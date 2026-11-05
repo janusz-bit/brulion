@@ -22,37 +22,45 @@ BDialog {
     property int tags: 0
 
     signal renamed(string newPath)
+    /// A map a call returned, read with AppController.route*() (compiled calls cannot take a map
+    /// held in a local after another call: kept here).
+    property var _held: ({})
 
     /// Ask about renaming `pagePath` to `title`, with Workspace.renameImpact() of it (`show`
-    /// false: only set it up, for rename() at once).
-    function openFor(pagePath, title, impact, show) {
-        path = pagePath
-        newTitle = title
-        newName = impact && impact.path ? Workspace.pageTitle(impact.path) : title
-        notes = impact && impact.notes ? impact.notes : 0
-        links = impact && impact.links ? impact.links : 0
-        tags = impact && impact.tags ? impact.tags : 0
-        if (show !== false)
-            open()
+    /// false: only set it up, for rename() at once; pass it always).
+    function openFor(pagePath: string, title: string, impact: var, show: bool): void {
+        dialog.path = pagePath
+        dialog.newTitle = title
+        dialog._held = impact
+        const newPath = AppController.routeText(dialog._held, "path")
+        dialog.newName = newPath !== "" ? Workspace.pageTitle(newPath) : title
+        dialog.notes = AppController.routeInt(dialog._held, "notes", 0)
+        dialog.links = AppController.routeInt(dialog._held, "links", 0)
+        dialog.tags = AppController.routeInt(dialog._held, "tags", 0)
+        if (show)
+            dialog.open()
     }
     /// Rename now (also without the dialog when nothing else changes).
-    function rename() {
-        const renamed = Workspace.renamePage(dialog.path, dialog.newTitle)
-        if (renamed !== "" && renamed !== dialog.path) {
-            AppController.toast(dialog.tags > 0
-                                ? qsTr("Renamed to “%1”, %n link(s) and tag(s) updated", "", dialog.links + dialog.tags).arg(Workspace.pageTitle(renamed))
-                                : dialog.links > 0
-                                ? qsTr("Renamed to “%1”, %n link(s) updated", "", dialog.links).arg(Workspace.pageTitle(renamed))
-                                : qsTr("Renamed to “%1”").arg(Workspace.pageTitle(renamed)), "success")
-            dialog.renamed(renamed)
-        }
+    function rename(): void {
+        // (Read before the rename: compiled calls take no arguments a call before may change.)
+        const links = dialog.links
+        const tags = dialog.tags
+        const renamed = "" + Workspace.renamePage(dialog.path, dialog.newTitle)
+        if (renamed === "" || renamed === dialog.path)
+            return
+        const title = "" + Workspace.pageTitle(renamed)
+        const message = tags > 0 ? qsTr("Renamed to “%1”, %n link(s) and tag(s) updated", "", links + tags).arg(title)
+                      : links > 0 ? qsTr("Renamed to “%1”, %n link(s) updated", "", links).arg(title)
+                      : qsTr("Renamed to “%1”").arg(title)
+        AppController.toast(message, "success")
+        dialog.renamed(renamed)
     }
 
     title: qsTr("Rename page?")
     iconName: "pencil"
     acceptText: qsTr("Rename")
     preferredWidth: Theme.dialogWidthSm
-    onAccepted: rename()
+    onAccepted: dialog.rename()
 
     BText {
         Layout.fillWidth: true

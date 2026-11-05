@@ -18,8 +18,8 @@ BDialog {
     /// The new page's note mode: "document" | "outline".
     property string mode: "document"
 
-    function openIn(inFolder) {
-        folder = inFolder || ""
+    function openIn(inFolder: string): void {
+        folder = inFolder
         nameField.text = ""
         mode = modeChoice.preferred()
         open()
@@ -29,13 +29,13 @@ BDialog {
     subtitle: folder !== "" ? qsTr("In the folder %1").arg(folder) : ""
     iconName: "square-pen"
     acceptText: qsTr("Create")
-    acceptEnabled: nameField.typedText.trim() !== ""
+    acceptEnabled: Js.trim(nameField.typedText) !== ""
     initialFocusItem: nameField
     preferredWidth: Theme.dialogWidth
 
     onAccepted: {
         modeChoice.remember(dialog.mode)
-        const path = Workspace.createPage(nameField.text.trim(), dialog.folder, dialog.mode)
+        const path = Workspace.createPage(Js.trim(nameField.text), dialog.folder, dialog.mode)
         if (path !== "")
             AppController.openPage(path)
         else

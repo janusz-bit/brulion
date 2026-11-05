@@ -17,25 +17,27 @@ Item {
 
     required property DrawingCanvas canvas
     /// The pen's colours: [{ color, label }].
-    property var colors: []
+    property list<var> colors: []
+    /// No rows (a Repeater's model while there is nothing to show).
+    readonly property list<var> noRows: []
 
     readonly property bool shown: canvas.visible && canvas.selectionCount > 0 && !canvas.busy && !canvas.textEditing
 
     /// A stored colour as the paper shows it now (re-evaluated when the paper turns dark).
-    function displayed(color) {
-        return root.canvas.dark ? root.canvas.displayColor(color) : color
+    function displayed(color: string): string {
+        return root.canvas.dark ? root.canvas.displayColorName(color, false) : color
     }
 
     visible: shown
 
     /// The style panel, "Więcej" (route.open, screenshots).
-    function openStyle() { stylePanel.open() }
-    function openMore() { moreMenu.popup(moreButton, 0, moreButton.height) }
+    function openStyle(): void { stylePanel.open() }
+    function openMore(): void { moreMenu.popup(moreButton, 0, moreButton.height) }
 
     component Separator: Rectangle {
         width: 1
         height: Theme.controlHeight - 8
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        y: parent ? (parent.height - height) / 2 : 0
         color: Theme.borderSubtle
     }
 
@@ -78,16 +80,18 @@ Item {
             spacing: 2
 
             Repeater {
-                model: Theme.compact ? [] : root.colors
+                model: Theme.compact ? root.noRows : root.colors
                 delegate: BColorSwatch {
+                    id: barSwatch
                     required property var modelData
-                    objectName: "drawingSelectionColor" + modelData.color.slice(1)
-                    anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                    color: root.displayed(modelData.color)
-                    label: modelData.label
+                    readonly property string stored: AppController.routeText(modelData, "color")
+                    objectName: "drawingSelectionColor" + Js.sliceFrom(stored, 1)
+                    y: parent ? (parent.height - height) / 2 : 0
+                    color: root.displayed(stored)
+                    label: AppController.routeText(modelData, "label")
                     size: 22
                     focusPolicy: Qt.NoFocus
-                    onClicked: root.canvas.recolorSelection(modelData.color)
+                    onClicked: root.canvas.recolorSelection(barSwatch.stored)
                 }
             }
             BColorSwatch {
@@ -95,7 +99,7 @@ Item {
                 objectName: "drawingSelectionColour"
                 visible: Theme.compact
                 anchors.verticalCenter: parent.verticalCenter
-                color: root.displayed(root.canvas.color)
+                color: root.displayed(root.canvas.color.toString())
                 label: qsTr("Colour")
                 size: 26
                 focusPolicy: Qt.NoFocus
@@ -213,7 +217,7 @@ Item {
             text: qsTr("Group")
             iconName: "group"
             shortcut: "Ctrl+G"
-            enabled: root.canvas.selectionStyle.canGroup === true
+            enabled: AppController.routeFlag(root.canvas.selectionStyle, "canGroup")
             onTriggered: root.canvas.groupSelection()
         }
         BMenuItem {
@@ -221,7 +225,7 @@ Item {
             text: qsTr("Ungroup")
             iconName: "ungroup"
             shortcut: "Ctrl+Shift+G"
-            enabled: root.canvas.selectionStyle.canUngroup === true
+            enabled: AppController.routeFlag(root.canvas.selectionStyle, "canUngroup")
             onTriggered: root.canvas.ungroupSelection()
         }
         BMenuSeparator { visible: Theme.compact; height: visible ? implicitHeight : 0 }
@@ -275,12 +279,14 @@ Item {
             Repeater {
                 model: root.colors
                 delegate: BColorSwatch {
+                    id: popupSwatch
                     required property var modelData
-                    color: root.displayed(modelData.color)
-                    label: modelData.label
+                    readonly property string stored: AppController.routeText(modelData, "color")
+                    color: root.displayed(stored)
+                    label: AppController.routeText(modelData, "label")
                     focusPolicy: Qt.NoFocus
                     onClicked: {
-                        root.canvas.recolorSelection(modelData.color)
+                        root.canvas.recolorSelection(popupSwatch.stored)
                         colorPopup.close()
                     }
                 }

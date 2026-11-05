@@ -109,8 +109,69 @@ void PageTools::setWorkspace(shell::Workspace *workspace)
 {
     if (m_workspace == workspace)
         return;
+    if (m_workspace)
+        disconnect(m_workspace, nullptr, this, nullptr);
     m_workspace = workspace;
+    if (m_workspace) {
+        // (The page header's summary follows saves, renames, other devices, and the index being
+        // read at start-up.)
+        connect(m_workspace, &shell::Workspace::revisionChanged, this, &PageTools::refreshSummary);
+        connect(m_workspace, &shell::Workspace::indexingChanged, this, &PageTools::refreshSummary);
+    }
     Q_EMIT workspaceChanged();
+    refreshSummary();
+}
+
+void PageTools::setPath(const QString &path)
+{
+    if (m_path == path)
+        return;
+    m_path = path;
+    Q_EMIT pathChanged();
+    refreshSummary();
+}
+
+void PageTools::refreshSummary()
+{
+    const QVariantMap summary = m_path.isEmpty() ? QVariantMap() : this->summary(m_path);
+    if (summary == m_summary)
+        return;
+    m_summary = summary;
+    Q_EMIT summaryChanged();
+}
+
+QVariantList PageTools::folderParts() const
+{
+    return m_summary.value(u"folderParts"_s).toList();
+}
+
+QVariantList PageTools::aliasChips() const
+{
+    QVariantList out;
+    for (const QString &alias : m_summary.value(u"aliases"_s).toStringList())
+        out.append(QVariantMap{ { u"name"_s, alias }, { u"key"_s, QString() }, { u"editable"_s, false } });
+    return out;
+}
+
+QVariantList PageTools::tagChips() const
+{
+    QVariantList out;
+    for (const QVariant &tag : m_summary.value(u"tags"_s).toList()) {
+        const QVariantMap t = tag.toMap();
+        out.append(QVariantMap{ { u"name"_s, t.value(u"display"_s) }, { u"key"_s, t.value(u"tag"_s) },
+                                { u"editable"_s, false } });
+    }
+    return out;
+}
+
+QVariantMap PageTools::headerTag() const
+{
+    return m_summary.value(u"tag"_s).toMap();
+}
+
+QVariantList PageTools::subTags() const
+{
+    return headerTag().value(u"subTags"_s).toList();
 }
 
 QVariantMap PageTools::renameImpact(const QString &rawPath) const
@@ -433,6 +494,58 @@ bool PageTools::copyText(const QString &text) const
         return false;
     clipboard->setText(text);
     return true;
+}
+
+QVariantMap PageTools::calendarMarks(const QString &from, const QString &to, const QString &today) const
+{
+    QVariantMap out;
+    if (!m_workspace)
+        return out;
+    for (const QString &day : m_workspace->journalDates(from, to))
+        out.insert(day, QStringList{ u"journal"_s });
+    for (const QVariant &value : m_workspace->calendarItems(from, to)) {
+        const QVariantMap item = value.toMap();
+        const QString kind = item.value(u"kind"_s).toString();
+        if (kind == u"journal")
+            continue;
+        const QString date = item.value(u"date"_s).toString();
+        const QString mark = kind == u"due" && date < today && item.value(u"status"_s).toString() != u"done"
+                                 ? u"overdue"_s
+                             : kind == u"reminder" ? (item.value(u"alarm"_s).toBool() ? u"alarm"_s : u"reminder"_s)
+                                                    : kind;
+        QStringList list = out.value(date).toStringList();
+        if (!list.contains(mark) && list.size() < 3)
+            list.append(mark);
+        out.insert(date, list);
+    }
+    return out;
+}
+
+QVariantList PageTools::calendarEntries(const QString &date) const
+{
+    QVariantList out;
+    if (!m_workspace)
+        return out;
+    for (const QVariant &item : m_workspace->calendarItems(date, date)) {
+        if (item.toMap().value(u"kind"_s).toString() != u"journal")
+            out.append(item);
+    }
+    return out;
+}
+
+QVariantList PageTools::tagSuggestions(const QVariantList &values) const
+{
+    QVariantList out;
+    for (const QVariant &row : values) {
+        const QVariantMap v = row.toMap();
+        const QString value = v.value(u"value"_s).toString();
+        const int count = v.value(u"count"_s).toInt();
+        out.append(QVariantMap{ { u"title"_s, QString(u'#' + value) },
+                                { u"value"_s, value },
+                                { u"subtitle"_s, count > 0 ? QString::number(count) : QString() },
+                                { u"icon"_s, QString() } });
+    }
+    return out;
 }
 
 QVariantList PageTools::exportFormats() const

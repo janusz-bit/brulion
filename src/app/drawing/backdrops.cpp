@@ -24,6 +24,7 @@
 #define BRULION_BACKDROP_THREADS 1
 #endif
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <mutex>
@@ -89,6 +90,32 @@ QList<int> DrawingBackdrops::parsePages(const QString &text, int count) const
 QString DrawingBackdrops::formatPages(const QList<int> &pages) const
 {
     return drawing::formatPageRanges(pages);
+}
+
+QList<int> DrawingBackdrops::sortedPages(const QList<int> &pages) const
+{
+    QList<int> out = pages;
+    std::stable_sort(out.begin(), out.end());
+    return out;
+}
+
+QList<int> DrawingBackdrops::toggledPage(const QList<int> &pages, int page) const
+{
+    QList<int> out = pages;
+    const qsizetype i = out.indexOf(page);
+    if (i >= 0)
+        out.removeAt(i);
+    else
+        out.append(page);
+    return sortedPages(out);
+}
+
+QList<int> DrawingBackdrops::allPages(int count) const
+{
+    QList<int> out;
+    for (int p = 1; p <= count; ++p)
+        out.append(p);
+    return out;
 }
 
 int DrawingBackdrops::pickInBrowser()

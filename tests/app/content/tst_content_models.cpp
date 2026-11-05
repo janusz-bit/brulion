@@ -1078,6 +1078,136 @@ private Q_SLOTS:
         QCOMPARE(QString::fromUtf8(saved.readAll()), html);
         QVERIFY(!tools.saveExport(u"Projekty/Dom.md"_s, u"html"_s, QUrl()));
     }
+
+    // The page header's summary as typed properties (PageTools with a path, compiled QML): kept up
+    // to date when the notebook changes.
+    void pageToolsHeaderSummary()
+    {
+        auto ws = open({
+                { u"Praca/Raport.md"_s, u"---\naliases: [Sprawozdanie]\ntags: [praca, \"#Pilne\"]\n---\n- treść\n"_s },
+                { u"Praca.md"_s, u"- strona tagu\n"_s },
+                { u"Notatka.md"_s, u"- #praca/raporty i #praca/spotkania, znowu #praca/raporty\n- #praca\n"_s },
+        });
+        PageTools tools;
+        QSignalSpy changed(&tools, &PageTools::summaryChanged);
+        tools.setWorkspace(ws.get());
+        QVERIFY(tools.folderParts().isEmpty()); // no path yet
+        QCOMPARE(changed.count(), 0);
+
+        tools.setPath(u"Praca/Raport.md"_s);
+        QCOMPARE(changed.count(), 1);
+        const QVariantList parts = tools.folderParts();
+        QCOMPARE(parts.size(), 1);
+        QCOMPARE(parts.first().toMap().value(u"title"_s).toString(), u"Praca"_s);
+        QCOMPARE(parts.first().toMap().value(u"path"_s).toString(), u"Praca"_s);
+        const QVariantList aliases = tools.aliasChips();
+        QCOMPARE(aliases.size(), 1);
+        QCOMPARE(aliases.first().toMap(),
+                 (QVariantMap{ { u"name"_s, u"Sprawozdanie"_s }, { u"key"_s, QString() }, { u"editable"_s, false } }));
+        const QVariantList tags = tools.tagChips();
+        QCOMPARE(tags.size(), 2);
+        QCOMPARE(tags.at(0).toMap().value(u"key"_s).toString(), u"praca"_s);
+        QCOMPARE(tags.at(1).toMap().value(u"key"_s).toString(), u"pilne"_s);
+        QCOMPARE(tags.at(1).toMap().value(u"editable"_s).toBool(), false);
+        // Every row has every key (QML delegates require them).
+        for (const QVariant &row : tags)
+            QCOMPARE(row.toMap().keys(), (QStringList{ u"editable"_s, u"key"_s, u"name"_s }));
+
+        // The page named by a tag: its key, text and sub-tags.
+        tools.setPath(u"Praca.md"_s);
+        QCOMPARE(tools.headerTag().value(u"key"_s).toString(), u"praca"_s);
+        QCOMPARE(tools.headerTag().value(u"text"_s).toString(), u"#praca"_s);
+        QVERIFY(tools.headerTag().value(u"references"_s).toInt() > 0);
+        QStringList sub;
+        for (const QVariant &t : tools.subTags())
+            sub.append(t.toMap().value(u"tag"_s).toString());
+        sub.sort();
+        QCOMPARE(sub, (QStringList{ u"praca/raporty"_s, u"praca/spotkania"_s }));
+        QVERIFY(tools.folderParts().isEmpty());
+
+        // A change in the notebook (another sub-tag): the summary follows.
+        const int before = changed.count();
+        QVERIFY(ws->writeFile(u"Inna.md"_s, u"- #praca/zadania\n"_s));
+        ws->finishIndexing();
+        QCoreApplication::processEvents();
+        QTRY_VERIFY(changed.count() > before);
+        QCOMPARE(tools.subTags().size(), 3);
+
+        // No path: empty again.
+        tools.setPath(QString());
+        QVERIFY(tools.headerTag().isEmpty() && tools.subTags().isEmpty() && tools.tagChips().isEmpty());
+    }
+
+    // The side panel's calendar (ContentMiniCalendar): marks of a range and the entries of a day.
+    void calendarMarksAndEntries()
+    {
+        auto ws = open({
+                { u"journals/2026-10-12.md"_s, u"- dzień z notatką\n"_s },
+                { u"Plan.md"_s,
+                  u"- [ ] Zaległe 📅 2026-10-12\n"
+                  u"- [x] Zrobione 📅 2026-10-12 ✅ 2026-10-12\n"
+                  u"- [ ] Spotkanie 📅 2026-10-15 ⏰ 2026-10-15 09:00\n"
+                  u"- [ ] Na jutro ⏳ 2026-10-16 ⏰! 2026-10-16 06:00\n"_s },
+        });
+        PageTools tools;
+        tools.setWorkspace(ws.get());
+        const QVariantMap marks = tools.calendarMarks(u"2026-10-10"_s, u"2026-10-20"_s, u"2026-10-14"_s);
+        // A journal comes first, then at most three kinds a day, each once.
+        const QStringList monday = marks.value(u"2026-10-12"_s).toStringList();
+        QCOMPARE(monday.size(), 3);
+        QCOMPARE(monday.first(), u"journal"_s);
+        QVERIFY2(monday.contains(u"overdue"_s), qPrintable(monday.join(u',')));
+        const QStringList thursday = marks.value(u"2026-10-15"_s).toStringList();
+        QVERIFY2(thursday.contains(u"due"_s) && thursday.contains(u"reminder"_s), qPrintable(thursday.join(u',')));
+        QVERIFY(!thursday.contains(u"overdue"_s)); // not before today
+        const QStringList friday = marks.value(u"2026-10-16"_s).toStringList();
+        QVERIFY2(friday.contains(u"scheduled"_s) && friday.contains(u"alarm"_s), qPrintable(friday.join(u',')));
+        QVERIFY(!marks.contains(u"2026-10-13"_s));
+        for (const QVariant &kinds : marks)
+            QCOMPARE(kinds.toStringList().removeDuplicates(), 0);
+        // The same day seen from earlier: nothing is overdue yet.
+        QVERIFY(!tools.calendarMarks(u"2026-10-12"_s, u"2026-10-12"_s, u"2026-10-01"_s)
+                         .value(u"2026-10-12"_s).toStringList().contains(u"overdue"_s));
+        QVERIFY(tools.calendarMarks(u"zły"_s, u"2026-10-12"_s, u"2026-10-14"_s).isEmpty());
+
+        // A day's entries leave its journal out.
+        const QVariantList entries = tools.calendarEntries(u"2026-10-12"_s);
+        QVERIFY(entries.size() >= 2);
+        for (const QVariant &e : entries) {
+            const QVariantMap m = e.toMap();
+            QVERIFY(m.value(u"kind"_s).toString() != u"journal"_s);
+            QCOMPARE(m.value(u"path"_s).toString(), u"Plan.md"_s);
+            for (const QString &key : { u"title"_s, u"time"_s, u"status"_s, u"alarm"_s, u"line"_s })
+                QVERIFY2(m.contains(key), qPrintable(key));
+        }
+        QVERIFY(tools.calendarEntries(u"2026-10-13"_s).isEmpty());
+
+        PageTools without; // no notebook
+        QVERIFY(without.calendarMarks(u"2026-10-10"_s, u"2026-10-20"_s, u"2026-10-14"_s).isEmpty());
+        QVERIFY(without.calendarEntries(u"2026-10-12"_s).isEmpty());
+    }
+
+    void tagSuggestions_data()
+    {
+        QTest::addColumn<QVariantList>("values");
+        QTest::addColumn<QVariantList>("rows");
+        auto row = [](const QString &title, const QString &value, const QString &subtitle) {
+            return QVariantMap{ { u"title"_s, title }, { u"value"_s, value }, { u"subtitle"_s, subtitle }, { u"icon"_s, QString() } };
+        };
+        QTest::newRow("none") << QVariantList() << QVariantList();
+        QTest::newRow("counts") << QVariantList{ QVariantMap{ { u"value"_s, u"praca"_s }, { u"count"_s, 3 } },
+                                                 QVariantMap{ { u"value"_s, u"żółw"_s }, { u"count"_s, 0 } } }
+                                << QVariantList{ row(u"#praca"_s, u"praca"_s, u"3"_s), row(u"#żółw"_s, u"żółw"_s, QString()) };
+        QTest::newRow("no count") << QVariantList{ QVariantMap{ { u"value"_s, u"Zażółć gęślą"_s } } }
+                                  << QVariantList{ row(u"#Zażółć gęślą"_s, u"Zażółć gęślą"_s, QString()) };
+    }
+    void tagSuggestions()
+    {
+        QFETCH(QVariantList, values);
+        QFETCH(QVariantList, rows);
+        PageTools tools;
+        QCOMPARE(tools.tagSuggestions(values), rows);
+    }
 };
 
 QTEST_MAIN(TestContentModels)

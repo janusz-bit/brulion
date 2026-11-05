@@ -20,27 +20,30 @@ FocusScope {
     property string mode: "document"
     signal activated(string mode)
 
-    readonly property var options: [
+    readonly property list<var> options: [
         { value: "document", icon: "file-text", title: qsTr("Document"), hint: qsTr("like Obsidian"),
           description: qsTr("Paragraphs, headings and lists, read like a text.") },
         { value: "outline", icon: "list", title: qsTr("Outline"), hint: qsTr("like Logseq"),
           description: qsTr("Every point is a block: indent, fold, zoom in.") }
     ]
 
-    function choose(value) {
-        if (value !== mode) {
-            mode = value
-            activated(value)
+    function choose(value: string): void {
+        if (value !== root.mode) {
+            root.mode = value
+            root.activated(value)
         }
     }
+    function setting(key: string): string {
+        return AppSettings.value(key, "")
+    }
     /// The mode to preselect (see the file comment).
-    function preferred() {
+    function preferred(): string {
         const fallback = Workspace.config.pageMode === "outline" ? "outline" : "document"
-        const last = AppSettings.value("ui/newPage/mode", "")
-        const underDefault = AppSettings.value("ui/newPage/modeDefault", "")
+        const last = root.setting("ui/newPage/mode")
+        const underDefault = root.setting("ui/newPage/modeDefault")
         return (last === "document" || last === "outline") && underDefault === fallback ? last : fallback
     }
-    function remember(value) {
+    function remember(value: string): void {
         AppSettings.setValue("ui/newPage/mode", value)
         AppSettings.setValue("ui/newPage/modeDefault", Workspace.config.pageMode === "outline" ? "outline" : "document")
     }
@@ -86,19 +89,23 @@ FocusScope {
                 model: root.options
                 delegate: Rectangle {
                     id: card
-                    required property var modelData
-                    readonly property bool selected: root.mode === modelData.value
+                    required property string value
+                    required property string icon
+                    required property string title
+                    required property string hint
+                    required property string description
+                    readonly property bool selected: root.mode === value
                     Layout.fillWidth: true
                     implicitHeight: Math.max(Theme.touchUi ? Theme.touchTarget : 0, cardRow.implicitHeight + 2 * Theme.space2 + 2)
                     radius: Theme.radius
                     color: selected ? Theme.bgSelected : cardHover.hovered ? Theme.bgHover : "transparent"
                     border.width: selected ? 1.5 : 1
-                    border.color: selected ? Theme.alpha(Theme.focusRing, 0.7) : Theme.border
+                    border.color: selected ? Theme.focusRing.alpha(0.7) : Theme.border
                     Accessible.role: Accessible.RadioButton
-                    Accessible.name: modelData.title + " (" + modelData.hint + ")"
-                    Accessible.description: modelData.description
+                    Accessible.name: title + " (" + hint + ")"
+                    Accessible.description: description
                     Accessible.checked: selected
-                    Accessible.onPressAction: root.choose(modelData.value)
+                    Accessible.onPressAction: root.choose(card.value)
 
                     RowLayout {
                         id: cardRow
@@ -108,7 +115,7 @@ FocusScope {
                         spacing: Theme.space3
                         BIcon {
                             Layout.alignment: Qt.AlignVCenter
-                            name: card.modelData.icon
+                            name: card.icon
                             size: Theme.iconSize
                             color: card.selected ? Theme.link : Theme.fgMuted
                         }
@@ -118,8 +125,8 @@ FocusScope {
                             Text {
                                 Layout.fillWidth: true
                                 textFormat: Text.StyledText
-                                text: TextHelper.escapeHtml(card.modelData.title)
-                                      + " <font color=\"" + Theme.fgMuted + "\">(" + TextHelper.escapeHtml(card.modelData.hint) + ")</font>"
+                                text: TextHelper.escapeHtml(card.title)
+                                      + " <font color=\"" + Theme.fgMuted.toString() + "\">(" + TextHelper.escapeHtml(card.hint) + ")</font>"
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textBase
                                 font.weight: Theme.weightMedium
@@ -128,7 +135,7 @@ FocusScope {
                             }
                             BText {
                                 Layout.fillWidth: true
-                                text: card.modelData.description
+                                text: card.description
                                 variant: "muted"
                                 font.pixelSize: Theme.textSm
                                 wrapMode: Text.Wrap
@@ -145,7 +152,7 @@ FocusScope {
                     HoverHandler { id: cardHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
                     TapHandler {
                         onTapped: {
-                            root.choose(card.modelData.value)
+                            root.choose(card.value)
                             root.forceActiveFocus()
                         }
                     }

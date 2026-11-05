@@ -40,23 +40,25 @@ Item {
         delegate: BListItem {
             id: item
             required property int index
-            required property var model
+            // OutlineModel's roles.
+            required property int row
+            required property int depth
+            required text
             width: list.width
             dense: true
-            leftPadding: (Theme.touchUi ? 14 : 10) + item.model.depth * (Theme.touchUi ? 16 : 14)
-            text: item.model.text
-            iconName: item.model.depth === 0 ? "heading" : ""
+            leftPadding: (Theme.touchUi ? 14 : 10) + item.depth * (Theme.touchUi ? 16 : 14)
+            iconName: item.depth === 0 ? "heading" : ""
             selected: list.currentIndex === item.index
-            font.weight: item.model.depth === 0 ? Theme.weightMedium : Theme.weightNormal
-            onClicked: if (root.editor) root.editor.revealRow(item.model.row)
-            onPressAndHold: root.openMenu(item, item.model.row)
-            Keys.onMenuPressed: root.openMenu(item, item.model.row)
+            font.weight: item.depth === 0 ? Theme.weightMedium : Theme.weightNormal
+            onClicked: if (root.editor) root.editor.revealRow(item.row)
+            onPressAndHold: root.openMenu(item, item.row)
+            Keys.onMenuPressed: root.openMenu(item, item.row)
             TapHandler {
                 // Right-click only — never a finger (Qt hands touch points to every TapHandler):
                 // touch has the long press above.
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                 acceptedButtons: Qt.RightButton
-                onTapped: root.openMenu(item, item.model.row)
+                onTapped: root.openMenu(item, item.row)
             }
         }
     }
@@ -65,18 +67,18 @@ Item {
     /// while the menu is open (the page may change meanwhile: sync, undo).
     property BMenu headingMenu: null
     property int menuHandle: -1
-    function openMenu(item: Item, row: int) {
+    function openMenu(item: Item, row: int): void {
         if (!root.editor || !root.controller || row < 0)
             return
-        if (!headingMenu)
-            headingMenu = headingMenuComponent.createObject(root) as BMenu
-        if (menuHandle >= 0)
-            root.controller.untrack(menuHandle)
-        menuHandle = root.controller.trackBlock(row)
-        headingMenu.popup(item, Theme.space4, item.height)
+        if (!root.headingMenu)
+            root.headingMenu = headingMenuComponent.createObject(root) as BMenu
+        if (root.menuHandle >= 0)
+            root.controller.untrack(root.menuHandle)
+        root.menuHandle = root.controller.trackBlock(row)
+        root.headingMenu.popup(item, Theme.space4, item.height)
     }
-    function copy(kind: string) {
-        const row = root.controller && menuHandle >= 0 ? root.controller.trackedRow(menuHandle) : -1
+    function copy(kind: string): void {
+        const row = root.controller && root.menuHandle >= 0 ? root.controller.trackedRow(root.menuHandle) : -1
         if (row >= 0 && root.editor)
             root.editor.copyLink(row, kind)
     }

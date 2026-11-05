@@ -22,27 +22,22 @@ BDialog {
     /// Accepted: the colour ("#rrggbb", lower case).
     signal chosen(string color)
 
-    function openWith(color) {
-        const c = ThemePalette.normalizeColor(color || "")
-        value = c !== "" ? c : "#ffffff"
-        field.text = value
+    function openWith(color: string): void {
+        const c = ThemePalette.normalizeColor(color)
+        dialog.value = c !== "" ? c : "#ffffff"
+        field.text = dialog.value
         field.errorText = ""
-        open()
+        dialog.open()
     }
     /// A colour as the paper shows it now (re-evaluated when it turns dark).
-    function shown(color) {
-        return dialog.canvas.dark ? dialog.canvas.displayColor(color) : color
+    function shown(color: string): string {
+        return dialog.canvas.dark ? dialog.canvas.displayColorName(color, false) : color
     }
 
     /// 12 neutrals, then 12 hues × 3 shades.
-    readonly property var grid: {
-        const out = ["#ffffff", "#fbf7ee", "#f5f0e1", "#f1f3f5", "#dee2e6", "#adb5bd",
-                     "#868e96", "#495057", "#343a40", "#1f2430", "#121212", "#000000"]
-        for (const shade of [{ s: 0.9, l: 0.93 }, { s: 0.75, l: 0.82 }, { s: 0.5, l: 0.25 }]) {
-            for (let h = 0; h < 12; ++h)
-                out.push(String(Qt.hsla(h / 12, shade.s, shade.l, 1)))
-        }
-        return out
+    readonly property list<string> grid: dialog.paperColors()
+    function paperColors(): list<string> {
+        return dialog.canvas.paperColors()
     }
 
     objectName: "drawingPaperDialog"
@@ -95,14 +90,14 @@ BDialog {
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhPreferLatin
             maximumLength: 7
             onTextEdited: {
-                const c = ThemePalette.normalizeColor(text)
+                const c = ThemePalette.normalizeColor(field.text)
                 if (c !== "") {
                     dialog.value = c
-                    errorText = ""
+                    field.errorText = ""
                 }
             }
-            onEditingFinished: errorText = ThemePalette.normalizeColor(text) !== "" || text === ""
-                                          ? "" : qsTr("Enter a colour like #fff9db.")
+            onEditingFinished: field.errorText = ThemePalette.normalizeColor(field.text) !== "" || field.text === ""
+                                                ? "" : qsTr("Enter a colour like #fff9db.")
             onAccepted: dialog.tryAccept()
         }
     }

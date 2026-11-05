@@ -68,17 +68,17 @@ Item {
     property int textLimit: 200 * 1024
 
     readonly property string fileName: {
-        const i = root.path.lastIndexOf("/")
-        return i < 0 ? root.path : root.path.slice(i + 1)
+        const i = Js.lastIndexOf(root.path, "/")
+        return i < 0 ? root.path : Js.sliceFrom(root.path, i + 1)
     }
     /// Drawn to fill the view: an SVG, a drawing (its preview, drawn at any size).
-    readonly property bool scalable: !root.textOnly && (root.drawing || /\.svg$/i.test(root.fileName))
+    readonly property bool scalable: !root.textOnly && (root.drawing || Js.test(root.fileName, "\\.svg$", "i"))
     /// This device can decode the picture's format (see above); a drawing's preview always.
     readonly property bool decodable: !root.textOnly && (root.drawing || (root.path !== "" && Workspace.canDecodePicture(root.path)))
     /// "WEBP" for assets/łąka.webp (the message for a format this device cannot show).
     readonly property string formatName: {
-        const i = root.fileName.lastIndexOf(".")
-        return i < 0 ? "" : root.fileName.slice(i + 1).toUpperCase()
+        const i = Js.lastIndexOf(root.fileName, ".")
+        return i < 0 ? "" : Js.toUpperCase(Js.sliceFrom(root.fileName, i + 1))
     }
     /// Grows when the file changes on disk (a drawing saved again): its URL is asked for again
     /// (a drawing's carries its version, Workspace.assetUrl).
@@ -92,27 +92,38 @@ Item {
 
     Connections {
         target: Workspace
-        function onFileChanged(path) {
+        function onFileChanged(path: string) {
             if (path === root.path)
                 root.fileRevision++
         }
     }
     /// The picture's pixels from its header (≤ 0: not in the header — the loaded picture's then);
-    /// a drawing's preview size (again when the file changes).
-    readonly property size headerSize: root.fileRevision >= 0 && !root.textOnly ? Workspace.pictureSize(root.path) : Qt.size(0, 0)
+    /// a drawing's preview size (again when the file changes). Set by readHeaderSize() (a call's
+    /// size cannot be bound compiled), whenever the path, the file or textOnly change.
+    property size headerSize: Qt.size(0, 0)
+    function readHeaderSize(): void {
+        if (root.textOnly)
+            root.headerSize = Qt.size(0, 0)
+        else
+            root.headerSize = Workspace.pictureSize(root.path)
+    }
+    onFileRevisionChanged: root.readHeaderSize()
+    onTextOnlyChanged: root.readHeaderSize()
+    Component.onCompleted: root.readHeaderSize()
     readonly property bool headerKnown: headerSize.width > 0 && headerSize.height > 0
     /// The picture's own pixels in the pixels view (the loaded size when the header has none).
     readonly property size shownSize: headerKnown ? headerSize
                                      : Qt.size(Math.max(1, picture.implicitWidth),
                                                Math.max(1, picture.implicitHeight))
     /// What the picture is decoded at: its own shape, at most 2048 px a side (see above).
-    readonly property var decodeSize: {
+    /// (-1 × -1: none — Image.sourceSize reset.)
+    readonly property size decodeSize: {
         if (!root.headerKnown)
-            return root.scalable ? undefined : Qt.size(2048, 2048)
-        const k = root.scalable ? Math.min(2048 / headerSize.width, 2048 / headerSize.height)
-                                : Math.min(1, 2048 / headerSize.width, 2048 / headerSize.height)
-        return Qt.size(Math.max(1, Math.round(headerSize.width * k)),
-                       Math.max(1, Math.round(headerSize.height * k)))
+            return root.scalable ? Qt.size(-1, -1) : Qt.size(2048, 2048)
+        const k = root.scalable ? Math.min(2048 / root.headerSize.width, 2048 / root.headerSize.height)
+                                : Math.min(1, 2048 / root.headerSize.width, 2048 / root.headerSize.height)
+        return Qt.size(Math.max(1, Math.round(root.headerSize.width * k)),
+                       Math.max(1, Math.round(root.headerSize.height * k)))
     }
     /// The fitted picture's scale: at most 1 for a raster picture (fitting only shrinks), any
     /// for an SVG.
@@ -134,13 +145,14 @@ Item {
     // Another picture: start fitted from the top left (the flickable clamps itself to the
     // smaller content, but contentX/Y are plain state without a binding to reset them).
     onPathChanged: {
+        root.readHeaderSize()
         root.actualSize = false
         flick.contentX = 0
         flick.contentY = 0
     }
 
     /// Fitted ↔ the picture's own pixels, centred in the other view.
-    function toggleSize() {
+    function toggleSize(): void {
         if (!root.canZoom && !root.actualSize)
             return
         root.actualSize = !root.actualSize
@@ -370,7 +382,7 @@ Item {
                 const revision = textFlick.revision
                 return revision >= 0 ? Workspace.readTextStart(root.path, root.textLimit) : ({})
             }
-            readonly property bool truncated: file.truncated === true
+            readonly property bool truncated: AppController.routeFlag(file, "truncated")
 
             objectName: "pictureText" // (the shell's self-test)
             clip: true
@@ -383,7 +395,7 @@ Item {
             // The file changed on disk while shown (Syncthing, Nextcloud, another program).
             Connections {
                 target: Workspace
-                function onFileChanged(path) {
+                function onFileChanged(path: string) {
                     if (path === root.path)
                         textFlick.revision++
                 }
@@ -400,7 +412,7 @@ Item {
                     objectName: "pictureTextNote" // (the shell's self-test)
                     visible: textFlick.truncated
                     width: parent.width
-                    text: qsTr("The start of the file: %1 of %2.").arg(textFlick.file.bytesText).arg(textFlick.file.sizeText)
+                    text: qsTr("The start of the file: %1 of %2.").arg(AppController.routeText(textFlick.file, "bytesText")).arg(AppController.routeText(textFlick.file, "sizeText"))
                     variant: "muted"
                     wrapMode: Text.Wrap
                 }
@@ -413,7 +425,7 @@ Item {
                     selectByMouse: !Theme.touchUi
                     textFormat: TextEdit.PlainText
                     wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                    text: textFlick.file.text || ""
+                    text: AppController.routeText(textFlick.file, "text")
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.textSm + 1
                     color: Theme.fg

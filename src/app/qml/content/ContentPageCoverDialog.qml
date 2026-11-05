@@ -19,29 +19,34 @@ BDialog {
 
     property PageController controller
     property BlockEditor editor
-    readonly property var cover: controller && controller.look ? (controller.look.cover || ({})) : ({})
-    readonly property bool hasCover: !!cover.kind
+    /// A map a call returned, read with AppController.route*() (compiled calls cannot take a map
+    /// held in a local after another call: kept here).
+    property var _held: ({})
+    /// The page's cover now (PageController.look.cover: kind "" | "file" | "web", target).
+    readonly property string coverKind: dialog.controller ? AppController.routeText(dialog.controller.look.cover, "kind") : ""
+    readonly property string coverTarget: dialog.controller ? AppController.routeText(dialog.controller.look.cover, "target") : ""
+    readonly property bool hasCover: coverKind !== ""
     /// The notebook's pictures matching the search (Workspace.pictureAttachments), read while open.
-    readonly property var pictures: dialog.opened && Workspace.revision >= 0
+    readonly property list<var> pictures: dialog.opened && Workspace.revision >= 0
                                     ? Workspace.pictureAttachments(searchField.text, 60) : []
 
     /// Write the cover `target` (a vault path or a URL; "" removes it) and close.
-    function pick(target) {
-        if (!controller)
+    function pick(target: string): void {
+        if (!dialog.controller)
             return
-        const before = controller.undoToken()
-        const r = controller.setPageCover(target)
-        if (!r.ok) {
-            AppController.toast(r.reason, "error")
+        // (Strings from calls laundered: a call cannot take one a call before may change.)
+        const before = "" + dialog.controller.undoToken()
+        dialog._held = dialog.controller.setPageCover(target)
+        if (!AppController.routeFlag(dialog._held, "ok")) {
+            AppController.toast(AppController.routeText(dialog._held, "reason"), "error")
             return
         }
         dialog.close()
-        if (r.status !== "changed")
+        if (AppController.routeText(dialog._held, "status") !== "changed")
             return
         const text = target === "" ? qsTr("Cover removed") : qsTr("Cover set")
-        const action = editor ? editor.undoAction(before) : null
-        if (action)
-            AppController.toastAction(text, "success", action.text, action.run)
+        if (dialog.editor)
+            dialog.editor.noticeUndoable(text, "success", before)
         else
             AppController.toast(text, "success")
     }
@@ -50,12 +55,12 @@ BDialog {
     iconName: "image"
     showFooter: true
     acceptText: qsTr("Use address")
-    acceptEnabled: urlField.text.trim().match(/^https?:\/\/\S+$/i) !== null
+    acceptEnabled: Js.test(Js.trim(urlField.text), "^https?:\\/\\/\\S+$", "i")
     initialFocusItem: Theme.touchUi ? null : searchField
-    onAccepted: pick(urlField.text.trim())
+    onAccepted: dialog.pick(Js.trim(urlField.text))
     onAboutToShow: {
         searchField.text = ""
-        urlField.text = cover.kind === "web" ? cover.target : ""
+        urlField.text = dialog.coverKind === "web" ? dialog.coverTarget : ""
     }
     footerLeading: BButton {
         objectName: "pageCoverRemove"
@@ -90,22 +95,24 @@ BDialog {
             model: dialog.pictures
             delegate: T.AbstractButton {
                 id: tile
-                required property var modelData
+                required property string path
+                required property string title
+                required property url url
                 width: Theme.touchUi ? 104 : 120
                 height: width * 0.7
                 focusPolicy: Qt.StrongFocus
                 hoverEnabled: !Theme.touchUi
                 Accessible.role: Accessible.Button
-                Accessible.name: modelData.title
-                onClicked: dialog.pick(modelData.path)
+                Accessible.name: tile.title
+                onClicked: dialog.pick(tile.path)
                 background: Rectangle {
                     radius: Theme.radius
                     color: Theme.bgSunken
-                    border.width: tile.visualFocus || tile.hovered || dialog.cover.target === tile.modelData.title ? 2 : 1
+                    border.width: tile.visualFocus || tile.hovered || dialog.coverTarget === tile.title ? 2 : 1
                     border.color: tile.visualFocus ? Theme.focusRing : tile.hovered ? Theme.accent : Theme.border
                 }
                 contentItem: Image {
-                    source: tile.modelData.url
+                    source: tile.url
                     asynchronous: true
                     fillMode: Image.PreserveAspectCrop
                     sourceSize.width: Math.ceil(tile.width * Screen.devicePixelRatio)
@@ -115,7 +122,7 @@ BDialog {
                     active: tile.hovered
                     sourceComponent: BToolTip {
                         parent: tile
-                        text: tile.modelData.path
+                        text: tile.path
                     }
                 }
             }
@@ -124,7 +131,7 @@ BDialog {
     BText {
         visible: dialog.pictures.length === 0
         Layout.fillWidth: true
-        text: searchField.text.trim() !== "" ? qsTr("No pictures match") : qsTr("The notebook has no pictures yet")
+        text: Js.trim(searchField.text) !== "" ? qsTr("No pictures match") : qsTr("The notebook has no pictures yet")
         variant: "muted"
         wrapMode: Text.Wrap
     }
@@ -140,7 +147,7 @@ BDialog {
         placeholderText: "https://…"
         accessibleName: qsTr("Picture address")
         inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase
-        onAccepted: if (dialog.acceptEnabled) dialog.pick(text.trim())
+        onAccepted: if (dialog.acceptEnabled) dialog.pick(Js.trim(text))
     }
     BText {
         Layout.fillWidth: true

@@ -99,7 +99,7 @@ FocusScope {
                 objectName: "refTaskBox"
                 visible: row.taskStatus !== ""
                 anchors.centerIn: parent
-                status: row.taskStatus || "todo"
+                status: row.taskStatus !== "" ? row.taskStatus : "todo"
                 onToggled: row.taskToggled()
                 onStatusChosen: (status) => {
                     if (status !== row.taskStatus)
@@ -164,13 +164,14 @@ FocusScope {
 
     /// The link of the text under the mouse or the pressing finger, underlined (as in the editor).
     property string hoveredLink: ""
-    function trackLink(pos) {
-        const p = textItem.mapFromItem(row, pos.x, pos.y)
-        const link = textItem.linkAt(p.x, p.y)
-        const h = link.startsWith("task:") ? "" : link
+    /// The last point trackLink() looked at, in textItem's coordinates.
+    property point linkPoint
+    function trackLink(pos: point): void {
+        row.linkPoint = textItem.mapFromItem(row, pos.x, pos.y)
+        const link = textItem.linkAt(row.linkPoint.x, row.linkPoint.y)
+        const h = Js.startsWith(link, "task:") ? "" : link
         if (h !== row.hoveredLink)
             row.hoveredLink = h
-        return p
     }
 
     HoverHandler {
@@ -179,8 +180,8 @@ FocusScope {
         cursorShape: Qt.PointingHandCursor
         onPointChanged: {
             // The link under the resting pointer: its preview (LinkPreviews, docs/UI.md "Link previews").
-            const p = row.trackLink(point.position)
-            LinkPreviews.hover(textItem, row.hoveredLink, row.sourcePath, Workspace, p.x, p.y)
+            row.trackLink(hover.point.position)
+            LinkPreviews.hover(textItem, row.hoveredLink, row.sourcePath, Workspace, row.linkPoint.x, row.linkPoint.y)
         }
         onHoveredChanged: {
             if (!hovered) {
@@ -201,8 +202,8 @@ FocusScope {
                 row.hoveredLink = ""
         }
         onTapped: (eventPoint, button) => {
-            const p = textItem.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
-            const link = textItem.linkAt(p.x, p.y)
+            row.linkPoint = textItem.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
+            const link = textItem.linkAt(row.linkPoint.x, row.linkPoint.y)
             if (link === "task:toggle") {
                 if (button === Qt.LeftButton)
                     row.taskToggled()
@@ -211,10 +212,16 @@ FocusScope {
             // Ctrl+click, a middle click: a new tab.
             const target = OpenIn.clickTarget(button, tap.point.modifiers)
             let followed = false
-            if (link !== "" && row.tools)
-                OpenIn.run(target, () => { followed = row.tools.openLink(link, row.sourcePath, false) })
-            if (!followed)
-                OpenIn.run(target, () => row.opened(false))
+            if (link !== "" && row.tools) {
+                OpenIn.begin(target)
+                followed = row.tools.openLink(link, row.sourcePath, false)
+                OpenIn.end()
+            }
+            if (!followed) {
+                OpenIn.begin(target)
+                row.opened(false)
+                OpenIn.end()
+            }
         }
     }
 }

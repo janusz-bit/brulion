@@ -32,6 +32,15 @@ struct JournalListModelForeign {
     QML_NAMED_ELEMENT(JournalListModel)
 };
 
+/// The base of BacklinksModel and TagBlocksModel, as a type for QML properties
+/// (ContentRefGroupHeader.refs).
+struct GroupedRefsModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::content::GroupedRefsModel)
+    QML_NAMED_ELEMENT(GroupedRefsModel)
+    QML_UNCREATABLE("Use BacklinksModel or TagBlocksModel")
+};
+
 struct BacklinksModelForeign {
     Q_GADGET
     QML_FOREIGN(brulion::content::BacklinksModel)

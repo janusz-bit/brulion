@@ -50,8 +50,8 @@ Item {
 
     readonly property alias model: pdf
     readonly property string fileName: {
-        const i = root.path.lastIndexOf("/")
-        return i < 0 ? root.path : root.path.slice(i + 1)
+        const i = Js.lastIndexOf(root.path, "/")
+        return i < 0 ? root.path : Js.sliceFrom(root.path, i + 1)
     }
     /// Zoomed in beyond the view's width: the drawer's edge strip yields to panning (PageView).
     readonly property bool pannedSideways: pdf.status === PdfViewModel.Ready && pdf.contentWidth > flick.width + 1
@@ -65,7 +65,21 @@ Item {
     property int drawJob: 0
     property int drawPage: 0
     /// The drawings of the current page the note embeds already (the draw menu offers them).
-    property var existingDrawings: []
+    property list<var> existingDrawings: []
+    /// A map or a list a call returned, read with AppController.route*() (compiled calls cannot
+    /// take one held in a local after another call: kept here).
+    property var _held: ({})
+    property list<var> _heldList: []
+    property list<int> _pages: []
+    /// No rows (a Repeater's model while there is nothing to show).
+    readonly property list<var> noRows: []
+    /// A position the model computed (contentX/Y of the Flickable), kept to be read compiled.
+    property point _at: Qt.point(0, 0)
+    /// A page's rectangle (content coordinates) and the last pagePoint(): its page and the point
+    /// in fractions of it.
+    property rect _box: Qt.rect(0, 0, 0, 0)
+    property int _hitPage: 0
+    property point _hitAt: Qt.point(0, 0)
     /// The zoom preview of a gesture (Ctrl+wheel, pinch): the pages layer scaled on the GPU around
     /// `previewOrigin` (content coordinates); committed once at the end (the pages drawn again once).
     property real previewScale: 1
@@ -99,7 +113,7 @@ Item {
 
     Connections {
         target: Workspace
-        function onFileChanged(path) {
+        function onFileChanged(path: string) {
             if (path === root.path)
                 root.revision++
         }
@@ -117,12 +131,12 @@ Item {
         maxFitWidth: Theme.narrow || root.inSidePanel ? 1e6 : 1000
         onMoveViewport: (x, y) => root.moveTo(x, y)
         // Two pages side by side, as last chosen on this device (QSettings' INI gives strings).
-        twoPages: String(AppSettings.value("pdf/twoPages", false)) === "true"
-        coverAlone: String(AppSettings.value("pdf/coverAlone", false)) === "true"
+        twoPages: root.settingText("pdf/twoPages") === "true"
+        coverAlone: root.settingText("pdf/coverAlone") === "true"
         // (Once the bindings on the status, `ready` among them, followed it: readyLater — a
         // Timer of this view, not Qt.callLater, so a view destroyed meanwhile — a tab switched
         // away — is never called back.)
-        onStatusChanged: if (status === PdfViewModel.Ready) readyLater.restart()
+        onStatusChanged: if (pdf.status === PdfViewModel.Ready) readyLater.restart()
         onCurrentPageChanged: if (root.ready) writeRoute.restart()
     }
 
@@ -134,7 +148,11 @@ Item {
 
     // ---- Route ------------------------------------------------------------------------------
 
-    function whenReady() {
+    /// A device setting as text (String(AppSettings.value(key, false))).
+    function settingText(key: string): string {
+        return AppSettings.value(key, false)
+    }
+    function whenReady(): void {
         if (!root || !root.ready)
             return
         root._readyPath = root.path
@@ -144,29 +162,42 @@ Item {
     }
 
     /// The page a route names: pdfPage, else Obsidian's "#page=N" kept as a heading.
-    function routePage(r) {
-        if (r && r.pdfPage > 0)
-            return r.pdfPage
-        const m = r && r.heading ? /(?:^|&)\s*page\s*=\s*(\d{1,7})\s*(?:&|$)/i.exec(r.heading) : null
-        return m ? parseInt(m[1]) : 1
+    function routePage(r: var): int {
+        root._held = r
+        const pdfPage = AppController.routeInt(root._held, "pdfPage", 0)
+        if (pdfPage > 0)
+            return pdfPage
+        const m = root.headingPage("" + AppController.routeText(root._held, "heading"))
+        return m.length > 1 ? Js.parseInt(m[1]) : 1
     }
-    onRouteChanged: Qt.callLater(root.applyRouteFromOutside)
-    function applyRouteFromOutside() {
+    /// Obsidian's "#page=N" in a heading: [match, N] ([] without one).
+    function headingPage(heading: string): list<string> {
+        return heading !== "" ? Js.match(heading, "(?:^|&)\\s*page\\s*=\\s*(\\d{1,7})\\s*(?:&|$)", "i") : []
+    }
+    onRouteChanged: routeLater.restart()
+    Timer {
+        id: routeLater
+        interval: 0
+        onTriggered: root.applyRouteFromOutside()
+    }
+    function applyRouteFromOutside(): void {
         root.applyRouteScale()
         root.applyRoutePage()
     }
     /// route.pdfScale (a zoom in percent): once per path and value, before the page is jumped to.
-    function applyRouteScale() {
-        if (!root || !root.ready || root._readyPath !== root.path || !root.route || !(root.route.pdfScale > 0))
+    function applyRouteScale(): void {
+        const scale = Js.toNumber(AppController.routeText(root.route, "pdfScale"))
+        if (!root.ready || root._readyPath !== root.path || !(scale > 0))
             return
-        const key = root.path + "\n" + root.route.pdfScale
+        const key = root.path + "\n" + AppController.routeText(root.route, "pdfScale")
         if (key === root._scaled)
             return
         root._scaled = key
-        root.moveTo(pdf.setScaleAround(root.route.pdfScale / 100 * 96 / 72, Qt.point(flick.width / 2, 0)))
+        root._at = pdf.setScaleAround(scale / 100 * 96 / 72, Qt.point(flick.width / 2, 0))
+        root.moveToPoint(root._at)
     }
-    function applyRoutePage() {
-        if (!root || !root.ready || root._readyPath !== root.path)
+    function applyRoutePage(): void {
+        if (!root.ready || root._readyPath !== root.path)
             return
         const page = Math.max(1, Math.min(pdf.pageCount, root.routePage(root.route)))
         if (page === root._routePage)
@@ -179,36 +210,37 @@ Item {
     Timer {
         id: writeRoute
         interval: 500
-        onTriggered: {
-            const current = AppController.currentRoute
-            if (root.inSidePanel || !root.paneActive || !root.ready || root._readyPath !== root.path || !current
-                    || current.path !== root.path)
-                return
-            const page = pdf.currentPage
-            if (page < 1 || root.routePage(current) === page)
-                return
-            root._routePage = page
-            const next = Object.assign({}, current, { pdfPage: page })
-            delete next.heading
-            AppController.replaceRoute(next)
-        }
+        onTriggered: root.writePageIntoRoute()
+    }
+    function writePageIntoRoute(): void {
+        if (root.inSidePanel || !root.paneActive || !root.ready || root._readyPath !== root.path
+                || AppController.routeText(AppController.currentRoute, "path") !== root.path)
+            return
+        const page = pdf.currentPage
+        if (page < 1 || root.routePage(AppController.currentRoute) === page)
+            return
+        root._routePage = page
+        AppController.replaceRoute(Js.withKey(Js.withoutKey(AppController.currentRoute, "heading"), "pdfPage", page))
     }
     /// route.open: once per path and value.
-    function openRequested() {
-        if (!root.route || !root.route.open || !root.ready || root._readyPath !== root.path)
+    function openRequested(): void {
+        const open = AppController.routeText(root.route, "open")
+        if (open === "" || !root.ready || root._readyPath !== root.path)
             return
-        const key = root.path + "\n" + root.route.open
+        const key = root.path + "\n" + open
         if (key === root._opened)
             return
         root._opened = key
-        switch (root.route.open) {
-        case "search":
+        switch (open) {
+        case "search": {
             root.openSearch()
-            if (root.route.search) {
-                searchField.text = root.route.search
-                pdf.searchText = root.route.search
+            const search = AppController.routeText(root.route, "search")
+            if (search !== "") {
+                searchField.text = search
+                pdf.searchText = search
             }
             break
+        }
         case "jump":
             root.openJump()
             break
@@ -220,63 +252,74 @@ Item {
 
     // ---- Moving and zooming -------------------------------------------------------------------
 
-    function moveTo(x, y) {
-        if (typeof x === "object") { // a point
-            y = x.y
-            x = x.x
-        }
-        if (!isFinite(x) || !isFinite(y))
+    function moveTo(x: real, y: real): void {
+        if (!Js.isFinite(x) || !Js.isFinite(y))
             return
         flick.contentX = Math.max(0, x)
         flick.contentY = Math.max(0, y)
     }
-    function jumpTo(page) {
+    function moveToPoint(p: point): void {
+        root.moveTo(p.x, p.y)
+    }
+    function jumpTo(page: int): void {
         if (!root.ready)
             return
         const p = Math.max(1, Math.min(pdf.pageCount, page))
-        root.moveTo(pdf.positionForPage(p, 0))
+        root._at = pdf.positionForPage(p, 0)
+        root.moveToPoint(root._at)
         pdf.pinPage(p) // (named also when it cannot reach the view's top)
         pdf.settle()
     }
-    function scrollBy(dx, dy) {
+    function scrollBy(dx: real, dy: real): void {
         const maxX = Math.max(0, flick.contentWidth - flick.width)
         const maxY = Math.max(0, flick.contentHeight - flick.height)
         flick.contentX = Math.max(0, Math.min(maxX, flick.contentX + dx))
         flick.contentY = Math.max(0, Math.min(maxY, flick.contentY + dy))
     }
     readonly property point centre: Qt.point(flick.width / 2, flick.height / 2)
-    function zoomBy(factor, point) {
-        if (root.ready)
-            root.moveTo(pdf.zoomAround(factor, point || root.centre))
+    function zoomBy(factor: real): void {
+        root.zoomByAt(factor, root.centre)
     }
-    function zoomTo(percent) {
-        if (root.ready)
-            root.moveTo(pdf.setScaleAround(percent / 100 * 96 / 72, root.centre))
-    }
-    /// A double tap / click: fit width ↔ twice that, around `point` (in the view).
-    function toggleZoomAt(point) {
+    function zoomByAt(factor: real, point: point): void {
         if (!root.ready)
             return
-        if (pdf.fitWidth)
-            root.zoomBy(2, point)
-        else
-            root.moveTo(pdf.fitToWidth(point))
+        root._at = pdf.zoomAround(factor, point)
+        root.moveToPoint(root._at)
     }
-    function fitWidth() {
-        if (root.ready)
-            root.moveTo(pdf.fitToWidth(Qt.point(0, 0)))
+    function zoomTo(percent: real): void {
+        if (!root.ready)
+            return
+        root._at = pdf.setScaleAround(percent / 100 * 96 / 72, root.centre)
+        root.moveToPoint(root._at)
+    }
+    /// A double tap / click: fit width ↔ twice that, around `point` (in the view).
+    function toggleZoomAt(point: point): void {
+        if (!root.ready)
+            return
+        if (pdf.fitWidth) {
+            root.zoomByAt(2, point)
+        } else {
+            root._at = pdf.fitToWidth(point)
+            root.moveToPoint(root._at)
+        }
+    }
+    function fitWidth(): void {
+        if (!root.ready)
+            return
+        root._at = pdf.fitToWidth(Qt.point(0, 0))
+        root.moveToPoint(root._at)
     }
     /// The gesture's preview committed: one zoom around where it happened.
-    function commitPreview() {
+    function commitPreview(): void {
         if (root.previewScale === 1)
             return
         const factor = root.previewScale
-        const point = Qt.point(root.previewOrigin.x - flick.contentX, root.previewOrigin.y - flick.contentY)
+        root._at = Qt.point(root.previewOrigin.x - flick.contentX, root.previewOrigin.y - flick.contentY)
         root.previewScale = 1
-        root.zoomBy(factor, point)
+        root.zoomByAt(factor, root._at)
     }
     /// A preview factor that keeps the committed zoom within the model's limits.
-    function boundedPreview(factor) {
+    function boundedPreview(factor: real): real {
         return Math.max(pdf.minScale / pdf.scale, Math.min(pdf.maxScale / pdf.scale, factor))
     }
     Timer {
@@ -287,148 +330,177 @@ Item {
 
     // ---- Search, jump, open elsewhere, draw -----------------------------------------------------
 
-    function openSearch() {
+    function openSearch(): void {
         if (!pdf.searchAvailable || !root.ready)
             return
         root.searchOpen = true
         searchField.forceActiveFocus()
         searchField.selectAll()
     }
-    function closeSearch() {
+    function closeSearch(): void {
         root.searchOpen = false
         searchField.text = ""
         pdf.clearSearch()
         root.forceActiveFocus()
     }
-    function nextHit(backwards) {
-        const at = backwards ? pdf.previousHit() : pdf.nextHit()
-        if (isFinite(at.x))
-            root.moveTo(at)
+    function nextHit(backwards: bool): void {
+        if (backwards)
+            root._at = pdf.previousHit()
+        else
+            root._at = pdf.nextHit()
+        if (Js.isFinite(root._at.x))
+            root.moveToPoint(root._at)
     }
-    function openJump() {
+    function openJump(): void {
         if (!root.ready)
             return
-        jumpField.text = String(pdf.currentPage)
+        jumpField.text = "" + pdf.currentPage
         jumpDialog.open()
     }
-    function openElsewhere() {
+    function openElsewhere(): void {
         Workspace.openInOtherApp(root.path)
     }
-    function drawOnPage() {
+    /// The drawings of `page` the note `from` embeds (Workspace.drawingsOnPdfPage).
+    function drawingsOn(page: int): list<var> {
+        return Workspace.drawingsOnPdfPage(root.path, page, AppController.routeText(root.route, "from"))
+    }
+    function drawOnPage(): void {
         if (!root.ready || root.drawJob !== 0)
             return
         const page = Math.max(1, pdf.currentPage)
-        const existing = Workspace.drawingsOnPdfPage(root.path, page, root.route && root.route.from ? root.route.from : "")
+        const existing = root.drawingsOn(page)
         if (existing.length > 0) {
             root.existingDrawings = existing
             root.drawPage = page
-            drawMenu.popup(drawButtonAnchor(), 0, drawButtonAnchor().height)
+            const anchor = root.drawButtonAnchor()
+            drawMenu.popup(anchor, 0, anchor.height)
         } else {
             root.startDrawing(page)
         }
     }
-    function drawButtonAnchor() {
+    function drawButtonAnchor(): Item {
         return root.wide ? drawButton : moreButton
     }
     /// The page shown, into the route now (the view is about to be left: Back returns here).
-    function rememberPage() {
+    function rememberPage(): void {
         writeRoute.stop()
-        writeRoute.triggered()
+        root.writePageIntoRoute()
+    }
+    /// The name of the drawing `i` of existingDrawings ("" none).
+    function existingName(i: int): string {
+        return i < root.existingDrawings.length ? AppController.routeText(root.existingDrawings[i], "name") : ""
     }
     /// A drawing of this page the note has already, opened.
-    function openExisting(i) {
+    function openExisting(i: int): void {
         root.rememberPage()
-        AppController.navigate({ view: "drawing", path: root.existingDrawings[i].path })
+        AppController.navigate({ view: "drawing", path: AppController.routeText(root.existingDrawings[i], "path") })
     }
-    function startDrawing(page) {
+    function startDrawing(page: int): void {
         root.rememberPage()
         root.drawPage = page
-        root.drawJob = DrawingBackdrops.prepare(root.path, [page], true)
+        root._pages = [page]
+        root.drawJob = DrawingBackdrops.prepare(root.path, root._pages, true)
     }
     Connections {
         target: DrawingBackdrops
         enabled: root.drawJob !== 0
-        function onFinished(job, items, cancelled) {
+        function onFinished(job: int, items: list<var>, cancelled: bool) {
             if (job !== root.drawJob)
                 return
             root.drawJob = 0
             if (cancelled)
                 return
-            if (items.length === 0 || items[0].error !== "") {
-                AppController.toast(DrawingBackdrops.errorText(items.length > 0 ? items[0].error : "pdf"), "error")
+            root._heldList = items
+            const error = items.length > 0 ? AppController.routeText(root._heldList[0], "error") : "pdf"
+            if (error !== "") {
+                AppController.toast(DrawingBackdrops.errorText(error), "error")
                 return
             }
-            const out = Workspace.addDrawingOnPdfPage(root.path, items[0], root.route && root.route.from ? root.route.from : "",
-                                                      root.route && root.route.fromLine !== undefined ? root.route.fromLine : -1)
-            if (!out.path)
+            const from = "" + AppController.routeText(root.route, "from")
+            const fromLine = 0 + AppController.routeInt(root.route, "fromLine", -1)
+            root._held = Workspace.addDrawingOnPdfPage(root.path, root._heldList[0], from, fromLine)
+            const path = AppController.routeText(root._held, "path")
+            if (path === "")
                 return
-            if (out.journal)
+            if (AppController.routeFlag(root._held, "journal"))
                 AppController.toast(qsTr("The drawing was added to today's journal."), "info")
-            AppController.navigate({ view: "drawing", path: out.path })
+            AppController.navigate({ view: "drawing", path: path })
         }
     }
 
     // ---- Selection, links, outline, password, two pages -------------------------------------------
 
-    /// The page at a point of the pages layer (content coordinates) and the point in fractions of it.
-    function pagePoint(x, y, page) {
+    /// A page's search hits, selected text and links (PdfViewModel's rows: { box, … }).
+    function hitsOn(page: int): list<var> {
+        return pdf.hitRects(page)
+    }
+    function selectionOn(page: int): list<var> {
+        return pdf.selectionRects(page)
+    }
+    function linksOn(page: int): list<var> {
+        return pdf.linkRects(page)
+    }
+    /// The page at a point of the pages layer (content coordinates) and the point in fractions of
+    /// it: _hitPage and _hitAt (false: no page there).
+    function pagePoint(x: real, y: real, page: int): bool {
         const p = page > 0 ? page : pdf.pageAt(x, y)
-        const r = pdf.pageRect(p)
-        if (p < 1 || !(r.width > 0) || !(r.height > 0))
-            return null
-        return { page: p, at: Qt.point((x - r.x) / r.width, (y - r.y) / r.height) }
+        root._box = pdf.pageRect(p)
+        if (p < 1 || !(root._box.width > 0) || !(root._box.height > 0))
+            return false
+        root._hitPage = p
+        root._hitAt = Qt.point((x - root._box.x) / root._box.width, (y - root._box.y) / root._box.height)
+        return true
     }
     /// A selection starts at a point of the pages layer.
-    function beginSelection(x, y) {
-        const hit = root.pagePoint(x, y, 0)
-        if (!hit)
+    function beginSelection(x: real, y: real): bool {
+        if (!root.pagePoint(x, y, 0))
             return false
-        root.selectPage = hit.page
-        root.selectFrom = hit.at
+        root.selectPage = root._hitPage
+        root.selectFrom = root._hitAt
         pdf.clearSelection()
         return true
     }
     /// …and goes on to another point (fractions of the press's page, beyond it too).
-    function extendSelection(x, y) {
-        const hit = root.pagePoint(x, y, root.selectPage)
-        if (hit)
-            pdf.selectText(root.selectPage, root.selectFrom, hit.at)
+    function extendSelection(x: real, y: real): void {
+        if (root.pagePoint(x, y, root.selectPage))
+            pdf.selectText(root.selectPage, root.selectFrom, root._hitAt)
     }
-    function copySelection() {
+    function copySelection(): void {
         if (pdf.copySelection())
             AppController.toast(qsTr("Copied to the clipboard"), "success")
     }
-    function selectAllOnPage() {
+    function selectAllOnPage(): void {
         if (pdf.selectionAvailable && root.ready)
             pdf.selectAll(Math.max(1, pdf.currentPage))
     }
     /// A link of the PDF: a page of it (and a place there), or an address for the browser / mail.
-    function followLink(link) {
-        if (link.url)
-            Workspace.openUrl(link.url) // (only http, https, mailto)
-        else if (link.page > 0)
-            root.jumpToTarget(link.page, link.top)
+    function followLink(url: string, page: int, top: real): void {
+        if (url !== "")
+            Workspace.openUrl(url) // (only http, https, mailto)
+        else if (page > 0)
+            root.jumpToTarget(page, top)
     }
-    function jumpToTarget(page, top) {
+    function jumpToTarget(page: int, top: real): void {
         if (!root.ready || page < 1)
             return
-        root.moveTo(pdf.positionForTarget(page, top))
+        root._at = pdf.positionForTarget(page, top)
+        root.moveToPoint(root._at)
         pdf.pinPage(page)
         pdf.settle()
     }
-    function openOutline() {
+    function openOutline(): void {
         if (root.ready && pdf.outline.length > 0)
             outlineDialog.open()
     }
-    function setTwoPages(on) {
+    function setTwoPages(on: bool): void {
         pdf.twoPages = on
         AppSettings.setValue("pdf/twoPages", on)
     }
-    function setCoverAlone(on) {
+    function setCoverAlone(on: bool): void {
         pdf.coverAlone = on
         AppSettings.setValue("pdf/coverAlone", on)
     }
-    function submitPassword() {
+    function submitPassword(): void {
         if (passwordField.text === "")
             return
         const password = passwordField.text
@@ -593,7 +665,12 @@ Item {
                 label: qsTr("Search in PDF")
                 shortcut: "Ctrl+F"
                 Layout.alignment: Qt.AlignVCenter
-                onClicked: root.searchOpen ? root.closeSearch() : root.openSearch()
+                onClicked: {
+                    if (root.searchOpen)
+                        root.closeSearch()
+                    else
+                        root.openSearch()
+                }
             }
             BIconButton {
                 id: outlineButton
@@ -729,21 +806,21 @@ Item {
             visible: root.existingDrawings.length > 0
             height: visible ? implicitHeight : 0
             //: "Rysuj na tej stronie": a drawing of this page already in the note
-            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingDrawings[0].name) : ""
+            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(0)) : ""
             iconName: "pen-tool"
             onTriggered: root.openExisting(0)
         }
         BMenuItem {
             visible: root.existingDrawings.length > 1
             height: visible ? implicitHeight : 0
-            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingDrawings[1].name) : ""
+            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(1)) : ""
             iconName: "pen-tool"
             onTriggered: root.openExisting(1)
         }
         BMenuItem {
             visible: root.existingDrawings.length > 2
             height: visible ? implicitHeight : 0
-            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingDrawings[2].name) : ""
+            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(2)) : ""
             iconName: "pen-tool"
             onTriggered: root.openExisting(2)
         }
@@ -797,7 +874,7 @@ Item {
                 // Esc closes the search (below), never only clears its text.
                 clearable: false
                 placeholderText: qsTr("Search in PDF")
-                onTextEdited: pdf.searchText = text
+                onTextEdited: pdf.searchText = searchField.text
                 onCleared: pdf.searchText = ""
                 onAccepted: root.nextHit((searchField.lastModifiers & Qt.ShiftModifier) !== 0)
                 property int lastModifiers: 0
@@ -832,7 +909,7 @@ Item {
                 Accessible.role: Accessible.StaticText
                 Accessible.name: text
                 text: {
-                    if (pdf.searchText.trim() === "")
+                    if (Js.trim(pdf.searchText) === "")
                         return ""
                     if (pdf.hitCount > 0)
                         //: Search hits in the PDF viewer: "3 z 12" (+ while still searching or capped)
@@ -897,8 +974,8 @@ Item {
         TouchFlick.enabled: !pinch.active && !root.touchSelecting
         T.ScrollBar.vertical: BScrollBar {}
         T.ScrollBar.horizontal: BScrollBar {}
-        onContentXChanged: pdf.setViewport(contentX, contentY)
-        onContentYChanged: pdf.setViewport(contentX, contentY)
+        onContentXChanged: pdf.setViewport(flick.contentX, flick.contentY)
+        onContentYChanged: pdf.setViewport(flick.contentX, flick.contentY)
         onMovementEnded: pdf.settle()
         Accessible.role: Accessible.Pane
         //: The PDF viewer's pages for screen readers: the zoom ("Powiększenie 85 %")
@@ -928,6 +1005,9 @@ Item {
                     required property real baseWidth
                     required property real baseHeight
                     required property bool failed
+                    // The detail picture (PdfViewModel.detail(): again when the view settled).
+                    required property url detailUrl
+                    required property rect detailBox
 
                     objectName: "pdfPage"
                     x: pageX
@@ -955,13 +1035,13 @@ Item {
                     Image {
                         // The visible part at full resolution, zoomed in, once the view settled.
                         objectName: "pdfPageDetail"
-                        readonly property var d: pdf.detailRevision >= 0 ? pdf.detail(pageItem.page) : ({})
-                        visible: !!d.url && status === Image.Ready
-                        x: d.x || 0
-                        y: d.y || 0
-                        width: d.width || 0
-                        height: d.height || 0
-                        source: d.url || ""
+                        id: detailImage
+                        visible: pageItem.detailBox.width > 0 && detailImage.status === Image.Ready
+                        x: pageItem.detailBox.x
+                        y: pageItem.detailBox.y
+                        width: pageItem.detailBox.width
+                        height: pageItem.detailBox.height
+                        source: pageItem.detailUrl
                         sourceSize: Qt.size(width, height)
                         asynchronous: true
                         cache: false
@@ -970,59 +1050,62 @@ Item {
                     }
                     Repeater {
                         // Search hits (fractions of the page).
-                        model: pdf.hitRevision >= 0 ? pdf.hitRects(pageItem.page) : []
+                        model: pdf.hitRevision >= 0 ? root.hitsOn(pageItem.page) : root.noRows
                         delegate: Rectangle {
-                            required property var modelData
+                            required property rect box
+                            required property bool current
                             objectName: "pdfHit"
-                            x: modelData.x * pageItem.width - 1
-                            y: modelData.y * pageItem.height - 1
-                            width: modelData.width * pageItem.width + 2
-                            height: modelData.height * pageItem.height + 2
+                            x: box.x * pageItem.width - 1
+                            y: box.y * pageItem.height - 1
+                            width: box.width * pageItem.width + 2
+                            height: box.height * pageItem.height + 2
                             radius: 2
-                            color: Theme.alpha(Theme.accent, modelData.current ? 0.45 : 0.25)
-                            border.width: modelData.current ? 2 : 0
+                            color: Theme.accent.alpha(current ? 0.45 : 0.25)
+                            border.width: current ? 2 : 0
                             border.color: Theme.accent
                         }
                     }
                     Repeater {
                         // The selected text (fractions of the page; the page is paper: one blue in
                         // both themes).
-                        model: pdf.selectionRevision >= 0 ? pdf.selectionRects(pageItem.page) : []
+                        model: pdf.selectionRevision >= 0 ? root.selectionOn(pageItem.page) : root.noRows
                         delegate: Rectangle {
-                            required property var modelData
+                            required property rect box
                             objectName: "pdfSelection"
-                            x: modelData.x * pageItem.width
-                            y: modelData.y * pageItem.height
-                            width: modelData.width * pageItem.width
-                            height: modelData.height * pageItem.height
-                            color: Qt.rgba(66 / 255, 133 / 255, 244 / 255, 0.35)
+                            x: box.x * pageItem.width
+                            y: box.y * pageItem.height
+                            width: box.width * pageItem.width
+                            height: box.height * pageItem.height
+                            color: "#594285f4" // rgba(66, 133, 244, 0.35)
                         }
                     }
                     Repeater {
                         // Links: a page of the PDF, or an address for the browser / mail client.
-                        model: pdf.linkRevision >= 0 ? pdf.linkRects(pageItem.page) : []
+                        model: pdf.linkRevision >= 0 ? root.linksOn(pageItem.page) : root.noRows
                         delegate: MouseArea {
                             id: linkArea
-                            required property var modelData
+                            required property rect box
+                            required property string url
+                            required property int page
+                            required property real targetTop
                             objectName: "pdfLink"
-                            x: modelData.x * pageItem.width
-                            y: modelData.y * pageItem.height
-                            width: Math.max(1, modelData.width * pageItem.width)
-                            height: Math.max(1, modelData.height * pageItem.height)
+                            x: box.x * pageItem.width
+                            y: box.y * pageItem.height
+                            width: Math.max(1, box.width * pageItem.width)
+                            height: Math.max(1, box.height * pageItem.height)
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             Accessible.role: Accessible.Link
-                            Accessible.name: modelData.url !== "" ? modelData.url
-                                                                  : qsTr("Page %1 of %2").arg(modelData.page).arg(pdf.pageCount)
-                            Accessible.onPressAction: root.followLink(modelData)
-                            onClicked: root.followLink(modelData)
+                            Accessible.name: url !== "" ? url : qsTr("Page %1 of %2").arg(page).arg(pdf.pageCount)
+                            Accessible.onPressAction: root.followLink(linkArea.url, linkArea.page, linkArea.targetTop)
+                            onClicked: root.followLink(linkArea.url, linkArea.page, linkArea.targetTop)
                             Loader {
                                 // Where an address leads, on hover (created only then).
-                                active: linkArea.containsMouse && linkArea.modelData.url !== ""
+                                active: linkArea.containsMouse && linkArea.url !== ""
                                 sourceComponent: BToolTip {
                                     parent: linkArea
                                     visible: true
-                                    text: linkArea.modelData.url
+                                    text: linkArea.url
                                 }
                             }
                         }
@@ -1049,6 +1132,7 @@ Item {
                 // turns go on to the Flickable (scrolling). A press and drag selects text where
                 // the renderer can (the Flickable may not steal it then), else pans; a right click
                 // opens the menu of the selection. Under the pages' links (z).
+                id: pagesMouse
                 objectName: "pdfMouse"
                 anchors.fill: parent
                 z: -1
@@ -1065,8 +1149,8 @@ Item {
                     if (delta === 0)
                         return
                     if (root.previewScale === 1) {
-                        const p = flick.mapFromItem(this, wheel.x, wheel.y)
-                        root.previewOrigin = Qt.point(flick.contentX + p.x, flick.contentY + p.y)
+                        root._at = flick.mapFromItem(pagesMouse, wheel.x, wheel.y)
+                        root.previewOrigin = Qt.point(flick.contentX + root._at.x, flick.contentY + root._at.y)
                     }
                     root.previewScale = root.boundedPreview(root.previewScale * Math.pow(1.0015, delta))
                     wheelCommit.restart()
@@ -1079,8 +1163,8 @@ Item {
                     root.forceActiveFocus()
                     if (mouse.button === Qt.RightButton) {
                         root.contextPage = pdf.pageAt(mouse.x, mouse.y)
-                        const p = flick.mapFromItem(this, mouse.x, mouse.y)
-                        selectionMenu.popup(flick, p.x, p.y)
+                        root._at = flick.mapFromItem(pagesMouse, mouse.x, mouse.y)
+                        selectionMenu.popup(flick, root._at.x, root._at.y)
                         return
                     }
                     if (pdf.selectionAvailable)
@@ -1096,7 +1180,8 @@ Item {
                     // (A finger's double tap: the TapHandler below.)
                     if (mouse.source !== Qt.MouseEventNotSynthesized)
                         return
-                    root.toggleZoomAt(flick.mapFromItem(this, mouse.x, mouse.y))
+                    root._at = flick.mapFromItem(pagesMouse, mouse.x, mouse.y)
+                    root.toggleZoomAt(root._at)
                 }
             }
             PinchHandler {
@@ -1104,14 +1189,14 @@ Item {
                 target: null
                 acceptedDevices: PointerDevice.TouchScreen | PointerDevice.TouchPad
                 onActiveChanged: {
-                    if (active) {
-                        const p = flick.mapFromItem(null, centroid.scenePosition.x, centroid.scenePosition.y)
-                        root.previewOrigin = Qt.point(flick.contentX + p.x, flick.contentY + p.y)
+                    if (pinch.active) {
+                        root._at = flick.mapFromItem(null, pinch.centroid.scenePosition.x, pinch.centroid.scenePosition.y)
+                        root.previewOrigin = Qt.point(flick.contentX + root._at.x, flick.contentY + root._at.y)
                     } else {
                         root.commitPreview()
                     }
                 }
-                onActiveScaleChanged: if (active) root.previewScale = root.boundedPreview(activeScale)
+                onActiveScaleChanged: if (pinch.active) root.previewScale = root.boundedPreview(pinch.activeScale)
             }
             TapHandler {
                 // A finger's double tap: fit width ↔ twice that, around the tap. A long press
@@ -1120,8 +1205,10 @@ Item {
                 // tap elsewhere ends the selection.
                 id: touchTap
                 acceptedDevices: PointerDevice.TouchScreen
-                onDoubleTapped: (eventPoint) => root.toggleZoomAt(
-                                    flick.mapFromItem(null, eventPoint.scenePosition.x, eventPoint.scenePosition.y))
+                onDoubleTapped: (eventPoint) => {
+                    root._at = flick.mapFromItem(null, eventPoint.scenePosition.x, eventPoint.scenePosition.y)
+                    root.toggleZoomAt(root._at)
+                }
                 onTapped: if (root.hasSelection) pdf.clearSelection()
                 onLongPressed: {
                     const p = touchTap.point.position
@@ -1144,22 +1231,23 @@ Item {
                     if (Math.abs(p.x - from.x) + Math.abs(p.y - from.y) > Theme.space2)
                         root.extendSelection(p.x, p.y)
                 }
-                onActiveChanged: if (!active) root.touchSelecting = false
+                onActiveChanged: if (!touchFinger.active) root.touchSelecting = false
             }
 
             BButton {
                 // The selection's "Kopiuj", over its first line (scrolls with the page).
                 id: copyButton
                 objectName: "pdfCopyButton"
-                readonly property var first: root.hasSelection && pdf.selectionRevision >= 0
-                                             ? pdf.selectionRects(pdf.selectionPage)[0] : undefined
+                // (The selection's first rectangle, fractions of its page.)
+                readonly property rect first: pdf.selectionAnchor
+                readonly property bool hasFirst: root.hasSelection && first.width > 0
                 readonly property rect pageBox: root.hasSelection && pdf.scale > 0 && pdf.contentWidth > 0
-                                                ? pdf.pageRect(pdf.selectionPage) : Qt.rect(0, 0, 0, 0)
-                visible: first !== undefined && !root.selecting && !root.touchSelecting
+                                                ? pdf.selectionPageRect : Qt.rect(0, 0, 0, 0)
+                visible: hasFirst && !root.selecting && !root.touchSelecting
                 z: 3
-                x: first ? Math.max(pageBox.x, Math.min(pageBox.x + pageBox.width - width,
-                                                         pageBox.x + first.x * pageBox.width)) : 0
-                y: first ? Math.max(0, pageBox.y + first.y * pageBox.height - height - Theme.space2) : 0
+                x: hasFirst ? Math.max(pageBox.x, Math.min(pageBox.x + pageBox.width - width,
+                                                           pageBox.x + first.x * pageBox.width)) : 0
+                y: hasFirst ? Math.max(0, pageBox.y + first.y * pageBox.height - height - Theme.space2) : 0
                 size: "small"
                 variant: "secondary"
                 iconName: "copy"
@@ -1370,7 +1458,7 @@ Item {
                 id: messageRefs
                 anchors.horizontalCenter: parent.horizontalCenter
                 active: messageFlick.visible && !root.refsInSidePanel
-                visible: active && item !== null && !item.empty
+                visible: active && item !== null && !(item as ContentBacklinks).empty
                 sourceComponent: ContentBacklinks {
                     objectName: "pdfMessageReferences"
                     width: Math.min(messageFlick.width - 2 * Theme.space4, 760)
@@ -1392,16 +1480,6 @@ Item {
 
     // ---- Table of contents ----------------------------------------------------------------------
 
-    /// The outline entry of the current page: the last one leading to it or before it.
-    function currentOutlineIndex() {
-        let best = -1
-        for (let i = 0; i < pdf.outline.length; ++i) {
-            const page = pdf.outline[i].page
-            if (page > 0 && page <= pdf.currentPage)
-                best = i
-        }
-        return best
-    }
 
     BDialog {
         id: outlineDialog
@@ -1412,9 +1490,15 @@ Item {
         preferredWidth: 440
         property int current: -1
         onAboutToShow: {
-            current = root.currentOutlineIndex()
-            if (current >= 0)
-                Qt.callLater(() => outlineList.positionViewAtIndex(outlineDialog.current, ListView.Center))
+            // The outline entry of the current page: the last one leading to it or before it.
+            outlineDialog.current = pdf.outlineIndexForPage(pdf.currentPage)
+            if (outlineDialog.current >= 0)
+                outlineLater.restart()
+        }
+        Timer {
+            id: outlineLater
+            interval: 0
+            onTriggered: outlineList.positionViewAtIndex(outlineDialog.current, ListView.Center)
         }
         onClosed: root.forceActiveFocus()
 
@@ -1425,21 +1509,25 @@ Item {
             Layout.preferredHeight: Math.min(contentHeight, Math.max(160, root.height * 0.6))
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            model: outlineDialog.visible ? pdf.outline : []
+            model: outlineDialog.visible ? pdf.outline : root.noRows
             T.ScrollBar.vertical: BScrollBar {}
             delegate: BListItem {
                 id: entry
-                required property var modelData
+                // PdfViewModel.outline rows (every key always there).
+                required property string title
+                required property int level
+                required property int page
+                required property real targetTop
                 required property int index
                 objectName: "pdfOutlineEntry"
-                width: ListView.view.width
+                width: outlineList.width
                 dense: true
-                text: modelData.title !== "" ? modelData.title : qsTr("Page %1").arg(modelData.page)
-                leftPadding: Theme.space3 + Math.min(modelData.level, 6) * Theme.space4
+                text: title !== "" ? title : qsTr("Page %1").arg(page)
+                leftPadding: Theme.space3 + Math.min(level, 6) * Theme.space4
                 selected: index === outlineDialog.current
-                enabled: modelData.page > 0
+                enabled: page > 0
                 trailing: Text {
-                    text: entry.modelData.page > 0 ? String(entry.modelData.page) : ""
+                    text: entry.page > 0 ? "" + entry.page : ""
                     textFormat: Text.PlainText
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
@@ -1447,7 +1535,7 @@ Item {
                 }
                 onClicked: {
                     outlineDialog.close()
-                    root.jumpToTarget(modelData.page, modelData.top)
+                    root.jumpToTarget(entry.page, entry.targetTop)
                 }
             }
         }
@@ -1464,7 +1552,7 @@ Item {
         preferredWidth: 320
         initialFocusItem: jumpField
         acceptEnabled: jumpField.acceptableInput
-        onAccepted: root.jumpTo(parseInt(jumpField.text))
+        onAccepted: root.jumpTo(Js.parseInt(jumpField.text))
         onClosed: root.forceActiveFocus()
 
         BTextField {
@@ -1475,7 +1563,7 @@ Item {
             placeholderText: "1–%1".arg(pdf.pageCount)
             inputMethodHints: Qt.ImhDigitsOnly
             validator: IntValidator { bottom: 1; top: Math.max(1, pdf.pageCount) }
-            onAccepted: if (acceptableInput) jumpDialog.accept()
+            onAccepted: if (jumpField.acceptableInput) jumpDialog.accept()
         }
     }
 }

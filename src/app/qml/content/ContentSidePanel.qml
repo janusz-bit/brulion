@@ -20,21 +20,28 @@ Item {
     /// The tab shown first: "links" | "outline" | "calendar" (default: the last one used).
     property string initialTab: ""
 
-    readonly property var tabs: ["links", "outline", "calendar"]
+    readonly property list<string> tabs: ["links", "outline", "calendar"]
     /// The tab shown now ("links" | "outline" | "calendar"): the page leaves out its own references
     /// section while this panel shows them (PageView.refsInSidePanel). A property, not the
     /// remembered setting: AppSettings.value() is not tracked by bindings.
-    readonly property string currentTab: tabs[tabBar.currentIndex] || "links"
+    readonly property string currentTab: tabName(tabBar.currentIndex)
     readonly property string journalDate: path !== "" ? Workspace.journalDate(path) : ""
 
-    function rendererPalette() {
-        return editor ? editor.rendererPalette : ({})
+    function rendererPalette(): var {
+        return panel.editor ? panel.editor.rendererPalette : ({})
+    }
+    /// The tab at `index` ("links" out of range).
+    function tabName(index: int): string {
+        return index >= 0 && index < panel.tabs.length ? panel.tabs[index] : "links"
+    }
+    function setting(key: string, fallback: string): string {
+        return AppSettings.value(key, fallback)
     }
 
     Component.onCompleted: {
-        const remembered = String(AppSettings.value("ui/sidePanel/tab", "links"))
-        const tab = initialTab !== "" ? initialTab : remembered
-        tabBar.currentIndex = Math.max(0, tabs.indexOf(tab))
+        const remembered = panel.setting("ui/sidePanel/tab", "links")
+        const tab = panel.initialTab !== "" ? panel.initialTab : remembered
+        tabBar.currentIndex = Math.max(0, panel.tabs.indexOf(tab))
     }
 
     Rectangle {
@@ -51,7 +58,7 @@ Item {
             Layout.fillWidth: true
             Layout.leftMargin: Theme.space2
             stretch: true
-            onCurrentIndexChanged: AppSettings.setValue("ui/sidePanel/tab", panel.tabs[currentIndex] || "links")
+            onCurrentIndexChanged: AppSettings.setValue("ui/sidePanel/tab", panel.tabName(currentIndex))
             BTabButton { text: qsTr("Links"); iconName: "link"; count: links.linkedCount }
             BTabButton { text: qsTr("Outline"); iconName: "list" }
             BTabButton { text: qsTr("Calendar"); iconName: "calendar-days" }

@@ -73,19 +73,23 @@ FocusScope {
 
     focus: true
 
-    readonly property string routePath: route && route.path ? route.path : ""
+    readonly property string routePath: AppController.routeText(route, "path")
     readonly property string fileName: {
-        const i = root.loadedPath.lastIndexOf("/")
-        return i < 0 ? root.loadedPath : root.loadedPath.slice(i + 1)
+        const i = Js.lastIndexOf(root.loadedPath, "/")
+        return i < 0 ? root.loadedPath : Js.sliceFrom(root.loadedPath, i + 1)
     }
     /// The drawing file's extension as written (".svg", ".excalidraw", ".excalidraw.md"; the title
     /// goes without it, a kept copy gets it).
-    readonly property string extension: {
-        const m = /(\.excalidraw\.md|\.excalidraw|\.svg|\.md)$/i.exec(root.fileName)
-        return m ? m[1] : ".svg"
+    readonly property string extension: root.extensionOf(root.fileName)
+    function extensionOf(name: string): string {
+        const m = root.extensionMatch(name)
+        return m.length > 1 ? m[1] : ".svg"
     }
-    readonly property string title: root.fileName.endsWith(root.extension)
-                                    ? root.fileName.slice(0, root.fileName.length - root.extension.length)
+    function extensionMatch(name: string): list<string> {
+        return Js.match(name, "(\\.excalidraw\\.md|\\.excalidraw|\\.svg|\\.md)$", "i")
+    }
+    readonly property string title: Js.endsWith(root.fileName, root.extension)
+                                    ? Js.slice(root.fileName, 0, root.fileName.length - root.extension.length)
                                     : root.fileName
     readonly property bool editing: true
     readonly property bool toolbarDocked: Theme.narrow && root.status === ""
@@ -105,8 +109,20 @@ FocusScope {
     /// The drawing the backdrop is chosen for (loadedPath then): another one loaded meanwhile
     /// gets none.
     property string backdropFor: ""
-    /// A prepared backdrop waiting for the stroke, shape or text in progress to end.
-    property var pendingBackdrop: null
+    /// A prepared backdrop waiting for the stroke, shape or text in progress to end
+    /// (backdropPending: its items in pendingBackdrop).
+    property bool backdropPending: false
+    property list<var> pendingBackdrop: []
+    /// A map or a list a call returned, read with AppController.route*() (compiled calls cannot
+    /// take one held in a local after another call: kept here).
+    property var _held: ({})
+    property list<var> _heldList: []
+    property list<int> _pages: []
+    /// No pages (a picture is prepared as itself).
+    readonly property list<int> noPages: []
+    /// File bytes (the drawing's, the file's on disk) passed on to more than one call.
+    property var _bytes
+    property var _disk
     /// The drawing of a neighbouring PDF page being made (stepPage()): the job preparing the page
     /// (0 none), the drawing it goes beside, the note it goes into, before the current one or after.
     property int pageJob: 0
@@ -118,21 +134,21 @@ FocusScope {
     property bool _writing: false
 
     // The tools, remembered on the device.
-    property string penColor: AppSettings.value("drawing/penColor", "#1f2430")
-    property real penWidth: Number(AppSettings.value("drawing/penWidth", 1)) || 1
-    property string highlighterColor: AppSettings.value("drawing/highlighterColor", "#ffd43b")
-    property real highlighterWidth: Number(AppSettings.value("drawing/highlighterWidth", 5)) || 5
+    property string penColor: root.setting("drawing/penColor", "#1f2430")
+    property real penWidth: root.settingNumber("drawing/penWidth", 1)
+    property string highlighterColor: root.setting("drawing/highlighterColor", "#ffd43b")
+    property real highlighterWidth: root.settingNumber("drawing/highlighterWidth", 5)
     /// The shape tool the shape button stands for.
-    property string shapeTool: AppSettings.value("drawing/shape", "rectangle")
+    property string shapeTool: root.setting("drawing/shape", "rectangle")
     /// How the select tool takes elements: "lasso", "box".
-    property string selectMode: AppSettings.value("drawing/selectMode", "lasso")
-    property real fontSize: Number(AppSettings.value("drawing/fontSize", 20)) || 20
+    property string selectMode: root.setting("drawing/selectMode", "lasso")
+    property real fontSize: root.settingNumber("drawing/fontSize", 20)
     /// "auto" (a finger draws until a stylus has been seen), "on", "off".
-    property string fingerMode: AppSettings.value("drawing/finger", "auto")
-    property bool stylusKnown: flag(AppSettings.value("drawing/stylusSeen", false))
+    property string fingerMode: root.setting("drawing/finger", "auto")
+    property bool stylusKnown: root.setting("drawing/stylusSeen", "false") === "true"
     readonly property bool fingerDraws: fingerMode === "on" || (fingerMode === "auto" && !stylusKnown)
 
-    readonly property var penColors: [
+    readonly property list<var> penColors: [
         { color: "#1f2430", label: qsTr("Ink") },
         { color: "#2f6fdd", label: qsTr("Blue") },
         { color: "#e03131", label: qsTr("Red") },
@@ -140,38 +156,44 @@ FocusScope {
         { color: "#f08c00", label: qsTr("Orange") },
         { color: "#7048e8", label: qsTr("Violet") }
     ]
-    readonly property var highlighterColors: [
+    readonly property list<var> highlighterColors: [
         { color: "#ffd43b", label: qsTr("Yellow") },
         { color: "#8ce99a", label: qsTr("Green") },
         { color: "#faa2c1", label: qsTr("Pink") },
         { color: "#74c0fc", label: qsTr("Blue") },
         { color: "#ffa94d", label: qsTr("Orange") }
     ]
-    readonly property var penWidths: [
+    readonly property list<var> penWidths: [
         { value: 0.5, label: qsTr("Fine") },
         { value: 1, label: qsTr("Medium") },
         { value: 2, label: qsTr("Thick") }
     ]
-    readonly property var highlighterWidths: [
+    readonly property list<var> highlighterWidths: [
         { value: 3, label: qsTr("Narrow") },
         { value: 5, label: qsTr("Medium") },
         { value: 8, label: qsTr("Wide") }
     ]
     /// Excalidraw's text sizes.
-    readonly property var fontSizes: [
+    readonly property list<var> fontSizes: [
         { value: 16, label: qsTr("Small") },
         { value: 20, label: qsTr("Medium", "text size") },
         { value: 28, label: qsTr("Large") },
         { value: 36, label: qsTr("Extra large") }
     ]
 
-    function flag(value) {
-        return value === true || value === "true"
+    /// A device setting as text (true: "true"), `fallback` when it is not set.
+    function setting(key: string, fallback: string): string {
+        return AppSettings.value(key, fallback)
+    }
+    /// A device setting as a number (Number(value) || fallback).
+    function settingNumber(key: string, fallback: real): real {
+        const n = Js.toNumber(root.setting(key, ""))
+        return n !== 0 && !Js.isNaN(n) ? n : fallback
     }
 
     /// Write the drawing when it changed (true: nothing to write, or written); a text being written
     /// is committed first.
-    function save() {
+    function save(): bool {
         saveTimer.stop()
         if (textEditor)
             textEditor.commit() // (a text being written goes in first)
@@ -181,25 +203,25 @@ FocusScope {
         // holds now, on disk, right before the write: another program may have written it a
         // moment ago, before its change was reported (a folder watch that missed it, Android's
         // shared storage, Syncthing while this was written) — taken in first, never written over.
-        let bytes = canvas.fileBytes()
+        root._bytes = canvas.fileBytes()
         for (let checks = 0; checks < 3 && Workspace.exists(root.loadedPath); ++checks) {
-            const disk = Workspace.readAttachment(root.loadedPath)
-            if (disk.byteLength === 0 || canvas.isKnownFile(disk))
+            root._disk = Workspace.readAttachment(root.loadedPath)
+            if (!canvas.hasBytes(root._disk) || canvas.isKnownFile(root._disk))
                 break
-            if (!root.takeIn(disk))
+            if (!root.takeIn(root._disk))
                 return true // shown as it is now; what was drawn here kept in a copy beside it
             if (!canvas.modified)
                 return true // (theirs as it is: nothing of this side to write)
-            bytes = canvas.fileBytes() // (the merge)
+            root._bytes = canvas.fileBytes() // (the merge)
         }
         // The vault reports the write at once (Workspace.fileChanged, below): that is this save,
         // not another device's change to merge.
         root._writing = true
-        const written = Workspace.writeAttachment(root.loadedPath, bytes)
+        const written = Workspace.writeAttachment(root.loadedPath, root._bytes)
         root._writing = false
         if (!written)
             return false // (Workspace.errorOccurred: the shell's toast says why)
-        canvas.markSaved(bytes)
+        canvas.markSaved(root._bytes)
         return true
     }
 
@@ -207,9 +229,11 @@ FocusScope {
     /// drawn here (DrawingCanvas.takeExternal) — or, when it is no drawing Brulion can edit any
     /// more (a frame or an embedded page added in excalidraw.com), shown as it is, with what was
     /// drawn here and not yet saved kept in a copy beside it. True when the paper still edits it.
-    function takeIn(bytes) {
+    property var _taken
+    function takeIn(bytes: var): bool {
+        root._taken = bytes
         const merged = canvas.modified
-        if (canvas.takeExternal(bytes)) {
+        if (canvas.takeExternal(root._taken)) {
             if (merged) {
                 AppController.toast(qsTr("The drawing was changed on another device: both versions are kept in it"))
                 saveTimer.restart()
@@ -219,26 +243,30 @@ FocusScope {
         saveTimer.stop()
         if (canvas.modified)
             root.keepCopy()
-        root.status = canvas.load(bytes)
+        root.status = canvas.load(root._taken)
         return false
     }
 
     /// What was drawn here, written beside the drawing as a new file in its format ("Rysunek (to
     /// urządzenie).svg", "Szkic (to urządzenie).excalidraw.md").
-    function keepCopy() {
-        const slash = root.loadedPath.lastIndexOf("/")
-        const folder = slash < 0 ? "" : root.loadedPath.slice(0, slash + 1)
+    function keepCopy(): void {
+        const slash = Js.lastIndexOf(root.loadedPath, "/")
+        const folder = slash < 0 ? "" : Js.slice(root.loadedPath, 0, slash + 1)
         const path = Workspace.createAttachment(folder + qsTr("%1 (this device)").arg(root.title) + root.extension,
                                                 canvas.fileBytes())
         if (path !== "")
-            AppController.toast(qsTr("The drawing was changed elsewhere into one Brulion cannot edit. What you drew here is kept in %1").arg(path.slice(path.lastIndexOf("/") + 1)))
+            AppController.toast(qsTr("The drawing was changed elsewhere into one Brulion cannot edit. What you drew here is kept in %1").arg(root.baseName(path)))
+    }
+    /// The last part of a path.
+    function baseName(path: string): string {
+        return Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1)
     }
 
-    function load(path) {
+    function load(path: string): void {
         root.loadedPath = path
         root.dropBackdropChoice()
         if (!Workspace.exists(path)) {
-            canvas.load(new ArrayBuffer(0))
+            canvas.loadEmpty()
             root.status = "missing"
             return
         }
@@ -246,15 +274,26 @@ FocusScope {
         root.forceActiveFocus()
     }
 
-    function applyRoute() {
+    function applyRoute(): void {
         if (root.routePath === "" || root.routePath === root.loadedPath)
             return
         root.save()
         root.load(root.routePath)
         // route.open (screenshots): "style" | "more" (phones), "paper" (wide windows), "theme".
-        const open = root.route && root.route.open ? root.route.open : ""
-        if (open !== "" && root.status === "")
-            Qt.callLater(() => {
+        const open = AppController.routeText(root.route, "open")
+        if (open !== "" && root.status === "") {
+            root._open = open
+            openLater.restart()
+        }
+    }
+    /// route.open being applied (a moment later: openLater).
+    property string _open: ""
+    Timer {
+        id: openLater
+        interval: 0
+        onTriggered: root.openFromRoute(root._open)
+    }
+    function openFromRoute(open: string): void {
                 const bar = Theme.narrow ? bottomBar : topBar
                 if (open === "style")
                     bar.openStyle()
@@ -270,8 +309,8 @@ FocusScope {
                     bar.openShapes()
                 else if (open === "select" || open === "selectstyle" || open === "selectmore") {
                     canvas.tool = "select"
-                    if (root.route.ids)
-                        canvas.select(root.route.ids)
+                    if (AppController.routeFlag(root.route, "ids"))
+                        canvas.select(AppController.routeStrings(root.route, "ids"))
                     else
                         canvas.selectAll()
                     if (open === "selectstyle")
@@ -286,17 +325,16 @@ FocusScope {
                     else
                         bar.openBackground()
                 }
-            })
     }
 
-    function applyTool() {
+    function applyTool(): void {
         // (Shapes and text in the pen's colour; shapes twice the pen's width.)
         canvas.color = canvas.tool === "highlighter" ? root.highlighterColor : root.penColor
         canvas.penWidth = canvas.tool === "highlighter" ? root.highlighterWidth : root.penWidth
         canvas.fontSize = root.fontSize
     }
 
-    function chooseColor(color) {
+    function chooseColor(color: string): void {
         if (canvas.tool === "highlighter") {
             root.highlighterColor = color
             AppSettings.setValue("drawing/highlighterColor", color)
@@ -309,28 +347,28 @@ FocusScope {
         root.applyTool()
     }
 
-    function chooseFontSize(size) {
+    function chooseFontSize(size: real): void {
         root.fontSize = size
         AppSettings.setValue("drawing/fontSize", size)
         root.applyTool()
     }
 
-    function chooseShape(tool) {
+    function chooseShape(tool: string): void {
         root.shapeTool = tool
         AppSettings.setValue("drawing/shape", tool)
     }
 
-    function chooseSelectMode(mode) {
+    function chooseSelectMode(mode: string): void {
         root.selectMode = mode
         AppSettings.setValue("drawing/selectMode", mode)
     }
 
-    function useShape(tool) {
+    function useShape(tool: string): void {
         canvas.tool = tool
         root.chooseShape(tool)
     }
 
-    function chooseWidth(width) {
+    function chooseWidth(width: real): void {
         if (canvas.tool === "highlighter") {
             root.highlighterWidth = width
             AppSettings.setValue("drawing/highlighterWidth", width)
@@ -341,13 +379,13 @@ FocusScope {
         root.applyTool()
     }
 
-    function toggleFinger() {
+    function toggleFinger(): void {
         root.fingerMode = root.fingerDraws ? "off" : "on"
         AppSettings.setValue("drawing/finger", root.fingerMode)
     }
 
     /// "Podkład z obrazu lub PDF…": a picture or a PDF picked and imported into the notebook.
-    function pickBackdrop() {
+    function pickBackdrop(): void {
         if (root.status !== "")
             return
         root.backdropFor = root.loadedPath
@@ -359,50 +397,51 @@ FocusScope {
     }
     /// The backdrop's file (a vault path, just imported): a PDF's page is chosen, a picture
     /// prepared at once.
-    function useBackdropFile(path) {
+    function useBackdropFile(path: string): void {
         root.backdropImport = path
         if (path === "")
             return
         if (DrawingBackdrops.isPdf(path))
             root.openPageDialog(path, 1)
         else
-            root.backdropJob = DrawingBackdrops.prepare(path, [])
+            root.backdropJob = DrawingBackdrops.prepare(path, root.noPages)
     }
-    function openPaperDialog() {
+    function openPaperDialog(): void {
         if (!root.paperDialog)
             root.paperDialog = paperDialogComponent.createObject(root) as DrawingPaperDialog
         root.paperDialog.openWith(canvas.paper)
     }
-    function openPageDialog(path, page) {
+    function openPageDialog(path: string, page: int): void {
         if (!root.backdropDialog)
             root.backdropDialog = backdropDialogComponent.createObject(root) as DrawingBackdropDialog
         root.backdropDialog.openFor(path, "single", page)
     }
     /// No backdrop was set from the picked file: the copy stored for it goes (never a file of the
     /// notebook or one reused).
-    function abandonBackdropFile() {
+    function abandonBackdropFile(): void {
         if (root.backdropImport !== "")
             Workspace.discardImport(root.backdropImport)
         root.backdropImport = ""
     }
     /// "Inna strona PDF…": the backdrop's PDF again (renames do not follow it into the drawing).
-    function otherBackdropPage() {
+    function otherBackdropPage(): void {
         root.backdropImport = "" // (the file is the drawing's: never discarded)
         root.backdropFor = root.loadedPath
         const path = canvas.backdropPath
         if (path === "" || !Workspace.exists(path)) {
-            AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(path.slice(path.lastIndexOf("/") + 1)))
+            AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(root.baseName(path)))
             return
         }
         root.openPageDialog(path, canvas.backdropPage)
     }
     /// Ctrl+V, "Wklej": Excalidraw's elements (excalidraw.com's, another drawing's) or plain text
     /// from the clipboard (DrawingCanvas.paste), saying what was left out.
-    function paste() {
-        const out = canvas.paste()
-        if (out.skipped > 0)
-            AppController.toast(qsTr("%n pasted element(s) Brulion does not draw (frames, embedded pages) left out.", "", out.skipped))
-        else if (out.pasted === 0 && root.status === "")
+    function paste(): void {
+        root._held = canvas.paste()
+        const skipped = AppController.routeInt(root._held, "skipped", 0)
+        if (skipped > 0)
+            AppController.toast(qsTr("%n pasted element(s) Brulion does not draw (frames, embedded pages) left out.", "", skipped))
+        else if (AppController.routeInt(root._held, "pasted", 0) === 0 && root.status === "")
             AppController.toast(qsTr("The clipboard holds nothing to paste on a drawing."))
     }
     /// "Poprzednia / Następna strona PDF" (PgUp / PgDown): the drawing of page N ± 1 of the
@@ -411,7 +450,7 @@ FocusScope {
     /// new one is made ("<PDF> s. N.svg") and embedded right before (the previous page) or after
     /// this one's block (no note: today's journal). It replaces this drawing in the route, so Back
     /// returns to the note.
-    function stepPage(step) {
+    function stepPage(step: int): void {
         const path = canvas.backdropPath
         const page = canvas.backdropPage + step
         if (root.status !== "" || root.pageJob > 0 || canvas.backdropPage < 1 || path === ""
@@ -422,64 +461,77 @@ FocusScope {
             return
         }
         if (!Workspace.exists(path)) {
-            AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(path.slice(path.lastIndexOf("/") + 1)))
+            AppController.toast(qsTr("The file %1 is not in the notebook any more.").arg(root.baseName(path)))
             return
         }
-        const info = DrawingBackdrops.pdfInfo(path)
-        if (info.pages < 1) {
-            AppController.toast(info.error !== "" ? info.error : DrawingBackdrops.errorText("pdf"))
+        root._held = DrawingBackdrops.pdfInfo(path)
+        const pages = AppController.routeInt(root._held, "pages", -1)
+        if (pages < 1) {
+            const error = AppController.routeText(root._held, "error")
+            AppController.toast(error !== "" ? error : DrawingBackdrops.errorText("pdf"))
             return
         }
-        if (page > info.pages) {
+        if (page > pages) {
             AppController.toast(qsTr("This is the last page of the PDF."))
             return
         }
         if (!root.save())
             return
-        const note = Workspace.noteOfDrawing(root.loadedPath, root.route && root.route.from ? root.route.from : "")
-        const existing = note !== "" ? Workspace.drawingsOnPdfPage(path, page, note) : []
-        if (existing.length > 0) {
-            AppController.replaceRoute({ view: "drawing", path: existing[0].path, from: note })
+        const note = Workspace.noteOfDrawing(root.loadedPath, AppController.routeText(root.route, "from"))
+        root._heldList = root.drawingsOn(path, page, note)
+        if (root._heldList.length > 0) {
+            AppController.replaceRoute({ view: "drawing", path: AppController.routeText(root._heldList[0], "path"), from: note })
             return
         }
         root.pageFrom = root.loadedPath
         root.pageNote = note
         root.pageBefore = step < 0
-        root.pageJob = DrawingBackdrops.prepare(path, [page], true)
+        root._pages = [page]
+        root.pageJob = DrawingBackdrops.prepare(path, root._pages, true)
     }
     Connections {
         target: DrawingBackdrops
         enabled: root.pageJob > 0
-        function onFinished(job, items, cancelled) {
+        function onFinished(job: int, items: list<var>, cancelled: bool) {
             if (job !== root.pageJob)
                 return
             root.pageJob = 0
             if (cancelled || root.pageFrom !== root.loadedPath)
                 return // (another drawing was opened meanwhile)
-            if (items.length === 0 || items[0].error !== "") {
-                AppController.toast(DrawingBackdrops.errorText(items.length > 0 ? items[0].error : "pdf"), "error")
+            root._heldList = items
+            const error = items.length > 0 ? AppController.routeText(root._heldList[0], "error") : "pdf"
+            if (error !== "") {
+                AppController.toast(DrawingBackdrops.errorText(error), "error")
                 return
             }
-            const out = Workspace.addDrawingBeside(root.pageFrom, items[0], root.pageNote, root.pageBefore)
-            if (!out.path)
+            root._held = Workspace.addDrawingBeside(root.pageFrom, root._heldList[0], root.pageNote, root.pageBefore)
+            const path = AppController.routeText(root._held, "path")
+            if (path === "")
                 return
-            if (out.journal)
+            if (AppController.routeFlag(root._held, "journal"))
                 AppController.toast(qsTr("The drawing was added to today's journal."), "info")
-            AppController.replaceRoute({ view: "drawing", path: out.path, from: out.note })
+            AppController.replaceRoute({ view: "drawing", path: path, from: AppController.routeText(root._held, "note") })
         }
     }
-    function applyBackdrop(items) {
-        root.pendingBackdrop = null
+    /// The drawings of `page` of the PDF `path` the note `note` embeds ([] without a note).
+    function drawingsOn(path: string, page: int, note: string): list<var> {
+        return note !== "" ? Workspace.drawingsOnPdfPage(path, page, note) : []
+    }
+    function applyBackdrop(items: list<var>): void {
+        root.backdropPending = false
+        root.pendingBackdrop = []
         if (root.backdropFor !== root.loadedPath) {
             root.abandonBackdropFile() // (another drawing is open now)
             return
         }
-        const item = items.length > 0 ? items[0] : null
-        if (item && item.error !== "")
-            AppController.toast(DrawingBackdrops.errorText(item.error))
-        const result = item && item.error === "" ? canvas.setBackdrop(item) : "invalid"
+        root._heldList = items
+        const error = items.length > 0 ? AppController.routeText(root._heldList[0], "error") : "invalid"
+        if (items.length > 0 && error !== "")
+            AppController.toast(DrawingBackdrops.errorText(error))
+        const result = error === "" ? canvas.setBackdrop(root._heldList[0]) : "invalid"
         if (result === "busy") {
             root.pendingBackdrop = items // (set when the stroke, shape or text ends)
+            root.backdropPending = true
             return
         }
         if (result === "") {
@@ -492,25 +544,53 @@ FocusScope {
         root.forceActiveFocus()
     }
     /// Another drawing loaded: a backdrop being prepared or waiting for this one is not set.
-    function dropBackdropChoice() {
+    function dropBackdropChoice(): void {
         if (root.backdropJob > 0)
             DrawingBackdrops.cancel(root.backdropJob) // (finished(): its copy goes)
-        if (root.pendingBackdrop !== null) {
-            root.pendingBackdrop = null
+        if (root.backdropPending) {
+            root.backdropPending = false
+            root.pendingBackdrop = []
             root.abandonBackdropFile()
         }
     }
 
-    function applyPendingBackdrop() {
-        if (root.pendingBackdrop !== null && !canvas.busy && !canvas.textEditing)
-            Qt.callLater(() => {
-                if (root.pendingBackdrop !== null && !canvas.busy && !canvas.textEditing)
-                    root.applyBackdrop(root.pendingBackdrop)
-            })
+    function applyPendingBackdrop(): void {
+        if (root.backdropPending && !canvas.busy && !canvas.textEditing)
+            pendingLater.restart()
+    }
+    Timer {
+        id: pendingLater
+        interval: 0
+        onTriggered: {
+            if (root.backdropPending && !canvas.busy && !canvas.textEditing)
+                root.applyBackdrop(root.pendingBackdrop)
+        }
+    }
+
+    /// An Obsidian Excalidraw plugin file's pictures in their own files ("## Embedded Files",
+    /// canvas.embeddedFiles: { fileId, link }): their links resolved as the file's links, their
+    /// bytes handed to the canvas.
+    function provideEmbeddedFiles(): void {
+        const from = root.loadedPath !== "" ? root.loadedPath : root.routePath
+        const count = canvas.embeddedFiles.length
+        for (let i = 0; i < count; ++i) {
+            const path = "" + Workspace.resolveLink(root.embeddedField(i, "link"), from)
+            if (path === "")
+                continue
+            const fileId = root.embeddedField(i, "fileId")
+            root._disk = Workspace.readAttachment(path)
+            if (canvas.hasBytes(root._disk))
+                canvas.provideEmbeddedFile(fileId, root._disk)
+        }
+    }
+    function embeddedField(i: int, key: string): string {
+        const files = canvas.embeddedFiles
+        const f = files[i]
+        return AppController.routeText(f, key)
     }
 
     /// Gotowe: written, back to where the drawing was opened from.
-    function done() {
+    function done(): void {
         root.save()
         if (AppController.canGoBack)
             AppController.back()
@@ -524,27 +604,32 @@ FocusScope {
     property bool _routeQueued: false
     property bool alive: true
     onRouteChanged: {
-        if (_routeQueued)
+        if (root._routeQueued)
             return
-        _routeQueued = true
-        Qt.callLater(() => {
-            if (!root || !root.alive)
+        root._routeQueued = true
+        routeLater.restart()
+    }
+    Timer {
+        id: routeLater
+        interval: 0
+        onTriggered: {
+            if (!root.alive)
                 return
             root._routeQueued = false
             root.applyRoute()
-        })
+        }
     }
     // Text on drawings in the app's fonts (the previews' too).
     readonly property string _fonts: Theme.fontUi + "\n" + Theme.fontMono
     on_FontsChanged: DrawingFonts.set(Theme.fontUi, Theme.fontMono)
     Component.onCompleted: {
         DrawingFonts.set(Theme.fontUi, Theme.fontMono)
-        applyRoute()
+        root.applyRoute()
     }
     Component.onDestruction: {
-        alive = false
-        save()
-        if (root.backdropJob > 0 || root.pendingBackdrop !== null) {
+        root.alive = false
+        root.save()
+        if (root.backdropJob > 0 || root.backdropPending) {
             DrawingBackdrops.cancel(root.backdropJob)
             root.abandonBackdropFile() // (no backdrop set: the copy stored for it goes)
         }
@@ -559,52 +644,53 @@ FocusScope {
 
     Connections {
         target: Workspace
-        function onPathRenamed(oldPath, newPath) {
+        function onPathRenamed(oldPath: string, newPath: string) {
             if (oldPath === root.backdropFor)
                 root.backdropFor = newPath
             if (oldPath === root.loadedPath)
                 root.loadedPath = newPath
         }
-        function onPathRemoved(path) {
+        function onPathRemoved(path: string) {
             if (path !== root.loadedPath)
                 return
             saveTimer.stop()
             root.loadedPath = ""
             root.status = "missing"
         }
-        function onFileChanged(path) {
+        function onFileChanged(path: string) {
             if (path !== root.loadedPath || root.status === "missing" || root._writing)
                 return
-            const bytes = Workspace.readAttachment(path)
-            if (bytes.byteLength === 0 || canvas.isKnownFile(bytes))
+            root._disk = Workspace.readAttachment(path)
+            if (!canvas.hasBytes(root._disk) || canvas.isKnownFile(root._disk))
                 return // its own save, or a file being written
             if (root.status === "")
-                root.takeIn(bytes)
+                root.takeIn(root._disk)
             else
-                root.status = canvas.load(bytes)
+                root.status = canvas.load(root._disk)
         }
     }
     Connections {
         target: DrawingBackdrops
         enabled: root.backdropPick > 0 || root.backdropJob > 0
-        function onPicked(pick, path) {
+        function onPicked(pick: int, path: string) {
             if (pick !== root.backdropPick)
                 return
             root.backdropPick = 0
             root.useBackdropFile(path)
         }
-        function onPickFailed(pick, name) {
+        function onPickFailed(pick: int, name: string) {
             if (pick !== root.backdropPick)
                 return
             root.backdropPick = 0
             AppController.toast(DrawingBackdrops.errorText("unreadable"))
         }
-        function onFinished(job, items, cancelled) {
+        function onFinished(job: int, items: list<var>, cancelled: bool) {
             if (job !== root.backdropJob)
                 return
+            root._heldList = items
             root.backdropJob = 0
             if (!cancelled)
-                root.applyBackdrop(items)
+                root.applyBackdrop(root._heldList)
             else
                 root.abandonBackdropFile()
         }
@@ -617,7 +703,7 @@ FocusScope {
         colors: Theme.colors
         nameFilters: DrawingBackdrops.nameFilters
         onAccepted: {
-            const path = Workspace.importAttachment(selectedFile)
+            const path = "" + Workspace.importAttachment(backdropPicker.selectedFile)
             if (path === "")
                 AppController.toast(DrawingBackdrops.errorText("unreadable"))
             root.useBackdropFile(path)
@@ -643,10 +729,29 @@ FocusScope {
     }
 
     Connections {
-        target: Qt.application
+        target: Application
         function onStateChanged() {
-            if (Qt.application.state !== Qt.ApplicationActive)
+            if (Application.state !== Qt.ApplicationActive)
                 root.save()
+        }
+    }
+    /// The selection's move for an arrow key (`axis` 0: x, 1: y; 0 for another key).
+    function arrowStep(key: int, axis: int): int {
+        switch (key) {
+        case Qt.Key_Left: return axis === 0 ? -1 : 0
+        case Qt.Key_Right: return axis === 0 ? 1 : 0
+        case Qt.Key_Up: return axis === 0 ? 0 : -1
+        case Qt.Key_Down: return axis === 0 ? 0 : 1
+        default: return 0
+        }
+    }
+    /// The side an arrow key aligns the selection to.
+    function arrowSide(key: int): string {
+        switch (key) {
+        case Qt.Key_Left: return "left"
+        case Qt.Key_Right: return "right"
+        case Qt.Key_Up: return "top"
+        default: return "bottom"
         }
     }
 
@@ -656,7 +761,8 @@ FocusScope {
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0
         const plain = event.modifiers === Qt.NoModifier
-        const arrows = { [Qt.Key_Left]: [-1, 0], [Qt.Key_Right]: [1, 0], [Qt.Key_Up]: [0, -1], [Qt.Key_Down]: [0, 1] }
+        const arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Up
+                      || event.key === Qt.Key_Down
         if (event.matches(StandardKey.Undo)) {
             canvas.undo()
         } else if (event.matches(StandardKey.Redo) || (ctrl && event.key === Qt.Key_Y)) {
@@ -718,15 +824,14 @@ FocusScope {
         } else if (event.key === Qt.Key_Escape && (canvas.busy || canvas.selectionCount > 0)) {
             if (!canvas.cancelGesture())
                 canvas.clearSelection()
-        } else if (arrows[event.key] !== undefined && canvas.selectionCount > 0 && ctrl && shift) {
-            const sides = { [Qt.Key_Left]: "left", [Qt.Key_Right]: "right", [Qt.Key_Up]: "top", [Qt.Key_Down]: "bottom" }
-            canvas.alignSelection(sides[event.key])
+        } else if (arrow && canvas.selectionCount > 0 && ctrl && shift) {
+            canvas.alignSelection(root.arrowSide(event.key))
         } else if (event.modifiers === Qt.AltModifier && (event.key === Qt.Key_H || event.key === Qt.Key_V)
                    && canvas.selectionCount > 0) {
             canvas.distributeSelection(event.key === Qt.Key_H ? "horizontal" : "vertical")
-        } else if (arrows[event.key] !== undefined && canvas.selectionCount > 0 && !ctrl) {
+        } else if (arrow && canvas.selectionCount > 0 && !ctrl) {
             const step = shift ? 10 : 1
-            canvas.nudgeSelection(arrows[event.key][0] * step, arrows[event.key][1] * step)
+            canvas.nudgeSelection(root.arrowStep(event.key, 0) * step, root.arrowStep(event.key, 1) * step)
         } else if (ctrl && (event.key === Qt.Key_BracketRight || event.key === Qt.Key_BraceRight)) {
             canvas.reorderSelection(shift || event.key === Qt.Key_BraceRight ? "front" : "forward")
         } else if (ctrl && (event.key === Qt.Key_BracketLeft || event.key === Qt.Key_BraceLeft)) {
@@ -803,16 +908,7 @@ FocusScope {
                 onBusyChanged: root.applyPendingBackdrop()
                 // An Obsidian Excalidraw plugin file's pictures in their own files ("## Embedded
                 // Files"): their links resolved as the file's links, their bytes shown.
-                onEmbeddedFilesChanged: {
-                    for (const f of canvas.embeddedFiles) {
-                        const path = Workspace.resolveLink(f.link, root.loadedPath || root.routePath)
-                        if (path === "")
-                            continue
-                        const bytes = Workspace.readAttachment(path)
-                        if (bytes.byteLength > 0)
-                            canvas.provideEmbeddedFile(f.fileId, bytes)
-                    }
-                }
+                onEmbeddedFilesChanged: root.provideEmbeddedFiles()
                 onStylusSeenChanged: {
                     if (canvas.stylusSeen && !root.stylusKnown) {
                         root.stylusKnown = true
@@ -837,7 +933,7 @@ FocusScope {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                visible: root.backdropJob > 0 || root.pendingBackdrop !== null || root.pageJob > 0
+                visible: root.backdropJob > 0 || root.backdropPending || root.pageJob > 0
                 indeterminate: true
             }
 
@@ -893,7 +989,7 @@ FocusScope {
                             case "corrupt":
                                 return qsTr("The drawing data in this file cannot be read. The picture is shown as it was saved.")
                             case "missing":
-                                return qsTr("The drawing %1 is not in the notebook.").arg(root.fileName || root.routePath)
+                                return qsTr("The drawing %1 is not in the notebook.").arg(root.fileName !== "" ? root.fileName : root.routePath)
                             }
                             return ""
                         }
@@ -909,11 +1005,27 @@ FocusScope {
                         id: noticePicture
                         objectName: "drawingNoticePicture"
                         /// The picture's own size (its SVG root), shown at most as wide as the view.
-                        readonly property size natural: root.loadedPath !== "" && notice.visible
-                                                        ? Workspace.pictureSize(root.loadedPath) : Qt.size(0, 0)
+                        // (Set by readNatural(): a call's size cannot be bound compiled.)
+                        property size natural: Qt.size(0, 0)
+                        function readNatural(): void {
+                            if (root.loadedPath !== "" && notice.visible)
+                                noticePicture.natural = Workspace.pictureSize(root.loadedPath)
+                            else
+                                noticePicture.natural = Qt.size(0, 0)
+                        }
+                        Connections {
+                            target: root
+                            function onLoadedPathChanged() { noticePicture.readNatural() }
+                        }
+                        Connections {
+                            target: notice
+                            function onVisibleChanged() { noticePicture.readNatural() }
+                        }
+                        Component.onCompleted: noticePicture.readNatural()
                         // (Also while the app's other theme loads: the shown picture stays.)
                         visible: root.status !== "missing"
-                                 && (status === Image.Ready || (status === Image.Loading && implicitWidth > 0))
+                                 && (noticePicture.status === Image.Ready
+                                     || (noticePicture.status === Image.Loading && noticePicture.implicitWidth > 0))
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(parent.width, natural.width > 0 ? natural.width : parent.width)
                         height: natural.width > 0 ? width * natural.height / natural.width : implicitHeight

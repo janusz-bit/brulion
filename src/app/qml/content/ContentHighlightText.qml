@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
@@ -12,10 +13,13 @@ Text {
     /// The plain text.
     property string source
     /// Offsets of the highlighted characters, ascending.
-    property var positions: []
+    property list<var> positions: []
     property color highlightColor: Theme.accentText
 
-    text: positions && positions.length > 0 ? TextHelper.markMatches(source, positions, String(highlightColor))
+    /// highlightColor as text ("#rrggbb").
+    readonly property string highlightName: highlightColor.toString()
+
+    text: positions.length > 0 ? TextHelper.markMatches(source, positions, highlightName)
                                             : TextHelper.escapeHtml(source)
     textFormat: Text.StyledText
     color: Theme.fg

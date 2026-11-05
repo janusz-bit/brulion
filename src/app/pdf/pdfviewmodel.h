@@ -61,7 +61,9 @@ namespace brulion::pdfview {
 class PdfViewModel;
 
 /// The pages near the viewport: roles page (1-based), pageX, pageY, pageWidth, pageHeight (content
-/// coordinates), baseWidth, baseHeight (the base picture's size, logical), failed.
+/// coordinates), baseWidth, baseHeight (the base picture's size, logical), failed, and the page's
+/// detail picture (PdfViewModel::detail(), again at every detailChanged()): detailUrl (empty:
+/// none), detailBox (its place on the page, logical).
 class PdfVisiblePages : public QAbstractListModel {
     Q_OBJECT
 
@@ -74,7 +76,9 @@ public:
         HeightRole,
         BaseWidthRole,
         BaseHeightRole,
-        FailedRole
+        FailedRole,
+        DetailUrlRole,
+        DetailBoxRole
     };
     explicit PdfVisiblePages(PdfViewModel *model);
     int rowCount(const QModelIndex &parent = {}) const override;
@@ -87,6 +91,8 @@ public:
     void geometryChanged();
     /// The row of page index `index` changed its failed state.
     void pageChanged(int index);
+    /// Every row's detail picture may have changed (the view settled).
+    void detailsChanged();
     void reset();
     int first() const { return m_first; }
 
@@ -157,8 +163,14 @@ private:
     Q_PROPERTY(int selectionPage READ selectionPage NOTIFY selectionChanged FINAL)
     Q_PROPERTY(int selectionRevision READ selectionRevision NOTIFY selectionChanged FINAL)
     // outline and links
-    /// [{title, level, page, top}] (page 0: no destination; top a fraction of the page or −1).
+    /// [{title, level, page, top}] (page 0: no destination; top a fraction of the page or −1;
+    /// also as targetTop: QML's delegates cannot have a property named `top`).
     Q_PROPERTY(QVariantList outline READ outline NOTIFY outlineChanged FINAL)
+    /// The first rectangle of the selection (fractions of selectionPage; empty without one): where
+    /// the floating "Kopiuj" goes.
+    Q_PROPERTY(QRectF selectionAnchor READ selectionAnchor NOTIFY selectionChanged FINAL)
+    /// pageRect(selectionPage) (empty without a selection).
+    Q_PROPERTY(QRectF selectionPageRect READ selectionPageRect NOTIFY selectionPageRectChanged FINAL)
     Q_PROPERTY(int linkRevision READ linkRevision NOTIFY linksChanged FINAL)
 
 public:
@@ -236,6 +248,10 @@ public:
     int selectionRevision() const { return m_selectionRevision; }
 
     QVariantList outline() const { return m_outline; }
+    QRectF selectionAnchor() const { return m_selectionRects.isEmpty() ? QRectF() : m_selectionRects.first(); }
+    QRectF selectionPageRect() const { return m_selectionPage > 0 ? pageRect(m_selectionPage) : QRectF(); }
+    /// The outline entry of `page`: the last one leading to it or to a page before it (−1 none).
+    Q_INVOKABLE int outlineIndexForPage(int page) const;
     int linkRevision() const { return m_linkRevision; }
 
     /// The Flickable's position (content coordinates): the visible pages, the current page.
@@ -261,10 +277,11 @@ public:
     /// The base picture of page `page`:
     /// image://pdfview/<file>?page=N&v=<version>&w=<logical width>&h=<logical height>.
     Q_INVOKABLE QUrl pageUrl(int page) const;
-    /// The detail picture of page `page`: {url, x, y, width, height} (page-local logical), or {}
+    /// The detail picture of page `page`: {url, x, y, width, height, box} (page-local logical), or {}
     /// when the base picture has the page's full resolution or the view has not settled at this zoom.
     Q_INVOKABLE QVariantMap detail(int page) const;
-    /// The search hits on page `page`: [{x, y, width, height, current}] in fractions of the page.
+    /// The search hits on page `page`: [{x, y, width, height, box (the same as a rect), current}] in
+    /// fractions of the page.
     Q_INVOKABLE QVariantList hitRects(int page) const;
     /// The next / previous hit made current; the Flickable's contentX/Y showing it (NaN, NaN: none).
     Q_INVOKABLE QPointF nextHit();
@@ -283,13 +300,14 @@ public:
     /// All the text of page `page`.
     Q_INVOKABLE void selectAll(int page);
     Q_INVOKABLE void clearSelection();
-    /// The selection's rectangles on page `page`: [{x, y, width, height}] in fractions of the page.
+    /// The selection's rectangles on page `page`: [{x, y, width, height, box}] in fractions of the page.
     Q_INVOKABLE QVariantList selectionRects(int page) const;
     /// The selected text onto the clipboard; false when nothing is selected.
     Q_INVOKABLE bool copySelection();
 
-    /// The links of page `page` (loaded as it comes near the view): [{x, y, width, height} in
-    /// fractions of the page, url ("" for a page of this PDF), page, top (a fraction or −1)].
+    /// The links of page `page` (loaded as it comes near the view): [{x, y, width, height, box} in
+    /// fractions of the page, url ("" for a page of this PDF), page, top (a fraction or −1; also as
+    /// targetTop)].
     Q_INVOKABLE QVariantList linkRects(int page) const;
     /// The Flickable's contentX/Y showing page `page` from `top` (a fraction of it; −1: its top) —
     /// an outline entry or a link — a little above it.
@@ -312,6 +330,8 @@ Q_SIGNALS:
     void spreadChanged();
     void selectionAvailableChanged();
     void selectionChanged();
+    /// The selection or the layout changed (selectionPageRect).
+    void selectionPageRectChanged();
     void outlineChanged();
     void linksChanged();
     /// The Flickable should go to contentX/Y (sizes arrived, a reload, a hit, fit width followed the

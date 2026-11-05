@@ -22,46 +22,45 @@ Item {
     signal activated()
 
     /// Select `date` and show its month (the tray calendar opens on today's month every time).
-    function showDay(date: string) {
+    function showDay(date: string): void {
         root.selectedDate = date
         picker.showMonthOf(date)
         picker.focusDate = date
         flick.contentY = 0
     }
 
+    PageTools { id: tools; workspace: Workspace }
+    function journalDates(date: string): list<string> {
+        return Workspace.journalDates(date, date)
+    }
+
+    /// The picker's month grid ({ date } cells) and the date of its first or last cell.
+    function cells(): list<var> {
+        return picker.cells
+    }
+    function cellDate(last: bool): string {
+        const c = root.cells()
+        if (c.length === 0)
+            return ""
+        const cell = c[last ? c.length - 1 : 0]
+        return AppController.routeText(cell, "date")
+    }
+
     // Dots for the six weeks shown: journals + calendar entries (Workspace.revision: follows edits;
     // only while the tab is shown — the side panel keeps it while another tab is open, and every
-    // save while typing bumps the revision).
+    // save while typing bumps the revision). PageTools.calendarMarks.
     readonly property var marks: {
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        const cells = picker.cells
-        if (!root.visible || root.placeholder !== "" || !cells || cells.length === 0 || Workspace.revision < 0)
+        const from = root.cellDate(false)
+        if (!root.visible || root.placeholder !== "" || from === "" || Workspace.revision < 0)
             return ({})
-        const from = cells[0].date
-        const to = cells[cells.length - 1].date
-        const out = {}
-        for (const d of Workspace.journalDates(from, to))
-            out[d] = ["journal"]
-        for (const item of Workspace.calendarItems(from, to)) {
-            if (item.kind === "journal")
-                continue
-            const kind = item.kind === "due" && item.date < DatesHelper.today && item.status !== "done" ? "overdue"
-                       : item.kind === "reminder" ? (item.alarm ? "alarm" : "reminder") : item.kind
-            const list = out[item.date] || []
-            if (list.indexOf(kind) < 0 && list.length < 3)
-                list.push(kind)
-            out[item.date] = list
-        }
-        return out
+        return tools.calendarMarks(from, root.cellDate(true), DatesHelper.today)
     }
-    readonly property var dayItems: {
-        if (!root.visible || root.placeholder !== "" || Workspace.revision < 0)
-            return []
-        return Workspace.calendarItems(root.selectedDate, root.selectedDate).filter(i => i.kind !== "journal")
-    }
+    readonly property list<var> dayItems: !root.visible || root.placeholder !== "" || Workspace.revision < 0
+                                          ? [] : tools.calendarEntries(root.selectedDate)
     readonly property bool hasJournal: {
         return root.visible && root.placeholder === "" && Workspace.revision >= 0
-               && Workspace.journalDates(root.selectedDate, root.selectedDate).length > 0
+               && root.journalDates(root.selectedDate).length > 0
     }
 
     Flickable {
@@ -86,7 +85,7 @@ Item {
                 showNaturalInput: false
                 selectedDate: root.selectedDate
                 marks: root.marks
-                onPicked: (value) => root.selectedDate = value.slice(0, 10)
+                onPicked: (value) => root.selectedDate = Js.slice(value, 0, 10)
             }
 
             RowLayout {
@@ -123,20 +122,27 @@ Item {
                 model: root.dayItems
                 delegate: BListItem {
                     id: entry
-                    required property var modelData
+                    // Workspace.calendarItems() rows (every key is always there).
+                    required property string title
+                    required property string path
+                    required property string time
+                    required property string kind
+                    required property string status
+                    required property bool alarm
+                    required property int line
                     Layout.fillWidth: true
                     dense: true
-                    text: entry.modelData.title
-                    readonly property string day: Workspace.journalDate(entry.modelData.path)
-                    readonly property string where: (entry.modelData.time !== "" ? entry.modelData.time + " · " : "")
-                                                    + (day !== "" ? DatesHelper.formatShort(day) : Workspace.pageTitle(entry.modelData.path))
+                    text: entry.title
+                    readonly property string day: Workspace.journalDate(entry.path)
+                    readonly property string where: (entry.time !== "" ? entry.time + " · " : "")
+                                                    + (day !== "" ? DatesHelper.formatShort(day) : Workspace.pageTitle(entry.path))
                     subtitle: where // plain text (BListItem)
-                    iconName: entry.modelData.kind === "reminder" ? (entry.modelData.alarm ? "alarm-clock" : "bell")
-                              : entry.modelData.status === "done" ? "circle-check"
-                              : entry.modelData.kind === "scheduled" ? "hourglass" : "calendar-check"
-                    iconColor: entry.modelData.kind === "reminder" ? Theme.warningText : Theme.fgMuted
+                    iconName: entry.kind === "reminder" ? (entry.alarm ? "alarm-clock" : "bell")
+                              : entry.status === "done" ? "circle-check"
+                              : entry.kind === "scheduled" ? "hourglass" : "calendar-check"
+                    iconColor: entry.kind === "reminder" ? Theme.warningText : Theme.fgMuted
                     onClicked: {
-                        AppController.openPage(entry.modelData.path, entry.modelData.line)
+                        AppController.openPage(entry.path, entry.line)
                         root.activated()
                     }
                 }

@@ -12,7 +12,7 @@ import Brulion
 //                           count: …; collapsed: …; pageLevel: … }
 Item {
     id: header
-    required property var refs
+    required property GroupedRefsModel refs
     required property string path
     required property string title
     required property string folder

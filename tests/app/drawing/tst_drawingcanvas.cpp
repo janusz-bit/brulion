@@ -1821,8 +1821,33 @@ private Q_SLOTS:
         QCOMPARE(canvas->displayColor(QColor(u"#f08c00"_s)).name(), u"#b86200"_s);
         QCOMPARE(canvas->displayColor(QColor(u"#ffd43b"_s), true).name(), u"#ffd43b"_s);
         QVERIFY(!canvas->displayColor(QColor()).isValid());
+        // As text, as QML writes a colour (compiled QML's swatches).
+        QCOMPARE(canvas->displayColorName(u"#1f2430"_s, false), u"#caced8"_s);
+        QCOMPARE(canvas->displayColorName(u"#ffd43b"_s, true), u"#ffd43b"_s);
+        QCOMPARE(canvas->displayColorName(u"#801f2430"_s, true), u"#801f2430"_s); // not opaque: #aarrggbb
+        QCOMPARE(canvas->displayColorName(u"nie kolor"_s, false), QString());
         canvas->setTheme(u"light"_s);
         QCOMPARE(canvas->displayColor(ink), ink);
+        QCOMPARE(canvas->displayColorName(u"#F08C00"_s, false), u"#f08c00"_s);
+    }
+
+    void paperColorsAndBytes()
+    {
+        // The background dialog's colours: 12 greys, 12 hues in three shades (as Qt.hsla made them).
+        const QStringList colors = canvas->paperColors();
+        QCOMPARE(colors.size(), 48);
+        QCOMPARE(colors.first(), u"#ffffff"_s);
+        QCOMPARE(colors.at(11), u"#000000"_s);
+        QCOMPARE(colors.at(12), QColor::fromHslF(0, 0.9f, 0.93f, 1).name());
+        QCOMPARE(colors.at(12 + 12 + 4), QColor::fromHslF(float(4.0 / 12), 0.75f, 0.82f, 1).name());
+        QCOMPARE(colors.last(), QColor::fromHslF(float(11.0 / 12), 0.5f, 0.25f, 1).name());
+        for (const QString &c : colors)
+            QVERIFY2(QColor(c).isValid() && c.size() == 7, qPrintable(c));
+        QVERIFY(canvas->hasBytes(QByteArray("x")));
+        QVERIFY(!canvas->hasBytes(QByteArray()));
+        // Nothing loaded: an empty drawing, as for a missing file.
+        QCOMPARE(canvas->loadEmpty(), canvas->load(QByteArray()));
+        QVERIFY(canvas->currentDrawing().strokes.isEmpty());
     }
 
     void qtSvgIgnoresDarkCss()
@@ -3011,6 +3036,7 @@ private Q_SLOTS:
         QCOMPARE(requests.size(), 1);
         QVERIFY(canvas->textEditing());
         QVariantMap request = requests.takeFirst().at(0).toMap();
+        QCOMPARE(canvas->textRequest(), request); // (kept for compiled QML)
         QCOMPARE(request.value(u"id"_s).toString(), QString());
         QCOMPARE(request.value(u"fontSize"_s).toDouble(), 28.0);
         QCOMPARE(request.value(u"align"_s).toString(), u"left"_s);
@@ -4135,6 +4161,15 @@ private Q_SLOTS:
         // Pages typed and shown.
         QCOMPARE(backdrops.parsePages(u"3–1, 7"_s, 10), (QList<int>{1, 2, 3, 7}));
         QCOMPARE(backdrops.formatPages({1, 2, 3, 7}), u"1-3, 7"_s);
+        // The page picker's choice: sorted, a page toggled in and out, all pages.
+        QCOMPARE(backdrops.sortedPages({7, 2, 9, 2, 1}), (QList<int>{1, 2, 2, 7, 9}));
+        QCOMPARE(backdrops.sortedPages({}), QList<int>());
+        QCOMPARE(backdrops.toggledPage({3, 1}, 2), (QList<int>{1, 2, 3}));
+        QCOMPARE(backdrops.toggledPage({1, 2, 3}, 2), (QList<int>{1, 3}));
+        QCOMPARE(backdrops.toggledPage({}, 5), (QList<int>{5}));
+        QCOMPARE(backdrops.allPages(4), (QList<int>{1, 2, 3, 4}));
+        QVERIFY(backdrops.allPages(0).isEmpty());
+        QVERIFY(backdrops.allPages(-3).isEmpty());
         if (backdrops.pdfAvailable()) {
             const QVariantMap info = backdrops.pdfInfo(u"Załączniki/wykład.pdf"_s);
             QCOMPARE(info.value(u"pages"_s).toInt(), 2);

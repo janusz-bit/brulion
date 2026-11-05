@@ -1859,7 +1859,8 @@ and diagrams (shapes, arrows, text), on every platform.
   the ink `#1f2430` as `#caced8`, every pen colour ≥ 4.2:1 on the paper; the lines and the grid
   `#323a45`), highlighter strokes in their own colour at 1.25 × the opacity (≥ 3.2:1 on the paper,
   the dark ink on them ≥ 2.9:1), the eraser's ring light (`DrawingCanvas.paperIsDark`, `paperColor`). The
-  tool bar's swatches show the colours as the paper shows them (`displayColor`); what is chosen
+  tool bar's swatches show the colours as the paper shows them (`displayColor`, as text
+  `displayColorName`); what is chosen
   and remembered is the colour as drawn. The file's picture follows the choice (docs/SYNTAX.md §2:
   dark attributes for Ciemne; for Jak motyw an `@media (prefers-color-scheme: dark)` style sheet,
   so browsers show it dark when their viewer prefers dark, Obsidian in its dark theme). A merge
@@ -2489,11 +2490,12 @@ to its end, `WorkspaceSync`), `PdfThumbnails`,
 error, locked, passwordAvailable, passwordRejected, unlocked, pageCount, scale, zoomPercent,
 fitWidth, twoPages, coverAlone, contentWidth/Height, currentPage — the page under 40 % of the view's
 height —, pages, detailRevision, search properties, selectionAvailable, selectedText,
-selectionPage, selectionRevision, outline, linkRevision; setViewport, settle, positionForPage,
-positionForTarget, pageAt, zoomAround, setScaleAround, fitToWidth, pageUrl, detail, hitRects,
-nextHit, previousHit, clearSearch, reload, unlock, selectText, selectWord, selectAll,
-clearSelection, selectionRects, copySelection, linkRects; `moveViewport(x, y)` moves the
-Flickable) and `PdfViewImageProvider`. The platform's side: `PdfReader::selectText`, `selectRange`,
+selectionPage, selectionRevision, selectionAnchor, selectionPageRect, outline, linkRevision;
+setViewport, settle, positionForPage, positionForTarget, pageAt, zoomAround, setScaleAround,
+fitToWidth, pageUrl, detail (also the pages' rows' detailUrl / detailBox), hitRects, nextHit,
+previousHit, clearSearch, reload, unlock, selectText, selectWord, selectAll, clearSelection,
+selectionRects, copySelection, linkRects (rows with a `box` rect for the typed delegates),
+outlineIndexForPage; `moveViewport(x, y)` moves the Flickable) and `PdfViewImageProvider`. The platform's side: `PdfReader::selectText`, `selectRange`,
 `outline`, `links`, `open(file, info, password)` (`src/platform/pdfpages.h`) and the pure
 `src/platform/pdftext.h`. Tests: `tests/app/pdf` (`tst_pdflayout`, `tst_pdfthumbnails`,
 `tst_pdfviewmodel`), `tests/platform` (`tst_pdfpages` — also on `tests/data/pdf/spis.pdf`, a PDF

@@ -27,11 +27,13 @@ Rectangle {
     required property DrawingCanvas canvas
     property bool compact: false
     /// The current tool's colours: [{ color, label }], and its widths: [{ value, label }].
-    property var colors: []
-    property var widths: []
+    property list<var> colors: []
+    property list<var> widths: []
     /// The text's sizes: [{ value, label }].
-    property var fontSizes: []
-    /// The shape tool the shape button stands for (a tool of `shapes`).
+    property list<var> fontSizes: []
+    /// No rows (a Repeater's model while there is nothing to show).
+    readonly property list<var> noRows: []
+    /// The shape tool the shape button stands for (isShape()).
     property string shapeTool: "rectangle"
     /// One finger draws (touch screens).
     property bool fingerDraws: false
@@ -78,60 +80,123 @@ Rectangle {
     /// A tool that has a colour (everything but the eraser and the selection).
     readonly property bool drawingTool: canvas.tool !== "eraser" && canvas.tool !== "select"
     readonly property bool textTool: canvas.tool === "text"
-    /// The shape tools: their icons, names and keys.
-    readonly property var shapes: ({
-        rectangle: { icon: "square", label: qsTr("Rectangle"), key: "R" },
-        ellipse: { icon: "circle", label: qsTr("Ellipse"), key: "O" },
-        diamond: { icon: "diamond", label: qsTr("Diamond"), key: "D" },
-        line: { icon: "slash", label: qsTr("Line"), key: "L" },
-        arrow: { icon: "move-up-right", label: qsTr("Arrow"), key: "A" },
-        triangle: { icon: "triangle", label: qsTr("Triangle"), key: "" },
-        rightTriangle: { icon: "triangle-right", label: qsTr("Right triangle"), key: "" },
-        parallelogram: { icon: "parallelogram", label: qsTr("Parallelogram"), key: "" },
-        trapezoid: { icon: "trapezoid", label: qsTr("Trapezoid"), key: "" },
-        pentagon: { icon: "pentagon", label: qsTr("Pentagon"), key: "" },
-        hexagon: { icon: "hexagon", label: qsTr("Hexagon"), key: "" },
-        star: { icon: "star", label: qsTr("Star"), key: "" },
-        blockArrow: { icon: "arrow-big-right", label: qsTr("Block arrow"), key: "" },
-        callout: { icon: "message-square", label: qsTr("Speech bubble"), key: "" },
-        heart: { icon: "heart", label: qsTr("Heart"), key: "" },
-        cloud: { icon: "cloud", label: qsTr("Cloud"), key: "" }
-    })
-    readonly property bool shapeActive: shapes[canvas.tool] !== undefined
+    /// The shape tools (the tools of the shapes' menu, below): their icons, names and keys — a
+    /// tool that is no shape as the rectangle.
+    function isShape(tool: string): bool {
+        switch (tool) {
+        case "rectangle":
+        case "ellipse":
+        case "diamond":
+        case "line":
+        case "arrow":
+        case "triangle":
+        case "rightTriangle":
+        case "parallelogram":
+        case "trapezoid":
+        case "pentagon":
+        case "hexagon":
+        case "star":
+        case "blockArrow":
+        case "callout":
+        case "heart":
+        case "cloud":
+            return true
+        default:
+            return false
+        }
+    }
+    /// A shape tool's icon.
+    function shapeIcon(tool: string): string {
+        switch (tool) {
+        case "ellipse": return "circle"
+        case "diamond": return "diamond"
+        case "line": return "slash"
+        case "arrow": return "move-up-right"
+        case "triangle": return "triangle"
+        case "rightTriangle": return "triangle-right"
+        case "parallelogram": return "parallelogram"
+        case "trapezoid": return "trapezoid"
+        case "pentagon": return "pentagon"
+        case "hexagon": return "hexagon"
+        case "star": return "star"
+        case "blockArrow": return "arrow-big-right"
+        case "callout": return "message-square"
+        case "heart": return "heart"
+        case "cloud": return "cloud"
+        default: return "square"
+        }
+    }
+    /// A shape tool's name.
+    function shapeLabel(tool: string): string {
+        switch (tool) {
+        case "ellipse": return qsTr("Ellipse")
+        case "diamond": return qsTr("Diamond")
+        case "line": return qsTr("Line")
+        case "arrow": return qsTr("Arrow")
+        case "triangle": return qsTr("Triangle")
+        case "rightTriangle": return qsTr("Right triangle")
+        case "parallelogram": return qsTr("Parallelogram")
+        case "trapezoid": return qsTr("Trapezoid")
+        case "pentagon": return qsTr("Pentagon")
+        case "hexagon": return qsTr("Hexagon")
+        case "star": return qsTr("Star")
+        case "blockArrow": return qsTr("Block arrow")
+        case "callout": return qsTr("Speech bubble")
+        case "heart": return qsTr("Heart")
+        case "cloud": return qsTr("Cloud")
+        default: return qsTr("Rectangle")
+        }
+    }
+    /// A shape tool's key ("" none).
+    function shapeKey(tool: string): string {
+        switch (tool) {
+        case "ellipse": return "O"
+        case "diamond": return "D"
+        case "line": return "L"
+        case "arrow": return "A"
+        case "triangle": return ""
+        case "rightTriangle": return ""
+        case "parallelogram": return ""
+        case "trapezoid": return ""
+        case "pentagon": return ""
+        case "hexagon": return ""
+        case "star": return ""
+        case "blockArrow": return ""
+        case "callout": return ""
+        case "heart": return ""
+        case "cloud": return ""
+        default: return "R"
+        }
+    }
+    readonly property bool shapeActive: bar.isShape(bar.canvas.tool)
 
     /// Open the colours and widths (compact), the "Więcej" menu (compact), the paper's menu or
     /// the background's (the "Więcej" menu on phones) — route.open, screenshots.
-    function openStyle() { stylePopup.open() }
-    function openShapes() { shapeMenu.popup(shapeButton, 0, bar.atBottom ? -shapeMenu.implicitHeight : shapeButton.height) }
-    function openMore() { moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight) }
-    function openBackground() { backgroundMenu.popup(backgroundButton, 0, backgroundButton.height) }
-    function openTheme() {
+    function openStyle(): void { stylePopup.open() }
+    function openShapes(): void { shapeMenu.popup(shapeButton, 0, bar.atBottom ? -shapeMenu.implicitHeight : shapeButton.height) }
+    function openMore(): void { moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight) }
+    function openBackground(): void { backgroundMenu.popup(backgroundButton, 0, backgroundButton.height) }
+    function openTheme(): void {
         if (bar.compact)
             bar.openMore()
         else
             themeMenu.popup(themeButton, 0, themeButton.height)
     }
 
-    function shapeOf(tool) {
-        return bar.shapes[tool] !== undefined ? bar.shapes[tool] : bar.shapes.rectangle
-    }
-    function shapeIcon(tool) { return bar.shapeOf(tool).icon }
-    function shapeLabel(tool) { return bar.shapeOf(tool).label }
-    function shapeKey(tool) { return bar.shapeOf(tool).key }
-    function chooseShape(tool) {
+    function chooseShape(tool: string): void {
         bar.canvas.tool = tool
         bar.shapeChosen(tool)
     }
 
-    function backgroundIcon(name) {
+    function backgroundIcon(name: string): string {
         return name === "lines" ? "rows-3" : name === "grid" ? "grid-3x3" : "square"
     }
-    function themeIcon(name) {
+    function themeIcon(name: string): string {
         return name === "light" ? "sun" : name === "dark" ? "moon" : "sun-moon"
     }
     /// A colour of the current tool as the paper shows it now (re-evaluated when it turns dark).
-    function shown(color) {
-        return bar.canvas.dark ? bar.canvas.displayColor(color, bar.canvas.tool === "highlighter") : color
+    function shown(color: string): string {
+        return bar.canvas.dark ? bar.canvas.displayColorName(color, bar.canvas.tool === "highlighter") : color
     }
 
     implicitHeight: twoRows ? 2 * lineHeight : lineHeight
@@ -221,7 +286,7 @@ Rectangle {
     component Separator: Rectangle {
         width: 1
         height: Theme.controlHeight - 8
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        y: parent ? (parent.height - height) / 2 : 0
         color: Theme.borderSubtle
     }
 
@@ -368,42 +433,40 @@ Rectangle {
 
                 // Wide: the colours and widths in the row.
                 Repeater {
-                    model: !bar.compact && bar.drawingTool ? bar.colors : []
+                    model: !bar.compact && bar.drawingTool ? bar.colors : bar.noRows
                     delegate: BColorSwatch {
+                        id: rowSwatch
                         required property var modelData
+                        readonly property string stored: AppController.routeText(modelData, "color")
                         // (parent is null while the tool's change takes the delegate away)
-                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                        color: bar.shown(modelData.color)
-                        label: modelData.label
+                        y: parent ? (parent.height - height) / 2 : 0
+                        color: bar.shown(stored)
+                        label: AppController.routeText(modelData, "label")
                         size: 22
                         focusPolicy: Qt.NoFocus
-                        selected: Qt.colorEqual(bar.canvas.color, modelData.color)
-                        onClicked: bar.colorChosen(modelData.color)
+                        selected: Qt.colorEqual(bar.canvas.color, stored)
+                        onClicked: bar.colorChosen(rowSwatch.stored)
                     }
                 }
                 Separator { visible: !bar.compact && bar.drawingTool }
                 Repeater {
-                    model: !bar.compact && bar.drawingTool && !bar.textTool ? bar.widths : []
+                    model: !bar.compact && bar.drawingTool && !bar.textTool ? bar.widths : bar.noRows
                     delegate: WidthButton {
-                        required property var modelData
+                        id: rowWidth
                         // (parent is null while the tool's change takes the delegate away)
-                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                        value: modelData.value
-                        label: modelData.label
-                        selected: Math.abs(bar.canvas.penWidth - modelData.value) < 0.01
-                        onClicked: bar.widthChosen(modelData.value)
+                        y: parent ? (parent.height - height) / 2 : 0
+                        selected: Math.abs(bar.canvas.penWidth - value) < 0.01
+                        onClicked: bar.widthChosen(rowWidth.value)
                     }
                 }
                 Repeater {
-                    model: !bar.compact && bar.textTool ? bar.fontSizes : []
+                    model: !bar.compact && bar.textTool ? bar.fontSizes : bar.noRows
                     delegate: TextSizeButton {
-                        required property var modelData
-                        objectName: "drawingTextSize" + modelData.value
-                        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                        value: modelData.value
-                        label: modelData.label
-                        selected: Math.abs(bar.canvas.fontSize - modelData.value) < 0.01
-                        onClicked: bar.fontSizeChosen(modelData.value)
+                        id: rowSize
+                        objectName: "drawingTextSize" + value
+                        y: parent ? (parent.height - height) / 2 : 0
+                        selected: Math.abs(bar.canvas.fontSize - value) < 0.01
+                        onClicked: bar.fontSizeChosen(rowSize.value)
                     }
                 }
                 // Compact: one swatch for both.
@@ -412,7 +475,7 @@ Rectangle {
                     objectName: "drawingStyle"
                     visible: bar.compact && bar.drawingTool
                     anchors.verticalCenter: parent.verticalCenter
-                    color: bar.shown(bar.canvas.color)
+                    color: bar.shown(bar.canvas.color.toString())
                     label: bar.textTool ? qsTr("Colour and size") : qsTr("Colour and thickness")
                     size: 26
                     focusPolicy: Qt.NoFocus
@@ -512,7 +575,7 @@ Rectangle {
 
     component ShapeItem: BMenuItem {
         required property string tool
-        objectName: "drawingShape" + tool.charAt(0).toUpperCase() + tool.slice(1)
+        objectName: "drawingShape" + Js.toUpperCase(Js.charAt(tool, 0)) + Js.sliceFrom(tool, 1)
         text: bar.shapeLabel(tool)
         iconName: bar.shapeIcon(tool)
         shortcut: bar.shapeKey(tool)
@@ -801,7 +864,10 @@ Rectangle {
         id: stylePopup
         objectName: "drawingStylePopup"
         parent: bar
-        x: Math.max(0, Math.min(bar.width - width, styleButton.mapToItem(bar, 0, 0).x - width / 2))
+        // (Where the swatch is, read when it opens.)
+        property point at: Qt.point(0, 0)
+        onAboutToShow: stylePopup.at = styleButton.mapToItem(bar, 0, 0)
+        x: Math.max(0, Math.min(bar.width - width, at.x - width / 2))
         y: bar.atBottom ? -height - Theme.space2 : bar.height + Theme.space2
         implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                                 contentWidth + leftPadding + rightPadding)
@@ -831,39 +897,37 @@ Rectangle {
                 Repeater {
                     model: bar.colors
                     delegate: BColorSwatch {
+                        id: popupSwatch
                         required property var modelData
-                        color: bar.shown(modelData.color)
-                        label: modelData.label
+                        readonly property string stored: AppController.routeText(modelData, "color")
+                        color: bar.shown(stored)
+                        label: AppController.routeText(modelData, "label")
                         focusPolicy: Qt.NoFocus
-                        selected: Qt.colorEqual(bar.canvas.color, modelData.color)
-                        onClicked: bar.colorChosen(modelData.color)
+                        selected: Qt.colorEqual(bar.canvas.color, stored)
+                        onClicked: bar.colorChosen(popupSwatch.stored)
                     }
                 }
             }
             Row {
                 spacing: 2
                 Repeater {
-                    model: bar.textTool ? [] : bar.widths
+                    model: bar.textTool ? bar.noRows : bar.widths
                     delegate: WidthButton {
-                        required property var modelData
-                        value: modelData.value
-                        label: modelData.label
-                        selected: Math.abs(bar.canvas.penWidth - modelData.value) < 0.01
+                        id: popupWidth
+                        selected: Math.abs(bar.canvas.penWidth - value) < 0.01
                         onClicked: {
-                            bar.widthChosen(modelData.value)
+                            bar.widthChosen(popupWidth.value)
                             stylePopup.close()
                         }
                     }
                 }
                 Repeater {
-                    model: bar.textTool ? bar.fontSizes : []
+                    model: bar.textTool ? bar.fontSizes : bar.noRows
                     delegate: TextSizeButton {
-                        required property var modelData
-                        value: modelData.value
-                        label: modelData.label
-                        selected: Math.abs(bar.canvas.fontSize - modelData.value) < 0.01
+                        id: popupSize
+                        selected: Math.abs(bar.canvas.fontSize - value) < 0.01
                         onClicked: {
-                            bar.fontSizeChosen(modelData.value)
+                            bar.fontSizeChosen(popupSize.value)
                             stylePopup.close()
                         }
                     }
