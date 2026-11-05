@@ -78,9 +78,8 @@ BDialog {
     }
     /// The page shown once the dialog is laid out (Qt.callLater).
     property int _showIndex: -1
-    Timer {
+    Later {
         id: showLater
-        interval: 0
         onTriggered: grid.positionViewAtIndex(dialog._showIndex, GridView.Contain)
     }
 

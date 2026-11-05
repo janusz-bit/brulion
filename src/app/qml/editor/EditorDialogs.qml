@@ -192,9 +192,8 @@ Item {
         if (controller && controller.editingRow >= 0 && editor)
             refocusTimer.restart()
     }
-    Timer {
+    Later {
         id: refocusTimer
-        interval: 0
         onTriggered: {
             if (root.editor && root.editor.alive && root.controller && root.controller.editingRow >= 0)
                 root.editor.startEditing(root.controller.editingRow, root.controller.cursorPosition)

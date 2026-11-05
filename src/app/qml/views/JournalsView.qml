@@ -132,14 +132,12 @@ FocusScope {
             root.streamList.positionViewAtIndex(row, ListView.Beginning)
     }
     // Deferred calls (instead of Qt.callLater).
-    Timer {
+    Later {
         id: applyStateLater
-        interval: 0
         onTriggered: root.applyStreamState()
     }
-    Timer {
+    Later {
         id: scrollToRouteLater
-        interval: 0
         onTriggered: root.scrollToDate(AppController.routeText(root.route, "date"))
     }
 
@@ -433,14 +431,12 @@ FocusScope {
                     root.streamDays = null
                 }
             }
-            Timer {
+            Later {
                 id: jumpLater
-                interval: 0
                 onTriggered: jumpDialog.open()
             }
-            Timer {
+            Later {
                 id: caretLater
-                interval: 0
                 onTriggered: journals.keepCaretInView()
             }
 
@@ -645,9 +641,8 @@ FocusScope {
                         }
                         Component.onDestruction: if (root.activeDay === dayView) root.activeDay = null
                     }
-                    Timer {
+                    Later {
                         id: beginLater
-                        interval: 0
                         onTriggered: dayView.begin()
                     }
                 }

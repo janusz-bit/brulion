@@ -108,9 +108,8 @@ FocusScope {
     }
 
     // Qt.callLater(list.positionViewAtEnd): once, after the changes of this turn.
-    Timer {
+    Later {
         id: toEndLater
-        interval: 0
         onTriggered: list.positionViewAtEnd()
     }
 

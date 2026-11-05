@@ -163,14 +163,12 @@ FocusScope {
         property list<int> openIds
         property list<string> openDates
     }
-    Timer {
+    Later {
         id: openDayLater
-        interval: 0
         onTriggered: daySheet.open()
     }
-    Timer {
+    Later {
         id: openAddLater
-        interval: 0
         onTriggered: addDialog.openFor(later.addKind, cal.anchorDate)
     }
     Connections {

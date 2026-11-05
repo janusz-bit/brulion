@@ -63,9 +63,8 @@ Item {
     onWindowChanged: root.updateKeyboardCover()
     Component.onCompleted: root.updateKeyboardCover()
     // Deferred like Qt.callLater (repeated calls merged).
-    Timer {
+    Later {
         id: keepLater
-        interval: 0
         onTriggered: root.keepInView()
     }
 

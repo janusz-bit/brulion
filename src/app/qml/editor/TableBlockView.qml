@@ -161,9 +161,8 @@ Item {
         root.laterColumn = c
         startLaterTimer.restart()
     }
-    Timer {
+    Later {
         id: startLaterTimer
-        interval: 0
         onTriggered: root.startCell(root.laterRow, root.laterColumn)
     }
     /// The y of row `r` in the grid (-1 the header); a hidden row: where it would be.
@@ -185,9 +184,8 @@ Item {
         root.filterFocusColumn = Math.max(0, c)
         filterFocusTimer.restart()
     }
-    Timer {
+    Later {
         id: filterFocusTimer
-        interval: 0
         onTriggered: {
             const field = filterRepeater.itemAt(root.filterFocusColumn)
             if (field)
@@ -279,9 +277,8 @@ Item {
         root.stayRow = delegate.index
         stayTimer.restart()
     }
-    Timer {
+    Later {
         id: stayTimer
-        interval: 0
         onTriggered: {
             const delegate = root.block
             const editor = delegate ? delegate.editor : null
@@ -309,9 +306,8 @@ Item {
         root.ensureFor = input
         ensureTimer.restart()
     }
-    Timer {
+    Later {
         id: ensureTimer
-        interval: 0
         onTriggered: {
             if (root.ensureFor !== null && root.cellInput === root.ensureFor)
                 root.block.editor.ensureEditVisible()

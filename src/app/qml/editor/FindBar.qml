@@ -62,9 +62,8 @@ Rectangle {
         bar.replaceOpen = true
         replacementLater.restart()
     }
-    Timer {
+    Later {
         id: replacementLater
-        interval: 0
         onTriggered: bar.focusReplacement()
     }
     function hasKeyboard(): bool {

@@ -164,9 +164,8 @@ TextEdit {
     }
     /// A point mapped into the editor, read (mapToItem()'s result cannot be looked into).
     property point mapped
-    Timer {
+    Later {
         id: focusLater
-        interval: 0
         onTriggered: edit.ensureFocus()
     }
 
@@ -281,9 +280,8 @@ TextEdit {
     }
     onCursorRectangleChanged: if (activeFocus && editor) caretLater.restart()
     /// editor.ensureCaretVisible(edit) once the event loop is idle (Qt.callLater merged the calls).
-    Timer {
+    Later {
         id: caretLater
-        interval: 0
         onTriggered: if (edit.editor) edit.editor.ensureCaretVisible(edit)
     }
     // Android keyboards compose every word as preedit: completions follow it while it is typed.

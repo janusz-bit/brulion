@@ -310,9 +310,8 @@ FocusScope {
     }
     /// The part a focus request asked for (taken once the events being handled are done).
     property string focusPart: ""
-    Timer {
+    Later {
         id: focusTimer
-        interval: 0
         onTriggered: {
             const part = row.focusPart
             if (part === "value")

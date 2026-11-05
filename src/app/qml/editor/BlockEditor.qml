@@ -503,14 +503,14 @@ FocusScope {
     // Scrolled blocks must not draw over what surrounds the editor (the shell's top bar).
     clip: true
 
-    /// False once the editor is being destroyed (the deferred Timers below check it).
+    /// False once the editor is being destroyed (the deferred calls below check it).
     property bool alive: true
     Component.onDestruction: alive = false
 
     // Deferred work (instead of Qt.callLater, whose closures are not compiled ahead of time): the
-    // Timers below — interval 0, restarted: repeated requests before they fire are one, with the
-    // last values — and they check `alive` (a day of the journal stream scrolled out of view, the
-    // page closed meanwhile).
+    // Later calls below — posted events like Qt.callLater's, restarted: repeated requests before
+    // they run are one, with the last values — and they check `alive` (a day of the journal stream
+    // scrolled out of view, the page closed meanwhile).
     /// ensureEditVisible() once the event loop is idle.
     function laterEnsureEditVisible(): void {
         editVisibleLater.restart()
@@ -525,28 +525,24 @@ FocusScope {
         revealLater.target = row
         revealLater.restart()
     }
-    Timer {
+    Later {
         id: editVisibleLater
-        interval: 0
         onTriggered: if (editor.alive) editor.ensureEditVisible()
     }
-    Timer {
+    Later {
         id: revealLater
         property int target: -1
-        interval: 0
         onTriggered: if (editor.alive) editor.revealRow(revealLater.target)
     }
     /// The list to its beginning.
-    Timer {
+    Later {
         id: topLater
-        interval: 0
         onTriggered: if (editor.alive) list.positionViewAtBeginning()
     }
     /// The list to `row` (ListView.Contain) while there is a page.
-    Timer {
+    Later {
         id: positionLater
         property int row: -1
-        interval: 0
         onTriggered: {
             if (!editor.alive || !editor.controller)
                 return
@@ -554,10 +550,9 @@ FocusScope {
         }
     }
     /// ensureRowVisible(): the list to `row` when it has no delegate there.
-    Timer {
+    Later {
         id: rowVisibleLater
         property int row: -1
-        interval: 0
         onTriggered: {
             const row = rowVisibleLater.row
             if (!editor.alive || !editor.controller || row < 0 || row >= list.count)
@@ -646,11 +641,10 @@ FocusScope {
         id: findTarget
         function rowOf(): int { return findTarget.map.row }
     }
-    Timer {
+    Later {
         id: findTargetLater
         property int row: -1
         property bool editable: false
-        interval: 0
         onTriggered: {
             if (!editor.alive)
                 return
@@ -713,10 +707,9 @@ FocusScope {
         revealedLater.restart()
         list.forceActiveFocus()
     }
-    Timer {
+    Later {
         id: revealedLater
         property int row: -1
-        interval: 0
         onTriggered: {
             if (!editor.alive)
                 return
@@ -1292,12 +1285,11 @@ FocusScope {
             tableFilterLater.restart()
     }
     /// openTableFilter(): the filter's field takes the keys (once `menu` is closed).
-    Timer {
+    Later {
         id: tableFilterLater
         property int row: -1
         property int column: 0
         property T.Popup menu: null
-        interval: 0
         onTriggered: {
             if (!editor.alive)
                 return
@@ -1335,13 +1327,12 @@ FocusScope {
         else
             cellLater.restart()
     }
-    Timer {
+    Later {
         id: cellLater
         property int row: -1
         property int r: 0
         property int c: 0
         property T.Popup menu: null
-        interval: 0
         onTriggered: if (editor.alive) editor.editTableCell(cellLater.row, cellLater.r, cellLater.c)
     }
     Connections {
@@ -1450,9 +1441,8 @@ FocusScope {
         function action(): string { return command.map.action === undefined ? "" : command.map.action }
         function cursor(): int { return command.map.cursor === undefined ? -1 : command.map.cursor }
     }
-    Timer {
+    Later {
         id: completionLater
-        interval: 0
         onTriggered: if (editor.alive) editor.updateCompletion(editor.activeEditor)
     }
 
@@ -1986,9 +1976,8 @@ FocusScope {
     function editorFocusLost(): void {
         focusLostLater.restart()
     }
-    Timer {
+    Later {
         id: focusLostLater
-        interval: 0
         onTriggered: {
             if (!editor.alive || !editor.controller)
                 return
@@ -2080,9 +2069,8 @@ FocusScope {
         }
     }
     /// A zoom changed while a block is edited (onZoomChanged): the block stays in view.
-    Timer {
+    Later {
         id: zoomLater
-        interval: 0
         onTriggered: {
             if (!editor.alive)
                 return
@@ -2097,9 +2085,8 @@ FocusScope {
             editor.ensureEditVisible()
         }
     }
-    Timer {
+    Later {
         id: draftLater
-        interval: 0
         onTriggered: if (editor.alive) editor.propertyDraft = false
     }
 
@@ -3436,9 +3423,8 @@ FocusScope {
         enabled: editor.menuAbove !== null
         function onHeightChanged() { followLater.restart() }
     }
-    Timer {
+    Later {
         id: followLater
-        interval: 0
         onTriggered: if (editor.alive) editor.followToolbar()
     }
     /// The status of a block's task as the menu shows it ("" = none).
@@ -3850,11 +3836,10 @@ FocusScope {
     property InlineEditor highlightMenuEdit: null
     /// The text menu's "Zakreśl…" and "Blok…" open their menus once it is closed: at the caret of
     /// `edit` (`highlight`: the colours, else the block menu).
-    Timer {
+    Later {
         id: menuLater
         property InlineEditor edit: null
         property bool highlight: false
-        interval: 0
         onTriggered: {
             const edit = menuLater.edit
             if (!editor.alive || !edit)
@@ -3907,12 +3892,11 @@ FocusScope {
     /// PageController.setHighlight's result.
     MapHolder { id: highlighted }
     /// The highlighted text selected again once the edit has settled.
-    Timer {
+    Later {
         id: highlightLater
         property InlineEditor edit: null
         property int from: 0
         property int to: 0
-        interval: 0
         onTriggered: {
             const edit = highlightLater.edit
             if (editor.alive && edit && edit.active) {

@@ -288,9 +288,8 @@ FocusScope {
     }
     /// route.open being applied (a moment later: openLater).
     property string _open: ""
-    Timer {
+    Later {
         id: openLater
-        interval: 0
         onTriggered: root.openFromRoute(root._open)
     }
     function openFromRoute(open: string): void {
@@ -558,9 +557,8 @@ FocusScope {
         if (root.backdropPending && !canvas.busy && !canvas.textEditing)
             pendingLater.restart()
     }
-    Timer {
+    Later {
         id: pendingLater
-        interval: 0
         onTriggered: {
             if (root.backdropPending && !canvas.busy && !canvas.textEditing)
                 root.applyBackdrop(root.pendingBackdrop)
@@ -609,9 +607,8 @@ FocusScope {
         root._routeQueued = true
         routeLater.restart()
     }
-    Timer {
+    Later {
         id: routeLater
-        interval: 0
         onTriggered: {
             if (!root.alive)
                 return

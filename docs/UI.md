@@ -3555,9 +3555,12 @@ argument) do not compile; neither do `try`/`catch`, `for…of`, `for…in`, `typ
 `arguments`, `ScriptAction { script: … }` (it also makes qmlcachegen skip the rest of the file —
 the animation's `onFinished:` instead). Instead:
 
-* a deferred call: a `Timer { interval: 0 }`, `restart()`ed; it merges repeated requests (with
-  the last values, unlike `Qt.callLater` with different closures) and checks that its owner is
-  still alive (`BlockEditor.laterEnsureEditVisible()` / `laterRevealRow()`);
+* a deferred call: `Later { onTriggered: … }` (`src/app/ui/later.h`), `restart()`ed — like
+  `Qt.callLater` a posted event, ahead of the timers due by then (not a `Timer { interval: 0 }`:
+  on a slow machine it runs after an overdue timer, and the editor's scrolling came after the
+  self-tests' next step); repeated requests are one call, with the last values (unlike
+  `Qt.callLater` with different closures); the handler checks that its owner is still alive
+  (`BlockEditor.laterEnsureEditVisible()` / `laterRevealRow()`);
 * a callback: a signal, or a target name the receiver hands back (`EditorDialogs.pickDateWith(target,
   …)` → `applied(target, action, a, b)`), or an id (`BToastHost.showToast()` returns one,
   `actionTriggered(id)`; `AppController.toastWithAction()` / `toastRestore()`);

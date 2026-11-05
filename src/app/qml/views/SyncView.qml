@@ -56,10 +56,9 @@ FocusScope {
         }
     }
     // (Qt.callLater(historyList.open, run))
-    Timer {
+    Later {
         id: openRunLater
         property int run
-        interval: 0
         onTriggered: historyList.open(run)
     }
 

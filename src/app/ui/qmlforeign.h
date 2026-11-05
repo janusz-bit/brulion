@@ -13,6 +13,7 @@
 #include "filepicker.h"
 #include "gestureinsets.h"
 #include "jshelper.h"
+#include "later.h"
 #include "keyboardinsets.h"
 #include "mapholder.h"
 #include "rowscroll.h"
@@ -45,6 +46,12 @@ struct TextHelperForeign {
     QML_SINGLETON
 public:
     static TextHelper *create(QQmlEngine *, QJSEngine *) { return new TextHelper; }
+};
+
+struct LaterForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::Later)
+    QML_NAMED_ELEMENT(Later)
 };
 
 struct JsHelperForeign {

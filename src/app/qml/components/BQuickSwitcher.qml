@@ -33,9 +33,8 @@ BPalette {
 
     /// commandsRequested()'s text, once this keystroke is done (the palette then takes the keyboard).
     property string _commandsText
-    Timer {
+    Later {
         id: commandsLater
-        interval: 0
         onTriggered: control.commandsRequested(control._commandsText)
     }
 

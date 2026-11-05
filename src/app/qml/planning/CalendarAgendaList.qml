@@ -46,9 +46,8 @@ FocusScope {
     }
     Component.onCompleted: scrollLater.restart()
     // Qt.callLater(scrollToAnchor): once, after this turn's changes.
-    Timer {
+    Later {
         id: scrollLater
-        interval: 0
         onTriggered: root.scrollToAnchor()
     }
 

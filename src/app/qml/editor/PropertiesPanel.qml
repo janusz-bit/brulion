@@ -136,9 +136,8 @@ Item {
         adding = true
         addFocusTimer.restart()
     }
-    Timer {
+    Later {
         id: addFocusTimer
-        interval: 0
         onTriggered: {
             if (addLoader.item)
                 (addLoader.item as Item).forceActiveFocus()

@@ -33,9 +33,8 @@ Item {
             later.restart()
     }
     // (Once the current changes are done, merging repeated requests.)
-    Timer {
+    Later {
         id: later
-        interval: 0
         onTriggered: keeper.keepVisible()
     }
     /// Places in keepVisible() (a method's point result is read through a typed property).

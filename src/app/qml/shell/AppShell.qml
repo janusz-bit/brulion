@@ -187,9 +187,8 @@ FocusScope {
         shell._loggedTyping = shell.typingReport
     }
     // (Qt.callLater: once per turn of the event loop.)
-    Timer {
+    Later {
         id: logTypingLater
-        interval: 0
         onTriggered: shell.logTyping()
     }
     onTypingReportChanged: logTypingLater.restart()
@@ -1028,14 +1027,12 @@ FocusScope {
         }
     }
     // (Qt.callLater: opened a turn of the event loop later.)
-    Timer {
+    Later {
         id: devPopupLater
-        interval: 0
         onTriggered: shell.openDevPopupNow()
     }
-    Timer {
+    Later {
         id: devPopupChooseLater
-        interval: 0
         onTriggered: {
             const query = shell._devPopupQuery
             moveDialog.choose(Js.sliceFrom(query, Js.indexOf(query, ">") + 1), false)

@@ -822,9 +822,8 @@ ApplicationWindow {
             description: "Jeden przycisk główny na widok; drugorzędne obramowane; „duch” w paskach narzędzi; czerwony tylko dla nieodwracalnych akcji."
             // Screenshots show the keyboard focus ring on one button.
             Component.onCompleted: if (window.autoOpen) focusDemoLater.start()
-            Timer {
+            Later {
                 id: focusDemoLater
-                interval: 0
                 onTriggered: focusDemo.forceActiveFocus(Qt.TabFocusReason)
             }
 
@@ -880,9 +879,8 @@ ApplicationWindow {
             title: "Pola tekstowe"
             description: "Pola z ikoną, czyszczeniem i komunikatem błędu. Escape czyści pole; pole wyszukiwania pokazuje skrót klawiszowy."
             Component.onCompleted: if (window.autoOpen) focusedFieldLater.start()
-            Timer {
+            Later {
                 id: focusedFieldLater
-                interval: 0
                 onTriggered: focusedField.forceActiveFocus(Qt.TabFocusReason)
             }
 
@@ -1303,9 +1301,8 @@ ApplicationWindow {
             title: "Menu"
             description: "Menu kontekstowe z ikonami, skrótami, opcjami do zaznaczenia i akcją niebezpieczną. Strzałki, Enter i Escape działają z klawiatury."
             Component.onCompleted: if (window.autoOpen) pageMenuLater.start()
-            Timer {
+            Later {
                 id: pageMenuLater
-                interval: 0
                 onTriggered: pageMenu.popup(moreButton, 0, moreButton.height + 4)
             }
 
@@ -1343,9 +1340,8 @@ ApplicationWindow {
             title: "Status zadania"
             description: "Pole zadania: kliknięcie odhacza, prawy przycisk myszy albo przytrzymanie palcem otwiera menu statusów (w edytorze także Ctrl+Shift+Enter i „/” z poleceniem). „Bez statusu” usuwa pole wyboru, tekst zostaje."
             Component.onCompleted: if (window.autoOpen) doingBoxLater.start()
-            Timer {
+            Later {
                 id: doingBoxLater
-                interval: 0
                 onTriggered: doingBox.openMenu()
             }
 
@@ -1649,9 +1645,8 @@ ApplicationWindow {
                 applyText: "Zapisz scalony"
                 Component.onCompleted: mergeLater.start()
                 onResolved: (text) => toasts.showToast("Scalono (" + text.length + " znaków)", "success", "", -1)
-                Timer {
+                Later {
                     id: mergeLater
-                    interval: 0
                     onTriggered: {
                         merge.setChoice(0, "theirs")
                         merge.setChoice(2, "both")
@@ -1694,9 +1689,8 @@ ApplicationWindow {
             title: "Paleta poleceń"
             description: "Ctrl+K: wyszukiwanie przybliżone, bez względu na polskie znaki („zolw” znajduje „Żółw”). Strzałki, Enter, Escape."
             Component.onCompleted: if (window.autoOpen) paletteLater.start()
-            Timer {
+            Later {
                 id: paletteLater
-                interval: 0
                 onTriggered: {
                     palette.open()
                     palette.query = "syn"
@@ -1722,9 +1716,8 @@ ApplicationWindow {
             title: "Szybkie przejście"
             description: "Ctrl+O: przejdź do strony albo utwórz nową, gdy nic nie pasuje dokładnie."
             Component.onCompleted: if (window.autoOpen) switcherLater.start()
-            Timer {
+            Later {
                 id: switcherLater
-                interval: 0
                 onTriggered: {
                     switcher.open()
                     switcher.query = "pla"

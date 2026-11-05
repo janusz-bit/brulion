@@ -187,9 +187,8 @@ Item {
         adding = true
         addFocusTimer.restart()
     }
-    Timer {
+    Later {
         id: addFocusTimer
-        interval: 0
         onTriggered: if (root.field) (root.field as Item).forceActiveFocus()
     }
 

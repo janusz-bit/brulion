@@ -68,9 +68,8 @@ ApplicationWindow {
             focusBack.restart()
     }
     // (Once the popup has closed.)
-    Timer {
+    Later {
         id: focusBack
-        interval: 0
         onTriggered: {
             if (window.activeFocusItem === window.contentItem)
                 stage.forceActiveFocus()

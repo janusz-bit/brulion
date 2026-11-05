@@ -64,9 +64,8 @@ BDialog {
         showCurrent.restart()
     }
     // (Once the rows are there.)
-    Timer {
+    Later {
         id: showCurrent
-        interval: 0
         onTriggered: {
             const i = dialog.rows.indexOf(dialog.current)
             if (i >= 0)

@@ -3928,9 +3928,8 @@ ApplicationWindow {
         }
     }
     /// "copylink": the "Kopiuj odnośnik" entry opened once the block menu is up (Qt.callLater).
-    Timer {
+    Later {
         id: copyEntryLater
-        interval: 0
         onTriggered: {
             const entry = window.copyEntry()
             if (entry)

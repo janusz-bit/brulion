@@ -175,9 +175,8 @@ Item {
         return heading !== "" ? Js.match(heading, "(?:^|&)\\s*page\\s*=\\s*(\\d{1,7})\\s*(?:&|$)", "i") : []
     }
     onRouteChanged: routeLater.restart()
-    Timer {
+    Later {
         id: routeLater
-        interval: 0
         onTriggered: root.applyRouteFromOutside()
     }
     function applyRouteFromOutside(): void {
@@ -1495,9 +1494,8 @@ Item {
             if (outlineDialog.current >= 0)
                 outlineLater.restart()
         }
-        Timer {
+        Later {
             id: outlineLater
-            interval: 0
             onTriggered: outlineList.positionViewAtIndex(outlineDialog.current, ListView.Center)
         }
         onClosed: root.forceActiveFocus()

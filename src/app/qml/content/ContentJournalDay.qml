@@ -115,10 +115,9 @@ FocusScope {
             page.setFoldState(day._folds)
         day._foldsRestored = true
     }
-    // Deferred like the editor's own Timers: gone with the day (a stream scrolled away).
-    Timer {
+    // Deferred like the editor's own calls (Later): gone with the day (a stream scrolled away).
+    Later {
         id: revealLater
-        interval: 0
         onTriggered: if (dayEditor.alive) dayEditor.ensureEditVisible()
     }
 

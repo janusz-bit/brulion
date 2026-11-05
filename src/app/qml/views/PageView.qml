@@ -155,34 +155,29 @@ FocusScope {
         }
     }
     // Deferred calls (instead of Qt.callLater and the editor's later()).
-    Timer {
+    Later {
         id: applyStateLater
-        interval: 0
         onTriggered: root.applyViewState()
     }
-    Timer {
+    Later {
         id: applyStateFirst
-        interval: 0
         onTriggered: applyStateSecond.restart()
     }
-    Timer {
+    Later {
         id: applyStateSecond
-        interval: 0
         onTriggered: root.scrollToAppliedState()
     }
-    Timer {
+    Later {
         id: routeLater
-        interval: 0
         onTriggered: {
             root._routeQueued = false
             root.applyRoute()
         }
     }
     /// What route.open asks for, done one turn later (openRequested()).
-    Timer {
+    Later {
         id: openLater
         property string action
-        interval: 0
         onTriggered: {
             switch (action) {
             case "rename":
@@ -844,9 +839,8 @@ FocusScope {
         // The viewer takes the keys (PageDown, Ctrl+F, Esc…) when it opens in the main pane.
         onLoaded: if (!root.inSidePanel) pdfFocusLater.restart()
     }
-    Timer {
+    Later {
         id: pdfFocusLater
-        interval: 0
         onTriggered: if (pdfLoader.item !== null) (pdfLoader.item as Item).forceActiveFocus()
     }
     /// The editor's last message with an action (a toast's button runs it: messageToast).

@@ -106,22 +106,19 @@ FocusScope {
         /// The quick-add field's text from the route ("add:<text>").
         property string addText
     }
-    Timer {
+    Later {
         id: openQueryLater
-        interval: 0
         onTriggered: queryDialog.open()
     }
-    Timer {
+    Later {
         id: fillAddLater
-        interval: 0
         onTriggered: {
             if (quickAdd.field)
                 quickAdd.field.text = later.addText
         }
     }
-    Timer {
+    Later {
         id: toTopLater
-        interval: 0
         onTriggered: list.positionViewAtBeginning()
     }
     // Every toast button of this view is "Undo".

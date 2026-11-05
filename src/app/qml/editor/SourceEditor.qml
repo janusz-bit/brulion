@@ -95,9 +95,8 @@ Flickable {
     readonly property bool keyboardSliding: KeyboardInsets.animating
     onKeyboardSlidingChanged: if (!keyboardSliding && KeyboardInsets.shown) caretLater.restart()
     /// keepCaretVisible() once the event loop is idle (repeated requests are one).
-    Timer {
+    Later {
         id: caretLater
-        interval: 0
         onTriggered: root.keepCaretVisible()
     }
     Component.onDestruction: if (editor) editor.sourceEditing = false

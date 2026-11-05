@@ -78,9 +78,8 @@ FocusScope {
     }
     Component.onCompleted: scrollLater.restart()
     // Qt.callLater(scrollToFirstEntry): once, after this turn's changes.
-    Timer {
+    Later {
         id: scrollLater
-        interval: 0
         onTriggered: root.scrollToFirstEntry()
     }
     Timer {

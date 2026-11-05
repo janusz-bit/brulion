@@ -78,12 +78,12 @@ Rectangle {
         return AppController.recentPagesExcept(sidebar.currentPath, 5)
     }
     // (Qt.callLater: once per turn of the event loop. The same for the other timers below.)
-    Timer { id: recentLater; interval: 0; onTriggered: sidebar.updateRecentOthers() }
-    Timer { id: revealRouteLater; interval: 0; onTriggered: sidebar.revealRoute() }
-    Timer { id: placeRevealedLater; interval: 0; onTriggered: sidebar.placeRevealed() }
-    Timer { id: placeListLater; interval: 0; onTriggered: sidebar.placeList() }
-    Timer { id: keepPlaceLater; interval: 0; onTriggered: list.keepPlace() }
-    Timer { id: dragAgainLater; interval: 0; onTriggered: sidebar.dragTo(sidebar.dragScenePos) }
+    Later { id: recentLater; onTriggered: sidebar.updateRecentOthers() }
+    Later { id: revealRouteLater; onTriggered: sidebar.revealRoute() }
+    Later { id: placeRevealedLater; onTriggered: sidebar.placeRevealed() }
+    Later { id: placeListLater; onTriggered: sidebar.placeList() }
+    Later { id: keepPlaceLater; onTriggered: list.keepPlace() }
+    Later { id: dragAgainLater; onTriggered: sidebar.dragTo(sidebar.dragScenePos) }
     onCurrentPathChanged: recentLater.restart()
     /// Show the open page in the tree on every route change.
     property bool revealCurrent: flag(AppSettings.value("ui/sidebar/revealCurrent", true))

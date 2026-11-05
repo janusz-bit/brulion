@@ -92,9 +92,8 @@ FocusScope {
                 AppController.openPage(undo.openPaths[open])
         }
     }
-    Timer {
+    Later {
         id: openAddLater
-        interval: 0
         onTriggered: addDialog.open()
     }
 

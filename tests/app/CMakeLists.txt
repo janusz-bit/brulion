@@ -9,6 +9,11 @@ brulion_add_test(tst_ui_helpers
 brulion_add_test(tst_jshelper
     SOURCES tst_jshelper.cpp
     LIBS brulion_ui_helpers Qt6::Qml)
+# Later (QML type, brulion_ui_helpers): Qt.callLater() without a closure — one call for many
+# requests, ahead of the timers due, stop().
+brulion_add_test(tst_later
+    SOURCES tst_later.cpp
+    LIBS brulion_ui_helpers)
 # KeyboardInsets (brulion_ui_helpers): the on-screen keyboard's overlap of the window and the
 # choice between a simulated keyboard, the platform's report and Qt's input method.
 brulion_add_test(tst_keyboardinsets
