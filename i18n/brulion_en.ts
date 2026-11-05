@@ -1062,6 +1062,22 @@
             <numerusform>%n warnings or errors</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1215"/>
+        <source>Last check %1: %n reminder(s), the sync failed.</source>
+        <translation>
+            <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
+            <numerusform>Last check %1: %n reminders, the sync failed.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1217"/>
+        <source>Last check %1: %n reminder(s).</source>
+        <translation>
+            <numerusform>Last check %1: %n reminder.</numerusform>
+            <numerusform>Last check %1: %n reminders.</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>ShellBackupSettings</name>

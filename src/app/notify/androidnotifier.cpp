@@ -58,6 +58,28 @@ void AndroidNotifier::takeDoneRequests()
     }
 }
 
+void AndroidNotifier::setBackgroundCheck(const QJsonObject &target)
+{
+    if (m_backgroundTarget == target)
+        return;
+    const QJsonObject answer = platform::AndroidBridge::instance()->setBackgroundCheck(target);
+    if (answer.isEmpty() || answer.contains(QStringLiteral("error"))) {
+        qCWarning(lcAndroidNotify) << "Could not set up the background check:" << answer;
+        return; // tried again with the next change
+    }
+    m_backgroundTarget = target;
+    const int interval = answer.value(QStringLiteral("interval")).toInt();
+    if (interval > 0)
+        qCInfo(lcAndroidNotify).noquote() << QStringLiteral("Background check of the notes every %1 min").arg(interval);
+    else
+        qCInfo(lcAndroidNotify) << "Background check of the notes off";
+}
+
+QJsonObject AndroidNotifier::backgroundCheckStatus() const
+{
+    return platform::AndroidBridge::instance()->backgroundCheckStatus();
+}
+
 AndroidNotifier::~AndroidNotifier() = default;
 
 QString AndroidNotifier::backend() const

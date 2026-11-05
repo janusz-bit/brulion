@@ -71,6 +71,10 @@ object BrulionAndroid {
   private var nativeAttached = false
 
   @Volatile private var activityRef: WeakReference<Activity>? = null
+  /** [BrulionActivity] is resumed (on the screen): the background check leaves the reminders to it. */
+  @Volatile private var uiResumed = false
+  /** How often C++ attached in this process ([attach]): a check that saw it change defers to the app. */
+  @Volatile private var attaches = 0
   /** [setSystemBarsLight]'s value, null before C++ asked. */
   @Volatile private var systemBarsLight: Boolean? = null
 
@@ -126,6 +130,7 @@ object BrulionAndroid {
   fun attach(context: Context) {
     ReminderNotifier.ensureChannels(context)
     synchronized(lock) { nativeAttached = true }
+    attaches++
     // What the keyboard observer saw before C++ listened.
     onMain { ImeInsets.reportAgain() }
   }
@@ -355,6 +360,53 @@ object BrulionAndroid {
       Log.e(TAG, "takeDoneRequests failed", e)
       "[]"
     }
+
+  // -----------------------------------------------------------------------------------------
+  // The background check of the notes (BackgroundCheck.kt, docs/ANDROID.md "Sprawdzanie notatek
+  // w tle")
+  // -----------------------------------------------------------------------------------------
+
+  /**
+   * What the periodic background check reads while Brulion is closed ([BackgroundCheck.configure]):
+   * the C++ `background::Target` as JSON, `{}` for off. Returns `{"interval": minutes}` or
+   * `{"error": "..."}` (the previous target stays).
+   */
+  @JvmStatic
+  fun setBackgroundCheck(context: Context, json: String): String =
+    try {
+      BackgroundCheck.configure(context.applicationContext, json)
+    } catch (e: JSONException) {
+      errorJson("setBackgroundCheck: not a target", e)
+    } catch (e: RuntimeException) {
+      errorJson("setBackgroundCheck failed: $e", e)
+    }
+
+  /** The last background check: `{at, ok, applied, reminders, sync, error, …}`, `{}` before the first. */
+  @JvmStatic
+  fun backgroundCheckStatus(context: Context): String =
+    try {
+      BackgroundCheck.status(context.applicationContext)
+    } catch (e: RuntimeException) {
+      Log.e(TAG, "backgroundCheckStatus failed", e)
+      "{}"
+    }
+
+  /** In the check's own process: the target to check (`{}`: none). */
+  @JvmStatic
+  fun backgroundCheckTarget(context: Context): String =
+    try {
+      BackgroundCheck.targetJson(context.applicationContext)
+    } catch (e: RuntimeException) {
+      Log.e(TAG, "backgroundCheckTarget failed", e)
+      "{}"
+    }
+
+  /** In the check's own process: C++ finished the check ([BackgroundCheckService] sends it to the job). */
+  @JvmStatic
+  @Suppress("UNUSED_PARAMETER") // kept for a stable JNI signature
+  fun backgroundCheckFinished(context: Context, json: String) {
+    BackgroundCheckService.finished(json)
+  }
 
   // -----------------------------------------------------------------------------------------
   // Home-screen widgets (docs/ANDROID.md "Widgety")
@@ -678,6 +730,20 @@ object BrulionAndroid {
       isAppearanceLightNavigationBars = light
     }
   }
+
+  internal fun onActivityResumed() {
+    uiResumed = true
+  }
+
+  internal fun onActivityPaused() {
+    uiResumed = false
+  }
+
+  /** Brulion's activity is on the screen (resumed). */
+  internal fun isUiShown(): Boolean = uiResumed
+
+  /** How often C++ attached in this process (0: Qt never ran here). */
+  internal fun attachCount(): Int = attaches
 
   internal fun onActivityDestroyed(activity: Activity) {
     if (activityRef?.get() === activity) activityRef = null

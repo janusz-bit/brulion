@@ -7,14 +7,21 @@
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
+#include "backgroundcheck.h" // Android's background check of the notes (src/app/background)
 #include "desktopnotifier.h"
 #include "notifier.h"
 #include "remindersounds.h"
 
+#include "log/categories.h"
+#include "vault/vault.h"
+
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QLoggingCategory>
 #include <QPointer>
 #include <QSaveFile>
 
@@ -52,6 +59,8 @@ bool writeSecretFile(const QString &file, const QString &value)
     QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     return true;
 }
+
+void wireBackgroundCheck(AppController *app, notify::Notifier *notifier);
 
 void wireReminders(AppController *app)
 {
@@ -160,10 +169,75 @@ void wireReminders(AppController *app)
 
     // Closing a notebook on purpose (back to onboarding): nothing of it may ring any more.
     // Quitting keeps Android's alarms armed — they are meant to ring while Brulion is closed.
-    QObject::connect(app, &AppController::statusChanged, reminders, [app, ws, reminders] {
-        if (app->status() == u"onboarding" && ws->isOpen())
+    QObject::connect(app, &AppController::statusChanged, reminders, [app, ws, reminders, guard] {
+        if (app->status() == u"onboarding" && ws->isOpen()) {
             reminders->cancelAll();
+            if (guard)
+                guard->setBackgroundCheck({}); // nor may a background check arm them again
+        }
     });
+
+    wireBackgroundCheck(app, notifier);
+}
+
+void wireBackgroundCheck(AppController *app, notify::Notifier *notifier)
+{
+    // Android's background check (docs/ANDROID.md "Sprawdzanie notatek w tle"): the notebook whose
+    // reminders run is the one it reads while Brulion is closed. Handed over whenever they start
+    // and when a setting it uses changes; kept when they stop because the app quits, another
+    // notebook is being opened or the documentation is open (Android keeps that notebook's alarms
+    // armed then); off with the reminders, or with the check's own setting.
+    AppSettings *settings = app->settings();
+    Workspace *ws = app->workspace();
+    WorkspaceReminders *reminders = ws->reminders();
+    WorkspaceSync *sync = ws->sync();
+    const QPointer<notify::Notifier> guard(notifier);
+    reminders->setBackgroundCheckInfo([guard] { return guard ? guard->backgroundCheckStatus() : QJsonObject(); });
+
+    const auto push = [app, settings, ws, reminders, sync, guard] {
+        if (!guard)
+            return;
+        const int interval = background::normalizedInterval(
+                settings->value(QString::fromLatin1(background::IntervalSettingKey), background::DefaultIntervalMinutes)
+                        .toInt());
+        if (!settings->remindersEnabled() || interval <= 0) {
+            guard->setBackgroundCheck({});
+            return;
+        }
+        Vault *vault = ws->vault();
+        if (!reminders->isRunning() || !vault)
+            return; // keep what was handed over for the notebook whose alarms stay armed
+        background::Target target;
+        target.root = vault->rootPath();
+        target.stateDir = app->deviceStatePath(vault->rootPath());
+        target.vault = vault->id();
+        target.ringMinutes = settings->alarmRingMinutes();
+        target.language = settings->language();
+        target.intervalMinutes = interval;
+        if (sync->active()) {
+            target.nextcloud = background::Target::Nextcloud{sync->currentDavUrl(), settings->nextcloudUser().trimmed(),
+                                                             sync->deviceName()};
+        }
+        guard->setBackgroundCheck(target.toJson());
+    };
+    QObject::connect(reminders, &WorkspaceReminders::runningChanged, notifier, push);
+    QObject::connect(settings, &AppSettings::remindersEnabledChanged, notifier, push);
+    QObject::connect(settings, &AppSettings::alarmRingMinutesChanged, notifier, push);
+    QObject::connect(settings, &AppSettings::languageChanged, notifier, push);
+    QObject::connect(settings, &AppSettings::valueChanged, notifier, [push](const QString &key) {
+        if (key == QLatin1String(background::IntervalSettingKey))
+            push();
+    });
+    QObject::connect(sync, &WorkspaceSync::configurationChanged, notifier, push);
+    push();
+
+    // What the last check did while Brulion was closed, for the event log.
+    const QJsonObject last = notifier->backgroundCheckStatus();
+    if (const qint64 at = last.value(u"at"_s).toInteger(); at > 0) {
+        qCInfo(logging::lcReminders).noquote() << u"Last background check %1: %2"_s.arg(
+                QDateTime::fromMSecsSinceEpoch(at).toString(u"yyyy-MM-dd HH:mm"_s),
+                QString::fromUtf8(QJsonDocument(last).toJson(QJsonDocument::Compact)));
+    }
 }
 
 void wireSync(AppController *app)

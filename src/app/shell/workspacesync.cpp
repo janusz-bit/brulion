@@ -512,6 +512,8 @@ QString WorkspaceSync::errorText(const QString &code, const QString &fallback) c
         return tr("Sync paused: the folder on the server is empty although it was synced before.");
     if (code == u"vault-unavailable")
         return tr("The notebook folder is not available (an unmounted card or drive?).");
+    if (code == u"other-process")
+        return tr("The background check is syncing this notebook right now. Brulion will try again shortly.");
     if (code == u"needs-confirmation") {
         const int n = s.lastReport ? int(s.lastReport->pendingDeletions.size()) : 0;
         return tr("%n file(s) would be deleted. Confirm in the sync center.", "", n);

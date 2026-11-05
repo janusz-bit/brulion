@@ -85,7 +85,7 @@ target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
     PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
-            brulion_core_drawing brulion_notify)
+            brulion_core_drawing brulion_notify brulion_background)
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
 # src/app/pdf — its area is included before this one — and openexternal.h).

@@ -94,6 +94,34 @@ private Q_SLOTS:
         QCOMPARE(env.sink.scheduled.size(), 2);
     }
 
+    void resendSoonSendsAnUnchangedSetOnce()
+    {
+        // Android's background check armed its own set meanwhile: the app's goes again, once.
+        Env env(dt(2026, 10, 14, 8, 0), /*native*/ true);
+        fill(env.index, vault());
+        auto s = env.scheduler();
+        s->resendSoon(); // stopped: nothing
+        s->start();
+        QCOMPARE(env.sink.scheduled.size(), 1);
+        s->resendSoon();
+        QTRY_COMPARE(env.sink.scheduled.size(), 2);
+        QCOMPARE(env.sink.scheduled.last(), env.sink.scheduled.first());
+        // An ordinary refresh afterwards sends nothing: the set is still the same.
+        QTest::qWait(30);
+        s->refresh();
+        QCOMPARE(env.sink.scheduled.size(), 2);
+        // A change that comes with it (the vault rescanned on return) goes in the same send.
+        s->resendSoon();
+        env.index.update(u"Z komputera.md"_s, u"- Dodane na komputerze ⏰ 2026-10-14 21:15"_s);
+        QTRY_COMPARE(env.sink.scheduled.size(), 3);
+        QTest::qWait(30);
+        QCOMPARE(env.sink.scheduled.size(), 3);
+        bool found = false;
+        for (const ScheduledNotification &n : env.sink.scheduled.last())
+            found = found || n.title == u"Dodane na komputerze"_s;
+        QVERIFY(found);
+    }
+
     void startAlwaysSendsTheSet()
     {
         // An empty set still replaces whatever the platform kept from the previous run.

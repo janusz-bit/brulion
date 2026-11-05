@@ -1764,8 +1764,11 @@ void Workspace::applicationStateChanged(Qt::ApplicationState state)
     }
     m_backups->applicationActive();
 #ifndef Q_OS_WASM
-    if (std::exchange(m_wasInactive, false) && m_vault)
+    if (std::exchange(m_wasInactive, false) && m_vault) {
         m_vault->rescan(); // emits changed() for what other programs did meanwhile
+        // Android's background check may have armed what it read meanwhile: the app's set again.
+        m_reminders->resendSoon();
+    }
 #endif
 }
 

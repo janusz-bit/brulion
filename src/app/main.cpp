@@ -58,6 +58,7 @@
 
 #ifdef Q_OS_ANDROID
 #include "android/androidbridge.h"
+#include "backgroundentry.h" // the background check's process (src/app/background)
 #include "widgetpublisher.h"
 #endif
 
@@ -97,6 +98,12 @@ int main(int argc, char *argv[])
     // log file, no single-instance claim, no settings.
     if (argc > 1 && qstrcmp(argv[1], "cli") == 0)
         return brulion::cli::run(argc - 1, argv + 1);
+#endif
+#ifdef Q_OS_ANDROID
+    // The background check's own process (BackgroundCheckService.kt, docs/ANDROID.md "Sprawdzanie
+    // notatek w tle"): no window, no QML, no settings of the app — before anything of the app.
+    if (argc > 1 && qstrcmp(argv[1], brulion::background::BackgroundCheckArgument) == 0)
+        return brulion::background::runBackgroundCheck(argc, argv);
 #endif
     brulion::ui::DevTools::applyEarlyArguments(argc, argv); // --scale (before the app exists)
 #ifdef BRULION_DESKTOP_INTEGRATION

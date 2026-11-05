@@ -112,6 +112,30 @@ void WorkspaceReminders::setBackendInfo(std::function<QString()> backend, std::f
     Q_EMIT sinkChanged();
 }
 
+void WorkspaceReminders::setBackgroundCheckInfo(std::function<QJsonObject()> status)
+{
+    m_backgroundStatus = std::move(status);
+}
+
+QVariantMap WorkspaceReminders::backgroundCheckStatus() const
+{
+    const QJsonObject status = m_backgroundStatus ? m_backgroundStatus() : QJsonObject();
+    const qint64 at = status.value(u"at"_s).toInteger();
+    if (status.isEmpty() || at <= 0)
+        return {};
+    const dates::UiLocale locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+    const QDateTime when = QDateTime::fromMSecsSinceEpoch(at).toLocalTime();
+    return {
+            {u"at"_s, when.toString(u"yyyy-MM-dd HH:mm"_s)},
+            {u"when"_s, dates::formatHuman(DateSpec{when.date(), when.time()}, locale, now().date())},
+            {u"ok"_s, status.value(u"ok"_s).toBool()},
+            {u"applied"_s, status.value(u"applied"_s).toBool()},
+            {u"reminders"_s, status.value(u"reminders"_s).toInt()},
+            {u"sync"_s, status.value(u"sync"_s).toString()},
+            {u"error"_s, status.value(u"error"_s).toString()},
+    };
+}
+
 void WorkspaceReminders::attach(Vault *vault, VaultIndex *index)
 {
     detach();
@@ -217,6 +241,12 @@ void WorkspaceReminders::resendUpcoming()
 {
     if (m_scheduler && m_scheduler->isRunning())
         m_proxy->schedule(m_scheduler->upcoming());
+}
+
+void WorkspaceReminders::resendSoon()
+{
+    if (m_scheduler && m_scheduler->isRunning() && m_proxy->firesWhenClosed())
+        m_scheduler->resendSoon();
 }
 
 // ---- settings ---------------------------------------------------------------------------------

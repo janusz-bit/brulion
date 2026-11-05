@@ -112,7 +112,9 @@
 * **Zadania, kalendarz, przypomnienia.** `- [ ] Zadanie 📅 2026-10-20 ⏰ 2026-10-19 18:00`,
   powtarzanie `🔁 co tydzień`, alarmy `⏰!` (dzwonią jak budzik, aż je wyłączysz albo minie
   ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
-  widok kalendarza i listy zadań. Status zadania (do zrobienia, w toku, zrobione, oczekujące,
+  widok kalendarza i listy zadań. Przypomnienie dopisane na komputerze telefon nastawi sam: co
+  15–60 minut Android sprawdza notatki w tle, po synchronizacji z Nextcloud, jeśli jest włączona
+  ([docs/ANDROID.md](docs/ANDROID.md#sprawdzanie-notatek-w-tle)). Status zadania (do zrobienia, w toku, zrobione, oczekujące,
   anulowane albo bez statusu) wybierasz z menu pola wyboru — prawy przycisk myszy lub
   przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku. Tak samo
   na znaczniku daty (📅 ⏳ 🛫 ✅ ➕ ❌) albo ⏰ otwiera się menu do zmiany daty: kalendarz, dziś,
@@ -291,7 +293,8 @@ nie synchronizują się wcale (także „Synchronizuj teraz”), dopóki jednemu
 innego folderu — stan synchronizacji mówi, z którym notatnikiem dzielą folder. „Wyloguj”
 wyłącza synchronizację we wszystkich notatnikach, a zapisanie innego serwera lub użytkownika —
 w pozostałych. Brulion synchronizuje w tle
-(domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
+(domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci, a na Androidzie przy zamkniętej
+aplikacji — przy [sprawdzaniu notatek w tle](docs/ANDROID.md#sprawdzanie-notatek-w-tle); równoległe dopiski
 w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
 10 plików) — dopóki nie potwierdzisz listy. Foldery też się synchronizują: pusty folder pojawia
@@ -475,7 +478,8 @@ iCalendar (export also as one
 Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
-  alarms that fire while the app is closed; text, links and `.md`/`.txt` files shared from other
+  alarms that fire while the app is closed, and a periodic background check — after a Nextcloud
+  sync, when set up — that arms reminders added on other devices; text, links and `.md`/`.txt` files shared from other
   apps go to the journal or a new page — the same dialog opens for "Open with → Brulion" on a
   `.md`/`.txt` file on the desktop (Linux: "Open with → Other application"; Brulion never becomes
   the default program), which saves a copy and leaves the file as it is, and for text

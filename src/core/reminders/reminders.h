@@ -25,7 +25,8 @@
 //
 //   scheduler.h      class ReminderScheduler : QObject — (VaultIndex*, NotificationSink*,
 //                      LocalStore*, Clock = QDateTime::currentDateTime)
-//                      start() / stop() / refresh() (debounced on index changes) / checkNow()
+//                      start() / stop() / refresh() (debounced on index changes) / checkNow() /
+//                      resendSoon() (the next refresh hands the set over even when unchanged)
 //                      settings: horizonDays, maxScheduled, alarmRingMinutes, locale
 //                      one NotificationCache of [today − 8, today + horizon + 1] for every pass
 //                      (a refresh after a save computes the saved note only)

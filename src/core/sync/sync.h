@@ -67,7 +67,8 @@
 //     warnings with their code, one summary line per run with phase times and request stats.
 //     Mass-deletion guard: > 25 % and >= 10 files of a side (or all of them) -> no deletion
 //     applied, needsConfirmation; confirm with SyncRunOptions::confirmDeletions. A vault whose
-//     folder is missing / on another storage is refused (SyncErrorCode::VaultUnavailable). Pure
+//     folder is missing / on another storage is refused (SyncErrorCode::VaultUnavailable), so is a
+//     run while another process syncs the same store (SyncErrorCode::OtherProcess). Pure
 //     helpers: planSync(SyncFacts), isSyncablePath, isSyncTextPath, decodeSyncText, groupByCase,
 //     remoteVersion.
 //

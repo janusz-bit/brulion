@@ -86,7 +86,11 @@ QList<QStringList> groupByCase(const QStringList &sortedPaths, const std::functi
 /// The engine refuses to mirror a side on which every previously synced file has disappeared
 /// (SyncErrorCode::LocalEmpty / RemoteEmpty) unless SyncRunOptions::allowEmptySide is set, and
 /// refuses to run while the vault folder is missing or on another storage than at open()
-/// (SyncErrorCode::VaultUnavailable, see Vault::isStorageAvailable()).
+/// (SyncErrorCode::VaultUnavailable, see Vault::isStorageAvailable()). Across processes too, one
+/// run per store at a time: a run holds "<store file>.sync-lock" (QLockFile; a dead owner's lock is
+/// taken over) and re-reads the store first, so it starts from what the last run of any process
+/// left there; while another process holds the lock the run is refused (SyncErrorCode::
+/// OtherProcess — Android's background check, docs/ANDROID.md).
 /// Mass-deletion guard (like the Nextcloud client): when a run would delete more than 25 % of
 /// the files of one side and at least 10 of them (MassDeletionRatio, MassDeletionMinFiles), or
 /// every file of a side (at least 2), it applies no deletion at all — the other changes are

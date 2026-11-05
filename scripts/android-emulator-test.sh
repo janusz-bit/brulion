@@ -79,6 +79,14 @@
 # (`[x]` and `✅ <the day of the tap>`); the second one's tapped with the app's process gone leaves
 # the note as it is until the next start, which writes it. Screenshots (dn-*.png); the same
 # debuggable APK.
+# With --background instead: the background check of the notes (docs/ANDROID.md "Sprawdzanie notatek
+# w tle") — a notebook with a reminder three hours ahead, opened in the app (its reminder armed, the
+# check's target kept), the app's process gone (am kill); then, as Syncthing would, that reminder is
+# deleted from the journal and a note "Z komputera.md" with a reminder three minutes ahead appears;
+# the system's job run at once (cmd jobscheduler run -f): the check's own process (":background")
+# reads the notebook and ends, the armed set is the new one (the old reminder gone), its status is
+# kept, and the new reminder rings while Brulion is still closed; with the app on screen the job
+# leaves the reminders to it. Logs (bg-*.txt, the check's own log); the same debuggable APK.
 # With --drawing instead: text on a drawing with the on-screen keyboard (docs/UI.md "Drawing
 # editor") — a notebook whose journal embeds a drawing (tests/data/drawing/auto_theme.svg): a tap
 # on the embed opens the drawing editor, the bar at the bottom has "Tekst" on screen (a phone held
@@ -151,6 +159,7 @@
 #        scripts/android-emulator-test.sh --widgets [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-pictures [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --done [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --background [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --drawing [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --stylus [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --pickers [DEBUG_APP_APK]
@@ -209,6 +218,7 @@ SHARE=0
 WIDGETS=0
 WEBPICTURES=0
 DONE=0
+BACKGROUND=0
 DRAWING=0
 STYLUS=0
 PICKERS=0
@@ -232,6 +242,9 @@ elif [[ ${1:-} == --widgets ]]; then
   shift
 elif [[ ${1:-} == --done ]]; then
   DONE=1
+  shift
+elif [[ ${1:-} == --background ]]; then
+  BACKGROUND=1
   shift
 elif [[ ${1:-} == --drawing ]]; then
   DRAWING=1
@@ -263,7 +276,7 @@ else
   APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH)) ||
+  ((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || PDF || RELAUNCH)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -1938,6 +1951,104 @@ if ((DONE)); then
   info "Result"
   echo "    the journal:"
   dn_cat | sed 's/^/      /'
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- the background check of the notes (--background) --------------------------------------------
+
+if ((BACKGROUND)); then
+  info "Background check: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  zone=$(adb shell getprop persist.sys.timezone | tr -d '\r')
+  now=$(adb shell date +%s | tr -d '\r')
+  at() { TZ=${zone:-UTC} date -d "@$((now + $1 * 60))" '+%Y-%m-%d %H:%M'; } # <minutes ahead>
+  today=$(TZ=${zone:-UTC} date -d "@$now" +%Y-%m-%d)
+  old_at=$(at 180)
+  new_at=$(at 3)
+  BG_VAULT=files/Notatnik
+  BG_DIR=/data/user/0/$PKG/$BG_VAULT
+  JOB_ID=16912 # BackgroundCheck.JOB_ID (0x4210)
+  bg_push() { # <local file> <path in the notebook>
+    adb push "$1" /data/local/tmp/brulion-bg >/dev/null
+    adb shell run-as "$PKG" mkdir -p "'$(dirname -- "$BG_VAULT/$2")'"
+    adb shell run-as "$PKG" cp /data/local/tmp/brulion-bg "'$BG_VAULT/$2'"
+  }
+  kill_app() { adb shell am kill "$PKG" && sleep 2 && not_running; } # Android may need a second try
+  prefs() { adb shell run-as "$PKG" cat "shared_prefs/$PKG.android.$1.xml" 2>/dev/null | tr -d '\r'; } # <name>
+  armed() { prefs reminders | grep -q -- "$1"; }      # <title>
+  not_armed() { ! armed "$1"; }
+  bg_running() { [[ -n $(adb shell pidof "$PKG:background" | tr -d '\r') ]]; }
+  bg_gone() { ! bg_running; }
+  notified() { adb shell dumpsys notification --noredact | grep -q "$1"; } # <title>
+  applied() { prefs background | grep -q 'applied&quot;:true'; }
+  run_job() { adb shell cmd jobscheduler run -f "$PKG" "$JOB_ID" >/dev/null 2>&1; }
+  printf -- '- [ ] Odebrać paczkę ⏰ %s\n- Koniec dnia\n' "$old_at" >"$OUT/bg-journal.md"
+  bg_push "$OUT/bg-journal.md" "journals/$today.md"
+  echo "    reminders: $old_at (deleted while closed), $new_at (added while closed) ($zone)"
+
+  # 1. The app opens the notebook: its reminder armed, the check's target kept, the job scheduled.
+  start_app "--vault $BG_DIR --locale pl --route journals"
+  check "the app is running" running
+  check "its reminder is armed" wait_for 30 armed 'Odebrać paczkę'
+  check "the background check's target is kept" bash -c \
+    "'$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.background.xml | grep -q 'intervalMinutes'"
+  adb shell dumpsys jobscheduler >"$OUT/bg-jobs-1.txt"
+  check "the periodic job is scheduled" grep -q "$PKG/.android.BackgroundCheckJob" "$OUT/bg-jobs-1.txt"
+  # 2. With the app on screen the job leaves the reminders to it.
+  adb logcat -c
+  run_job
+  check "with the app on screen the job is skipped" wait_for 20 log_has 'background check skipped: Brulion is on the screen'
+  check "… and starts no check process" bg_gone
+
+  # 3. The app closed; Syncthing brings changes from the computer.
+  adb shell input keyevent 3
+  sleep 2
+  check "the app's process is gone (am kill)" wait_for 30 kill_app
+  printf -- '- Koniec dnia\n' >"$OUT/bg-journal.md"
+  bg_push "$OUT/bg-journal.md" "journals/$today.md"
+  printf -- '# Z komputera\n\n- [ ] Spotkanie z Łucją ⏰ %s\n' "$new_at" >"$OUT/bg-note.md"
+  bg_push "$OUT/bg-note.md" "Z komputera.md"
+  check "… the old reminder is still armed" armed 'Odebrać paczkę'
+
+  # 4. The job runs (as Android would, every 15–60 minutes).
+  adb logcat -c
+  run_job
+  check "the check's own process starts" wait_for 20 bash -c \
+    "'$SDK/platform-tools/adb' -s $SERIAL logcat -d | grep -q 'background check: '"
+  adb logcat -d >"$OUT/bg-logcat-check.txt"
+  check "the new reminder is armed" wait_for 30 armed 'Spotkanie z Łucją'
+  check "… the deleted one is not" not_armed 'Odebrać paczkę'
+  check "… the check's status says so" applied
+  check "the check's process ends" wait_for 20 bg_gone
+  check "the app's UI did not start" bash -c "! '$SDK/platform-tools/adb' -s $SERIAL logcat -d | grep -q 'brulion.shell'"
+  adb shell run-as "$PKG" cat files/logs/background/brulion.log >"$OUT/bg-check-log.txt" 2>/dev/null || true
+  check "the check's own log has the result" grep -qE 'Checked [0-9]+ note\(s\): 1 reminder\(s\)' "$OUT/bg-check-log.txt"
+  check "the new reminder rings with Brulion closed" wait_for 240 notified 'Spotkanie z Łucją'
+  check "… the app's process is not running its UI" bash -c "! '$SDK/platform-tools/adb' -s $SERIAL logcat -d | grep -q 'brulion.shell'"
+  app_shot bg-1-notification
+
+  # 5. Back in the app: its own set again (the same one), the last check shown in the settings.
+  start_app "--vault $BG_DIR --locale pl --route settings"
+  check "the app is running again" running
+  check "the app logs the last check" wait_for 20 log_has 'Last background check'
+  # Settings → Przypomnienia: the setting with the last check under its name (a screenshot: Qt's
+  # accessibility tree does not follow the settings' scrolling for UiAutomator).
+  for _ in 1 2 3 4 5 6 7 8 9 10 11; do
+    adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 3 / 4)) $((SCREEN_W / 2)) $((SCREEN_H / 4)) 400
+    sleep 1
+  done
+  app_shot bg-2-settings
+  prefs background >"$OUT/bg-prefs.txt"
+
+  adb logcat -d >"$OUT/bg-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/bg-logcat-check.txt' '$OUT/bg-logcat.txt'"
+  info "Result"
+  echo "    the check's status:"
+  sed 's/^/      /' "$OUT/bg-prefs.txt"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

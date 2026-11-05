@@ -24,6 +24,7 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QJsonObject>
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -80,6 +81,8 @@ public:
     NotificationSink *sink() const;
     /// The notifier's backend name and whether it can show notifications now (for the UI).
     void setBackendInfo(std::function<QString()> backend, std::function<bool()> canShow);
+    /// The last background check of the notes (Android, Notifier::backgroundCheckStatus()).
+    void setBackgroundCheckInfo(std::function<QJsonObject()> status);
     void attach(Vault *vault, VaultIndex *index);
     void detach();
     /// Start the scheduler (the index is complete). No-op when disabled or not attached.
@@ -90,6 +93,11 @@ public:
     /// Hand the running scheduler's set to the platform again, even when it is unchanged:
     /// reminders the platform armed on its own (the Android widgets' provisional ones) give way.
     void resendUpcoming();
+    /// The app is back in the foreground: on a platform that arms reminders itself (Android) the
+    /// next refresh — after the vault took in what changed meanwhile — hands the set over even when
+    /// unchanged, since the background check may have armed another one meanwhile
+    /// (ReminderScheduler::resendSoon()). No-op elsewhere and while not running.
+    void resendSoon();
     /// The scheduler (nullptr when not running); tests.
     ReminderScheduler *scheduler() const { return m_scheduler.get(); }
 
@@ -118,6 +126,11 @@ public:
     bool firesWhenClosed() const;
     /// The notifier can show notifications right now.
     Q_INVOKABLE bool canShow() const;
+    /// The last background check of the notes (Android, docs/ANDROID.md "Sprawdzanie notatek w
+    /// tle"): { at ("YYYY-MM-DD HH:mm"), when ("dziś 10:32"), ok, applied (its reminders were
+    /// armed), reminders (how many), sync ("off" | "ok" | "failed" | "busy" | "skipped"), error };
+    /// {} before the first one and on other platforms.
+    Q_INVOKABLE QVariantMap backgroundCheckStatus() const;
 
     Q_INVOKABLE void dismissMissed(const QString &id);
     Q_INVOKABLE void clearMissed();
@@ -209,6 +222,7 @@ private:
     QPointer<VaultIndex> m_index;
     std::function<QString()> m_backend;
     std::function<bool()> m_canShow;
+    std::function<QJsonObject()> m_backgroundStatus;
     bool m_enabled = true;
     bool m_notifyMissed = true;
     bool m_wantRunning = false;

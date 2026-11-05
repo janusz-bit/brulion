@@ -1178,6 +1178,12 @@ QString AppSettings::passwordFile() const
     return m_dataDir + u"/secrets/nextcloud-password"_s;
 }
 
+QString AppSettings::storedNextcloudPassword(const QString &dataDir)
+{
+    QFile in(dataDir + u"/secrets/nextcloud-password"_s);
+    return in.open(QIODevice::ReadOnly) ? QString::fromUtf8(in.readAll()) : QString();
+}
+
 bool AppSettings::hasNextcloudPassword() const
 {
     return QFileInfo(passwordFile()).size() > 0;

@@ -19,6 +19,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLockFile>
 #include <QSet>
 
 #include <algorithm>
@@ -378,6 +379,12 @@ void SyncRun::start()
         detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
         return;
     }
+    if (!lockStore()) {
+        m_report.syncError =
+                SyncError{SyncErrorCode::OtherProcess, u"Another process of this device is syncing this notebook"_s};
+        detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
+        return;
+    }
     m_exchangeConnection = QObject::connect(client(), &WebDavClient::exchanged, m_engine,
                                             [weak = weak_from_this()](const HttpExchange &exchange) {
                                                 if (const std::shared_ptr<SyncRun> self = weak.lock())
@@ -391,6 +398,34 @@ void SyncRun::start()
     listRemote();
 }
 
+bool SyncRun::lockStore()
+{
+    // Another process of this device may sync the same notebook through the same store (Android:
+    // the background check runs in a process of its own while the app may live on, docs/ANDROID.md
+    // "Sprawdzanie notatek w tle"): one run at a time, and every run starts from what the last
+    // one left in the store, whichever process made it. QLockFile takes over the lock of a
+    // process that died; a store in memory only has nobody to share with.
+    if (!store()->isPersistent())
+        return true;
+    auto lock = std::make_unique<QLockFile>(store()->filePath() + u".sync-lock"_s);
+    lock->setStaleLockTime(0); // only a dead owner makes the lock stale, never its age
+    if (!lock->tryLock(0)) {
+        if (lock->error() == QLockFile::LockFailedError) {
+            qCInfo(lcSync).noquote() << u"%1 another process is syncing this notebook: later"_s.arg(tag());
+            return false;
+        }
+        // The state folder cannot hold a lock file (read-only, gone): the store cannot be saved
+        // there either, so there is nobody to share it with.
+        qCWarning(lcSync).noquote() << u"%1 no sync lock (%2): syncing without one"_s.arg(
+                tag(), QString::number(int(lock->error())));
+        lock.reset();
+    }
+    m_storeLock = std::move(lock);
+    if (!store()->reload())
+        qCWarning(lcSync).noquote() << tag() << "could not re-read the sync state:" << store()->errorString();
+    return true;
+}
+
 void SyncRun::cancel()
 {
     m_cancelled = true;
@@ -402,6 +437,7 @@ void SyncRun::abandon()
 {
     m_finished = true;
     m_engine = nullptr;
+    m_storeLock.reset();
     if (m_pool) {
         m_pool->stop();
         m_pool.reset(); // breaks the run -> pool -> idle callback -> run cycle
@@ -889,6 +925,7 @@ void SyncRun::finish()
             qCWarning(lcSync).noquote() << tag() << "could not save the sync state:" << store()->errorString();
         endPhase(0);
     }
+    m_storeLock.reset(); // after the flush: the next run, in any process, reads this run's state
     QObject::disconnect(m_exchangeConnection);
     m_report.finished = now();
     m_report.durationMs = m_runTimer.elapsed();

@@ -337,6 +337,9 @@ public:
     QString nextcloudPassword() const;
     /// File that holds the password.
     QString passwordFile() const;
+    /// The password stored for the app data folder `dataDir`, read without an AppSettings (and so
+    /// without touching the settings file): Android's background check, in a process of its own.
+    static QString storedNextcloudPassword(const QString &dataDir);
 
     /// Generic preference for other app areas (key with an area prefix, e.g. "views/tasks/x").
     /// The value comes back with the type of `defaultValue` (bool, int, double, …) — the INI

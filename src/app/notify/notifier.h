@@ -28,6 +28,7 @@
 #include "soundchoice.h"
 
 #include <QDate>
+#include <QJsonObject>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -61,6 +62,14 @@ public:
     /// hands its queued taps over only then, and only that notebook's (the others stay queued);
     /// the desktop notifiers ignore it.
     virtual void setDoneTarget(const QString &vault) { (void)vault; }
+
+    /// Android's background check of the notes while Brulion is closed (docs/ANDROID.md
+    /// "Sprawdzanie notatek w tle"): what it works on — background::Target as JSON, the notebook
+    /// whose reminders are armed — or an empty object to turn it off. Elsewhere nothing (the
+    /// desktop app runs in the tray instead).
+    virtual void setBackgroundCheck(const QJsonObject &target) { (void)target; }
+    /// The last background check (`{at, ok, applied, reminders, sync, error}`); {} for none.
+    virtual QJsonObject backgroundCheckStatus() const { return {}; }
 
     // NotificationSink: schedule() remembers the set (subclasses arm it); showNow() is theirs.
     void schedule(const QList<ScheduledNotification> &notifications) override;

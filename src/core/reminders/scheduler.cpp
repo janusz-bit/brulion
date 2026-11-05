@@ -270,6 +270,14 @@ void ReminderScheduler::checkNow()
     armTimer(now);
 }
 
+void ReminderScheduler::resendSoon()
+{
+    if (!m_running)
+        return;
+    m_forceSchedule = true;
+    scheduleRefresh();
+}
+
 void ReminderScheduler::scheduleRefresh()
 {
     if (m_running)

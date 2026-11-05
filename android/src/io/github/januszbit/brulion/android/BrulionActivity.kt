@@ -52,6 +52,17 @@ class BrulionActivity : QtActivity() {
     Runtime.getRuntime().exit(0)
   }
 
+  // On the screen: the background check leaves the reminders to the app (BackgroundCheckJob).
+  override fun onResume() {
+    super.onResume()
+    BrulionAndroid.onActivityResumed()
+  }
+
+  override fun onPause() {
+    BrulionAndroid.onActivityPaused()
+    super.onPause()
+  }
+
   // Qt sets the system bars' icons after the system's day/night mode here: the app's theme wins.
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)

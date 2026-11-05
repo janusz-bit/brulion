@@ -112,7 +112,8 @@ IoCard {
             case "auth": return qsTr("Enter a new app password below and save. Brulion keeps trying with the old one until then.")
             case "network":
             case "timeout":
-            case "stalled": return qsTr("Brulion tries again by itself; your notes stay safe on this device.")
+            case "stalled":
+            case "other-process": return qsTr("Brulion tries again by itself; your notes stay safe on this device.")
             case "not-found": return qsTr("Check the server folder below – or let the first sync create it.")
             case "local-empty":
             case "remote-empty": return qsTr("Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again.")

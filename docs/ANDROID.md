@@ -6,6 +6,9 @@ z natywną częścią w Kotlinie (`android/src/io/github/januszbit/brulion/andro
 * daje dostęp do folderu z notatkami na pamięci współdzielonej („Dostęp do wszystkich plików”),
 * planuje przypomnienia i alarmy w systemie (`AlarmManager`) — działają przy zamkniętej
   aplikacji i po restarcie telefonu,
+* co 15–60 minut sprawdza w tle notatki (po synchronizacji z Nextcloud, jeśli jest włączona),
+  żeby przypomnienia dodane na innych urządzeniach dzwoniły bez otwierania aplikacji
+  ([Sprawdzanie notatek w tle](#sprawdzanie-notatek-w-tle)),
 * otwiera właściwą notatkę po stuknięciu w powiadomienie,
 * przyjmuje tekst i pliki `.md`/`.txt` z menu **Udostępnij** innych aplikacji
   ([Udostępnij → Brulion](#udostępnij--brulion)),
@@ -68,8 +71,9 @@ Wskazówki do Syncthing:
 
 Agent AI albo skrypt na komputerze (`brulion-cli`, [CLI.md](CLI.md)) pracuje na tym samym
 folderze po jego stronie synchronizacji — wiersza poleceń na Androidzie nie ma. Przypomnienia,
-które dopisze, telefon uzbroi, gdy Brulion zobaczy zmianę (przy uruchomieniu i po zmianach w
-notatkach).
+które dopisze, telefon uzbroi, gdy Brulion zobaczy zmianę: przy uruchomieniu, po zmianach w
+notatkach, a przy zamkniętej aplikacji — przy najbliższym [sprawdzaniu notatek w
+tle](#sprawdzanie-notatek-w-tle).
 
 ## Przypomnienia i alarmy
 
@@ -150,10 +154,83 @@ dźwięku są **lokalne dla urządzenia** (dzwonek z jednego telefonu nie istnie
 nie synchronizują się z notatnikiem. Zmiana dźwięku w czasie, gdy alarm dzwoni, zamyka jego
 powiadomienie (kanał jest usuwany).
 
-Ograniczenie: Brulion planuje przypomnienia na podstawie notatek, które przeczytał. Przypomnienie
-dodane albo zmienione na innym urządzeniu (i zsynchronizowane, gdy Brulion był zamknięty) zostanie
-zaplanowane przy najbliższym otwarciu Brulionu. Warto otworzyć aplikację po większych zmianach
-na komputerze.
+### Sprawdzanie notatek w tle
+
+Brulion planuje przypomnienia na podstawie notatek, które przeczytał. Przypomnienie dopisane albo
+zmienione na komputerze (także przez agenta AI z `brulion-cli`) dociera do telefonu razem
+z notatką — przez Syncthing albo Nextcloud. Żeby zadzwoniło także wtedy, gdy Brulion jest
+zamknięty, Android co jakiś czas uruchamia **sprawdzanie notatek w tle**:
+
+* *Ustawienia → Przypomnienia → Sprawdzaj notatki w tle*: **Wyłączone**, **15 min**, **30 min**
+  (domyślnie) albo **1 h**. Pod nazwą ustawienia: kiedy było ostatnie sprawdzenie i ile
+  przypomnień znalazło.
+* Sprawdzany jest notatnik, którego przypomnienia są nastawione (ten otwarty ostatnio;
+  dokumentacja się nie liczy). Gdy notatnik synchronizuje się z **Nextcloud**, najpierw jest jedna
+  synchronizacja (ta sama co w aplikacji, z tym samym stanem), potem odczyt notatek. Przy
+  **Syncthing** pliki ściąga sam Syncthing-Fork, a Brulion tylko je czyta.
+* Nastawione przypomnienia zastępuje to, co jest w notatkach: nowe dochodzą, a usunięte albo
+  przesunięte na komputerze znikają albo się przesuwają. Drzemki z powiadomienia zostają.
+* Gdy notatnika nie da się przeczytać (brak folderu albo pusty folder, np. po odłączeniu karty
+  albo cofnięciu uprawnienia do plików), nastawione przypomnienia zostają bez zmian. Nieudana
+  synchronizacja, np. bez sieci, niczego nie psuje: liczą się notatki, które telefon już ma.
+* Gdy Brulion jest na ekranie, sprawdzanie jest pomijane, bo aplikacja robi to sama. Po jej
+  powrocie na pierwszy plan budziki dostają z powrotem zestaw aplikacji.
+
+Ograniczenia:
+
+* Android uruchamia zadania okresowe najwyżej co 15 minut, a w trybie uśpienia (Doze) odkłada je
+  do „okien serwisowych”: przy dłużej nieużywanym telefonie nawet o godzinę lub więcej.
+  Przypomnienie dopisane na komputerze „za 10 minut” może więc nie zdążyć, a to na jutro rano
+  zdąży. Oszczędzanie baterii u części producentów potrafi zadanie wstrzymać całkiem (niżej:
+  [Oszczędzanie baterii](#oszczędzanie-baterii)).
+* Wymuszone zatrzymanie Brulionu kasuje także to zadanie. Wraca przy następnym uruchomieniu
+  aplikacji.
+* Sprawdzanie w tle nie zmienia notatek (poza samą synchronizacją). „Zrobione” stuknięte
+  w powiadomieniu przy zamkniętej aplikacji nadal czeka na jej uruchomienie, a widżety
+  odświeżają się tylko z aplikacji.
+
+Sprawdzone na emulatorze (Android 16, 2026-11-05): `scripts/android-emulator-test.sh
+--background` — 20 sprawdzeń; sprawdzenie notatnika z indeksem w pamięci podręcznej trwa
+kilkadziesiąt milisekund.
+
+Jak to działa:
+
+* `BackgroundCheckJob` (zadanie okresowe JobScheduler, zachowywane po restarcie, bez wymagań co do
+  sieci) w głównym procesie aplikacji wiąże `BackgroundCheckService`: usługę Qt (`QtService`)
+  w osobnym procesie `:background`. Qt nie wystartuje drugi raz w procesie aktywności
+  (`QtServiceBase` odmawia), a jej `onDestroy` kończy proces. Dlatego osobny proces żyje tylko na
+  czas jednego sprawdzenia.
+* Qt uruchamia w nim bibliotekę Brulionu z argumentem `--background-check`. `main()` od razu
+  przechodzi do `runBackgroundCheck()` (`src/app/background/backgroundentry.h`): `QCoreApplication`,
+  bez okna, QML i ustawień aplikacji, z osobnym rejestrem zdarzeń w
+  `files/logs/background/brulion.log`.
+* `background::Check` (`src/app/background/backgroundcheck.h`) otwiera notatnik tak jak `brulion-cli`
+  (`notebook::Notebook`, z gotowym indeksem `index-cache.bin`). Przy Nextcloud robi jedną
+  synchronizację tym samym `SyncEngine` i z tym samym stanem z folderu danych urządzenia. Potem
+  liczy przypomnienia funkcją `upcomingFor()`, która daje ten sam zestaw, jaki aplikacja przekazuje
+  Androidowi (horyzont 14 dni, najwyżej 64 przypomnienia, czas dzwonienia, język, id notatnika).
+  Dzięki temu identyfikatory budzików się zgadzają.
+* Wynik (JSON jak w `scheduleReminders`) wraca przez `Messenger` do zadania w głównym procesie,
+  które nastawia budziki przez `AlarmScheduler.replaceAll`. `ReminderStore` (SharedPreferences)
+  ma jednego właściciela: główny proces. Wynik jest odrzucany, gdy sprawdzenie się nie udało, gdy
+  dotyczy innego notatnika niż bieżący cel albo gdy w międzyczasie aplikacja pojawiła się na
+  ekranie lub wystartowała (`BackgroundCheck.verdict`).
+* Co sprawdzać, aplikacja przekazuje przez `AndroidBridge::setBackgroundCheck`:
+  `{root, stateDir, vault, ringMinutes, language, intervalMinutes, nextcloud: {davUrl, user,
+  device}}`. Hasła aplikacji w tym nie ma: proces w tle czyta je z pliku aplikacji
+  `secrets/nextcloud-password`. Aplikacja wysyła cel, gdy startują jej przypomnienia i gdy zmienia
+  się ustawienie, z którego cel korzysta. Zamknięcie aplikacji, otwarcie dokumentacji albo innego
+  notatnika cel zostawiają (alarmy tego notatnika zostają nastawione). Wyłączenie przypomnień,
+  wybór „Wyłączone” albo zamknięcie notatnika (powrót do ekranu powitalnego) kasują go razem
+  z zadaniem.
+* Dwa procesy, jedna synchronizacja: przebieg `SyncEngine` trzyma blokadę `store.json.sync-lock`
+  (QLockFile; blokadę martwego procesu przejmuje następny) i przed startem wczytuje stan od nowa
+  (`LocalStore::reload`). Gdy blokadę trzyma drugi proces, przebieg kończy się kodem
+  `other-process`: w aplikacji komunikat „Sprawdzanie w tle właśnie synchronizuje ten notatnik…”
+  i ponowna próba za 30 s, a sprawdzanie w tle pomija wtedy synchronizację i czyta to, co jest.
+* Po powrocie aplikacji na pierwszy plan C++ przegląda folder i przekazuje swój zestaw
+  przypomnień jeszcze raz, nawet niezmieniony (`ReminderScheduler::resendSoon`). Dzięki temu
+  budziki zawsze kończą na zestawie aplikacji.
 
 ### Uprawnienia
 
@@ -188,6 +265,7 @@ ponownego uruchomienia. Dlatego:
   przełączniki włączone);
 * **OnePlus / OPPO / realme**: zezwól na działanie w tle i autostart.
 
+Te same ustawienia pozwalają działać [sprawdzaniu notatek w tle](#sprawdzanie-notatek-w-tle).
 To samo zrób dla **Syncthing-Fork**, żeby synchronizował w tle. Szczegóły dla konkretnych
 telefonów: <https://dontkillmyapp.com>.
 
@@ -1409,17 +1487,18 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 |---|---|
 | `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, `ShareActivity` (filtry `ACTION_SEND`/`ACTION_SEND_MULTIPLE` dla `text/*`), ikony |
 | `android/res/` | teksty (`values` — polski, domyślny; `values-en`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu; widżety: układy `layout/widget_*.xml` (też podglądy dla wyboru widżetów), `xml/widget_*_info.xml`, kolory `widget_colors.xml` (`values` jasne, `values-night` ciemne), promień rogów (`values-v31`: systemowy), motyw okna szybkiego dodawania |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka) + `StartupRelaunch` (utworzona od nowa przed startem Qt: restart aplikacji), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `DoneQueue` (kolejka „Zrobione” dla C++), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++), widżety: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews i wiersze list), `WidgetSnapshot` (migawka, przekładanie zadań na nowy dzień), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (zapis, odświeżanie, północ, przyciski miesiąca), `WidgetDates` (nazwy dni i miesięcy aplikacji), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (szybkie dodawanie, zapis do dziennika), `WidgetInbox` (kolejka wpisów dla C++) |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka) + `StartupRelaunch` (utworzona od nowa przed startem Qt: restart aplikacji), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `DoneQueue` (kolejka „Zrobione” dla C++), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++), widżety: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews i wiersze list), `WidgetSnapshot` (migawka, przekładanie zadań na nowy dzień), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (zapis, odświeżanie, północ, przyciski miesiąca), `WidgetDates` (nazwy dni i miesięcy aplikacji), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (szybkie dodawanie, zapis do dziennika), `WidgetInbox` (kolejka wpisów dla C++), sprawdzanie notatek w tle: `BackgroundCheck` (cel, zadanie, decyzja o wyniku), `BackgroundCheckJob` (zadanie JobScheduler w głównym procesie), `BackgroundCheckService` (`QtService` w procesie `:background`) |
 | `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
 | `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
 | `android/settings.gradle`, `android/proguard-rules.pro` | R8 w buildach release i jego reguły (klasy wołane przez JNI) — [Rozmiar APK](#rozmiar-apk) |
 | `android/res/xml/network_security_config.xml` | zaufane urzędy certyfikacji HTTPS: systemowe i zainstalowane przez użytkownika — [HTTPS i OpenSSL](#https-i-openssl) |
 | `android/assets/licenses/` | teksty licencji dołączanych bibliotek (OpenSSL, Apache-2.0) |
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
+| `src/app/background/` | C++ sprawdzania notatek w tle: `backgroundcheck.{h,cpp}` (cel, przypomnienia, jedno sprawdzenie — budowane wszędzie, testy `tests/app/background`), `backgroundentry_android.cpp` (`main()` procesu `:background`) — [Sprawdzanie notatek w tle](#sprawdzanie-notatek-w-tle) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
 | `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | opisy, ikona i zrzuty dla F-Droid i IzzyOnDroid, ich sprawdzanie — [F-Droid i IzzyOnDroid](#f-droid-i-izzyondroid) |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków, części linku do strony w folderze i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--relaunch`: aktywność utworzona od nowa w trakcie startu (restart zamiast pustego okna); `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków, części linku do strony w folderze i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--background`: sprawdzanie notatek w tle (przypomnienie dopisane i usunięte przy zamkniętej aplikacji, zadanie uruchomione od razu, budzik nowego dzwoni bez otwierania Brulionu); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--relaunch`: aktywność utworzona od nowa w trakcie startu (restart zamiast pustego okna); `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -1491,6 +1570,10 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `shared(QByteArray json)` | natywna `nativeShared(String)` (z `ShareActivity` przez `deliverShare`) |
 | sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
 | sygnał `doneRequestsQueued()` | natywna `nativeDoneQueued()` (z `ReminderActions.done`) + powrót na pierwszy plan + raz po starcie |
+| `QJsonObject setBackgroundCheck(const QJsonObject &)` | `setBackgroundCheck(Context, String): String` — cel sprawdzania w tle (`background::Target`, `{}` = wyłączone) zapisany, zadanie JobScheduler nastawione na jego okres: `{"interval": min}` albo `{"error":…}` |
+| `QJsonObject backgroundCheckStatus()` | `backgroundCheckStatus(Context): String` — ostatnie sprawdzenie `{at, ok, applied, verdict, reminders, sync, error, …}` albo `{}` |
+| `static QJsonObject backgroundCheckTarget()` (proces `:background`) | `backgroundCheckTarget(Context): String` — cel do sprawdzenia albo `{}` |
+| `static void backgroundCheckFinished(const QJsonObject &)` (proces `:background`) | `backgroundCheckFinished(Context, String)` — wynik `background::Check` do zadania w głównym procesie (`BackgroundCheckService` → `Messenger`) |
 | `int updateWidgets(const QJsonObject &)` | `updateWidgets(Context, String): String` — migawka widżetów (`src/app/widgets/widgetsnapshot.h`) zapisana, widżety odświeżone: `{"widgets": n}` (ile postawionych) albo `{"error":…}` (poprzednia migawka zostaje) |
 | `QJsonArray takeWidgetActions(vault)` | `takeWidgetActions(Context, String): String` — kolejka szybkiego dodawania (`WidgetInbox.kt`): `[{id, kind, text, date, time, alarm, vault, added}, …]` notatnika `vault` (i wpisy bez notatnika), wydane znikają |
 | `void requeueWidgetActions(const QJsonArray &)` | `requeueWidgetActions(Context, String)` — wpisy, których aplikacja też nie zapisała, wracają do kolejki (ten sam JSON; bez sygnału) |
@@ -1586,7 +1669,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   plik nie w UTF-8, brakujący folder notatnika: `JournalAppendTest`; kolejka dla C++ i powrót
   do niej: `WidgetInboxTest`; PDF-y — JSON sesji i trafień, rozmiary rysowane: `PdfJsonTest`;
   „Otwórz w innej aplikacji” — czy plik leży w korzeniach FileProvidera, nazwa kopii:
-  `OpenWithTest`. Przypadki
+  `OpenWithTest`; sprawdzanie notatek w tle — cel, które wyniki są nastawiane, stan dla ustawień:
+  `BackgroundCheckTest`. Przypadki
   `tests/data/widgets/*.json` sprawdza też C++ — `tst_widgets` —, więc obie strony piszą
   i przekładają tak samo; skrypt init podaje ich folder we właściwości `brulion.testData`):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia

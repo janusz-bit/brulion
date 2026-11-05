@@ -9,8 +9,9 @@
   reminders/alarms and of a vault on shared storage, the alarm receivers and AlarmActivity
   (android/src/io/github/januszbit/brulion/android/), ShareActivity (the share sheet's
   "Brulion": text and text files from other apps), the home-screen widgets (TasksWidget,
-  CalendarWidget, NotesWidget, their list service and receiver, QuickAddActivity), the launcher
-  icons.
+  CalendarWidget, NotesWidget, their list service and receiver, QuickAddActivity), the background
+  check of the notes (BackgroundCheckJob, BackgroundCheckService in the process ":background"), the
+  launcher icons.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -195,6 +196,26 @@
         <receiver
             android:name="io.github.januszbit.brulion.android.WidgetReceiver"
             android:exported="false" />
+
+        <!-- The background check of the notes (docs/ANDROID.md "Sprawdzanie notatek w tle"): the
+             periodic job (main process: it arms the reminders) and the Qt service it binds, which
+             runs Brulion's C++ without any UI in a process of its own (Qt cannot start a second
+             time next to the activity; the process ends when the job unbinds). -->
+        <service
+            android:name="io.github.januszbit.brulion.android.BackgroundCheckJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name="io.github.januszbit.brulion.android.BackgroundCheckService"
+            android:exported="false"
+            android:process=":background">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="-- %%INSERT_APP_LIB_NAME%% --" />
+            <meta-data
+                android:name="android.app.arguments"
+                android:value="--background-check" />
+        </service>
 
         <!-- The rows of the widgets' lists (only the system's widget host may bind it). -->
         <service

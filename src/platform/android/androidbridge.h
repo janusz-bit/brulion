@@ -139,6 +139,26 @@ public:
     /// the queue (same JSON; an entry with the same id is replaced), for the next try. Emits nothing.
     void requeueWidgetActions(const QJsonArray &actions);
 
+    // The background check of the notes (docs/ANDROID.md "Sprawdzanie notatek w tle";
+    // src/app/background/backgroundcheck.h, BackgroundCheck*.kt).
+
+    /**
+     * What the periodic background check works on while Brulion is closed: the notebook whose
+     * reminders are armed, `{root, stateDir, vault, ringMinutes, language, intervalMinutes,
+     * nextcloud?}` (background::Target), kept by the Kotlin side, which (re)schedules the system's
+     * job for `intervalMinutes`; an empty object turns the check off. Returns `{"interval": n}`
+     * (minutes, 0 = off) or `{"error": …}`; an empty object when the call failed.
+     */
+    QJsonObject setBackgroundCheck(const QJsonObject &target);
+    /// The last check: `{at (epoch ms), ok, applied, reminders, sync, error, …}`; `{}` before the
+    /// first one (the settings page).
+    QJsonObject backgroundCheckStatus();
+    /// In the check's own process (no bridge instance there): the target the app handed over last.
+    static QJsonObject backgroundCheckTarget();
+    /// In the check's own process: the check's result (background::Check), sent to the job in the
+    /// app's main process, which arms its reminders.
+    static void backgroundCheckFinished(const QJsonObject &result);
+
     /**
      * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,
      * API 29): no storage permission is needed — with scoped storage a plain file write there

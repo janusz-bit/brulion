@@ -11326,6 +11326,50 @@
         <source>Habits</source>
         <translation>Nawyki</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1206"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1222"/>
+        <source>Check notes in the background</source>
+        <translation>Sprawdzaj notatki w tle</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1208"/>
+        <source>While Brulion is closed, Android reads the notebook now and then (after a Nextcloud sync, if set up), so reminders added on another device ring too. Android may postpone it while the phone sleeps.</source>
+        <translation>Gdy Brulion jest zamknięty, Android co jakiś czas czyta notatnik (po synchronizacji z Nextcloud, jeśli jest włączona), więc dzwonią też przypomnienia dodane na innym urządzeniu. Gdy telefon śpi, Android może to odłożyć.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1213"/>
+        <source>Last check %1: the notebook could not be read.</source>
+        <translation>Ostatnie sprawdzenie %1: nie udało się przeczytać notatnika.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1215"/>
+        <source>Last check %1: %n reminder(s), the sync failed.</source>
+        <translation>
+            <numerusform>Ostatnie sprawdzenie %1: %n przypomnienie, synchronizacja się nie udała.</numerusform>
+            <numerusform>Ostatnie sprawdzenie %1: %n przypomnienia, synchronizacja się nie udała.</numerusform>
+            <numerusform>Ostatnie sprawdzenie %1: %n przypomnień, synchronizacja się nie udała.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1217"/>
+        <source>Last check %1: %n reminder(s).</source>
+        <translation>
+            <numerusform>Ostatnie sprawdzenie %1: %n przypomnienie.</numerusform>
+            <numerusform>Ostatnie sprawdzenie %1: %n przypomnienia.</numerusform>
+            <numerusform>Ostatnie sprawdzenie %1: %n przypomnień.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1224"/>
+        <source>Off</source>
+        <translation>Wyłączone</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1227"/>
+        <source>1 h</source>
+        <translation>1 godz.</translation>
+    </message>
 </context>
 <context>
     <name>ShellAboutDialog</name>
@@ -21846,6 +21890,16 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/workspacesyncruns.cpp" line="614"/>
         <source>Running for %1</source>
         <translation>Trwa %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacesync.cpp" line="516"/>
+        <source>The background check is syncing this notebook right now. Brulion will try again shortly.</source>
+        <translation>Sprawdzanie w tle właśnie synchronizuje ten notatnik. Brulion spróbuje ponownie za chwilę.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="249"/>
+        <source>the background check was syncing</source>
+        <translation>synchronizowało sprawdzanie w tle</translation>
     </message>
 </context>
 <context>

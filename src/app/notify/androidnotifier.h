@@ -17,6 +17,10 @@
 // stay queued for their notebook. They are forwarded as doneRequested() with the day of the tap
 // and written by WorkspaceReminders right away — a tap is never held only in memory.
 //
+// The background check (docs/ANDROID.md "Sprawdzanie notatek w tle"): setBackgroundCheck() hands
+// the Kotlin side the notebook whose reminders are armed (src/app/background/backgroundcheck.h);
+// its periodic job reads that notebook while Brulion is closed and arms what it finds.
+//
 // Sounds: every mode (default, a ringtone from the system picker, vibration only, silent);
 // setSounds() goes to AndroidBridge::setReminderSounds() — the Kotlin side recreates the
 // notification channel of a kind whose sound changed (a channel's sound is fixed once created)
@@ -24,6 +28,8 @@
 #pragma once
 
 #include "notifier.h"
+
+#include <optional>
 
 namespace brulion::notify {
 
@@ -47,6 +53,8 @@ public:
     bool previewSound(SoundKind kind, const SoundChoice &choice) override;
     bool openSystemSoundSettings(SoundKind kind) override;
     void setDoneTarget(const QString &vault) override;
+    void setBackgroundCheck(const QJsonObject &target) override;
+    QJsonObject backgroundCheckStatus() const override;
 
 protected:
     void soundsChanged() override;
@@ -57,6 +65,8 @@ private:
 
     /// setDoneTarget(): the queue is taken only while a notebook is ready for it.
     QString m_doneTarget;
+    /// setBackgroundCheck(): the target handed over last (unchanged ones are not sent again).
+    std::optional<QJsonObject> m_backgroundTarget;
 };
 
 } // namespace brulion::notify

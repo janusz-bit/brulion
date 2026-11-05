@@ -245,6 +245,8 @@ QString WorkspaceSync::shortErrorText(const QString &code) const
         return tr("the server folder is empty");
     if (code == u"vault-unavailable")
         return tr("the notebook folder is not available");
+    if (code == u"other-process")
+        return tr("the background check was syncing");
     return code.isEmpty() ? tr("unknown error") : code;
 }
 

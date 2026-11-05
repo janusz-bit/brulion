@@ -380,6 +380,69 @@ int AndroidBridge::updateWidgets(const QJsonObject &snapshot)
     return object.value("widgets"_L1).toInt();
 }
 
+namespace {
+
+/// BrulionAndroid.<method>(Context, String): String with JSON in and out; {} when the call failed.
+QJsonObject callJson(const char *method, const QJsonObject &argument)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return {};
+    const QJniObject json =
+            QJniObject::fromString(QString::fromUtf8(QJsonDocument(argument).toJson(QJsonDocument::Compact)));
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, method, "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;", context.object(),
+            json.object<jstring>());
+    if (failed(method) || !answer.isValid())
+        return {};
+    return QJsonDocument::fromJson(answer.toString().toUtf8()).object();
+}
+
+/// BrulionAndroid.<method>(Context): String with JSON out; {} when the call failed.
+QJsonObject callJson(const char *method)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return {};
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, method, "(Landroid/content/Context;)Ljava/lang/String;", context.object());
+    if (failed(method) || !answer.isValid())
+        return {};
+    return QJsonDocument::fromJson(answer.toString().toUtf8()).object();
+}
+
+} // namespace
+
+QJsonObject AndroidBridge::setBackgroundCheck(const QJsonObject &target)
+{
+    const QJsonObject answer = callJson("setBackgroundCheck", target);
+    if (answer.contains("error"_L1))
+        qCWarning(lcAndroid) << "setBackgroundCheck:" << answer.value("error"_L1).toString();
+    return answer;
+}
+
+QJsonObject AndroidBridge::backgroundCheckStatus()
+{
+    return callJson("backgroundCheckStatus");
+}
+
+QJsonObject AndroidBridge::backgroundCheckTarget()
+{
+    return callJson("backgroundCheckTarget");
+}
+
+void AndroidBridge::backgroundCheckFinished(const QJsonObject &result)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return;
+    QJniObject::callStaticMethod<void>(
+            kClass, "backgroundCheckFinished", "(Landroid/content/Context;Ljava/lang/String;)V", context.object(),
+            QJniObject::fromString(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact)))
+                    .object<jstring>());
+    failed("backgroundCheckFinished");
+}
+
 QJsonArray AndroidBridge::takeWidgetActions(const QString &vault)
 {
     const QJniObject context = appContext();

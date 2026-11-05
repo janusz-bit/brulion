@@ -16,7 +16,7 @@ import Brulion
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
 // names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
-// length, test notification), Synchronizacja (qml/io/SyncSettings: status,
+// length, Android's background check of the notes, test notification), Synchronizacja (qml/io/SyncSettings: status,
 // the sync center, the Nextcloud account), Kopie zapasowe (qml/shell/ShellBackupSettings), Aplikacja (close to tray, the event log and its
 // detailed mode, version, licence, source code; on the desktop "Dla programistów": the switch
 // that lets AI agents drive the running app, AppController.remoteControl).
@@ -1191,6 +1191,48 @@ Item {
                 description: qsTr("Reminders that were due while the device was off appear when Brulion starts.")
                 checked: AppSettings.notifyMissed
                 onToggled: AppSettings.notifyMissed = checked
+            }
+            // Android: the periodic background check of the notes (docs/ANDROID.md "Sprawdzanie
+            // notatek w tle") — reminders added on another device ring without opening Brulion.
+            ShellSettingRow {
+                id: backgroundCheckRow
+                objectName: "backgroundCheckRow"
+                visible: AppController.isAndroid
+                property int minutes: Number(AppSettings.value("reminders/backgroundCheckMinutes", 30))
+                // The last check (Workspace.reminders.backgroundCheckStatus()), read when shown.
+                property var last: ({})
+                onVisibleChanged: if (visible) last = Workspace.reminders.backgroundCheckStatus()
+                Component.onCompleted: if (visible) last = Workspace.reminders.backgroundCheckStatus()
+                title: qsTr("Check notes in the background")
+                description: {
+                    const what = qsTr("While Brulion is closed, Android reads the notebook now and then (after a Nextcloud sync, if set up), so reminders added on another device ring too. Android may postpone it while the phone sleeps.")
+                    if (minutes <= 0 || !last || !last.when)
+                        return what
+                    let done
+                    if (!last.ok)
+                        done = qsTr("Last check %1: the notebook could not be read.").arg(last.when)
+                    else if (last.sync === "failed")
+                        done = qsTr("Last check %1: %n reminder(s), the sync failed.", "", last.reminders).arg(last.when)
+                    else
+                        done = qsTr("Last check %1: %n reminder(s).", "", last.reminders).arg(last.when)
+                    return what + "\n" + done
+                }
+                BSegmented {
+                    objectName: "backgroundCheckInterval"
+                    accessibleName: qsTr("Check notes in the background")
+                    model: [
+                        { value: 0, text: qsTr("Off") },
+                        { value: 15, text: qsTr("%1 min").arg(15) },
+                        { value: 30, text: qsTr("%1 min").arg(30) },
+                        { value: 60, text: qsTr("1 h") }
+                    ]
+                    currentValue: backgroundCheckRow.minutes
+                    enabled: AppSettings.remindersEnabled
+                    onActivated: (value) => {
+                        AppSettings.setValue("reminders/backgroundCheckMinutes", value)
+                        backgroundCheckRow.minutes = value
+                    }
+                }
             }
             ShellSettingRow {
                 title: qsTr("Test")

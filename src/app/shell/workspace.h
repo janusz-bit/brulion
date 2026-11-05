@@ -658,7 +658,8 @@ public:
     /// The app left the foreground (another window has the focus, the phone shows another app)
     /// or came back. Coming back rescans the vault: other programs may have rewritten notes in
     /// place meanwhile, which the vault's folder watches do not report (it watches only the
-    /// files open in editors themselves). Connected to QGuiApplication::applicationStateChanged.
+    /// files open in editors themselves), and hands the reminders to Android again
+    /// (WorkspaceReminders::resendSoon()). Connected to QGuiApplication::applicationStateChanged.
     void applicationStateChanged(Qt::ApplicationState state);
     /// Folded blocks of a page on this device (the editor's PageController.foldState: lines of
     /// folded blocks); follows renames, forgotten when the page is deleted.

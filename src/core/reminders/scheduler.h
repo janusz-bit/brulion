@@ -144,6 +144,10 @@ public Q_SLOTS:
     /// Fire reminders that are due now (normally driven by the timers; call it e.g. when the
     /// system resumes from sleep). No-op while stopped or with a sink that fires by itself.
     void checkNow();
+    /// Hand the set to the sink at the next (debounced) refresh even when it did not change: the
+    /// sink's set was replaced behind the scheduler's back (Android's background check armed
+    /// what it read from the notes while the app was in the background). No-op while stopped.
+    void resendSoon();
 
 Q_SIGNALS:
     /// A reminder was shown in-app with NotificationSink::showNow() (e.g. for a toast).

@@ -6,6 +6,7 @@
 
 #include <QElapsedTimer>
 #include <QHash>
+#include <QLockFile>
 #include <QMetaObject>
 #include <QPointer>
 #include <QSet>
@@ -43,6 +44,8 @@ public:
 
     void start();
     void cancel();
+    /// Take the store's sync lock and re-read the store; false when another process holds it.
+    bool lockStore();
     /// The engine is going away: drop everything still pending (no report follows).
     void abandon();
     /// The vault, client or store went away: finish now with SyncErrorCode::NotReady (pending
@@ -321,6 +324,8 @@ private:
     bool m_cancelled = false;
     bool m_finished = false;
     bool m_holdDeletions = false; ///< the mass-deletion guard tripped: no deletions this run
+    /// The store's sync lock (lockStore()), held from start() to finish().
+    std::unique_ptr<QLockFile> m_storeLock;
 
     // Instrumentation
     QElapsedTimer m_runTimer;
