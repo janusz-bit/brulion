@@ -44,46 +44,79 @@ Item {
     property string scenario: DevTools.editorScript
 
     /// The item named `name` under `item` (depth first), or null.
-    function findItem(item, name) {
-        if (!item)
-            return null
-        if (item.objectName === name)
-            return item
-        for (let i = 0; i < item.children.length; ++i) {
-            const found = findItem(item.children[i], name)
-            if (found)
-                return found
-        }
-        return null
+    function findItem(item: Item, name: string): Item {
+        return DevTest.findItem(item, name)
     }
 
-    function rowOf(prefix) {
-        const blocks = controller.blocks
+    /// The fields of a block (BlockListModel.get()).
+    property DevBlock block: DevBlock {}
+    function rowOf(prefix: string): int {
+        const blocks = script.controller.blocks
         for (let i = 0; i < blocks.count; ++i) {
-            if (blocks.get(i).plainText.indexOf(prefix) === 0)
+            script.block.read(blocks.get(i))
+            if (Js.indexOf(script.block.plainText, prefix) === 0)
                 return i
         }
         return blocks.count > 0 ? 0 : -1
     }
     /// A new block after the block starting with `prefix`, with `text` typed into it.
-    function typeAfter(prefix, text) {
-        const row = controller.insertBlockAfter(rowOf(prefix), "")
-        editor.startEditing(row, -1)
+    function typeAfter(prefix: string, text: string): int {
+        const row = script.controller.insertBlockAfter(script.rowOf(prefix), "")
+        script.editor.startEditing(row, -1)
         typing.pending = text
         typing.start()
         return row
     }
+    /// The reminder dialog for the new block `row`.
+    function reminderFor(row: int): void {
+        script.controller.stopEditing()
+        script.editor.ensureRowVisible(row)
+        script.dialogs().createReminder(row, false)
+    }
+    function dialogs(): EditorDialogs {
+        return script.editor.dialogs as EditorDialogs
+    }
+    function list(): ListView {
+        return script.editor.listView
+    }
+    function edit(): InlineEditor {
+        return script.editor.activeEditor
+    }
+    /// The block the scenario works on (the second half of "toolbar-menu").
+    property int scenarioRow: -1
+    /// The second half of a scenario, a moment later (after the editor has its toolbar, the menu
+    /// its place): `step` 1, then 2.
+    function runLater(step: int): void {
+        switch (script.scenario) {
+        case "editing-toast":
+            AppController.toast(qsTranslate("PageView", "Merged changes made elsewhere into this page"), "info")
+            break
+        case "toolbar-menu":
+            if (step === 1) {
+                const more = script.findItem(script.editor.dockHost, "toolbarMore")
+                const flick = script.findItem(script.editor.dockHost, "editToolbarFlick") as Flickable
+                if (flick)
+                    flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+                if (more)
+                    script.editor.openBlockMenuAbove(script.scenarioRow, more)
+                later.run(2)
+            } else {
+                KeyboardInsets.simulated = 0
+            }
+            break
+        }
+    }
 
-    /// Runs `fn` a moment later (after the editor has its toolbar, the menu its place).
+    /// Runs runLater() a moment later (after the editor has its toolbar, the menu its place).
     Timer {
         id: later
-        property var pending: null
+        property int step: 0
         interval: 250
-        function run(fn) {
-            pending = fn
+        function run(next: int): void {
+            step = next
             restart()
         }
-        onTriggered: if (pending) pending()
+        onTriggered: script.runLater(step)
     }
 
     Timer {
@@ -91,7 +124,7 @@ Item {
         property string pending
         interval: 150
         onTriggered: {
-            const edit = script.editor.activeEditor
+            const edit = script.edit()
             if (edit)
                 edit.insert(edit.cursorPosition, pending)
         }
@@ -107,21 +140,12 @@ Item {
                 break
             case "editing-toast":
                 script.editor.startEditing(script.rowOf("Każdy punkt listy"), -1)
-                later.run(() => AppController.toast(qsTranslate("PageView", "Merged changes made elsewhere into this page"),
-                                                    "info"))
+                later.run(1)
                 break
             case "toolbar-menu": {
-                const row = script.rowOf("Każdy punkt listy")
-                script.editor.startEditing(row, -1)
-                later.run(() => {
-                    const more = script.findItem(script.editor.dockHost, "toolbarMore")
-                    const flick = script.findItem(script.editor.dockHost, "editToolbarFlick")
-                    if (flick)
-                        flick.contentX = Math.max(0, flick.contentWidth - flick.width)
-                    if (more)
-                        script.editor.openBlockMenuAbove(row, more)
-                    later.run(() => KeyboardInsets.simulated = 0)
-                })
+                script.scenarioRow = script.rowOf("Każdy punkt listy")
+                script.editor.startEditing(script.scenarioRow, -1)
+                later.run(1)
                 break
             }
             case "suggest":
@@ -136,13 +160,9 @@ Item {
             case "date":
                 script.typeAfter("Zadzwonić do mamy", "Odebrać paczkę ⏰ jutro o 9")
                 break
-            case "reminder": {
-                const row = script.controller.insertBlockAfter(script.rowOf("Zadzwonić do mamy"), "Kupić bilety na pociąg")
-                script.controller.stopEditing()
-                script.editor.ensureRowVisible(row)
-                script.editor.dialogs.createReminder(row, false)
+            case "reminder":
+                script.reminderFor(script.controller.insertBlockAfter(script.rowOf("Zadzwonić do mamy"), "Kupić bilety na pociąg"))
                 break
-            }
             case "source":
                 script.editor.toggleSourceMode()
                 break
@@ -155,11 +175,9 @@ Item {
             case "doc-list":
                 script.editor.startEditing(script.rowOf("Dokument, jak w Obsidianie"), -1)
                 break
-            case "doc-heading": {
-                const row = script.rowOf("Dokument i konspekt")
-                script.editor.startEditing(row, -1)
+            case "doc-heading":
+                script.editor.startEditing(script.rowOf("Dokument i konspekt"), -1)
                 break
-            }
             case "doc-outline":
                 script.controller.setMode("outline")
                 break
@@ -171,33 +189,48 @@ Item {
                 break
             case "properties":
                 script.editor.setPropertiesExpanded(true)
-                script.editor.listView.positionViewAtBeginning()
+                script.list().positionViewAtBeginning()
                 break
             case "mode-tooltip": {
                 // Shown as by a long press: it stays up without a hovering mouse.
                 const toggle = script.findItem(script.editor, "noteModeToggle")
                 if (toggle)
-                    toggle._touchTip = true
+                    DevTest.setProperty(toggle, "_touchTip", true)
                 break
             }
             default:
-                if (script.scenario.indexOf("select-range:") === 0) {
-                    const ends = script.scenario.substring(13).split("..")
-                    const first = script.rowOf(ends[0])
-                    script.controller.selectRange(first, script.rowOf(ends.length > 1 ? ends[1] : ends[0]))
-                    if (script.editor.touch)
-                        script.editor.selectionMode = true
-                    script.editor.listView.positionViewAtIndex(first, ListView.Center)
-                } else if (script.scenario.indexOf("select:") === 0) {
-                    const row = script.rowOf(script.scenario.substring(7))
-                    script.editor.revealRow(row)
-                } else if (script.scenario.indexOf("edit:") === 0) {
-                    const spec = script.scenario.substring(5).split("@")
-                    const row = script.rowOf(spec[0])
-                    script.editor.startEditing(row, spec.length > 1 ? parseInt(spec[1]) : -1)
-                }
+                script.byPrefix()
                 break
             }
         }
+    }
+    /// The scenarios with an argument: select-range:, select:, edit:.
+    function byPrefix(): void {
+        if (Js.indexOf(script.scenario, "select-range:") === 0) {
+            const first = script.rowOf(script.ends()[0])
+            const last = script.rowOf(script.rangeEnd())
+            script.controller.selectRange(first, last)
+            if (script.editor.touch)
+                script.editor.selectionMode = true
+            script.list().positionViewAtIndex(first, ListView.Center)
+        } else if (Js.indexOf(script.scenario, "select:") === 0) {
+            const row = script.rowOf(Js.substringFrom(script.scenario, 7))
+            script.editor.revealRow(row)
+        } else if (Js.indexOf(script.scenario, "edit:") === 0) {
+            script.editor.startEditing(script.rowOf(script.editSpec()[0]), script.editCaret())
+        }
+    }
+    /// "select-range:<first>..<last>" → [first, last]; "edit:<text>[@<caret>]" → [text, caret].
+    function ends(): list<string> {
+        return Js.split(Js.substringFrom(script.scenario, 13), "..")
+    }
+    function rangeEnd(): string {
+        return script.ends().length > 1 ? script.ends()[1] : script.ends()[0]
+    }
+    function editCaret(): int {
+        return script.editSpec().length > 1 ? Js.parseInt(script.editSpec()[1]) : -1
+    }
+    function editSpec(): list<string> {
+        return Js.split(Js.substringFrom(script.scenario, 5), "@")
     }
 }

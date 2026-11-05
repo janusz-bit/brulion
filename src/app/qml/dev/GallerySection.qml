@@ -38,7 +38,7 @@ ColumnLayout {
             color: Theme.fgMuted
             wrapMode: Text.Wrap
             lineHeightMode: Text.FixedHeight
-            lineHeight: Theme.lineHeightPx(font.pixelSize)
+            lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
         }
     }
 

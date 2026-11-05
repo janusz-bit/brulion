@@ -23,31 +23,42 @@ ApplicationWindow {
     font.family: Theme.fontUi
     font.pixelSize: Theme.textBase
 
-    readonly property var sections: [
-        { id: "foundations", title: "Podstawy", icon: "sun", popup: false },
-        { id: "icons", title: "Ikony", icon: "image", popup: false },
-        { id: "buttons", title: "Przyciski", icon: "square-check-big", popup: false },
-        { id: "inputs", title: "Pola tekstowe", icon: "pencil", popup: false },
-        { id: "selection", title: "Przełączniki i karty", icon: "list-checks", popup: false },
-        { id: "chips", title: "Chipy i plakietki", icon: "tag", popup: false },
-        { id: "lists", title: "Listy i karty", icon: "list", popup: false },
-        { id: "feedback", title: "Postęp i powiadomienia", icon: "bell", popup: true },
-        { id: "menus", title: "Menu", icon: "ellipsis", popup: true },
-        { id: "taskstatus", title: "Status zadania", icon: "list-todo", popup: true },
-        { id: "dialog", title: "Okno dialogowe", icon: "panel-right", popup: true },
-        { id: "confirm", title: "Potwierdzenie", icon: "triangle-alert", popup: true },
-        { id: "datepicker", title: "Wybór daty", icon: "calendar", popup: false },
-        { id: "timepicker", title: "Wybór godziny", icon: "clock", popup: true },
-        { id: "reminder", title: "Przypomnienie", icon: "alarm-clock", popup: true },
-        { id: "diff", title: "Porównanie wersji", icon: "file-diff", popup: false },
-        { id: "merge", title: "Scalanie konfliktów", icon: "git-merge", popup: false },
-        { id: "palette", title: "Paleta poleceń", icon: "command", popup: true },
-        { id: "switcher", title: "Szybkie przejście", icon: "file-text", popup: true },
-        { id: "split", title: "Podział widoku", icon: "columns-2", popup: false }
+    readonly property list<var> sections: [
+        { key: "foundations", title: "Podstawy", icon: "sun", popup: false },
+        { key: "icons", title: "Ikony", icon: "image", popup: false },
+        { key: "buttons", title: "Przyciski", icon: "square-check-big", popup: false },
+        { key: "inputs", title: "Pola tekstowe", icon: "pencil", popup: false },
+        { key: "selection", title: "Przełączniki i karty", icon: "list-checks", popup: false },
+        { key: "chips", title: "Chipy i plakietki", icon: "tag", popup: false },
+        { key: "lists", title: "Listy i karty", icon: "list", popup: false },
+        { key: "feedback", title: "Postęp i powiadomienia", icon: "bell", popup: true },
+        { key: "menus", title: "Menu", icon: "ellipsis", popup: true },
+        { key: "taskstatus", title: "Status zadania", icon: "list-todo", popup: true },
+        { key: "dialog", title: "Okno dialogowe", icon: "panel-right", popup: true },
+        { key: "confirm", title: "Potwierdzenie", icon: "triangle-alert", popup: true },
+        { key: "datepicker", title: "Wybór daty", icon: "calendar", popup: false },
+        { key: "timepicker", title: "Wybór godziny", icon: "clock", popup: true },
+        { key: "reminder", title: "Przypomnienie", icon: "alarm-clock", popup: true },
+        { key: "diff", title: "Porównanie wersji", icon: "file-diff", popup: false },
+        { key: "merge", title: "Scalanie konfliktów", icon: "git-merge", popup: false },
+        { key: "palette", title: "Paleta poleceń", icon: "command", popup: true },
+        { key: "switcher", title: "Szybkie przejście", icon: "file-text", popup: true },
+        { key: "split", title: "Podział widoku", icon: "columns-2", popup: false }
     ]
     property string current: DevTools.section !== "" ? DevTools.section : "foundations"
     readonly property bool autoOpen: DevTools.section !== ""
-    readonly property var currentInfo: sections.find(s => s.id === current) || sections[0]
+    /// The section shown: its index in `sections` (the first when `current` names none), title.
+    readonly property int currentIndex: window.sectionIndex(window.current)
+    readonly property string currentTitle: "" + DevTest.valueAt(window.sections, window.currentIndex + ".title")
+    function sectionIndex(key: string): int {
+        for (let i = 0; i < window.sections.length; ++i) {
+            if (DevTest.valueAt(window.sections, i + ".key") === key)
+                return i
+        }
+        return 0
+    }
+
+    function accentNames(): list<var> { return DevTest.listOf(ThemePalette.accentNames()) }
 
     Binding { target: Theme; property: "windowWidth"; value: window.width }
     Binding { target: Theme; property: "windowHeight"; value: window.height }
@@ -86,7 +97,7 @@ ApplicationWindow {
             }
             Text {
                 Layout.fillWidth: true
-                text: Theme.narrow ? window.currentInfo.title : "Brulion · system projektowy"
+                text: Theme.narrow ? window.currentTitle : "Brulion · system projektowy"
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textMd
                 font.weight: Theme.weightSemiBold
@@ -111,7 +122,7 @@ ApplicationWindow {
                 visible: !Theme.narrow
                 size: "small"
                 accessibleName: "Akcent"
-                model: ThemePalette.accentNames()
+                model: window.accentNames()
                 currentValue: Theme.accentName
                 onActivated: (value) => Theme.accentName = value
             }
@@ -170,15 +181,17 @@ ApplicationWindow {
             count: window.sections.length
         }
         delegate: BListItem {
-            required property var modelData
+            required property string key
+            required property string title
+            required property string icon
             width: sectionList.width
             dense: true
-            text: modelData.title
-            iconName: modelData.icon
-            selected: window.current === modelData.id
+            text: title
+            iconName: icon
+            selected: window.current === key
             selectionBar: true
             onClicked: {
-                window.current = modelData.id
+                window.current = key
                 sectionList.chosen()
             }
         }
@@ -309,18 +322,122 @@ ApplicationWindow {
         }
     }
 
-    function luminance(c) {
-        const f = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
-        return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
+    function channel(v: real): real {
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
     }
-    function contrast(a, b) {
-        const la = luminance(a), lb = luminance(b)
+    function luminance(r: real, g: real, b: real): real {
+        return 0.2126 * window.channel(r) + 0.7152 * window.channel(g) + 0.0722 * window.channel(b)
+    }
+    function contrast(a: color, b: color): real {
+        const ar = a.r
+        const ag = a.g
+        const ab = a.b
+        const br = b.r
+        const bg = b.g
+        const bb = b.b
+        const la = window.luminance(ar, ag, ab)
+        const lb = window.luminance(br, bg, bb)
         return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
     }
-    /// Translucent colours composited over a background (for contrast checks).
-    function over(c, bg) {
-        return Qt.rgba(c.r * c.a + bg.r * (1 - c.a), c.g * c.a + bg.g * (1 - c.a), c.b * c.a + bg.b * (1 - c.a), 1)
+    /// Translucent colours composited over a (solid) background, for contrast checks: what
+    /// Qt.tint() gives (its alpha blend).
+    function over(c: color, bg: color): color {
+        return bg.tint(c)
     }
+
+
+    // ---- The foundations' specimens (Repeater models; each row has every key its delegate takes) ----
+    readonly property list<var> textSwatches: [
+        { name: "fg", sample: Theme.fg }, { name: "fgMuted", sample: Theme.fgMuted },
+        { name: "fgFaint", sample: Theme.fgFaint }, { name: "link", sample: Theme.link },
+        { name: "accentText", sample: Theme.accentText }, { name: "dangerText", sample: Theme.dangerText },
+        { name: "warningText", sample: Theme.warningText }, { name: "successText", sample: Theme.successText },
+        { name: "tagFg", sample: Theme.tagFg }, { name: "chipReminderFg", sample: Theme.chipReminderFg }
+    ]
+    readonly property list<var> fillSwatches: [
+        { name: "tag", fg: Theme.tagFg, fill: Theme.tagBg },
+        { name: "due", fg: Theme.chipDueFg, fill: Theme.chipDueBg },
+        { name: "overdue", fg: Theme.chipOverdueFg, fill: Theme.chipOverdueBg },
+        { name: "scheduled", fg: Theme.chipScheduledFg, fill: Theme.chipScheduledBg },
+        { name: "reminder", fg: Theme.chipReminderFg, fill: Theme.chipReminderBg },
+        { name: "alarm", fg: Theme.chipAlarmFg, fill: Theme.chipAlarmBg },
+        { name: "recurrence", fg: Theme.chipRecurrenceFg, fill: Theme.chipRecurrenceBg },
+        { name: "neutral", fg: Theme.chipNeutralFg, fill: Theme.chipNeutralBg },
+        { name: "primaryFg/primary", fg: Theme.primaryFg, fill: Theme.primary },
+        { name: "white/danger", fg: Theme.dangerFg, fill: Theme.danger },
+        { name: "white/accentSolid", fg: Qt.color("#ffffff"), fill: Theme.accentSolid },
+        { name: "toast (fgInverse)", fg: Theme.fgInverse, fill: Theme.bgInverse },
+        { name: "selected row (fgMuted)", fg: Theme.fgMuted, fill: Theme.bgSelected }
+    ]
+    /// The controls' states: their mark, the surfaces it lies on and its worst contrast there (the
+    /// selected segment's outline only in dark: in light the thumb shows it).
+    readonly property list<var> stateSwatchesLight: [
+        { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, fg: Theme.fg, kind: "switch",
+          onNames: "bg, bgElevated, bgSunken",
+          worst: Math.min(window.contrast(Theme.borderControl, Theme.bg), window.contrast(Theme.borderControl, Theme.bgElevated),
+                          window.contrast(Theme.borderControl, Theme.bgSunken)) },
+        { name: "kalendarz: wybrany dzień", token: "primary", mark: Theme.primary, fg: Theme.primaryFg, kind: "disc",
+          onNames: "bg", worst: Math.min(99, window.contrast(Theme.primary, Theme.bg)) },
+        { name: "kalendarz: dziś", token: "accentSolid", mark: Theme.accentSolid, fg: Theme.fgOnAccent, kind: "disc",
+          onNames: "bg", worst: Math.min(99, window.contrast(Theme.accentSolid, Theme.bg)) }
+    ]
+    readonly property list<var> stateSwatchesDark: [
+        { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, fg: Theme.fg, kind: "switch",
+          onNames: "bg, bgElevated, bgSunken",
+          worst: Math.min(window.contrast(Theme.borderControl, Theme.bg), window.contrast(Theme.borderControl, Theme.bgElevated),
+                          window.contrast(Theme.borderControl, Theme.bgSunken)) },
+        { name: "wybrany segment", token: "borderControl", mark: Theme.borderControl, fg: Theme.fg, kind: "segmented",
+          onNames: "bgSunken, bgElevated",
+          worst: Math.min(window.contrast(Theme.borderControl, Theme.bgSunken), window.contrast(Theme.borderControl, Theme.bgElevated)) },
+        { name: "kalendarz: wybrany dzień", token: "primary", mark: Theme.primary, fg: Theme.primaryFg, kind: "disc",
+          onNames: "bg", worst: Math.min(99, window.contrast(Theme.primary, Theme.bg)) },
+        { name: "kalendarz: dziś", token: "accentSolid", mark: Theme.accentSolid, fg: Theme.fgOnAccent, kind: "disc",
+          onNames: "bg", worst: Math.min(99, window.contrast(Theme.accentSolid, Theme.bg)) }
+    ]
+    readonly property list<var> surfaceSwatches: [
+        { name: "bg", sample: Theme.bg }, { name: "bgElevated", sample: Theme.bgElevated },
+        { name: "bgSunken", sample: Theme.bgSunken }, { name: "bgInverse", sample: Theme.bgInverse },
+        { name: "border", sample: Theme.border }, { name: "borderStrong", sample: Theme.borderStrong },
+        { name: "ink", sample: Theme.ink }, { name: "paper", sample: Theme.paper },
+        { name: "marginRed", sample: Theme.marginRed }, { name: "amber", sample: Theme.amber },
+        { name: "gridBlue", sample: Theme.gridBlue }, { name: "focusRing", sample: Theme.focusRing }
+    ]
+    /// BSuggestField's sample: the keys whose title holds `typed` (every key for "").
+    readonly property list<var> sampleKeys: [
+        { title: "status", subtitle: "12 stron", icon: "type", value: "status" },
+        { title: "termin", subtitle: "8 stron", icon: "calendar", value: "termin" },
+        { title: "źródło", subtitle: "3 strony", icon: "type", value: "źródło" },
+        { title: "koszt", subtitle: "2 strony", icon: "sigma", value: "koszt" }
+    ]
+    function keySuggestions(typed: string): list<var> {
+        return DevTest.rowsContaining(window.sampleKeys, "title", typed)
+    }
+    /// BDatePicker's sample marks: overdue, due, reminders, scheduled, an alarm and a done task.
+    readonly property list<string> overdueMarks: ["overdue"]
+    readonly property list<string> todayMarks: ["due", "reminder"]
+    readonly property list<string> reminderMarks: ["reminder"]
+    readonly property list<string> scheduledMarks: ["scheduled", "due"]
+    readonly property list<string> alarmMarks: ["alarm"]
+    readonly property list<string> doneMarks: ["done"]
+    DevRecord { id: marks }
+    function addMark(day: string, kinds: list<string>): void {
+        marks.value = Js.withKey(marks.value, day, kinds)
+    }
+    function sampleMarks(t: string): var {
+        marks.value = Js.withKey({}, t, window.todayMarks)
+        window.addMark(DatesHelper.addDays(t, -2), window.overdueMarks)
+        window.addMark(DatesHelper.addDays(t, 1), window.reminderMarks)
+        window.addMark(DatesHelper.addDays(t, 3), window.scheduledMarks)
+        window.addMark(DatesHelper.addDays(t, 6), window.alarmMarks)
+        window.addMark(DatesHelper.addDays(t, 9), window.doneMarks)
+        return marks.value
+    }
+    readonly property list<int> spaceSizes: [4, 8, 12, 16, 24, 32, 48]
+    readonly property list<int> elevations: [0, 1, 2, 3]
+    readonly property list<int> iconSizes: [14, 16, 20, 24, 32]
+    readonly property list<var> taskSpecimens: [{ status: "todo", text: "Do zrobienia" }, { status: "doing", text: "W toku" },
+        { status: "done", text: "Zrobione" }, { status: "deferred", text: "Oczekujące" },
+        { status: "cancelled", text: "Anulowane" }]
 
     // ---- Sections -------------------------------------------------------------------------
     Component {
@@ -332,44 +449,39 @@ ApplicationWindow {
             Specimen {
                 label: "TEKST NA TŁACH (kontrast)"
                 Repeater {
-                    model: [
-                        { name: "fg", color: Theme.fg }, { name: "fgMuted", color: Theme.fgMuted },
-                        { name: "fgFaint", color: Theme.fgFaint }, { name: "link", color: Theme.link },
-                        { name: "accentText", color: Theme.accentText }, { name: "dangerText", color: Theme.dangerText },
-                        { name: "warningText", color: Theme.warningText }, { name: "successText", color: Theme.successText },
-                        { name: "tagFg", color: Theme.tagFg }, { name: "chipReminderFg", color: Theme.chipReminderFg }
-                    ]
+                    model: window.textSwatches
                     delegate: Rectangle {
                         id: swatch
-                        required property var modelData
+                        required property string name
+                        required property color sample
                         width: 172
                         height: 74
                         radius: Theme.radius
                         color: Theme.bgElevated
                         border.width: 1
                         border.color: Theme.border
-                        readonly property real worst: Math.min(window.contrast(modelData.color, Theme.bg),
-                                                               window.contrast(modelData.color, Theme.bgElevated),
-                                                               window.contrast(modelData.color, Theme.bgSunken))
+                        readonly property real worst: Math.min(window.contrast(sample, Theme.bg),
+                                                               window.contrast(sample, Theme.bgElevated),
+                                                               window.contrast(sample, Theme.bgSunken))
                         Column {
                             anchors.fill: parent
                             anchors.margins: 10
                             spacing: 2
                             Text {
                                 text: "Zażółć gęślą jaźń"
-                                color: swatch.modelData.color
+                                color: swatch.sample
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textBase
                                 font.weight: Theme.weightMedium
                             }
                             Text {
-                                text: swatch.modelData.name
+                                text: swatch.name
                                 color: Theme.fgMuted
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs
                             }
                             Text {
-                                text: (swatch.worst >= 4.5 ? "AA " : "✗ ") + swatch.worst.toFixed(1) + ":1"
+                                text: (swatch.worst >= 4.5 ? "AA " : "✗ ") + Js.toFixed(swatch.worst, 1) + ":1"
                                 color: swatch.worst >= 4.5 ? Theme.successText : Theme.dangerText
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs
@@ -385,54 +497,44 @@ ApplicationWindow {
             Specimen {
                 label: "TEKST NA WYPEŁNIENIACH (chipy, plakietki, przyciski, powiadomienia)"
                 Repeater {
-                    model: [
-                        { name: "tag", fg: Theme.tagFg, fill: Theme.tagBg },
-                        { name: "due", fg: Theme.chipDueFg, fill: Theme.chipDueBg },
-                        { name: "overdue", fg: Theme.chipOverdueFg, fill: Theme.chipOverdueBg },
-                        { name: "scheduled", fg: Theme.chipScheduledFg, fill: Theme.chipScheduledBg },
-                        { name: "reminder", fg: Theme.chipReminderFg, fill: Theme.chipReminderBg },
-                        { name: "alarm", fg: Theme.chipAlarmFg, fill: Theme.chipAlarmBg },
-                        { name: "recurrence", fg: Theme.chipRecurrenceFg, fill: Theme.chipRecurrenceBg },
-                        { name: "neutral", fg: Theme.chipNeutralFg, fill: Theme.chipNeutralBg },
-                        { name: "primaryFg/primary", fg: Theme.primaryFg, fill: Theme.primary },
-                        { name: "white/danger", fg: Theme.dangerFg, fill: Theme.danger },
-                        { name: "white/accentSolid", fg: Qt.color("#ffffff"), fill: Theme.accentSolid },
-                        { name: "toast (fgInverse)", fg: Theme.fgInverse, fill: Theme.bgInverse },
-                        { name: "selected row (fgMuted)", fg: Theme.fgMuted, fill: Theme.bgSelected }
-                    ]
+                    model: window.fillSwatches
                     delegate: Rectangle {
                         id: fillSwatch
-                        required property var modelData
+                        required property string name
+                        required property color fg
+                        required property color fill
                         width: 172
                         height: 74
                         radius: Theme.radius
-                        color: window.over(modelData.fill, Theme.bgElevated)
+                        color: window.over(fill, Theme.bgElevated)
                         border.width: 1
                         border.color: Theme.border
-                        readonly property real worst: Math.min(window.contrast(modelData.fg, window.over(modelData.fill, Theme.bg)),
-                                                               window.contrast(modelData.fg, window.over(modelData.fill, Theme.bgElevated)),
-                                                               window.contrast(modelData.fg, window.over(modelData.fill, Theme.bgSunken)))
+                        readonly property color onBg: window.over(fill, Theme.bg)
+                        readonly property color onBgElevated: window.over(fill, Theme.bgElevated)
+                        readonly property color onBgSunken: window.over(fill, Theme.bgSunken)
+                        readonly property real worst: Math.min(window.contrast(fg, onBg), window.contrast(fg, onBgElevated),
+                                                               window.contrast(fg, onBgSunken))
                         Column {
                             anchors.fill: parent
                             anchors.margins: 10
                             spacing: 2
                             Text {
                                 text: "Zażółć gęślą jaźń"
-                                color: fillSwatch.modelData.fg
+                                color: fillSwatch.fg
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textSm
                                 font.weight: Theme.weightMedium
                             }
                             Text {
-                                text: fillSwatch.modelData.name
-                                color: fillSwatch.modelData.fg
+                                text: fillSwatch.name
+                                color: fillSwatch.fg
                                 opacity: 0.8
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs
                             }
                             Text {
-                                text: (fillSwatch.worst >= 4.5 ? "AA " : "✗ ") + fillSwatch.worst.toFixed(1) + ":1"
-                                color: fillSwatch.modelData.fg
+                                text: (fillSwatch.worst >= 4.5 ? "AA " : "✗ ") + Js.toFixed(fillSwatch.worst, 1) + ":1"
+                                color: fillSwatch.fg
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs
                                 font.weight: Theme.weightSemiBold
@@ -451,26 +553,22 @@ ApplicationWindow {
                 label: "STANY KONTROLEK (≥ 3:1)"
                 note: "najgorszy wynik na tłach, na których leżą"
                 Repeater {
-                    model: [
-                        { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, kind: "switch",
-                          on: [["bg", Theme.bg], ["bgElevated", Theme.bgElevated], ["bgSunken", Theme.bgSunken]] },
-                        { name: "wybrany segment", token: "borderControl", mark: Theme.borderControl, kind: "segmented", dark: true,
-                          on: [["bgSunken", Theme.bgSunken], ["bgElevated", Theme.bgElevated]] },
-                        { name: "kalendarz: wybrany dzień", token: "primary", mark: Theme.primary, fg: Theme.primaryFg, kind: "disc",
-                          on: [["bg", Theme.bg]] },
-                        { name: "kalendarz: dziś", token: "accentSolid", mark: Theme.accentSolid, fg: Theme.fgOnAccent, kind: "disc",
-                          on: [["bg", Theme.bg]] }
-                    ].filter(m => !m.dark || Theme.dark)
+                    model: Theme.dark ? window.stateSwatchesDark : window.stateSwatchesLight
                     delegate: Rectangle {
                         id: stateSwatch
-                        required property var modelData
+                        required property string name
+                        required property string token
+                        required property color mark
+                        required property color fg
+                        required property string kind
+                        required property string onNames
+                        required property real worst
                         width: 264
                         height: 104
                         radius: Theme.radius
                         color: Theme.bgElevated
                         border.width: 1
                         border.color: Theme.border
-                        readonly property real worst: modelData.on.reduce((w, s) => Math.min(w, window.contrast(modelData.mark, s[1])), 99)
                         Column {
                             anchors.fill: parent
                             anchors.margins: 10
@@ -480,7 +578,7 @@ ApplicationWindow {
                                 height: 32
                                 // Both states: the knob's cross and check say it besides the colour.
                                 Row {
-                                    visible: stateSwatch.modelData.kind === "switch"
+                                    visible: stateSwatch.kind === "switch"
                                     anchors.verticalCenter: parent.verticalCenter
                                     spacing: Theme.space3
                                     BSwitch {
@@ -493,7 +591,7 @@ ApplicationWindow {
                                     }
                                 }
                                 BSegmented {
-                                    visible: stateSwatch.modelData.kind === "segmented"
+                                    visible: stateSwatch.kind === "segmented"
                                     anchors.verticalCenter: parent.verticalCenter
                                     size: "small"
                                     model: ["Miesiąc", "Tydzień"]
@@ -501,25 +599,25 @@ ApplicationWindow {
                                     accessibleName: "Widok"
                                 }
                                 Rectangle {
-                                    visible: stateSwatch.modelData.kind === "disc"
+                                    visible: stateSwatch.kind === "disc"
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 24
                                     height: 24
                                     radius: 12
-                                    color: stateSwatch.modelData.mark
+                                    color: stateSwatch.mark
                                     Text {
                                         anchors.centerIn: parent
                                         text: "14"
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textSm
                                         font.weight: Theme.weightBold
-                                        color: stateSwatch.modelData.fg || Theme.fg
+                                        color: stateSwatch.fg
                                     }
                                 }
                             }
                             Text {
                                 width: parent.width
-                                text: stateSwatch.modelData.name + " · " + stateSwatch.modelData.token
+                                text: stateSwatch.name + " · " + stateSwatch.token
                                 color: Theme.fgMuted
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs
@@ -527,14 +625,14 @@ ApplicationWindow {
                             }
                             Text {
                                 width: parent.width
-                                text: "na " + stateSwatch.modelData.on.map(s => s[0]).join(", ")
+                                text: "na " + stateSwatch.onNames
                                 color: Theme.fgFaint
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs
                                 elide: Text.ElideRight
                             }
                             Text {
-                                text: (stateSwatch.worst >= 3 ? "≥ 3:1 " : "✗ ") + stateSwatch.worst.toFixed(2) + ":1"
+                                text: (stateSwatch.worst >= 3 ? "≥ 3:1 " : "✗ ") + Js.toFixed(stateSwatch.worst, 2) + ":1"
                                 color: stateSwatch.worst >= 3 ? Theme.successText : Theme.dangerText
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.textXs
@@ -548,28 +646,22 @@ ApplicationWindow {
             Specimen {
                 label: "POWIERZCHNIE I MARKA"
                 Repeater {
-                    model: [
-                        { name: "bg", color: Theme.bg }, { name: "bgElevated", color: Theme.bgElevated },
-                        { name: "bgSunken", color: Theme.bgSunken }, { name: "bgInverse", color: Theme.bgInverse },
-                        { name: "border", color: Theme.border }, { name: "borderStrong", color: Theme.borderStrong },
-                        { name: "ink", color: Theme.ink }, { name: "paper", color: Theme.paper },
-                        { name: "marginRed", color: Theme.marginRed }, { name: "amber", color: Theme.amber },
-                        { name: "gridBlue", color: Theme.gridBlue }, { name: "focusRing", color: Theme.focusRing }
-                    ]
+                    model: window.surfaceSwatches
                     delegate: Column {
                         id: surface
-                        required property var modelData
+                        required property string name
+                        required property color sample
                         spacing: 4
                         Rectangle {
                             width: 70
                             height: 52
                             radius: Theme.radius
-                            color: surface.modelData.color
+                            color: surface.sample
                             border.width: 1
                             border.color: Theme.border
                         }
                         Text {
-                            text: surface.modelData.name
+                            text: surface.name
                             color: Theme.fgMuted
                             font.family: Theme.fontMono
                             font.pixelSize: Theme.textXs
@@ -606,7 +698,7 @@ ApplicationWindow {
             Specimen {
                 label: "ODSTĘPY, PROMIENIE, CIENIE"
                 Repeater {
-                    model: [4, 8, 12, 16, 24, 32, 48]
+                    model: window.spaceSizes
                     delegate: Column {
                         id: spaceSample
                         required property int modelData
@@ -623,7 +715,7 @@ ApplicationWindow {
                 }
                 Item { width: Theme.space4; height: 1 }
                 Repeater {
-                    model: [0, 1, 2, 3]
+                    model: window.elevations
                     delegate: Item {
                         id: elev
                         required property int modelData
@@ -665,7 +757,7 @@ ApplicationWindow {
                 Row {
                     spacing: Theme.space3
                     Repeater {
-                        model: [14, 16, 20, 24, 32]
+                        model: window.iconSizes
                         delegate: BIcon {
                             required property int modelData
                             anchors.verticalCenter: parent.verticalCenter
@@ -729,7 +821,12 @@ ApplicationWindow {
             title: "Przyciski"
             description: "Jeden przycisk główny na widok; drugorzędne obramowane; „duch” w paskach narzędzi; czerwony tylko dla nieodwracalnych akcji."
             // Screenshots show the keyboard focus ring on one button.
-            Component.onCompleted: if (window.autoOpen) Qt.callLater(() => focusDemo.forceActiveFocus(Qt.TabFocusReason))
+            Component.onCompleted: if (window.autoOpen) focusDemoLater.start()
+            Timer {
+                id: focusDemoLater
+                interval: 0
+                onTriggered: focusDemo.forceActiveFocus(Qt.TabFocusReason)
+            }
 
             Specimen {
                 label: "WARIANTY"
@@ -782,7 +879,12 @@ ApplicationWindow {
         GallerySection {
             title: "Pola tekstowe"
             description: "Pola z ikoną, czyszczeniem i komunikatem błędu. Escape czyści pole; pole wyszukiwania pokazuje skrót klawiszowy."
-            Component.onCompleted: if (window.autoOpen) Qt.callLater(() => focusedField.forceActiveFocus(Qt.TabFocusReason))
+            Component.onCompleted: if (window.autoOpen) focusedFieldLater.start()
+            Timer {
+                id: focusedFieldLater
+                interval: 0
+                onTriggered: focusedField.forceActiveFocus(Qt.TabFocusReason)
+            }
 
             Specimen {
                 label: "POLA"
@@ -805,12 +907,9 @@ ApplicationWindow {
                     size: "small"
                     placeholderText: "Nazwa właściwości"
                     // ↓ / ↑ wybierają, Enter albo Tab bierze podpowiedź, Escape zamyka.
-                    provider: (typed) => [
-                        { title: "status", subtitle: "12 stron", icon: "type" },
-                        { title: "termin", subtitle: "8 stron", icon: "calendar" },
-                        { title: "źródło", subtitle: "3 strony", icon: "type" },
-                        { title: "koszt", subtitle: "2 strony", icon: "sigma" }
-                    ].filter(s => typed === "" || s.title.indexOf(typed) >= 0)
+                    id: keySuggest
+                    suggesting: true
+                    onSuggestionsRequested: (typed) => keySuggest.suggestions = window.keySuggestions(typed)
                 }
             }
             Specimen {
@@ -1114,8 +1213,8 @@ ApplicationWindow {
 
             Component.onCompleted: {
                 if (window.autoOpen) {
-                    toasts.show("Zsynchronizowano 12 plików z Nextcloud", { kind: "success", timeout: 0 })
-                    toasts.show("Przeniesiono „Plan podróży” do kosza", { actionText: "Cofnij", timeout: 0 })
+                    toasts.showToast("Zsynchronizowano 12 plików z Nextcloud", "success", "", 0)
+                    toasts.showToast("Przeniesiono „Plan podróży” do kosza", "", "Cofnij", 0)
                     tipTimer.start()
                 }
             }
@@ -1187,12 +1286,12 @@ ApplicationWindow {
                 label: "NA ŻYWO"
                 BButton {
                     text: "Pokaż powiadomienie"
-                    onClicked: toasts.show("Przeniesiono do kosza", { actionText: "Cofnij", onAction: () => toasts.show("Przywrócono", { kind: "success" }) })
+                    onClicked: window.undoToast = toasts.showToast("Przeniesiono do kosza", "", "Cofnij", -1)
                 }
                 BButton {
                     text: "Błąd"
                     variant: "ghost"
-                    onClicked: toasts.show("Nie można zapisać pliku", { kind: "error" })
+                    onClicked: toasts.showToast("Nie można zapisać pliku", "error", "", -1)
                 }
             }
         }
@@ -1203,7 +1302,12 @@ ApplicationWindow {
         GallerySection {
             title: "Menu"
             description: "Menu kontekstowe z ikonami, skrótami, opcjami do zaznaczenia i akcją niebezpieczną. Strzałki, Enter i Escape działają z klawiatury."
-            Component.onCompleted: if (window.autoOpen) Qt.callLater(() => pageMenu.popup(moreButton, 0, moreButton.height + 4))
+            Component.onCompleted: if (window.autoOpen) pageMenuLater.start()
+            Timer {
+                id: pageMenuLater
+                interval: 0
+                onTriggered: pageMenu.popup(moreButton, 0, moreButton.height + 4)
+            }
 
             Specimen {
                 label: "MENU STRONY"
@@ -1238,29 +1342,33 @@ ApplicationWindow {
         GallerySection {
             title: "Status zadania"
             description: "Pole zadania: kliknięcie odhacza, prawy przycisk myszy albo przytrzymanie palcem otwiera menu statusów (w edytorze także Ctrl+Shift+Enter i „/” z poleceniem). „Bez statusu” usuwa pole wyboru, tekst zostaje."
-            Component.onCompleted: if (window.autoOpen) Qt.callLater(() => doingBox.openMenu())
+            Component.onCompleted: if (window.autoOpen) doingBoxLater.start()
+            Timer {
+                id: doingBoxLater
+                interval: 0
+                onTriggered: doingBox.openMenu()
+            }
 
             Specimen {
                 label: "POLA ZADAŃ"
                 note: "TaskBox"
                 Repeater {
-                    model: [{ status: "todo", text: "Do zrobienia" }, { status: "doing", text: "W toku" },
-                            { status: "done", text: "Zrobione" }, { status: "deferred", text: "Oczekujące" },
-                            { status: "cancelled", text: "Anulowane" }]
+                    model: window.taskSpecimens
                     delegate: Row {
                         id: specimenRow
-                        required property var modelData
+                        required property string status
+                        required property string text
                         spacing: Theme.space1
                         TaskBox {
                             id: specimenBox
                             anchors.verticalCenter: parent.verticalCenter
-                            status: specimenRow.modelData.status
-                            onToggled: toasts.show("Kliknięcie: " + specimenRow.modelData.text, { kind: "info" })
+                            status: specimenRow.status
+                            onToggled: toasts.showToast("Kliknięcie: " + specimenRow.text, "info", "", -1)
                             onStatusChosen: (status) => specimenBox.status = status === "" ? "todo" : status
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: specimenRow.modelData.text
+                            text: specimenRow.text
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textBase
                             color: Theme.fg
@@ -1311,7 +1419,7 @@ ApplicationWindow {
                 title: "Zmień nazwę strony"
                 subtitle: "Odnośniki do tej strony zostaną zaktualizowane we wszystkich notatkach."
                 acceptText: "Zmień nazwę"
-                acceptEnabled: nameField.text.trim() !== ""
+                acceptEnabled: Js.trim(nameField.text) !== ""
                 initialFocusItem: nameField
                 BTextField {
                     id: nameField
@@ -1325,7 +1433,7 @@ ApplicationWindow {
                     text: "Zaktualizuj odnośniki (14 stron)"
                     checked: true
                 }
-                onAccepted: toasts.show("Zmieniono nazwę na „" + nameField.text + "”", { kind: "success" })
+                onAccepted: toasts.showToast("Zmieniono nazwę na „" + nameField.text + "”", "success", "", -1)
             }
         }
     }
@@ -1374,17 +1482,7 @@ ApplicationWindow {
                         withTime: true
                         selectedDate: DatesHelper.addDays(DatesHelper.today, 1)
                         time: "09:00"
-                        marks: {
-                            const t = DatesHelper.today
-                            const m = {}
-                            m[DatesHelper.addDays(t, -2)] = ["overdue"]
-                            m[t] = ["due", "reminder"]
-                            m[DatesHelper.addDays(t, 1)] = ["reminder"]
-                            m[DatesHelper.addDays(t, 3)] = ["scheduled", "due"]
-                            m[DatesHelper.addDays(t, 6)] = ["alarm"]
-                            m[DatesHelper.addDays(t, 9)] = ["done"]
-                            return m
-                        }
+                        marks: window.sampleMarks(DatesHelper.today)
                         Component.onCompleted: naturalText = "w piątek o 18"
                     }
                 }
@@ -1468,12 +1566,9 @@ ApplicationWindow {
         GallerySection {
             title: "Przypomnienie"
             description: "Szybkie wybory, data słowami lub z kalendarza, godzina w formacie 24 h, alarm i powtarzanie. Wynik: { at, alarm, recurrence } z regułą w kanonicznym języku angielskim."
-            Component.onCompleted: if (window.autoOpen) reminder.edit({
-                at: DatesHelper.addDays(DatesHelper.today, 1) + " 09:00",
-                alarm: true,
-                recurrence: "every week on Monday, Thursday",
-                context: "Zadzwonić do mamy w sprawie urodzin"
-            })
+            Component.onCompleted: if (window.autoOpen) reminder.editWith(DatesHelper.addDays(DatesHelper.today, 1) + " 09:00", true,
+                                                                       "every week on Monday, Thursday",
+                                                                       "Zadzwonić do mamy w sprawie urodzin")
 
             Specimen {
                 label: "OTWÓRZ"
@@ -1481,7 +1576,7 @@ ApplicationWindow {
                 BButton {
                     text: "Edytuj przypomnienie"
                     iconName: "pencil"
-                    onClicked: reminder.edit({ at: DatesHelper.today + " 18:00", alarm: false, recurrence: "every 2 weeks on Friday", context: "Podlać kwiaty" })
+                    onClicked: reminder.editWith(DatesHelper.today + " 18:00", false, "every 2 weeks on Friday", "Podlać kwiaty")
                 }
             }
             Specimen {
@@ -1490,9 +1585,19 @@ ApplicationWindow {
             }
             BReminderDialog {
                 id: reminder
-                onReminderAccepted: (r) => reminderResult.text = JSON.stringify(r)
-                onDeleteRequested: toasts.show("Usunięto przypomnienie", { actionText: "Cofnij" })
+                onReminderAccepted: (r) => reminderResult.text = Js.stringify(r)
+                onDeleteRequested: toasts.showToast("Usunięto przypomnienie", "", "Cofnij", -1)
             }
+        }
+    }
+
+    /// The toast whose "Cofnij" shows "Przywrócono" (the feedback section's live toast).
+    property int undoToast: -1
+    Connections {
+        target: toasts
+        function onActionTriggered(toastId: int) {
+            if (toastId === window.undoToast)
+                toasts.showToast("Przywrócono", "success", "", -1)
         }
     }
 
@@ -1542,31 +1647,36 @@ ApplicationWindow {
                 oursLabel: "Ten telefon"
                 theirsLabel: "Laptop (Nextcloud)"
                 applyText: "Zapisz scalony"
-                Component.onCompleted: Qt.callLater(() => {
-                    setChoice(0, "theirs")
-                    setChoice(2, "both")
-                })
-                onResolved: (text) => toasts.show("Scalono (" + text.length + " znaków)", { kind: "success" })
+                Component.onCompleted: mergeLater.start()
+                onResolved: (text) => toasts.showToast("Scalono (" + text.length + " znaków)", "success", "", -1)
+                Timer {
+                    id: mergeLater
+                    interval: 0
+                    onTriggered: {
+                        merge.setChoice(0, "theirs")
+                        merge.setChoice(2, "both")
+                    }
+                }
             }
         }
     }
 
-    readonly property var sampleCommands: [
-        { title: "Dzisiejszy dziennik", icon: "book-open", shortcut: "Ctrl+J" },
-        { title: "Nowa strona", icon: "square-pen", shortcut: "Ctrl+N" },
-        { title: "Synchronizuj teraz", subtitle: "Nextcloud · ostatnio 5 min temu", icon: "refresh-cw", shortcut: "Ctrl+R" },
-        { title: "Synchronizacja — ustawienia", subtitle: "Ustawienia", icon: "settings" },
-        { title: "Przypomnienia", subtitle: "Widok", icon: "bell" },
-        { title: "Kalendarz", subtitle: "Widok", icon: "calendar" },
-        { title: "Pokaż graf powiązań", icon: "waypoints" },
-        { title: "Przełącz tryb źródła", icon: "code", shortcut: "Ctrl+E" },
-        { title: "Motyw: ciemny", icon: "moon" },
-        { title: "Importuj z Obsidiana…", icon: "import" },
-        { title: "Eksportuj do ZIP…", icon: "download" },
-        { title: "Kosz", icon: "trash-2" },
-        { title: "Zaplanowane zadania", subtitle: "Widok zadań", icon: "list-todo" }
+    readonly property list<var> sampleCommands: [
+        { id: "0", title: "Dzisiejszy dziennik", icon: "book-open", shortcut: "Ctrl+J" },
+        { id: "1", title: "Nowa strona", icon: "square-pen", shortcut: "Ctrl+N" },
+        { id: "2", title: "Synchronizuj teraz", subtitle: "Nextcloud · ostatnio 5 min temu", icon: "refresh-cw", shortcut: "Ctrl+R" },
+        { id: "3", title: "Synchronizacja — ustawienia", subtitle: "Ustawienia", icon: "settings" },
+        { id: "4", title: "Przypomnienia", subtitle: "Widok", icon: "bell" },
+        { id: "5", title: "Kalendarz", subtitle: "Widok", icon: "calendar" },
+        { id: "6", title: "Pokaż graf powiązań", icon: "waypoints" },
+        { id: "7", title: "Przełącz tryb źródła", icon: "code", shortcut: "Ctrl+E" },
+        { id: "8", title: "Motyw: ciemny", icon: "moon" },
+        { id: "9", title: "Importuj z Obsidiana…", icon: "import" },
+        { id: "10", title: "Eksportuj do ZIP…", icon: "download" },
+        { id: "11", title: "Kosz", icon: "trash-2" },
+        { id: "12", title: "Zaplanowane zadania", subtitle: "Widok zadań", icon: "list-todo" }
     ]
-    readonly property var samplePages: [
+    readonly property list<var> samplePages: [
         { title: "Plan podróży do Gdańska", subtitle: "Projekty/Podróże" },
         { title: "Lista zakupów", subtitle: "Dom" },
         { title: "Przepis na pierogi z kapustą", subtitle: "Kuchnia" },
@@ -1583,7 +1693,15 @@ ApplicationWindow {
         GallerySection {
             title: "Paleta poleceń"
             description: "Ctrl+K: wyszukiwanie przybliżone, bez względu na polskie znaki („zolw” znajduje „Żółw”). Strzałki, Enter, Escape."
-            Component.onCompleted: if (window.autoOpen) Qt.callLater(() => { palette.open(); palette.query = "syn" })
+            Component.onCompleted: if (window.autoOpen) paletteLater.start()
+            Timer {
+                id: paletteLater
+                interval: 0
+                onTriggered: {
+                    palette.open()
+                    palette.query = "syn"
+                }
+            }
 
             Specimen {
                 label: "OTWÓRZ"
@@ -1592,7 +1710,8 @@ ApplicationWindow {
             }
             BCommandPalette {
                 id: palette
-                commands: window.sampleCommands.map(c => Object.assign({ action: () => toasts.show(c.title) }, c))
+                commands: window.sampleCommands
+                onCommandIdActivated: (id) => toasts.showToast("" + DevTest.valueAt(window.sampleCommands, id + ".title"), "", "", -1)
             }
         }
     }
@@ -1602,7 +1721,15 @@ ApplicationWindow {
         GallerySection {
             title: "Szybkie przejście"
             description: "Ctrl+O: przejdź do strony albo utwórz nową, gdy nic nie pasuje dokładnie."
-            Component.onCompleted: if (window.autoOpen) Qt.callLater(() => { switcher.open(); switcher.query = "pla" })
+            Component.onCompleted: if (window.autoOpen) switcherLater.start()
+            Timer {
+                id: switcherLater
+                interval: 0
+                onTriggered: {
+                    switcher.open()
+                    switcher.query = "pla"
+                }
+            }
 
             Specimen {
                 label: "OTWÓRZ"
@@ -1611,8 +1738,8 @@ ApplicationWindow {
             BQuickSwitcher {
                 id: switcher
                 pages: window.samplePages
-                onPageChosen: (p) => toasts.show("Otwieram „" + p.title + "”")
-                onCreateRequested: (t) => toasts.show("Tworzę stronę „" + t + "”", { kind: "success" })
+                onPageChosen: (p) => toasts.showToast("Otwieram „" + DevTest.valueAt(p, "title") + "”", "", "", -1)
+                onCreateRequested: (t) => toasts.showToast("Tworzę stronę „" + t + "”", "success", "", -1)
             }
         }
     }

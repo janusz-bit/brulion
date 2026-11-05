@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtTest
+import QtQuick.Controls.Basic
+import QtQuick.Templates as T
 import Brulion
 
 // SelectionSelfTest — selecting and copying blocks with real input in the editor playground
@@ -32,54 +33,52 @@ import Brulion
 QtObject {
     id: test
 
-    required property var window
+    required property ApplicationWindow appWindow
+    readonly property EditorPlayground window: test.appWindow as EditorPlayground
     required property BlockEditor editor
     required property PageController page
     required property FakeEditorHost host
 
-    property TestEvent events: TestEvent {}
+    property DevEvents events: DevEvents {}
     property int rowA: -1
     property int rowB: -1
     property int rowC: -1
     property real contentBefore: 0
     /// Where the scroll bar's thumb was pressed (in the bar).
     property point barPress
+    /// A point mapped to another item (read through a typed property).
+    property point mapped
     property string textBefore: ""
     /// A toast's Cofnij kept after its edit was undone another way.
-    property var staleUndo: null
+    property EditorToastAction staleUndo: null
+    /// A caret's rectangle (read through a typed property).
+    property rect caret
 
     // ---- Helpers ------------------------------------------------------------------------------------
-    readonly property ListView list: editor.listView
-    function check(ok, what) { window.check(ok, what) }
-    /// A step repeating until `ready()`, then checking it (at most window.waitLimit times: longer
-    /// in slow sanitizer builds). Gestures are followed by one: what they do may come a frame later.
-    function wait(ready, what) { return window.waitStep(ready, what) }
-    /// A step repeating until `ready()` (at most window.waitLimit times), checking nothing: a finger
-    /// held down until its gesture took effect.
-    function hold(ready) { return window.holdStep(ready) }
-    function rowOf(prefix) { return window.rowOf(prefix) }
-    function info(row) { return page.blocks.get(row) }
-    function textOf(row) { return window.renderedOf(row) }
-    function delegateAt(row) { return window.delegateAt(row) }
-    function selected() {
-        const out = []
-        for (const r of page.selectedRows())
-            out.push(r)
-        return out
-    }
+    readonly property ListView list: test.editor.listView
+    function check(ok: bool, what: string): void { window.check(ok, what) }
+    function rowOf(prefix: string): int { return window.rowOf(prefix) }
+    function info(row: int): DevBlock { return window.info(row) }
+    function textOf(row: int): Text { return window.renderedOf(row) }
+    function delegateAt(row: int): BlockDelegate { return window.delegateAt(row) }
+    function edit(): InlineEditor { return editor.activeEditor }
+    function menuItem(menu: T.Menu, name: string): T.MenuItem { return window.menuItemNamed(menu, name) }
+    function selected(): list<int> { return page.selectedRows() }
+    /// The selected rows as JSON.stringify wrote them ("[3,4]").
+    function selectedText(): string { return "[" + selected().join(",") + "]" }
     /// The clipboard's text exactly (no-break spaces kept): this app's copies are read as written.
-    function clip() { return page.clipboardText() }
-    function key(k, modifiers) { EditorInput.sendKey(list, k, modifiers || 0, "") }
-    function editKey(k, modifiers) { window.realKey(k, modifiers || 0, "") }
-    function edgeOf(row) {
+    function clip(): string { return page.clipboardText() }
+    function key(k: int, modifiers: int): void { EditorInput.sendKey(list, k, modifiers, "") }
+    function editKey(k: int, modifiers: int): void { window.realKey(k, modifiers, "") }
+    function edgeOf(row: int): string {
         const item = delegateAt(row)
         return item ? item.selectionEdge : "?"
     }
-    function center(row) {
-        editor.listView.positionViewAtIndex(row, ListView.Center)
+    function center(row: int): void {
+        list.positionViewAtIndex(row, ListView.Center)
     }
     /// Visible rows that can be selected (not the page's properties).
-    function selectableCount() {
+    function selectableCount(): int {
         let n = 0
         for (let r = 0; r < page.blocks.count; ++r) {
             const b = info(r)
@@ -88,34 +87,38 @@ QtObject {
         }
         return n
     }
-    /// A finger put on (x, y) of `target()` and held there until `done()` — the long press took
-    /// effect (the selection mode, a menu, a selected word), as a user lifts it once that shows —,
-    /// then `then` (steps, the finger still down) and the release (unless `then` lifts it:
-    /// releasedByThen): steps. (Held for a fixed number of steps, it was lifted too early in slow
-    /// sanitizer runs now and then: a tap.)
-    function longPress(target, x, y, done, then, releasedByThen) {
-        const out = [() => {
-            const item = target()
-            check(item !== null, "something to hold")
-            if (item)
-                events.touchEvent(item).press(0, item, x(item), y(item)).commit()
-        }, hold(done)]
-        if (then)
-            out.push(...then)
-        if (!releasedByThen) {
-            out.push(() => {
-                const item = target()
-                if (item)
-                    events.touchEvent(item).release(0, item, x(item), y(item)).commit()
-            })
-        }
-        return out
+    /// A finger put on the middle of the text of `row` (a long press: the step after it holds the
+    /// finger until the press took effect — the selection mode, a menu —, as a user lifts it once
+    /// that shows; then releaseText()). (Held for a fixed number of steps, it was lifted too early
+    /// in slow sanitizer runs now and then: a tap.)
+    function pressText(row: int): void {
+        const item = textOf(row)
+        check(item !== null, "something to hold")
+        if (item)
+            events.touchPress(item, item.width / 2, item.height / 2)
     }
-    function fingerTap(item, x, y) {
-        events.touchEvent(item).press(0, item, x, y).commit()
-        events.touchEvent(item).release(0, item, x, y).commit()
+    function releaseText(row: int): void {
+        const item = textOf(row)
+        if (item)
+            events.touchRelease(item, item.width / 2, item.height / 2)
     }
-    function tap(item) {
+    /// The same on the bullet of `row`.
+    function pressBullet(row: int): void {
+        const item = delegateAt(row)
+        check(item !== null, "something to hold")
+        if (item)
+            events.touchPress(item, item.bulletX, item.firstLineCenter)
+    }
+    function releaseBullet(row: int): void {
+        const item = delegateAt(row)
+        if (item)
+            events.touchRelease(item, item.bulletX, item.firstLineCenter)
+    }
+    function fingerTap(item: Item, x: real, y: real): void {
+        events.touchPress(item, x, y)
+        events.touchRelease(item, x, y)
+    }
+    function tap(item: Item): void {
         if (!item)
             return
         if (Theme.touchUi)
@@ -124,710 +127,717 @@ QtObject {
             events.mouseClick(item, item.width / 2, item.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
     }
     /// A Ctrl+click on the text of `row` (picks it into or out of the selection).
-    function ctrlClick(row) {
+    function ctrlClick(row: int): void {
         const text = textOf(row)
         check(text !== null, "the text of row " + row)
         if (text)
             events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ControlModifier, -1)
     }
-    function rightClick(item, x, y) {
+    function rightClick(item: Item, x: real, y: real): void {
         if (item)
             events.mouseClick(item, x, y, Qt.RightButton, Qt.NoModifier, -1)
     }
-    function toolbar() { return window.findItem(editor, "editToolbarSlot") }
-    function shown(item, name) { return window.findShown(item, name) }
+    /// The x of `item` in the window.
+    function windowX(item: Item): real {
+        test.mapped = item.mapToItem(null, 0, 0)
+        return test.mapped.x
+    }
+    function partsOf(text: string, separator: string): list<string> { return Js.split(text, separator) }
+    /// The picked blocks (touch) are on the clipboard.
+    function pickedCopied(): bool {
+        return Js.indexOf(clip(), "- [ ] Wywieźć gruz") === 0 && Js.indexOf(clip(), "\n- Prace\n\t- [ ] Skuć") > 0
+               && Js.endsWith(clip(), "\n- Ekipa może zacząć 20 października, cena ==do negocjacji==")
+    }
+    function textMenu(): BMenu { return editor.textMenu }
+    function blockMenu(): BlockMenu { return editor.blockMenu }
+    function highlightMenu(): BMenu { return editor.highlightMenu }
+    function scrollBar(): T.ScrollBar { return editor.scrollBar }
+    function toolbar(): Item { return window.findItem(editor, "editToolbarSlot") }
+    function shown(item: Item, name: string): Item { return window.findShown(item, name) }
+    function shownText(item: Item, name: string): Text { return window.findShown(item, name) as Text }
+    /// The floating selection tools (desktop), their menu.
+    function floatingTools(): SelectionToolbar { return window.findShown(editor.dockHost, "floatingSelectionTools") as SelectionToolbar }
+    function toolsMenu(): BMenu {
+        const tools = floatingTools()
+        return tools ? tools.menu : null
+    }
+    function toolsMenuOpen(): bool {
+        const tools = floatingTools()
+        return tools !== null && toolsMenu() !== null && toolsMenu().opened
+    }
     /// Scroll the docked toolbar's row so that `button` is on screen.
-    function revealTool(button) {
-        const flick = window.findItem(editor, "editToolbarFlick")
+    function revealTool(button: Item): void {
+        const flick = window.findItem(editor, "editToolbarFlick") as Flickable
         if (!flick || !button)
             return
-        const x = button.mapToItem(flick.contentItem, 0, 0).x
-        flick.contentX = Math.max(0, Math.min(x - Theme.space8, flick.contentWidth - flick.width))
+        test.mapped = button.mapToItem(flick.contentItem, 0, 0)
+        flick.contentX = Math.max(0, Math.min(test.mapped.x - Theme.space8, flick.contentWidth - flick.width))
     }
     /// The shown grip at the end of the selection's band, or null.
-    function endGrip() { return window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") }
+    function endGrip(): Item { return window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") }
     /// The button of a toast ("Cofnij"), when one is shown (clearToasts() first: one at a time).
-    function toastUndo() { return window.findShown(window.toastHost, "toastAction") }
-    function clearToasts() { window.toastHost.clear() }
+    function toastUndo(): T.AbstractButton { return window.findShown(window.toastHost, "toastAction") as T.AbstractButton }
+    function clearToasts(): void { window.toastHost.clear() }
 
-    Component.onCompleted: window.runSteps(Theme.touchUi ? touchSteps() : desktopSteps())
+    function steps(): void {
+        if (Theme.touchUi)
+            touchSteps()
+        else
+            desktopSteps()
+    }
+    Component.onCompleted: window.runSteps("selectiontest")
 
     // ---- Desktop ------------------------------------------------------------------------------------
-    function desktopSteps() {
-        return [
-            wait(() => page.loaded && rowOf("Przygotowanie") > 0, "the outline is open"),
-            // ---- Esc, Shift+↓ twice, Ctrl+C -----------------------------------------------------------
-            () => {
-                test.rowA = rowOf("Przygotowanie")
-                center(test.rowA)
-                editor.startEditing(test.rowA, -1)
-            },
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus, "a block is edited"),
-            () => editKey(Qt.Key_Escape),
-            () => {
-                check(page.selectedRow === test.rowA && page.editingRow < 0, "Esc selects the block")
-                check(selected().length === 7, "with its children (folded or not): " + selected().length)
-                key(Qt.Key_Return, Qt.ControlModifier)
-            },
-            () => {
-                check(info(test.rowA).taskStatus === "todo" && info(rowOf("Zmierzyć")).taskStatus === "done"
-                      && info(rowOf("Zadzwonić")).taskStatus === "doing" && info(rowOf("Wywieźć")).taskStatus === "todo",
-                      "Ctrl+Enter on a parent selected alone changes it, not the children it brings along")
-                key(Qt.Key_Z, Qt.ControlModifier)
-            },
-            () => {
-                check(info(test.rowA).taskStatus === "" && page.selectedRow === test.rowA && selected().length === 7,
-                      "undone, still selected")
-                key(Qt.Key_Down, Qt.ShiftModifier)
-            },
-            () => {
-                check(page.selectedRow === rowOf("Prace") && page.selectionAnchorRow === test.rowA,
-                      "Shift+↓ jumps over the selected children to the next block: " + page.selectedRow)
-                key(Qt.Key_Down, Qt.ShiftModifier)
-            },
-            () => {
-                check(page.selectedRow === rowOf("Notatki z rozmowy"), "Shift+↓ again: " + page.selectedRow)
-                check(edgeOf(test.rowA) === "first" && edgeOf(rowOf("Prace")) === "middle"
-                      && edgeOf(rowOf("Ekipa może")) === "last", "one band over the range")
-                window.lastNotice = ""
-                key(Qt.Key_C, Qt.ControlModifier)
-            },
-            wait(() => clip().startsWith("- Przygotowanie ^przyg\n\t- [x] Zmierzyć ściany") && clip().indexOf("\n- Prace\n") > 0
-                       && clip().endsWith("- Notatki z rozmowy z ekipą — zobacz ((przyg))\n\t- Ekipa może zacząć 20 października, cena ==do negocjacji=="),
-                 () => "Ctrl+C copies the three blocks with their children as Markdown: " + JSON.stringify(clip().slice(0, 60))),
-            () => {
-                check(window.lastNotice !== "", "and says so: " + window.lastNotice)
-                key(Qt.Key_Escape)
-            },
-            () => check(page.selectedRow < 0 && page.selectionCount === 0, "Esc clears the selection"),
-            // ---- Shift+↑ from the first line of an edited block; Shift+↓ from inside one ---------------
-            () => editor.startEditing(rowOf("Skuć"), 0),
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus, "Skuć is edited"),
-            () => editKey(Qt.Key_Up, Qt.ShiftModifier),
-            () => check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Prace"),
-                        "Shift+↑ at the start of the first line selects the block and the one above"),
-            () => editor.startEditing(rowOf("Położyć"), 3),
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus, "Położyć is edited"),
-            () => editKey(Qt.Key_Down, Qt.ShiftModifier),
-            () => {
-                const edit = editor.activeEditor
-                check(page.editingRow === rowOf("Położyć") && edit !== null && edit.selectionStart === 3 && edit.selectionEnd === edit.length,
-                      "Shift+↓ on the last line first selects the text to the block's end")
-                editKey(Qt.Key_Down, Qt.ShiftModifier)
-            },
-            () => check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Położyć") && page.selectedRow === rowOf("Podlać"),
-                        "then the next block"),
-            // ---- Ctrl+A twice -------------------------------------------------------------------------
-            () => editor.startEditing(rowOf("Kolejność"), 2),
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus, "Kolejność is edited"),
-            () => editKey(Qt.Key_A, Qt.ControlModifier),
-            () => {
-                const edit = editor.activeEditor
-                check(page.editingRow === rowOf("Kolejność") && edit && edit.selectionStart === 0 && edit.selectionEnd === edit.length,
-                      "the first Ctrl+A selects the block's text")
-                editKey(Qt.Key_A, Qt.ControlModifier)
-            },
-            () => check(page.editingRow < 0 && page.selectionCount === selectableCount(),
-                        "the second Ctrl+A selects every block: " + page.selectionCount + " of " + selectableCount()),
-            () => key(Qt.Key_Escape),
-            // ---- Ctrl+click picks single blocks: gaps, copying, no moving, Shift+click after it ------------
-            () => {
-                center(rowOf("Zadzwonić"))
-                ctrlClick(rowOf("Zmierzyć"))
-            },
-            () => {
-                check(page.selectedRow === rowOf("Zmierzyć") && page.editingRow < 0, "Ctrl+click selects a block, nothing edited")
-                ctrlClick(rowOf("Zadzwonić"))
-            },
-            () => ctrlClick(rowOf("Skuć")),
-            () => {
-                check(page.selectionCount === 3 && page.selectionPicked && !page.selectionContiguous
-                      && JSON.stringify(selected()) === JSON.stringify([rowOf("Zmierzyć"), rowOf("Zadzwonić"), rowOf("Skuć")]),
-                      "Ctrl+clicks pick three blocks with gaps between them: " + JSON.stringify(selected()))
-                check(edgeOf(rowOf("Zmierzyć")) === "single" && edgeOf(rowOf("Kupić płytki")) === ""
-                      && edgeOf(rowOf("Zadzwonić")) === "single" && edgeOf(rowOf("Prace")) === ""
-                      && edgeOf(rowOf("Skuć")) === "single", "each has its own band, the gaps none")
-                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
-                const count = tools ? window.findShown(tools, "selectionCount") : null
-                check(count !== null && count.text.indexOf("3") >= 0, "the floating tools count them: " + (count ? count.text : ""))
-                window.lastNotice = ""
-                key(Qt.Key_C, Qt.ControlModifier)
-            },
-            wait(() => clip() === "- [x] Zmierzyć ściany i podłogę ✅ 2026-10-12\n- [/] Zadzwonić do hydraulika ⏰ 2026-10-15 18:00 #telefon\n- [ ] Skuć stare płytki 📅 2026-10-13",
-                 () => "Ctrl+C copies the picked blocks in their order: " + JSON.stringify(clip())),
-            () => {
-                test.textBefore = window.pageText()
-                window.lastNotice = ""
-                key(Qt.Key_Tab)
-            },
-            () => {
-                check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason,
-                      "Tab does not indent blocks with gaps between them, and says why: " + window.lastNotice)
-                window.lastNotice = ""
-                key(Qt.Key_Up, Qt.AltModifier)
-            },
-            () => {
-                check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason, "nor does Alt+↑ move them")
-                tap(window.findShown(window.findShown(editor.dockHost, "floatingSelectionTools"), "selectionMore"))
-            },
-            wait(() => {
-                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
-                return tools !== null && tools.menu !== null && tools.menu.opened
-            }, "the floating tools' Więcej opens"),
-            () => {
-                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
-                const up = window.menuItemNamed(tools.menu, "selectionMoveUp")
-                check(up !== null && up.unavailable === editor.gapReason && up.opacity < 1,
-                      "its Przenieś w górę is shown disabled, with the reason")
-                window.lastNotice = ""
-                tap(up)
-            },
-            () => check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason,
-                        "a click on it moves nothing and says why"),
-            () => ctrlClick(rowOf("Zadzwonić")),
-            () => {
-                check(JSON.stringify(selected()) === JSON.stringify([rowOf("Zmierzyć"), rowOf("Skuć")]),
-                      "a second Ctrl+click leaves a picked block out: " + JSON.stringify(selected()))
-                ctrlClick(rowOf("Ekipa może"))
-            },
-            () => {
-                check(page.selectedRow === rowOf("Ekipa może") && page.selectionCount === 3, "another one picked")
-                const text = textOf(rowOf("Położyć"))
-                events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
-            },
-            () => check(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć"),
-                        "Shift+click then selects a range from the block picked last: " + page.selectionAnchorRow + "–" + page.selectedRow),
-            () => key(Qt.Key_Escape),
-            // ---- Shift+click; Delete and Ctrl+Z ---------------------------------------------------------
-            () => {
-                test.rowA = rowOf("Zmierzyć")
-                center(test.rowA)
-                editor.startEditing(test.rowA, -1)
-            },
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus, "Zmierzyć is edited"),
-            () => {
-                const text = textOf(rowOf("Wywieźć"))
-                events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
-            },
-            () => {
-                check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === rowOf("Wywieźć"),
-                      "Shift+click selects from the edited block to the clicked one")
-                test.textBefore = window.pageText()
-                key(Qt.Key_Delete)
-            },
-            wait(() => window.pageText().indexOf("Zadzwonić do hydraulika") < 0, "Delete removes the selected blocks"),
-            () => {
-                check(page.selectedRow === rowOf("Przygotowanie"), "the block before them is selected")
-                key(Qt.Key_Z, Qt.ControlModifier)
-            },
-            wait(() => window.pageText() === test.textBefore, "Ctrl+Z brings them back byte for byte"),
-            () => check(page.selectionAnchorRow === rowOf("Zmierzyć") && page.selectedRow === rowOf("Wywieźć"),
-                        "selected again"),
-            // ---- The toast's "Cofnij" (a click on its button), and a stale one --------------------------
-            () => clearToasts(),
-            wait(() => toastUndo() === null, "no toast is left"),
-            () => {
-                window.lastNoticeAction = null
-                key(Qt.Key_Delete)
-            },
-            wait(() => window.pageText().indexOf("Zadzwonić do hydraulika") < 0 && toastUndo() !== null,
-                 () => "Delete again: the toast says so and offers Cofnij: “" + window.lastNotice + "”"),
-            () => {
-                const button = toastUndo()
-                check(window.lastNoticeAction !== null && button.text === window.lastNoticeAction.text,
-                      "the toast's button is the editor's action: " + window.lastNotice)
-                events.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
-            },
-            wait(() => window.pageText() === test.textBefore, "the toast's Cofnij brings them back byte for byte"),
-            () => check(page.selectionAnchorRow === rowOf("Zmierzyć") && page.selectedRow === rowOf("Wywieźć"),
-                        "and selects them again"),
-            () => {
-                window.lastNoticeAction = null
-                key(Qt.Key_Delete)
-            },
-            wait(() => window.lastNoticeAction !== null, "deleted once more"),
-            () => {
-                test.staleUndo = window.lastNoticeAction
-                key(Qt.Key_Z, Qt.ControlModifier) // undone already (another way)
-            },
-            wait(() => window.pageText() === test.textBefore, "Ctrl+Z undoes the deletion"),
-            () => {
-                window.lastNotice = ""
-                test.staleUndo.run()
-            },
-            () => check(window.pageText() === test.textBefore && window.lastNotice !== "",
-                        "a Cofnij whose edit was undone already undoes nothing else, and says so: " + window.lastNotice),
-            // ---- Alt+↓ and Tab on a range ------------------------------------------------------------
-            () => {
-                page.selectRange(rowOf("Skuć"), rowOf("Położyć"))
-                list.forceActiveFocus()
-                test.textBefore = window.pageText()
-                key(Qt.Key_Down, Qt.AltModifier)
-            },
-            () => {
-                check(rowOf("Podlać") < rowOf("Skuć") && rowOf("Skuć") + 1 === rowOf("Położyć"),
-                      "Alt+↓ moves the range below its next sibling (with that one's child)")
-                check(page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć"), "the range stays selected")
-                key(Qt.Key_Tab)
-            },
-            () => {
-                check(info(rowOf("Skuć")).depth === 2 && info(rowOf("Położyć")).depth === 2, "Tab indents the range")
-                editor.startEditing(rowOf("Ekipa może"), -1) // another block edited meanwhile
-            },
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === rowOf("Ekipa może"),
-                 "another block is edited"),
-            () => editKey(Qt.Key_Z, Qt.ControlModifier),
-            () => {
-                check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
-                      && list.activeFocus && info(rowOf("Skuć")).depth === 1,
-                      "Ctrl+Z in it undoes Tab: the range selected again, nothing edited, the keys with the selection")
-                key(Qt.Key_Z, Qt.ControlModifier)
-            },
-            wait(() => window.pageText() === test.textBefore, "undone"),
-            // ---- Ctrl+V over a selection ---------------------------------------------------------------
-            () => {
-                page.selectRange(rowOf("Skuć"), rowOf("Skuć"))
-                list.forceActiveFocus()
-                key(Qt.Key_C, Qt.ControlModifier)
-            },
-            wait(() => clip() === "- [ ] Skuć stare płytki 📅 2026-10-13", "Ctrl+C copies one block"),
-            () => {
-                page.selectedRow = rowOf("Położyć")
-                key(Qt.Key_V, Qt.ControlModifier)
-            },
-            () => {
-                check(rowOf("Położyć") < 0 && window.pageText().split("Skuć stare płytki").length === 3,
-                      "Ctrl+V replaces the selected block with the copied one")
-                key(Qt.Key_Z, Qt.ControlModifier)
-            },
-            wait(() => window.pageText() === test.textBefore, "undone"),
-            // ---- One copied block pasted into an edited empty bullet: its text, no second marker --------
-            () => { test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "") },
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === test.rowA,
-                 "a new empty bullet is edited"),
-            () => editKey(Qt.Key_V, Qt.ControlModifier),
-            wait(() => info(test.rowA).taskStatus === "todo" && info(test.rowA).plainText.indexOf("Skuć stare płytki") === 0
-                       && window.pageText().split("\t- [ ] Skuć stare płytki 📅 2026-10-13\n").length === 3,
-                 () => "Ctrl+V pastes the copied task into it, its checkbox and no second marker: "
-                       + JSON.stringify(info(test.rowA).plainText) + " " + info(test.rowA).taskStatus),
-            () => check(page.editingRow === test.rowA && window.pageText().indexOf("- - ") < 0, "the block is still edited"),
-            () => {
-                page.undo()
-                page.undo()
-                page.stopEditing()
-            },
-            wait(() => window.pageText() === test.textBefore, "undone"),
-            // ---- Shift+click on a calculation and on a table (frames, not text) ---------------------------
-            () => {
-                test.rowA = rowOf("Koszty")
-                center(window.viewRow("calc"))
-                editor.startEditing(test.rowA, -1)
-            },
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === test.rowA,
-                 "the heading Koszty is edited"),
-            () => {
-                const calc = window.findItem(delegateAt(window.viewRow("calc")), "calcInput")
-                check(calc !== null, "the calculation's lines")
-                if (calc)
-                    events.mouseClick(calc, 20, 8, Qt.LeftButton, Qt.ShiftModifier, -1)
-            },
-            () => check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === window.viewRow("calc"),
-                        "Shift+click on a calculation selects from the edited heading to it, nothing edited: "
-                        + page.selectionAnchorRow + "–" + page.selectedRow),
-            () => {
-                center(window.viewRow("table"))
-                const table = delegateAt(window.viewRow("table"))
-                if (table)
-                    events.mouseClick(table, table.width / 3, table.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
-            },
-            () => check(page.selectionAnchorRow === test.rowA && page.selectedRow === window.viewRow("table")
-                        && editor.editingTable === null && page.editingRow < 0,
-                        "Shift+click on a table moves the selection's end there, no cell edited: " + page.selectedRow),
-            () => key(Qt.Key_Escape),
-            // ---- In-block Ctrl+C / Ctrl+X keep no-break spaces ------------------------------------------
-            () => {
-                test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "Jadę w\u00a0góry z\u00a0Anią")
-            },
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === test.rowA,
-                 "a block with no-break spaces is edited"),
-            () => {
-                editor.activeEditor.select(5, 13)
-                editKey(Qt.Key_C, Qt.ControlModifier)
-            },
-            wait(() => clip() === "w\u00a0góry z", () => "Ctrl+C copies the exact characters: " + JSON.stringify(clip())),
-            () => editKey(Qt.Key_X, Qt.ControlModifier),
-            wait(() => window.pageText().indexOf("- Jadę \u00a0Anią\n") > 0 && clip() === "w\u00a0góry z", "Ctrl+X cuts them"),
-            // ---- The edited text's menu -------------------------------------------------------------------
-            () => {
-                const edit = editor.activeEditor
-                edit.select(0, 4)
-                const r = edit.positionToRectangle(2)
-                events.mouseClick(edit, r.x, r.y + r.height / 2, Qt.RightButton, Qt.NoModifier, -1)
-            },
-            wait(() => editor.textMenu !== null && editor.textMenu.opened, "a right-click in the edited text opens its menu"),
-            () => {
-                check(editor.activeEditor.selectionStart === 0 && editor.activeEditor.selectionEnd === 4,
-                      "the selection stays while the menu is open")
-                check(!editor.blockMenu || !editor.blockMenu.opened, "and no block menu")
-                tap(window.menuItemNamed(editor.textMenu, "editTextCopy"))
-            },
-            wait(() => clip() === "Jadę" && !editor.textMenu.opened, "its Kopiuj copies the selected text"),
-            // ---- Its "Zakreśl…" (docs/UI.md "Coloured highlights") -----------------------------------
-            () => {
-                const edit = editor.activeEditor
-                edit.select(0, 4)
-                const r = edit.positionToRectangle(2)
-                events.mouseClick(edit, r.x, r.y + r.height / 2, Qt.RightButton, Qt.NoModifier, -1)
-            },
-            wait(() => editor.textMenu !== null && editor.textMenu.opened, "the edited text's menu again"),
-            () => tap(window.menuItemNamed(editor.textMenu, "editTextHighlight")),
-            wait(() => editor.highlightMenu !== null && editor.highlightMenu.opened && !editor.textMenu.opened,
-                 "Zakreśl… opens the colours"),
-            () => {
-                check(window.menuItemNamed(editor.highlightMenu, "highlight-default") !== null
-                      && window.menuItemNamed(editor.highlightMenu, "highlight-remove") !== null,
-                      "with the default colour and Usuń zakreślenie")
-                tap(window.menuItemNamed(editor.highlightMenu, "highlight-red"))
-            },
-            wait(() => window.pageText().indexOf("- <mark style=\"background: #FF5582A6;\">Jadę</mark> \u00a0Anią\n") > 0,
-                 () => "Czerwony highlights the selection: " + JSON.stringify(window.pageText().slice(0, 160))),
-            wait(() => editor.activeEditor !== null && editor.activeEditor.selectedText === "Jadę",
-                 "the highlighted text stays selected"),
-            () => page.undo(),
-            wait(() => window.pageText().indexOf("- Jadę \u00a0Anią\n") > 0, "the highlight is one undo step"),
-            () => {
-                page.undo()
-                page.stopEditing()
-            },
-            // ---- The block menu: of another block, of a selected one --------------------------------------
-            () => {
-                center(rowOf("Plan remontu"))
-                const text = textOf(rowOf("Plan remontu"))
-                rightClick(text, 8, 10) // (on "Plan", not on a link: a link has a menu of its own)
-            },
-            wait(() => editor.blockMenu !== null && editor.blockMenu.opened, "a right-click on a paragraph opens the block menu"),
-            () => {
-                const copy = window.menuItemNamed(editor.blockMenu, "blockMenuCopy")
-                check(copy !== null && !editor.blockMenu.inSelection, "with Kopiuj")
-                tap(copy)
-            },
-            wait(() => clip().indexOf("Plan remontu na październik.") === 0, "Kopiuj copies that block"),
-            () => {
-                page.selectRange(rowOf("Zadzwonić"), rowOf("Prace"))
-                const text = textOf(rowOf("Wywieźć"))
-                rightClick(text, 20, text.height / 2)
-            },
-            wait(() => editor.blockMenu !== null && editor.blockMenu.opened && editor.blockMenu.inSelection,
-                 "the menu of a selected block acts on the selection"),
-            () => tap(window.menuItemNamed(editor.blockMenu, "blockMenuCopyText")),
-            wait(() => clip().indexOf("☐ Zadzwonić do hydraulika") === 0 && clip().indexOf("\n☐ Wywieźć gruz") > 0
-                       && clip().indexOf("\n• Prace\n  ☐ Skuć") > 0,
-                 () => "Kopiuj jako tekst copies the selection as text: " + JSON.stringify(clip().slice(0, 80))),
-            // ---- The floating tools ---------------------------------------------------------------------
-            () => {
-                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
-                check(tools !== null, "two or more blocks selected: the floating tools")
-                tap(window.findShown(tools, "selectionCopy"))
-            },
-            wait(() => clip().indexOf("- [/] Zadzwonić do hydraulika") === 0, "their Kopiuj copies the selection as Markdown"),
-            // ---- The band after scrolling far away and back -----------------------------------------------
-            () => list.positionViewAtEnd(),
-            () => list.positionViewAtBeginning(),
-            () => center(rowOf("Wywieźć")),
-            () => check(window.findShown(delegateAt(rowOf("Wywieźć")), "selectionBand") !== null && edgeOf(rowOf("Prace")) !== "",
-                        "the band is there again after its blocks were scrolled away"),
-            () => key(Qt.Key_Escape),
-            // ---- A mouse drag from one block into another; at the view's edge the list scrolls -------------
-            () => list.positionViewAtBeginning(),
-            () => {
-                test.contentBefore = list.contentY
-                test.rowA = rowOf("Zmierzyć")
-                const text = textOf(test.rowA)
-                events.mousePress(text, 40, text.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
-                events.mouseMove(text, 60, text.height / 2 + 2, -1, Qt.LeftButton, Qt.NoModifier)
-            },
-            () => {
-                const text = textOf(rowOf("Zadzwonić"))
-                events.mouseMove(text, 60, text.height / 2, -1, Qt.LeftButton, Qt.NoModifier)
-            },
-            () => {
-                check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === rowOf("Zadzwonić"),
-                      "dragging into another block selects the range")
-                check(Math.abs(list.contentY - test.contentBefore) < 1, "a mouse drag does not scroll the list")
-                events.mouseMove(list, list.width / 2, list.height - 4, -1, Qt.LeftButton, Qt.NoModifier)
-            },
-            // Held at the edge until the list has scrolled (a frame at a time: slow in sanitizer builds).
-            hold(() => list.contentY > test.contentBefore + 100 && page.selectedRow > rowOf("Notatki z rozmowy")),
-            () => {
-                check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
-                check(page.selectedRow > rowOf("Notatki z rozmowy"), "and the selection follows the pointer: " + page.selectedRow)
-                const y = list.height - 4
-                events.mouseRelease(list, list.width / 2, y, Qt.LeftButton, Qt.NoModifier, -1)
-            },
-            () => {
-                check(!editor.dragSelecting && page.editingRow < 0 && page.selectionAnchorRow === test.rowA,
-                      "the release ends the drag, nothing is edited")
-                key(Qt.Key_Escape)
-            },
-            // ---- The scroll bar (BRowScrollBar): its thumb dragged, the wheel over it --------------------
-            () => list.positionViewAtBeginning(),
-            () => {
-                const bar = editor.scrollBar
-                check(bar !== null && bar.objectName === "rowScrollBar" && bar.visible && bar.size < 1,
-                      "the page has a row scroll bar")
-                test.contentBefore = list.contentY
-                test.barPress = bar.mapFromItem(bar.contentItem, bar.contentItem.width / 2, bar.contentItem.height / 2)
-                events.mousePress(bar, test.barPress.x, test.barPress.y, Qt.LeftButton, Qt.NoModifier, -1)
-            },
-            () => events.mouseMove(editor.scrollBar, test.barPress.x, test.barPress.y + 30, -1, Qt.LeftButton, Qt.NoModifier),
-            () => events.mouseMove(editor.scrollBar, test.barPress.x, test.barPress.y + 60, -1, Qt.LeftButton, Qt.NoModifier),
-            wait(() => list.contentY > test.contentBefore + 30, "dragging the scroll bar's thumb scrolls the list"),
-            () => {
-                check(editor.scrollBar.pressed && page.selectionCount === 0 && !editor.dragSelecting && page.editingRow < 0,
-                      "and selects nothing")
-                events.mouseRelease(editor.scrollBar, test.barPress.x, test.barPress.y + 60, Qt.LeftButton, Qt.NoModifier, -1)
-            },
-            () => {
-                check(!editor.scrollBar.pressed && page.selectionCount === 0, "the release selects nothing either")
-                test.contentBefore = list.contentY
-                const bar = editor.scrollBar
-                events.mouseWheel(bar, bar.width / 2, bar.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
-            },
-            wait(() => list.contentY > test.contentBefore + 10, "the wheel over the scroll bar scrolls the list"),
-            // ---- A document: a drag over three paragraphs --------------------------------------------------
-            () => { page.path = host.documentPath },
-            wait(() => page.loaded && page.documentMode && rowOf("Pierwszego dnia") > 0, "the document is open"),
-            () => list.positionViewAtBeginning(),
-            () => {
-                test.rowA = rowOf("Trzy dni")
-                test.rowB = rowOf("Pierwszego dnia")
-                test.contentBefore = list.contentY
-                const text = textOf(test.rowA)
-                events.mousePress(text, 30, 10, Qt.LeftButton, Qt.NoModifier, -1)
-                events.mouseMove(text, 50, 14, -1, Qt.LeftButton, Qt.NoModifier)
-            },
-            () => {
-                const text = textOf(rowOf("Plan"))
-                events.mouseMove(text, 40, text.height / 2, -1, Qt.LeftButton, Qt.NoModifier)
-            },
-            () => {
-                const text = textOf(test.rowB)
-                events.mouseMove(text, 80, 10, -1, Qt.LeftButton, Qt.NoModifier)
-                events.mouseRelease(text, 80, 10, Qt.LeftButton, Qt.NoModifier, -1)
-            },
-            () => {
-                check(page.selectionAnchorRow === test.rowA && page.selectedRow === test.rowB && page.selectionCount === 3,
-                      "a drag over three paragraphs selects them: " + page.selectionCount)
-                check(edgeOf(test.rowA) === "first" && edgeOf(rowOf("Plan")) === "middle" && edgeOf(test.rowB) === "last",
-                      "on one band")
-                check(Math.abs(list.contentY - test.contentBefore) < 1 && page.editingRow < 0, "nothing scrolled, nothing edited")
-                key(Qt.Key_C, Qt.ControlModifier)
-            },
-            wait(() => clip().indexOf("Trzy dni w Zakopanem") === 0 && clip().indexOf("\n\n## Plan\n\nPierwszego dnia") > 0,
-                 "copied as Markdown with its blank lines"),
-            // A document's paragraphs have no outline: Więcej offers no indents for them.
-            () => tap(window.findShown(window.findShown(editor.dockHost, "floatingSelectionTools"), "selectionMore")),
-            wait(() => {
-                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
-                return tools !== null && tools.menu !== null && tools.menu.opened
-            }, "the floating tools' Więcej opens"),
-            () => {
-                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
-                const indent = window.menuItemNamed(tools.menu, "selectionIndent")
-                const outdent = window.menuItemNamed(tools.menu, "selectionOutdent")
-                check(indent !== null && !indent.visible && outdent !== null && !outdent.visible,
-                      "paragraphs of a document: no Zwiększ / Zmniejsz wcięcie")
-                tools.menu.close()
-            },
-        ]
+    function desktopSteps(): void {
+        if (window.at()) window.waitStep(page.loaded && rowOf("Przygotowanie") > 0, "the outline is open")
+        // ---- Esc, Shift+↓ twice, Ctrl+C -----------------------------------------------------------
+        if (window.at()) {
+            test.rowA = rowOf("Przygotowanie")
+            center(test.rowA)
+            editor.startEditing(test.rowA, -1)
+        }
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus, "a block is edited")
+        if (window.at()) editKey(Qt.Key_Escape, 0)
+        if (window.at()) {
+            check(page.selectedRow === test.rowA && page.editingRow < 0, "Esc selects the block")
+            check(selected().length === 7, "with its children (folded or not): " + selected().length)
+            key(Qt.Key_Return, Qt.ControlModifier)
+        }
+        if (window.at()) {
+            check(info(test.rowA).taskStatus === "todo" && info(rowOf("Zmierzyć")).taskStatus === "done"
+                  && info(rowOf("Zadzwonić")).taskStatus === "doing" && info(rowOf("Wywieźć")).taskStatus === "todo",
+                  "Ctrl+Enter on a parent selected alone changes it, not the children it brings along")
+            key(Qt.Key_Z, Qt.ControlModifier)
+        }
+        if (window.at()) {
+            check(info(test.rowA).taskStatus === "" && page.selectedRow === test.rowA && selected().length === 7,
+                  "undone, still selected")
+            key(Qt.Key_Down, Qt.ShiftModifier)
+        }
+        if (window.at()) {
+            check(page.selectedRow === rowOf("Prace") && page.selectionAnchorRow === test.rowA,
+                  "Shift+↓ jumps over the selected children to the next block: " + page.selectedRow)
+            key(Qt.Key_Down, Qt.ShiftModifier)
+        }
+        if (window.at()) {
+            check(page.selectedRow === rowOf("Notatki z rozmowy"), "Shift+↓ again: " + page.selectedRow)
+            check(edgeOf(test.rowA) === "first" && edgeOf(rowOf("Prace")) === "middle"
+                  && edgeOf(rowOf("Ekipa może")) === "last", "one band over the range")
+            window.lastNotice = ""
+            key(Qt.Key_C, Qt.ControlModifier)
+        }
+        if (window.at() && !window.waiting(Js.startsWith(clip(), "- Przygotowanie ^przyg\n\t- [x] Zmierzyć ściany") && Js.indexOf(clip(), "\n- Prace\n") > 0
+                   && Js.endsWith(clip(), "- Notatki z rozmowy z ekipą — zobacz ((przyg))\n\t- Ekipa może zacząć 20 października, cena ==do negocjacji==")))
+            window.checkWait("Ctrl+C copies the three blocks with their children as Markdown: " + Js.stringify(Js.slice(clip(), 0, 60)))
+        if (window.at()) {
+            check(window.lastNotice !== "", "and says so: " + window.lastNotice)
+            key(Qt.Key_Escape, 0)
+        }
+        if (window.at()) check(page.selectedRow < 0 && page.selectionCount === 0, "Esc clears the selection")
+        // ---- Shift+↑ from the first line of an edited block; Shift+↓ from inside one ---------------
+        if (window.at()) editor.startEditing(rowOf("Skuć"), 0)
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus, "Skuć is edited")
+        if (window.at()) editKey(Qt.Key_Up, Qt.ShiftModifier)
+        if (window.at()) check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Prace"),
+                    "Shift+↑ at the start of the first line selects the block and the one above")
+        if (window.at()) editor.startEditing(rowOf("Położyć"), 3)
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus, "Położyć is edited")
+        if (window.at()) editKey(Qt.Key_Down, Qt.ShiftModifier)
+        if (window.at()) {
+            const ed = edit()
+            check(page.editingRow === rowOf("Położyć") && ed !== null && ed.selectionStart === 3 && ed.selectionEnd - ed.length === 0,
+                  "Shift+↓ on the last line first selects the text to the block's end")
+            editKey(Qt.Key_Down, Qt.ShiftModifier)
+        }
+        if (window.at()) check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Położyć") && page.selectedRow === rowOf("Podlać"),
+                    "then the next block")
+        // ---- Ctrl+A twice -------------------------------------------------------------------------
+        if (window.at()) editor.startEditing(rowOf("Kolejność"), 2)
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus, "Kolejność is edited")
+        if (window.at()) editKey(Qt.Key_A, Qt.ControlModifier)
+        if (window.at()) {
+            const ed = edit()
+            check(page.editingRow === rowOf("Kolejność") && ed !== null && ed.selectionStart === 0 && ed.selectionEnd - ed.length === 0,
+                  "the first Ctrl+A selects the block's text")
+            editKey(Qt.Key_A, Qt.ControlModifier)
+        }
+        if (window.at()) check(page.editingRow < 0 && page.selectionCount === selectableCount(),
+                    "the second Ctrl+A selects every block: " + page.selectionCount + " of " + selectableCount())
+        if (window.at()) key(Qt.Key_Escape, 0)
+        // ---- Ctrl+click picks single blocks: gaps, copying, no moving, Shift+click after it ------------
+        if (window.at()) {
+            center(rowOf("Zadzwonić"))
+            ctrlClick(rowOf("Zmierzyć"))
+        }
+        if (window.at()) {
+            check(page.selectedRow === rowOf("Zmierzyć") && page.editingRow < 0, "Ctrl+click selects a block, nothing edited")
+            ctrlClick(rowOf("Zadzwonić"))
+        }
+        if (window.at()) ctrlClick(rowOf("Skuć"))
+        if (window.at()) {
+            check(page.selectionCount === 3 && page.selectionPicked && !page.selectionContiguous
+                  && selectedText() === "[" + rowOf("Zmierzyć") + "," + rowOf("Zadzwonić") + "," + rowOf("Skuć") + "]",
+                  "Ctrl+clicks pick three blocks with gaps between them: " + selectedText())
+            check(edgeOf(rowOf("Zmierzyć")) === "single" && edgeOf(rowOf("Kupić płytki")) === ""
+                  && edgeOf(rowOf("Zadzwonić")) === "single" && edgeOf(rowOf("Prace")) === ""
+                  && edgeOf(rowOf("Skuć")) === "single", "each has its own band, the gaps none")
+            const tools = floatingTools()
+            const count = tools ? shownText(tools, "selectionCount") : null
+            check(count !== null && Js.indexOf(count.text, "3") >= 0, "the floating tools count them: " + (count ? count.text : ""))
+            window.lastNotice = ""
+            key(Qt.Key_C, Qt.ControlModifier)
+        }
+        if (window.at() && !window.waiting(clip() === "- [x] Zmierzyć ściany i podłogę ✅ 2026-10-12\n- [/] Zadzwonić do hydraulika ⏰ 2026-10-15 18:00 #telefon\n- [ ] Skuć stare płytki 📅 2026-10-13"))
+            window.checkWait("Ctrl+C copies the picked blocks in their order: " + Js.stringify(clip()))
+        if (window.at()) {
+            test.textBefore = window.pageText()
+            window.lastNotice = ""
+            key(Qt.Key_Tab, 0)
+        }
+        if (window.at()) {
+            check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason,
+                  "Tab does not indent blocks with gaps between them, and says why: " + window.lastNotice)
+            window.lastNotice = ""
+            key(Qt.Key_Up, Qt.AltModifier)
+        }
+        if (window.at()) {
+            check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason, "nor does Alt+↑ move them")
+            tap(window.findShown(floatingTools(), "selectionMore"))
+        }
+        if (window.at()) window.waitStep(toolsMenuOpen(), "the floating tools' Więcej opens")
+        if (window.at()) {
+            const tools = floatingTools()
+            const up = menuItem(toolsMenu(), "selectionMoveUp")
+            check(up !== null && "" + DevTest.property(up, "unavailable") === editor.gapReason && up.opacity < 1,
+                  "its Przenieś w górę is shown disabled, with the reason")
+            window.lastNotice = ""
+            tap(up)
+        }
+        if (window.at()) check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason,
+                    "a click on it moves nothing and says why")
+        if (window.at()) ctrlClick(rowOf("Zadzwonić"))
+        if (window.at()) {
+            check(selectedText() === "[" + rowOf("Zmierzyć") + "," + rowOf("Skuć") + "]",
+                  "a second Ctrl+click leaves a picked block out: " + selectedText())
+            ctrlClick(rowOf("Ekipa może"))
+        }
+        if (window.at()) {
+            check(page.selectedRow === rowOf("Ekipa może") && page.selectionCount === 3, "another one picked")
+            const text = textOf(rowOf("Położyć"))
+            events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
+        }
+        if (window.at()) check(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć"),
+                    "Shift+click then selects a range from the block picked last: " + page.selectionAnchorRow + "–" + page.selectedRow)
+        if (window.at()) key(Qt.Key_Escape, 0)
+        // ---- Shift+click; Delete and Ctrl+Z ---------------------------------------------------------
+        if (window.at()) {
+            test.rowA = rowOf("Zmierzyć")
+            center(test.rowA)
+            editor.startEditing(test.rowA, -1)
+        }
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus, "Zmierzyć is edited")
+        if (window.at()) {
+            const text = textOf(rowOf("Wywieźć"))
+            events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
+        }
+        if (window.at()) {
+            check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === rowOf("Wywieźć"),
+                  "Shift+click selects from the edited block to the clicked one")
+            test.textBefore = window.pageText()
+            key(Qt.Key_Delete, 0)
+        }
+        if (window.at()) window.waitStep(Js.indexOf(window.pageText(), "Zadzwonić do hydraulika") < 0, "Delete removes the selected blocks")
+        if (window.at()) {
+            check(page.selectedRow === rowOf("Przygotowanie"), "the block before them is selected")
+            key(Qt.Key_Z, Qt.ControlModifier)
+        }
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "Ctrl+Z brings them back byte for byte")
+        if (window.at()) check(page.selectionAnchorRow === rowOf("Zmierzyć") && page.selectedRow === rowOf("Wywieźć"),
+                    "selected again")
+        // ---- The toast's "Cofnij" (a click on its button), and a stale one --------------------------
+        if (window.at()) clearToasts()
+        if (window.at()) window.waitStep(toastUndo() === null, "no toast is left")
+        if (window.at()) {
+            window.lastNoticeAction = null
+            key(Qt.Key_Delete, 0)
+        }
+        if (window.at() && !window.waiting(Js.indexOf(window.pageText(), "Zadzwonić do hydraulika") < 0 && toastUndo() !== null))
+            window.checkWait("Delete again: the toast says so and offers Cofnij: “" + window.lastNotice + "”")
+        if (window.at()) {
+            const button = toastUndo()
+            check(window.lastNoticeAction !== null && button.text === window.lastNoticeAction.text,
+                  "the toast's button is the editor's action: " + window.lastNotice)
+            events.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "the toast's Cofnij brings them back byte for byte")
+        if (window.at()) check(page.selectionAnchorRow === rowOf("Zmierzyć") && page.selectedRow === rowOf("Wywieźć"),
+                    "and selects them again")
+        if (window.at()) {
+            window.lastNoticeAction = null
+            key(Qt.Key_Delete, 0)
+        }
+        if (window.at()) window.waitStep(window.lastNoticeAction !== null, "deleted once more")
+        if (window.at()) {
+            test.staleUndo = window.lastNoticeAction
+            key(Qt.Key_Z, Qt.ControlModifier) // undone already (another way)
+        }
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "Ctrl+Z undoes the deletion")
+        if (window.at()) {
+            window.lastNotice = ""
+            test.staleUndo.run()
+        }
+        if (window.at()) check(window.pageText() === test.textBefore && window.lastNotice !== "",
+                    "a Cofnij whose edit was undone already undoes nothing else, and says so: " + window.lastNotice)
+        // ---- Alt+↓ and Tab on a range ------------------------------------------------------------
+        if (window.at()) {
+            page.selectRange(rowOf("Skuć"), rowOf("Położyć"))
+            list.forceActiveFocus()
+            test.textBefore = window.pageText()
+            key(Qt.Key_Down, Qt.AltModifier)
+        }
+        if (window.at()) {
+            check(rowOf("Podlać") < rowOf("Skuć") && rowOf("Skuć") + 1 === rowOf("Położyć"),
+                  "Alt+↓ moves the range below its next sibling (with that one's child)")
+            check(page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć"), "the range stays selected")
+            key(Qt.Key_Tab, 0)
+        }
+        if (window.at()) {
+            check(info(rowOf("Skuć")).depth === 2 && info(rowOf("Położyć")).depth === 2, "Tab indents the range")
+            editor.startEditing(rowOf("Ekipa może"), -1) // another block edited meanwhile
+        }
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === rowOf("Ekipa może"), "another block is edited")
+        if (window.at()) editKey(Qt.Key_Z, Qt.ControlModifier)
+        if (window.at()) {
+            check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
+                  && list.activeFocus && info(rowOf("Skuć")).depth === 1,
+                  "Ctrl+Z in it undoes Tab: the range selected again, nothing edited, the keys with the selection")
+            key(Qt.Key_Z, Qt.ControlModifier)
+        }
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "undone")
+        // ---- Ctrl+V over a selection ---------------------------------------------------------------
+        if (window.at()) {
+            page.selectRange(rowOf("Skuć"), rowOf("Skuć"))
+            list.forceActiveFocus()
+            key(Qt.Key_C, Qt.ControlModifier)
+        }
+        if (window.at()) window.waitStep(clip() === "- [ ] Skuć stare płytki 📅 2026-10-13", "Ctrl+C copies one block")
+        if (window.at()) {
+            page.selectedRow = rowOf("Położyć")
+            key(Qt.Key_V, Qt.ControlModifier)
+        }
+        if (window.at()) {
+            check(rowOf("Położyć") < 0 && partsOf(window.pageText(), "Skuć stare płytki").length === 3,
+                  "Ctrl+V replaces the selected block with the copied one")
+            key(Qt.Key_Z, Qt.ControlModifier)
+        }
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "undone")
+        // ---- One copied block pasted into an edited empty bullet: its text, no second marker --------
+        if (window.at()) { test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "") }
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === test.rowA, "a new empty bullet is edited")
+        if (window.at()) editKey(Qt.Key_V, Qt.ControlModifier)
+        if (window.at() && !window.waiting(info(test.rowA).taskStatus === "todo" && Js.indexOf(info(test.rowA).plainText, "Skuć stare płytki") === 0
+                   && partsOf(window.pageText(), "\t- [ ] Skuć stare płytki 📅 2026-10-13\n").length === 3))
+            window.checkWait("Ctrl+V pastes the copied task into it, its checkbox and no second marker: "
+                   + Js.stringify(info(test.rowA).plainText) + " " + info(test.rowA).taskStatus)
+        if (window.at()) check(page.editingRow === test.rowA && Js.indexOf(window.pageText(), "- - ") < 0, "the block is still edited")
+        if (window.at()) {
+            page.undo()
+            page.undo()
+            page.stopEditing()
+        }
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "undone")
+        // ---- Shift+click on a calculation and on a table (frames, not text) ---------------------------
+        if (window.at()) {
+            test.rowA = rowOf("Koszty")
+            center(window.viewRow("calc"))
+            editor.startEditing(test.rowA, -1)
+        }
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === test.rowA, "the heading Koszty is edited")
+        if (window.at()) {
+            const calc = window.findItem(delegateAt(window.viewRow("calc")), "calcInput") as Item
+            check(calc !== null, "the calculation's lines")
+            if (calc)
+                events.mouseClick(calc, 20, 8, Qt.LeftButton, Qt.ShiftModifier, -1)
+        }
+        if (window.at()) check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === window.viewRow("calc"),
+                    "Shift+click on a calculation selects from the edited heading to it, nothing edited: "
+                    + page.selectionAnchorRow + "–" + page.selectedRow)
+        if (window.at()) {
+            center(window.viewRow("table"))
+            const table = delegateAt(window.viewRow("table"))
+            if (table)
+                events.mouseClick(table, table.width / 3, table.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
+        }
+        if (window.at()) check(page.selectionAnchorRow === test.rowA && page.selectedRow === window.viewRow("table")
+                    && editor.editingTable === null && page.editingRow < 0,
+                    "Shift+click on a table moves the selection's end there, no cell edited: " + page.selectedRow)
+        if (window.at()) key(Qt.Key_Escape, 0)
+        // ---- In-block Ctrl+C / Ctrl+X keep no-break spaces ------------------------------------------
+        if (window.at()) {
+            test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "Jadę w\u00a0góry z\u00a0Anią")
+        }
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === test.rowA, "a block with no-break spaces is edited")
+        if (window.at()) {
+            edit().select(5, 13)
+            editKey(Qt.Key_C, Qt.ControlModifier)
+        }
+        if (window.at() && !window.waiting(clip() === "w\u00a0góry z"))
+            window.checkWait("Ctrl+C copies the exact characters: " + Js.stringify(clip()))
+        if (window.at()) editKey(Qt.Key_X, Qt.ControlModifier)
+        if (window.at()) window.waitStep(Js.indexOf(window.pageText(), "- Jadę \u00a0Anią\n") > 0 && clip() === "w\u00a0góry z", "Ctrl+X cuts them")
+        // ---- The edited text's menu -------------------------------------------------------------------
+        if (window.at()) {
+            const ed = edit()
+            ed.select(0, 4)
+            test.caret = ed.positionToRectangle(2)
+            events.mouseClick(ed, test.caret.x, test.caret.y + test.caret.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) window.waitStep(textMenu() !== null && textMenu().opened, "a right-click in the edited text opens its menu")
+        if (window.at()) {
+            check(edit().selectionStart === 0 && edit().selectionEnd === 4,
+                  "the selection stays while the menu is open")
+            check(!blockMenu() || !blockMenu().opened, "and no block menu")
+            tap(window.menuItemNamed(textMenu(), "editTextCopy"))
+        }
+        if (window.at()) window.waitStep(clip() === "Jadę" && !textMenu().opened, "its Kopiuj copies the selected text")
+        // ---- Its "Zakreśl…" (docs/UI.md "Coloured highlights") -----------------------------------
+        if (window.at()) {
+            const ed = edit()
+            ed.select(0, 4)
+            test.caret = ed.positionToRectangle(2)
+            events.mouseClick(ed, test.caret.x, test.caret.y + test.caret.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) window.waitStep(textMenu() !== null && textMenu().opened, "the edited text's menu again")
+        if (window.at()) tap(window.menuItemNamed(textMenu(), "editTextHighlight"))
+        if (window.at()) window.waitStep(highlightMenu() !== null && highlightMenu().opened && !textMenu().opened, "Zakreśl… opens the colours")
+        if (window.at()) {
+            check(window.menuItemNamed(highlightMenu(), "highlight-default") !== null
+                  && window.menuItemNamed(highlightMenu(), "highlight-remove") !== null,
+                  "with the default colour and Usuń zakreślenie")
+            tap(window.menuItemNamed(highlightMenu(), "highlight-red"))
+        }
+        if (window.at() && !window.waiting(Js.indexOf(window.pageText(), "- <mark style=\"background: #FF5582A6;\">Jadę</mark> \u00a0Anią\n") > 0))
+            window.checkWait("Czerwony highlights the selection: " + Js.stringify(Js.slice(window.pageText(), 0, 160)))
+        if (window.at()) window.waitStep(edit() !== null && edit().selectedText === "Jadę", "the highlighted text stays selected")
+        if (window.at()) page.undo()
+        if (window.at()) window.waitStep(Js.indexOf(window.pageText(), "- Jadę \u00a0Anią\n") > 0, "the highlight is one undo step")
+        if (window.at()) {
+            page.undo()
+            page.stopEditing()
+        }
+        // ---- The block menu: of another block, of a selected one --------------------------------------
+        if (window.at()) {
+            center(rowOf("Plan remontu"))
+            const text = textOf(rowOf("Plan remontu"))
+            rightClick(text, 8, 10) // (on "Plan", not on a link: a link has a menu of its own)
+        }
+        if (window.at()) window.waitStep(window.blockMenuOpen(), "a right-click on a paragraph opens the block menu")
+        if (window.at()) {
+            const copy = menuItem(blockMenu(), "blockMenuCopy")
+            check(copy !== null && !blockMenu().inSelection, "with Kopiuj")
+            tap(copy)
+        }
+        if (window.at()) window.waitStep(Js.indexOf(clip(), "Plan remontu na październik.") === 0, "Kopiuj copies that block")
+        if (window.at()) {
+            page.selectRange(rowOf("Zadzwonić"), rowOf("Prace"))
+            const text = textOf(rowOf("Wywieźć"))
+            rightClick(text, 20, text.height / 2)
+        }
+        if (window.at()) window.waitStep(window.blockMenuOpen() && blockMenu().inSelection, "the menu of a selected block acts on the selection")
+        if (window.at()) tap(menuItem(blockMenu(), "blockMenuCopyText"))
+        if (window.at() && !window.waiting(Js.indexOf(clip(), "☐ Zadzwonić do hydraulika") === 0 && Js.indexOf(clip(), "\n☐ Wywieźć gruz") > 0
+                   && Js.indexOf(clip(), "\n• Prace\n  ☐ Skuć") > 0))
+            window.checkWait("Kopiuj jako tekst copies the selection as text: " + Js.stringify(Js.slice(clip(), 0, 80)))
+        // ---- The floating tools ---------------------------------------------------------------------
+        if (window.at()) {
+            const tools = floatingTools()
+            check(tools !== null, "two or more blocks selected: the floating tools")
+            tap(window.findShown(tools, "selectionCopy"))
+        }
+        if (window.at()) window.waitStep(Js.indexOf(clip(), "- [/] Zadzwonić do hydraulika") === 0, "their Kopiuj copies the selection as Markdown")
+        // ---- The band after scrolling far away and back -----------------------------------------------
+        if (window.at()) list.positionViewAtEnd()
+        if (window.at()) list.positionViewAtBeginning()
+        if (window.at()) center(rowOf("Wywieźć"))
+        if (window.at()) check(window.findShown(delegateAt(rowOf("Wywieźć")), "selectionBand") !== null && edgeOf(rowOf("Prace")) !== "",
+                    "the band is there again after its blocks were scrolled away")
+        if (window.at()) key(Qt.Key_Escape, 0)
+        // ---- A mouse drag from one block into another; at the view's edge the list scrolls -------------
+        if (window.at()) list.positionViewAtBeginning()
+        if (window.at()) {
+            test.contentBefore = list.contentY
+            test.rowA = rowOf("Zmierzyć")
+            const text = textOf(test.rowA)
+            events.mousePress(text, 40, text.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+            events.mouseMove(text, 60, text.height / 2 + 2, -1, Qt.LeftButton, Qt.NoModifier)
+        }
+        if (window.at()) {
+            const text = textOf(rowOf("Zadzwonić"))
+            events.mouseMove(text, 60, text.height / 2, -1, Qt.LeftButton, Qt.NoModifier)
+        }
+        if (window.at()) {
+            check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === rowOf("Zadzwonić"),
+                  "dragging into another block selects the range")
+            check(Math.abs(list.contentY - test.contentBefore) < 1, "a mouse drag does not scroll the list")
+            events.mouseMove(list, list.width / 2, list.height - 4, -1, Qt.LeftButton, Qt.NoModifier)
+        }
+        // Held at the edge until the list has scrolled (a frame at a time: slow in sanitizer builds).
+        if (window.at()) window.waiting(list.contentY > test.contentBefore + 100 && page.selectedRow > rowOf("Notatki z rozmowy"))
+        if (window.at()) {
+            check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
+            check(page.selectedRow > rowOf("Notatki z rozmowy"), "and the selection follows the pointer: " + page.selectedRow)
+            const y = list.height - 4
+            events.mouseRelease(list, list.width / 2, y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) {
+            check(!editor.dragSelecting && page.editingRow < 0 && page.selectionAnchorRow === test.rowA,
+                  "the release ends the drag, nothing is edited")
+            key(Qt.Key_Escape, 0)
+        }
+        // ---- The scroll bar (BRowScrollBar): its thumb dragged, the wheel over it --------------------
+        if (window.at()) list.positionViewAtBeginning()
+        if (window.at()) {
+            const bar = scrollBar()
+            check(bar !== null && bar.objectName === "rowScrollBar" && bar.visible && bar.size < 1,
+                  "the page has a row scroll bar")
+            test.contentBefore = list.contentY
+            test.barPress = bar.mapFromItem(bar.contentItem, bar.contentItem.width / 2, bar.contentItem.height / 2)
+            events.mousePress(bar, test.barPress.x, test.barPress.y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) events.mouseMove(scrollBar(), test.barPress.x, test.barPress.y + 30, -1, Qt.LeftButton, Qt.NoModifier)
+        if (window.at()) events.mouseMove(scrollBar(), test.barPress.x, test.barPress.y + 60, -1, Qt.LeftButton, Qt.NoModifier)
+        if (window.at()) window.waitStep(list.contentY > test.contentBefore + 30, "dragging the scroll bar's thumb scrolls the list")
+        if (window.at()) {
+            check(scrollBar().pressed && page.selectionCount === 0 && !editor.dragSelecting && page.editingRow < 0,
+                  "and selects nothing")
+            events.mouseRelease(scrollBar(), test.barPress.x, test.barPress.y + 60, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) {
+            check(!scrollBar().pressed && page.selectionCount === 0, "the release selects nothing either")
+            test.contentBefore = list.contentY
+            const bar = scrollBar()
+            events.mouseWheel(bar, bar.width / 2, bar.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+        }
+        if (window.at()) window.waitStep(list.contentY > test.contentBefore + 10, "the wheel over the scroll bar scrolls the list")
+        // ---- A document: a drag over three paragraphs --------------------------------------------------
+        if (window.at()) { page.path = host.documentPath }
+        if (window.at()) window.waitStep(page.loaded && page.documentMode && rowOf("Pierwszego dnia") > 0, "the document is open")
+        if (window.at()) list.positionViewAtBeginning()
+        if (window.at()) {
+            test.rowA = rowOf("Trzy dni")
+            test.rowB = rowOf("Pierwszego dnia")
+            test.contentBefore = list.contentY
+            const text = textOf(test.rowA)
+            events.mousePress(text, 30, 10, Qt.LeftButton, Qt.NoModifier, -1)
+            events.mouseMove(text, 50, 14, -1, Qt.LeftButton, Qt.NoModifier)
+        }
+        if (window.at()) {
+            const text = textOf(rowOf("Plan"))
+            events.mouseMove(text, 40, text.height / 2, -1, Qt.LeftButton, Qt.NoModifier)
+        }
+        if (window.at()) {
+            const text = textOf(test.rowB)
+            events.mouseMove(text, 80, 10, -1, Qt.LeftButton, Qt.NoModifier)
+            events.mouseRelease(text, 80, 10, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) {
+            check(page.selectionAnchorRow === test.rowA && page.selectedRow === test.rowB && page.selectionCount === 3,
+                  "a drag over three paragraphs selects them: " + page.selectionCount)
+            check(edgeOf(test.rowA) === "first" && edgeOf(rowOf("Plan")) === "middle" && edgeOf(test.rowB) === "last",
+                  "on one band")
+            check(Math.abs(list.contentY - test.contentBefore) < 1 && page.editingRow < 0, "nothing scrolled, nothing edited")
+            key(Qt.Key_C, Qt.ControlModifier)
+        }
+        if (window.at()) window.waitStep(Js.indexOf(clip(), "Trzy dni w Zakopanem") === 0 && Js.indexOf(clip(), "\n\n## Plan\n\nPierwszego dnia") > 0, "copied as Markdown with its blank lines")
+        // A document's paragraphs have no outline: Więcej offers no indents for them.
+        if (window.at()) tap(window.findShown(floatingTools(), "selectionMore"))
+        if (window.at()) window.waitStep(toolsMenuOpen(), "the floating tools' Więcej opens")
+        if (window.at()) {
+            const tools = floatingTools()
+            const indent = menuItem(toolsMenu(), "selectionIndent")
+            const outdent = menuItem(toolsMenu(), "selectionOutdent")
+            check(indent !== null && !indent.visible && outdent !== null && !outdent.visible,
+                  "paragraphs of a document: no Zwiększ / Zmniejsz wcięcie")
+            toolsMenu().close()
+        }
     }
 
     // ---- Touch --------------------------------------------------------------------------------------
     // (Qt Quick hands a finger's moves over with the next frame, not when they are sent: whatever a
     // gesture does is waited for, in slow sanitizer runs too.)
-    function touchSteps() {
-        const textAt = (row) => () => textOf(row())
-        return [
-            wait(() => page.loaded && rowOf("Przygotowanie") > 0, "the outline is open"),
-            () => center(rowOf("Zadzwonić")),
-            // ---- A long press on a block's text: the selection mode ----------------------------------------
-            ...longPress(textAt(() => rowOf("Zadzwonić")), (t) => t.width / 2, (t) => t.height / 2,
-                         () => editor.selectionMode && page.selectedRow === rowOf("Zadzwonić")),
-            wait(() => editor.selectionMode && editor.toolbarMode === "selection" && page.selectedRow === rowOf("Zadzwonić"),
-                 "a long press on text selects the block (the selection mode)"),
-            () => {
-                check(page.editingRow < 0, "nothing is edited")
-                check(shown(toolbar(), "toolbarSelectionTools") !== null, "the selection tools are docked")
-                check(window.findShown(delegateAt(rowOf("Zadzwonić")), "selectionGripStart") !== null, "with grips")
-                const text = textOf(rowOf("Położyć"))
-                fingerTap(text, text.width / 3, text.height / 2)
-            },
-            wait(() => page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Położyć")
-                       && page.editingRow < 0 && editor.selectionMode,
-                 "a tap on another block extends the selection (no editing)"),
-            () => tap(shown(toolbar(), "selectionCopy")),
-            wait(() => clip().indexOf("- [/] Zadzwonić do hydraulika") === 0 && clip().indexOf("- [ ] Położyć hydroizolację") > 0,
-                 "Kopiuj copies it"),
-            // ---- "Pojedynczo": taps pick single blocks ----------------------------------------------------
-            () => {
-                const pick = shown(toolbar(), "selectionPickMode")
-                check(pick !== null && !pick.checked, "the docked tools have Pojedynczo")
-                revealTool(pick)
-            },
-            () => tap(shown(toolbar(), "selectionPickMode")),
-            wait(() => editor.pickMode && shown(toolbar(), "selectionPickMode").checked, "a tap turns it on"),
-            () => {
-                check(window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") === null, "no grips while picking")
-                const text = textOf(rowOf("Zadzwonić"))
-                fingerTap(text, text.width / 3, text.height / 2)
-            },
-            wait(() => page.selectionPicked && page.editingRow < 0 && selected().indexOf(rowOf("Zadzwonić")) < 0
-                       && selected().indexOf(rowOf("Wywieźć")) >= 0,
-                 () => "a tap on a selected block leaves it out, the rest stays: " + JSON.stringify(selected())),
-            () => center(rowOf("Ekipa może")),
-            () => {
-                const text = textOf(rowOf("Ekipa może"))
-                fingerTap(text, text.width / 3, text.height / 2)
-            },
-            wait(() => !page.selectionContiguous && page.selectedRow === rowOf("Ekipa może")
-                       && selected().indexOf(rowOf("Ekipa może")) >= 0 && selected().indexOf(rowOf("Notatki z rozmowy")) < 0,
-                 () => "a tap on another block picks it, with a gap: " + JSON.stringify(selected())),
-            () => tap(shown(toolbar(), "selectionCopy")),
-            wait(() => clip().indexOf("- [ ] Wywieźć gruz") === 0 && clip().indexOf("\n- Prace\n\t- [ ] Skuć") > 0
-                       && clip().endsWith("\n- Ekipa może zacząć 20 października, cena ==do negocjacji=="),
-                 () => "Kopiuj copies the picked blocks: " + JSON.stringify(clip())),
-            () => tap(shown(toolbar(), "selectionPickMode")),
-            wait(() => !editor.pickMode, "a second tap turns Pojedynczo off"),
-            () => center(rowOf("Położyć")),
-            () => {
-                const text = textOf(rowOf("Położyć"))
-                fingerTap(text, text.width / 3, text.height / 2)
-            },
-            wait(() => !page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć")
-                       && endGrip() !== null,
-                 () => "then a tap moves the selection's end again, from the block picked last (the grips are back): "
-                       + page.selectionAnchorRow + "–" + page.selectedRow),
-            // ---- The end grip -------------------------------------------------------------------------------
-            // The band ends below Prace's children (a selected parent brings them along). Położyć in
-            // the middle keeps its grip and Kolejność, where the finger goes, clear of the view's
-            // bottom edge, where a finger held on a grip scrolls the list: centred on Zadzwonić, the
-            // grip sat there, the list scrolled after the first move and the row the finger ended on
-            // depended on how far it had scrolled before Qt Quick handed the next move over.
-            () => {
-                page.selectRange(rowOf("Zadzwonić"), rowOf("Położyć")) // as before, for the grip
-                center(rowOf("Położyć"))
-            },
-            wait(() => endGrip() !== null, "the band's end has a grip"),
-            () => {
-                test.contentBefore = list.contentY
-                const grip = endGrip()
-                events.touchEvent(grip).press(0, grip, grip.width / 2, grip.height / 2).commit()
-            },
-            wait(() => editor.dragSelecting, "a finger on the grip drags the selection's end"),
-            () => {
-                const text = textOf(rowOf("Kolejność"))
-                events.touchEvent(text).move(0, text, 30, text.height / 2).commit()
-            },
-            hold(() => page.selectedRow === rowOf("Kolejność")),
-            () => {
-                const text = textOf(rowOf("Kolejność"))
-                events.touchEvent(text).release(0, text, 30, text.height / 2).commit()
-            },
-            wait(() => !editor.dragSelecting, "the lifted finger ends the drag"),
-            () => check(page.selectedRow === rowOf("Kolejność") && page.selectionAnchorRow === rowOf("Zadzwonić")
-                        && Math.abs(list.contentY - test.contentBefore) < 1,
-                        "dragging the end grip moves the selection's end: " + page.selectionAnchorRow + "–" + page.selectedRow
-                        + ", scrolled " + (list.contentY - test.contentBefore)),
-            // ---- Usuń keeps the selection mode (the block before them selected); the toast's Cofnij, Ctrl+Z --
-            () => clearToasts(),
-            wait(() => toastUndo() === null, "no toast is left"),
-            () => {
-                test.textBefore = window.pageText()
-                revealTool(shown(toolbar(), "selectionDelete"))
-            },
-            () => tap(shown(toolbar(), "selectionDelete")),
-            wait(() => window.pageText().indexOf("Zadzwonić do hydraulika") < 0, "Usuń deletes the selected blocks"),
-            () => check(editor.selectionMode && editor.toolbarMode === "selection" && page.selectionCount === 1
-                        && page.editingRow < 0,
-                        "the block before them is selected, in the selection mode with its tools: " + page.selectionCount),
-            wait(() => toastUndo() !== null, "the toast offers Cofnij above the docked tools"),
-            () => tap(toastUndo()),
-            wait(() => window.pageText() === test.textBefore, "a tap on the toast's Cofnij brings them back"),
-            () => {
-                check(page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
-                      "selected again")
-                tap(shown(toolbar(), "selectionDelete"))
-            },
-            wait(() => window.pageText().indexOf("Zadzwonić do hydraulika") < 0, "Usuń deletes them again"),
-            () => key(Qt.Key_Z, Qt.ControlModifier),
-            wait(() => window.pageText() === test.textBefore, "Ctrl+Z brings them back"),
-            () => check(editor.selectionMode && page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
-                        "selected again, in the selection mode"),
-            // ---- Back leaves the selection mode -----------------------------------------------------------
-            () => key(Qt.Key_Back),
-            wait(() => !editor.selectionMode && page.selectionCount === 0 && editor.toolbarMode === "",
-                 "Back leaves the selection mode"),
-            // ---- A long press dragged to the view's edge: autoscroll ----------------------------------------
-            () => list.positionViewAtBeginning(),
-            () => { test.contentBefore = list.contentY },
-            ...longPress(textAt(() => rowOf("Zmierzyć")), (t) => t.width / 2, (t) => t.height / 2,
-                         () => editor.selectionMode && page.selectedRow === rowOf("Zmierzyć"), [
-                () => {
-                    check(editor.selectionMode, "the long press selected the block")
-                    const text = textOf(rowOf("Kupić płytki"))
-                    events.touchEvent(text).move(0, text, text.width / 2, text.height / 2).commit()
-                },
-                wait(() => page.selectedRow === rowOf("Kupić płytki") && Math.abs(list.contentY - test.contentBefore) < 1,
-                     () => "moving the finger without lifting it extends the selection (no scrolling): " + page.selectedRow
-                           + ", scrolled " + (list.contentY - test.contentBefore)),
-                () => events.touchEvent(list).move(0, list, list.width / 2, list.height - 6).commit(),
-                // Held at the edge until the list has scrolled (a frame at a time: slow in sanitizer builds).
-                hold(() => list.contentY > test.contentBefore + 100 && page.selectedRow > rowOf("Prace")),
-                () => {
-                    check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
-                    check(page.selectedRow > rowOf("Prace"), "the selection follows the finger: " + page.selectedRow)
-                    events.touchEvent(list).release(0, list, list.width / 2, list.height - 6).commit()
-                },
-            ], true),
-            wait(() => !editor.dragSelecting && editor.selectionMode && list.interactive
-                       && page.selectionAnchorRow === rowOf("Zmierzyć"),
-                 "the lifted finger leaves the selection in the selection mode"),
-            () => key(Qt.Key_Back),
-            // ---- The editing toolbar's "Zaznacz" ------------------------------------------------------------
-            () => {
-                test.rowA = rowOf("Skuć")
-                center(test.rowA)
-                editor.startEditing(test.rowA, -1)
-            },
-            wait(() => editor.toolbarMode === "block" && shown(toolbar(), "toolbarSelect") !== null, "the editing toolbar has Zaznacz"),
-            () => revealTool(shown(toolbar(), "toolbarSelect")),
-            () => tap(shown(toolbar(), "toolbarSelect")),
-            wait(() => editor.selectionMode && page.selectedRow === test.rowA && page.editingRow < 0,
-                 "Zaznacz selects the edited block (the selection mode)"),
-            () => {
-                const done = shown(toolbar(), "selectionDone")
-                check(done !== null && done.mapToItem(null, 0, 0).x < 60, "Gotowe is the bar's first tool")
-                tap(done)
-            },
-            wait(() => !editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode"),
-            // ---- A keyboard on a touch UI: Esc and Shift+↓ give the selection its tools -------------------
-            () => editor.startEditing(rowOf("Skuć"), -1),
-            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === rowOf("Skuć"),
-                 "Skuć is edited"),
-            () => editKey(Qt.Key_Escape),
-            wait(() => page.selectedRow === rowOf("Skuć") && page.editingRow < 0 && editor.selectionMode
-                       && editor.toolbarMode === "selection", "Esc selects the block with the selection's tools"),
-            () => key(Qt.Key_Down, Qt.ShiftModifier),
-            wait(() => page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
-                       && editor.toolbarMode === "selection", "Shift+↓ extends it, the tools stay"),
-            () => key(Qt.Key_Back),
-            // ---- The bullet's menu: Zaznacz -----------------------------------------------------------------
-            ...longPress(() => delegateAt(rowOf("Kolejność")), (d) => d.bulletX, (d) => d.firstLineCenter,
-                         () => editor.blockMenu !== null && editor.blockMenu.opened),
-            wait(() => editor.blockMenu !== null && editor.blockMenu.opened, "a bullet's long press opens the block menu"),
-            () => tap(window.menuItemNamed(editor.blockMenu, "blockMenuSelect")),
-            wait(() => editor.selectionMode && page.selectedRow === rowOf("Kolejność"), "its Zaznacz selects the block"),
-            () => key(Qt.Key_Back),
-        ]
+    function touchSteps(): void {
+        if (window.at()) window.waitStep(page.loaded && rowOf("Przygotowanie") > 0, "the outline is open")
+        if (window.at()) center(rowOf("Zadzwonić"))
+        // ---- A long press on a block's text: the selection mode ----------------------------------------
+        if (window.at()) pressText(rowOf("Zadzwonić"))
+        if (window.at()) window.waiting(editor.selectionMode && page.selectedRow === rowOf("Zadzwonić"))
+        if (window.at()) releaseText(rowOf("Zadzwonić"))
+        if (window.at()) window.waitStep(editor.selectionMode && editor.toolbarMode === "selection" && page.selectedRow === rowOf("Zadzwonić"), "a long press on text selects the block (the selection mode)")
+        if (window.at()) {
+            check(page.editingRow < 0, "nothing is edited")
+            check(shown(toolbar(), "toolbarSelectionTools") !== null, "the selection tools are docked")
+            check(window.findShown(delegateAt(rowOf("Zadzwonić")), "selectionGripStart") !== null, "with grips")
+            const text = textOf(rowOf("Położyć"))
+            fingerTap(text, text.width / 3, text.height / 2)
+        }
+        if (window.at()) window.waitStep(page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Położyć")
+                   && page.editingRow < 0 && editor.selectionMode, "a tap on another block extends the selection (no editing)")
+        if (window.at()) tap(shown(toolbar(), "selectionCopy"))
+        if (window.at()) window.waitStep(Js.indexOf(clip(), "- [/] Zadzwonić do hydraulika") === 0 && Js.indexOf(clip(), "- [ ] Położyć hydroizolację") > 0, "Kopiuj copies it")
+        // ---- "Pojedynczo": taps pick single blocks ----------------------------------------------------
+        if (window.at()) {
+            const pick = shown(toolbar(), "selectionPickMode") as T.AbstractButton
+            check(pick !== null && !pick.checked, "the docked tools have Pojedynczo")
+            revealTool(pick)
+        }
+        if (window.at()) tap(shown(toolbar(), "selectionPickMode"))
+        if (window.at()) window.waitStep(editor.pickMode && (shown(toolbar(), "selectionPickMode") as T.AbstractButton).checked, "a tap turns it on")
+        if (window.at()) {
+            check(window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") === null, "no grips while picking")
+            const text = textOf(rowOf("Zadzwonić"))
+            fingerTap(text, text.width / 3, text.height / 2)
+        }
+        if (window.at() && !window.waiting(page.selectionPicked && page.editingRow < 0 && selected().indexOf(rowOf("Zadzwonić")) < 0
+                   && selected().indexOf(rowOf("Wywieźć")) >= 0))
+            window.checkWait("a tap on a selected block leaves it out, the rest stays: " + selectedText())
+        if (window.at()) center(rowOf("Ekipa może"))
+        if (window.at()) {
+            const text = textOf(rowOf("Ekipa może"))
+            fingerTap(text, text.width / 3, text.height / 2)
+        }
+        if (window.at() && !window.waiting(!page.selectionContiguous && page.selectedRow === rowOf("Ekipa może")
+                   && selected().indexOf(rowOf("Ekipa może")) >= 0 && selected().indexOf(rowOf("Notatki z rozmowy")) < 0))
+            window.checkWait("a tap on another block picks it, with a gap: " + selectedText())
+        if (window.at()) tap(shown(toolbar(), "selectionCopy"))
+        if (window.at() && !window.waiting(pickedCopied()))
+            window.checkWait("Kopiuj copies the picked blocks: " + Js.stringify(clip()))
+        if (window.at()) tap(shown(toolbar(), "selectionPickMode"))
+        if (window.at()) window.waitStep(!editor.pickMode, "a second tap turns Pojedynczo off")
+        if (window.at()) center(rowOf("Położyć"))
+        if (window.at()) {
+            const text = textOf(rowOf("Położyć"))
+            fingerTap(text, text.width / 3, text.height / 2)
+        }
+        if (window.at() && !window.waiting(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć")
+                   && endGrip() !== null))
+            window.checkWait("then a tap moves the selection's end again, from the block picked last (the grips are back): "
+                   + page.selectionAnchorRow + "–" + page.selectedRow)
+        // ---- The end grip -------------------------------------------------------------------------------
+        // The band ends below Prace's children (a selected parent brings them along). Położyć in
+        // the middle keeps its grip and Kolejność, where the finger goes, clear of the view's
+        // bottom edge, where a finger held on a grip scrolls the list: centred on Zadzwonić, the
+        // grip sat there, the list scrolled after the first move and the row the finger ended on
+        // depended on how far it had scrolled before Qt Quick handed the next move over.
+        if (window.at()) {
+            page.selectRange(rowOf("Zadzwonić"), rowOf("Położyć")) // as before, for the grip
+            center(rowOf("Położyć"))
+        }
+        if (window.at()) window.waitStep(endGrip() !== null, "the band's end has a grip")
+        if (window.at()) {
+            test.contentBefore = list.contentY
+            const grip = endGrip()
+            events.touchPress(grip, grip.width / 2, grip.height / 2)
+        }
+        if (window.at()) window.waitStep(editor.dragSelecting, "a finger on the grip drags the selection's end")
+        if (window.at()) {
+            const text = textOf(rowOf("Kolejność"))
+            events.touchMove(text, 30, text.height / 2)
+        }
+        if (window.at()) window.waiting(page.selectedRow === rowOf("Kolejność"))
+        if (window.at()) {
+            const text = textOf(rowOf("Kolejność"))
+            events.touchRelease(text, 30, text.height / 2)
+        }
+        if (window.at()) window.waitStep(!editor.dragSelecting, "the lifted finger ends the drag")
+        if (window.at()) check(page.selectedRow === rowOf("Kolejność") && page.selectionAnchorRow === rowOf("Zadzwonić")
+                    && Math.abs(list.contentY - test.contentBefore) < 1,
+                    "dragging the end grip moves the selection's end: " + page.selectionAnchorRow + "–" + page.selectedRow
+                    + ", scrolled " + (list.contentY - test.contentBefore))
+        // ---- Usuń keeps the selection mode (the block before them selected); the toast's Cofnij, Ctrl+Z --
+        if (window.at()) clearToasts()
+        if (window.at()) window.waitStep(toastUndo() === null, "no toast is left")
+        if (window.at()) {
+            test.textBefore = window.pageText()
+            revealTool(shown(toolbar(), "selectionDelete"))
+        }
+        if (window.at()) tap(shown(toolbar(), "selectionDelete"))
+        if (window.at()) window.waitStep(Js.indexOf(window.pageText(), "Zadzwonić do hydraulika") < 0, "Usuń deletes the selected blocks")
+        if (window.at()) check(editor.selectionMode && editor.toolbarMode === "selection" && page.selectionCount === 1
+                    && page.editingRow < 0,
+                    "the block before them is selected, in the selection mode with its tools: " + page.selectionCount)
+        if (window.at()) window.waitStep(toastUndo() !== null, "the toast offers Cofnij above the docked tools")
+        if (window.at()) tap(toastUndo())
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "a tap on the toast's Cofnij brings them back")
+        if (window.at()) {
+            check(page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
+                  "selected again")
+            tap(shown(toolbar(), "selectionDelete"))
+        }
+        if (window.at()) window.waitStep(Js.indexOf(window.pageText(), "Zadzwonić do hydraulika") < 0, "Usuń deletes them again")
+        if (window.at()) key(Qt.Key_Z, Qt.ControlModifier)
+        if (window.at()) window.waitStep(window.pageText() === test.textBefore, "Ctrl+Z brings them back")
+        if (window.at()) check(editor.selectionMode && page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
+                    "selected again, in the selection mode")
+        // ---- Back leaves the selection mode -----------------------------------------------------------
+        if (window.at()) key(Qt.Key_Back, 0)
+        if (window.at()) window.waitStep(!editor.selectionMode && page.selectionCount === 0 && editor.toolbarMode === "", "Back leaves the selection mode")
+        // ---- A long press dragged to the view's edge: autoscroll ----------------------------------------
+        if (window.at()) list.positionViewAtBeginning()
+        if (window.at()) { test.contentBefore = list.contentY }
+        if (window.at()) pressText(rowOf("Zmierzyć"))
+        if (window.at()) window.waiting(editor.selectionMode && page.selectedRow === rowOf("Zmierzyć"))
+        if (window.at()) {
+                check(editor.selectionMode, "the long press selected the block")
+                const text = textOf(rowOf("Kupić płytki"))
+                events.touchMove(text, text.width / 2, text.height / 2)
+            }
+        if (window.at() && !window.waiting(page.selectedRow === rowOf("Kupić płytki") && Math.abs(list.contentY - test.contentBefore) < 1))
+            window.checkWait("moving the finger without lifting it extends the selection (no scrolling): " + page.selectedRow
+                       + ", scrolled " + (list.contentY - test.contentBefore))
+        if (window.at()) events.touchMove(list, list.width / 2, list.height - 6)
+        // Held at the edge until the list has scrolled (a frame at a time: slow in sanitizer builds).
+        if (window.at()) window.waiting(list.contentY > test.contentBefore + 100 && page.selectedRow > rowOf("Prace"))
+        if (window.at()) {
+                check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
+                check(page.selectedRow > rowOf("Prace"), "the selection follows the finger: " + page.selectedRow)
+                events.touchRelease(list, list.width / 2, list.height - 6)
+            }
+        if (window.at()) window.waitStep(!editor.dragSelecting && editor.selectionMode && list.interactive
+                   && page.selectionAnchorRow === rowOf("Zmierzyć"), "the lifted finger leaves the selection in the selection mode")
+        if (window.at()) key(Qt.Key_Back, 0)
+        // ---- The editing toolbar's "Zaznacz" ------------------------------------------------------------
+        if (window.at()) {
+            test.rowA = rowOf("Skuć")
+            center(test.rowA)
+            editor.startEditing(test.rowA, -1)
+        }
+        if (window.at()) window.waitStep(editor.toolbarMode === "block" && shown(toolbar(), "toolbarSelect") !== null, "the editing toolbar has Zaznacz")
+        if (window.at()) revealTool(shown(toolbar(), "toolbarSelect"))
+        if (window.at()) tap(shown(toolbar(), "toolbarSelect"))
+        if (window.at()) window.waitStep(editor.selectionMode && page.selectedRow === test.rowA && page.editingRow < 0, "Zaznacz selects the edited block (the selection mode)")
+        if (window.at()) {
+            const done = shown(toolbar(), "selectionDone")
+            check(done !== null && windowX(done) < 60, "Gotowe is the bar's first tool")
+            tap(done)
+        }
+        if (window.at()) window.waitStep(!editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode")
+        // ---- A keyboard on a touch UI: Esc and Shift+↓ give the selection its tools -------------------
+        if (window.at()) editor.startEditing(rowOf("Skuć"), -1)
+        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === rowOf("Skuć"), "Skuć is edited")
+        if (window.at()) editKey(Qt.Key_Escape, 0)
+        if (window.at()) window.waitStep(page.selectedRow === rowOf("Skuć") && page.editingRow < 0 && editor.selectionMode
+                   && editor.toolbarMode === "selection", "Esc selects the block with the selection's tools")
+        if (window.at()) key(Qt.Key_Down, Qt.ShiftModifier)
+        if (window.at()) window.waitStep(page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
+                   && editor.toolbarMode === "selection", "Shift+↓ extends it, the tools stay")
+        if (window.at()) key(Qt.Key_Back, 0)
+        // ---- The bullet's menu: Zaznacz -----------------------------------------------------------------
+        if (window.at()) pressBullet(rowOf("Kolejność"))
+        if (window.at()) window.waiting(window.blockMenuOpen())
+        if (window.at()) releaseBullet(rowOf("Kolejność"))
+        if (window.at()) window.waitStep(window.blockMenuOpen(), "a bullet's long press opens the block menu")
+        if (window.at()) tap(menuItem(blockMenu(), "blockMenuSelect"))
+        if (window.at()) window.waitStep(editor.selectionMode && page.selectedRow === rowOf("Kolejność"), "its Zaznacz selects the block")
+        if (window.at()) key(Qt.Key_Back, 0)
     }
 }
