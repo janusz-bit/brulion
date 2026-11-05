@@ -37,6 +37,12 @@ Jeśli blok ma też regułę `🔁` (zobacz [[Zadania|Zadania]]), przypomnienie 
 - Na Windows *Ustawienia → Aplikacja → Uruchamiaj po zalogowaniu* uruchamia Brulion ukryty w zasobniku zaraz po zalogowaniu, żeby przypomnienia dzwoniły od początku dnia. Instalator proponuje to samo.
 - Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku, gdzie pokazuje je baner z przypomnieniami do obsłużenia: **Otwórz**, **Drzemka**, przy zadaniu **Zrobione** i odrzucenie.
 
+## Przypomnienia z innych urządzeń
+Przypomnienie dopisane na komputerze (albo przez agenta AI z `brulion-cli`) dociera do telefonu razem z notatką, przez Syncthing albo Nextcloud. Na Androidzie zadzwoni także wtedy, gdy Brulion jest zamknięty: co jakiś czas telefon sam sprawdza notatki w tle — przy Nextcloud najpierw je synchronizuje — i nastawia to, co znalazł. Nowe przypomnienia dochodzą, a usunięte albo przesunięte na komputerze znikają albo się przesuwają.
+- Jak często, wybierzesz w *Ustawienia → Przypomnienia → Sprawdzaj notatki w tle*: co 15 minut, co 30 minut (domyślnie), co godzinę albo wcale. Pod tym ustawieniem widać, kiedy było ostatnie sprawdzenie.
+- Android może odłożyć sprawdzanie, gdy telefon długo leży nieużywany (nawet o godzinę lub więcej), więc przypomnienie na „za 10 minut” może nie zdążyć, a to na jutro rano zdąży. Pomaga ustawienie baterii Brulionu na „Bez ograniczeń”.
+- Gdy notatnika nie da się przeczytać (np. karta pamięci jest odłączona), nastawione przypomnienia zostają bez zmian.
+
 ## Który notatnik przypomina
 Przypomnienia i alarmy pochodzą z otwartego notatnika. Gdy przełączysz się na inny swój notatnik, Brulion odlicza już tylko jego przypomnienia, a poprzedniego czekają, aż do niego wrócisz:
 - na Androidzie alarmy poprzedniego notatnika zostają wyłączone, a te, których czas minie, zanim wrócisz, przepadają — nie zadzwonią ani nie pojawią się później;

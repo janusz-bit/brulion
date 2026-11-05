@@ -7,6 +7,19 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.10.0 — 5 listopada 2026
+
+**Nowe**
+- **Przypomnienia z innych urządzeń na Androidzie** — przypomnienie dopisane na komputerze (także przez agenta AI z `brulion-cli`) zadzwoni na telefonie, choć Brulion jest zamknięty. Co jakiś czas Android sam sprawdza w tle ostatnio otwarty notatnik — przy Nextcloud najpierw go synchronizuje — i nastawia to, co znalazł: nowe przypomnienia dochodzą, a usunięte i przesunięte znikają albo się przesuwają. Jak często (15 min, 30 min, godzina albo wcale), wybierzesz w **Ustawienia → Przypomnienia → Sprawdzaj notatki w tle**; pod ustawieniem widać ostatnie sprawdzenie. Zobacz [[Przypomnienia i alarmy#Przypomnienia z innych urządzeń|Przypomnienia z innych urządzeń]].
+- **Pasek widoków przy lewej krawędzi** — na górze notatnik (jego pierwsza litera przełącza notatniki), pod nim ikony widoków z dymkami, na dole stan synchronizacji i Ustawienia. Zostaje, gdy schowasz panel stron; na telefonie to lewa kolumna menu. Kolejność sekcji panelu stron (Ulubione, Ostatnie, Strony) zmienisz w **Ustawienia → Wygląd → Układ**. Zobacz [[Pierwsze kroki#Pasek boczny|Pasek boczny]].
+- **Szukaj albo wpisz polecenie** — pole na górnym pasku otwiera szybkie przejście do strony; `>` na początku przełącza na polecenia, a ostatnia pozycja listy szuka słów w treści notatek. Zobacz [[Pierwsze kroki#Szukanie i przechodzenie|Szukanie i przechodzenie]].
+- **Nowe menu Więcej** — akcje strony jako ikony (Ulubione, Nazwa, Przenieś, Historia), przełącznik **Tryb** (Dokument, Konspekt, Źródło), na komputerze **Otwórz w** (nowa karta, okno, panel boczny, podział), a widoki notatnika w podmenu **Notatnik**.
+- **Repozytorium F-Droid** — Brulion ma własne repozytorium F-Droid (https://janusz-bit.github.io/brulion/): dodajesz je raz w F-Droid, a nowe wersje przychodzą same.
+- **Wersja w przeglądarce w jednym pliku** — plik `brulion-web-….html` z wydania otwierasz z dysku, bez serwera i bez internetu; notatki zostają w przeglądarce także po pobraniu nowszej wersji pliku.
+
+**Zmiany**
+- Synchronizacja z Nextcloud czeka chwilę, gdy ten sam notatnik synchronizuje właśnie sprawdzanie w tle na Androidzie, i próbuje ponownie sama.
+
 ## 0.9.1 — 5 listopada 2026
 
 **Uwaga**
