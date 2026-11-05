@@ -4,7 +4,7 @@ brulion: document
 ---
 # Import i eksport
 
-Widok **Import i eksport** otwierasz z menu **Więcej** (⋮) albo z palety poleceń. Import jest też na stronie startowej pustego notatnika („Importuj notatki”).
+Widok **Import i eksport** otwierasz z menu **Więcej** → **Notatnik** albo z palety poleceń. Import jest też na stronie startowej pustego notatnika („Importuj notatki”).
 
 ## Import
 Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Microsoft To Do, Joplin, Simplenote, Roam, Trilium, Bear, pliki Markdown, TXT i HTML oraz kalendarze iCalendar. Możesz wskazać pliki, archiwum ZIP albo cały folder.

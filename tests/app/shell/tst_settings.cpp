@@ -103,6 +103,7 @@ private Q_SLOTS:
         QCOMPARE(s.editorLineSpacing(), u"normal"_s);
         QCOMPARE(s.density(), u"comfortable"_s);
         QCOMPARE(s.sidebarHidden(), QStringList());
+        QCOMPARE(s.sidebarSections(), (QStringList{u"favorites"_s, u"recent"_s, u"pages"_s}));
         QCOMPARE(s.bottomNavTabs(), (QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s}));
         QVERIFY(s.captureButtonShown());
         QVERIFY(!s.taskStatusHistory()); // docs/SYNTAX.md §5: off by default
@@ -242,6 +243,15 @@ private Q_SLOTS:
         QTest::newRow("sidebar sections") << "sidebarHidden" << list({u"recent", u"favorites", u"pages"})
                                           << list({u"recent", u"favorites"});
         QTest::newRow("sidebar empty") << "sidebarHidden" << list({}) << list({});
+        QTest::newRow("sections empty") << "sidebarSections" << list({})
+                                        << list({u"favorites", u"recent", u"pages"});
+        QTest::newRow("sections reordered") << "sidebarSections" << list({u"pages", u"recent", u"favorites"})
+                                            << list({u"pages", u"recent", u"favorites"});
+        QTest::newRow("sections partial") << "sidebarSections" << list({u"pages"})
+                                          << list({u"pages", u"favorites", u"recent"});
+        QTest::newRow("sections dedupe unknown") << "sidebarSections"
+                                                 << list({u"recent", u"ulubione", u"recent", u"graph", u"pages"})
+                                                 << list({u"recent", u"pages", u"favorites"});
         QTest::newRow("tabs empty") << "bottomNavTabs" << list({})
                                     << list({u"journals", u"calendar", u"search", u"tasks"});
         QTest::newRow("tabs filled") << "bottomNavTabs" << list({u"tags", u"tags", u"menu"})
@@ -279,6 +289,7 @@ private Q_SLOTS:
                                                {u"editorLineSpacing"_s, u"editor/lineSpacing"_s},
                                                {u"density"_s, u"ui/density"_s},
                                                {u"sidebarHidden"_s, u"ui/sidebar/hidden"_s},
+                                               {u"sidebarSections"_s, u"ui/sidebar/sections"_s},
                                                {u"bottomNavTabs"_s, u"ui/bottomNav/tabs"_s}};
             QVERIFY(keys.contains(property));
             raw.setValue(keys.value(property), input);
@@ -388,6 +399,21 @@ private Q_SLOTS:
         QCOMPARE(s.sidebarHidden(), QStringList{u"recent"_s});
         QCOMPARE(hidden.size(), 3);
 
+        // The page sections move one step at a time; past either end or unknown: nothing.
+        QSignalSpy sections(&s, &AppSettings::sidebarSectionsChanged);
+        s.moveSidebarSection(u"pages"_s, -1);
+        QCOMPARE(s.sidebarSections(), (QStringList{u"favorites"_s, u"pages"_s, u"recent"_s}));
+        s.moveSidebarSection(u"pages"_s, -1);
+        QCOMPARE(s.sidebarSections(), (QStringList{u"pages"_s, u"favorites"_s, u"recent"_s}));
+        s.moveSidebarSection(u"pages"_s, -1);  // first already
+        s.moveSidebarSection(u"recent"_s, 1);  // last already
+        s.moveSidebarSection(u"ostatnie"_s, 1);
+        s.moveSidebarSection(u"favorites"_s, 0);
+        QCOMPARE(s.sidebarSections(), (QStringList{u"pages"_s, u"favorites"_s, u"recent"_s}));
+        s.moveSidebarSection(u"favorites"_s, 5); // one step, whatever the size
+        QCOMPARE(s.sidebarSections(), (QStringList{u"pages"_s, u"recent"_s, u"favorites"_s}));
+        QCOMPARE(sections.size(), 3);
+
         // A slot takes a view; one already in another slot swaps places.
         QSignalSpy tabs(&s, &AppSettings::bottomNavTabsChanged);
         s.setBottomNavTab(3, u"graph"_s);
@@ -433,6 +459,7 @@ private Q_SLOTS:
         QCOMPARE(s.editorFontSize(), 16);
         QVERIFY(!s.captureButtonShown());
         QCOMPARE(s.sidebarHidden(), QStringList{u"recent"_s});
+        QCOMPARE(s.sidebarSections(), (QStringList{u"pages"_s, u"recent"_s, u"favorites"_s}));
         QCOMPARE(accent.size(), 1);
         QCOMPARE(fonts.size(), 3);
     }

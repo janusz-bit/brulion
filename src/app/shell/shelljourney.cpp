@@ -169,7 +169,8 @@ private:
             waitFor([d] { return !d->property("visible").toBool(); }, 1500);
         }
     }
-    /// Open a view the way a user does: the sidebar (wide), the bottom bar or the drawer (phone).
+    /// Open a view the way a user does: the sidebar's rail (wide), the bottom bar or the drawer
+    /// (phone).
     void go(const QString &viewName, const char *sidebarText, const char *bottomText = nullptr)
     {
         closePopups();
@@ -183,11 +184,11 @@ private:
                     m_drawerShot = true;
                     shot(u"drawer"_s, 500);
                 }
-                clicked = clickText(ui("ShellSidebar", sidebarText), "ShellSidebar");
+                clicked = clickText(ui("ShellRail", sidebarText), "ShellRail");
             }
         }
         if (!clicked && !narrow() && sidebarText)
-            clicked = clickText(ui("ShellSidebar", sidebarText), "ShellSidebar");
+            clicked = clickText(ui("ShellRail", sidebarText), "ShellRail");
         if (!clicked) {
             fallback(u"navigate to "_s + viewName);
             m_app->navigate({ { u"view"_s, viewName } });
@@ -197,8 +198,9 @@ private:
         closePopups();
         settle(300);
     }
-    /// A top bar "More" menu item (`shotName`: a screenshot of the open menu first).
-    bool moreMenu(const char *itemText, const QString &shotName = QString())
+    /// A top bar "More" menu item (`shotName`: a screenshot of the open menu first), in its
+    /// submenu `submenu` if given ("Notebook").
+    bool moreMenu(const char *itemText, const QString &shotName = QString(), const char *submenu = nullptr)
     {
         closePopups();
         if (!clickText(ui("ShellTopBar", "More"), "ShellTopBar"))
@@ -206,6 +208,14 @@ private:
         settle(300);
         if (!shotName.isEmpty())
             shot(shotName, 300);
+        if (submenu) {
+            if (!clickText(ui("ShellTopBar", submenu))) {
+                key(Qt::Key_Escape);
+                settle(200);
+                return false;
+            }
+            settle(300);
+        }
         if (clickText(ui("ShellTopBar", itemText)))
             return true;
         key(Qt::Key_Escape); // close the menu again
@@ -490,10 +500,16 @@ void Journey::importExport()
 {
     closePopups();
     bool opened = false;
-    if (!narrow())
-        opened = clickText(ui("ShellTopBar", "Command palette"), "ShellTopBar");
-    else
+    if (!narrow()) {
+        // The top bar's search field, then "> ": the commands.
+        if (clickText(ui("ShellTopBar", "Search or type a command…"), "ShellTopBar")) {
+            settle(300);
+            type(u">"_s);
+            opened = true;
+        }
+    } else {
         opened = moreMenu("Command palette");
+    }
     if (opened && waitFor([this] {
             QObject *palette = m_window->findChild<QObject *>(u"shellPalette"_s);
             return palette && palette->property("opened").toBool();
@@ -537,7 +553,7 @@ void Journey::history()
         m_app->openJournal(m_app->today());
     }
     settle(600);
-    if (!moreMenu("Page history") || !waitFor([this] { return view() == u"history"; })) {
+    if (!moreMenu("History") || !waitFor([this] { return view() == u"history"; })) {
         fallback(u"open the page history (top bar menu)"_s);
         m_app->navigate({ { u"view"_s, u"history"_s }, { u"path"_s, todayPath() } });
     }
@@ -649,7 +665,7 @@ void Journey::emptyNotebook()
     }
     type(u"żółw"_s);
     shot(u"empty-search"_s, 900);
-    if (!moreMenu("Trash") || !waitFor([this] { return view() == u"trash"; })) {
+    if (!moreMenu("Trash", QString(), "Notebook") || !waitFor([this] { return view() == u"trash"; })) {
         fallback(u"open the trash (top bar menu)"_s);
         m_app->navigate({ { u"view"_s, u"trash"_s } });
     }

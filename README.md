@@ -235,8 +235,8 @@
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na
   żywych przykładach — do klikania, edytowania i psucia.
 * **Dokumentacja w środku.** Pełny poradnik po polsku to osobny notatnik „Dokumentacja
-  Brulionu” (na komputerze i Androidzie): przycisk „Przełącz notatnik” obok nazwy notatnika
-  albo `Ctrl+Shift+B` i z powrotem. Aktualizuje się razem z aplikacją, a Twoje zmiany w nim
+  Brulionu” (na komputerze i Androidzie): przycisk „Przełącz notatnik” (pierwsza litera nazwy
+  notatnika na górze paska ikon) albo `Ctrl+Shift+B` i z powrotem. Aktualizuje się razem z aplikacją, a Twoje zmiany w nim
   zostają; w przeglądarce te same strony są w repozytorium
   ([src/app/shell/guide](src/app/shell/guide)).
 

@@ -146,6 +146,10 @@ FocusScope {
     }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
     readonly property bool sourceMode: page.sourceMode && !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+    /// The note's mode, "document" | "outline" (the top bar's menu shows it); "" while loading and
+    /// for a picture, a PDF or another file.
+    readonly property string noteMode: !page.loaded || root.pictureRoute || root.pdfRoute || root.fileRoute ? ""
+                                       : page.documentMode ? "document" : "outline"
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     /// The tab this page's context panel showed last in the side panel ("": never shown).
     property string sidePanelTab: ""

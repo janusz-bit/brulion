@@ -62,6 +62,9 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString density READ density WRITE setDensity NOTIFY densityChanged FINAL)
     /// Navigation entries and sections hidden in the sidebar (ids of SidebarItems).
     Q_PROPERTY(QStringList sidebarHidden READ sidebarHidden WRITE setSidebarHidden NOTIFY sidebarHiddenChanged FINAL)
+    /// The order of the sidebar's page sections: all of SidebarSections, each once.
+    Q_PROPERTY(QStringList sidebarSections READ sidebarSections WRITE setSidebarSections NOTIFY
+                       sidebarSectionsChanged FINAL)
     /// The phone's bottom navigation: exactly four views of BottomNavViews (the menu comes last).
     Q_PROPERTY(QStringList bottomNavTabs READ bottomNavTabs WRITE setBottomNavTabs NOTIFY bottomNavTabsChanged FINAL)
     /// Quick capture's "+ Notatka" item on the phone's bottom navigation (before Menu).
@@ -182,6 +185,8 @@ public:
 
     /// Ids for sidebarHidden: the navigation entries, then the sections.
     static QStringList sidebarItems();
+    /// The sidebar's page sections in their default order: Ulubione, Ostatnie, Wszystkie strony.
+    static QStringList sidebarSectionIds();
     /// Views the bottom navigation can offer, and its default four.
     static QStringList bottomNavViews();
     static QStringList defaultBottomNavTabs();
@@ -205,6 +210,10 @@ public:
     void setSidebarHidden(const QStringList &ids);
     /// Show or hide one sidebar entry or section.
     Q_INVOKABLE void setSidebarItemShown(const QString &id, bool shown);
+    QStringList sidebarSections() const;
+    void setSidebarSections(const QStringList &ids);
+    /// Move one page section up (`delta` -1) or down (+1) in the sidebar.
+    Q_INVOKABLE void moveSidebarSection(const QString &id, int delta);
     QStringList bottomNavTabs() const;
     void setBottomNavTabs(const QStringList &views);
     /// Put `view` into slot `index` (0 … 3) of the bottom navigation; a view already in another
@@ -359,6 +368,7 @@ Q_SIGNALS:
     void fontFamiliesChanged();
     void densityChanged();
     void sidebarHiddenChanged();
+    void sidebarSectionsChanged();
     void bottomNavTabsChanged();
     void captureButtonShownChanged();
     void editorLineSpacingChanged();

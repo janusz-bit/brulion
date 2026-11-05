@@ -382,6 +382,23 @@ private:
         if (!more)
             return;
         tap(more);
+        // In the menu's "Notebook" submenu.
+        const QString notebookTitle = QCoreApplication::translate("ShellTopBar", "Notebook");
+        QQuickItem *notebook = nullptr;
+        waitFor([&] {
+            const QList<QQuickItem *> all = m_window->findChildren<QQuickItem *>();
+            for (QQuickItem *i : all) {
+                if (i->inherits("QQuickMenuItem") && i->property("text").toString() == notebookTitle && shown(i)) {
+                    notebook = i;
+                    return true;
+                }
+            }
+            return false;
+        });
+        check(notebook != nullptr, "the “More” menu has the “Notebook” submenu");
+        if (!notebook)
+            return;
+        tap(notebook);
         QQuickItem *entry = item("menuImportNotes");
         check(waitFor([entry] { return shown(entry); }), "the “More” menu lists “Import notes”");
         if (!shown(entry))

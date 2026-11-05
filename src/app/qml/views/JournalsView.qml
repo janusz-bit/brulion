@@ -77,6 +77,10 @@ FocusScope {
     }
     /// One day as a page in source mode (the stream opens a day as a page for that).
     readonly property bool sourceMode: single && pageView !== null && pageView.sourceMode
+    /// The mode of the day being written in ("document" | "outline"; "" with none): the one the
+    /// "toggleNoteMode" action switches.
+    readonly property string noteMode: single ? (pageView !== null ? pageView.noteMode : "")
+                                       : activeDay !== null ? (activeDay.controller.documentMode ? "document" : "outline") : ""
     readonly property Component sidePanel: inSidePanel ? null : single ? (pageView ? pageView.sidePanel : null) : journalsPanel
 
     focus: true

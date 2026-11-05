@@ -6649,6 +6649,84 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
               "a view hidden in the sidebar stays in the command palette");
     }
 
+    // The page sections' order (Układ → Kolejność sekcji): "Strony" moved up twice goes first,
+    // Ulubione (a page starred) then come after the tree, in the list's footer.
+    {
+        const QStringList defaults{u"favorites"_s, u"recent"_s, u"pages"_s};
+        check(settings->sidebarSections() == defaults, "the sidebar's sections start as Ulubione, Ostatnie, Strony");
+        check(activate(shownItem(u"sidebarSectionUp_pages"_s))
+                      && waitFor([&] {
+                             return settings->sidebarSections()
+                                    == QStringList{u"favorites"_s, u"pages"_s, u"recent"_s};
+                         }),
+              "a section's “up” button moves it one place up (saved)");
+        activate(shownItem(u"sidebarSectionUp_pages"_s));
+        check(waitFor([&] {
+                  return settings->sidebarSections() == QStringList{u"pages"_s, u"favorites"_s, u"recent"_s};
+              }),
+              "and once more to the top");
+        QQuickItem *up = shownItem(u"sidebarSectionUp_pages"_s);
+        check(up && !up->isEnabled(), "the first section cannot move further up");
+        Workspace *ws = app->workspace();
+        const QString starred = u"Przepisy.md"_s;
+        ws->setFavorite(starred, true);
+        QObject *sectionDrawer = window->findChild<QObject *>(u"shellDrawer"_s);
+        if (narrow && sectionDrawer)
+            QMetaObject::invokeMethod(sectionDrawer, "open");
+        const auto sceneY = [&](const QString &name) {
+            QQuickItem *item = shownItem(name);
+            return item ? item->mapToScene(QPointF(0, 0)).y() : -1.0;
+        };
+        check(waitFor([&] {
+                  const qreal favorites = sceneY(u"sidebarFavoritesHeader"_s);
+                  const qreal pages = sceneY(u"sidebarPagesHeader"_s);
+                  return favorites >= 0 && pages >= 0 && favorites > pages;
+              }),
+              "with Strony first the favourites come after the folder tree");
+        ws->setFavorite(starred, false);
+        settings->setSidebarSections({});
+        check(waitFor([&] {
+                  return settings->sidebarSections() == defaults
+                         && !shownNamed(window->contentItem(), u"sidebarFavoritesHeader"_s);
+              }),
+              "the default order comes back");
+        if (narrow && sectionDrawer) {
+            QMetaObject::invokeMethod(sectionDrawer, "close");
+            waitFor([sectionDrawer] { return !sectionDrawer->property("visible").toBool(); });
+        }
+    }
+
+    // Wide windows: the sidebar's button hides the page panel, the rail of views stays; the top
+    // bar's search field opens the page switcher, ">" in it the command palette.
+    if (!narrow) {
+        QQuickItem *shellItem =
+                findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+        if (shellItem)
+            QMetaObject::invokeMethod(shellItem, "toggleSidebar");
+        check(shellItem && waitFor([&] { return !shownNamed(window->contentItem(), u"sidebarTree"_s); })
+                      && shownItem(u"shellRail"_s) && shownItem(u"sidebarNav_calendar"_s),
+              "with the page panel hidden the rail of views stays");
+        if (shellItem)
+            QMetaObject::invokeMethod(shellItem, "toggleSidebar");
+        check(waitFor([&] { return shownNamed(window->contentItem(), u"sidebarTree"_s) != nullptr; }),
+              "the page panel comes back");
+
+        QObject *switcher = window->findChild<QObject *>(u"shellSwitcher"_s);
+        QObject *palette = window->findChild<QObject *>(u"shellPalette"_s);
+        check(activate(shownItem(u"topBarSearchField"_s)) && switcher
+                      && waitFor([&] { return switcher->property("opened").toBool(); }),
+              "the top bar's search field opens the page switcher");
+        sendKey(window, Qt::Key_Greater, Qt::ShiftModifier, u">"_s);
+        check(palette && switcher && waitFor([&] {
+                  return palette->property("opened").toBool() && !switcher->property("visible").toBool();
+              }),
+              "“>” in it turns to the command palette");
+        if (palette)
+            QMetaObject::invokeMethod(palette, "close");
+        if (palette)
+            waitFor([palette] { return !palette->property("visible").toBool(); });
+    }
+
     // The bottom navigation's last slot: Graf instead of Zadania.
     check(activate(shownItem(u"bottomNavSlot_3"_s)), "the bottom navigation's slots are listed");
     check(activate(shownItem(u"bottomNavChoice_graph"_s)), "a slot's menu lists the views");
@@ -7417,6 +7495,68 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 check(waitFor([&] { return page->property("mode").toString() == u"document"; })
                               && app->workspace()->readFile(guide) == before,
                       "the \"Toggle note mode\" command switches back");
+
+                // The top bar's More menu: its Mode switch shows the note's mode and changes it —
+                // Konspekt (only the mode written), Źródło (the Markdown source), Dokument again.
+                const QString more = QCoreApplication::translate("ShellTopBar", "More");
+                const auto openMore = [&] {
+                    closeMenus(window);
+                    QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
+                        return isA(item, "BIconButton") && item->property("label").toString() == more;
+                    });
+                    if (button)
+                        tapOrClick(window, pointIn(button), touch);
+                    QQuickItem *mode = nullptr;
+                    waitFor([&] {
+                        mode = findShown(window->contentItem(),
+                                         [](QQuickItem *item) { return item->objectName() == u"menuNoteMode"; });
+                        return mode != nullptr;
+                    });
+                    settle(150); // the menu's opening transition
+                    return mode;
+                };
+                const auto segment = [&](QQuickItem *mode, const char *text) {
+                    const QString wanted = QCoreApplication::translate("ShellTopBar", text);
+                    return mode ? findShown(mode,
+                                            [&](QQuickItem *item) {
+                                                return item->inherits("QQuickAbstractButton")
+                                                       && item->property("text").toString() == wanted;
+                                            })
+                                : nullptr;
+                };
+                QQuickItem *mode = openMore();
+                QQuickItem *segmented = mode ? findShown(mode, [](QQuickItem *item) { return isA(item, "BSegmented"); })
+                                             : nullptr;
+                check(segmented && segmented->property("currentValue").toString() == u"document",
+                      "the More menu's Mode switch shows the document");
+                if (QQuickItem *outline = segment(mode, "Outline")) {
+                    tapOrClick(window, pointIn(outline), touch);
+                    check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
+                                  && app->workspace()->readFile(guide) == withKey(u"outline"_s),
+                          "its Outline makes the note an outline, writing only the mode");
+                } else {
+                    check(false, "the Mode switch has Outline");
+                }
+                mode = openMore();
+                if (QQuickItem *sourceSegment = segment(mode, "Source")) {
+                    tapOrClick(window, pointIn(sourceSegment), touch);
+                    check(waitFor([&] { return page->property("sourceMode").toBool(); }),
+                          "its Source shows the Markdown source");
+                } else {
+                    check(false, "the Mode switch has Source");
+                }
+                mode = openMore();
+                if (QQuickItem *document = segment(mode, "Document")) {
+                    tapOrClick(window, pointIn(document), touch);
+                    check(waitFor([&] {
+                              return !page->property("sourceMode").toBool()
+                                     && page->property("mode").toString() == u"document";
+                          }) && app->workspace()->readFile(guide) == before,
+                          "its Document leaves the source and makes the note a document again");
+                } else {
+                    check(false, "the Mode switch has Document");
+                }
+                closeMenus(window);
             }
 
             // Page properties (docs/UI.md "Page properties"): the guide's tag chip in the header —

@@ -4,10 +4,13 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ShellSidebar — navigation (Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj),
-// favourites, recent pages (entries and these two sections can be hidden: AppSettings.sidebarHidden), the vault's folder tree and the sync status footer. The same
-// component is the left pane on wide windows and the drawer's content on narrow ones
-// (`navigated()` closes it).
+// ShellSidebar — the page panel beside the rail of views (ShellRail, docs/UI.md "Sidebar"): the
+// notebook's name with "Nowa strona", then its sections in the order of Ustawienia → Wygląd →
+// Układ (AppSettings.sidebarSections): Ulubione, Ostatnie and Wszystkie strony — the notebook's
+// folder tree. Ulubione and Ostatnie can be hidden (AppSettings.sidebarHidden); the sections
+// before the tree are the list's header, the ones after it its footer. The same component is the
+// left pane on wide windows (hidden with the top bar's sidebar button; the rail stays) and, beside
+// the rail, the drawer's content on narrow ones (`navigated()` closes it).
 //
 // The tree (FolderTreeModel): a tap on a folder opens or closes it, on a page opens it; the
 // context menu (right-click, press-and-hold, the Menu key, and on touch screens the row's "⋯"
@@ -17,7 +20,7 @@ import Brulion
 // the open page or daily note is shown and highlighted in the tree on every route change,
 // `ui/sidebar/revealCurrent`, on by default — a collapsed "Strony" section stays collapsed, only
 // "Pokaż w drzewie" opens it). The revealed row is kept fully in the list's visible part — above
-// the sync footer — until the user scrolls the list: it is placed again whenever the list's
+// the system's navigation bar — until the user scrolls the list: it is placed again whenever the list's
 // geometry changes, since a closed drawer lays itself out only when it opens (its system-bar
 // padding, a keyboard that goes, sections that grew meanwhile), so a row placed while it was
 // closed or still opening could end up under the footer. A row revealed while it is in view (a
@@ -50,6 +53,10 @@ Rectangle {
     /// The sections Ulubione and Ostatnie, unless hidden (Ustawienia → Wygląd → Układ).
     readonly property bool favoritesShown: AppSettings.sidebarHidden.indexOf("favorites") < 0
     readonly property bool recentShown: AppSettings.sidebarHidden.indexOf("recent") < 0
+    /// The sections above the tree (the list's header) and below it (its footer), in the order of
+    /// the settings: "favorites" | "recent".
+    readonly property var sectionsBefore: AppSettings.sidebarSections.slice(0, Math.max(0, AppSettings.sidebarSections.indexOf("pages")))
+    readonly property var sectionsAfter: AppSettings.sidebarSections.slice(AppSettings.sidebarSections.indexOf("pages") + 1)
     /// "Ostatnie": up to 5 recent pages, without the one shown (the tree highlights it). Set once
     /// per change — a route change updates the recent pages and then the current path — and only
     /// when the list differs, so the header above the tree is not rebuilt (and resized) twice while
@@ -385,35 +392,23 @@ Rectangle {
         anchors.topMargin: sidebar.topInset
         spacing: 0
 
-        // ---- Vault header ----------------------------------------------------------------
+        // ---- The notebook's name (level with the rail's notebook button) -----------------
         RowLayout {
             Layout.fillWidth: true
+            Layout.preferredHeight: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight
             Layout.leftMargin: Theme.space3
             Layout.rightMargin: Theme.space1
             Layout.topMargin: Theme.space2
             Layout.bottomMargin: Theme.space1
             spacing: Theme.space2
 
-            Image {
-                source: "qrc:/images/logo.svg"
-                sourceSize: Qt.size(24, 24)
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-                Accessible.ignored: true
-            }
             BText {
+                objectName: "sidebarNotebookName"
                 Layout.fillWidth: true
                 text: Workspace.name
                 variant: "label"
                 elide: Text.ElideRight
-            }
-            BIconButton {
-                id: switchButton
-                objectName: "notebookSwitch"
-                iconName: "repeat"
-                label: qsTr("Switch notebook")
-                size: "small"
-                onClicked: notebookMenu.popup(switchButton, 0, switchButton.height)
+                Accessible.role: Accessible.Heading
             }
             BIconButton {
                 iconName: "square-pen"
@@ -477,152 +472,19 @@ Rectangle {
                 width: list.width - list.leftMargin - list.rightMargin
                 spacing: 0
                 // A ListView keeps its rows in place when the header grows (a page added to
-                // Recent), which scrolled the navigation up out of sight: the drawer then opened
-                // on "Tasks" with "Journals" and "Calendar" hidden. Stay at the top instead (the
+                // Recent), which scrolled the sections above the tree up out of sight (the drawer
+                // once opened that way with its first entries hidden). Stay at the top instead (the
                 // revealed row still in view: it moved down with the rows) — unless the list is
                 // kept scrolled away: the rows stay where they are.
                 onHeightChanged: Qt.callLater(sidebar.placeList)
 
-                // ---- Navigation --------------------------------------------------------
-                Column {
-                    width: parent.width
-                    topPadding: Theme.space1
-                    bottomPadding: Theme.space2
-
-                    Repeater {
-                        // Without the entries hidden in Ustawienia → Wygląd → Układ.
-                        model: [
-                            { view: "journals", also: "journal", title: qsTr("Journals"), icon: "book-open" },
-                            { view: "calendar", title: qsTr("Calendar"), icon: "calendar" },
-                            { view: "tasks", title: qsTr("Tasks"), icon: "list-todo" },
-                            { view: "habits", title: qsTr("Habits"), icon: "flame" },
-                            { view: "allPages", title: qsTr("All pages"), icon: "files" },
-                            { view: "tags", also: "tag", title: qsTr("Tags"), icon: "tags" },
-                            { view: "graph", title: qsTr("Graph"), icon: "waypoints" },
-                            { view: "search", title: qsTr("Search"), icon: "search" }
-                        ].filter(e => AppSettings.sidebarHidden.indexOf(e.view) < 0)
-                        delegate: BListItem {
-                            required property var modelData
-                            objectName: "sidebarNav_" + modelData.view
-                            width: parent.width
-                            dense: true
-                            text: modelData.title
-                            iconName: modelData.icon
-                            selected: sidebar.route.view === modelData.view
-                                      || (modelData.also !== undefined && sidebar.route.view === modelData.also)
-                            selectionBar: true
-                            onClicked: sidebar.go({ view: modelData.view })
-                        }
-                    }
-
-                    // ---- Import (the drawer on phones: notes from other apps, docs/UI.md):
-                    // the last navigation entry, so the column's bottom padding follows it ----
-                    BListItem {
-                        objectName: "drawerImportNotes"
-                        visible: Theme.narrow
+                // ---- The sections before the tree --------------------------------------
+                Repeater {
+                    model: sidebar.sectionsBefore
+                    delegate: Loader {
+                        required property string modelData
                         width: parent.width
-                        height: visible ? implicitHeight : 0
-                        dense: true
-                        text: qsTr("Import notes")
-                        iconName: "download"
-                        selected: sidebar.route.view === "importExport"
-                        selectionBar: true
-                        onClicked: sidebar.go({ view: "importExport", tab: "import" })
-                    }
-                }
-
-
-                // ---- Favourites (once a page is starred: the page header's star, a row's menu,
-                // the palette) --------------------------------------------------------------------
-                BSectionHeader {
-                    objectName: "sidebarFavoritesHeader"
-                    visible: sidebar.favoritesShown && Workspace.favorites.length > 0
-                    width: parent.width
-                    text: qsTr("Favorites")
-                    count: Workspace.favorites.length
-                    collapsible: true
-                    expanded: sidebar.favoritesOpen
-                    onExpandedToggled: (open) => {
-                        sidebar.favoritesOpen = open
-                        AppSettings.setValue("ui/sidebar/favorites", open)
-                    }
-                }
-                Column {
-                    visible: sidebar.favoritesShown && sidebar.favoritesOpen && Workspace.favorites.length > 0
-                    width: parent.width
-                    bottomPadding: Theme.space2
-
-                    Repeater {
-                        model: Workspace.favorites
-                        delegate: BListItem {
-                            id: favoriteItem
-                            required property var modelData
-                            /// The page's own icon in place of the star (docs/UI.md "Page icon and cover").
-                            readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
-                            width: parent.width
-                            dense: true
-                            text: modelData.title
-                            iconName: pageIcon.kind === "app" ? pageIcon.name : "star"
-                            iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
-                            selected: sidebar.route.view === "page" && sidebar.route.path === modelData.path
-                            onClicked: sidebar.openPage(modelData.path)
-                            onPressAndHold: sidebar.showContextMenu(favoriteItem, modelData.path, false)
-                            TapHandler {
-                                // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                acceptedButtons: Qt.MiddleButton
-                                enabled: OpenIn.tabs
-                                onTapped: sidebar.openPage(favoriteItem.modelData.path, "tab")
-                            }
-                            TapHandler {
-                                // Right-click only (see the tree rows below): never a finger.
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                                acceptedButtons: Qt.RightButton
-                                onTapped: sidebar.showContextMenu(favoriteItem, favoriteItem.modelData.path, false)
-                            }
-                        }
-                    }
-                }
-
-                // ---- Recent: the pages opened lately other than the one shown (the tree
-                // highlights that one) ---------------------------------------------------------------
-                BSectionHeader {
-                    objectName: "sidebarRecentHeader"
-                    visible: sidebar.recentShown && sidebar.recentOthers.length > 0
-                    width: parent.width
-                    text: qsTr("Recent")
-                    collapsible: true
-                    expanded: sidebar.recentOpen
-                    onExpandedToggled: (open) => {
-                        sidebar.recentOpen = open
-                        AppSettings.setValue("ui/sidebar/recent", open)
-                    }
-                }
-                Column {
-                    visible: sidebar.recentShown && sidebar.recentOpen && sidebar.recentOthers.length > 0
-                    width: parent.width
-                    bottomPadding: Theme.space2
-
-                    Repeater {
-                        model: sidebar.recentOthers
-                        delegate: BListItem {
-                            id: recentItem
-                            required property var modelData
-                            readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
-                            width: parent.width
-                            dense: true
-                            text: modelData.title
-                            iconName: pageIcon.kind === "app" ? pageIcon.name : "clock"
-                            iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
-                            onClicked: sidebar.openPage(modelData.path)
-                            TapHandler {
-                                // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
-                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                                acceptedButtons: Qt.MiddleButton
-                                enabled: OpenIn.tabs
-                                onTapped: sidebar.openPage(recentItem.modelData.path, "tab")
-                            }
-                        }
+                        sourceComponent: modelData === "favorites" ? favoritesSection : recentSection
                     }
                 }
 
@@ -715,6 +577,11 @@ Rectangle {
                     }
                 }
 
+                // A row back in the pool (reuseItems) is hidden until it is reused: the list
+                // leaves it where it was, under the rows laid out since (a folder closed above it),
+                // where it still counted as shown.
+                ListView.onPooled: visible = false
+                ListView.onReused: visible = true
                 onClicked: {
                     if (isDir)
                         tree.toggle(index)
@@ -785,16 +652,25 @@ Rectangle {
                 }
             }
 
-            footer: Item {
+            footer: Column {
                 width: list.width - list.leftMargin - list.rightMargin
-                height: Theme.space4
+                topPadding: sidebar.sectionsAfter.length > 0 ? Theme.space2 : 0
+                bottomPadding: Theme.space4
+                // ---- The sections after the tree -----------------------------------------
+                Repeater {
+                    model: sidebar.sectionsAfter
+                    delegate: Loader {
+                        required property string modelData
+                        width: parent.width
+                        sourceComponent: modelData === "favorites" ? favoritesSection : recentSection
+                    }
+                }
             }
         }
 
-        ShellSyncFooter {
-            Layout.fillWidth: true
-            safeBottom: sidebar.bottomInset
-            onClicked: sidebar.go({ view: "sync" })
+        // The system's navigation bar (phones, edge to edge).
+        Item {
+            Layout.preferredHeight: sidebar.bottomInset
         }
     }
 
@@ -871,57 +747,108 @@ Rectangle {
     // No edge line of its own: on wide windows the SplitView's handle (BSplitHandle) is the one
     // hairline beside the page; the drawer has its own edge.
 
-    // Quick switch between notebooks: the recent ones, the documentation, any other folder.
-    BMenu {
-        id: notebookMenu
-        objectName: "notebookMenu"
+    // ---- The page sections around the tree (their order: AppSettings.sidebarSections) ----------
+    Component {
+        id: favoritesSection
+        Column {
+            width: parent ? parent.width : 0
+            // ---- Favourites (once a page is starred: the page header's star, a row's menu,
+            // the palette) --------------------------------------------------------------------
+            BSectionHeader {
+                objectName: "sidebarFavoritesHeader"
+                visible: sidebar.favoritesShown && Workspace.favorites.length > 0
+                width: parent.width
+                text: qsTr("Favorites")
+                count: Workspace.favorites.length
+                collapsible: true
+                expanded: sidebar.favoritesOpen
+                onExpandedToggled: (open) => {
+                    sidebar.favoritesOpen = open
+                    AppSettings.setValue("ui/sidebar/favorites", open)
+                }
+            }
+            Column {
+                visible: sidebar.favoritesShown && sidebar.favoritesOpen && Workspace.favorites.length > 0
+                width: parent.width
+                bottomPadding: Theme.space2
 
-        readonly property string current: AppSettings.currentVault
-        readonly property string docsPath: AppController.docsVaultPath
-
-        Repeater {
-            model: AppSettings.recentVaults.filter(v => v.path !== notebookMenu.docsPath)
-            delegate: BMenuItem {
-                required property var modelData
-                objectName: "notebookMenuRecent"
-                // Not `checked`: a checkable item has already toggled it when onTriggered runs,
-                // so the first click on another notebook would do nothing.
-                readonly property bool isCurrent: modelData.path === notebookMenu.current
-                text: modelData.name
-                iconName: "folder"
-                checkable: true
-                checked: isCurrent
-                onTriggered: {
-                    checked = Qt.binding(() => isCurrent)
-                    if (!isCurrent)
-                        AppController.openRecentVault(modelData.path)
-                    sidebar.navigated()
+                Repeater {
+                    model: Workspace.favorites
+                    delegate: BListItem {
+                        id: favoriteItem
+                        required property var modelData
+                        /// The page's own icon in place of the star (docs/UI.md "Page icon and cover").
+                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
+                        width: parent.width
+                        dense: true
+                        text: modelData.title
+                        iconName: pageIcon.kind === "app" ? pageIcon.name : "star"
+                        iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
+                        selected: sidebar.route.view === "page" && sidebar.route.path === modelData.path
+                        onClicked: sidebar.openPage(modelData.path)
+                        onPressAndHold: sidebar.showContextMenu(favoriteItem, modelData.path, false)
+                        TapHandler {
+                            // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            acceptedButtons: Qt.MiddleButton
+                            enabled: OpenIn.tabs
+                            onTapped: sidebar.openPage(favoriteItem.modelData.path, "tab")
+                        }
+                        TapHandler {
+                            // Right-click only (see the tree rows below): never a finger.
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                            acceptedButtons: Qt.RightButton
+                            onTapped: sidebar.showContextMenu(favoriteItem, favoriteItem.modelData.path, false)
+                        }
+                    }
                 }
             }
         }
-        BMenuSeparator {}
-        BMenuItem {
-            objectName: "notebookMenuDocs"
-            visible: notebookMenu.docsPath !== ""
-            height: visible ? implicitHeight : 0
-            text: qsTr("Brulion documentation")
-            iconName: "book-open"
-            readonly property bool isCurrent: notebookMenu.docsPath === notebookMenu.current
-            checkable: true
-            checked: isCurrent
-            onTriggered: {
-                checked = Qt.binding(() => isCurrent)
-                if (!isCurrent)
-                    AppController.openDocsVault()
-                sidebar.navigated()
+    }
+    Component {
+        id: recentSection
+        Column {
+            width: parent ? parent.width : 0
+            // ---- Recent: the pages opened lately other than the one shown (the tree
+            // highlights that one) ---------------------------------------------------------------
+            BSectionHeader {
+                objectName: "sidebarRecentHeader"
+                visible: sidebar.recentShown && sidebar.recentOthers.length > 0
+                width: parent.width
+                text: qsTr("Recent")
+                collapsible: true
+                expanded: sidebar.recentOpen
+                onExpandedToggled: (open) => {
+                    sidebar.recentOpen = open
+                    AppSettings.setValue("ui/sidebar/recent", open)
+                }
             }
-        }
-        BMenuItem {
-            text: qsTr("Open another notebook…")
-            iconName: "folder-open"
-            onTriggered: {
-                sidebar.navigated()
-                AppController.closeVault()
+            Column {
+                visible: sidebar.recentShown && sidebar.recentOpen && sidebar.recentOthers.length > 0
+                width: parent.width
+                bottomPadding: Theme.space2
+
+                Repeater {
+                    model: sidebar.recentOthers
+                    delegate: BListItem {
+                        id: recentItem
+                        required property var modelData
+                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
+                        width: parent.width
+                        dense: true
+                        text: modelData.title
+                        iconName: pageIcon.kind === "app" ? pageIcon.name : "clock"
+                        iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
+                        onClicked: sidebar.openPage(modelData.path)
+                        TapHandler {
+                            // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            acceptedButtons: Qt.MiddleButton
+                            enabled: OpenIn.tabs
+                            onTapped: sidebar.openPage(recentItem.modelData.path, "tab")
+                        }
+                    }
+                }
             }
         }
     }

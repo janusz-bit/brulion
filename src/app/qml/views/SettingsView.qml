@@ -104,6 +104,12 @@ Item {
         { id: "favorites", title: qsTr("Favorites section") },
         { id: "recent", title: qsTr("Recent section") }
     ]
+    /// The sidebar's page sections, whose order can change (AppSettings.sidebarSectionIds()).
+    readonly property var sidebarSections: ({
+        favorites: { title: qsTr("Favorites"), icon: "star" },
+        recent: { title: qsTr("Recent"), icon: "clock" },
+        pages: { title: qsTr("Pages (the folder tree)"), icon: "folder-tree" }
+    })
     /// Views the bottom navigation offers (AppSettings.bottomNavViews()).
     readonly property var bottomNavViews: [
         { value: "journals", text: qsTr("Journal"), icon: "book-open" },
@@ -616,6 +622,72 @@ Item {
                             text: modelData.title
                             checked: AppSettings.sidebarHidden.indexOf(modelData.id) < 0
                             onToggled: AppSettings.setSidebarItemShown(modelData.id, checked)
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Order of the sections")
+                    description: qsTr("Favorites, recent pages and the folder tree beside the views' icons, top to bottom.")
+                }
+                Column {
+                    objectName: "sidebarSectionOrder"
+                    Layout.fillWidth: true
+                    spacing: Theme.space1
+                    Repeater {
+                        model: AppSettings.sidebarSections
+                        delegate: Rectangle {
+                            id: sectionRow
+                            required property string modelData
+                            required property int index
+                            readonly property var info: root.sidebarSections[modelData] || ({ title: modelData, icon: "" })
+                            objectName: "sidebarSection_" + modelData
+                            width: Math.min(parent.width, 420)
+                            height: Theme.touchUi ? Theme.touchTarget + 4 : Theme.controlHeight + 4
+                            radius: Theme.radius
+                            color: Theme.bgSunken
+                            border.width: 1
+                            border.color: Theme.borderSubtle
+                            Accessible.role: Accessible.ListItem
+                            Accessible.name: qsTr("%1. %2").arg(index + 1).arg(info.title)
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.space3
+                                anchors.rightMargin: Theme.space1
+                                spacing: Theme.space2
+                                BText {
+                                    text: String(sectionRow.index + 1)
+                                    color: Theme.fgFaint
+                                    variant: "small"
+                                    Accessible.ignored: true
+                                }
+                                BIcon {
+                                    name: sectionRow.info.icon
+                                    size: Theme.iconSizeSm
+                                    color: Theme.fgMuted
+                                }
+                                BText {
+                                    Layout.fillWidth: true
+                                    text: sectionRow.info.title
+                                    elide: Text.ElideRight
+                                    Accessible.ignored: true
+                                }
+                                BIconButton {
+                                    objectName: "sidebarSectionUp_" + sectionRow.modelData
+                                    iconName: "chevron-up"
+                                    label: qsTr("Move %1 up").arg(sectionRow.info.title)
+                                    size: "small"
+                                    enabled: sectionRow.index > 0
+                                    onClicked: AppSettings.moveSidebarSection(sectionRow.modelData, -1)
+                                }
+                                BIconButton {
+                                    objectName: "sidebarSectionDown_" + sectionRow.modelData
+                                    iconName: "chevron-down"
+                                    label: qsTr("Move %1 down").arg(sectionRow.info.title)
+                                    size: "small"
+                                    enabled: sectionRow.index < AppSettings.sidebarSections.length - 1
+                                    onClicked: AppSettings.moveSidebarSection(sectionRow.modelData, 1)
+                                }
+                            }
                         }
                     }
                 }

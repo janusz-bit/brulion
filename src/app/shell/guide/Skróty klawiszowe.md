@@ -40,8 +40,8 @@ Kilka stron może być otwartych naraz, każda w swojej karcie. Każda karta ma 
 
 * **Nowa karta**: Ctrl+T albo „+” na pasku kart. Stronę z paska bocznego, listy wszystkich stron, wyników wyszukiwania czy odnośników otworzysz w nowej karcie **środkowym przyciskiem myszy** albo **Ctrl+kliknięciem**. Link w notatce — środkowym przyciskiem albo z menu linku (prawy przycisk): „Otwórz w nowej karcie” (w edytorze Ctrl+kliknięcie zaznacza bloki).
 * **Pasek kart** pojawia się, gdy kart jest co najmniej dwie. Karty można przeciągać, środkowy przycisk albo × zamyka kartę, prawy przycisk otwiera jej menu.
-* **Podział widoku**: *Więcej* ⋮ → „Podziel widok” (albo paleta poleceń) pokazuje drugą stronę obok — kliknij w połowę okna, w której chcesz pracować. „Zamknij podział” wraca do jednego widoku.
-* **Osobne okno** (komputer): „Otwórz w nowym oknie” z menu linku, menu strony w drzewku albo *Więcej* ⋮. Zmiany w jednym oknie od razu widać w drugim. „Przenieś do okna głównego” robi z okna z powrotem kartę.
+* **Podział widoku**: *Więcej* → *Otwórz w* → „Podziel” (albo paleta poleceń) pokazuje drugą stronę obok — kliknij w połowę okna, w której chcesz pracować. „Zamknij podział” wraca do jednego widoku.
+* **Osobne okno** (komputer): „Otwórz w nowym oknie” z menu linku, menu strony w drzewku albo *Więcej* → *Otwórz w* → „Okno”. Zmiany w jednym oknie od razu widać w drugim. „Przenieś do okna głównego” robi z okna z powrotem kartę.
 * **Na telefonie** nie ma paska kart: gdy kart jest kilka, na górnym pasku pojawia się kwadracik z ich liczbą — dotknij go, żeby przełączyć kartę albo zamknąć pozostałe.
 
 ## Własne skróty
@@ -120,7 +120,7 @@ Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu mysz�
 | ↑ / ↓ | zaznacz sam poprzedni / następny blok |
 | Esc | odznacz |
 
-Gdy zaznaczone są co najmniej dwa bloki, u góry pojawia się pasek: Kopiuj, Wytnij, Usuń, Zaznacz wszystko i Więcej (Kopiuj jako tekst — zwykły tekst z punktorami, wcięcia, przenoszenie, status zadania). Fragmenty kilku akapitów skopiujesz, zaznaczając całe bloki, albo co do znaku w trybie źródła Markdown (Ctrl+E, *Więcej* ⋮ → „Źródło Markdown”). Więcej: [[Dokument i konspekt#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].
+Gdy zaznaczone są co najmniej dwa bloki, u góry pojawia się pasek: Kopiuj, Wytnij, Usuń, Zaznacz wszystko i Więcej (Kopiuj jako tekst — zwykły tekst z punktorami, wcięcia, przenoszenie, status zadania). Fragmenty kilku akapitów skopiujesz, zaznaczając całe bloki, albo co do znaku w trybie źródła Markdown (Ctrl+E, *Więcej* → *Tryb* → „Źródło”). Więcej: [[Dokument i konspekt#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].
 
 Prawy przycisk myszy na bloku otwiera menu bloku (Kopiuj, Wytnij, Kopiuj jako tekst, Zaznacz, Kopiuj odnośnik, wcięcia, przenoszenie, usuwanie) — na bloku z zaznaczenia działa na całe zaznaczenie. Prawy przycisk w edytowanym tekście: Wytnij, Kopiuj, Wklej, Zaznacz wszystko. W przeglądarce Ctrl+Shift+C może otwierać narzędzia przeglądarki — wtedy odwołanie skopiujesz z menu bloku albo z palety poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”). Więcej: [[Linki i odnośniki zwrotne#Kopiowanie odnośnika do bloku lub nagłówka|Kopiowanie odnośnika]].
 

@@ -40,7 +40,7 @@ Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz 
 > W wersji 0.3.0 otwarcie tej dokumentacji przy włączonym Nextcloudzie synchronizowało ją z Twoim folderem na serwerze. Jej strony (np. „Spis treści”, „Synchronizacja”) mogły więc trafić do Twojego notatnika na wszystkich urządzeniach, a do dokumentacji — kopie Twoich notatek. Strony dokumentacji znajdziesz w swoim notatniku w widoku **Tagi**, pod tagiem `dokumentacja`, i możesz je tam usunąć: dokumentacja ma własne. Twoje notatki, które pojawiły się w dokumentacji, to tylko kopie.
 
 ## Centrum synchronizacji
-Menu **Więcej** (⋮) → *Centrum synchronizacji*, albo kliknięcie stanu synchronizacji na dole paska bocznego. Zakładki: Przegląd, Syncthing, Nextcloud, Konflikty.
+Menu **Więcej** → **Notatnik** → *Centrum synchronizacji*, albo kliknięcie ikony stanu synchronizacji na dole paska ikon po lewej (dymek mówi, jaki to stan). Zakładki: Przegląd, Syncthing, Nextcloud, Konflikty.
 
 - Na bieżąco widać, co się dzieje: etap, liczbę plików, czas trwania i pliki w drodze.
 - Jeśli serwer długo nie odpowiada, pojawia się ostrzeżenie, a po 180 s próba jest przerywana i ponawiana — panel nie „synchronizuje” w nieskończoność.

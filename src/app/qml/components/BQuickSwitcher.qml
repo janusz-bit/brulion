@@ -13,14 +13,30 @@ import Brulion
 //   }
 //
 // Recent pages first when the query is empty (pass them first in `pages`).
+// `offerSearch`: a last result searches the notes' text for the query (`searchRequested`).
+// `commandPrefix`: a query starting with ">" asks for the command palette instead
+// (`commandsRequested` with the rest of the query; the switcher closes).
 BPalette {
     id: control
 
     property var pages: []
     property bool allowCreate: true
+    property bool offerSearch: false
+    property bool commandPrefix: false
 
     signal pageChosen(var page)
     signal createRequested(string title)
+    signal searchRequested(string text)
+    signal commandsRequested(string text)
+
+    onQueryChanged: {
+        if (commandPrefix && query.startsWith(">")) {
+            const rest = query.slice(1).replace(/^\s+/, "")
+            close()
+            // (Once this keystroke is done: the palette then takes the keyboard.)
+            Qt.callLater(() => control.commandsRequested(rest))
+        }
+    }
 
     items: pages
     placeholderText: qsTr("Go to page…")
@@ -28,16 +44,24 @@ BPalette {
     defaultIcon: "file-text"
     extraResults: {
         const q = query.trim()
-        if (!allowCreate || q === "")
+        if (q === "")
             return []
-        const folded = TextHelper.fold(q)
-        const exact = (pages || []).some(p => TextHelper.fold(p.title || "") === folded)
-        return exact ? [] : [{ title: qsTr("Create page “%1”").arg(q), icon: "plus", create: true, name: q }]
+        const out = []
+        if (allowCreate) {
+            const folded = TextHelper.fold(q)
+            if (!(pages || []).some(p => TextHelper.fold(p.title || "") === folded))
+                out.push({ title: qsTr("Create page “%1”").arg(q), icon: "plus", create: true, name: q })
+        }
+        if (offerSearch)
+            out.push({ title: qsTr("Search the notes for “%1”").arg(q), icon: "search", search: true, text: q })
+        return out
     }
 
     onItemActivated: (item) => {
         if (item.create)
             createRequested(item.name)
+        else if (item.search)
+            searchRequested(item.text)
         else
             pageChosen(item)
     }
