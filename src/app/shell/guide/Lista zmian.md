@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.11.0 — 5 listopada 2026
+
+**Zmiany**
+- Cały interfejs (ponad 18 tysięcy wiązań i funkcji QML) jest przy budowaniu aplikacji kompilowany do C++, zamiast wykonywany w czasie działania przez interpreter JavaScriptu. Wygląd i działanie się nie zmieniają; odciąża to procesor przy otwieraniu widoków, przewijaniu i pisaniu, zwłaszcza na słabszych telefonach.
+
 ## 0.10.3 — 5 listopada 2026
 
 **Uwaga**
