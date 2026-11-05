@@ -239,7 +239,22 @@ QVariantList ShortcutMap::bindings() const
     for (const Action &a : m_actions) {
         const QString s = m_effective.value(a.id);
         if (!s.isEmpty())
-            out.append(QVariantMap{{u"id"_s, a.id}, {u"sequence"_s, s}});
+            out.append(QVariantMap{{u"id"_s, a.id}, {u"action"_s, a.id}, {u"sequence"_s, s}});
+    }
+    return out;
+}
+
+QVariantList ShortcutMap::shellBindings() const
+{
+    static const QStringList viewsOwn{u"page.find"_s, u"page.replace"_s, u"page.source"_s, u"page.addProperty"_s};
+    QVariantList out;
+    for (const QVariant &binding : bindings()) {
+        const QVariantMap b = binding.toMap();
+        const QString id = b.value(u"id"_s).toString();
+        if (viewsOwn.contains(id)
+            || (id == u"block.copyRef" && b.value(u"sequence"_s).toString() == u"Ctrl+Shift+C"))
+            continue;
+        out.append(binding);
     }
     return out;
 }
@@ -384,6 +399,7 @@ QVariantList ShortcutMap::entries(const QString &query) const
             && !s.contains(q, Qt::CaseInsensitive))
             continue;
         out.append(QVariantMap{{u"id"_s, a.id},
+                               {u"action"_s, a.id}, // (a QML delegate cannot name a property "id")
                                {u"title"_s, a.title},
                                {u"sequence"_s, s},
                                {u"defaultSequence"_s, a.defaultSequence},

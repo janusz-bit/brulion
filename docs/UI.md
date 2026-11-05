@@ -775,14 +775,15 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   and the sidebar's / All pages' row menus' **Otwórz w nowej karcie**; the top bar's Więcej and the
   palette's **Otwórz w nowej karcie** (a copy of the view shown) and **Nowa karta**. A new tab goes
   right after the focused one, is shown and has no history (Back does nothing there; its first
-  route is the page). These go through `OpenIn` (`qml/components/OpenIn.qml`): a click brackets
-  its own navigation (the editor's `activateLink`, a row's `openPage`) with `OpenIn.begin(target)`
-  and `OpenIn.end()`, and the shell (which sets `OpenIn.tabs`) sends that one navigation to a new tab
-  (`target` "tab") or window ("window") — `AppController.beginOpenIn` / `endOpenIn` — the editor and
-  the lists need no shell (without it, in the editor's tests, only the usual click). At most `TabSet::MaxTabs` (100) tabs: more says so.
+  route is the page). These go through `OpenIn` (`qml/components/OpenIn.qml`): the shell sets
+  `OpenIn.tabs`, a click brackets its own navigation (the editor's `activateLink`, a row's
+  `openPage`) with `OpenIn.begin(target)` … `OpenIn.end()`, which the shell hands to
+  `AppController.beginOpenIn(target)` / `endOpenIn()`: its one navigation goes to a new tab
+  (`target` "tab") or window ("window") — the editor and the lists need no shell (without it, in the
+  editor's tests, only the usual click). At most `TabSet::MaxTabs` (100) tabs: more says so.
 * **The tab bar** (`ShellTabBar`, wide windows): between the top bar and the view, shown while
   there are two tabs or more (or the view is split). Equal widths (120–220 px; past that the bar
-  scrolls with the wheel), the view's icon and title (`AppShell.routeTitle`), × (shown on the
+  scrolls with the wheel), the view's icon and title (`ShellRouteTitles.routeTitle`), × (shown on the
   focused tab and on hover). The tab of the focused pane is drawn like the view below it with a
   2-px accent line on top, the other pane's tab of a split view like the view without the line. A
   click shows a tab (in the focused pane; a tab already shown in the other pane focuses that pane),
@@ -1776,8 +1777,10 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   about 1 MB per transaction) with a toast — never cut short. Cut = copy, then delete as one undo
   step. The toasts "Wycięto %n bloków" and "Usunięto %n bloków" (two or more blocks) have
   "Cofnij": the editor's `message(text, kind, action)` carries an `EditorToastAction` (`text`,
-  `run()`; `BlockEditor.undoAction()`), the page views pass it to `AppController.toastAction` and the
-  shell's toast shows the button; it runs `PageController.undoStep(token)`, which undoes that edit
+  `run()`; `BlockEditor.undoAction()`), the page views pass it to `AppController.toastAction` (which
+  keeps the function; Main.qml shows the toast by id — `toastWithActionRequested`, the closure-free
+  `toastWithAction` / `toastActionTriggered` and `toastRestore` of compiled QML go the same way)
+  and the shell's toast shows the button; it runs `PageController.undoStep(token)`, which undoes that edit
   only while it is still the page's last step (`undoToken()` taken right after it names the
   history, the position and the step there) — after other edits (one made in its place after
   Ctrl+Z too), on another page or once undone it says "Nie cofnięto: strona zmieniła się od tego

@@ -13,7 +13,7 @@ import Brulion
 ColumnLayout {
     id: section
 
-    readonly property var backups: Workspace.backups
+    readonly property WorkspaceBackups backups: Workspace.backups
     /// What restorePlanReady delivered, shown by the confirmation.
     property var plan: ({})
     /// The backup a delete confirmation is about.
@@ -23,8 +23,8 @@ ColumnLayout {
     /// The foreign backup a restore would start from, waiting for its own confirmation.
     property string foreignRestore: ""
 
-    function runningText() {
-        switch (backups.phase) {
+    function runningText(): string {
+        switch (section.backups.phase) {
         case "backup": return qsTr("Creating a backup…")
         case "check": return qsTr("Checking the backup…")
         case "sync": return qsTr("Waiting for the running sync to finish…")
@@ -37,12 +37,12 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: Theme.space2
 
-    Component.onCompleted: backups.refresh()
+    Component.onCompleted: section.backups.refresh()
 
     Connections {
         target: section.backups
-        function onRestorePlanReady(plan) {
-            if (!plan.hasChanges) {
+        function onRestorePlanReady(plan: var) {
+            if (!AppController.routeFlag(plan, "hasChanges")) {
                 section.backups.dismissRestore()
                 AppController.toast(qsTr("This notebook already holds exactly what the backup holds."), "info")
                 return
@@ -88,7 +88,7 @@ ColumnLayout {
             ShellSettingRow {
                 objectName: "backupsStatus"
                 title: qsTr("Last backup")
-                description: section.backups.lastBackupText || qsTr("None yet.")
+                description: section.backups.lastBackupText !== "" ? section.backups.lastBackupText : qsTr("None yet.")
                 BButton {
                     objectName: "backupsCreateNow"
                     text: qsTr("Create a backup now")
@@ -232,15 +232,19 @@ ColumnLayout {
 
             BListItem {
                 id: row
-                required property var modelData
+                // (WorkspaceBackups.backups' rows.)
+                required property string name
+                required property string when
+                required property string sizeText
+                required property bool foreign
+                required property bool complete
                 Layout.fillWidth: true
                 objectName: "backupRow"
                 iconName: "hard-drive"
-                text: modelData.when
-                subtitle: [modelData.sizeText,
-                           modelData.foreign ? qsTr("not from this notebook") : "",
-                           !modelData.foreign && !modelData.complete ? qsTr("incomplete") : ""].filter(s => s !== "").join(" · ")
-                Accessible.description: modelData.name
+                text: when
+                subtitle: sizeText + (foreign ? (sizeText !== "" ? " · " : "") + qsTr("not from this notebook") : "")
+                          + (!foreign && !complete ? (sizeText !== "" ? " · " : "") + qsTr("incomplete") : "")
+                Accessible.description: name
                 trailing: RowLayout {
                     spacing: 0
                     BIconButton {
@@ -248,14 +252,14 @@ ColumnLayout {
                         size: "small"
                         variant: "ghost"
                         iconName: "rotate-ccw"
-                        label: qsTr("Restore the backup from %1").arg(row.modelData.when)
+                        label: qsTr("Restore the backup from %1").arg(row.when)
                         enabled: !section.backups.running
                         onClicked: {
-                            if (row.modelData.foreign) {
-                                section.foreignRestore = row.modelData.name
+                            if (row.foreign) {
+                                section.foreignRestore = row.name
                                 foreignRestoreDialog.open()
                             } else {
-                                section.backups.prepareRestore(row.modelData.name)
+                                section.backups.prepareRestore(row.name)
                             }
                         }
                     }
@@ -265,23 +269,23 @@ ColumnLayout {
                         size: "small"
                         variant: "ghost"
                         iconName: section.backups.browser ? "download" : "share"
-                        label: section.backups.browser ? qsTr("Download the backup from %1").arg(row.modelData.when)
-                                                       : qsTr("Share the backup from %1").arg(row.modelData.when)
-                        onClicked: section.backups.exportBackup(row.modelData.name)
+                        label: section.backups.browser ? qsTr("Download the backup from %1").arg(row.when)
+                                                       : qsTr("Share the backup from %1").arg(row.when)
+                        onClicked: section.backups.exportBackup(row.name)
                     }
                     BIconButton {
                         objectName: "backupDelete"
                         size: "small"
                         variant: "ghost"
                         iconName: "trash-2"
-                        label: qsTr("Delete the backup from %1").arg(row.modelData.when)
+                        label: qsTr("Delete the backup from %1").arg(row.when)
                         enabled: !section.backups.running
                         onClicked: {
-                            section.deleting = row.modelData.name
-                            section.deletingForeign = row.modelData.foreign
-                            deleteDialog.message = row.modelData.foreign
-                                    ? qsTr("The backup from %1 was not made from this notebook: it may be the only copy of another one. It is deleted for good; it does not go to the trash.").arg(row.modelData.when)
-                                    : qsTr("The backup from %1 is deleted for good; it does not go to the trash.").arg(row.modelData.when)
+                            section.deleting = row.name
+                            section.deletingForeign = row.foreign
+                            deleteDialog.message = row.foreign
+                                    ? qsTr("The backup from %1 was not made from this notebook: it may be the only copy of another one. It is deleted for good; it does not go to the trash.").arg(row.when)
+                                    : qsTr("The backup from %1 is deleted for good; it does not go to the trash.").arg(row.when)
                             deleteDialog.open()
                         }
                     }
@@ -304,12 +308,13 @@ ColumnLayout {
         id: restoreDialog
         objectName: "backupsRestoreConfirm"
         parent: T.Overlay.overlay
-        title: qsTr("Restore the backup from %1?").arg(section.plan.when || "")
-        message: [qsTr("%n file(s) will be replaced by the backup's version.", "", section.plan.changed || 0),
-                  qsTr("%n file(s) will come back.", "", section.plan.recreated || 0),
-                  qsTr("%n file(s) the backup does not hold will go to the trash.", "", section.plan.trashed || 0)].join(" ")
-        detail: (section.plan.incomplete ? qsTr("This backup is not known to be complete, so files it does not hold stay where they are.") + " " : "")
-                + (section.plan.tooLarge > 0 ? qsTr("%n file(s) are too large to restore and stay as they are.", "", section.plan.tooLarge) + " " : "")
+        title: qsTr("Restore the backup from %1?").arg(AppController.routeText(section.plan, "when"))
+        message: qsTr("%n file(s) will be replaced by the backup's version.", "", AppController.routeInt(section.plan, "changed", 0))
+                 + " " + qsTr("%n file(s) will come back.", "", AppController.routeInt(section.plan, "recreated", 0))
+                 + " " + qsTr("%n file(s) the backup does not hold will go to the trash.", "", AppController.routeInt(section.plan, "trashed", 0))
+        detail: (AppController.routeFlag(section.plan, "incomplete") ? qsTr("This backup is not known to be complete, so files it does not hold stay where they are.") + " " : "")
+                + (AppController.routeInt(section.plan, "tooLarge", 0) > 0
+                   ? qsTr("%n file(s) are too large to restore and stay as they are.", "", AppController.routeInt(section.plan, "tooLarge", 0)) + " " : "")
                 + qsTr("A safety backup of the notebook as it is now is made first. Replaced notes stay in the version history as well; other files only in the safety backup.")
         confirmText: qsTr("Restore")
         destructive: true

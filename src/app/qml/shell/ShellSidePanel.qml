@@ -16,7 +16,8 @@ Rectangle {
     property Component contextPanel: null
 
     readonly property var pinned: AppController.sidePanelRoute
-    readonly property bool hasPinned: pinned && pinned.view !== undefined
+    property var _opening: ({})
+    readonly property bool hasPinned: AppController.routeText(AppController.sidePanelRoute, "view") !== ""
     /// The pinned view's editing toolbar is docked at its bottom edge (touch UIs; AppShell keeps
     /// the panel's bottom on the keyboard).
     readonly property bool toolbarDocked: visible && hasPinned && pinnedView.viewToolbarDocked
@@ -54,9 +55,10 @@ Rectangle {
                     label: qsTr("Open in the main view")
                     size: "small"
                     onClicked: {
-                        const route = panel.pinned
+                        // (A copy: clearing the panel's route changes `pinned`.)
+                        panel._opening = panel.pinned
                         AppController.clearSidePanelRoute()
-                        AppController.navigate(route)
+                        AppController.navigate(panel._opening)
                     }
                 }
                 BIconButton {

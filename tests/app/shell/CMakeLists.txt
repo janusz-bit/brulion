@@ -5,6 +5,10 @@ brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_sh
 # The tabs (tabs.h): opening, closing, moving, the split pane, tabs in windows of their own, each
 # tab's history and view state, saving them per notebook (also malformed JSON).
 brulion_add_test(tst_shell_tabs SOURCES tst_tabs.cpp LIBS brulion_shell)
+# ViewTraits (viewtraits.h): what ShellRouteView reads of its view — typed, following changes, the
+# optional functions called (typed and untyped QML views); folderChoices (folderchoices.h): the
+# rows of "Przenieś do…".
+brulion_add_test(tst_shell_viewtraits SOURCES tst_viewtraits.cpp LIBS brulion_shell Qt6::Qml)
 # "Udostępnij → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
 # data, saving to the journal or to new pages, waiting for the notebook, the copies removed; files
 # opened with Brulion (--open, a second launch's `share` message: copies, the files untouched, a

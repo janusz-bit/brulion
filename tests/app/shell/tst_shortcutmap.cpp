@@ -325,6 +325,36 @@ private Q_SLOTS:
         }
     }
 
+    // AppShell's Shortcut objects: every binding but the views' own and the editor's Ctrl+Shift+C.
+    void shellBindings()
+    {
+        ShortcutMap map(nullptr);
+        QList<ShortcutMap::Action> actions = sampleActions();
+        actions.append({u"page.find"_s, u"Znajdź w notatce"_s, u"Ctrl+F"_s});
+        actions.append({u"page.source"_s, u"Źródło Markdown"_s, u"Ctrl+E"_s});
+        actions.append({u"block.copyRef"_s, u"Kopiuj odwołanie do bloku"_s, u"Ctrl+Shift+C"_s});
+        map.setActions(actions);
+        const auto ids = [](const QVariantList &rows) {
+            QStringList out;
+            for (const QVariant &row : rows) {
+                const QVariantMap r = row.toMap();
+                // A delegate cannot name a property "id": the same as "action".
+                if (r.value(u"action"_s) != r.value(u"id"_s))
+                    out.append(u"!"_s);
+                out.append(r.value(u"id"_s).toString());
+            }
+            return out;
+        };
+        QCOMPARE(map.bindings().size(), 9);
+        const QStringList shell = ids(map.shellBindings());
+        QCOMPARE(shell, (QStringList{u"palette"_s, u"journal.today"_s, u"go.settings"_s, u"panel.toggle"_s,
+                                     u"view.focus"_s, u"nav.back"_s}));
+        // Another key for the block reference: the shell's Shortcut handles it.
+        QVERIFY(map.assign(u"block.copyRef"_s, u"Ctrl+Alt+R"_s));
+        QVERIFY(ids(map.shellBindings()).contains(u"block.copyRef"_s));
+        QVERIFY(!ids(map.shellBindings()).contains(u"page.find"_s));
+    }
+
     void withoutSettings()
     {
         ShortcutMap map(nullptr);

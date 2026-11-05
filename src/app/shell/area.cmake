@@ -49,6 +49,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appupdates.h ${_brulion_shell_dir}/appupdates.cpp
     ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
+    ${_brulion_shell_dir}/folderchoices.h ${_brulion_shell_dir}/folderchoices.cpp
     ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
     ${_brulion_shell_dir}/indexworkers.h
     ${_brulion_shell_dir}/navigation.h ${_brulion_shell_dir}/navigation.cpp
@@ -56,6 +57,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/replacesession.h ${_brulion_shell_dir}/replacesession.cpp
     ${_brulion_shell_dir}/shortcutmap.h ${_brulion_shell_dir}/shortcutmap.cpp
     ${_brulion_shell_dir}/traypopup.h ${_brulion_shell_dir}/traypopup.cpp
+    ${_brulion_shell_dir}/viewtraits.h ${_brulion_shell_dir}/viewtraits.cpp
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
     ${_brulion_shell_dir}/workspacequery.cpp
     ${_brulion_shell_dir}/workspacehistory.cpp
@@ -85,7 +87,8 @@ target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
     PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
-            brulion_core_drawing brulion_notify brulion_background)
+            brulion_core_drawing brulion_notify brulion_background
+            brulion_ui_helpers) # folderchoices.cpp: TextHelper's fuzzy ranking
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);
 # WasmStorage + WasmNotifier; PDFs (workspacepdf.cpp: the thumbnails' cache of brulion_pdfview,
 # src/app/pdf — its area is included before this one — and openexternal.h).
@@ -131,6 +134,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellQuickCapture.qml
     qml/shell/ShellRail.qml
     qml/shell/ShellRenameDialog.qml
+    qml/shell/ShellRouteTitles.qml
     qml/shell/ShellRouteView.qml
     qml/shell/ShellSettingDividers.qml
     qml/shell/ShellSettingRow.qml

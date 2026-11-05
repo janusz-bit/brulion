@@ -29,17 +29,18 @@ FocusScope {
     /// The keyboard focus went into the pane, or a press reached its background.
     signal activated()
 
-    function sync() {
+    function sync(): void {
+        // (tabRoute(0) and tabViewState(0) are {}.)
         if (pane._shown === pane.tabId) {
-            view.route = pane.tabId !== 0 ? AppController.tabRoute(pane.tabId) : ({})
+            view.route = AppController.tabRoute(pane.tabId)
             return
         }
         // The tab shown until now keeps where its view was (it may be gone: closed).
-        if (pane._shown !== 0 && AppController.tabRoute(pane._shown).view !== undefined)
+        if (pane._shown !== 0 && AppController.routeText(AppController.tabRoute(pane._shown), "view") !== "")
             AppController.setTabViewState(pane._shown, view.viewState())
         pane._shown = pane.tabId
-        view.route = pane.tabId !== 0 ? AppController.tabRoute(pane.tabId) : ({})
-        view.restoreViewState(pane.tabId !== 0 ? AppController.tabViewState(pane.tabId) : ({}))
+        view.route = AppController.tabRoute(pane.tabId)
+        view.restoreViewState(AppController.tabViewState(pane.tabId))
     }
     onTabIdChanged: sync()
     Component.onCompleted: sync()
@@ -47,11 +48,11 @@ FocusScope {
 
     Connections {
         target: AppController
-        function onTabRouteChanged(id) {
+        function onTabRouteChanged(id: int) {
             if (id === pane.tabId)
                 pane.sync()
         }
-        function onTabViewStatesRequested() {
+        function onTabViewStatesRequested(): void {
             if (pane._shown !== 0 && pane._shown === pane.tabId)
                 AppController.setTabViewState(pane._shown, view.viewState())
         }

@@ -16,6 +16,8 @@ Item {
     id: root
 
     required property Item column
+    /// The column's rows. (A list property: `column.children[i]` itself is not compiled.)
+    readonly property list<Item> rows: column.children
 
     x: column.x
     y: column.y
@@ -30,16 +32,20 @@ Item {
             required property int index
             readonly property bool isRow: modelData.visible && modelData.height > 0
             /// The shown row above this one (null: this is the first).
-            readonly property Item above: {
-                const rows = root.column.children
-                for (let i = index - 1; i >= 0; --i) {
-                    const r = rows[i]
-                    if (r.visible && r.height > 0)
-                        return r
+            readonly property int aboveIndex: {
+                for (let i = line.index - 1; i >= 0; --i) {
+                    if (root.rows[i].visible && root.rows[i].height > 0)
+                        return i
                 }
-                return null
+                return -1
             }
-            visible: isRow && above !== null && !(modelData instanceof BText) && above.hasControls !== false
+            readonly property Item above: aboveIndex >= 0 ? root.rows[aboveIndex] : null
+            /// A row above with no controls of its own (ShellSettingRow.hasControls) takes none.
+            readonly property bool aboveHasControls: {
+                const row = line.above as ShellSettingRow
+                return row === null || row.hasControls
+            }
+            visible: isRow && above !== null && (modelData as BText) === null && aboveHasControls
             width: root.width
             height: 1
             y: above ? Math.round((above.y + above.height + modelData.y) / 2) : 0

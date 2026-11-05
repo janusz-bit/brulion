@@ -21,27 +21,43 @@ Rectangle {
     signal menuClicked()
     signal captureClicked()
 
-    readonly property string view: AppController.currentRoute.view || ""
-    /// The views a tab can show.
-    readonly property var tabs: ({
-        journals: { id: "journals", title: qsTr("Journal"), icon: "book-open" },
-        calendar: { id: "calendar", title: qsTr("Calendar"), icon: "calendar" },
-        search: { id: "search", title: qsTr("Search"), icon: "search" },
-        tasks: { id: "tasks", title: qsTr("Tasks"), icon: "list-todo" },
-        habits: { id: "habits", title: qsTr("Habits"), icon: "flame" },
-        allPages: { id: "allPages", title: qsTr("Pages"), icon: "files" },
-        tags: { id: "tags", title: qsTr("Tags"), icon: "tags" },
-        graph: { id: "graph", title: qsTr("Graph"), icon: "waypoints" }
-    })
-    readonly property var captureItem: ({ id: "capture", title: qsTr("Note"), icon: "plus", action: true })
-    readonly property var menuItem: ({ id: "menu", title: qsTr("Menu"), icon: "menu" })
-    /// The items shown, in the bar's order.
-    readonly property var shownItems: {
-        const out = AppSettings.bottomNavTabs.map(v => nav.tabs[v]).filter(t => t !== undefined)
-        if (AppSettings.captureButtonShown)
-            out.push(captureItem)
-        out.push(menuItem)
-        return out
+    readonly property string view: AppController.currentView
+    /// The items shown, in the bar's order: the views' tabs (AppSettings.bottomNavTabs: known
+    /// views only), "capture" (quick capture, when shown) and "menu".
+    readonly property list<string> shownIds: AppSettings.captureButtonShown
+                                             ? Js.appendedString(Js.appendedString(AppSettings.bottomNavTabs, "capture"), "menu")
+                                             : Js.appendedString(AppSettings.bottomNavTabs, "menu")
+    /// An item's label.
+    function titleOf(id: string): string {
+        switch (id) {
+        case "journals": return qsTr("Journal")
+        case "calendar": return qsTr("Calendar")
+        case "search": return qsTr("Search")
+        case "tasks": return qsTr("Tasks")
+        case "habits": return qsTr("Habits")
+        case "allPages": return qsTr("Pages")
+        case "tags": return qsTr("Tags")
+        case "graph": return qsTr("Graph")
+        case "capture": return qsTr("Note")
+        case "menu": return qsTr("Menu")
+        }
+        return ""
+    }
+    /// An item's icon.
+    function iconOf(id: string): string {
+        switch (id) {
+        case "journals": return "book-open"
+        case "calendar": return "calendar"
+        case "search": return "search"
+        case "tasks": return "list-todo"
+        case "habits": return "flame"
+        case "allPages": return "files"
+        case "tags": return "tags"
+        case "graph": return "waypoints"
+        case "capture": return "plus"
+        case "menu": return "menu"
+        }
+        return ""
     }
 
     // The items' geometry (one place for every item, capture's included).
@@ -55,46 +71,53 @@ Rectangle {
     readonly property int pillTop: 7
     readonly property int labelGap: 3
 
-    /// Each shown item's width by its id: `share()` of the labels' needs (the label in the
-    /// semi-bold of the current view, 4 px on each side, at least minItemWidth); when they do not
-    /// fit, 2 px on each side; when even that does not fit, the needs scaled to the bar (the
-    /// longest labels elide).
-    readonly property var widths: {
-        const out = {}
-        const items = shownItems
+    /// Each shown item's width by its id (0 for one not shown): the labels' needs (the label in
+    /// the semi-bold of the current view, 4 px on each side, at least minItemWidth) shared out over
+    /// the bar (`evenShare()`); when they do not fit, 2 px on each side; when even that does not
+    /// fit, the needs scaled to the bar (the longest labels elide).
+    function itemWidth(id: string): real {
+        const index = nav.shownIds.indexOf(id)
         // (font.pixelSize read for real: the widths follow the text size and the UI font.)
-        if (items.length === 0 || width <= 0 || labelMetrics.font.pixelSize <= 0)
-            return out
-        const label = items.map(i => Math.ceil(labelMetrics.advanceWidth(i.title)))
-        let result = null
-        for (const pad of [8, 4]) {
-            result = share(label.map(l => Math.max(minItemWidth, l + pad)), width)
-            if (result)
-                break
-        }
-        if (!result) {
-            const needs = label.map(l => Math.max(minItemWidth, l + 4))
-            const sum = needs.reduce((a, b) => a + b, 0)
-            result = needs.map(n => n * width / sum)
-        }
-        items.forEach((item, i) => { out[item.id] = result[i] })
-        return out
+        if (index < 0 || nav.width <= 0 || labelMetrics.font.pixelSize <= 0)
+            return 0
+        const wide = nav.evenShare(8)
+        if (wide >= 0)
+            return Math.max(nav.need(index, 8), wide)
+        const narrow = nav.evenShare(4)
+        if (narrow >= 0)
+            return Math.max(nav.need(index, 4), narrow)
+        let sum = 0
+        for (let i = 0; i < nav.shownIds.length; ++i)
+            sum += nav.need(i, 4)
+        return nav.need(index, 4) * nav.width / sum
     }
-    /// `needs` shared out over `w`: evenly, but an item that needs more than an even share gets
-    /// its need and the others share the rest evenly; null when the needs do not fit.
-    function share(needs, w) {
-        const n = needs.length
-        const sorted = needs.slice().sort((a, b) => b - a)
+    /// What item `index` needs with `pad` px around its label.
+    function need(index: int, pad: int): real {
+        return Math.max(nav.minItemWidth, Math.ceil(labelMetrics.advanceWidth(nav.titleOf(nav.shownIds[index]))) + pad)
+    }
+    /// The needs (`pad`) shared out over the bar: evenly, but an item that needs more than an even
+    /// share gets its need and the others share the rest evenly — that even share; -1 when the
+    /// needs do not fit. (The largest needs first, as sorted.)
+    function evenShare(pad: int): real {
+        const n = nav.shownIds.length
+        let fixedMask = 0
         let fixed = 0
         let k = 0
-        while (k < n && sorted[k] > (w - fixed) / (n - k)) {
-            fixed += sorted[k]
+        while (k < n) {
+            let largest = -1
+            for (let i = 0; i < n; ++i) {
+                if ((fixedMask & (1 << i)) === 0 && (largest < 0 || nav.need(i, pad) > nav.need(largest, pad)))
+                    largest = i
+            }
+            if (nav.need(largest, pad) <= (nav.width - fixed) / (n - k))
+                break
+            fixed += nav.need(largest, pad)
+            fixedMask |= 1 << largest
             ++k
         }
         if (k === n)
-            return null
-        const even = (w - fixed) / (n - k)
-        return needs.map(x => Math.max(x, even))
+            return -1
+        return (nav.width - fixed) / (n - k)
     }
 
     implicitHeight: 60 + bottomInset
@@ -120,40 +143,42 @@ Rectangle {
     /// text sizes; 1 px kept on each side).
     component NavLabel: BText {
         required property Item item
-        anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+        // (Centred in its column.)
+        x: parent ? Math.round((parent.width - width) / 2) : 0
         font.pixelSize: Theme.textXs
         readonly property bool tooWide: implicitWidth > item.width - 2 && item.width > 2
         width: tooWide ? item.width - 2 : implicitWidth
         elide: tooWide ? Text.ElideRight : Text.ElideNone
     }
 
-    function openView(id, current) {
+    function openView(id: string, current: bool): void {
         if (id === "journals" && current)
             AppController.openToday()
         else
             AppController.navigate({ view: id })
     }
 
-    /// An item of the bar: a view's tab, quick capture (`modelData.action`) or Menu
+    /// An item of the bar: a view's tab, quick capture (`itemId` "capture") or Menu ("menu")
     /// (`currentView`: the route's view; the instance acts on clicked()).
     component NavTab: T.AbstractButton {
         id: tab
-        required property var modelData
+        property string itemId
         property string currentView
+        readonly property string title: nav.titleOf(itemId)
         /// An action (quick capture), not a view: never the current one.
-        readonly property bool isAction: modelData.action === true
+        readonly property bool isAction: itemId === "capture"
         readonly property bool current: !isAction
-                                        && (modelData.id === currentView
-                                            || (modelData.id === "journals" && currentView === "journal")
-                                            || (modelData.id === "tags" && currentView === "tag"))
+                                        && (itemId === currentView
+                                            || (itemId === "journals" && currentView === "journal")
+                                            || (itemId === "tags" && currentView === "tag"))
 
-        objectName: "bottomNav_" + modelData.id
-        width: nav.widths[modelData.id] || 0
+        objectName: "bottomNav_" + itemId
+        width: nav.itemWidth(itemId)
         height: parent ? parent.height : 0
         focusPolicy: Qt.StrongFocus
         hoverEnabled: !Theme.touchUi
         Accessible.role: isAction ? Accessible.Button : Accessible.PageTab
-        Accessible.name: modelData.title
+        Accessible.name: title
         Accessible.selected: current
 
         contentItem: Column {
@@ -161,6 +186,7 @@ Rectangle {
             topPadding: nav.pillTop
 
             Rectangle {
+                id: pill
                 anchors.horizontalCenter: parent.horizontalCenter
                 // Never wider than the item: it would run into a neighbour on a narrow phone.
                 width: Math.min(tab.isAction ? nav.actionPillWidth : nav.pillWidth, tab.width - 4)
@@ -178,21 +204,21 @@ Rectangle {
                 Rectangle {
                     visible: tab.isAction
                     anchors.fill: parent
-                    radius: parent.radius
+                    radius: pill.radius
                     antialiasing: true
                     color: tab.down ? Theme.bgPressed : tab.hovered ? Theme.bgHover : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.durationFast } }
                 }
                 BIcon {
                     anchors.centerIn: parent
-                    name: tab.modelData.icon
+                    name: nav.iconOf(tab.itemId)
                     size: Theme.iconSize
                     color: tab.current || tab.isAction ? Theme.fg : Theme.fgMuted
                 }
             }
             NavLabel {
                 item: tab
-                text: tab.modelData.title
+                text: tab.title
                 font.weight: tab.current ? Theme.weightSemiBold : Theme.weightMedium
                 color: tab.current ? Theme.fg : Theme.fgMuted
             }
@@ -212,11 +238,14 @@ Rectangle {
         height: parent.height - nav.bottomInset
 
         Repeater {
-            model: AppSettings.bottomNavTabs.map(v => nav.tabs[v]).filter(t => t !== undefined)
+            // (Known views only: AppSettings normalizes them.)
+            model: AppSettings.bottomNavTabs
             delegate: NavTab {
                 id: viewTab
+                required property string modelData
+                itemId: modelData
                 currentView: nav.view
-                onClicked: nav.openView(viewTab.modelData.id, viewTab.current)
+                onClicked: nav.openView(viewTab.itemId, viewTab.current)
             }
         }
 
@@ -225,14 +254,14 @@ Rectangle {
         // Its accessible name holds its label (WCAG 2.5.3: "Note" in "Quick note").
         NavTab {
             objectName: "shellCaptureButton"
-            modelData: nav.captureItem
+            itemId: "capture"
             visible: AppSettings.captureButtonShown
             Accessible.name: qsTr("Quick note")
             onClicked: nav.captureClicked()
         }
 
         NavTab {
-            modelData: nav.menuItem
+            itemId: "menu"
             currentView: nav.view
             onClicked: nav.menuClicked()
         }

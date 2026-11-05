@@ -1173,8 +1173,10 @@ private Q_SLOTS:
         QVERIFY(alone->inDocsVault());
     }
 
-    // The editor's toasts with a button ("Cofnij" after deleting blocks): AppController carries the
-    // function to the shell's toast host (Main.qml), which calls it when the button is pressed.
+    // The editor's toasts with a button ("Cofnij" after deleting blocks): AppController keeps the
+    // function and has the shell's toast host (Main.qml) show the toast by id; the host's button
+    // runs it once. toastWithAction() (compiled QML) reports the button by id, toastRestore()
+    // brings pages back from the trash.
     void toastWithAction()
     {
         auto app = openApp(u"toastaction"_s);
@@ -1182,19 +1184,100 @@ private Q_SLOTS:
         const QJSValue undo = engine.evaluate(u"var undone = 0; (function () { undone += 1 })"_s);
         QVERIFY(undo.isCallable());
         QSignalSpy plain(app.get(), &AppController::toastRequested);
-        QSignalSpy withAction(app.get(), &AppController::toastActionRequested);
+        QSignalSpy shown(app.get(), &AppController::toastWithActionRequested);
+        QSignalSpy triggered(app.get(), &AppController::toastActionTriggered);
         app->toastAction(u"Usunięto 3 bloki"_s, u"info"_s, u"Cofnij"_s, undo);
-        QCOMPARE(withAction.size(), 1);
+        QCOMPARE(shown.size(), 1);
         QCOMPARE(plain.size(), 0);
-        const QList<QVariant> args = withAction.first();
-        QCOMPARE(args.at(0).toString(), u"Usunięto 3 bloki"_s);
-        QCOMPARE(args.at(1).toString(), u"info"_s);
-        QCOMPARE(args.at(2).toString(), u"Cofnij"_s);
-        QJSValue carried = args.at(3).value<QJSValue>();
-        QVERIFY(carried.isCallable());
-        const QJSValue result = carried.call();
-        QVERIFY2(!result.isError(), qPrintable(result.toString()));
+        const QList<QVariant> args = shown.first();
+        const int functionId = args.at(0).toInt();
+        QVERIFY(functionId > 0);
+        QCOMPARE(args.at(1).toString(), u"Usunięto 3 bloki"_s);
+        QCOMPARE(args.at(2).toString(), u"info"_s);
+        QCOMPARE(args.at(3).toString(), u"Cofnij"_s);
+        app->setToastHostId(functionId, 7);
+        app->hostToastActionTriggered(8); // another toast of the host: nothing
+        QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 0);
+        app->hostToastActionTriggered(7);
         QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 1);
+        app->hostToastActionTriggered(7); // once
+        app->hostToastRemoved(7);
+        QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 1);
+        QCOMPARE(triggered.size(), 0);
+
+        // Without a function: the button is reported by the id toastWithAction() gave.
+        const int id = app->toastWithAction(u"Przeniesiono „Zażółć”"_s, u"success"_s, u"Cofnij"_s);
+        QVERIFY(id > functionId);
+        QCOMPARE(shown.size(), 2);
+        QCOMPARE(shown.at(1).at(0).toInt(), id);
+        QCOMPARE(shown.at(1).at(2).toString(), u"success"_s);
+        app->setToastHostId(id, 9);
+        app->hostToastActionTriggered(9);
+        QCOMPARE(triggered.size(), 1);
+        QCOMPARE(triggered.first().at(0).toInt(), id);
+
+        // A toast that went without its button pressed forgets its action.
+        const int gone = app->toastWithAction(u"Ślad"_s, u"info"_s, u"Cofnij"_s);
+        app->setToastHostId(gone, 10);
+        app->hostToastRemoved(10);
+        app->hostToastActionTriggered(10);
+        QCOMPARE(triggered.size(), 1);
+
+        // toastRestore(): the pages come back from the trash, also with no view left.
+        const QString page = app->workspace()->createPage(u"Gęś"_s);
+        QVERIFY(!page.isEmpty());
+        const QString trashed = app->workspace()->deletePage(page);
+        QVERIFY(!trashed.isEmpty());
+        QVERIFY(!app->workspace()->exists(page));
+        const int restore = app->toastRestore(u"Przeniesiono do kosza"_s, u"Cofnij"_s, { trashed });
+        QCOMPARE(shown.size(), 4);
+        QCOMPARE(shown.last().at(0).toInt(), restore);
+        QCOMPARE(shown.last().at(2).toString(), u"info"_s);
+        app->setToastHostId(restore, 11);
+        app->hostToastActionTriggered(11);
+        QVERIFY(app->workspace()->exists(page));
+        QCOMPARE(triggered.size(), 1);
+    }
+
+    // The breadcrumb's folders (the top bar): every folder down to the one given.
+    void folderChain_data()
+    {
+        QTest::addColumn<QString>("folder");
+        QTest::addColumn<QStringList>("chain");
+        QTest::newRow("none") << QString() << QStringList();
+        QTest::newRow("one") << u"Projekty"_s << QStringList{ u"Projekty"_s };
+        QTest::newRow("three") << u"Firma/Łódź/Zażółć"_s
+                               << QStringList{ u"Firma"_s, u"Firma/Łódź"_s, u"Firma/Łódź/Zażółć"_s };
+        // As JavaScript's split("/") did: empty parts stay.
+        QTest::newRow("empty part") << u"a//b"_s << QStringList{ u"a"_s, u"a/"_s, u"a//b"_s };
+        QTest::newRow("trailing slash") << u"a/"_s << QStringList{ u"a"_s, u"a/"_s };
+    }
+    void folderChain()
+    {
+        QFETCH(QString, folder);
+        QFETCH(QStringList, chain);
+        auto app = makeApp();
+        QCOMPARE(app->folderChain(folder), chain);
+    }
+
+    // OpenIn.begin / end (compiled QML): one navigation between them goes to a new tab.
+    void beginEndOpenIn()
+    {
+        auto app = openApp(u"openinpair"_s);
+        const QString a = app->workspace()->createPage(u"Zażółć"_s);
+        const QString b = app->workspace()->createPage(u"Gęś"_s);
+        const int tabs = app->tabCount();
+        app->beginOpenIn(u"tab"_s);
+        app->openPage(a, -1, false);
+        app->endOpenIn();
+        QCOMPARE(app->tabCount(), tabs + 1);
+        QCOMPARE(app->currentRoute(), page(a));
+        // Nothing navigated between them: nothing left pending.
+        app->beginOpenIn(u"tab"_s);
+        app->endOpenIn();
+        app->openPage(b, -1, false);
+        QCOMPARE(app->tabCount(), tabs + 1);
+        QCOMPARE(app->currentRoute(), page(b));
     }
 
     // ---- tabs (tabs.h; docs/UI.md "Tabs, split view and windows") ------------------------------

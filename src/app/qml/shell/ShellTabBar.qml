@@ -14,10 +14,7 @@ import Brulion
 Rectangle {
     id: bar
 
-    /// The title of a route (AppShell.routeTitle).
-    property var titleOf: (route) => ""
-
-    readonly property var tabs: AppController.tabs
+    readonly property list<var> tabs: AppController.tabs
     readonly property real tabWidth: Math.max(minTabWidth, Math.min(maxTabWidth, (list.width) / Math.max(1, tabs.length)))
     readonly property real minTabWidth: 120
     readonly property real maxTabWidth: 220
@@ -27,9 +24,11 @@ Rectangle {
     Accessible.role: Accessible.PageTabList
     Accessible.name: qsTr("Tabs")
 
+    ShellRouteTitles { id: titles }
+
     /// The icon of a route's view.
-    function iconOf(route) {
-        switch (route.view) {
+    function iconOf(route: var): string {
+        switch (titles.field(route, "view")) {
         case "journals": return "book-open"
         case "journal": return "notebook-pen"
         case "calendar": return "calendar"
@@ -81,13 +80,17 @@ Rectangle {
             delegate: Item {
                 id: tab
                 objectName: "shellTab"
-                required property var modelData
+                // (AppController.tabs: { tabId, route, … })
+                required property int tabId
+                required property var route
                 required property int index
-                readonly property int tabId: modelData.id
                 readonly property bool focusedTab: tabId === AppController.focusedTab
                 /// Shown in a pane (the main one or the split one).
                 readonly property bool shown: tabId === AppController.mainTab || tabId === AppController.splitTab
-                readonly property string title: bar.titleOf(modelData.route)
+                readonly property string title: titles.routeTitle(titles.field(tab.route, "view"),
+                                                                 titles.field(tab.route, "path"),
+                                                                 titles.field(tab.route, "date"),
+                                                                 titles.field(tab.route, "tag"))
                 /// While dragged: where it would go.
                 property int dropIndex: index
 
@@ -143,7 +146,7 @@ Rectangle {
                     spacing: Theme.space1
 
                     BIcon {
-                        name: bar.iconOf(tab.modelData.route)
+                        name: bar.iconOf(tab.route)
                         size: Theme.iconSizeSm
                         color: tab.focusedTab ? Theme.fg : Theme.fgMuted
                     }
@@ -171,7 +174,7 @@ Rectangle {
                 TapHandler {
                     acceptedButtons: Qt.LeftButton
                     onTapped: AppController.selectTab(tab.tabId)
-                    onLongPressed: tabMenu.openFor(tab)
+                    onLongPressed: tabMenu.openFor(tab, tab.tabId)
                 }
                 TapHandler {
                     // A middle click closes it, as in browsers.
@@ -182,19 +185,19 @@ Rectangle {
                 TapHandler {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                     acceptedButtons: Qt.RightButton
-                    onTapped: tabMenu.openFor(tab)
+                    onTapped: tabMenu.openFor(tab, tab.tabId)
                 }
                 DragHandler {
                     id: drag
                     target: null
                     yAxis.enabled: false
                     onActiveTranslationChanged: {
-                        const centre = tab.x + tab.width / 2 + activeTranslation.x
+                        const centre = tab.x + tab.width / 2 + drag.activeTranslation.x
                         tab.dropIndex = Math.max(0, Math.min(bar.tabs.length - 1, Math.floor(centre / bar.tabWidth)))
                     }
                     onActiveChanged: {
                         // (Nothing changes the tabs while dragging: the delegates would be made again.)
-                        if (active) {
+                        if (drag.active) {
                             tab.dropIndex = tab.index
                         } else if (tab.dropIndex !== tab.index) {
                             AppController.moveTab(tab.index, tab.dropIndex)
@@ -217,9 +220,9 @@ Rectangle {
         id: tabMenu
         property int tabId: 0
         readonly property bool inSplit: tabId !== 0 && tabId === AppController.splitTab
-        function openFor(item) {
-            tabId = item.tabId
-            popup(item, 0, item.height)
+        function openFor(tab: Item, id: int): void {
+            tabMenu.tabId = id
+            tabMenu.popup(tab, 0, tab.height)
         }
         BMenuItem {
             text: qsTr("Close tab")

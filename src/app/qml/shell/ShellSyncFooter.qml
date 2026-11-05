@@ -15,14 +15,16 @@ T.ItemDelegate {
     /// Only the icon, in a square button (the rail).
     property bool compact: false
 
-    readonly property var status: AppController.syncStatus
+    /// AppController.syncStatus: { state, text }.
+    readonly property string statusState: AppController.routeText(AppController.syncStatus, "state")
     // Without a sync engine an error can still stop the sync (another notebook syncs with the
     // same server folder): shown as one.
-    readonly property string syncState: AppController.syncAvailable ? (status.state || "idle")
-                                      : status.state === "error" ? "error" : "none"
+    readonly property string syncState: AppController.syncAvailable ? (statusState !== "" ? statusState : "idle")
+                                      : statusState === "error" ? "error" : "none"
     readonly property string statusText: {
-        if (status.text)
-            return status.text
+        const text = AppController.routeText(AppController.syncStatus, "text")
+        if (text !== "")
+            return text
         switch (control.syncState) {
         case "idle": return qsTr("Synced with Nextcloud")
         case "syncing": return qsTr("Syncing…")

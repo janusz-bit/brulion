@@ -46,7 +46,8 @@ Rectangle {
     /// A row dragged onto a folder ("" = the notebook's root): the shell moves it.
     signal dropMoveRequested(string path, string folder)
 
-    readonly property var route: AppController.currentRoute
+    readonly property string routeView: AppController.currentView
+    readonly property string routePath: AppController.routeText(AppController.currentRoute, "path")
     property bool favoritesOpen: flag(AppSettings.value("ui/sidebar/favorites", true))
     property bool recentOpen: flag(AppSettings.value("ui/sidebar/recent", true))
     property bool pagesOpen: flag(AppSettings.value("ui/sidebar/pages", true))
@@ -55,21 +56,35 @@ Rectangle {
     readonly property bool recentShown: AppSettings.sidebarHidden.indexOf("recent") < 0
     /// The sections above the tree (the list's header) and below it (its footer), in the order of
     /// the settings: "favorites" | "recent".
-    readonly property var sectionsBefore: AppSettings.sidebarSections.slice(0, Math.max(0, AppSettings.sidebarSections.indexOf("pages")))
-    readonly property var sectionsAfter: AppSettings.sidebarSections.slice(AppSettings.sidebarSections.indexOf("pages") + 1)
+    readonly property list<string> sectionsBefore: AppSettings.sidebarSections.slice(0, Math.max(0, AppSettings.sidebarSections.indexOf("pages")))
+    readonly property list<string> sectionsAfter: AppSettings.sidebarSections.slice(AppSettings.sidebarSections.indexOf("pages") + 1)
     /// "Ostatnie": up to 5 recent pages, without the one shown (the tree highlights it). Set once
     /// per change — a route change updates the recent pages and then the current path — and only
     /// when the list differs, so the header above the tree is not rebuilt (and resized) twice while
     /// the tree is placed for the new route.
-    property var recentOthers: []
-    function updateRecentOthers() {
-        const next = Workspace.recentPages.filter(p => p.path !== currentPath).slice(0, 5)
-        if (next.length === recentOthers.length
-                && next.every((p, i) => p.path === recentOthers[i].path && p.title === recentOthers[i].title))
+    property list<var> recentOthers
+    function updateRecentOthers(): void {
+        // ([{ path, title }]: the same list when its text is.)
+        const next = sidebar.recentNext()
+        if (sidebar.textOf(next) === sidebar.textOf(sidebar.recentOthers))
             return
-        recentOthers = next
+        sidebar.recentOthers = next
     }
-    onCurrentPathChanged: Qt.callLater(updateRecentOthers)
+    /// A list's JSON text (typed).
+    function textOf(list: var): string {
+        return Js.stringify(list)
+    }
+    function recentNext(): list<var> {
+        return AppController.recentPagesExcept(sidebar.currentPath, 5)
+    }
+    // (Qt.callLater: once per turn of the event loop. The same for the other timers below.)
+    Timer { id: recentLater; interval: 0; onTriggered: sidebar.updateRecentOthers() }
+    Timer { id: revealRouteLater; interval: 0; onTriggered: sidebar.revealRoute() }
+    Timer { id: placeRevealedLater; interval: 0; onTriggered: sidebar.placeRevealed() }
+    Timer { id: placeListLater; interval: 0; onTriggered: sidebar.placeList() }
+    Timer { id: keepPlaceLater; interval: 0; onTriggered: list.keepPlace() }
+    Timer { id: dragAgainLater; interval: 0; onTriggered: sidebar.dragTo(sidebar.dragScenePos) }
+    onCurrentPathChanged: recentLater.restart()
     /// Show the open page in the tree on every route change.
     property bool revealCurrent: flag(AppSettings.value("ui/sidebar/revealCurrent", true))
     /// The row `reveal()` keeps in view ("" = none): placed again on every change of the list's
@@ -78,12 +93,13 @@ Rectangle {
     /// The file the current route shows — a page, or a daily note opened as a page: highlighted
     /// in the tree.
     readonly property string currentPath: {
-        if (route.view === "page")
-            return route.path || ""
+        if (sidebar.routeView === "page")
+            return sidebar.routePath
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (route.view !== "journal" || Workspace.revision < 0)
+        if (sidebar.routeView !== "journal" || Workspace.revision < 0)
             return ""
-        const p = route.path || (route.date ? Workspace.journalPath(route.date) : "")
+        const date = AppController.routeText(AppController.currentRoute, "date")
+        const p = sidebar.routePath !== "" ? sidebar.routePath : (date !== "" ? Workspace.journalPath(date) : "")
         return p !== "" && Workspace.exists(p) ? p : ""
     }
 
@@ -98,77 +114,86 @@ Rectangle {
     /// `dropFolder` is a folder the item may go into (not itself, its subtree or where it is).
     property bool dropAllowed: false
     /// Workspace.moveImpact() of the drop (a moment after the target changed, planned without
-    /// blocking — Workspace.requestMoveImpact(); null before).
-    property var dropImpact: null
-    readonly property bool dropValid: dropAllowed && !(dropImpact && dropImpact.ok === false)
+    /// blocking — Workspace.requestMoveImpact(); `dropImpactKnown` false before).
+    property var dropImpact: ({})
+    property bool dropImpactKnown: false
+    readonly property bool dropValid: dropAllowed && !(dropImpactKnown && !AppController.routeFlag(dropImpact, "ok"))
     /// The pointer is over the "Strony" header (the root).
     property bool dropOnRoot: false
     property point dragPoint
     /// The pointer's last scene position: the target is found again as the list scrolls under it.
     property point dragScenePos
+    /// dragTo()'s pointer in the list's and the header's coordinates.
+    property point _inList
+    property point _inHeader
     /// The "Strony" header in the list's header: the drop target of the notebook's root.
     property Item pagesHeader: null
 
     /// QSettings hands booleans back as strings after a restart.
-    function flag(value) {
+    function flag(value: var): bool {
         return value === true || value === "true"
     }
-    function go(route) {
+    function go(route: var): void {
         AppController.navigate(route)
         sidebar.navigated()
     }
-    /// Open the page `path` as a click does — `target` "tab": in a new tab; by default where the
-    /// click asks (Ctrl+click, Ctrl+Enter: a new tab — OpenIn).
-    function openPage(path, target) {
-        const where = target !== undefined ? target : OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers())
-        OpenIn.run(where, () => AppController.openPage(path))
+    /// Open the page `path` as a click does — `target` "tab": in a new tab (OpenIn's navigation
+    /// to a target: AppController.beginOpenIn … endOpenIn).
+    function openPage(path: string, target: string): void {
+        AppController.beginOpenIn(target)
+        AppController.openPage(path)
+        AppController.endOpenIn()
         sidebar.navigated()
     }
-    function showContextMenu(item, path, isDir) {
+    /// The same where the click asks (Ctrl+click, Ctrl+Enter: a new tab — OpenIn).
+    function openPageHere(path: string): void {
+        sidebar.openPage(path, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
+    }
+    function showContextMenu(item: Item, path: string, isDir: bool): void {
         contextMenu.path = path
         contextMenu.isDir = isDir
         contextMenu.popup(item, Theme.space6, item.height - 4)
     }
     /// Indentation of a row: 18 px (touch) / 14 px per level, 8 px per level below the fourth
     /// (a narrow drawer keeps room for deep names).
-    function indent(depth) {
+    function indent(depth: int): real {
         const step = Theme.touchUi ? 18 : 14
         return depth <= 4 ? depth * step : 4 * step + (depth - 4) * 8
     }
     /// Show `path` in the tree: the folders above it open, the row scrolled into view (and kept
     /// there: `revealedPath`). A collapsed "Strony" section is opened only when `force` ("Pokaż w
     /// drzewie", a new folder); the reveal on every route change leaves it collapsed.
-    function reveal(path, force) {
-        if (!path)
+    function reveal(path: string, force: bool): void {
+        if (path === "")
             return
-        if (!pagesOpen) {
-            if (force !== true)
+        if (!sidebar.pagesOpen) {
+            if (!force)
                 return
-            pagesOpen = true
+            sidebar.pagesOpen = true
             AppSettings.setValue("ui/sidebar/pages", true)
         }
         if (tree.reveal(path) < 0)
             return
-        revealedPath = path
-        if (!keepIfInView())
-            Qt.callLater(placeRevealed)
+        sidebar.revealedPath = path
+        if (!sidebar.keepIfInView())
+            placeRevealedLater.restart()
     }
-    function revealRoute() {
-        if (currentPath !== "")
-            reveal(currentPath, false)
+    function revealRoute(): void {
+        if (sidebar.currentPath !== "")
+            sidebar.reveal(sidebar.currentPath, false)
         else
-            revealedPath = "" // (a route with no file in the tree: the list stays as it is)
+            sidebar.revealedPath = "" // (a route with no file in the tree: the list stays as it is)
     }
     /// The revealed row lies wholly in the list's visible part as the list is laid out now (its
     /// own row: a model change not laid out yet leaves another row at its index): the list stays
     /// where it is, kept there (`list.scrolledAway`) — a click on a row the list was scrolled to
     /// must not move the row from under the pointer (to the bottom edge, where the list placed
     /// from its top would show it: the next click hit another row).
-    function keepIfInView() {
-        if (!list || revealedPath === "" || list.model !== tree || list.height <= 0)
+    function keepIfInView(): bool {
+        if (!list || sidebar.revealedPath === "" || list.model !== tree || list.height <= 0)
             return false
-        const item = list.itemAtIndex(tree.indexOf(revealedPath)) // (a tree row: its `path`)
-        if (!item || item.path !== revealedPath || item.y < list.contentY - 0.5
+        const item = sidebar.rowAt(tree.indexOf(sidebar.revealedPath)) // (a tree row: its `path`)
+        if (!item || sidebar.pathOfRow(item) !== sidebar.revealedPath || item.y < list.contentY - 0.5
                 || item.y + item.height > list.contentY + list.height + 0.5)
             return false
         list.scrolledAway = !list.atYBeginning
@@ -176,12 +201,19 @@ Rectangle {
     }
     /// A row just revealed, once the list is laid out (folders opened above it): in view it
     /// stays, else the list is placed. Hidden (a closed drawer): placed as it shows.
-    function placeRevealed() {
+    /// The list's row `index` (typed) and a row's `path` (a tree row's required property).
+    function rowAt(index: int): Item {
+        return list.itemAtIndex(index)
+    }
+    function pathOfRow(row: Item): string {
+        return AppController.propertyOf(row, "path")
+    }
+    function placeRevealed(): void {
         if (!list || !sidebar.visible)
             return
         list.forceLayout()
-        if (!keepIfInView())
-            placeList()
+        if (!sidebar.keepIfInView())
+            sidebar.placeList()
     }
     /// The list's position after its geometry changed (the drawer opening, a keyboard, the window,
     /// a section of its header that grew) or a row revealed out of view: at the top (the
@@ -189,19 +221,19 @@ Rectangle {
     /// with the least scrolling, so the navigation stays in sight where the row allows it. The
     /// row only while shown: a closed drawer's list still has the size it had (it is laid out
     /// again as it opens, and placed again then). Never while the user moves it.
-    function placeList() {
+    function placeList(): void {
         if (!list || list.moving)
             return
         if (!list.scrolledAway)
             list.positionViewAtBeginning()
-        if (!sidebar.visible || revealedPath === "" || list.model !== tree)
+        if (!sidebar.visible || sidebar.revealedPath === "" || list.model !== tree)
             return
-        const row = tree.indexOf(revealedPath)
+        const row = tree.indexOf(sidebar.revealedPath)
         if (row >= 0)
             list.positionViewAtIndex(row, ListView.Contain)
     }
     /// "Kopiuj link": the same text as the page menu's and the editor's (PageTools.wikiLink).
-    function copyLink(path) {
+    function copyLink(path: string): void {
         const link = tools.wikiLink(path)
         if (tools.copyText(link))
             AppController.toast(qsTr("Copied %1").arg(link), "success")
@@ -209,80 +241,95 @@ Rectangle {
 
     // The drag itself: started by a row's DragHandler, followed by `pointerWatch` (it sees the
     // pointer whoever holds it — a row scrolled out of the list may lose its handler).
-    function beginDrag(path, isDir, title) {
-        revealedPath = "" // (the list scrolls under the pointer)
-        dragPath = path
-        dragIsDir = isDir
-        dragTitle = title
-        dropFolder = ""
-        dropAllowed = false
-        dropImpact = null
-        dropOnRoot = false
+    function beginDrag(path: string, isDir: bool, title: string): void {
+        sidebar.revealedPath = "" // (the list scrolls under the pointer)
+        sidebar.dragPath = path
+        sidebar.dragIsDir = isDir
+        sidebar.dragTitle = title
+        sidebar.dropFolder = ""
+        sidebar.dropAllowed = false
+        sidebar.dropImpact = ({})
+        sidebar.dropImpactKnown = false
+        sidebar.dropOnRoot = false
     }
-    function cancelDrag() {
-        if (dragging)
+    function cancelDrag(): void {
+        if (sidebar.dragging)
             Workspace.cancelMoveImpact() // (not another sidebar's: the drawer's and the window's)
-        dragPath = ""
-        dropAllowed = false
-        dropImpact = null
-        dropOnRoot = false
+        sidebar.dragPath = ""
+        sidebar.dropAllowed = false
+        sidebar.dropImpact = ({})
+        sidebar.dropImpactKnown = false
+        sidebar.dropOnRoot = false
         expandTimer.stop()
         impactTimer.stop()
         scrollTimer.direction = 0
     }
     /// Can the dragged item go into `folder`? Not into itself, its own subtree or where it is.
-    function canDropInto(folder) {
-        if (!dragging)
+    function canDropInto(folder: string): bool {
+        if (!sidebar.dragging)
             return false
-        if (dragIsDir && (folder === dragPath || folder.startsWith(dragPath + "/")))
+        if (sidebar.dragIsDir && (folder === sidebar.dragPath || Js.startsWith(folder, sidebar.dragPath + "/")))
             return false
-        return folder !== Workspace.folderOf(dragPath)
+        return folder !== Workspace.folderOf(sidebar.dragPath)
     }
-    function dragTo(scenePos) {
-        if (!dragging)
+    function dragTo(scenePos: point): void {
+        if (!sidebar.dragging)
             return
-        dragScenePos = scenePos
-        dragPoint = sidebar.mapFromItem(null, scenePos.x, scenePos.y)
-        const inList = list.mapFromItem(null, scenePos.x, scenePos.y)
+        // (Copied first: a value-type parameter read after a call is not compiled.)
+        const sceneX = scenePos.x
+        const sceneY = scenePos.y
+        sidebar.dragScenePos = scenePos
+        sidebar.dragPoint = sidebar.mapFromItem(null, sceneX, sceneY)
+        sidebar._inList = list.mapFromItem(null, sceneX, sceneY)
+        // (The properties read again after each call: a call's result is not kept in a local
+        // across another call by compiled code.)
         // Near the list's edges: scroll (scrollTimer finds the target again on every step).
-        scrollTimer.direction = inList.y < 36 && inList.y >= 0 ? -1 : inList.y > list.height - 36 && inList.y <= list.height ? 1 : 0
+        scrollTimer.direction = sidebar._inList.y < 36 && sidebar._inList.y >= 0 ? -1
+                              : sidebar._inList.y > list.height - 36 && sidebar._inList.y <= list.height ? 1 : 0
         // Only what shows in the list is a target: the header scrolled above its top edge is
         // clipped away, though still `visible`.
-        const inside = inList.x >= 0 && inList.x <= list.width && inList.y >= 0 && inList.y <= list.height
-        const header = sidebar.pagesHeader
-        let folder = null
+        const inside = sidebar._inList.x >= 0 && sidebar._inList.x <= list.width && sidebar._inList.y >= 0
+                       && sidebar._inList.y <= list.height
+        // The folder under the pointer (`found`; "" the notebook's root).
+        let found = false
+        let folder = ""
         let hoveredFolder = ""
         let collapsed = false
-        if (inside && header && header.visible) {
-            const h = header.mapFromItem(null, scenePos.x, scenePos.y)
-            if (h.x >= 0 && h.y >= 0 && h.x <= header.width && h.y <= header.height)
-                folder = ""
+        if (inside && sidebar.pagesHeader && sidebar.pagesHeader.visible) {
+            sidebar._inHeader = sidebar.pagesHeader.mapFromItem(null, sceneX, sceneY)
+            if (sidebar._inHeader.x >= 0 && sidebar._inHeader.y >= 0 && sidebar._inHeader.x <= sidebar.pagesHeader.width
+                    && sidebar._inHeader.y <= sidebar.pagesHeader.height)
+                found = true
         }
-        if (folder === null && inside) {
-            const index = list.indexAt(inList.x + list.contentX, inList.y + list.contentY)
-            const entry = index >= 0 ? tree.get(index) : null
-            if (entry && entry.path !== undefined) {
-                folder = entry.isDir ? entry.path : Workspace.folderOf(entry.path)
-                if (entry.isDir && !entry.expanded) {
-                    hoveredFolder = entry.path
+        if (!found && inside) {
+            // (FolderTreeModel.get: { path, isDir, expanded, depth }; {} for no row.)
+            sidebar._entry = tree.get(list.indexAt(sidebar._inList.x + list.contentX, sidebar._inList.y + list.contentY))
+            if (Js.hasKey(sidebar._entry, "path")) {
+                const entryPath = sidebar.entryText("path")
+                const entryIsDir = sidebar.entryFlag("isDir")
+                found = true
+                folder = entryIsDir ? entryPath : sidebar.folderOf(entryPath)
+                if (entryIsDir && !sidebar.entryFlag("expanded")) {
+                    hoveredFolder = entryPath
                     collapsed = true
                 }
             }
         }
-        dropOnRoot = folder === ""
-        const allowed = folder !== null && canDropInto(folder)
-        const target = folder !== null ? folder : ""
+        sidebar.dropOnRoot = found && folder === ""
+        const allowed = found && sidebar.canDropInto(folder)
+        const target = folder
         // What the move would rewrite: asked once the target stays a moment.
-        if (target !== dropFolder || allowed !== dropAllowed) {
-            dropImpact = null
+        if (target !== sidebar.dropFolder || allowed !== sidebar.dropAllowed) {
+            sidebar.dropImpact = ({})
+            sidebar.dropImpactKnown = false
             Workspace.cancelMoveImpact()
             if (allowed)
                 impactTimer.restart()
             else
                 impactTimer.stop()
         }
-        dropAllowed = allowed
-        dropFolder = target
+        sidebar.dropAllowed = allowed
+        sidebar.dropFolder = target
         // A closed folder under the pointer opens after a moment.
         if (collapsed && expandTimer.folder !== hoveredFolder) {
             expandTimer.folder = hoveredFolder
@@ -292,11 +339,22 @@ Rectangle {
             expandTimer.stop()
         }
     }
-    function drop() {
-        const path = dragPath
-        const folder = dropFolder
-        const valid = dropValid
-        cancelDrag()
+    /// The tree row under the dragged pointer (FolderTreeModel.get) and its fields, typed.
+    property var _entry: ({})
+    function entryText(key: string): string {
+        return AppController.routeText(sidebar._entry, key)
+    }
+    function entryFlag(key: string): bool {
+        return AppController.routeFlag(sidebar._entry, key)
+    }
+    function folderOf(path: string): string {
+        return Workspace.folderOf(path)
+    }
+    function drop(): void {
+        const path = sidebar.dragPath
+        const folder = sidebar.dropFolder
+        const valid = sidebar.dropValid
+        sidebar.cancelDrag()
         if (valid)
             sidebar.dropMoveRequested(path, folder)
     }
@@ -317,33 +375,33 @@ Rectangle {
         target: AppController
         function onCurrentRouteChanged() {
             if (sidebar.revealCurrent)
-                Qt.callLater(sidebar.revealRoute)
+                revealRouteLater.restart()
             else
                 sidebar.revealedPath = ""
         }
     }
     Connections {
         target: Workspace
-        function onRecentPagesChanged() { Qt.callLater(sidebar.updateRecentOthers) }
+        function onRecentPagesChanged() { recentLater.restart() }
     }
     Component.onCompleted: {
-        updateRecentOthers()
-        if (revealCurrent)
-            Qt.callLater(revealRoute)
+        sidebar.updateRecentOthers()
+        if (sidebar.revealCurrent)
+            revealRouteLater.restart()
     }
     // Shown (the drawer opens, the window's sidebar comes back): its list is laid out again —
     // placed again (the header may have grown meanwhile: the navigation stays in sight).
-    onVisibleChanged: if (visible) Qt.callLater(placeList)
+    onVisibleChanged: if (visible) placeListLater.restart()
 
     Timer {
         id: expandTimer
         property string folder
         interval: 600
         onTriggered: {
-            if (!sidebar.dragging || folder === "")
+            if (!sidebar.dragging || expandTimer.folder === "")
                 return
-            tree.setExpanded(folder, true)
-            Qt.callLater(() => sidebar.dragTo(sidebar.dragScenePos))
+            tree.setExpanded(expandTimer.folder, true)
+            dragAgainLater.restart()
         }
     }
     Timer {
@@ -354,7 +412,7 @@ Rectangle {
         running: sidebar.dragging && direction !== 0
         onTriggered: {
             const max = Math.max(0, list.contentHeight + list.originY - list.height)
-            list.contentY = Math.max(list.originY, Math.min(list.originY + max, list.contentY + direction * 12))
+            list.contentY = Math.max(list.originY, Math.min(list.originY + max, list.contentY + scrollTimer.direction * 12))
             list.keepPlace() // (the user's scrolling too)
             // Other rows are under the still pointer now: they are the target (and open).
             sidebar.dragTo(sidebar.dragScenePos)
@@ -370,9 +428,11 @@ Rectangle {
     }
     Connections {
         target: Workspace
-        function onMoveImpactReady(path, folder, impact) {
-            if (sidebar.dragging && sidebar.dropAllowed && path === sidebar.dragPath && folder === sidebar.dropFolder)
+        function onMoveImpactReady(path: string, folder: string, impact: var) {
+            if (sidebar.dragging && sidebar.dropAllowed && path === sidebar.dragPath && folder === sidebar.dropFolder) {
                 sidebar.dropImpact = impact
+                sidebar.dropImpactKnown = true
+            }
         }
     }
     ShellMoveWords { id: words }
@@ -449,8 +509,8 @@ Rectangle {
             /// dragged to its edge) or a row was revealed where the list showed it — not ending at
             /// the top. Otherwise it is placed from its top (`placeList()`).
             property bool scrolledAway: false
-            function keepPlace() {
-                scrolledAway = !atYBeginning
+            function keepPlace(): void {
+                list.scrolledAway = !list.atYBeginning
             }
             // The user scrolls: the revealed row is no longer kept in view.
             onMovementStarted: sidebar.revealedPath = ""
@@ -461,12 +521,12 @@ Rectangle {
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
                     sidebar.revealedPath = ""
-                    Qt.callLater(list.keepPlace)
+                    keepPlaceLater.restart()
                 }
                 event.accepted = false
             }
             // Laid out again (the drawer opening, a keyboard, the window): placed again.
-            onHeightChanged: Qt.callLater(sidebar.placeList)
+            onHeightChanged: placeListLater.restart()
 
             header: Column {
                 width: list.width - list.leftMargin - list.rightMargin
@@ -476,7 +536,7 @@ Rectangle {
                 // once opened that way with its first entries hidden). Stay at the top instead (the
                 // revealed row still in view: it moved down with the rows) — unless the list is
                 // kept scrolled away: the rows stay where they are.
-                onHeightChanged: Qt.callLater(sidebar.placeList)
+                onHeightChanged: placeListLater.restart()
 
                 // ---- The sections before the tree --------------------------------------
                 Repeater {
@@ -509,7 +569,7 @@ Rectangle {
                         AppSettings.setValue("ui/sidebar/pages", open)
                         // Opened again: the open page shows (it was not revealed while collapsed).
                         if (open && sidebar.revealCurrent)
-                            Qt.callLater(sidebar.revealRoute)
+                            revealRouteLater.restart()
                     }
                     // A row dragged here goes to the notebook's root.
                     Rectangle {
@@ -549,10 +609,12 @@ Rectangle {
                 subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
                 /// A page's own icon (docs/UI.md "Page icon and cover"), following its edits.
                 readonly property var pageIcon: !isDir && Workspace.revision >= 0 ? Workspace.pageIconOf(path) : ({})
+                readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
+                readonly property string pageIconName: AppController.routeText(pageIcon, "name")
                 iconName: special === "journals" ? fileIcon
                           : isDir && hasChildren ? (expanded ? "chevron-down" : "chevron-right")
-                          : pageIcon.kind === "app" ? pageIcon.name : fileIcon
-                iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
+                          : pageIconKind === "app" ? pageIconName : fileIcon
+                iconEmoji: pageIconKind === "emoji" ? pageIconName : ""
                 iconColor: special === "journals" ? Theme.accent : Theme.fgFaint
                 selected: !isDir && sidebar.currentPath === path
                 opacity: sidebar.dragging && sidebar.dragPath === path ? 0.5 : 1
@@ -583,10 +645,10 @@ Rectangle {
                 ListView.onPooled: visible = false
                 ListView.onReused: visible = true
                 onClicked: {
-                    if (isDir)
-                        tree.toggle(index)
+                    if (row.isDir)
+                        tree.toggle(row.index)
                     else
-                        sidebar.openPage(path)
+                        sidebar.openPageHere(row.path)
                 }
                 onPressAndHold: sidebar.showContextMenu(row, path, isDir)
                 TapHandler {
@@ -613,12 +675,13 @@ Rectangle {
                 // list and holds for the menu (the drawer's edge swipe too). It takes the pointer
                 // from the list (no flick) and keeps it.
                 DragHandler {
+                    id: rowDrag
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     acceptedButtons: Qt.LeftButton
                     target: null
                     dragThreshold: 6
                     grabPermissions: PointerHandler.CanTakeOverFromAnything
-                    onActiveChanged: if (active) sidebar.beginDrag(row.path, row.isDir, row.text)
+                    onActiveChanged: if (rowDrag.active) sidebar.beginDrag(row.path, row.isDir, row.text)
                 }
 
                 Loader {
@@ -681,9 +744,10 @@ Rectangle {
         anchors.fill: parent
         z: 10
         PointHandler {
+            id: pointer
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-            onPointChanged: if (sidebar.dragging) sidebar.dragTo(point.scenePosition)
-            onActiveChanged: if (!active && sidebar.dragging) sidebar.drop()
+            onPointChanged: if (sidebar.dragging) sidebar.dragTo(pointer.point.scenePosition)
+            onActiveChanged: if (!pointer.active && sidebar.dragging) sidebar.drop()
         }
     }
     // The dragged row under the pointer, with where it would go and what that rewrites (or why
@@ -692,9 +756,13 @@ Rectangle {
         id: ghost
         objectName: "treeDragGhost"
         /// The second line: Workspace.moveImpact() of the target.
-        readonly property string impactText: !sidebar.dragging || !sidebar.dropAllowed || !sidebar.dropImpact ? ""
-                                             : sidebar.dropImpact.ok ? words.impactText(sidebar.dropImpact)
-                                             : (sidebar.dropImpact.error || "")
+        readonly property string impactText: !sidebar.dragging || !sidebar.dropAllowed || !sidebar.dropImpactKnown ? ""
+                                             : AppController.routeFlag(sidebar.dropImpact, "ok")
+                                               ? words.impactText(words.count(sidebar.dropImpact, "links"),
+                                                                  words.count(sidebar.dropImpact, "tags"),
+                                                                  words.count(sidebar.dropImpact, "notes"),
+                                                                  words.strings(sidebar.dropImpact, "specials"))
+                                             : AppController.routeText(sidebar.dropImpact, "error")
         visible: sidebar.dragging
         z: 11
         x: Math.min(sidebar.dragPoint.x + 12, sidebar.width - width - 4)
@@ -726,7 +794,8 @@ Rectangle {
                     width: Math.min(implicitWidth, sidebar.width - 60)
                     elide: Text.ElideRight
                     text: sidebar.dropValid ? qsTr("%1 → %2").arg(sidebar.dragTitle)
-                                                            .arg(sidebar.dropFolder !== "" ? sidebar.dropFolder.split("/").pop() : qsTr("Notebook root"))
+                                                            .arg(sidebar.dropFolder !== "" ? Js.sliceFrom(sidebar.dropFolder, Js.lastIndexOf(sidebar.dropFolder, "/") + 1)
+                                                                                           : qsTr("Notebook root"))
                                             : sidebar.dragTitle
                     font.pixelSize: Theme.textSm
                 }
@@ -776,29 +845,33 @@ Rectangle {
                     model: Workspace.favorites
                     delegate: BListItem {
                         id: favoriteItem
-                        required property var modelData
+                        // (Workspace.favorites: { path, title }.)
+                        required property string path
+                        required property string title
                         /// The page's own icon in place of the star (docs/UI.md "Page icon and cover").
-                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
+                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(path) : ({})
+                        readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
+                        readonly property string pageIconName: AppController.routeText(pageIcon, "name")
                         width: parent.width
                         dense: true
-                        text: modelData.title
-                        iconName: pageIcon.kind === "app" ? pageIcon.name : "star"
-                        iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
-                        selected: sidebar.route.view === "page" && sidebar.route.path === modelData.path
-                        onClicked: sidebar.openPage(modelData.path)
-                        onPressAndHold: sidebar.showContextMenu(favoriteItem, modelData.path, false)
+                        text: title
+                        iconName: pageIconKind === "app" ? pageIconName : "star"
+                        iconEmoji: pageIconKind === "emoji" ? pageIconName : ""
+                        selected: sidebar.routeView === "page" && sidebar.routePath === path
+                        onClicked: sidebar.openPageHere(favoriteItem.path)
+                        onPressAndHold: sidebar.showContextMenu(favoriteItem, favoriteItem.path, false)
                         TapHandler {
                             // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
                             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                             acceptedButtons: Qt.MiddleButton
                             enabled: OpenIn.tabs
-                            onTapped: sidebar.openPage(favoriteItem.modelData.path, "tab")
+                            onTapped: sidebar.openPage(favoriteItem.path, "tab")
                         }
                         TapHandler {
                             // Right-click only (see the tree rows below): never a finger.
                             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                             acceptedButtons: Qt.RightButton
-                            onTapped: sidebar.showContextMenu(favoriteItem, favoriteItem.modelData.path, false)
+                            onTapped: sidebar.showContextMenu(favoriteItem, favoriteItem.path, false)
                         }
                     }
                 }
@@ -832,20 +905,24 @@ Rectangle {
                     model: sidebar.recentOthers
                     delegate: BListItem {
                         id: recentItem
-                        required property var modelData
-                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(modelData.path) : ({})
+                        // (AppController.recentPagesExcept: { path, title }.)
+                        required property string path
+                        required property string title
+                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(path) : ({})
+                        readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
+                        readonly property string pageIconName: AppController.routeText(pageIcon, "name")
                         width: parent.width
                         dense: true
-                        text: modelData.title
-                        iconName: pageIcon.kind === "app" ? pageIcon.name : "clock"
-                        iconEmoji: pageIcon.kind === "emoji" ? pageIcon.name : ""
-                        onClicked: sidebar.openPage(modelData.path)
+                        text: title
+                        iconName: pageIconKind === "app" ? pageIconName : "clock"
+                        iconEmoji: pageIconKind === "emoji" ? pageIconName : ""
+                        onClicked: sidebar.openPageHere(recentItem.path)
                         TapHandler {
                             // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
                             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                             acceptedButtons: Qt.MiddleButton
                             enabled: OpenIn.tabs
-                            onTapped: sidebar.openPage(recentItem.modelData.path, "tab")
+                            onTapped: sidebar.openPage(recentItem.path, "tab")
                         }
                     }
                 }
@@ -859,8 +936,10 @@ Rectangle {
 
         property string path
         property bool isDir: false
-        readonly property bool favorite: !isDir && Workspace.favorites.some(f => f.path === contextMenu.path)
-        readonly property bool page: !isDir && contextMenu.path.toLowerCase().endsWith(".md")
+        // (Workspace.favorites: followed; it lists the favourites that exist.)
+        readonly property bool favorite: !isDir && Workspace.favorites.length >= 0 && Workspace.isFavorite(contextMenu.path)
+                                         && Workspace.exists(contextMenu.path)
+        readonly property bool page: !isDir && Js.endsWith(Js.toLowerCase(contextMenu.path), ".md")
 
         BMenuItem {
             objectName: "treeMenuNewPage"
@@ -1002,25 +1081,28 @@ Rectangle {
             objectName: "pagesMenuAttachments"
             text: qsTr("Show attachments")
             iconName: "paperclip"
+            id: attachmentsItem
             checkable: true
-            checked: tree.showAttachments
+            // (A Binding: it follows again after the item's own toggle; onTriggered sets it at once.)
+            Binding on checked { value: tree.showAttachments }
             onTriggered: {
                 const show = !tree.showAttachments
                 tree.showAttachments = show
                 AppSettings.setValue("ui/sidebar/attachments", show)
-                checked = Qt.binding(() => tree.showAttachments)
+                attachmentsItem.checked = tree.showAttachments
             }
         }
         BMenuItem {
             objectName: "pagesMenuReveal"
             text: qsTr("Show the open page")
             iconName: "folder-tree"
+            id: revealItem
             checkable: true
-            checked: sidebar.revealCurrent
+            Binding on checked { value: sidebar.revealCurrent }
             onTriggered: {
                 sidebar.revealCurrent = !sidebar.revealCurrent
                 AppSettings.setValue("ui/sidebar/revealCurrent", sidebar.revealCurrent)
-                checked = Qt.binding(() => sidebar.revealCurrent)
+                revealItem.checked = sidebar.revealCurrent
                 if (sidebar.revealCurrent)
                     sidebar.revealRoute()
             }

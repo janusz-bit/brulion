@@ -16,12 +16,12 @@ import Brulion
 BDialog {
     id: dialog
 
-    readonly property var share: AppController.pendingShare
-    readonly property bool hasFiles: share.kind === "files"
-    readonly property var files: share.files || []
-    readonly property int readable: share.readable || 0
+    readonly property bool hasFiles: AppController.routeText(AppController.pendingShare, "kind") === "files"
+    /// [{ name, title, preview, size, error }] (AppController.pendingShare).
+    readonly property list<var> files: AppController.routeList(AppController.pendingShare, "files")
+    readonly property int readable: AppController.routeInt(AppController.pendingShare, "readable", 0)
     /// Files opened with Brulion on a desktop: copies go into the notebook, the files stay.
-    readonly property bool openedWithBrulion: share.source === "open"
+    readonly property bool openedWithBrulion: AppController.routeText(AppController.pendingShare, "source") === "open"
     /// "journal" | "page"
     property string target: "journal"
     /// The last save failed (a page of that name exists): changed input tries again.
@@ -35,27 +35,33 @@ BDialog {
     iconName: "share"
     acceptText: qsTr("Save")
     // Once saved, pendingShare is empty: the dialog still closes as accepted.
-    acceptEnabled: saved || saveError === "" && (hasFiles ? readable > 0 : textField.typedText.trim() !== "")
-                   && (target !== "page" || !titleField.visible || titleField.typedText.trim() !== "")
+    acceptEnabled: saved || saveError === "" && (hasFiles ? readable > 0 : Js.trim(textField.typedText) !== "")
+                   && (target !== "page" || !titleField.visible || Js.trim(titleField.typedText) !== "")
     initialFocusItem: hasFiles ? null : textField
 
     /// Fill the dialog from pendingShare (on open, and when a newer share replaces the shown one).
-    function reload() {
-        saved = false
-        saveError = ""
-        target = share.target === "page" ? "page" : "journal"
-        titleField.text = share.title || ""
-        textField.text = share.text || ""
+    property var _result: ({})
+    function errorOf(result: var): string {
+        return AppController.routeText(result, "error")
+    }
+    function reload(): void {
+        dialog.saved = false
+        dialog.saveError = ""
+        dialog.target = AppController.routeText(AppController.pendingShare, "target") === "page" ? "page" : "journal"
+        titleField.text = AppController.routeText(AppController.pendingShare, "title")
+        textField.text = AppController.routeText(AppController.pendingShare, "text")
     }
 
     onAboutToShow: reload()
     onAcceptRequested: {
-        const result = AppController.saveShare({ target: dialog.target, title: titleField.text.trim(),
-                                                 text: textField.text })
-        if (result.ok === true)
+        // (Kept in a property: a call's result read after another call is not compiled.)
+        dialog._result = AppController.saveShare({ target: dialog.target, title: Js.trim(titleField.text),
+                                                   text: textField.text })
+        const error = dialog.errorOf(dialog._result)
+        if (AppController.routeFlag(dialog._result, "ok"))
             dialog.saved = true
         else
-            dialog.saveError = result.error || qsTr("Nothing to save.")
+            dialog.saveError = error !== "" ? error : qsTr("Nothing to save.")
     }
     onRejected: {
         if (!saved)
@@ -106,7 +112,10 @@ BDialog {
         model: dialog.files
         delegate: ColumnLayout {
             id: fileRow
-            required property var modelData
+            // (The rows of AppController.pendingShare's files.)
+            required property string name
+            required property string preview
+            required property string error
             Layout.fillWidth: true
             spacing: Theme.space1
 
@@ -114,12 +123,12 @@ BDialog {
                 Layout.fillWidth: true
                 spacing: Theme.space2
                 BIcon {
-                    name: fileRow.modelData.error !== "" ? "circle-alert" : "file-text"
-                    color: fileRow.modelData.error !== "" ? Theme.dangerText : Theme.fgMuted
+                    name: fileRow.error !== "" ? "circle-alert" : "file-text"
+                    color: fileRow.error !== "" ? Theme.dangerText : Theme.fgMuted
                 }
                 BText {
                     Layout.fillWidth: true
-                    text: fileRow.modelData.name
+                    text: fileRow.name
                     textFormat: Text.PlainText
                     elide: Text.ElideMiddle
                     variant: "label"
@@ -130,10 +139,10 @@ BDialog {
             BText {
                 Layout.fillWidth: true
                 visible: text !== ""
-                text: fileRow.modelData.error !== "" ? fileRow.modelData.error : fileRow.modelData.preview
+                text: fileRow.error !== "" ? fileRow.error : fileRow.preview
                 textFormat: Text.PlainText
                 variant: "faint"
-                color: fileRow.modelData.error !== "" ? Theme.dangerText : Theme.fgFaint
+                color: fileRow.error !== "" ? Theme.dangerText : Theme.fgFaint
                 font.pixelSize: Theme.textSm
                 wrapMode: Text.Wrap
                 maximumLineCount: 6

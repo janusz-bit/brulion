@@ -1,0 +1,112 @@
+// ViewTraits — what the shell reads of the view a ShellRouteView shows (docs/UI.md "Navigation":
+// the view contract). The views share no base type: each has some of the optional properties
+// (`title`, `sidePanel`, `editing`, `toolbarDocked`, …) and functions (`viewState()`,
+// `restoreViewState(state)`, `endEditing()`). QML looked them up dynamically, which qmlcachegen
+// cannot compile; this object does it through the view's meta-object and gives typed results,
+// following the properties' change signals:
+//
+//   ViewTraits { id: traits; view: loader.item }
+//   readonly property string viewTitle: traits.title
+//
+// A property the view lacks, or of another type than the contract's, reads as "", null or false
+// (as `typeof v.title === "string" ? v.title : ""` and `v.editing === true` did); a function it
+// lacks does nothing (viewState() gives {}).
+#pragma once
+
+#include <QMetaMethod>
+#include <QObject>
+#include <QPointer>
+#include <QString>
+#include <QVariantMap>
+
+#include <QQmlComponent>
+
+namespace brulion::shell {
+
+class ViewTraits : public QObject
+{
+    Q_OBJECT
+    /// The view (a ShellRouteView's Loader.item); null for none.
+    Q_PROPERTY(QObject *view READ view WRITE setView NOTIFY viewChanged FINAL)
+    /// `title` when it is a string, else "".
+    Q_PROPERTY(QString title READ title NOTIFY traitsChanged FINAL)
+    /// `sidePanel` when it is a Component, else null.
+    Q_PROPERTY(QQmlComponent *sidePanel READ sidePanel NOTIFY traitsChanged FINAL)
+    /// `noteMode` when it is a string, else "".
+    Q_PROPERTY(QString noteMode READ noteMode NOTIFY traitsChanged FINAL)
+    // Each true only when the view's property of that name is the boolean true.
+    Q_PROPERTY(bool editing READ editing NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool toolbarDocked READ toolbarDocked NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool replacesBottomNav READ replacesBottomNav NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool pictureRoute READ pictureRoute NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool pictureAsText READ pictureAsText NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool pdfRoute READ pdfRoute NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool fileRoute READ fileRoute NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool sourceMode READ sourceMode NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(bool edgeSwipe READ edgeSwipe NOTIFY traitsChanged FINAL)
+
+public:
+    explicit ViewTraits(QObject *parent = nullptr);
+
+    QObject *view() const { return m_view; }
+    void setView(QObject *view);
+
+    QString title() const { return m_title; }
+    QQmlComponent *sidePanel() const { return m_sidePanel; }
+    QString noteMode() const { return m_noteMode; }
+    bool editing() const { return m_flags & Editing; }
+    bool toolbarDocked() const { return m_flags & ToolbarDocked; }
+    bool replacesBottomNav() const { return m_flags & ReplacesBottomNav; }
+    bool pictureRoute() const { return m_flags & PictureRoute; }
+    bool pictureAsText() const { return m_flags & PictureAsText; }
+    bool pdfRoute() const { return m_flags & PdfRoute; }
+    bool fileRoute() const { return m_flags & FileRoute; }
+    bool sourceMode() const { return m_flags & SourceMode; }
+    bool edgeSwipe() const { return m_flags & EdgeSwipe; }
+
+    /// The view's viewState() ({} when it has none, or it gives no map).
+    Q_INVOKABLE QVariantMap viewState() const;
+    /// Keep `state` for the view ({}: none) and hand it over at once when the view can take it
+    /// (restoreViewState(state)); a view loaded later gets it from applyPendingState(). A view
+    /// without restoreViewState() drops it.
+    Q_INVOKABLE void restoreViewState(const QVariantMap &state);
+    /// Hand the state kept by restoreViewState() to the view (a view just loaded).
+    Q_INVOKABLE void applyPendingState();
+    /// The view's endEditing(), when it has one.
+    Q_INVOKABLE void endEditing() const;
+
+Q_SIGNALS:
+    void viewChanged();
+    void traitsChanged();
+
+private Q_SLOTS:
+    void refresh();
+    void viewDestroyed();
+
+private:
+    enum Flag {
+        Editing = 1 << 0,
+        ToolbarDocked = 1 << 1,
+        ReplacesBottomNav = 1 << 2,
+        PictureRoute = 1 << 3,
+        PictureAsText = 1 << 4,
+        PdfRoute = 1 << 5,
+        FileRoute = 1 << 6,
+        SourceMode = 1 << 7,
+        EdgeSwipe = 1 << 8,
+    };
+    /// The view's method `name` with `parameters` parameters (invalid when it has none).
+    QMetaMethod method(const char *name, int parameters) const;
+    QVariant read(const char *name) const;
+
+    QPointer<QObject> m_view;
+    QList<QMetaObject::Connection> m_connections;
+    QString m_title;
+    QPointer<QQmlComponent> m_sidePanel;
+    QString m_noteMode;
+    int m_flags = 0;
+    QVariantMap m_pending;
+    bool m_hasPending = false;
+};
+
+} // namespace brulion::shell

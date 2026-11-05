@@ -37,8 +37,12 @@ class ShortcutMap : public QObject {
     Q_OBJECT
     /// The shortcut of every action that has one: { id: "Ctrl+J", … }.
     Q_PROPERTY(QVariantMap sequences READ sequences NOTIFY changed FINAL)
-    /// The same as a list [{ id, sequence }] (AppShell's Shortcut objects).
+    /// The same as a list [{ id, action (= id), sequence }].
     Q_PROPERTY(QVariantList bindings READ bindings NOTIFY changed FINAL)
+    /// The bindings AppShell's Shortcut objects handle: without the views' own (find, replace,
+    /// Markdown source, a page property: "page.find", "page.replace", "page.source",
+    /// "page.addProperty") and block.copyRef on Ctrl+Shift+C, which the editor handles itself.
+    Q_PROPERTY(QVariantList shellBindings READ shellBindings NOTIFY changed FINAL)
     /// How many actions have a custom shortcut (or none instead of their default).
     Q_PROPERTY(int customCount READ customCount NOTIFY changed FINAL)
 
@@ -59,6 +63,7 @@ public:
 
     QVariantMap sequences() const;
     QVariantList bindings() const;
+    QVariantList shellBindings() const;
     int customCount() const { return int(m_custom.size()); }
 
     /// The shortcut `id` has now ("" for none or an unknown id).
@@ -86,8 +91,8 @@ public:
     Q_INVOKABLE QString reset(const QString &id);
     /// Every action back to its default.
     Q_INVOKABLE void resetAll();
-    /// The settings' list: [{ id, title, sequence, defaultSequence, custom }] of the actions whose
-    /// title, id or shortcut contains `query` (case and diacritics ignored), in order.
+    /// The settings' list: [{ id, action (= id), title, sequence, defaultSequence, custom }] of the
+    /// actions whose title, id or shortcut contains `query` (case and diacritics ignored), in order.
     Q_INVOKABLE QVariantList entries(const QString &query = QString()) const;
     /// The shortcut of a key press (QML KeyEvent key and modifiers): "" for a modifier alone or a
     /// key Qt does not know.

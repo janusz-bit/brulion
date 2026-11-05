@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Templates as T
 import Brulion
 
 // AppShell — the main UI once a vault is open (docs/UI.md "Window layout").
@@ -49,17 +50,21 @@ FocusScope {
     /// navigation's tabs into the middle of the screen and the content with them. No navigation
     /// bar is that tall: a margin above `navigationBarMax` keeps the last one below it. The
     /// bottom navigation pads itself with it, the content clears it while typing.
-    readonly property real navigationBar: safe.bottom <= navigationBarMax ? safe.bottom : _lastNavigationBar
+    readonly property real navigationBar: shell.SafeArea.margins.bottom <= navigationBarMax ? shell.SafeArea.margins.bottom
+                                                                                            : _lastNavigationBar
     /// The tallest system navigation bar (logical px; Android's are 16–56 dp, a tablet's taskbar
     /// included); as in ViewportKeyboard::MinKeyboard, anything taller is a keyboard.
     readonly property real navigationBarMax: 120
     property real _lastNavigationBar: 0
-    function noteNavigationBar() {
-        if (safe.bottom <= navigationBarMax)
-            _lastNavigationBar = safe.bottom
+    function noteNavigationBar(): void {
+        if (shell.SafeArea.margins.bottom <= shell.navigationBarMax)
+            shell._lastNavigationBar = shell.SafeArea.margins.bottom
     }
     onSafeChanged: noteNavigationBar()
     readonly property var route: AppController.currentRoute
+    /// The current route's view and path ("" when it has none).
+    readonly property string currentView: AppController.currentView
+    readonly property string routePath: routeTitles.field(AppController.currentRoute, "path")
     /// The main window shows two panes side by side (wide windows).
     readonly property bool split: !Theme.narrow && AppController.splitTab !== 0
     /// The focused pane's view: the top bar, the side panel's context and the keyboard rules are its.
@@ -68,7 +73,7 @@ FocusScope {
     /// when it was in one of the panes.
     readonly property bool splitPaneFocused: split && AppController.splitFocused
     onSplitPaneFocusedChanged: {
-        const pane = splitPaneFocused ? splitPane : mainPane
+        const pane = shell.splitPaneFocused ? splitPane : mainPane
         if (!pane.activeFocus && (mainPane.activeFocus || splitPane.activeFocus))
             pane.forceActiveFocus()
     }
@@ -121,35 +126,34 @@ FocusScope {
     /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
     /// line is kept right above the keyboard and the toolbar, under the toasts' usual place.
     readonly property bool toastsAtTop: KeyboardInsets.shown || (toolbarDocked && shell.routeView.viewEditing)
-    readonly property string title: shell.routeView.viewTitle !== "" ? shell.routeView.viewTitle : routeTitle(route)
+    readonly property string title: shell.routeView.viewTitle !== "" ? shell.routeView.viewTitle
+                                    : routeTitles.routeTitle(shell.currentView, shell.routePath,
+                                                             routeTitles.field(AppController.currentRoute, "date"),
+                                                             routeTitles.field(AppController.currentRoute, "tag"))
     /// Folders above the current page, or above the folder All pages shows (with "Wszystkie
-    /// strony" first): [{ title, path }] — a crumb opens All pages in that folder.
-    readonly property var crumbs: {
-        if (route.view === "allPages" && route.path) {
-            const parts = String(route.path).split("/")
-            return [{ title: qsTr("All pages"), path: "" }].concat(
-                        parts.slice(0, -1).map((part, i) => ({ title: part, path: parts.slice(0, i + 1).join("/") })))
-        }
-        if (route.view !== "page" || !route.path)
-            return []
-        const folder = Workspace.folderOf(route.path)
-        if (folder === "")
-            return []
-        const parts = folder.split("/")
-        return parts.map((part, i) => ({ title: part, path: parts.slice(0, i + 1).join("/") }))
-    }
+    /// strony" first): their titles (`crumbs`) and paths (`crumbPaths`; "" the notebook's root) —
+    /// a crumb opens All pages in that folder.
+    readonly property string crumbFolder: currentView === "allPages" ? Js.slice(routePath, 0, Math.max(0, Js.lastIndexOf(routePath, "/")))
+                                        : currentView === "page" && routePath !== "" ? Workspace.folderOf(routePath) : ""
+    readonly property list<string> crumbFolderParts: crumbFolder !== "" ? Js.split(crumbFolder, "/") : []
+    readonly property list<string> crumbs: currentView === "allPages" && routePath !== ""
+                                           ? Js.insertedStringAt(crumbFolderParts, 0, qsTr("All pages")) : crumbFolderParts
+    readonly property list<string> crumbPaths: currentView === "allPages" && routePath !== ""
+                                               ? Js.insertedStringAt(AppController.folderChain(crumbFolder), 0, "")
+                                               : AppController.folderChain(crumbFolder)
     /// The file the current route shows: a page, or a daily note that exists.
     readonly property string currentFile: {
-        if (route.view === "page")
-            return route.path || ""
+        if (shell.currentView === "page")
+            return shell.routePath
+        const date = routeTitles.field(AppController.currentRoute, "date")
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-        if (route.view !== "journal" || !route.date || Workspace.revision < 0)
+        if (shell.currentView !== "journal" || date === "" || Workspace.revision < 0)
             return ""
-        const path = route.path || Workspace.journalPath(route.date)
+        const path = shell.routePath !== "" ? shell.routePath : Workspace.journalPath(date)
         return Workspace.exists(path) ? path : ""
     }
 
-    function flag(value) {
+    function flag(value: var): bool {
         return value === true || value === "true"
     }
 
@@ -157,8 +161,8 @@ FocusScope {
     /// shows a page or the journal, no sidebar, top bar, side panel or bottom navigation — the
     /// text column alone, centred. F8 (ShortcutMap "view.focus"), Esc once the view does not need
     /// it, the Back key and the corner button leave it; other views show their bars as usual.
-    readonly property bool focusMode: AppSettings.focusMode && ["page", "journal", "journals"].indexOf(route.view) >= 0
-    function leaveFocusMode() {
+    readonly property bool focusMode: AppSettings.focusMode && ["page", "journal", "journals"].indexOf(currentView) >= 0
+    function leaveFocusMode(): void {
         AppSettings.focusMode = false
     }
 
@@ -176,62 +180,43 @@ FocusScope {
           .arg(Math.round(navigationBar)).arg(bottomNavShown ? Math.round(bottomNavHeight) : 0)
           .arg(toolbarDocked ? "docked" : "not docked")
     property string _loggedTyping: ""
-    function logTyping() {
-        if (KeyboardInsets.animating || typingReport === _loggedTyping)
+    function logTyping(): void {
+        if (KeyboardInsets.animating || shell.typingReport === shell._loggedTyping)
             return
-        console.debug(platformLog, typingReport !== "" ? typingReport : "Typing ended")
-        _loggedTyping = typingReport
+        console.debug(platformLog, shell.typingReport !== "" ? shell.typingReport : "Typing ended")
+        shell._loggedTyping = shell.typingReport
     }
-    onTypingReportChanged: Qt.callLater(shell.logTyping)
+    // (Qt.callLater: once per turn of the event loop.)
+    Timer {
+        id: logTypingLater
+        interval: 0
+        onTriggered: shell.logTyping()
+    }
+    onTypingReportChanged: logTypingLater.restart()
     Connections {
         target: KeyboardInsets
-        function onAnimatingChanged() { Qt.callLater(shell.logTyping) }
+        function onAnimatingChanged() { logTypingLater.restart() }
     }
 
+    // Titles of routes and pages (also the tab bar's, the tab switcher's, a page window's).
+    ShellRouteTitles { id: routeTitles }
     /// A page's title as people read it: daily notes by their date ("środa, 14 października
     /// 2026"), not by their file name ("2026-10-14").
-    function pageLabel(path) {
-        const day = path ? Workspace.journalDate(path) : ""
-        return day !== "" ? DatesHelper.formatLong(day) : Workspace.pageTitle(path)
+    function pageLabel(path: string): string {
+        return routeTitles.pageLabel(path)
     }
 
-    /// Human title of a route (top bar, side panel header).
-    function routeTitle(r) {
-        switch (r.view) {
-        case "journals": return qsTr("Journals")
-        case "journal": return DatesHelper.formatLong(r.date)
-        case "page": return pageLabel(r.path)
-        case "calendar": return qsTr("Calendar")
-        case "tasks": return qsTr("Tasks")
-        case "habits": return qsTr("Habits")
-        case "graph": return qsTr("Graph")
-        case "search": return qsTr("Search")
-        case "allPages": return r.path ? r.path.split("/").pop() : qsTr("All pages")
-        case "tags": return qsTr("Tags")
-        case "tag": return "#" + r.tag
-        case "sync": return qsTr("Sync")
-        case "importExport": return qsTr("Import and export")
-        case "history": return qsTr("History of %1").arg(pageLabel(r.path))
-        case "trash": return qsTr("Trash")
-        case "cleanup": return qsTr("Clean up")
-        case "replace": return qsTr("Replace in notebook")
-        case "settings": return qsTr("Settings")
-        case "drawing": return Workspace.pageTitle(r.path || "").replace(/\.(svg|excalidraw)$/i, "")
-        }
-        return "Brulion"
-    }
-
-    function openPalette(query) {
+    function openPalette(query: string): void {
         palette.open()
-        if (query)
+        if (query !== "")
             palette.typeQuery(query)
     }
-    function openSwitcher(query) {
+    function openSwitcher(query: string): void {
         switcher.open()
-        if (query)
+        if (query !== "")
             switcher.typeQuery(query)
     }
-    function openCapture() {
+    function openCapture(): void {
         // Captured notes belong in the user's journal: from the documentation, AppController
         // goes back to the user's notebook and opens the dialog there.
         if (AppController.inDocsVault)
@@ -241,8 +226,8 @@ FocusScope {
     }
     /// The share dialog for what another app shared (AppController.pendingShare; Android's
     /// "Udostępnij → Brulion", the --share option).
-    function openShare() {
-        if (AppController.pendingShare.kind === undefined)
+    function openShare(): void {
+        if (AppController.routeText(AppController.pendingShare, "kind") === "")
             return
         if (shareDialog.opened)
             shareDialog.reload() // a newer share replaced the one shown
@@ -252,44 +237,64 @@ FocusScope {
     /// A new page: in `folder`, or — Ctrl+N, the top bar, the sidebar's pencil pass "" — in the
     /// folder of the page shown, the root too (a removable chip in the dialog); else the
     /// notebook's folder for new pages.
-    function openNewPage(folder) {
-        if (!folder && route.view === "page" && route.path && Workspace.journalDate(route.path) === "") {
-            newPage.openFor(Workspace.folderOf(route.path), false, true)
+    function openNewPage(folder: string): void {
+        if (folder === "" && shell.currentView === "page" && shell.routePath !== ""
+                && Workspace.journalDate(shell.routePath) === "") {
+            newPage.openFor(Workspace.folderOf(shell.routePath), false, true)
             return
         }
-        newPage.openFor(folder || "", false)
+        newPage.openFor(folder, false, false)
     }
-    function openNewFolder(parentFolder) { newPage.openFor(parentFolder, true) }
-    function openRename(path, isDir) { rename.openFor(path, isDir) }
+    function openNewFolder(parentFolder: string): void { newPage.openFor(parentFolder, true, false) }
+    function openRename(path: string, isDir: bool): void { rename.openFor(path, isDir) }
     /// "Przenieś do…" for a page, an attachment or a folder.
-    function openMove(path, isDir) {
-        if (path)
-            moveDialog.openFor(path, isDir === true)
+    function openMove(path: string, isDir: bool): void {
+        if (path !== "")
+            moveDialog.openFor(path, isDir)
     }
+    /// The last move's Undo: its toast (AppController.toastWithAction) and where it moves back.
+    property int _moveToast: 0
+    property string _movedPath
+    property string _moveBack
+    property var _moveImpact: ({})
     /// Move `path` into `folder` (created first when `create`; "" = the root) and say how it went,
     /// with Undo (moving it back).
-    function performMove(path, folder, create) {
+    function performMove(path: string, folder: string, create: bool): bool {
         let target = folder
         if (create) {
-            target = Workspace.createFolder(folder)
+            target = shell.textOf(Workspace.createFolder(folder))
             if (target === "")
                 return false
         }
-        const impact = Workspace.moveImpact(path, target)
-        const moved = Workspace.movePath(path, target)
+        // (Kept in a property: a call's result read after another call is not compiled.)
+        shell._moveImpact = Workspace.moveImpact(path, target)
+        const tags = shell.intOf(shell._moveImpact, "tags")
+        const links = shell.intOf(shell._moveImpact, "links")
+        const moved = shell.textOf(Workspace.movePath(path, target))
         if (moved === "" || moved === path)
             return false
-        const text = moveWords.movedText(Workspace.folderOf(moved), (impact.links || 0) + (impact.tags || 0),
-                                         (impact.tags || 0) > 0)
-        const back = Workspace.folderOf(path)
-        if (shell.toasts)
-            shell.toasts.show(text, { kind: "success", actionText: qsTr("Undo"), onAction: () => Workspace.movePath(moved, back) })
+        const text = moveWords.movedText(Workspace.folderOf(moved), links + tags, tags > 0, "")
+        if (shell.toasts) {
+            shell._movedPath = moved
+            shell._moveBack = Workspace.folderOf(path)
+            shell._moveToast = AppController.toastWithAction(text, "success", qsTr("Undo"))
+        }
         return true
+    }
+    /// A map's field as an int (AppController.routeInt, 0 when missing) / a text, typed.
+    function intOf(map: var, key: string): int {
+        return AppController.routeInt(map, key, 0)
+    }
+    function textOf(text: string): string {
+        return text
+    }
+    function intValue(value: int): int {
+        return value
     }
     /// "Pokaż w drzewie": the sidebar (the drawer on phones) shows `path`, its "Strony" section
     /// opened if it was collapsed.
-    function revealInTree(path) {
-        if (!path)
+    function revealInTree(path: string): void {
+        if (path === "")
             return
         if (Theme.narrow) {
             drawer.open()
@@ -297,37 +302,37 @@ FocusScope {
             if (sidebar)
                 sidebar.reveal(path, true)
         } else {
-            if (!sidebarVisible)
-                toggleSidebar()
+            if (!shell.sidebarVisible)
+                shell.toggleSidebar()
             const sidebar = sidebarLoader.item as ShellSidebar
             if (sidebar)
                 sidebar.reveal(path, true)
         }
     }
-    function openAbout() { about.open() }
-    function confirmDelete(path) {
+    function openAbout(): void { about.open() }
+    function confirmDelete(path: string): void {
         deleteDialog.path = path
         deleteDialog.open()
     }
-    function toggleSidebar() {
-        sidebarVisible = !sidebarVisible
-        AppSettings.setValue("ui/sidebar/visible", sidebarVisible)
+    function toggleSidebar(): void {
+        shell.sidebarVisible = !shell.sidebarVisible
+        AppSettings.setValue("ui/sidebar/visible", shell.sidebarVisible)
     }
     /// AppController.uiActionRequested: the shell's popups.
-    function handleUiAction(action) {
+    function handleUiAction(action: string): void {
         switch (action) {
-        case "palette": openPalette(); break
-        case "switcher": openSwitcher(); break
-        case "capture": openCapture(); break
-        case "share": openShare(); break
-        case "newPage": openNewPage(""); break
-        case "newFolder": openNewFolder(""); break
-        case "movePage": if (route.view === "page") openMove(route.path, false); break
-        case "revealInTree": revealInTree(currentFile); break
-        case "trashPage": if (currentFile !== "") confirmDelete(currentFile); break
-        case "about": openAbout(); break
+        case "palette": shell.openPalette(""); break
+        case "switcher": shell.openSwitcher(""); break
+        case "capture": shell.openCapture(); break
+        case "share": shell.openShare(); break
+        case "newPage": shell.openNewPage(""); break
+        case "newFolder": shell.openNewFolder(""); break
+        case "movePage": if (shell.currentView === "page") shell.openMove(shell.routePath, false); break
+        case "revealInTree": shell.revealInTree(shell.currentFile); break
+        case "trashPage": if (shell.currentFile !== "") shell.confirmDelete(shell.currentFile); break
+        case "about": shell.openAbout(); break
         case "toggleSidePanel": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
-        case "renamePage": if (route.view === "page") openRename(route.path, false); break
+        case "renamePage": if (shell.currentView === "page") shell.openRename(shell.routePath, false); break
         }
     }
 
@@ -364,10 +369,10 @@ FocusScope {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.bottomMargin: shell.keyboardRoom
-        width: visible && item ? item.implicitWidth : 0
+        width: visible && rail.item ? (rail.item as Item).implicitWidth : 0
         sourceComponent: ShellRail {
             objectName: "shellRail"
-            topInset: shell.safe.top
+            topInset: shell.SafeArea.margins.top
             bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
         }
     }
@@ -392,7 +397,7 @@ FocusScope {
             SplitView.minimumWidth: 200
             SplitView.maximumWidth: 440
             sourceComponent: ShellSidebar {
-                topInset: shell.safe.top
+                topInset: shell.SafeArea.margins.top
                 // (The navigation bar's part the keyboard's room leaves.)
                 bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
                 onNewPageRequested: (folder) => shell.openNewPage(folder)
@@ -413,7 +418,7 @@ FocusScope {
             // Focus mode: no top bar; the content clears the system's status bar itself.
             Item {
                 visible: shell.focusMode
-                Layout.preferredHeight: shell.safe.top
+                Layout.preferredHeight: shell.SafeArea.margins.top
             }
             ShellTopBar {
                 id: topBar
@@ -421,9 +426,9 @@ FocusScope {
                 visible: !shell.focusMode
                 Layout.fillWidth: true
                 title: shell.title
-                titleOf: (r) => shell.routeTitle(r)
                 crumbs: shell.crumbs
-                topInset: shell.safe.top
+                crumbPaths: shell.crumbPaths
+                topInset: shell.SafeArea.margins.top
                 sidebarVisible: shell.sidebarVisible
                 // Phones: one way to the drawer — the bottom navigation's Menu while that bar is
                 // shown; ☰ whenever it is not: a view with its own bar instead (the drawing
@@ -437,8 +442,8 @@ FocusScope {
                 noteMode: shell.routeView.viewNoteMode
                 onMenuClicked: drawer.open()
                 onSidebarToggled: shell.toggleSidebar()
-                onPaletteRequested: shell.openPalette()
-                onSwitcherRequested: shell.openSwitcher()
+                onPaletteRequested: shell.openPalette("")
+                onSwitcherRequested: shell.openSwitcher("")
                 onCaptureRequested: shell.openCapture()
                 onNewPageRequested: shell.openNewPage("")
                 onRenameRequested: (path) => shell.openRename(path, false)
@@ -460,7 +465,6 @@ FocusScope {
                 objectName: "shellTabBar"
                 visible: shell.tabBarShown
                 Layout.fillWidth: true
-                titleOf: (r) => shell.routeTitle(r)
             }
             // One pane, or two side by side (the split view). Only the tabs shown have views.
             SplitView {
@@ -532,7 +536,10 @@ FocusScope {
             SplitView.preferredWidth: 340
             SplitView.minimumWidth: 260
             SplitView.maximumWidth: 600
-            pinnedTitle: shell.routeTitle(AppController.sidePanelRoute)
+            pinnedTitle: routeTitles.routeTitle(routeTitles.field(AppController.sidePanelRoute, "view"),
+                                                routeTitles.field(AppController.sidePanelRoute, "path"),
+                                                routeTitles.field(AppController.sidePanelRoute, "date"),
+                                                routeTitles.field(AppController.sidePanelRoute, "tag"))
             contextPanel: shell.routeView.viewSidePanel
         }
     }
@@ -559,8 +566,8 @@ FocusScope {
         visible: shell.focusMode
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.topMargin: shell.safe.top + Theme.space2
-        anchors.rightMargin: shell.safe.right + Theme.space3
+        anchors.topMargin: shell.SafeArea.margins.top + Theme.space2
+        anchors.rightMargin: shell.SafeArea.margins.right + Theme.space3
         z: 5
         iconName: "minimize"
         toolTipBelow: true
@@ -598,7 +605,7 @@ FocusScope {
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
                     : shell.typing || shell.routeView.viewEdgeSwipe ? 0
-                    : Math.max(shell.safe.left, GestureInsets.left) + shell.edgeSwipeStrip
+                    : Math.max(shell.SafeArea.margins.left, GestureInsets.left) + shell.edgeSwipeStrip
         dim: true
         // Focus while open (Drawer's default, stated because the keys rely on it): Escape / the
         // Android back key close the drawer instead of acting underneath it.
@@ -620,10 +627,10 @@ FocusScope {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            width: item ? item.implicitWidth : 0
+            width: drawerRail.item ? (drawerRail.item as Item).implicitWidth : 0
             sourceComponent: ShellRail {
                 objectName: "drawerRail"
-                topInset: shell.safe.top
+                topInset: shell.SafeArea.margins.top
                 bottomInset: shell.navigationBar
                 onNavigated: drawer.close()
             }
@@ -636,7 +643,7 @@ FocusScope {
             anchors.bottom: parent.bottom
             active: Theme.narrow
             sourceComponent: ShellSidebar {
-                topInset: shell.safe.top
+                topInset: shell.SafeArea.margins.top
                 bottomInset: shell.navigationBar
                 onNavigated: drawer.close()
                 onNewPageRequested: (folder) => {
@@ -670,7 +677,7 @@ FocusScope {
         id: palette
         objectName: "shellPalette"
         commands: CommandModel.commands
-        onCommandActivated: (command) => CommandModel.run(command.id)
+        onCommandIdActivated: (id) => CommandModel.run(id)
     }
 
     BQuickSwitcher {
@@ -687,7 +694,7 @@ FocusScope {
         commandPrefix: true
         onSearchRequested: (text) => AppController.search(text)
         onCommandsRequested: (text) => shell.openPalette(text)
-        onPageChosen: (page) => AppController.openPage(page.path)
+        onPagePathChosen: (path) => AppController.openPage(path)
         onCreateRequested: (name) => {
             const path = Workspace.createPage(name)
             if (path !== "")
@@ -700,8 +707,7 @@ FocusScope {
         objectName: "shellCapture"
         onCaptured: {
             if (shell.toasts)
-                shell.toasts.show(qsTr("Added to today's journal"),
-                                  { kind: "success", actionText: qsTr("Open"), onAction: () => AppController.openToday() })
+                shell._captureToast = AppController.toastWithAction(qsTr("Added to today's journal"), "success", qsTr("Open"))
         }
     }
 
@@ -723,16 +729,30 @@ FocusScope {
         property string path
         /// Workspace.folderInfo() of a folder ({} for a file).
         readonly property var info: path !== "" && visible ? Workspace.folderInfo(path) : ({})
-        readonly property bool folder: info.exists === true
-        readonly property string name: path.endsWith(".md") ? Workspace.pageTitle(path) : path.split("/").pop()
+        readonly property bool folder: AppController.routeFlag(info, "exists")
+        readonly property int pages: AppController.routeInt(info, "pages", 0)
+        /// [{ special, path }]: the special folders and files it is or holds.
+        readonly property list<var> specials: AppController.routeList(info, "specials")
+        readonly property string name: Js.endsWith(path, ".md") ? Workspace.pageTitle(path) : Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1)
+        /// The trash path of what was deleted last (its toast's Undo).
+        property list<string> trashed
 
         /// What deleting a special folder, a folder holding some, or the journal template does to
-        /// the notebook: a sentence for each.
-        function specialWarnings() {
-            return (info.specials || []).map(s => specialWarning(s.special, s.path)).filter(w => w !== "")
+        /// the notebook: a sentence for each, after a space.
+        function specialWarnings(): string {
+            let text = ""
+            for (let i = 0; i < deleteDialog.specials.length; ++i) {
+                const warning = deleteDialog.specialWarning(deleteDialog.fieldOf(i, "special"), deleteDialog.fieldOf(i, "path"))
+                if (warning !== "")
+                    text += " " + warning
+            }
+            return text
         }
-        function specialWarning(special, specialPath) {
-            const self = specialPath === path
+        function fieldOf(index: int, key: string): string {
+            return AppController.routeText(deleteDialog.specials[index], key)
+        }
+        function specialWarning(special: string, specialPath: string): string {
+            const self = specialPath === deleteDialog.path
             switch (special) {
             case "journals":
                 return self ? qsTr("This is the journals folder: new daily notes will create it again.")
@@ -766,35 +786,30 @@ FocusScope {
         }
 
         title: qsTr("Move to trash?")
-        message: {
-            const parts = []
-            if (!folder)
-                parts.push(qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(name))
-            else if ((info.pages || 0) > 0)
-                parts.push(qsTr("The folder “%1” and %n page(s) in it will be moved to the trash.", "", info.pages).arg(name),
-                           qsTr("You can restore them from there."))
-            else
-                parts.push(qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(name))
-            return parts.concat(specialWarnings()).join(" ")
-        }
+        message: (folder && pages > 0
+                  ? qsTr("The folder “%1” and %n page(s) in it will be moved to the trash.", "", pages).arg(name)
+                    + " " + qsTr("You can restore them from there.")
+                  : qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(name))
+                 + specialWarnings()
         confirmText: qsTr("Move to trash")
         destructive: true
         onAccepted: {
-            const trashPath = Workspace.deletePage(path)
-            if (trashPath !== "" && shell.toasts)
-                shell.toasts.show(qsTr("Moved to trash"),
-                                  { actionText: qsTr("Undo"), onAction: () => Workspace.restore(trashPath) })
+            const trashPath = Workspace.deletePage(deleteDialog.path)
+            if (trashPath !== "" && shell.toasts) {
+                deleteDialog.trashed = [trashPath]
+                AppController.toastRestore(qsTr("Moved to trash"), qsTr("Undo"), deleteDialog.trashed)
+            }
         }
     }
 
     Connections {
         target: AppController
-        function onUiActionRequested(action) {
+        function onUiActionRequested(action: string) {
             shell.handleUiAction(action)
         }
         // A page or folder of the tree from a view (All pages, the page's menu, the palette).
-        function onItemActionRequested(action, path) {
-            const isDir = Workspace.folderInfo(path).exists === true
+        function onItemActionRequested(action: string, path: string) {
+            const isDir = AppController.routeFlag(Workspace.folderInfo(path), "exists")
             switch (action) {
             case "move": shell.openMove(path, isDir); break
             case "rename": shell.openRename(path, isDir); break
@@ -809,19 +824,23 @@ FocusScope {
     // ---- Shortcuts (docs/UI.md) -----------------------------------------------------------------
 
     // How a replace in the whole notebook went, also when ReplaceView has gone meanwhile.
+    // Its Undo: the toast (AppController.toastWithAction) and the replace's token.
+    property int _replaceToast: 0
+    property int _replaceToken: 0
     Connections {
         target: Workspace.replacing
-        function onApplied(token, hits, files, changed, failed) {
+        function onApplied(token: int, hits: int, files: int, changed: list<string>, failed: list<string>) {
             if (hits > 0) {
-                AppController.toastAction(qsTr("%n occurrence(s) replaced", "", hits) + " · " + qsTr("%n note(s)", "", files),
-                                          "success", qsTr("Undo"), Workspace.replacing.undo.bind(Workspace.replacing, token))
+                shell._replaceToken = token
+                shell._replaceToast = AppController.toastWithAction(qsTr("%n occurrence(s) replaced", "", hits) + " · "
+                                                                    + qsTr("%n note(s)", "", files), "success", qsTr("Undo"))
             }
             if (changed.length > 0)
                 AppController.toast(qsTr("Left as they are, changed since the preview: %1").arg(changed.join(", ")), "warning")
             if (failed.length > 0)
                 AppController.toast(qsTr("Could not write: %1").arg(failed.join(", ")), "error")
         }
-        function onUndone(restored, left) {
+        function onUndone(restored: int, left: list<string>) {
             AppController.toast(left.length > 0
                                 ? qsTr("%n note(s) restored", "", restored) + " · "
                                   + qsTr("Changed since, left as they are: %1").arg(left.join(", "))
@@ -834,17 +853,17 @@ FocusScope {
     // one, as ShortcutMap has them now (custom ones too). Find, replace, Markdown source and a
     // page property are the views' own (PageView, JournalsView: their state decides); the editor
     // copies a block reference with Ctrl+Shift+C itself (another key for it is a Shortcut here).
-    readonly property var viewShortcuts: ["page.find", "page.replace", "page.source", "page.addProperty"]
+    // (ShortcutMap.shellBindings: without those.)
     Repeater {
-        model: ShortcutMap.bindings.filter(b => shell.viewShortcuts.indexOf(b.id) < 0
-                                           && !(b.id === "block.copyRef" && b.sequence === "Ctrl+Shift+C"))
+        model: ShortcutMap.shellBindings
         delegate: Item {
             id: binding
-            required property var modelData
+            required property string action
+            required property string sequence
             Shortcut {
-                sequence: binding.modelData.sequence
-                enabled: shell.shortcutEnabled(binding.modelData.id)
-                onActivated: shell.runShortcut(binding.modelData.id)
+                sequence: binding.sequence
+                enabled: shell.shortcutEnabled(binding.action)
+                onActivated: shell.runShortcut(binding.action)
             }
         }
     }
@@ -862,56 +881,46 @@ FocusScope {
             onActivated: AppController.selectTabAt(index === 8 ? -1 : index)
         }
     }
-    function shortcutEnabled(id) {
+    function shortcutEnabled(id: string): bool {
         switch (id) {
         case "panel.toggle": return !Theme.narrow
-        case "page.rename": return shell.route.view === "page"
-        case "page.print": return shell.route.view === "page"
+        case "page.rename": return shell.currentView === "page"
+        case "page.print": return shell.currentView === "page"
         }
         return true
     }
     /// What a command's shortcut does: the shell's own popups directly, the rest as the palette.
-    function runShortcut(id) {
+    function runShortcut(id: string): void {
         switch (id) {
-        case "palette": shell.openPalette(); break
-        case "page.switch": shell.openSwitcher(); break
+        case "palette": shell.openPalette(""); break
+        case "page.switch": shell.openSwitcher(""); break
         case "go.search": AppController.search(""); break
         case "page.new": shell.openNewPage(""); break
         case "capture": shell.openCapture(); break
         case "panel.toggle": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
-        case "page.rename": shell.openRename(shell.route.path, false); break
+        case "page.rename": shell.openRename(shell.routePath, false); break
         default: CommandModel.run(id)
         }
     }
 
     // ---- Tabs: links in a new tab (OpenIn), pages in windows of their own -------------------------
 
-    /// tab id → its ShellPageWindow.
-    property var pageWindows: ({})
-    /// One window per AppController.windowTabs entry: new ones made and shown, gone ones destroyed.
-    function syncPageWindows() {
-        const ids = AppController.windowTabs
-        const kept = {}
-        for (const id of ids) {
-            let w = pageWindows[id]
-            if (!w) {
-                w = pageWindowComponent.createObject(shell, { tabId: id, titleOf: (r) => shell.routeTitle(r) })
-                if (!w)
-                    continue
-                w.show()
-                w.raise()
-                w.requestActivate()
-            }
-            kept[id] = w
+    /// The tabs that have their ShellPageWindow (a window whose tab goes destroys itself).
+    property list<var> _windowTabsShown
+    /// One window per AppController.windowTabs entry: new ones made and shown (gone ones: the
+    /// window itself, ShellPageWindow).
+    function syncPageWindows(): void {
+        for (let i = 0; i < AppController.windowTabs.length; ++i) {
+            if (shell._windowTabsShown.indexOf(AppController.windowTabs[i]) >= 0)
+                continue
+            const w = pageWindowComponent.createObject(shell, { tabId: AppController.windowTabs[i] }) as ShellPageWindow
+            if (!w)
+                continue
+            w.show()
+            w.raise()
+            w.requestActivate()
         }
-        for (const key of Object.keys(pageWindows)) {
-            if (!kept[key]) {
-                // Hidden at once (destroy() waits for the event loop).
-                pageWindows[key].hide()
-                pageWindows[key].destroy()
-            }
-        }
-        pageWindows = kept
+        shell._windowTabsShown = AppController.windowTabs
     }
     Component {
         id: pageWindowComponent
@@ -924,21 +933,40 @@ FocusScope {
     // The tabs saved (the panes hand their view states over first) when the app goes to the
     // background, where Android may end it.
     Connections {
-        target: Qt.application
+        target: Application
         function onStateChanged() {
-            if (Qt.application.state !== Qt.ApplicationActive)
+            if (Application.state !== Qt.ApplicationActive)
                 AppController.saveTabs()
         }
     }
     Binding { target: OpenIn; property: "windows"; value: AppController.windowsAllowed && !Theme.narrow }
+    // A link's click in a new tab or window: OpenIn.begin(target) … end() around its navigation.
+    Connections {
+        target: OpenIn
+        function onBeginRequested(target: string) { AppController.beginOpenIn(target) }
+        function onEndRequested() { AppController.endOpenIn() }
+    }
+    // The shell's toasts' buttons (AppController.toastWithAction).
+    property int _captureToast: 0
+    Connections {
+        target: AppController
+        function onToastActionTriggered(id: int) {
+            if (id === shell._moveToast)
+                Workspace.movePath(shell._movedPath, shell._moveBack)
+            else if (id === shell._replaceToast)
+                Workspace.replacing.undo(shell._replaceToken)
+            else if (id === shell._captureToast)
+                AppController.openToday()
+        }
+    }
 
     Component.onCompleted: {
         // The navigation bar's first margin.
-        noteNavigationBar()
-        OpenIn.openIn = (target, open) => AppController.openIn(target, open)
-        syncPageWindows()
+        shell.noteNavigationBar()
+        shell.syncPageWindows()
+        OpenIn.tabs = true
     }
-    Component.onDestruction: OpenIn.openIn = null
+    Component.onDestruction: OpenIn.tabs = false
 
     // --popup (screenshots, the UI benchmark, manual checks): opened once the notebook is open and
     // indexed — a popup that lists pages (the switcher) then shows them, as a user sees it —, or
@@ -950,51 +978,94 @@ FocusScope {
         repeat: true
         running: AppController.devPopup !== ""
         onTriggered: {
-            waited += interval
-            if (!Workspace.ready && waited < 3000)
+            devPopupTimer.waited += devPopupTimer.interval
+            if (!Workspace.ready && devPopupTimer.waited < 3000)
                 return
-            stop()
+            devPopupTimer.stop()
             shell.openDevPopup(AppController.devPopup)
         }
     }
-    function openDevPopup(popup) {
-        const name = popup.split(":")[0]
-        const query = popup.indexOf(":") >= 0 ? popup.slice(popup.indexOf(":") + 1) : ""
+    /// --popup's name and query (the part after ":"), kept for the deferred opening.
+    property string _devPopupName
+    property string _devPopupQuery
+    /// The popup --screenshot waits for (DevTools.holdScreenshot) until it has opened.
+    property T.Popup _devPopupHeld: null
+    function devPopupTarget(name: string): T.Popup {
+        switch (name) {
+        case "palette": return palette
+        case "switcher": return switcher
+        case "capture": return capture
+        case "newPage":
+        case "newFolder": return newPage
+        case "move": return moveDialog
+        case "about": return about
+        case "drawer": return drawer
+        case "more": return topBar.moreMenuPopup
+        }
+        return shell._noPopup
+    }
+    property T.Popup _noPopup: null
+    function openDevPopup(popup: string): void {
+        const colon = shell.intValue(Js.indexOf(popup, ":"))
+        shell._devPopupName = colon >= 0 ? Js.slice(popup, 0, colon) : popup
+        shell._devPopupQuery = colon >= 0 ? Js.sliceFrom(popup, colon + 1) : ""
         // --screenshot waits until the popup has opened (its enter transition over), or at once
         // when it is open already (DevTools.holdScreenshot).
-        const target = ({ palette: palette, switcher: switcher, capture: capture, newPage: newPage,
-                          newFolder: newPage, move: moveDialog, about: about, drawer: drawer,
-                          more: topBar.moreMenuPopup })[name] || null
-        if (target && !target.opened) {
+        const held = shell.devPopupTarget(shell._devPopupName)
+        if (held && !held.opened) {
             DevTools.holdScreenshot(true)
-            const release = () => {
-                if (!target.opened)
-                    return
-                target.openedChanged.disconnect(release)
-                DevTools.holdScreenshot(false)
-            }
-            target.openedChanged.connect(release)
+            shell._devPopupHeld = held
         }
-        Qt.callLater(() => {
-            switch (name) {
-            case "palette": shell.openPalette(query); break
-            case "switcher": shell.openSwitcher(query); break
-            case "capture": shell.openCapture(); break
-            case "newPage": shell.openNewPage(""); break
-            case "newFolder": shell.openNewFolder(""); break
-            // move:<path>[><folder>] (else the page shown): the move dialog for a page or a folder,
-            // and with ">" the folder chosen in it (what the move changes shows).
-            case "move": {
-                const item = query.split(">")[0] || shell.route.path
-                shell.openMove(item, Workspace.folderInfo(item).exists === true)
-                if (query.indexOf(">") >= 0)
-                    Qt.callLater(() => moveDialog.choose({ folder: query.slice(query.indexOf(">") + 1), create: false }))
-                break
-            }
-            case "about": shell.openAbout(); break
-            case "drawer": drawer.open(); break
-            case "more": topBar.openMoreMenu(); break
-            }
-        })
+        devPopupLater.restart()
+    }
+    Connections {
+        target: shell._devPopupHeld
+        function onOpenedChanged() {
+            if (!shell._devPopupHeld || !shell._devPopupHeld.opened)
+                return
+            shell._devPopupHeld = null
+            DevTools.holdScreenshot(false)
+        }
+    }
+    // (Qt.callLater: opened a turn of the event loop later.)
+    Timer {
+        id: devPopupLater
+        interval: 0
+        onTriggered: shell.openDevPopupNow()
+    }
+    Timer {
+        id: devPopupChooseLater
+        interval: 0
+        onTriggered: {
+            const query = shell._devPopupQuery
+            moveDialog.choose(Js.sliceFrom(query, Js.indexOf(query, ">") + 1), false)
+        }
+    }
+    function isFolder(path: string): bool {
+        return AppController.routeFlag(Workspace.folderInfo(path), "exists")
+    }
+    function openDevPopupNow(): void {
+        const query = shell._devPopupQuery
+        switch (shell._devPopupName) {
+        case "palette": shell.openPalette(query); break
+        case "switcher": shell.openSwitcher(query); break
+        case "capture": shell.openCapture(); break
+        case "newPage": shell.openNewPage(""); break
+        case "newFolder": shell.openNewFolder(""); break
+        // move:<path>[><folder>] (else the page shown): the move dialog for a page or a folder,
+        // and with ">" the folder chosen in it (what the move changes shows).
+        case "move": {
+            const arrow = shell.intValue(Js.indexOf(query, ">"))
+            const named = arrow >= 0 ? shell.textOf(Js.slice(query, 0, arrow)) : query
+            const item = named !== "" ? named : shell.routePath
+            shell.openMove(item, shell.isFolder(item))
+            if (arrow >= 0)
+                devPopupChooseLater.restart()
+            break
+        }
+        case "about": shell.openAbout(); break
+        case "drawer": drawer.open(); break
+        case "more": topBar.openMoreMenu(); break
+        }
     }
 }

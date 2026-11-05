@@ -23,7 +23,7 @@ import Brulion
 // a split view — the window-wide shortcuts and the shell's actions are the focused pane's view's).
 // Optional `viewState()` / `restoreViewState(state)` (PageView, JournalsView): where the view is
 // scrolled, kept by the tab while another one is shown (restoreViewState() here waits for the
-// view of a route just set).
+// view of a route just set). ViewTraits (src/app/shell/viewtraits.h) reads these optional members.
 Item {
     id: root
 
@@ -37,58 +37,52 @@ Item {
     property bool paneActive: true
 
     /// The view's state (where it is scrolled), {} for a view that keeps none.
-    function viewState() {
-        return _view && typeof _view.viewState === "function" ? _view.viewState() : {}
+    function viewState(): var {
+        return traits.viewState()
     }
     /// Give the view of the route just set the state it had ({}: none, the route's own target).
-    function restoreViewState(state) {
-        root._pendingState = state && Object.keys(state).length > 0 ? state : null
-        root.applyPendingState()
-    }
-    property var _pendingState: null
-    function applyPendingState() {
-        if (!root._pendingState || !root._view)
-            return
-        if (typeof root._view.restoreViewState === "function")
-            root._view.restoreViewState(root._pendingState)
-        root._pendingState = null
+    function restoreViewState(state: var): void {
+        traits.restoreViewState(state)
     }
 
     readonly property Item view: loader.item as Item
-    readonly property string viewName: route && route.view ? route.view : ""
-    // The optional view properties are looked up dynamically (views share no base type).
-    readonly property var _view: loader.item
+    readonly property string viewName: AppController.routeText(root.route, "view")
+    // The optional view properties are looked up through the view's meta-object (views share no
+    // base type): ViewTraits.
+    ViewTraits {
+        id: traits
+        view: loader.item
+    }
     /// The view's own title, "" when it has none.
-    readonly property string viewTitle: _view && typeof _view.title === "string" ? _view.title : ""
+    readonly property string viewTitle: traits.title
     /// The view's context panel, or null.
-    readonly property Component viewSidePanel: (_view && _view.sidePanel) || null
+    readonly property Component viewSidePanel: traits.sidePanel
     /// The view is editing text (a block, source mode) or shows a picture.
-    readonly property bool viewEditing: !!_view && _view.editing === true
+    readonly property bool viewEditing: traits.editing
     /// The view's editing toolbar is docked at its bottom edge (touch UIs).
-    readonly property bool viewToolbarDocked: !!_view && _view.toolbarDocked === true
+    readonly property bool viewToolbarDocked: traits.toolbarDocked
     /// The view has a bar of its own at the bottom instead of the bottom navigation (phones).
-    readonly property bool viewReplacesBottomNav: !!_view && _view.replacesBottomNav === true
+    readonly property bool viewReplacesBottomNav: traits.replacesBottomNav
     /// The view shows a picture attachment (not a note), and that picture's text instead.
-    readonly property bool viewPicture: !!_view && _view.pictureRoute === true
-    readonly property bool viewPictureAsText: viewPicture && _view.pictureAsText === true
+    readonly property bool viewPicture: traits.pictureRoute
+    readonly property bool viewPictureAsText: viewPicture && traits.pictureAsText
     /// The view shows a PDF in the PDF viewer (PageView.pdfRoute), or another file that is no note
     /// read-only (PageView.fileRoute): no Markdown, no note actions.
-    readonly property bool viewPdf: !!_view && _view.pdfRoute === true
-    readonly property bool viewFile: !!_view && _view.fileRoute === true
+    readonly property bool viewPdf: traits.pdfRoute
+    readonly property bool viewFile: traits.fileRoute
     /// The view's editor shows the page's Markdown source (source mode).
-    readonly property bool viewSourceMode: !!_view && _view.sourceMode === true
+    readonly property bool viewSourceMode: traits.sourceMode
     /// The view's note mode, "document" | "outline" ("" for a view without a note to switch).
-    readonly property string viewNoteMode: !!_view && typeof _view.noteMode === "string" ? _view.noteMode : ""
+    readonly property string viewNoteMode: traits.noteMode
     /// The view swipes sideways from the left edge itself (the calendar's grids): no edge strip.
-    readonly property bool viewEdgeSwipe: !!_view && _view.edgeSwipe === true
+    readonly property bool viewEdgeSwipe: traits.edgeSwipe
 
     /// Ends the editing the view's docked touch toolbar is for (views without one: nothing).
-    function endEditing() {
-        if (_view && typeof _view.endEditing === "function")
-            _view.endEditing()
+    function endEditing(): void {
+        traits.endEditing()
     }
 
-    function componentFor(view) {
+    function componentFor(view: string): Component {
         switch (view) {
         case "journals":
         case "journal": return journalsView
@@ -120,9 +114,12 @@ Item {
         focus: true
         sourceComponent: root.componentFor(root.viewName)
         onLoaded: {
-            item.opacity = 0
+            const item = loader.item as Item
+            if (item)
+                item.opacity = 0
             fadeIn.restart()
-            root.applyPendingState()
+            // (traits.view follows loader.item already: itemChanged comes before loaded.)
+            traits.applyPendingState()
         }
     }
     NumberAnimation {
@@ -134,7 +131,11 @@ Item {
         duration: Theme.durationFast
         easing.type: Theme.easing
         // Without motion (or before the animation runs) the view must still be visible.
-        onStopped: if (loader.item) loader.item.opacity = 1
+        onStopped: {
+            const item = loader.item as Item
+            if (item)
+                item.opacity = 1
+        }
     }
 
     Component { id: journalsView; JournalsView { route: root.route; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }

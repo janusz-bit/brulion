@@ -469,8 +469,11 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         QQuickItem *row = dueChip;
         while (row && !isA(row, "TasksRow"))
             row = row->parentItem();
+        // Its `task` model object's `path`; without one the row's own (a required property).
         const QObject *task = row ? row->property("task").value<QObject *>() : nullptr;
-        const QString path = task ? task->property("path").toString() : QString();
+        const QString path = task ? task->property("path").toString()
+                             : row ? row->property("path").toString()
+                                   : QString();
         const QString before = path.isEmpty() ? QString() : ws->readFile(path);
         if (touch)
             touchTap(window, pointIn(dueChip), 1000);
@@ -640,7 +643,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
             shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarView"); });
     QObject *daySheet = calendarView ? calendarView->findChild<QObject *>(u"calendarDaySheet"_s) : nullptr;
     if (calendarView)
-        QMetaObject::invokeMethod(calendarView, "showDay", Q_ARG(QVariant, QVariant(app->today(2))));
+        uidriver::callQml(calendarView, "showDay", {QVariant(app->today(2))});
     const bool inSheet = daySheet && waitFor([&] { return daySheet->property("opened").toBool(); }, 1000);
     std::fprintf(stderr, "selftest: the calendar's day panel %s\n", inSheet ? "in a bottom sheet" : "beside the week");
     box = shownWhere(window->contentItem(), [](QQuickItem *item) {
@@ -752,7 +755,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(row), int(ideaLine));
     check(row >= 0, "today's journal has its dinner idea");
     if (row >= 0) {
-        QMetaObject::invokeMethod(dayEditor, "startEditing", QVariant(row), QVariant(-1));
+        uidriver::callQml(dayEditor, "startEditing", {QVariant(row), QVariant(-1)});
         const bool editing = waitFor([&] {
             const QQuickItem *f = window->activeFocusItem();
             return day->property("editingRow").toInt() == row && f
@@ -1053,8 +1056,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
     QObject *rename = window->findChild<QObject *>(u"shellRename"_s);
     check(rename != nullptr, "the shell has its rename dialog");
     if (rename) {
-        QMetaObject::invokeMethod(rename, "openFor", Q_ARG(QVariant, QVariant(u"Witaj w Brulionie.md"_s)),
-                                  Q_ARG(QVariant, QVariant(false)));
+        uidriver::callQml(rename, "openFor", {u"Witaj w Brulionie.md"_s, false});
         const int changes = rename->property("changes").toInt();
         check(waitFor([&] { return rename->property("opened").toBool(); }) && changes > 0
                       && rename->property("subtitle").toString().contains(QString::number(changes)),
@@ -1067,8 +1069,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         QString toast;
         const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
                                                                 [&toast](const QString &text) { toast = text; });
-        QMetaObject::invokeMethod(rename, "openFor", Q_ARG(QVariant, QVariant(probe)),
-                                  Q_ARG(QVariant, QVariant(false)));
+        uidriver::callQml(rename, "openFor", {probe, false});
         QQuickItem *field = nullptr;
         waitFor([&] {
             field = findShown(window->contentItem(),
@@ -1435,7 +1436,7 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     // (A sideways swipe on a block's text that ends on it is a tap there — BlockText's
     // ReleaseWithinBounds — and edits the block, which takes the strip away: end it.)
     if (editor && editor->property("toolbarMode").toString() == u"block")
-        QMetaObject::invokeMethod(editor, "stopEditing", Q_ARG(QVariant, false));
+        uidriver::callQml(editor, "stopEditing", {QVariant(false)});
     waitFor([&] { return margin() > 0; });
     // The top bar's first button lies in the strip — back (no ☰ while the bottom navigation has
     // Menu): a tap there is the button's, not the drawer's. Back leads from another page to this
@@ -2235,10 +2236,9 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             QMetaObject::invokeMethod(list, "positionViewAtBeginning");
             settle(100);
             const qreal top = list->property("contentY").toReal();
-            QMetaObject::invokeMethod(sidebar, "beginDrag", QVariant(remont), QVariant(false),
-                                      QVariant(u"Remont mieszkania"_s));
+            uidriver::callQml(sidebar, "beginDrag", {QVariant(remont), QVariant(false), QVariant(u"Remont mieszkania"_s)});
             const QPointF still = list->mapToScene(QPointF(list->width() / 2, list->height() - 12));
-            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(still));
+            uidriver::callQml(sidebar, "dragTo", {QVariant(still)});
             const QString first = sidebar->property("dropFolder").toString();
             settle(700);
             const QString now = folderAt(still);
@@ -2251,7 +2251,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             // The header in view is the root; scrolled just above the list's top edge it is not.
             QMetaObject::invokeMethod(list, "positionViewAtBeginning");
             settle(100);
-            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(pointIn(pagesHeader, 0.5)));
+            uidriver::callQml(sidebar, "dragTo", {QVariant(pointIn(pagesHeader, 0.5))});
             const bool rootShown = sidebar->property("dropOnRoot").toBool() && sidebar->property("dropValid").toBool();
             // A moment later the ghost says what the move would rewrite.
             QQuickItem *impactLine = sidebar->findChild<QQuickItem *>(u"treeDragImpact"_s);
@@ -2265,7 +2265,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             settle(100);
             const QPointF above = list->mapToScene(QPointF(list->width() / 2, -10));
             const bool overHeader = pagesHeader->contains(pagesHeader->mapFromScene(above));
-            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(above));
+            uidriver::callQml(sidebar, "dragTo", {QVariant(above)});
             check(rootShown && overHeader && !sidebar->property("dropOnRoot").toBool()
                           && !sidebar->property("dropValid").toBool(),
                   "the “Strony” header is a drop target while it shows, not once scrolled out of the list");
@@ -3511,7 +3511,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     };
     QString drawingPath;
     if (view) {
-        QMetaObject::invokeMethod(view, "jumpTo", QVariant(2));
+        uidriver::callQml(view, "jumpTo", {QVariant(2)});
         check(waitFor([&] { return opened(2); }), "the viewer goes to page 2");
         check(drawOnPage(), "“Draw on this page” is offered");
         check(waitFor(
@@ -3790,7 +3790,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         check(m && waitFor([&] { return m->property("twoPages").toBool() && sideBySide(); }) && opened(2),
               "pages 1 and 2 side by side, page 2 still the current one");
         closeMenus(window);
-        QMetaObject::invokeMethod(pdfView(), "setTwoPages", QVariant(false));
+        uidriver::callQml(pdfView(), "setTwoPages", {QVariant(false)});
         check(waitFor([&] { return m && !m->property("twoPages").toBool() && !sideBySide(); }),
               "and back to one page per row");
     }
@@ -4148,7 +4148,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
           "a stroke drawn here, another device's version written behind the vault's back");
     QVariant saved;
     if (view)
-        QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
+        uidriver::callQml(view, "save", {}, &saved);
     {
         const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
         const bool kept = d && std::any_of(d->strokes.cbegin(), d->strokes.cend(),
@@ -4172,7 +4172,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return canvas->property("strokeCount").toInt() == 4; }) && writeBehind(shapes),
           "a stroke drawn here, an Excalidraw version with a frame written behind the vault's back");
     if (view)
-        QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
+        uidriver::callQml(view, "save", {}, &saved);
     check(workspace->readAttachment(path) == shapesBytes, "the version with the frame is not written over");
     check(view && view->property("status").toString() == u"readonly"_s, "and the editor shows it as it is");
     {
@@ -4315,7 +4315,7 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     QMetaObject::invokeMethod(button, "clicked");
     check(waitFor([&] { return dialog->property("opened").toBool(); }), "the clock button opens the clock");
     auto *picker = dialog->property("picker").value<QQuickItem *>();
-    QMetaObject::invokeMethod(picker, "commitTime", Q_ARG(QVariant, 7), Q_ARG(QVariant, 35));
+    uidriver::callQml(picker, "commitTime", {7, 35});
     QMetaObject::invokeMethod(dialog, "tryAccept");
     check(waitFor([&] { return configValue() == u"07:35" && field->property("text").toString() == u"07:35"; }),
           "a time picked on the clock is saved as the default reminder time");
@@ -4965,7 +4965,7 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
               "the page's corner shows its word count");
         settings->setTypewriterScrolling(true);
         const int last = 59;
-        QMetaObject::invokeMethod(editor, "startEditing", Q_ARG(QVariant, last), Q_ARG(QVariant, -1));
+        uidriver::callQml(editor, "startEditing", {QVariant(last), QVariant(-1)});
         QQuickItem *edit = nullptr;
         check(waitFor([&] {
                   edit = editor->property("activeEditor").value<QQuickItem *>();
@@ -6196,7 +6196,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     const auto editLastRow = [&] {
         int row = -1;
         QMetaObject::invokeMethod(page, "lastVisibleRow", qReturnArg(row));
-        QMetaObject::invokeMethod(editor, "startEditing", QVariant(row), QVariant(-1));
+        uidriver::callQml(editor, "startEditing", {QVariant(row), QVariant(-1)});
     };
     check(openGuide(), "the guide opens");
     if (editor && page && shellItem) {
@@ -6457,7 +6457,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         insets->setProperty("simulated", keyboard);
         int row = -1;
         QMetaObject::invokeMethod(side.second, "lastVisibleRow", qReturnArg(row));
-        QMetaObject::invokeMethod(side.first, "startEditing", QVariant(row), QVariant(-1));
+        uidriver::callQml(side.first, "startEditing", {QVariant(row), QVariant(-1)});
         QQuickItem *slot = nullptr;
         check(waitFor([&] {
                   slot = toolbarSlotOf(window, side.first);
@@ -6849,7 +6849,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         QObject *fontPicker = nullptr;
         bool stays = true;
         for (int round = 0; round < 2 && stays; ++round) {
-            QMetaObject::invokeMethod(fontSetting, "select", Q_ARG(QVariant, 2));
+            uidriver::callQml(fontSetting, "select", {2});
             stays = waitFor([&] {
                 fontPicker = openPicker();
                 return fontPicker && fontPicker->property("opened").toBool();
@@ -7107,7 +7107,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             const bool isPalette = popup == palette;
             QMetaObject::invokeMethod(popup, "open");
             const bool opened = waitFor([&] { return popup->property("opened").toBool(); });
-            QMetaObject::invokeMethod(popup, "typeQuery", Q_ARG(QVariant, query));
+            uidriver::callQml(popup, "typeQuery", {query});
             QString detail;
             const bool laidOut = opened && waitFor([&] { return rowsLaidOut(popup, &detail); });
             if (!laidOut)
@@ -7241,7 +7241,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             int row = -1;
             QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(row), int(line));
             check(line >= 0 && row >= 0, "the guide has its first outline block");
-            QMetaObject::invokeMethod(editor, "startEditing", QVariant(row), QVariant(-1));
+            uidriver::callQml(editor, "startEditing", {QVariant(row), QVariant(-1)});
             check(waitFor([&] { return page->property("editingRow").toInt() == row; }) && editorFocused(),
                   "a block starts editing and has the keyboard");
             typeText(u" Żółw ąę"_s);
@@ -7726,7 +7726,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     QMetaObject::invokeMethod(page, "stopEditing");
                     QMetaObject::invokeMethod(list, "positionViewAtIndex", low, 2 /* ListView.End */);
                     settle(100);
-                    QMetaObject::invokeMethod(editor, "startEditing", QVariant(low), QVariant(-1));
+                    uidriver::callQml(editor, "startEditing", {QVariant(low), QVariant(-1)});
                     const auto caretBottom = [editor]() -> qreal {
                         auto *edit = editor->property("activeEditor").value<QQuickItem *>();
                         if (!edit)
