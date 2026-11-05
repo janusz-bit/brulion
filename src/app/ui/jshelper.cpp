@@ -5,6 +5,7 @@
 #include <QJsonValue>
 #include <QLocale>
 #include <QSet>
+#include <QUrl>
 
 #include <algorithm>
 #include <cmath>
@@ -361,6 +362,31 @@ QString JsHelper::padStart(const QString &s, int length, const QString &fill) co
 QString JsHelper::padEnd(const QString &s, int length, const QString &fill) const
 {
     return s + padding(length - s.size(), fill);
+}
+
+QString JsHelper::encodeURIComponent(const QString &s) const
+{
+    return QString::fromLatin1(QUrl::toPercentEncoding(s, QByteArrayLiteral("!*'()")));
+}
+
+QString JsHelper::decodeURIComponent(const QString &s) const
+{
+    // (QByteArray::fromPercentEncoding() also decodes escapes without two hex digits.)
+    const auto hex = [](char c) {
+        return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+    };
+    const QByteArray in = s.toUtf8();
+    QByteArray out;
+    out.reserve(in.size());
+    for (qsizetype i = 0; i < in.size(); ++i) {
+        if (in.at(i) == '%' && i + 2 < in.size() && hex(in.at(i + 1)) >= 0 && hex(in.at(i + 2)) >= 0) {
+            out.append(char(hex(in.at(i + 1)) * 16 + hex(in.at(i + 2))));
+            i += 2;
+        } else {
+            out.append(in.at(i));
+        }
+    }
+    return QString::fromUtf8(out);
 }
 
 // --- Numbers ---

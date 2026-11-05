@@ -1,5 +1,7 @@
 #include "editorinput.h"
 
+#include "blocktext.h"
+
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -93,6 +95,25 @@ void EditorInput::sendInputMethod(QQuickItem *item, const QString &preedit, cons
     if (!commit.isEmpty())
         event.setCommitString(commit);
     QCoreApplication::sendEvent(item, &event);
+}
+
+QList<int> EditorInput::changedRange(const QString &before, const QString &after) const
+{
+    const TextDelta d = TextDelta::between(before, after);
+    return {int(d.from), int(d.from + d.inserted.size()), int(d.from + d.removed.size())};
+}
+
+int EditorInput::childCount(QQuickItem *item) const
+{
+    return item ? int(item->childItems().size()) : 0;
+}
+
+QQuickItem *EditorInput::childAt(QQuickItem *item, int index) const
+{
+    if (!item)
+        return nullptr;
+    const QList<QQuickItem *> children = item->childItems();
+    return index >= 0 && index < children.size() ? children.at(index) : nullptr;
 }
 
 } // namespace brulion::editor

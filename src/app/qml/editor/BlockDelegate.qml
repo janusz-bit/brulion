@@ -33,23 +33,44 @@ Item {
     id: block
 
     required property int index
+    /// The row's model object (untyped: compiled QML reads the typed roles below and rowData).
     required property var model
-    property BlockEditor editor
+    // The roles every block reads, typed (BlockListModel; read when the block is created and
+    // updated with the row). `shown` is the role `visible` (Item has a property of that name).
+    required property bool shown
+    required property bool isEditing
+    required property string view
+    required property string kind
+    required property string taskStatus
+    required property int headingLevel
+    required property int depth
+    required property string listMarker
+    required property string prevKind
+    required property string selectionEdge
+    required property bool hasChildren
+    required property bool collapsed
+    required property bool onlyEmbeds
+    required property string plainText
+    required property list<var> embeds
+    required property list<var> transclusions
+    // (final: the views of the block look into them through `block`.)
+    final property BlockEditor editor: editorItem as BlockEditor
+    /// The editor as an Item: what BlockEditor gives its delegates (a file cannot give its own
+    /// root to a property of its own type in compiled code).
+    property Item editorItem
 
-    readonly property PageController controller: editor ? editor.controller : null
-    readonly property bool shown: model.visible
-    readonly property bool editing: model.isEditing
-    readonly property string view: model.view
-    readonly property bool listItem: model.kind === "listItem"
-    readonly property string taskStatus: model.taskStatus
+    final property PageController controller: editor ? editor.controller : null
+    /// The roles only some blocks or views read (the rendered text, a table's data, …), typed and
+    /// read on demand (BlockRowData).
+    final property BlockRowData rowData: BlockRowData {}
+    readonly property bool editing: isEditing
+    readonly property bool listItem: kind === "listItem"
     readonly property bool isTask: taskStatus !== "" && listItem
     readonly property bool closedTask: taskStatus === "done" || taskStatus === "cancelled"
-    readonly property int headingLevel: view === "heading" ? Math.max(1, model.headingLevel) : 0
-    readonly property int depth: model.depth
+    readonly property int shownHeadingLevel: view === "heading" ? Math.max(1, headingLevel) : 0
     readonly property bool hovered: hover.hovered
     readonly property bool doc: editor.documentMode
-    readonly property string listMarker: model.listMarker || ""
-    readonly property bool ordered: listItem && listMarker.length > 0 && listMarker.charAt(0) >= "0" && listMarker.charAt(0) <= "9"
+    readonly property bool ordered: listItem && listMarker.length > 0 && listMarker[0] >= "0" && listMarker[0] <= "9"
 
     // Horizontal geometry. Outline: the text column of this depth, the bullet centred left of it.
     // Document: paragraphs at the text column (after the editor's documentInset, its gutter); a
@@ -60,7 +81,7 @@ Item {
     readonly property real bulletX: markerX(doc && !listItem ? -1 : depth)
     /// The centre of the marker column of list level `level` (the bullet's, a number's, a task's
     /// box): the bullets and the guide lines through the ancestors' markers share it.
-    function markerX(level) {
+    function markerX(level: int): real {
         return doc ? editor.contentX + editor.gutter + (level + 1) * editor.listIndent - Math.round(editor.listIndent * 0.55)
                    : editor.contentX + editor.gutter + level * editor.indentStep - editor.bulletColumn / 2
     }
@@ -73,41 +94,40 @@ Item {
                                    || view === "mermaid" || view === "chart" || view === "table" || view === "callout"
                                    || view === "frontmatter"
     // The title shown above the properties panel (see the file comment).
-    readonly property bool titleFirst: editor.titleFirst && index === editor.controller.titleRow
-    readonly property bool propertiesAfterTitle: editor.titleFirst && index === editor.controller.titleRow - 1
+    readonly property bool titleFirst: editor.titleFirst && index === controller.titleRow
+    readonly property bool propertiesAfterTitle: editor.titleFirst && index === controller.titleRow - 1
     /// The first block drawn under the properties panel — the one after it in the file, or after
     /// the title drawn above it —: 24 px under the panel in both modes (constant per row).
     readonly property bool belowProperties: (prevKind === "frontmatter" && !titleFirst)
-                                            || (editor.titleFirst && index === editor.controller.titleRow + 1)
+                                            || (editor.titleFirst && index === controller.titleRow + 1)
     readonly property real topPad: doc ? docTopPad : outlineTopPad
     readonly property real outlineTopPad: {
         // With the panel's 8 px bottom padding: 24 px.
         if (belowProperties)
-            return headingLevel === 1 ? Theme.space5 : Theme.space4
-        if (headingLevel > 0 && index > 0 && !titleFirst)
-            return headingLevel === 1 ? Theme.space5 : headingLevel === 2 ? Theme.space4 : Theme.space3
+            return shownHeadingLevel === 1 ? Theme.space5 : Theme.space4
+        if (shownHeadingLevel > 0 && index > 0 && !titleFirst)
+            return shownHeadingLevel === 1 ? Theme.space5 : shownHeadingLevel === 2 ? Theme.space4 : Theme.space3
         if (framed)
             return Theme.space2
         return view === "rule" ? Theme.space2 : rowPad
     }
     /// Document: the space above a block follows the block before it (a page of text: paragraph
     /// gaps, list items close together, headings with air above and close to what follows).
-    readonly property string prevKind: model.prevKind || ""
     readonly property real docTopPad: {
         if (propertiesAfterTitle)
             return Theme.space3 // the properties panel under the title
         if (prevKind === "" || titleFirst)
             return 0
         if (belowProperties) // air between the properties panel and the page's text
-            return headingLevel > 0 && !listItem ? Math.max(Theme.space6, editor.headingGapAbove(headingLevel))
+            return shownHeadingLevel > 0 && !listItem ? Math.max(Theme.space6, editor.headingGapAbove(shownHeadingLevel))
                                                  : Theme.space6
-        if (headingLevel > 0 && !listItem)
-            return editor.headingGapAbove(headingLevel)
+        if (shownHeadingLevel > 0 && !listItem)
+            return editor.headingGapAbove(shownHeadingLevel)
         // A frame (table, code, callout, …), a quote's bar or a picture right under a heading:
         // their edges sat a few pixels under its descenders, a paragraph's text does not need it.
         // (Not `onlyPictures`: it changes with editing, the gap must not.)
         if (prevKind === "heading")
-            return framed || view === "quote" || (hasEmbeds && model.onlyEmbeds && !listItem)
+            return framed || view === "quote" || (hasEmbeds && onlyEmbeds && !listItem)
                    ? editor.headingGapBelow + Theme.space2 : editor.headingGapBelow
         if (listItem && prevKind === "listItem")
             return editor.listGap
@@ -116,17 +136,16 @@ Item {
     /// Text rows: a little air between blocks; more on touch so 44 px targets fit the rows.
     readonly property real rowPad: Theme.touchUi ? 4 : 2
     readonly property real bottomPad: doc ? (listItem ? editor.listGap / 2 : 0)
-                                          : framed ? Theme.space2 : headingLevel > 0 ? Theme.space1 : rowPad
-    readonly property var embeds: model.embeds
-    readonly property bool hasEmbeds: embeds !== undefined && embeds !== null && embeds.length > 0
+                                          : framed ? Theme.space2 : shownHeadingLevel > 0 ? Theme.space1 : rowPad
+    readonly property bool hasEmbeds: embeds.length > 0
                                       && (view === "text" || view === "heading" || view === "quote" || view === "callout")
-    readonly property var transclusions: model.transclusions
-    readonly property bool hasTransclusions: transclusions !== undefined && transclusions !== null && transclusions.length > 0
+    readonly property bool hasTransclusions: transclusions.length > 0
+    readonly property list<var> noItems: []
     /// Nothing but embedded pages / sections / blocks: no empty text line above their frames.
-    readonly property bool onlyTransclusions: hasTransclusions && !hasEmbeds && model.onlyEmbeds && !editing && view === "text"
+    readonly property bool onlyTransclusions: hasTransclusions && !hasEmbeds && onlyEmbeds && !editing && view === "text"
     /// Document: a paragraph of nothing but pictures shows just them, like a picture in a page
     /// of text (the outline keeps the line its bullet sits on); a click beside one edits it.
-    readonly property bool onlyPictures: doc && hasEmbeds && !listItem && model.onlyEmbeds && !editing && view === "text"
+    readonly property bool onlyPictures: doc && hasEmbeds && !listItem && onlyEmbeds && !editing && view === "text"
     readonly property bool noTextLine: onlyTransclusions || onlyPictures
     /// Paragraphs, list items, headings (most blocks): their text is created with the block, not
     /// through the content Loader — the Loader's own work was a large part of creating a block.
@@ -135,7 +154,7 @@ Item {
                                      && view !== "callout"
                                      && view !== "rule" && view !== "frontmatter"
     readonly property real contentHeight: noTextLine ? 0 : textView ? textContent.height : content.height
-    readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !model.onlyEmbeds ? Theme.space2 : 0)
+    readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !onlyEmbeds ? Theme.space2 : 0)
     readonly property real transclusionsY: (hasEmbeds ? embedsY + embedView.height : topPad + contentHeight)
                                            + (contentHeight > 0 || hasEmbeds ? Theme.space2 : 0)
     readonly property real bodyBottom: hasTransclusions ? transclusionsY + transclusionView.height
@@ -144,7 +163,7 @@ Item {
     /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
     readonly property real firstLineCenter: topPad + (onlyTransclusions ? transclusionView.firstLineCenter
                                                       : textView ? textContent.firstLineCenter
-                                                      : content.item ? content.item.firstLineCenter : editor.firstLineCenter(0))
+                                                      : contentFirstLineCenter)
 
     width: ListView.view ? ListView.view.width : 0
     height: shown ? Math.ceil(bodyBottom + bottomPad) : 0
@@ -158,7 +177,7 @@ Item {
     Binding { when: block.propertiesAfterTitle; target: block.editor; property: "propertiesHeight"; value: block.height }
 
     Accessible.role: Accessible.ListItem
-    Accessible.name: model.plainText
+    Accessible.name: plainText
 
     /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
     readonly property Item contentItem: textView ? textContent : content.item as Item
@@ -166,9 +185,55 @@ Item {
     readonly property alias embedView: embedView
 
     /// Give the keyboard to the block content (tables: the first cell).
-    function focusContent() {
-        if (content.item && content.item.focusFirstCell)
-            content.item.focusFirstCell()
+    function focusContent(): void {
+        const table = content.item as TableBlockView
+        if (table !== null)
+            table.focusFirstCell()
+    }
+    /// The first line's centre in the view loaded for the block's content (not a text view).
+    readonly property real contentFirstLineCenter: {
+        const item = content.item as Item
+        if (item === null)
+            return editor.firstLineCenter(0)
+        switch (view) {
+        case "code": {
+            const code = item as CodeBlockView
+            return code !== null ? code.firstLineCenter : editor.firstLineCenter(0)
+        }
+        case "calc": {
+            const calc = item as CalcBlockView
+            return calc !== null ? calc.firstLineCenter : editor.firstLineCenter(0)
+        }
+        case "query": {
+            const query = item as QueryBlockView
+            return query !== null ? query.firstLineCenter : editor.firstLineCenter(0)
+        }
+        case "math": {
+            const math = item as MathBlockView
+            return math !== null ? math.firstLineCenter : editor.firstLineCenter(0)
+        }
+        case "mermaid": {
+            const mermaid = item as MermaidBlockView
+            return mermaid !== null ? mermaid.firstLineCenter : editor.firstLineCenter(0)
+        }
+        case "chart": {
+            const chart = item as ChartBlockView
+            return chart !== null ? chart.firstLineCenter : editor.firstLineCenter(0)
+        }
+        case "table": {
+            const table = item as TableBlockView
+            return table !== null ? table.firstLineCenter : editor.firstLineCenter(0)
+        }
+        case "frontmatter": {
+            const frontmatter = item as FrontmatterView
+            return frontmatter !== null ? frontmatter.firstLineCenter : editor.firstLineCenter(0)
+        }
+        // (The frame's and the rule's own firstLineCenter, below: their components have no type.)
+        case "quote":
+        case "callout": return (view === "callout" ? Theme.space3 : 0) + editor.firstLineCenter(shownHeadingLevel)
+        case "rule": return item.height / 2
+        }
+        return editor.firstLineCenter(0)
     }
 
     HoverHandler { id: hover; enabled: !Theme.touchUi }
@@ -176,12 +241,12 @@ Item {
     // ---- Selection ---------------------------------------------------------------------------
     /// Where the block sits in the band of selected blocks: "" | "single" | "first" | "middle" |
     /// "last" (BlockListModel's selectionEdge: visible rows only).
-    readonly property string selectionEdge: shown ? (model.selectionEdge || "") : ""
-    readonly property bool bandStart: selectionEdge === "single" || selectionEdge === "first"
-    readonly property bool bandEnd: selectionEdge === "single" || selectionEdge === "last"
+    readonly property string bandEdge: shown ? selectionEdge : ""
+    readonly property bool bandStart: bandEdge === "single" || bandEdge === "first"
+    readonly property bool bandEnd: bandEdge === "single" || bandEdge === "last"
     /// The band's left edge: a block alone from its own level, a range from the editor's (one
     /// straight band over every level).
-    readonly property real bandX: selectionEdge === "single"
+    readonly property real bandX: bandEdge === "single"
                                   ? (doc ? (listItem ? levelX - editor.listIndent : levelX) - Theme.space2
                                          : bulletX - editor.bulletColumn / 2 - 2)
                                   : (doc ? editor.contentX + editor.gutter - Theme.space2
@@ -191,7 +256,7 @@ Item {
     readonly property real bandBottom: bandEnd ? height - 1 : height
     // Made only for selected blocks (most blocks never are).
     Loader {
-        active: block.selectionEdge !== ""
+        active: block.bandEdge !== ""
         x: block.bandX
         y: block.bandTop
         width: block.bandRight - x
@@ -203,14 +268,14 @@ Item {
             bottomLeftRadius: block.bandEnd ? Theme.radiusSm : 0
             bottomRightRadius: block.bandEnd ? Theme.radiusSm : 0
             color: Theme.bgSelected
-            border.width: block.selectionEdge === "single" ? 1 : 0
-            border.color: Theme.alpha(Theme.focusRing, 0.35)
+            border.width: block.bandEdge === "single" ? 1 : 0
+            border.color: Theme.focusRing.alpha(0.35)
             // A range: a line down its left edge marks the band as one.
             Rectangle {
-                visible: block.selectionEdge !== "single"
+                visible: block.bandEdge !== "single"
                 width: 2
                 height: parent.height
-                color: Theme.alpha(Theme.focusRing, 0.6)
+                color: Theme.focusRing.alpha(0.6)
             }
         }
     }
@@ -218,7 +283,7 @@ Item {
     // ---- Flash (a link to the block was followed) ------------------------------------------------
     /// The highlight is showing (BlockEditor.revealRow); it ends by itself.
     property bool flashing: false
-    function flash() {
+    function flash(): void {
         flashing = false // again from the start when it is still showing
         flashing = true
     }
@@ -237,7 +302,9 @@ Item {
                 NumberAnimation { from: 0; to: 1; duration: Theme.reducedMotion ? 0 : 150; easing.type: Theme.easing }
                 PauseAnimation { duration: 700 }
                 NumberAnimation { to: 0; duration: Theme.reducedMotion ? 0 : 350; easing.type: Theme.easing }
-                ScriptAction { script: block.flashing = false }
+                // (Not a ScriptAction: its script is not compiled, and qmlcachegen skipped the
+                // rest of the file after it.)
+                onFinished: block.flashing = false
             }
         }
     }
@@ -262,7 +329,7 @@ Item {
     // children.
     Rectangle {
         objectName: "parentGuide"
-        visible: block.shown && block.listItem && block.model.hasChildren && !block.model.collapsed
+        visible: block.shown && block.listItem && block.hasChildren && !block.collapsed
         x: Math.round(block.bulletX)
         // (Under a document's task box: half its size and 3 px below its centre.)
         y: Math.round(block.firstLineCenter + (block.doc && block.isTask ? block.taskBoxSize / 2 + 3 : 9))
@@ -280,24 +347,24 @@ Item {
     // ---- Fold arrow ------------------------------------------------------------------------
     Loader {
         id: arrow
-        active: block.model.hasChildren && block.shown && !block.doc
+        active: block.hasChildren && block.shown && !block.doc
         width: block.editor.arrowColumn
         height: Math.max(block.editor.arrowColumn, 24)
         // Left of the bullet's hit area (with a mouse 24 px wide, a little wider than its column).
         x: (Theme.touchUi ? block.bulletX - block.editor.bulletColumn / 2 : block.levelX - bulletBox.width) - width + 2
         y: block.firstLineCenter - height / 2
         sourceComponent: Item {
-            visible: block.model.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed
-            opacity: block.model.collapsed ? 0.9 : 0.6
+            visible: block.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed
+            opacity: block.collapsed ? 0.9 : 0.6
             Accessible.role: Accessible.Button
-            Accessible.name: block.model.collapsed ? qsTr("Expand") : qsTr("Collapse")
+            Accessible.name: block.collapsed ? qsTr("Expand") : qsTr("Collapse")
 
             BIcon {
                 anchors.centerIn: parent
                 name: "chevron-right"
                 size: Theme.iconSizeSm
                 color: arrowHover.hovered ? Theme.fg : Theme.fgMuted
-                rotation: block.model.collapsed ? 0 : 90
+                rotation: block.collapsed ? 0 : 90
                 Behavior on rotation { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
             }
             // Touch: a 44 px hit area around the small arrow (the bullet, stacked above, keeps the
@@ -326,7 +393,7 @@ Item {
         // 44 — a document's first level on a phone has less room there and reaches under the
         // item's first letters, which edit the item as well; a parent keeps the arrow / bullet
         // split (both cannot be 44 wide in the outline's gutter).
-        readonly property bool besideArrow: !block.doc && block.model.hasChildren
+        readonly property bool besideArrow: !block.doc && block.hasChildren
         width: Theme.touchUi ? (besideArrow ? block.editor.bulletColumn + 6 : Theme.touchTarget)
                              : Math.max(24, block.editor.bulletColumn)
         height: Theme.touchUi ? Theme.touchTarget : Math.max(24, block.editor.bulletColumn)
@@ -347,8 +414,8 @@ Item {
                 width: 16
                 height: 16
                 radius: 8
-                color: block.model.collapsed ? Theme.bgPressed : Theme.bgHover
-                visible: !block.doc && (block.model.collapsed || bulletHover.hovered)
+                color: block.collapsed ? Theme.bgPressed : Theme.bgHover
+                visible: !block.doc && (block.collapsed || bulletHover.hovered)
             }
             Rectangle {
                 // The same round bullet at every depth (a document too: nesting shows in the indent).
@@ -463,7 +530,7 @@ Item {
         width: Math.max(40, block.contentRight - x)
         visible: textContent.live && !block.noTextLine
         live: block.textView && block.shown
-        block: block
+        blockItem: block
     }
     Loader {
         id: content
@@ -496,8 +563,8 @@ Item {
         x: block.contentLeft
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
-        embeds: block.hasEmbeds ? block.embeds : []
-        onClicked: (target) => block.controller.activateLink(block.index, "page:" + encodeURIComponent(target), false)
+        embeds: block.hasEmbeds ? block.embeds : block.noItems
+        onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
         onDrawingClicked: (path) => block.controller.openDrawing(path)
         onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)
         onBackgroundClicked: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
@@ -514,8 +581,8 @@ Item {
         x: block.contentLeft
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
-        block: block
-        transclusions: block.hasTransclusions ? block.transclusions : []
+        blockItem: block
+        transclusions: block.hasTransclusions ? block.transclusions : block.noItems
     }
 
     Component {
@@ -523,7 +590,7 @@ Item {
         Rectangle {
             id: frame
             readonly property bool callout: block.view === "callout"
-            readonly property string type: block.model.calloutType
+            readonly property string type: block.rowData.calloutType
             readonly property color tint: {
                 switch (type) {
                 case "tip": case "success": case "check": case "done": return Theme.success
@@ -538,7 +605,7 @@ Item {
             implicitHeight: inner.implicitHeight + (callout ? 2 * Theme.space3 : 0)
             height: implicitHeight
             radius: callout ? Theme.radius : 0
-            color: callout ? Theme.alpha(tint, Theme.dark ? 0.12 : 0.10) : "transparent"
+            color: callout ? tint.alpha(Theme.dark ? 0.12 : 0.10) : "transparent"
             Rectangle {
                 width: 3
                 height: parent.height
@@ -554,7 +621,7 @@ Item {
                 BlockText {
                     id: text
                     width: parent.width
-                    block: block
+                    blockItem: block
                     quoted: !frame.callout
                 }
             }
@@ -562,35 +629,35 @@ Item {
     }
     Component {
         id: codeComponent
-        CodeBlockView { block: block }
+        CodeBlockView { blockItem: block }
     }
     Component {
         id: calcComponent
-        CalcBlockView { block: block }
+        CalcBlockView { blockItem: block }
     }
     Component {
         id: queryComponent
-        QueryBlockView { block: block }
+        QueryBlockView { blockItem: block }
     }
     Component {
         id: mathComponent
-        MathBlockView { block: block }
+        MathBlockView { blockItem: block }
     }
     Component {
         id: mermaidComponent
-        MermaidBlockView { block: block }
+        MermaidBlockView { blockItem: block }
     }
     Component {
         id: chartComponent
-        ChartBlockView { block: block }
+        ChartBlockView { blockItem: block }
     }
     Component {
         id: tableComponent
-        TableBlockView { block: block }
+        TableBlockView { blockItem: block }
     }
     Component {
         id: frontmatterComponent
-        FrontmatterView { block: block }
+        FrontmatterView { blockItem: block }
     }
     Component {
         id: ruleComponent
@@ -614,7 +681,7 @@ Item {
                 id: ruleText
                 visible: block.editing
                 width: parent.width
-                block: block
+                blockItem: block
             }
         }
     }

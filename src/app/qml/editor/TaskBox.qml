@@ -83,7 +83,7 @@ T.AbstractButton {
             height: control.boxSize
             radius: Theme.radiusXs + 1
             color: control.status === "done" ? Theme.success
-                 : control.status === "doing" ? Theme.alpha(Theme.warning, 0.18)
+                 : control.status === "doing" ? Theme.warning.alpha(0.18)
                  : control.hovered ? Theme.bgHover : "transparent"
             border.width: control.status === "done" ? 0 : 1.5
             border.color: control.status === "doing" ? Theme.warningText

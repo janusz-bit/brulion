@@ -52,8 +52,11 @@ BMenu {
     readonly property bool dateKind: !reminder && !recurrence && !priorityKind && !day
     /// Moves to a day: dates and day links (not a series' occurrence).
     readonly property bool movable: (dateKind || day) && !occurrence
-    readonly property bool whenDone: rule.endsWith(" when done")
-    readonly property string baseRule: whenDone ? rule.slice(0, rule.length - " when done".length) : rule
+    readonly property bool whenDone: Js.endsWith(rule, " when done")
+    readonly property string baseRule: whenDone ? Js.slice(rule, 0, rule.length - " when done".length) : rule
+    /// Bumped after a checkable item toggled itself: its `checked` binding (which reads this)
+    /// gives the item its state back at once (Qt.binding did that before compiled QML).
+    property int checkRevision: 0
 
     signal chosen(string action, var a, var b)
 
@@ -85,9 +88,9 @@ BMenu {
         /// "recurrence" (the 🔁 token) or "blockRecurrence" (the reminder's block).
         property string chosenAction: "recurrence"
         checkable: true
-        checked: menu.baseRule === ruleText
+        checked: menu.checkRevision >= 0 && menu.baseRule === ruleText
         onTriggered: {
-            checked = Qt.binding(() => menu.baseRule === ruleText) // (a checkable item toggles itself)
+            ++menu.checkRevision // (a checkable item toggles itself)
             menu.chosen(chosenAction, menu.whenDone ? ruleText + " when done" : ruleText, 0)
         }
     }
@@ -95,9 +98,9 @@ BMenu {
         required property string level
         property string chosenAction: "priority"
         checkable: true
-        checked: menu.priority === level
+        checked: menu.checkRevision >= 0 && menu.priority === level
         onTriggered: {
-            checked = Qt.binding(() => menu.priority === level)
+            ++menu.checkRevision
             menu.chosen(chosenAction, level, 0)
         }
     }
@@ -207,9 +210,9 @@ BMenu {
         text: qsTr("From the completion date")
         iconName: "check"
         checkable: true
-        checked: menu.whenDone
+        checked: menu.checkRevision >= 0 && menu.whenDone
         onTriggered: {
-            checked = Qt.binding(() => menu.whenDone)
+            ++menu.checkRevision
             menu.chosen("recurrence", menu.whenDone ? menu.baseRule : menu.baseRule + " when done", 0)
         }
     }
@@ -229,10 +232,10 @@ BMenu {
         text: qsTr("Alarm")
         iconName: "bell-ring"
         checkable: true
-        checked: menu.alarm
+        checked: menu.checkRevision >= 0 && menu.alarm
         onTriggered: {
             const on = !menu.alarm
-            checked = Qt.binding(() => menu.alarm) // (a checkable item toggles itself)
+            ++menu.checkRevision // (a checkable item toggles itself)
             menu.chosen("alarm", on, 0)
         }
     }

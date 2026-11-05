@@ -22,19 +22,22 @@ import Brulion
 TextEdit {
     id: edit
 
-    property BlockDelegate block
-    readonly property BlockEditor editor: block ? block.editor : null
-    readonly property int row: block ? block.index : -1
-    readonly property bool active: block !== null && block.editing
+    final property BlockDelegate block
+    final property BlockEditor editor: block ? block.editor : null
+    // (final, also the bindings: BlockEditor and the popups look them up through a typed `edit`.)
+    final property int row: block ? block.index : -1
+    final property bool active: block !== null && block.editing
     /// Stays alive (read-only) while the block is not edited.
-    property bool persistent: false
-    property real lineHeightPx: 0
+    final property bool persistent: false
+    final property real lineHeightPx: 0
     /// Enter inserts a line break (code, quotes) instead of splitting the block.
-    property bool multiline: false
+    final property bool multiline: false
     /// Inserted after a line break (quotes: "> ").
     property string continuation: ""
     /// Autocomplete popup for links, tags, slash commands, dates.
-    property bool completions: !multiline || continuation !== ""
+    final property bool completions: !multiline || continuation !== ""
+    /// cursorRectangle, typed for the editor (TextEdit's own cannot be looked into from there).
+    final property rect caretRect: cursorRectangle
     property string highlightMode: "inline"
     property string placeholderText
     /// Misspelled words are underlined while the block is edited.
@@ -46,7 +49,8 @@ TextEdit {
     property bool completed: false
     property string lastText: ""
     property bool softBreak: false
-    readonly property string modelText: block ? block.model.editText : ""
+    readonly property color noColor: "transparent"
+    readonly property string modelText: block ? block.rowData.editText : ""
 
     textFormat: TextEdit.PlainText
     wrapMode: TextEdit.Wrap
@@ -77,19 +81,19 @@ TextEdit {
         findMatchCase: find ? find.matchCase : false
         findMatchDiacritics: find ? find.matchDiacritics : false
         findWholeWord: find ? find.wholeWord : false
-        findColor: edit.editor ? edit.editor.findHitColor : "transparent"
+        findColor: edit.editor ? edit.editor.findHitColor : edit.noColor
         spellCheck: edit.spellChecked ? SpellCheck : null
         spellCaret: edit.spellChecked ? edit.cursorPosition : -1
         spellColor: Theme.danger
     }
 
     /// The word marked as misspelled at `position` ({from, to, word, text}; {} when none).
-    function misspelledAt(position) {
+    function misspelledAt(position: int): var {
         return edit.spellChecked ? highlighter.misspelledAt(position) : ({})
     }
     /// Replace the misspelled word [from, to) with `text`: one undo step, the caret after it
     /// (PageController.replaceRange → editTextReset).
-    function replaceWord(from, to, text) {
+    function replaceWord(from: int, to: int, text: string): void {
         if (editor && editor.controller && active)
             editor.controller.replaceRange(row, from, to, text)
     }
@@ -107,12 +111,12 @@ TextEdit {
     }
 
     /// The exact text of the document (no-break spaces kept), see EditorInput.plainText().
-    function plain() {
+    function plain(): string {
         return EditorInput.plainText(edit.textDocument)
     }
     /// Show `t` exactly. TextEdit.text ignores a new text that equals its current one after
     /// normalisation (a space for a no-break space), so such a text is set from scratch.
-    function setPlain(t) {
+    function setPlain(t: string): void {
         if (plain() === t)
             return
         text = t
@@ -124,7 +128,7 @@ TextEdit {
 
     /// Take the keyboard: text from the model, caret from a click, Up/Down navigation or the
     /// controller.
-    function activate() {
+    function activate(): void {
         if (!editor || !editor.controller)
             return
         syncing = true
@@ -132,11 +136,13 @@ TextEdit {
         lastText = plain()
         let c = -1
         if (editor.pendingClickRow === row) {
-            c = positionAt(editor.pendingClick.x, editor.pendingClick.y)
+            const click = editor.pendingClick
+            c = positionAt(click.x, click.y)
             editor.pendingClickRow = -1
         } else if (editor.navigationEdge !== "") {
             // navigationX is in the editor's coordinates: blocks are indented differently.
-            const x = editor.navigationX - mapToItem(editor, 0, 0).x
+            edit.mapped = mapToItem(editor, 0, 0)
+            const x = editor.navigationX - edit.mapped.x
             c = positionAt(Math.max(0, x), editor.navigationEdge === "bottom" ? contentHeight - 2 : 2)
             editor.navigationEdge = ""
         } else {
@@ -148,32 +154,38 @@ TextEdit {
         edit.selectFindMatch()
         // The find bar keeps the keyboard while it goes from match to match.
         if (editor.findKeepsKeyboard) {
-            editor.activeEditor = edit
+            editor.setActiveEditor(edit)
             return
         }
         forceActiveFocus()
         // A delegate created while rows are being inserted is not in the scene yet: focus again
         // once it is.
-        Qt.callLater(edit.ensureFocus)
+        focusLater.restart()
+    }
+    /// A point mapped into the editor, read (mapToItem()'s result cannot be looked into).
+    property point mapped
+    Timer {
+        id: focusLater
+        interval: 0
+        onTriggered: edit.ensureFocus()
     }
 
-    function ensureFocus() {
+    function ensureFocus(): void {
         if (active && !activeFocus && !(editor && editor.findKeepsKeyboard))
             forceActiveFocus()
     }
 
     /// The find bar's current match is in this block: selected, once — a click back into the block
     /// later (activate() again) must not select it again, typing would replace it.
-    function selectFindMatch() {
-        const match = editor ? editor.findSelection : null
-        if (match && match.row === row && active) {
-            select(match.from, match.to)
-            editor.findSelection = null
+    function selectFindMatch(): void {
+        if (editor && editor.findSelectionRow >= 0 && editor.findSelectionRow === row && active) {
+            select(editor.findSelectionFrom, editor.findSelectionTo)
+            editor.clearFindSelection()
         }
     }
 
     /// The controller changed the text (undo, completion, normalisation…).
-    function reset(newText, cursor) {
+    function reset(newText: string, cursor: int): void {
         syncing = true
         setPlain(newText)
         lastText = plain()
@@ -183,7 +195,7 @@ TextEdit {
             editor.updateCompletion(edit)
     }
 
-    function insertLineBreak() {
+    function insertLineBreak(): void {
         if (selectedText !== "")
             remove(selectionStart, selectionEnd)
         softBreak = true
@@ -229,17 +241,13 @@ TextEdit {
             // Text with line breaks that did not come from Shift+Enter: an input method's Enter
             // (Android commits "\n" as text) splits the block, pasted or dropped Markdown
             // becomes blocks.
-            let start = 0
-            while (start < t.length && start < lastText.length && t.charAt(start) === lastText.charAt(start))
-                ++start
-            let endNew = t.length
-            let endOld = lastText.length
-            while (endNew > start && endOld > start && t.charAt(endNew - 1) === lastText.charAt(endOld - 1)) {
-                --endNew
-                --endOld
-            }
-            const inserted = t.slice(start, endNew)
-            if (inserted.indexOf("\n") >= 0) {
+            // The changed range: [start, endNew) of the new text, [start, endOld) of the old one.
+            edit.changed = edit.changedRange(lastText, t)
+            const start = edit.changed[0] + 0 // (typed copies: passed on after other calls)
+            const endNew = edit.changed[1] + 0
+            const endOld = edit.changed[2] + 0
+            const inserted = Js.slice(t, start, endNew) + ""
+            if (Js.indexOf(inserted, "\n") >= 0) {
                 const before = lastText
                 syncing = true
                 setPlain(before)
@@ -258,13 +266,26 @@ TextEdit {
         editor.updateCompletion(edit)
     }
 
+    /// EditorInput.changedRange(before, after): [start, end in after, end in before].
+    function changedRange(before: string, after: string): list<int> {
+        return EditorInput.changedRange(before, after)
+    }
+    /// The last text change's range (onTextChanged).
+    property list<int> changed
+
     onCursorPositionChanged: {
         if (syncing || !active || !editor || !editor.controller)
             return
         editor.controller.cursorPosition = cursorPosition
         editor.updateCompletion(edit)
     }
-    onCursorRectangleChanged: if (activeFocus && editor) Qt.callLater(editor.ensureCaretVisible, edit)
+    onCursorRectangleChanged: if (activeFocus && editor) caretLater.restart()
+    /// editor.ensureCaretVisible(edit) once the event loop is idle (Qt.callLater merged the calls).
+    Timer {
+        id: caretLater
+        interval: 0
+        onTriggered: if (edit.editor) edit.editor.ensureCaretVisible(edit)
+    }
     // Android keyboards compose every word as preedit: completions follow it while it is typed.
     onPreeditTextChanged: if (editor && active) editor.updateCompletion(edit)
 
@@ -273,8 +294,8 @@ TextEdit {
             return
         if (activeFocus) {
             editor.findKeepsKeyboard = false
-            editor.activeEditor = edit
-            Qt.callLater(editor.ensureCaretVisible, edit)
+            editor.setActiveEditor(edit)
+            caretLater.restart()
         } else {
             editor.editorFocusLost()
         }
@@ -282,7 +303,7 @@ TextEdit {
 
     Connections {
         target: edit.editor ? edit.editor.controller : null
-        function onEditTextReset(r, t, c) {
+        function onEditTextReset(r: int, t: string, c: int) {
             if (r === edit.row && edit.active)
                 edit.reset(t, c)
         }
@@ -295,8 +316,12 @@ TextEdit {
 
     Keys.onShortcutOverride: (event) => {
         // Editor shortcuts win over application-wide ones while typing.
-        if ((event.modifiers & Qt.ControlModifier) && [Qt.Key_E, Qt.Key_Period, Qt.Key_Z, Qt.Key_Y, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) >= 0)
+        if (!(event.modifiers & Qt.ControlModifier))
+            return
+        switch (event.key) {
+        case Qt.Key_E: case Qt.Key_Period: case Qt.Key_Z: case Qt.Key_Y: case Qt.Key_Return: case Qt.Key_Enter:
             event.accepted = true
+        }
     }
     Keys.onPressed: (event) => {
         if (edit.active && edit.editor && edit.editor.handleEditorKey(event, edit))
@@ -309,9 +334,12 @@ TextEdit {
         enabled: edit.active && Theme.touchUi && edit.spellChecked
         acceptedDevices: PointerDevice.TouchScreen
         onTapped: (eventPoint) => {
-            const pos = edit.positionAt(eventPoint.position.x, eventPoint.position.y)
-            if (edit.misspelledAt(pos).word !== undefined)
-                edit.editor.openSpellingMenu(edit, pos, eventPoint.position.x, eventPoint.position.y)
+            const x = eventPoint.position.x
+            const y = eventPoint.position.y
+            const pos = edit.positionAt(x, y)
+            misspelling.map = edit.misspelledAt(pos)
+            if (misspelling.map.word !== undefined)
+                edit.editor.openSpellingMenu(edit, pos, x, y)
         }
     }
     // The text menu: a right-click in the edited text (its press is the text's: the editor's
@@ -328,8 +356,8 @@ TextEdit {
     TapHandler {
         id: persistentTap
         enabled: !edit.active && edit.persistent
-        onTapped: (eventPoint, button) => edit.editor.editAt(edit.row, eventPoint.position.x, eventPoint.position.y,
-                                                             persistentTap.point.modifiers)
+        onTapped: (eventPoint, button) => edit.editor.editAtWith(edit.row, eventPoint.position.x, eventPoint.position.y,
+                                                                 persistentTap.point.modifiers)
     }
     TapHandler {
         enabled: !edit.active && edit.persistent && Theme.touchUi
@@ -340,4 +368,6 @@ TextEdit {
         enabled: !edit.active && edit.persistent && !Theme.touchUi
         cursorShape: Qt.IBeamCursor
     }
+    /// The word marked as misspelled under a tap.
+    MapHolder { id: misspelling }
 }

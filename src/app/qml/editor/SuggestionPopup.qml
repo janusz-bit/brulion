@@ -13,15 +13,27 @@ import Brulion
 T.Popup {
     id: popup
 
-    property BlockEditor editor
+    /// The editor as an Item, for the editor itself to pass (a file cannot give its own root to a
+    /// property of its own type in compiled code); `editor` follows it unless set directly.
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     property SuggestionModel model
+    /// SuggestionModel.detect()'s trigger ({ mode, token, … }).
     property var trigger: ({})
     property int row: -1
-    property InlineEditor target: null
+    final property InlineEditor target: null
     property int currentIndex: 0
     signal activated(int index)
 
-    readonly property bool slash: trigger.mode === "slash"
+    /// The trigger's keys (typed).
+    MapHolder {
+        id: triggerInfo
+        map: popup.trigger
+        function mode(): string { return triggerInfo.map.mode }
+        function token(): string { return triggerInfo.map.token ? triggerInfo.map.token : "" }
+    }
+    readonly property string mode: triggerInfo.mode()
+    readonly property bool slash: mode === "slash"
     readonly property real rowHeight: Theme.touchUi ? 48 : (slash ? 36 : 40) // two lines (title + folder) need 40
 
     parent: editor
@@ -32,7 +44,7 @@ T.Popup {
     implicitWidth: Math.min(editor.width - 2 * Theme.space2, slash ? 300 : 360)
     implicitHeight: Math.min(list.contentHeight, rowHeight * (Theme.touchUi ? 5 : 8)) + topPadding + bottomPadding + (headerText.visible ? headerText.height : 0)
 
-    function show() {
+    function show(): void {
         if (!target)
             return
         place()
@@ -45,16 +57,17 @@ T.Popup {
     /// part (above the touch toolbar docked on the keyboard: editor.visibleBottom()). Called again
     /// while open: the list scrolls under the caret (the toolbar appearing, the caret kept
     /// visible, the keyboard sliding in) and the list of items grows.
-    function place() {
+    function place(): void {
         if (!target || !editor)
             return
-        const rect = target.cursorRectangle
-        const caret = target.mapToItem(editor, rect.x, rect.y)
+        editor.mapPoint(target, editor, target.caretRect.x, target.caretRect.y)
+        const caretX = editor.mapped.x
+        const caretY = editor.mapped.y
         const h = implicitHeight
         const bottomLimit = editor.visibleBottom()
-        const below = caret.y + rect.height + 4
-        const above = caret.y - h - 4
-        x = Math.max(Theme.space2, Math.min(caret.x - Theme.space3, editor.width - width - Theme.space2))
+        const below = caretY + target.caretRect.height + 4
+        const above = caretY - h - 4
+        x = Math.max(Theme.space2, Math.min(caretX - Theme.space3, editor.width - width - Theme.space2))
         const y0 = below + h <= bottomLimit || above < Theme.space1 ? below : above
         y = Math.max(Theme.space1, Math.min(y0, bottomLimit - h - Theme.space1))
     }
@@ -85,7 +98,7 @@ T.Popup {
         ignoreUnknownSignals: true
         function onContentYChanged() { popup.place() }
     }
-    function move(delta) {
+    function move(delta: int): void {
         if (model.count === 0)
             return
         currentIndex = (currentIndex + delta + model.count) % model.count
@@ -115,13 +128,13 @@ T.Popup {
     contentItem: Column {
         Text {
             id: headerText
-            visible: popup.trigger.mode === "date" && popup.model.count > 0
+            visible: popup.mode === "date" && popup.model.count > 0
             width: parent.width
             leftPadding: Theme.space3
             topPadding: Theme.space1
             bottomPadding: Theme.space1
-            text: popup.trigger.token && popup.trigger.token.indexOf("⏰") === 0 ? qsTr("Reminder at")
-                : popup.trigger.token === "@" ? qsTr("Date") : qsTr("Date")
+            text: Js.indexOf(triggerInfo.token(), "⏰") === 0 ? qsTr("Reminder at")
+                : triggerInfo.token() === "@" ? qsTr("Date") : qsTr("Date")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs
             font.weight: Theme.weightMedium

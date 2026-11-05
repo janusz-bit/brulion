@@ -18,7 +18,7 @@
 //   depth        display depth (relative to the zoomed block)    docDepth    outline depth in the file
 //   kind         listItem | paragraph | heading | code | table | quote | callout | rule | html | frontmatter
 //   view         text | heading | code | calc | query | table | quote | callout | rule | frontmatter | html
-//   headingLevel, lang, hasChildren, collapsed, visible (zoom + folds), taskStatus ("" | todo |
+//   headingLevel, lang, hasChildren, collapsed, visible (zoom + folds; also `shown`), taskStatus ("" | todo |
 //   doing | done | cancelled | deferred), blockId, isEditing, isSelected, isZoomRoot,
 //   selectionEdge  where a selected row sits in the band of selected visible rows: "single" |
 //                "first" | "middle" | "last" ("" when not selected or hidden) — the band's rounded
@@ -147,6 +147,8 @@ public:
         NoteModeOnlyRole,
         SelectionEdgeRole,
         PropertiesInfoRole,
+        /// `visible` under a name a delegate can take as a required property (Item has `visible`).
+        ShownRole,
     };
 
     /// Nested embeds rendered inside a transclusion (deeper ones become a "depth" note).
@@ -171,6 +173,11 @@ public:
     /// A few roles of `row` by name (view, kind, taskStatus, depth, hasChildren, collapsed,
     /// visible, blockId, headingLevel, plainText, editText, listMarker); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
+    /// get(row)'s view, kind and taskStatus typed, for QML compiled ahead of time ("" for an
+    /// invalid row).
+    Q_INVOKABLE QString viewAt(int row) const;
+    Q_INVOKABLE QString kindAt(int row) const;
+    Q_INVOKABLE QString taskStatusAt(int row) const;
 
     // --- Document ----------------------------------------------------------------------------
     const markdown::BlockDocument &document() const { return m_doc; }

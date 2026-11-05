@@ -28,7 +28,10 @@ import Brulion
 Item {
     id: root
 
-    property BlockDelegate block
+    final property BlockDelegate block: blockItem as BlockDelegate
+    /// The block as an Item: what BlockDelegate gives (a file cannot give its own root to a
+    /// property of its own type in compiled code); `block` follows it unless set directly.
+    property Item blockItem
     /// Quote style (muted, italic) for blockquotes.
     property bool quoted: false
     /// Centres the text (a formula block: ```math, MathBlockView).
@@ -37,26 +40,29 @@ Item {
     /// block is shown by another view or hidden: no text, no inline editor).
     property bool live: true
 
-    readonly property BlockEditor editor: block.editor
-    readonly property int level: block.headingLevel
+    final property BlockEditor editor: block.editor
+    /// The editor's controller and find bar (typed here: looked into below).
+    readonly property PageController controller: editor.controller
+    readonly property NoteFind find: editor.find
+    readonly property int level: block.shownHeadingLevel
     readonly property int fontSize: editor.headingSize(level)
     readonly property int lineHeightPx: editor.headingLineHeight(level)
     readonly property real firstLineCenter: editor.firstLineCenter(level)
     readonly property bool mono: block.view === "html"
     readonly property bool editing: live && block.editing
     readonly property int align: root.centered ? Text.AlignHCenter : Text.AlignLeft
-    readonly property string html: root.live ? root.block.model.html : ""
+    readonly property string html: root.live ? root.block.rowData.html : ""
     /// The rendered text with the find bar's matches tinted (docs/UI.md "Find and replace").
     readonly property string findHtml: {
-        const find = root.editor.find
-        return find && find.appliedQuery !== "" && root.live
+        const find = root.find
+        return find !== null && find.appliedQuery !== "" && root.live
                 ? TextHelper.findHighlightedHtml(root.html, find.appliedQuery, find.matchCase, find.matchDiacritics,
                                                  find.wholeWord, root.editor.findHitColor.toString())
                 : root.html
     }
     /// The text has a span with a background colour (InlineRenderer's chips and tags, inline code,
     /// highlights): the TextEdit with rounded shapes shows it.
-    readonly property bool tinted: findHtml.indexOf("background-color:") >= 0
+    readonly property bool tinted: Js.indexOf(findHtml, "background-color:") >= 0
     /// The item showing the rendered text: linkAt(), the anchor of the token and link menus.
     readonly property Item renderedItem: tinted && tintedLoader.item ? tintedLoader.item as Item : rendered
 
@@ -68,11 +74,19 @@ Item {
     /// The link under the mouse, or under the finger / button while it presses ("" = none): shown
     /// underlined. Not the task checkbox nor a chip a click edits (dates, 🔁, priorities).
     property string hoveredLink: ""
+    /// Where a right-click or a long press on the text was (in the text, in the scene): kept here
+    /// while the menus are asked for (compiled code reads no event values after other calls).
+    property point menuAt
+    property point menuScene
+    function setMenuPoints(at: point, scene: point): void {
+        menuAt = at
+        menuScene = scene
+    }
     /// The shown rich text: the rendered HTML with hoveredLink underlined.
     readonly property string shownHtml: TextHelper.hoveredLinkHtml(root.findHtml, root.hoveredLink)
-    function trackLink(x: real, y: real) {
+    function trackLink(x: real, y: real): void {
         const link = root.editing ? "" : root.linkAt(x, y)
-        const hovered = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""
+        const hovered = link !== "" && !Js.startsWith(link, "task:") && !root.editor.editsOnClick(link) ? link : ""
         if (hovered !== root.hoveredLink)
             root.hoveredLink = hovered
     }
@@ -82,8 +96,8 @@ Item {
     }
     /// The link whose preview the resting pointer asks for (LinkPreviews: page: and block:; a day
     /// of the journal, a day: chip here, by the page it names).
-    readonly property string previewLink: root.hoveredLink.startsWith("day:") && root.editor.controller
-                                          ? (root.editor.controller.dateChip(root.block.index, root.hoveredLink).url || "")
+    readonly property string previewLink: Js.startsWith(root.hoveredLink, "day:") && root.controller !== null
+                                          ? root.controller.dateChipUrl(root.block.index, root.hoveredLink)
                                           : root.hoveredLink
 
     /// The rendered text's height in whole fixed-height lines.
@@ -110,7 +124,7 @@ Item {
         color: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
         linkColor: Theme.link
         Accessible.role: Accessible.StaticText
-        Accessible.name: root.live ? root.block.model.plainText : ""
+        Accessible.name: root.live ? root.block.plainText : ""
     }
     // A text with tinted spans: the same text, font, colours and line height in a read-only
     // rich-text TextEdit (it exposes its document), the spans' rounded shapes drawn under it.
@@ -140,7 +154,7 @@ Item {
             font.strikeout: root.block.taskStatus === "cancelled"
             color: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
             Accessible.role: Accessible.StaticText
-            Accessible.name: root.live ? root.block.model.plainText : ""
+            Accessible.name: root.live ? root.block.plainText : ""
             onWidthChanged: tints.refresh()
 
             RichTextPills {
@@ -150,10 +164,10 @@ Item {
             }
             // Under the text: a child with a negative z is drawn below its parent's content.
             Repeater {
-                model: tints.pills
+                model: tints.shapes
                 delegate: Rectangle {
                     id: tintShape
-                    required property var modelData
+                    required property richTextPill modelData
                     z: -1
                     x: modelData.x
                     y: modelData.y
@@ -194,7 +208,7 @@ Item {
             onPointChanged: {
                 root.trackLink(point.position.x, point.position.y)
                 // The link under the resting pointer: its preview (docs/UI.md "Link previews").
-                const controller = root.editor.controller
+                const controller = root.controller
                 LinkPreviews.hover(root, tap.pressed ? "" : root.previewLink, controller ? controller.path : "",
                                    controller ? controller.host : null, point.position.x, point.position.y)
             }
@@ -218,15 +232,16 @@ Item {
                     root.hoveredLink = ""
             }
             onTapped: (eventPoint, button) => {
+                const x = eventPoint.position.x
+                const y = eventPoint.position.y
                 // Shift+click, the touch selection mode (BlockEditor.blockTapped).
-                if (root.editor.blockTapped(root.block.index, tap.point.modifiers))
+                if (root.editor.blockTappedWith(root.block.index, tap.point.modifiers))
                     return
-                const p = eventPoint.position
-                const link = root.linkAt(p.x, p.y)
+                const link = root.linkAt(x, y)
                 if (link !== "" && !root.editor.editsOnClick(link))
                     root.editor.activateLink(root.block.index, link)
                 else
-                    root.editor.editAt(root.block.index, p.x, p.y)
+                    root.editor.editAt(root.block.index, x, y)
             }
         }
         // A middle click on a page, tag or block link: that link in a new tab (OpenIn; the app's
@@ -236,8 +251,8 @@ Item {
             acceptedButtons: Qt.MiddleButton
             enabled: OpenIn.tabs
             onTapped: (eventPoint) => {
-                const p = eventPoint.position
-                root.editor.openLinkInTab(root.block.index, root.linkAt(p.x, p.y))
+                const link = root.linkAt(eventPoint.position.x, eventPoint.position.y)
+                root.editor.openLinkInTab(root.block.index, link)
             }
         }
         // A right-click: a token's menu, a link's menu, else the block menu (as the list's handler
@@ -247,11 +262,12 @@ Item {
             acceptedButtons: Qt.RightButton
             gesturePolicy: TapHandler.WithinBounds
             onTapped: (eventPoint) => {
-                const p = eventPoint.position
-                const link = root.linkAt(p.x, p.y)
-                if (!root.editor.openDateMenu(root.block.index, link, root.renderedItem, p.x, p.y)
-                        && !root.editor.openBlockLinkMenu(root.block.index, link, root.renderedItem, p.x, p.y))
-                    root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+                root.setMenuPoints(eventPoint.position, eventPoint.scenePosition)
+                const link = root.linkAt(root.menuAt.x, root.menuAt.y)
+                if (!root.editor.openDateMenu(root.block.index, link, root.renderedItem, root.menuAt.x, root.menuAt.y)
+                        && !root.editor.openBlockLinkMenu(root.block.index, link, root.renderedItem, root.menuAt.x,
+                                                          root.menuAt.y))
+                    root.editor.openBlockMenuAt(root.block.index, root.menuScene)
             }
         }
         // A finger held on the text: the block selection (never the block menu: that is the
@@ -261,11 +277,12 @@ Item {
             acceptedDevices: PointerDevice.TouchScreen
             enabled: Theme.touchUi
             onLongPressed: {
-                const p = hold.point.position
-                const link = root.linkAt(p.x, p.y)
+                root.menuAt = hold.point.position
+                const link = root.linkAt(root.menuAt.x, root.menuAt.y)
                 if (!root.editor.selectionMode
-                        && (root.editor.openDateMenu(root.block.index, link, root.renderedItem, p.x, p.y)
-                            || root.editor.openBlockLinkMenu(root.block.index, link, root.renderedItem, p.x, p.y)))
+                        && (root.editor.openDateMenu(root.block.index, link, root.renderedItem, root.menuAt.x, root.menuAt.y)
+                            || root.editor.openBlockLinkMenu(root.block.index, link, root.renderedItem, root.menuAt.x,
+                                                             root.menuAt.y)))
                     return
                 root.editor.longPressText(root.block.index)
             }

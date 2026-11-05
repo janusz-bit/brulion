@@ -332,6 +332,22 @@ QVariantList PageController::breadcrumb() const
     return out;
 }
 
+QVariantList PageController::breadcrumbItems(const QString &pageTitle, const QVariantList &crumbs) const
+{
+    QVariantList out{QVariantMap{{u"title"_s, pageTitle}}};
+    for (const QVariant &crumb : crumbs) {
+        const QString title = crumb.toMap().value(u"title"_s).toString();
+        out.append(QVariantMap{{u"title"_s, title.isEmpty() ? u"…"_s : title}});
+    }
+    return out;
+}
+
+int PageController::breadcrumbRow(int i) const
+{
+    const QVariantList crumbs = breadcrumb();
+    return i >= 0 && i < crumbs.size() ? crumbs.at(i).toMap().value(u"row"_s).toInt() : -1;
+}
+
 int PageController::editingRow() const
 {
     return m_editingUid ? m_model->rowOfUid(m_editingUid) : -1;
@@ -2725,6 +2741,11 @@ QVariantMap PageController::reminderAt(int row, int from, int to) const
                 {u"context"_s, blockContext(row)}};
     }
     return {};
+}
+
+QString PageController::dateChipUrl(int row, const QString &url) const
+{
+    return dateChip(row, url).value(u"url"_s).toString();
 }
 
 QVariantMap PageController::dateChip(int row, const QString &url) const

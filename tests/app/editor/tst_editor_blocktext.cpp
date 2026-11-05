@@ -2,6 +2,7 @@
 // edit mapping, fences, token edits, completion triggers, slash commands, query/frontmatter data.
 #include "blocktext.h"
 #include "editorhost.h"
+#include "editorinput.h"
 
 #include "dates/local.h"
 #include "markdown/blockdocument.h"
@@ -1240,6 +1241,8 @@ private Q_SLOTS:
         QTest::newRow("from empty") << QString() << u"- nowa\n"_s;
         QTest::newRow("to empty") << u"- stara\n"_s << QString();
         QTest::newRow("repeated chars") << u"aaaa"_s << u"aaaaaa"_s;
+        QTest::newRow("line break typed") << u"pół zdania"_s << u"pół\n zdania"_s;
+        QTest::newRow("pasted lines") << u"ab"_s << u"a- x\n- y\nb"_s;
     }
 
     void textDeltas()
@@ -1256,6 +1259,17 @@ private Q_SLOTS:
         QVERIFY(d.removed.size() + d.inserted.size() <= std::abs(before.size() - after.size()) + 4);
         if (before == after)
             QVERIFY(d.removed.isEmpty() && d.inserted.isEmpty());
+        // EditorInput.changedRange (the inline editor) gives what its JavaScript loops gave.
+        qsizetype start = 0;
+        while (start < after.size() && start < before.size() && after[start] == before[start])
+            ++start;
+        qsizetype endNew = after.size();
+        qsizetype endOld = before.size();
+        while (endNew > start && endOld > start && after[endNew - 1] == before[endOld - 1]) {
+            --endNew;
+            --endOld;
+        }
+        QCOMPARE(EditorInput().changedRange(before, after), QList<int>({int(start), int(endNew), int(endOld)}));
     }
 
     // What a path part of a link opens, as EditorHost::linkPart() gives it (editorhost.h).
