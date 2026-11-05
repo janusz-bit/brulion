@@ -121,6 +121,20 @@ void RichTextPills::setInset(qreal px)
     Q_EMIT insetChanged();
 }
 
+QList<RichTextPill> RichTextPills::shapes() const
+{
+    QList<RichTextPill> out;
+    out.reserve(m_pills.size());
+    for (const Pill &p : m_pills) {
+        out.append(RichTextPill{p.rect.x(), p.rect.y(), p.rect.width(), p.rect.height(), p.color,
+                                !p.icon.isEmpty() ? u"icon"_s
+                                : p.round         ? u"pill"_s
+                                                  : u"box"_s,
+                                p.icon});
+    }
+    return out;
+}
+
 QVariantList RichTextPills::pills() const
 {
     QVariantList out;

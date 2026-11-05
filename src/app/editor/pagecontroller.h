@@ -672,6 +672,8 @@ public:
     /// tokenChip()); a day link also url (its page: link, what a click opens) and copyText; empty
     /// when the link names no token.
     Q_INVOKABLE QVariantMap dateChip(int row, const QString &url) const;
+    /// dateChip(row, url)'s "url" ("" without one): typed, for QML compiled ahead of time.
+    Q_INVOKABLE QString dateChipUrl(int row, const QString &url) const;
     /// One edit of a token menu on body range [from, to) of a row (markdown::applyTokenAction():
     /// "set", "move", "shift", "alarm", "reminder", "remove", "recurrence", "priority",
     /// "blockRecurrence", "blockPriority"; on a [[day]] link "set", "move", "shift") — only the

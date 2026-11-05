@@ -96,6 +96,13 @@ void setUp(QTextDocument &doc, qreal width = TextWidth)
     doc.setTextWidth(width);
 }
 
+/// A typed shape as the map `pills` gives for it.
+QVariantMap shapeMap(const RichTextPill &p)
+{
+    return {{u"x"_s, p.x}, {u"y"_s, p.y}, {u"width"_s, p.width}, {u"height"_s, p.height},
+            {u"color"_s, p.color}, {u"kind"_s, p.kind}, {u"icon"_s, p.icon}};
+}
+
 /// The distinct lines (by their top) the pills of `span` (its from position) lie on.
 QList<qreal> linesOf(const QList<RichTextPills::Pill> &pills, int from)
 {
@@ -201,6 +208,11 @@ private Q_SLOTS:
             QCOMPARE(m.value(u"color"_s).value<QColor>(), pills.pillList()[i].color);
             QCOMPARE(m.value(u"width"_s).toReal(), pills.pillList()[i].rect.width());
         }
+        // So does the typed list, entry by entry.
+        const QList<RichTextPill> shapes = pills.shapes();
+        QCOMPARE(shapes.size(), list.size());
+        for (int i = 0; i < shapes.size(); ++i)
+            QCOMPARE(shapeMap(shapes[i]), list[i].toMap());
     }
 
     // Coloured highlights (`<mark>`) are boxes in their palette colours; a page's app icon in front
@@ -235,6 +247,10 @@ private Q_SLOTS:
         QCOMPARE(doc.toRawText().mid(iconPill.from, iconPill.to - iconPill.from), QString(3, QChar(0x00A0)));
         QCOMPARE(list[2].toMap().value(u"kind"_s).toString(), u"box"_s);
         QCOMPARE(list[2].toMap().value(u"icon"_s).toString(), QString());
+        const QList<RichTextPill> shapes = pills.shapes();
+        QCOMPARE(shapes.size(), 3);
+        for (int i = 0; i < shapes.size(); ++i)
+            QCOMPARE(shapeMap(shapes[i]), list[i].toMap());
         // The icon's anchor is the link's: a click on it follows the link.
         QTextCursor cursor(&doc);
         cursor.setPosition(iconPill.from + 1);
