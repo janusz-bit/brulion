@@ -489,8 +489,10 @@ private Q_SLOTS:
         QTRY_COMPARE(zipsIn(folder).size(), 2);
         QCOMPARE(b->status(), u"ok"_s);
 
-        // A restore waits for its safety backup to be stored; refused, nothing is restored.
-        const QString source = b->backups().first().toMap().value(u"name"_s).toString();
+        // A restore waits for its safety backup to be stored; refused, nothing is restored. (Of
+        // the copy just written: the list reads the folder again on its own, a moment later.)
+        const QString source = written.first().at(0).toString();
+        QTRY_COMPARE(b->backups().first().toMap().value(u"name"_s).toString(), source);
         QVERIFY(ws->writeFile(u"a.md"_s, u"- przed przywróceniem\n"_s));
         QVERIFY(!plannedRestore(b, source).isEmpty());
         b->confirmRestore();
