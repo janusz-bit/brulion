@@ -27,7 +27,9 @@ import Brulion
 BMenu {
     id: menu
 
-    property BlockEditor editor
+    /// The editor (an Item: BlockEditor passes itself, see blockItem in the block views).
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     readonly property PageController controller: editor ? editor.controller : null
     /// controller.trackBlock() handle of the block (-1: none).
     property int handle: -1

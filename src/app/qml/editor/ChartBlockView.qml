@@ -13,7 +13,10 @@ import Brulion
 Rectangle {
     id: root
 
-    final property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     /// The source is on screen: while editing, or when there is no chart to show.
     readonly property bool showSource: root.block.editing || chart.status !== "ok"
     readonly property real codeLine: Theme.lineHeightPx(Theme.textSm, 1.5)

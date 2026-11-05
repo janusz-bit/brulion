@@ -15,7 +15,10 @@ Rectangle {
     id: root
     objectName: "frontmatterView"
 
-    final property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     readonly property BlockEditor editor: block.editor
     readonly property bool expanded: editor.propertiesExpanded && !block.editing
     readonly property bool open: expanded || block.editing
@@ -179,7 +182,7 @@ Rectangle {
         visible: active
         sourceComponent: PropertiesPanel {
             objectName: "propertiesPanel"
-            editor: root.editor
+            editorItem: root.editor
             controller: root.block.controller
             blockRow: root.block.index
             properties: root.properties

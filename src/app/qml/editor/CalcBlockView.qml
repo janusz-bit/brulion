@@ -12,7 +12,10 @@ import Brulion
 Rectangle {
     id: root
 
-    final property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     readonly property list<var> results: root.block.rowData.calcResults
     /// The note's text size (the editor's), and its line height for a list of lines.
     readonly property int fontSize: root.block && root.block.editor ? root.block.editor.fontSize : Theme.textEditor

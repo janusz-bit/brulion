@@ -18,7 +18,10 @@ import Brulion
 Column {
     id: root
 
-    final property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     property list<var> transclusions
     /// A task's status menu is open in the embeds (or closed a moment ago: the menu is still
     /// closing on its row): they wait, `frozen` is shown.

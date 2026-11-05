@@ -19,7 +19,10 @@ import Brulion
 Rectangle {
     id: root
 
-    final property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     readonly property BlockEditor editor: block.editor
     readonly property list<var> filters: root.block.rowData.query.filters
     readonly property list<string> terms: root.block.rowData.query.terms

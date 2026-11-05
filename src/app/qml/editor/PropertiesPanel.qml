@@ -16,7 +16,9 @@ import Brulion
 Item {
     id: panel
 
-    property BlockEditor editor
+    /// The editor (an Item: BlockEditor passes itself, see blockItem in the block views).
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     property PageController controller
     /// The frontmatter row (-1: the draft above the blocks).
     property int blockRow: -1

@@ -46,7 +46,9 @@ import Brulion
 Item {
     id: root
 
-    property BlockEditor editor
+    /// The editor (an Item: BlockEditor passes itself, see blockItem in the block views).
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     property PageController controller
     readonly property bool anyOpen: (reminderDialog !== null && reminderDialog.opened)
                                     || (dateDialog !== null && dateDialog.opened)

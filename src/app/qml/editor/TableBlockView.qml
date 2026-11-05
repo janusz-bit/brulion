@@ -35,7 +35,10 @@ import Brulion
 Item {
     id: root
 
-    final property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     /// The block's row (read once here: the delegate's `index` is no final property).
     readonly property int blockIndex: block ? block.index : -1
     readonly property list<string> header: root.block.rowData.tableData.header

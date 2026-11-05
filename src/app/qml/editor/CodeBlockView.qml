@@ -8,7 +8,10 @@ import Brulion
 Rectangle {
     id: root
 
-    final property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     readonly property real firstLineCenter: code.y + Theme.lineHeightPx(Theme.textSm, 1.5) / 2
 
     implicitHeight: code.y + code.implicitHeight + Theme.space3
