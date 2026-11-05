@@ -58,6 +58,8 @@ BMenu {
     readonly property bool inCell: cellRow > -2
     /// The block is a table (its CSV and filter items).
     property bool table: false
+    /// Bumped when a click toggled an alignment's check mark: its binding takes over again.
+    property int checkRevision: 0
 
     // Submenu items are OptionalItems too, shown as their OptionalMenu says. Set before the first
     // submenu below: a menu makes the item of a submenu as soon as it gets it.
@@ -181,9 +183,9 @@ BMenu {
         id: alignItem
         required property string align
         checkable: true
-        checked: menu.cellAlign === align
+        checked: menu.checkRevision >= 0 && menu.cellAlign === align
         onTriggered: {
-            alignItem.checked = menu.cellAlign === alignItem.align // the click toggled it
+            ++menu.checkRevision // the click toggled it: the binding again (an assignment would end it)
             const r = menu.row()
             if (r >= 0)
                 menu.controller.setTableColumnAlign(r, menu.cellColumn, alignItem.align)

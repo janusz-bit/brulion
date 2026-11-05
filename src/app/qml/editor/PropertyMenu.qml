@@ -15,24 +15,15 @@ BMenu {
     property PropertyRow row: null
     readonly property bool editable: row !== null && row.editable
 
-    /// The type `type` chosen (the check marks follow the row's type again: a checkable item's
-    /// trigger toggles its own).
+    /// Bumped when a type was chosen: the click toggled that item's check mark, its binding (the
+    /// row's type) takes over again.
+    property int checkRevision: 0
+    /// The type `type` chosen.
     function choose(type: string): void {
         if (row)
             row.setType(type)
-        syncChecks()
+        ++menu.checkRevision
     }
-    /// Each type's check mark as the row's type is now.
-    function syncChecks(): void {
-        const type = menu.row !== null ? menu.row.type : ""
-        typeText.checked = type === "text"
-        typeNumber.checked = type === "number"
-        typeCheckbox.checked = type === "checkbox"
-        typeDate.checked = type === "date"
-        typeDatetime.checked = type === "datetime"
-        typeList.checked = type === "list"
-    }
-    onAboutToShow: syncChecks()
 
     /// The "Typ" submenu.
     readonly property alias typeMenu: typeSubMenu
@@ -49,7 +40,7 @@ BMenu {
             text: menu.row ? menu.row.typeName("text") : ""
             iconName: menu.row ? menu.row.typeIcon("text") : ""
             checkable: true
-            checked: menu.row !== null && menu.row.type === "text"
+            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "text"
             onTriggered: menu.choose("text")
         }
         BMenuItem {
@@ -58,7 +49,7 @@ BMenu {
             text: menu.row ? menu.row.typeName("number") : ""
             iconName: menu.row ? menu.row.typeIcon("number") : ""
             checkable: true
-            checked: menu.row !== null && menu.row.type === "number"
+            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "number"
             onTriggered: menu.choose("number")
         }
         BMenuItem {
@@ -67,7 +58,7 @@ BMenu {
             text: menu.row ? menu.row.typeName("checkbox") : ""
             iconName: menu.row ? menu.row.typeIcon("checkbox") : ""
             checkable: true
-            checked: menu.row !== null && menu.row.type === "checkbox"
+            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "checkbox"
             onTriggered: menu.choose("checkbox")
         }
         BMenuItem {
@@ -76,7 +67,7 @@ BMenu {
             text: menu.row ? menu.row.typeName("date") : ""
             iconName: menu.row ? menu.row.typeIcon("date") : ""
             checkable: true
-            checked: menu.row !== null && menu.row.type === "date"
+            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "date"
             onTriggered: menu.choose("date")
         }
         BMenuItem {
@@ -85,7 +76,7 @@ BMenu {
             text: menu.row ? menu.row.typeName("datetime") : ""
             iconName: menu.row ? menu.row.typeIcon("datetime") : ""
             checkable: true
-            checked: menu.row !== null && menu.row.type === "datetime"
+            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "datetime"
             onTriggered: menu.choose("datetime")
         }
         BMenuItem {
@@ -94,7 +85,7 @@ BMenu {
             text: menu.row ? menu.row.typeName("list") : ""
             iconName: menu.row ? menu.row.typeIcon("list") : ""
             checkable: true
-            checked: menu.row !== null && menu.row.type === "list"
+            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "list"
             onTriggered: menu.choose("list")
         }
     }
