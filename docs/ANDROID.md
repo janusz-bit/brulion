@@ -1205,9 +1205,10 @@ APK, ustawiane zmienne). Najważniejsze decyzje:
   sam dopisuje build dla każdego nowego taga `vX.Y.Z` (bez `-rc`).
 * Kategorie: Note, Calendar & Agenda, Task, Writing. Opis, zrzuty i ikonę F-Droid bierze
   z `fastlane/metadata/android/` w repozytorium.
-* **Pierwszy build musi wskazywać wydanie, które ma te skrypty** — v0.8.1 ich nie ma. W przepisie
-  stoi wersja z `CMakeLists.txt` (0.8.1, `versionCode` 8001); przed zgłoszeniem zmień
-  `versionName`/`versionCode`/`commit`/`CurrentVersion*` na pierwsze wydanie z tą zmianą.
+* **Pierwszy build to v0.9.1** (`versionCode` 9001, `commit: v0.9.1`) — pierwsze opublikowane
+  wydanie z tymi skryptami (v0.8.1 ich nie ma, v0.9.0 nie zostało opublikowane). Następne wersje
+  dopisuje bot F-Droid (`AutoUpdateMode`); w tym repozytorium przepis zmienia się tylko razem
+  ze sposobem budowania.
 
 Sprawdzenie lokalnie w kontenerze buildservera F-Droid (jak zadanie „fdroid build” w CI
 fdroiddata), podman albo docker:
@@ -1223,12 +1224,14 @@ podman run --rm -it -u root --entrypoint /bin/bash \
 # w kontenerze:
 source /etc/profile.d/bsenv.sh && apt-get update && apt-get install -y fdroidserver sudo
 cd /build && export PATH=/home/vagrant/fdroidserver:$PATH
+# (fetchsrclibs to wtyczka z examples/ fdroidservera — jak w CI fdroiddata)
+export PYTHONPATH=/home/vagrant/fdroidserver:/home/vagrant/fdroidserver/examples
 fdroid lint io.github.januszbit.brulion && fdroid readmeta
 fdroid fetchsrclibs io.github.januszbit.brulion --verbose
 fdroid build --verbose --test --on-server --no-tarball io.github.januszbit.brulion
 ```
 
-(Przed wydaniem z tymi skryptami — test na lokalnej gałęzi: w kopii przepisu `Repo:` na
+(Zmiana w budowaniu przed jej wydaniem — test na lokalnej gałęzi: w kopii przepisu `Repo:` na
 lokalne repozytorium, `commit:` na hash commita.)
 
 Zweryfikowane 2026-11-04 dokładnie tak (obraz `registry.gitlab.com/fdroid/fdroidserver:buildserver`
@@ -1242,6 +1245,14 @@ te same sprawdzenia `android-build.sh` co lokalnie). Krok `build` (Qt hosta, Qt 
 APK) z 6 zadaniami: 29–45 min. Pierwsze próby znalazły rzeczy poprawione w skryptach i przepisie:
 dane testowe LZ-String jako „binaria” dla skanera, ścieżka z `..` w `QT_ROOT` (Qt nie znajdował
 wtedy `Qt6LinguistTools` hosta) i różnice bajtów między buildami (niżej).
+
+Ponownie 2026-11-05 na wydaniu **v0.9.1** — przepis z `packaging/fdroid/` bez zmian
+(`commit: v0.9.1` pobierany z GitHuba), fdroidserver i fdroiddata z gałęzi głównej (fdroidserver
+z 27.10.2026): `fdroid lint`, `readmeta` i `rewritemeta` bez uwag, skaner bez błędów (po
+`scandelete`), **„Successfully built io.github.januszbit.brulion:9001 from d497fdb8”**,
+sprawdzenia `android-build.sh` jak wyżej (49 bibliotek, 16 KB, OpenSSL 3.5.9, Qt i OpenSSL ze
+źródeł), APK 91,9 MB, SHA-256 `6a701443aaab7deadb0e209b8d522c7f1a12d774e7e06203139c1c841f25fca4`.
+Całość z pobraniem NDK i srclibs: ok. 25 min na 16 rdzeniach.
 
 Do sprawdzenia przez fdroiddata przy zgłoszeniu: czas buildu na ich buildserverze (mniej rdzeni
 niż tu; `timeout: 14400` = 4 h) i to, czy recenzenci zaakceptują srclib `Qt5` z `init-repository`
@@ -1330,7 +1341,9 @@ odinstalowanie u jej użytkowników.
 
 Nic z poniższego nie jest wysłane. Kolejność:
 
-1. Wydanie z tymi skryptami (tag `vX.Y.Z`), poprawiony szkic przepisu (wersja, commit).
+1. Gotowe: wydanie z tymi skryptami (v0.9.1) i przepis wskazujący je, zbudowany w kontenerze
+   buildservera (wyżej). Zostaje decyzja o podpisie (wyżej) — przy (b) przepis dostaje
+   `Binaries:` i `AllowedAPKSigningKeys:`, a wydania na GitHubie budowanie ze źródeł.
 2. **Merge request do fdroiddata** (najszybsza droga, bez RFP): fork
    `gitlab.com/fdroid/fdroiddata`, gałąź `io.github.januszbit.brulion`, plik
    `metadata/io.github.januszbit.brulion.yml` ze szkicu, `fdroid lint` i `fdroid rewritemeta`
@@ -1363,8 +1376,9 @@ Nic z poniższego nie jest wysłane. Kolejność:
 4. **IzzyOnDroid** (repozytorium z APK z wydań GitHuba, podpis właściciela, szybkie aktualizacje,
    niezależne od decyzji (a)/(b)): issue w `gitlab.com/IzzyOnDroid/repo` (szablon „App inclusion
    request”). Wymagania: APK w wydaniach GitHuba (jest: `brulion-<wersja>-arm64-v8a.apk`), metadane
-   fastlane w repozytorium; plik APK ma ~85 MB (biblioteki natywne nieskompresowane, wyrównane do
-   16 KB), więcej niż domyślny limit rozmiaru IzzyOnDroid — w zgłoszeniu poprosić o wyjątek.
+   fastlane w repozytorium; plik APK ma ~90 MB (v0.9.1: 90,0 MB; biblioteki natywne
+   nieskompresowane, wyrównane do 16 KB), więcej niż domyślny limit rozmiaru IzzyOnDroid —
+   w zgłoszeniu poprosić o wyjątek.
    Tekst:
 
    > **App inclusion request: Brulion**
@@ -1376,7 +1390,7 @@ Nic z poniższego nie jest wysłane. Kolejność:
    >   Nextcloud sync). No trackers, no proprietary libraries. Fastlane metadata in
    >   `fastlane/metadata/android`.
    > * The app has its own update notice (GitHub releases, can be turned off in the settings).
-   > * The APK is ~85 MB (Qt's native libraries are stored uncompressed for 16 KB page alignment);
+   > * The APK is ~90 MB (Qt's native libraries are stored uncompressed for 16 KB page alignment);
    >   please allow an exception to the size limit.
    > * I am the author.
 
