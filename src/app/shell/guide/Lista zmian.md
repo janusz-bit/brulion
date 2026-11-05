@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.10.3 — 5 listopada 2026
+
+**Uwaga**
+- Wersja 0.10.2 nie została opublikowana: wydanie zatrzymały dwa testy — test interfejsu, w którym dymek z podpowiedzią zasłaniał przycisk, i sprawdzenie wiersza poleceń w pakiecie Nix — poprawione w tej wersji. Wszystkie nowości wersji 0.10.0–0.10.2, opisane poniżej, są dostępne od tej wersji.
+
 ## 0.10.2 — 5 listopada 2026
 
 **Uwaga**
