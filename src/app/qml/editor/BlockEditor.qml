@@ -3601,7 +3601,9 @@ FocusScope {
                 && (editor.inSpan ? editor.spanTools : editor.controller.multiSelection)
         visible: active
         z: 11
-        anchors.horizontalCenter: editor.dockHost.horizontalCenter
+        // Centred on the dock host (its parent; the parent itself while it is set: a binding to an
+        // anchor of `undefined` is not compiled).
+        x: parent ? (parent.width - width) / 2 : 0
         y: Theme.space2
         sourceComponent: Item {
             implicitWidth: card.width
