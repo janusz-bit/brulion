@@ -2,6 +2,8 @@
 
 **Nowości w {{VERSION}}**
 
+Wersja 0.9.0 nie została opublikowana, więc jej nowości trafiają do Ciebie dopiero w tym wydaniu.
+
 * **Karty i osobne okna** — kilka stron otwartych naraz, każda z własną historią: **Ctrl+T**, **Ctrl+W**, **Ctrl+Tab**, **Ctrl+1…9**, środkowy przycisk myszy albo **Ctrl+kliknięcie** otwiera stronę w nowej karcie. Widok można podzielić na dwie strony obok siebie, a na komputerze otworzyć stronę w osobnym oknie. Karty wracają po ponownym uruchomieniu; na telefonie przełącza się je z górnego paska.
 * **Sprawdzanie pisowni** — błędy po polsku i angielsku są podkreślone w edytowanym bloku, a prawy przycisk (na telefonie dotknięcie słowa) podpowiada poprawki, **Dodaj do słownika** i **Ignoruj**. Kod, linki, tagi i daty są pomijane. Na komputerze Hunspell, na Androidzie sprawdzanie pisowni klawiatury; **Ustawienia → Edytor**.
 * **Podgląd linku** — najechanie myszą na `[[stronę]]` albo `((blok))` pokazuje jego treść w dymku, bez opuszczania notatki.

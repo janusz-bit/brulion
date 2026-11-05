@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.9.1 — 5 listopada 2026
+
+**Uwaga**
+- Wersja 0.9.0 nie została opublikowana: wydanie zatrzymały błędy znalezione przez testy i przy budowaniu, poprawione w tej wersji — między innymi drukowanie i sprawdzanie pisowni w AppImage oraz budowanie wersji na Windows. Wszystkie nowości wersji 0.9.0, opisane poniżej, są dostępne od tej wersji.
+
 ## 0.9.0 — 4 listopada 2026
 
 **Nowe**
