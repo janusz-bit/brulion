@@ -35,6 +35,8 @@ class DeviceInfo : public QObject, public QAccessible::ActivationObserver {
     /// Behave as if a screen reader were on (self-tests; the environment variable sets it at start).
     Q_PROPERTY(bool simulateScreenReader READ simulateScreenReader WRITE setSimulateScreenReader NOTIFY
                        screenReaderChanged FINAL)
+    /// The on-screen keyboard is shown (Qt.inputMethod.visible, typed for compiled QML).
+    Q_PROPERTY(bool inputMethodVisible READ inputMethodVisible NOTIFY inputMethodVisibleChanged FINAL)
 
 public:
     explicit DeviceInfo(QObject *parent = nullptr);
@@ -48,6 +50,11 @@ public:
     bool screenReader() const { return m_simulated || m_accessible; }
     bool simulateScreenReader() const { return m_simulated; }
     void setSimulateScreenReader(bool on);
+    bool inputMethodVisible() const;
+
+    /// Qt.inputMethod.hide() / show(), callable from compiled QML.
+    Q_INVOKABLE void hideInputMethod() const;
+    Q_INVOKABLE void showInputMethod() const;
 
     /// The installed families a font picker offers (filterFontFamilies(): no emoji, symbol or
     /// private families; sorted for Polish readers); `fixedOnly`: monospaced ones only.
@@ -58,6 +65,7 @@ public:
 
 Q_SIGNALS:
     void screenReaderChanged();
+    void inputMethodVisibleChanged();
 
 private:
     void accessibilityActiveChanged(bool active) override;
