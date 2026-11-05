@@ -1,14 +1,13 @@
-# Browser version (Qt 6.11.2 for WebAssembly, offline PWA) built with scripts/wasm-build.sh —
-# see docs/WEB.md. Runs by hand and for a push to main with "[ci]" in a commit message (and
-# changes in the paths below; see the build job's `if`); both deploy main to GitHub Pages
-# (https://<owner>.github.io/brulion/; the site uses relative URLs, so any base path works).
-# Also called by release.yml (deploy: false, pages-artifact) for the brulion-web-<version>.zip
-# release asset; release.yml deploys that site to GitHub Pages once the release is published.
+# Browser version (Qt 6.11.2 for WebAssembly) built with scripts/wasm-build.sh — see docs/WEB.md:
+# the site (offline PWA for any web server; relative URLs, so any base path works; artifact
+# brulion-web) and the same app in one HTML file opened from disk (scripts/wasm-single-file.py;
+# artifact brulion-web-html). Runs by hand and for a push to main with "[ci]" in a commit message
+# (and changes in the paths below; see the build job's `if`), and is called by release.yml for the
+# release's brulion-web-<version>.zip and brulion-web-<version>.html. Nothing is deployed: GitHub
+# Pages serve the F-Droid repository (fdroid.yml).
 # The job "browsers" tests the built site in Playwright's Chromium and Firefox (tests/web: pictures
 # from the internet — CORS, mixed content, no preflight, the export with copies — and the pen's
-# pressure and eraser end in the drawing editor); the deployment waits for it.
-# One-time setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions", and
-# Settings -> Environments -> github-pages -> Deployment branches and tags: main and tag v*.
+# pressure and eraser end in the drawing editor, the single file from disk); a release waits for it.
 name: Web
 
 on:
@@ -29,21 +28,8 @@ on:
       - tests/web/**
       - .github/workflows/wasm.yml
   workflow_dispatch:
-    inputs:
-      deploy:
-        description: Deploy to GitHub Pages (from main only)
-        type: boolean
-        default: true
   workflow_call:
     inputs:
-      deploy:
-        description: Deploy to GitHub Pages (from main only)
-        type: boolean
-        default: false
-      pages-artifact:
-        description: Upload the site as the GitHub Pages artifact for the caller to deploy
-        type: boolean
-        default: false
       skip-emulator:
         description: Leave out the Android emulator's browser check (release.yml)
         type: boolean
@@ -52,6 +38,9 @@ on:
       artifact:
         description: Name of the uploaded workflow artifact (the site, dist-wasm/)
         value: brulion-web
+      html-artifact:
+        description: Name of the uploaded workflow artifact with the single file (brulion.html)
+        value: brulion-web-html
 
 permissions:
   contents: read
@@ -72,16 +61,8 @@ jobs:
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    outputs:
-      deploy: ${{ steps.deploy.outputs.deploy }}
     steps:
       - uses: actions/checkout@v7
-
-      - id: deploy
-        name: Deploy?
-        env:
-          DEPLOY: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.deploy) }}
-        run: echo "deploy=$DEPLOY" | tee -a "$GITHUB_OUTPUT"
 
       # aqt runs through uvx (scripts/wasm-build.sh).
       - uses: astral-sh/setup-uv@v10.3.3
@@ -121,7 +102,7 @@ jobs:
           # Keep the cached emsdk small: the downloaded archives are already unpacked.
           rm -rf ~/.cache/brulion-emsdk/emsdk/downloads
 
-      # Headless Chrome (preinstalled) under the GitHub Pages path: the app starts, its emoji and
+      # Headless Chrome (preinstalled) under a base path (/brulion/): the app starts, its emoji and
       # symbols draw (no empty boxes: the bundled fallback fonts), it follows a phone's on-screen
       # keyboard (a stubbed visualViewport; on an emulated phone the editing toolbar ends on it and
       # a page the browser shrank gets no overlap), the notes survive a reload and a browser
@@ -157,6 +138,13 @@ jobs:
           # a download.
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile-pick" \
             --loads 1 --pick-files --screenshot "$RUNNER_TEMP/shots/pick.png"
+          # The single file opened from disk (file://, no server): it starts, draws its emoji, and
+          # its notes survive a reload and a browser restart.
+          single="file://$GITHUB_WORKSPACE/dist-wasm-single/brulion.html"
+          node scripts/wasm-smoke.mjs --url "$single" --profile "$RUNNER_TEMP/profile-single" \
+            --loads 2 --selftest --glyphs --expect-first 1 --screenshot "$RUNNER_TEMP/shots/single.png"
+          node scripts/wasm-smoke.mjs --url "$single" --profile "$RUNNER_TEMP/profile-single" \
+            --loads 1 --selftest --expect-first 3
           kill "$server"
           wait "$server" || true
           node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile "$RUNNER_TEMP/profile" \
@@ -179,11 +167,12 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - if: steps.deploy.outputs.deploy == 'true' || inputs.pages-artifact
-        uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
-          path: dist-wasm/
-          include-hidden-files: true
+          name: brulion-web-html
+          path: dist-wasm-single/brulion.html
+          if-no-files-found: error
+          retention-days: 30
 
   # The editing toolbar on the on-screen keyboard in real browsers — Chrome, Brave (its
   # visualViewport bug, brave-browser#60074) and Firefox — on an Android 16 emulator (KVM):
@@ -251,6 +240,11 @@ jobs:
           name: brulion-web
           path: dist-wasm
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: brulion-web-html
+          path: dist-wasm-single
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -274,25 +268,3 @@ jobs:
             tests/web/test-results/
           if-no-files-found: ignore
           retention-days: 7
-
-  deploy:
-    name: Deploy to GitHub Pages
-    needs: [build, browsers]
-    if: needs.build.outputs.deploy == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      pages: write
-      id-token: write
-    # One deployment at a time; a running deployment is allowed to finish.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/configure-pages@v6
-
-      - id: deployment
-        uses: actions/deploy-pages@v5

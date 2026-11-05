@@ -21,10 +21,11 @@ Testy w GitHub Actions nie startują same przy każdym pushu. Uruchamia się je:
 |---|---|---|
 | `.github/workflows/ci.yml` | ręcznie, push na `main` ze znacznikiem `[ci]`, z `release.yml` | **nix** (x86_64 i aarch64): `nix flake check` (z całym `ctest` w piaskownicy Nixa: `checks.<system>.tests`) + `nix build .#brulion` (pakiet bez testów — `doCheck = false`; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan przy `-O1` (asercje włączone), ccache między przebiegami (`actions/cache`, zapisywany zaraz po budowaniu), `ctest` (testy GUI obok innych, najdłuższe startują pierwsze — `tests/ctest-costs.txt`; czasy testów jako artefakt `ctest-junit-linux-asan`), `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh` i `tests/scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md); benchmarki mają limit czasu (`bench.sh -T 1500`, kroki własne timeouty, zadanie 80 min), więc wolny runner nie anuluje przebiegu; `release.yml` go pomija (`skip-perf-smoke: true`) — wydanie na niego nie czeka |
 | `.github/workflows/android.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `android/`…), z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
-| `.github/workflows/wasm.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `wasm/`…), z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline) → artefakt `brulion-web`; **browsers**: testy Playwrighta w Chromium i Firefoksie (`scripts/web-test.sh`, `tests/web`: obrazy z internetu — CORS, mixed content, brak preflight, eksport z kopiami —, nacisk i gumka rysika, parametry adresu; raport i ślady nieudanych testów → artefakt `web-browser-tests`, docs/WEB.md „Testy w przeglądarkach”); **keyboard-android** (bez wydań: `skip-emulator`): klawiatura ekranowa w przeglądarkach na emulatorze Androida; z `main` **wdrożenie na GitHub Pages** po `build` i `browsers` — wydanie przez wywołanie `wasm.yml` też czeka na `browsers` (wdraża swoją wersję po publikacji) |
+| `.github/workflows/wasm.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `wasm/`…), z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline; jeden plik HTML z `file://`) → artefakty `brulion-web` (strona) i `brulion-web-html` (jeden plik, docs/WEB.md „Jeden plik HTML”); **browsers**: testy Playwrighta w Chromium i Firefoksie (`scripts/web-test.sh`, `tests/web`: obrazy z internetu — CORS, mixed content, brak preflight, eksport z kopiami —, nacisk i gumka rysika, parametry adresu, jeden plik HTML z dysku; raport i ślady nieudanych testów → artefakt `web-browser-tests`, docs/WEB.md „Testy w przeglądarkach”); **keyboard-android** (bez wydań: `skip-emulator`): klawiatura ekranowa w przeglądarkach na emulatorze Androida. Niczego nie wdraża — wydanie przez wywołanie `wasm.yml` czeka też na `browsers` |
+| `.github/workflows/fdroid.yml` | ręcznie (z `main` albo taga `v*`), z `release.yml` | własne repozytorium F-Droid na GitHub Pages: `scripts/fdroid-repo.sh` (fdroidserver 2.4.5 z PyPI) z APK trzech ostatnich wydań, indeks podpisany kluczem repozytorium (sekrety `FDROID_*`), strona z kodem QR → wdrożenie na Pages (docs/ANDROID.md „Własne repozytorium F-Droid”) |
 | `.github/workflows/appimage.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `tests/`…), z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
 | `.github/workflows/windows.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `tests/`, `packaging/windows/`…), z `release.yml` | `scripts/windows-build.ps1` na `windows-2022` (Qt 6.11.2 MSVC 2022 z aqt, MSVC, Ninja): build Release, testy offscreen, `windeployqt`, przenośny ZIP i instalator Inno Setup, sprawdzenie obu bez Qt w `PATH` (rozpakowany ZIP, cicha instalacja dla użytkownika, autotest powłoki, ciche odinstalowanie) → artefakt `brulion-windows` (wersja testowa, docs/WINDOWS.md) |
-| `.github/workflows/release.yml` | tag `v*` albo ręcznie | sprawdza wersję, tworzy szkic wydania, uruchamia testy (`ci.yml` bez **perf**), cztery powyższe buildy + `git archive`, dołącza pliki i `SHA256SUMS.txt`, publikuje wydanie i wdraża jego wersję przeglądarkową na GitHub Pages (wydanie testowe nie) |
+| `.github/workflows/release.yml` | tag `v*` albo ręcznie | sprawdza wersję, tworzy szkic wydania, uruchamia testy (`ci.yml` bez **perf**), cztery powyższe buildy + `git archive`, dołącza pliki i `SHA256SUMS.txt`, publikuje wydanie i przebudowuje repozytorium F-Droid na GitHub Pages z jego APK (`fdroid.yml`; wydanie testowe i APK z kluczem jednorazowym nie) |
 
 Wersje narzędzi są przypięte w skryptach (Qt 6.11.2, aqtinstall 3.3.0, NDK r27c, Emscripten
 4.0.7, linuxdeploy z sumami SHA-256); `dependabot.yml` co miesiąc aktualizuje akcje GitHuba
@@ -47,10 +48,13 @@ nix develop -c git clang-format          # formatuje linie zmienione względem H
 ## Jednorazowa konfiguracja repozytorium
 
 1. **GitHub Pages:** Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-   Wersja przeglądarkowa trafia pod `https://janusz-bit.github.io/brulion/`. Żeby wydanie
-   mogło ją wdrożyć: Settings → Environments → `github-pages` → *Deployment branches and
+   Pod `https://janusz-bit.github.io/brulion/` jest repozytorium F-Droid (`fdroid.yml`). Żeby
+   wydanie mogło je wdrożyć: Settings → Environments → `github-pages` → *Deployment branches and
    tags*: gałąź `main` i tag `v*` (z wiersza poleceń:
    `gh api -X POST repos/janusz-bit/brulion/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag`).
+   Klucz repozytorium F-Droid: `scripts/fdroid-new-keystore.sh` (sekrety
+   `FDROID_KEYSTORE_BASE64`, `FDROID_KEYSTORE_PASS`, `FDROID_KEY_ALIAS`; docs/ANDROID.md
+   „Własne repozytorium F-Droid”), potem pierwsze wdrożenie: `gh workflow run fdroid.yml`.
 2. **Klucz podpisu Androida:** `scripts/android-new-keystore.sh` tworzy klucz poza
    repozytorium i wypisuje polecenia `gh secret set` dla sekretów `QT_ANDROID_KEYSTORE_BASE64`,
    `QT_ANDROID_KEYSTORE_STORE_PASS`, `QT_ANDROID_KEYSTORE_KEY_PASS`, `QT_ANDROID_KEYSTORE_ALIAS`.
@@ -172,21 +176,23 @@ Push taga uruchamia `release.yml`:
    listą zmian.
 2. Równolegle: **Tests** (`ci.yml`: build Nix x86_64 i aarch64, build z sanitizerami
    i `ctest`, lint — bez nieblokującego pomiaru wydajności, na który wydanie nie czeka), **Android** (`android.yml`), **Linux**
-   (`appimage.yml`), **Web** (`wasm.yml`, bez wdrożenia na Pages) i **źródła**
+   (`appimage.yml`), **Web** (`wasm.yml`: strona i jeden plik HTML) i **źródła**
    (`git archive`).
 3. **publish** — pliki do wydania:
    `brulion-<wersja>-arm64-v8a.apk`, `Brulion-<wersja>-x86_64.AppImage`,
    `Brulion-<wersja>-aarch64.AppImage` (+ `.zsync` do aktualizacji przez AppImageUpdate),
-   `brulion-web-<wersja>.zip`, `brulion-<wersja>-source.tar.gz`, `SHA256SUMS.txt`; potem
+   `brulion-web-<wersja>.zip`, `brulion-web-<wersja>.html` (jeden plik, otwierany z dysku),
+   `brulion-<wersja>-source.tar.gz`, `SHA256SUMS.txt`; potem
    szkic staje się wydaniem (tag z sufiksem, np. `-rc.1`, → pre-release). Wcześniej
    `scripts/appimage-update-check.sh` sprawdza, że każdy AppImage ma swój `.zsync`, który go
    wskazuje, i że informacja o aktualizacji wbudowana w AppImage
    (`gh-releases-zsync|janusz-bit|brulion|latest|Brulion-*-<arch>.AppImage.zsync`) pasuje
    dokładnie do tego pliku — AppImageUpdate, Gear Lever i AppImageLauncher pobierają go
    z najnowszego wydania. Szkic czeka na wszystkie testy (**Tests**) i buildy.
-4. **pages** — opublikowane wydanie wdraża swoją wersję przeglądarkową (ten sam build co
-   `brulion-web-<wersja>.zip`) na GitHub Pages; wydanie testowe (`-rc.1`) i ręczne
-   uruchomienie z gałęzi (nie z taga) zostawiają stronę bez zmian.
+4. **fdroid** — po publikacji `fdroid.yml` przebudowuje repozytorium F-Droid na GitHub Pages
+   z APK tego wydania i dwóch poprzednich; wydanie testowe (`-rc.1`), ręczne uruchomienie z
+   gałęzi (nie z taga) i APK podpisany kluczem jednorazowym zostawiają repozytorium bez zmian.
+   Bez sekretów `FDROID_*` to zadanie kończy się błędem (wydanie jest już opublikowane).
 
 Aplikacja na Androidzie i Windows pyta raz dziennie o najnowsze wydanie (`releases/latest`) i pokazuje
 komunikat ze stroną jego taga (`shell/appupdates.h`). Liczy się tylko tag `vX.Y.Z`: szkic i wydanie

@@ -4,9 +4,12 @@
 # the drawing editor; docs/WEB.md "Testy w przeglądarkach". GitHub Actions runs it (wasm.yml, job
 # "browsers"), and so can anyone with a built site:
 #
-#   scripts/web-test.sh [--dist DIR] [--install] [-- <playwright test arguments>]
+#   scripts/web-test.sh [--dist DIR] [--single-file FILE] [--install] [-- <playwright test arguments>]
 #
 #   --dist DIR   the built site (default dist-wasm/, scripts/wasm-build.sh)
+#   --single-file FILE
+#                the single-file version opened from disk (default dist-wasm-single/brulion.html,
+#                scripts/wasm-build.sh; singlefile.spec.mjs)
 #   --install    npm ci and Playwright's Chromium and Firefox (on Ubuntu/Debian with sudo also
 #                their system libraries)
 #   -- …         passed to `playwright test` (e.g. -- --project=firefox stylus.spec.mjs)
@@ -22,11 +25,13 @@ script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0
 root=$(cd "$(dirname "$script")/.." && pwd)
 
 dist="$root/dist-wasm"
+single_file="$root/dist-wasm-single/brulion.html"
 install=0
 pw_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dist) dist="$2"; shift 2 ;;
+    --single-file) single_file="$2"; shift 2 ;;
     --install) install=1; shift ;;
     --) shift; pw_args=("$@"); break ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$script"; exit 0 ;;
@@ -61,7 +66,7 @@ if [[ -e /etc/NIXOS && -z ${BRULION_WEB_IN_NIX_SHELL:-} ]]; then
     export __EGL_VENDOR_LIBRARY_DIRS=/run/opengl-driver/share/glvnd/egl_vendor.d
   fi
   export BRULION_WEB_IN_NIX_SHELL=1
-  again=(--dist "$dist")
+  again=(--dist "$dist" --single-file "$single_file")
   if ((install)); then again+=(--install); fi
   exec nix shell nixpkgs#nodejs_22 nixpkgs#openssl nixpkgs#xvfb-run --command bash "$script" "${again[@]}" \
     -- ${pw_args[@]+"${pw_args[@]}"}
@@ -70,6 +75,8 @@ fi
 dist=$(cd "$dist" 2>/dev/null && pwd) || { log "no site in $dist (scripts/wasm-build.sh)"; exit 2; }
 [[ -f "$dist/index.html" ]] || { log "$dist/index.html missing (scripts/wasm-build.sh)"; exit 2; }
 export BRULION_DIST="$dist"
+BRULION_SINGLE_FILE=$(realpath -m -- "$single_file")
+export BRULION_SINGLE_FILE
 command -v node >/dev/null || { log "Node.js 22 or newer is needed"; exit 2; }
 command -v openssl >/dev/null || { log "openssl is needed (the test certificate)"; exit 2; }
 

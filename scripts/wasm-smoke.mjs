@@ -628,8 +628,10 @@ async function main() {
     }
   }
 
-  // Service worker: registered after the first start; wait until it controls the page.
-  const sw = await evaluate(
+  // Service worker: registered after the first start; wait until it controls the page. The
+  // single-file version (file://) registers none.
+  const singleFile = url.protocol === 'file:';
+  const sw = singleFile ? 'none (file://)' : await evaluate(
     `(async () => {
       if (!('serviceWorker' in navigator)) return 'unsupported';
       const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(r, 30000))]);
@@ -637,7 +639,7 @@ async function main() {
     })()`,
     true,
   );
-  const cacheNames = await evaluate('caches.keys()', true);
+  const cacheNames = singleFile ? [] : await evaluate('caches.keys()', true);
   console.log(`service worker: ${sw}; caches: ${JSON.stringify(cacheNames)}`);
 
   if (args.notify) {

@@ -1,0 +1,101 @@
+# Brulion's own F-Droid repository on GitHub Pages (https://<owner>.github.io/brulion/, the
+# repository itself under repo/): scripts/fdroid-repo.sh builds it from the APKs of the last three
+# published releases (the release key's own APKs, as on GitHub), the texts, icon and screenshots of
+# fastlane/metadata/android and packaging/fdroid-repo, signs its index with the repository's key and
+# adds the landing page (QR code, fingerprint). docs/ANDROID.md, "Własne repozytorium F-Droid".
+#
+# Called by release.yml once a release is published (not for a pre-release, nor for an APK signed
+# with a throwaway key), and by hand (e.g. after the secrets were set; from main or a tag v*).
+# Secrets (scripts/fdroid-new-keystore.sh): FDROID_KEYSTORE_BASE64, FDROID_KEYSTORE_PASS and
+# FDROID_KEY_ALIAS (default brulion-fdroid). One-time setup: Settings -> Pages -> Build and
+# deployment -> Source: "GitHub Actions", and Settings -> Environments -> github-pages ->
+# Deployment branches and tags: main and tag v*.
+name: F-Droid repository
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      FDROID_KEYSTORE_BASE64:
+        required: false
+      FDROID_KEYSTORE_PASS:
+        required: false
+      FDROID_KEY_ALIAS:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  FDROIDSERVER_VERSION: 2.4.5
+
+jobs:
+  build:
+    name: Build the repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            scripts
+            packaging/fdroid-repo
+            fastlane
+            assets
+
+      # fdroidserver from PyPI in a venv; keytool comes with the runner's JDK, apksigner with its
+      # Android SDK (fdroid finds it under $ANDROID_HOME/build-tools).
+      - name: Install fdroidserver
+        run: |
+          python3 -m venv "$RUNNER_TEMP/fdroidserver"
+          "$RUNNER_TEMP/fdroidserver/bin/pip" install --quiet "fdroidserver==$FDROIDSERVER_VERSION"
+          echo "$RUNNER_TEMP/fdroidserver/bin" >> "$GITHUB_PATH"
+
+      - name: Build the repository and the landing page
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
+          FDROID_KEYSTORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASS }}
+          FDROID_KEY_ALIAS: ${{ secrets.FDROID_KEY_ALIAS }}
+        run: |
+          set -o pipefail
+          if [ -z "$FDROID_KEYSTORE_BASE64" ] || [ -z "$FDROID_KEYSTORE_PASS" ]; then
+            echo "::error::The secrets FDROID_KEYSTORE_BASE64 and FDROID_KEYSTORE_PASS are missing: create the repository's key with scripts/fdroid-new-keystore.sh"
+            exit 1
+          fi
+          scripts/fdroid-repo.sh -o dist-fdroid | tee "$RUNNER_TEMP/repo.txt"
+          {
+            echo "### F-Droid repository"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/repo.txt"
+            (cd dist-fdroid/repo && ls -l -- *.apk)
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist-fdroid/
+          include-hidden-files: true
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    # One deployment at a time; a running one is allowed to finish.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -52,3 +52,20 @@ if(BRULION_BASH)
     add_test(NAME tst_scripts_fdroid_recipe
              COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_fdroid_recipe.sh ${PROJECT_SOURCE_DIR})
 endif()
+
+# Brulion's own F-Droid repository (docs/ANDROID.md, "Własne repozytorium F-Droid"):
+# scripts/fdroid-repo.sh with stand-ins for fdroid, keytool, gh and curl.
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_fdroid_repo
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_fdroid_repo.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/fdroid-repo.sh)
+endif()
+
+# The browser version in one HTML file (docs/WEB.md, "Jeden plik HTML"): scripts/wasm-single-file.py
+# on stand-in builds with the real wasm/index.html; needs python3 (skipped without it).
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_wasm_single_file
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_wasm_single_file.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/wasm-single-file.py ${PROJECT_SOURCE_DIR})
+    set_tests_properties(tst_scripts_wasm_single_file PROPERTIES SKIP_RETURN_CODE 77)
+endif()

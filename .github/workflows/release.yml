@@ -8,12 +8,14 @@
 #   Brulion-<version>-<arch>.AppImage(.zsync) Linux x86_64 + aarch64 (appimage.yml)
 #   Brulion-<version>-windows-x86_64-setup.exe, brulion-<version>-windows-x86_64.zip
 #                                            Windows, the test version (windows.yml)
+#   brulion-web-<version>.html               the browser version in one file, opened from disk (wasm.yml)
 #   brulion-web-<version>.zip                the browser version for any web server (wasm.yml)
 #   brulion-<version>-source.tar.gz          the tagged sources (git archive)
 #   SHA256SUMS.txt
-# and publishes the release once the tests passed and every build succeeded; then the release's
-# browser version goes to GitHub Pages. A tag with a suffix (v0.2.0-rc.1) becomes a pre-release
-# (Pages keep the last release); the files carry the CMake version (0.2.0).
+# and publishes the release once the tests passed and every build succeeded; then GitHub Pages get
+# the F-Droid repository with its APK (fdroid.yml; not for an APK signed with a throwaway key).
+# A tag with a suffix (v0.2.0-rc.1) becomes a pre-release (the repository keeps the last release);
+# the files carry the CMake version (0.2.0).
 name: Release
 
 on:
@@ -111,6 +113,7 @@ jobs:
             prerelease=false
             case "$TAG" in *-*) prerelease=true ;; esac
             owner=${GH_REPO%%/*}
+            # The F-Droid repository's landing page (fdroid.yml).
             pages_url="https://${owner,,}.github.io/${GH_REPO#*/}/"
             sed -e "s|{{VERSION}}|$VERSION|g" -e "s|{{FILE_VERSION}}|$FILE_VERSION|g" \
               -e "s|{{TAG}}|$TAG|g" -e "s|{{REPO}}|$GH_REPO|g" -e "s|{{PAGES_URL}}|$pages_url|g" \
@@ -179,20 +182,14 @@ jobs:
     uses: ./.github/workflows/android.yml
     secrets: inherit
 
+  # Without the Android emulator's check of the browsers' keyboards (skip-emulator).
   web:
     name: Web
     needs: draft
-    # wasm.yml's Pages deployment job needs these, although it does not run for releases (the
-    # pages job below deploys the release's site once the release is published). Its Android
-    # emulator check of the browsers' keyboards does not run either (skip-emulator).
     permissions:
       contents: read
-      pages: write
-      id-token: write
     uses: ./.github/workflows/wasm.yml
     with:
-      deploy: false
-      pages-artifact: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
       skip-emulator: true
 
   publish:
@@ -221,6 +218,7 @@ jobs:
           cp -- artifacts/brulion-android-apk/* artifacts/brulion-appimage-*/* artifacts/brulion-windows/* \
             artifacts/brulion-source/* assets/
           (cd artifacts/brulion-web && zip -q -r -X "$GITHUB_WORKSPACE/assets/brulion-web-$FILE_VERSION.zip" .)
+          cp -- artifacts/brulion-web-html/brulion.html "assets/brulion-web-$FILE_VERSION.html"
           # The AppImages update themselves from their .zsync files in the latest release.
           scripts/appimage-update-check.sh assets "$GH_REPO"
           (cd assets && sha256sum -- * > SHA256SUMS.txt)
@@ -251,26 +249,17 @@ jobs:
           echo "Published $url"
           echo "### Released [$TAG]($url)" >> "$GITHUB_STEP_SUMMARY"
 
-  pages:
-    name: Deploy the site to GitHub Pages
-    needs: [web, publish]
-    # From a tag only (the github-pages environment admits main and the tags v*), and not for a
-    # pre-release: the site stays at the last release.
-    if: github.ref_type == 'tag' && !contains(github.ref_name, '-')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+  # The F-Droid repository on GitHub Pages, with the APK of this release (fdroid.yml): from a tag
+  # only (the github-pages environment admits main and the tags v*), not for a pre-release (the
+  # repository stays at the last release), and not for an APK signed with a throwaway key (it would
+  # not update the installed app).
+  fdroid:
+    name: F-Droid repository
+    needs: [android, publish]
+    if: github.ref_type == 'tag' && !contains(github.ref_name, '-') && needs.android.outputs.signing == 'release'
     permissions:
+      contents: read
       pages: write
       id-token: write
-    # Shared with wasm.yml's deployment: one at a time, a running one is allowed to finish.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/configure-pages@v6
-
-      - id: deployment
-        uses: actions/deploy-pages@v5
+    uses: ./.github/workflows/fdroid.yml
+    secrets: inherit
