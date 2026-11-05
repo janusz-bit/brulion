@@ -140,6 +140,18 @@ void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch)
     uidriver::tapOrClickNow(window, scenePos, touch);
 }
 
+/// Does a press at `item`'s centre reach it (or an item inside it)? A button that has just
+/// appeared in a layout keeps its old place until the layout's polish runs: tapped before that,
+/// the press lands on whatever the layout has already moved there.
+bool takesPressAtCentre(QQuickWindow *window, QQuickItem *item)
+{
+    for (QQuickItem *p = item ? uidriver::pressTargetAt(window, pointIn(item)) : nullptr; p; p = p->parentItem()) {
+        if (p == item)
+            return true;
+    }
+    return false;
+}
+
 /// `word` typed on an on-screen keyboard that still composes it: preedit text of `item`, nothing
 /// committed (Android's keyboards keep every word so until a space or a tap elsewhere).
 void composeWord(QQuickItem *item, const QString &word)
@@ -3652,10 +3664,15 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         check(waitFor([&] { return opened(1); }, 15000), "the PDF with a table of contents opens");
         // (poppler only: Qt PDF's bookmark model is not safe with a looping outline.)
         if (platform::pdfBackendName() == u"poppler"_s) {
+            // (The button shows once the outline has been read, on a thread: until the bar's layout
+            // has placed it, a click at its old place hits “Draw on this page” — on a busy runner.)
             QQuickItem *outlineButton = nullptr;
-            check(waitFor([&] { return (outlineButton = shownNamed(pdfView(), u"pdfOutlineButton"_s)) != nullptr; }),
+            check(waitFor([&] {
+                      outlineButton = shownNamed(pdfView(), u"pdfOutlineButton"_s);
+                      return outlineButton && takesPressAtCentre(window, outlineButton);
+                  }),
                   "a PDF with a table of contents has its button");
-            if (outlineButton)
+            if (outlineButton && takesPressAtCentre(window, outlineButton))
                 tapOrClick(window, pointIn(outlineButton), touch);
             QQuickItem *third = nullptr;
             check(waitFor(
@@ -3669,8 +3686,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                           10000), // (the dialog opens over a few frames: slow on a busy CI runner)
                   "the table of contents lists its chapters");
             if (!third) {
-                // What there is instead (a failure in the Nix sandbox only): the entries shown, the
-                // outline the view has.
+                // What there is instead: the entries shown, the outline the view has, the route,
+                // the PDF views, the popups.
                 QStringList entries;
                 for (QQuickItem *item : uidriver::matching(window, [](QQuickItem *i) {
                          return i->objectName() == u"pdfOutlineEntry"_s;
@@ -3679,7 +3696,17 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                 QQuickItem *shownPdf = pdfView();
                 QObject *viewPdf = shownPdf ? shownPdf->property("model").value<QObject *>() : nullptr;
                 qWarning().noquote() << "selftest: outline entries" << entries << "outline"
-                                     << (viewPdf ? viewPdf->property("outline") : QVariant());
+                                     << (viewPdf ? viewPdf->property("outline") : QVariant()) << "route"
+                                     << app->currentRoute();
+                for (QQuickItem *item :
+                     uidriver::matching(window, [](QQuickItem *i) { return i->objectName() == u"pdfView"_s; }, false))
+                    qWarning().noquote() << "selftest: a PDF view" << item->isVisible() << item->width()
+                                         << item->height() << item->property("ready")
+                                         << uidriver::itemsAt(window, pointIn(item));
+                for (QObject *popup : uidriver::openPopups(window))
+                    qWarning().noquote() << "selftest: a popup" << popup->metaObject()->className()
+                                         << popup->objectName();
+                qWarning().noquote() << "selftest: shown at 640,400:" << uidriver::itemsAt(window, QPointF(640, 400));
                 closeMenus(window);
             }
             if (third)
@@ -4061,6 +4088,8 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
             check(waitFor([&] { return canvas->height() < paperHeight - full.height() / 4; }),
                   "the paper shrinks with the window");
             const auto onPaper = [&] {
+                if (!editor) // (a failed step above: no crash, that check failed already)
+                    return false;
                 const QRectF e = editor->mapRectToScene(QRectF(0, 0, editor->width(), editor->height()));
                 const QRectF c = canvas->mapRectToScene(QRectF(0, 0, canvas->width(), canvas->height()));
                 return e.bottom() <= c.bottom() + 1 && e.top() >= c.top() - 1;

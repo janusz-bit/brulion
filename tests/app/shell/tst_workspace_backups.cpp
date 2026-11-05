@@ -288,9 +288,10 @@ private Q_SLOTS:
         const QString older = zipsIn(drive).first();
         const QByteArray olderBytes = readRaw(drive + u'/' + older);
 
-        // Unplugged: the mount point is gone.
+        // Unplugged: the mount point is gone. (Retried: on Windows a virus scanner or the indexer may
+        // still hold the ZIP just written, and a folder with an open file cannot be renamed.)
         const QString away = drive + u"-odpięty"_s;
-        QVERIFY(QDir().rename(drive, away));
+        QVERIFY(QTest::qWaitFor([&] { return QDir().rename(drive, away); }, 15000));
         QVERIFY(ws->writeFile(u"a.md"_s, u"- b\n"_s));
         m_now = m_now.addDays(1);
         QSignalSpy messages(b, &WorkspaceBackups::messageRequested);
@@ -305,7 +306,7 @@ private Q_SLOTS:
         QCOMPARE(messages.size(), 1);
 
         // Back again: the next check makes the backup, the older one is untouched.
-        QVERIFY(QDir().rename(away, drive));
+        QVERIFY(QTest::qWaitFor([&] { return QDir().rename(away, drive); }, 15000));
         QVERIFY(!checked(b).isEmpty());
         QCOMPARE(b->status(), u"ok"_s);
         QCOMPARE(b->statusText(), QString());
