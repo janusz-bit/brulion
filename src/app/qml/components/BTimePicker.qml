@@ -40,12 +40,12 @@ T.Control {
     readonly property real fieldsHeight: fields.implicitHeight + Theme.space2
 
     readonly property int selectedHour: {
-        const h = parseInt(time.slice(0, 2), 10)
-        return isNaN(h) || h < 0 || h > 23 ? 9 : h
+        const h = Js.parseInt(Js.slice(time, 0, 2))
+        return Js.isNaN(h) || h < 0 || h > 23 ? 9 : h
     }
     readonly property int selectedMinute: {
-        const m = parseInt(time.slice(3, 5), 10)
-        return isNaN(m) || m < 0 || m > 59 ? 0 : m
+        const m = Js.parseInt(Js.slice(time, 3, 5))
+        return Js.isNaN(m) || m < 0 || m > 59 ? 0 : m
     }
     readonly property string displayHour: pad(selectedHour)
     readonly property string displayMinute: pad(selectedMinute)
@@ -87,14 +87,14 @@ T.Control {
 
     signal picked(string time)
 
-    function pad(value) {
-        return String(value).padStart(2, "0")
+    function pad(value: int): string {
+        return Js.padStart("" + value, 2, "0")
     }
-    function wrap(value, modulo) {
+    function wrap(value: int, modulo: int): int {
         return ((value % modulo) + modulo) % modulo
     }
     /// Emit the value first, then keep it unless the consumer's binding already followed.
-    function commitTime(hourValue, minuteValue) {
+    function commitTime(hourValue: int, minuteValue: int): void {
         const value = pad(wrap(hourValue, 24)) + ":" + pad(wrap(minuteValue, 60))
         if (value === control.time)
             return
@@ -102,15 +102,15 @@ T.Control {
         if (control.time !== value)
             control.time = value
     }
-    function commitHour(value) {
+    function commitHour(value: int): void {
         commitTime(value, selectedMinute)
     }
-    function commitMinute(value) {
+    function commitMinute(value: int): void {
         commitTime(selectedHour, value)
     }
     /// The value of the number drawn at (x, y) of the face — an hour (0–23) or a minute label (a
     /// multiple of five) — or -1 when no number is there.
-    function labelAt(x, y) {
+    function labelAt(x: real, y: real): int {
         const count = mode === "hour" ? 24 : 12
         for (let i = 0; i < count; ++i) {
             const inner = mode === "hour" && i >= 12
@@ -126,7 +126,7 @@ T.Control {
     }
     /// A number pressed (a tap on it, a screen reader's press): that value; an hour moves on to
     /// the minutes.
-    function pickLabel(value) {
+    function pickLabel(value: int): void {
         if (mode === "hour") {
             commitHour(value)
             if (autoSwitchToMinutes)
@@ -137,25 +137,25 @@ T.Control {
     }
     /// A tap or a drag on the face: the nearest number for hours, the angle for minutes. False
     /// on the hub (no value there).
-    function pickAt(x, y) {
+    function pickAt(x: real, y: real): bool {
         const dx = x - center
         const dy = y - center
         if (dx * dx + dy * dy < 144)   // the hub is not a value
             return false
         if (mode === "minute") {
-            const fromTop = (Math.atan2(dy, dx) + Math.PI / 2 + 2 * Math.PI) % (2 * Math.PI)
+            const fromTop = (Js.atan2(dy, dx) + Math.PI / 2 + 2 * Math.PI) % (2 * Math.PI)
             commitMinute(Math.round(fromTop / (2 * Math.PI) * 60) % 60)
             return true
         }
         let best = 0
-        let bestDistance = Number.POSITIVE_INFINITY
+        let bestDistance = -1
         for (let value = 0; value < 24; ++value) {
             const radius = value < 12 ? outerRadius : innerRadius
             const angle = (value % 12) * Math.PI / 6 - Math.PI / 2
             const ddx = dx - Math.cos(angle) * radius
             const ddy = dy - Math.sin(angle) * radius
             const distance = ddx * ddx + ddy * ddy
-            if (distance < bestDistance) {
+            if (bestDistance < 0 || distance < bestDistance) {
                 bestDistance = distance
                 best = value
             }

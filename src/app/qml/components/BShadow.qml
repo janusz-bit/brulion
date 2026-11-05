@@ -18,7 +18,11 @@ Item {
     property int level: 2
     property real radius: target ? target.radius : Theme.radius
 
-    readonly property var spec: Theme.elevation(level)
+    // Theme.elevation(level), typed.
+    readonly property real specBlur: Theme.elevationBlur(level)
+    readonly property real specOffsetY: Theme.elevationOffsetY(level)
+    readonly property real specSpread: Theme.elevationSpread(level)
+    readonly property real specOpacity: Theme.elevationOpacity(level)
     readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
     x: target ? target.x : 0
@@ -34,26 +38,26 @@ Item {
         active: !shadow.software
         sourceComponent: RectangularShadow {
             radius: shadow.radius
-            blur: shadow.spec.blur
-            offset: Qt.vector2d(0, shadow.spec.offsetY)
-            spread: shadow.spec.spread
-            color: Qt.rgba(Theme.shadow.r, Theme.shadow.g, Theme.shadow.b, shadow.spec.opacity * 2.2)
+            blur: shadow.specBlur
+            offset.x: 0
+            offset.y: shadow.specOffsetY
+            spread: shadow.specSpread
+            color: Theme.shadow.alpha(shadow.specOpacity * 2.2)
         }
     }
 
     // Software fallback: stacked rings fading outwards.
     Repeater {
-        model: shadow.software ? Math.min(6, Math.ceil(shadow.spec.blur / 4)) : 0
+        model: shadow.software ? Math.min(6, Math.ceil(shadow.specBlur / 4)) : 0
         delegate: Rectangle {
             required property int index
-            readonly property real grow: (index + 1) * shadow.spec.blur / (2 * Math.min(6, Math.ceil(shadow.spec.blur / 4)))
+            readonly property real grow: (index + 1) * shadow.specBlur / (2 * Math.min(6, Math.ceil(shadow.specBlur / 4)))
             x: -grow
-            y: -grow + shadow.spec.offsetY * (0.5 + index * 0.1)
+            y: -grow + shadow.specOffsetY * (0.5 + index * 0.1)
             width: shadow.width + 2 * grow
             height: shadow.height + 2 * grow
             radius: shadow.radius + grow
-            color: Qt.rgba(Theme.shadow.r, Theme.shadow.g, Theme.shadow.b,
-                           shadow.spec.opacity * 0.85 / Math.min(6, Math.ceil(shadow.spec.blur / 4)))
+            color: Theme.shadow.alpha(shadow.specOpacity * 0.85 / Math.min(6, Math.ceil(shadow.specBlur / 4)))
             antialiasing: true
         }
     }

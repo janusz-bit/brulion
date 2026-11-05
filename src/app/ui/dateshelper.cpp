@@ -418,4 +418,90 @@ int DatesHelper::compare(const QString &a, const QString &b) const
                                    dates::parseDateSpec(b).value_or(DateSpec{}));
 }
 
+QString DatesHelper::specDate(const QString &spec) const
+{
+    const auto parsed = dates::parseDateSpec(spec);
+    return parsed ? isoDate(parsed->date) : QString();
+}
+
+QString DatesHelper::specTime(const QString &spec) const
+{
+    const auto parsed = dates::parseDateSpec(spec);
+    return parsed && parsed->time ? parsed->time->toString(u"HH:mm"_s) : QString();
+}
+
+QString DatesHelper::repeatKind(const QString &text) const
+{
+    if (text.isEmpty())
+        return u"none"_s;
+    const auto r = dates::parseRecurrence(text);
+    if (!r)
+        return u"none"_s;
+    using Freq = dates::RecurrenceRule::Freq;
+    if (r->interval == 1 && !r->whenDone && !r->monthDay.value_or(0) && !r->lastDayOfMonth) {
+        if (r->freq == Freq::Day)
+            return r->weekdaysOnly ? u"weekdays"_s : u"daily"_s;
+        if (r->freq == Freq::Week && !r->weekdaysOnly)
+            return u"weekly"_s;
+        if (r->freq == Freq::Month)
+            return u"monthly"_s;
+        if (r->freq == Freq::Year)
+            return u"yearly"_s;
+    }
+    return u"custom"_s;
+}
+
+QString DatesHelper::ruleFreq(const QString &text) const
+{
+    const auto r = dates::parseRecurrence(text);
+    return r ? freqName(r->freq) : QString();
+}
+
+int DatesHelper::ruleInterval(const QString &text) const
+{
+    const auto r = dates::parseRecurrence(text);
+    return r ? r->interval : 0;
+}
+
+QList<int> DatesHelper::ruleWeekdays(const QString &text) const
+{
+    const auto r = dates::parseRecurrence(text);
+    return r ? r->weekdays : QList<int>();
+}
+
+QVariantMap DatesHelper::makeRule(const QString &freq, int interval, const QList<int> &weekdays,
+                                  bool weekdaysOnly) const
+{
+    QVariantList days;
+    for (int d : weekdays)
+        days.append(d);
+    return {{u"freq"_s, freq}, {u"interval"_s, interval}, {u"weekdays"_s, days}, {u"weekdaysOnly"_s, weekdaysOnly}};
+}
+
+QStringList DatesHelper::weekdayNamesFrom(int weekStart, const QString &form, const QString &locale) const
+{
+    const QStringList names = weekdayNames(form, locale);
+    QStringList out;
+    if (names.size() != 7)
+        return out;
+    // JavaScript's names[(weekStart - 1 + i) % 7] (a weekStart out of 1 … 7 wraps the same way).
+    for (int i = 0; i < 7; ++i)
+        out.append(names.at(((((weekStart - 1 + i) % 7) + 7) % 7)));
+    return out;
+}
+
+QList<int> DatesHelper::toggledWeekday(const QList<int> &days, int day) const
+{
+    QList<int> out = days;
+    const qsizetype i = out.indexOf(day);
+    if (i >= 0) {
+        if (out.size() > 1)
+            out.removeAt(i);
+    } else {
+        out.append(day);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
 } // namespace brulion::ui

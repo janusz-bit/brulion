@@ -58,7 +58,7 @@ T.AbstractButton {
             Text {
                 id: title
                 anchors.verticalCenter: parent.verticalCenter
-                text: control.text.toLocaleUpperCase(Qt.locale())
+                text: Js.toUpperCase(control.text)
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs
                 font.weight: Theme.weightSemiBold

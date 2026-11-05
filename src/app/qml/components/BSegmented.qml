@@ -26,7 +26,7 @@ import Brulion
 T.Control {
     id: control
 
-    property var model: []
+    property list<var> model
     property var currentValue
     property bool fill: false
     property bool iconOnly: false
@@ -36,43 +36,51 @@ T.Control {
 
     signal activated(var value)
 
-    readonly property var items: {
-        const out = []
-        for (let i = 0; i < (model ? model.length : 0); ++i) {
-            const m = model[i]
-            out.push(typeof m === "object" ? m : { value: m, text: String(m), icon: "" })
-        }
-        return out
+    /// { value, text, iconName } per segment (UiModels.segmentRows: a plain value v is
+    /// { value: v, text: String(v), iconName: "" }).
+    readonly property list<var> items: UiModels.segmentRows(model)
+    readonly property int currentIndex: UiModels.indexOfValue(items, currentValue)
+    /// The natural width of segment `i` (0 before it exists).
+    function _naturalWidth(i: int): real {
+        const segment = repeater.itemAt(i)
+        return segment ? segment.implicitWidth : 0
     }
-    readonly property int currentIndex: {
-        for (let i = 0; i < items.length; ++i)
-            if (items[i].value === currentValue)
-                return i
-        return -1
+    /// The segments' natural widths' sum (for `fill`; repeater.count: re-evaluated once they exist).
+    readonly property real _implicitSum: {
+        let sum = 0
+        for (let i = 0; i < repeater.count; ++i)
+            sum += _naturalWidth(i)
+        return sum
     }
-    /// The segments' natural widths (for `fill`; repeater.count: re-evaluated once they exist).
-    readonly property var _naturalWidths: {
-        const out = []
-        for (let i = 0; i < repeater.count; ++i) {
-            const segment = repeater.itemAt(i)
-            out.push(segment ? segment.implicitWidth : 0)
-        }
-        return out
-    }
-    /// Their sum.
-    readonly property real _implicitSum: _naturalWidths.reduce((sum, w) => sum + w, 0)
     /// Filling: the width every narrower segment widens to, so that Σ max(natural, width) is the
     /// available width (water-filling: the widest labels keep theirs, the rest share the room
     /// left); -1 when the natural widths do not fit.
     readonly property real _fillWidth: {
-        const widths = _naturalWidths.slice().sort((a, b) => b - a)
+        const n = repeater.count
         let room = availableWidth
-        let left = widths.length
+        let left = n
         if (left === 0 || _implicitSum > room)
             return -1
-        for (let i = 0; i < widths.length && widths[i] > room / left; ++i) {
-            room -= widths[i]
-            --left
+        // The widest first (equal widths together): each one wider than an even share of the
+        // room left keeps its own width.
+        let below = Infinity
+        while (left > 0) {
+            let widest = -1
+            let ties = 0
+            for (let i = 0; i < n; ++i) {
+                const w = _naturalWidth(i)
+                if (w < below && w > widest) {
+                    widest = w
+                    ties = 1
+                } else if (w === widest) {
+                    ++ties
+                }
+            }
+            if (widest < 0 || widest <= room / left)
+                break
+            room -= widest * ties
+            left -= ties
+            below = widest
         }
         return room / left
     }
@@ -80,7 +88,7 @@ T.Control {
     readonly property real _withIconsSum: {
         let sum = 0
         for (let i = 0; i < repeater.count; ++i) {
-            const segment = repeater.itemAt(i)
+            const segment = repeater.itemAt(i) as Segment
             if (segment)
                 sum += segment.withIconWidth
         }
@@ -95,17 +103,22 @@ T.Control {
     readonly property int visualHeight: size === "small" ? Theme.controlHeightSm : Theme.controlHeight
     readonly property int hitHeight: Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0)
 
-    function select(index) {
+    /// Segment `index`'s value is currentValue (===).
+    function isCurrentValue(index: int): bool {
+        const value = UiModels.fieldAt(items, index, "value")
+        return UiModels.strictEquals(value, currentValue)
+    }
+    function select(index: int): void {
         if (index < 0 || index >= items.length || index === currentIndex)
             return
-        const value = items[index].value
         // Controlled use (`currentValue: model.x; onActivated: model.x = value`): the handler
         // updates the source and the binding follows — assigning here would break that
         // binding, and later changes of the source (another conflict choice, a reopened
         // dialog) would no longer show. Uncontrolled use: keep the selection ourselves.
-        activated(value)
-        if (!controlled && currentValue !== value)
-            currentValue = value
+        activated(UiModels.fieldAt(items, index, "value"))
+        // (The value read again: the handler may have changed anything.)
+        if (!controlled && !control.isCurrentValue(index))
+            currentValue = UiModels.fieldAt(items, index, "value")
     }
 
     implicitWidth: Math.max(implicitBackgroundWidth, row.implicitWidth + leftPadding + rightPadding)
@@ -121,14 +134,14 @@ T.Control {
     Accessible.role: Accessible.PageTabList
     Accessible.name: accessibleName
 
-    Keys.onLeftPressed: select(Math.max(0, currentIndex - 1))
-    Keys.onRightPressed: select(Math.min(items.length - 1, currentIndex + 1))
+    Keys.onLeftPressed: control.select(Math.max(0, control.currentIndex - 1))
+    Keys.onRightPressed: control.select(Math.min(control.items.length - 1, control.currentIndex + 1))
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Home) {
-            select(0)
+            control.select(0)
             event.accepted = true
         } else if (event.key === Qt.Key_End) {
-            select(items.length - 1)
+            control.select(control.items.length - 1)
             event.accepted = true
         }
     }
@@ -162,7 +175,7 @@ T.Control {
             // Dark: the raised surface lightened by 12 % of the text colour (slate ≈ #424858,
             // ≈ 1.9:1 against the track instead of ≈ 1.36:1), so the choice reads at a glance as
             // light's white thumb does; from tokens, so every surface and accent follows.
-            color: Theme.dark ? Qt.tint(Theme.bgElevated2, Theme.alpha(Theme.fg, 0.12)) : Theme.bgElevated
+            color: Theme.dark ? Theme.bgElevated2.tint(Theme.fg.alpha(0.12)) : Theme.bgElevated
             border.width: 1
             // Dark: a state border too (≥ 3:1 against the track, WCAG 1.4.11).
             border.color: Theme.dark ? Theme.borderControl : Theme.border
@@ -187,77 +200,81 @@ T.Control {
             Repeater {
                 id: repeater
                 model: control.items
-                delegate: T.AbstractButton {
-                    id: segment
-                    required property var modelData
-                    required property int index
-                    readonly property bool isCurrent: index === control.currentIndex
+                delegate: Segment {}
+            }
+        }
+    }
 
-                    height: row.height
-                    // Filling the width: every segment at least the shared width (_fillWidth), so
-                    // the short labels line up evenly and a long one ("Cały notatnik") is not cut;
-                    // when they do not fit, each its own width minus an equal share of the excess.
-                    width: !control.fill || control.items.length === 0 ? implicitWidth
-                           : control._implicitSum <= 0 ? control.availableWidth / control.items.length
-                           : control._fillWidth >= 0 ? Math.max(implicitWidth, control._fillWidth)
-                           : Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
-                    // At least a touch target wide on touch UIs (icon-only and short labels).
-                    implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
-                                            (segmentIcon.width > 0 ? iconRoom : 0)
-                                            + (control.iconOnly ? 0 : segmentLabel.implicitWidth) + (control.iconOnly ? 16 : 24))
-                    /// The icon and the space after it (0 without an icon), shown or not.
-                    readonly property real iconRoom: (modelData.icon || "") === "" ? 0
-                        : (control.size === "small" ? Theme.iconSizeSm : Theme.iconSize) + (control.iconOnly ? 0 : segmentRow.spacing)
-                    readonly property real withIconWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
-                                                                   iconRoom + (control.iconOnly ? 0 : segmentLabel.implicitWidth)
-                                                                   + (control.iconOnly ? 16 : 24))
-                    focusPolicy: Qt.NoFocus
-                    hoverEnabled: !Theme.touchUi
-                    text: modelData.text
-                    Accessible.role: Accessible.PageTab
-                    Accessible.name: modelData.text
-                    Accessible.checkable: true
-                    Accessible.checked: isCurrent
-                    onClicked: {
-                        control.forceActiveFocus(Qt.MouseFocusReason)
-                        control.select(index)
-                    }
+    /// One segment (a delegate of the repeater).
+    component Segment: T.AbstractButton {
+        id: segment
+        required property int index
+        /// The segment's text and icon ("" for none).
+        required text
+        required property string iconName
+        readonly property bool isCurrent: index === control.currentIndex
 
-                    contentItem: Item {
-                        Row {
-                            id: segmentRow
-                            anchors.centerIn: parent
-                            spacing: 6
-                            BIcon {
-                                id: segmentIcon
-                                anchors.verticalCenter: parent.verticalCenter
-                                name: control.iconsShown ? (segment.modelData.icon || "") : ""
-                                size: control.size === "small" ? Theme.iconSizeSm : Theme.iconSize
-                                color: segment.isCurrent ? Theme.fg : Theme.fgMuted
-                            }
-                            Text {
-                                id: segmentLabel
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: !control.iconOnly
-                                text: segment.modelData.text
-                                color: segment.isCurrent ? Theme.fg : segment.hovered ? Theme.fg : Theme.fgMuted
-                                font.family: Theme.fontUi
-                                font.pixelSize: control.size === "small" ? Theme.textSm : Theme.textControl
-                                font.weight: segment.isCurrent ? Theme.weightSemiBold : Theme.weightMedium
-                                elide: Text.ElideRight
-                                width: Math.min(implicitWidth, Math.max(0, segment.width - 12 - (segmentIcon.width > 0 ? segmentIcon.width + 6 : 0)))
-                            }
-                        }
-                    }
-                    Loader {
-                        active: control.iconOnly && segment.hovered && !Theme.touchUi
-                        sourceComponent: BToolTip {
-                            parent: segment
-                            visible: true
-                            text: segment.modelData.text
-                        }
-                    }
+        height: row.height
+        // Filling the width: every segment at least the shared width (_fillWidth), so
+        // the short labels line up evenly and a long one ("Cały notatnik") is not cut;
+        // when they do not fit, each its own width minus an equal share of the excess.
+        width: !control.fill || control.items.length === 0 ? implicitWidth
+               : control._implicitSum <= 0 ? control.availableWidth / control.items.length
+               : control._fillWidth >= 0 ? Math.max(implicitWidth, control._fillWidth)
+               : Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
+        // At least a touch target wide on touch UIs (icon-only and short labels).
+        implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
+                                (segmentIcon.width > 0 ? iconRoom : 0)
+                                + (control.iconOnly ? 0 : segmentLabel.implicitWidth) + (control.iconOnly ? 16 : 24))
+        /// The icon and the space after it (0 without an icon), shown or not.
+        readonly property real iconRoom: iconName === "" ? 0
+            : (control.size === "small" ? Theme.iconSizeSm : Theme.iconSize) + (control.iconOnly ? 0 : segmentRow.spacing)
+        readonly property real withIconWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
+                                                       iconRoom + (control.iconOnly ? 0 : segmentLabel.implicitWidth)
+                                                       + (control.iconOnly ? 16 : 24))
+        focusPolicy: Qt.NoFocus
+        hoverEnabled: !Theme.touchUi
+        Accessible.role: Accessible.PageTab
+        Accessible.name: text
+        Accessible.checkable: true
+        Accessible.checked: isCurrent
+        onClicked: {
+            control.forceActiveFocus(Qt.MouseFocusReason)
+            control.select(segment.index)
+        }
+
+        contentItem: Item {
+            Row {
+                id: segmentRow
+                anchors.centerIn: parent
+                spacing: 6
+                BIcon {
+                    id: segmentIcon
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: control.iconsShown ? segment.iconName : ""
+                    size: control.size === "small" ? Theme.iconSizeSm : Theme.iconSize
+                    color: segment.isCurrent ? Theme.fg : Theme.fgMuted
                 }
+                Text {
+                    id: segmentLabel
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !control.iconOnly
+                    text: segment.text
+                    color: segment.isCurrent ? Theme.fg : segment.hovered ? Theme.fg : Theme.fgMuted
+                    font.family: Theme.fontUi
+                    font.pixelSize: control.size === "small" ? Theme.textSm : Theme.textControl
+                    font.weight: segment.isCurrent ? Theme.weightSemiBold : Theme.weightMedium
+                    elide: Text.ElideRight
+                    width: Math.min(implicitWidth, Math.max(0, segment.width - 12 - (segmentIcon.width > 0 ? segmentIcon.width + 6 : 0)))
+                }
+            }
+        }
+        Loader {
+            active: control.iconOnly && segment.hovered && !Theme.touchUi
+            sourceComponent: BToolTip {
+                parent: segment
+                visible: true
+                text: segment.text
             }
         }
     }

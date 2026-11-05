@@ -22,7 +22,7 @@ T.TextArea {
     /// What is typed, with the word an on-screen keyboard is still composing (preedit text, outside
     /// `text` until a space or a tap elsewhere — BTextField.typedText).
     readonly property string typedText: preeditText === "" ? text
-                                        : text.slice(0, cursorPosition) + preeditText + text.slice(cursorPosition)
+                                        : Js.slice(text, 0, cursorPosition) + preeditText + Js.sliceFrom(text, cursorPosition)
 
     // Leaving the field (a dialog's button takes the focus first) keeps a word the keyboard was
     // still composing: it becomes text (an input method may not commit it itself).
@@ -63,6 +63,7 @@ T.TextArea {
     }
 
     background: Rectangle {
+        id: backgroundRect
         implicitWidth: 240
         implicitHeight: 96
         radius: Theme.radius
@@ -79,10 +80,10 @@ T.TextArea {
             y: -3
             width: parent.width + 6
             height: parent.height + 6
-            radius: parent.radius + 3
+            radius: backgroundRect.radius + 3
             color: "transparent"
             border.width: 3
-            border.color: Qt.rgba(Theme.focusRing.r, Theme.focusRing.g, Theme.focusRing.b, 0.28)
+            border.color: Theme.focusRing.alpha(0.28)
         }
     }
 

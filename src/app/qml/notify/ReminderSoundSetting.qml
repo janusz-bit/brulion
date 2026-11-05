@@ -25,12 +25,25 @@ GridLayout {
     required property string kind
     property string title
 
+    /// { mode, uri, title } (ReminderSounds.reminder / alarm).
     readonly property var choice: kind === "alarm" ? ReminderSounds.alarm : ReminderSounds.reminder
-    readonly property string mode: choice.mode || "default"
-    readonly property bool hasCustom: (choice.uri || "") !== ""
+    readonly property string _mode: UiModels.stringField(choice, "mode")
+    readonly property string mode: _mode !== "" ? _mode : "default"
+    /// The custom sound's uri ("" for none).
+    readonly property string choiceUri: UiModels.stringField(choice, "uri")
+    readonly property string choiceTitle: UiModels.stringField(choice, "title")
+    readonly property bool hasCustom: choiceUri !== ""
     readonly property bool offersCustom: ReminderSounds.modes.indexOf("custom") >= 0
+    /// The modes this platform offers, as BSegmented's rows.
+    readonly property list<var> modeRows: UiModels.rowsByKey(allModeRows, "value", ReminderSounds.modes)
+    readonly property list<var> allModeRows: [
+        { value: "default", text: modeLabel("default") },
+        { value: "custom", text: modeLabel("custom") },
+        { value: "vibrate", text: modeLabel("vibrate") },
+        { value: "silent", text: modeLabel("silent") }
+    ]
 
-    function modeLabel(m) {
+    function modeLabel(m: string): string {
         switch (m) {
         case "custom": return qsTr("Ringtone")
         case "vibrate": return qsTr("Vibrate")
@@ -38,7 +51,7 @@ GridLayout {
         default: return qsTr("Default")
         }
     }
-    function themeSoundLabel(name) {
+    function themeSoundLabel(name: string): string {
         switch (name) {
         case "message-new-instant": return qsTr("New message")
         case "bell": return qsTr("Bell")
@@ -52,18 +65,25 @@ GridLayout {
         case "Reminder": return qsTr("Reminder")
         case "SMS": return qsTr("Text message")
         default: {
-            const looping = /^Looping\.(Alarm|Call)(\d*)$/.exec(name)
-            if (looping) {
-                const number = looping[2] === "" ? 1 : Number(looping[2])
-                return looping[1] === "Alarm" ? qsTr("Alarm %1").arg(number) : qsTr("Call %1").arg(number)
+            const looping = setting.loopingParts(name)
+            if (looping.length > 0) {
+                const sound = looping[1]
+                const digits = looping[2]
+                const number = digits === "" ? 1 : Js.toNumber(digits)
+                return sound === "Alarm" ? qsTr("Alarm %1").arg(number) : qsTr("Call %1").arg(number)
             }
             return name
         }
         }
     }
+    /// Windows' looping sound `name` ("Looping.Alarm3"): [name, "Alarm" | "Call", number or ""];
+    /// [] for any other name.
+    function loopingParts(name: string): list<string> {
+        return Js.match(name, "^Looping\\.(Alarm|Call)(\\d*)$", "")
+    }
     /// The shown name of the custom sound: the ringtone's title or file name, else the theme sound's.
-    function customName() {
-        return choice.title ? choice.title : themeSoundLabel(choice.uri || "")
+    function customName(): string {
+        return choiceTitle !== "" ? choiceTitle : themeSoundLabel(choiceUri)
     }
     readonly property string summary: {
         switch (mode) {
@@ -86,14 +106,14 @@ GridLayout {
         }
     }
 
-    function selectMode(m) {
+    function selectMode(m: string): void {
         // "Ringtone" with none chosen yet: choose one first (the selection stays meanwhile).
         if (m === "custom" && !hasCustom)
             chooseSound()
         else
             ReminderSounds.setMode(kind, m)
     }
-    function chooseSound() {
+    function chooseSound(): void {
         if (ReminderSounds.systemPicker)
             ReminderSounds.pick(kind)
         else
@@ -137,14 +157,12 @@ GridLayout {
         Layout.fillWidth: Theme.compact
         fill: Theme.compact
         accessibleName: setting.title
-        model: ReminderSounds.modes.map(m => ({ value: m, text: setting.modeLabel(m) }))
+        model: setting.modeRows
         currentValue: setting.mode
-        onActivated: (value) => {
-            setting.selectMode(value)
-            // A choice that did not happen (no ringtone yet, the picker open): BSegmented took
-            // the value itself — follow the setting again.
-            Qt.callLater(() => modeControl.currentValue = Qt.binding(() => setting.mode))
-        }
+        // A choice that does not happen (no ringtone yet, the picker open) is not shown: the
+        // selection only follows the setting.
+        controlled: true
+        onActivated: (value) => setting.selectMode(value)
     }
 
     Flow {
@@ -194,15 +212,19 @@ GridLayout {
             objectName: setting.kind + "ThemeSound_" + modelData
             text: setting.themeSoundLabel(modelData)
             checkable: true
-            checked: setting.mode === "custom" && setting.choice.uri === modelData
+            readonly property bool current: setting.mode === "custom" && setting.choiceUri === modelData
+            // (A Binding: a click toggles `checked`, which would end a plain binding.)
+            Binding on checked {
+                value: themeItem.current
+            }
             onTriggered: {
-                ReminderSounds.setCustom(setting.kind, modelData, "")
+                ReminderSounds.setCustom(setting.kind, themeItem.modelData, "")
                 // A click toggled `checked`: follow the setting again.
-                checked = Qt.binding(() => setting.mode === "custom" && setting.choice.uri === themeItem.modelData)
+                themeItem.checked = themeItem.current
             }
         }
-        onObjectAdded: (index, object) => soundMenu.insertItem(index, object)
-        onObjectRemoved: (index, object) => soundMenu.removeItem(object)
+        onObjectAdded: (index, object) => soundMenu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => soundMenu.removeItem(object as Item)
     }
     FilePicker {
         id: soundFileDialog
@@ -212,6 +234,6 @@ GridLayout {
         dark: Theme.dark
         colors: Theme.colors
         nameFilters: [qsTr("Sound files (*.oga *.ogg *.wav)"), qsTr("All files (*)")]
-        onAccepted: ReminderSounds.setCustom(setting.kind, selectedFile.toString(), "")
+        onAccepted: ReminderSounds.setCustom(setting.kind, "" + soundFileDialog.selectedFile, "")
     }
 }

@@ -11,7 +11,7 @@ import Brulion
 //
 // variant:  "tag" | "due" | "overdue" | "scheduled" | "reminder" | "alarm" | "recurrence" |
 //           "done" | "neutral" (default). Each has its colours and default icon
-//           (Theme.chip(variant)); `iconName` overrides ("" for none: set showIcon: false).
+//           (Theme.chipBg/chipFg/chipIcon(variant)); `iconName` overrides ("" for none: set showIcon: false).
 // interactive: hover/press feedback, focusable, emits clicked(); `selected` = filter state
 // outlined:    an interactive neutral chip is drawn as an outlined filter button (default); a
 //              chip that is an item of a list rather than a filter sets it false (filled)
@@ -23,7 +23,7 @@ T.AbstractButton {
     id: control
 
     property string variant: "neutral"
-    property string iconName: colors.icon
+    property string iconName: Theme.chipIcon(variant)
     property bool showIcon: true
     property bool interactive: false
     property bool selected: false
@@ -35,9 +35,11 @@ T.AbstractButton {
 
     signal removeClicked()
 
-    readonly property var colors: Theme.chip(variant)
+    /// The variant's colours (Theme.chipBg / chipFg).
+    readonly property color variantBg: Theme.chipBg(variant)
+    readonly property color variantFg: Theme.chipFg(variant)
     property bool outlined: variant === "neutral" && interactive
-    readonly property color fgColor: selected && variant === "neutral" ? Theme.primaryFg : colors.fg
+    readonly property color fgColor: selected && variant === "neutral" ? Theme.primaryFg : variantFg
     readonly property int visualHeight: size === "small" ? (Theme.touchUi ? 24 : 20) : (Theme.touchUi ? 32 : 26)
     readonly property int hitHeight: interactive || removable ? Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0) : visualHeight
 
@@ -140,7 +142,7 @@ T.AbstractButton {
                     height: removeButton.circle
                     radius: width / 2
                     color: removeButton.hovered || removeButton.down
-                           ? Qt.rgba(control.fgColor.r, control.fgColor.g, control.fgColor.b, 0.16) : "transparent"
+                           ? control.fgColor.alpha(0.16) : "transparent"
                 }
                 BIcon {
                     anchors.centerIn: parent
@@ -153,26 +155,27 @@ T.AbstractButton {
     }
 
     background: Rectangle {
+        id: chipBackground
         implicitHeight: control.visualHeight
         radius: height / 2
         antialiasing: true
         color: control.selected && control.variant === "neutral" ? Theme.primary
              : control.outlined ? Theme.bgElevated
-             : control.colors.bg
+             : control.variantBg
         border.width: control.outlined && !control.selected ? 1 : (control.selected ? 1.5 : 0)
-        border.color: control.selected ? (control.variant === "neutral" ? Theme.primary : control.colors.fg)
+        border.color: control.selected ? (control.variant === "neutral" ? Theme.primary : control.variantFg)
                     : control.hovered ? Theme.borderControl : Theme.borderStrong
         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
+            radius: chipBackground.radius
             visible: control.interactive
             color: control.down ? Theme.bgPressed : control.hovered && !control.selected ? Theme.bgHover : "transparent"
         }
         BFocusRing {
             visible: control.visualFocus
-            targetRadius: parent.radius
+            targetRadius: chipBackground.radius
         }
     }
 

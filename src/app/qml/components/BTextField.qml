@@ -200,6 +200,7 @@ T.TextField {
     }
 
     background: Rectangle {
+        id: backgroundRect
         implicitWidth: 220
         implicitHeight: control.fieldHeight
         radius: Theme.radius
@@ -217,12 +218,10 @@ T.TextField {
             y: -3
             width: parent.width + 6
             height: parent.height + 6
-            radius: parent.radius + 3
+            radius: backgroundRect.radius + 3
             color: "transparent"
             border.width: 3
-            border.color: Qt.rgba(control.errorText !== "" ? Theme.dangerText.r : Theme.focusRing.r,
-                                  control.errorText !== "" ? Theme.dangerText.g : Theme.focusRing.g,
-                                  control.errorText !== "" ? Theme.dangerText.b : Theme.focusRing.b, 0.28)
+            border.color: (control.errorText !== "" ? Theme.dangerText : Theme.focusRing).alpha(0.28)
         }
     }
 

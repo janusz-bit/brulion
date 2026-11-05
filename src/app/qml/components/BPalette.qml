@@ -12,8 +12,9 @@ import Brulion
 //       onItemActivated: (item) => …
 //   }
 //
-// items: array of { title, subtitle?, icon?, emoji? (in the icon's place), shortcut?, … } (extra
-// fields are passed back).
+// items: array of { title, subtitle?, icon?, emoji? (in the icon's place), shortcut?, … } (the
+// object itself is passed back: itemActivated(item); compiled callers read its fields with
+// itemString(row, key) / itemBool(row, key) in rowActivated(row)).
 // Filtering is fuzzy and diacritic-insensitive (TextHelper.fuzzyRank: "zolw" finds "Żółw";
 // subtitles match at half weight); matched characters are highlighted. `extraResults` are
 // appended after the matches (e.g. "Create page …"). Keyboard: Up/Down (wrapping),
@@ -25,8 +26,8 @@ import Brulion
 T.Popup {
     id: control
 
-    property var items: []
-    property var extraResults: []
+    property list<var> items
+    property list<var> extraResults
     property string placeholderText: qsTr("Search…")
     property string emptyTitle: qsTr("No results")
     property string emptyDescription
@@ -35,47 +36,75 @@ T.Popup {
     property bool closeOnActivate: true
     property alias query: field.text
     property int currentIndex: 0
+    /// The rows shown: the matches, then extraResults.
+    readonly property int resultCount: filter.count
 
     signal itemActivated(var item)
+    /// Row `row` was activated (just before itemActivated): read its item's fields with
+    /// itemString() / itemBool().
+    signal rowActivated(int row)
 
-    // Titles/subtitles are extracted once per `items` change, not on every keystroke (a vault
-    // can have thousands of pages).
-    readonly property var _titles: (items || []).map(i => i.title || "")
-    readonly property var _subtitles: (items || []).map(i => i.subtitle || "")
-    readonly property var results: {
-        const list = items || []
-        const ranked = TextHelper.fuzzyRank(field.text, _titles, maxResults, _subtitles)
-        const mark = Theme.link.toString()
-        return ranked.map(r => ({
-            item: list[r.index],
-            markup: r.positions.length > 0 ? TextHelper.markMatches(list[r.index].title || "", r.positions, mark) : ""
-        }))
+    /// The item (or extra result) shown in row `row`, as it was given; undefined out of range.
+    function itemAt(row: int): var {
+        const source = filter.sourceIndex(row)
+        if (source >= 0)
+            return items[source]
+        if (source < 0 && -1 - source < extraResults.length)
+            return extraResults[-1 - source]
+        return undefined
     }
-    readonly property var allResults: results.concat((extraResults || []).map(i => ({ item: i, markup: "" })))
+    /// The field `key` of row `row`'s item as text ("" when it has none).
+    function itemString(row: int, key: string): string {
+        return filter.itemString(row, key)
+    }
+    /// `!!item[key]` of row `row`'s item.
+    function itemBool(row: int, key: string): bool {
+        return filter.itemBool(row, key)
+    }
+    /// Row `row` shows one of extraResults.
+    function isExtra(row: int): bool {
+        return filter.isExtra(row)
+    }
+    /// Some item's title is `title`, case and diacritics ignored (TextHelper.fold).
+    function hasTitle(title: string): bool {
+        return filter.hasTitle(title)
+    }
 
-    function activate(index) {
-        const entry = allResults[index]
-        if (!entry)
+    // Fuzzy, diacritic-insensitive (C++: titles extracted once per `items` change, not on every
+    // keystroke: a notebook can have thousands of pages).
+    PaletteFilter {
+        id: filter
+        items: control.items
+        extras: control.extraResults
+        query: field.text
+        maxResults: control.maxResults
+        markColor: Theme.palette.link
+        defaultIcon: control.defaultIcon
+        onRowsChanged: control.currentIndex = 0
+    }
+
+    function activate(index: int): void {
+        if (index < 0 || index >= filter.count)
             return
         if (closeOnActivate)
             close()
-        itemActivated(entry.item)
+        rowActivated(index)
+        itemActivated(itemAt(index))
     }
     /// `text` in the field as if typed: the caret after it (a field that is not focused yet puts
     /// its caret at the start of a text set from outside).
-    function typeQuery(text) {
+    function typeQuery(text: string): void {
         field.text = text
         field.cursorPosition = field.text.length
     }
-    function move(delta) {
-        const n = allResults.length
+    function move(delta: int): void {
+        const n = filter.count
         if (n === 0)
             return
         currentIndex = (currentIndex + delta + n) % n
         list.positionViewAtIndex(currentIndex, ListView.Contain)
     }
 
-    onAllResultsChanged: currentIndex = 0
 
     readonly property real overlayWidth: parent ? parent.width : Theme.windowWidth
     readonly property real overlayHeight: parent ? parent.height : Theme.windowHeight
@@ -98,7 +127,7 @@ T.Popup {
     padding: 0
 
     implicitHeight: searchRow.implicitHeight + 1 + _listHeight
-                    + (allResults.length === 0 ? 150 : 0) + (hints.visible ? hints.implicitHeight : 0)
+                    + (filter.count === 0 ? 150 : 0) + (hints.visible ? hints.implicitHeight : 0)
 
     /// Floating: the most the list may take — 420 px, and what the popup's own limits (72 % of
     /// the window, above the on-screen keyboard) leave under the search row and the key hints.
@@ -135,6 +164,12 @@ T.Popup {
         }
         return h
     }
+
+    readonly property list<var> _hints: [
+        { keys: "↑+↓", text: qsTr("navigate") },
+        { keys: "Enter", text: qsTr("open") },
+        { keys: "Esc", text: qsTr("close") }
+    ]
 
     /// Rows the list has created so far (each one re-measures _listHeight).
     property int _rowsCreated: 0
@@ -210,13 +245,13 @@ T.Popup {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredHeight: control._listHeight
-            visible: control.allResults.length > 0
+            visible: filter.count > 0
             clip: true
             topMargin: 6
             bottomMargin: 6
             leftMargin: 6
             rightMargin: 6
-            model: control.allResults
+            model: filter.rows
             currentIndex: control.currentIndex
             boundsBehavior: Flickable.StopAtBounds
             highlightMoveDuration: 0
@@ -228,25 +263,25 @@ T.Popup {
 
             delegate: BListItem {
                 id: row
-                required property var modelData
                 required property int index
+                required text
+                required titleMarkup
+                required subtitle
+                required iconName
+                required iconEmoji
+                required property string shortcut
                 width: list.width - 12
-                text: modelData.item.title || ""
-                titleMarkup: modelData.markup
-                subtitle: modelData.item.subtitle || ""
-                iconName: modelData.item.icon || control.defaultIcon
-                iconEmoji: modelData.item.emoji || ""
                 selected: index === control.currentIndex
                 // Floating: one-line rows, the subtitle after the title (an even rhythm);
                 // full screen (phones): two lines.
                 subtitleInline: !control.fullScreen
                 focusPolicy: Qt.NoFocus
                 trailing: BKbd {
-                    sequence: row.modelData.item.shortcut || ""
+                    sequence: row.shortcut
                     small: true
                 }
-                onHoveredChanged: if (hovered) control.currentIndex = index
-                onClicked: control.activate(index)
+                onHoveredChanged: if (hovered) control.currentIndex = row.index
+                onClicked: control.activate(row.index)
                 Component.onCompleted: ++control._rowsCreated
             }
         }
@@ -256,7 +291,7 @@ T.Popup {
             Layout.fillHeight: control.fullScreen
             Layout.topMargin: Theme.space5
             Layout.bottomMargin: Theme.space5
-            visible: control.allResults.length === 0
+            visible: filter.count === 0
             compact: true
             iconName: "search"
             title: control.emptyTitle
@@ -265,7 +300,7 @@ T.Popup {
 
         Item {
             Layout.fillHeight: true
-            visible: control.fullScreen && control.allResults.length > 0
+            visible: control.fullScreen && filter.count > 0
         }
 
         // The key hints on the panel's own surface, under a hairline.
@@ -281,22 +316,20 @@ T.Popup {
                 x: Theme.space4
                 spacing: Theme.space4
                 Repeater {
-                    model: [
-                        { keys: "↑+↓", text: qsTr("navigate") },
-                        { keys: "Enter", text: qsTr("open") },
-                        { keys: "Esc", text: qsTr("close") }
-                    ]
+                    model: control._hints
                     delegate: Row {
-                        required property var modelData
+                        id: hint
+                        required property string keys
+                        required property string text
                         spacing: 5
                         BKbd {
                             anchors.verticalCenter: parent.verticalCenter
-                            sequence: parent.modelData.keys
+                            sequence: hint.keys
                             small: true
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: parent.modelData.text
+                            text: hint.text
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs
                             color: Theme.fgMuted

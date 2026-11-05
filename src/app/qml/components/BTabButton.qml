@@ -13,7 +13,7 @@ T.TabButton {
     property int count: -1
 
     // Natural width (left-aligned tabs); equal widths when the bar has `stretch: true`.
-    readonly property var bar: T.TabBar.tabBar
+    readonly property BTabBar bar: T.TabBar.tabBar as BTabBar
     width: bar && bar.stretch ? (bar.availableWidth - bar.spacing * (bar.count - 1)) / Math.max(1, bar.count) : implicitWidth
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)

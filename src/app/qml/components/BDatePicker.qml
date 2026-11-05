@@ -63,21 +63,26 @@ T.Control {
 
     readonly property string value: selectedDate === "" ? ""
                                   : (withTime && time !== "" ? selectedDate + " " + time : selectedDate)
-    readonly property var natural: naturalField.text.trim() !== "" ? DatesHelper.parseNatural(naturalField.text) : ({ ok: false })
+    /// DatesHelper.parseNatural() of the natural-language field ({ ok: false } while it is empty).
+    readonly property var natural: naturalResult.map
+    MapHolder {
+        id: naturalResult
+        map: DatesHelper.parseNatural(Js.trim(naturalField.text) !== "" ? naturalField.text : "")
+    }
     /// The round clock, null until the Clock button first opens it.
     property BTimePickerDialog clockDialog: null
 
     signal picked(string value)
 
-    function showMonthOf(date) {
-        displayYear = Number(date.slice(0, 4))
-        displayMonth = Number(date.slice(5, 7))
+    function showMonthOf(date: string): void {
+        displayYear = Js.toNumber(Js.slice(date, 0, 4))
+        displayMonth = Js.toNumber(Js.slice(date, 5, 7))
     }
     /// User change of the date and/or time: emits picked() first, then keeps the new values
     /// unless the consumer's bindings already followed. Controlled use (`selectedDate:
     /// model.date; onPicked: model.date = …`) keeps its bindings this way — assigning first
     /// would break them, and later changes of the source would not show.
-    function commit(date, newTime) {
+    function commit(date: string, newTime: string): void {
         picked(withTime && newTime !== "" ? date + " " + newTime : date)
         if (selectedDate !== date)
             selectedDate = date
@@ -86,7 +91,7 @@ T.Control {
     }
     /// Apply a time chosen elsewhere (the clock): with a date set, commit() it (emits picked()
     /// first, keeping a consumer's binding); without one, just the time, as a typed one does.
-    function applyTime(newTime) {
+    function applyTime(newTime: string): void {
         if (!withTime)
             return
         timeField.invalid = false
@@ -95,63 +100,75 @@ T.Control {
         else if (time !== newTime)
             time = newTime
     }
-    function selectDate(date) {
+    function selectDate(date: string): void {
         if (!DatesHelper.isValidDate(date))
             return
         focusDate = date
         showMonthOf(date)
         commit(date, withTime && time === "" && timeRequired ? defaultTime : time)
     }
-    function moveFocus(date) {
+    function moveFocus(date: string): void {
         if (!DatesHelper.isValidDate(date))
             return
         focusDate = date
         showMonthOf(date)
     }
-    function shiftMonth(delta) {
-        const first = DatesHelper.addMonths(displayYear + "-" + String(displayMonth).padStart(2, "0") + "-01", delta)
+    function shiftMonth(delta: int): void {
+        const year = "" + displayYear
+        const month = Js.padStart("" + displayMonth, 2, "0")
+        // ("" +: a plain string, which compiled code passes on after other calls.)
+        const first = "" + DatesHelper.addMonths(year + "-" + month + "-01", delta)
         showMonthOf(first)
         // Keep the keyboard focus inside the shown month.
-        const day = Math.min(Number(focusDate.slice(8, 10)), 28)
-        focusDate = first.slice(0, 8) + String(day).padStart(2, "0")
+        const focusDay = Js.slice(control.focusDate, 8, 10)
+        const day = Math.min(Js.toNumber(focusDay), 28)
+        const start = Js.slice(first, 0, 8)
+        const dayText = Js.padStart("" + day, 2, "0")
+        focusDate = start + dayText
     }
-    function applyNatural() {
-        if (!natural.ok || !DatesHelper.isValidDate(natural.date))
+    function applyNatural(): void {
+        if (!naturalResult.map.ok || !DatesHelper.isValidDate(naturalResult.map.date))
             return
-        const date = natural.date
+        const date = control.naturalDate()
         focusDate = date
         showMonthOf(date)
-        commit(date, natural.hasTime && withTime ? natural.time
-                                                 : withTime && time === "" && timeRequired ? defaultTime : time)
+        commit(date, naturalResult.map.hasTime && withTime ? control.naturalTime()
+                                                           : withTime && time === "" && timeRequired ? defaultTime : time)
         naturalField.clear()
     }
-    function focusGrid() {
+    function naturalDate(): string {
+        return naturalResult.map.date
+    }
+    function naturalTime(): string {
+        return naturalResult.map.time
+    }
+    function focusGrid(): void {
         grid.forceActiveFocus(Qt.TabFocusReason)
     }
     /// Apply what is still being typed, as Enter would: a recognised date in the
     /// natural-language field, then a changed time in the time field. Returns false when the
     /// typed time is not valid (it stays in the field with its hint).
-    function commitPending() {
-        if (natural.ok)
+    function commitPending(): bool {
+        if (naturalResult.map.ok)
             applyNatural()
         return withTime ? timeField.commitTyped() : true
     }
     /// Open the round clock on `value` (created on first use).
-    function openClock(value) {
+    function openClock(value: string): void {
         if (!clockDialog)
             clockDialog = clockComponent.createObject(control) as BTimePickerDialog
         clockDialog.openFor(value)
     }
     /// Forget typed text (natural-language field, an invalid time) — when a dialog opens anew.
-    function clearTyped() {
+    function clearTyped(): void {
         naturalField.clear()
         timeField.invalid = false
     }
 
     onSelectedDateChanged: {
-        if (DatesHelper.isValidDate(selectedDate)) {
-            focusDate = selectedDate
-            showMonthOf(selectedDate)
+        if (DatesHelper.isValidDate(control.selectedDate)) {
+            control.focusDate = control.selectedDate
+            control.showMonthOf(control.selectedDate)
         }
     }
     // A time set from outside (a quick pick, a recognised natural date) replaces a rejected one.
@@ -159,12 +176,11 @@ T.Control {
     // Touch keyboards: hiding the keyboard (Back, its hide key) ends typing as well — the field
     // keeps the focus then, so editingFinished would come only later (the summary above kept
     // the old time meanwhile).
-    // (var: qmllint knows Qt.inputMethod only as a QObject; `as InputMethod` yields null.)
-    readonly property var _inputMethod: Qt.inputMethod
+    // (DeviceInfo: compiled QML knows Qt.inputMethod only as a QObject.)
     Connections {
-        target: control._inputMethod
-        function onVisibleChanged() {
-            if (control._inputMethod.visible)
+        target: DeviceInfo
+        function onInputMethodVisibleChanged() {
+            if (DeviceInfo.inputMethodVisible)
                 return
             if (timeField.activeFocus)
                 timeField.commitTyped()
@@ -173,24 +189,19 @@ T.Control {
         }
     }
     Component.onCompleted: {
-        const start = DatesHelper.isValidDate(selectedDate) ? selectedDate : DatesHelper.today
-        if (focusDate === "")
-            focusDate = start
-        if (displayYear === 0)
-            showMonthOf(start)
+        const start = DatesHelper.isValidDate(control.selectedDate) ? control.selectedDate : DatesHelper.today
+        if (control.focusDate === "")
+            control.focusDate = start
+        if (control.displayYear === 0)
+            control.showMonthOf(start)
     }
 
     // Method calls are not tracked: `today` (the today marker moves at midnight) and `locale` are
     // read for real — qmlcachegen compiles a bare `void DatesHelper.today` away with the dependency.
-    readonly property var cells: DatesHelper.today !== "" ? DatesHelper.monthGrid(displayYear, displayMonth, weekStart)
-                                                          : []
-    readonly property var weekdayLabels: {
-        const names = DatesHelper.weekdayNames("short", DatesHelper.locale)
-        const out = []
-        for (let i = 0; i < 7; ++i)
-            out.push(names[(weekStart - 1 + i) % 7])
-        return out
-    }
+    /// { date, day, inMonth, isToday, isWeekend, dayOfWeek } per cell (DatesHelper.monthGrid).
+    readonly property list<var> cells: DatesHelper.today !== "" ? DatesHelper.monthGrid(displayYear, displayMonth, weekStart)
+                                                                : []
+    readonly property list<string> weekdayLabels: DatesHelper.weekdayNamesFrom(weekStart, "short", DatesHelper.locale)
     readonly property int cellSize: Theme.touchUi ? 44 : 38
 
     implicitWidth: Math.max(7 * cellSize, column.implicitWidth) + leftPadding + rightPadding
@@ -229,7 +240,7 @@ T.Control {
             Item {
                 Layout.fillWidth: true
                 implicitHeight: previewRow.implicitHeight
-                visible: naturalField.text.trim() !== ""
+                visible: Js.trim(naturalField.text) !== ""
 
                 Row {
                     id: previewRow
@@ -237,21 +248,21 @@ T.Control {
                     width: parent.width
                     BIcon {
                         anchors.verticalCenter: parent.verticalCenter
-                        name: control.natural.ok ? "" : "circle-help"
+                        name: naturalResult.map.ok ? "" : "circle-help"
                         size: Theme.iconSizeSm
                         color: Theme.fgFaint
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - (control.natural.ok ? 0 : 20) - (enterHint.visible ? enterHint.width + 6 : 0)
+                        width: parent.width - (naturalResult.map.ok ? 0 : 20) - (enterHint.visible ? enterHint.width + 6 : 0)
                         // "→ czw, 15 paź 09:00 · jutro" (relative word only for yesterday…tomorrow)
-                        text: control.natural.ok ? "→ " + control.natural.display
-                                                   + (control.natural.relative ? "  ·  " + control.natural.relativeWord : "")
+                        text: naturalResult.map.ok ? "→ " + naturalResult.map.display
+                                                   + (naturalResult.map.relative ? "  ·  " + naturalResult.map.relativeWord : "")
                                                  : qsTr("No date recognised")
-                        color: control.natural.ok ? Theme.fg : Theme.fgFaint
+                        color: naturalResult.map.ok ? Theme.fg : Theme.fgFaint
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm
-                        font.weight: control.natural.ok ? Theme.weightMedium : Theme.weightNormal
+                        font.weight: naturalResult.map.ok ? Theme.weightMedium : Theme.weightNormal
                         elide: Text.ElideRight
                     }
                 }
@@ -259,12 +270,12 @@ T.Control {
                     id: enterHint
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    visible: control.natural.ok
+                    visible: naturalResult.map.ok
                     sequence: "Enter"
                     small: true
                 }
                 Accessible.role: Accessible.StaticText
-                Accessible.name: control.natural.ok ? control.natural.display : qsTr("No date recognised")
+                Accessible.name: naturalResult.map.ok ? naturalResult.map.display : qsTr("No date recognised")
             }
         }
 
@@ -279,9 +290,13 @@ T.Control {
                 Layout.leftMargin: 4
                 // (`locale` read for real: monthTitle() is a method call, not tracked.)
                 text: {
-                    const t = DatesHelper.locale !== ""
-                            ? DatesHelper.monthTitle(control.displayYear, control.displayMonth) : ""
-                    return t.charAt(0).toLocaleUpperCase() + t.slice(1)
+                    const year = control.displayYear
+                    const month = control.displayMonth
+                    // ("" +: a plain string, passed on to two calls.)
+                    const t = "" + (DatesHelper.locale !== "" ? DatesHelper.monthTitle(year, month) : "")
+                    const first = Js.toUpperCase(Js.charAt(t, 0))
+                    const rest = Js.sliceFrom(t, 1)
+                    return first + rest
                 }
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textMd
@@ -379,25 +394,29 @@ T.Control {
                         model: control.cells
                         delegate: T.AbstractButton {
                             id: cell
-                            required property var modelData
-                            readonly property bool isSelected: modelData.date === control.selectedDate
-                            readonly property bool isFocused: grid.activeFocus && modelData.date === control.focusDate
-                            readonly property var kinds: control.marks && control.marks[modelData.date] ? control.marks[modelData.date] : []
+                            required property string date
+                            required property int day
+                            required property bool inMonth
+                            required property bool isToday
+                            required property bool isWeekend
+                            readonly property bool isSelected: date === control.selectedDate
+                            readonly property bool isFocused: grid.activeFocus && date === control.focusDate
+                            readonly property list<string> kinds: UiModels.stringListField(control.marks, date)
 
                             width: control.cellSize
                             height: control.cellSize
                             focusPolicy: Qt.NoFocus
                             hoverEnabled: !Theme.touchUi
-                            text: modelData.day
+                            text: "" + day
                             Accessible.role: Accessible.Button
-                            Accessible.name: DatesHelper.formatLong(modelData.date)
-                                             + (modelData.isToday ? ", " + qsTr("today") : "")
+                            Accessible.name: DatesHelper.formatLong(date)
+                                             + (isToday ? ", " + qsTr("today") : "")
                                              + (kinds.length > 0 ? ", " + qsTr("%n item(s)", "", kinds.length) : "")
                             Accessible.checkable: true
                             Accessible.checked: isSelected
                             onClicked: {
                                 grid.forceActiveFocus(Qt.MouseFocusReason)
-                                control.selectDate(modelData.date)
+                                control.selectDate(cell.date)
                             }
 
                             background: Item {
@@ -410,7 +429,7 @@ T.Control {
                                     color: cell.isSelected ? Theme.primary
                                          : cell.down ? Theme.bgPressed
                                          : cell.hovered ? Theme.bgHover : "transparent"
-                                    border.width: cell.modelData.isToday && !cell.isSelected ? 1.5 : 0
+                                    border.width: cell.isToday && !cell.isSelected ? 1.5 : 0
                                     border.color: Theme.accent
                                     Behavior on color { ColorAnimation { duration: Theme.durationInstant } }
                                 }
@@ -433,13 +452,13 @@ T.Control {
                                     text: cell.text
                                     font.family: Theme.fontUi
                                     font.pixelSize: Theme.textSm + 1
-                                    font.weight: cell.isSelected || cell.modelData.isToday ? Theme.weightSemiBold : Theme.weightNormal
+                                    font.weight: cell.isSelected || cell.isToday ? Theme.weightSemiBold : Theme.weightNormal
                                     font.features: { "tnum": 1 }
                                     color: cell.isSelected ? Theme.primaryFg
-                                         : cell.modelData.isToday ? Theme.accentText
-                                         : !cell.modelData.inMonth ? Theme.fgFaint
-                                         : cell.modelData.isWeekend ? Theme.fgMuted : Theme.fg
-                                    opacity: cell.modelData.inMonth || cell.isSelected ? 1 : 0.75
+                                         : cell.isToday ? Theme.accentText
+                                         : !cell.inMonth ? Theme.fgFaint
+                                         : cell.isWeekend ? Theme.fgMuted : Theme.fg
+                                    opacity: cell.inMonth || cell.isSelected ? 1 : 0.75
                                 }
                                 Row {
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -499,16 +518,19 @@ T.Control {
                 /// Normalise and apply the typed time (Enter, Done, leaving the field, OK);
                 /// false when it is no time (then it stays, with the hint below).
                 function commitTyped(): bool {
-                    const t = text.trim() === "" && !control.timeRequired ? "" : DatesHelper.normalizeTime(text)
-                    invalid = t === "" && (text.trim() !== "" || control.timeRequired)
+                    const typed = "" + timeField.text
+                    const blank = Js.trim(typed) === ""
+                    // ("" +: a plain string, passed on after the assignments below.)
+                    const t = "" + (blank && !control.timeRequired ? "" : DatesHelper.normalizeTime(typed))
+                    invalid = t === "" && (!blank || control.timeRequired)
                     if (invalid)
                         return false
-                    if (text !== t)
-                        text = t
+                    if (timeField.text !== t)
+                        timeField.text = t
                     if (t === control.time)
                         return true
                     if (control.selectedDate !== "")
-                        control.commit(control.selectedDate, t)
+                        control.commit("" + control.selectedDate, t)
                     else
                         control.time = t
                     return true
@@ -531,7 +553,7 @@ T.Control {
                 variant: "secondary"
                 Accessible.name: qsTr("Pick a time on a clock")
                 onClicked: {
-                    if (timeField.text.trim() !== "")
+                    if (Js.trim(timeField.text) !== "")
                         timeField.commitTyped()
                     control.openClock(control.time !== "" ? control.time : control.defaultTime)
                 }

@@ -535,6 +535,29 @@ QString DiffHelper::resolveHunks(const QVariantList &hunks, const QVariantList &
     return out;
 }
 
+QList<int> DiffHelper::conflictIndexes(const QVariantList &hunks) const
+{
+    QList<int> out;
+    for (int i = 0; i < hunks.size(); ++i) {
+        if (hunks.at(i).toMap().value(u"kind"_s).toString() == u"conflict")
+            out.append(i);
+    }
+    return out;
+}
+
+QString DiffHelper::resolveHunksWith(const QVariantList &hunks, const QStringList &choices,
+                                     const QStringList &texts) const
+{
+    QVariantList list;
+    list.reserve(choices.size());
+    for (qsizetype i = 0; i < choices.size(); ++i) {
+        const QString &choice = choices.at(i);
+        list.append(QVariantMap{{u"choice"_s, choice.isEmpty() ? u"ours"_s : choice},
+                                {u"text"_s, i < texts.size() ? texts.at(i) : QString()}});
+    }
+    return resolveHunks(hunks, list);
+}
+
 QString DiffHelper::segmentsHtml(const QVariantList &segments, const QString &highlight) const
 {
     QString out = u"<span style=\"white-space:pre-wrap\">"_s;

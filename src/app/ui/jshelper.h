@@ -93,6 +93,8 @@ public:
     Q_INVOKABLE QString toFixed(double x, int digits) const;
     /// String(x) for a number: "3", "0.5", "1e+21", "NaN" — what JavaScript prints.
     Q_INVOKABLE QString numberToString(double x) const;
+    /// Math.atan2(y, x) (Math.atan2 is not compiled; Math's other functions are).
+    Q_INVOKABLE double atan2(double y, double x) const;
 
     // --- Regular expressions: `pattern` and `flags` as in a JavaScript literal /pattern/flags
     // (flags i, m, s, g; others ignored; PCRE syntax beyond JavaScript's is not refused). Patterns

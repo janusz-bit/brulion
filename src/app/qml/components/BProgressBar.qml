@@ -74,6 +74,6 @@ T.ProgressBar {
         implicitWidth: 200
         implicitHeight: control.thickness
         radius: height / 2
-        color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, Theme.dark ? 0.10 : 0.08)
+        color: Theme.fg.alpha(Theme.dark ? 0.10 : 0.08)
     }
 }

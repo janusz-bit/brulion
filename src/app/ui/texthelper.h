@@ -28,12 +28,27 @@ struct FuzzyMatch {
 /// The matcher itself (pure function, unit-tested).
 FuzzyMatch fuzzyMatch(QStringView query, QStringView text);
 
+/// One entry of fuzzyRankList(): the index in `texts`, its score and matched positions.
+struct FuzzyRanked {
+    int index = 0;
+    int score = 0;
+    QList<int> positions;
+};
+/// TextHelper::markMatches() with the positions as a list (pure function).
+QString markMatchesHtml(const QString &text, const QList<int> &positions, const QString &color);
+/// TextHelper::fuzzyRank() as a list (pure function).
+QList<FuzzyRanked> fuzzyRankList(const QString &query, const QStringList &texts, int limit,
+                                 const QStringList &secondary);
+
 class TextHelper : public QObject {
     Q_OBJECT
 
 public:
     explicit TextHelper(QObject *parent = nullptr);
 
+    /// BKbd's key caps of a shortcut: `sequence` split on "+", "++" giving a "+" key ("Ctrl++" ->
+    /// ["Ctrl", "+"], "Ctrl+Shift+F" -> ["Ctrl", "Shift", "F"]); empty parts dropped.
+    Q_INVOKABLE QStringList shortcutKeys(const QString &sequence) const;
     /// Search key: lower-case without diacritics ("Zażółć" -> "zazolc").
     Q_INVOKABLE QString fold(const QString &text) const;
     /// Fuzzy score of `query` against `text`; 0 when it does not match. An empty query scores 1.
@@ -48,6 +63,8 @@ public:
                                        const QStringList &secondary = {}) const;
     /// Escaped rich text with the characters at `positions` wrapped in
     /// <b><font color="…">…</font></b> (colour optional). Safe for Text.StyledText.
+    /// fuzzyRank()'s texts themselves, best first (all of them in order for an empty query).
+    Q_INVOKABLE QStringList fuzzyRankTexts(const QString &query, const QStringList &texts, int limit = 0) const;
     Q_INVOKABLE QString markMatches(const QString &text, const QVariantList &positions,
                                     const QString &color = {}) const;
     /// HTML-escape (&, <, >, ") for rich-text Text items.

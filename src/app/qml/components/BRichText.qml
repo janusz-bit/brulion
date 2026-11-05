@@ -35,7 +35,7 @@ Item {
     property real lineHeight: 0
     /// Lines shown at most (0: all); a longer text ends with "…".
     property int maximumLineCount: 0
-    property font font: Qt.font({ family: Theme.fontUi, pixelSize: Theme.textBase })
+    property font font: Theme.fontUiBase
     property color color: Theme.fg
     property color linkColor: Theme.link
     property int horizontalAlignment: Text.AlignLeft
@@ -46,7 +46,7 @@ Item {
     /// The shown rich text: the hovered link underlined.
     readonly property string shownHtml: TextHelper.hoveredLinkHtml(root.html, root.hoveredLink)
     /// The text has a span with a background colour (chips, tags, inline code, highlights).
-    readonly property bool tinted: shownHtml.indexOf("background-color:") >= 0
+    readonly property bool tinted: Js.indexOf(shownHtml, "background-color:") >= 0
     /// A plain text longer than the line limit (measured by the Text, which shows every line).
     readonly property bool overflows: !tinted && maximumLineCount > 0 && lineHeight > 0
                                       && plain.implicitHeight > (maximumLineCount + 0.5) * lineHeight
@@ -130,23 +130,30 @@ Item {
         // Under the text: a child with a negative z is drawn below its parent's content.
         Repeater {
             model: tints.pills
-            delegate: Rectangle {
+            // (An Item with the shape inside: a pill's `color` is not a Rectangle's own.)
+            delegate: Item {
                 id: tintShape
-                required property var modelData
+                required x
+                required y
+                required width
+                required height
+                required property color color
+                /// "pill", "box" or "icon".
+                required property string kind
+                required property string icon
                 z: -1
-                x: modelData.x
-                y: modelData.y
-                width: modelData.width
-                height: modelData.height
-                radius: modelData.kind === "pill" ? height / 2 : Theme.radiusXs
-                antialiasing: true
-                // A page's app icon in front of a link (RichTextPills kind "icon"): the icon, no shape.
-                color: modelData.kind === "icon" ? "transparent" : modelData.color
+                Rectangle {
+                    anchors.fill: parent
+                    radius: tintShape.kind === "pill" ? height / 2 : Theme.radiusXs
+                    antialiasing: true
+                    // A page's app icon in front of a link (RichTextPills kind "icon"): the icon, no shape.
+                    color: tintShape.kind === "icon" ? "transparent" : tintShape.color
+                }
                 BIcon {
                     anchors.centerIn: parent
-                    name: tintShape.modelData.kind === "icon" ? tintShape.modelData.icon : ""
+                    name: tintShape.kind === "icon" ? tintShape.icon : ""
                     size: Math.round(Math.min(parent.width, parent.height) * 0.9)
-                    color: tintShape.modelData.color
+                    color: tintShape.color
                 }
             }
         }

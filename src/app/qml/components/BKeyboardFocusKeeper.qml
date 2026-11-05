@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Templates as T
 import Brulion
 
 // BKeyboardFocusKeeper — keeps the focused form field above the on-screen keyboard (docs/UI.md
@@ -20,37 +21,57 @@ Item {
     property real margin: Theme.space3
 
     readonly property Item focusItem: window ? window.activeFocusItem : null
-    readonly property Item field: focusItem && focusItem.keepAboveKeyboard === true ? focusItem : null
+    /// The focused field kept above the keyboard (BTextField and BTextArea: keepAboveKeyboard).
+    readonly property Item field: (focusItem as BTextField) !== null && (focusItem as BTextField).keepAboveKeyboard
+                                  || (focusItem as BTextArea) !== null && (focusItem as BTextArea).keepAboveKeyboard
+                                  ? focusItem : null
 
     visible: false
 
-    function schedule() {
+    function schedule(): void {
         if (field && KeyboardInsets.shown && !KeyboardInsets.animating)
-            Qt.callLater(keeper.keepVisible)
+            later.restart()
     }
+    // (Once the current changes are done, merging repeated requests.)
+    Timer {
+        id: later
+        interval: 0
+        onTriggered: keeper.keepVisible()
+    }
+    /// Places in keepVisible() (a method's point result is read through a typed property).
+    property point _at
+    property rect _caret
 
     /// Scroll the Flickables around the focused field, innermost first, until it is above the
     /// keyboard and below their top edges.
-    function keepVisible() {
+    function keepVisible(): void {
         const item = field
         if (!item || !item.visible || !window || !KeyboardInsets.shown || KeyboardInsets.animating)
             return
         const keyboardTop = window.height - KeyboardInsets.overlap
-        for (let f = item.parent; f; f = f.parent) {
-            if (!(f instanceof Flickable) || f.dragging)
+        for (let p = item.parent; p; p = p.parent) {
+            const f = p as Flickable
+            if (f === null || f.dragging)
                 continue
             // The part of the Flickable left above the keyboard (its own coordinates: the shell
             // may not have laid out the shorter view yet).
-            const visibleBottom = Math.min(f.height, keyboardTop - f.mapToItem(null, 0, 0).y)
+            keeper._at = f.mapToItem(null, 0, 0)
+            const visibleBottom = Math.min(f.height, keyboardTop - keeper._at.y)
             if (visibleBottom < 2 * margin)
                 continue
-            const at = item.mapToItem(f, 0, 0)
-            let top = at.y
-            let bottom = at.y + item.height
-            if (bottom - top > visibleBottom - 2 * margin && item.cursorRectangle !== undefined) {
-                const caret = item.cursorRectangle
-                top = item.mapToItem(f, caret.x, caret.y).y
-                bottom = top + caret.height
+            keeper._at = item.mapToItem(f, 0, 0)
+            let top = keeper._at.y
+            let bottom = keeper._at.y + item.height
+            if (bottom - top > visibleBottom - 2 * margin) {
+                const textField = item as T.TextField
+                const textArea = item as T.TextArea
+                if (textField !== null)
+                    keeper._caret = textField.cursorRectangle
+                else if (textArea !== null)
+                    keeper._caret = textArea.cursorRectangle
+                keeper._at = item.mapToItem(f, keeper._caret.x, keeper._caret.y)
+                top = keeper._at.y
+                bottom = top + keeper._caret.height
             }
             let delta = 0
             if (bottom > visibleBottom - margin)

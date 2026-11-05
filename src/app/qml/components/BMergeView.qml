@@ -26,56 +26,76 @@ Item {
     property string theirs
     property string oursLabel: qsTr("My version")
     property string theirsLabel: qsTr("Their version")
-    property var hunks: DiffHelper.conflictHunks(ours, theirs)
+    property list<var> hunks: DiffHelper.conflictHunks(ours, theirs)
     property string applyText: qsTr("Apply")
 
-    // One entry per conflict: { choice: "" | "ours" | "theirs" | "both" | "manual", text }.
-    // Reset whenever `hunks` change (null before that; a literal, not a binding, so the
-    // assignments below never break one).
-    property var choices: null
+    // One entry per conflict: the choice ("" | "ours" | "theirs" | "both" | "manual") and the
+    // manual text. Reset whenever `hunks` change (empty before that; plain values, not bindings,
+    // so the assignments below never break one).
+    property list<string> choiceKinds
+    property list<string> choiceTexts
 
     signal resolved(string text)
 
-    readonly property var conflictIndexes: {
-        const out = []
-        for (let i = 0; i < (hunks ? hunks.length : 0); ++i)
-            if (hunks[i].kind === "conflict")
-                out.push(i)
-        return out
-    }
+    readonly property list<int> conflictIndexes: DiffHelper.conflictIndexes(hunks)
     readonly property int conflictCount: conflictIndexes.length
-    readonly property int resolvedCount: (choices || []).filter(c => c && c.choice !== "").length
+    readonly property int resolvedCount: {
+        let n = 0
+        for (let i = 0; i < choiceKinds.length; ++i) {
+            if (choiceKinds[i] !== "")
+                ++n
+        }
+        return n
+    }
     readonly property bool allResolved: resolvedCount === conflictCount
-    readonly property string resolvedText: DiffHelper.resolveHunks(hunks, (choices || []).map(c => c && c.choice !== "" ? c : { choice: "ours" }))
+    readonly property string resolvedText: DiffHelper.resolveHunksWith(hunks, choiceKinds, choiceTexts)
+    /// The hunks with every key the hunk delegates read.
+    readonly property list<var> hunkRows: UiModels.withDefaults(hunks, { kind: "", text: "", lines: 0, ours: "", theirs: "" })
 
-    function resetChoices() {
-        const out = []
-        for (let i = 0; i < conflictCount; ++i)
-            out.push({ choice: "", text: "" })
-        choices = out
+    /// conflict `n`'s choice and manual text ("" when there is none).
+    function choiceOf(n: int): string {
+        return n >= 0 && n < choiceKinds.length ? choiceKinds[n] : ""
     }
-    function setChoice(conflict, choice, text) {
-        const next = (choices || []).slice()
-        next[conflict] = { choice: choice, text: text === undefined ? (next[conflict] ? next[conflict].text : "") : text }
-        choices = next
+    function choiceTextOf(n: int): string {
+        return n >= 0 && n < choiceTexts.length ? choiceTexts[n] : ""
     }
-    function chooseAll(choice) {
-        const next = []
-        for (let i = 0; i < conflictCount; ++i)
-            next.push({ choice: choice, text: "" })
-        choices = next
+    function resetChoices(): void {
+        chooseAll("")
     }
-    function apply() {
+    /// Conflict `conflict` takes `choice`, keeping its manual text.
+    function setChoice(conflict: int, choice: string): void {
+        setChoiceText(conflict, choice, choiceTextOf(conflict))
+    }
+    /// Conflict `conflict` takes `choice` with the manual text `text`.
+    function setChoiceText(conflict: int, choice: string, text: string): void {
+        if (conflict < 0 || conflict >= choiceKinds.length)
+            return
+        choiceKinds = Js.insertedStringAt(Js.removedStringAt(choiceKinds, conflict), conflict, choice)
+        choiceTexts = Js.insertedStringAt(Js.removedStringAt(choiceTexts, conflict), conflict, text)
+    }
+    /// Every conflict takes `choice` (no manual text).
+    function chooseAll(choice: string): void {
+        choiceKinds = Js.filled(conflictCount, choice)
+        choiceTexts = Js.filled(conflictCount, "")
+    }
+    function apply(): void {
         if (allResolved)
             resolved(resolvedText)
     }
-    function scrollToConflict(n) {
+    function scrollToConflict(n: int): void {
         if (n >= 0 && n < conflictCount)
             list.positionViewAtIndex(conflictIndexes[n], ListView.Beginning)
     }
 
-    onHunksChanged: resetChoices()
-    Component.onCompleted: resetChoices()
+    onHunksChanged: control.resetChoices()
+    Component.onCompleted: control.resetChoices()
+
+    readonly property list<var> choiceRows: [
+        { value: "ours", text: qsTr("Mine") },
+        { value: "theirs", text: qsTr("Theirs") },
+        { value: "both", text: qsTr("Both") },
+        { value: "manual", text: qsTr("Manual") }
+    ]
 
     implicitWidth: 720
     implicitHeight: 520
@@ -146,24 +166,29 @@ Item {
             Layout.fillHeight: true
             clip: true
             spacing: Theme.space2
-            model: control.hunks
+            model: control.hunkRows
             boundsBehavior: Flickable.StopAtBounds
             cacheBuffer: 2000
             T.ScrollBar.vertical: BScrollBar {}
 
-            delegate: Loader {
-                id: hunkLoader
-                required property var modelData
-                required property int index
+            delegate: HunkLoader {
                 width: list.width - 2
                 x: 1
-                sourceComponent: modelData.kind === "conflict" ? conflictHunk : sameHunk
-                onLoaded: {
-                    item.hunk = Qt.binding(() => hunkLoader.modelData)
-                    item.hunkIndex = Qt.binding(() => hunkLoader.index)
-                }
+                sourceComponent: kind === "conflict" ? conflictHunk : sameHunk
             }
         }
+    }
+
+    /// A hunk (the delegate): its keys, read by the hunk it loads (its parent).
+    component HunkLoader: Loader {
+        required property int index
+        /// "same" | "conflict"
+        required property string kind
+        /// same: the text and its line count; conflict: both sides.
+        required property string text
+        required property int lines
+        required property string ours
+        required property string theirs
     }
 
     component MonoText: Text {
@@ -179,11 +204,10 @@ Item {
         id: sameHunk
         Rectangle {
             id: same
-            property var hunk: ({})
-            property int hunkIndex: -1
+            readonly property HunkLoader hunk: parent as HunkLoader
             property bool open: false
-            readonly property string body: (hunk.text || "").replace(/\r?\n$/, "")
-            readonly property var lines: body.split(/\r\n|\r|\n/)
+            readonly property string body: Js.replaceRegExp(hunk ? hunk.text : "", "\\r?\\n$", "", "")
+            readonly property list<string> lines: Js.splitRegExp(body, "\\r\\n|\\r|\\n", "")
             width: parent ? parent.width : 0
             implicitHeight: open ? toggle.height + sameColumn.implicitHeight + 8 : toggle.height
             radius: Theme.radius
@@ -195,7 +219,7 @@ Item {
                 height: Theme.touchUi ? Theme.touchTarget : 30
                 hoverEnabled: !Theme.touchUi
                 focusPolicy: Qt.StrongFocus
-                text: qsTr("%n unchanged line(s)", "", same.hunk.lines || 0)
+                text: qsTr("%n unchanged line(s)", "", same.hunk ? same.hunk.lines : 0)
                 Accessible.role: Accessible.Button
                 Accessible.name: text
                 onClicked: same.open = !same.open
@@ -221,7 +245,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !same.open
                         width: Math.max(0, same.width - x - 16)
-                        text: same.lines[0] || ""
+                        text: same.lines.length > 0 ? same.lines[0] : ""
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.textXs
                         color: Theme.fgFaint
@@ -251,14 +275,23 @@ Item {
         id: conflictHunk
         BCard {
             id: card
-            property var hunk: ({})
-            property int hunkIndex: -1
+            readonly property HunkLoader hunk: parent as HunkLoader
+            readonly property int hunkIndex: hunk ? hunk.index : -1
             readonly property int conflict: control.conflictIndexes.indexOf(hunkIndex)
-            readonly property var choiceState: (control.choices || [])[conflict] || { choice: "", text: "" }
+            /// The conflict's choice and manual text (control.choiceKinds / choiceTexts).
+            readonly property string choice: conflict >= 0 && conflict < control.choiceKinds.length ? control.choiceKinds[conflict] : ""
+            readonly property string choiceText: conflict >= 0 && conflict < control.choiceTexts.length ? control.choiceTexts[conflict] : ""
+            readonly property string oursText: hunk ? hunk.ours : ""
+            readonly property string theirsText: hunk ? hunk.theirs : ""
+            /// The two sides: { side, label, body }.
+            readonly property list<var> sides: [
+                { side: "ours", label: control.oursLabel, body: oursText },
+                { side: "theirs", label: control.theirsLabel, body: theirsText }
+            ]
             readonly property bool stacked: width < 640
             width: parent ? parent.width : 0
             padding: Theme.space3
-            tone: choiceState.choice === "" ? "warning" : "default"
+            tone: card.choice === "" ? "warning" : "default"
 
             contentItem: ColumnLayout {
                 spacing: Theme.space3
@@ -269,9 +302,9 @@ Item {
                     columnSpacing: Theme.space2
                     rowSpacing: Theme.space2
                     BIcon {
-                        name: card.choiceState.choice === "" ? "triangle-alert" : "circle-check"
+                        name: card.choice === "" ? "triangle-alert" : "circle-check"
                         size: Theme.iconSize
-                        color: card.choiceState.choice === "" ? Theme.warningText : Theme.successText
+                        color: card.choice === "" ? Theme.warningText : Theme.successText
                     }
                     Text {
                         Layout.fillWidth: true
@@ -290,16 +323,11 @@ Item {
                         fill: card.stacked
                         size: "small"
                         accessibleName: qsTr("Keep which version")
-                        model: [
-                            { value: "ours", text: qsTr("Mine") },
-                            { value: "theirs", text: qsTr("Theirs") },
-                            { value: "both", text: qsTr("Both") },
-                            { value: "manual", text: qsTr("Manual") }
-                        ]
-                        currentValue: card.choiceState.choice
+                        model: control.choiceRows
+                        currentValue: card.choice
                         onActivated: (value) => {
-                            if (value === "manual" && card.choiceState.text === "")
-                                control.setChoice(card.conflict, value, (card.hunk.ours || "") + (card.hunk.theirs || ""))
+                            if (value === "manual" && card.choiceText === "")
+                                control.setChoiceText(card.conflict, value, card.oursText + card.theirsText)
                             else
                                 control.setChoice(card.conflict, value)
                         }
@@ -308,21 +336,21 @@ Item {
 
                 GridLayout {
                     Layout.fillWidth: true
-                    visible: card.choiceState.choice !== "manual"
+                    visible: card.choice !== "manual"
                     columns: card.stacked ? 1 : 2
                     columnSpacing: Theme.space2
                     rowSpacing: Theme.space2
 
                     Repeater {
-                        model: [
-                            { side: "ours", label: control.oursLabel, text: card.hunk.ours || "" },
-                            { side: "theirs", label: control.theirsLabel, text: card.hunk.theirs || "" }
-                        ]
+                        model: card.sides
                         delegate: T.AbstractButton {
-                            id: side
-                            required property var modelData
-                            readonly property bool chosen: card.choiceState.choice === modelData.side || card.choiceState.choice === "both"
-                            readonly property bool rejected: card.choiceState.choice !== "" && !chosen
+                            id: sideButton
+                            /// "ours" | "theirs", its label and its text.
+                            required property string side
+                            required property string label
+                            required property string body
+                            readonly property bool chosen: card.choice === sideButton.side || card.choice === "both"
+                            readonly property bool rejected: card.choice !== "" && !chosen
                             Layout.fillWidth: true
                             Layout.preferredWidth: 1
                             Layout.alignment: Qt.AlignTop
@@ -330,28 +358,28 @@ Item {
                             hoverEnabled: !Theme.touchUi
                             focusPolicy: Qt.StrongFocus
                             Accessible.role: Accessible.Button
-                            Accessible.name: qsTr("Keep %1").arg(modelData.label)
-                            onClicked: control.setChoice(card.conflict, modelData.side)
+                            Accessible.name: qsTr("Keep %1").arg(sideButton.label)
+                            onClicked: control.setChoice(card.conflict, sideButton.side)
 
                             background: Rectangle {
                                 radius: Theme.radius
                                 // Neither side is "wrong": a chosen side is highlighted neutrally.
-                                color: side.chosen ? Theme.bgSelected : side.hovered ? Theme.bgHover : Theme.bgSunken
-                                border.width: side.chosen ? 1.5 : 1
-                                border.color: side.chosen ? Theme.focusRing : side.hovered ? Theme.borderStrong : Theme.borderSubtle
-                                opacity: side.rejected ? 0.55 : 1
-                                BFocusRing { visible: side.visualFocus; targetRadius: Theme.radius }
+                                color: sideButton.chosen ? Theme.bgSelected : sideButton.hovered ? Theme.bgHover : Theme.bgSunken
+                                border.width: sideButton.chosen ? 1.5 : 1
+                                border.color: sideButton.chosen ? Theme.focusRing : sideButton.hovered ? Theme.borderStrong : Theme.borderSubtle
+                                opacity: sideButton.rejected ? 0.55 : 1
+                                BFocusRing { visible: sideButton.visualFocus; targetRadius: Theme.radius }
                             }
                             contentItem: Column {
                                 id: sideColumn
                                 padding: 8
                                 spacing: 4
                                 RowLayout {
-                                    width: side.width - 16
+                                    width: sideButton.width - 16
                                     spacing: 6
                                     Text {
                                         Layout.fillWidth: true
-                                        text: side.modelData.label
+                                        text: sideButton.label
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textXs
                                         font.weight: Theme.weightSemiBold
@@ -359,17 +387,17 @@ Item {
                                         elide: Text.ElideRight
                                     }
                                     BIcon {
-                                        name: side.chosen ? "circle-check" : ""
+                                        name: sideButton.chosen ? "circle-check" : ""
                                         size: Theme.iconSizeSm
                                         color: Theme.link
                                     }
                                 }
                                 MonoText {
-                                    width: side.width - 16
-                                    text: side.modelData.text === "" ? qsTr("(nothing)") : side.modelData.text.replace(/\r?\n$/, "")
-                                    color: side.modelData.text === "" ? Theme.fgFaint : Theme.fg
-                                    font.italic: side.modelData.text === ""
-                                    font.strikeout: side.rejected && side.modelData.text !== ""
+                                    width: sideButton.width - 16
+                                    text: sideButton.body === "" ? qsTr("(nothing)") : Js.replaceRegExp(sideButton.body, "\\r?\\n$", "", "")
+                                    color: sideButton.body === "" ? Theme.fgFaint : Theme.fg
+                                    font.italic: sideButton.body === ""
+                                    font.strikeout: sideButton.rejected && sideButton.body !== ""
                                 }
                             }
                         }
@@ -379,11 +407,11 @@ Item {
                 BTextArea {
                     id: manual
                     Layout.fillWidth: true
-                    visible: card.choiceState.choice === "manual"
+                    visible: card.choice === "manual"
                     monospace: true
-                    text: card.choiceState.text
+                    text: card.choiceText
                     accessibleName: qsTr("Merged text")
-                    onTextChanged: if (activeFocus) control.setChoice(card.conflict, "manual", text)
+                    onTextChanged: if (manual.activeFocus) control.setChoiceText(card.conflict, "manual", manual.text)
                 }
             }
         }

@@ -109,6 +109,29 @@ public:
     /// Chronological compare of two specs (negative when a is earlier).
     Q_INVOKABLE int compare(const QString &a, const QString &b) const;
 
+    // Typed parts of the maps above (compiled QML reads no member of a method's map result).
+    /// splitSpec()'s date ("YYYY-MM-DD"; "" when `spec` is not a spec).
+    Q_INVOKABLE QString specDate(const QString &spec) const;
+    /// splitSpec()'s time ("HH:mm"; "" when the spec has none or is not one).
+    Q_INVOKABLE QString specTime(const QString &spec) const;
+    /// How BReminderDialog's "Repeat" shows rule `text`: "none" (empty or not a rule), "daily",
+    /// "weekdays", "weekly", "monthly", "yearly" (every one of them, nothing else), else "custom".
+    Q_INVOKABLE QString repeatKind(const QString &text) const;
+    /// The rule's frequency: "day" | "week" | "month" | "year"; "" when not a rule.
+    Q_INVOKABLE QString ruleFreq(const QString &text) const;
+    /// The rule's interval; 0 when not a rule.
+    Q_INVOKABLE int ruleInterval(const QString &text) const;
+    /// The rule's weekdays (1 = Monday … 7), ascending; [] when it has none or is not a rule.
+    Q_INVOKABLE QList<int> ruleWeekdays(const QString &text) const;
+    /// A rule object for formatRule() / nextOccurrences(): { freq, interval, weekdays,
+    /// weekdaysOnly }.
+    Q_INVOKABLE QVariantMap makeRule(const QString &freq, int interval, const QList<int> &weekdays,
+                                     bool weekdaysOnly) const;
+    /// weekdayNames(form, locale) starting at `weekStart` (1 = Monday … 7 = Sunday), seven names.
+    Q_INVOKABLE QStringList weekdayNamesFrom(int weekStart, const QString &form, const QString &locale) const;
+    /// `days` with `day` added, or removed when it is there (unless it is the only one), ascending.
+    Q_INVOKABLE QList<int> toggledWeekday(const QList<int> &days, int day) const;
+
 Q_SIGNALS:
     void localeChanged();
     void weekStartChanged();

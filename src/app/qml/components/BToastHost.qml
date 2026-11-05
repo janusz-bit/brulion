@@ -9,13 +9,16 @@ import Brulion
 // Put one in the main window, above everything (also above dialogs):
 //   BToastHost { id: toasts; parent: T.Overlay.overlay; anchors.fill: parent; z: 1000 }
 // and call:
-//   toasts.show(qsTr("Zsynchronizowano 12 plików"), { kind: "success" })
-//   toasts.show(qsTr("Przeniesiono do kosza"), { actionText: qsTr("Cofnij"), onAction: undo })
+//   toasts.showToast(qsTr("Zsynchronizowano 12 plików"), "success", "", -1)
+//   undoToast = toasts.showToast(qsTr("Przeniesiono do kosza"), "info", qsTr("Cofnij"), -1)
+//   Connections { target: toasts; function onActionTriggered(toastId: int) { if (toastId === undoToast) undo() } }
 //
-// show(text, options) -> id. options: kind ("info" | "success" | "warning" | "error"),
-// actionText, onAction (function), timeout (ms; default 4 s, 7 s with an action, 0 = until
-// closed). Hovering a toast pauses its timer. dismiss(id), clear(). toastShown(id, text, kind)
-// tells about each one shown (the remote control's state.lastToasts).
+// showToast(text, kind, actionText, timeout) -> id. kind: "info" (also "") | "success" | "warning" |
+// "error"; actionText: the button ("" for none; pressing it dismisses the toast and emits
+// actionTriggered(id)); timeout: ms, < 0 the default (4 s, 7 s with an action), 0 = until closed.
+// Hovering a toast pauses its timer. dismiss(id), clear(). toastShown(id, text, kind) tells about
+// each one shown (the remote control's state.lastToasts). The older show(text, { kind, actionText,
+// onAction, timeout }) still works but does not compile (it takes a function): use showToast().
 Item {
     id: host
 
@@ -26,65 +29,99 @@ Item {
     /// top bar.
     property bool atTop: false
     property real topMargin: Theme.space2
-    property var _actions: ({})
     property int _nextId: 1
 
     signal toastShown(int toastId, string text, string kind)
+    /// The action button of toast `toastId` was pressed (the toast is gone from the screen already).
+    signal actionTriggered(int toastId)
+    /// Toast `toastId` is gone (dismissed, timed out, pushed out by newer ones, its button
+    /// pressed: after actionTriggered) — the last signal about it.
+    signal toastRemoved(int toastId)
 
-    function show(text, options) {
-        const o = options || {}
+    function showToast(text: string, kind: string, actionText: string, timeout: int): int {
         const id = _nextId++
-        const hasAction = !!o.actionText
-        if (typeof o.onAction === "function")
-            _actions[id] = o.onAction
-        toastModel.insert(0, {
-            toastId: id,
-            text: String(text),
-            kind: o.kind || "info",
-            actionText: o.actionText || "",
-            timeout: o.timeout !== undefined ? o.timeout : (hasAction ? 7000 : defaultTimeout)
-        })
+        const k = kind !== "" ? kind : "info"
+        toastModel.prepend(id, text, k, actionText, timeout >= 0 ? timeout : (actionText !== "" ? 7000 : defaultTimeout))
         while (toastModel.count > (atTop ? 1 : maxVisible))
             _remove(toastModel.count - 1)
-        _announce(text)
-        toastShown(id, String(text), o.kind || "info")
+        // Qt 6.8+: polite live-region style announcement.
+        host.Accessible.announce(text, Accessible.Polite)
+        toastShown(id, text, k)
         return id
     }
 
-    function dismiss(id) {
-        for (let i = 0; i < toastModel.count; ++i) {
-            if (toastModel.get(i).toastId === id) {
-                _remove(i)
-                return
+    /// The older API (options: { kind, actionText, onAction, timeout }): onAction runs when the
+    /// toast's button is pressed, after the toast is dismissed (_connectAction(): not compiled, it
+    /// takes a function).
+    function show(text: string, options: var): int {
+        // (Kept in a property, the fields as plain values: compiled code passes them on after the
+        // calls that read the others.)
+        _showOptions = options
+        const kind = "" + UiModels.stringField(_showOptions, "kind")
+        const actionText = "" + UiModels.stringField(_showOptions, "actionText")
+        const timeout = 0 + UiModels.numberField(_showOptions, "timeout", -1)
+        const id = showToast(text, kind, actionText, timeout)
+        _connectAction(id, _showOptions)
+        _showOptions = null
+        return id
+    }
+    property var _showOptions: null
+    function _connectAction(id: int, options: var): void {
+        const o = options || {}
+        if (typeof o.onAction === "function") {
+            const run = (toastId) => {
+                if (toastId !== id)
+                    return
+                actionTriggered.disconnect(run)
+                toastRemoved.disconnect(forget)
+                o.onAction()
             }
+            const forget = (toastId) => {
+                if (toastId !== id)
+                    return
+                actionTriggered.disconnect(run)
+                toastRemoved.disconnect(forget)
+            }
+            actionTriggered.connect(run)
+            toastRemoved.connect(forget)
         }
     }
 
-    function clear() {
+    function dismiss(toastId: int): void {
+        const i = toastModel.indexOf(toastId)
+        if (i >= 0)
+            _remove(i)
+    }
+
+    function clear(): void {
         while (toastModel.count > 0)
             _remove(0)
     }
 
-    function _remove(index) {
-        const id = toastModel.get(index).toastId
-        delete _actions[id]
-        toastModel.remove(index)
+    function _remove(index: int): void {
+        const id = toastModel.idAt(index)
+        toastModel.removeAt(index)
+        toastRemoved(id)
     }
 
-    function _announce(text) {
-        // Qt 6.8+: polite live-region style announcement.
-        if (typeof host.Accessible.announce === "function")
-            host.Accessible.announce(String(text))
+    /// Toast `toastId`'s button was pressed: it goes, then actionTriggered, then toastRemoved.
+    function _trigger(toastId: int): void {
+        const i = toastModel.indexOf(toastId)
+        if (i < 0)
+            return
+        toastModel.removeAt(i)
+        actionTriggered(toastId)
+        toastRemoved(toastId)
     }
 
-    ListModel {
+    ToastListModel {
         id: toastModel
     }
 
     // (The older toasts go when they move to the top.)
     onAtTopChanged: {
-        while (atTop && toastModel.count > 1)
-            _remove(toastModel.count - 1)
+        while (host.atTop && toastModel.count > 1)
+            host._remove(toastModel.count - 1)
     }
 
     ListView {
@@ -122,12 +159,7 @@ Item {
                 text: wrapper.text
                 kind: wrapper.kind
                 actionText: wrapper.actionText
-                onActionTriggered: {
-                    const fn = host._actions[wrapper.toastId]
-                    host.dismiss(wrapper.toastId)
-                    if (fn)
-                        fn()
-                }
+                onActionTriggered: host._trigger(wrapper.toastId)
                 onCloseClicked: host.dismiss(wrapper.toastId)
             }
 

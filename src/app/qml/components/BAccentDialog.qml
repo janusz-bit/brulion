@@ -21,8 +21,8 @@ BDialog {
     /// Accepted: the colour ("#rrggbb", lower case).
     signal chosen(string color)
 
-    function openWith(color) {
-        const c = ThemePalette.normalizeColor(color || "")
+    function openWith(color: string): void {
+        const c = ThemePalette.normalizeColor(color)
         value = c !== "" ? c : ThemePalette.accentSwatch(Theme.accentName, Theme.customAccent, Theme.dark,
                                                          Theme.dark ? Theme.darkSurface : Theme.lightSurface)
         field.text = value
@@ -31,16 +31,22 @@ BDialog {
     }
 
     /// What Theme would use with this colour.
-    readonly property var preview: ThemePalette.colors(Theme.dark, Theme.lightSurface, Theme.darkSurface, "custom", value)
-    /// 12 hues × 3 shades.
-    readonly property var grid: {
-        const out = []
-        for (const l of [0.36, 0.5, 0.64]) {
-            for (let h = 0; h < 12; ++h)
-                out.push(String(Qt.hsla(h / 12, 0.68, l, 1)))
-        }
-        return out
+    readonly property var preview: previewColors.map
+    ThemeColors {
+        id: previewColors
+        dark: Theme.dark
+        lightSurface: Theme.lightSurface
+        darkSurface: Theme.darkSurface
+        accentName: "custom"
+        customAccent: dialog.value
     }
+    readonly property color previewAccent: previewColors.accent
+    /// 12 hues × 3 shades: Qt.hsla(h / 12, 0.68, l, 1) for l = 0.36, 0.5, 0.64 and h = 0 … 11.
+    readonly property list<string> grid: [
+        "#9a1d1d", "#9a5c1d", "#9a9a1d", "#5c9a1d", "#1d9a1d", "#1d9a5c", "#1d9a9a", "#1d5c9a", "#1d1d9a", "#5c1d9a", "#9a1d9a", "#9a1d5c",
+        "#d62929", "#d68029", "#d6d629", "#80d629", "#29d629", "#29d680", "#29d6d6", "#2980d6", "#2929d6", "#8029d6", "#d629d6", "#d62980",
+        "#e26565", "#e2a365", "#e2e265", "#a3e265", "#65e265", "#65e2a3", "#65e2e2", "#65a3e2", "#6565e2", "#a365e2", "#e265e2", "#e265a3"
+    ]
 
     objectName: "accentDialog"
     title: qsTr("Custom accent colour")
@@ -93,14 +99,14 @@ BDialog {
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhPreferLatin
             maximumLength: 7
             onTextEdited: {
-                const c = ThemePalette.normalizeColor(text)
+                const c = ThemePalette.normalizeColor(field.text)
                 if (c !== "") {
                     dialog.value = c
-                    errorText = ""
+                    field.errorText = ""
                 }
             }
-            onEditingFinished: errorText = ThemePalette.normalizeColor(text) !== "" || text === ""
-                                          ? "" : qsTr("Enter a colour like #3b7dd8.")
+            onEditingFinished: field.errorText = ThemePalette.normalizeColor(field.text) !== "" || field.text === ""
+                                                 ? "" : qsTr("Enter a colour like #3b7dd8.")
             onAccepted: dialog.tryAccept()
         }
     }
@@ -127,7 +133,7 @@ BDialog {
                     implicitWidth: 28
                     implicitHeight: 28
                     radius: 14
-                    color: dialog.preview.accentSolid
+                    color: previewColors.accentSolid
                     BText {
                         anchors.centerIn: parent
                         text: "14"
@@ -139,28 +145,27 @@ BDialog {
                 BText {
                     text: qsTr("Today")
                     variant: "label"
-                    color: dialog.preview.accentText
+                    color: previewColors.accentText
                 }
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 3
                     radius: 2
-                    color: dialog.preview.accent
+                    color: dialog.previewAccent
                 }
             }
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: badgeText.implicitHeight + Theme.space2
                 radius: Theme.radiusSm
-                color: Qt.rgba(Qt.color(dialog.preview.accent).r, Qt.color(dialog.preview.accent).g,
-                               Qt.color(dialog.preview.accent).b, Theme.dark ? 0.18 : 0.12)
+                color: dialog.previewAccent.alpha(Theme.dark ? 0.18 : 0.12)
                 BText {
                     id: badgeText
                     anchors.verticalCenter: parent.verticalCenter
                     x: Theme.space2
                     width: parent.width - 2 * Theme.space2
                     text: qsTr("Zażółć gęślą jaźń — text in the accent colour")
-                    color: dialog.preview.accentText
+                    color: previewColors.accentText
                     elide: Text.ElideRight
                 }
             }

@@ -17,8 +17,11 @@ Item {
     property real size: Theme.iconSize
     property color color: Theme.fgFaint
 
-    readonly property bool emoji: !!icon && icon.kind === "emoji" && !!icon.name
-    readonly property string iconName: emoji ? "" : !!icon && icon.kind === "app" && !!icon.name ? icon.name : fallback
+    /// icon.kind and icon.name ("" when missing).
+    readonly property string _kind: UiModels.stringField(icon, "kind")
+    readonly property string _name: UiModels.stringField(icon, "name")
+    readonly property bool emoji: _kind === "emoji" && _name !== ""
+    readonly property string iconName: emoji ? "" : _kind === "app" && _name !== "" ? _name : fallback
 
     width: emoji || iconName !== "" ? size : 0
     height: size
@@ -36,7 +39,7 @@ Item {
         anchors.centerIn: parent
         active: root.emoji
         sourceComponent: Text {
-            text: root.icon.name
+            text: root._name
             textFormat: Text.PlainText
             font.pixelSize: Math.round(root.size * 0.85)
             color: Theme.fg

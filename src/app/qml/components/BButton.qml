@@ -134,6 +134,7 @@ T.Button {
     }
 
     background: Rectangle {
+        id: backgroundRect
         implicitWidth: control.iconOnly ? control.visualHeight : 64
         implicitHeight: control.visualHeight
         radius: Theme.radius
@@ -143,7 +144,7 @@ T.Button {
             case "primary":
                 return control.down ? Theme.primaryPressed : control.hovered ? Theme.primaryHover : Theme.primary
             case "danger":
-                return control.down ? Qt.darker(Theme.dangerHover, 1.08) : control.hovered ? Theme.dangerHover : Theme.danger
+                return control.down ? Theme.dangerHover.darker(1.08) : control.hovered ? Theme.dangerHover : Theme.danger
             case "ghost":
                 return control.down ? Theme.bgPressed : control.hovered || control.checked ? Theme.bgHover : "transparent"
             default:
@@ -158,7 +159,7 @@ T.Button {
         // State overlay for the outlined variant (keeps the elevated surface colour).
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
+            radius: backgroundRect.radius
             visible: control.variant === "secondary"
             color: control.down ? Theme.bgPressed : control.hovered || control.checked ? Theme.bgHover : "transparent"
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }

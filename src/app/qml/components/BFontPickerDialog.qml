@@ -33,27 +33,23 @@ BDialog {
     /// A row was tapped: its family, "" for the default.
     signal chosen(string family)
 
-    function openFor(family) {
-        current = family || ""
+    function openFor(family: string): void {
+        current = family
         open()
     }
-    function choose(row) {
-        if (!row)
-            return
-        dialog.chosen(row.family)
+    /// Choose the row of `family` ("" the default).
+    function choose(family: string): void {
+        dialog.chosen(family)
         dialog.close()
     }
 
-    readonly property var families: visible ? DeviceInfo.fontFamilies(fixedOnly) : []
-    readonly property var rows: {
-        const q = query.trim()
-        const out = []
-        if (q === "" || TextHelper.fuzzyScore(q, defaultLabel) > 0)
-            out.push({ family: "", title: defaultLabel })
-        for (const r of TextHelper.fuzzyRank(q, families))
-            out.push({ family: families[r.index], title: families[r.index] })
-        return out
-    }
+    readonly property list<string> families: visible ? DeviceInfo.fontFamilies(fixedOnly) : []
+    readonly property string _trimmedQuery: Js.trim(query)
+    /// The rows: the families matching the query (TextHelper.fuzzyRank), "" for the default row
+    /// first when it matches.
+    readonly property list<string> rows: _trimmedQuery === "" || TextHelper.fuzzyScore(_trimmedQuery, defaultLabel) > 0
+                                         ? Js.insertedStringAt(TextHelper.fuzzyRankTexts(_trimmedQuery, families), 0, "")
+                                         : TextHelper.fuzzyRankTexts(_trimmedQuery, families)
 
     objectName: "fontPickerDialog"
     iconName: "type"
@@ -65,11 +61,17 @@ BDialog {
         search.text = ""
         query = ""
         list.currentIndex = -1
-        Qt.callLater(() => {
-            const i = dialog.rows.findIndex(r => r.family === dialog.current)
+        showCurrent.restart()
+    }
+    // (Once the rows are there.)
+    Timer {
+        id: showCurrent
+        interval: 0
+        onTriggered: {
+            const i = dialog.rows.indexOf(dialog.current)
             if (i >= 0)
                 list.positionViewAtIndex(i, ListView.Center)
-        })
+        }
     }
 
     BSearchField {
@@ -102,18 +104,20 @@ BDialog {
         T.ScrollBar.vertical: BScrollBar {}
         Accessible.role: Accessible.List
         Accessible.name: dialog.title
-        Keys.onReturnPressed: dialog.choose(dialog.rows[currentIndex])
-        Keys.onEnterPressed: dialog.choose(dialog.rows[currentIndex])
+        Keys.onReturnPressed: if (list.currentIndex >= 0 && list.currentIndex < dialog.rows.length) dialog.choose(dialog.rows[list.currentIndex])
+        Keys.onEnterPressed: if (list.currentIndex >= 0 && list.currentIndex < dialog.rows.length) dialog.choose(dialog.rows[list.currentIndex])
         delegate: BListItem {
-            required property var modelData
+            id: fontRow
+            /// The family ("" the default).
+            required property string modelData
             objectName: "fontPickerRow"
             width: ListView.view.width
-            text: modelData.title
-            font.family: modelData.family === "" ? dialog.defaultFamily : modelData.family
+            text: modelData === "" ? dialog.defaultLabel : modelData
+            font.family: modelData === "" ? dialog.defaultFamily : modelData
             font.pixelSize: Theme.textMd
-            iconName: modelData.family === dialog.current ? "check" : ""
-            selected: modelData.family === dialog.current
-            onClicked: dialog.choose(modelData)
+            iconName: modelData === dialog.current ? "check" : ""
+            selected: modelData === dialog.current
+            onClicked: dialog.choose(fontRow.modelData)
         }
         BText {
             anchors.centerIn: parent

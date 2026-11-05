@@ -47,6 +47,9 @@ private Q_SLOTS:
     void fontFamilies_data();
     void fontFamilies();
     void qmlFacade();
+    void colorText_data();
+    void colorText();
+    void themeColorsFollowInputs();
 };
 
 void TestThemePalette::defaultsAreTodaysColours_data()
@@ -374,6 +377,60 @@ void TestThemePalette::qmlFacade()
     QCOMPARE(p.normalizeColor(u"żółty"_s), QString());
     QCOMPARE(p.contrastRatio(u"#000000"_s, u"#ffffff"_s), 21.0);
     QCOMPARE(p.contrastRatio(u"#000000"_s, u"biały"_s), 0.0);
+}
+
+void TestThemePalette::colorText_data()
+{
+    QTest::addColumn<double>("r");
+    QTest::addColumn<double>("g");
+    QTest::addColumn<double>("b");
+    QTest::addColumn<double>("a");
+    QTest::addColumn<QString>("expected");
+    // What String(color) gives in QML (checked with Qt 6.11's engine): the channels as QColor keeps
+    // them (16 bits), "#aarrggbb" when translucent.
+    QTest::newRow("opaque") << 1.0 << 1.0 << 1.0 << 1.0 << u"#ffffff"_s;
+    QTest::newRow("margin red 0.36") << 226 / 255.0 << 87 / 255.0 << 76 / 255.0 << 23593 / 65535.0 << u"#5ce2574c"_s;
+    QTest::newRow("margin red 0.28") << 226 / 255.0 << 87 / 255.0 << 76 / 255.0 << 0.28 << u"#47e2574c"_s;
+    QTest::newRow("green 0.32") << 111 / 255.0 << 191 / 255.0 << 138 / 255.0 << 0.32 << u"#526fbf8a"_s;
+    QTest::newRow("green 0.30") << 63 / 255.0 << 143 / 255.0 << 90 / 255.0 << 0.30 << u"#4d3f8f5a"_s;
+    QTest::newRow("transparent") << 0.0 << 0.0 << 0.0 << 0.0 << u"#00000000"_s;
+    QTest::newRow("clamped") << 2.0 << -1.0 << 0.5 << 1.5 << u"#ff0080"_s;
+}
+
+void TestThemePalette::colorText()
+{
+    QFETCH(double, r);
+    QFETCH(double, g);
+    QFETCH(double, b);
+    QFETCH(double, a);
+    QFETCH(QString, expected);
+    QCOMPARE(ThemePalette().colorText(r, g, b, a), expected);
+}
+
+void TestThemePalette::themeColorsFollowInputs()
+{
+    brulion::ui::ThemeColors c;
+    // Defaults: the light paper surface with the red accent.
+    QCOMPARE(c.map(), paletteMap(false, u"", u"", u"", u""));
+    QCOMPARE(c.bg(), u"#fbf7ee"_s);
+    QCOMPARE(c.accent(), u"#e2574c"_s);
+    int changes = 0;
+    connect(&c, &brulion::ui::ThemeColors::colorsChanged, this, [&changes] { ++changes; });
+    c.setDark(true);
+    c.setDarkSurface(u"black"_s);
+    QCOMPARE(c.bg(), u"#000000"_s);
+    QCOMPARE(c.map(), paletteMap(true, u"", u"black", u"", u""));
+    c.setAccentName(u"custom"_s);
+    c.setCustomAccent(u"#3b7dd8"_s);
+    QCOMPARE(c.map(), paletteMap(true, u"", u"black", u"custom", u"#3b7dd8"));
+    // Every token of the map is a property of its own.
+    const QVariantMap map = c.map();
+    for (auto it = map.cbegin(); it != map.cend(); ++it)
+        QCOMPARE(c.property(it.key().toLatin1().constData()).toString(), it.value().toString());
+    const int before = changes;
+    c.setLightSurface(u"white"_s); // not shown in the dark: the colours stay
+    QCOMPARE(changes, before);
+    QVERIFY(before >= 3);
 }
 
 QTEST_GUILESS_MAIN(TestThemePalette)

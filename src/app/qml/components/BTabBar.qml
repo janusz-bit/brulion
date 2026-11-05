@@ -73,7 +73,7 @@ T.TabBar {
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop { position: 0; color: control.fadeColor }
-                GradientStop { position: 1; color: Qt.rgba(control.fadeColor.r, control.fadeColor.g, control.fadeColor.b, 0) }
+                GradientStop { position: 1; color: control.fadeColor.alpha(0) }
             }
             Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
         }
@@ -87,7 +87,7 @@ T.TabBar {
             visible: opacity > 0
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: Qt.rgba(control.fadeColor.r, control.fadeColor.g, control.fadeColor.b, 0) }
+                GradientStop { position: 0; color: control.fadeColor.alpha(0) }
                 GradientStop { position: 1; color: control.fadeColor }
             }
             Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }

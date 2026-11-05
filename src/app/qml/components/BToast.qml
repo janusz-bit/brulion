@@ -108,8 +108,8 @@ T.Control {
                 }
                 background: Rectangle {
                     radius: Theme.radius
-                    color: action.down ? Qt.rgba(Theme.fgInverse.r, Theme.fgInverse.g, Theme.fgInverse.b, 0.16)
-                         : action.hovered ? Qt.rgba(Theme.fgInverse.r, Theme.fgInverse.g, Theme.fgInverse.b, 0.10) : "transparent"
+                    color: action.down ? Theme.fgInverse.alpha(0.16)
+                         : action.hovered ? Theme.fgInverse.alpha(0.10) : "transparent"
                     BFocusRing {
                         visible: action.visualFocus
                         targetRadius: Theme.radius
@@ -132,12 +132,12 @@ T.Control {
                         anchors.centerIn: parent
                         name: "x"
                         size: Theme.iconSizeSm
-                        color: Qt.rgba(Theme.fgInverse.r, Theme.fgInverse.g, Theme.fgInverse.b, close.hovered ? 1 : 0.7)
+                        color: Theme.fgInverse.alpha(close.hovered ? 1 : 0.7)
                     }
                 }
                 background: Rectangle {
                     radius: Theme.radius
-                    color: close.hovered ? Qt.rgba(Theme.fgInverse.r, Theme.fgInverse.g, Theme.fgInverse.b, 0.10) : "transparent"
+                    color: close.hovered ? Theme.fgInverse.alpha(0.10) : "transparent"
                     BFocusRing {
                         visible: close.visualFocus
                         targetRadius: Theme.radius

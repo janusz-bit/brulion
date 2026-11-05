@@ -379,4 +379,85 @@ double ThemePalette::contrastRatio(const QString &a, const QString &b) const
     return x && y ? contrast(*x, *y) : 0.0;
 }
 
+QString ThemePalette::colorText(double r, double g, double b, double a) const
+{
+    // As QColor keeps them (16 bits a channel) and gives them back in 8 bits (qt_div_257).
+    const auto channel = [](double v) {
+        const int wide = int(std::lround(std::clamp(v, 0.0, 1.0) * 65535.0));
+        return (wide - (wide >> 8) + 0x80) >> 8;
+    };
+    const auto hex2 = [](int v) { return QString::number(v, 16).rightJustified(2, u'0'); };
+    const int alpha = channel(a);
+    QString out = u"#"_s;
+    if (alpha != 255)
+        out += hex2(alpha);
+    return out + hex2(channel(r)) + hex2(channel(g)) + hex2(channel(b));
+}
+
+// ---- ThemeColors ----------------------------------------------------------------------------
+
+ThemeColors::ThemeColors(QObject *parent) : QObject(parent)
+{
+    update();
+}
+
+void ThemeColors::setDark(bool dark)
+{
+    if (m_dark == dark)
+        return;
+    m_dark = dark;
+    Q_EMIT inputsChanged();
+    update();
+}
+
+void ThemeColors::setLightSurface(const QString &name)
+{
+    if (m_lightSurface == name)
+        return;
+    m_lightSurface = name;
+    Q_EMIT inputsChanged();
+    update();
+}
+
+void ThemeColors::setDarkSurface(const QString &name)
+{
+    if (m_darkSurface == name)
+        return;
+    m_darkSurface = name;
+    Q_EMIT inputsChanged();
+    update();
+}
+
+void ThemeColors::setAccentName(const QString &name)
+{
+    if (m_accentName == name)
+        return;
+    m_accentName = name;
+    Q_EMIT inputsChanged();
+    update();
+}
+
+void ThemeColors::setCustomAccent(const QString &color)
+{
+    if (m_customAccent == color)
+        return;
+    m_customAccent = color;
+    Q_EMIT inputsChanged();
+    update();
+}
+
+QString ThemeColors::token(QStringView name) const
+{
+    return m_map.value(name.toString()).toString();
+}
+
+void ThemeColors::update()
+{
+    QVariantMap map = paletteMap(m_dark, m_lightSurface, m_darkSurface, m_accentName, m_customAccent);
+    if (map == m_map)
+        return;
+    m_map = std::move(map);
+    Q_EMIT colorsChanged();
+}
+
 } // namespace brulion::ui
