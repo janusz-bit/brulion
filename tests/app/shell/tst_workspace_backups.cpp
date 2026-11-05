@@ -494,9 +494,12 @@ private Q_SLOTS:
         const QString source = written.first().at(0).toString();
         QTRY_COMPARE(b->backups().first().toMap().value(u"name"_s).toString(), source);
         QVERIFY(ws->writeFile(u"a.md"_s, u"- przed przywróceniem\n"_s));
+        // (The safety backup's file shows before it is done: waited for as written, not as a file.)
         QVERIFY(!plannedRestore(b, source).isEmpty());
+        QSignalSpy safety(b, &WorkspaceBackups::backupWritten);
         b->confirmRestore();
-        QVERIFY(QTest::qWaitFor([&] { return zipsIn(folder).size() == 3; }, 30000));
+        QVERIFY(safety.wait(30000));
+        QCOMPARE(zipsIn(folder).size(), 3);
         QVERIFY(b->running());
         b->storageRefused(u"QuotaExceededError"_s);
         QVERIFY(!b->running());
@@ -505,8 +508,10 @@ private Q_SLOTS:
 
         // Stored: it goes on.
         QVERIFY(!plannedRestore(b, source).isEmpty());
+        safety.clear();
         b->confirmRestore();
-        QVERIFY(QTest::qWaitFor([&] { return zipsIn(folder).size() == 3; }, 30000));
+        QVERIFY(safety.wait(30000));
+        QCOMPARE(zipsIn(folder).size(), 3);
         b->storageFlushed();
         QTRY_VERIFY_WITH_TIMEOUT(!b->running(), 30000);
         QCOMPARE(ws->readFile(u"a.md"_s), u"- mniejsza\n"_s);
