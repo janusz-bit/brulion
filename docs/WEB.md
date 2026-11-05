@@ -5,8 +5,12 @@ przez **Qt for WebAssembly** (jednowątkowo). Po pierwszym wczytaniu działa **o
 PWA (można ją „zainstalować” z menu przeglądarki), a notatki trzyma w **IndexedDB**
 przeglądarki.
 
-* Wdrożenie docelowe: GitHub Pages pod `https://janusz-bit.github.io/brulion/` (działa też
-  dowolny serwer plików statycznych, pod dowolną ścieżką — wszystkie adresy są względne).
+* Dwie postacie, obie w każdym wydaniu: **jeden plik HTML** `brulion-web-<wersja>.html`,
+  otwierany z dysku bez serwera (niżej, „Jeden plik HTML”), i **strona** `brulion-web-<wersja>.zip`
+  na dowolny serwer plików statycznych, pod dowolną ścieżką — wszystkie adresy są względne (na
+  NixOS moduł `services.brulion-web`). Publicznej wersji w sieci nie ma: GitHub Pages projektu
+  (`https://janusz-bit.github.io/brulion/`) to repozytorium F-Droid (docs/ANDROID.md, „Własne
+  repozytorium F-Droid”).
 * Ograniczenia wobec aplikacji natywnych: przypomnienia tylko gdy karta/PWA jest otwarta,
   brak dostępu do folderów na dysku (import/eksport plików zamiast tego), synchronizacja z
   Nextcloud wymaga CORS (niżej), Syncthing niedostępny. Qt for WebAssembly nie ma bazy stref
@@ -83,18 +87,22 @@ leży w `~/.cache`).
 | `sw.js` | service worker (z `wasm/sw.js`): offline, kliknięcia w powiadomienia |
 | `manifest.webmanifest` | manifest PWA (z `wasm/`) |
 | `icons/` | ikony PWA (z `wasm/icons/` + `assets/logo.svg`) |
-| `.nojekyll` | GitHub Pages bez przetwarzania przez Jekyll |
+| `.nojekyll` | GitHub Pages (gdyby ktoś wdrażał tam stronę) bez przetwarzania przez Jekyll |
 
 Skrypt wstawia do `index.html` rozmiar `.wasm` (pasek postępu) i hash plików aplikacji
 (`?v=<hash>` w adresach — przeglądarka nigdy nie złoży `brulion.js` i `brulion.wasm` z dwóch
 różnych wydań), a do `sw.js` wersję cache (hash całej strony) i listę plików do zapamiętania.
 
+Obok powstaje `dist-wasm-single/brulion.html` (zmienna `SINGLE_FILE`): ta sama strona w jednym
+pliku, otwierana z dysku (niżej, „Jeden plik HTML”); `--assemble` składa oba od nowa.
+
 Wygenerowany przez Qt `build-wasm/src/app/brulion.html` to tylko domyślna strona Qt (bez PWA)
-— do szybkich prób wystarczy, do publikacji służy `dist-wasm/`.
+— do szybkich prób wystarczy, do publikacji służą `dist-wasm/` i `dist-wasm-single/`.
 
 ## Uruchamianie lokalnie
 
-Strony nie da się otworzyć z `file://` — potrzebny serwer HTTP:
+Strony z `dist-wasm/` nie da się otworzyć z `file://` — potrzebny serwer HTTP (z dysku otwiera
+się tylko jeden plik `dist-wasm-single/brulion.html`, niżej):
 
 ```sh
 python3 -m http.server 8000 --bind 127.0.0.1 --directory dist-wasm
@@ -132,8 +140,8 @@ Parametry adresu (do debugowania):
   `scripts/wasm-smoke.mjs --keyboard`. Wynik `?selftest=keyboard` zawiera początek tekstu
   edytowanego pola (`focusText`), nigdy pola hasła.
 
-Ścieżkę GitHub Pages da się sprawdzić lokalnie, kopiując `dist-wasm/` do `site/brulion/` i
-serwując `site/` (`http://127.0.0.1:8000/brulion/`).
+Stronę pod ścieżką (np. `/brulion/` na własnym serwerze) da się sprawdzić lokalnie, kopiując
+`dist-wasm/` do `site/brulion/` i serwując `site/` (`http://127.0.0.1:8000/brulion/`).
 
 ## Test dymny w przeglądarce bez okna
 
@@ -153,10 +161,13 @@ node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/
 kill %1                                                            # serwer wyłączony
 node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof \
   --loads 1 --selftest --expect-first 3 --screenshot offline.png   # offline z cache SW
+node scripts/wasm-smoke.mjs --url "file://$PWD/dist-wasm-single/brulion.html" \
+  --profile /tmp/prof-single --loads 2 --selftest --expect-first 1  # jeden plik HTML z dysku
 ```
 
 Drugie uruchomienie (nowy proces Chromium, ten sam profil, serwer wyłączony) dowodzi, że
 dane przetrwały restart przeglądarki, a aplikacja startuje offline z cache service workera.
+Adres `file://` (jeden plik HTML) nie ma service workera — skrypt go wtedy nie sprawdza.
 
 Pozostałe opcje:
 
@@ -267,14 +278,14 @@ Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez Swif
 sprawdza zbudowaną stronę w **Chromium i Firefoksie** — obrazy z internetu (niżej, „Obrazy
 z internetu”), rysik w edytorze rysunków („Rysik (nacisk)”), PDF-y („PDF w przeglądarce”) i części
 linku do strony w folderze (`linkparts.spec.mjs`, niżej). GitHub Actions uruchamia go w
-`wasm.yml` (zadanie `browsers`, po `build`; wdrożenie na Pages na nie czeka, wydanie też — wywołuje
-`wasm.yml`); raport HTML, zrzuty i ślady nieudanych testów są w artefakcie `web-browser-tests`
+`wasm.yml` (zadanie `browsers`, po `build`; wydanie na nie czeka — wywołuje `wasm.yml`); raport HTML, zrzuty i ślady nieudanych testów są w artefakcie `web-browser-tests`
 (7 dni). W CI nieudany test powtarza się raz (`retries: 1`; udany za drugim razem raport oznacza
 jako „flaky”). Lokalnie, po `scripts/wasm-build.sh`:
 
 ```sh
 scripts/web-test.sh --install                     # npm ci + Chromium i Firefox Playwrighta
 scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `playwright test`
+scripts/web-test.sh --single-file plik.html -- singlefile.spec.mjs   # inny jeden plik HTML
 (cd tests/web && npx playwright show-report)     # raport HTML (playwright-report/)
 ```
 
@@ -333,6 +344,10 @@ scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `play
     `Projekty/Remont mieszkania.md`), klika prawdziwą myszą przeglądarki w środek „Projekty” →
     trasa `{view: allPages, path: Projekty}`, po Alt+← w „Remont mieszkania” → strona; to samo
     stuknięciem w Chromium z dotykiem (412×915, `isMobile`); plik dziennika się nie zmienia.
+* **Jeden plik HTML** (`singlefile.spec.mjs`; plik z `--single-file`, domyślnie
+  `dist-wasm-single/brulion.html`): otwarty z `file://` startuje bez żadnego zapytania poza sobą
+  samym, nie rejestruje service workera, zwalnia tekst base64 i po przeładowaniu widzi swoje
+  notatki (liczniki `?selftest=storage` o 1 większe).
 * **Plik z eksportu**: w Chromium na `https://` Qt zapisuje przez File System Access
   (`showSaveFilePicker`), który wymaga gestu użytkownika — test podmienia go na stronie testowej
   na rejestrator; w Firefoksie i na stronie `http://` przychodzi zwykłe pobranie pliku.
@@ -348,24 +363,57 @@ scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `play
 
 ## Publikacja
 
-### GitHub Pages
+### W CI
 
-Robi to `.github/workflows/wasm.yml` (opis: `docs/RELEASE.md`): buduje stronę
-`scripts/wasm-build.sh --setup`, uruchamia test dymny w Chrome pod ścieżką `/brulion/` (start,
-trwałość po przeładowaniu i restarcie przeglądarki, pełny indeks 3000 notatek bez żadnego
-wejścia, start offline z service workera) i wdraża `dist-wasm/` na GitHub Pages. Sam z siebie
-nie startuje przy każdym pushu: uruchamia się go ręcznie z `main` albo pushem na `main`
-ze znacznikiem `[ci]` w opisie commita (i zmianami w `src/`, `wasm/`…). Wywołany
-z `release.yml` buduje `brulion-web-<wersja>.zip` do wydania, a po publikacji wydania
-`release.yml` wdraża tę samą stronę na Pages — strona to więc ostatnie wydanie (wydanie
-testowe jej nie zmienia), chyba że ktoś ręcznie wdroży nowszy `main`.
-Jednorazowo: *Settings → Pages → Build and deployment → Source: GitHub Actions* oraz
-*Settings → Environments → github-pages → Deployment branches and tags*: `main` i tag `v*`.
+Robi to `.github/workflows/wasm.yml` (opis: `docs/RELEASE.md`): buduje stronę i jeden plik
+`scripts/wasm-build.sh --setup` i uruchamia test dymny w Chrome — strona pod ścieżką `/brulion/`
+(start, trwałość po przeładowaniu i restarcie przeglądarki, pełny indeks 3000 notatek bez żadnego
+wejścia, start offline z service workera) i jeden plik z `file://` (start, emoji, trwałość po
+przeładowaniu i restarcie przeglądarki) — a potem testy Playwrighta (wyżej). Sam z siebie nie
+startuje przy każdym pushu: uruchamia się go ręcznie albo pushem na `main` ze znacznikiem `[ci]`
+w opisie commita (i zmianami w `src/`, `wasm/`…). Niczego nie wdraża; wywołany z `release.yml`
+daje do wydania `brulion-web-<wersja>.zip` (artefakt `brulion-web`) i
+`brulion-web-<wersja>.html` (artefakt `brulion-web-html`).
 
-GitHub Pages serwuje `.wasm` jako `application/wasm`; kompresją i nagłówkami cache
-(`max-age=600`) steruje GitHub — czy `.wasm` przychodzi skompresowany, widać w nagłówku
-`Content-Encoding`. Wersjonowane adresy `?v=` i service worker z `updateViaCache: 'none'`
-sprawiają, że nowe wydanie dociera przy następnym wczytaniu.
+### Jeden plik HTML
+
+`brulion-web-<wersja>.html` z wydania (ok. 20 MB) to cała wersja przeglądarkowa w jednym pliku:
+otwierasz go z dysku (dwuklik, „Otwórz plik…” w przeglądarce albo przeciągnięcie do jej okna),
+bez serwera i bez internetu. Lokalnie robi go `scripts/wasm-build.sh`
+(`dist-wasm-single/brulion.html`).
+
+* **Notatki** leżą w IndexedDB przeglądarki, tak jak na stronie. Chromium i Firefox mają jedną
+  pamięć dla wszystkich plików otwartych z dysku (origin `file://`): plik można przenieść, zmienić
+  mu nazwę albo zastąpić wersją z nowszego wydania — notatki zostają (sprawdzone w Chromium 156
+  i Firefoksie z Playwrighta 1.64.1). Inna przeglądarka albo inny profil ma własne notatki.
+* **Ta sama pamięć należy do każdego pliku HTML otwartego z dysku** w tej przeglądarce: inny
+  plik `.html` z dysku mógłby odczytać notatki. Otwieraj w niej z dysku tylko pliki, którym
+  ufasz (albo trzymaj Brulion w osobnym profilu przeglądarki).
+* Nie ma: instalacji jako aplikacja (PWA) i service workera (`file://` ich nie obsługuje),
+  **Udostępnij → Brulion** (wymaga zainstalowanej aplikacji) ani powiadomień przy zamkniętej
+  karcie; przypomnienia działają, gdy karta jest otwarta i przeglądarka pozwala na powiadomienia
+  stronom z dysku.
+* **Nextcloud:** strona z dysku ma origin `null`, a CORS dla `null` otwierałby WebDAV każdemu
+  plikowi z dysku — do synchronizacji służą aplikacje albo strona na własnym serwerze (niżej,
+  „Nextcloud (WebDAV) a CORS”). **Zdjęcia z internetu** pokażą się tylko z serwerów, które
+  pozwalają na to wszystkim stronom (`Access-Control-Allow-Origin: *`).
+* Przeglądarka musi mieć `DecompressionStream` (Chrome i Edge 80+, Firefox 113+, Safari 16.4+).
+
+Jak to działa: `scripts/wasm-single-file.py` bierze złożoną stronę z `dist-wasm/`. `brulion.wasm`
+kompresuje gzipem (poziom 9, bez daty: ten sam build daje ten sam plik) i wstawia w base64 do
+elementu `<script id="brulion-wasm" type="application/octet-stream">`; `qtloader.js` i
+`brulion.js` wstawia jako skrypty strony przed jej własnym (w miejsce komentarza
+`brulion-single-file` z `wasm/index.html`; `</script` zapisuje w nich jako `<\/script`, a
+`<!--` odrzuca), ikony zamienia na adresy `data:`, a link do manifestu usuwa. Odwołanie do
+jakiegokolwiek innego pliku strony przerywa skrypt — w pliku nie zostaje nic do pobrania.
+`wasm/index.html`, gdy znajdzie `#brulion-wasm`, niczego nie pobiera: dekoduje base64,
+rozpakowuje strumieniowo (`DecompressionStream('gzip')`) prosto do
+`WebAssembly.compileStreaming` (pasek postępu liczy rozpakowane bajty, „Rozpakowywanie
+aplikacji…”), zwalnia tekst base64 i nie rejestruje service workera. Testy:
+`tests/scripts/tst_wasm_single_file.sh` (ctest `tst_scripts_wasm_single_file`: prawdziwa
+`wasm/index.html` z atrapami aplikacji, `brulion.wasm` bajt w bajt, kolejność skryptów,
+`</script`, żadnych odwołań, powtarzalność, odrzucane buildy), test dymny w `wasm.yml` i
+`tests/web/singlefile.spec.mjs` (wyżej).
 
 ### Własny serwer
 
@@ -476,9 +524,10 @@ Uwagi:
   `WasmStorage::requestPersistentStorage()` prosi o `navigator.storage.persist()` (Firefox
   pyta użytkownika — wywoływać z akcji użytkownika). Regularny eksport/synchronizacja to
   jedyna pełna kopia zapasowa.
-* **Jedno źródło (origin) na GitHub Pages:** wszystkie projekty `janusz-bit.github.io/*`
-  dzielą IndexedDB. Inna strona pod tym adresem mogłaby odczytać notatki — dla prywatnych
-  danych lepiej hostować Brulion pod własną domeną.
+* **Jedno źródło (origin):** wszystkie strony jednego originu dzielą IndexedDB — np. na GitHub
+  Pages wszystkie projekty `<użytkownik>.github.io/*`, a z dysku wszystkie pliki `file://`
+  (wyżej, „Jeden plik HTML”). Inna strona tego originu mogłaby odczytać notatki — dla prywatnych
+  danych Brulion najlepiej hostować pod własną domeną (albo subdomeną).
 * Ustawienia przez `QSettings` (format natywny) Qt na WebAssembly trzyma w `localStorage`.
 * **Obrazy z internetu** (docs/SYNTAX.md §2): pamięć podręczna
   (`QStandardPaths::CacheLocation`/web-pictures) nie jest montażem IDBFS — leży w pamięci
@@ -566,7 +615,7 @@ tekst do poprawienia, **Dzisiejszy dziennik** albo **Nowa strona**, nic nie zapi
 
 * Tylko tekst i odnośniki. Pliki (`.md`, `.txt`) udostępnisz aplikacji na Androida; wersja
   w przeglądarce ich nie przyjmuje (cel udostępniania z plikami wymaga wysłania ich do serwera
-  albo do service workera, którego GitHub Pages ani prosty serwer nie zastąpią).
+  albo do service workera, którego statyczny serwer nie zastąpi).
 * Brulion jest już otwarty w innej karcie: udostępnienie trafia do tamtej karty (tam otwiera się
   okno), a nowa karta nie wczytuje aplikacji, tylko mówi „Przekazano do Brulionu otwartego
   w innej karcie.” i zamyka się, gdy przeglądarka na to pozwala. Gdy tamta karta nie odpowie
@@ -581,7 +630,7 @@ tekst do poprawienia, **Dzisiejszy dziennik** albo **Nowa strona**, nic nie zapi
   celów udostępniania nie obsługują — Brulionu w ich menu **Udostępnij** nie będzie.
 
 Technicznie: `wasm/manifest.webmanifest` ma `share_target` metodą GET z akcją `./` (sama
-aplikacja: działa bez service workera — GitHub Pages i nginx podają dla niej `index.html` — i offline
+aplikacja: działa bez service workera — statyczny serwer (np. nginx) podaje dla niej `index.html` — i offline
 z jego pamięci) i parametrami `share-title`, `share-text`, `share-url`. `index.html` zabiera je
 z paska adresu (`history.replaceState`: przeładowanie nie udostępnia drugi raz; inne parametry
 zostają) i przekazuje aplikacji jako `--share-query` (zakodowane jak formularz); zapytanie
@@ -620,7 +669,7 @@ Chrome na Androidzie nie pozwala stronie tworzyć powiadomień (`new Notificatio
 
 ## Nextcloud (WebDAV) a CORS
 
-Przeglądarka pozwala stronie z `https://janusz-bit.github.io` łączyć się z
+Przeglądarka pozwala stronie Brulionu (np. `https://notatki.example.com`) łączyć się z
 `https://chmura.example.com/remote.php/dav/…` tylko wtedy, gdy serwer odpowie nagłówkami
 **CORS** (także na zapytania wstępne `OPTIONS` dla `PROPFIND`, `PUT`, `MKCOL`, `DELETE` z
 nagłówkami `Authorization`, `Depth`, `If-Match`). Nextcloud domyślnie ich nie wysyła dla
@@ -631,12 +680,13 @@ WebDAV, więc synchronizacja z wersji przeglądarkowej „po prostu” nie zadzi
    jak wyżej). Zapytania są wtedy same-origin, CORS niepotrzebny, a dane w IndexedDB są
    oddzielone od innych stron.
 2. **Nagłówki CORS na reverse proxy przed Nextcloud** — tylko dla konkretnego originu
-   (`Access-Control-Allow-Origin: https://janusz-bit.github.io`, nigdy `*` z
+   (`Access-Control-Allow-Origin: https://notatki.example.com`, nigdy `*` z
    uwierzytelnianiem), `Access-Control-Allow-Methods: GET, PUT, DELETE, PROPFIND, MKCOL,
    MOVE, COPY, OPTIONS`, `Access-Control-Allow-Headers: Authorization, Content-Type, Depth,
    Destination, If-Match, If-None-Match, Overwrite`, `Access-Control-Expose-Headers: ETag,
    OC-ETag, DAV`, odpowiedź `204` na `OPTIONS` bez wymagania logowania. Uwaga: to otwiera
-   WebDAV dla skryptów z tego originu (na GitHub Pages — z każdego projektu użytkownika).
+   WebDAV dla skryptów z tego originu (na wspólnym originie, np. GitHub Pages — z każdego projektu
+   użytkownika).
    Istnieją też aplikacje Nextcloud dodające CORS dla WebDAV (np. WebAppPassword) —
    sprawdź ich aktualny stan i zakres przed użyciem.
 3. **Aplikacje natywne:** wersje NixOS i Android nie podlegają CORS i synchronizują się
@@ -979,6 +1029,7 @@ czy przeglądarka przekazuje nacisk i drugi koniec rysika.
 | `tests/web/`, `scripts/web-test.sh` | testy Playwright w Chromium i Firefoksie (obrazy z internetu, rysik) i ich uruchamianie (CI: `wasm.yml`, zadanie `browsers`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
+| `scripts/wasm-single-file.py`, `tests/scripts/tst_wasm_single_file.sh`, `tests/web/singlefile.spec.mjs` | jeden plik HTML z `dist-wasm/` i jego testy |
 | `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium; z `--text` tekst wpisany na rysunku |
 
 Ikony po zmianie logo:

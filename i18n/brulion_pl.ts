@@ -502,6 +502,11 @@
         <source>Habits</source>
         <translation>Nawyki</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="685"/>
+        <source>Go to page… (&gt; for commands)</source>
+        <translation>Przejdź do strony… („&gt;” — polecenia)</translation>
+    </message>
 </context>
 <context>
     <name>BAccentDialog</name>
@@ -962,6 +967,11 @@
         <location filename="../src/app/qml/components/BQuickSwitcher.qml" line="35"/>
         <source>Create page “%1”</source>
         <translation>Utwórz stronę „%1”</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/components/BQuickSwitcher.qml" line="56"/>
+        <source>Search the notes for “%1”</source>
+        <translation>Szukaj „%1” w notatkach</translation>
     </message>
 </context>
 <context>
@@ -11370,6 +11380,46 @@
         <source>1 h</source>
         <translation>1 godz.</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="109"/>
+        <source>Favorites</source>
+        <translation>Ulubione</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="110"/>
+        <source>Recent</source>
+        <translation>Ostatnie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="111"/>
+        <source>Pages (the folder tree)</source>
+        <translation>Strony (drzewo folderów)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="629"/>
+        <source>Order of the sections</source>
+        <translation>Kolejność sekcji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="630"/>
+        <source>Favorites, recent pages and the folder tree beside the views' icons, top to bottom.</source>
+        <translation>Ulubione, ostatnie strony i drzewo folderów obok ikon widoków, od góry do dołu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="651"/>
+        <source>%1. %2</source>
+        <translation>%1. %2</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="677"/>
+        <source>Move %1 up</source>
+        <translation>Przesuń „%1” wyżej</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="685"/>
+        <source>Move %1 down</source>
+        <translation>Przesuń „%1” niżej</translation>
+    </message>
 </context>
 <context>
     <name>ShellAboutDialog</name>
@@ -12102,6 +12152,79 @@
     </message>
 </context>
 <context>
+    <name>ShellRail</name>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="26"/>
+        <source>Journals</source>
+        <translation>Dziennik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="27"/>
+        <source>Calendar</source>
+        <translation>Kalendarz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="28"/>
+        <source>Tasks</source>
+        <translation>Zadania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="29"/>
+        <source>Habits</source>
+        <translation>Nawyki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="30"/>
+        <source>All pages</source>
+        <translation>Wszystkie strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="31"/>
+        <source>Tags</source>
+        <translation>Tagi</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="32"/>
+        <source>Graph</source>
+        <translation>Graf</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="33"/>
+        <source>Search</source>
+        <translation>Szukaj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="47"/>
+        <source>Views</source>
+        <translation>Widoki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="90"/>
+        <source>Switch notebook</source>
+        <translation>Przełącz notatnik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="170"/>
+        <source>Import notes</source>
+        <translation>Importuj notatki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="186"/>
+        <source>Settings</source>
+        <translation>Ustawienia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="227"/>
+        <source>Brulion documentation</source>
+        <translation>Dokumentacja Brulionu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellRail.qml" line="240"/>
+        <source>Open another notebook…</source>
+        <translation>Otwórz inny notatnik…</translation>
+    </message>
+</context>
+<context>
     <name>ShellRenameDialog</name>
     <message>
         <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="63"/>
@@ -12445,21 +12568,6 @@
 <context>
     <name>ShellSidebar</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="411"/>
-        <source>Switch notebook</source>
-        <translation>Przełącz notatnik</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="872"/>
-        <source>Brulion documentation</source>
-        <translation>Dokumentacja Brulionu</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="885"/>
-        <source>Open another notebook…</source>
-        <translation>Otwórz inny notatnik…</translation>
-    </message>
-    <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="296"/>
         <source>Sidebar</source>
         <translation>Pasek boczny</translation>
@@ -12474,41 +12582,6 @@
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1005"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="492"/>
-        <source>Journals</source>
-        <translation>Dziennik</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="493"/>
-        <source>Calendar</source>
-        <translation>Kalendarz</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="494"/>
-        <source>Tasks</source>
-        <translation>Zadania</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="495"/>
-        <source>All pages</source>
-        <translation>Wszystkie strony</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="496"/>
-        <source>Tags</source>
-        <translation>Tagi</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="497"/>
-        <source>Graph</source>
-        <translation>Graf</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="498"/>
-        <source>Search</source>
-        <translation>Szukaj</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="537"/>
@@ -12647,11 +12720,6 @@
         <translation>Pokazuj otwartą stronę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="522"/>
-        <source>Import notes</source>
-        <translation>Importuj notatki</translation>
-    </message>
-    <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="968"/>
         <source>Open in new tab</source>
         <translation>Otwórz w nowej karcie</translation>
@@ -12660,11 +12728,6 @@
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="983"/>
         <source>Open in new window</source>
         <translation>Otwórz w nowym oknie</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml"/>
-        <source>Habits</source>
-        <translation>Nawyki</translation>
     </message>
 </context>
 <context>
@@ -12994,6 +13057,83 @@
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="369"/>
         <source>Split view</source>
         <translation>Podziel widok</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="197"/>
+        <source>Search or type a command…</source>
+        <translation>Szukaj lub wpisz polecenie…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="409"/>
+        <source>Favorite</source>
+        <translation>Ulubione</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="421"/>
+        <source>Rename</source>
+        <translation>Nazwa</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="432"/>
+        <source>Move</source>
+        <translation>Przenieś</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="443"/>
+        <source>History</source>
+        <translation>Historia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="466"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="474"/>
+        <source>Mode</source>
+        <translation>Tryb</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="475"/>
+        <source>Document</source>
+        <translation>Dokument</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="476"/>
+        <source>Outline</source>
+        <translation>Konspekt</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="477"/>
+        <source>Source</source>
+        <translation>Źródło</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="500"/>
+        <source>Open in</source>
+        <translation>Otwórz w</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="518"/>
+        <source>Window</source>
+        <translation>Okno</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="529"/>
+        <source>Side panel</source>
+        <translation>Panel boczny</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="539"/>
+        <source>Unsplit</source>
+        <translation>Jeden widok</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="539"/>
+        <source>Split</source>
+        <translation>Podziel</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="622"/>
+        <location filename="../src/app/io/ioselftest.cpp" line="386"/>
+        <source>Notebook</source>
+        <translation>Notatnik</translation>
     </message>
 </context>
 <context>

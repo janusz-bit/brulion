@@ -77,6 +77,8 @@ Item {
     readonly property bool viewFile: !!_view && _view.fileRoute === true
     /// The view's editor shows the page's Markdown source (source mode).
     readonly property bool viewSourceMode: !!_view && _view.sourceMode === true
+    /// The view's note mode, "document" | "outline" ("" for a view without a note to switch).
+    readonly property string viewNoteMode: !!_view && typeof _view.noteMode === "string" ? _view.noteMode : ""
     /// The view swipes sideways from the left edge itself (the calendar's grids): no edge strip.
     readonly property bool viewEdgeSwipe: !!_view && _view.edgeSwipe === true
 

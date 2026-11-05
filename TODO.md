@@ -12,6 +12,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Rozszerzalność jak w Emacsie i TiddlyWiki** — użytkownik zmienia i rozszerza Brulion z poziomu
   notatnika (własne polecenia, widoki, makra, zachowania); zakres i bezpieczeństwo do ustalenia
   (notatki przychodzą z synchronizacji i importu).
+* **Mały język do układu interfejsu (w stylu Typst)** — plik tekstowy opisujący, co i w jakiej
+  kolejności pokazują pasek ikon, panel stron, menu „Więcej”, karty i dolna nawigacja (ikony,
+  podpisy, grupy). Dziś ustawia się to tylko w Ustawienia → Wygląd → Układ (ukryte pozycje,
+  kolejność sekcji panelu, przyciski dolnej nawigacji).
 * **Ustawienia notatnika w notatkach** — ustawienia notatnika zapisane jako notatka (strona
   w notatniku, edytowalna jak każda inna i synchronizowana razem z nim) zamiast
   `.brulion/config.json`; do ustalenia format, przeniesienie istniejących ustawień i co zostaje

@@ -48,6 +48,7 @@ stdenv.mkDerivation (finalAttrs: {
         ../docs
         ../scripts
         ../fastlane
+        ../wasm
       ]
     );
   };
@@ -102,8 +103,8 @@ stdenv.mkDerivation (finalAttrs: {
 
   doCheck = false;
   # Without these the tests that need them skip themselves: git (tst_scripts_release), python3
-  # and hostname (tst_scripts_bench_budget), node (tst_uibench_*), fc-match and DejaVu
-  # (tst_fallback_fonts_*).
+  # (tst_scripts_wasm_single_file) and hostname (tst_scripts_bench_budget), node (tst_uibench_*),
+  # fc-match and DejaVu (tst_fallback_fonts_*).
   nativeCheckInputs = [
     git
     python3

@@ -6,8 +6,9 @@
   Custom shell based on Qt's wasm_shell.html: loading screen, download progress, error and
   exit screens, service worker registration (offline PWA), the share target's launch (handed to
   the app, or to Brulion already open in another tab). scripts/wasm-build.sh fills in the
-  @BRULION_…@ placeholders. All URLs are relative, so the site works under any base path
-  (GitHub Pages: /brulion/).
+  @BRULION_…@ placeholders. All URLs are relative, so the site works under any base path.
+  scripts/wasm-single-file.py turns the built page into the single-file version (one .html opened
+  from disk, file://): the app inside the page, no service worker, no web app manifest.
 -->
 <html lang="pl">
   <head>
@@ -152,6 +153,7 @@
       <noscript>Brulion potrzebuje JavaScriptu i WebAssembly — włącz JavaScript w przeglądarce.</noscript>
     </div>
 
+    <!-- brulion-single-file: the app's scripts (scripts/wasm-single-file.py) -->
     <script>
       (function () {
         'use strict';
@@ -177,11 +179,20 @@
         var ASSET_VERSION = '@BRULION_ASSET_VERSION@';
         var assetQuery = ASSET_VERSION.charAt(0) === '@' ? '' : '?v=' + ASSET_VERSION;
 
+        // The single-file version (scripts/wasm-single-file.py; the release's
+        // brulion-web-<version>.html, opened from disk): qtloader.js and brulion.js are scripts of
+        // the page before this one, brulion.wasm is gzip-compressed in base64 in the script
+        // element #brulion-wasm. There is no server to fetch from, and file:// has no service
+        // worker and no installable web app (docs/WEB.md "Jeden plik HTML").
+        var embeddedWasm = document.getElementById('brulion-wasm');
+        var singleFile = !!embeddedWasm;
+
         // Polish by default, English for English browsers (like the app's own translation).
         var english = /^en\b/i.test(navigator.language || '');
         var T = english ? {
           title: 'Loading Brulion…',
           download: 'Downloading the app…',
+          unpack: 'Unpacking the app…',
           start: 'Starting…',
           storage: 'Loading notes…',
           locked: 'Brulion is open in another tab. Close it to continue here.',
@@ -198,6 +209,7 @@
         } : {
           title: 'Wczytywanie Brulionu…',
           download: 'Pobieranie aplikacji…',
+          unpack: 'Rozpakowywanie aplikacji…',
           start: 'Uruchamianie…',
           storage: 'Wczytywanie notatek…',
           locked: 'Brulion jest otwarty w innej karcie. Zamknij ją, aby kontynuować tutaj.',
@@ -353,8 +365,9 @@
           }).observe(screen, { childList: true });
         }
 
-        // Download progress: bytes of the uncompressed file vs. its known size, read from a copy
-        // of the response body.
+        // Download (single file: unpacking) progress: bytes of the uncompressed file vs. its known
+        // size, read from a copy of the response body.
+        var loadingText = singleFile ? T.unpack : T.download;
         function showDownloadProgress(body) {
           var reader = body.getReader();
           var loaded = 0;
@@ -367,11 +380,18 @@
               }
               loaded += chunk.value.byteLength;
               setProgress(loaded / WASM_SIZE);
-              setStatus(T.download + ' ' + Math.min(100, Math.floor(loaded * 100 / WASM_SIZE)) + '%');
+              setStatus(loadingText + ' ' + Math.min(100, Math.floor(loaded * 100 / WASM_SIZE)) + '%');
               return next();
             });
           }
           next().catch(function () {});
+        }
+        // The progress of a .wasm response's body (downloaded or unpacked).
+        function withProgress(response) {
+          if (response.body && WASM_SIZE > 0 && typeof ReadableStream !== 'undefined') {
+            showDownloadProgress(response.clone().body);
+          }
+          return response;
         }
         // Downloads the .wasm. compileStreaming gets the browser's own Response: only then can the
         // browser keep the compiled code for the next visits (V8's WebAssembly code cache goes by
@@ -385,15 +405,31 @@
             if (type !== 'application/wasm') {
               response = new Response(response.body, { headers: { 'Content-Type': 'application/wasm' } });
             }
-            if (response.body && WASM_SIZE > 0 && typeof ReadableStream !== 'undefined') {
-              showDownloadProgress(response.clone().body);
-            }
-            return response;
+            return withProgress(response);
+          });
+        }
+        // The single file's brulion.wasm, decompressed as a stream (DecompressionStream: Chrome 80,
+        // Firefox 113, Safari 16.4). The base64 text leaves the page once read.
+        function base64Bytes(text) {
+          if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(text);
+          var binary = atob(text);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return bytes;
+        }
+        function embeddedWasmResponse() {
+          return new Promise(function (resolve) {
+            if (typeof DecompressionStream === 'undefined') throw new Error('DecompressionStream is missing');
+            var gzipped = base64Bytes(embeddedWasm.textContent.trim());
+            embeddedWasm.textContent = '';
+            var body = new Blob([gzipped]).stream().pipeThrough(new DecompressionStream('gzip'));
+            resolve(withProgress(new Response(body, { headers: { 'Content-Type': 'application/wasm' } })));
           });
         }
         function compileWasm(url) {
-          if (WebAssembly.compileStreaming) return WebAssembly.compileStreaming(fetchWasm(url));
-          return fetchWasm(url).then(function (r) { return r.arrayBuffer(); }).then(WebAssembly.compile);
+          var response = singleFile ? embeddedWasmResponse() : fetchWasm(url);
+          if (WebAssembly.compileStreaming) return WebAssembly.compileStreaming(response);
+          return response.then(function (r) { return r.arrayBuffer(); }).then(WebAssembly.compile);
         }
 
         function loadScript(src) {
@@ -418,7 +454,7 @@
 
         function registerServiceWorker() {
           var params = new URLSearchParams(location.search);
-          if (!('serviceWorker' in navigator) || !window.isSecureContext || params.has('nosw')) return;
+          if (singleFile || !('serviceWorker' in navigator) || !window.isSecureContext || params.has('nosw')) return;
           navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function (e) {
             console.warn('Brulion: service worker not registered', e);
           });
@@ -523,7 +559,7 @@
         }
 
         function start() {
-          setStatus(T.download);
+          setStatus(loadingText);
           var params = new URLSearchParams(location.search);
           // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs,keyboard,share
           var args = [];
@@ -566,7 +602,8 @@
           var wasmModule = compileWasm('brulion.wasm' + assetQuery);
           wasmModule.catch(function () {});
 
-          Promise.all([loadScript('qtloader.js' + assetQuery), loadScript('brulion.js' + assetQuery)])
+          (singleFile ? Promise.resolve()
+            : Promise.all([loadScript('qtloader.js' + assetQuery), loadScript('brulion.js' + assetQuery)]))
             .then(function () {
               if (typeof qtLoad !== 'function' || typeof window.brulion_entry !== 'function') {
                 throw new Error('qtloader.js / brulion.js did not load');

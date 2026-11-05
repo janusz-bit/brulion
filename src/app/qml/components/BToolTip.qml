@@ -9,15 +9,18 @@ import Brulion
 //   BToolTip { parent: someItem; visible: hover.hovered; text: qsTr("Wklej") }
 //
 // Inverse colours (ink on paper, paper on ink), small radius, fades in after `delay`.
-// `below: true` places it under the parent (for controls at the top edge).
+// `below: true` places it under the parent (for controls at the top edge), `beside: true` to its
+// right (a column of buttons at the window's left edge: the sidebar's rail).
 T.ToolTip {
     id: control
 
     property string shortcut
     property bool below: false
+    property bool beside: false
 
-    x: parent ? Math.round((parent.width - implicitWidth) / 2) : 0
-    y: below ? (parent ? parent.height + 6 : 0) : -implicitHeight - 6
+    x: !parent ? 0 : beside ? parent.width + 6 : Math.round((parent.width - implicitWidth) / 2)
+    y: !parent ? 0 : beside ? Math.round((parent.height - implicitHeight) / 2)
+                            : below ? parent.height + 6 : -implicitHeight - 6
     margins: 6
     delay: Theme.touchUi ? 0 : 550
     timeout: Theme.touchUi ? 2500 : -1

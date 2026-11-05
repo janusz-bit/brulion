@@ -16,6 +16,8 @@ keystore.properties
 .claude/scheduled_tasks.lock
 /dist-android/
 /dist-wasm/
+/dist-wasm-single/
+/dist-fdroid/
 /tests/screenshots/
 /dist-appimage/
 /dist-source/
@@ -23,3 +25,4 @@ aqtinstall.log
 /tests/web/node_modules/
 /tests/web/test-results/
 /tests/web/playwright-report/
+.claude/worktrees/

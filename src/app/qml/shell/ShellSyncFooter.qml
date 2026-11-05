@@ -4,14 +4,16 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ShellSyncFooter — the sidebar's sync status line: where the notes are synced (Nextcloud
-// status from the sync integration via AppController.syncStatus, a Syncthing folder, this
-// browser, this device only) with "Sync now" when a sync engine is available. Clicking it opens
-// the sync center.
+// ShellSyncFooter — the sync status: where the notes are synced (Nextcloud status from the sync
+// integration via AppController.syncStatus, a Syncthing folder, this browser, this device only).
+// A line with "Sync now" when a sync engine is available, or `compact`: the status icon alone
+// (the sidebar's rail, ShellRail), its text as the tooltip. Clicking it opens the sync center.
 T.ItemDelegate {
     id: control
 
     property real safeBottom: 0
+    /// Only the icon, in a square button (the rail).
+    property bool compact: false
 
     readonly property var status: AppController.syncStatus
     // Without a sync engine an error can still stop the sync (another notebook syncs with the
@@ -44,11 +46,14 @@ T.ItemDelegate {
         return AppController.isWasm ? "monitor" : "hard-drive"
     }
 
-    implicitWidth: Math.max(implicitBackgroundWidth, implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(Theme.touchUi ? 52 : 40, implicitContentHeight + topPadding) + safeBottom
-    leftPadding: Theme.touchUi ? 16 : 14
-    rightPadding: 6
-    bottomPadding: safeBottom
+    readonly property int squareSize: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight + 4
+
+    implicitWidth: compact ? squareSize : Math.max(implicitBackgroundWidth, implicitContentWidth + leftPadding + rightPadding)
+    implicitHeight: compact ? squareSize
+                            : Math.max(Theme.touchUi ? 52 : 40, implicitContentHeight + topPadding) + safeBottom
+    leftPadding: compact ? (squareSize - Theme.iconSize) / 2 : Theme.touchUi ? 16 : 14
+    rightPadding: compact ? leftPadding : 6
+    bottomPadding: compact ? 0 : safeBottom
     hoverEnabled: !Theme.touchUi
     focusPolicy: Qt.StrongFocus
 
@@ -75,6 +80,7 @@ T.ItemDelegate {
             }
         }
         BText {
+            visible: !control.compact
             Layout.fillWidth: true
             text: control.statusText
             variant: "small"
@@ -82,7 +88,7 @@ T.ItemDelegate {
             elide: Text.ElideRight
         }
         BIconButton {
-            visible: AppController.syncAvailable
+            visible: AppController.syncAvailable && !control.compact
             enabled: control.syncState !== "syncing"
             iconName: "refresh-cw"
             label: qsTr("Sync now")
@@ -92,8 +98,10 @@ T.ItemDelegate {
     }
 
     background: Rectangle {
+        radius: control.compact ? Theme.radius : 0
         color: control.pressed ? Theme.bgPressed : control.hovered ? Theme.bgHover : "transparent"
         Rectangle {
+            visible: !control.compact
             width: parent.width
             height: 1
             color: Theme.border
@@ -101,8 +109,18 @@ T.ItemDelegate {
         BFocusRing {
             target: control
             visible: control.visualFocus
-            inset: true
-            targetRadius: 0
+            inset: !control.compact
+            targetRadius: control.compact ? Theme.radius : 0
+        }
+    }
+
+    Loader {
+        active: control.compact && (control.hovered || control.visualFocus)
+        sourceComponent: BToolTip {
+            parent: control
+            text: control.statusText
+            beside: true
+            visible: (control.hovered && !control.down) || control.visualFocus
         }
     }
 }

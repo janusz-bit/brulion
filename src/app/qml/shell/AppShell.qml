@@ -354,9 +354,30 @@ FocusScope {
 
     onWidthChanged: if (!Theme.narrow && drawer.opened) drawer.close()
 
+    // The rail of views at the window's left edge (wide windows; phones have it in the drawer):
+    // it stays when the sidebar's page panel is hidden, not in focus mode.
+    Loader {
+        id: rail
+        active: !Theme.narrow
+        visible: active && !shell.focusMode
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: shell.keyboardRoom
+        width: visible && item ? item.implicitWidth : 0
+        sourceComponent: ShellRail {
+            objectName: "shellRail"
+            topInset: shell.safe.top
+            bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
+        }
+    }
+
     SplitView {
         id: split
-        anchors.fill: parent
+        anchors.left: rail.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
         // Everything ends at the keyboard's top: an editor in the side panel docks its toolbar
         // on the keyboard as well as the main view's.
         anchors.bottomMargin: shell.keyboardRoom
@@ -395,6 +416,7 @@ FocusScope {
                 Layout.preferredHeight: shell.safe.top
             }
             ShellTopBar {
+                id: topBar
                 objectName: "shellTopBar"
                 visible: !shell.focusMode
                 Layout.fillWidth: true
@@ -412,9 +434,11 @@ FocusScope {
                 pictureAsText: shell.routeView.viewPictureAsText
                 pdf: shell.routeView.viewPdf
                 fileOnly: shell.routeView.viewFile
+                noteMode: shell.routeView.viewNoteMode
                 onMenuClicked: drawer.open()
                 onSidebarToggled: shell.toggleSidebar()
                 onPaletteRequested: shell.openPalette()
+                onSwitcherRequested: shell.openSwitcher()
                 onCaptureRequested: shell.openCapture()
                 onNewPageRequested: shell.openNewPage("")
                 onRenameRequested: (path) => shell.openRename(path, false)
@@ -549,7 +573,8 @@ FocusScope {
     Drawer {
         id: drawer
         objectName: "shellDrawer"
-        width: Math.min(320, shell.width * 0.86)
+        // The rail and the page panel beside it.
+        width: Math.min(340, shell.width * 0.88)
         height: shell.height
         edge: Qt.LeftEdge
         // (Not in focus mode: nothing but the text; its button or Back leave it first.)
@@ -590,8 +615,25 @@ FocusScope {
         bottomPadding: 0
 
         Loader {
+            id: drawerRail
+            active: Theme.narrow
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: item ? item.implicitWidth : 0
+            sourceComponent: ShellRail {
+                objectName: "drawerRail"
+                topInset: shell.safe.top
+                bottomInset: shell.navigationBar
+                onNavigated: drawer.close()
+            }
+        }
+        Loader {
             id: drawerSidebar
-            anchors.fill: parent
+            anchors.left: drawerRail.right
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
             active: Theme.narrow
             sourceComponent: ShellSidebar {
                 topInset: shell.safe.top
@@ -638,6 +680,13 @@ FocusScope {
         // stays true until the exit transition ends), it neither queries nor follows the
         // revision: every save bumps it.
         pages: switcher.visible && Workspace.revision >= 0 ? Workspace.switcherPages(switcher.query, 60) : []
+        // The top bar's search field opens it: "> " turns to the commands, the last result
+        // searches the notes' text.
+        placeholderText: qsTr("Go to page… (> for commands)")
+        offerSearch: true
+        commandPrefix: true
+        onSearchRequested: (text) => AppController.search(text)
+        onCommandsRequested: (text) => shell.openPalette(text)
         onPageChosen: (page) => AppController.openPage(page.path)
         onCreateRequested: (name) => {
             const path = Workspace.createPage(name)
@@ -914,7 +963,8 @@ FocusScope {
         // --screenshot waits until the popup has opened (its enter transition over), or at once
         // when it is open already (DevTools.holdScreenshot).
         const target = ({ palette: palette, switcher: switcher, capture: capture, newPage: newPage,
-                          newFolder: newPage, move: moveDialog, about: about, drawer: drawer })[name] || null
+                          newFolder: newPage, move: moveDialog, about: about, drawer: drawer,
+                          more: topBar.moreMenuPopup })[name] || null
         if (target && !target.opened) {
             DevTools.holdScreenshot(true)
             const release = () => {
@@ -943,6 +993,7 @@ FocusScope {
             }
             case "about": shell.openAbout(); break
             case "drawer": drawer.open(); break
+            case "more": topBar.openMoreMenu(); break
             }
         })
     }

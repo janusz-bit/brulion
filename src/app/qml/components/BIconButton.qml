@@ -25,6 +25,7 @@ T.Button {
     property string shortcut
     property bool showToolTip: true
     property bool toolTipBelow: false
+    property bool toolTipBeside: false
     property string unavailable: ""
     /// What the tooltip says: the label, or why the button does nothing now.
     readonly property string toolTipText: unavailable !== "" ? unavailable : label
@@ -117,6 +118,7 @@ T.Button {
             text: control.toolTipText
             shortcut: control.unavailable === "" ? control.shortcut : ""
             below: control.toolTipBelow
+            beside: control.toolTipBeside
             visible: ((control.hovered && !control.down) || control.visualFocus) && !Theme.touchUi || control._touchTip
             onClosed: control._touchTip = false
         }

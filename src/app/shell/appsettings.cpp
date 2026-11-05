@@ -36,6 +36,7 @@ constexpr auto kDarkSurface = "ui/darkSurface";
 constexpr auto kUiFontFamily = "ui/fontFamily";
 constexpr auto kDensity = "ui/density";
 constexpr auto kSidebarHidden = "ui/sidebar/hidden";
+constexpr auto kSidebarSections = "ui/sidebar/sections";
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs";
 constexpr auto kCaptureButton = "ui/captureButton";
 constexpr auto kEditorFont = "editor/font";
@@ -209,6 +210,18 @@ QStringList normalizedTabs(const QStringList &views)
     return out;
 }
 
+/// All the sidebar's page sections: the known ones in their order, the others after them in the
+/// default order.
+QStringList normalizedSections(const QStringList &ids)
+{
+    QStringList out = knownIds(ids, AppSettings::sidebarSectionIds());
+    for (const QString &d : AppSettings::sidebarSectionIds()) {
+        if (!out.contains(d))
+            out.append(d);
+    }
+    return out;
+}
+
 /// A list stored in the INI file (one entry comes back as a plain string).
 QStringList storedList(const QVariant &v)
 {
@@ -307,6 +320,11 @@ QStringList AppSettings::sidebarItems()
 {
     return {u"journals"_s, u"calendar"_s, u"tasks"_s,  u"habits"_s,    u"allPages"_s,
             u"tags"_s,     u"graph"_s,    u"search"_s, u"favorites"_s, u"recent"_s};
+}
+
+QStringList AppSettings::sidebarSectionIds()
+{
+    return {u"favorites"_s, u"recent"_s, u"pages"_s};
 }
 
 QStringList AppSettings::bottomNavViews()
@@ -416,6 +434,28 @@ void AppSettings::setSidebarItemShown(const QString &id, bool shown)
     if (!shown)
         hidden.append(id);
     setSidebarHidden(hidden);
+}
+
+QStringList AppSettings::sidebarSections() const
+{
+    return normalizedSections(storedList(m_settings->value(key(kSidebarSections))));
+}
+
+void AppSettings::setSidebarSections(const QStringList &ids)
+{
+    if (store(key(kSidebarSections), normalizedSections(ids), sidebarSections()))
+        Q_EMIT sidebarSectionsChanged();
+}
+
+void AppSettings::moveSidebarSection(const QString &id, int delta)
+{
+    QStringList sections = sidebarSections();
+    const qsizetype from = sections.indexOf(id);
+    const qsizetype to = from + (delta < 0 ? -1 : 1);
+    if (from < 0 || delta == 0 || to < 0 || to >= sections.size())
+        return;
+    sections.swapItemsAt(from, to);
+    setSidebarSections(sections);
 }
 
 QStringList AppSettings::bottomNavTabs() const

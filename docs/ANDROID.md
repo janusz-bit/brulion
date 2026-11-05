@@ -881,6 +881,59 @@ BRULION_UPDATE_CHECK=OFF scripts/android-build.sh
 Test: `tst_shell_appupdates` sprawdza, że `AppUpdates::checkBuiltIn()` idzie za opcją, a w
 buildzie z `OFF` — że aplikacja niczego nie pokazuje i o nic nie pyta.
 
+## Własne repozytorium F-Droid
+
+Pod `https://janusz-bit.github.io/brulion/` (GitHub Pages projektu) jest repozytorium F-Droid
+Brulionu: strona z kodem QR i odciskiem klucza, a w `repo/` samo repozytorium. Dodaje się je
+w F-Droid (albo Droid-ify, Neo Store) przyciskiem **Dodaj do F-Droid** na stronie, kodem QR albo
+ręcznie (Ustawienia → Repozytoria → „+”: adres `https://janusz-bit.github.io/brulion/repo`
+i odcisk ze strony). Potem F-Droid sam proponuje aktualizacje.
+
+* **Te same APK co w wydaniach na GitHubie**, podpisane kluczem wydań — Brulion zainstalowany
+  z GitHuba aktualizuje się z repozytorium bez odinstalowania (i odwrotnie). APK z
+  f-droid.org, gdyby F-Droid podpisywał go sam (wyżej, „Podpis: decyzja dla właściciela”), miałby
+  inny podpis.
+* Trzy ostatnie wydania (bez wydań testowych); APK ma ok. 90 MB, więc razem ok. 270 MB z limitu
+  1 GB strony GitHub Pages. Opis, ikona, zrzuty i „co nowego” każdej wersji pochodzą
+  z `fastlane/metadata/android` (wyżej), kategorie i odnośniki
+  z `packaging/fdroid-repo/io.github.januszbit.brulion.yml`.
+* Komunikat o nowej wersji z GitHuba (wyżej) zostaje — to ten sam APK; zwykle F-Droid
+  zaproponuje aktualizację w tym samym czasie.
+
+**Jak powstaje.** `.github/workflows/fdroid.yml` uruchamia `scripts/fdroid-repo.sh` z
+fdroidserver 2.4.5 (PyPI): pobiera APK trzech ostatnich opublikowanych wydań (`gh release
+download`), kopiuje metadane (fastlane jako `metadata/<id>/<język>/`, a dla każdego APK wpis
+`Builds:` z jego `versionCode` z nazwy pliku — tylko tak F-Droid łączy z wersją jej
+`changelogs/<versionCode>.txt`; najnowszy to `CurrentVersionCode`), czyta opublikowany
+`repo/index-v2.json` (zachowuje daty dodania wersji, które już tam są), uruchamia `fdroid update`
+(indeks `index-v1.jar`, `index-v2.json` + `entry.jar` podpisane kluczem repozytorium, kod QR
+`repo/index.png`), dokłada stronę `packaging/fdroid-repo/index.html` z adresem i odciskiem,
+a workflow wdraża całość na GitHub Pages. Wydanie (`release.yml`) wywołuje go po publikacji, poza
+wydaniem testowym i APK z kluczem jednorazowym; można go też uruchomić ręcznie
+(`gh workflow run fdroid.yml`). Lokalnie (bez wdrożenia, APK z folderu):
+
+```sh
+read -r -s -p 'Hasło klucza repozytorium: ' FDROID_KEYSTORE_PASS; echo; export FDROID_KEYSTORE_PASS
+nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner -c \
+  env FDROID_KEYSTORE=~/.local/share/brulion/brulion-fdroid-repo.p12 \
+  scripts/fdroid-repo.sh -a dist-android -o dist-fdroid   # dist-fdroid/index.html, dist-fdroid/repo/
+```
+
+**Klucz repozytorium** (osobny od klucza APK: podpisuje tylko indeks) tworzy
+`scripts/fdroid-new-keystore.sh` — poza repozytorium (domyślnie
+`~/.local/share/brulion/brulion-fdroid-repo.p12`), wypisuje odcisk i polecenia `gh secret set`
+dla sekretów `FDROID_KEYSTORE_BASE64`, `FDROID_KEYSTORE_PASS` i `FDROID_KEY_ALIAS` (domyślnie
+`brulion-fdroid`). **Zrób kopię zapasową klucza i hasła:** F-Droid przyjmuje indeks tylko
+podpisany tym kluczem; nowy klucz oznacza, że każdy musi usunąć repozytorium i dodać je od nowa.
+Jednorazowo trzeba też włączyć GitHub Pages ze źródłem „GitHub Actions” i dopuścić do środowiska
+`github-pages` gałąź `main` i tagi `v*` (docs/RELEASE.md, „Jednorazowa konfiguracja
+repozytorium”).
+
+Testy: `tests/scripts/tst_fdroid_repo.sh` (ctest `tst_scripts_fdroid_repo`) uruchamia skrypt
+z atrapami `fdroid`, `keytool`, `gh` i `curl` — wybór wydań, konfiguracja fdroid (hasła tylko
+jako `{env: …}`, plik tylko dla właściciela), wpisy `Builds:`, metadane, strona z odciskiem
+i odrzucane dane; prawdziwy `fdroid update` biegnie w `fdroid.yml`.
+
 ## Budowanie APK
 
 Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące

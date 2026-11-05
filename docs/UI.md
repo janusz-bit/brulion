@@ -89,22 +89,45 @@ components — no Material/Fusion look, so all targets look identical.
   the card nor the switch (`updates.supported` is false, also with `--update-available`).
 * **Focus mode** (F8; "Statistics and focus mode" below): on a page or the journal no sidebar,
   top bar, side panel or bottom navigation.
-* **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
-  right **side panel**. One 1-px hairline between them: the split handle's (`BSplitHandle`, which
-  also highlights on hover and while dragging); the sidebar and the side panel draw no edge of
-  their own there (the drawer keeps its edge).
-  * Sidebar (`ShellSidebar`): the notebook's name, the **Przełącz notatnik** button (the
-    `repeat` icon; a menu of the recent notebooks — the current one checked, one click switches
-    — then „Dokumentacja Brulionu” and „Otwórz inny notatnik…” (the start screen); a recent
-    notebook whose folder is gone is not recreated: a warning, and it leaves the list) and a
-    new-page button; navigation Dziennik,
-    Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione (shown once a page is
-    starred — the page header's ☆, the Więcej menu, a tree row's „Dodaj do ulubionych”, the
-    palette); Ostatnie (up to 5 pages opened lately, without the one shown — the tree highlights
-    that one —; hidden while there are none); Strony (the folder tree — see "Folders" below); a
-    sync status footer (opens the sync center).
+* **Wide (≥ 900 px):** the **rail** of views at the window's left edge, then a `SplitView` — the
+  **sidebar** (the page panel) | **top bar** + current view | optional right **side panel**. One
+  1-px hairline between them: the split handle's (`BSplitHandle`, which also highlights on hover
+  and while dragging); the sidebar and the side panel draw no edge of their own there (the drawer
+  keeps its edge), the rail its own line.
+  * Rail (`ShellRail`, also the drawer's left column on phones): at the top the notebook — its
+    first letter on the accent; a click opens the **Przełącz notatnik** menu (the recent notebooks
+    — the current one checked, one click switches — then „Dokumentacja Brulionu” and „Otwórz inny
+    notatnik…” (the start screen); a recent notebook whose folder is gone is not recreated: a
+    warning, and it leaves the list); then the views as icon buttons, their names and shortcuts
+    in tooltips to the right: Dziennik, Kalendarz, Zadania, Nawyki, Wszystkie strony, Tagi, Graf,
+    Szukaj (the selected one tinted, the accent's bar at the rail's edge; the entries hidden in
+    Settings → Wygląd → Układ left out; in the drawer also Importuj notatki; they scroll when the
+    window is too low); at the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
+    its text in the tooltip; a click opens the sync center) and Ustawienia. The top bar's sidebar
+    button hides only the page panel: the rail stays (not in focus mode).
+  * Sidebar (`ShellSidebar`, the page panel): the notebook's name and a new-page button, then
+    its sections in the order chosen in Settings → Wygląd → Układ → „Kolejność sekcji”
+    (`AppSettings.sidebarSections`, `ui/sidebar/sections`; Ulubione, Ostatnie, Strony by default;
+    the ones before the tree are the list's header, the ones after it its footer): Ulubione (shown
+    once a page is starred — the page header's ☆, the Więcej menu, a tree row's „Dodaj do
+    ulubionych”, the palette); Ostatnie (up to 5 pages opened lately, without the one shown — the
+    tree highlights that one —; hidden while there are none); Strony (the folder tree — see
+    "Folders" below). Ulubione and Ostatnie can be hidden there too.
   * Top bar (`ShellTopBar`): sidebar toggle, back / forward, the title (a breadcrumb for pages
-    in folders), Szukaj, Paleta poleceń, Szybka notatka, side panel toggle and **Więcej** (⋮).
+    in folders), the **search field** „Szukaj lub wpisz polecenie…” (the page switcher's key in
+    it, Ctrl+O by default: it opens the switcher, `BQuickSwitcher` — pages by name, „Utwórz
+    stronę…”, and last „Szukaj „…” w notatkach” (the search view with the query); a query starting
+    with „>” turns to the command palette with the rest typed), Szybka notatka, side panel toggle
+    and **Więcej** (⋯; ⋮ on phones). Więcej: a row of the page's actions as icons with short
+    names (Ulubione — the star tinted when the page is one —, Nazwa, Przenieś, Historia; a daily
+    note has no Nazwa nor Przenieś); **Tryb**, a segmented switch Dokument | Konspekt | Źródło
+    (the note's mode, `ShellRouteView.viewNoteMode`, and its source mode; a picture has „Pokaż
+    jako tekst” / „Pokaż obraz” instead, a PDF or another file neither); **Otwórz w** — Nowa
+    karta, Okno, Panel boczny, Podziel (phones: „Otwórz w nowej karcie”); then Dodaj właściwość,
+    Znajdź w notatce, Pokaż w drzewie, Otwórz w innej aplikacji (a PDF, an attachment), Przenieś
+    do kosza; on phones Paleta poleceń; the **Notatnik** submenu (Nowa strona, Centrum
+    synchronizacji, Importuj notatki, Import i eksport, Zamień w notatniku, Sprzątanie, Kosz, O
+    Brulionie) and Ustawienia.
     Under it, with two tabs or more, the **tab bar** (`ShellTabBar`), and the view: one pane or two
     side by side (the split view) — "Tabs, split view and windows".
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
@@ -117,12 +140,12 @@ components — no Material/Fusion look, so all targets look identical.
     in the panel, as the header's chips hide while the open properties panel shows them); closing
     the panel, pinning a page there or switching to Konspekt / Kalendarz brings the section back
     at once. Narrow windows have no side panel and always show the section.
-* **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the bottom bar's **Menu**, or a
+* **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the bottom bar's **Menu**, or a
   swipe to the right from the left edge; the top bar's ☰ whenever the bottom navigation is not
   there — a view whose own bar replaces it, the drawing editor, or the on-screen keyboard up; a
   swipe to the left on the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
   navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
-  `bottomInset` = `AppShell.navigationBar`) keep the notebook row and the sync footer clear of
+  `bottomInset` = `AppShell.navigationBar`) keep the notebook button, the notebook row and the sync status clear of
   them — counted once: the Basic style pads a Drawer by the SafeArea margins itself, so the
   shell sets its top and bottom padding to 0 (on Android the doubled bars cost about 190 px of
   the tree). On touch UIs the swipe starts in a 24 px strip (`drawer.dragMargin`) that
@@ -288,8 +311,8 @@ in rendered text" below).
   change — the "+" menu's "Pokazuj otwartą stronę" (`ui/sidebar/revealCurrent`, on by default)
   turns that off; a collapsed "Strony" stays collapsed (revealed when opened again), only "Pokaż
   w drzewie" opens it. "Strony" counts pages without the daily notes. The revealed row (also a
-  new folder's, "Pokaż w drzewie"'s) stays wholly in the list's visible part, above the sync
-  footer: `ShellSidebar.revealedPath` is placed again (`placeList()`: the top unless the list
+  new folder's, "Pokaż w drzewie"'s) stays wholly in the list's visible part, above the system's
+  navigation bar: `ShellSidebar.revealedPath` is placed again (`placeList()`: the top unless the list
   is kept scrolled away, then the row with the least scrolling) whenever the list's or its
   header's height changes or the sidebar shows, until the user scrolls the list (a flick, the
   wheel or touchpad, the scroll bar, the arrow keys, a row dragged to its edge) or a route shows
@@ -3452,7 +3475,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--share-query <query>` | the browser version's share target: `share-title=…&share-text=…&share-url=…` as `wasm/index.html` passes a share launch's parameters (`notebook::sharedContentFromQuery`, `AppController::receiveShareQuery`); works on every platform (ctest `tst_shell_share`) |
 | `--open <file>…` | the files to offer in the share dialog ("Otwórz za pomocą": the desktop entry's `Exec=brulion --open %F`, the Windows installer's `"…\brulion.exe" --open "%1"`): every argument after it is a file — paths relative to the working folder or `file://` URLs —, never an option, the options are the arguments before it (`notebook::splitOpenArguments`); a file of the open notebook opens as its page; copies are saved, the files are never changed; without files a plain start. A second launch sends them to the running Brulion (`share`, ipc/appmessage.h) |
 | `--update-available <version>` | show the message about a new version as if `<version>` were the latest release, on any platform, without asking GitHub; for this run only (the `update` screenshot) |
-| `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher` (the query as if typed, the caret after it), `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
+| `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher` (the query as if typed, the caret after it), `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer`, `more` (the top bar's “Więcej” menu) |
 | `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, `properties` — the page's properties panel expanded, nothing focused, the view at the top: the `ui` benchmark's screen —, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit; with `--popup` also once that popup has opened — its enter transition over, so a shot never catches it half faded in (`DevTools.holdScreenshot`; at most 5 s longer, then with a warning) |
 | `--dump-layout <file>` | with `--screenshot`: write what the window shows (texts with colours and fonts, targets, boxes, theme tokens) as JSON for the UI benchmark (`src/app/ui/layoutdump.h`), from the same frame |

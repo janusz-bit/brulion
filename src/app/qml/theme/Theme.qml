@@ -295,7 +295,7 @@ QtObject {
 
     readonly property int measure: 680          // editor's comfortable text width (~85 characters)
     readonly property int measureList: 760      // a list of entries' width (the calendar's agenda: time, title, page)
-    readonly property int sidebarWidth: dense ? 248 : 272
+    readonly property int sidebarWidth: dense ? 232 : 256  // the page panel, beside the rail of views
     readonly property int dialogWidthSm: 400
     readonly property int dialogWidth: 520
     readonly property int dialogWidthLg: 760

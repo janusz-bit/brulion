@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Browser version (Qt for WebAssembly) -> dist-wasm/: a static site (offline PWA) for GitHub
-# Pages or any web server. Idempotent: re-running reuses the build directory and the
+# Browser version (Qt for WebAssembly) -> dist-wasm/: a static site (offline PWA) for any web
+# server, and dist-wasm-single/brulion.html: the same app in one HTML file opened from disk
+# (scripts/wasm-single-file.py). Idempotent: re-running reuses the build directory and the
 # toolchains, and rebuilds only what changed. See docs/WEB.md.
 #
-#   scripts/wasm-build.sh               # configure + build + assemble dist-wasm/
+#   scripts/wasm-build.sh               # configure + build + assemble dist-wasm/ and the single file
 #   scripts/wasm-build.sh --setup       # first install emsdk + Qt for WebAssembly if missing
-#   scripts/wasm-build.sh --assemble    # only re-assemble dist-wasm/ from an existing build
+#   scripts/wasm-build.sh --assemble    # only re-assemble both from an existing build
 #   scripts/wasm-build.sh --clean       # start with an empty build directory
 #
 # Environment (defaults in brackets):
@@ -16,6 +17,7 @@
 #   QT_HOST        desktop Qt of the same version, for moc/rcc/qmlcachegen/lrelease
 #                  [$QT_ROOT/6.11.2/gcc_64]
 #   BUILD_DIR [build-wasm]  DIST_DIR [dist-wasm]  BUILD_TYPE [MinSizeRel]  JOBS [nproc]
+#   SINGLE_FILE    the single-file version [dist-wasm-single/brulion.html]
 #
 # Needs cmake >= 3.24, ninja, python3, git; --setup also uvx (or aqt) for aqtinstall. On NixOS
 # the script enters a `nix shell` with these by itself (and needs programs.nix-ld).
@@ -38,6 +40,7 @@ QT_WASM=${QT_WASM:-$QT_ROOT/$QT_VERSION/wasm_singlethread}
 QT_HOST=${QT_HOST:-$QT_ROOT/$QT_VERSION/gcc_64}
 BUILD_DIR=${BUILD_DIR:-build-wasm}
 DIST_DIR=${DIST_DIR:-dist-wasm}
+SINGLE_FILE=${SINGLE_FILE:-dist-wasm-single/brulion.html}
 BUILD_TYPE=${BUILD_TYPE:-MinSizeRel}
 JOBS=${JOBS:-$(nproc 2>/dev/null || echo 4)}
 
@@ -208,6 +211,10 @@ sed -e "s/@BRULION_CACHE_VERSION@/$cache_version/g" \
 
 grep -qE '@BRULION_[A-Z_]+@' "$DIST_DIR/index.html" "$DIST_DIR/sw.js" && die "unreplaced placeholder in index.html/sw.js"
 
+# The same app in one HTML file, opened from disk (docs/WEB.md "Jeden plik HTML").
+log "assembling $SINGLE_FILE"
+python3 scripts/wasm-single-file.py "$DIST_DIR" "$SINGLE_FILE" >/dev/null || die "the single file failed"
+
 # ---- report ---------------------------------------------------------------------------------
 human() { awk -v b="$1" 'BEGIN { printf "%.2f MiB (%d B)", b / 1048576, b }'; }
 wasm_gzip=$(gzip -9 -c "$DIST_DIR/brulion.wasm" | wc -c | tr -d ' ')
@@ -221,3 +228,4 @@ if command -v brotli >/dev/null; then
 fi
 echo "brulion.js    raw $(human "$js_size")  gzip -9 $(human "$js_gzip")"
 echo "total site    $(du -sk "$DIST_DIR" | cut -f1) KiB"
+echo "single file   $(human "$(wc -c <"$SINGLE_FILE" | tr -d ' ')")  ($SINGLE_FILE)"

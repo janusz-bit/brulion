@@ -12,7 +12,7 @@ One C++/QML code base, four targets, all built against **Qt 6.11.2** (CMake acce
 | **NixOS / Linux desktop** | Qt from nixpkgs: flake package + NixOS module; AppImage (Qt from aqt) for other distributions | a folder (e.g. a Syncthing folder) | `org.freedesktop.Notifications` over D-Bus, tray as fallback; timed in-app (`ReminderScheduler`), the app can live hidden in the tray (`--hidden`, autostart); the tray calendar from the icon's menu (or its click, a setting) |
 | **Windows** 10/11 x86_64 (test version, docs/WINDOWS.md) | MSVC 2022 + Qt from aqt, `windeployqt`; portable ZIP and a per-user Inno Setup installer from GitHub Actions | a folder (default `Documents\Brulion`) | toast notifications through C++/WinRT (`WindowsToastBus`: Snooze/Done/OK, alarms on screen with a looping sound; the tray icon's messages when toasts are off), timed in-app (`ReminderScheduler`) while the app runs, also hidden in the tray; optional start at sign-in (the Run key, `Autostart`); a click on the tray icon opens the tray calendar (a setting; the system clock's flyout cannot be replaced) |
 | **Android** (9+, API 28–36) | Qt for Android (aqt) + `androiddeployqt`, signed APK from GitHub Actions | a folder on shared storage (Syncthing-Fork; "All files access") or app storage + Nextcloud | native `AlarmManager` alarms (Kotlin via JNI) — fire while the app is closed and after a reboot; while it is closed a periodic system job reads the notebook (after one Nextcloud sync) in a process of its own and arms what it finds (`src/app/background`, docs/ANDROID.md "Sprawdzanie notatek w tle"); "Zrobione" taps queued natively (`DoneQueue.kt`) and written by C++ at once while the app is in front, else when it returns to the front or starts (Qt's event loop is paused in the background); home-screen widgets drawn by Kotlin from a snapshot the app publishes (their quick add writes today's journal itself, see below) |
-| **Browser** | Qt for WebAssembly (single-threaded) + emsdk, offline PWA shell (`wasm/`) on GitHub Pages | Emscripten IDBFS (IndexedDB) + import/export, Nextcloud sync | web Notification API (service worker where needed) while the page is open |
+| **Browser** | Qt for WebAssembly (single-threaded) + emsdk, offline PWA shell (`wasm/`) for any web server, and the same in one HTML file opened from disk | Emscripten IDBFS (IndexedDB) + import/export, Nextcloud sync | web Notification API (service worker where needed) while the page is open |
 
 On the desktop (Linux, Windows) a command line for scripts and AI agents comes with it:
 `brulion-cli` (also `brulion cli …`), with an MCP server (`brulion-cli mcp`) — see "Command line" below and
@@ -568,13 +568,15 @@ redirect check does not apply there); a failed one is told as CORS or mixed cont
 * WebAssembly: `scripts/wasm-build.sh` — Qt 6.11.2 `wasm_singlethread` + matching emsdk; our
   HTML shell, manifest and service worker in `wasm/` (offline PWA; the shell gives every
   `setTimeout` with a wait 2 ms more, as Qt 6.11.2's dispatcher stops all its timers when one
-  runs early — docs/WEB.md "Ograniczenia techniczne"); deployed to GitHub Pages — docs/WEB.md.
+  runs early — docs/WEB.md "Ograniczenia techniczne"); `scripts/wasm-single-file.py` packs the
+  built site into one HTML file opened from disk (`file://`, no server) — docs/WEB.md.
   Browser tests of the built site: `scripts/wasm-smoke.mjs` (Chrome over a dependency-free
   DevTools client) and `tests/web` (an npm project CMake ignores: Playwright in Chromium and
   Firefox — pictures from the internet, the pen, the shell —, `scripts/web-test.sh`).
 * CI (`.github/workflows`): `ci.yml` (Nix build + flake checks on x86_64/aarch64, aqt build
   with ASan/UBSan and `-Werror`, actionlint/shellcheck/clang-format), `android.yml`,
-  `appimage.yml`, `windows.yml`, `wasm.yml` (Pages, after the smoke test and the Playwright tests
-  — job `browsers`; the Android emulator's browsers — job `keyboard-android` — do not hold it
-  back), `release.yml` (tag `v*` → draft release with
-  APK, AppImages, the Windows installer and ZIP, web ZIP, sources, checksums) — docs/RELEASE.md.
+  `appimage.yml`, `windows.yml`, `wasm.yml` (the site and the single file, the smoke test and the
+  Playwright tests — job `browsers`; the Android emulator's browsers — job `keyboard-android`),
+  `fdroid.yml` (Brulion's own F-Droid repository on GitHub Pages — docs/ANDROID.md),
+  `release.yml` (tag `v*` → draft release with APK, AppImages, the Windows installer and ZIP,
+  web ZIP and single HTML file, sources, checksums; then the F-Droid repository) — docs/RELEASE.md.
