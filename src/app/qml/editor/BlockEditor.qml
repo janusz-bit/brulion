@@ -525,6 +525,11 @@ FocusScope {
     function laterEnsureEditVisible(): void {
         editVisibleLater.restart()
     }
+    /// The reader moved the page (a page view's own scrolling): the list no longer keeps its top
+    /// in view while rows above grow.
+    function markUserMoved(): void {
+        list.userMoved = true
+    }
     /// revealRow(row) once the event loop is idle.
     function laterRevealRow(row: int): void {
         revealLater.target = row
