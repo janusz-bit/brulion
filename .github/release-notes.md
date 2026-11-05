@@ -2,6 +2,9 @@
 
 **Nowości w {{VERSION}}**
 
+Wersja 0.10.0 nie została opublikowana, więc jej nowości trafiają do Ciebie dopiero w tym wydaniu.
+
+* **Wprowadzenie przy pierwszym uruchomieniu** — kilka kroków, które można pominąć: język, wygląd, uprawnienia potrzebne przypomnieniom na tym urządzeniu (z próbnym powiadomieniem) i ustawienia pierwszego notatnika. Uruchomisz je ponownie w **Ustawienia → Ogólne → Uruchom wprowadzenie ponownie**. Domyślny język interfejsu to teraz angielski, a domyślny wygląd — ciemny, z czarnym tłem; kto wcześniej nie wybrał języka, polski włączy w **Settings → General** (Ustawienia → Ogólne).
 * **Przypomnienia z innych urządzeń na Androidzie** — przypomnienie dopisane na komputerze zadzwoni na telefonie, choć Brulion jest zamknięty: co 15, 30 albo 60 minut Android sam sprawdza notatki w tle (przy Nextcloud najpierw je synchronizuje) i nastawia, co znalazł; usunięte i przesunięte przypomnienia znikają albo się przesuwają. **Ustawienia → Przypomnienia → Sprawdzaj notatki w tle**, z czasem ostatniego sprawdzenia.
 * **Pasek widoków i wyszukiwarka u góry** — przy lewej krawędzi okna stały pasek z ikonami widoków, notatnikiem, stanem synchronizacji i ustawieniami; pole **Szukaj albo wpisz polecenie…** na górnym pasku otwiera przełącznik stron, a `>` paletę poleceń. Menu **Więcej** ma akcje strony jako ikony i przełącznik trybu (dokument, konspekt, źródło). Kolejność sekcji panelu stron (ulubione, ostatnie, drzewo) ustawisz w **Ustawienia → Wygląd**.
 * **Repozytorium F-Droid** — Brulion ma własne repozytorium F-Droid ({{PAGES_URL}}): dodajesz je raz, a aktualizacje przychodzą przez F-Droid.
@@ -17,7 +20,7 @@ Z wersji 0.9.1: karty, podział widoku i osobne okna, sprawdzanie pisowni, podgl
 * Obliczenia w blokach `calc` (jednostki, waluty, procenty) i tabele z formułami.
 * Synchronizacja: Syncthing (zwykły folder, scalanie kopii konfliktów) albo Nextcloud/WebDAV (w tle, scalanie trójstronne, ochrona przed masowym usuwaniem).
 * Import z Obsidiana, Logseq, Notion, Evernote, Google Keep, Microsoft To Do, Joplin, Simplenote, Roam, Bear, Trilium, Markdown, HTML i iCalendar; eksport do 12 formatów (m.in. PDF, Word i dokument dla programu Pandoc) oraz druk.
-* Interfejs po polsku (angielski do wyboru), jasny i ciemny motyw, własny kolor akcentu i czcionki.
+* Interfejs po angielsku i po polsku, ciemny i jasny motyw, własny kolor akcentu i czcionki.
 * Rysunki w notatkach: pióro z naciskiem rysika, kształty, tekst, ciemne tło, rysowanie na slajdach i PDF-ach; pliki SVG, które Obsidian pokazuje, a excalidraw.com otwiera do edycji.
 * Android: widżety na ekranie głównym i „Udostępnij → Brulion”.
 

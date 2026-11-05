@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.10.1 — 5 listopada 2026
+
+**Uwaga**
+- Wersja 0.10.0 nie została opublikowana: wydanie zatrzymały dwa testy interfejsu, które na wolniejszych maszynach do budowania (Windows, Nix) klikały, zanim menu i lista sekcji były gotowe — poprawione w tej wersji. Wszystkie nowości wersji 0.10.0, opisane poniżej, są dostępne od tej wersji.
+
+**Nowe**
+- **Wprowadzenie przy pierwszym uruchomieniu** — kilka kroków, które można pominąć: język, wygląd, uprawnienia potrzebne przypomnieniom na tym urządzeniu (z próbnym powiadomieniem) i ustawienia pierwszego notatnika. Uruchomisz je ponownie w **Ustawienia → Ogólne → Uruchom wprowadzenie ponownie**. Po aktualizacji z wcześniejszej wersji wprowadzenie się nie pokazuje.
+
+**Zmiany**
+- Domyślny język interfejsu to angielski, a domyślny wygląd — ciemny, z czarnym tłem. Polski wybierzesz we wprowadzeniu albo w **Settings → General** (Ustawienia → Ogólne).
+
 ## 0.10.0 — 5 listopada 2026
 
 **Nowe**
