@@ -33,6 +33,7 @@ qt_add_library(brulion_editor STATIC
     blocktext.h blocktext.cpp
     blockrender_p.h
     blocklistmodel.h blocklistmodel.cpp blocklistmodel_transclusions.cpp
+    blockrowdata.h blockrowdata.cpp
     queryhost.h
     queryresultmodel.h queryresultmodel.cpp
     pagecontroller.h pagecontroller.cpp pagecontroller_selection.cpp pagecontroller_properties.cpp

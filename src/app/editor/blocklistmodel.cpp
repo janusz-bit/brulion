@@ -36,7 +36,8 @@ namespace {
 const QList<int> StructuralRoles{
         BlockListModel::DepthRole,      BlockListModel::HasChildrenRole, BlockListModel::CollapsedRole,
         BlockListModel::VisibleRole,    BlockListModel::IsEditingRole,   BlockListModel::IsSelectedRole,
-        BlockListModel::IsZoomRootRole, BlockListModel::PrevKindRole,    BlockListModel::SelectionEdgeRole};
+        BlockListModel::IsZoomRootRole, BlockListModel::PrevKindRole,    BlockListModel::SelectionEdgeRole,
+        BlockListModel::ShownRole};
 
 /// Where a selected row sits in the band of selected visible rows (selectionEdge role).
 enum SelectionEdge : quint8 { NoEdge, SingleEdge, FirstEdge, MiddleEdge, LastEdge };
@@ -323,6 +324,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {SelectionEdgeRole, "selectionEdge"},
             {NoteModeOnlyRole, "noteModeOnly"},
             {PropertiesInfoRole, "propertiesInfo"},
+            {ShownRole, "shown"},
     };
 }
 
@@ -1757,7 +1759,8 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case LangRole: return cachedShape(row).lang;
     case HasChildrenRole: return st.hasChildren;
     case CollapsedRole: return st.collapsed;
-    case VisibleRole: return st.visible;
+    case VisibleRole:
+    case ShownRole: return st.visible;
     case TaskStatusRole: return taskStatusName(cachedShape(row).task);
     case BlockIdRole: return e.blockId;
     case IsEditingRole: return st.editing;
