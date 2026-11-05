@@ -320,6 +320,11 @@ QVariantList BlockViews::propertyValueRows(const QVariantList &suggestions, bool
     for (const QString &h : held)
         heldLower.append(h.toLower());
     const QByteArray ctx = context.toUtf8();
+    // The word for a page's row, translated in the QML file asking (marked here for lupdate:
+    // `context` is one of these).
+    static const char *const pageWords[] = {QT_TRANSLATE_NOOP("PropertyRow", "page"),
+                                            QT_TRANSLATE_NOOP("PropertyListValue", "page")};
+    Q_UNUSED(pageWords);
     QVariantList out;
     for (const QVariant &v : suggestions) {
         const QVariantMap s = v.toMap();

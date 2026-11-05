@@ -53,6 +53,7 @@
 #include <QRegularExpression>
 #include <QScopeGuard>
 #include <QScreen>
+#include <QStyleHints>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUrlQuery>
@@ -1695,6 +1696,9 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         check(waitFor([&] { return openMenus(window) == 1; }) && view() == u"tasks",
               "a long press or right-click on a task opens its menu");
         check(closeMenu(), "Escape closes the task's menu");
+        // Past the double-click interval since the long press's release: a tap right after it
+        // is the second click of a double click (no clicked()).
+        settle(QGuiApplication::styleHints()->mouseDoubleClickInterval() + 50);
         activate(findType("TasksRow"), 0.75);
         check(waitFor([&] { return view() != u"tasks"; }) && openMenus(window) == 0,
               "a tap or click on a task opens its note, without a menu");
@@ -3732,7 +3736,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
                       [&] {
                           link = findShown(pdfView(), [](QQuickItem *item) {
                               return item->objectName() == u"pdfLink"_s
-                                     && item->property("modelData").toMap().value(u"page"_s).toInt() == 2;
+                                     && item->property("page").toInt() == 2;
                           });
                           return opened(1) && link != nullptr;
                       },
@@ -3741,11 +3745,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         const bool webLink = findShown(pdfView(),
                                        [](QQuickItem *item) {
                                            return item->objectName() == u"pdfLink"_s
-                                                  && item->property("modelData")
-                                                             .toMap()
-                                                             .value(u"url"_s)
-                                                             .toString()
-                                                             .startsWith(u"https://example.org/"_s);
+                                                  && item->property("url").toString().startsWith(
+                                                          u"https://example.org/"_s);
                                        })
                              != nullptr;
         // (Only page 1 has links: three of its six — never the script, the javascript: address, the launch.)
@@ -5168,7 +5169,7 @@ void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
                           if (!pictures)
                               return false;
                           for (QQuickItem *child : pictures->childItems()) {
-                              if (child->property("modelData").toMap().value(u"path"_s).toString() == cover)
+                              if (child->property("path").toString() == cover)
                                   tile = child;
                           }
                           return tile != nullptr;
@@ -7124,10 +7125,13 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     //    that page ready to type (and typing creates it).
     {
         const QString guide = u"Witaj w Brulionie.md"_s;
+        // The controller of the page view shown for `path`: views a Loader has let go of (no parent
+        // item) may still be around with their controllers until they are deleted.
         const auto controllerFor = [window](const QString &path) -> QObject * {
             const QList<QObject *> found = window->findChildren<QObject *>(u"pageController"_s);
             for (QObject *c : found) {
-                if (c->property("path").toString() == path)
+                const auto *shownView = qobject_cast<QQuickItem *>(c->parent());
+                if (c->property("path").toString() == path && (!shownView || shownView->parentItem()))
                     return c;
             }
             return nullptr;

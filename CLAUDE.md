@@ -69,5 +69,8 @@ builds) run on the x86_64 laptop via `flock <lock> laptop-run …` or in GitHub 
   `InlineRenderer` with escaping — never pass raw note HTML to QML `Text`. The calculator is
   our own parser (no script engine evaluation of note content).
 * UI strings: `qsTr()`/`tr()` with English source text; Polish translation in `i18n/`.
+* QML is compiled to C++ in full (qmlcachegen): typed functions and properties, no closures,
+  no JavaScript String/Array methods (`Js` singleton instead) — rules in `docs/UI.md` "Compiled
+  QML". `-Werror` builds and ctest `tst_qml_compiled` fail on anything left to the interpreter.
 * Comments and identifiers in English; English is the app's first language (default UI language,
   also in the browser; README starts in English and has a Polish section); other user docs in Polish.

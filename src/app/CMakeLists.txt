@@ -210,6 +210,20 @@ foreach(_area IN LISTS _brulion_app_areas)
     include(${_area})
 endforeach()
 
+# Builds that treat warnings as errors (scripts/dev-build.sh, CI, the AppImage, Android with
+# BRULION_WERROR) also fail right after linking the app when a binding or function of its QML is
+# left to the interpreter (docs/UI.md "Compiled QML"; ctest tst_qml_compiled checks the same).
+option(BRULION_QML_COMPILED_CHECK "Fail the build when any of the app's QML is not compiled to C++"
+    ${BRULION_WERROR})
+if(BRULION_QML_COMPILED_CHECK AND (NOT DEFINED QT_QML_GENERATE_AOTSTATS OR QT_QML_GENERATE_AOTSTATS))
+    add_custom_command(TARGET brulion POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                -DLIST=${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/module_brulion.aotstatslist
+                -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+                -P ${PROJECT_SOURCE_DIR}/cmake/BrulionQmlCompiledCheck.cmake
+        VERBATIM)
+endif()
+
 # Android package (APK/AAB via androiddeployqt): docs/ANDROID.md, scripts/android-build.sh.
 # android/ holds the manifest, resources and the Kotlin sources (alarms, permissions,
 # notification taps). ABIs come from the configure option QT_ANDROID_ABIS (default: the ABI

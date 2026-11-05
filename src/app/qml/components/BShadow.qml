@@ -57,7 +57,7 @@ Item {
             width: shadow.width + 2 * grow
             height: shadow.height + 2 * grow
             radius: shadow.radius + grow
-            color: Theme.shadow.alpha(shadow.specOpacity * 0.85 / Math.min(6, Math.ceil(shadow.specBlur / 4)))
+            color: Theme.shadow.alpha(Math.min(1, shadow.specOpacity * 0.85 / Math.min(6, Math.ceil(shadow.specBlur / 4))))
             antialiasing: true
         }
     }

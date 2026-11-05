@@ -403,6 +403,7 @@ QtObject {
     // ---- Helpers -------------------------------------------------------------------------
     /// `c` with alpha `a` (0–1).
     function alpha(c: color, a: real): color {
-        return c.alpha(a)
+        // Clamped like Qt.rgba() (color.alpha() warns outside [0, 1]).
+        return c.alpha(Math.max(0, Math.min(1, a)))
     }
 }

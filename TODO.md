@@ -222,3 +222,7 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
   powiększanie i przeciąganie stron w trakcie układania; Windows z kartą graficzną (Direct3D 11)
   i przeglądarka na telefonie; pomiar na Raspberry Pi (rysowanie programowe) i w emulatorze
   Androida.
+* **Widoki, które Loader powłoki odłączył, zostają w pamięci** — po przejściu do innego widoku
+  stary `PageView` (z edytorem, kontrolerem strony i jego plikiem) nie jest niszczony: w
+  `tst_shell_qml` jest ich w jednej chwili 26, przed kompilacją QML do C++ tak samo. Sprawdzić, co je
+  trzyma (ShellRouteView, karty, stan widoku), i zwolnić je.

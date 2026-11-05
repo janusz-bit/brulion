@@ -3502,7 +3502,8 @@ docs/WEB.md). A new emoji in the UI or the syntax: add it to `brulionEmoji()`, r
 Every binding, signal handler and function of the app's QML is compiled to C++ ahead of time
 by qmlcachegen (Qt Quick Compiler); none is left to the QML interpreter. ctest
 `tst_qml_compiled` reads qmlcachegen's statistics of the build and lists anything that is not
-compiled, with qmlcachegen's reason:
+compiled, with qmlcachegen's reason; builds with `BRULION_WERROR` (`scripts/dev-build.sh`, CI) fail
+on it right after linking the app:
 
 ```sh
 cmake --build build --target brulion
@@ -3512,59 +3513,128 @@ cmake -DLIST=build/src/app/.rcc/qmlcache/module_brulion.aotstatslist -DSOURCE_DI
 
 The statistics are the per-file `.aotstats` that qmlcachegen writes with `--dump-aot-stats`
 (`all_aotstats` prints Qt's own summary). Qt 6.11 writes them for `qt_add_qml_module()`'s files only;
-`src/app/CMakeLists.txt` turns them on for the areas' `qt_target_qml_sources()` too. Compiling
-fails only on what Qt 6.11 (and 6.12) cannot compile; the rules below avoid it.
+`src/app/CMakeLists.txt` turns them on for the areas' `qt_target_qml_sources()` too. Only the first
+reason of each function is listed. A file is compiled again only when it changes: after changing
+a component's API, `touch` the files that use it before reading the list. Everything below was
+verified with Qt 6.11.2 (6.12 compiles the same).
 
 **Types everywhere.** Functions get annotated parameters and return types
-(`function f(text: string, at: int): bool`, `: void`); signal handlers name their parameters
-(`onX: (a, b) => …`). Properties have their real type, not `var`: `list<string>`, `list<var>`,
-`list<int>`, `rect`, `point`, a component or C++ type. `pragma ComponentBehavior: Bound` in every
-file, and delegates declare what they use as `required property`.
+(`function f(text: string, at: int): bool`, `: void`; no default values — a call passes every
+argument); signal handlers name their parameters (`onX: (a, b) => …`). Properties have their real
+type, not `var`: `list<string>`, `list<var>`, `list<int>`, `rect`, `point`, a component or C++
+type. `pragma ComponentBehavior: Bound` in every file, ids of outer components qualified
+(`root.x`).
 
-**What does not compile (Qt 6.11), and what to write instead:**
+**JavaScript built-ins.** String and Number methods (`s.trim()`, `indexOf`, `slice`, `split`,
+`replace`, `startsWith`, `toLowerCase`, `s[i]`, `n.toString()`, `toFixed`, `String(n)`,
+`Number(s)`, `parseInt`, `isNaN`), regular expression literals, `JSON.stringify`, `Date.now()`,
+`Math.atan2` do not compile: the singleton `Js` (`src/app/ui/jshelper.h`, tested against the
+JavaScript engine) has each of them with the same result (`Js.trim(s)`, `Js.indexOf(s, x)`,
+`Js.test(s, "^\\d+$", "")`, `Js.replaceRegExp(s, "\\s+", "g", " ")`, `Js.dateNow()`). The QML
+engine has no `replaceAll`, `trimStart`, `trimEnd` at all (`Js` has). What compiles: `s.length`,
+`===`/`!==` (not `==`), `+` (`"" + n` and `"" + url` give the text; `color.toString()` too),
+template strings, `qsTr().arg()`, `qsTranslate()`, other `Math.*`, `Qt.formatDate`,
+`Qt.platform.os`, `Application.state` / `Application.layoutDirection` (not `Qt.application.*`),
+`switch`, `x as Item` with `!== null` (instead of `instanceof`).
 
-* JavaScript's String and Number methods (`s.trim()`, `s.indexOf()`, `s.slice()`, `split`,
-  `replace`, `startsWith`, `toLowerCase`, `toFixed`, `Number(s)`, `parseInt`, `isNaN`…), regular
-  expression literals, `JSON.stringify`: the singleton `Js` (`src/app/ui/jshelper.h`) has each of
-  them with the same result (`Js.trim(s)`, `Js.indexOf(s, x)`, `Js.test(s, "^\\d+$", "")`,
-  `Js.replaceRegExp(s, "\\s+", "g", " ")`). What still compiles: `s.length`, `s[i]`, `===`,
-  `+` (also `"" + n` for a number's text), template strings, `qsTr().arg()`, `Math.*`.
-* Building lists: `push`, `concat`, `splice`, `sort`, `reverse`, `filter`, `map`, `forEach`, an
-  assignment to `list[i]` of a local. `Js.appended(list, x)`, `Js.concat`, `Js.removedAt`,
-  `Js.sortedStrings`… for simple cases; anything more (sorting by a key, filtering, grouping)
-  belongs in the C++ that produces the data (controllers, models). What compiles on lists:
-  `length`, `[i]`, `indexOf`, `includes`, `join`, `slice`, `for (let i = 0; i < l.length; ++i)`.
-* Closures: arrow functions and `function () {}` as values (`array.map(x => …)`,
-  `Qt.callLater(f)`, `Qt.binding(() => …)`, `connect(f)`). A deferred call is a `Timer { interval: 0 }`
-  restarted (`restart()` also merges repeated calls like `Qt.callLater`); a binding set later is
-  a declared binding with a condition or a `Binding { when: … }`.
-* `try`/`catch`/`finally`, `for…of`, `for…in`, `instanceof` (use `x as Item` and compare with
-  `null`), `typeof`, `delete`, `arguments`.
-* Reading a member of something typed `var`: a JavaScript object, a `QVariantMap` or
-  `QVariantList` held in a `var` property, parameter or local, `modelData` of an array model.
-  Delegates take each key as a `required property` with its type (`required property string title`
-  — the model's rows must all carry every key the delegate requires: a missing string arrives as
-  "undefined"). Elsewhere a C++ type gives the fields: a `Q_PROPERTY(QVariantMap info … FINAL)`'s
-  `info.title` compiles, a `Q_GADGET` value type (`QML_VALUE_TYPE`) with `FINAL` properties
+**Lists.** `push`, `concat`, `splice`, `sort`, `reverse`, `filter`, `map`, `forEach`, `find`, an
+assignment to an element of a local do not compile. `Js.appended`, `Js.concat`, `Js.removedAt`,
+`Js.sortedStrings`, `Js.fromStrings`… for simple cases; anything more (sorting by a key, filtering,
+grouping, building rows) belongs in the C++ that produces the data — controllers, models, the
+areas' helper singletons (`UiModels`, `BlockViews`, `PageTools`, `IoLists`). What compiles: `length`,
+`[i]`, `indexOf`, `includes`, `join`, `slice`, `for (let i = 0; i < l.length; ++i)`,
+`list[list.length] = x` on a `list<…>` property (not across `if`/`return` branches). An array
+literal compiles only into a `list<…>` property or return value: not as a call's argument, not
+inside an object literal, not as `cond ? x : []` (`if (!cond) return []`; a
+`readonly property list<var> noRows: []`). `QVariantList` converts to `list<var>`, not to
+`list<int>`; `QStringList` not to `list<var>` (`Js.fromStrings`).
+
+**No functions as values.** Arrow functions and `function () {}` as values (`array.map(x => …)`,
+`Qt.callLater(f)`, `Qt.binding(() => …)`, `connect(f)`, `nextCheckState: () => …`, a callback
+argument) do not compile; neither do `try`/`catch`, `for…of`, `for…in`, `typeof`, `delete`,
+`arguments`, `ScriptAction { script: … }` (it also makes qmlcachegen skip the rest of the file —
+the animation's `onFinished:` instead). Instead:
+
+* a deferred call: a `Timer { interval: 0 }`, `restart()`ed; it merges repeated requests (with
+  the last values, unlike `Qt.callLater` with different closures) and checks that its owner is
+  still alive (`BlockEditor.laterEnsureEditVisible()` / `laterRevealRow()`);
+* a callback: a signal, or a target name the receiver hands back (`EditorDialogs.pickDateWith(target,
+  …)` → `applied(target, action, a, b)`), or an id (`BToastHost.showToast()` returns one,
+  `actionTriggered(id)`; `AppController.toastWithAction()` / `toastRestore()`);
+  `OpenIn.begin(target)` … the navigation … `OpenIn.end()` instead of a function to run;
+* a binding set after a click: a declared binding — `Binding on checked { value: … }` or a counter
+  (`checked: menu.checkRevision >= 0 && …`, `++checkRevision` on click); assigning `checked = …` in
+  JavaScript removes the binding;
+* a ListModel's `insert` / `remove` / `get`: a C++ model (`ToastListModel`).
+
+**Reading members of untyped values.** A member of anything typed `var` does not compile: a
+JavaScript object, a `QVariantMap` / `QVariantList` held in a `var` property, parameter or local,
+`modelData` of an array model, `Text.fontInfo`. Instead:
+
+* delegates take each key as a typed `required property` (`required property string title`).
+  Every row must carry every key the delegate requires (a missing string arrives as "undefined", a
+  missing `list<…>` fails "not initialized"). Required properties cannot be named like the
+  delegate type's own properties: `left`, `right`, `top`, `bottom`, `horizontalCenter`,
+  `verticalCenter`, `baseline` (Item's FINAL anchor lines — the component does not load, and with it
+  the app), `display`, `icon`, `text`, `state`, `color`, `count`, `id`, `index` — `required text` marks
+  the existing property required, or the producer uses another key, or the delegate is wrapped in
+  an `Item`;
+* a `FINAL` `Q_PROPERTY(QVariantMap …)`'s keys compile (`Workspace.sync.status.state`), also in
+  arithmetic; `MapHolder { map: … }` (`src/app/ui/mapholder.h`) is such a property for any map,
+  one level per holder: `holder.map = controller.copyText(t); holder.map.ok`. Write a holder only in
+  handlers and functions called from them — written from a function a binding calls, it makes a
+  binding loop;
+* `AppController.routeText/routeInt/routeFlag/routeStrings/routeList(map, key)` and
+  `UiModels.stringField/boolField/numberField(map, key)` read one value of a map (JavaScript's
+  truthiness for `routeFlag`); a `Q_GADGET` value type (`QML_VALUE_TYPE`, `FINAL` properties)
   compiles everywhere.
-* Results of `Q_INVOKABLE` methods are "shadowable" (a QML subclass could replace the method):
-  passing them on, returning them and comparing with `===` compiles, a member of the result
-  (`TextHelper.fuzzyMatch(q, t).score`, `item.mapToItem(…).y`) or `==` on it does not. Expose a
-  `FINAL` property instead, return what QML needs (the score itself), or launder the result
-  through a typed QML function of the same file (`function names(): list<string> { return
-  Helper.names() }` — then `names().length` compiles) or a typed property
-  (`root.at = item.mapToItem(…); root.at.y`). A method returning `QColor`, `QPointF` or a gadget
-  cannot be stored in a typed property at all: a `FINAL` property or a scalar result instead.
-* `Qt.rgba()`, `Qt.hsla()`, `Qt.lighter()`, `Qt.darker()`, `Qt.tint()`, `Qt.alpha()`, `Qt.color()`
-  (they return `var`): the `color` type's own methods compile — `c.alpha(0.5)`, `c.lighter(1.2)`,
-  `c.darker(1.5)`, `c.tint(other)` — and a colour literal (`"#80ffffff"`) or a string property
-  bound to a `color`.
-* Anchors to a `var` (`anchors.left: cond ? a.right : b.right` where a or b is untyped): both items
-  typed.
-* Unqualified access to a property of an outer component from a delegate or inline component:
-  qualify it with the id (`root.x`), with `pragma ComponentBehavior: Bound`.
-* The members of C++ types used from QML are `FINAL` (`Q_PROPERTY(… FINAL)`): a non-final
-  property is shadowable too — reading it compiles, but not looking further into its value.
+
+**Results of methods ("shadowable").** A `Q_INVOKABLE`'s result, and a property of a non-`FINAL`
+C++ property or of another QML component reached through a typed reference, may be replaced by a
+subclass: passing it on, returning it and comparing with `===` compile; a member of it
+(`TextHelper.fuzzyMatch(q, t).score`, `item.mapToItem(…).y`, `editor.controller.titleRow`) or `==`
+does not. Instead: a `FINAL` C++ property; a `final property PageController controller` in the
+owning QML file (`final readonly` does not help); a result that is what QML needs (the score
+itself); launder it through a typed QML function of the same file (`function names(): list<string>
+{ return Helper.names() }`, then `names().length`; for `string`, `int`, `bool`, `real`, lists — not
+for `color`, `point`, `rect`, gadgets) or a typed property (`root.at = item.mapToItem(…); root.at.y`;
+`mapToItem` through the file's root item compiles directly); `x as T`; `"" + x` / `0 + x`. A method
+returning `QColor` cannot be stored in a `color` (`"" + call()` can, or a FINAL property); one
+returning `QPointF`/`QRectF` only through a typed property or a typed function's parameter.
+Every new `Q_PROPERTY` is `FINAL`; methods cannot be.
+
+**Side effects.** After any call, compiled code does not read again what the call might have
+changed: a local holding a shadowable result, a `var` or list parameter (`list[i]`, `.x` of a
+`point`/`rect` parameter, `eventPoint`'s fields), an element of a `var`, a local list in a loop that
+calls methods — "argument affected by side effects" / "reading from a value potentially affected
+by side effects". So read parameters and event fields at the start of a function into typed
+locals, compute the arguments of one call before it (`const a = …; const b = …; f(a, b)`, not
+`f(g(), h())` with shadowable results), read lists from properties (`property list<string>
+lastTrashed`), pass a map through a `MapHolder`, or move the loop into C++.
+
+**Colours.** `Qt.rgba()`, `Qt.hsla()`, `Qt.lighter()`, `Qt.darker()`, `Qt.tint()`, `Qt.alpha()`,
+`Qt.color()` (they return `var`) do not compile: the `color` type's own methods do — `c.alpha(0.5)`,
+`c.lighter(1.2)`, `c.darker(1.5)`, `c.tint(other)` (`alpha()` warns above 1 where `Qt.rgba`
+clamped: clamp it), `c.r/g/b/a/hslLightness` reads — and a colour literal (`"#80ffffff"`), a string
+bound to a `color`, `ThemeColors`' typed tokens (`Theme.palette`).
+
+**Types of QML components.** A file cannot store its own root into another file's property typed
+with the file's own type ("cannot convert from X to X"). `import Brulion as B` with `root as B.X`
+compiles but **crashes at run time** (Qt 6.11.2): never use it. The receiver takes the base type
+and casts in its own file — `property Item editorItem` + `final property BlockEditor editor:
+editorItem as BlockEditor` — or has a setter `function setOwner(o: Item): void { owner = o as Ed }`.
+Cyclic `required property` types the same way. `Drawer` and `Menu` as a declared type: `T.Popup`.
+The children of an item (`item.children[i]`) do not compile: `readonly property list<Item> rows:
+ref.children` for a property, else a property of the child (`AppController.propertyOf(item,
+"day") as ContentJournalDay`).
+
+**Other.** `"\r"` inside a compiled string literal breaks the generated C++ (qmlcachegen writes a
+raw CR): keep it in a property (`readonly property string crlf: "\r\n"`). `Qt.inputMethod` →
+`DeviceInfo.inputMethodVisible` / `hideInputMethod()`. A font in a `?:` → a `Binding` element. A typed
+`QVariantMap` parameter refuses `null` (the interpreter took it). Self-tests (`qml/dev`) drive the
+UI through the C++ helpers `DevEvents`, `DevTest`, `DevBlock`, `DevRecord`
+(`src/app/ui/devtesting.h`), C++ self-tests call typed QML functions through
+`uidriver::callQml()`, which converts each argument to the declared type.
 
 ## Dev tools, screenshots and UI tests
 
