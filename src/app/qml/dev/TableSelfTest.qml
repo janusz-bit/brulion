@@ -57,7 +57,7 @@ QtObject {
     function rows(): list<var> { return test.view().rows }
     function header(): list<string> { return test.view().header }
     function aligns(): list<string> { return test.view().aligns }
-    function shown(): list<int> { return test.shown() }
+    function shown(): list<int> { return test.view().shownRows }
     function menu(): BlockMenu { return test.editor.blockMenu }
     function menuOpen(): bool { return test.menu() !== null && test.menu().opened }
     /// The item of the block menu that opens its submenu `name`.
@@ -114,7 +114,7 @@ QtObject {
     /// Steps: the block menu of cell (r, c): a right-click; on touch UIs a tap on the cell and the
     /// toolbar's "Więcej".
     function openOn(r: int, c: int): void {
-        if (!Theme.touchUi) {
+        if (!window.touchRun) {
             if (test.window.at())
                 test.rightClickCell(r, c)
         } else {
@@ -185,7 +185,7 @@ QtObject {
     /// Keys in a cell: rows and columns move, the cell stays edited (desktop); on touch UIs the
     /// cell closed and the row taken back.
     function keySteps(): void {
-        if (Theme.touchUi) {
+        if (window.touchRun) {
             if (test.window.at())
                 test.closeCell()
             if (test.window.at())
@@ -221,7 +221,7 @@ QtObject {
     }
     /// A right-click on the cell being edited (desktop).
     function editedCellMenuSteps(): void {
-        if (Theme.touchUi)
+        if (window.touchRun)
             return
         // ---- A right-click on the cell being edited ---------------------------------------------
         if (test.window.at()) test.tapCell(0, 1)

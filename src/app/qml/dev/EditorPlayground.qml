@@ -466,7 +466,11 @@ ApplicationWindow {
         return window.stepCursor++ === window.stepTarget
     }
     /// Run the steps of `name` (a suite of runSuite()), then exit with the failures.
+    /// Theme.touchUi when the steps began: what decides which steps there are (a test that
+    /// switches to touch sizes halfway keeps its steps).
+    property bool touchRun: false
     function runSteps(name: string): void {
+        touchRun = Theme.touchUi
         suite = name
         stepIndex = 0
         stepTimer.start()
@@ -690,7 +694,7 @@ ApplicationWindow {
         return DevTest.valueAt(window.suggestionModel().get(row), key)
     }
     function listHeader(): Item {
-        return window.listHeader()
+        return editor.listView.headerItem
     }
     /// The item named `name` under `item` (depth first), or null.
     function findItem(item: Item, name: string): Item {
@@ -2472,7 +2476,7 @@ ApplicationWindow {
     /// lifts it once the menu shows. (A fixed hold lifted it too early in a slow sanitizer build: a
     /// tap, which toggled the task.) Both are read on every step, each step takes what they are then.
     function menuGesture(target: Item, shown: bool): void {
-        if (!Theme.touchUi) {
+        if (!window.touchRun) {
             if (window.at()) {
                 check(target !== null, "the checkbox is there for the right-click")
                 if (target)
@@ -2523,8 +2527,8 @@ ApplicationWindow {
     }
     /// The steps of taskStatusTest() (see the step runner).
     function taskStatusSteps(): void {
-        const gesture = Theme.touchUi ? "a long press" : "a right-click"
-        const tap = Theme.touchUi ? "a tap" : "a click"
+        const gesture = window.touchRun ? "a long press" : "a right-click"
+        const tap = window.touchRun ? "a tap" : "a click"
         if (window.at()) {
             window.taskRow = rowOf("Kupić płytki")
             editor.listView.positionViewAtIndex(window.taskRow, ListView.Center)
@@ -3015,27 +3019,25 @@ ApplicationWindow {
         editor.listView.forceLayout()
         return editor.listView.itemAtIndex(row) as BlockDelegate
     }
-    /// The rendered rich text under `item` (a visible Text in RichText with linkAt()), or null.
-    function renderedIn(item: Item): Text {
-        if (!item || !item.visible)
-            return null
-        const text = item as Text
-        if (text && text.textFormat === Text.RichText)
-            return text
-        for (let i = 0; i < window.childCount(item); ++i) {
-            const found = window.renderedIn(window.childAt(item, i))
-            if (found)
-                return found
-        }
-        return null
+    /// The rendered rich text under `item` (a visible Text or TextEdit in RichText — a text with
+    /// chips is a TextEdit), or null.
+    function renderedIn(item: Item): Item {
+        return DevTest.findRendered(item)
+    }
+    /// linkAt(x, y) and the text of a rendered text (a Text or a TextEdit).
+    function linkAt(text: Item, x: real, y: real): string {
+        return DevTest.linkAt(text, x, y)
+    }
+    function textOfRendered(text: Item): string {
+        return "" + DevTest.property(text, "text")
     }
     /// A point of the rendered `text` on its link whose URL contains `url` (linkX, linkY), or false.
     property real linkX: 0
     property real linkY: 0
-    function linkPointIn(text: Text, url: string): bool {
+    function linkPointIn(text: Item, url: string): bool {
         for (let y = 2; text && y < text.height; y += 3) {
             for (let x = 2; x < text.width; x += 4) {
-                if (Js.indexOf(text.linkAt(x, y), url) >= 0) {
+                if (Js.indexOf(window.linkAt(text, x, y), url) >= 0) {
                     window.linkX = x + 2
                     window.linkY = y + 2
                     return true
@@ -3134,7 +3136,7 @@ ApplicationWindow {
     /// the block menu opened (a bullet's long press) and lifted. (A fixed hold could be lifted too
     /// early in a slow sanitizer run: a tap, which zooms into the block.)
     function bulletMenuGesture(row: int): void {
-        if (!Theme.touchUi) {
+        if (!window.touchRun) {
             if (window.at()) {
                 const item = delegateAt(row)
                 rightClick(item, item.bulletX, item.firstLineCenter)
@@ -3158,7 +3160,7 @@ ApplicationWindow {
     }
     /// The steps of blockLinksTest() (see the step runner).
     function blockLinksSteps(): void {
-        const touch = Theme.touchUi
+        const touch = window.touchRun
         const gesture = touch ? "a long press" : "a right-click"
         const doc = "Wyjazd w Tatry"
         if (window.at()) { page.path = host.documentPath }
@@ -3274,7 +3276,7 @@ ApplicationWindow {
         }
         if (window.at()) {
             const text = renderedOf(window.linkRow)
-            check(text !== null && Js.indexOf(text.text, doc + " › Piątek") >= 0,
+            check(text !== null && Js.indexOf(window.textOfRendered(text), doc + " › Piątek") >= 0,
                   "[[Page#^id]] reads as the page and the block's text")
             const p = linkPointIn(text, "#^" + window.copiedId)
             check(p, "the link to the block is there")
@@ -3536,7 +3538,7 @@ ApplicationWindow {
         const edit = editor.activeEditor
         return edit ? edit.row + " " + Js.stringify(edit.plain()) : "none"
     }
-    function renderedOf(row: int): Text {
+    function renderedOf(row: int): Item {
         return renderedIn(delegateAt(row))
     }
 
@@ -3850,9 +3852,9 @@ ApplicationWindow {
             if (name === "linkparts") {
                 const block = findWith(delegateAt(row), window.blockTextMembers) as BlockText
                 if (block)
-                    block.hoveredLink = text.linkAt(window.linkX, window.linkY)
+                    block.hoveredLink = window.linkAt(text, window.linkX, window.linkY)
             } else {
-                editor.openBlockLinkMenu(row, text.linkAt(window.linkX, window.linkY), text, window.linkX, window.linkY)
+                editor.openBlockLinkMenu(row, window.linkAt(text, window.linkX, window.linkY), text, window.linkX, window.linkY)
             }
             break
         }
@@ -3903,9 +3905,9 @@ ApplicationWindow {
             if (!text || !linkPointIn(text, scheme))
                 return
             if (name === "link-menu")
-                editor.openBlockLinkMenu(window.scriptRow, text.linkAt(window.linkX, window.linkY), text, window.linkX, window.linkY)
+                editor.openBlockLinkMenu(window.scriptRow, window.linkAt(text, window.linkX, window.linkY), text, window.linkX, window.linkY)
             else
-                editor.openDateMenu(window.scriptRow, text.linkAt(window.linkX, window.linkY), text, window.linkX, window.linkY)
+                editor.openDateMenu(window.scriptRow, window.linkAt(text, window.linkX, window.linkY), text, window.linkX, window.linkY)
             break
         }
         case "task-menu-query": {

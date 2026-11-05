@@ -34,7 +34,7 @@ QtObject {
     function check(ok: bool, what: string): void { window.check(ok, what) }
     function info(r: int): DevBlock { return window.info(r) }
     function line(prefix: string): string { return window.fileLineOf(window.pageText(), prefix) }
-    function text(): Text { return window.renderedIn(window.delegateAt(row)) }
+    function text(): Item { return window.renderedIn(window.delegateAt(row)) }
     function menu(): DateChipMenu { return editor.dateMenu }
     function menuOpen(): bool { return menu() !== null && menu().opened }
     function blockMenu(): BlockMenu { return editor.blockMenu }
@@ -70,7 +70,7 @@ QtObject {
         list().positionViewAtIndex(row, ListView.Center)
     }
     /// The rendered text with the chip whose link starts with `scheme` (`at`: a point on it), or null.
-    function find(scheme: string): Text {
+    function find(scheme: string): Item {
         const t = text()
         const found = t !== null && window.linkPointIn(t, scheme)
         check(found, "the " + scheme + " chip is drawn")
@@ -81,7 +81,7 @@ QtObject {
     /// Steps: the context gesture on the chip whose link starts with `scheme`: a right-click, or a
     /// finger held down until the menu (the link menu if `link`) shows, then lifted.
     function chipGesture(scheme: string, link: bool): void {
-        if (!Theme.touchUi) {
+        if (!window.touchRun) {
             if (window.at()) {
                 const t = find(scheme)
                 if (t)

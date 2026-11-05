@@ -161,6 +161,11 @@ public:
     /// The first visible item under `root` (invisible ones and their children skipped) named
     /// `name`, or null.
     Q_INVOKABLE QQuickItem *findShown(QQuickItem *root, const QString &name) const;
+    /// The first visible rendered rich text under `root` (invisible items and their children
+    /// skipped): a Text or TextEdit whose textFormat is RichText, with linkAt(); null for none.
+    Q_INVOKABLE QQuickItem *findRendered(QQuickItem *root) const;
+    /// text.linkAt(x, y) of a Text or a TextEdit ("" for anything else).
+    Q_INVOKABLE QString linkAt(QQuickItem *text, qreal x, qreal y) const;
     /// The first item under `root` (itself included, depth first) with a property `textFormat`
     /// (a Text, TextEdit) whose `text` is `text`, or null.
     Q_INVOKABLE QQuickItem *findText(QQuickItem *root, const QString &text) const;

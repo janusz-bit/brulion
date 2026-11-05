@@ -59,7 +59,7 @@ QtObject {
     function check(ok: bool, what: string): void { window.check(ok, what) }
     function rowOf(prefix: string): int { return window.rowOf(prefix) }
     function info(row: int): DevBlock { return window.info(row) }
-    function textOf(row: int): Text { return window.renderedOf(row) }
+    function textOf(row: int): Item { return window.renderedOf(row) }
     function delegateAt(row: int): BlockDelegate { return window.delegateAt(row) }
     function edit(): InlineEditor { return editor.activeEditor }
     function menuItem(menu: T.Menu, name: string): T.MenuItem { return window.menuItemNamed(menu, name) }
@@ -180,7 +180,7 @@ QtObject {
     function clearToasts(): void { window.toastHost.clear() }
 
     function steps(): void {
-        if (Theme.touchUi)
+        if (window.touchRun)
             touchSteps()
         else
             desktopSteps()

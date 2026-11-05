@@ -473,7 +473,7 @@ QtObject {
             key(field, Qt.Key_Backspace, 0)
         }
         if (window.at()) window.waitStep(Js.indexOf(text(), "autorzy:\n  - \"[[Jan Kowalski]]\"\n  - Anna\n---") > 0, "Backspace in the empty field removes the last item")
-        if (Theme.touchUi) {
+        if (window.touchRun) {
             // Touch UIs: no ×; a tap on a chip that opens nothing opens its menu, a press and
             // hold on any chip too — not the row's menu —, and "Usuń" there removes it (a toast
             // with "Cofnij").

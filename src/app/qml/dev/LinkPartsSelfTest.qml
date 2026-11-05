@@ -85,20 +85,21 @@ QtObject {
         return window.findWith(delegateAt(r), window.blockTextMembers) as BlockText
     }
     /// The rendered rich text of `r` holding `needle` ("part:" for "").
-    function textOf(r: int, needle: string): Text {
-        return window.textContaining(delegateAt(r), needle !== "" ? needle : "part:") as Text
+    function textOf(r: int, needle: string): Item {
+        return window.textContaining(delegateAt(r), needle !== "" ? needle : "part:")
     }
-    function partText(r: int): Text { return textOf(r, "") }
+    function partText(r: int): Item { return textOf(r, "") }
+    function linkAt(text: Item, x: real, y: real): string { return DevTest.linkAt(text, x, y) }
     /// The box of the links of `text` whose URL starts with `url`, sampled on a 2-px grid, into
     /// `box`; false when there is none.
-    function linkBox(text: Text, url: string): bool {
+    function linkBox(text: Item, url: string): bool {
         let x1 = 1e9
         let y1 = 1e9
         let x2 = -1
         let y2 = -1
         for (let y = 1; text && y < text.height; y += 2) {
             for (let x = 1; x < text.width; x += 2) {
-                if (Js.indexOf(text.linkAt(x, y), url) === 0) {
+                if (Js.indexOf(linkAt(text, x, y), url) === 0) {
                     x1 = Math.min(x1, x)
                     y1 = Math.min(y1, y)
                     x2 = Math.max(x2, x)
@@ -112,7 +113,7 @@ QtObject {
         return true
     }
     /// The part's ("part:1:") and the page's ("page:") boxes of `text` (partBox, pageBox).
-    function boxes(text: Text): bool {
+    function boxes(text: Item): bool {
         const part = linkBox(text, "part:1:")
         partBox = box
         const page = linkBox(text, "page:")
@@ -123,11 +124,11 @@ QtObject {
     function boxCy(): real { return box.y + box.height / 2 }
     /// The middle of the link of `text` whose URL is exactly `url`, on the height of `y` (linkCx);
     /// false when there is none.
-    function exactLink(text: Text, url: string, y: real): bool {
+    function exactLink(text: Item, url: string, y: real): bool {
         let x1 = -1
         let x2 = -1
         for (let x = 1; text && x < text.width; ++x) {
-            if (text.linkAt(x, y) === url) {
+            if (linkAt(text, x, y) === url) {
                 if (x1 < 0)
                     x1 = x
                 x2 = x
@@ -163,7 +164,7 @@ QtObject {
         return -1
     }
     /// A tap (touch) or a left click at the centre of the link of `text` starting with `url`.
-    function clickLink(text: Text, url: string): void {
+    function clickLink(text: Item, url: string): void {
         const found = linkBox(text, url)
         check(found, "the link " + url + " is drawn")
         if (found)
@@ -186,7 +187,7 @@ QtObject {
                && host.lastRoute.target === "Firma" && host.lastRoute.from === test.path
     }
     /// The rendered text of row `r` with its part drawn (`at`: the part's middle), or null.
-    function findPart(r: int): Text {
+    function findPart(r: int): Item {
         const t = partText(r)
         const found = t !== null && linkBox(t, "part:1:")
         check(found, "the part of row " + r + " is drawn")
@@ -197,7 +198,7 @@ QtObject {
     /// Steps: the context gesture on the part of row `r`: a right-click, or a finger held until the
     /// menu shows, then lifted.
     function menuGesture(r: int): void {
-        if (!Theme.touchUi) {
+        if (!window.touchRun) {
             if (window.at()) {
                 const t = findPart(r)
                 if (t)
@@ -256,9 +257,9 @@ QtObject {
     function linkItemCount(r: int): int { return window.countNamed(delegateAt(r), "linkTarget") }
     function linkItemAt(r: int, i: int): Item { return window.namedAt(delegateAt(r), "linkTarget", i) }
     /// The link item `it` lies over its link of `t`.
-    function overItsLink(it: Item, t: Text): bool {
+    function overItsLink(it: Item, t: Item): bool {
         test.mapped = it.mapToItem(t, it.width / 2, it.height / 2)
-        return t.linkAt(test.mapped.x, test.mapped.y) === "" + DevTest.property(it, "href")
+        return linkAt(t, test.mapped.x, test.mapped.y) === "" + DevTest.property(it, "href")
     }
 
     /// What tells a table view (TableBlockView) from the items around it.
@@ -279,14 +280,14 @@ QtObject {
             row = rowWith("Zapytać", "")
             list().positionViewAtIndex(row, ListView.Center)
             const t = textOf(row, "")
-            check(Js.indexOf(t.text, "href=\"" + partUrl + "\"") >= 0 && Js.indexOf(t.text, "href=\"" + pageUrl + "\"") >= 0,
+            check(Js.indexOf(window.textOfRendered(t), "href=\"" + partUrl + "\"") >= 0 && Js.indexOf(window.textOfRendered(t), "href=\"" + pageUrl + "\"") >= 0,
                   "[[Firma/Adam cośtam]] is drawn as a part and the page")
             const both = boxes(t)
             check(both && partBox.x + partBox.width < pageBox.x
                   && Math.abs(partBox.y + partBox.height / 2 - (pageBox.y + pageBox.height / 2)) < 4,
                   "the part left of the page on one line")
             // Between them the separator: no link.
-            check(both && t.linkAt((partBox.x + partBox.width + pageBox.x) / 2, partBox.y + partBox.height / 2) === "",
+            check(both && linkAt(t, (partBox.x + partBox.width + pageBox.x) / 2, partBox.y + partBox.height / 2) === "",
                   "the separator is no link")
         }
         // ---- 1. hover (desktop): the part under the mouse underlined, alone ------------------
@@ -375,10 +376,10 @@ QtObject {
         if (window.at()) {
             const r = rowWith("Z tekstem", "")
             const t = textOf(r, "page:")
-            check(t !== null && Js.indexOf(t.text, "part:") < 0, "a link with a display text has no parts")
+            check(t !== null && Js.indexOf(window.textOfRendered(t), "part:") < 0, "a link with a display text has no parts")
             const found = t !== null && linkBox(t, "page:")
-            check(found && Js.indexOf(t.linkAt(box.x + 1, boxCy()), "page:Firma%2FAdam") === 0
-                  && Js.indexOf(t.linkAt(box.x + box.width - 1, boxCy()), "page:Firma%2FAdam") === 0,
+            check(found && Js.indexOf(linkAt(t, box.x + 1, boxCy()), "page:Firma%2FAdam") === 0
+                  && Js.indexOf(linkAt(t, box.x + box.width - 1, boxCy()), "page:Firma%2FAdam") === 0,
                   "both of its halves are the page link")
         }
         // ---- 4. the menus of a folder's part and a page's part --------------------------------------

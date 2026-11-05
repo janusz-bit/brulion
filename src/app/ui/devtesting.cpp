@@ -283,6 +283,26 @@ QQuickItem *DevTest::findShown(QQuickItem *root, const QString &name) const
         [](QQuickItem *item) { return item->isVisible(); });
 }
 
+QQuickItem *DevTest::findRendered(QQuickItem *root) const
+{
+    return firstWhere(
+        root,
+        [](QQuickItem *item) {
+            // Text.RichText and TextEdit.RichText are both 1.
+            return ownsProperty(item, "textFormat") && item->property("textFormat").toInt() == 1
+                && ownsMember(item, "linkAt");
+        },
+        [](QQuickItem *item) { return item->isVisible(); });
+}
+
+QString DevTest::linkAt(QQuickItem *text, qreal x, qreal y) const
+{
+    QString link;
+    if (text && ownsMember(text, "linkAt"))
+        QMetaObject::invokeMethod(text, "linkAt", Qt::DirectConnection, qReturnArg(link), x, y);
+    return link;
+}
+
 QQuickItem *DevTest::findText(QQuickItem *root, const QString &text) const
 {
     return firstWhere(
