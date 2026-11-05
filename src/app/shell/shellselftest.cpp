@@ -3658,13 +3658,15 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
             if (outlineButton)
                 tapOrClick(window, pointIn(outlineButton), touch);
             QQuickItem *third = nullptr;
-            check(waitFor([&] {
-                      third = findShown(window->contentItem(), [](QQuickItem *item) {
-                          return item->objectName() == u"pdfOutlineEntry"_s
-                                 && item->property("text").toString() == u"Rozdział 3"_s;
-                      });
-                      return third != nullptr;
-                  }),
+            check(waitFor(
+                          [&] {
+                              third = findShown(window->contentItem(), [](QQuickItem *item) {
+                                  return item->objectName() == u"pdfOutlineEntry"_s
+                                         && item->property("text").toString() == u"Rozdział 3"_s;
+                              });
+                              return third != nullptr;
+                          },
+                          10000), // (the dialog opens over a few frames: slow on a busy CI runner)
                   "the table of contents lists its chapters");
             if (!third) {
                 // What there is instead (a failure in the Nix sandbox only): the entries shown, the
