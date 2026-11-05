@@ -583,10 +583,11 @@ FocusScope {
     }
     /// "123 words · 820 characters · 1 min read" (`reading`: with the reading time and the
     /// characters without spaces).
-    MapHolder { id: statsInfo }
-    function statsSummary(stats: var, details: bool): string {
-        statsInfo.map = stats
-        const s = statsInfo.map
+    // The counts as typed maps (bound, never written by statsSummary(): it runs in bindings).
+    MapHolder { id: pageStatsInfo; map: root.pageStats }
+    MapHolder { id: selectionStatsInfo; map: root.selectionStats }
+    function statsSummary(stats: MapHolder, details: bool): string {
+        const s = stats.map
         if (s.words === undefined)
             return ""
         const words = s.words
@@ -791,11 +792,11 @@ FocusScope {
         radius: Theme.radiusSm
         color: Theme.bg.alpha(0.85)
         readonly property bool selection: Js.hasKey(root.selectionStats, "words")
-        readonly property string text: selection ? qsTr("Selection: %1").arg(root.statsSummary(root.selectionStats, false))
-                                                 : root.statsSummary(root.pageStats, false)
+        readonly property string text: selection ? qsTr("Selection: %1").arg(root.statsSummary(selectionStatsInfo, false))
+                                                 : root.statsSummary(pageStatsInfo, false)
         Accessible.role: Accessible.StaticText
-        Accessible.name: selection ? qsTr("Selection: %1").arg(root.statsSummary(root.selectionStats, true))
-                                   : root.statsSummary(root.pageStats, true)
+        Accessible.name: selection ? qsTr("Selection: %1").arg(root.statsSummary(selectionStatsInfo, true))
+                                   : root.statsSummary(pageStatsInfo, true)
         BText {
             id: statsLabel
             anchors.centerIn: parent
@@ -902,7 +903,7 @@ FocusScope {
             visible: root.statsAvailable && Js.hasKey(root.pageStats, "words")
             height: visible ? implicitHeight : 0
             enabled: false
-            text: root.statsSummary(root.pageStats, true)
+            text: root.statsSummary(pageStatsInfo, true)
             iconName: "type"
         }
         BMenuSeparator {
