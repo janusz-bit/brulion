@@ -51,7 +51,8 @@ BDialog {
     function pick(kind: string, name: string): void {
         if (!dialog.controller)
             return
-        const before = dialog.controller.undoToken()
+        // (Strings from calls laundered: a call cannot take one a call before may change.)
+        const before = "" + dialog.controller.undoToken()
         dialog._held = dialog.controller.setPageIcon(kind, name)
         if (!AppController.routeFlag(dialog._held, "ok")) {
             AppController.toast(AppController.routeText(dialog._held, "reason"), "error")

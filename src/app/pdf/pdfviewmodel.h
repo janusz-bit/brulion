@@ -163,7 +163,8 @@ private:
     Q_PROPERTY(int selectionPage READ selectionPage NOTIFY selectionChanged FINAL)
     Q_PROPERTY(int selectionRevision READ selectionRevision NOTIFY selectionChanged FINAL)
     // outline and links
-    /// [{title, level, page, top}] (page 0: no destination; top a fraction of the page or −1).
+    /// [{title, level, page, top}] (page 0: no destination; top a fraction of the page or −1;
+    /// also as targetTop: QML's delegates cannot have a property named `top`).
     Q_PROPERTY(QVariantList outline READ outline NOTIFY outlineChanged FINAL)
     /// The first rectangle of the selection (fractions of selectionPage; empty without one): where
     /// the floating "Kopiuj" goes.
@@ -305,7 +306,8 @@ public:
     Q_INVOKABLE bool copySelection();
 
     /// The links of page `page` (loaded as it comes near the view): [{x, y, width, height, box} in
-    /// fractions of the page, url ("" for a page of this PDF), page, top (a fraction or −1)].
+    /// fractions of the page, url ("" for a page of this PDF), page, top (a fraction or −1; also as
+    /// targetTop)].
     Q_INVOKABLE QVariantList linkRects(int page) const;
     /// The Flickable's contentX/Y showing page `page` from `top` (a fraction of it; −1: its top) —
     /// an outline entry or a link — a little above it.

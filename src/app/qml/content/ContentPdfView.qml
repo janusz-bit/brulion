@@ -1087,7 +1087,7 @@ Item {
                             required property rect box
                             required property string url
                             required property int page
-                            required property real top
+                            required property real targetTop
                             objectName: "pdfLink"
                             x: box.x * pageItem.width
                             y: box.y * pageItem.height
@@ -1097,8 +1097,8 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             Accessible.role: Accessible.Link
                             Accessible.name: url !== "" ? url : qsTr("Page %1 of %2").arg(page).arg(pdf.pageCount)
-                            Accessible.onPressAction: root.followLink(linkArea.url, linkArea.page, linkArea.top)
-                            onClicked: root.followLink(linkArea.url, linkArea.page, linkArea.top)
+                            Accessible.onPressAction: root.followLink(linkArea.url, linkArea.page, linkArea.targetTop)
+                            onClicked: root.followLink(linkArea.url, linkArea.page, linkArea.targetTop)
                             Loader {
                                 // Where an address leads, on hover (created only then).
                                 active: linkArea.containsMouse && linkArea.url !== ""
@@ -1517,7 +1517,7 @@ Item {
                 required property string title
                 required property int level
                 required property int page
-                required property real top
+                required property real targetTop
                 required property int index
                 objectName: "pdfOutlineEntry"
                 width: outlineList.width
@@ -1535,7 +1535,7 @@ Item {
                 }
                 onClicked: {
                     outlineDialog.close()
-                    root.jumpToTarget(entry.page, entry.top)
+                    root.jumpToTarget(entry.page, entry.targetTop)
                 }
             }
         }

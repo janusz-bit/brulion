@@ -549,6 +549,7 @@ private Q_SLOTS:
             QCOMPARE(chapter.value(u"title"_s).toString(), u"Rozdział 2 — żółw"_s);
             QCOMPARE(chapter.value(u"page"_s).toInt(), 2);
             QVERIFY(std::abs(chapter.value(u"top"_s).toReal() - 0.5) < 0.02);
+            QCOMPARE(chapter.value(u"targetTop"_s), chapter.value(u"top"_s));
             QCOMPARE(model->outline().at(2).toMap().value(u"level"_s).toInt(), 1);
             QCOMPARE(model->outline().at(4).toMap().value(u"page"_s).toInt(), 0);
             // The entry of a page: the last one leading to it or to a page before it.
@@ -579,6 +580,8 @@ private Q_SLOTS:
         QCOMPARE(links.at(1).toMap().value(u"url"_s).toString(),
                  u"https://example.org/brulion?q=%C5%BC%C3%B3%C5%82w"_s);
         QCOMPARE(links.at(2).toMap().value(u"page"_s).toInt(), 3);
+        for (const QVariant &link : links)
+            QCOMPARE(link.toMap().value(u"targetTop"_s), link.toMap().value(u"top"_s));
         const QVariantMap first = links.at(0).toMap();
         QVERIFY(std::abs(first.value(u"x"_s).toReal() - 55.0 / 595) < 0.01);
         QVERIFY(std::abs(first.value(u"y"_s).toReal() - (842.0 - 724) / 842) < 0.01);

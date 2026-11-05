@@ -298,15 +298,17 @@ Item {
             test.waitFor(test.dayAt(0) !== null && test.dayAt(0).controller.documentMode)
         if (test.at()) {
             const ed = test.dayAt(0).editor
-            test.check(ed.documentMode && ed.gutter === ed.outlineGutter && ed.gutter > 0,
-                       "a document day among outline days keeps their left edge: " + ed.gutter)
+            const gutter = 0 + ed.gutter
+            const outlineGutter = 0 + ed.outlineGutter
+            test.check(ed.documentMode && gutter === outlineGutter && gutter > 0,
+                       "a document day among outline days keeps their left edge: " + gutter)
             Workspace.setConfig({ journalMode: "document" })
         }
         if (test.at())
             test.waitFor(Workspace.config.journalMode === "document")
         if (test.at()) {
             const ed = test.dayAt(0).editor
-            test.check(ed.documentMode && ed.gutter === 0, "with documents by default, days use the full width")
+            test.check(ed.documentMode && 0 + ed.gutter === 0, "with documents by default, days use the full width")
             Workspace.setConfig({ journalMode: "outline" })
             test.dayAt(0).controller.setMode("outline")
         }
@@ -399,7 +401,7 @@ Item {
         if (test.at())
             test.waitFor(test.tracked === null) // the delegate (and its editor) is gone
         if (test.at()) {
-            const content = Workspace.readFile(test.secondPath)
+            const content = "" + Workspace.readFile(test.secondPath)
             test.check(Js.indexOf(content, "Dopisane później ąę") >= 0, "an older day's edit is saved when it scrolls away")
             test.check(Js.indexOf(content, "zażółć") >= 0, "the word being composed is saved too")
         }
@@ -433,7 +435,7 @@ Item {
         }
         if (test.at()) {
             const day = test.tracked
-            const head = day !== null ? day.editor.listView.itemAtIndex(0) : null
+            const head = day !== null ? day.editor.listView.itemAtIndex(0) as Item : null
             test.check(head !== null && day.controller.isHeading(0) && test.bottomInList(head) < 0,
                        "the day's heading is above the visible part")
             if (day !== null)
@@ -442,7 +444,7 @@ Item {
         if (test.at())
             test.waitFor(test.tracked !== null && test.tracked.controller.selectedRow === 0)
         if (test.at()) {
-            const head = test.tracked.editor.listView.itemAtIndex(0)
+            const head = test.tracked.editor.listView.itemAtIndex(0) as Item
             const top = head !== null ? test.topInList(head) : -1
             test.check(top >= 0 && top + head.height <= test.list.height,
                        "following a same-day heading link scrolls the journal to the heading: " + top)
@@ -493,7 +495,7 @@ Item {
             const slots = test.visibleSlots()
             test.check(slots === 1 && DevTest.findShown(test._slot, "toolbarSelectionTools") !== null,
                        "the selection tools are docked on the stream's frame")
-            const copy = slots === 1 ? DevTest.findShown(test._slot, "selectionCopy") : null
+            const copy = slots === 1 ? DevTest.findShown(test._slot, "selectionCopy") as Item : null
             if (copy !== null) {
                 events.touchPress(copy, copy.width / 2, copy.height / 2)
                 events.touchRelease(copy, copy.width / 2, copy.height / 2)
@@ -590,7 +592,7 @@ Item {
         test.idle(3)
         if (test.at()) {
             const c = test.tracked.controller
-            const item = test.tracked.editor.listView.itemAtIndex(c.editingRow)
+            const item = test.tracked.editor.listView.itemAtIndex(c.editingRow) as Item
             const top = item !== null ? test.topInList(item) : -1e9
             test.check(c.zoomBlock < 0 && c.editingRow === test.zoomRow + 1 && test.editing(test.tracked),
                        "Enter at the end of a zoomed paragraph in a day ends the zoom and edits the new block: zoom "
@@ -603,7 +605,7 @@ Item {
         test.idle(3)
         if (test.at()) {
             const c = test.tracked.controller
-            const item = test.tracked.editor.listView.itemAtIndex(test.zoomRow)
+            const item = test.tracked.editor.listView.itemAtIndex(test.zoomRow) as Item
             const top = item !== null ? test.topInList(item) : -1e9
             test.check(c.zoomBlock === test.zoomRow && c.editingRow === test.zoomRow && test.editing(test.tracked)
                        && item !== null && top >= 0 && top + item.height <= test.list.height,

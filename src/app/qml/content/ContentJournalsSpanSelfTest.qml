@@ -278,7 +278,8 @@ Item {
             const bar = test.shownOnFrameCount("floatingSelectionTools") === 1 && test.shownOnFrame("floatingSelectionTools") !== null
             const cut = bar ? DevTest.findShown(test._frameItem, "selectionCut") as BIconButton : null
             const tip = cut !== null ? cut.toolTipText : ""
-            test.check(cut !== null && tip === test.dayAt(test.rowB).editor.spanReason,
+            const reason = "" + test.dayAt(test.rowB).editor.spanReason
+            test.check(cut !== null && tip === reason,
                        "the floating Wytnij says why in its tooltip: " + tip)
             // The block menu of a block in the span.
             const a2 = test.blockText(test.dayAt(test.rowA), 2)
@@ -294,8 +295,9 @@ Item {
             const up = test.menuItem(menu, "blockMenuMoveUp")
             const cut = test.menuItem(menu, "blockMenuCut")
             const copy = test.menuItem(menu, "blockMenuCopy")
-            test.check(test.stream.active && menu.inSelection && up !== null && up.unavailable === editor.spanReason
-                       && cut !== null && cut.unavailable === editor.spanReason,
+            const reason = "" + editor.spanReason
+            test.check(test.stream.active && menu.inSelection && up !== null && up.unavailable === reason
+                       && cut !== null && cut.unavailable === reason,
                        "the block menu in the span shows moving and cutting unavailable: " + (up !== null ? up.unavailable : "no item"))
             const copyText = copy !== null ? copy.text : ""
             test.check(copy !== null && Js.indexOf(copyText, "6") >= 0, "its Kopiuj counts the whole span: " + copyText)
@@ -382,7 +384,7 @@ Item {
             const count = bar ? DevTest.findShown(test._frameItem, "selectionCount") as Text : null
             const countText = count !== null ? count.text : ""
             test.check(count !== null && Js.indexOf(countText, "6") >= 0, "it counts the blocks of both days: " + countText)
-            const cut = bar ? DevTest.findShown(test._frameItem, "selectionCut") : null
+            const cut = bar ? DevTest.findShown(test._frameItem, "selectionCut") as Item : null
             if (cut !== null)
                 test.click(cut, Qt.NoModifier)
         }
@@ -390,7 +392,7 @@ Item {
             test.check(test.stream.active && test.dayAt(test.rowA).controller.blocks.count === 4
                        && !test.dayAt(test.rowA).controller.canUndo, "Wytnij changes nothing over several days")
             const bar = test.shownOnFrameCount("toolbarSelectionTools") === 1 && test.shownOnFrame("toolbarSelectionTools") !== null
-            const copy = bar ? DevTest.findShown(test._frameItem, "selectionCopy") : null
+            const copy = bar ? DevTest.findShown(test._frameItem, "selectionCopy") as Item : null
             if (copy !== null)
                 test.click(copy, Qt.NoModifier)
         }

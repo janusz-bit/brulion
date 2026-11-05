@@ -1242,7 +1242,8 @@ void PdfViewModel::loadOutline()
                     outline.append(QVariantMap{{u"title"_s, item.title},
                                                {u"level"_s, item.level},
                                                {u"page"_s, page},
-                                               {u"top"_s, page > 0 ? item.top : -1.0}});
+                                               {u"top"_s, page > 0 ? item.top : -1.0},
+                                               {u"targetTop"_s, page > 0 ? item.top : -1.0}});
                 }
                 post(alive, [self, generation, outline] {
                     if (!self || generation != self->m_generation)
@@ -1312,7 +1313,8 @@ void PdfViewModel::loadLinks(int first, int last)
                                                  {u"box"_s, box},
                                                  {u"url"_s, link.url},
                                                  {u"page"_s, link.page},
-                                                 {u"top"_s, link.top}});
+                                                 {u"top"_s, link.top},
+                                                 {u"targetTop"_s, link.top}});
                     }
                     if (links.isEmpty())
                         continue;

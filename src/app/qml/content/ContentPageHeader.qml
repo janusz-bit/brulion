@@ -193,13 +193,14 @@ Item {
     }
     /// Take `name` out of the page's tags / aliases (a toast with "Cofnij").
     function removeListItem(kind: string, name: string): void {
-        const before = header.controller.undoToken()
+        // (Strings from calls laundered: a call cannot take one a call before may change.)
+        const before = "" + header.controller.undoToken()
         header._held = header.controller.removePageListItem(kind, name)
         if (!AppController.routeFlag(header._held, "ok")) {
             AppController.toast(AppController.routeText(header._held, "reason"), "error")
             return
         }
-        const text = header.chipMenu.removedText(kind, name, name)
+        const text = "" + header.chipMenu.removedText(kind, name, name)
         if (header.editor)
             header.editor.noticeUndoable(text, "info", before)
         else
