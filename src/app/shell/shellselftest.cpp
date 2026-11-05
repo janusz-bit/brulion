@@ -3585,8 +3585,19 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         }),
               "the route and the viewer follow the moved PDF");
         waitFor([] { return false; }, 1500); // (reopened, and longer than the route write's 500 ms)
-        check(waitFor([&] { return opened(2); }, 15000) && app->currentRoute().value(u"pdfPage"_s).toInt() == 2,
-              "it reopens on the same page, kept in the route");
+        const bool reopened =
+                waitFor([&] { return opened(2); }, 15000) && app->currentRoute().value(u"pdfPage"_s).toInt() == 2;
+        if (!reopened) // (once on a Windows runner: what the viewer shows instead)
+            std::fprintf(stderr,
+                         "selftest: after the move: route path %s, pdfPage %d; viewer %s, ready %d, file %s, status "
+                         "%d, page %d of %d, error \"%s\"\n",
+                         qPrintable(app->currentRoute().value(u"path"_s).toString()),
+                         app->currentRoute().value(u"pdfPage"_s).toInt(), pdfView() ? "shown" : "none",
+                         pdfView() ? int(pdfView()->property("ready").toBool()) : -1,
+                         qPrintable(modelValue("file").toString()), modelValue("status").toInt(),
+                         modelValue("currentPage").toInt(), modelValue("pageCount").toInt(),
+                         qPrintable(modelValue("error").toString()));
+        check(reopened, "it reopens on the same page, kept in the route");
         // A route naming only a zoom (remote control, tests): applied without route.open.
         app->navigate(QVariantMap{{u"view"_s, u"page"_s}, {u"path"_s, pdf}, {u"pdfScale"_s, 250}});
         check(waitFor([&] { return opened(0) && qAbs(modelValue("zoomPercent").toInt() - 250) <= 1; }, 15000),
