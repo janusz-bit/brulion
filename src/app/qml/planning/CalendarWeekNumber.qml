@@ -48,7 +48,7 @@ Item {
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: root.week > 0 ? String(root.week) : ""
+            text: root.week > 0 ? "" + root.week : ""
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs
             font.weight: root.hasNote ? Theme.weightSemiBold : Font.Normal

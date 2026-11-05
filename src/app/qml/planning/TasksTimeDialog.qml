@@ -12,10 +12,15 @@ BDialog {
     objectName: "tasksTimeDialog"
 
     /// The TaskListModel whose tasks are summed.
-    property var tasks: null
+    property TaskListModel tasks: null
     property string group: "day"
     property string range: "week"
-    property var summary: ({ rows: [], totalLabel: "", tasks: 0 })
+    /// TaskListModel.timeSummary(): { rows: [{ label, duration, tasks, path, line, … }], totalLabel, tasks }.
+    readonly property var summary: summaryHolder.map
+    readonly property list<var> ranges: [{ value: "today", text: qsTr("Today") }, { value: "week", text: qsTr("This week") },
+                                         { value: "month", text: qsTr("This month") }, { value: "all", text: qsTr("All") }]
+    readonly property list<var> groups: [{ value: "day", text: qsTr("Days") }, { value: "page", text: qsTr("Pages") },
+                                         { value: "tag", text: qsTr("Tags") }, { value: "task", text: qsTr("Tasks") }]
 
     signal taskOpened(string path, int line)
 
@@ -24,8 +29,17 @@ BDialog {
     showReject: false
     acceptText: qsTr("Close")
 
-    function refresh() {
-        summary = tasks ? tasks.timeSummary(group, range) : { rows: [], totalLabel: "", tasks: 0 }
+    function refresh(): void {
+        summaryHolder.map = dialog.tasks ? dialog.tasks.timeSummary(dialog.group, dialog.range) : ({})
+    }
+    function rows(): list<var> {
+        if (summaryHolder.map.rows === undefined)
+            return []
+        return summaryHolder.map.rows
+    }
+
+    MapHolder {
+        id: summaryHolder
     }
     onAboutToShow: refresh()
     onGroupChanged: refresh()
@@ -34,8 +48,7 @@ BDialog {
     BSegmented {
         objectName: "tasksTimeRange"
         Layout.fillWidth: true
-        model: [{ value: "today", text: qsTr("Today") }, { value: "week", text: qsTr("This week") },
-                { value: "month", text: qsTr("This month") }, { value: "all", text: qsTr("All") }]
+        model: dialog.ranges
         fill: true
         currentValue: dialog.range
         onActivated: (value) => dialog.range = value
@@ -43,8 +56,7 @@ BDialog {
     BSegmented {
         objectName: "tasksTimeGroup"
         Layout.fillWidth: true
-        model: [{ value: "day", text: qsTr("Days") }, { value: "page", text: qsTr("Pages") },
-                { value: "tag", text: qsTr("Tags") }, { value: "task", text: qsTr("Tasks") }]
+        model: dialog.groups
         fill: true
         currentValue: dialog.group
         onActivated: (value) => dialog.group = value
@@ -53,25 +65,30 @@ BDialog {
         objectName: "tasksTimeTotal"
         Layout.fillWidth: true
         variant: "label"
-        text: dialog.summary.tasks > 0
-              ? qsTr("Total: %1 · %n task(s)", "", dialog.summary.tasks).arg(dialog.summary.totalLabel)
+        text: summaryHolder.map.tasks > 0
+              ? qsTr("Total: %1 · %n task(s)", "", summaryHolder.map.tasks).arg(summaryHolder.map.totalLabel)
               : qsTr("No time was logged on these tasks in this period. Start a timer from a task's menu.")
         wrapMode: Text.Wrap
     }
     Repeater {
-        model: dialog.summary.rows
+        model: dialog.rows()
         delegate: BListItem {
-            required property var modelData
+            id: timeRow
+            required property string label
+            required property string duration
+            required property int tasks
+            required property string path
+            required property int line
             required property int index
             objectName: "tasksTimeRow_" + index
             Layout.fillWidth: true
-            text: modelData.label !== "" ? modelData.label : qsTr("No tag")
-            subtitle: dialog.group === "task" ? "" : qsTr("%n task(s)", "", modelData.tasks)
-            trailing: BText { text: modelData.duration; variant: "label" }
+            text: label !== "" ? label : qsTr("No tag")
+            subtitle: dialog.group === "task" ? "" : qsTr("%n task(s)", "", tasks)
+            trailing: BText { text: timeRow.duration; variant: "label" }
             onClicked: {
-                if (dialog.group === "task" && modelData.path) {
+                if (dialog.group === "task" && timeRow.path !== "") {
                     dialog.close()
-                    dialog.taskOpened(modelData.path, modelData.line)
+                    dialog.taskOpened(timeRow.path, timeRow.line)
                 }
             }
         }

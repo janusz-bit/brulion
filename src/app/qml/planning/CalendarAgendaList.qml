@@ -29,7 +29,11 @@ FocusScope {
     readonly property bool empty: list.count === 0 || (list.count === 1 && calendar.itemCount === 0
                                                        && calendar.data(calendar.index(0, 0), CalendarModel.HasJournalRole) !== true)
 
-    function scrollToAnchor() {
+    /// `s` with its first letter upper case ("dziś" → "Dziś").
+    function capitalized(s: string): string {
+        return s.length > 0 ? Js.toUpperCase(Js.charAt(s, 0)) + Js.sliceFrom(s, 1) : ""
+    }
+    function scrollToAnchor(): void {
         let row = calendar.rowForDate(calendar.anchorDate)
         if (row < 0)
             row = calendar.rowForDate(DatesHelper.today)
@@ -38,9 +42,15 @@ FocusScope {
     }
     Connections {
         target: root.calendar
-        function onRangeChanged() { Qt.callLater(root.scrollToAnchor) }
+        function onRangeChanged() { scrollLater.restart() }
     }
-    Component.onCompleted: Qt.callLater(scrollToAnchor)
+    Component.onCompleted: scrollLater.restart()
+    // Qt.callLater(scrollToAnchor): once, after this turn's changes.
+    Timer {
+        id: scrollLater
+        interval: 0
+        onTriggered: root.scrollToAnchor()
+    }
 
     ListView {
         id: list
@@ -69,7 +79,7 @@ FocusScope {
             required property bool isToday
             required property bool isPast
             required property bool hasJournal
-            required property var items
+            required property list<var> items
             required property string longLabel
 
             width: ListView.view.width
@@ -103,7 +113,7 @@ FocusScope {
                         color: day.isToday ? Theme.accentSolid : Theme.bgSunken
                         Text {
                             anchors.centerIn: parent
-                            text: day.day
+                            text: "" + day.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textLg
                             font.weight: Theme.weightBold
@@ -120,7 +130,7 @@ FocusScope {
                         Text {
                             id: dayLabel
                             width: parent.width
-                            text: day.longLabel.charAt(0).toLocaleUpperCase() + day.longLabel.slice(1)
+                            text: root.capitalized(day.longLabel)
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textMd
                             font.weight: Theme.weightSemiBold
@@ -134,11 +144,10 @@ FocusScope {
                             y: dayLabel.implicitHeight
                             width: parent.width
                             text: {
-                                const h = day.isToday ? qsTr("Today") : DatesHelper.formatHuman(day.date)
-                                return h.charAt(0).toLocaleUpperCase() + h.slice(1)
+                                return root.capitalized(day.isToday ? qsTr("Today") : DatesHelper.formatHuman(day.date))
                             }
                             // Only the relative words (today, tomorrow, yesterday).
-                            visible: day.isToday || DatesHelper.formatHuman(day.date).indexOf(" ") < 0
+                            visible: day.isToday || Js.indexOf(DatesHelper.formatHuman(day.date), " ") < 0
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textSm
                             color: day.isToday ? Theme.accentText : Theme.fgMuted

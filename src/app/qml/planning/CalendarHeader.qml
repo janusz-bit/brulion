@@ -43,7 +43,7 @@ Item {
 
     implicitHeight: column.implicitHeight + 2 * Theme.space2
 
-    readonly property var modes: [
+    readonly property list<var> modes: [
         { value: "month", text: qsTr("Month"), icon: "calendar-days" },
         { value: "week", text: qsTr("Week"), icon: "columns-2" },
         { value: "agenda", text: qsTr("Agenda"), icon: "list" }
@@ -134,7 +134,7 @@ Item {
                 variant: "ghost"
                 iconName: "triangle-alert"
                 textColor: Theme.dangerText
-                text: root.stacked ? String(root.overdueCount) : qsTr("%n overdue", "", root.overdueCount)
+                text: root.stacked ? "" + root.overdueCount : qsTr("%n overdue", "", root.overdueCount)
                 Accessible.name: qsTr("%n overdue", "", root.overdueCount)
                 onClicked: root.overdueRequested()
             }

@@ -23,7 +23,7 @@ BDialog {
 
     readonly property string at: date + " " + time
     readonly property bool validTime: time !== ""
-    readonly property var quickTimes: ["08:00", "09:00", "12:00", "15:00", "18:00", "20:00"]
+    readonly property list<string> quickTimes: ["08:00", "09:00", "12:00", "15:00", "18:00", "20:00"]
     /// The round clock, null until the clock button first opens it.
     property BTimePickerDialog clockDialog: null
 
@@ -31,7 +31,12 @@ BDialog {
     signal reminderAdded(string text, string at, bool alarm)
     signal moreOptionsRequested(string text, string at, bool alarm)
 
-    function openFor(newMode, day) {
+    /// "More options…": the draft goes to the view (after this dialog closed).
+    function requestMoreOptions(text: string): void {
+        close()
+        moreOptionsRequested(text, at, alarm)
+    }
+    function openFor(newMode: string, day: string): void {
         mode = newMode
         date = day
         time = defaultTime
@@ -47,7 +52,7 @@ BDialog {
     iconColor: mode === "task" ? Theme.fgMuted : Theme.chipReminderFg
     preferredWidth: Theme.dialogWidth
     acceptText: qsTr("Add")
-    acceptEnabled: field.typedText.trim() !== "" && (mode === "task" || validTime)
+    acceptEnabled: Js.trim(field.typedText) !== "" && (mode === "task" || validTime)
     initialFocusItem: field
 
     footerLeading: [
@@ -57,16 +62,12 @@ BDialog {
             iconName: "repeat"
             text: control.sheet ? qsTr("More") : qsTr("More options…")
             Accessible.name: qsTr("More options: date, repetition")
-            onClicked: {
-                const text = field.text.trim()
-                control.close()
-                control.moreOptionsRequested(text, control.at, control.alarm)
-            }
+            onClicked: control.requestMoreOptions(Js.trim(field.text))
         }
     ]
 
     onAccepted: {
-        const text = field.text.trim()
+        const text = Js.trim(field.text)
         if (mode === "task")
             taskAdded(text, date)
         else
@@ -107,7 +108,7 @@ BDialog {
                 variant: "secondary"
                 Accessible.name: qsTr("Pick a time on a clock, now %1").arg(control.time)
                 onClicked: {
-                    if (timeField.text.trim() !== "") {
+                    if (Js.trim(timeField.text) !== "") {
                         const typed = DatesHelper.normalizeTime(timeField.text)
                         if (typed !== "")
                             control.time = typed

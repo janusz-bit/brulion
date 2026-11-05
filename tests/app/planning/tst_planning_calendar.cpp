@@ -294,6 +294,12 @@ private Q_SLOTS:
         // Any day, also outside the range.
         QCOMPARE(m.dayItems(u"2027-01-01"_s).size(), 0);
         QCOMPARE(m.dayItems(u"bogus"_s).size(), 0);
+        // The day panel's lists: no journal, open entries before closed ones (a stable partition).
+        QVERIFY(m.dayHasJournal(u"2026-10-15"_s));
+        QVERIFY(!m.dayHasJournal(u"2026-10-01"_s));
+        QVERIFY(!m.dayHasJournal(u"bogus"_s));
+        QCOMPARE(kindsOf(m.dayEntries(u"2026-10-15"_s), u"kind"_s), (QStringList{u"reminder"_s, u"due"_s}));
+        QCOMPARE(m.dayEntries(u"bogus"_s).size(), 0);
 
         const QVariantMap marks = m.marks(u"2026-10-01"_s, u"2026-10-31"_s);
         QStringList kinds = marks.value(u"2026-10-15"_s).toStringList();
@@ -301,6 +307,90 @@ private Q_SLOTS:
         QCOMPARE(kinds, (QStringList{u"due"_s, u"journal"_s, u"reminder"_s}));
         QCOMPARE(marks.value(u"2026-10-01"_s).toStringList(), QStringList{u"overdue"_s});
         QVERIFY(m.marks(u"2026-10-31"_s, u"2026-10-01"_s).isEmpty());
+    }
+
+    // ---- The grids' lists (pure functions) --------------------------------------------------
+
+    void gridLists()
+    {
+        const auto entry = [](const QString &title, int minutes, bool closed) {
+            return QVariant(QVariantMap{{u"title"_s, title}, {u"minutes"_s, minutes}, {u"closed"_s, closed}});
+        };
+        const QVariantList items{entry(u"Śniadanie"_s, 8 * 60, true), entry(u"Spotkanie"_s, 8 * 60 + 30, false),
+                                 entry(u"Zadzwonić"_s, 9 * 60 + 10, false), entry(u"Żaglówka"_s, -1, false),
+                                 entry(u"Rachunek"_s, -1, true), entry(u"Kolacja"_s, 19 * 60, false)};
+        QCOMPARE(kindsOf(brulion::planning::openEntriesFirst(items), u"title"_s),
+                 (QStringList{u"Spotkanie"_s, u"Zadzwonić"_s, u"Żaglówka"_s, u"Kolacja"_s, u"Śniadanie"_s, u"Rachunek"_s}));
+        QCOMPARE(kindsOf(brulion::planning::allDayEntries(items), u"title"_s), (QStringList{u"Żaglówka"_s, u"Rachunek"_s}));
+        QVERIFY(brulion::planning::openEntriesFirst({}).isEmpty());
+        QVERIFY(brulion::planning::allDayEntries({}).isEmpty());
+
+        // Lanes: 8:00 and 8:30 share (< 45 min after the group's first), 9:10 starts a group (70
+        // minutes after 8:00), 19:00 is alone.
+        const QVariantList lanes = brulion::planning::timedLanes(items);
+        QCOMPARE(lanes.size(), 4);
+        QStringList titles;
+        QList<int> lane;
+        QList<int> count;
+        for (const QVariant &v : lanes) {
+            const QVariantMap m = v.toMap();
+            titles << m.value(u"entry"_s).toMap().value(u"title"_s).toString();
+            lane << m.value(u"lane"_s).toInt();
+            count << m.value(u"lanes"_s).toInt();
+        }
+        QCOMPARE(titles, (QStringList{u"Śniadanie"_s, u"Spotkanie"_s, u"Zadzwonić"_s, u"Kolacja"_s}));
+        QCOMPARE(lane, (QList<int>{0, 1, 0, 0}));
+        QCOMPARE(count, (QList<int>{2, 2, 1, 1}));
+        // 44 minutes after the first still share, 45 do not.
+        const QList<QVariant> edge{entry(u"a"_s, 600, false), entry(u"b"_s, 644, false), entry(u"c"_s, 645, false)};
+        const QVariantList edgeLanes = brulion::planning::timedLanes(edge);
+        QCOMPARE(edgeLanes.at(1).toMap().value(u"lanes"_s).toInt(), 2);
+        QCOMPARE(edgeLanes.at(2).toMap().value(u"lane"_s).toInt(), 0);
+        QCOMPARE(edgeLanes.at(2).toMap().value(u"lanes"_s).toInt(), 1);
+        QVERIFY(brulion::planning::timedLanes({}).isEmpty());
+    }
+
+    void gridRoles()
+    {
+        auto index = makeIndex({
+                {u"Dom.md"_s, u"- [ ] Farba 📅 2026-10-15\n- [ ] Rata 📅 2026-10-15\n- przypomnienie ⏰ 2026-10-15 12:00\n"_s},
+        });
+        CalendarModel m;
+        m.setToday(u"2026-10-15"_s);
+        m.setVaultIndex(index.get());
+        m.setMode(u"week"_s);
+        QCOMPARE(m.maxAllDay(), 2);
+        const int row = m.rowForDate(u"2026-10-15"_s);
+        QVERIFY(row >= 0);
+        QCOMPARE(role(m, row, CalendarModel::AllDayRole).toList().size(), 2);
+        QCOMPARE(role(m, row, CalendarModel::TimedRole).toList().size(), 1);
+        QCOMPARE(role(m, row, CalendarModel::OrderedItemsRole).toList().size(), 3);
+        QVERIFY(m.roleNames().values().contains("orderedItems"));
+        QVERIFY(m.roleNames().values().contains("allDay"));
+        QVERIFY(m.roleNames().values().contains("timed"));
+    }
+
+    void dayEntriesOpenFirst()
+    {
+        auto index = makeIndex({
+                {u"Dom.md"_s, u"- [x] Zrobione rano ⏳ 2026-10-15 08:00\n- [ ] Później ⏳ 2026-10-15 09:00\n"
+                              u"- [-] Odwołane ⏳ 2026-10-15 07:00\n- [ ] Całodzienne 📅 2026-10-15\n"_s},
+        });
+        CalendarModel m;
+        m.setToday(u"2026-10-15"_s);
+        m.setVaultIndex(index.get());
+        const QVariantList all = m.dayItems(u"2026-10-15"_s);
+        const QVariantList entries = m.dayEntries(u"2026-10-15"_s);
+        QCOMPARE(entries.size(), all.size());
+        QStringList open;
+        QStringList closed;
+        for (const QVariant &e : all)
+            (e.toMap().value(u"closed"_s).toBool() ? closed : open).append(e.toMap().value(u"title"_s).toString());
+        QVERIFY(!open.isEmpty());
+        QVERIFY(!closed.isEmpty());
+        QCOMPARE(kindsOf(entries, u"title"_s), open + closed);
+        for (qsizetype i = 0; i < entries.size(); ++i)
+            QCOMPARE(entries.at(i).toMap().value(u"closed"_s).toBool(), i >= open.size());
     }
 
     void agendaMode()

@@ -20,7 +20,7 @@ ColumnLayout {
 
     spacing: Theme.space2
 
-    readonly property var statusChoices: [
+    readonly property list<var> statusChoices: [
         { value: "all", text: qsTr("All tasks") },
         { value: "open", text: qsTr("Open") },
         { value: "todo", text: qsTr("To do") },
@@ -29,7 +29,7 @@ ColumnLayout {
         { value: "done", text: qsTr("Done") },
         { value: "cancelled", text: qsTr("Cancelled") }
     ]
-    readonly property var priorityChoices: [
+    readonly property list<var> priorityChoices: [
         { value: "", text: qsTr("Any priority") },
         { value: "highest", text: qsTr("Highest") },
         { value: "high", text: qsTr("High") },
@@ -38,22 +38,52 @@ ColumnLayout {
         { value: "low", text: qsTr("Low") },
         { value: "lowest", text: qsTr("Lowest") }
     ]
-    readonly property var sortChoices: [
+    readonly property list<var> sortChoices: [
         { value: "due", text: qsTr("By date") },
         { value: "priority", text: qsTr("By priority") },
         { value: "page", text: qsTr("By page") },
         { value: "created", text: qsTr("Newest first") }
     ]
-    function labelOf(choices, value) {
-        for (const c of choices)
-            if (c.value === value)
-                return c.text
-        return ""
+    /// The text of the choice `value` of statusChoices, priorityChoices or sortChoices.
+    function statusLabel(value: string): string {
+        switch (value) {
+        case "all": return qsTr("All tasks")
+        case "open": return qsTr("Open")
+        case "todo": return qsTr("To do")
+        case "doing": return qsTr("In progress")
+        case "deferred": return qsTr("Waiting")
+        case "done": return qsTr("Done")
+        case "cancelled": return qsTr("Cancelled")
+        default: return ""
+        }
     }
-    function focusSearch() { search.forceActiveFocus() }
-    function pageTitle(path) {
-        const name = path.split("/").pop()
-        return name.endsWith(".md") ? name.slice(0, -3) : name
+    function priorityLabel(value: string): string {
+        switch (value) {
+        case "": return qsTr("Any priority")
+        case "highest": return qsTr("Highest")
+        case "high": return qsTr("High")
+        case "medium": return qsTr("Medium")
+        case "none": return qsTr("Normal (none)")
+        case "low": return qsTr("Low")
+        case "lowest": return qsTr("Lowest")
+        default: return ""
+        }
+    }
+    function sortLabel(value: string): string {
+        switch (value) {
+        case "due": return qsTr("By date")
+        case "priority": return qsTr("By priority")
+        case "page": return qsTr("By page")
+        case "created": return qsTr("Newest first")
+        default: return ""
+        }
+    }
+    function focusSearch(): void { search.forceActiveFocus() }
+    function pageTitle(path: string): string {
+        return root.withoutMd(Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1))
+    }
+    function withoutMd(name: string): string {
+        return Js.endsWith(name, ".md") ? Js.slice(name, 0, -3) : name
     }
 
     RowLayout {
@@ -98,7 +128,7 @@ ColumnLayout {
             interactive: true
             selected: root.tasks.statusFilter !== "all"
             iconName: "circle-check"
-            text: root.labelOf(root.statusChoices, root.tasks.statusFilter)
+            text: root.statusLabel(root.tasks.statusFilter)
             onClicked: statusMenu.popup(statusChip, 0, statusChip.height)
         }
         BChip {
@@ -109,7 +139,7 @@ ColumnLayout {
             iconName: "hash"
             text: root.tasks.tagFilter !== "" ? root.tasks.tagFilter : qsTr("Tag")
             onClicked: {
-                tagPalette.items = root.tasks.tagChoices(0).map(c => ({ title: c.label, subtitle: qsTr("%n tasks", "", c.count), icon: "hash", value: c.value }))
+                tagPalette.items = root.tasks.paletteChoices("tag")
                 tagPalette.open()
             }
             onRemoveClicked: root.tasks.tagFilter = ""
@@ -121,7 +151,7 @@ ColumnLayout {
             iconName: "file-text"
             text: root.tasks.pageFilter !== "" ? root.pageTitle(root.tasks.pageFilter) : qsTr("Page")
             onClicked: {
-                pagePalette.items = root.tasks.pageChoices(0).map(c => ({ title: c.label, subtitle: c.folder !== "" ? c.folder + " · " + qsTr("%n tasks", "", c.count) : qsTr("%n tasks", "", c.count), icon: "file-text", value: c.value }))
+                pagePalette.items = root.tasks.paletteChoices("page")
                 pagePalette.open()
             }
             onRemoveClicked: root.tasks.pageFilter = ""
@@ -133,7 +163,7 @@ ColumnLayout {
             iconName: "folder"
             text: root.tasks.folderFilter !== "" ? root.tasks.folderFilter : qsTr("Folder")
             onClicked: {
-                folderPalette.items = root.tasks.folderChoices(0).map(c => ({ title: c.label, subtitle: qsTr("%n tasks", "", c.count), icon: "folder", value: c.value }))
+                folderPalette.items = root.tasks.paletteChoices("folder")
                 folderPalette.open()
             }
             onRemoveClicked: root.tasks.folderFilter = ""
@@ -144,7 +174,7 @@ ColumnLayout {
             removable: root.tasks.priorityFilter !== ""
             selected: root.tasks.priorityFilter !== ""
             iconName: "arrow-up"
-            text: root.tasks.priorityFilter !== "" ? root.labelOf(root.priorityChoices, root.tasks.priorityFilter) : qsTr("Priority")
+            text: root.tasks.priorityFilter !== "" ? root.priorityLabel(root.tasks.priorityFilter) : qsTr("Priority")
             onClicked: priorityMenu.popup(priorityChip, 0, priorityChip.height)
             onRemoveClicked: root.tasks.priorityFilter = ""
         }
@@ -152,7 +182,7 @@ ColumnLayout {
             id: sortChip
             interactive: true
             iconName: "chevrons-up-down"
-            text: root.labelOf(root.sortChoices, root.tasks.sortKey)
+            text: root.sortLabel(root.tasks.sortKey)
             Accessible.name: qsTr("Sort: %1").arg(text)
             onClicked: sortMenu.popup(sortChip, 0, sortChip.height)
         }
@@ -172,14 +202,15 @@ ColumnLayout {
     Instantiator {
         model: root.statusChoices
         delegate: BMenuItem {
-            required property var modelData
-            text: modelData.text
+            id: choiceItem
+            required text
+            required property string value
             checkable: true
-            checked: root.tasks.statusFilter === modelData.value
-            onTriggered: root.tasks.statusFilter = modelData.value
+            checked: root.tasks.statusFilter === choiceItem.value
+            onTriggered: root.tasks.statusFilter = choiceItem.value
         }
-        onObjectAdded: (index, object) => statusMenu.insertItem(index, object)
-        onObjectRemoved: (index, object) => statusMenu.removeItem(object)
+        onObjectAdded: (index, object) => statusMenu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => statusMenu.removeItem(object as Item)
     }
     BMenu {
         id: priorityMenu
@@ -187,14 +218,15 @@ ColumnLayout {
     Instantiator {
         model: root.priorityChoices
         delegate: BMenuItem {
-            required property var modelData
-            text: modelData.text
+            id: choiceItem
+            required text
+            required property string value
             checkable: true
-            checked: root.tasks.priorityFilter === modelData.value
-            onTriggered: root.tasks.priorityFilter = modelData.value
+            checked: root.tasks.priorityFilter === choiceItem.value
+            onTriggered: root.tasks.priorityFilter = choiceItem.value
         }
-        onObjectAdded: (index, object) => priorityMenu.insertItem(index, object)
-        onObjectRemoved: (index, object) => priorityMenu.removeItem(object)
+        onObjectAdded: (index, object) => priorityMenu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => priorityMenu.removeItem(object as Item)
     }
     BMenu {
         id: sortMenu
@@ -202,14 +234,15 @@ ColumnLayout {
     Instantiator {
         model: root.sortChoices
         delegate: BMenuItem {
-            required property var modelData
-            text: modelData.text
+            id: choiceItem
+            required text
+            required property string value
             checkable: true
-            checked: root.tasks.sortKey === modelData.value
-            onTriggered: root.tasks.sortKey = modelData.value
+            checked: root.tasks.sortKey === choiceItem.value
+            onTriggered: root.tasks.sortKey = choiceItem.value
         }
-        onObjectAdded: (index, object) => sortMenu.insertItem(index, object)
-        onObjectRemoved: (index, object) => sortMenu.removeItem(object)
+        onObjectAdded: (index, object) => sortMenu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => sortMenu.removeItem(object as Item)
     }
 
     BPalette {
@@ -217,20 +250,20 @@ ColumnLayout {
         placeholderText: qsTr("Filter by tag…")
         emptyTitle: qsTr("No tags on tasks")
         defaultIcon: "hash"
-        onItemActivated: (item) => root.tasks.tagFilter = item.value
+        onItemActivated: (item) => root.tasks.tagFilter = AppController.routeText(item, "value")
     }
     BPalette {
         id: pagePalette
         placeholderText: qsTr("Filter by page…")
         emptyTitle: qsTr("No pages with tasks")
         defaultIcon: "file-text"
-        onItemActivated: (item) => root.tasks.pageFilter = item.value
+        onItemActivated: (item) => root.tasks.pageFilter = AppController.routeText(item, "value")
     }
     BPalette {
         id: folderPalette
         placeholderText: qsTr("Filter by folder…")
         emptyTitle: qsTr("No folders with tasks")
         defaultIcon: "folder"
-        onItemActivated: (item) => root.tasks.folderFilter = item.value
+        onItemActivated: (item) => root.tasks.folderFilter = AppController.routeText(item, "value")
     }
 }

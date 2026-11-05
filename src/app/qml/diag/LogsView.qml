@@ -15,11 +15,11 @@ FocusScope {
 
     property var route: ({})
     readonly property string title: qsTr("Event log")
-    readonly property bool hasWindow: (route.fromMs || 0) > 0 || (route.toMs || 0) > 0
+    readonly property bool hasWindow: routeMs("fromMs") > 0 || routeMs("toMs") > 0
     property bool windowCleared: false
     property bool following: true
     property int newCount: 0
-    readonly property var groups: [
+    readonly property list<var> groups: [
         { value: "", text: qsTr("Everything") },
         { value: "sync", text: qsTr("Sync") },
         { value: "net", text: qsTr("Network") },
@@ -31,11 +31,32 @@ FocusScope {
         { value: "system", text: qsTr("System") }
     ]
 
-    function groupText(group) {
-        const g = groups.find(x => x.value === group)
-        return g ? g.text : group
+    readonly property list<var> levels: [{ value: "debug", text: qsTr("All") },
+                                         { value: "warning", text: Theme.compact ? qsTr("Warnings") : qsTr("Warnings and errors") },
+                                         { value: "error", text: qsTr("Errors") }]
+
+    /// A number of the route (fromMs, toMs; 0 when missing or not a number).
+    function routeMs(key: string): real {
+        const text = AppController.routeText(root.route, key)
+        const n = text === "" ? 0 : Js.toNumber(text)
+        return Js.isNaN(n) ? 0 : n
     }
-    function levelText(level) {
+    /// The chip's name of an area (the groups above).
+    function groupText(group: string): string {
+        switch (group) {
+        case "": return qsTr("Everything")
+        case "sync": return qsTr("Sync")
+        case "net": return qsTr("Network")
+        case "vault": return qsTr("Notebook")
+        case "index": return qsTr("Index")
+        case "reminders": return qsTr("Reminders")
+        case "io": return qsTr("Import and export")
+        case "app": return qsTr("Application")
+        case "system": return qsTr("System")
+        default: return group
+        }
+    }
+    function levelText(level: string): string {
         switch (level) {
         case "debug": return qsTr("Detail")
         case "info": return qsTr("Information")
@@ -45,16 +66,16 @@ FocusScope {
         default: return level
         }
     }
-    function toEnd() {
+    function toEnd(): void {
         list.positionViewAtEnd()
         root.newCount = 0
         root.following = true
     }
-    function saveAs() {
+    function saveAs(): void {
         saveDialog.selectedFile = Logs.suggestedSaveFile()
         saveDialog.open()
     }
-    function has(action) {
+    function has(action: string): bool {
         return Logs.actions.indexOf(action) >= 0
     }
 
@@ -62,17 +83,17 @@ FocusScope {
 
     LogModel {
         id: logModel
-        group: root.route.group || ""
-        minLevel: root.route.level || "debug"
+        group: AppController.routeText(root.route, "group")
+        minLevel: AppController.routeText(root.route, "level") !== "" ? AppController.routeText(root.route, "level") : "debug"
         search: ""
         // Earlier runs of the app too (from the files): the sync that took long may have been
         // before the app was restarted.
         includeEarlier: true
-        fromMs: root.windowCleared ? 0 : (root.route.fromMs || 0)
-        toMs: root.windowCleared ? 0 : (root.route.toMs || 0)
+        fromMs: root.windowCleared ? 0 : root.routeMs("fromMs")
+        toMs: root.windowCleared ? 0 : root.routeMs("toMs")
         onCountChanged: {
             if (root.following)
-                Qt.callLater(list.positionViewAtEnd)
+                toEndLater.restart()
         }
         onRowsInserted: (parent, first, last) => {
             if (!root.following)
@@ -82,8 +103,15 @@ FocusScope {
 
     Connections {
         target: Logs
-        function onDone(message) { AppController.toast(message, "success") }
-        function onFailed(message) { AppController.toast(message, "error") }
+        function onDone(message: string) { AppController.toast(message, "success") }
+        function onFailed(message: string) { AppController.toast(message, "error") }
+    }
+
+    // Qt.callLater(list.positionViewAtEnd): once, after the changes of this turn.
+    Timer {
+        id: toEndLater
+        interval: 0
+        onTriggered: list.positionViewAtEnd()
     }
 
     TextMetrics {
@@ -176,14 +204,15 @@ FocusScope {
                 Repeater {
                     model: root.groups
                     delegate: BChip {
-                        required property var modelData
-                        objectName: "logsGroup-" + (modelData.value === "" ? "all" : modelData.value)
-                        text: modelData.text
+                        id: groupChip
+                        required property string value
+                        required text
+                        objectName: "logsGroup-" + (value === "" ? "all" : value)
                         showIcon: false
                         interactive: true
-                        selected: logModel.group === modelData.value
-                        onClicked: logModel.group = modelData.value
-                        Accessible.name: qsTr("Show: %1").arg(modelData.text)
+                        selected: logModel.group === value
+                        onClicked: logModel.group = groupChip.value
+                        Accessible.name: qsTr("Show: %1").arg(text)
                     }
                 }
             }
@@ -200,9 +229,7 @@ FocusScope {
                 fill: Theme.compact
                 size: "small"
                 accessibleName: qsTr("Level")
-                model: [{ value: "debug", text: qsTr("All") },
-                        { value: "warning", text: Theme.compact ? qsTr("Warnings") : qsTr("Warnings and errors") },
-                        { value: "error", text: qsTr("Errors") }]
+                model: root.levels
                 currentValue: logModel.minLevel === "info" ? "debug" : logModel.minLevel
                 onActivated: (value) => logModel.minLevel = value
             }
@@ -226,7 +253,7 @@ FocusScope {
             spacing: Theme.space2
             BChip {
                 visible: root.hasWindow && !root.windowCleared
-                text: root.route.run ? qsTr("Sync #%1").arg(root.route.run) : qsTr("Time of one sync")
+                text: AppController.routeFlag(root.route, "run") ? qsTr("Sync #%1").arg(AppController.routeText(root.route, "run")) : qsTr("Time of one sync")
                 iconName: "history"
                 removable: true
                 onRemoveClicked: root.windowCleared = true
@@ -271,12 +298,12 @@ FocusScope {
                     id: dayHeader
                     required property string section
                     width: ListView.view.width
-                    height: Theme.lineHeightPx(Theme.textSm) + Theme.space2 + Theme.space1
+                    height: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight) + Theme.space2 + Theme.space1
                     Rectangle { anchors.fill: parent; color: Theme.bgSunken }
                     Text {
                         x: Theme.space3
                         y: Theme.space1
-                        height: Theme.lineHeightPx(Theme.textSm)
+                        height: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight)
                         verticalAlignment: Text.AlignVCenter
                         text: DatesHelper.formatHuman(dayHeader.section)
                         font.family: Theme.fontUi
@@ -361,7 +388,7 @@ FocusScope {
                     if (root.following)
                         root.newCount = 0
                 }
-                Component.onCompleted: Qt.callLater(list.positionViewAtEnd)
+                Component.onCompleted: toEndLater.restart()
             }
 
             BEmptyState {

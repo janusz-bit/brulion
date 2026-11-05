@@ -8,8 +8,11 @@ import Brulion
 // overdue), scheduled, start, the next reminder / alarm, recurrence in words, priority — plus
 // where it is written (page, or the day of a daily note).
 //
-//   TasksRow { task: model; onTaskToggled: …; onOpened: …; onLinkActivated: (url) => …
-//              onTagPageRequested: (tag) => …; onStatusRequested: (status) => … }
+//   delegate: TasksRow { onTaskToggled: …; onOpened: …; onLinkActivated: (url) => …
+//                        onTagPageRequested: (tag) => …; onStatusRequested: (status) => … }
+//
+// A TaskListModel task row's delegate: its roles are required properties (`text` is the task's
+// plain text).
 //
 // Click / Enter opens the note at the task's line; Space toggles; the context menu — "Otwórz" and
 // the statuses (TaskStatusMenu; "Bez statusu" makes it a plain list item) — opens with a right
@@ -27,8 +30,40 @@ import Brulion
 T.ItemDelegate {
     id: control
 
-    /// The row's roles (TaskListModel), e.g. the delegate's `model`.
-    required property var task
+    // The row's roles (TaskListModel).
+    required text
+    required property string status
+    required property string html
+    required property string path
+    required property int line
+    required property string pageTitle
+    required property string folder
+    required property bool isJournal
+    required property string due
+    required property string dueLabel
+    required property bool overdue
+    required property string scheduled
+    required property string scheduledLabel
+    required property string start
+    required property string startLabel
+    required property string recurrence
+    required property string recurrenceLabel
+    required property int priority
+    required property string priorityName
+    required property string reminderLabel
+    required property bool reminderAlarm
+    required property string reminderSpec
+    required property bool blocked
+    required property string blockedBy
+    required property string blockedById
+    required property int blockingCount
+    required property string dependencyProblem
+    required property string progress
+    required property bool progressComplete
+    required property string timeLabel
+    required property bool clockRunning
+    /// The status, "todo" for none.
+    readonly property string statusOrTodo: status !== "" ? status : "todo"
 
     signal taskToggled()
     signal opened()
@@ -50,46 +85,87 @@ T.ItemDelegate {
     /// The link under the mouse or the pressing finger, underlined (as in the editor). Followed
     /// with linkAt: the Text's own hoveredLink would reset with each change of its text.
     property string _hoveredLink: ""
-    function _trackLink(x, y) {
+    function _trackLink(x: real, y: real): void {
         const link = label.linkAt(x, y)
-        const h = link.startsWith("task:") ? "" : link
+        const h = Js.startsWith(link, "task:") ? "" : link
         if (h !== control._hoveredLink)
             control._hoveredLink = h
     }
     /// The tag of the link at (x, y) of the task text, "" when it is no #tag.
-    function tagAt(x, y) {
+    function tagAt(x: real, y: real): string {
         const link = label.linkAt(x, y)
-        return link.startsWith("tag:") ? decodeURIComponent(link.slice(4)) : ""
+        return Js.startsWith(link, "tag:") ? Js.decodeURIComponent(Js.sliceFrom(link, 4)) : ""
     }
-    function openTagPage(tag) {
+    function openTagPage(tag: string): void {
         control._tagOpened = true
         control.tagPageRequested(tag)
     }
     /// The menu of what is at (x, y) of the row: a chip's token, a link of the text; false when
     /// there is neither (the row's own menu then).
-    function openMenuAt(x, y) {
-        const c = chips.mapFromItem(control, x, y)
-        const chip = chips.childAt(c.x, c.y)
-        if (chip && chip.objectName.startsWith("taskChip_")) {
-            control.tokenMenuRequested(chip.objectName.slice(9), chip, c.x - chip.x, c.y - chip.y)
+    function openMenuAt(x: real, y: real): bool {
+        control._chipsPoint = chips.mapFromItem(control, x, y)
+        control._chip = chips.childAt(control._chipsPoint.x, control._chipsPoint.y)
+        if (control._chip !== null && Js.startsWith(control._chip.objectName, "taskChip_")) {
+            control.tokenMenuRequested(Js.sliceFrom(control._chip.objectName, 9), control._chip,
+                                       control._chipsPoint.x - control._chip.x, control._chipsPoint.y - control._chip.y)
             return true
         }
-        const p = label.mapFromItem(control, x, y)
-        const link = label.linkAt(p.x, p.y)
+        control._labelPoint = label.mapFromItem(control, x, y)
+        const link = label.linkAt(control._labelPoint.x, control._labelPoint.y)
         if (link !== "") {
             control._tagOpened = true // (the release after a long press is no click on the link)
-            control.linkMenuRequested(link, label, p.x, p.y)
+            control.linkMenuRequested(link, label, control._labelPoint.x, control._labelPoint.y)
             return true
         }
         return false
     }
+    /// A right click at (x, y): the menu of what is there, else the row's.
+    function openAnyMenuAt(x: real, y: real): void {
+        if (!control.openMenuAt(x, y))
+            control.openMenuAtPoint(x, y)
+    }
+    /// A click at (x, y) of the text: follows the link there (`ctrl` on a #tag: its page).
+    function clickLinkAt(x: real, y: real, ctrl: bool): void {
+        const tag = control.tagAt(x, y)
+        if (tag !== "" && ctrl) {
+            control.openTagPage(tag)
+            return
+        }
+        const link = label.linkAt(x, y)
+        if (link !== "")
+            control.linkActivated(link)
+    }
+    /// A finger's tap at (x, y) of the text: follows the link there — unless the press opened a
+    /// link's menu (a long press).
+    function tapLinkAt(x: real, y: real): void {
+        if (control._tagOpened) {
+            control._tagOpened = false // the gesture that opened the link's menu
+            return
+        }
+        const link = label.linkAt(x, y)
+        if (link !== "")
+            control.linkActivated(link)
+    }
+    // What openMenuAt() found (mapFromItem's and childAt()'s results read through typed properties).
+    property point _chipsPoint
+    property point _labelPoint
+    property Item _chip: null
+    /// The non-empty parts joined with ", ".
+    function joinNonEmpty(parts: list<string>): string {
+        let out = ""
+        for (let i = 0; i < parts.length; ++i) {
+            if (parts[i] !== "")
+                out = out === "" ? parts[i] : out + ", " + parts[i]
+        }
+        return out
+    }
 
-    readonly property bool closed: task.status === "done" || task.status === "cancelled"
-    readonly property string journalDay: task.isJournal ? Workspace.journalDate(task.path || "") : ""
+    readonly property bool closed: status === "done" || status === "cancelled"
+    readonly property string journalDay: isJournal ? Workspace.journalDate(path) : ""
     readonly property string where: journalDay !== "" ? qsTr("Journal · %1").arg(DatesHelper.formatShort(journalDay))
-                                                      : (task.folder ? task.pageTitle + " · " + task.folder : task.pageTitle)
+                                                      : (folder !== "" ? pageTitle + " · " + folder : pageTitle)
     readonly property string priorityLabel: {
-        switch (task.priorityName) {
+        switch (priorityName) {
         case "highest": return qsTr("Highest")
         case "high": return qsTr("High")
         case "medium": return qsTr("Medium")
@@ -99,7 +175,7 @@ T.ItemDelegate {
         return ""
     }
     readonly property string statusLabel: {
-        switch (task.status) {
+        switch (status) {
         case "doing": return qsTr("In progress")
         case "deferred": return qsTr("Waiting")
         case "cancelled": return qsTr("Cancelled")
@@ -118,8 +194,8 @@ T.ItemDelegate {
     hoverEnabled: !Theme.touchUi
 
     Accessible.role: Accessible.ListItem
-    Accessible.name: [task.text, statusLabel, task.dueLabel ? qsTr("due %1").arg(task.dueLabel) : "",
-                      task.overdue ? qsTr("overdue") : "", priorityLabel, where].filter(s => !!s).join(", ")
+    Accessible.name: joinNonEmpty([text, statusLabel, dueLabel !== "" ? qsTr("due %1").arg(dueLabel) : "",
+                                   overdue ? qsTr("overdue") : "", priorityLabel, where])
 
     onClicked: control.opened()
     onPressAndHold: {
@@ -130,7 +206,7 @@ T.ItemDelegate {
     Keys.onEnterPressed: control.opened()
     Keys.onSpacePressed: control.taskToggled()
     Keys.onMenuPressed: {
-        control.openMenu(control, Theme.space8, control.height)
+        control.openMenuFrom(control, Theme.space8, control.height)
         control.statusMenu.highlightStatus() // the keyboard starts at the task's status
     }
 
@@ -139,10 +215,7 @@ T.ItemDelegate {
         // tap opened the (modal) menu, which swallowed the release: the task never opened.
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         acceptedButtons: Qt.RightButton
-        onTapped: (eventPoint) => {
-            if (!control.openMenuAt(eventPoint.position.x, eventPoint.position.y))
-                control.openMenu(eventPoint.position.x, eventPoint.position.y)
-        }
+        onTapped: (eventPoint) => control.openAnyMenuAt(eventPoint.position.x, eventPoint.position.y)
     }
 
     // Laid out with bindings, not Layouts: the row has its final height (a title on two lines,
@@ -159,11 +232,11 @@ T.ItemDelegate {
         TaskBox {
             id: box
             objectName: "tasksRowTaskBox"
-            status: control.task.status || "todo"
-            Accessible.name: qsTr("Done: %1").arg(control.task.text || "")
+            status: control.statusOrTodo
+            Accessible.name: qsTr("Done: %1").arg(control.text)
             onToggled: control.taskToggled()
             ownMenu: false // the row's menu, "Otwórz" first
-            onMenuRequested: control.openMenu(box, 0, box.height)
+            onMenuRequested: control.openMenuFrom(box, 0, box.height)
         }
 
         // The text and its chips, vertically centred below their top margin (as a Layout would).
@@ -179,11 +252,11 @@ T.ItemDelegate {
                 width: parent.width
                 // Escaped by the core InlineRenderer: notes never inject markup. Tags and chips are
                 // rounded shapes; the text ends with "…" after 4 lines.
-                html: control.task.html || ""
+                html: control.html
                 hoveredLink: control._hoveredLink
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
-                font.strikeout: control.task.status === "cancelled"
+                font.strikeout: control.status === "cancelled"
                 color: control.closed ? Theme.fgMuted : Theme.fg
                 maximumLineCount: 4
                 lineHeight: Theme.lineHeightPx(Theme.textBase, 1.4)
@@ -202,7 +275,7 @@ T.ItemDelegate {
                     cursorShape: Qt.PointingHandCursor
                     onPointChanged: {
                         control._trackLink(point.position.x, point.position.y)
-                        LinkPreviews.hover(label, control._hoveredLink, control.task.path || "", Workspace,
+                        LinkPreviews.hover(label, control._hoveredLink, control.path, Workspace,
                                            point.position.x, point.position.y)
                     }
                     onHoveredChanged: {
@@ -219,17 +292,8 @@ T.ItemDelegate {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                     gesturePolicy: TapHandler.ReleaseWithinBounds
                     onPressedChanged: if (pressed) control._tagOpened = false
-                    onTapped: (eventPoint) => {
-                        const p = eventPoint.position
-                        const tag = control.tagAt(p.x, p.y)
-                        if (tag !== "" && (mouseTap.point.modifiers & Qt.ControlModifier)) {
-                            control.openTagPage(tag)
-                            return
-                        }
-                        const link = label.linkAt(p.x, p.y)
-                        if (link !== "")
-                            control.linkActivated(link)
-                    }
+                    onTapped: (eventPoint) => control.clickLinkAt(eventPoint.position.x, eventPoint.position.y,
+                                                                  (mouseTap.point.modifiers & Qt.ControlModifier) !== 0)
                 }
                 TapHandler {
                     // A tap on a link follows it; a long press on it: its menu.
@@ -244,17 +308,10 @@ T.ItemDelegate {
                             control._hoveredLink = ""
                         }
                     }
-                    onTapped: (eventPoint) => {
-                        if (control._tagOpened) {
-                            control._tagOpened = false // the gesture that opened the link's menu
-                            return
-                        }
-                        const link = label.linkAt(eventPoint.position.x, eventPoint.position.y)
-                        if (link !== "")
-                            control.linkActivated(link)
-                    }
+                    onTapped: (eventPoint) => control.tapLinkAt(eventPoint.position.x, eventPoint.position.y)
                     onLongPressed: {
-                        const at = label.mapToItem(control, touchHold.point.position.x, touchHold.point.position.y)
+                        control._labelPoint = label.mapToItem(control, touchHold.point.position.x, touchHold.point.position.y)
+                        const at = control._labelPoint
                         control.openMenuAt(at.x, at.y)
                     }
                 }
@@ -263,7 +320,7 @@ T.ItemDelegate {
             // Screen readers: the task text's links as link items of their own (its 4 shown lines).
             BLinkTargets {
                 textItem: label.textItem
-                html: control.task.html || ""
+                html: control.html
                 lineHeight: label.lineHeight
                 maxHeight: label.height
                 onActivated: (href, x, y) => control.linkActivated(href)
@@ -298,96 +355,96 @@ T.ItemDelegate {
                 BChip {
                     visible: control.statusLabel !== ""
                     size: "small"
-                    variant: control.task.status === "doing" ? "reminder" : "neutral"
-                    iconName: control.task.status === "doing" ? "clock" : control.task.status === "deferred" ? "hourglass" : "x"
+                    variant: control.status === "doing" ? "reminder" : "neutral"
+                    iconName: control.status === "doing" ? "clock" : control.status === "deferred" ? "hourglass" : "x"
                     text: control.statusLabel
                 }
                 BChip {
                     objectName: "taskChip_due" // (its token menu: openMenuAt())
-                    visible: (control.task.dueLabel || "") !== ""
+                    visible: control.dueLabel !== ""
                     size: "small"
-                    variant: control.closed ? "done" : control.task.overdue ? "overdue" : "due"
-                    text: control.task.overdue ? qsTr("%1, overdue").arg(control.task.dueLabel) : control.task.dueLabel
+                    variant: control.closed ? "done" : control.overdue ? "overdue" : "due"
+                    text: control.overdue ? qsTr("%1, overdue").arg(control.dueLabel) : control.dueLabel
                 }
                 BChip {
                     objectName: "taskChip_scheduled" // (its token menu: openMenuAt())
-                    visible: (control.task.scheduledLabel || "") !== ""
+                    visible: control.scheduledLabel !== ""
                     size: "small"
                     variant: control.closed ? "done" : "scheduled"
-                    text: control.task.scheduledLabel
+                    text: control.scheduledLabel
                 }
                 BChip {
                     objectName: "taskChip_start" // (its token menu: openMenuAt())
-                    visible: (control.task.startLabel || "") !== ""
+                    visible: control.startLabel !== ""
                     size: "small"
                     variant: "neutral"
                     iconName: "calendar-clock"
-                    text: qsTr("from %1").arg(control.task.startLabel)
+                    text: qsTr("from %1").arg(control.startLabel)
                 }
                 BChip {
                     objectName: "taskChip_reminder" // (its token menu: openMenuAt())
-                    visible: (control.task.reminderLabel || "") !== "" && !control.closed
+                    visible: control.reminderLabel !== "" && !control.closed
                     size: "small"
-                    variant: control.task.reminderAlarm ? "alarm" : "reminder"
-                    text: control.task.reminderLabel
+                    variant: control.reminderAlarm ? "alarm" : "reminder"
+                    text: control.reminderLabel
                 }
                 BChip {
                     objectName: "taskChip_recurrence" // (its token menu: openMenuAt())
-                    visible: (control.task.recurrenceLabel || "") !== ""
+                    visible: control.recurrenceLabel !== ""
                     size: "small"
                     variant: "recurrence"
-                    text: control.task.recurrenceLabel
+                    text: control.recurrenceLabel
                 }
                 BChip {
                     objectName: "taskBlockedChip"
-                    visible: control.task.blocked === true && !control.closed
+                    visible: control.blocked && !control.closed
                     size: "small"
                     variant: "overdue"
                     iconName: "lock"
                     interactive: true
                     outlined: false
-                    text: qsTr("Waits for: %1").arg(control.task.blockedBy || "")
+                    text: qsTr("Waits for: %1").arg(control.blockedBy)
                     width: Math.min(implicitWidth, control.availableWidth - 40)
-                    onClicked: control.linkActivated("taskdep:" + control.task.blockedById)
+                    onClicked: control.linkActivated("taskdep:" + control.blockedById)
                 }
                 BChip {
                     objectName: "taskDependencyProblemChip"
-                    visible: (control.task.dependencyProblem || "") !== ""
+                    visible: control.dependencyProblem !== ""
                     size: "small"
                     variant: "neutral"
                     iconName: "triangle-alert"
-                    text: control.task.dependencyProblem === "cycle" ? qsTr("Dependency cycle") : qsTr("Missing dependency")
+                    text: control.dependencyProblem === "cycle" ? qsTr("Dependency cycle") : qsTr("Missing dependency")
                 }
                 BChip {
                     objectName: "taskBlockingChip"
-                    visible: (control.task.blockingCount || 0) > 0 && !control.closed
+                    visible: control.blockingCount > 0 && !control.closed
                     size: "small"
                     variant: "neutral"
                     iconName: "link"
-                    text: qsTr("Blocks %n task(s)", "", control.task.blockingCount || 0)
+                    text: qsTr("Blocks %n task(s)", "", control.blockingCount)
                 }
                 BChip {
                     objectName: "taskProgressChip"
-                    visible: (control.task.progress || "") !== ""
+                    visible: control.progress !== ""
                     size: "small"
-                    variant: control.task.progressComplete ? "done" : "neutral"
+                    variant: control.progressComplete ? "done" : "neutral"
                     iconName: "list-checks"
-                    text: control.task.progress || ""
+                    text: control.progress
                 }
                 BChip {
                     objectName: "taskTimeChip"
-                    visible: (control.task.timeLabel || "") !== ""
+                    visible: control.timeLabel !== ""
                     size: "small"
-                    variant: control.task.clockRunning ? "reminder" : "neutral"
+                    variant: control.clockRunning ? "reminder" : "neutral"
                     iconName: "clock"
-                    text: control.task.timeLabel || ""
+                    text: control.timeLabel
                 }
                 BChip {
                     objectName: "taskChip_priority" // (its token menu: openMenuAt())
                     visible: control.priorityLabel !== ""
                     size: "small"
-                    variant: control.task.priority >= 4 && !control.closed ? "overdue" : "neutral"
-                    iconName: control.task.priority >= 3 ? "arrow-up" : "arrow-down"
+                    variant: control.priority >= 4 && !control.closed ? "overdue" : "neutral"
+                    iconName: control.priority >= 3 ? "arrow-up" : "arrow-down"
                     text: control.priorityLabel
                 }
                 Text {
@@ -419,17 +476,26 @@ T.ItemDelegate {
     /// row several times as costly to create while scrolling (docs/UI.md "Scrolling performance").
     property TaskStatusMenu statusMenu: null
     /// Opens the menu like BMenu.popup() with the same arguments: (), (x, y) or (item, x, y).
-    function openMenu(a, b, c) {
+    function prepareMenu(): void {
         if (!statusMenu)
             statusMenu = menuComponent.createObject(control) as TaskStatusMenu
-        statusMenu.status = control.task.status || "todo"
-        statusMenu.clockRunning = control.task.clockRunning === true
-        if (a === undefined)
-            statusMenu.popup()
-        else if (c === undefined)
-            statusMenu.popup(a, b)
-        else
-            statusMenu.popup(a, b, c)
+        statusMenu.status = control.statusOrTodo
+        statusMenu.clockRunning = control.clockRunning
+    }
+    /// The status menu at the pointer (BMenu.popup()).
+    function openMenu(): void {
+        control.prepareMenu()
+        statusMenu.popup()
+    }
+    /// The status menu at (x, y) of the row.
+    function openMenuAtPoint(x: real, y: real): void {
+        control.prepareMenu()
+        statusMenu.popup(x, y)
+    }
+    /// The status menu at (x, y) of `item`.
+    function openMenuFrom(item: Item, x: real, y: real): void {
+        control.prepareMenu()
+        statusMenu.popup(item, x, y)
     }
 
     Component {
@@ -441,7 +507,7 @@ T.ItemDelegate {
             onClockRequested: control.clockRequested()
             onDependencyRequested: control.dependencyRequested()
             onStatusChosen: (status) => {
-                if (status !== (control.task.status || "todo"))
+                if (status !== control.statusOrTodo)
                     control.statusRequested(status)
             }
         }

@@ -11,16 +11,36 @@ import Brulion
 // Laid out with bindings (docs/UI.md "Scrolling performance"): the card has its final height when
 // it is created.
 //
-//   HabitCard { habit: model; weekdayNames: habitModel.weekdayNames; monthOffset: habitModel.monthOffset
-//               onCheckRequested: (date, state) => …; onOpenRequested: … }
+//   delegate: HabitCard { weekdayNames: habitModel.weekdayNames; monthOffset: habitModel.monthOffset
+//                         onCheckRequested: (date, state) => …; onOpenRequested: … }
+//
+// A HabitListModel row's delegate: its roles are required properties.
 Item {
     id: card
 
-    /// The row's roles (name, key, scheduleLabel, valid, problem, todayMark, dueToday, streaks,
-    /// rate, period, days, …).
-    required property var habit
-    property var weekdayNames: []
+    // The row's roles (HabitListModel).
+    required property string key
+    required property string name
+    required property string schedule
+    required property string scheduleLabel
+    required property bool valid
+    required property string problem
+    required property string path
+    required property int line
+    required property bool isPage
+    required property string todayMark
+    required property bool todayRecorded
+    required property bool dueToday
+    required property int currentStreak
+    required property string streakLabel
+    required property string longestLabel
+    required property string rateLabel
+    required property string periodLabel
+    /// The model's month: [{ date, day, state, today }].
+    required property list<var> days
+    property list<string> weekdayNames: []
     property int monthOffset: 0
+    readonly property list<string> noNames: []
     /// Today ("YYYY-MM-DD").
     property string today: ""
 
@@ -31,8 +51,6 @@ Item {
     /// Open the daily note of `date`.
     signal dayOpenRequested(string date)
 
-    readonly property bool valid: habit.valid === true
-    readonly property var days: habit.days || []
     readonly property int cell: Theme.touchUi ? 34 : 26
     readonly property int gap: 4
     readonly property int gridRows: days.length > 0 ? Math.ceil((monthOffset + days.length) / 7) : 0
@@ -45,7 +63,7 @@ Item {
                     + (gridHeight > 0 ? Theme.space3 + gridHeight : 0) + pad
     height: implicitHeight
 
-    function stateLabel(state) {
+    function stateLabel(state: string): string {
         switch (state) {
         case "done": return qsTr("done")
         case "skipped": return qsTr("skipped")
@@ -56,16 +74,19 @@ Item {
         }
         return qsTr("nothing due")
     }
-    function nextState(mark) {
+    function nextState(mark: string): string {
         return mark === "done" || mark === "skipped" ? "open" : "done"
     }
-    function openDayMenu(date, mark, item, x, y) {
+    function openDayMenu(date: string, mark: string, item: Item, x: real, y: real): void {
         dayMenuLoader.date = date
         dayMenuLoader.mark = mark
         dayMenuLoader.active = true
-        const p = item.mapToItem(card, x, y)
-        dayMenuLoader.item.popup(card, p.x, p.y)
+        card._menuAt = item.mapToItem(card, x, y)
+        const menu = dayMenuLoader.item as BMenu
+        menu.popup(card, card._menuAt.x, card._menuAt.y)
     }
+    /// Where openDayMenu() opens (mapToItem's result is read through a typed property).
+    property point _menuAt
 
     Rectangle {
         anchors.fill: parent
@@ -78,8 +99,8 @@ Item {
     // ---- Today's check ----------------------------------------------------------------------
     Rectangle {
         id: toggle
-        objectName: "habitToggle_" + card.habit.key
-        readonly property string mark: card.habit.todayMark || "open"
+        objectName: "habitToggle_" + card.key
+        readonly property string mark: card.todayMark !== "" ? card.todayMark : "open"
         readonly property int size: Theme.touchUi ? 40 : 32
         x: card.pad
         y: card.pad + (card.headerHeight - height) / 2
@@ -88,11 +109,11 @@ Item {
         radius: size / 2
         color: mark === "done" ? Theme.successBg : mark === "skipped" ? Theme.chipDoneBg : "transparent"
         border.width: mark === "open" ? 2 : 0
-        border.color: card.habit.dueToday ? Theme.accent : Theme.borderControl
+        border.color: card.dueToday ? Theme.accent : Theme.borderControl
         Accessible.role: Accessible.CheckBox
         Accessible.checkable: true
         Accessible.checked: mark === "done"
-        Accessible.name: qsTr("%1 today: %2").arg(card.habit.name)
+        Accessible.name: qsTr("%1 today: %2").arg(card.name)
                          .arg(mark === "done" ? qsTr("done") : mark === "skipped" ? qsTr("skipped") : qsTr("not done"))
         activeFocusOnTab: true
         Keys.onSpacePressed: card.checkRequested(card.today, card.nextState(mark))
@@ -132,7 +153,7 @@ Item {
         BText {
             id: nameText
             width: parent.width
-            text: card.habit.name
+            text: card.name
             variant: "title"
             font.weight: Font.DemiBold
             elide: Text.ElideRight
@@ -144,23 +165,24 @@ Item {
             variant: card.valid ? "muted" : "small"
             color: card.valid ? Theme.fgMuted : Theme.warningText
             elide: Text.ElideRight
-            text: card.habit.problem === "duplicate" ? qsTr("Defined twice — this definition is not used")
-                : card.habit.problem === "schedule" ? qsTr("Schedule not understood: “%1”").arg(card.habit.schedule)
-                : card.habit.periodLabel !== "" ? card.habit.scheduleLabel + " · " + card.habit.periodLabel
-                : card.habit.scheduleLabel
+            text: card.problem === "duplicate" ? qsTr("Defined twice — this definition is not used")
+                : card.problem === "schedule" ? qsTr("Schedule not understood: “%1”").arg(card.schedule)
+                : card.periodLabel !== "" ? card.scheduleLabel + " · " + card.periodLabel
+                : card.scheduleLabel
         }
     }
 
     BIconButton {
         id: menuButton
-        objectName: "habitMenu_" + card.habit.key
+        objectName: "habitMenu_" + card.key
         x: card.width - width - card.pad + Theme.space1
         y: card.pad + (card.headerHeight - height) / 2
         label: qsTr("More")
         iconName: "ellipsis"
         onClicked: {
             menuLoader.active = true
-            menuLoader.item.popup(menuButton, 0, menuButton.height)
+            const menu = menuLoader.item as BMenu
+            menu.popup(menuButton, 0, menuButton.height)
         }
     }
 
@@ -177,7 +199,7 @@ Item {
             id: flame
             name: card.valid ? "flame" : ""
             size: Theme.iconSizeSm
-            color: card.habit.currentStreak > 0 ? Theme.warningText : Theme.fgMuted
+            color: card.currentStreak > 0 ? Theme.warningText : Theme.fgMuted
             anchors.verticalCenter: parent.verticalCenter
         }
         BText {
@@ -189,11 +211,8 @@ Item {
             color: Theme.fgMuted
             elide: Text.ElideRight
             text: {
-                const parts = [qsTr("Streak: %1").arg(card.habit.streakLabel),
-                               qsTr("longest: %1").arg(card.habit.longestLabel)]
-                if (card.habit.rateLabel !== "")
-                    parts.push(qsTr("completed: %1").arg(card.habit.rateLabel))
-                return parts.join(" · ")
+                const streaks = qsTr("Streak: %1").arg(card.streakLabel) + " · " + qsTr("longest: %1").arg(card.longestLabel)
+                return card.rateLabel !== "" ? streaks + " · " + qsTr("completed: %1").arg(card.rateLabel) : streaks
             }
         }
     }
@@ -208,7 +227,7 @@ Item {
         height: card.gridHeight
 
         Repeater {
-            model: card.gridRows > 0 ? card.weekdayNames : []
+            model: card.gridRows > 0 ? card.weekdayNames : card.noNames
             delegate: Text {
                 required property int index
                 required property string modelData
@@ -227,9 +246,12 @@ Item {
                 id: dayCell
                 required property int index
                 required property var modelData
-                readonly property string state_: modelData.state
+                // (Item has a `state` of its own: the day's fields are read from the row.)
+                readonly property string date: AppController.routeText(modelData, "date")
+                readonly property string state_: AppController.routeText(modelData, "state")
+                readonly property bool isToday: AppController.routeFlag(modelData, "today")
                 readonly property int slot: card.monthOffset + index
-                objectName: "habitDay_" + card.habit.key + "_" + modelData.date
+                objectName: "habitDay_" + card.key + "_" + date
                 x: (slot % 7) * (card.cell + card.gap)
                 y: Theme.textXs + Theme.space2 + Math.floor(slot / 7) * (card.cell + card.gap)
                 width: card.cell
@@ -237,33 +259,33 @@ Item {
                 radius: Theme.radiusSm
                 color: state_ === "done" ? Theme.successBg : state_ === "missed" ? Theme.dangerBg
                      : state_ === "skipped" ? Theme.chipDoneBg : "transparent"
-                border.width: modelData.today ? 2 : state_ === "due" ? 1 : 0
+                border.width: isToday ? 2 : state_ === "due" ? 1 : 0
                 border.color: Theme.accent
                 Accessible.role: Accessible.Button
-                Accessible.name: qsTr("%1: %2").arg(modelData.date).arg(card.stateLabel(state_))
+                Accessible.name: qsTr("%1: %2").arg(date).arg(card.stateLabel(state_))
 
                 Text {
                     anchors.centerIn: parent
-                    text: dayCell.modelData.day
+                    text: AppController.routeText(dayCell.modelData, "day")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textXs
                     font.strikeout: dayCell.state_ === "skipped"
                     color: dayCell.state_ === "done" ? Theme.successText : dayCell.state_ === "missed" ? Theme.dangerText
-                         : dayCell.state_ === "due" || dayCell.modelData.today ? Theme.fg : Theme.fgMuted
+                         : dayCell.state_ === "due" || dayCell.isToday ? Theme.fg : Theme.fgMuted
                 }
                 TapHandler {
                     enabled: dayCell.state_ !== "future"
                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: card.checkRequested(dayCell.modelData.date,
+                    onTapped: card.checkRequested(dayCell.date,
                                                   dayCell.state_ === "done" || dayCell.state_ === "skipped" ? "open" : "done")
-                    onLongPressed: card.openDayMenu(dayCell.modelData.date, dayCell.state_, dayCell, dayCell.width / 2,
+                    onLongPressed: card.openDayMenu(dayCell.date, dayCell.state_, dayCell, dayCell.width / 2,
                                                     dayCell.height)
                 }
                 TapHandler {
                     enabled: dayCell.state_ !== "future"
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                     acceptedButtons: Qt.RightButton
-                    onTapped: (eventPoint) => card.openDayMenu(dayCell.modelData.date, dayCell.state_, dayCell,
+                    onTapped: (eventPoint) => card.openDayMenu(dayCell.date, dayCell.state_, dayCell,
                                                                eventPoint.position.x, eventPoint.position.y)
                 }
             }
@@ -279,20 +301,20 @@ Item {
                 objectName: "habitMenuDone"
                 text: qsTr("Done today")
                 iconName: "check"
-                enabled: card.valid || card.habit.problem === "schedule"
+                enabled: card.valid || card.problem === "schedule"
                 onTriggered: card.checkRequested(card.today, "done")
             }
             BMenuItem {
                 objectName: "habitMenuSkip"
                 text: qsTr("Skip today")
                 iconName: "minus"
-                enabled: card.valid || card.habit.problem === "schedule"
+                enabled: card.valid || card.problem === "schedule"
                 onTriggered: card.checkRequested(card.today, "skipped")
             }
             BMenuItem {
                 text: qsTr("No check today")
                 iconName: "circle"
-                enabled: card.habit.todayRecorded === true
+                enabled: card.todayRecorded
                 onTriggered: card.checkRequested(card.today, "open")
             }
             BMenuSeparator {}

@@ -14,17 +14,25 @@ ColumnLayout {
 
     required property PlanningActions actions
     property alias text: field.text
-    readonly property var parsed: field.text.trim() !== "" ? actions.parseQuickAdd(field.text) : ({ ok: false })
+    /// PlanningActions.parseQuickAdd() of the text ({ ok, line, kind, when, text, … }).
+    readonly property var parsed: parsedHolder.map
+    /// Something was typed and understood.
+    readonly property bool ok: Js.trim(field.text) !== "" && parsedHolder.map.ok === true
 
     signal submitted(string line, var parsed)
 
-    function submit() {
-        if (!parsed.ok)
+    function submit(): void {
+        if (!ok)
             return
-        submitted(parsed.line, parsed)
+        submitted(AppController.routeText(parsedHolder.map, "line"), parsedHolder.map)
         field.text = ""
     }
-    function focusField() { field.forceActiveFocus() }
+    function focusField(): void { field.forceActiveFocus() }
+
+    MapHolder {
+        id: parsedHolder
+        map: root.actions.parseQuickAdd(Js.trim(field.text) !== "" ? field.text : "")
+    }
 
     spacing: Theme.space1
 
@@ -37,7 +45,7 @@ ColumnLayout {
         accessibleName: qsTr("New task")
         onAccepted: root.submit()
         trailingItem: BButton {
-            visible: root.parsed.ok && !Theme.touchUi
+            visible: root.ok && !Theme.touchUi
             size: "small"
             variant: "primary"
             text: qsTr("Add")
@@ -49,7 +57,7 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         Layout.leftMargin: Theme.space1
-        visible: root.parsed.ok === true
+        visible: root.ok
         spacing: Theme.space2
 
         BIcon {
@@ -58,15 +66,15 @@ ColumnLayout {
             color: Theme.fgFaint
         }
         BChip {
-            visible: root.parsed.kind !== "task"
+            visible: parsedHolder.map.kind !== "task"
             size: "small"
-            variant: root.parsed.kind === "reminder" ? "reminder" : "due"
-            text: root.parsed.when || ""
+            variant: parsedHolder.map.kind === "reminder" ? "reminder" : "due"
+            text: AppController.routeText(parsedHolder.map, "when")
         }
         Text {
             Layout.fillWidth: true
-            text: root.parsed.kind === "task" ? qsTr("Without a date — goes into today's journal")
-                                              : qsTr("“%1” — into today's journal").arg(root.parsed.text || "")
+            text: parsedHolder.map.kind === "task" ? qsTr("Without a date — goes into today's journal")
+                                                   : qsTr("“%1” — into today's journal").arg(AppController.routeText(parsedHolder.map, "text"))
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm
             color: Theme.fgMuted

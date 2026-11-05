@@ -101,6 +101,9 @@ class NextcloudSetup : public QObject {
     Q_PROPERTY(QString davUrl READ davUrl NOTIFY draftChanged FINAL)
     Q_PROPERTY(QString securityUrl READ securityUrl NOTIFY draftChanged FINAL)
     Q_PROPERTY(QVariantList intervalOptions READ intervalOptions CONSTANT FINAL)
+    /// The text of the chosen interval's option ("Every 15 minutes"; another interval: "Every
+    /// %n minute(s)").
+    Q_PROPERTY(QString intervalText READ intervalText NOTIFY draftChanged FINAL)
     Q_PROPERTY(bool testing READ testing NOTIFY testingChanged FINAL)
     Q_PROPERTY(QVariantMap testResult READ testResult NOTIFY testResultChanged FINAL)
     /// Explanations for the browser (CORS); default: running as WebAssembly.
@@ -144,6 +147,7 @@ public:
     QString davUrl() const;
     QString securityUrl() const;
     QVariantList intervalOptions() const;
+    QString intervalText() const;
     bool testing() const { return m_testing > 0; }
     QVariantMap testResult() const { return m_testResult; }
     bool browser() const { return m_browser; }

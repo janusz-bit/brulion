@@ -36,7 +36,7 @@ Item {
                                       : level === "warning" ? "triangle-alert"
                                       : level === "debug" ? "" : "info"
     readonly property int pad: Theme.touchUi ? Theme.space2 : 3
-    readonly property int metaHeight: Theme.lineHeightPx(Theme.textSm)
+    readonly property int metaHeight: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight)
     readonly property real levelX: Theme.space3 + timeWidth + Theme.space2
     readonly property real groupX: levelX + Theme.iconSizeSm + 14 + Theme.space2
     readonly property real badgeX: groupX + (stacked ? groupLabel.implicitWidth : groupWidth) + Theme.space2
@@ -132,7 +132,7 @@ Item {
         font.pixelSize: Theme.textSm
         color: row.earlier ? Theme.fgMuted : Theme.fg
         lineHeightMode: Text.FixedHeight
-        lineHeight: Theme.lineHeightPx(Theme.textSm)
+        lineHeight: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight)
     }
 
     HoverHandler {

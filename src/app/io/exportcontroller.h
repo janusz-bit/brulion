@@ -81,6 +81,8 @@ class ExportController : public QObject {
     /// Translated: changes with the UI language (formatsChanged).
     Q_PROPERTY(QVariantList formats READ formats NOTIFY formatsChanged FINAL)
     Q_PROPERTY(QString format READ format WRITE setFormat NOTIFY optionsChanged FINAL)
+    /// The `formats` row of `format` ({} for one without a row: "markdown-file").
+    Q_PROPERTY(QVariantMap chosenFormat READ chosenFormat NOTIFY chosenFormatChanged FINAL)
     Q_PROPERTY(QString scope READ scope WRITE setScope NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString folder READ folder WRITE setFolder NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString page READ page WRITE setPage NOTIFY optionsChanged FINAL)
@@ -126,6 +128,7 @@ public:
 
     QVariantList formats() const;
     QString format() const { return m_format; }
+    QVariantMap chosenFormat() const;
     void setFormat(const QString &format);
     QString scope() const { return m_scope; }
     void setScope(const QString &scope);
@@ -189,6 +192,8 @@ Q_SIGNALS:
     /// The UI language changed: `formats` (names, descriptions) read again.
     void formatsChanged();
     void optionsChanged();
+    /// formatsChanged() or optionsChanged().
+    void chosenFormatChanged();
     void foldersChanged();
     void summaryChanged();
     void stateChanged();

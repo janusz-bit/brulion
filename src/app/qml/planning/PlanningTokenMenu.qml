@@ -16,9 +16,10 @@ import Brulion
 // file (a Logseq SCHEDULED: line) opens no menu (PlanningActions.tokenMenu()).
 //
 //   PlanningTokenMenu { id: tokenMenu; actions: planningActions
-//                       onChanged: (text) => toasts.show(text, { actionText: qsTr("Undo"), onAction: () => planningActions.undo() }) }
+//                       onChanged: (text) => …a toast with "Undo": planningActions.undo()
+//                       onFilterRequested: (tag) => taskModel.tagFilter = tag }
 //   tokenMenu.openToken({ path, line, text, kind, value, alarm, rule, priority, isTask, occurrence, date, time }, item, x, y)
-//   tokenMenu.openLink(url, fromPath, item, x, y, filter)   // filter: function(tag) or null
+//   tokenMenu.openLink(url, fromPath, item, x, y, filterable)   // filterable: "Filtruj po tagu" first
 Item {
     id: root
 
@@ -27,84 +28,129 @@ Item {
     signal changed(string text)
     /// Something to say without an undo (a copied link, why nothing changed).
     signal message(string text, string kind)
+    /// "Filtruj po tagu" of a link menu opened with `filterable`: filter the view by `tag`.
+    signal filterRequested(string tag)
 
-    /// The token whose menu is open (see openToken()).
-    property var target: ({})
+    // The token whose menu is open (see openToken()).
+    property string targetPath
+    property int targetLine: 0
+    property string targetText
+    property string targetKind
+    property string targetValue
+    property bool targetAlarm: false
+    property string targetRule
+    property string targetPriority
+    property bool targetOccurrence: false
+    property string targetDate
+    property string targetTime
     property DateChipMenu dateMenu: null
     property LinkMenu linkMenu: null
-    property var linkTarget: ({})
+    // The link whose menu is open (see openLink()).
+    property string linkUrl
+    property string linkFromPath
+    property bool linkFilterable: false
+    property string linkTag
 
     EditorDialogs {
         id: dialogs
         editor: null
         controller: null
     }
+    // openToken()'s token and PlanningActions.tokenMenu()'s answer, read by key.
+    MapHolder { id: tokenHolder }
+    MapHolder { id: infoHolder }
+    // The dialogs' answers to the requests made here ("planning").
+    Connections {
+        target: dialogs
+        function onApplied(target: string, action: string, a: var, b: var) {
+            if (target === "planning")
+                root.run(action, a, b)
+        }
+    }
 
     /// Open the token menu for `t` at (x, y) of `item`: { path, line, text (the task's plain text:
     /// finds it again when its line moved), kind ("due" | "scheduled" | "start" | "done" |
     /// "reminder" | "recurrence" | "priority"), value (the token's value as the models give it),
     /// alarm, rule, priority, isTask, occurrence (a series' other date), date, time }.
-    function openToken(t, item, x, y) {
-        if (!actions || !t || !t.path || !t.value || t.kind === "journal")
+    function openToken(t: var, item: Item, x: real, y: real): bool {
+        // (Read into the target's properties first: compiled code passes no value read before
+        // another call.)
+        tokenHolder.map = t
+        if (!actions || AppController.routeText(tokenHolder.map, "path") === ""
+                || AppController.routeText(tokenHolder.map, "value") === ""
+                || AppController.routeText(tokenHolder.map, "kind") === "journal")
             return false
+        targetPath = AppController.routeText(tokenHolder.map, "path")
+        targetLine = AppController.routeInt(tokenHolder.map, "line", 0)
+        targetText = AppController.routeText(tokenHolder.map, "text")
+        targetKind = AppController.routeText(tokenHolder.map, "kind")
+        targetValue = AppController.routeText(tokenHolder.map, "value")
         // The token as the file has it (the block's rule, a Logseq priority); none written as a
         // token (a Logseq SCHEDULED: line, a .+1w repeater): no menu.
-        const info = actions.tokenMenu(t.path, t.line, t.text || "", t.kind, t.value)
-        if (info.rule === undefined)
+        infoHolder.map = actions.tokenMenu(targetPath, targetLine, targetText, targetKind, targetValue)
+        if (infoHolder.map.rule === undefined)
             return false
-        target = Object.assign({}, t, { rule: info.rule, priority: info.priority })
+        targetAlarm = tokenHolder.map.alarm === true
+        targetRule = AppController.routeText(infoHolder.map, "rule")
+        targetPriority = AppController.routeText(infoHolder.map, "priority")
+        targetOccurrence = tokenHolder.map.occurrence === true
+        targetDate = AppController.routeText(tokenHolder.map, "date")
+        targetTime = AppController.routeText(tokenHolder.map, "time")
         if (!dateMenu)
             dateMenu = dateMenuComponent.createObject(root) as DateChipMenu
-        dateMenu.kind = t.kind
-        dateMenu.alarm = t.alarm === true
-        dateMenu.rule = info.rule
-        dateMenu.priority = info.priority
-        dateMenu.logseq = info.logseq === true
-        dateMenu.isTask = t.isTask === true
-        dateMenu.occurrence = t.occurrence === true
+        dateMenu.kind = targetKind
+        dateMenu.alarm = targetAlarm
+        dateMenu.rule = targetRule
+        dateMenu.priority = targetPriority
+        dateMenu.logseq = infoHolder.map.logseq === true
+        dateMenu.isTask = tokenHolder.map.isTask === true
+        dateMenu.occurrence = targetOccurrence
         // A later time of a recurring reminder that has not come yet would still ring: no snooze.
-        dateMenu.snoozable = !(t.occurrence === true && t.kind === "reminder"
-                               && DatesHelper.compare(occurrenceAt(t), DatesHelper.now()) > 0)
+        dateMenu.snoozable = !(targetOccurrence && targetKind === "reminder"
+                               && DatesHelper.compare(occurrenceAt(), DatesHelper.now()) > 0)
         dateMenu.popup(item, x, y)
         return true
     }
-    /// When the occurrence `t` (a calendar entry of a recurring reminder) rings: "YYYY-MM-DD HH:mm".
-    function occurrenceAt(t) {
-        return t.date + " " + (t.time || "09:00")
+    /// When the open token's occurrence (a calendar entry of a recurring reminder) rings:
+    /// "YYYY-MM-DD HH:mm".
+    function occurrenceAt(): string {
+        return targetDate + " " + (targetTime !== "" ? targetTime : "09:00")
     }
 
     /// The link menu of `url` (a tag:, page:, part: — a path part of a link —, block: or ext: link
     /// of a task's text written on `fromPath`); `filter(tag)`, when given, makes "Filtruj po tagu"
     /// its first item.
-    function openLink(url, fromPath, item, x, y, filter) {
+    function openLink(url: string, fromPath: string, item: Item, x: real, y: real, filterable: bool): bool {
         if (!actions)
             return false
-        const part = url.startsWith("part:")
-        const kind = url.startsWith("tag:") ? "tag" : url.startsWith("page:") || part ? "page"
-                   : url.startsWith("block:") ? "block" : url.startsWith("ext:") ? "ext" : ""
+        const part = Js.startsWith(url, "part:")
+        const kind = Js.startsWith(url, "tag:") ? "tag" : Js.startsWith(url, "page:") || part ? "page"
+                   : Js.startsWith(url, "block:") ? "block" : Js.startsWith(url, "ext:") ? "ext" : ""
         if (kind === "")
             return false
-        const partTarget = part ? actions.linkPartTarget(url, fromPath || "") : ""
+        const partTarget = part ? actions.linkPartTarget(url, fromPath) : ""
         if (part && partTarget === "")
             return false // a malformed part: link
-        linkTarget = { url: url, fromPath: fromPath || "", filter: filter || null,
-                       tag: kind === "tag" ? decodeURIComponent(url.slice(4)) : "" }
+        const partFolder = partTarget === "folder"
+        linkUrl = url
+        linkFromPath = fromPath
+        linkFilterable = filterable
+        linkTag = kind === "tag" ? Js.decodeURIComponent(Js.sliceFrom(url, 4)) : ""
         if (!linkMenu)
             linkMenu = linkMenuComponent.createObject(root) as LinkMenu
         linkMenu.kind = kind
         // A [[link]] to a page that does not exist offers "Utwórz stronę", as in the editor; a
         // path part naming a folder "Pokaż folder".
-        linkMenu.unresolved = kind === "page" && actions.linkMissing(url, fromPath || "")
-        linkMenu.folder = partTarget === "folder"
-        linkMenu.filterFirst = kind === "tag" && !!filter
+        linkMenu.unresolved = kind === "page" && actions.linkMissing(url, fromPath)
+        linkMenu.folder = partFolder
+        linkMenu.filterFirst = kind === "tag" && filterable
         linkMenu.popup(item, x, y)
         return true
     }
 
     /// Write `action` on the open menu's token; says what changed.
-    function run(action, a, b) {
-        const t = target
-        if (!actions.editToken(t.path, t.line, t.text || "", t.kind, t.value, action, a, b))
+    function run(action: string, a: var, b: var): void {
+        if (!actions.editToken(targetPath, targetLine, targetText, targetKind, targetValue, action, a, b))
             return
         changed(action === "recurrence" || action === "blockRecurrence" ? qsTr("Repeat changed")
                 : action === "priority" || action === "blockPriority" ? qsTr("Priority changed")
@@ -112,32 +158,30 @@ Item {
                 : action === "alarm" || action === "reminder" ? qsTr("Reminder changed")
                 : qsTr("Date changed"))
     }
-    function snooze(at) {
-        const t = target
-        if (actions.snoozeReminder(t.path, t.line, t.text || "", t.value, at))
+    function snooze(at: string): void {
+        if (actions.snoozeReminder(targetPath, targetLine, targetText, targetValue, at))
             changed(qsTr("Reminder snoozed until %1").arg(DatesHelper.formatHuman(at)))
     }
-    function choose(action, a, b) {
-        const t = target
+    function choose(action: string, a: var, b: var): void {
         switch (action) {
         case "change":
-            if (t.kind === "reminder")
-                dialogs.editReminderWith(root.run, { at: t.value, alarm: t.alarm === true, rule: t.rule || "",
-                                                     context: t.text || "" })
-            else if (t.kind === "recurrence")
-                dialogs.pickRecurrenceWith((act, rule) => root.run(act, rule, 0), t.rule || "", "recurrence")
+            if (targetKind === "reminder")
+                dialogs.editReminderWith("planning", targetValue, targetAlarm, targetRule, targetText)
+            else if (targetKind === "recurrence")
+                dialogs.pickRecurrenceWith("planning", targetRule, "recurrence")
             else
-                dialogs.pickDateWith(root.run, t.kind, t.value)
+                dialogs.pickDateWith("planning", targetKind, targetValue)
             break
         case "blockRecurrenceChange":
-            dialogs.pickRecurrenceWith((act, rule) => root.run(act, rule, 0), t.rule || "", "blockRecurrence")
+            dialogs.pickRecurrenceWith("planning", targetRule, "blockRecurrence")
             break
         case "shift":
         case "move":
             // One time of a recurring reminder (the calendar's other dates): snoozed, the series stays.
-            if (t.kind === "reminder" && t.occurrence) {
-                const at = occurrenceAt(t)
-                snooze(action === "shift" ? DatesHelper.addMinutes(at, b) : DatesHelper.addDays(DatesHelper.today, a) + " " + (t.time || "09:00"))
+            if (targetKind === "reminder" && targetOccurrence) {
+                const at = occurrenceAt()
+                snooze(action === "shift" ? DatesHelper.addMinutes(at, b)
+                                          : DatesHelper.addDays(DatesHelper.today, a) + " " + (targetTime !== "" ? targetTime : "09:00"))
                 break
             }
             run(action, a, b)
@@ -147,25 +191,31 @@ Item {
             break
         }
     }
-    function chooseLink(action) {
-        const l = linkTarget
+    /// The open link in a new tab or window (OpenIn). (OpenIn.run() takes a function: not
+    /// compiled until OpenIn's begin()/end() replace it.)
+    function openLinkIn(target: string): void {
+        const url = linkUrl
+        const fromPath = linkFromPath
+        OpenIn.run(target, () => root.actions.openLink(url, fromPath, false))
+    }
+    function chooseLink(action: string): void {
         switch (action) {
-        case "filter": if (l.filter) l.filter(l.tag); break
-        case "open": actions.openLink(l.url, l.fromPath, false); break
-        case "openSide": actions.openLink(l.url, l.fromPath, true); break
-        case "openTab": OpenIn.run("tab", () => actions.openLink(l.url, l.fromPath, false)); break
-        case "openWindow": OpenIn.run("window", () => actions.openLink(l.url, l.fromPath, false)); break
-        case "overview": AppController.navigate({ view: "tag", tag: l.tag, overview: true }); break
-        case "tasks": if (linkMenu) AppController.navigate({ view: "tasks", query: linkMenu.tasksQuery(l.tag) }); break
-        case "copy": {
-            const text = actions.linkText(l.url, l.fromPath)
-            if (actions.copyText(text))
-                message(qsTr("Copied %1").arg(text), "success")
-            else
-                message(qsTr("Could not copy: the clipboard is not available"), "error")
-            break
+        case "filter": if (linkFilterable) root.filterRequested(linkTag); break
+        case "open": actions.openLink(linkUrl, linkFromPath, false); break
+        case "openSide": actions.openLink(linkUrl, linkFromPath, true); break
+        case "openTab": root.openLinkIn("tab"); break
+        case "openWindow": root.openLinkIn("window"); break
+        case "overview": AppController.navigate({ view: "tag", tag: linkTag, overview: true }); break
+        case "tasks": if (linkMenu) AppController.navigate({ view: "tasks", query: linkMenu.tasksQuery(linkTag) }); break
+        case "copy": root.copyLink(actions.linkText(linkUrl, linkFromPath)); break
         }
-        }
+    }
+    /// Copy a link's text (its menu's "Kopiuj link").
+    function copyLink(text: string): void {
+        if (actions.copyText(text))
+            message(qsTr("Copied %1").arg(text), "success")
+        else
+            message(qsTr("Could not copy: the clipboard is not available"), "error")
     }
 
     Component {

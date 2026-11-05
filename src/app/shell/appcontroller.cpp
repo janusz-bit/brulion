@@ -27,6 +27,7 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QLoggingCategory>
 #include <QMetaMethod>
 #include <QStandardPaths>
@@ -35,6 +36,7 @@
 #include <QWindow>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #ifdef Q_OS_ANDROID
@@ -1747,6 +1749,59 @@ void AppController::setClock(std::function<QDateTime()> clock)
 QDateTime AppController::now() const
 {
     return m_clock ? m_clock() : QDateTime::currentDateTime();
+}
+
+QString AppController::routeText(const QVariantMap &route, const QString &key) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return {};
+    switch (value.typeId()) {
+    case QMetaType::Double:
+    case QMetaType::Float: {
+        // A whole number without ".0", like JavaScript (12.0 → "12").
+        const double d = value.toDouble();
+        if (d == std::trunc(d) && std::abs(d) < 1e15)
+            return QString::number(qint64(d));
+        return QString::number(d, 'g', QLocale::FloatingPointShortest);
+    }
+    default:
+        return value.toString();
+    }
+}
+
+int AppController::routeInt(const QVariantMap &route, const QString &key, int fallback) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return fallback;
+    bool ok = false;
+    const int n = value.toInt(&ok);
+    return ok ? n : fallback;
+}
+
+bool AppController::routeFlag(const QVariantMap &route, const QString &key) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return false;
+    switch (value.typeId()) {
+    case QMetaType::Bool:
+        return value.toBool();
+    case QMetaType::QString:
+        return !value.toString().isEmpty();
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong:
+    case QMetaType::Double:
+    case QMetaType::Float: {
+        const double d = value.toDouble();
+        return d != 0 && !std::isnan(d);
+    }
+    default:
+        return true;
+    }
 }
 
 } // namespace brulion::shell

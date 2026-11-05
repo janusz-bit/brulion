@@ -204,6 +204,49 @@ void CalendarModel::requestRebuild(bool forceReset)
     rebuild(forceReset);
 }
 
+QVariantList openEntriesFirst(const QVariantList &items)
+{
+    QVariantList open;
+    QVariantList closed;
+    for (const QVariant &entry : items)
+        (entry.toMap().value(u"closed"_s).toBool() ? closed : open).append(entry);
+    return open + closed;
+}
+
+QVariantList allDayEntries(const QVariantList &items)
+{
+    QVariantList out;
+    for (const QVariant &entry : items) {
+        if (entry.toMap().value(u"minutes"_s).toInt() < 0)
+            out.append(entry);
+    }
+    return out;
+}
+
+QVariantList timedLanes(const QVariantList &items)
+{
+    QVariantList out;
+    QVariantList group;
+    int groupStart = 0;
+    const auto flush = [&] {
+        for (qsizetype k = 0; k < group.size(); ++k)
+            out.append(QVariantMap{{u"entry"_s, group.at(k)}, {u"lane"_s, int(k)}, {u"lanes"_s, int(group.size())}});
+        group.clear();
+    };
+    for (const QVariant &entry : items) {
+        const int minutes = entry.toMap().value(u"minutes"_s).toInt();
+        if (minutes < 0)
+            continue;
+        if (!group.isEmpty() && minutes - groupStart >= 45)
+            flush();
+        if (group.isEmpty())
+            groupStart = minutes;
+        group.append(entry);
+    }
+    flush();
+    return out;
+}
+
 int CalendarModel::rowCount(const QModelIndex &parent) const
 {
     return parent.isValid() ? 0 : int(m_days.size());
@@ -242,6 +285,9 @@ QVariant CalendarModel::dayData(const Day &day, int role) const
     case KindsRole: return day.kinds;
     case LabelRole: return dates::formatDateShort(date, loc);
     case LongLabelRole: return longLabel(date, loc);
+    case OrderedItemsRole: return openEntriesFirst(day.items);
+    case AllDayRole: return allDayEntries(day.items);
+    case TimedRole: return timedLanes(day.items);
     default: return {};
     }
 }
@@ -268,6 +314,9 @@ QHash<int, QByteArray> CalendarModel::roleNames() const
             {KindsRole, "kinds"},
             {LabelRole, "label"},
             {LongLabelRole, "longLabel"},
+            {OrderedItemsRole, "orderedItems"},
+            {AllDayRole, "allDay"},
+            {TimedRole, "timed"},
     };
 }
 
@@ -509,6 +558,22 @@ QVariantList CalendarModel::dayItems(const QString &date) const
         out.append(itemMap(item, today));
     }
     return out;
+}
+
+QVariantList CalendarModel::dayEntries(const QString &date) const
+{
+    QVariantList entries;
+    for (const QVariant &entry : dayItems(date)) {
+        if (entry.toMap().value(u"kind"_s).toString() != u"journal")
+            entries.append(entry);
+    }
+    return openEntriesFirst(entries);
+}
+
+bool CalendarModel::dayHasJournal(const QString &date) const
+{
+    const QVariantList items = dayItems(date);
+    return !items.isEmpty() && items.first().toMap().value(u"kind"_s).toString() == u"journal";
 }
 
 QVariantMap CalendarModel::marks(const QString &from, const QString &to) const
@@ -763,6 +828,9 @@ void CalendarModel::rebuild(bool forceReset)
     m_overdueCount = overdueCount;
     m_firstHour = firstHour <= lastHour ? firstHour : 8;
     m_lastHour = firstHour <= lastHour ? lastHour : 18;
+    m_maxAllDay = 0;
+    for (const Day &day : std::as_const(m_days))
+        m_maxAllDay = std::max(m_maxAllDay, int(allDayEntries(day.items).size()));
     ++m_revision;
     Q_EMIT rangeChanged();
     Q_EMIT itemsChanged();

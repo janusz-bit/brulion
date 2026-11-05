@@ -77,6 +77,11 @@ public:
     Q_INVOKABLE QString padStart(const QString &s, int length, const QString &fill) const;
     /// s.padEnd(length, fill)
     Q_INVOKABLE QString padEnd(const QString &s, int length, const QString &fill) const;
+    /// encodeURIComponent(s): UTF-8 percent-encoding of all but A-Z a-z 0-9 - _ . ! ~ * ' ( ).
+    Q_INVOKABLE QString encodeURIComponent(const QString &s) const;
+    /// decodeURIComponent(s): every %XX decoded as UTF-8. Malformed escapes stay as they are
+    /// (JavaScript throws a URIError).
+    Q_INVOKABLE QString decodeURIComponent(const QString &s) const;
 
     // --- Numbers ---
     /// Number(s): trimmed decimal (or 0x/0o/0b) literal, "" → 0, "Infinity", otherwise NaN.
@@ -93,6 +98,8 @@ public:
     Q_INVOKABLE QString toFixed(double x, int digits) const;
     /// String(x) for a number: "3", "0.5", "1e+21", "NaN" — what JavaScript prints.
     Q_INVOKABLE QString numberToString(double x) const;
+    /// Date.now(): milliseconds since the epoch (UTC), now.
+    Q_INVOKABLE double dateNow() const;
 
     // --- Regular expressions: `pattern` and `flags` as in a JavaScript literal /pattern/flags
     // (flags i, m, s, g; others ignored; PCRE syntax beyond JavaScript's is not refused). Patterns

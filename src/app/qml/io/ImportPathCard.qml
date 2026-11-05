@@ -14,15 +14,18 @@ IoCard {
     id: card
 
     required property ImportController importer
-    readonly property string path: field.text.trim()
+    readonly property string path: Js.trim(field.text)
     /// Android: the path lies outside the app's storage and "All files access" is missing.
-    readonly property bool needsAccess: card.path !== "" && card.path.indexOf("content:") !== 0
+    readonly property bool needsAccess: card.path !== "" && Js.indexOf(card.path, "content:") !== 0
                                         && AppController.needsStoragePermission(card.path)
                                         && !AppController.permissions.allFilesAccess
 
-    function submit() {
+    function onePath(path: string): list<string> {
+        return [path]
+    }
+    function submit(): void {
         if (card.path !== "")
-            card.importer.addPaths([card.path])
+            card.importer.addPaths(card.onePath(card.path))
     }
 
     iconName: "folder-open"

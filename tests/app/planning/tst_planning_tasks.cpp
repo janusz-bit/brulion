@@ -553,6 +553,26 @@ private Q_SLOTS:
         const QVariantList pages = m.pageChoices();
         QCOMPARE(pages.first().toMap().value(u"label"_s).toString(), u"Remont"_s);
         QCOMPARE(pages.first().toMap().value(u"count"_s).toInt(), 8);
+
+        // TasksFilterBar's palette rows: the same choices, all of them.
+        const QVariantList tagRows = m.paletteChoices(u"tag"_s);
+        QCOMPARE(tagRows.size(), m.tagChoices(0).size());
+        QCOMPARE(tagRows.first().toMap().value(u"title"_s), tags.first().toMap().value(u"label"_s));
+        QCOMPARE(tagRows.first().toMap().value(u"value"_s), tags.first().toMap().value(u"value"_s));
+        QCOMPARE(tagRows.first().toMap().value(u"icon"_s).toString(), u"hash"_s);
+        QCOMPARE(tagRows.first().toMap().value(u"subtitle"_s).toString(),
+                 QCoreApplication::translate("TasksFilterBar", "%n tasks", nullptr,
+                                             tags.first().toMap().value(u"count"_s).toInt()));
+        const QVariantMap folderRow = m.paletteChoices(u"folder"_s).at(1).toMap();
+        QCOMPARE(folderRow.value(u"value"_s).toString(), u"Projekty"_s);
+        QCOMPARE(folderRow.value(u"icon"_s).toString(), u"folder"_s);
+        QCOMPARE(folderRow.value(u"subtitle"_s).toString(), QCoreApplication::translate("TasksFilterBar", "%n tasks", nullptr, 8));
+        const QVariantMap pageRow = m.paletteChoices(u"page"_s).first().toMap();
+        QCOMPARE(pageRow.value(u"title"_s).toString(), u"Remont"_s);
+        QCOMPARE(pageRow.value(u"icon"_s).toString(), u"file-text"_s);
+        QCOMPARE(pageRow.value(u"subtitle"_s).toString(),
+                 u"Projekty/Dom · "_s + QCoreApplication::translate("TasksFilterBar", "%n tasks", nullptr, 8));
+        QVERIFY(m.paletteChoices(u"nie-ma"_s).isEmpty());
     }
 
     void incrementalUpdates()

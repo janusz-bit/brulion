@@ -219,13 +219,7 @@ IoCard {
                 Layout.fillWidth: true
                 iconName: "chevron-down"
                 iconRight: true
-                text: {
-                    const options = form.setup.intervalOptions
-                    for (let i = 0; i < options.length; ++i)
-                        if (options[i].value === form.setup.interval)
-                            return options[i].text
-                    return qsTr("Every %n minute(s)", "", form.setup.interval)
-                }
+                text: form.setup.intervalText
                 Accessible.name: qsTr("How often to sync: %1").arg(text)
                 onClicked: intervalMenu.popup(intervalButton, 0, intervalButton.height)
             }
@@ -252,23 +246,23 @@ IoCard {
     Instantiator {
         model: form.setup.intervalOptions
         delegate: BMenuItem {
-            required property var modelData
-            text: modelData.text
+            id: intervalItem
+            required text
+            required property int value
             checkable: true
-            checked: form.setup.interval === modelData.value
-            onTriggered: form.setup.interval = modelData.value
+            checked: form.setup.interval === intervalItem.value
+            onTriggered: form.setup.interval = intervalItem.value
         }
-        onObjectAdded: (index, object) => intervalMenu.insertItem(index, object)
-        onObjectRemoved: (index, object) => intervalMenu.removeItem(object)
+        onObjectAdded: (index, object) => intervalMenu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => intervalMenu.removeItem(object as Item)
     }
 
     // ---- Test result ---------------------------------------------------------------------------
     BCard {
         id: result
-        readonly property var r: form.setup.testResult
         Layout.fillWidth: true
-        visible: r.title !== undefined
-        tone: r.ok ? "success" : r.code === "no-folder" ? "warning" : "danger"
+        visible: form.setup.testResult.title !== undefined
+        tone: form.setup.testResult.ok ? "success" : form.setup.testResult.code === "no-folder" ? "warning" : "danger"
         padding: Theme.space3
         contentItem: ColumnLayout {
             spacing: Theme.space2
@@ -277,28 +271,28 @@ IoCard {
                 spacing: Theme.space2
                 BIcon {
                     Layout.alignment: Qt.AlignTop
-                    name: result.r.ok ? "circle-check" : result.r.code === "no-folder" ? "folder" : "circle-alert"
+                    name: form.setup.testResult.ok ? "circle-check" : form.setup.testResult.code === "no-folder" ? "folder" : "circle-alert"
                     size: Theme.iconSize
-                    color: result.r.ok ? Theme.successText : result.r.code === "no-folder" ? Theme.warningText : Theme.dangerText
+                    color: form.setup.testResult.ok ? Theme.successText : form.setup.testResult.code === "no-folder" ? Theme.warningText : Theme.dangerText
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 2
                     BText {
                         Layout.fillWidth: true
-                        text: result.r.title || ""
+                        text: form.setup.testResult.title ? "" + form.setup.testResult.title : ""
                         variant: "label"
                         wrapMode: Text.Wrap
                     }
                     BText {
                         Layout.fillWidth: true
-                        text: result.r.message || ""
+                        text: form.setup.testResult.message ? "" + form.setup.testResult.message : ""
                         wrapMode: Text.Wrap
                     }
                     BText {
                         Layout.fillWidth: true
                         visible: text !== ""
-                        text: result.r.hint || ""
+                        text: form.setup.testResult.hint ? "" + form.setup.testResult.hint : ""
                         variant: "small"
                         color: Theme.fgMuted
                         wrapMode: Text.Wrap
@@ -311,7 +305,7 @@ IoCard {
                 visible: createButton.visible || securityButton.visible || detailsButton.visible
                 BButton {
                     id: createButton
-                    visible: !!result.r.canCreateFolder
+                    visible: !!form.setup.testResult.canCreateFolder
                     text: qsTr("Create the folder")
                     iconName: "plus"
                     size: "small"
@@ -321,16 +315,16 @@ IoCard {
                 }
                 BButton {
                     id: securityButton
-                    visible: !!result.r.securityUrl
+                    visible: !!form.setup.testResult.securityUrl
                     text: qsTr("Create an app password")
                     iconName: "external-link"
                     size: "small"
-                    onClicked: Qt.openUrlExternally(result.r.securityUrl)
+                    onClicked: Qt.openUrlExternally("" + form.setup.testResult.securityUrl)
                 }
                 BButton {
                     id: detailsButton
                     property bool open: false
-                    visible: !!result.r.details
+                    visible: !!form.setup.testResult.details
                     text: qsTr("Technical details")
                     iconName: open ? "chevron-down" : "chevron-right"
                     size: "small"
@@ -341,7 +335,7 @@ IoCard {
             BText {
                 Layout.fillWidth: true
                 visible: detailsButton.open && detailsButton.visible
-                text: result.r.details || ""
+                text: form.setup.testResult.details ? "" + form.setup.testResult.details : ""
                 variant: "mono"
                 color: Theme.fgMuted
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere

@@ -175,24 +175,57 @@ QtObject {
     readonly property color chipNeutralFg: fgMuted
 
     /// { bg, fg, icon } for a chip variant: tag, due, overdue, scheduled, reminder, alarm,
-    /// recurrence, done, neutral.
-    function chip(kind) {
+    /// recurrence, done, neutral. (A member of its result does not compile: chipBg(), chipFg()
+    /// and chipIcon() give the same typed.)
+    function chip(kind: string): var {
+        return { bg: chipBg(kind), fg: chipFg(kind), icon: chipIcon(kind) }
+    }
+    /// The background of a chip variant (chip()).
+    function chipBg(kind: string): color {
         switch (kind) {
-        case "tag": return { bg: tagBg, fg: tagFg, icon: "hash" }
-        case "due": return { bg: chipDueBg, fg: chipDueFg, icon: "calendar" }
-        case "overdue": return { bg: chipOverdueBg, fg: chipOverdueFg, icon: "calendar" }
-        case "scheduled": return { bg: chipScheduledBg, fg: chipScheduledFg, icon: "hourglass" }
-        case "reminder": return { bg: chipReminderBg, fg: chipReminderFg, icon: "bell" }
-        case "alarm": return { bg: chipAlarmBg, fg: chipAlarmFg, icon: "alarm-clock" }
-        case "recurrence": return { bg: chipRecurrenceBg, fg: chipRecurrenceFg, icon: "repeat" }
-        case "done": return { bg: chipDoneBg, fg: chipDoneFg, icon: "check" }
-        default: return { bg: chipNeutralBg, fg: chipNeutralFg, icon: "" }
+        case "tag": return tagBg
+        case "due": return chipDueBg
+        case "overdue": return chipOverdueBg
+        case "scheduled": return chipScheduledBg
+        case "reminder": return chipReminderBg
+        case "alarm": return chipAlarmBg
+        case "recurrence": return chipRecurrenceBg
+        case "done": return chipDoneBg
+        default: return chipNeutralBg
+        }
+    }
+    /// The text colour of a chip variant (chip()).
+    function chipFg(kind: string): color {
+        switch (kind) {
+        case "tag": return tagFg
+        case "due": return chipDueFg
+        case "overdue": return chipOverdueFg
+        case "scheduled": return chipScheduledFg
+        case "reminder": return chipReminderFg
+        case "alarm": return chipAlarmFg
+        case "recurrence": return chipRecurrenceFg
+        case "done": return chipDoneFg
+        default: return chipNeutralFg
+        }
+    }
+    /// The default icon of a chip variant (chip()); "" for neutral.
+    function chipIcon(kind: string): string {
+        switch (kind) {
+        case "tag": return "hash"
+        case "due": return "calendar"
+        case "overdue": return "calendar"
+        case "scheduled": return "hourglass"
+        case "reminder": return "bell"
+        case "alarm": return "alarm-clock"
+        case "recurrence": return "repeat"
+        case "done": return "check"
+        default: return ""
         }
     }
 
     /// Dot colour for date marks (BDatePicker): due, overdue, scheduled, reminder, alarm,
     /// journal, done, event.
-    function markColor(kind) {
+    function markColor(kind: string): color {
         switch (kind) {
         case "overdue": return dangerText
         case "reminder": case "alarm": return dark ? "#f2b33d" : "#c98a12"

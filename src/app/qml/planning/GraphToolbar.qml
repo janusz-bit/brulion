@@ -33,14 +33,22 @@ BCard {
     signal depthRequested(int depth)
     signal optionToggled(string name, bool on)
 
-    readonly property var results: search.text.trim() !== "" ? model.find(search.text, 8) : []
+    /// The pages matching the search: [{ id, kind, title, degree }].
+    readonly property list<var> results: findResults(search.text)
+    readonly property list<var> scopes: [
+        { value: "global", text: qsTr("Whole graph"), icon: "waypoints" },
+        { value: "local", text: qsTr("Local"), icon: "network" }
+    ]
+    readonly property list<var> depths: [{ value: 1, text: "1" }, { value: 2, text: "2" }]
 
-    function focusSearch() { search.forceActiveFocus() }
-    function choose(index) {
-        const r = results[index]
-        if (!r)
+    function findResults(text: string): list<var> {
+        return Js.trim(text) !== "" ? root.model.find(text, 8) : []
+    }
+    function focusSearch(): void { search.forceActiveFocus() }
+    function choose(index: int): void {
+        if (index < 0 || index >= results.length)
             return
-        nodeChosen(r.id)
+        nodeChosen(AppController.routeText(results[index], "id"))
         search.text = ""
     }
 
@@ -79,26 +87,29 @@ BCard {
             id: resultList
             Layout.fillWidth: true
             Layout.preferredHeight: contentHeight
-            visible: search.text.trim() !== ""
+            visible: Js.trim(search.text) !== ""
             interactive: false
             model: root.results
             currentIndex: count > 0 ? 0 : -1
             delegate: BListItem {
-                required property var modelData
+                id: resultRow
+                required property string kind
+                required property string title
+                required property int degree
                 required property int index
                 width: ListView.view.width
                 dense: true
                 selected: ListView.isCurrentItem
-                iconName: modelData.kind === "tag" ? "hash" : modelData.kind === "journal" ? "book-open"
-                        : modelData.kind === "missing" ? "file" : "file-text"
-                text: modelData.title
-                count: modelData.degree
-                onClicked: root.choose(index)
+                iconName: kind === "tag" ? "hash" : kind === "journal" ? "book-open"
+                        : kind === "missing" ? "file" : "file-text"
+                text: title
+                count: degree
+                onClicked: root.choose(resultRow.index)
             }
         }
         Text {
             Layout.fillWidth: true
-            visible: search.text.trim() !== "" && root.results.length === 0
+            visible: Js.trim(search.text) !== "" && root.results.length === 0
             text: qsTr("No such page in the graph.")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm
@@ -119,10 +130,7 @@ BCard {
                     Layout.fillWidth: true
                     fill: true
                     size: "small"
-                    model: [
-                        { value: "global", text: qsTr("Whole graph"), icon: "waypoints" },
-                        { value: "local", text: qsTr("Local"), icon: "network" }
-                    ]
+                    model: root.scopes
                     currentValue: root.localMode ? "local" : "global"
                     enabled: root.localAvailable || root.localMode
                     accessibleName: qsTr("Graph scope")
@@ -131,7 +139,7 @@ BCard {
                 BSegmented {
                     visible: root.localMode
                     size: "small"
-                    model: [{ value: 1, text: "1" }, { value: 2, text: "2" }]
+                    model: root.depths
                     currentValue: root.depth
                     accessibleName: qsTr("Links away from the page")
                     onActivated: (value) => root.depthRequested(value)

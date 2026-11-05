@@ -24,23 +24,23 @@ ColumnLayout {
     readonly property alias importer: importerObject
     readonly property bool phone: AppController.isAndroid || DevTools.touch
 
-    function pickFiles() {
+    function pickFiles(): void {
         if (AppController.isWasm)
             importerObject.pickInBrowser()
         else
             fileDialog.open()
     }
-    function pickFolder() {
+    function pickFolder(): void {
         if (!AppController.isWasm)
             folderDialog.open()
     }
-    function applyPreset() {
+    function applyPreset(): void {
         if (!preset)
             return
-        if (preset.importer)
-            importerObject.importerId = preset.importer
-        if (preset.files)
-            importerObject.addPaths(String(preset.files).split("|"))
+        if (AppController.routeFlag(preset, "importer"))
+            importerObject.importerId = AppController.routeText(preset, "importer")
+        if (AppController.routeFlag(preset, "files"))
+            importerObject.addPaths(Js.split(AppController.routeText(preset, "files"), "|"))
     }
 
     onPresetChanged: applyPreset()

@@ -40,13 +40,16 @@ FocusScope {
     readonly property int maxPills: Math.max(0, Math.floor((cellHeight - pillsTop - 2) / (pillHeight + 2)))
     // (The locale passed for real: a method call is not tracked, and a bare `void DatesHelper.locale`
     // is compiled away with the dependency.)
-    readonly property var weekdayNames: {
-        const names = DatesHelper.weekdayNames(dots ? "short" : "short", DatesHelper.locale)
-        const start = calendar.effectiveWeekStart
-        const out = []
-        for (let i = 0; i < 7; ++i)
-            out.push(names[(start - 1 + i) % 7])
-        return out
+    readonly property list<string> weekdayNames: rotatedNames(shortNames(DatesHelper.locale), calendar.effectiveWeekStart)
+    function shortNames(locale: string): list<string> {
+        return DatesHelper.weekdayNames("short", locale)
+    }
+    /// `names` (Monday first) starting at the day `start` (1 = Monday).
+    function rotatedNames(names: list<string>, start: int): list<string> {
+        if (names.length !== 7)
+            return names
+        const at = (start - 1 + 7) % 7
+        return Js.concatStrings(names.slice(at), names.slice(0, at))
     }
 
     signal dayTapped(string date)
@@ -56,7 +59,7 @@ FocusScope {
     signal weekOpened(string monday)
 
     /// Mondays of the shown weeks that have a weekly note (the numbers' accent).
-    readonly property var weekNotes: {
+    readonly property list<string> weekNotes: {
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
         if (!showWeekNumbers || calendar.rangeStart === "" || Workspace.revision < 0)
             return []
@@ -74,8 +77,8 @@ FocusScope {
     Keys.onPressed: (event) => {
         const ctrl = event.modifiers & Qt.ControlModifier
         switch (event.key) {
-        case Qt.Key_Left: calendar.moveAnchor(Qt.application.layoutDirection === Qt.RightToLeft ? 1 : -1); break
-        case Qt.Key_Right: calendar.moveAnchor(Qt.application.layoutDirection === Qt.RightToLeft ? -1 : 1); break
+        case Qt.Key_Left: calendar.moveAnchor(Application.layoutDirection === Qt.RightToLeft ? 1 : -1); break
+        case Qt.Key_Right: calendar.moveAnchor(Application.layoutDirection === Qt.RightToLeft ? -1 : 1); break
         case Qt.Key_Up: calendar.moveAnchor(-7); break
         case Qt.Key_Down: calendar.moveAnchor(7); break
         case Qt.Key_PageUp: calendar.previous(); break
@@ -139,7 +142,9 @@ FocusScope {
             id: slider
             width: parent.width
             height: parent.height
-            x: swipe.active ? swipe.translation.x : 0
+            // (Set to a side and back to 0 after a swipe: the Behavior slides the new range in.)
+            property real slideOffset: 0
+            x: swipe.active ? swipe.translation.x : slideOffset
             Behavior on x {
                 enabled: !swipe.active
                 NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing }
@@ -186,19 +191,18 @@ FocusScope {
                     required property bool isWeekend
                     required property bool isSelected
                     required property bool hasJournal
-                    required property var items
+                    /// The day's entries, open ones first (a stable partition: times keep their
+                    /// order), so "+N więcej" hides finished ones first; the pills and a click
+                    /// on one read this order.
+                    required property list<var> orderedItems
                     required property int itemCount
-                    required property var kinds
+                    required property list<string> kinds
                     required property string longLabel
 
                     readonly property int column: index % 7
                     readonly property int row: Math.floor(index / 7)
-                    /// The day's entries, open ones first (a stable partition: times keep their
-                    /// order), so "+N więcej" hides finished ones first; the pills and a click
-                    /// on one read this order.
-                    readonly property var ordered: items.filter(e => !e.closed).concat(items.filter(e => e.closed))
-                    readonly property bool overflow: ordered.length > root.maxPills
-                    readonly property int shownPills: overflow ? Math.max(0, root.maxPills - 1) : ordered.length
+                    readonly property bool overflow: orderedItems.length > root.maxPills
+                    readonly property int shownPills: overflow ? Math.max(0, root.maxPills - 1) : orderedItems.length
 
                     x: root.weekColumn + column * root.cellWidth
                     y: row * root.cellHeight
@@ -209,14 +213,14 @@ FocusScope {
 
                     Accessible.role: Accessible.Cell
                     Accessible.name: {
-                        const parts = [longLabel]
+                        let out = longLabel
                         if (isToday)
-                            parts.push(qsTr("today"))
+                            out += ", " + qsTr("today")
                         if (itemCount > 0)
-                            parts.push(qsTr("%n entries", "", itemCount))
+                            out += ", " + qsTr("%n entries", "", itemCount)
                         if (hasJournal)
-                            parts.push(qsTr("journal"))
-                        return parts.join(", ")
+                            out += ", " + qsTr("journal")
+                        return out
                     }
                     Accessible.selected: isSelected
 
@@ -247,7 +251,7 @@ FocusScope {
                         color: cell.isToday ? Theme.accentSolid : cell.isSelected ? Theme.primary : "transparent"
                         Text {
                             anchors.centerIn: parent
-                            text: cell.day
+                            text: "" + cell.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textSm
                             font.weight: cell.isToday || cell.isSelected ? Theme.weightBold
@@ -278,40 +282,47 @@ FocusScope {
                             delegate: Rectangle {
                                 id: pill
                                 required property int index
-                                readonly property var entry: cell.ordered[index]
+                                readonly property var entry: cell.orderedItems[index]
+                                readonly property string variant: AppController.routeText(entry, "variant")
+                                readonly property string status: AppController.routeText(entry, "status")
+                                readonly property string time: AppController.routeText(entry, "time")
+                                readonly property bool closed: AppController.routeFlag(entry, "closed")
+                                readonly property bool recurring: AppController.routeFlag(entry, "recurring")
                                 // An alarm in the reminder's tint: its alarm clock tells it apart (a
                                 // solid amber pill was the loudest thing on the month).
-                                readonly property var colors: Theme.chip(entry.variant === "alarm" ? "reminder" : entry.variant)
+                                readonly property string tint: variant === "alarm" ? "reminder" : variant
+                                readonly property color fgColor: Theme.chipFg(tint)
                                 width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
                                 radius: Theme.radiusSm
                                 // (Done and cancelled entries: the "done" chip's colours at full
                                 // opacity — readable text, AA —, with a check, or struck out with
                                 // an x when cancelled, as in Tasks.)
-                                color: colors.bg
+                                color: Theme.chipBg(pill.tint)
                                 Row {
+                                    id: pillRow
                                     anchors.verticalCenter: parent.verticalCenter
                                     x: 5
                                     width: parent.width - 8
                                     spacing: 3
                                     BIcon {
                                         anchors.verticalCenter: parent.verticalCenter
-                                        visible: pill.entry.closed || pill.entry.variant === "alarm" || pill.entry.recurring
-                                        name: pill.entry.closed ? (pill.entry.status === "cancelled" ? "x" : "check")
-                                            : pill.entry.variant === "alarm" ? "alarm-clock" : "repeat"
+                                        visible: pill.closed || pill.variant === "alarm" || pill.recurring
+                                        name: pill.closed ? (pill.status === "cancelled" ? "x" : "check")
+                                            : pill.variant === "alarm" ? "alarm-clock" : "repeat"
                                         size: 10
-                                        color: pill.colors.fg
+                                        color: pill.fgColor
                                     }
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width - (x > 0 ? 13 : 0)
-                                        text: (pill.entry.time !== "" ? "<b>" + pill.entry.time + "</b> " : "")
-                                              + TextHelper.escapeHtml(pill.entry.title)
+                                        text: (pill.time !== "" ? "<b>" + pill.time + "</b> " : "")
+                                              + TextHelper.escapeHtml(AppController.routeText(pill.entry, "title"))
                                         textFormat: Text.StyledText
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textXs
-                                        font.strikeout: pill.entry.status === "cancelled"
-                                        color: pill.colors.fg
+                                        font.strikeout: pill.status === "cancelled"
+                                        color: pill.fgColor
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
                                     }
@@ -321,7 +332,7 @@ FocusScope {
                         Text {
                             visible: cell.overflow
                             leftPadding: 5
-                            text: qsTr("+%n more", "", cell.ordered.length - cell.shownPills)
+                            text: qsTr("+%n more", "", cell.orderedItems.length - cell.shownPills)
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs
                             font.weight: Theme.weightMedium
@@ -356,17 +367,17 @@ FocusScope {
                     TapHandler {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
                         onTapped: (eventPoint) => {
+                            // (The pill under the pointer found before the focus and the anchor change.)
+                            const py = eventPoint.position.y
+                            const k = Math.floor((py - root.pillsTop) / (root.pillHeight + 2))
+                            const onPill = !Theme.touchUi && !root.dots && py >= root.pillsTop && k >= 0 && k < cell.shownPills
                             root.forceActiveFocus(Qt.MouseFocusReason)
                             root.keyboardActive = false
                             root.calendar.anchorDate = cell.date
                             // A click on a pill opens that entry (mouse UIs); elsewhere it selects the day.
-                            if (!Theme.touchUi && !root.dots) {
-                                const p = eventPoint.position
-                                const k = Math.floor((p.y - root.pillsTop) / (root.pillHeight + 2))
-                                if (p.y >= root.pillsTop && k >= 0 && k < cell.shownPills) {
-                                    root.itemOpened(cell.ordered[k])
-                                    return
-                                }
+                            if (onPill) {
+                                root.itemOpened(cell.orderedItems[k])
+                                return
                             }
                             root.dayTapped(cell.date)
                         }
@@ -398,8 +409,8 @@ FocusScope {
                     else
                         root.calendar.previous()
                     // Slide the new month in from the side it came from.
-                    slider.x = dx < 0 ? root.width * 0.25 : -root.width * 0.25
-                    slider.x = Qt.binding(() => swipe.active ? swipe.translation.x : 0)
+                    slider.slideOffset = dx < 0 ? root.width * 0.25 : -root.width * 0.25
+                    slider.slideOffset = 0
                 }
             }
         }

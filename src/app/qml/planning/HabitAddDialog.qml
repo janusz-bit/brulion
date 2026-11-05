@@ -13,12 +13,12 @@ BDialog {
     id: control
 
     /// The HabitListModel (describeSchedule, hasHabit).
-    property var habits: null
+    property HabitListModel habits: null
 
     signal addRequested(string name, string schedule)
 
-    readonly property string name: nameField.text.trim()
-    readonly property string schedule: scheduleField.text.trim()
+    readonly property string name: Js.trim(nameField.text)
+    readonly property string schedule: Js.trim(scheduleField.text)
     readonly property string preview: habits ? habits.describeSchedule(schedule) : ""
     readonly property bool taken: name !== "" && habits !== null && habits.hasHabit(name)
 

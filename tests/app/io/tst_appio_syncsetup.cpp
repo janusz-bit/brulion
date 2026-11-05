@@ -212,6 +212,15 @@ private Q_SLOTS:
         QVERIFY(!form.configured());
         QCOMPARE(form.intervalOptions().size(), 6);
         QCOMPARE(form.interval(), 15);
+        // The interval's own option text; one without an option: "Every %n minute(s)".
+        QCOMPARE(form.intervalText(), form.intervalOptions().at(1).toMap().value(u"text"_s).toString());
+        form.setInterval(0);
+        QCOMPARE(form.intervalText(), form.intervalOptions().last().toMap().value(u"text"_s).toString());
+        form.setInterval(7);
+        if (form.interval() == 7)
+            QCOMPARE(form.intervalText(), NextcloudSetup::tr("Every %n minute(s)", "", 7));
+        form.setInterval(15);
+        QVERIFY(!form.dirty());
         QVERIFY(form.urlError().isEmpty()); // errors only after a save attempt
 
         form.setEnabled(true);

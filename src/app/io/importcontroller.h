@@ -98,6 +98,8 @@ class ImportController : public QObject {
     Q_PROPERTY(qreal progress READ progress NOTIFY progressChanged FINAL)
     Q_PROPERTY(QString progressText READ progressText NOTIFY progressChanged FINAL)
     Q_PROPERTY(QString importerId READ importerId WRITE setImporterId NOTIFY importerChanged FINAL)
+    /// The `importers` row of importerId ({} when none is chosen).
+    Q_PROPERTY(QVariantMap chosenImporter READ chosenImporter NOTIFY importerChanged FINAL)
     Q_PROPERTY(QString detectedId READ detectedId NOTIFY importerChanged FINAL)
     Q_PROPERTY(QString effectiveId READ effectiveId NOTIFY importerChanged FINAL)
     Q_PROPERTY(QString effectiveName READ effectiveName NOTIFY importerChanged FINAL)
@@ -129,6 +131,7 @@ public:
     QString progressText() const { return m_progressText; }
     QString importerId() const { return m_importerId; }
     void setImporterId(const QString &id);
+    QVariantMap chosenImporter() const;
     QString detectedId() const { return m_detectedId; }
     QString effectiveId() const;
     QString effectiveName() const;

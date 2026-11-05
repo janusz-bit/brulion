@@ -20,7 +20,19 @@ import Brulion
 T.ItemDelegate {
     id: control
 
+    /// The CalendarModel entry (a map: { kind, title, time, status, isTask, closed, variant, icon,
+    /// spec, path, pageTitle, isJournalPage, dueLabel, recurring, … }).
     required property var entry
+    // Its fields (a missing one: "" / false).
+    readonly property string entryKind: AppController.routeText(entry, "kind")
+    readonly property string entryTitle: AppController.routeText(entry, "title")
+    readonly property string entryTime: AppController.routeText(entry, "time")
+    readonly property string entryStatus: AppController.routeText(entry, "status")
+    readonly property string entryIcon: AppController.routeText(entry, "icon")
+    readonly property string entryPath: AppController.routeText(entry, "path")
+    readonly property string entryPageTitle: AppController.routeText(entry, "pageTitle")
+    readonly property string entryDueLabel: AppController.routeText(entry, "dueLabel")
+    readonly property bool recurring: AppController.routeText(entry, "recurring") === "true"
     /// Show the entry's date in the subtitle (lists spanning several days: overdue tasks).
     property bool showDate: false
 
@@ -33,22 +45,21 @@ T.ItemDelegate {
     signal tokenMenuRequested(Item item, real x, real y)
 
     /// The entry names a token of a note (journals have none).
-    readonly property bool hasTokenMenu: (entry.spec || "") !== "" && entry.kind !== "journal"
+    readonly property bool hasTokenMenu: AppController.routeText(entry, "spec") !== "" && entryKind !== "journal"
 
-    readonly property bool isTask: entry.isTask === true
-    readonly property bool closed: entry.closed === true
-    readonly property string variant: entry.variant || "neutral"
-    readonly property var chipColors: Theme.chip(variant)
-    readonly property string journalDay: entry.isJournalPage ? Workspace.journalDate(entry.path || "") : ""
+    readonly property bool isTask: AppController.routeText(entry, "isTask") === "true"
+    readonly property bool closed: AppController.routeText(entry, "closed") === "true"
+    readonly property string variant: AppController.routeText(entry, "variant") !== "" ? AppController.routeText(entry, "variant") : "neutral"
+    readonly property string journalDay: AppController.routeFlag(entry, "isJournalPage") ? Workspace.journalDate(entryPath) : ""
     readonly property string kindLabel: {
         switch (variant) {
         case "overdue": return qsTr("Overdue")
         case "alarm": return qsTr("Alarm")
         case "reminder": return qsTr("Reminder")
         case "scheduled": return qsTr("Scheduled")
-        case "done": return entry.kind === "done" ? qsTr("Done") : qsTr("Finished")
+        case "done": return control.entryKind === "done" ? qsTr("Done") : qsTr("Finished")
         }
-        switch (entry.kind) {
+        switch (control.entryKind) {
         case "due": return qsTr("Due")
         case "start": return qsTr("Starts")
         case "journal": return qsTr("Journal")
@@ -57,10 +68,20 @@ T.ItemDelegate {
     }
     readonly property string subtitle: {
         const where = journalDay !== "" ? qsTr("Journal · %1").arg(DatesHelper.formatShort(journalDay))
-                                        : (entry.pageTitle || "")
-        if (showDate && entry.dueLabel)
-            return entry.dueLabel + (where !== "" ? " · " + where : "")
+                                        : control.entryPageTitle
+        if (showDate && control.entryDueLabel !== "")
+            return control.entryDueLabel + (where !== "" ? " · " + where : "")
         return where
+    }
+
+    /// The non-empty parts joined with ", ".
+    function joinNonEmpty(parts: list<string>): string {
+        let out = ""
+        for (let i = 0; i < parts.length; ++i) {
+            if (parts[i] !== "")
+                out = out === "" ? parts[i] : out + ", " + parts[i]
+        }
+        return out
     }
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
@@ -74,7 +95,7 @@ T.ItemDelegate {
     hoverEnabled: !Theme.touchUi
 
     Accessible.role: Accessible.ListItem
-    Accessible.name: [entry.time || "", entry.title || "", kindLabel, subtitle].filter(s => s !== "").join(", ")
+    Accessible.name: joinNonEmpty([entryTime, entryTitle, kindLabel, subtitle])
 
     onClicked: control.opened()
     onPressAndHold: if (control.hasTokenMenu) control.tokenMenuRequested(control, control.pressX, control.pressY)
@@ -118,18 +139,18 @@ T.ItemDelegate {
                 objectName: "planningTaskBox"
                 anchors.centerIn: parent
                 visible: control.isTask
-                status: control.entry.status || "todo"
-                Accessible.name: qsTr("Done: %1").arg(control.entry.title || "")
+                status: control.entryStatus !== "" ? control.entryStatus : "todo"
+                Accessible.name: qsTr("Done: %1").arg(control.entryTitle)
                 onToggled: control.taskToggled()
                 onStatusChosen: (status) => {
-                    if (status !== (control.entry.status || "todo"))
+                    if (status !== (control.entryStatus !== "" ? control.entryStatus : "todo"))
                         control.statusRequested(status)
                 }
             }
             BIcon {
                 anchors.centerIn: parent
                 visible: !control.isTask
-                name: control.entry.icon || "calendar"
+                name: control.entryIcon !== "" ? control.entryIcon : "calendar"
                 size: Theme.iconSizeSm
                 color: control.variant === "alarm" || control.variant === "reminder" ? Theme.markColor(control.variant)
                                                                                      : Theme.fgMuted
@@ -141,8 +162,8 @@ T.ItemDelegate {
             x: marker.width + content.spacing
             y: Theme.touchUi ? 12 : 4
             width: timeMetrics.width
-            visible: (control.entry.time || "") !== ""
-            text: control.entry.time || ""
+            visible: control.entryTime !== ""
+            text: control.entryTime
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm
             font.weight: Theme.weightSemiBold
@@ -167,11 +188,11 @@ T.ItemDelegate {
             Text {
                 id: title
                 width: parent.width
-                text: control.entry.title || ""
+                text: control.entryTitle
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
                 // Done: muted (its ticked box says so); cancelled: struck out too — as in Tasks.
-                font.strikeout: control.entry.status === "cancelled"
+                font.strikeout: control.entryStatus === "cancelled"
                 color: control.closed ? Theme.fgMuted : Theme.fg
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
@@ -200,7 +221,7 @@ T.ItemDelegate {
             visible: control.kindLabel !== "" && control.width > 300
             size: "small"
             variant: control.variant
-            showIcon: control.entry.recurring === true
+            showIcon: control.recurring
             iconName: "repeat"
             text: control.kindLabel
         }
