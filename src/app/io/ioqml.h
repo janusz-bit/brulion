@@ -8,6 +8,8 @@
 //   NextcloudSetup { settings: AppSettings }
 //   SyncthingSetup { settings: AppSettings; workspace: Workspace }
 //   ConflictResolver { workspace: Workspace; copy: conflict.copy }
+//   SyncRunInfo { sync: Workspace.sync; number: n }
+//   IoLists          singleton (syncviews.h)
 #pragma once
 
 #include "conflictresolver.h"
@@ -15,6 +17,7 @@
 #include "importcontroller.h"
 #include "mstodoimport.h"
 #include "syncsetup.h"
+#include "syncviews.h"
 
 #include <QtQml/qqmlregistration.h>
 
@@ -54,6 +57,19 @@ struct ConflictResolverForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ioviews::ConflictResolver)
     QML_NAMED_ELEMENT(ConflictResolver)
+};
+
+struct SyncRunInfoForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ioviews::SyncRunInfo)
+    QML_NAMED_ELEMENT(SyncRunInfo)
+};
+
+struct IoListsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ioviews::IoLists)
+    QML_NAMED_ELEMENT(IoLists)
+    QML_SINGLETON
 };
 
 } // namespace brulion::ioviews

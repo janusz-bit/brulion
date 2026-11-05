@@ -13,22 +13,21 @@ import Brulion
 IoCard {
     id: panel
 
-    readonly property var sync: Workspace.sync
+    readonly property WorkspaceSync sync: Workspace.sync
     readonly property string syncState: sync ? sync.state : "disabled"
     readonly property bool syncing: syncState === "syncing"
-    readonly property var report: sync ? sync.lastReport : ({})
-    readonly property bool hasReport: !!report && report.finished !== undefined && report.finished !== ""
+    readonly property bool hasReport: !!sync && sync.lastReport.finished !== undefined && sync.lastReport.finished !== ""
     property bool showErrors: false
-    readonly property var lastRun: sync ? sync.lastRun : ({})
+    readonly property bool hasLastRun: !!sync && sync.lastRun.number !== undefined
     /// Seconds until the planned retry (ticks while shown).
     property int retryIn: 0
 
     signal showConflicts()
 
-    function updateRetry() {
-        retryIn = sync && sync.retrying && sync.nextSyncMs > 0 ? Math.max(0, Math.round((sync.nextSyncMs - Date.now()) / 1000)) : 0
+    function updateRetry(): void {
+        retryIn = !!sync && sync.retrying && sync.nextSyncMs > 0 ? Math.max(0, Math.round((sync.nextSyncMs - Js.dateNow()) / 1000)) : 0
     }
-    function countdownText(seconds) {
+    function countdownText(seconds: int): string {
         if (seconds >= 120)
             return qsTr("in %n min", "", Math.round(seconds / 60))
         return qsTr("in %n s", "", seconds)
@@ -42,10 +41,40 @@ IoCard {
         onTriggered: panel.updateRetry()
     }
 
-    function nextText() {
+    function nextText(): string {
         if (!sync || sync.nextSync === "")
             return ""
-        return DatesHelper.formatHuman(sync.nextSync.replace("T", " ").slice(0, 16))
+        return DatesHelper.formatHuman(Js.slice(Js.replace(sync.nextSync, "T", " "), 0, 16))
+    }
+    /// The last report's failed files [{ path, text, message }].
+    function reportErrors(): list<var> {
+        if (!panel.hasReport)
+            return []
+        return panel.sync.lastReport.errors
+    }
+    function errorCount(): int {
+        return panel.reportErrors().length
+    }
+    function shownErrors(): list<var> {
+        return panel.showErrors && panel.hasReport ? panel.reportErrors().slice(0, 20) : []
+    }
+    /// The tiles of what the last run did.
+    function tiles(): list<var> {
+        if (!panel.hasReport)
+            return []
+        const r = panel.sync.lastReport
+        const errors = panel.errorCount()
+        return [
+            { label: qsTr("Sent"), value: r.uploaded, icon: "upload", tone: "" },
+            { label: qsTr("Downloaded"), value: r.downloaded, icon: "download", tone: "" },
+            { label: qsTr("Merged"), value: r.merged, icon: "git-merge", tone: "" },
+            { label: qsTr("Conflicts"), value: r.conflicts, icon: "git-compare", tone: r.conflicts > 0 ? "warning" : "" },
+            { label: qsTr("Errors"), value: errors, icon: "circle-alert", tone: errors > 0 ? "danger" : "" }
+        ]
+    }
+    /// The error code is a passing one (network…): Brulion retries by itself.
+    function passingError(code: string): bool {
+        return code === "network" || code === "timeout" || code === "server" || code === "stalled" || code === "files"
     }
 
     iconName: syncState === "syncing" ? "refresh-cw"
@@ -57,7 +86,7 @@ IoCard {
              : syncState === "idle" ? Theme.successText : Theme.fgMuted
     // Problems that need the user (password, folder, storage) are red; passing ones (network)
     // only amber — Brulion retries by itself.
-    readonly property bool needsUser: syncState === "error" && ["network", "timeout", "server", "stalled", "files"].indexOf(sync ? sync.lastErrorCode : "") < 0
+    readonly property bool needsUser: syncState === "error" && !passingError(sync ? sync.lastErrorCode : "")
     tone: syncState === "error" ? (needsUser ? "danger" : "warning") : "default"
     title: qsTr("Nextcloud")
     subtitle: !sync ? ""
@@ -66,7 +95,7 @@ IoCard {
 
     trailing: [
         BButton {
-            visible: panel.sync && panel.sync.active && !Theme.compact
+            visible: !!panel.sync && panel.sync.active && !Theme.compact
             text: qsTr("Sync now")
             iconName: "refresh-cw"
             variant: "primary"
@@ -149,21 +178,22 @@ IoCard {
     // The last run: its result, with the way to its details.
     RowLayout {
         Layout.fillWidth: true
-        visible: !panel.syncing && panel.lastRun.number !== undefined
+        visible: !panel.syncing && panel.hasLastRun
         spacing: Theme.space2
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
             implicitWidth: 8
             implicitHeight: 8
             radius: 4
-            color: panel.lastRun.tone === "danger" ? Theme.dangerText
-                 : panel.lastRun.tone === "warning" ? Theme.warningText
-                 : panel.lastRun.tone === "success" ? Theme.successText : Theme.fgMuted
+            color: !panel.hasLastRun ? Theme.fgMuted
+                 : panel.sync.lastRun.tone === "danger" ? Theme.dangerText
+                 : panel.sync.lastRun.tone === "warning" ? Theme.warningText
+                 : panel.sync.lastRun.tone === "success" ? Theme.successText : Theme.fgMuted
         }
         BText {
             Layout.fillWidth: true
-            text: panel.lastRun.number !== undefined
-                  ? qsTr("Last run: %1 · %2").arg(panel.lastRun.outcomeText).arg(panel.lastRun.summary) : ""
+            text: panel.hasLastRun
+                  ? qsTr("Last run: %1 · %2").arg(panel.sync.lastRun.outcomeText).arg(panel.sync.lastRun.summary) : ""
             variant: "small"
             wrapMode: Text.Wrap
         }
@@ -175,7 +205,7 @@ IoCard {
             iconName: "chevron-right"
             iconRight: true
             onClicked: {
-                detailsLoader.number = panel.lastRun.number
+                detailsLoader.number = panel.sync.lastRun.number
                 detailsLoader.active = true
             }
         }
@@ -201,15 +231,13 @@ IoCard {
         text: {
             if (!panel.sync || !panel.sync.active)
                 return ""
-            const parts = []
-            if (panel.sync.lastSyncText !== "")
-                parts.push(qsTr("Last synced %1").arg(panel.sync.lastSyncText))
+            const last = panel.sync.lastSyncText !== "" ? qsTr("Last synced %1").arg(panel.sync.lastSyncText) : ""
             const next = panel.nextText()
             // A retry has its own countdown above.
-            if (next !== "" && !panel.syncing && !panel.sync.retrying)
-                parts.push(panel.syncState === "error" || panel.syncState === "offline" ? qsTr("next attempt %1").arg(next)
-                                                                                         : qsTr("next sync %1").arg(next))
-            return parts.join(" · ")
+            const nextPart = next === "" || panel.syncing || panel.sync.retrying ? ""
+                           : panel.syncState === "error" || panel.syncState === "offline" ? qsTr("next attempt %1").arg(next)
+                           : qsTr("next sync %1").arg(next)
+            return last !== "" && nextPart !== "" ? last + " · " + nextPart : last + nextPart
         }
     }
 
@@ -222,23 +250,20 @@ IoCard {
         rowSpacing: Theme.space2
 
         Repeater {
-            model: panel.hasReport ? [
-                { label: qsTr("Sent"), value: panel.report.uploaded, icon: "upload", tone: "" },
-                { label: qsTr("Downloaded"), value: panel.report.downloaded, icon: "download", tone: "" },
-                { label: qsTr("Merged"), value: panel.report.merged, icon: "git-merge", tone: "" },
-                { label: qsTr("Conflicts"), value: panel.report.conflicts, icon: "git-compare", tone: panel.report.conflicts > 0 ? "warning" : "" },
-                { label: qsTr("Errors"), value: (panel.report.errors || []).length, icon: "circle-alert", tone: (panel.report.errors || []).length > 0 ? "danger" : "" }
-            ] : []
+            model: panel.tiles()
             delegate: Rectangle {
                 id: tile
-                required property var modelData
+                required property string label
+                required property int value
+                required property string icon
+                required property string tone
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
                 implicitHeight: tileColumn.implicitHeight + 2 * Theme.space3
                 radius: Theme.radius
-                color: modelData.tone === "warning" ? Theme.warningBg : modelData.tone === "danger" ? Theme.dangerBg : Theme.bgSunken
+                color: tile.tone === "warning" ? Theme.warningBg : tile.tone === "danger" ? Theme.dangerBg : Theme.bgSunken
                 Accessible.role: Accessible.StaticText
-                Accessible.name: modelData.label + ": " + modelData.value
+                Accessible.name: tile.label + ": " + tile.value
                 ColumnLayout {
                     id: tileColumn
                     anchors.fill: parent
@@ -246,19 +271,19 @@ IoCard {
                     spacing: 2
                     RowLayout {
                         spacing: Theme.space1
-                        BIcon { name: tile.modelData.icon; size: Theme.iconSizeSm; color: Theme.fgMuted }
+                        BIcon { name: tile.icon; size: Theme.iconSizeSm; color: Theme.fgMuted }
                         Text {
-                            text: tile.modelData.value
+                            text: "" + tile.value
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXl
                             font.weight: Theme.weightSemiBold
-                            color: tile.modelData.tone === "warning" ? Theme.warningText
-                                 : tile.modelData.tone === "danger" ? Theme.dangerText : Theme.fg
+                            color: tile.tone === "warning" ? Theme.warningText
+                                 : tile.tone === "danger" ? Theme.dangerText : Theme.fg
                         }
                     }
                     BText {
                         Layout.fillWidth: true
-                        text: tile.modelData.label
+                        text: tile.label
                         variant: "small"
                         color: Theme.fgMuted
                         elide: Text.ElideRight
@@ -270,18 +295,18 @@ IoCard {
 
     BText {
         Layout.fillWidth: true
-        visible: panel.hasReport && (panel.report.deletedLocal > 0 || panel.report.deletedRemote > 0)
+        visible: panel.hasReport && (panel.sync.lastReport.deletedLocal > 0 || panel.sync.lastReport.deletedRemote > 0)
         variant: "small"
         color: Theme.fgMuted
         wrapMode: Text.Wrap
         text: panel.hasReport ? qsTr("Deleted: %1 on this device, %2 on the server (they are in the trash or the server's deleted files).")
-                                .arg(panel.report.deletedLocal).arg(panel.report.deletedRemote) : ""
+                                .arg("" + panel.sync.lastReport.deletedLocal).arg("" + panel.sync.lastReport.deletedRemote) : ""
     }
 
     BText {
         readonly property string folders: panel.hasReport && panel.sync
-            ? panel.sync.folderCountsText(panel.report.foldersCreated || 0, panel.report.foldersDeleted || 0,
-                                          panel.report.foldersMoved || 0, panel.report.foldersMovedHere || 0)
+            ? panel.sync.folderCountsText(panel.sync.lastReport.foldersCreated || 0, panel.sync.lastReport.foldersDeleted || 0,
+                                          panel.sync.lastReport.foldersMoved || 0, panel.sync.lastReport.foldersMovedHere || 0)
             : ""
         Layout.fillWidth: true
         visible: folders !== ""
@@ -293,7 +318,7 @@ IoCard {
 
     BText {
         readonly property string files: panel.hasReport && panel.sync
-            ? panel.sync.fileMovesText(panel.report.filesMoved || 0, panel.report.filesMovedHere || 0)
+            ? panel.sync.fileMovesText(panel.sync.lastReport.filesMoved || 0, panel.sync.lastReport.filesMovedHere || 0)
             : ""
         Layout.fillWidth: true
         visible: files !== ""
@@ -305,7 +330,7 @@ IoCard {
 
     RowLayout {
         Layout.fillWidth: true
-        visible: panel.hasReport && panel.report.conflicts > 0
+        visible: panel.hasReport && panel.sync.lastReport.conflicts > 0
         spacing: Theme.space2
         BText {
             Layout.fillWidth: true
@@ -322,37 +347,39 @@ IoCard {
 
     // Files that failed (usually few; at most 20 shown).
     BButton {
-        visible: panel.hasReport && (panel.report.errors || []).length > 0
+        visible: panel.errorCount() > 0
         variant: "ghost"
         size: "small"
         iconName: panel.showErrors ? "chevron-down" : "chevron-right"
-        text: qsTr("%n file(s) could not be synced", "", panel.hasReport ? (panel.report.errors || []).length : 0)
+        text: qsTr("%n file(s) could not be synced", "", panel.errorCount())
         onClicked: panel.showErrors = !panel.showErrors
     }
     Repeater {
-        model: panel.showErrors && panel.hasReport ? (panel.report.errors || []).slice(0, 20) : []
+        model: panel.shownErrors()
         delegate: ColumnLayout {
             id: errorRow
-            required property var modelData
+            required property string path
+            required property string text
+            required property string message
             Layout.fillWidth: true
             Layout.leftMargin: Theme.space4
             spacing: 0
             BText {
                 Layout.fillWidth: true
-                text: errorRow.modelData.path
+                text: errorRow.path
                 variant: "label"
                 elide: Text.ElideMiddle
             }
             BText {
                 Layout.fillWidth: true
                 visible: text !== ""
-                text: errorRow.modelData.text || ""
+                text: errorRow.text
                 variant: "small"
                 wrapMode: Text.Wrap
             }
             BText {
                 Layout.fillWidth: true
-                text: errorRow.modelData.message
+                text: errorRow.message
                 variant: "small"
                 color: Theme.fgMuted
                 wrapMode: Text.WrapAnywhere

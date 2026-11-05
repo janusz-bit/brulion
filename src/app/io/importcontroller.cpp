@@ -212,6 +212,18 @@ QVariantList ImportController::importers() const
     return out;
 }
 
+QVariantMap ImportController::chosenImporter() const
+{
+    if (m_importerId.isEmpty())
+        return {};
+    for (const QVariant &row : importers()) {
+        QVariantMap map = row.toMap();
+        if (map.value(u"id"_s).toString() == m_importerId)
+            return map;
+    }
+    return {};
+}
+
 bool ImportController::busy() const
 {
     return m_state == u"reading" || m_state == u"analyzing" || m_state == u"importing";

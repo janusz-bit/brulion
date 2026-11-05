@@ -112,6 +112,8 @@ ExportController::ExportController(QObject *parent)
 {
     m_summaryTimer.setSingleShot(true);
     m_summaryTimer.setInterval(150);
+    connect(this, &ExportController::formatsChanged, this, &ExportController::chosenFormatChanged);
+    connect(this, &ExportController::optionsChanged, this, &ExportController::chosenFormatChanged);
     // Vault changes come in bursts (an import writes thousands of files): the summary and the
     // folder list follow once the burst is over.
     connect(&m_summaryTimer, &QTimer::timeout, this, [this] {
@@ -216,6 +218,16 @@ QVariantList ExportController::formats() const
                                 { u"icon"_s, icon } });
     }
     return out;
+}
+
+QVariantMap ExportController::chosenFormat() const
+{
+    for (const QVariant &row : formats()) {
+        QVariantMap map = row.toMap();
+        if (map.value(u"id"_s).toString() == m_format)
+            return map;
+    }
+    return {};
 }
 
 void ExportController::setFormat(const QString &format)

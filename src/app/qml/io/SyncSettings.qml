@@ -11,7 +11,7 @@ import Brulion
 ColumnLayout {
     id: section
 
-    readonly property var sync: Workspace.sync
+    readonly property WorkspaceSync sync: Workspace.sync
 
     Layout.fillWidth: true
     spacing: Theme.space2
@@ -46,7 +46,7 @@ ColumnLayout {
             ShellSettingRow {
                 visible: !AppController.isWasm
                 title: "Syncthing"
-                description: section.sync && section.sync.syncthing.text ? section.sync.syncthing.text
+                description: !!section.sync && section.sync.syncthing.text ? "" + section.sync.syncthing.text
                              : Workspace.syncthingFolder ? qsTr("This notebook folder is shared with Syncthing.")
                              : qsTr("Not shared. Syncthing keeps a folder the same on all devices, without a server.")
                 BBadge {
@@ -57,7 +57,7 @@ ColumnLayout {
             }
             ShellSettingRow {
                 title: "Nextcloud"
-                description: section.sync && section.sync.statusText !== "" ? section.sync.statusText
+                description: !!section.sync && section.sync.statusText !== "" ? section.sync.statusText
                              : qsTr("Not set up. Fill in the account below.")
                 BButton {
                     visible: !!section.sync && section.sync.active

@@ -379,6 +379,27 @@ QVariantMap TaskListModel::timeSummary(const QString &group, const QString &rang
     return out;
 }
 
+QVariantList TaskListModel::paletteChoices(const QString &kind) const
+{
+    const bool page = kind == u"page";
+    const QVariantList choices = kind == u"tag" ? tagChoices(0) : page ? pageChoices(0)
+                                 : kind == u"folder" ? folderChoices(0) : QVariantList();
+    const QString icon = kind == u"tag" ? u"hash"_s : page ? u"file-text"_s : u"folder"_s;
+    QVariantList out;
+    out.reserve(choices.size());
+    for (const QVariant &choice : choices) {
+        const QVariantMap c = choice.toMap();
+        const QString count = QCoreApplication::translate("TasksFilterBar", "%n tasks", nullptr,
+                                                          c.value(u"count"_s).toInt());
+        const QString folder = page ? c.value(u"folder"_s).toString() : QString();
+        out.append(QVariantMap{{u"title"_s, c.value(u"label"_s).toString()},
+                               {u"subtitle"_s, folder.isEmpty() ? count : folder + u" · "_s + count},
+                               {u"icon"_s, icon},
+                               {u"value"_s, c.value(u"value"_s).toString()}});
+    }
+    return out;
+}
+
 QHash<int, QByteArray> TaskListModel::roleNames() const
 {
     return {

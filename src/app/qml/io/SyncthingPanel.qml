@@ -12,8 +12,8 @@ import Brulion
 ColumnLayout {
     id: panel
 
-    readonly property var status: Workspace.sync ? Workspace.sync.syncthing : ({})
-    readonly property bool shared: !!status.folder || (status.folderId || "") !== ""
+    readonly property WorkspaceSync sync: Workspace.sync
+    readonly property bool shared: !!sync.syncthing.folder || (sync.syncthing.folderId || "") !== ""
     property bool showTemplate: false
     property bool showKey: false
 
@@ -38,18 +38,18 @@ ColumnLayout {
     IoCard {
         visible: !AppController.isWasm
         iconName: "folder-sync"
-        iconColor: panel.status.state === "idle" ? Theme.successText
-                 : panel.status.state === "offline" || panel.status.state === "not-shared" ? Theme.warningText
-                 : panel.status.state === "error" ? Theme.dangerText : Theme.fgMuted
+        iconColor: panel.sync.syncthing.state === "idle" ? Theme.successText
+                 : panel.sync.syncthing.state === "offline" || panel.sync.syncthing.state === "not-shared" ? Theme.warningText
+                 : panel.sync.syncthing.state === "error" ? Theme.dangerText : Theme.fgMuted
         title: "Syncthing"
-        subtitle: panel.status.text || (panel.shared
+        subtitle: panel.sync.syncthing.text ? "" + panel.sync.syncthing.text : (panel.shared
                   ? qsTr("This notebook folder is shared with Syncthing.")
                   : qsTr("Syncthing keeps this folder the same on all your devices – directly between them, without a server."))
         trailing: [
             BBadge {
                 visible: text !== ""
                 text: {
-                    switch (panel.status.state || "") {
+                    switch (panel.sync.syncthing.state || "") {
                     case "idle": return qsTr("Up to date")
                     case "syncing":
                     case "sync-preparing": return qsTr("Syncing")
@@ -62,7 +62,7 @@ ColumnLayout {
                     }
                 }
                 variant: {
-                    switch (panel.status.state || "") {
+                    switch (panel.sync.syncthing.state || "") {
                     case "idle": return "success"
                     case "syncing":
                     case "sync-preparing":
@@ -75,7 +75,7 @@ ColumnLayout {
                 }
             },
             BIconButton {
-                visible: !!panel.status.enabled
+                visible: !!panel.sync.syncthing.enabled
                 iconName: "refresh-cw"
                 label: qsTr("Check now")
                 size: "small"
@@ -85,34 +85,34 @@ ColumnLayout {
 
         BProgressBar {
             Layout.fillWidth: true
-            visible: panel.status.state === "syncing" || panel.status.state === "sync-preparing"
-            value: (panel.status.completion || 0) / 100
+            visible: panel.sync.syncthing.state === "syncing" || panel.sync.syncthing.state === "sync-preparing"
+            value: (panel.sync.syncthing.completion || 0) / 100
         }
         Flow {
             Layout.fillWidth: true
-            visible: !!panel.status.enabled && panel.status.state !== "offline" && panel.status.state !== "not-shared"
-                     && panel.status.state !== "unknown"
+            visible: !!panel.sync.syncthing.enabled && panel.sync.syncthing.state !== "offline" && panel.sync.syncthing.state !== "not-shared"
+                     && panel.sync.syncthing.state !== "unknown"
             spacing: Theme.space2
             BChip {
-                visible: (panel.status.folderLabel || "") !== ""
+                visible: (panel.sync.syncthing.folderLabel || "") !== ""
                 iconName: "folder"
-                text: qsTr("Folder “%1”").arg(panel.status.folderLabel || "")
+                text: qsTr("Folder “%1”").arg(panel.sync.syncthing.folderLabel || "")
             }
             BChip {
-                visible: panel.status.connected !== undefined && panel.status.connected >= 0
+                visible: panel.sync.syncthing.connected !== undefined && panel.sync.syncthing.connected >= 0
                 iconName: "laptop"
-                text: qsTr("%n device(s) connected", "", panel.status.connected || 0)
+                text: qsTr("%n device(s) connected", "", panel.sync.syncthing.connected || 0)
             }
             BChip {
-                visible: panel.status.completion !== undefined
+                visible: panel.sync.syncthing.completion !== undefined
                 iconName: "circle-check"
-                text: qsTr("%1 % in sync").arg(Math.floor(panel.status.completion || 0))
+                text: qsTr("%1 % in sync").arg(Math.floor(panel.sync.syncthing.completion || 0))
             }
         }
         BText {
             Layout.fillWidth: true
-            visible: (panel.status.error || "") !== "" && panel.status.state === "offline"
-            text: panel.status.error || ""
+            visible: (panel.sync.syncthing.error || "") !== "" && panel.sync.syncthing.state === "offline"
+            text: panel.sync.syncthing.error || ""
             variant: "small"
             color: Theme.fgFaint
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere

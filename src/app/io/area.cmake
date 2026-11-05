@@ -23,6 +23,7 @@
 #                      connection" with explained errors (401, 404 + create the folder, TLS,
 #                      CORS in the browser), saving into AppSettings
 #   SyncthingSetup     Syncthing REST settings and the recommended .stignore
+#   SyncRunInfo, IoLists   WorkspaceSync's run details and lists for compiled QML (syncviews.h)
 #   ConflictResolver   one conflict copy: both texts, a base from the version history, merge3
 #                      hunks for BMergeView, keep mine / keep the copy / merge; drawings: both
 #                      files and their union (drawing::merge) for the previews, "Scal rysunki"
@@ -40,11 +41,12 @@ qt_add_library(brulion_ioviews STATIC
     ${_brulion_ioviews_dir}/exportcontroller.h ${_brulion_ioviews_dir}/exportcontroller.cpp
     ${_brulion_ioviews_dir}/syncsetup.h ${_brulion_ioviews_dir}/syncsetup.cpp
     ${_brulion_ioviews_dir}/conflictresolver.h ${_brulion_ioviews_dir}/conflictresolver.cpp
+    ${_brulion_ioviews_dir}/syncviews.h ${_brulion_ioviews_dir}/syncviews.cpp
 )
 target_include_directories(brulion_ioviews PUBLIC ${_brulion_ioviews_dir})
 target_link_libraries(brulion_ioviews
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault
-    PRIVATE Qt6::Network brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
+    PRIVATE Qt6::Network brulion_ui_helpers brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
         brulion_core_webpicture brulion_core_drawing)
 # The browser pick's files (platform/pickedfiles.h, ImportController::setPickedFiles; everywhere, so
 # that tests/app/io checks it). Android: "Save to Downloads" (MediaStore through the platform's

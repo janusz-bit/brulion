@@ -202,6 +202,23 @@ private Q_SLOTS:
         QCOMPARE(c.summary().value(u"valid"_s).toBool(), false);
     }
 
+    void chosenFormat()
+    {
+        ExportController c;
+        QSignalSpy changed(&c, &ExportController::chosenFormatChanged);
+        QCOMPARE(c.chosenFormat().value(u"id"_s).toString(), c.format());
+        c.setFormat(u"pdf"_s);
+        QVERIFY(changed.size() >= 1);
+        const QVariantMap pdf = c.chosenFormat();
+        QCOMPARE(pdf.value(u"id"_s).toString(), u"pdf"_s);
+        QCOMPARE(pdf.value(u"ext"_s).toString(), u".pdf"_s);
+        QVERIFY(!pdf.value(u"name"_s).toString().isEmpty());
+        // The page's file as it is has no row of its own.
+        c.setFormat(u"markdown-file"_s);
+        if (c.format() == u"markdown-file"_s)
+            QVERIFY(c.chosenFormat().isEmpty());
+    }
+
     void formatsFollowTheLanguage()
     {
         ExportController c;

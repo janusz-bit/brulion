@@ -17,6 +17,7 @@ brulion_add_test(tst_appio_pageexport SOURCES tst_appio_pageexport.cpp
 if(BRULION_DESKTOP)
     target_compile_definitions(tst_appio_pageexport PRIVATE BRULION_PRINT_DIALOG)
 endif()
+brulion_add_test(tst_appio_syncviews SOURCES tst_appio_syncviews.cpp LIBS brulion_ioviews)
 brulion_add_test(tst_appio_conflicts SOURCES tst_appio_conflicts.cpp
     LIBS brulion_ioviews brulion_core_sync brulion_core_vault brulion_core_drawing)
 # Microsoft To Do: sign-in and download against the core's FakeMicrosoft, then preview and import.

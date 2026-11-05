@@ -40,22 +40,29 @@ FocusScope {
     signal addReminderRequested(string date)
     signal allOverdueRequested()
 
-    // (`calendar.revision` read for real: dayItems() is a method call, not tracked, and a bare
+    // (`calendar.revision` read for real: the calls are not tracked, and a bare
     // `void calendar.revision` is compiled away with the dependency.)
-    readonly property var entries: date !== "" && calendar.revision >= 0 ? calendar.dayItems(date) : []
-    readonly property var journal: entries.find(e => e.kind === "journal") || null
-    readonly property var items: entries.filter(e => e.kind !== "journal")
-    /// The day's entries, open ones first (a stable partition: times keep their order).
-    readonly property var orderedItems: items.filter(e => !e.closed).concat(items.filter(e => e.closed))
-    readonly property string heading: {
-        const s = date !== "" ? DatesHelper.formatLong(date) : ""
-        return s.length > 0 ? s.charAt(0).toLocaleUpperCase() + s.slice(1) : ""
+    /// The day has a daily note.
+    readonly property bool journal: date !== "" && calendar.revision >= 0 && calendar.dayHasJournal(date)
+    /// The day's entries without the journal, open ones first (a stable partition: times keep
+    /// their order).
+    readonly property list<var> orderedItems: date !== "" && calendar.revision >= 0 ? calendar.dayEntries(date) : []
+    readonly property list<var> none: []
+    readonly property string heading: date !== "" ? root.capitalized(DatesHelper.formatLong(date)) : ""
+    readonly property string relative: date !== "" ? root.relativeOf(DatesHelper.formatHuman(date)) : ""
+
+    /// `human` (DatesHelper.formatHuman()) capitalized when it is a relative word ("Dziś"), else "".
+    function relativeOf(human: string): string {
+        return Js.indexOf(human, " ") < 0 ? root.capitalized(human) : ""
     }
-    readonly property string relative: {
-        if (date === "")
-            return ""
-        const h = DatesHelper.formatHuman(date)
-        return h.indexOf(" ") < 0 ? h.charAt(0).toLocaleUpperCase() + h.slice(1) : ""
+
+    /// `s` with its first letter upper case (the locale's: "dziś" → "Dziś").
+    function capitalized(s: string): string {
+        return s.length > 0 ? Js.toUpperCase(Js.charAt(s, 0)) + Js.sliceFrom(s, 1) : ""
+    }
+    /// The overdue tasks listed (at most overdueLimit).
+    function overdueShown(): list<var> {
+        return root.showOverdue && root.overdueExpanded ? root.calendar.overdue.slice(0, root.overdueLimit) : root.none
     }
 
     implicitHeight: column.implicitHeight
@@ -153,7 +160,7 @@ FocusScope {
                 onExpandedToggled: (open) => root.overdueExpanded = open
             }
             Repeater {
-                model: root.showOverdue && root.overdueExpanded ? root.calendar.overdue.slice(0, root.overdueLimit) : []
+                model: root.overdueShown()
                 delegate: PlanningItemRow {
                     required property var modelData
                     Layout.fillWidth: true
@@ -182,7 +189,7 @@ FocusScope {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.space2
                 text: qsTr("Plan of the day")
-                count: root.items.length
+                count: root.orderedItems.length
             }
             Repeater {
                 model: root.orderedItems
@@ -202,7 +209,7 @@ FocusScope {
                 Layout.fillWidth: true
                 Layout.leftMargin: dayHeader.leftPadding
                 Layout.rightMargin: Theme.space2
-                visible: root.items.length === 0
+                visible: root.orderedItems.length === 0
                 compact: true
                 alignStart: true
                 iconName: ""

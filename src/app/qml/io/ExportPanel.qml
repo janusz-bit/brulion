@@ -22,29 +22,39 @@ ColumnLayout {
 
     property var preset: ({})
     readonly property alias exporter: exporterObject
+    // Phones: no icons, so "Cały notatnik" fits.
+    readonly property list<var> scopes: [
+        { value: "vault", text: qsTr("Whole notebook"), icon: Theme.compact ? "" : "notebook-pen" },
+        { value: "folder", text: qsTr("Folder"), icon: Theme.compact ? "" : "folder" },
+        { value: "page", text: qsTr("Page"), icon: Theme.compact ? "" : "file-text" }
+    ]
+    readonly property list<var> webPictureChoices: [
+        { value: "link", text: qsTr("Keep addresses"), icon: Theme.compact ? "" : "link" },
+        { value: "include", text: qsTr("Include copies"), icon: Theme.compact ? "" : "image" }
+    ]
 
-    function applyPreset() {
+    function applyPreset(): void {
         if (!preset)
             return
-        if (preset.format)
-            exporterObject.format = preset.format
-        if (preset.folder)
-            exporterObject.folder = preset.folder
-        if (preset.path)
-            exporterObject.page = preset.path
-        if (preset.scope)
-            exporterObject.scope = preset.scope
-        else if (preset.path)
+        if (AppController.routeFlag(preset, "format"))
+            exporterObject.format = AppController.routeText(preset, "format")
+        if (AppController.routeFlag(preset, "folder"))
+            exporterObject.folder = AppController.routeText(preset, "folder")
+        if (AppController.routeFlag(preset, "path"))
+            exporterObject.page = AppController.routeText(preset, "path")
+        if (AppController.routeFlag(preset, "scope"))
+            exporterObject.scope = AppController.routeText(preset, "scope")
+        else if (AppController.routeFlag(preset, "path"))
             exporterObject.scope = "page"
     }
-    function defaultPage() {
+    function defaultPage(): void {
         if (exporterObject.page !== "")
             return
         const recent = Workspace.recentPages
         if (recent.length > 0)
-            exporterObject.page = recent[0].path
+            exporterObject.page = AppController.routeText(recent[0], "path")
     }
-    function save() {
+    function save(): void {
         if (AppController.isWasm) {
             exporterObject.saveInBrowser()
             return
@@ -101,8 +111,13 @@ ColumnLayout {
             model: exporterObject.formats
             delegate: T.AbstractButton {
                 id: tile
+                // (A row's "id" cannot be a property name, "icon" is the button's own.)
                 required property var modelData
-                readonly property bool chosen: exporterObject.format === modelData.id
+                required property string name
+                required property string description
+                readonly property string formatId: AppController.routeText(modelData, "id")
+                readonly property string iconName: AppController.routeText(modelData, "icon")
+                readonly property bool chosen: exporterObject.format === formatId
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -112,10 +127,10 @@ ColumnLayout {
                 focusPolicy: Qt.StrongFocus
                 enabled: !exporterObject.busy
                 Accessible.role: Accessible.RadioButton
-                Accessible.name: modelData.name
-                Accessible.description: modelData.description
+                Accessible.name: tile.name
+                Accessible.description: tile.description
                 Accessible.checked: chosen
-                onClicked: exporterObject.format = modelData.id
+                onClicked: exporterObject.format = tile.formatId
 
                 background: Rectangle {
                     radius: Theme.radius
@@ -129,8 +144,8 @@ ColumnLayout {
                     spacing: Theme.space3
                     BIcon {
                         Layout.alignment: Qt.AlignTop
-                        Layout.topMargin: Math.round((Theme.lineHeightPx(Theme.textBase) - Theme.iconSize) / 2)
-                        name: tile.modelData.icon
+                        Layout.topMargin: Math.round((Theme.lineHeightPx(Theme.textBase, Theme.lineHeight) - Theme.iconSize) / 2)
+                        name: tile.iconName
                         size: Theme.iconSize
                         color: tile.chosen ? Theme.link : Theme.fgMuted
                     }
@@ -140,7 +155,7 @@ ColumnLayout {
                         spacing: 2
                         BText {
                             Layout.fillWidth: true
-                            text: tile.modelData.name
+                            text: tile.name
                             variant: "label"
                             // Phones: two lines rather than "HTML website (…" (Polish names are longer).
                             wrapMode: Text.Wrap
@@ -150,7 +165,7 @@ ColumnLayout {
                         BText {
                             Layout.fillWidth: true
                             visible: !formats.brief
-                            text: tile.modelData.description
+                            text: tile.description
                             variant: "small"
                             color: Theme.fgMuted
                             wrapMode: Text.Wrap
@@ -164,10 +179,7 @@ ColumnLayout {
     BText {
         Layout.fillWidth: true
         visible: formats.brief
-        text: {
-            const f = exporterObject.formats.find(x => x.id === exporterObject.format)
-            return f ? f.description : ""
-        }
+        text: exporterObject.chosenFormat.description !== undefined ? "" + exporterObject.chosenFormat.description : ""
         variant: "small"
         color: Theme.fgMuted
         wrapMode: Text.Wrap
@@ -186,11 +198,7 @@ ColumnLayout {
         enabled: !exporterObject.busy
         accessibleName: qsTr("What to export")
         // Phones: no icons, so "Cały notatnik" fits.
-        model: [
-            { value: "vault", text: qsTr("Whole notebook"), icon: Theme.compact ? "" : "notebook-pen" },
-            { value: "folder", text: qsTr("Folder"), icon: Theme.compact ? "" : "folder" },
-            { value: "page", text: qsTr("Page"), icon: Theme.compact ? "" : "file-text" }
-        ]
+        model: panel.scopes
         currentValue: exporterObject.scope
         onActivated: (value) => exporterObject.scope = value
     }
@@ -237,10 +245,8 @@ ColumnLayout {
                 const s = exporterObject.summary
                 if (!s.valid)
                     return s.error || ""
-                const parts = [qsTr("%n page(s)", "", s.pages)]
-                if (s.attachments > 0)
-                    parts.push(qsTr("%n attachment(s)", "", s.attachments))
-                return parts.join(", ") + " · " + s.sizeText
+                const pages = qsTr("%n page(s)", "", s.pages)
+                return (s.attachments > 0 ? pages + ", " + qsTr("%n attachment(s)", "", s.attachments) : pages) + " · " + s.sizeText
             }
         }
     }
@@ -261,10 +267,7 @@ ColumnLayout {
             fill: Theme.compact
             enabled: !exporterObject.busy
             accessibleName: qsTr("Pictures from the internet")
-            model: [
-                { value: "link", text: qsTr("Keep addresses"), icon: Theme.compact ? "" : "link" },
-                { value: "include", text: qsTr("Include copies"), icon: Theme.compact ? "" : "image" }
-            ]
+            model: panel.webPictureChoices
             currentValue: exporterObject.webPictures
             onActivated: (value) => {
                 exporterObject.webPictures = value
@@ -410,10 +413,9 @@ ColumnLayout {
         colors: Theme.colors
         currentFolder: exporterObject.defaultSaveFolder
         // selectedFile: set by save()
-        nameFilters: {
-            const f = exporterObject.formats.find(x => x.id === exporterObject.format)
-            return f ? [f.name + " (*" + f.ext + ")", qsTr("All files (*)")] : [qsTr("All files (*)")]
-        }
+        nameFilters: exporterObject.chosenFormat.id !== undefined
+                     ? [exporterObject.chosenFormat.name + " (*" + exporterObject.chosenFormat.ext + ")", qsTr("All files (*)")]
+                     : [qsTr("All files (*)")]
         onAccepted: exporterObject.saveTo(selectedFile)
     }
 }

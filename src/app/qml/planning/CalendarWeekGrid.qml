@@ -28,20 +28,17 @@ FocusScope {
     readonly property real headerHeight: Theme.touchUi ? 52 : 46
     readonly property int pillHeight: Theme.touchUi ? 20 : 18
     readonly property bool narrowColumns: columnWidth < 80
-    /// Rows of the all-day strip (0–3). (`calendar.revision` read for real: the model's methods are
-    /// not tracked, and a bare `void calendar.revision` is compiled away with the dependency.)
-    readonly property int allDayRows: {
-        if (calendar.revision < 0)
-            return 0
-        let rows = 0
-        for (let i = 0; i < calendar.rowCount(); ++i) {
-            const items = calendar.data(calendar.index(i, 0), CalendarModel.ItemsRole) || []
-            rows = Math.max(rows, items.filter(e => e.minutes < 0).length)
-        }
-        return Math.min(rows, 3)
-    }
+    /// Rows of the all-day strip (0–3).
+    readonly property int allDayRows: Math.min(calendar.maxAllDay, 3)
     readonly property real allDayHeight: allDayRows > 0 ? allDayRows * (pillHeight + 2) + 6 : 0
     property string nowSpec: DatesHelper.now()
+    /// Minutes since midnight of nowSpec (-1 when it has no time).
+    function nowMinutes(): int {
+        const m = root.nowParts.length === 2 ? Js.parseInt(root.nowParts[0]) * 60 + Js.parseInt(root.nowParts[1]) : -1
+        return Js.isNaN(m) ? -1 : m
+    }
+    /// ["HH", "mm"] of nowSpec.
+    readonly property list<string> nowParts: Js.split(Js.slice(nowSpec, 11, 16), ":")
 
     signal dayTapped(string date)
     signal dayOpened(string date)
@@ -58,19 +55,34 @@ FocusScope {
     Accessible.name: calendar.title
 
     /// An entry's accessible name: its time (if any), its title and its state when finished.
-    function entryName(entry, time) {
-        const state = !entry.closed ? "" : entry.status === "cancelled" ? qsTr("cancelled") : qsTr("done")
-        return [time, entry.title, state].filter(s => s !== "").join(", ")
+    function entryName(closed: bool, status: string, title: string, time: string): string {
+        const state = !closed ? "" : status === "cancelled" ? qsTr("cancelled") : qsTr("done")
+        let out = time
+        if (title !== "")
+            out = out === "" ? title : out + ", " + title
+        if (state !== "")
+            out = out === "" ? state : out + ", " + state
+        return out
     }
-    function scrollToFirstEntry() {
+    /// The short weekday names, Monday first.
+    function weekdayShortNames(): list<string> {
+        return DatesHelper.weekdayNames("short")
+    }
+    function scrollToFirstEntry(): void {
         const first = calendar.itemCount > 0 ? calendar.firstHour : 7
         hours.contentY = Math.max(0, Math.min(hours.contentHeight - hours.height, (first - 0.6) * hourHeight))
     }
     Connections {
         target: root.calendar
-        function onRangeChanged() { Qt.callLater(root.scrollToFirstEntry) }
+        function onRangeChanged() { scrollLater.restart() }
     }
-    Component.onCompleted: Qt.callLater(scrollToFirstEntry)
+    Component.onCompleted: scrollLater.restart()
+    // Qt.callLater(scrollToFirstEntry): once, after this turn's changes.
+    Timer {
+        id: scrollLater
+        interval: 0
+        onTriggered: root.scrollToFirstEntry()
+    }
     Timer {
         interval: 60 * 1000
         running: root.visible
@@ -102,29 +114,11 @@ FocusScope {
         event.accepted = true
     }
 
-    /// Timed entries of a day with their lane: [{ entry, lane, lanes }].
-    function layoutTimed(items) {
-        const timed = (items || []).filter(e => e.minutes >= 0)
-        const out = []
-        let group = []
-        const flush = () => {
-            for (let k = 0; k < group.length; ++k)
-                out.push({ entry: group[k], lane: k, lanes: group.length })
-            group = []
-        }
-        for (const e of timed) {
-            if (group.length > 0 && e.minutes - group[0].minutes >= 45)
-                flush()
-            group.push(e)
-        }
-        flush()
-        return out
-    }
 
     /// The week's number in the corner was clicked: its Monday ("YYYY-MM-DD").
     signal weekOpened(string monday)
     /// Mondays of weekly notes in the shown range (the number's accent).
-    readonly property var weekNotes: {
+    readonly property list<string> weekNotes: {
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
         if (calendar.rangeStart === "" || Workspace.revision < 0)
             return []
@@ -162,9 +156,8 @@ FocusScope {
                 required property bool isToday
                 required property bool isSelected
                 required property bool hasJournal
-                required property var items
+                required property list<var> allDay
                 required property string longLabel
-                readonly property var allDay: items.filter(e => e.minutes < 0)
 
                 x: root.gutter + index * root.columnWidth
                 width: root.columnWidth
@@ -177,7 +170,7 @@ FocusScope {
                     spacing: 1
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: DatesHelper.weekdayNames("short")[dayHead.dayOfWeek - 1]
+                        text: root.weekdayShortNames()[dayHead.dayOfWeek - 1]
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textXs
                         font.weight: Theme.weightSemiBold
@@ -194,7 +187,7 @@ FocusScope {
                         color: dayHead.isToday ? Theme.accentSolid : dayHead.isSelected ? Theme.primary : "transparent"
                         Text {
                             anchors.centerIn: parent
-                            text: dayHead.day
+                            text: "" + dayHead.day
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textMd
                             font.weight: Theme.weightSemiBold
@@ -224,17 +217,21 @@ FocusScope {
                             required property int index
                             readonly property bool more: index === root.allDayRows - 1 && dayHead.allDay.length > root.allDayRows
                             readonly property var entry: dayHead.allDay[index]
-                            readonly property var colors: Theme.chip(more ? "neutral" : entry.variant)
+                            readonly property string variant: more ? "neutral" : AppController.routeText(entry, "variant")
+                            readonly property bool closed: AppController.routeFlag(entry, "closed")
+                            readonly property string status: AppController.routeText(entry, "status")
+                            readonly property color fgColor: Theme.chipFg(variant)
                             width: parent ? parent.width : 0 // (null while the Repeater drops it: a new week)
                             height: root.pillHeight
                             radius: Theme.radiusSm
                             // (Done and cancelled: the "done" chip's colours at full opacity, AA,
                             // with a check, or struck out with an x when cancelled — as in the
                             // month and in Tasks: the state never by colour alone.)
-                            color: colors.bg
+                            color: Theme.chipBg(variant)
                             Accessible.role: Accessible.Button
-                            Accessible.name: allDayPill.more ? allDayText.text : root.entryName(allDayPill.entry, "")
+                            Accessible.name: allDayPill.more ? allDayText.text : root.entryName(allDayPill.closed, allDayPill.status, AppController.routeText(allDayPill.entry, "title"), "")
                             Row {
+                                id: allDayRow
                                 anchors.verticalCenter: parent.verticalCenter
                                 x: 4
                                 width: parent.width - 6
@@ -242,21 +239,21 @@ FocusScope {
                                 BIcon {
                                     id: allDayState
                                     anchors.verticalCenter: parent.verticalCenter
-                                    visible: !allDayPill.more && allDayPill.entry.closed
-                                    name: allDayPill.entry.status === "cancelled" ? "x" : "check"
+                                    visible: !allDayPill.more && allDayPill.closed
+                                    name: allDayPill.status === "cancelled" ? "x" : "check"
                                     size: 10
-                                    color: allDayPill.colors.fg
+                                    color: allDayPill.fgColor
                                 }
                                 Text {
                                     id: allDayText
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - (allDayState.visible ? allDayState.width + parent.spacing : 0)
+                                    width: allDayRow.width - (allDayState.visible ? allDayState.width + allDayRow.spacing : 0)
                                     text: allDayPill.more ? qsTr("+%n more", "", dayHead.allDay.length - root.allDayRows + 1)
-                                                          : allDayPill.entry.title
+                                                          : AppController.routeText(allDayPill.entry, "title")
                                     font.family: Theme.fontUi
                                     font.pixelSize: Theme.textXs
-                                    font.strikeout: !allDayPill.more && allDayPill.entry.status === "cancelled"
-                                    color: allDayPill.colors.fg
+                                    font.strikeout: !allDayPill.more && allDayPill.status === "cancelled"
+                                    color: allDayPill.fgColor
                                     elide: Text.ElideRight
                                 }
                             }
@@ -337,7 +334,9 @@ FocusScope {
             id: slider
             width: hours.width
             height: hours.contentHeight
-            x: swipe.active ? swipe.translation.x : 0
+            // (Set to a side and back to 0 after a swipe: the Behavior slides the new range in.)
+            property real slideOffset: 0
+            x: swipe.active ? swipe.translation.x : slideOffset
             Behavior on x {
                 enabled: !swipe.active
                 NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing }
@@ -383,8 +382,8 @@ FocusScope {
                     required property bool isToday
                     required property bool isSelected
                     required property bool isWeekend
-                    required property var items
-                    readonly property var timed: root.layoutTimed(items)
+                    /// The timed entries with their lanes: [{ entry, lane, lanes }].
+                    required property list<var> timed
 
                     x: root.gutter + index * root.columnWidth
                     width: root.columnWidth
@@ -392,8 +391,8 @@ FocusScope {
 
                     Rectangle {
                         anchors.fill: parent
-                        color: dayColumn.isSelected ? Theme.alpha(Theme.bgSelected, Theme.bgSelected.a * 0.5)
-                             : dayColumn.isWeekend ? Theme.alpha(Theme.bgSunken, 0.45) : "transparent"
+                        color: dayColumn.isSelected ? Theme.bgSelected.alpha(Theme.bgSelected.a * 0.5)
+                             : dayColumn.isWeekend ? Theme.bgSunken.alpha(0.45) : "transparent"
                     }
                     Rectangle {
                         width: 1
@@ -413,24 +412,30 @@ FocusScope {
                         model: dayColumn.timed
                         delegate: Rectangle {
                             id: event
-                            required property var modelData
-                            readonly property var entry: modelData.entry
-                            readonly property var colors: Theme.chip(entry.variant)
+                            required property var entry
+                            required property int lane
+                            required property int lanes
+                            readonly property string variant: AppController.routeText(entry, "variant")
+                            readonly property string time: AppController.routeText(entry, "time")
+                            readonly property string status: AppController.routeText(entry, "status")
+                            readonly property bool closed: AppController.routeFlag(entry, "closed")
+                            readonly property real minutes: Js.toNumber(AppController.routeText(entry, "minutes"))
+                            readonly property color fgColor: Theme.chipFg(variant)
                             // Wide columns: side by side; narrow ones (phones): cascaded, so
                             // every time stays readable.
-                            readonly property real laneWidth: (dayColumn.width - 4) / modelData.lanes
-                            x: root.narrowColumns ? 2 + modelData.lane * 6 : 2 + modelData.lane * laneWidth
-                            y: entry.minutes / 60 * root.hourHeight + 1 + (root.narrowColumns ? modelData.lane * 10 : 0)
-                            width: root.narrowColumns ? dayColumn.width - 4 - modelData.lane * 6 : laneWidth - 2
-                            z: modelData.lane
+                            readonly property real laneWidth: (dayColumn.width - 4) / lanes
+                            x: root.narrowColumns ? 2 + lane * 6 : 2 + lane * laneWidth
+                            y: minutes / 60 * root.hourHeight + 1 + (root.narrowColumns ? lane * 10 : 0)
+                            width: root.narrowColumns ? dayColumn.width - 4 - lane * 6 : laneWidth - 2
+                            z: lane
                             height: Math.max(2 * root.pillHeight - 2, root.hourHeight * 0.75 - 2)
                             radius: Theme.radiusSm
-                            color: colors.bg
+                            color: Theme.chipBg(variant)
                             border.width: 1
-                            border.color: Theme.alpha(colors.fg, 0.25)
+                            border.color: fgColor.alpha(0.25)
                             clip: true
                             Accessible.role: Accessible.Button
-                            Accessible.name: root.entryName(entry, entry.time)
+                            Accessible.name: root.entryName(closed, status, AppController.routeText(entry, "title"), time)
 
                             Column {
                                 x: 4
@@ -439,35 +444,36 @@ FocusScope {
                                 // The time, after a check (done) or an x (cancelled): the state
                                 // never by colour alone, as in the month.
                                 Row {
+                                    id: eventRow
                                     width: parent.width
                                     spacing: 3
                                     BIcon {
                                         id: eventState
                                         anchors.verticalCenter: parent.verticalCenter
-                                        visible: event.entry.closed
-                                        name: event.entry.status === "cancelled" ? "x" : "check"
+                                        visible: event.closed
+                                        name: event.status === "cancelled" ? "x" : "check"
                                         size: 10
-                                        color: event.colors.fg
+                                        color: event.fgColor
                                     }
                                     Text {
-                                        width: parent.width - (eventState.visible ? eventState.width + parent.spacing : 0)
-                                        text: (event.entry.variant === "alarm" ? "⏰ " : "") + event.entry.time
+                                        width: eventRow.width - (eventState.visible ? eventState.width + eventRow.spacing : 0)
+                                        text: (event.variant === "alarm" ? "⏰ " : "") + event.time
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textXs
                                         font.weight: Theme.weightSemiBold
                                         font.features: { "tnum": 1 }
-                                        color: event.colors.fg
+                                        color: event.fgColor
                                         elide: Text.ElideRight
                                     }
                                 }
                                 Text {
                                     width: parent.width
                                     visible: event.height > 2 * root.pillHeight - 6
-                                    text: event.entry.title
+                                    text: AppController.routeText(event.entry, "title")
                                     font.family: Theme.fontUi
                                     font.pixelSize: Theme.textXs
-                                    font.strikeout: event.entry.status === "cancelled"
-                                    color: event.colors.fg
+                                    font.strikeout: event.status === "cancelled"
+                                    color: event.fgColor
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
@@ -500,10 +506,7 @@ FocusScope {
 
                     // Now.
                     Rectangle {
-                        readonly property int minutes: {
-                            const t = root.nowSpec.slice(11, 16).split(":")
-                            return t.length === 2 ? parseInt(t[0]) * 60 + parseInt(t[1]) : -1
-                        }
+                        readonly property int minutes: root.nowMinutes()
                         visible: dayColumn.isToday && minutes >= 0
                         y: minutes / 60 * root.hourHeight - 1
                         width: parent.width
@@ -543,8 +546,8 @@ FocusScope {
                         root.calendar.next()
                     else
                         root.calendar.previous()
-                    slider.x = dx < 0 ? root.width * 0.25 : -root.width * 0.25
-                    slider.x = Qt.binding(() => swipe.active ? swipe.translation.x : 0)
+                    slider.slideOffset = dx < 0 ? root.width * 0.25 : -root.width * 0.25
+                    slider.slideOffset = 0
                 }
             }
         }

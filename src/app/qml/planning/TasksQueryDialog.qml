@@ -13,7 +13,14 @@ BDialog {
 
     property string query
     readonly property string block: "```query\n" + query + "\n```"
-    readonly property var parts: query.match(/"[^"]*"|\S+/g) || []
+    readonly property list<string> parts: Js.match(query, "\"[^\"]*\"|\\S+", "g")
+    readonly property list<var> examples: [
+        { code: "due:<=+7d", text: qsTr("due within a week") },
+        { code: "due:overdue", text: qsTr("overdue") },
+        { code: "-tag:prywatne", text: qsTr("without the tag #prywatne") },
+        { code: "group:page", text: qsTr("grouped by page") },
+        { code: "limit:20", text: qsTr("at most 20 tasks") }
+    ]
 
     signal copied()
 
@@ -32,10 +39,20 @@ BDialog {
     }
 
     /// What one part of the query means.
-    function explain(part) {
-        const colon = part.indexOf(":")
-        const key = colon > 0 ? part.slice(0, colon) : ""
-        const value = colon > 0 ? part.slice(colon + 1).replace(/^"|"$/g, "") : part.replace(/^"|"$/g, "")
+    /// The key of a part ("tag" of "tag:dom"; "" for a word).
+    function keyOf(part: string): string {
+        const colon = Js.indexOf(part, ":")
+        return colon > 0 ? Js.slice(part, 0, colon) : ""
+    }
+    /// The value of a part without its quotes ("dom" of tag:"dom").
+    function valueOf(part: string): string {
+        const colon = Js.indexOf(part, ":")
+        return colon > 0 ? control.unquoted(Js.sliceFrom(part, colon + 1)) : control.unquoted(part)
+    }
+    function unquoted(s: string): string {
+        return Js.replaceRegExp(s, "^\"|\"$", "g", "")
+    }
+    function explain(key: string, value: string): string {
         switch (key) {
         case "type": return qsTr("only tasks (not blocks or pages)")
         case "status":
@@ -50,7 +67,7 @@ BDialog {
             return qsTr("tasks with this status")
         case "tag": return qsTr("tagged #%1 (also #%1/…, and on pages tagged so)").arg(value)
         case "page": return qsTr("on the page “%1”").arg(value)
-        case "path": return qsTr("in the folder “%1”").arg(value.replace(/\/$/, ""))
+        case "path": return qsTr("in the folder “%1”").arg(Js.replaceRegExp(value, "\\/$", "", ""))
         case "priority": return value === "none" ? qsTr("without a priority") : qsTr("with priority “%1”").arg(value)
         case "sort":
             switch (value) {
@@ -72,7 +89,7 @@ BDialog {
         color: Theme.fgMuted
         wrapMode: Text.Wrap
         lineHeightMode: Text.FixedHeight
-        lineHeight: Theme.lineHeightPx(font.pixelSize)
+        lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
     }
 
     Rectangle {
@@ -133,7 +150,9 @@ BDialog {
                 Layout.row: index
                 Layout.column: 1
                 Layout.fillWidth: true
-                text: control.explain(modelData)
+                readonly property string partKey: control.keyOf(modelData)
+                readonly property string partValue: control.valueOf(modelData)
+                text: control.explain(partKey, partValue)
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
                 color: Theme.fg
@@ -158,20 +177,16 @@ BDialog {
                 color: Theme.fg
             }
             Repeater {
-                model: [
-                    { code: "due:<=+7d", text: qsTr("due within a week") },
-                    { code: "due:overdue", text: qsTr("overdue") },
-                    { code: "-tag:prywatne", text: qsTr("without the tag #prywatne") },
-                    { code: "group:page", text: qsTr("grouped by page") },
-                    { code: "limit:20", text: qsTr("at most 20 tasks") }
-                ]
+                model: control.examples
                 delegate: RowLayout {
-                    required property var modelData
+                    id: example
+                    required property string code
+                    required property string text
                     Layout.fillWidth: true
                     spacing: Theme.space2
                     Text {
                         Layout.alignment: Qt.AlignTop
-                        text: modelData.code
+                        text: example.code
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.textSm
                         color: Theme.link
@@ -179,7 +194,7 @@ BDialog {
                     Text {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignTop
-                        text: "— " + modelData.text
+                        text: "— " + example.text
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm
                         color: Theme.fgMuted

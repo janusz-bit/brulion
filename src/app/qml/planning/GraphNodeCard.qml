@@ -12,23 +12,26 @@ import Brulion
 BCard {
     id: root
 
+    /// GraphModel.nodeInfo(): { kind, title, path, degree, … }.
     property var info: ({})
     property bool actions: true
+    /// The node's kind ("page" | "journal" | "tag" | "missing").
+    readonly property string kind: AppController.routeText(info, "kind")
 
     signal openRequested()
     signal localRequested()
     signal closeRequested()
 
     readonly property string kindLabel: {
-        switch (info.kind) {
+        switch (kind) {
         case "journal": return qsTr("Journal")
         case "tag": return qsTr("Tag")
         case "missing": return qsTr("Page that does not exist yet")
         }
         return qsTr("Page")
     }
-    readonly property string journalDay: info.kind === "journal" ? Workspace.journalDate(info.path || "") : ""
-    readonly property string displayTitle: journalDay !== "" ? DatesHelper.formatLong(journalDay) : (info.title || "")
+    readonly property string journalDay: kind === "journal" ? Workspace.journalDate(AppController.routeText(info, "path")) : ""
+    readonly property string displayTitle: journalDay !== "" ? DatesHelper.formatLong(journalDay) : AppController.routeText(info, "title")
 
     elevation: 3
     padding: Theme.space3
@@ -47,8 +50,8 @@ BCard {
             BIcon {
                 Layout.alignment: Qt.AlignTop
                 Layout.topMargin: 2
-                name: root.info.kind === "tag" ? "hash" : root.info.kind === "journal" ? "book-open"
-                    : root.info.kind === "missing" ? "file" : "file-text"
+                name: root.kind === "tag" ? "hash" : root.kind === "journal" ? "book-open"
+                    : root.kind === "missing" ? "file" : "file-text"
                 size: Theme.iconSize
                 color: Theme.fgMuted
             }
@@ -68,7 +71,7 @@ BCard {
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: root.kindLabel + " · " + qsTr("%n links", "", root.info.degree || 0)
+                    text: root.kindLabel + " · " + qsTr("%n links", "", AppController.routeInt(root.info, "degree", 0))
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
                     color: Theme.fgMuted
@@ -91,12 +94,12 @@ BCard {
             BButton {
                 size: "small"
                 variant: "primary"
-                iconName: root.info.kind === "missing" ? "plus" : root.info.kind === "tag" ? "hash" : "file-text"
-                text: root.info.kind === "missing" ? qsTr("Create") : qsTr("Open")
+                iconName: root.kind === "missing" ? "plus" : root.kind === "tag" ? "hash" : "file-text"
+                text: root.kind === "missing" ? qsTr("Create") : qsTr("Open")
                 onClicked: root.openRequested()
             }
             BButton {
-                visible: root.info.kind === "page" || root.info.kind === "journal"
+                visible: root.kind === "page" || root.kind === "journal"
                 size: "small"
                 iconName: "network"
                 text: qsTr("Local graph")

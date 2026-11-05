@@ -352,6 +352,24 @@ private Q_SLOTS:
         QCOMPARE(c.importerId(), QString());
     }
 
+    void chosenImporter()
+    {
+        ImportController c;
+        QSignalSpy changed(&c, &ImportController::importerChanged);
+        QVERIFY(c.chosenImporter().isEmpty());
+        c.setImporterId(u"evernote"_s);
+        QCOMPARE(changed.size(), 1);
+        const QVariantMap chosen = c.chosenImporter();
+        QCOMPARE(chosen.value(u"id"_s).toString(), u"evernote"_s);
+        QCOMPARE(chosen.value(u"fileTypes"_s).toStringList(), QStringList{u"*.enex"_s});
+        for (const QVariant &row : c.importers()) {
+            if (row.toMap().value(u"id"_s) == u"evernote"_s)
+                QCOMPARE(chosen, row.toMap());
+        }
+        c.setImporterId(QString());
+        QVERIFY(c.chosenImporter().isEmpty());
+    }
+
     void importersFollowTheLanguage()
     {
         ImportController c;

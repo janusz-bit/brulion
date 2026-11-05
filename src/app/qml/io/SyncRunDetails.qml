@@ -14,13 +14,25 @@ BDialog {
     id: dialog
 
     property int number: 0
-    readonly property var details: Workspace.sync && number > 0 ? Workspace.sync.runDetails(number) : ({})
-    readonly property bool known: details.number !== undefined
-    readonly property var phases: known ? details.phases : []
-    readonly property var stats: known ? details.stats : ({})
-    readonly property var counts: known ? details.counts : ({})
+    readonly property alias run: runInfo
+    readonly property bool known: runInfo.known
 
-    function toneColor(tone) {
+    SyncRunInfo {
+        id: runInfo
+        sync: Workspace.sync
+        number: dialog.number
+    }
+
+    /// The non-empty parts joined with " · ".
+    function joinNonEmpty(parts: list<string>): string {
+        let out = ""
+        for (let i = 0; i < parts.length; ++i) {
+            if (parts[i] !== "")
+                out = out === "" ? parts[i] : out + " · " + parts[i]
+        }
+        return out
+    }
+    function toneColor(tone: string): color {
         switch (tone) {
         case "success": return Theme.successText
         case "warning": return Theme.warningText
@@ -28,13 +40,19 @@ BDialog {
         default: return Theme.fgMuted
         }
     }
-    function phaseColor(index) {
-        const colors = [Theme.info, Theme.success, Theme.warning, Theme.chipScheduledFg, Theme.marginRed, Theme.fgFaint]
-        return colors[index % colors.length]
+    function phaseColor(index: int): color {
+        switch (index % 6) {
+        case 0: return Theme.info
+        case 1: return Theme.success
+        case 2: return Theme.warning
+        case 3: return Theme.chipScheduledFg
+        case 4: return Theme.marginRed
+        default: return Theme.fgFaint
+        }
     }
 
     title: qsTr("Sync #%1").arg(number)
-    subtitle: known ? [details.startedText, details.triggerText, details.durationText].filter(s => s !== "").join(" · ") : ""
+    subtitle: known ? joinNonEmpty([runInfo.details.startedText, runInfo.details.triggerText, runInfo.details.durationText]) : ""
     iconName: "history"
     acceptText: qsTr("Close")
     showReject: false
@@ -50,7 +68,7 @@ BDialog {
             visible: dialog.known
             onClicked: {
                 dialog.close()
-                AppController.navigate({ view: "logs", fromMs: dialog.details.fromMs, toMs: dialog.details.toMs,
+                AppController.navigate({ view: "logs", fromMs: runInfo.details.fromMs, toMs: runInfo.details.toMs,
                                          run: dialog.number })
             }
         },
@@ -84,27 +102,27 @@ BDialog {
             implicitWidth: 10
             implicitHeight: 10
             radius: 5
-            color: dialog.toneColor(dialog.details.tone)
+            color: dialog.toneColor(dialog.known ? runInfo.details.tone : "")
         }
         BText {
             Layout.fillWidth: true
-            text: dialog.known ? dialog.details.outcomeText : ""
+            text: dialog.known ? runInfo.details.outcomeText : ""
             variant: "label"
-            color: dialog.toneColor(dialog.details.tone)
+            color: dialog.toneColor(dialog.known ? runInfo.details.tone : "")
             wrapMode: Text.Wrap
         }
     }
     BText {
         Layout.fillWidth: true
-        visible: dialog.known && dialog.details.errorText !== ""
-        text: dialog.known ? dialog.details.errorText : ""
+        visible: dialog.known && runInfo.details.errorText !== ""
+        text: dialog.known ? runInfo.details.errorText : ""
         wrapMode: Text.Wrap
     }
     BText {
         Layout.fillWidth: true
-        visible: dialog.known && (dialog.details.errorCode !== "" || dialog.details.errorMessage !== "")
-        text: dialog.known ? [dialog.details.errorCode !== "" ? qsTr("Code: %1").arg(dialog.details.errorCode) : "",
-                              dialog.details.errorMessage].filter(s => s !== "").join(" · ") : ""
+        visible: dialog.known && (runInfo.details.errorCode !== "" || runInfo.details.errorMessage !== "")
+        text: dialog.known ? dialog.joinNonEmpty([runInfo.details.errorCode !== "" ? qsTr("Code: %1").arg(runInfo.details.errorCode) : "",
+                                                  runInfo.details.errorMessage]) : ""
         variant: "small"
         color: Theme.fgMuted
         wrapMode: Text.WrapAnywhere
@@ -114,7 +132,7 @@ BDialog {
     BText {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space2
-        visible: dialog.phases.length > 0
+        visible: runInfo.phases.length > 0
         text: qsTr("Where the time went")
         variant: "label"
         Accessible.role: Accessible.Heading
@@ -123,15 +141,15 @@ BDialog {
         id: phaseBar
         Layout.fillWidth: true
         Layout.preferredHeight: 10
-        visible: dialog.phases.length > 0
+        visible: runInfo.phases.length > 0
         spacing: 1
         Accessible.ignored: true
         Repeater {
-            model: dialog.phases
+            model: runInfo.phases
             delegate: Rectangle {
-                required property var modelData
+                required property real share
                 required property int index
-                width: Math.max(2, (phaseBar.width - dialog.phases.length) * modelData.share)
+                width: Math.max(2, (phaseBar.width - runInfo.phases.length) * share)
                 height: phaseBar.height
                 radius: 2
                 color: dialog.phaseColor(index)
@@ -139,15 +157,17 @@ BDialog {
         }
     }
     Repeater {
-        model: dialog.phases
+        model: runInfo.phases
         delegate: RowLayout {
             id: phaseRow
-            required property var modelData
+            required property string text
+            required property string durationText
+            required property string detailText
             required property int index
             Layout.fillWidth: true
             spacing: Theme.space2
             Accessible.role: Accessible.StaticText
-            Accessible.name: modelData.text + ": " + modelData.durationText + (modelData.detailText !== "" ? ", " + modelData.detailText : "")
+            Accessible.name: text + ": " + durationText + (detailText !== "" ? ", " + detailText : "")
             Rectangle {
                 Layout.alignment: Qt.AlignVCenter
                 implicitWidth: 8
@@ -157,12 +177,12 @@ BDialog {
             }
             BText {
                 Layout.fillWidth: true
-                text: phaseRow.modelData.text + (phaseRow.modelData.detailText !== "" ? " · " + phaseRow.modelData.detailText : "")
+                text: phaseRow.text + (phaseRow.detailText !== "" ? " · " + phaseRow.detailText : "")
                 variant: "small"
                 wrapMode: Text.Wrap
             }
             BText {
-                text: phaseRow.modelData.durationText
+                text: phaseRow.durationText
                 variant: "small"
                 color: Theme.fgMuted
             }
@@ -185,15 +205,15 @@ BDialog {
         variant: "small"
         text: dialog.known
               ? qsTr("Sent %1 · downloaded %2 · merged %3 · deleted %4 here and %5 on the server · conflicts %6 · errors %7")
-                .arg(dialog.counts.uploaded).arg(dialog.counts.downloaded).arg(dialog.counts.merged)
-                .arg(dialog.counts.deletedLocal).arg(dialog.counts.deletedRemote).arg(dialog.counts.conflicts)
-                .arg(dialog.counts.fileErrors)
+                .arg("" + runInfo.counts.uploaded).arg("" + runInfo.counts.downloaded).arg("" + runInfo.counts.merged)
+                .arg("" + runInfo.counts.deletedLocal).arg("" + runInfo.counts.deletedRemote).arg("" + runInfo.counts.conflicts)
+                .arg("" + runInfo.counts.fileErrors)
               : ""
     }
     BText {
         readonly property string folders: dialog.known && Workspace.sync
-            ? Workspace.sync.folderCountsText(dialog.counts.foldersCreated || 0, dialog.counts.foldersDeleted || 0,
-                                              dialog.counts.foldersMoved || 0, dialog.counts.foldersMovedHere || 0)
+            ? Workspace.sync.folderCountsText(runInfo.counts.foldersCreated || 0, runInfo.counts.foldersDeleted || 0,
+                                              runInfo.counts.foldersMoved || 0, runInfo.counts.foldersMovedHere || 0)
             : ""
         Layout.fillWidth: true
         visible: folders !== ""
@@ -203,7 +223,7 @@ BDialog {
     }
     BText {
         readonly property string files: dialog.known && Workspace.sync
-            ? Workspace.sync.fileMovesText(dialog.counts.filesMoved || 0, dialog.counts.filesMovedHere || 0)
+            ? Workspace.sync.fileMovesText(runInfo.counts.filesMoved || 0, runInfo.counts.filesMovedHere || 0)
             : ""
         Layout.fillWidth: true
         visible: files !== ""
@@ -216,32 +236,34 @@ BDialog {
     BText {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space2
-        visible: dialog.known && dialog.stats.requests > 0
+        visible: dialog.known && runInfo.stats.requests > 0
         text: qsTr("Requests to the server")
         variant: "label"
         Accessible.role: Accessible.Heading
     }
     BText {
         Layout.fillWidth: true
-        visible: dialog.known && dialog.stats.requests > 0
+        visible: dialog.known && runInfo.stats.requests > 0
         variant: "small"
         wrapMode: Text.Wrap
         text: dialog.known
-              ? [dialog.stats.requestsText,
-                 dialog.stats.averageText !== "" ? qsTr("average %1").arg(dialog.stats.averageText) : "",
-                 dialog.stats.bytesText, dialog.stats.protocol,
-                 dialog.stats.timeouts > 0 ? qsTr("%n timeout(s)", "", dialog.stats.timeouts) : "",
-                 dialog.stats.stallText !== "" ? qsTr("longest wait %1").arg(dialog.stats.stallText) : ""]
-                .filter(s => s !== "").join(" · ")
+              ? dialog.joinNonEmpty([runInfo.stats.requestsText,
+                                     runInfo.stats.averageText !== "" ? qsTr("average %1").arg(runInfo.stats.averageText) : "",
+                                     runInfo.stats.bytesText, runInfo.stats.protocol,
+                                     runInfo.stats.timeouts > 0 ? qsTr("%n timeout(s)", "", runInfo.stats.timeouts) : "",
+                                     runInfo.stats.stallText !== "" ? qsTr("longest wait %1").arg(runInfo.stats.stallText) : ""])
               : ""
     }
     Repeater {
-        model: dialog.known ? dialog.stats.slowest : []
+        model: runInfo.slowest
         delegate: BText {
-            required property var modelData
+            required property string method
+            required property string title
+            required property int status
+            required property string msText
             Layout.fillWidth: true
             Layout.leftMargin: Theme.space3
-            text: modelData.method + " " + modelData.title + " → " + (modelData.status > 0 ? modelData.status : "—") + " · " + modelData.msText
+            text: method + " " + title + " → " + (status > 0 ? "" + status : "—") + " · " + msText
             variant: "small"
             color: Theme.fgMuted
             elide: Text.ElideMiddle
@@ -252,32 +274,35 @@ BDialog {
     BText {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space2
-        visible: dialog.known && dialog.details.errors.length > 0
+        visible: runInfo.errors.length > 0
         text: qsTr("Files that could not be synced")
         variant: "label"
         Accessible.role: Accessible.Heading
     }
     Repeater {
-        model: dialog.known ? dialog.details.errors : []
+        model: runInfo.errors
         delegate: ColumnLayout {
             id: errorRow
-            required property var modelData
+            required property string path
+            required property string text
+            required property string code
+            required property string message
             Layout.fillWidth: true
             spacing: 0
             BText {
                 Layout.fillWidth: true
-                text: errorRow.modelData.path
+                text: errorRow.path
                 variant: "label"
                 elide: Text.ElideMiddle
             }
             BText {
                 Layout.fillWidth: true
-                text: errorRow.modelData.text
+                text: errorRow.text
                 wrapMode: Text.Wrap
             }
             BText {
                 Layout.fillWidth: true
-                text: errorRow.modelData.code + " · " + errorRow.modelData.message
+                text: errorRow.code + " · " + errorRow.message
                 variant: "small"
                 color: Theme.fgMuted
                 wrapMode: Text.WrapAnywhere
@@ -286,8 +311,8 @@ BDialog {
     }
     BText {
         Layout.fillWidth: true
-        visible: dialog.known && dialog.details.moreErrors > 0
-        text: qsTr("…and %n more", "", dialog.known ? dialog.details.moreErrors : 0)
+        visible: dialog.known && runInfo.details.moreErrors > 0
+        text: qsTr("…and %n more", "", dialog.known ? runInfo.details.moreErrors : 0)
         variant: "small"
         color: Theme.fgMuted
     }
@@ -296,23 +321,23 @@ BDialog {
     BText {
         Layout.fillWidth: true
         Layout.topMargin: Theme.space2
-        visible: dialog.known && dialog.details.conflicts.length > 0
+        visible: runInfo.conflicts.length > 0
         text: qsTr("Conflicts (both versions kept)")
         variant: "label"
         Accessible.role: Accessible.Heading
     }
     Repeater {
-        model: dialog.known ? dialog.details.conflicts : []
+        model: runInfo.conflicts
         delegate: BText {
-            required property var modelData
+            required property string path
             Layout.fillWidth: true
-            text: modelData.path
+            text: path
             variant: "small"
             elide: Text.ElideMiddle
         }
     }
     BButton {
-        visible: dialog.known && dialog.details.conflicts.length > 0
+        visible: runInfo.conflicts.length > 0
         text: qsTr("Merge")
         iconName: "git-merge"
         size: "small"

@@ -15,21 +15,20 @@ ListView {
 
     signal activated(string copy)
 
-    function describe(c) {
-        const parts = []
-        const folder = Workspace.folderOf(c.original)
-        if (folder !== "")
-            parts.push(folder)
-        parts.push(c.source === "syncthing" ? "Syncthing" : "Nextcloud")
-        if (c.device)
-            parts.push(c.device)
-        if (c.when)
-            parts.push(c.when)
-        return parts.join(" · ")
+    /// "folder · Syncthing · device · when" (the parts there are).
+    function describe(original: string, source: string, device: string, when: string): string {
+        const folder = Workspace.folderOf(original)
+        const from = source === "syncthing" ? "Syncthing" : "Nextcloud"
+        let out = folder !== "" ? folder + " · " + from : from
+        if (device !== "")
+            out += " · " + device
+        if (when !== "")
+            out += " · " + when
+        return out
     }
 
     clip: true
-    model: Workspace.sync ? Workspace.sync.conflicts : []
+    model: Workspace.sync.conflicts
     boundsBehavior: Flickable.StopAtBounds
     keyNavigationEnabled: true
     T.ScrollBar.vertical: BScrollBar {}
@@ -38,17 +37,27 @@ ListView {
 
     delegate: BListItem {
         id: item
+        required property string original
+        required property string copy
+        required property string title
+        required property string source
+        required property string device
+        required property string when
+        required property bool drawing
+        // The row itself, for its "text" (a text file that can be merged; BListItem has a `text`
+        // of its own).
         required property var modelData
         required property int index
+        readonly property bool textFile: AppController.routeFlag(modelData, "text")
         width: ListView.view.width
-        iconName: modelData.drawing ? "pen-tool" : modelData.text ? "file-diff" : "file"
-        text: modelData.title
-        subtitle: list.describe(modelData)
-        selected: modelData.copy === list.currentCopy
+        iconName: drawing ? "pen-tool" : textFile ? "file-diff" : "file"
+        text: title
+        subtitle: list.describe(original, source, device, when)
+        selected: copy === list.currentCopy
         selectionBar: true
         onClicked: {
             list.currentIndex = index
-            list.activated(modelData.copy)
+            list.activated(item.copy)
         }
     }
 }

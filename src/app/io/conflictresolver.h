@@ -108,6 +108,10 @@ class ConflictResolver : public QObject {
     Q_PROPERTY(bool copyIsOlder READ copyIsOlder NOTIFY changed FINAL)
     Q_PROPERTY(QString oursSizeText READ oursSizeText NOTIFY changed FINAL)
     Q_PROPERTY(QString theirsSizeText READ theirsSizeText NOTIFY changed FINAL)
+    /// Sizes of oursBytes, theirsBytes and mergedBytes (compiled QML reads no QByteArray length).
+    Q_PROPERTY(int oursByteCount READ oursByteCount NOTIFY changed FINAL)
+    Q_PROPERTY(int theirsByteCount READ theirsByteCount NOTIFY changed FINAL)
+    Q_PROPERTY(int mergedByteCount READ mergedByteCount NOTIFY changed FINAL)
 
 public:
     explicit ConflictResolver(QObject *parent = nullptr);
@@ -125,6 +129,9 @@ public:
     QByteArray oursBytes() const { return m_oursBytes; }
     QByteArray theirsBytes() const { return m_theirsBytes; }
     QByteArray mergedBytes() const { return m_mergedBytes; }
+    int oursByteCount() const { return int(m_oursBytes.size()); }
+    int theirsByteCount() const { return int(m_theirsBytes.size()); }
+    int mergedByteCount() const { return int(m_mergedBytes.size()); }
     QVariantMap drawingCounts() const { return m_drawingCounts; }
     bool notesDiffer() const { return m_notesDiffer; }
     bool notesOnly() const { return m_notesOnly; }

@@ -16,10 +16,69 @@ ColumnLayout {
 
     required property ImportController importer
     readonly property string phase: importer.state
-    readonly property var p: importer.preview
-    readonly property var r: importer.report
     property bool showFiles: false
     property bool showWarnings: false
+    readonly property list<var> none: []
+
+    // The preview's and the report's lists (importer.preview / importer.report).
+    function previewWarnings(): list<string> {
+        if (preview.importer.preview.warnings === undefined)
+            return []
+        return preview.importer.preview.warnings
+    }
+    function previewFiles(): list<var> {
+        if (preview.importer.preview.files === undefined)
+            return []
+        return preview.importer.preview.files
+    }
+    function reportWarnings(): list<string> {
+        if (preview.importer.report.warnings === undefined)
+            return []
+        return preview.importer.report.warnings
+    }
+    function reportFailed(): list<var> {
+        if (preview.importer.report.failed === undefined)
+            return []
+        return preview.importer.report.failed
+    }
+    /// The counts of the preview's tiles.
+    function tiles(): list<var> {
+        const p = preview.importer.preview
+        return [
+            { label: qsTr("Pages"), value: p.pages || 0, icon: "file-text" },
+            { label: qsTr("Daily notes"), value: p.journals || 0, icon: "calendar" },
+            { label: qsTr("Attachments"), value: p.attachments || 0, icon: "image" }
+        ]
+    }
+    /// What happens to existing files.
+    function notes(): list<var> {
+        const p = preview.importer.preview
+        let out = preview.none
+        if ((p.journalsAppended || 0) > 0)
+            out = Js.appended(out, { icon: "calendar-plus", text: qsTr("%n daily note(s) exist already: the imported text is added at their end under “Import (%1)”.", "", p.journalsAppended).arg(preview.importer.effectiveName) })
+        if ((p.renamed || 0) > 0)
+            out = Js.appended(out, { icon: "copy", text: qsTr("%n file(s) get a new name (“… 2”) because the name is taken; links to them follow.", "", p.renamed) })
+        if (p.folderExists)
+            out = Js.appended(out, { icon: "folder", text: qsTr("The folder “%1” exists already; nothing in it is replaced.").arg(p.folder) })
+        return out
+    }
+    /// The report's summary ("3 pages · 2 daily notes").
+    function reportSummary(): string {
+        const r = preview.importer.report
+        let out = ""
+        if (r.pages > 0)
+            out = qsTr("%n page(s)", "", r.pages)
+        if (r.journals > 0) {
+            const journals = r.appended > 0 ? qsTr("%n daily note(s) (%1 added to existing ones)", "", r.journals).arg(r.appended)
+                                            : qsTr("%n daily note(s)", "", r.journals)
+            out = out === "" ? journals : out + " · " + journals
+        }
+        if (r.attachments > 0) {
+            const attachments = qsTr("%n attachment(s)", "", r.attachments)
+            out = out === "" ? attachments : out + " · " + attachments
+        }
+        return out !== "" ? out : qsTr("Nothing was written.")
+    }
 
     signal pickAgain()
 
@@ -123,15 +182,18 @@ ColumnLayout {
     Instantiator {
         model: preview.importer.importers
         delegate: BMenuItem {
+            id: asItem
+            // (A row's "id" cannot be a property name.)
             required property var modelData
-            text: modelData.name
-            iconName: modelData.icon
+            readonly property string importerKey: AppController.routeText(modelData, "id")
+            text: AppController.routeText(modelData, "name")
+            iconName: AppController.routeText(modelData, "icon")
             checkable: true
-            checked: preview.importer.importerId === modelData.id
-            onTriggered: preview.importer.importerId = modelData.id
+            checked: preview.importer.importerId === asItem.importerKey
+            onTriggered: preview.importer.importerId = asItem.importerKey
         }
-        onObjectAdded: (index, object) => asMenu.insertItem(index + 2, object)
-        onObjectRemoved: (index, object) => asMenu.removeItem(object)
+        onObjectAdded: (index, object) => asMenu.insertItem(index + 2, object as Item)
+        onObjectRemoved: (index, object) => asMenu.removeItem(object as Item)
     }
 
     // ---- Busy -------------------------------------------------------------------------------------
@@ -181,7 +243,7 @@ ColumnLayout {
 
     // ---- Preview -----------------------------------------------------------------------------------
     IoCard {
-        visible: preview.phase === "ready" && !!preview.p.fileCount
+        visible: preview.phase === "ready" && !!preview.importer.preview.fileCount
         iconName: "eye"
         title: qsTr("What will be imported")
         subtitle: qsTr("Nothing has been written yet.")
@@ -192,21 +254,19 @@ ColumnLayout {
             columnSpacing: Theme.space2
             rowSpacing: Theme.space2
             Repeater {
-                model: [
-                    { label: qsTr("Pages"), value: preview.p.pages || 0, icon: "file-text" },
-                    { label: qsTr("Daily notes"), value: preview.p.journals || 0, icon: "calendar" },
-                    { label: qsTr("Attachments"), value: preview.p.attachments || 0, icon: "image" }
-                ]
+                model: preview.tiles()
                 delegate: Rectangle {
                     id: tile
-                    required property var modelData
+                    required property string label
+                    required property int value
+                    required property string icon
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     implicitHeight: tileColumn.implicitHeight + 2 * Theme.space3
                     radius: Theme.radius
                     color: Theme.bgSunken
                     Accessible.role: Accessible.StaticText
-                    Accessible.name: modelData.label + ": " + modelData.value
+                    Accessible.name: tile.label + ": " + tile.value
                     ColumnLayout {
                         id: tileColumn
                         anchors.fill: parent
@@ -214,9 +274,9 @@ ColumnLayout {
                         spacing: 2
                         RowLayout {
                             spacing: Theme.space1
-                            BIcon { name: tile.modelData.icon; size: Theme.iconSizeSm; color: Theme.fgMuted }
+                            BIcon { name: tile.icon; size: Theme.iconSizeSm; color: Theme.fgMuted }
                             Text {
-                                text: tile.modelData.value.toLocaleString(Qt.locale(), "f", 0)
+                                text: Qt.locale().toString(tile.value)
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textXl
                                 font.weight: Theme.weightSemiBold
@@ -225,7 +285,7 @@ ColumnLayout {
                         }
                         BText {
                             Layout.fillWidth: true
-                            text: tile.modelData.label
+                            text: tile.label
                             variant: "small"
                             color: Theme.fgMuted
                             elide: Text.ElideRight
@@ -237,26 +297,17 @@ ColumnLayout {
 
         // What happens to existing files.
         Repeater {
-            model: {
-                const notes = []
-                const p = preview.p
-                if ((p.journalsAppended || 0) > 0)
-                    notes.push({ icon: "calendar-plus", text: qsTr("%n daily note(s) exist already: the imported text is added at their end under “Import (%1)”.", "", p.journalsAppended).arg(preview.importer.effectiveName) })
-                if ((p.renamed || 0) > 0)
-                    notes.push({ icon: "copy", text: qsTr("%n file(s) get a new name (“… 2”) because the name is taken; links to them follow.", "", p.renamed) })
-                if (p.folderExists)
-                    notes.push({ icon: "folder", text: qsTr("The folder “%1” exists already; nothing in it is replaced.").arg(p.folder) })
-                return notes
-            }
+            model: preview.notes()
             delegate: RowLayout {
                 id: note
-                required property var modelData
+                required property string icon
+                required property string text
                 Layout.fillWidth: true
                 spacing: Theme.space2
-                BIcon { Layout.alignment: Qt.AlignTop; name: note.modelData.icon; size: Theme.iconSize; color: Theme.infoText }
+                BIcon { Layout.alignment: Qt.AlignTop; name: note.icon; size: Theme.iconSize; color: Theme.infoText }
                 BText {
                     Layout.fillWidth: true
-                    text: note.modelData.text
+                    text: note.text
                     wrapMode: Text.Wrap
                 }
             }
@@ -264,17 +315,17 @@ ColumnLayout {
 
         // Warnings of the importer (unsupported parts, skipped files).
         BButton {
-            visible: (preview.p.warnings || []).length > 0
-            text: qsTr("%n warning(s)", "", (preview.p.warnings || []).length)
+            visible: preview.previewWarnings().length > 0
+            text: qsTr("%n warning(s)", "", preview.previewWarnings().length)
             iconName: preview.showWarnings ? "chevron-down" : "chevron-right"
             size: "small"
             variant: "ghost"
             onClicked: preview.showWarnings = !preview.showWarnings
         }
         Repeater {
-            model: preview.showWarnings ? (preview.p.warnings || []).slice(0, 100) : []
+            model: preview.showWarnings ? preview.previewWarnings().slice(0, 100) : preview.none
             delegate: BText {
-                required property var modelData
+                required property string modelData
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.space4
                 text: "• " + modelData
@@ -305,39 +356,41 @@ ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 1
                 clip: true
-                model: preview.showFiles ? (preview.p.files || []) : []
+                model: preview.showFiles ? preview.previewFiles() : preview.none
                 boundsBehavior: Flickable.StopAtBounds
                 T.ScrollBar.vertical: BScrollBar {}
                 footer: BText {
                     width: ListView.view ? ListView.view.width : 0
-                    visible: (preview.p.fileCount || 0) > (preview.p.files || []).length
+                    visible: AppController.routeInt(preview.importer.preview, "fileCount", 0) > preview.previewFiles().length
                     height: visible ? 32 : 0
                     leftPadding: Theme.space3
                     verticalAlignment: Text.AlignVCenter
-                    text: qsTr("… and %n more", "", (preview.p.fileCount || 0) - (preview.p.files || []).length)
+                    text: qsTr("… and %n more", "", (preview.importer.preview.fileCount || 0) - preview.previewFiles().length)
                     variant: "small"
                     color: Theme.fgMuted
                 }
                 delegate: RowLayout {
                     id: fileRow
-                    required property var modelData
+                    required property string path
+                    required property string kind
+                    required property bool append
                     width: ListView.view.width
                     height: 32
                     spacing: Theme.space2
                     BIcon {
                         Layout.leftMargin: Theme.space3
-                        name: fileRow.modelData.kind === "journal" ? "calendar" : fileRow.modelData.kind === "page" ? "file-text" : "image"
+                        name: fileRow.kind === "journal" ? "calendar" : fileRow.kind === "page" ? "file-text" : "image"
                         size: Theme.iconSizeSm
                         color: Theme.fgMuted
                     }
                     BText {
                         Layout.fillWidth: true
-                        text: fileRow.modelData.path
+                        text: fileRow.path
                         elide: Text.ElideMiddle
                     }
                     BBadge {
                         Layout.rightMargin: Theme.space3
-                        visible: fileRow.modelData.append
+                        visible: fileRow.append
                         text: qsTr("added to")
                         variant: "info"
                     }
@@ -350,7 +403,7 @@ ColumnLayout {
             spacing: Theme.space2
             BButton {
                 objectName: "importStartButton"
-                text: qsTr("Import %n file(s)", "", preview.p.fileCount || 0)
+                text: qsTr("Import %n file(s)", "", preview.importer.preview.fileCount || 0)
                 iconName: "download"
                 variant: "primary"
                 enabled: preview.importer.targetFolderError === ""
@@ -367,54 +420,45 @@ ColumnLayout {
     // ---- Report -----------------------------------------------------------------------------------
     IoCard {
         visible: preview.phase === "done"
-        tone: (preview.r.failed || []).length > 0 || preview.r.cancelled ? "warning" : "success"
-        iconName: (preview.r.failed || []).length > 0 || preview.r.cancelled ? "triangle-alert" : "circle-check"
-        iconColor: (preview.r.failed || []).length > 0 || preview.r.cancelled ? Theme.warningText : Theme.successText
-        title: preview.r.cancelled ? qsTr("Import stopped") : qsTr("Imported from %1").arg(preview.r.source || "")
-        subtitle: {
-            const r = preview.r
-            const parts = []
-            if (r.pages > 0)
-                parts.push(qsTr("%n page(s)", "", r.pages))
-            if (r.journals > 0)
-                parts.push(r.appended > 0 ? qsTr("%n daily note(s) (%1 added to existing ones)", "", r.journals).arg(r.appended)
-                                          : qsTr("%n daily note(s)", "", r.journals))
-            if (r.attachments > 0)
-                parts.push(qsTr("%n attachment(s)", "", r.attachments))
-            return parts.length > 0 ? parts.join(" · ") : qsTr("Nothing was written.")
-        }
+        readonly property bool troubled: preview.reportFailed().length > 0 || !!preview.importer.report.cancelled
+        tone: troubled ? "warning" : "success"
+        iconName: troubled ? "triangle-alert" : "circle-check"
+        iconColor: troubled ? Theme.warningText : Theme.successText
+        title: preview.importer.report.cancelled ? qsTr("Import stopped") : qsTr("Imported from %1").arg(preview.importer.report.source || "")
+        subtitle: preview.reportSummary()
 
         BText {
             Layout.fillWidth: true
-            visible: (preview.r.renamed || 0) > 0
-            text: qsTr("%n file(s) got a new name because the name was taken.", "", preview.r.renamed || 0)
+            visible: (preview.importer.report.renamed || 0) > 0
+            text: qsTr("%n file(s) got a new name because the name was taken.", "", preview.importer.report.renamed || 0)
             variant: "small"
             color: Theme.fgMuted
             wrapMode: Text.Wrap
         }
         Repeater {
-            model: (preview.r.failed || []).slice(0, 20)
+            model: preview.reportFailed().slice(0, 20)
             delegate: BText {
-                required property var modelData
+                required property string path
+                required property string message
                 Layout.fillWidth: true
-                text: qsTr("Not saved: %1 (%2)").arg(modelData.path).arg(modelData.message)
+                text: qsTr("Not saved: %1 (%2)").arg(path).arg(message)
                 variant: "small"
                 color: Theme.dangerText
                 wrapMode: Text.Wrap
             }
         }
         BButton {
-            visible: (preview.r.warnings || []).length > 0
-            text: qsTr("%n warning(s)", "", (preview.r.warnings || []).length)
+            visible: preview.reportWarnings().length > 0
+            text: qsTr("%n warning(s)", "", preview.reportWarnings().length)
             iconName: preview.showWarnings ? "chevron-down" : "chevron-right"
             size: "small"
             variant: "ghost"
             onClicked: preview.showWarnings = !preview.showWarnings
         }
         Repeater {
-            model: preview.showWarnings && preview.phase === "done" ? (preview.r.warnings || []).slice(0, 100) : []
+            model: preview.showWarnings && preview.phase === "done" ? preview.reportWarnings().slice(0, 100) : preview.none
             delegate: BText {
-                required property var modelData
+                required property string modelData
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.space4
                 text: "• " + modelData
@@ -428,9 +472,9 @@ ColumnLayout {
             spacing: Theme.space2
             BButton {
                 objectName: "importOpenFolder"
-                visible: (preview.r.folder || "") !== "" || (preview.r.firstPage || "") !== ""
+                visible: (preview.importer.report.folder || "") !== "" || (preview.importer.report.firstPage || "") !== ""
                 //: Polish: "Otwórz zaimportowany folder"
-                text: (preview.r.folder || "") !== "" ? qsTr("Open the imported folder") : qsTr("Open the first page")
+                text: (preview.importer.report.folder || "") !== "" ? qsTr("Open the imported folder") : qsTr("Open the first page")
                 iconName: "folder-open"
                 variant: "primary"
                 onClicked: preview.importer.openTarget()

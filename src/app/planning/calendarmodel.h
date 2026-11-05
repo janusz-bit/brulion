@@ -17,7 +17,8 @@
 // isPast, isWeekend, isSelected, weekNumber (ISO), journalPath ("" = none), hasJournal, items
 // (list of entry maps, journals excluded, see below), itemCount, timedCount, kinds (distinct
 // mark kinds for dots: due, overdue, scheduled, reminder, alarm, done), label ("czw, 15 paź"),
-// longLabel ("czwartek, 15 października").
+// longLabel ("czwartek, 15 października"); for the grids: orderedItems (openEntriesFirst()),
+// allDay (allDayEntries()), timed (timedLanes()).
 //
 // Entry maps: { key, kind ("due" | "scheduled" | "start" | "reminder" | "done"), variant (chip:
 // "due" | "overdue" | "scheduled" | "reminder" | "alarm" | "done" | "neutral"), icon, time
@@ -79,6 +80,16 @@ private:
     NoteCacheSync m_last;
 };
 
+/// `items` (entry maps) with the open ones first, a stable partition: times keep their order (the
+/// month's pills and "+N więcej" hide finished entries first).
+QVariantList openEntriesFirst(const QVariantList &items);
+/// The entries of `items` without a time (minutes < 0), in order (the week's all-day strip).
+QVariantList allDayEntries(const QVariantList &items);
+/// The timed entries of `items` (minutes ≥ 0, by time) in lanes, for the week's hour grid:
+/// [{ entry, lane, lanes }] — an entry starting within 45 minutes of its group's first one shares
+/// the group's width (lane 0…lanes-1).
+QVariantList timedLanes(const QVariantList &items);
+
 class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
     Q_OBJECT
     Q_INTERFACES(QQmlParserStatus)
@@ -126,6 +137,8 @@ class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(int lastHour READ lastHour NOTIFY itemsChanged FINAL)
     /// Grows with every rebuild (bind day panels to it).
     Q_PROPERTY(int revision READ revision NOTIFY itemsChanged FINAL)
+    /// The most all-day entries (allDayEntries()) of a day of the range.
+    Q_PROPERTY(int maxAllDay READ maxAllDay NOTIFY itemsChanged FINAL)
 
 public:
     static constexpr int MaxOverdue = 200;
@@ -150,6 +163,9 @@ public:
         KindsRole,
         LabelRole,
         LongLabelRole,
+        OrderedItemsRole,
+        AllDayRole,
+        TimedRole,
     };
     Q_ENUM(Role)
 
@@ -199,6 +215,7 @@ public:
     int firstHour() const { return m_firstHour; }
     int lastHour() const { return m_lastHour; }
     int revision() const { return m_revision; }
+    int maxAllDay() const { return m_maxAllDay; }
 
     /// Move the anchor by one period of the mode (month / week / agenda window).
     Q_INVOKABLE void next();
@@ -210,6 +227,11 @@ public:
     /// Entries of any day (not only the range): the journal first ({ kind: "journal", path,
     /// title }), then the entries as in `items`.
     Q_INVOKABLE QVariantList dayItems(const QString &date) const;
+    /// dayItems() without the journal, the open entries first (stable: times keep their order) —
+    /// CalendarDayPanel's "Plan dnia".
+    Q_INVOKABLE QVariantList dayEntries(const QString &date) const;
+    /// The day has a daily note.
+    Q_INVOKABLE bool dayHasJournal(const QString &date) const;
     /// { "YYYY-MM-DD": [kinds] } for BDatePicker / BReminderDialog marks within [from, to]
     /// (at most 400 days).
     Q_INVOKABLE QVariantMap marks(const QString &from, const QString &to) const;
@@ -282,6 +304,7 @@ private:
     int m_firstHour = 8;
     int m_lastHour = 18;
     int m_revision = 0;
+    int m_maxAllDay = 0;
 
     QTimer m_refreshTimer;
     QTimer m_midnightTimer;

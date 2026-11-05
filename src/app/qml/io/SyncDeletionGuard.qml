@@ -12,9 +12,9 @@ import Brulion
 IoCard {
     id: guard
 
-    readonly property var sync: Workspace.sync
-    readonly property var deletions: sync ? sync.pendingDeletions : []
-    readonly property int localCount: deletions.filter(d => d.action === "delete-local").length
+    readonly property WorkspaceSync sync: Workspace.sync
+    readonly property list<var> deletions: sync ? sync.pendingDeletions : []
+    readonly property int localCount: IoLists.countWhere(deletions, "action", "delete-local")
     readonly property int remoteCount: deletions.length - localCount
 
     visible: !!sync && sync.needsConfirmation
@@ -52,25 +52,26 @@ IoCard {
             Accessible.name: qsTr("Files that would be deleted")
             delegate: RowLayout {
                 id: row
-                required property var modelData
+                required property string path
+                required property string action
                 width: ListView.view.width
                 height: 36
                 spacing: Theme.space2
                 BIcon {
                     Layout.leftMargin: Theme.space3
-                    name: row.modelData.action === "delete-local" ? "smartphone" : "server"
+                    name: row.action === "delete-local" ? "smartphone" : "server"
                     size: Theme.iconSizeSm
                     color: Theme.fgMuted
                 }
                 BText {
                     Layout.fillWidth: true
-                    text: row.modelData.path
+                    text: row.path
                     elide: Text.ElideMiddle
                 }
                 BText {
                     Layout.rightMargin: Theme.space3
                     visible: !Theme.compact
-                    text: row.modelData.action === "delete-local" ? qsTr("here") : qsTr("on the server")
+                    text: row.action === "delete-local" ? qsTr("here") : qsTr("on the server")
                     variant: "small"
                     color: Theme.fgMuted
                 }
@@ -98,7 +99,7 @@ IoCard {
         id: confirm
         // The list the user is confirming, as it was when the dialog opened: a run that plans
         // other deletions meanwhile makes the confirmation fail instead of deleting unseen files.
-        property var shownPaths: []
+        property list<string> shownPaths: []
         title: qsTr("Delete %n file(s)?", "", shownPaths.length)
         message: qsTr("The files listed will be deleted on the other side as well. Files deleted on this device go to the trash; files deleted on the server go to its deleted files.")
         checkText: qsTr("Yes, these files should be deleted")
@@ -107,7 +108,7 @@ IoCard {
         acceptEnabled: checked
         onAboutToShow: {
             checked = false
-            shownPaths = guard.deletions.map(d => d.path)
+            shownPaths = IoLists.column(guard.deletions, "path")
         }
         onAccepted: guard.sync.confirmDeletions(shownPaths)
     }

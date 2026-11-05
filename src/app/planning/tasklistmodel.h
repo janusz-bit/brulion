@@ -220,6 +220,10 @@ public:
     Q_INVOKABLE QVariantList tagChoices(int limit = 50) const;
     Q_INVOKABLE QVariantList folderChoices(int limit = 50) const;
     Q_INVOKABLE QVariantList pageChoices(int limit = 50) const;
+    /// All choices of `kind` ("tag" | "page" | "folder") as TasksFilterBar's BPalette rows:
+    /// [{ title (the label), subtitle ("3 zadania"; pages: "<folder> · 3 zadania"), icon, value }]
+    /// (translated in TasksFilterBar's context); [] for another kind.
+    Q_INVOKABLE QVariantList paletteChoices(const QString &kind) const;
     /// Row of the task "path:line", -1 when not listed.
     Q_INVOKABLE int rowOfKey(const QString &key) const;
     /// The row's data as a map (QML helpers, tests).

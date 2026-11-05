@@ -16,15 +16,16 @@ ColumnLayout {
     id: picker
 
     required property ImportController importer
-    readonly property var current: {
-        const list = importer.importers
-        for (let i = 0; i < list.length; ++i)
-            if (list[i].id === importer.importerId)
-                return list[i]
-        return null
+    /// An importer is chosen (importer.chosenImporter has its fields).
+    readonly property bool hasCurrent: importer.chosenImporter.id !== undefined
+    readonly property string pick: hasCurrent ? "" + importer.chosenImporter.pick : "both"
+    readonly property bool collapsed: Theme.compact && hasCurrent
+    /// The chosen importer's file types ("*.enex").
+    function fileTypes(): list<string> {
+        if (!picker.hasCurrent)
+            return []
+        return picker.importer.chosenImporter.fileTypes
     }
-    readonly property string pick: current ? current.pick : "both"
-    readonly property bool collapsed: Theme.compact && current !== null
     property bool phone: false
 
     signal pickFiles()
@@ -45,10 +46,10 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: picker.collapsed
         spacing: Theme.space2
-        BIcon { name: picker.current ? picker.current.icon : ""; size: Theme.iconSize; color: Theme.link }
+        BIcon { name: picker.hasCurrent ? "" + picker.importer.chosenImporter.icon : ""; size: Theme.iconSize; color: Theme.link }
         BText {
             Layout.fillWidth: true
-            text: picker.current ? picker.current.name : ""
+            text: picker.hasCurrent ? "" + picker.importer.chosenImporter.name : ""
             variant: "label"
             elide: Text.ElideRight
         }
@@ -71,8 +72,12 @@ ColumnLayout {
             model: picker.importer.importers
             delegate: T.AbstractButton {
                 id: tile
+                // (A row's "id" cannot be a property name, "icon" is the button's own.)
                 required property var modelData
-                readonly property bool chosen: picker.importer.importerId === modelData.id
+                required property string name
+                readonly property string importerKey: AppController.routeText(modelData, "id")
+                readonly property string iconName: AppController.routeText(modelData, "icon")
+                readonly property bool chosen: picker.importer.importerId === tile.importerKey
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
                 implicitHeight: Math.max(Theme.touchUi ? 52 : 44, implicitContentHeight + topPadding + bottomPadding)
@@ -83,9 +88,9 @@ ColumnLayout {
                 checkable: true
                 checked: chosen
                 Accessible.role: Accessible.RadioButton
-                Accessible.name: modelData.name
+                Accessible.name: tile.name
                 Accessible.checked: chosen
-                onClicked: picker.importer.importerId = chosen ? "" : modelData.id
+                onClicked: picker.importer.importerId = chosen ? "" : tile.importerKey
 
                 background: Rectangle {
                     radius: Theme.radius
@@ -98,13 +103,13 @@ ColumnLayout {
                     id: row
                     spacing: Theme.space2
                     BIcon {
-                        name: tile.modelData.icon
+                        name: tile.iconName
                         size: Theme.iconSize
                         color: tile.chosen ? Theme.link : Theme.fgMuted
                     }
                     BText {
                         Layout.fillWidth: true
-                        text: tile.modelData.name
+                        text: tile.name
                         variant: tile.chosen ? "label" : "body"
                         elide: Text.ElideRight
                     }
@@ -114,17 +119,17 @@ ColumnLayout {
     }
 
     IoCard {
-        iconName: picker.current ? picker.current.icon : "sparkles"
-        iconColor: picker.current ? Theme.link : Theme.fgMuted
-        title: picker.current ? qsTr("From %1").arg(picker.current.name) : qsTr("Not sure where to start?")
-        subtitle: picker.current ? picker.current.howTo
+        iconName: picker.hasCurrent ? "" + picker.importer.chosenImporter.icon : "sparkles"
+        iconColor: picker.hasCurrent ? Theme.link : Theme.fgMuted
+        title: picker.hasCurrent ? qsTr("From %1").arg(picker.importer.chosenImporter.name) : qsTr("Not sure where to start?")
+        subtitle: picker.hasCurrent ? "" + picker.importer.chosenImporter.howTo
                   : qsTr("Choose the exported files or the folder – Brulion recognises Obsidian, Logseq, Notion, Evernote and the others by itself. Nothing is written before you see what will be imported.")
 
         // On the phone: where that app's notes are and what to pick.
         RowLayout {
             objectName: "importPhoneHowTo"
             Layout.fillWidth: true
-            visible: picker.phone && picker.current !== null && picker.current.phoneHowTo !== ""
+            visible: picker.phone && picker.hasCurrent && picker.importer.chosenImporter.phoneHowTo !== ""
             spacing: Theme.space2
             BIcon {
                 Layout.alignment: Qt.AlignTop
@@ -135,7 +140,7 @@ ColumnLayout {
             }
             BText {
                 Layout.fillWidth: true
-                text: picker.current ? picker.current.phoneHowTo : ""
+                text: picker.hasCurrent ? "" + picker.importer.chosenImporter.phoneHowTo : ""
                 wrapMode: Text.Wrap
             }
         }
@@ -143,7 +148,7 @@ ColumnLayout {
         // Microsoft To Do: sign in and download, or a file from Graph Explorer.
         Loader {
             Layout.fillWidth: true
-            active: picker.current !== null && picker.current.id === "mstodo"
+            active: picker.hasCurrent && picker.importer.chosenImporter.id === "mstodo"
             visible: active
             sourceComponent: MsTodoSignIn { importer: picker.importer }
         }
@@ -154,8 +159,8 @@ ColumnLayout {
             BButton {
                 objectName: "importChooseFiles"
                 visible: picker.pick !== "folder"
-                text: picker.current && picker.pick === "files" && picker.current.fileTypes.length === 1
-                      ? qsTr("Choose the %1 file…").arg(picker.current.fileTypes[0].replace("*", ""))
+                text: picker.hasCurrent && picker.pick === "files" && picker.fileTypes().length === 1
+                      ? qsTr("Choose the %1 file…").arg(Js.replace(picker.fileTypes()[0], "*", ""))
                       : qsTr("Choose files…")
                 iconName: "file-input"
                 variant: "primary"

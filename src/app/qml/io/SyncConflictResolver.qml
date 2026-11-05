@@ -32,12 +32,30 @@ ColumnLayout {
     property bool manual: false
 
     readonly property alias resolver: resolverObject
-    readonly property var conflict: resolverObject.conflict
-    readonly property string otherLabel: conflict.device ? qsTr("Copy from %1").arg(conflict.device) : qsTr("Copy")
+    readonly property string otherLabel: resolverObject.conflict.device ? qsTr("Copy from %1").arg(resolverObject.conflict.device) : qsTr("Copy")
+    /// The original and the copy (paths; "" before loading).
+    readonly property string original: resolverObject.conflict.original ? "" + resolverObject.conflict.original : ""
+    readonly property string copyPath: resolverObject.conflict.copy ? "" + resolverObject.conflict.copy : ""
+    readonly property string conflictTitle: resolverObject.conflict.title ? "" + resolverObject.conflict.title : ""
     readonly property bool textConflict: resolverObject.loaded && resolverObject.text && !resolverObject.identical
     readonly property bool cleanMerge: textConflict && resolverObject.clean && !view.manual
 
     signal closed()
+
+    readonly property list<var> modes: [
+        { value: "merge", text: qsTr("Merge"), icon: "git-merge" },
+        { value: "compare", text: qsTr("Compare"), icon: "git-compare" }
+    ]
+
+    /// The two versions of a binary file (the cards side by side).
+    function binarySides(): list<var> {
+        if (!resolverObject.loaded || resolverObject.text)
+            return []
+        return [
+            { label: qsTr("This device"), size: resolverObject.oursSizeText, path: view.original },
+            { label: view.otherLabel, size: resolverObject.theirsSizeText, path: view.copyPath }
+        ]
+    }
 
     onCopyChanged: {
         mode = "merge"
@@ -74,7 +92,7 @@ ColumnLayout {
             spacing: 2
             BText {
                 Layout.fillWidth: true
-                text: view.conflict.title || ""
+                text: view.conflictTitle
                 variant: "heading"
                 wrapMode: Text.Wrap
                 maximumLineCount: 3
@@ -87,37 +105,35 @@ ColumnLayout {
                 color: Theme.fgMuted
                 wrapMode: Text.Wrap
                 text: {
-                    const c = view.conflict
+                    const c = resolverObject.conflict
                     if (!c.copy)
                         return ""
-                    const parts = []
-                    const folder = Workspace.folderOf(c.original)
-                    if (folder !== "")
-                        parts.push(folder)
-                    parts.push(c.source === "syncthing" ? "Syncthing" : "Nextcloud")
+                    const folder = Workspace.folderOf(view.original)
+                    const from = c.source === "syncthing" ? "Syncthing" : "Nextcloud"
+                    let out = folder !== "" ? folder + " · " + from : from
                     if (c.device)
-                        parts.push(qsTr("other version from “%1”").arg(c.device))
+                        out += " · " + qsTr("other version from “%1”").arg(c.device)
                     if (c.when)
-                        parts.push(c.when)
-                    return parts.join(" · ")
+                        out += " · " + c.when
+                    return out
                 }
             }
         }
         BButton {
-            visible: !Theme.compact && view.conflict.originalExists === true && resolverObject.text
+            visible: !Theme.compact && resolverObject.conflict.originalExists === true && resolverObject.text
             text: qsTr("Open the note")
             iconName: "external-link"
             size: "small"
             variant: "ghost"
-            onClicked: AppController.openPage(view.conflict.original)
+            onClicked: AppController.openPage(view.original)
         }
         BButton {
-            visible: !Theme.compact && view.conflict.originalExists === true && resolverObject.drawing
+            visible: !Theme.compact && resolverObject.conflict.originalExists === true && resolverObject.drawing
             text: qsTr("Open the drawing")
             iconName: "pen-tool"
             size: "small"
             variant: "ghost"
-            onClicked: AppController.navigate({ view: "drawing", path: view.conflict.original })
+            onClicked: AppController.navigate({ view: "drawing", path: view.original })
         }
     }
 
@@ -125,11 +141,11 @@ ColumnLayout {
     // card of a drawing what merging does).
     BText {
         Layout.fillWidth: true
-        visible: resolverObject.loaded && (!Theme.compact || view.conflict.originalExists === false
+        visible: resolverObject.loaded && (!Theme.compact || resolverObject.conflict.originalExists === false
                                            || (!resolverObject.text && !drawingScroll.visible && !notesView.visible))
         variant: "muted"
         wrapMode: Text.Wrap
-        text: view.conflict.originalExists === false
+        text: resolverObject.conflict.originalExists === false
               ? (resolverObject.drawing
                  ? qsTr("The drawing was deleted on this device while it changed on another one. The other version is in the copy.")
                  : qsTr("The note was deleted on this device while it changed on another one. The other version is in the copy."))
@@ -202,15 +218,14 @@ ColumnLayout {
             columnSpacing: Theme.space3
             rowSpacing: Theme.space2
             Repeater {
-                model: resolverObject.loaded && !resolverObject.text ? [
-                    { label: qsTr("This device"), size: resolverObject.oursSizeText, path: view.conflict.original },
-                    { label: view.otherLabel, size: resolverObject.theirsSizeText, path: view.conflict.copy }
-                ] : []
+                model: view.binarySides()
                 delegate: Rectangle {
                     id: side
-                    required property var modelData
+                    required property string label
+                    required property string size
+                    required property string path
                     // The pictures the app shows as pictures (one list: paths::pictureExtensions()).
-                    readonly property bool picture: Workspace.isPicture(modelData.path)
+                    readonly property bool picture: Workspace.isPicture(path)
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     Layout.alignment: Qt.AlignTop
@@ -227,7 +242,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             Layout.preferredHeight: status === Image.Ready ? Math.min(180, implicitHeight) : 0
                             visible: side.picture && status === Image.Ready
-                            source: side.picture && side.modelData.path ? Workspace.assetUrl(side.modelData.path) : ""
+                            source: side.picture && side.path !== "" ? Workspace.assetUrl(side.path) : ""
                             sourceSize.height: 360
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
@@ -235,8 +250,8 @@ ColumnLayout {
                         }
                         ColumnLayout {
                             spacing: 2
-                            BText { text: side.modelData.label; variant: "label" }
-                            BText { text: side.modelData.size; variant: "small"; color: Theme.fgMuted }
+                            BText { text: side.label; variant: "label" }
+                            BText { text: side.size; variant: "small"; color: Theme.fgMuted }
                         }
                     }
                 }
@@ -251,7 +266,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         visible: resolverObject.loaded && resolverObject.drawing && !resolverObject.identical
-                 && !resolverObject.copyIsOlder && !resolverObject.notesOnly && view.conflict.originalExists !== false
+                 && !resolverObject.copyIsOlder && !resolverObject.notesOnly && resolverObject.conflict.originalExists !== false
         contentWidth: width
         contentHeight: drawingCard.implicitHeight
         clip: true
@@ -261,7 +276,6 @@ ColumnLayout {
         IoCard {
             id: drawingCard
             readonly property bool mergeable: resolverObject.canMergeDrawings
-            readonly property var counts: resolverObject.drawingCounts
             width: drawingScroll.width
             iconName: "pen-tool"
             title: qsTr("Two versions of a drawing")
@@ -279,16 +293,18 @@ ColumnLayout {
                     active: drawingScroll.visible
                     label: qsTr("This device")
                     bytes: resolverObject.oursBytes
-                    path: view.conflict.original || ""
-                    detail: drawingCard.mergeable ? qsTr("%n element(s)", "", drawingCard.counts.ours || 0)
+                    byteCount: resolverObject.oursByteCount
+                    path: view.original
+                    detail: drawingCard.mergeable ? qsTr("%n element(s)", "", resolverObject.drawingCounts.ours || 0)
                                                   : resolverObject.oursSizeText
                 }
                 DrawingTile {
                     active: drawingScroll.visible
                     label: view.otherLabel
                     bytes: resolverObject.theirsBytes
-                    path: view.conflict.copy || ""
-                    detail: drawingCard.mergeable ? qsTr("%n element(s)", "", drawingCard.counts.theirs || 0)
+                    byteCount: resolverObject.theirsByteCount
+                    path: view.copyPath
+                    detail: drawingCard.mergeable ? qsTr("%n element(s)", "", resolverObject.drawingCounts.theirs || 0)
                                                   : resolverObject.theirsSizeText
                 }
                 DrawingTile {
@@ -299,11 +315,12 @@ ColumnLayout {
                     result: true
                     label: qsTr("After merging")
                     bytes: resolverObject.mergedBytes
+                    byteCount: resolverObject.mergedByteCount
                     detail: drawingCard.mergeable
-                            ? qsTr("%n element(s)", "", drawingCard.counts.merged || 0) + " · "
+                            ? qsTr("%n element(s)", "", resolverObject.drawingCounts.merged || 0) + " · "
                               + qsTr("%1 in both, %2 only here, %3 only in the copy")
-                                    .arg(drawingCard.counts.common || 0).arg(drawingCard.counts.onlyOurs || 0)
-                                    .arg(drawingCard.counts.onlyTheirs || 0)
+                                    .arg(resolverObject.drawingCounts.common || 0).arg(resolverObject.drawingCounts.onlyOurs || 0)
+                                    .arg(resolverObject.drawingCounts.onlyTheirs || 0)
                             : ""
                 }
             }
@@ -327,6 +344,8 @@ ColumnLayout {
         property string label
         property string detail
         property var bytes
+        /// The size of `bytes`.
+        property int byteCount: 0
         /// The file (its picture when the canvas cannot show it); "" for the merge.
         property string path
         /// The merge: framed in the accent colour.
@@ -343,6 +362,7 @@ ColumnLayout {
         border.width: result ? 1 : 0
         border.color: Theme.accent
         onBytesChanged: preview.show()
+        onByteCountChanged: preview.show()
         onActiveChanged: preview.show()
         Component.onCompleted: preview.show()
 
@@ -360,8 +380,8 @@ ColumnLayout {
                     /// load()'s answer: "" shown, else the picture below.
                     property string status: "notDrawing"
                     // (Not interactive: the whole drawing in view, whatever the tile's size.)
-                    function show() {
-                        preview.status = tile.active && tile.bytes && tile.bytes.byteLength > 0
+                    function show(): void {
+                        preview.status = tile.active && tile.byteCount > 0
                                          ? preview.load(tile.bytes) : "notDrawing"
                     }
                     anchors.fill: parent
@@ -407,10 +427,7 @@ ColumnLayout {
         Layout.fillWidth: Theme.compact
         fill: Theme.compact
         accessibleName: qsTr("Show")
-        model: [
-            { value: "merge", text: qsTr("Merge"), icon: "git-merge" },
-            { value: "compare", text: qsTr("Compare"), icon: "git-compare" }
-        ]
+        model: view.modes
         currentValue: view.mode
         onActivated: (value) => view.mode = value
     }
@@ -534,15 +551,15 @@ ColumnLayout {
         spacing: Theme.space2
         BButton {
             //: Polish: "Zachowaj moją" (keep my version of the note)
-            text: view.conflict.originalExists === false ? qsTr("Keep it deleted") : qsTr("Keep mine")
+            text: resolverObject.conflict.originalExists === false ? qsTr("Keep it deleted") : qsTr("Keep mine")
             iconName: "check"
             onClicked: resolverObject.keepMine()
         }
         BButton {
             //: Polish: "Zachowaj kopię"
-            text: view.conflict.originalExists === false ? qsTr("Restore from the copy") : qsTr("Keep the copy")
+            text: resolverObject.conflict.originalExists === false ? qsTr("Restore from the copy") : qsTr("Keep the copy")
             iconName: "copy"
-            onClicked: view.conflict.originalExists === false ? resolverObject.keepCopy() : keepCopyDialog.open()
+            onClicked: resolverObject.conflict.originalExists === false ? resolverObject.keepCopy() : keepCopyDialog.open()
         }
     }
 
@@ -550,10 +567,10 @@ ColumnLayout {
         id: keepCopyDialog
         title: qsTr("Keep the copy?")
         message: resolverObject.drawing
-                 ? qsTr("“%1” gets the drawing from the copy. Your current version stays in its history.").arg(view.conflict.title || "")
-                 : view.conflict.text === false
-                   ? qsTr("“%1” gets the content of the copy. Your current version goes to the trash.").arg(view.conflict.title || "")
-                   : qsTr("“%1” gets the content of the copy. Your current version stays in the note's history.").arg(view.conflict.title || "")
+                 ? qsTr("“%1” gets the drawing from the copy. Your current version stays in its history.").arg(view.conflictTitle)
+                 : resolverObject.conflict.text === false
+                   ? qsTr("“%1” gets the content of the copy. Your current version goes to the trash.").arg(view.conflictTitle)
+                   : qsTr("“%1” gets the content of the copy. Your current version stays in the note's history.").arg(view.conflictTitle)
         confirmText: qsTr("Keep the copy")
         onAccepted: resolverObject.keepCopy()
     }

@@ -15,23 +15,18 @@ BDialog {
 
     /// "folder" | "page"
     property string mode: "folder"
-    property var folders: []
+    property list<string> folders: []
     property string query
 
     signal chosen(string path)
 
-    readonly property var items: {
-        if (!visible)
+    /// The rows: [{ title, subtitle, icon, path }].
+    function rows(): list<var> {
+        if (!dialog.visible)
             return []
-        if (mode === "page")
-            return Workspace.switcherPages(query, 60)
-        const list = folders || []
-        return TextHelper.fuzzyRank(query, list, 100).map(r => ({
-            title: list[r.index].split("/").pop(),
-            subtitle: list[r.index].indexOf("/") >= 0 ? list[r.index].slice(0, list[r.index].lastIndexOf("/")) : "",
-            icon: "folder",
-            path: list[r.index]
-        }))
+        if (dialog.mode === "page")
+            return Workspace.switcherPages(dialog.query, 60)
+        return IoLists.folderItems(dialog.query, dialog.folders, 100)
     }
 
     title: mode === "folder" ? qsTr("Choose a folder") : qsTr("Choose a page")
@@ -58,7 +53,7 @@ BDialog {
         Layout.fillWidth: true
         Layout.preferredHeight: Math.min(Math.max(contentHeight, Theme.listItemHeightTwoLine), 380)
         clip: true
-        model: dialog.items
+        model: dialog.rows()
         keyNavigationEnabled: true
         boundsBehavior: Flickable.StopAtBounds
         T.ScrollBar.vertical: BScrollBar {}
@@ -66,13 +61,16 @@ BDialog {
         Accessible.name: dialog.title
         delegate: BListItem {
             id: row
+            // (A row's "icon" is the button's own property.)
             required property var modelData
+            required property string title
+            required subtitle
+            required property string path
             width: ListView.view.width
-            iconName: modelData.icon
-            text: modelData.title
-            subtitle: modelData.subtitle
+            iconName: AppController.routeText(modelData, "icon")
+            text: title
             onClicked: {
-                dialog.chosen(modelData.path)
+                dialog.chosen(row.path)
                 dialog.close()
             }
         }

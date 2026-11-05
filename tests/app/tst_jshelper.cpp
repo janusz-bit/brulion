@@ -72,6 +72,7 @@ private Q_SLOTS:
     void numbers();
     void numberToString_data();
     void numberToString();
+    void dateNow();
     void toFixed_data();
     void toFixed();
     void atan2_data();
@@ -312,6 +313,16 @@ void TstJsHelper::atan2()
     const double expected = eval(u"Math.atan2("_s + y + u", "_s + x + u')').toNumber();
     const auto same = [](double a, double b) { return (std::isnan(a) && std::isnan(b)) || a == b; };
     QVERIFY2(same(got, expected), qPrintable(u"%1 vs %2"_s.arg(got).arg(expected)));
+}
+
+void TstJsHelper::dateNow()
+{
+    const double before = eval(u"Date.now()"_s).toNumber();
+    const double now = js.dateNow();
+    const double after = eval(u"Date.now()"_s).toNumber();
+    QVERIFY(before <= now);
+    QVERIFY(now <= after);
+    QCOMPARE(now, std::floor(now));
 }
 
 void TstJsHelper::toFixed_data()

@@ -498,6 +498,16 @@ QVariantList NextcloudSetup::intervalOptions() const
     return out;
 }
 
+QString NextcloudSetup::intervalText() const
+{
+    for (const QVariant &option : intervalOptions()) {
+        const QVariantMap map = option.toMap();
+        if (map.value(u"value"_s).toInt() == m_interval)
+            return map.value(u"text"_s).toString();
+    }
+    return tr("Every %n minute(s)", "", m_interval);
+}
+
 bool NextcloudSetup::save()
 {
     if (!m_settings)

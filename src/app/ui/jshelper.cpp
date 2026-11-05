@@ -1,5 +1,7 @@
 #include "jshelper.h"
 
+#include <QDateTime>
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonValue>
@@ -511,6 +513,11 @@ QString JsHelper::numberToString(double x) const
 double JsHelper::atan2(double y, double x) const
 {
     return std::atan2(y, x);
+}
+
+double JsHelper::dateNow() const
+{
+    return double(QDateTime::currentMSecsSinceEpoch());
 }
 
 // --- Regular expressions ---

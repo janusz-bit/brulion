@@ -11,13 +11,13 @@ import Brulion
 IoCard {
     id: card
 
-    readonly property var sync: Workspace.sync
-    readonly property var runs: sync ? sync.history : []
+    readonly property WorkspaceSync sync: Workspace.sync
+    readonly property list<var> runs: sync ? sync.history : []
     property bool showAll: false
     readonly property int shown: showAll ? runs.length : Math.min(runs.length, 5)
 
-    function iconFor(run) {
-        switch (run.outcome) {
+    function iconFor(outcome: string): string {
+        switch (outcome) {
         case "ok": return "circle-check"
         case "conflicts": return "git-merge"
         case "files": return "triangle-alert"
@@ -26,7 +26,7 @@ IoCard {
         default: return "circle-alert"
         }
     }
-    function colorFor(tone) {
+    function colorFor(tone: string): color {
         switch (tone) {
         case "success": return Theme.successText
         case "warning": return Theme.warningText
@@ -34,7 +34,16 @@ IoCard {
         default: return Theme.fgMuted
         }
     }
-    function open(number) {
+    /// The non-empty parts joined with " · ".
+    function joinNonEmpty(parts: list<string>): string {
+        let out = ""
+        for (let i = 0; i < parts.length; ++i) {
+            if (parts[i] !== "")
+                out = out === "" ? parts[i] : out + " · " + parts[i]
+        }
+        return out
+    }
+    function open(number: int): void {
         detailsLoader.number = number
         detailsLoader.active = true
     }
@@ -73,15 +82,21 @@ IoCard {
         model: card.runs.slice(0, card.shown)
         delegate: BListItem {
             id: row
-            required property var modelData
+            required property int number
+            required property string outcome
+            required property string tone
+            required property string outcomeText
+            required property string startedText
+            required property string triggerText
+            required property string summary
             objectName: "syncHistoryRow"
             Layout.fillWidth: true
-            iconName: card.iconFor(modelData)
-            iconColor: card.colorFor(modelData.tone)
-            text: modelData.outcomeText
-            subtitle: [modelData.startedText, modelData.triggerText, modelData.summary].filter(s => s !== "").join(" · ")
+            iconName: card.iconFor(row.outcome)
+            iconColor: card.colorFor(row.tone)
+            text: row.outcomeText
+            subtitle: card.joinNonEmpty([row.startedText, row.triggerText, row.summary])
             trailing: BIcon { name: "chevron-right"; size: Theme.iconSizeSm; color: Theme.fgFaint }
-            onClicked: card.open(row.modelData.number)
+            onClicked: card.open(row.number)
             Accessible.description: qsTr("Opens the details of this sync")
         }
     }
