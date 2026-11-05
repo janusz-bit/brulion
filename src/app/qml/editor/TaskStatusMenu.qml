@@ -52,13 +52,15 @@ BMenu {
         return h
     }
 
-    /// A checkable item toggles its own `checked` when clicked; give it its binding back first.
-    function choose(item: BMenuItem, value: string) {
-        item.checked = Qt.binding(() => menu.status === value)
+    /// A checkable item toggles its own `checked` when clicked; give it its state back first (its
+    /// binding reads checkRevision).
+    function choose(item: BMenuItem, value: string): void {
+        ++menu.checkRevision
         menu.statusChosen(value)
     }
+    property int checkRevision: 0
     /// Opened from the keyboard: the current status highlighted, Up / Down move from there.
-    function highlightStatus() {
+    function highlightStatus(): void {
         for (let i = 0; i < count; ++i) {
             const entry = itemAt(i)
             if (entry && entry.objectName === "taskStatus_" + (status === "" ? "none" : status)) {
@@ -75,7 +77,7 @@ BMenu {
         required property string value
         objectName: "taskStatus_" + (value === "" ? "none" : value)
         checkable: true
-        checked: menu.status === value
+        checked: menu.checkRevision >= 0 && menu.status === value
         focusPolicy: Qt.TabFocus
         onTriggered: menu.choose(statusItem, value)
         Keys.onReturnPressed: {

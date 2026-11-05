@@ -24,22 +24,24 @@ Rectangle {
     /// The field's placeholder when not the default one.
     property string placeholder: ""
     property bool replaceOpen: false
+    /// The match NoteFind asked to show last.
+    property var target
 
     readonly property int matchCount: stream ? stream.count : find.count
     readonly property int currentMatch: stream ? stream.current : find.current
-    function goNext() {
+    function goNext(): void {
         if (bar.stream)
             bar.stream.next()
         else
             bar.find.next()
     }
-    function goPrevious() {
+    function goPrevious(): void {
         if (bar.stream)
             bar.stream.previous()
         else
             bar.find.previous()
     }
-    function replaceOne(text) {
+    function replaceOne(text: string): void {
         if (bar.stream)
             bar.stream.replaceCurrent(text)
         else
@@ -48,57 +50,73 @@ Rectangle {
 
     signal closeRequested()
 
-    function focusField() {
+    function focusField(): void {
         field.forceActiveFocus()
         field.selectAll()
     }
-    function focusReplacement() {
+    function focusReplacement(): void {
         replacement.forceActiveFocus()
         replacement.selectAll()
     }
-    function openReplace() {
+    function openReplace(): void {
         bar.replaceOpen = true
-        Qt.callLater(bar.focusReplacement)
+        replacementLater.restart()
+    }
+    Timer {
+        id: replacementLater
+        interval: 0
+        onTriggered: bar.focusReplacement()
     }
     function hasKeyboard(): bool {
         return field.activeFocus || replacement.activeFocus
     }
-    function replaceAll() {
+    function replaceAll(): void {
         if (bar.stream) {
-            const r = bar.stream.replaceAll(replacement.text)
-            if (r.count <= 0 && r.changed.length === 0 && r.failed.length === 0)
+            replaced.map = bar.stream.replaceAll(replacement.text)
+            const count = replaced.number("count")
+            const changed = replaced.changed().length
+            const failed = replaced.failed().length
+            if (count <= 0 && changed === 0 && failed === 0)
                 return
-            const token = r.token
-            const stream = bar.stream
-            const editor = bar.editor
-            let message = qsTr("%n occurrence(s) replaced", "", r.count)
-            if (r.days > 1)
-                message += " " + qsTr("in %n day(s)", "", r.days)
-            const skipped = r.changed.length + r.failed.length
+            const token = replaced.number("token")
+            const days = replaced.number("days")
+            let message = qsTr("%n occurrence(s) replaced", "", count)
+            if (days > 1)
+                message += " " + qsTr("in %n day(s)", "", days)
+            const skipped = changed + failed
             if (skipped > 0)
                 message += ". " + qsTr("%n day(s) left as they were: they changed meanwhile or could not be written.", "", skipped)
-            bar.editor.notice(message, skipped > 0 ? "warning" : "success", token > 0 ? {
-                text: qsTr("Undo"),
-                run: () => {
-                    const u = stream.undo(token)
-                    if (u.left.length > 0 && editor)
-                        editor.notice(qsTr("Not undone in %n day(s): they changed since", "", u.left.length), "info")
-                }
-            } : null)
+            bar.editor.notice(message, skipped > 0 ? "warning" : "success",
+                              token > 0 ? bar.editor.streamUndoAction(bar.stream, token) : null)
             return
         }
         const ctl = bar.find.controller
         if (!ctl)
             return
-        const before = ctl.sourceMode ? null : ctl.undoToken()
-        const count = bar.find.replaceAll(replacement.text)
+        const sourceMode = ctl.sourceMode
+        const before = sourceMode ? "" : ctl.undoToken() + "" // (a typed copy: passed on after other calls)
+        const count = bar.find.replaceAll(replacement.text) + 0 // (a typed copy: passed on after other calls)
         if (count > 0)
             bar.editor.notice(qsTr("%n occurrence(s) replaced", "", count), "success",
-                              before !== null ? bar.editor.undoAction(before) : null)
+                              !sourceMode ? bar.editor.undoAction(before) : null)
+    }
+    /// StreamFind.replaceAll's result.
+    MapHolder {
+        id: replaced
+        function number(key: string): int {
+            switch (key) {
+            case "count": return replaced.map.count === undefined ? 0 : replaced.map.count
+            case "token": return replaced.map.token === undefined ? 0 : replaced.map.token
+            case "days": return replaced.map.days === undefined ? 0 : replaced.map.days
+            }
+            return 0
+        }
+        function changed(): list<string> { return replaced.map.changed }
+        function failed(): list<string> { return replaced.map.failed }
     }
 
     /// Keys of both fields: Esc, F3, Ctrl+H; Android's Back closes the bar first.
-    function commonKey(event) {
+    function commonKey(event: KeyEvent): void {
         if (event.key === Qt.Key_Escape) {
             bar.closeRequested()
         } else if (event.key === Qt.Key_F3) {
@@ -129,8 +147,12 @@ Rectangle {
 
     Connections {
         target: bar.find
-        function onTargetRequested(target) { bar.editor.showFindTarget(target, bar.hasKeyboard()) }
-        function onSourceReplaceRequested(ranges, text) { bar.editor.replaceInSource(ranges, text) }
+        function onTargetRequested(target: var) {
+            bar.target = target // (compiled code passes no `var` argument on after other calls)
+            const keepKeyboard = bar.hasKeyboard()
+            bar.editor.showFindTarget(bar.target, keepKeyboard)
+        }
+        function onSourceReplaceRequested(ranges: list<var>, text: string) { bar.editor.replaceInSource(ranges, text) }
     }
 
     component OptionButton: BButton {
@@ -305,12 +327,9 @@ Rectangle {
             text: {
                 const links = bar.stream ? bar.stream.linkMatches : bar.find.linkMatches
                 const properties = bar.stream ? bar.stream.frontmatterMatches : bar.find.frontmatterMatches
-                const parts = []
-                if (links > 0)
-                    parts.push(qsTr("%n match(es) inside links: they will point elsewhere.", "", links))
-                if (properties > 0)
-                    parts.push(qsTr("%n match(es) in the page's properties.", "", properties))
-                return parts.join(" ")
+                const inLinks = links > 0 ? qsTr("%n match(es) inside links: they will point elsewhere.", "", links) : ""
+                const inProperties = properties > 0 ? qsTr("%n match(es) in the page's properties.", "", properties) : ""
+                return inLinks !== "" && inProperties !== "" ? inLinks + " " + inProperties : inLinks + inProperties
             }
         }
         // The journal stream searched only its latest days (StreamFind.dayLimit, its text limit).

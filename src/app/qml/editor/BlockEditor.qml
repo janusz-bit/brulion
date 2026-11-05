@@ -3,6 +3,10 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
+// The editor passed to the components it makes: as the module's type (`editor as B.BlockEditor`) —
+// inside its own file the editor's type is another one for the compiler ("cannot convert from
+// BlockEditor to BlockEditor").
+import Brulion as B
 
 // BlockEditor — one page as a Logseq-like outline of blocks (docs/UI.md "The block editor"), or,
 // in the document mode (controller.documentMode, docs/UI.md "Note modes"), as an Obsidian-like
@@ -41,7 +45,8 @@ import Brulion
 // A leading "# Title" repeating the page title is shown above the page properties
 // (PageController.titleRow, see BlockDelegate); Up/Down follow that on-screen order.
 // `message(text, kind, action)` (emitted by notice()) tells what the host should show as a toast;
-// `action` — { text, run } or null — is its button (deleting or cutting blocks: "Cofnij").
+// `action` — an EditorToastAction (`text`, run()) or null — is its button (deleting or cutting
+// blocks: "Cofnij").
 // Block selection (docs/UI.md "Selecting and copying"; PageController keeps it as two uids):
 // Shift+↑/↓ (also from the first / last line of an edited block), Ctrl+A twice, Shift+click, a
 // mouse drag from one block into another (the list no longer scrolls with a left drag on non-touch
@@ -64,9 +69,9 @@ import Brulion
 FocusScope {
     id: editor
 
-    property PageController controller
+    final property PageController controller
     /// Shown above the blocks (e.g. the page title); scrolls with them.
-    property Component header: null
+    final property Component header: null
     /// Maximum width of the text column (centred when the editor is wider).
     property real maxTextWidth: Theme.measure
     property real horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
@@ -104,19 +109,23 @@ FocusScope {
     readonly property int listGap: Theme.touchUi ? 4 : 2
     // A heading: clearly closer to what follows than to what precedes it, with air on both sides.
     readonly property int headingGapBelow: Math.round(fontSize * 0.6)
-    function headingGapAbove(level) {
+    function headingGapAbove(level: int): int {
         return Math.round(fontSize * (level === 1 ? 1.8 : level === 2 ? 1.5 : level === 3 ? 1.25 : 1.05))
     }
     readonly property real taskBoxWidth: Theme.touchUi ? 26 : 24
     readonly property real contentX: Math.max(horizontalPadding, (width - maxTextWidth) / 2)
     readonly property real contentWidth: Math.max(120, Math.min(maxTextWidth, width - 2 * horizontalPadding))
     /// Where the caret/selection lives: the inline editor (TextEdit) being typed in.
-    property InlineEditor activeEditor: null
+    final property InlineEditor activeEditor: null
     readonly property bool touch: Theme.touchUi
 
     // ---- The touch toolbar, docked on the keyboard (docs/UI.md "On-screen keyboard") ------------
     /// The table whose cell is being edited (TableBlockView sets and clears it), else null.
-    property TableBlockView editingTable: null
+    final property TableBlockView editingTable: null
+    /// The table whose cell is being edited (TableBlockView: itself, or null).
+    function setEditingTable(table: Item): void {
+        editingTable = table as TableBlockView
+    }
     /// Source mode with its text being edited (SourceEditor: the text has the keyboard).
     property bool sourceEditing: false
     /// The tools of the touch toolbar: "block" (a block is being edited), "cell" (a table cell),
@@ -132,12 +141,12 @@ FocusScope {
     /// Where the toolbar docks: an item that does not scroll with the blocks and whose bottom
     /// edge the shell keeps on the keyboard — the editor itself (null) on a page, the journal
     /// stream's frame for its days (ContentJournalDay). The toolbar fills its bottom edge.
-    property Item toolbarHost: null
+    final property Item toolbarHost: null
     readonly property Item dockHost: toolbarHost !== null ? toolbarHost : editor
     /// What scrolls the editor instead of its own list (a day of the journal stream: the journal
     /// list; any object with ensureVisible(item, rect), and centerInView(item, rect) for
     /// typewriter scrolling), else null.
-    property var scroller: null
+    final property EditorScroller scroller: null
     /// Typewriter scrolling (AppSettings.typewriterScrolling; docs/UI.md "Statistics and focus
     /// mode"): the caret's line is kept in the middle of the view while writing (the view gives
     /// room under the last block for it: PageView's bottomSpace).
@@ -166,39 +175,71 @@ FocusScope {
         return Math.max(Theme.space2, win.height - editor.mapToItem(null, 0, visibleBottom()).y + Theme.space2)
     }
 
-    /// Something to tell the user (a toast): kind "error" | "info" | "success"; `action` — { text,
-    /// run } or null — a button on the toast (after deleting or cutting blocks: "Cofnij",
-    /// undoAction()).
-    signal message(string text, string kind, var action)
-    /// Say `text` (message()); `action` is optional.
-    function notice(text, kind, action) {
-        message(text, kind, action ? action : null)
+    /// Something to tell the user (a toast): kind "error" | "info" | "success"; `action` — an
+    /// EditorToastAction (`text`, run()) or null — a button on the toast (after deleting or cutting
+    /// blocks: "Cofnij", undoAction()).
+    signal message(string text, string kind, EditorToastAction action)
+    /// Say `text` (message()); `action` (null: none) is the toast's button (EditorToastAction:
+    /// `text` and `run()`, which the host calls), e.g. undoAction()'s.
+    function notice(text: string, kind: string, action: EditorToastAction): void {
+        message(text, kind, action)
+    }
+    /// notice() with undoAction(before) (a plain toast when the edit changed nothing).
+    function noticeUndoable(text: string, kind: string, before: string): void {
+        notice(text, kind, undoAction(before))
     }
     /// The "Cofnij" of a toast about the edit just made (`before`: controller.undoToken() before
     /// it; null when it changed nothing): undoes that edit while it is still the last step of this
     /// page's history (PageController.undoStep) — after other edits, on another page or once undone
     /// it says so instead.
-    function undoAction(before) {
+    function undoAction(before: string): EditorToastAction {
         const ctl = controller
         if (!ctl)
             return null
         const token = ctl.undoToken()
         if (token === before)
             return null
-        const path = ctl.path
-        return {
-            text: qsTr("Undo"),
-            run: () => {
-                try {
-                    if (ctl.path === path && ctl.undoStep(token))
-                        return
-                    if (editor.controller === ctl)
-                        editor.notice(qsTr("Not undone: the page has changed since"), "info")
-                } catch (e) {
-                    // The page (or the whole editor) is gone: nothing to undo here.
-                }
-            }
+        const action = toastAction("undoStep", qsTr("Undo"))
+        action.controller = ctl
+        action.path = ctl.path
+        action.token = token
+        return action
+    }
+    /// A toast's action (EditorToastAction: `kind` and its values), the editor's child.
+    /// The "Cofnij" of a replace over days of the journal stream (FindBar): StreamFind.undo(token).
+    function streamUndoAction(stream: StreamFind, token: int): EditorToastAction {
+        const action = toastAction("streamUndo", qsTr("Undo"))
+        action.stream = stream
+        action.undo = token
+        return action
+    }
+    function toastAction(kind: string, text: string): EditorToastAction {
+        return toastActionComponent.createObject(editor, { kind: kind, text: text }) as EditorToastAction
+    }
+    Component {
+        id: toastActionComponent
+        EditorToastAction {
+            editor: editor as B.BlockEditor
         }
+    }
+    /// `ctl` is still this editor's controller, on the page `path`.
+    function samePage(ctl: PageController, path: string): bool {
+        return controller === ctl && ctl !== null && ctl.path === path
+    }
+    /// The `row` of a PageController result map (-1 without one).
+    function resultRow(r: var): int {
+        rowResult.map = r
+        return rowResult.map.row === undefined ? -1 : rowResult.map.row
+    }
+    MapHolder { id: rowResult }
+    /// The number of `left` paths of StreamFind.undo()'s result.
+    function leftCount(r: var): int {
+        leftResult.map = r
+        return leftResult.left().length
+    }
+    MapHolder {
+        id: leftResult
+        function left(): list<string> { return leftResult.map.left }
     }
 
     // ---- Block selection (docs/UI.md "Selecting and copying") -----------------------------------
@@ -221,7 +262,7 @@ FocusScope {
     /// tooltips).
     readonly property string gapReason: qsTr("Only blocks selected without gaps can be indented or moved")
     /// A day of the journal stream: the stream's selection over several days (null elsewhere).
-    property StreamSelection stream: null
+    final property StreamSelection stream: null
     /// Blocks of several days are selected (this day may hold a part of them, or none).
     readonly property bool inSpan: stream !== null && stream.active
     /// This editor shows the tools of the selection over several days.
@@ -230,20 +271,20 @@ FocusScope {
     readonly property string spanReason: qsTr("Only copying works across several days")
     /// A selection over several days holds the selection: say that only copying works there. True
     /// when it did (the caller does nothing else).
-    function spanRefuses() {
+    function spanRefuses(): bool {
         if (!inSpan)
             return false
-        notice(spanReason, "info")
+        notice(spanReason, "info", null)
         return true
     }
     /// The end of a selection over several days moved into this day (StreamSelection.focusMoved):
     /// the keys come here, a touch UI is in the selection mode, `reveal` scrolls to `row`.
-    function spanFocusHere(row, reveal) {
+    function spanFocusHere(row: int, reveal: bool): void {
         if (!controller)
             return
         closeSuggestions()
         if (touch) {
-            Qt.inputMethod.hide()
+            DeviceInfo.hideInputMethod()
             selectionMode = true
         }
         if (!list.activeFocus)
@@ -261,7 +302,7 @@ FocusScope {
     /// The editor's list header shows the page's tags and aliases as chips while the panel is
     /// folded (PageView's ContentPageHeader): the folded panel's preview then leaves them out.
     property bool headerShowsListChips: false
-    function setPropertiesExpanded(on) {
+    function setPropertiesExpanded(on: bool): void {
         if (propertiesExpanded === on)
             return
         propertiesExpanded = on
@@ -278,16 +319,14 @@ FocusScope {
     property Item editingProperty: null
     /// The type an empty value is edited as, chosen in a row's menu this session: { key: type }.
     property var propertyTypeOverride: ({})
-    function setPropertyTypeOverride(key, type) {
-        const o = Object.assign({}, propertyTypeOverride)
-        o[key] = type
-        propertyTypeOverride = o
+    function setPropertyTypeOverride(key: string, type: string): void {
+        propertyTypeOverride = Js.withKey(propertyTypeOverride, key, type)
     }
     /// "Dodaj właściwość" (Ctrl+;, the page menu, the palette): the add row of the shown block new
     /// properties go to (zoomed out first), or — that block is not shown (a page without
     /// properties, a frontmatter holding only the note mode, also above shown `key::` lines) —
     /// the draft above the blocks.
-    function addProperty() {
+    function addProperty(): void {
         if (!controller || controller.sourceMode || !controller.loaded)
             return
         if (controller.zoomBlock >= 0)
@@ -295,19 +334,15 @@ FocusScope {
         closeSuggestions()
         if (controller.editingRow >= 0)
             controller.stopEditing()
-        const props = controller.pageProperties
-        const row = props.addRow
+        const row = controller.pageProperties.addRow
         if (row >= 0) {
             setPropertiesExpanded(true)
-            propertyFocus = { part: "add", source: props.addTarget }
-            later(() => {
-                if (!editor.controller)
-                    return
-                list.positionViewAtIndex(row, ListView.Contain)
-            })
+            propertyFocus = { part: "add", source: controller.pageProperties.addTarget }
+            positionLater.row = row
+            positionLater.restart()
         } else {
             propertyDraft = true
-            later(() => list.positionViewAtBeginning())
+            topLater.restart()
         }
     }
 
@@ -320,7 +355,7 @@ FocusScope {
     property int shownZoom: -1
 
     /// The next / previous visible row in on-screen order (the title above the properties).
-    function visualNext(row) {
+    function visualNext(row: int): int {
         if (titleFirst) {
             const t = controller.titleRow
             if (row === -1)
@@ -332,7 +367,7 @@ FocusScope {
         }
         return controller.nextVisibleRow(row)
     }
-    function visualPrevious(row) {
+    function visualPrevious(row: int): int {
         if (titleFirst) {
             const t = controller.titleRow
             if (row === t)
@@ -350,23 +385,24 @@ FocusScope {
     property string navigationEdge: ""
     // A click on rendered text: where the caret should go once the inline editor exists.
     property int pendingClickRow: -1
-    property point pendingClick: Qt.point(0, 0)
+    final property point pendingClick: Qt.point(0, 0)
 
     // Fonts of the block kinds: body text and headings (outline: levels 1-3, deeper levels use
     // the body size in bold; document: larger, relative to the text size, levels 1-4). Fixed
     // pixel line heights, see Theme.lineHeightPx.
-    function headingSize(level) {
+    function headingSize(level: int): int {
         if (documentMode) {
             if (level < 1 || level > 4)
                 return fontSize
             // headingCap compresses the steps above the body size (the levels stay apart).
             const top = fontSize * 1.75
             const k = headingCap > fontSize && headingCap < top ? (headingCap - fontSize) / (top - fontSize) : 1
-            return Math.round(fontSize + fontSize * ([1.75, 1.45, 1.25, 1.1][level - 1] - 1) * k)
+            const step = level === 1 ? 1.75 : level === 2 ? 1.45 : level === 3 ? 1.25 : 1.1
+            return Math.round(fontSize + fontSize * (step - 1) * k)
         }
         return level === 1 ? Theme.text2xl : level === 2 ? Theme.textXl : level === 3 ? Theme.textLg : fontSize
     }
-    function headingLineHeight(level) {
+    function headingLineHeight(level: int): int {
         if (documentMode)
             return level >= 1 && level <= 4 ? Theme.lineHeightPx(headingSize(level), 1.3) : lineHeight
         return level >= 1 && level <= 3 ? Theme.lineHeightPx(headingSize(level), 1.4) : lineHeight
@@ -374,7 +410,7 @@ FocusScope {
     /// Baseline of the first line (from the top of a text item) for a heading level (0 = body);
     /// measured on hidden probes laid out exactly like the blocks, so bullets, checkboxes and
     /// fold arrows sit on the first line with any font.
-    function firstBaseline(level) {
+    function firstBaseline(level: int): real {
         switch (level) {
         case 1: return probeH1.firstBaselineY
         case 2: return probeH2.firstBaselineY
@@ -383,7 +419,7 @@ FocusScope {
         default: return probeBody.firstBaselineY
         }
     }
-    function xHeight(level) {
+    function xHeight(level: int): real {
         switch (level) {
         case 1: return probeH1.xHeight
         case 2: return probeH2.xHeight
@@ -393,7 +429,7 @@ FocusScope {
         }
     }
     /// Vertical centre of the x-height of the first line: where bullets and checkboxes go.
-    function firstLineCenter(level) {
+    function firstLineCenter(level: int): real {
         return firstBaseline(level) - xHeight(level) / 2
     }
 
@@ -471,29 +507,82 @@ FocusScope {
     property bool alive: true
     Component.onDestruction: alive = false
 
-    /// Qt.callLater for the editor's deferred work: `fn` runs once the event loop is idle — unless
-    /// the editor went away meanwhile (a day of the journal stream scrolled out of view, the page
-    /// closed). Qt.callLater does not tie an arrow function to the component that made it: run
+    /// Qt.callLater for deferred work of other components: `fn` runs once the event loop is idle —
+    /// unless the editor went away meanwhile (a day of the journal stream scrolled out of view, the
+    /// page closed). Qt.callLater does not tie an arrow function to the component that made it: run
     /// after the editor is gone it met a null `list` (TypeError). Ids (editor, list) read null
     /// then, so they are what is checked; `fn` should use ids or qualified properties only.
+    /// (A closure: not compiled ahead of time. The editor's own deferred work uses the Timers below
+    /// — interval 0, restarted: repeated requests before they fire are one, with the last values.)
     function later(fn) {
         Qt.callLater(() => {
             if (editor && list && editor.alive)
                 fn()
         })
     }
+    /// ensureEditVisible() once the event loop is idle (what later(() => editor.ensureEditVisible())
+    /// did).
+    function laterEnsureEditVisible(): void {
+        editVisibleLater.restart()
+    }
+    /// revealRow(row) once the event loop is idle.
+    function laterRevealRow(row: int): void {
+        revealLater.target = row
+        revealLater.restart()
+    }
+    Timer {
+        id: editVisibleLater
+        interval: 0
+        onTriggered: if (editor.alive) editor.ensureEditVisible()
+    }
+    Timer {
+        id: revealLater
+        property int target: -1
+        interval: 0
+        onTriggered: if (editor.alive) editor.revealRow(revealLater.target)
+    }
+    /// The list to its beginning.
+    Timer {
+        id: topLater
+        interval: 0
+        onTriggered: if (editor.alive) list.positionViewAtBeginning()
+    }
+    /// The list to `row` (ListView.Contain) while there is a page.
+    Timer {
+        id: positionLater
+        property int row: -1
+        interval: 0
+        onTriggered: {
+            if (!editor.alive || !editor.controller)
+                return
+            list.positionViewAtIndex(positionLater.row, ListView.Contain)
+        }
+    }
+    /// ensureRowVisible(): the list to `row` when it has no delegate there.
+    Timer {
+        id: rowVisibleLater
+        property int row: -1
+        interval: 0
+        onTriggered: {
+            const row = rowVisibleLater.row
+            if (!editor.alive || !editor.controller || row < 0 || row >= list.count)
+                return
+            if (list.itemAtIndex(row) === null)
+                list.positionViewAtIndex(row, ListView.Contain)
+        }
+    }
 
     // ---- Editing helpers called by delegates and the inline editors ------------------------------
 
     /// Start editing `row` at `cursor` (-1 = end) and give it the keyboard.
-    function startEditing(row, cursor) {
+    function startEditing(row: int, cursor: int): void {
         if (!controller || row < 0)
             return
         closeSuggestions()
         findKeepsKeyboard = false
-        findSelection = null
+        clearFindSelection()
         const again = controller.editingRow === row
-        controller.startEditing(row, cursor === undefined ? -1 : cursor)
+        controller.startEditing(row, cursor)
         if (again && activeEditor && activeEditor.row === row)
             activeEditor.ensureFocus()
         ensureRowVisible(row)
@@ -501,43 +590,76 @@ FocusScope {
 
     // ---- The find bar (FindBar, NoteFind; docs/UI.md "Find and replace") ---------------------------
     /// The note's find bar while it is open here: rendered blocks and inline editors tint its matches.
-    property NoteFind find: null
-    readonly property color findHitColor: Theme.alpha(Theme.link, 0.28)
+    final property NoteFind find: null
+    // (final, not readonly: the find bar and the inline editors look it up through `editor`.)
+    final property color findHitColor: Theme.link.alpha(0.28)
     /// The block going to a match does not take the keyboard from the bar (until it is tapped).
     property bool findKeepsKeyboard: false
-    /// { row, from, to }: the match its block is to select when its editor is there; null again then.
-    property var findSelection: null
+    /// The match [findSelectionFrom, findSelectionTo) its block `findSelectionRow` is to select when
+    /// its editor is there; row -1 again then (none). findSelectionChanged() on every change.
+    property int findSelectionRow: -1
+    property int findSelectionFrom: 0
+    property int findSelectionTo: 0
+    signal findSelectionChanged()
+    function setFindSelection(row: int, from: int, to: int): void {
+        findSelectionRow = row
+        findSelectionFrom = from
+        findSelectionTo = to
+        findSelectionChanged()
+    }
+    function clearFindSelection(): void {
+        setFindSelection(-1, 0, 0)
+    }
 
     /// Show a match (NoteFind.targetRequested): out of folds and zooms, scrolled to, selected in its
     /// block's inline editor — or, where that cannot select it (a table, a list marker), the block
     /// selected and flashed. Source mode: selected in the text.
-    function showFindTarget(target, keepKeyboard) {
+    function showFindTarget(target: var, keepKeyboard: bool): void {
         if (!controller)
             return
         closeSuggestions()
-        if (target.source) {
+        findTarget.map = target
+        if (findTarget.map.source) {
             const source = sourceLoader.item as SourceEditor
             if (source)
-                source.showRange(target.sourceFrom, target.sourceTo, keepKeyboard)
+                source.showRange(findTarget.map.sourceFrom, findTarget.map.sourceTo, keepKeyboard)
             return
         }
-        const row = target.row
+        const row = findTarget.rowOf()
         if (row < 0)
             return
         controller.reveal(row)
         list.userMoved = true
-        if (target.editable) {
+        const editable = findTarget.map.editable === true
+        if (editable) {
             findKeepsKeyboard = keepKeyboard
             controller.clearSelection()
-            controller.startEditing(row, target.from)
-            findSelection = { row: row, from: target.from, to: target.to }
+            controller.startEditing(row, findTarget.map.from)
+            setFindSelection(row, findTarget.map.from, findTarget.map.to)
         } else {
             findKeepsKeyboard = false
-            findSelection = null
+            clearFindSelection()
             controller.stopEditing()
             controller.selectedRow = row
         }
-        later(() => {
+        findTargetLater.row = row
+        findTargetLater.editable = editable
+        findTargetLater.restart()
+    }
+    /// The match showFindTarget() was asked for (NoteFind.targetRequested's map).
+    MapHolder {
+        id: findTarget
+        function rowOf(): int { return findTarget.map.row }
+    }
+    Timer {
+        id: findTargetLater
+        property int row: -1
+        property bool editable: false
+        interval: 0
+        onTriggered: {
+            if (!editor.alive)
+                return
+            const row = findTargetLater.row
             list.positionViewAtIndex(row, ListView.Contain)
             list.forceLayout()
             const item = list.itemAtIndex(row) as BlockDelegate
@@ -545,27 +667,27 @@ FocusScope {
                 return
             if (editor.scroller)
                 editor.scroller.ensureVisible(item, Qt.rect(0, 0, item.width, item.height))
-            if (!target.editable)
+            if (!findTargetLater.editable)
                 item.flash()
             else if (editor.activeEditor && editor.activeEditor.row === row)
-                editor.ensureVisible(editor.activeEditor, editor.activeEditor.cursorRectangle)
-        })
+                editor.ensureVisible(editor.activeEditor, editor.activeEditor.caretRect)
+        }
     }
     /// Source mode's text: the replaces go through its own undo history.
-    function replaceInSource(ranges, text) {
+    function replaceInSource(ranges: list<var>, text: string): void {
         const source = sourceLoader.item as SourceEditor
         if (source)
             source.replaceRanges(ranges, text)
     }
     /// The caret in source mode, where the bar starts searching (-1: not in source mode).
-    function sourcePosition() {
+    function sourcePosition(): int {
         return sourceTextEdit ? sourceTextEdit.cursorPosition : -1
     }
     /// The find bar closed: the keyboard comes back to what was edited. On a touch screen a block
     /// entered only to show a match is left again: no keyboard pops up for it.
-    function findClosed() {
+    function findClosed(): void {
         findKeepsKeyboard = false
-        findSelection = null
+        clearFindSelection()
         if (!controller)
             return
         if (controller.sourceMode) {
@@ -584,7 +706,7 @@ FocusScope {
     /// Scroll to `row` (unfolding / leaving a zoom as needed), select it and flash it — for routes
     /// with `line` / `blockId` / `heading` (revealRow(controller.rowOfBlockId(route.blockId))), links
     /// to a block or heading of the page, the side panel's outline.
-    function revealRow(row) {
+    function revealRow(row: int): void {
         if (!controller || row < 0)
             return
         controller.reveal(row)
@@ -592,7 +714,18 @@ FocusScope {
         controller.selectedRow = row
         // The header (page title) settling its height must not scroll back to the top.
         list.userMoved = true
-        later(() => {
+        revealedLater.row = row
+        revealedLater.restart()
+        list.forceActiveFocus()
+    }
+    Timer {
+        id: revealedLater
+        property int row: -1
+        interval: 0
+        onTriggered: {
+            if (!editor.alive)
+                return
+            const row = revealedLater.row
             // (autoHeight: the list never scrolls — the journal stream does, below.)
             list.positionViewAtIndex(row, ListView.Center)
             // The row's delegate exists once the list has been laid out there.
@@ -603,27 +736,34 @@ FocusScope {
             if (editor.scroller)
                 editor.scroller.ensureVisible(item, Qt.rect(0, 0, item.width, item.height))
             item.flash()
-        })
-        list.forceActiveFocus()
+        }
     }
     /// A link's block (`blockId`) or heading is not on this page (nor anywhere): say so. `ref`: the
     /// block was named by a ((reference)), which no page of the notebook has.
-    function noticeMissing(blockId, heading, ref) {
-        if (blockId && ref)
-            notice(qsTr("No block in the notebook has the id %1").arg(blockId), "info")
-        else if (blockId)
-            notice(qsTr("Block ^%1 is not on this page").arg(blockId), "info")
-        else if (heading)
-            notice(qsTr("Heading “%1” is not on this page").arg(heading), "info")
+    function noticeMissing(blockId: string, heading: string, ref: bool): void {
+        if (blockId !== "" && ref)
+            notice(qsTr("No block in the notebook has the id %1").arg(blockId), "info", null)
+        else if (blockId !== "")
+            notice(qsTr("Block ^%1 is not on this page").arg(blockId), "info", null)
+        else if (heading !== "")
+            notice(qsTr("Heading “%1” is not on this page").arg(heading), "info", null)
     }
     /// noticeMissing() for PageController.activateLink's {action: "notFound", kind, name}.
-    function noticeNotFound(r) {
-        if (r.kind === "task") {
+    function noticeNotFound(r: var): void {
+        notFound.map = r
+        const kind = notFound.kind()
+        const name = notFound.name()
+        if (kind === "task") {
             // A ⛔ id no task carries (docs/SYNTAX.md §5): it blocks nothing.
-            notice(qsTr("No task in the notebook has the id %1").arg(r.name), "info")
+            notice(qsTr("No task in the notebook has the id %1").arg(name), "info", null)
             return
         }
-        noticeMissing(r.kind === "heading" ? "" : r.name, r.kind === "heading" ? r.name : "", r.kind === "ref")
+        noticeMissing(kind === "heading" ? "" : name, kind === "heading" ? name : "", kind === "ref")
+    }
+    MapHolder {
+        id: notFound
+        function kind(): string { return notFound.map.kind }
+        function name(): string { return notFound.map.name }
     }
 
     // ---- Copying links (docs/SYNTAX.md §2 "Copied links") -----------------------------------------
@@ -631,7 +771,7 @@ FocusScope {
     /// Copy a link to `row` — kind "blockRef" ((id)), "blockLink" [[Page#^id]], "heading"
     /// [[Page#Heading]], "embed", "page" [[Page]] (PageController.copyLink) — and say so: "Skopiowano
     /// …", or why nothing was copied. True when copied.
-    function copyLink(row, kind) {
+    function copyLink(row: int, kind: string): bool {
         if (!controller)
             return false
         // A word the keyboard is still composing becomes text first (an id resets the text).
@@ -639,15 +779,24 @@ FocusScope {
             EditorInput.commitPreedit(activeEditor)
         else if (editingTable && editingTable.block && editingTable.block.index === row && editingTable.cellInput)
             EditorInput.commitPreedit(editingTable.cellInput)
-        const r = controller.copyLink(row, kind)
-        if (r.ok)
-            notice(qsTr("Copied %1").arg(r.text), "success")
+        copied.map = controller.copyLink(row, kind)
+        const ok = copied.map.ok === true
+        const reason = copied.reason()
+        if (ok)
+            notice(qsTr("Copied %1").arg(copied.map.text), "success", null)
         else
-            notice(copyFailure(r.reason), r.reason === "noClipboard" || r.reason === "noId" ? "error" : "info")
-        return r.ok
+            notice(copyFailure(reason), reason === "noClipboard" || reason === "noId" ? "error" : "info", null)
+        return ok
+    }
+    /// The result of the last copy ({ ok, text, reason, count }).
+    MapHolder {
+        id: copied
+        /// `reason` ("" when missing: it is only compared with strings).
+        function reason(): string { return copied.map.reason === undefined ? "" : copied.map.reason }
+        function count(): int { return copied.map.count === undefined ? 0 : copied.map.count }
     }
     /// Why copyLink() copied nothing (PageController.copyLink's reason).
-    function copyFailure(reason) {
+    function copyFailure(reason: string): string {
         switch (reason) {
         case "readOnly":
             return qsTr("Links to blocks are not made in the documentation notebook: they would change its pages. Copy a link to a heading or to the page instead.")
@@ -667,7 +816,7 @@ FocusScope {
     }
     /// The current block: the one being edited — a block, or the table whose cell is being edited
     /// —, else the selected one; -1 when none.
-    function currentRow() {
+    function currentRow(): int {
         if (!controller)
             return -1
         if (controller.editingRow >= 0)
@@ -679,25 +828,25 @@ FocusScope {
     /// The command palette and Ctrl+Shift+C: a link to the page ("page"), to the current block
     /// (currentRow()) ("blockRef", "blockLink") or to the heading of its section ("heading": the
     /// last heading at or above it, as the side panel's outline marks).
-    function copyCurrentLink(kind) {
+    function copyCurrentLink(kind: string): bool {
         if (!controller)
             return false
         if (kind === "page")
             return copyLink(-1, "page")
         if (controller.sourceMode) {
-            notice(copyFailure("sourceMode"), "info")
+            notice(copyFailure("sourceMode"), "info", null)
             return false
         }
         const current = currentRow()
         if (current < 0) {
-            notice(copyFailure("noRow"), "info")
+            notice(copyFailure("noRow"), "info", null)
             return false
         }
         if (kind !== "heading")
             return copyLink(current, kind)
         const heading = controller.headingRowFor(current)
         if (heading < 0) {
-            notice(qsTr("There is no heading above this block"), "info")
+            notice(qsTr("There is no heading above this block"), "info", null)
             return false
         }
         return copyLink(heading, "heading")
@@ -707,7 +856,7 @@ FocusScope {
 
     /// Stop editing (the word being composed kept, the keyboard's suggestions closed) before a
     /// block selection takes over; the list gets the keyboard.
-    function leaveEditingForSelection() {
+    function leaveEditingForSelection(): void {
         if (activeEditor)
             EditorInput.commitPreedit(activeEditor)
         closeSuggestions()
@@ -717,17 +866,17 @@ FocusScope {
     }
     /// Select `row` (with its subtree) and, on touch UIs, enter the selection mode (the keyboard
     /// goes away, the selection tools dock where the editing toolbar was).
-    function selectBlock(row) {
+    function selectBlock(row: int): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
         leaveEditingForSelection()
         if (touch)
-            Qt.inputMethod.hide()
+            DeviceInfo.hideInputMethod()
         controller.selectedRow = row
         selectionMode = touch && controller.selectionCount > 0
         ensureRowVisible(row)
     }
-    function leaveSelectionMode() {
+    function leaveSelectionMode(): void {
         selectionMode = false
         if (inSpan)
             stream.clear() // every day's part
@@ -739,13 +888,17 @@ FocusScope {
     /// EditorInput.keyboardModifiers()) selects from the edited or selected block to it, Ctrl+click
     /// picks it into or out of the selection; in the touch selection mode a tap moves the
     /// selection's end there (with "Pojedynczo": picks it). True when it was taken.
-    function blockTapped(row, modifiers) {
+    function blockTapped(row: int): bool {
+        return blockTappedWith(row, EditorInput.keyboardModifiers())
+    }
+    /// blockTapped() with the tap's own `modifiers`.
+    function blockTappedWith(row: int, modifiers: int): bool {
         // The press that ended a drag selection is no tap (its release may be on a block).
         if (drag.selected)
             return true
         if (!controller || row < 0)
             return false
-        const mods = modifiers !== undefined ? modifiers : EditorInput.keyboardModifiers()
+        const mods = modifiers
         if (!touch && (mods & Qt.ShiftModifier)) {
             extendSelectionTo(row)
             return true
@@ -763,45 +916,45 @@ FocusScope {
             return false
         if (pickMode && !inSpan)
             toggleBlock(row)
-        else if (controller.blocks.get(row).view !== "frontmatter"
+        else if (controller.blocks.viewAt(row) !== "frontmatter"
                  && !(stream !== null && stream.extendTo(controller, row)))
             controller.extendSelectionTo(row)
         return true
     }
     /// Ctrl+click on `row` (a tap with "Pojedynczo"): that block with its children into the
     /// selection or out of it, the rest stays (gaps allowed); the block being edited joins it.
-    function toggleBlock(row) {
-        if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.get(row).view === "frontmatter")
+    function toggleBlock(row: int): void {
+        if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.viewAt(row) === "frontmatter")
             return
         if (activeEditor)
             EditorInput.commitPreedit(activeEditor)
         closeSuggestions()
         const result = controller.toggleSelected(row)
         if (result === "inParent")
-            notice(qsTr("This block is selected with the block it belongs to"), "info")
+            notice(qsTr("This block is selected with the block it belongs to"), "info", null)
         if (!list.activeFocus)
             list.forceActiveFocus()
         if (touch && controller.selectionCount > 0) {
-            Qt.inputMethod.hide()
+            DeviceInfo.hideInputMethod()
             selectionMode = true
         }
     }
     /// Indenting or moving the selection: only without gaps (blocks picked one by one may leave
     /// some) — else a toast says why. True when it may go on.
-    function selectionMovable() {
+    function selectionMovable(): bool {
         if (!controller || controller.selectionContiguous)
             return true
-        notice(gapReason, "info")
+        notice(gapReason, "info", null)
         return false
     }
     /// Shift+click on `row`: the selection from the block being edited or the selection's anchor
     /// to it (a block alone when there is neither).
-    function extendSelectionTo(row) {
+    function extendSelectionTo(row: int): void {
         if (!controller || row < 0)
             return
         // From a block selected or edited in another day of the journal stream (a selection over
         // several days), or back into the day its anchor is in.
-        if (stream !== null && controller.blocks.get(row).view !== "frontmatter" && stream.extendTo(controller, row))
+        if (stream !== null && controller.blocks.viewAt(row) !== "frontmatter" && stream.extendTo(controller, row))
             return
         const anchor = controller.selectionAnchorRow >= 0 ? controller.selectionAnchorRow : controller.editingRow
         leaveEditingForSelection()
@@ -809,7 +962,7 @@ FocusScope {
         ensureRowVisible(row)
     }
     /// Ctrl+A with blocks: every block of the page (in a zoom the zoomed subtree).
-    function selectAllBlocks() {
+    function selectAllBlocks(): void {
         if (!controller)
             return
         if (inSpan)
@@ -820,7 +973,7 @@ FocusScope {
             selectionMode = true
     }
     /// Why a copy copied nothing (PageController.copySelection's reason).
-    function selectionCopyFailure(reason) {
+    function selectionCopyFailure(reason: string): string {
         switch (reason) {
         case "tooLarge": return qsTr("The selection is too large to copy. Select fewer blocks.")
         case "empty": return qsTr("Nothing to copy")
@@ -828,66 +981,73 @@ FocusScope {
         }
     }
     /// Copy the selection (Markdown with HTML, or `plainText`) and say so. True when copied.
-    function copySelection(plainText) {
+    function copySelection(plainText: bool): bool {
         if (!controller)
             return false
-        const r = inSpan ? stream.copy(plainText === true) : controller.copySelection(plainText === true)
-        if (r.ok && inSpan)
-            notice(qsTr("Copied %n block(s) from several days", "", r.count), "success")
-        else if (r.ok)
-            notice(qsTr("Copied %n block(s)", "", r.count), "success")
+        copied.map = inSpan ? stream.copy(plainText) : controller.copySelection(plainText)
+        const ok = copied.map.ok === true
+        const count = copied.count()
+        const reason = copied.reason()
+        if (ok && inSpan)
+            notice(qsTr("Copied %n block(s) from several days", "", count), "success", null)
+        else if (ok)
+            notice(qsTr("Copied %n block(s)", "", count), "success", null)
         else
-            notice(selectionCopyFailure(r.reason), r.reason === "empty" ? "info" : "error")
-        return r.ok
+            notice(selectionCopyFailure(reason), reason === "empty" ? "info" : "error", null)
+        return ok
     }
-    function cutSelection() {
+    function cutSelection(): bool {
         if (!controller || spanRefuses())
             return false
-        const before = controller.undoToken()
-        const r = controller.cutSelection()
-        if (r.ok) {
-            notice(qsTr("Cut %n block(s)", "", r.count), "success", undoAction(before))
+        const before = controller.undoToken() + "" // (a typed copy: passed on after other calls)
+        copied.map = controller.cutSelection()
+        const ok = copied.map.ok === true
+        const count = copied.count()
+        const reason = copied.reason()
+        if (ok) {
+            notice(qsTr("Cut %n block(s)", "", count), "success", undoAction(before))
             if (controller.selectedRow >= 0)
                 ensureRowVisible(controller.selectedRow)
         } else {
-            notice(selectionCopyFailure(r.reason), r.reason === "empty" ? "info" : "error")
+            notice(selectionCopyFailure(reason), reason === "empty" ? "info" : "error", null)
         }
-        return r.ok
+        return ok
     }
-    function deleteSelection() {
+    function deleteSelection(): void {
         if (!controller || spanRefuses())
             return
         const count = Math.max(1, controller.selectionCount)
         const multiple = controller.multiSelection
-        const before = controller.undoToken()
-        const focus = controller.deleteSelection()
+        const before = controller.undoToken() + "" // (typed copies: passed on after other calls)
+        const focus = controller.deleteSelection() + 0
         if (multiple)
             notice(qsTr("Deleted %n block(s)", "", count), "info", undoAction(before))
         if (focus >= 0)
             ensureRowVisible(focus)
     }
     /// Ctrl+V with blocks selected: the clipboard's text replaces them.
-    function pasteOverSelection() {
+    function pasteOverSelection(): void {
         if (!controller || spanRefuses())
             return
-        const r = controller.pasteOverSelection()
-        if (r.row < 0) {
-            notice(qsTr("Nothing to paste"), "info")
+        pastedNow.map = controller.pasteOverSelection()
+        const row = resultRow(pastedNow.map)
+        if (row < 0) {
+            notice(qsTr("Nothing to paste"), "info", null)
         } else {
-            ensureRowVisible(r.row)
-            offerPastedPictures(r)
+            ensureRowVisible(row)
+            offerPastedPictures(pastedNow.map)
         }
     }
     /// Copy the exact characters [from, to) of the edited block `edit` (Ctrl+C, Ctrl+X, the text
     /// menu: TextEdit's own copy turns no-break spaces into spaces); `cut` removes them.
-    function copyEditSelection(edit, cut) {
-        if (!controller || !edit || edit.selectionStart === edit.selectionEnd)
+    function copyEditSelection(edit: InlineEditor, cut: bool): bool {
+        if (!controller || !edit || !differs(edit.selectionStart, edit.selectionEnd))
             return false
-        const from = edit.selectionStart
-        const to = edit.selectionEnd
-        const r = controller.copyEditText(edit.row, from, to, cut === true)
-        if (!r.ok) {
-            notice(selectionCopyFailure(r.reason), "error")
+        const from = edit.selectionStart + 0 // (typed copies: passed on after other calls)
+        const to = edit.selectionEnd + 0
+        copied.map = controller.copyEditText(edit.row, from, to, cut)
+        if (copied.map.ok !== true) {
+            notice(selectionCopyFailure(copied.reason()), "error", null)
             return false
         }
         if (cut)
@@ -897,61 +1057,67 @@ FocusScope {
     /// Paste into the edited block `edit` at its selection: Markdown splits into blocks, HTML from
     /// other apps comes as Markdown (PageController.pasteClipboard). False when the clipboard has
     /// no text (then nothing happens).
-    function pasteIntoEdit(edit) {
+    function pasteIntoEdit(edit: InlineEditor): bool {
         if (!controller || !edit)
             return false
         if (edit.preeditText !== "")
             EditorInput.commitPreedit(edit)
-        const r = controller.pasteClipboard(edit.row, edit.selectionStart, edit.selectionEnd)
-        if (r.row < 0)
+        pastedNow.map = controller.pasteClipboard(edit.row, edit.selectionStart, edit.selectionEnd)
+        if (resultRow(pastedNow.map) < 0)
             return false
-        offerPastedPictures(r)
+        offerPastedPictures(pastedNow.map)
         return true
     }
     /// Pictures from the internet a paste brought (PageController.pasteClipboard): a picture's
     /// address alone (a browser's "Kopiuj adres obrazu") — "Zapisz w notatniku" makes it the
     /// picture and stores it in the notebook (urlToPicture); pictures of pasted HTML — stored
     /// on "Zapisz w notatniku" (downloadWebPictures). Offered on a toast; nothing is fetched before.
-    function offerPastedPictures(r) {
+    function offerPastedPictures(r: var): void {
         const ctl = controller
         if (!ctl || !r)
             return
-        const path = ctl.path
-        const samePage = () => controller === ctl && ctl.path === path
-        if (r.pictureUrl) {
-            const row = r.row, from = r.pictureFrom, to = r.pictureTo, url = r.pictureUrl
-            notice(qsTr("Picture address pasted"), "info", {
-                text: qsTr("Save to notebook"),
-                run: () => {
-                    if (!samePage() || ctl.urlToPicture(row, from, to, url, true).row < 0)
-                        notice(qsTr("Not changed: the address was edited since"), "info")
-                }
-            })
-        } else if (r.webPictures && r.webPictures.length > 0) {
-            const urls = r.webPictures
-            notice(qsTr("Pasted %n picture(s) from the internet", "", urls.length), "info", {
-                text: qsTr("Save to notebook"),
-                run: () => {
-                    if (!samePage()) {
-                        notice(qsTr("Open that page again to save its pictures"), "info")
-                        return
-                    }
-                    for (let i = 0; i < urls.length; ++i)
-                        downloadWebPictures(urls[i])
-                }
-            })
+        pasted.map = r
+        if (pasted.map.pictureUrl) {
+            const action = toastAction("urlToPicture", qsTr("Save to notebook"))
+            action.controller = ctl
+            action.path = ctl.path
+            action.row = pasted.map.row
+            action.from = pasted.map.pictureFrom
+            action.to = pasted.map.pictureTo
+            action.url = pasted.map.pictureUrl
+            notice(qsTr("Picture address pasted"), "info", action)
+        } else {
+            pastedUrls = pasted.webPictures()
+            if (pastedUrls.length === 0)
+                return
+            const action = toastAction("downloadWeb", qsTr("Save to notebook"))
+            action.controller = ctl
+            action.path = ctl.path
+            action.urls = pastedUrls
+            notice(qsTr("Pasted %n picture(s) from the internet", "", pastedUrls.length), "info", action)
         }
     }
+    /// The paste offerPastedPictures() is about (PageController.pasteClipboard's result).
+    MapHolder {
+        id: pasted
+        function webPictures(): list<string> { return pasted.map.webPictures }
+    }
+    /// The pictures from the internet of the paste offerPastedPictures() is about.
+    property list<string> pastedUrls
+    /// A paste's result, passed on to offerPastedPictures().
+    MapHolder { id: pastedNow }
 
     /// The row drawn at (x, y) of the list's content item; -1 when none (the header, the footer, a
     /// gap). Not ListView.indexAt(): it goes by the rows' layout and ignores the Translate that
     /// draws the page's title above its properties (titleFirst); mapping into each delegate goes
     /// through it. (Nor contentItem.childAt(): the list's own highlight item covers the current row.)
-    function rowAt(x, y) {
-        const children = list.contentItem.children
-        for (let i = children.length - 1; i >= 0; --i) {
-            const item = children[i] as BlockDelegate
-            if (item && item.visible && item.contains(item.mapFromItem(list.contentItem, x, y)))
+    function rowAt(x: real, y: real): int {
+        for (let i = EditorInput.childCount(listContent) - 1; i >= 0; --i) {
+            const item = EditorInput.childAt(listContent, i) as BlockDelegate
+            if (!item || !item.visible)
+                continue
+            mapPoint(listContent, item, x, y)
+            if (item.contains(mapped))
                 return item.index
         }
         return -1
@@ -959,15 +1125,19 @@ FocusScope {
 
     /// A click on the rendered text of `row` at (x, y) in that text's coordinates (`modifiers`: the
     /// click's, see blockTapped()).
-    function editAt(row, x, y, modifiers) {
-        if (blockTapped(row, modifiers))
+    function editAt(row: int, x: real, y: real): void {
+        editAtWith(row, x, y, EditorInput.keyboardModifiers())
+    }
+    /// editAt() with the click's own `modifiers`.
+    function editAtWith(row: int, x: real, y: real, modifiers: int): void {
+        if (blockTappedWith(row, modifiers))
             return
         pendingClickRow = row
         pendingClick = Qt.point(x, y)
         startEditing(row, -1)
     }
 
-    function stopEditing(select) {
+    function stopEditing(select: bool): void {
         if (!controller)
             return
         const row = controller.editingRow
@@ -981,7 +1151,7 @@ FocusScope {
     /// Undo (`redo` false) or redo a step from the editor (keys, the toolbar). A step that brings a
     /// block selection back ends the editing of another block (PageController.restore): the keys
     /// go to the selection, and on touch UIs its tools replace the keyboard.
-    function undoStep(redo) {
+    function undoStep(redo: bool): void {
         if (!controller)
             return
         if (redo)
@@ -992,14 +1162,14 @@ FocusScope {
             return
         closeSuggestions()
         if (touch) {
-            Qt.inputMethod.hide()
+            DeviceInfo.hideInputMethod()
             selectionMode = true
         }
         if (!list.activeFocus)
             list.forceActiveFocus()
     }
 
-    function toggleSourceMode() {
+    function toggleSourceMode(): void {
         if (!controller)
             return
         closeSuggestions()
@@ -1007,72 +1177,71 @@ FocusScope {
         controller.sourceMode = !controller.sourceMode
     }
 
-    function ensureRowVisible(row) {
-        later(() => {
-            if (!editor.controller || row < 0 || row >= list.count)
-                return
-            if (list.itemAtIndex(row) === null)
-                list.positionViewAtIndex(row, ListView.Contain)
-        })
+    function ensureRowVisible(row: int): void {
+        rowVisibleLater.row = row
+        rowVisibleLater.restart()
     }
 
     /// Keep `rect` of `item` (e.g. the caret) inside the visible part of the list — or of the
     /// list scrolling the editor (`scroller`).
-    function ensureVisible(item, rect) {
+    function ensureVisible(item: Item, rect: rect): void {
+        const height = rect.height
         if (!item || !list || !editor.alive)
             return
         if (editor.scroller) {
             editor.scroller.ensureVisible(item, rect)
             return
         }
-        const p = item.mapToItem(list.contentItem, rect.x, rect.y)
+        mapPoint(item, listContent, rect.x, rect.y)
+        const p = mapped
         const margin = editor.lineHeight
         const bottomLimit = list.height - list.bottomMargin
         if (p.y - list.contentY < margin)
             list.contentY = Math.max(list.originY - list.topMargin, p.y - margin)
-        else if (p.y + rect.height - list.contentY > bottomLimit - margin)
-            list.contentY = Math.min(p.y + rect.height - bottomLimit + margin,
+        else if (p.y + height - list.contentY > bottomLimit - margin)
+            list.contentY = Math.min(p.y + height - bottomLimit + margin,
                                      Math.max(list.originY, list.contentHeight + list.originY - list.height + list.bottomMargin))
     }
 
     /// Keep the caret of an inline editor visible (called after layout settled). Not while the
     /// keyboard slides (the view changes size every frame): once it has settled.
-    function ensureCaretVisible(edit) {
+    function ensureCaretVisible(edit: InlineEditor): void {
         if (!edit || !edit.activeFocus || KeyboardInsets.animating)
             return
         if (editor.typewriter)
-            centerInView(edit, edit.cursorRectangle)
+            centerInView(edit, edit.caretRect)
         else
-            ensureVisible(edit, edit.cursorRectangle)
+            ensureVisible(edit, edit.caretRect)
     }
     /// Typewriter scrolling: `rect` of `item` (the caret) to the middle of the visible part of
     /// the list — or of the list scrolling the editor — as far as the content goes.
-    function centerInView(item, rect) {
+    function centerInView(item: Item, rect: rect): void {
+        const height = rect.height
         if (!item || !list || !editor.alive)
             return
         if (editor.scroller) {
-            if (editor.scroller.centerInView)
-                editor.scroller.centerInView(item, rect)
-            else
-                editor.scroller.ensureVisible(item, rect)
+            // (Every scroller has centerInView now: EditorScroller.)
+            editor.scroller.centerInView(item, rect)
             return
         }
-        const p = item.mapToItem(list.contentItem, rect.x, rect.y)
+        mapPoint(item, listContent, rect.x, rect.y)
+        const p = mapped
         const visibleHeight = list.height - list.bottomMargin
         const top = list.originY - list.topMargin
         const bottom = Math.max(top, list.contentHeight + list.originY - list.height + list.bottomMargin)
-        const target = Math.max(top, Math.min(bottom, p.y + rect.height / 2 - visibleHeight / 2))
+        const target = Math.max(top, Math.min(bottom, p.y + height / 2 - visibleHeight / 2))
         if (Math.abs(target - list.contentY) >= 1)
             list.contentY = target
     }
     /// Keep what is being edited visible: the caret of the block, else the table cell.
-    function ensureEditVisible() {
+    function ensureEditVisible(): void {
         if (KeyboardInsets.animating || !editor.alive)
             return
+        const cell = editingTable ? editingTable.cellInput : null
         if (activeEditor && activeEditor.activeFocus)
-            ensureVisible(activeEditor, activeEditor.cursorRectangle)
-        else if (editingTable && editingTable.cellInput)
-            ensureVisible(editingTable.cellInput, Qt.rect(0, 0, editingTable.cellInput.width, editingTable.cellInput.height))
+            ensureVisible(activeEditor, activeEditor.caretRect)
+        else if (cell)
+            ensureVisible(cell, Qt.rect(0, 0, cell.width, cell.height))
         else if (editingProperty && editingProperty.activeFocus)
             ensureVisible(editingProperty, Qt.rect(0, 0, editingProperty.width, editingProperty.height))
     }
@@ -1084,19 +1253,19 @@ FocusScope {
         const shrank = height < _lastHeight - 0.5
         _lastHeight = height
         if (shrank && !autoHeight && (activeEditor !== null || editingTable !== null || editingProperty !== null))
-            later(() => editor.ensureEditVisible())
+            editVisibleLater.restart()
     }
     readonly property bool keyboardSliding: KeyboardInsets.animating
     onKeyboardSlidingChanged: {
         if (!keyboardSliding && KeyboardInsets.shown
                 && (activeEditor !== null || editingTable !== null || editingProperty !== null))
-            later(() => editor.ensureEditVisible())
+            editVisibleLater.restart()
     }
 
     /// Edit cell (r, c) of the table in `row` (the cell's toolbar after an undo or redo, which
     /// closed the cell first: the table keeps its delegate, the cell opens again with the text the
     /// step left in it).
-    function editTableCell(row, r, c) {
+    function editTableCell(row: int, r: int, c: int): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
         list.forceLayout()
@@ -1107,36 +1276,50 @@ FocusScope {
     }
 
     /// The toast after "/Tabela z CSV…" made a table (`truncated`: rows, columns or text left out).
-    function csvInserted(truncated) {
+    function csvInserted(truncated: bool): void {
         if (truncated)
-            notice(qsTr("The CSV was too large: the table holds its first rows and columns."), "info")
+            notice(qsTr("The CSV was too large: the table holds its first rows and columns."), "info", null)
     }
     /// Show the filter row of the table in `row` with the keys in column `c`'s field (the block
     /// menu's "Filtruj wiersze" / "Filtruj według tej kolumny…": once `menu` is gone).
-    function openTableFilter(row, c, menu) {
+    function openTableFilter(row: int, c: int, menu: T.Popup): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
         controller.setTableFilterOpen(row, true)
-        const focus = () => later(() => {
+        tableFilterLater.row = row
+        tableFilterLater.column = c
+        // A menu closing gives the keys back to what had them: the field takes them after that.
+        if (menu && (menu.opened || menu.visible))
+            tableFilterLater.menu = menu
+        else
+            tableFilterLater.restart()
+    }
+    /// openTableFilter(): the filter's field takes the keys (once `menu` is closed).
+    Timer {
+        id: tableFilterLater
+        property int row: -1
+        property int column: 0
+        property T.Popup menu: null
+        interval: 0
+        onTriggered: {
+            if (!editor.alive)
+                return
             list.forceLayout()
-            const item = list.itemAtIndex(row) as BlockDelegate
+            const item = list.itemAtIndex(tableFilterLater.row) as BlockDelegate
             const table = item ? item.contentItem as TableBlockView : null
             if (table)
-                table.openFilter(c)
-        })
-        // A menu closing gives the keys back to what had them: the field takes them after that.
-        if (menu && (menu.opened || menu.visible)) {
-            const once = () => {
-                menu.closed.disconnect(once)
-                focus()
-            }
-            menu.closed.connect(once)
-        } else {
-            focus()
+                table.openFilter(tableFilterLater.column)
+        }
+    }
+    Connections {
+        target: tableFilterLater.menu
+        function onClosed() {
+            tableFilterLater.menu = null
+            tableFilterLater.restart()
         }
     }
     /// The table in `row` shows its filter row.
-    function tableFiltering(row) {
+    function tableFiltering(row: int): bool {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return false
         const item = list.itemAtIndex(row) as BlockDelegate
@@ -1146,27 +1329,42 @@ FocusScope {
 
     /// The same once `menu` is closed: a menu closing gives the keys back to what had them, which
     /// would end the cell's editing at once.
-    function editTableCellOnceClosed(menu, row, r, c) {
-        const open = () => {
-            menu.closed.disconnect(open)
-            later(() => editTableCell(row, r, c))
-        }
+    function editTableCellOnceClosed(menu: T.Popup, row: int, r: int, c: int): void {
+        cellLater.row = row
+        cellLater.r = r
+        cellLater.c = c
         if (menu.opened || menu.visible)
-            menu.closed.connect(open)
+            cellLater.menu = menu
         else
-            later(() => editTableCell(row, r, c))
+            cellLater.restart()
+    }
+    Timer {
+        id: cellLater
+        property int row: -1
+        property int r: 0
+        property int c: 0
+        property T.Popup menu: null
+        interval: 0
+        onTriggered: if (editor.alive) editor.editTableCell(cellLater.row, cellLater.r, cellLater.c)
+    }
+    Connections {
+        target: cellLater.menu
+        function onClosed() {
+            cellLater.menu = null
+            cellLater.restart()
+        }
     }
 
     /// Ends the editing the touch toolbar is docked for — a block, a table cell, the source's
     /// keyboard — as its "Hide keyboard" does (the word being composed is kept): the shell's quick
     /// capture from the bottom navigation would otherwise open over it. The selection's tools stay.
-    function endTouchEditing() {
+    function endTouchEditing(): void {
         const bar = toolbarLoader.item as MobileEditToolbar
         if (bar && toolbarVisible && toolbarMode !== "selection")
             bar.hideKeyboard()
     }
 
-    function releaseSourceKeyboard() {
+    function releaseSourceKeyboard(): void {
         if (sourceLoader.item)
             (sourceLoader.item as SourceEditor).releaseKeyboard()
     }
@@ -1174,132 +1372,160 @@ FocusScope {
     /// Alt+Enter while editing: follow the link at the caret (a path part of [[A/B/C]]: that
     /// part — PageController.linkAtCursor); `newPane` (Alt+Shift+Enter on a wide window) in the side
     /// panel. "There is no link at the cursor" when none is there; nothing is typed either way.
-    function followLinkAtCursor(row, position, newPane) {
+    function followLinkAtCursor(row: int, position: int, newPane: bool): void {
         followLink(row, controller ? controller.linkAtCursor(row, position) : "", newPane)
     }
     /// Follow `url` (a link at a caret: a block's or a table cell's) as a click on it would.
-    function followLink(row, url, newPane) {
+    function followLink(row: int, url: string, newPane: bool): void {
         if (!controller)
             return
-        if (url === "" || editsOnClick(url) || url.startsWith("task:"))
-            notice(qsTr("There is no link at the cursor"), "info")
+        if (url === "" || editsOnClick(url) || Js.startsWith(url, "task:"))
+            notice(qsTr("There is no link at the cursor"), "info", null)
         else if (newPane)
             controller.activateLink(row, url, true)
         else
             activateLink(row, url)
     }
 
-    function activateLink(row, link) {
+    function activateLink(row: int, link: string): void {
         if (!controller)
             return
-        const r = controller.activateLink(row, link, false)
-        if (!r || !r.action)
+        activated.map = controller.activateLink(row, link, false)
+        if (!activated.map.action)
             return
-        if (r.action === "reminder") {
-            dialogs.editReminder(row, r.from, r.to)
-        } else if (r.action === "scrollTo") {
-            revealRow(r.row)
-        } else if (r.action === "notFound") {
-            noticeNotFound(r)
+        const action = activated.action()
+        if (action === "reminder") {
+            dialogs.editReminder(row, activated.map.from, activated.map.to)
+        } else if (action === "scrollTo") {
+            revealRow(activated.map.row)
+        } else if (action === "notFound") {
+            noticeNotFound(activated.map)
         }
+    }
+    /// PageController.activateLink's result.
+    MapHolder {
+        id: activated
+        function action(): string { return activated.map.action }
     }
 
     /// A new drawing at the caret `cursor` of `row` (-1: a block of its own after it), opened in the
     /// drawing editor (Rysunek: the slash command, the touch toolbar, the block menu).
-    function insertDrawing(row, cursor) {
+    function insertDrawing(row: int, cursor: int): void {
         if (!controller)
             return
-        const r = controller.insertDrawing(row, cursor, cursor)
-        if (r.path)
-            controller.openDrawing(r.path)
+        drawing.map = controller.insertDrawing(row, cursor, cursor)
+        if (drawing.map.path)
+            controller.openDrawing(drawing.map.path)
     }
+    MapHolder { id: drawing }
 
     /// Run the result of PageController.applySlashCommand / applyCompletion.
-    function handleCommandResult(row, result) {
+    function handleCommandResult(row: int, result: var): void {
         if (!result)
             return
-        switch (result.action) {
+        command.map = result
+        const cursor = command.cursor()
+        switch (command.action()) {
         case "reminder": dialogs.createReminder(row, false); break
         case "alarm": dialogs.createReminder(row, true); break
         case "due": dialogs.pickDate(row, "due"); break
         case "scheduled": dialogs.pickDate(row, "scheduled"); break
         case "recurrence": dialogs.pickRecurrence(row); break
-        case "date": dialogs.pickJournalDate(row, result.cursor); break
+        case "date": dialogs.pickJournalDate(row, cursor); break
         case "template": dialogs.pickTemplate(row); break
-        case "image": dialogs.pickImage(row, result.cursor); break
-        case "fileLink": dialogs.pickFileLink(row, result.cursor); break
+        case "image": dialogs.pickImage(row, cursor); break
+        case "fileLink": dialogs.pickFileLink(row, cursor); break
         case "csvTable": dialogs.pickCsvTable(row); break
-        case "webImage": dialogs.pickWebImage(row, result.cursor); break
-        case "drawing": insertDrawing(row, result.cursor); break
-        case "drawingOn": dialogs.pickDrawingBackdrop(row, result.cursor); break
+        case "webImage": dialogs.pickWebImage(row, cursor); break
+        case "drawing": insertDrawing(row, cursor); break
+        case "drawingOn": dialogs.pickDrawingBackdrop(row, cursor); break
         case "table":
             list.forceActiveFocus()
             break
         case "complete":
-            later(() => editor.updateCompletion(editor.activeEditor))
+            completionLater.restart()
             break
         }
+    }
+    /// A slash command's or completion's result (PageController.applySlashCommand / applyCompletion).
+    MapHolder {
+        id: command
+        function action(): string { return command.map.action === undefined ? "" : command.map.action }
+        function cursor(): int { return command.map.cursor === undefined ? -1 : command.map.cursor }
+    }
+    Timer {
+        id: completionLater
+        interval: 0
+        onTriggered: if (editor.alive) editor.updateCompletion(editor.activeEditor)
     }
 
     // ---- Autocomplete ------------------------------------------------------------------------
 
     /// Re-detect the completion trigger at the caret of `edit` (InlineEditor). A word being
     /// composed by the input method (Android keyboards compose every word) counts as typed.
-    function updateCompletion(edit) {
+    function updateCompletion(edit: InlineEditor): void {
         if (!edit || !edit.activeFocus || edit.readOnly || !edit.completions) {
             closeSuggestions()
             return
         }
-        const plain = edit.plain()
-        const caret = edit.cursorPosition
-        const pre = edit.preeditText
-        const trigger = pre === "" ? suggestionModel.detect(plain, caret)
-                                   : suggestionModel.detect(plain.slice(0, caret) + pre + plain.slice(caret), caret + pre.length)
-        if (trigger.mode === "") {
+        const plain = edit.plain() + ""
+        const caret = edit.cursorPosition + 0 // (typed copies: TextEdit's own are looked into)
+        const pre = edit.preeditText + ""
+        detected.map = pre === "" ? suggestionModel.detect(plain, caret)
+                                  : suggestionModel.detect(Js.slice(plain, 0, caret) + pre + Js.sliceFrom(plain, caret),
+                                                           caret + pre.length)
+        if (detected.map.mode === "") {
             closeSuggestions()
             return
         }
-        suggestionModel.setTrigger(trigger)
+        suggestionModel.setTrigger(detected.map)
         if (suggestionModel.count === 0) {
             closeSuggestions()
             return
         }
         const popup = suggestionPopup()
-        popup.trigger = trigger
+        popup.trigger = detected.map
         popup.row = edit.row
         popup.target = edit
         popup.show()
     }
 
-    function acceptSuggestion(index) {
+    /// SuggestionModel.detect()'s trigger.
+    MapHolder { id: detected }
+
+    function acceptSuggestion(index: int): void {
         const edit = suggestions ? suggestions.target : null
         if (!controller || !edit || index < 0 || index >= suggestionModel.count)
             return
         // The trigger counted the composed word: make it text before replacing it.
-        const item = suggestionModel.get(index)
+        chosenItem.map = suggestionModel.get(index)
         if (EditorInput.commitPreedit(edit))
             updateCompletion(edit)
-        const trigger = suggestions.trigger
-        const row = suggestions.row
+        chosenTrigger.map = suggestions.trigger
+        const row = suggestions.row + 0 // (a typed copy: passed on after other calls)
         closeSuggestions()
-        const result = controller.applyCompletion(row, trigger, item)
-        handleCommandResult(row, result)
+        chosenResult.map = controller.applyCompletion(row, chosenTrigger.map, chosenItem.map)
+        handleCommandResult(row, chosenResult.map)
     }
+    /// acceptSuggestion(): the suggestion, its trigger and what applying it says.
+    MapHolder { id: chosenItem }
+    MapHolder { id: chosenTrigger }
+    MapHolder { id: chosenResult }
 
     // ---- Keyboard -----------------------------------------------------------------------------
 
-    function isFirstLine(edit) {
-        return edit.cursorRectangle.y < edit.lineHeightPx / 2
+    function isFirstLine(edit: InlineEditor): bool {
+        return edit.caretRect.y < edit.lineHeightPx / 2
     }
-    function isLastLine(edit) {
-        return edit.cursorRectangle.y + edit.cursorRectangle.height > edit.contentHeight - edit.lineHeightPx / 2
+    function isLastLine(edit: InlineEditor): bool {
+        return edit.caretRect.y + edit.caretRect.height > edit.contentHeight - edit.lineHeightPx / 2
     }
 
     /// `x`: the caret's x in the editor's coordinates (blocks are indented differently).
-    function goToRow(row, edge, x) {
+    function goToRow(row: int, edge: string, x: real): void {
         if (row < 0)
             return
-        if (controller.blocks.get(row).view === "table") {
+        if (controller.blocks.viewAt(row) === "table") {
             controller.stopEditing()
             controller.selectedRow = row
             list.forceActiveFocus()
@@ -1314,10 +1540,10 @@ FocusScope {
     /// Keys the editor handles itself (structure, navigation, shortcuts): a word the input
     /// method is still composing is committed before them, so Enter splits after it, Backspace
     /// at the "start" does not merge blocks while a word is being typed, and nothing is lost.
-    function isCommandKey(event) {
-        if ((event.modifiers & (Qt.ControlModifier | Qt.AltModifier)) !== 0)
+    function isCommandKey(key: int, modifiers: int): bool {
+        if ((modifiers & (Qt.ControlModifier | Qt.AltModifier)) !== 0)
             return true
-        switch (event.key) {
+        switch (key) {
         case Qt.Key_Return: case Qt.Key_Enter: case Qt.Key_Backspace: case Qt.Key_Delete:
         case Qt.Key_Tab: case Qt.Key_Backtab: case Qt.Key_Up: case Qt.Key_Down: case Qt.Key_Escape:
             return true
@@ -1326,18 +1552,22 @@ FocusScope {
     }
 
     /// Keys of an inline editor (InlineEditor.qml). Returns true when handled.
-    function handleEditorKey(event, edit) {
-        if (edit.preeditText !== "" && isCommandKey(event))
+    function handleEditorKey(event: KeyEvent, edit: InlineEditor): bool {
+        return handleEditorKeyCode(event.key, event.modifiers, edit)
+    }
+    /// handleEditorKey() for key `key` with `modifiers` (also the self-tests' keys).
+    function handleEditorKeyCode(key: int, modifiers: int, edit: InlineEditor): bool {
+        if (edit.preeditText !== "" && isCommandKey(key, modifiers))
             EditorInput.commitPreedit(edit)
         const row = edit.row
-        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
-        const alt = (event.modifiers & Qt.AltModifier) !== 0
+        const ctrl = (modifiers & Qt.ControlModifier) !== 0
+        const shift = (modifiers & Qt.ShiftModifier) !== 0
+        const alt = (modifiers & Qt.AltModifier) !== 0
         const multiline = edit.multiline
 
         // Suggestion popup navigation.
         if (suggestionsOpen) {
-            switch (event.key) {
+            switch (key) {
             case Qt.Key_Up: suggestions.move(-1); return true
             case Qt.Key_Down: suggestions.move(1); return true
             case Qt.Key_Return:
@@ -1353,10 +1583,9 @@ FocusScope {
         }
 
         // A copied picture (or copied files) goes in as an attachment, not as text.
-        const pasteKey = (ctrl && !alt && !shift && event.key === Qt.Key_V) || (shift && !ctrl && event.key === Qt.Key_Insert)
+        const pasteKey = (ctrl && !alt && !shift && key === Qt.Key_V) || (shift && !ctrl && key === Qt.Key_Insert)
         if (pasteKey && !multiline && controller.clipboardHasImage()) {
-            const pasted = controller.pasteImage(row, edit.selectionStart, edit.selectionEnd)
-            if (pasted.row >= 0)
+            if (resultRow(controller.pasteImage(row, edit.selectionStart, edit.selectionEnd)) >= 0)
                 return true
         }
         // Text: Markdown splits into blocks, HTML from other apps comes as Markdown, ids that
@@ -1365,13 +1594,13 @@ FocusScope {
         if (pasteKey && !multiline && pasteIntoEdit(edit))
             return true
         // Ctrl+Insert / Shift+Delete: copy / cut, exactly (like Ctrl+C / Ctrl+X).
-        if (!alt && edit.selectionStart !== edit.selectionEnd
-                && ((ctrl && !shift && event.key === Qt.Key_Insert) || (shift && !ctrl && event.key === Qt.Key_Delete))) {
-            copyEditSelection(edit, event.key === Qt.Key_Delete)
+        if (!alt && differs(edit.selectionStart, edit.selectionEnd)
+                && ((ctrl && !shift && key === Qt.Key_Insert) || (shift && !ctrl && key === Qt.Key_Delete))) {
+            copyEditSelection(edit, key === Qt.Key_Delete)
             return true
         }
         if (ctrl && !alt) {
-            switch (event.key) {
+            switch (key) {
             case Qt.Key_Z: undoStep(shift); return true
             case Qt.Key_Y: undoStep(true); return true
             case Qt.Key_E:
@@ -1384,7 +1613,7 @@ FocusScope {
             case Qt.Key_Enter:
                 // Ctrl+Shift+Enter: the status menu; Ctrl+Enter: the next status.
                 if (shift)
-                    openTaskStatusMenuFor(row)
+                    openTaskStatusMenuFor(row, false)
                 else
                     controller.cycleTask(row)
                 return true
@@ -1397,12 +1626,12 @@ FocusScope {
                     copyCurrentLink("blockRef")
                     return true
                 }
-                if (edit.selectionStart === edit.selectionEnd)
+                if (!differs(edit.selectionStart, edit.selectionEnd))
                     return false
                 copyEditSelection(edit, false)
                 return true
             case Qt.Key_X:
-                if (shift || edit.selectionStart === edit.selectionEnd)
+                if (shift || !differs(edit.selectionStart, edit.selectionEnd))
                     return false
                 copyEditSelection(edit, true)
                 return true
@@ -1411,7 +1640,7 @@ FocusScope {
                 // none): every block of the page.
                 if (shift)
                     return false
-                if (edit.length === 0 || (edit.selectionStart === 0 && edit.selectionEnd === edit.length))
+                if (edit.length === 0 || (edit.selectionStart === 0 && !differs(edit.selectionEnd, edit.length)))
                     selectAllBlocks()
                 else
                     edit.selectAll()
@@ -1420,18 +1649,18 @@ FocusScope {
             return false
         }
         if (alt && !ctrl) {
-            if (event.key === Qt.Key_Up) { controller.moveUp(row); ensureRowVisible(controller.editingRow); return true }
-            if (event.key === Qt.Key_Down) { controller.moveDown(row); ensureRowVisible(controller.editingRow); return true }
+            if (key === Qt.Key_Up) { controller.moveUp(row); ensureRowVisible(controller.editingRow); return true }
+            if (key === Qt.Key_Down) { controller.moveDown(row); ensureRowVisible(controller.editingRow); return true }
             // Alt+Enter: follow the link (the path part) at the caret; with Shift in the side panel.
             // Always taken: it never types a line break.
-            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (key === Qt.Key_Return || key === Qt.Key_Enter) {
                 followLinkAtCursor(row, edit.cursorPosition, shift && !Theme.narrow)
                 return true
             }
             return false
         }
 
-        switch (event.key) {
+        switch (key) {
         case Qt.Key_Return:
         case Qt.Key_Enter:
             if (shift || multiline) {
@@ -1453,26 +1682,26 @@ FocusScope {
                     }
                     return true
                 }
-                const info = controller.blocks.get(row)
-                if (info.taskStatus !== "" && info.kind === "listItem") {
+                const kind = controller.blocks.kindAt(row)
+                if (controller.blocks.taskStatusAt(row) !== "" && kind === "listItem") {
                     controller.removeTaskMarker(row)
                     return true
                 }
                 // A document's list item loses its marker (Obsidian), a nested one moves out.
-                if (documentMode && info.kind === "listItem") {
-                    const left = controller.leaveList(row)
-                    if (left.row >= 0)
-                        ensureRowVisible(left.row)
+                if (documentMode && kind === "listItem") {
+                    const left = resultRow(controller.leaveList(row))
+                    if (left >= 0)
+                        ensureRowVisible(left)
                     return true
                 }
-                const r = controller.mergeWithPrevious(row)
-                if (r.row >= 0)
-                    ensureRowVisible(r.row)
+                const merged = resultRow(controller.mergeWithPrevious(row))
+                if (merged >= 0)
+                    ensureRowVisible(merged)
                 return true
             }
             return false
         case Qt.Key_Delete:
-            if (!multiline && edit.cursorPosition === edit.length && edit.selectedText === "") {
+            if (!multiline && !differs(edit.cursorPosition, edit.length) && edit.selectedText === "") {
                 controller.mergeNext(row)
                 return true
             }
@@ -1483,16 +1712,16 @@ FocusScope {
                 return true
             }
             // A document indents list items only; in a paragraph Tab does nothing (no outline).
-            if (!documentMode || controller.blocks.get(row).kind === "listItem")
+            if (!documentMode || controller.blocks.kindAt(row) === "listItem")
                 controller.indent(row)
             return true
         case Qt.Key_Backtab:
-            if (!documentMode || controller.blocks.get(row).kind === "listItem")
+            if (!documentMode || controller.blocks.kindAt(row) === "listItem")
                 controller.outdent(row)
             return true
         case Qt.Key_Up:
             if (!shift && isFirstLine(edit)) {
-                goToRow(visualPrevious(row), "bottom", edit.mapToItem(editor, edit.cursorRectangle.x, 0).x)
+                goToRow(visualPrevious(row), "bottom", caretX(edit))
                 return true
             }
             // Shift+↑ on the first line: the text selection to the block's start, then the blocks.
@@ -1501,7 +1730,7 @@ FocusScope {
             return false
         case Qt.Key_Down:
             if (!shift && isLastLine(edit)) {
-                goToRow(visualNext(row), "top", edit.mapToItem(editor, edit.cursorRectangle.x, 0).x)
+                goToRow(visualNext(row), "top", caretX(edit))
                 return true
             }
             if (shift && isLastLine(edit))
@@ -1520,7 +1749,23 @@ FocusScope {
     /// Shift+↑ on the first line (`step` -1) / Shift+↓ on the last one (1) of the edited block: the
     /// text selection first goes to the block's start / end; once it is there, editing stops and
     /// the block and the previous / next one are selected (the block alone at the page's edge).
-    function extendFromEdit(edit, step) {
+    /// The caret's x of `edit` in the editor's coordinates.
+    function caretX(edit: InlineEditor): real {
+        mapPoint(edit, editor, edit.caretRect.x, 0)
+        return mapped.x
+    }
+    /// A point mapped between items (mapPoint()), read here: what an Item's own mapToItem() /
+    /// mapFromItem() returns cannot be looked into in compiled code, the editor's can.
+    final property point mapped
+    /// Map (x, y) of `from` (null: the scene) to `to` (null: the scene) into `mapped`.
+    function mapPoint(from: Item, to: Item, x: real, y: real): void {
+        mapped = editor.mapFromItem(from, x, y)
+        mapped = editor.mapToItem(to, mapped.x, mapped.y)
+    }
+    /// The list's content item (its rows).
+    readonly property Item listContent: list.contentItem
+
+    function extendFromEdit(edit: InlineEditor, step: int): bool {
         if (step < 0 && edit.cursorPosition > 0) {
             edit.moveCursorSelection(0, TextEdit.SelectCharacters)
             return true
@@ -1546,16 +1791,20 @@ FocusScope {
 
     /// A key reached the list while a block is being edited: its delegate was destroyed (scrolled
     /// far away). Bring the block back and give it the key, so typing is never silently lost.
-    function forwardToEditingRow(event) {
+    function forwardToEditingRow(event: KeyEvent): bool {
         if (!controller || controller.editingRow < 0 || controller.sourceMode)
             return false
         if (activeEditor && activeEditor.activeFocus)
             return false
         // Typed text and keys that edit or move the caret; a lone modifier, PageUp/PageDown…
         // must not pull the view back.
-        const printable = event.text !== "" && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127
-        const editing = [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Backspace, Qt.Key_Delete, Qt.Key_Tab, Qt.Key_Backtab,
-                         Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].indexOf(event.key) >= 0
+        const printable = event.text !== "" && Js.charCodeAt(event.text, 0) >= 32 && Js.charCodeAt(event.text, 0) !== 127
+        let editing = false
+        switch (event.key) {
+        case Qt.Key_Return: case Qt.Key_Enter: case Qt.Key_Backspace: case Qt.Key_Delete: case Qt.Key_Tab:
+        case Qt.Key_Backtab: case Qt.Key_Left: case Qt.Key_Right: case Qt.Key_Up: case Qt.Key_Down:
+            editing = true
+        }
         if (!printable && !editing)
             return false
         const row = controller.editingRow
@@ -1572,34 +1821,38 @@ FocusScope {
     /// subtitle, BToolTip; BBreadcrumb, BMenuItem and BToast show plain text): such text is rendered as styled text — images loaded, tags
     /// applied — when it looks like markup. Note text containing "<" is escaped, which AutoText
     /// then shows exactly as written.
-    function autoTextSafe(s) {
-        return s && s.indexOf("<") >= 0 ? TextHelper.escapeHtml(s) : (s || "")
+    function autoTextSafe(s: string): string {
+        return s !== "" && Js.indexOf(s, "<") >= 0 ? TextHelper.escapeHtml(s) : s
     }
 
     /// Keys while blocks are selected (not editing): one block (Esc) or a range — Shift+↑/↓ extend
     /// or shrink it, Ctrl+A selects every block, Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste over
     /// it, Delete removes it, Tab / Shift+Tab, Alt+↑/↓ and Ctrl+Enter act on all of it.
-    function handleSelectionKey(event) {
+    function handleSelectionKey(event: KeyEvent): bool {
+        return handleSelectionKeyCode(event.key, event.modifiers)
+    }
+    /// handleSelectionKey() for key `key` with `modifiers` (also the self-tests' keys).
+    function handleSelectionKeyCode(key: int, modifiers: int): bool {
         if (!controller)
             return false
         const row = controller.selectedRow
-        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
-        const alt = (event.modifiers & Qt.AltModifier) !== 0
+        const ctrl = (modifiers & Qt.ControlModifier) !== 0
+        const shift = (modifiers & Qt.ShiftModifier) !== 0
+        const alt = (modifiers & Qt.AltModifier) !== 0
         // Blocks from one end to another, or picked one by one (a block selected alone — with the
         // children it brings along — keeps the block's own keys: Ctrl+Enter changes it, not its
         // children).
         const range = row >= 0 && ((controller.selectionAnchorRow >= 0 && controller.selectionAnchorRow !== row)
                                    || controller.selectionPicked)
         // Blocks of several days: copying only (Ctrl+X, Ctrl+V, Delete say so in their functions).
-        if (inSpan && ((ctrl && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
-                       || (!ctrl && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab))
-                       || (alt && (event.key === Qt.Key_Up || event.key === Qt.Key_Down)))) {
+        if (inSpan && ((ctrl && (key === Qt.Key_Return || key === Qt.Key_Enter))
+                       || (!ctrl && (key === Qt.Key_Tab || key === Qt.Key_Backtab))
+                       || (alt && (key === Qt.Key_Up || key === Qt.Key_Down)))) {
             spanRefuses()
             return true
         }
         if (ctrl) {
-            switch (event.key) {
+            switch (key) {
             case Qt.Key_Z: undoStep(shift); return true
             case Qt.Key_Y: undoStep(true); return true
             case Qt.Key_E: toggleSourceMode(); return true
@@ -1648,8 +1901,8 @@ FocusScope {
             return false
         }
         if (row < 0) {
-            if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
-                const first = event.key === Qt.Key_Down ? visualNext(-1) : controller.lastVisibleRow()
+            if (key === Qt.Key_Down || key === Qt.Key_Up) {
+                const first = key === Qt.Key_Down ? visualNext(-1) : controller.lastVisibleRow() + 0
                 controller.selectedRow = first
                 ensureRowVisible(first)
                 return true
@@ -1657,11 +1910,11 @@ FocusScope {
             return false
         }
         if (shift && !alt) {
-            switch (event.key) {
+            switch (key) {
             case Qt.Key_Up:
             case Qt.Key_Down: {
                 // Past the day's edge (or over several days already): the journal stream's.
-                const step = event.key === Qt.Key_Down ? 1 : -1
+                const step = key === Qt.Key_Down ? 1 : -1
                 if (inSpan) {
                     stream.extendBy(controller, step)
                     return true
@@ -1679,19 +1932,19 @@ FocusScope {
             }
         }
         if (alt) {
-            if (event.key === Qt.Key_Up) {
+            if (key === Qt.Key_Up) {
                 if (!range) controller.moveUp(row); else if (selectionMovable()) controller.moveSelectionUp()
                 ensureRowVisible(controller.selectedRow)
                 return true
             }
-            if (event.key === Qt.Key_Down) {
+            if (key === Qt.Key_Down) {
                 if (!range) controller.moveDown(row); else if (selectionMovable()) controller.moveSelectionDown()
                 ensureRowVisible(controller.selectedRow)
                 return true
             }
             return false
         }
-        switch (event.key) {
+        switch (key) {
         case Qt.Key_Up: {
             const prev = visualPrevious(row)
             if (prev >= 0) { controller.selectedRow = prev; ensureRowVisible(prev) }
@@ -1705,7 +1958,7 @@ FocusScope {
         case Qt.Key_Return:
         case Qt.Key_Enter:
             selectionMode = false
-            if (controller.blocks.get(row).view === "table") {
+            if (controller.blocks.viewAt(row) === "table") {
                 const item = list.itemAtIndex(row) as BlockDelegate
                 if (item)
                     item.focusContent()
@@ -1731,13 +1984,18 @@ FocusScope {
     }
 
     /// Focus left an inline editor: flush the save when it left the editor entirely.
-    function editorFocusLost() {
-        later(() => {
-            if (!editor.controller)
+    function editorFocusLost(): void {
+        focusLostLater.restart()
+    }
+    Timer {
+        id: focusLostLater
+        interval: 0
+        onTriggered: {
+            if (!editor.alive || !editor.controller)
                 return
-            if (!editor.activeFocus && !editor.suggestionsOpen && !dialogs.anyOpen)
+            if (!editor.activeFocus && !editor.suggestionsOpen && !editor.dialogs.anyOpen)
                 editor.controller.save()
-        })
+        }
     }
 
     onActiveFocusChanged: if (!activeFocus) editorFocusLost()
@@ -1784,22 +2042,12 @@ FocusScope {
             // The breadcrumb coming or going changes the header's height: the view must not go
             // back to the page's top, away from the block (as revealRow).
             list.userMoved = true
-            editor.later(() => {
-                const row = editor.controller ? editor.controller.editingRow : -1
-                if (row < 0 || row >= list.count)
-                    return
-                // The rows the zoom showed or hid get their heights first: positioned before, the
-                // view kept its place among the zoom's rows and then showed the page's top.
-                list.forceLayout()
-                list.positionViewAtIndex(row, ListView.Contain)
-                list.forceLayout()
-                editor.ensureEditVisible()
-            })
+            zoomLater.restart()
         }
         // The draft's property is there (or another program wrote one): the panel shows it.
         function onPagePropertiesChanged() {
             if (editor.propertyDraft && editor.controller.pageProperties.addRow >= 0)
-                editor.later(() => editor.propertyDraft = false)
+                draftLater.restart()
         }
         function onLoadingChanged() {
             if (!editor.controller.loading) {
@@ -1809,28 +2057,51 @@ FocusScope {
                 list.userMoved = false
                 list.showsTop = true
                 // The editor may be gone by then (a day of the journal stream scrolled away).
-                editor.later(() => list.positionViewAtBeginning())
+                topLater.restart()
             }
         }
         function onSourceModeChanged() {
             if (!editor.controller.sourceMode)
                 list.forceActiveFocus()
         }
-        function onAttachmentFailed(name) {
-            editor.notice(qsTr("Could not add “%1” to the notebook").arg(name), "error")
+        function onAttachmentFailed(name: string) {
+            editor.notice(qsTr("Could not add “%1” to the notebook").arg(name), "error", null)
         }
-        function onCsvTableInserted(row, truncated) {
+        function onCsvTableInserted(row: int, truncated: bool) {
             editor.csvInserted(truncated)
         }
-        function onCsvTableFailed(name) {
-            editor.notice(qsTr("“%1” holds no table Brulion can read.").arg(name), "error")
+        function onCsvTableFailed(name: string) {
+            editor.notice(qsTr("“%1” holds no table Brulion can read.").arg(name), "error", null)
         }
-        function onWebPicturesDownloaded(stored, failed) {
+        function onWebPicturesDownloaded(stored: int, failed: list<string>) {
             if (failed.length > 0)
-                editor.notice(qsTr("Could not save to the notebook: %1").arg(failed.join(", ")), "error")
+                editor.notice(qsTr("Could not save to the notebook: %1").arg(failed.join(", ")), "error", null)
             else if (stored > 0)
-                editor.notice(qsTr("%n picture(s) saved to the notebook", "", stored), "success")
+                editor.notice(qsTr("%n picture(s) saved to the notebook", "", stored), "success", null)
         }
+    }
+    /// A zoom changed while a block is edited (onZoomChanged): the block stays in view.
+    Timer {
+        id: zoomLater
+        interval: 0
+        onTriggered: {
+            if (!editor.alive)
+                return
+            const row = editor.controller ? editor.controller.editingRow : -1
+            if (row < 0 || row >= list.count)
+                return
+            // The rows the zoom showed or hid get their heights first: positioned before, the
+            // view kept its place among the zoom's rows and then showed the page's top.
+            list.forceLayout()
+            list.positionViewAtIndex(row, ListView.Contain)
+            list.forceLayout()
+            editor.ensureEditVisible()
+        }
+    }
+    Timer {
+        id: draftLater
+        interval: 0
+        onTriggered: if (editor.alive) editor.propertyDraft = false
     }
 
     // ---- The blocks --------------------------------------------------------------------------
@@ -1891,7 +2162,7 @@ FocusScope {
     // Popups, dialogs and the drop hint are created when first needed (see EditorDialogs): every
     // page and every day of the journal stream has its own editor.
     property BDialog mergeDialog: null
-    function openMergeDialog() {
+    function openMergeDialog(): void {
         if (!mergeDialog)
             mergeDialog = mergeComponent.createObject(editor) as BDialog
         mergeDialog.open()
@@ -1965,7 +2236,7 @@ FocusScope {
         // keyboard is below the editor: the shell lifts the view above it).
         bottomMargin: editor.toolbarVisible && editor.dockHost === editor ? editor.toolbarHeight : 0
         // A block starting to be edited near the bottom must not stay hidden under it.
-        onBottomMarginChanged: if (editor.toolbarVisible) editor.later(() => editor.ensureEditVisible())
+        onBottomMarginChanged: if (editor.toolbarVisible) editVisibleLater.restart()
         // No press delay: a Flickable that delays presses replays them on release without the
         // release for pointer handlers (Qt sends it only when an item grabbed the replayed press),
         // so a quick tap (< 90 ms) on block text, a link, a bullet or a fold arrow did nothing on
@@ -2017,7 +2288,7 @@ FocusScope {
                         x: Theme.space1
                         y: Theme.space1
                         width: parent.width - 2 * Theme.space1
-                        editor: editor
+                        editor: editor as B.BlockEditor
                         controller: editor.controller
                         draft: true
                     }
@@ -2037,7 +2308,7 @@ FocusScope {
         }
 
         delegate: BlockDelegate {
-            editor: editor
+            editor: editor as B.BlockEditor
         }
 
         footer: Item {
@@ -2071,9 +2342,13 @@ FocusScope {
         }
         // The selection's keys win over application-wide shortcuts while the list has the keyboard.
         Keys.onShortcutOverride: (event) => {
-            if (editor.controller && editor.controller.selectedRow >= 0 && (event.modifiers & Qt.ControlModifier)
-                    && [Qt.Key_A, Qt.Key_C, Qt.Key_X, Qt.Key_V, Qt.Key_Z, Qt.Key_Y, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) >= 0)
+            if (!editor.controller || editor.controller.selectedRow < 0 || !(event.modifiers & Qt.ControlModifier))
+                return
+            switch (event.key) {
+            case Qt.Key_A: case Qt.Key_C: case Qt.Key_X: case Qt.Key_V: case Qt.Key_Z: case Qt.Key_Y:
+            case Qt.Key_Return: case Qt.Key_Enter:
                 event.accepted = true
+            }
         }
 
         // The block menu at the pointer: a right-click anywhere on a block — its text, a heading,
@@ -2088,9 +2363,7 @@ FocusScope {
             onTapped: (eventPoint) => {
                 if (!editor.controller)
                     return
-                const scene = eventPoint.scenePosition
-                const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
-                editor.openBlockMenuAt(editor.rowAt(p.x, p.y), scene)
+                editor.openBlockMenuAtScene(eventPoint.scenePosition.x, eventPoint.scenePosition.y)
             }
         }
 
@@ -2099,7 +2372,7 @@ FocusScope {
         Component.onCompleted: {
             if (!editor.autoHeight)
                 editor.scrollBar = scrollBarComponent.createObject(list, { list: list }) as T.ScrollBar
-            editor.later(() => list.positionViewAtBeginning())
+            topLater.restart()
         }
         // Rows from one line to a table or a picture: the bar counts rows, its thumb does not jump.
         Component {
@@ -2133,36 +2406,45 @@ FocusScope {
         property real speed: 0
         /// The list's scrolling was held for this press (setScrollingHeld()).
         property bool holding: false
+        /// The block under the pointer (updateDragTarget()): this editor's or another day's.
+        property B.BlockEditor targetEditor: null
+        property int targetRow: -1
     }
+    /// Another day's editor under the pointer (updateDragTarget()).
+    property B.BlockEditor dragOther: null
     /// Blocks are being selected by dragging (tests read it).
     readonly property bool dragSelecting: drag.active
 
-    function dragPressed(point) {
+    /// A press at `scene` (scene coordinates) by a mouse, touchpad or stylus (`mouse`) or a finger.
+    function dragPressed(scene: point, mouse: bool): void {
         drag.selected = false
         drag.active = false
         drag.armed = false
         drag.speed = 0
         drag.fixedRow = -1
-        drag.scene = point.scenePosition
-        drag.mouse = point.device === null || point.device.type !== PointerDevice.TouchScreen
+        drag.scene = scene
+        drag.mouse = mouse
         drag.startRow = -1
         if (!controller || controller.sourceMode)
             return
-        if (scrollBar && scrollBar.visible && scrollBar.contains(scrollBar.mapFromItem(null, drag.scene.x, drag.scene.y)))
-            return
-        const p = list.contentItem.mapFromItem(null, drag.scene.x, drag.scene.y)
-        drag.startRow = rowAt(p.x, p.y)
+        if (scrollBar && scrollBar.visible) {
+            mapPoint(null, scrollBar, drag.scene.x, drag.scene.y)
+            if (scrollBar.contains(mapped))
+                return
+        }
+        mapPoint(null, listContent, drag.scene.x, drag.scene.y)
+        drag.startRow = rowAt(mapped.x, mapped.y)
     }
-    function dragMoved(point) {
-        drag.scene = point.scenePosition
+    function dragMoved(scene: point): void {
+        drag.scene = scene
         if (!controller)
             return
         if (!drag.active) {
             if (drag.startRow < 0 || (!drag.mouse && !drag.armed))
                 return
-            const target = dragTarget()
-            if (target.row < 0 || (target.editor === editor && target.row === drag.startRow)
-                    || controller.blocks.get(drag.startRow).view === "frontmatter")
+            updateDragTarget()
+            if (drag.targetRow < 0 || (drag.targetEditor.controller === controller && drag.targetRow === drag.startRow)
+                    || controller.blocks.viewAt(drag.startRow) === "frontmatter")
                 return
             drag.active = true
             drag.selected = true
@@ -2174,7 +2456,7 @@ FocusScope {
         updateDragSelection()
         updateAutoScroll()
     }
-    function dragReleased() {
+    function dragReleased(): void {
         const selecting = drag.active || drag.armed
         drag.active = false
         drag.armed = false
@@ -2190,60 +2472,69 @@ FocusScope {
     }
     /// The selection from the fixed end to the block under the pointer (in another day of the
     /// journal stream: a selection over several days).
-    function updateDragSelection() {
+    function updateDragSelection(): void {
         if (!drag.active || !controller || drag.fixedRow < 0)
             return
-        const target = dragTarget()
-        if (target.row < 0 || target.editor.controller.blocks.get(target.row).view === "frontmatter")
+        updateDragTarget()
+        const target = drag.targetEditor
+        if (drag.targetRow < 0 || target.controller.blocks.viewAt(drag.targetRow) === "frontmatter")
             return
-        if (target.editor !== editor)
-            stream.extendFrom(controller, drag.fixedRow, target.editor.controller, target.row)
+        if (target.controller !== controller)
+            stream.extendFrom(controller, drag.fixedRow, target.controller, drag.targetRow)
         else
-            controller.selectRange(drag.fixedRow, target.row) // (back in this day: a span ends)
+            controller.selectRange(drag.fixedRow, drag.targetRow) // (back in this day: a span ends)
     }
-    /// The block under the pointer: { editor, row } — this editor's nearest block, or, below or
-    /// above this day of the journal stream, the block of the day there.
-    function dragTarget() {
-        const local = { editor: editor, row: rowNear(drag.scene) }
-        if (stream === null || !scroller || !scroller.dayAt)
-            return local
-        const p = editor.mapFromItem(null, drag.scene.x, drag.scene.y)
-        if (p.y >= 0 && p.y < editor.height)
-            return local
-        const day = scroller.dayAt(drag.scene)
-        const other = day ? day.editor : null
-        if (!other || other === editor || !other.controller || !other.controller.loaded)
-            return local
+    /// The block under the pointer (drag.targetEditor, drag.targetRow): this editor's nearest block,
+    /// or, below or above this day of the journal stream, the block of the day there.
+    function updateDragTarget(): void {
+        drag.targetEditor = editor as B.BlockEditor
+        drag.targetRow = rowNear(drag.scene)
+        if (stream === null || !scroller)
+            return
+        mapped = editor.mapFromItem(null, drag.scene.x, drag.scene.y)
+        if (mapped.y >= 0 && mapped.y < editor.height)
+            return
+        dragOther = scroller.editorAt(drag.scene)
+        const other = dragOther
+        if (!other || other === drag.targetEditor || !other.controller || !other.controller.loaded)
+            return
         const row = other.rowNear(drag.scene)
-        return row >= 0 ? { editor: other, row: row } : local
+        if (row >= 0) {
+            drag.targetEditor = other
+            drag.targetRow = row
+        }
     }
     /// The block at a scene point, the nearest one when the point is above or below the blocks (the
     /// header, the footer, outside a day of the journal stream) or outside the view.
-    function rowNear(scene) {
+    function rowNear(scene: point): int {
+        const sceneX = scene.x
+        const sceneY = scene.y
         if (!controller)
             return -1
-        const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
-        const y = Math.max(list.contentY + 1, Math.min(list.contentY + list.height - 1, p.y))
+        mapPoint(null, listContent, sceneX, sceneY)
+        const y = Math.max(list.contentY + 1, Math.min(list.contentY + list.height - 1, mapped.y))
         let row = rowAt(contentX + 1, y)
         if (row >= 0)
             return row
-        const headerBottom = list.headerItem ? list.headerItem.y + list.headerItem.height : list.originY
+        const header = list.headerItem
+        const headerBottom = header ? header.y + header.height : list.originY
         if (y <= headerBottom) {
             row = visualNext(-1)
-            while (row >= 0 && controller.blocks.get(row).view === "frontmatter")
-                row = controller.nextVisibleRow(row)
+            while (row >= 0 && controller.blocks.viewAt(row) === "frontmatter")
+                row = controller.nextVisibleRow(row) + 0 // (a typed copy: passed on in the loop)
             return row
         }
         return controller.lastVisibleRow()
     }
     /// Scroll near the view's top and bottom edges while selecting (the toolbar's top for the bottom).
-    function updateAutoScroll() {
+    function updateAutoScroll(): void {
         if (!drag.active) {
             drag.speed = 0
             return
         }
         const host = dockHost
-        const y = host.mapFromItem(null, drag.scene.x, drag.scene.y).y
+        mapPoint(null, host, drag.scene.x, drag.scene.y)
+        const y = mapped.y
         const top = host === editor ? list.y : 0
         const bottom = host.height - (toolbarVisible ? toolbarHeight : 0)
         const zone = Math.max(16, Math.min(56, (bottom - top) / 5))
@@ -2257,8 +2548,9 @@ FocusScope {
         // and, selecting into the days around it (`stream`), while it is still near enough to stay
         // in the list's cache (scrolled further, it would be destroyed and the drag with it).
         if (scroller && host !== editor) {
-            const dayTop = editor.mapToItem(host, 0, 0).y
-            const reach = stream !== null && scroller.selectionReach !== undefined ? scroller.selectionReach : 0
+            mapped = editor.mapToItem(host, 0, 0)
+            const dayTop = mapped.y
+            const reach = stream !== null ? scroller.selectionReach : 0
             const past = reach > 0 ? top - reach : bottom
             const before = reach > 0 ? bottom + reach : top
             if ((drag.speed > 0 && dayTop + editor.height <= past) || (drag.speed < 0 && dayTop >= before))
@@ -2266,7 +2558,7 @@ FocusScope {
         }
     }
     /// Scroll the editor (or the journal stream it is part of) by `dy`, within its content.
-    function scrollBy(dy) {
+    function scrollBy(dy: real): void {
         if (scroller) {
             scroller.scrollBy(dy)
             return
@@ -2276,11 +2568,11 @@ FocusScope {
         list.contentY = Math.max(min, Math.min(max, list.contentY + dy))
     }
     /// A finger selecting must not flick the list (or the journal stream) meanwhile.
-    function setScrollingHeld(held) {
+    function setScrollingHeld(held: bool): void {
         if (drag.holding === held || (held && drag.mouse))
             return
         drag.holding = held
-        if (scroller && scroller.holdScrolling)
+        if (scroller)
             scroller.holdScrolling(held)
         else if (!autoHeight)
             list.interactive = !held
@@ -2288,8 +2580,8 @@ FocusScope {
     /// A long press on the text of `row` (touch UIs; not the block being edited): the selection
     /// mode with that block selected — or, already in it, the selection extended there; moving the
     /// finger without lifting it extends it further.
-    function longPressText(row) {
-        if (!touch || !controller || row < 0 || controller.blocks.get(row).view === "frontmatter")
+    function longPressText(row: int): void {
+        if (!touch || !controller || row < 0 || controller.blocks.viewAt(row) === "frontmatter")
             return
         if (selectionMode && pickMode && controller.selectionCount > 0) {
             // "Pojedynczo": a long press picks like a tap (its release is no tap).
@@ -2311,7 +2603,7 @@ FocusScope {
     }
     /// A grip at the band's start (`atStart`) or end is pressed: the other end stays, the finger
     /// moves this one (the drag goes on when the grip's block scrolls away and is destroyed).
-    function beginGripDrag(atStart) {
+    function beginGripDrag(atStart: bool): void {
         if (!controller || controller.selectionCount === 0)
             return
         drag.fixedRow = atStart ? controller.selectionLastRow : controller.selectionFirstRow
@@ -2330,8 +2622,16 @@ FocusScope {
             id: dragPointer
             target: null
             enabled: editor.controller !== null && !editor.controller.sourceMode
-            onActiveChanged: active ? editor.dragPressed(point) : editor.dragReleased()
-            onPointChanged: if (active) editor.dragMoved(point)
+            onActiveChanged: {
+                if (!active) {
+                    editor.dragReleased()
+                    return
+                }
+                const device = dragPointer.point.device
+                editor.dragPressed(dragPointer.point.scenePosition,
+                                   device === null || device.type !== PointerDevice.TouchScreen)
+            }
+            onPointChanged: if (active) editor.dragMoved(dragPointer.point.scenePosition)
         }
     }
     Timer {
@@ -2356,8 +2656,8 @@ FocusScope {
         onDropped: (drop) => {
             if (!drop.hasUrls || !editor.controller)
                 return
-            const p = list.contentItem.mapFromItem(fileDrop, drop.x, drop.y)
-            const row = editor.rowAt(editor.contentX + 1, p.y)
+            editor.mapPoint(fileDrop, editor.listContent, drop.x, drop.y)
+            const row = editor.rowAt(editor.contentX + 1, editor.mapped.y)
             const c = editor.controller
             if (row >= 0 && row === c.editingRow && editor.activeEditor && editor.activeEditor.row === row)
                 c.insertFiles(row, editor.activeEditor.selectionStart, editor.activeEditor.selectionEnd, drop.urls)
@@ -2374,9 +2674,9 @@ FocusScope {
         z: 5
         sourceComponent: Rectangle {
             radius: Theme.radiusLg
-            color: Theme.alpha(Theme.info, 0.06)
+            color: Theme.info.alpha(0.06)
             border.width: 2
-            border.color: Theme.alpha(Theme.focusRing, 0.6)
+            border.color: Theme.focusRing.alpha(0.6)
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: Theme.space4
@@ -2408,7 +2708,7 @@ FocusScope {
         anchors.fill: parent
         active: editor.controller !== null && editor.controller.sourceMode
         sourceComponent: SourceEditor {
-            editor: editor
+            editor: editor as B.BlockEditor
             controller: editor.controller
         }
         onLoaded: (item as SourceEditor).focusEditor()
@@ -2434,14 +2734,14 @@ FocusScope {
             suggestions = suggestionComponent.createObject(editor) as SuggestionPopup
         return suggestions
     }
-    function closeSuggestions() {
+    function closeSuggestions(): void {
         if (suggestions)
             suggestions.close()
     }
     Component {
         id: suggestionComponent
         SuggestionPopup {
-            editor: editor
+            editor: editor as B.BlockEditor
             model: suggestionModel
             onActivated: (index) => editor.acceptSuggestion(index)
         }
@@ -2451,9 +2751,14 @@ FocusScope {
     /// BlockMenu for a block (made when first opened, one per editor; tests read it): a bullet's or
     /// number's right-click / long press, a right-click on a block, the touch toolbar's "Więcej".
     property BlockMenu blockMenu: null
-    /// `cell` (TableBlockView.cellInfo()): the table cell it is opened from, for its Wiersz and
-    /// Kolumna submenus.
-    function openBlockMenu(row, item, x, y, cell) {
+    function openBlockMenu(row: int, item: Item, x: real, y: real): void {
+        openCellBlockMenu(row, item, x, y, -2, 0, 0, 0, "")
+    }
+    /// openBlockMenu() from table cell (cellRow, cellColumn) — the header's: cellRow -1; -2: no
+    /// cell — of a table of cellRows × cellColumns, the column aligned cellAlign: for the menu's
+    /// Wiersz and Kolumna submenus.
+    function openCellBlockMenu(row: int, item: Item, x: real, y: real, cellRow: int, cellColumn: int, cellRows: int,
+                               cellColumns: int, cellAlign: string): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
         if (!blockMenu)
@@ -2463,7 +2768,7 @@ FocusScope {
         // A word the keyboard is still composing becomes text before anything acts on the block.
         if (activeEditor)
             EditorInput.commitPreedit(activeEditor)
-        blockMenu.openFor(row, cell)
+        blockMenu.openFor(row, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         blockMenu.bottomMargin = menuBottomMargin()
         if (item)
@@ -2473,70 +2778,86 @@ FocusScope {
     }
     /// The block menu of a right-click at `scene` (scene coordinates) on `row`: the list's handler,
     /// the rendered text's when the click was on no date chip. None for the page properties.
-    function openBlockMenuAt(row, scene, cell) {
-        if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.get(row).view === "frontmatter")
+    /// The block menu of a right-click on the list at (x, y) of the scene: of the row there.
+    function openBlockMenuAtScene(x: real, y: real): void {
+        mapPoint(null, listContent, x, y)
+        openBlockMenuAt(rowAt(mapped.x, mapped.y), Qt.point(x, y))
+    }
+    function openBlockMenuAt(row: int, scene: point): void {
+        openCellBlockMenuAt(row, scene, -2, 0, 0, 0, "")
+    }
+    /// openBlockMenuAt() from a table cell (see openCellBlockMenu()).
+    function openCellBlockMenuAt(row: int, scene: point, cellRow: int, cellColumn: int, cellRows: int,
+                                 cellColumns: int, cellAlign: string): void {
+        const sceneX = scene.x
+        const sceneY = scene.y
+        if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.viewAt(row) === "frontmatter")
             return
-        const at = list.mapFromItem(null, scene.x, scene.y)
-        openBlockMenu(row, list, at.x, at.y, cell)
+        mapPoint(null, list, sceneX, sceneY)
+        openCellBlockMenu(row, list, mapped.x, mapped.y, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
     }
     /// The touch toolbar's "Więcej": the menu of the block being edited, right above the button.
     /// The keyboard goes (the menu takes the keys, which hides it on Android anyway): the menu
     /// follows the toolbar down into the room it leaves (followToolbarWith), every item shown.
-    function openBlockMenuAbove(row, item) {
+    function openBlockMenuAbove(row: int, item: Item): void {
         if (!controller || row < 0)
             return
         if (!blockMenu)
             blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
-        blockMenu.openFor(row)
+        blockMenu.openFor(row, -2, 0, 0, 0, "")
         const y = -blockMenu.openHeight() - Theme.space1
         openBlockMenu(row, item, 0, y)
         followToolbarWith(blockMenu, item, y)
-        Qt.inputMethod.hide()
+        DeviceInfo.hideInputMethod()
     }
     /// The cell toolbar's "Więcej": the block menu of the table whose cell is being edited. A cell
     /// is no block editor that could go on under the menu: its editing ends (its text kept, the
     /// keyboard hidden), the table is selected — the block the menu acts on, the current block of
     /// the palette's commands afterwards — and the menu opens at the table.
-    function openTableBlockMenu(table) {
+    function openTableBlockMenu(table: TableBlockView): void {
         if (!controller || !table || !table.block)
             return
         const row = table.block.index
-        const cell = table.cellInfo(table.editRow, table.editColumn)
+        const cellRow = table.editRow
+        const cellColumn = table.editColumn
+        const cellRows = table.cellRowCount()
+        const cellColumns = table.columns
+        const cellAlign = table.cellAlignOf(cellColumn)
         if (table.cellInput)
             EditorInput.commitPreedit(table.cellInput)
-        Qt.inputMethod.hide()
+        DeviceInfo.hideInputMethod()
         table.closeCell()
         controller.selectedRow = row
         list.forceActiveFocus()
         list.forceLayout()
         const item = list.itemAtIndex(row) as BlockDelegate
-        openBlockMenu(row, item, item ? item.contentLeft : 0, 0, cell)
+        openCellBlockMenu(row, item, item ? item.contentLeft : 0, 0, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
     }
     Component {
         id: blockMenuComponent
         BlockMenu {
-            editor: editor
+            editor: editor as B.BlockEditor
         }
     }
 
     // ---- Pictures from the internet ------------------------------------------------------------
     /// Store the picture from the internet `url` — "" every one on the page — in the notebook
     /// (PageController.downloadWebPictures; the toast comes with webPicturesDownloaded).
-    function downloadWebPictures(url) {
+    function downloadWebPictures(url: string): void {
         if (!controller)
             return
-        const count = controller.downloadWebPictures(url || "")
+        const count = controller.downloadWebPictures(url)
         if (count < 0)
-            notice(qsTr("Switch back to blocks (Ctrl+E) to save the pictures in the notebook"), "info")
-        else if (count === 0 && !url)
-            notice(qsTr("This page has no pictures from the internet"), "info")
+            notice(qsTr("Switch back to blocks (Ctrl+E) to save the pictures in the notebook"), "info", null)
+        else if (count === 0 && url === "")
+            notice(qsTr("This page has no pictures from the internet"), "info", null)
     }
     /// WebPictureMenu for a shown picture from the internet (EmbedView: a right-click or long
     /// press on it; "⋯" in its viewer). Created when first opened.
     property WebPictureMenu webPictureMenu: null
     property string webPictureMenuUrl: ""
     property int webPictureMenuRow: -1
-    function openWebPictureMenu(row, url, host, item, x, y) {
+    function openWebPictureMenu(row: int, url: string, host: string, item: Item, x: real, y: real): void {
         if (!controller)
             return
         if (!webPictureMenu)
@@ -2554,8 +2875,11 @@ FocusScope {
     /// "Powiększ" in its menu). `picture` is its embed. Created when first opened.
     property WebPictureViewer webPictureViewer: null
     property int webPictureViewerRow: -1
-    function openWebPictureViewer(row, picture) {
-        if (!controller || !picture || picture.state !== "ready")
+    function openWebPictureViewer(row: int, picture: var): void {
+        if (!controller || !picture)
+            return
+        embedInfo.map = picture
+        if (embedInfo.map.state !== "ready")
             return
         if (!webPictureViewer)
             webPictureViewer = webPictureViewerComponent.createObject(editor) as WebPictureViewer
@@ -2566,16 +2890,24 @@ FocusScope {
         webPictureViewer.open()
     }
     /// The embed of the picture from the internet `url` in row `row` ({} when not shown there).
-    function webPictureEmbed(row, url) {
+    function webPictureEmbed(row: int, url: string): var {
         const item = list.itemAtIndex(row) as BlockDelegate
-        const embeds = item && item.embeds ? item.embeds : []
-        for (let i = 0; i < embeds.length; ++i) {
-            if (embeds[i].web && embeds[i].target === url)
-                return embeds[i]
+        if (!item)
+            return ({})
+        const count = embedsOf(item).length
+        for (let i = 0; i < count; ++i) {
+            embedInfo.map = embedsOf(item)[i]
+            if (embedInfo.map.web && embedInfo.map.target === url)
+                return embedsOf(item)[i]
         }
         return ({})
     }
-    function chooseWebPictureAction(action) {
+    function embedsOf(item: BlockDelegate): list<var> {
+        return item.embeds
+    }
+    /// An embed of a block (BlockListModel's embeds: a picture from the internet).
+    MapHolder { id: embedInfo }
+    function chooseWebPictureAction(action: string): void {
         const url = webPictureMenuUrl
         if (!controller || url === "")
             return
@@ -2589,9 +2921,9 @@ FocusScope {
         case "open": controller.activateLink(webPictureMenuRow, "ext:" + url, false); break
         case "copy":
             if (controller.copyWebPictureUrl(url))
-                notice(qsTr("Picture address copied"), "success")
+                notice(qsTr("Picture address copied"), "success", null)
             else
-                notice(qsTr("Could not copy: the clipboard is not available"), "error")
+                notice(qsTr("Could not copy: the clipboard is not available"), "error", null)
             break
         }
     }
@@ -2605,15 +2937,21 @@ FocusScope {
         id: webPictureViewerComponent
         WebPictureViewer {
             id: pictureViewer
+            MapHolder {
+                id: shownPicture
+                map: pictureViewer.picture
+                function target(): string { return shownPicture.map.target ? shownPicture.map.target : "" }
+                function host(): string { return shownPicture.map.host ? shownPicture.map.host : "" }
+            }
             onSaveRequested: {
-                const url = pictureViewer.picture ? pictureViewer.picture.target : ""
+                const url = shownPicture.target()
                 pictureViewer.close()
-                if (url)
+                if (url !== "")
                     editor.downloadWebPictures(url)
             }
             onMenuRequested: (item) => {
-                const p = pictureViewer.picture || {}
-                editor.openWebPictureMenu(editor.webPictureViewerRow, p.target || "", p.host || "", item, 0, item.height)
+                editor.openWebPictureMenu(editor.webPictureViewerRow, shownPicture.target(), shownPicture.host(), item, 0,
+                                          item.height)
             }
         }
     }
@@ -2622,162 +2960,226 @@ FocusScope {
     /// DateChipMenu for a token of rendered text (`link`: its date:, reminder:, recur:, prio: or day:
     /// link): a right-click or long press on it — in a block (BlockText: openDateMenu()), a query
     /// result or an embed of another block (openTokenMenuIn()), a table cell (openCellTokenMenu()).
-    /// Created when first opened; the menu's choice goes to the `apply(action, a, b)` its opener
-    /// gave (popupTokenMenu()). A block is tracked while its menu is open and the chip's range is
-    /// used only while the block is unchanged (PageController.trackedRow).
+    /// Created when first opened; what the menu's choice applies to is `dateMenuMode` with the
+    /// values below (popupTokenMenu()). A block is tracked while its menu is open and the chip's
+    /// range is used only while the block is unchanged (PageController.trackedRow).
     property DateChipMenu dateMenu: null
     property int dateMenuBlock: -1
-    property var dateMenuChip: ({})
-    property var dateMenuApply: null
-    function isDateChipLink(link) {
-        return link.startsWith("date:") || link.startsWith("reminder:") || link.startsWith("recur:")
-                || link.startsWith("prio:") || link.startsWith("day:")
+    /// What the open menu's choice applies to: "own" (a token of block dateMenuHandle's text),
+    /// "in" (a copy of a block of another file: dateMenuPath, dateMenuLine, dateMenuRaw), "cell"
+    /// (table cell dateMenuTableRow, dateMenuColumn of block dateMenuHandle); "" once chosen.
+    property string dateMenuMode: ""
+    property int dateMenuHandle: -1
+    property string dateMenuPath
+    property int dateMenuLine: -1
+    property string dateMenuRaw
+    property int dateMenuTableRow: -1
+    property int dateMenuColumn: -1
+    /// The mode a dialog opened from the menu ("Zmień…") applies its result in (tokenRun()).
+    property string tokenRunMode: ""
+    /// The chip the menu is for (PageController.dateChip / tokenChipIn / tableCellChip).
+    MapHolder {
+        id: dateMenuChip
+        function kind(): string { return dateMenuChip.map.kind ? dateMenuChip.map.kind : "" }
+        function rule(): string { return dateMenuChip.map.rule ? dateMenuChip.map.rule : "" }
+        function priority(): string { return dateMenuChip.map.priority ? dateMenuChip.map.priority : "" }
+        function at(): string { return dateMenuChip.map.at }
+    }
+    function isDateChipLink(link: string): bool {
+        return Js.startsWith(link, "date:") || Js.startsWith(link, "reminder:") || Js.startsWith(link, "recur:")
+                || Js.startsWith(link, "prio:") || Js.startsWith(link, "day:")
     }
     /// Links whose click edits the text (their menu is the right button's): date, 🔁 and priority chips.
-    function editsOnClick(link) {
-        return link.startsWith("date:") || link.startsWith("recur:") || link.startsWith("prio:")
+    function editsOnClick(link: string): bool {
+        return Js.startsWith(link, "date:") || Js.startsWith(link, "recur:") || Js.startsWith(link, "prio:")
     }
-    /// Open DateChipMenu for `chip` (PageController.dateChip / tokenChipIn / tableCellChip) at
-    /// (x, y) of `item`; `apply(action, a, b)` does what is chosen (DateChipMenu.chosen).
-    function popupTokenMenu(chip, apply, item, x, y) {
+    /// Open DateChipMenu for the chip in `chip` (PageController.dateChip / tokenChipIn /
+    /// tableCellChip) at (x, y) of `item`; the choice goes to `mode` (dateMenuMode).
+    function popupTokenMenu(chip: var, mode: string, item: Item, x: real, y: real): void {
         if (!dateMenu)
             dateMenu = dateMenuComponent.createObject(editor) as DateChipMenu
         menuAbove = null
         closeSuggestions()
-        dateMenuChip = chip
-        dateMenuApply = apply
-        dateMenu.kind = chip.kind
-        dateMenu.alarm = chip.alarm === true
-        dateMenu.rule = chip.rule || ""
-        dateMenu.priority = chip.priority || ""
-        dateMenu.logseq = chip.logseq === true
-        dateMenu.isTask = chip.isTask === true
+        dateMenuChip.map = chip
+        dateMenuMode = mode
+        dateMenu.kind = dateMenuChip.kind()
+        dateMenu.alarm = dateMenuChip.map.alarm === true
+        dateMenu.rule = dateMenuChip.rule()
+        dateMenu.priority = dateMenuChip.priority()
+        dateMenu.logseq = dateMenuChip.map.logseq === true
+        dateMenu.isTask = dateMenuChip.map.isTask === true
         dateMenu.occurrence = false
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         dateMenu.bottomMargin = menuBottomMargin()
         dateMenu.popup(item, x, y)
     }
-    function chooseDateAction(action, a, b) {
-        const apply = dateMenuApply
-        dateMenuApply = null
-        if (apply)
-            apply(action, a, b)
+    function chooseDateAction(action: string, a: var, b: var): void {
+        tokenA = a
+        tokenB = b
+        const mode = dateMenuMode
+        dateMenuMode = ""
+        if (mode === "own")
+            chooseOwnToken(dateMenuHandle, action)
+        else if (mode !== "")
+            chooseTokenWith(mode, action)
     }
+    /// The values of the token action being applied (DateChipMenu.chosen's, the dialog's: `a`, `b`
+    /// of PageController.applyTokenAction), kept here: compiled code passes no `var` argument on
+    /// after other calls.
+    property var tokenA
+    property var tokenB
     /// The menu of a token in block `row`'s text. False when `link` names none.
-    function openDateMenu(row, link, item, x, y) {
+    function openDateMenu(row: int, link: string, item: Item, x: real, y: real): bool {
         if (!controller || row < 0 || row >= controller.blocks.count || !isDateChipLink(link))
             return false
-        const chip = controller.dateChip(row, link)
-        if (!chip.kind)
+        chipFound.map = controller.dateChip(row, link)
+        if (!chipFound.map.kind)
             return false
         if (dateMenuBlock >= 0)
             controller.untrack(dateMenuBlock)
         dateMenuBlock = controller.trackBlock(row)
-        const handle = dateMenuBlock
-        popupTokenMenu(chip, (action, a, b) => editor.chooseOwnToken(handle, chip, action, a, b), item, x, y)
+        dateMenuHandle = dateMenuBlock
+        popupTokenMenu(chipFound.map, "own", item, x, y)
         return true
     }
-    function chooseOwnToken(handle, chip, action, a, b) {
+    /// A chip just asked for (before its menu shows it).
+    MapHolder { id: chipFound }
+    function chooseOwnToken(handle: int, action: string): void {
         if (!controller)
             return
-        const row = controller.trackedRow(handle)
+        const row = controller.trackedRow(handle) + 0 // (a typed copy: passed on after other calls)
         controller.untrack(handle)
         if (dateMenuBlock === handle)
             dateMenuBlock = -1
         if (row < 0)
             return
+        const kind = dateMenuChip.kind()
         switch (action) {
         case "change":
-            if (chip.kind === "reminder")
-                dialogs.editReminder(row, chip.from, chip.to)
-            else if (chip.kind === "recurrence")
-                dialogs.pickRecurrenceAt(row, chip.from, chip.to, chip.rule)
+            if (kind === "reminder")
+                dialogs.editReminder(row, dateMenuChip.map.from, dateMenuChip.map.to)
+            else if (kind === "recurrence")
+                dialogs.pickRecurrenceAt(row, dateMenuChip.map.from, dateMenuChip.map.to, dateMenuChip.map.rule)
             else
-                dialogs.pickDateAt(row, chip.from, chip.to, chip.kind, chip.at)
+                dialogs.pickDateAt(row, dateMenuChip.map.from, dateMenuChip.map.to, kind, dateMenuChip.map.at)
             break
         case "blockRecurrenceChange": dialogs.pickRecurrence(row); break
-        case "open": activateLink(row, chip.url); break
-        case "openSide": controller.activateLink(row, chip.url, true); break
-        case "copy": copyText(chip.copyText); break
-        default: controller.applyTokenAction(row, chip.from, chip.to, action, a, b); break
+        case "open": activateLink(row, dateMenuChip.map.url); break
+        case "openSide": controller.activateLink(row, dateMenuChip.map.url, true); break
+        case "copy": copyText(dateMenuChip.map.copyText ? dateMenuChip.map.copyText : ""); break
+        default:
+            controller.applyTokenAction(row, dateMenuChip.map.from, dateMenuChip.map.to, action, tokenA, tokenB)
+            break
         }
     }
     /// The menu of a token in a copy of a block of `path` (a query result, an embed): `raw` is the
     /// block's Markdown as the index has it, `line` its line. The edit goes to that block's file
     /// (PageController.editTokenIn) with a toast to undo it; on this page it is an undo step.
-    function openTokenMenuIn(path, line, raw, link, item, x, y) {
-        if (!controller || !path || line < 0 || !raw || !isDateChipLink(link))
+    function openTokenMenuIn(path: string, line: int, raw: string, link: string, item: Item, x: real, y: real): bool {
+        if (!controller || path === "" || line < 0 || raw === "" || !isDateChipLink(link))
             return false
-        const chip = controller.tokenChipIn(raw, link)
-        if (!chip.kind)
+        chipFound.map = controller.tokenChipIn(raw, link)
+        if (!chipFound.map.kind)
             return false
-        const run = (action, a, b) => editor.reportTokenEdit(controller.editTokenIn(path, line, raw, chip.ref, action, a, b), action)
-        popupTokenMenu(chip, (action, a, b) => editor.chooseTokenWith(chip, run, action, a, b), item, x, y)
+        dateMenuPath = path
+        dateMenuLine = line
+        dateMenuRaw = raw
+        popupTokenMenu(chipFound.map, "in", item, x, y)
         return true
     }
     /// The menu of a token in a table cell (tableRow -1 = the header): the cell's text changes
     /// (PageController.applyTableCellToken, one undo step).
-    function openCellTokenMenu(row, tableRow, column, link, item, x, y) {
+    function openCellTokenMenu(row: int, tableRow: int, column: int, link: string, item: Item, x: real, y: real): bool {
         if (!controller || row < 0 || !isDateChipLink(link))
             return false
-        const chip = controller.tableCellChip(row, tableRow, column, link)
-        if (!chip.kind)
+        chipFound.map = controller.tableCellChip(row, tableRow, column, link)
+        if (!chipFound.map.kind)
             return false
         if (dateMenuBlock >= 0)
             controller.untrack(dateMenuBlock)
         dateMenuBlock = controller.trackBlock(row)
-        const handle = dateMenuBlock
-        const run = (action, a, b) => {
-            const r = controller.trackedRow(handle)
-            if (r >= 0)
-                controller.applyTableCellToken(r, tableRow, column, chip.from, chip.to, action, a, b)
-        }
-        popupTokenMenu(chip, (action, a, b) => editor.chooseTokenWith(chip, run, action, a, b), item, x, y)
+        dateMenuHandle = dateMenuBlock
+        dateMenuTableRow = tableRow
+        dateMenuColumn = column
+        popupTokenMenu(chipFound.map, "cell", item, x, y)
         return true
     }
-    /// A token menu's choice made with `run(action, a, b)`; "change" opens the dialog that ends in it.
-    function chooseTokenWith(chip, run, action, a, b) {
+    /// A token menu's choice in `mode` ("in", "cell"), applied by tokenRun(); "change" opens the
+    /// dialog that ends in it (EditorDialogs.applied with the target "token").
+    function chooseTokenWith(mode: string, action: string): void {
+        tokenRunMode = mode
+        const kind = dateMenuChip.kind()
         switch (action) {
         case "change":
-            if (chip.kind === "reminder")
-                dialogs.editReminderWith(run, chip)
-            else if (chip.kind === "recurrence")
-                dialogs.pickRecurrenceWith((act, rule) => run(act, rule, 0), chip.rule, "recurrence")
+            if (kind === "reminder")
+                dialogs.editReminderWith("token", dateMenuChip.map.dialogAt ? dateMenuChip.map.dialogAt : dateMenuChip.at(),
+                                         dateMenuChip.map.alarm === true, dateMenuChip.rule(),
+                                         dateMenuChip.map.context ? dateMenuChip.map.context : "")
+            else if (kind === "recurrence")
+                dialogs.pickRecurrenceWith("token", dateMenuChip.map.rule, "recurrence")
             else
-                dialogs.pickDateWith(run, chip.kind, chip.at)
+                dialogs.pickDateWith("token", kind, dateMenuChip.at())
             break
         case "blockRecurrenceChange":
-            dialogs.pickRecurrenceWith((act, rule) => run(act, rule, 0), chip.rule, "blockRecurrence")
+            dialogs.pickRecurrenceWith("token", dateMenuChip.map.rule, "blockRecurrence")
             break
-        default: run(action, a, b); break
+        default: tokenRun(action); break
+        }
+    }
+    /// Apply a token menu's (or its dialog's) choice in tokenRunMode, with tokenA and tokenB: to the
+    /// token of a copy of another file's block (editTokenIn, the toast reportTokenEdit()) or to a
+    /// table cell's.
+    function tokenRun(action: string): void {
+        if (!controller)
+            return
+        if (tokenRunMode === "in") {
+            reportTokenEdit(controller.editTokenIn(dateMenuPath, dateMenuLine, dateMenuRaw, dateMenuChip.map.ref,
+                                                   action, tokenA, tokenB), action)
+        } else if (tokenRunMode === "cell") {
+            const r = controller.trackedRow(dateMenuHandle)
+            if (r >= 0)
+                controller.applyTableCellToken(r, dateMenuTableRow, dateMenuColumn, dateMenuChip.map.from,
+                                               dateMenuChip.map.to, action, tokenA, tokenB)
+        }
+    }
+    Connections {
+        target: dialogsItem
+        function onApplied(target: string, action: string, a: var, b: var) {
+            if (target !== "token")
+                return
+            editor.tokenA = a
+            editor.tokenB = b
+            editor.tokenRun(action)
         }
     }
     /// The toast after editTokenIn(): what changed, with "Undo" for another file; why not.
-    function reportTokenEdit(r, action) {
+    function reportTokenEdit(r: var, action: string): void {
         if (!r)
             return
-        if (r.ok) {
-            if (r.undo > 0) {
-                const undo = r.undo
+        tokenEdit.map = r
+        if (tokenEdit.map.ok) {
+            if (tokenEdit.undo() > 0) {
                 const text = action === "recurrence" || action === "blockRecurrence" ? qsTr("Repeat changed")
                            : action === "priority" || action === "blockPriority" ? qsTr("Priority changed")
                            : action === "remove" ? qsTr("Removed")
                            : action === "alarm" || action === "reminder" ? qsTr("Reminder changed")
                            : qsTr("Date changed")
-                notice(text, "success", {
-                    text: qsTr("Undo"),
-                    run: () => {
-                        if (!editor.controller.undoTokenEdit(undo))
-                            editor.notice(qsTr("The page changed in the meantime; nothing was undone."), "info")
-                    }
-                })
+                const undo = toastAction("undoTokenEdit", qsTr("Undo"))
+                undo.undo = tokenEdit.undo()
+                notice(text, "success", undo)
             }
             return
         }
-        if (r.reason === "gone" || r.reason === "changed")
-            notice(qsTr("The note changed in the meantime; nothing was changed."), "info")
-        else if (r.reason === "failed")
-            notice(qsTr("The change could not be saved."), "error")
+        const reason = tokenEdit.map.reason
+        if (reason === "gone" || reason === "changed")
+            notice(qsTr("The note changed in the meantime; nothing was changed."), "info", null)
+        else if (reason === "failed")
+            notice(qsTr("The change could not be saved."), "error", null)
+    }
+    /// PageController.editTokenIn's result.
+    MapHolder {
+        id: tokenEdit
+        function undo(): int { return tokenEdit.map.undo ? tokenEdit.map.undo : 0 }
     }
     Component {
         id: dateMenuComponent
@@ -2788,77 +3190,112 @@ FocusScope {
 
     // ---- The menu of a link: [[page]], #tag, ((block)), web address (LinkMenu) ------------------
     /// LinkMenu for a page:, tag:, block: or ext: link of rendered text — `fromPath`: the page the
-    /// link is written on ("" = this one) —; `open(newPane)` does what a click does (in the side
-    /// panel with newPane). Created when first opened. False when `link` is no such link.
+    /// link is written on ("" = this one) —; its Otwórz items do what a click does (in the side
+    /// panel with newPane): on the link in block `row` (requester null), else what `requester`
+    /// does on linkMenuOpenRequested(requester, link, newPane) (a query result, an embed). Created
+    /// when first opened. False when `link` is no such link.
     property LinkMenu linkMenu: null
-    property var linkMenuInfo: ({})
-    property var linkMenuOpen: null
-    function isLinkMenuLink(link) {
-        return link.startsWith("page:") || link.startsWith("part:") || link.startsWith("tag:") || link.startsWith("block:")
-                || link.startsWith("ext:")
+    property int linkMenuRow: -1
+    property Item linkMenuRequester: null
+    property string linkMenuLink
+    /// The menu is open for a link (its Otwórz items open it once).
+    property bool linkMenuArmed: false
+    signal linkMenuOpenRequested(Item requester, string link, bool newPane)
+    /// What the menu is about (PageController.linkMenu).
+    MapHolder {
+        id: linkMenuInfo
+        function tag(): string { return linkMenuInfo.map.tag }
     }
-    function openLinkMenu(link, fromPath, open, item, x, y) {
+    function isLinkMenuLink(link: string): bool {
+        return Js.startsWith(link, "page:") || Js.startsWith(link, "part:") || Js.startsWith(link, "tag:")
+                || Js.startsWith(link, "block:") || Js.startsWith(link, "ext:")
+    }
+    function openLinkMenu(link: string, fromPath: string, row: int, requester: Item, item: Item, x: real, y: real): bool {
         if (!controller || !isLinkMenuLink(link))
             return false
-        const info = controller.linkMenu(link, fromPath || "")
-        if (!info.kind)
+        chipFound.map = controller.linkMenu(link, fromPath)
+        if (!chipFound.map.kind)
             return false
         if (!linkMenu)
             linkMenu = linkMenuComponent.createObject(editor) as LinkMenu
         menuAbove = null
         closeSuggestions()
-        linkMenuInfo = info
-        linkMenuOpen = open
-        linkMenu.kind = info.kind
-        linkMenu.unresolved = info.unresolved === true
-        linkMenu.folder = info.target === "folder" // a path part naming a folder
+        linkMenuInfo.map = chipFound.map
+        linkMenuRow = row
+        linkMenuRequester = requester
+        linkMenuLink = link
+        linkMenuArmed = true
+        linkMenu.kind = linkMenuInfo.map.kind
+        linkMenu.unresolved = linkMenuInfo.map.unresolved === true
+        linkMenu.folder = linkMenuInfo.map.target === "folder" // a path part naming a folder
         linkMenu.bottomMargin = menuBottomMargin()
         linkMenu.popup(item, x, y)
         return true
     }
     /// A middle click (a mouse's wheel button) on `link` in block `row`'s text: a page, tag or
     /// block link opens in a new tab (OpenIn; nothing outside the app's shell). True when it did.
-    function openLinkInTab(row, link) {
-        if (!controller || !OpenIn.tabs || !isLinkMenuLink(link) || link.startsWith("ext:"))
+    function openLinkInTab(row: int, link: string): bool {
+        if (!controller || !OpenIn.tabs || !isLinkMenuLink(link) || Js.startsWith(link, "ext:"))
             return false
-        OpenIn.run("tab", () => editor.activateLink(row, link))
+        OpenIn.begin("tab")
+        activateLink(row, link)
+        OpenIn.end()
         return true
     }
     /// The link menu of a link in block `row`'s text.
-    function openBlockLinkMenu(row, link, item, x, y) {
-        return openLinkMenu(link, "", (newPane) => {
-            if (newPane)
-                editor.controller.activateLink(row, link, true)
-            else
-                editor.activateLink(row, link)
-        }, item, x, y)
+    function openBlockLinkMenu(row: int, link: string, item: Item, x: real, y: real): bool {
+        return openLinkMenu(link, "", row, null, item, x, y)
     }
-    function chooseLinkAction(action) {
-        const info = linkMenuInfo
-        const open = linkMenuOpen
-        linkMenuOpen = null
+    /// What a click on the menu's link does (`newPane`: in the side panel).
+    function openMenuLink(newPane: bool): void {
+        if (linkMenuRequester !== null)
+            linkMenuOpenRequested(linkMenuRequester, linkMenuLink, newPane)
+        else if (newPane)
+            controller.activateLink(linkMenuRow, linkMenuLink, true)
+        else
+            activateLink(linkMenuRow, linkMenuLink)
+    }
+    function chooseLinkAction(action: string): void {
+        const open = linkMenuArmed
+        linkMenuArmed = false
         if (!controller)
             return
         switch (action) {
-        case "open": if (open) open(false); break
-        case "openSide": if (open) open(true); break
-        case "openTab": if (open) OpenIn.run("tab", () => open(false)); break
-        case "openWindow": if (open) OpenIn.run("window", () => open(false)); break
-        case "copy": copyText(info.copyText); break
-        case "overview": controller.navigate({ view: "tag", tag: info.tag, overview: true }); break
-        case "tasks": if (linkMenu) controller.navigate({ view: "tasks", query: linkMenu.tasksQuery(info.tag) }); break
+        case "open": if (open) openMenuLink(false); break
+        case "openSide": if (open) openMenuLink(true); break
+        case "openTab":
+            if (open) {
+                OpenIn.begin("tab")
+                openMenuLink(false)
+                OpenIn.end()
+            }
+            break
+        case "openWindow":
+            if (open) {
+                OpenIn.begin("window")
+                openMenuLink(false)
+                OpenIn.end()
+            }
+            break
+        case "copy": copyText(linkMenuInfo.map.copyText ? linkMenuInfo.map.copyText : ""); break
+        case "overview": controller.navigate({ view: "tag", tag: linkMenuInfo.tag(), overview: true }); break
+        case "tasks":
+            if (linkMenu)
+                controller.navigate({ view: "tasks", query: linkMenu.tasksQuery(linkMenuInfo.tag()) })
+            break
         }
     }
     /// Copy `text` and say so ("Skopiowano …", or that the clipboard is not available).
-    function copyText(text) {
-        if (!controller || !text)
+    function copyText(text: string): bool {
+        if (!controller || text === "")
             return false
-        const r = controller.copyText(text)
-        if (r.ok)
-            notice(qsTr("Copied %1").arg(r.text), "success")
+        copied.map = controller.copyText(text)
+        const ok = copied.map.ok === true
+        if (ok)
+            notice(qsTr("Copied %1").arg(copied.map.text), "success", null)
         else
-            notice(copyFailure(r.reason), "error")
-        return r.ok
+            notice(copyFailure(copied.reason()), "error", null)
+        return ok
     }
     Component {
         id: linkMenuComponent
@@ -2880,7 +3317,7 @@ FocusScope {
     /// The menu sets the status of every block from one end of the selection to the other
     /// (Ctrl+Shift+Enter on a range: PageController.setSelectionTaskStatus), not of one block.
     property bool taskMenuForSelection: false
-    function openTaskStatusMenu(row, item, x, y) {
+    function openTaskStatusMenu(row: int, item: Item, x: real, y: real): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
         taskMenuForSelection = false
@@ -2899,7 +3336,12 @@ FocusScope {
         taskMenu.status = taskStatusOf(row)
         // The timer and "Dodaj zależność…" for a task (docs/SYNTAX.md §5).
         taskMenu.showTaskTools = taskMenu.status !== ""
-        taskMenu.clockRunning = taskMenu.showTaskTools && controller.taskInfo(row).clockRunning === true
+        if (taskMenu.showTaskTools) {
+            taskInfo.map = controller.taskInfo(row)
+            taskMenu.clockRunning = taskInfo.map.clockRunning === true
+        } else {
+            taskMenu.clockRunning = false
+        }
         closeSuggestions()
         // A word the keyboard is still composing becomes text first (the status resets the text).
         if (editing)
@@ -2911,35 +3353,34 @@ FocusScope {
     }
     /// Can the block get a task status (a list item or a paragraph)? A heading, code, a table, a
     /// quote… cannot: the keyboard and the toolbar open no menu whose choices would do nothing.
-    function canHaveTaskStatus(row) {
+    function canHaveTaskStatus(row: int): bool {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return false
-        const kind = controller.blocks.get(row).kind
+        const kind = controller.blocks.kindAt(row)
         return kind === "listItem" || kind === "paragraph"
     }
     /// Ctrl+Shift+Enter: the menu under the caret of the block being edited, else under the
     /// selected block's first line; `selection`: for every block of the selected range (`row` is
     /// its focus end).
-    function openTaskStatusMenuFor(row, selection) {
-        if (!canHaveTaskStatus(row) && selection !== true)
+    function openTaskStatusMenuFor(row: int, selection: bool): void {
+        if (!canHaveTaskStatus(row) && !selection)
             return
         const edit = activeEditor
         const item = list.itemAtIndex(row) as BlockDelegate
         if (edit && edit.row === row && edit.active) {
-            const r = edit.cursorRectangle
-            openTaskStatusMenu(row, edit, r.x, r.y + r.height)
+            openTaskStatusMenu(row, edit, edit.caretRect.x, edit.caretRect.y + edit.caretRect.height)
         } else if (item) {
             openTaskStatusMenu(row, item, item.contentLeft, item.firstLineCenter + lineHeight / 2)
         } else {
             openTaskStatusMenu(row, null, 0, 0)
         }
-        taskMenuForSelection = selection === true
+        taskMenuForSelection = selection
         if (taskMenu)
             taskMenu.highlightStatus()
     }
     /// The touch toolbar's task button held down: the menu right above the button (the toolbar
     /// is docked on the keyboard).
-    function openTaskStatusMenuAbove(row, item) {
+    function openTaskStatusMenuAbove(row: int, item: Item): void {
         if (!canHaveTaskStatus(row))
             return
         if (!taskMenu)
@@ -2959,12 +3400,12 @@ FocusScope {
     property BMenu menuAbove: null
     property Item menuAboveAnchor: null
     property real menuAboveY: 0
-    function followToolbarWith(menu, anchor, y) {
+    function followToolbarWith(menu: BMenu, anchor: Item, y: real): void {
         menuAbove = menu && menu.visible ? menu : null
         menuAboveAnchor = anchor
         menuAboveY = y
     }
-    function followToolbar() {
+    function followToolbar(): void {
         const menu = menuAbove
         const anchor = menuAboveAnchor
         if (!menu || !anchor || !menu.visible || menu.touched)
@@ -2978,22 +3419,26 @@ FocusScope {
     Connections {
         target: KeyboardInsets
         enabled: editor.menuAbove !== null
-        function onOverlapChanged() { Qt.callLater(editor.followToolbar) }
+        function onOverlapChanged() { followLater.restart() }
     }
     Connections {
         target: editor.dockHost
         enabled: editor.menuAbove !== null
-        function onHeightChanged() { Qt.callLater(editor.followToolbar) }
+        function onHeightChanged() { followLater.restart() }
+    }
+    Timer {
+        id: followLater
+        interval: 0
+        onTriggered: if (editor.alive) editor.followToolbar()
     }
     /// The status of a block's task as the menu shows it ("" = none).
-    function taskStatusOf(row) {
-        const info = controller.blocks.get(row)
-        return info.kind === "listItem" ? info.taskStatus : ""
+    function taskStatusOf(row: int): string {
+        return controller.blocks.kindAt(row) === "listItem" ? controller.blocks.taskStatusAt(row) : ""
     }
-    function chooseTaskStatus(status) {
+    function chooseTaskStatus(status: string): void {
         if (!controller || taskMenuBlock < 0)
             return
-        const row = controller.trackedRow(taskMenuBlock)
+        const row = controller.trackedRow(taskMenuBlock) + 0 // (a typed copy: passed on after other calls)
         controller.untrack(taskMenuBlock)
         taskMenuBlock = -1
         if (taskMenuForSelection) {
@@ -3004,7 +3449,7 @@ FocusScope {
         }
     }
     /// The task the menu was opened for (its tracking ends), -1 when gone.
-    function takeTaskMenuRow() {
+    function takeTaskMenuRow(): int {
         if (!controller || taskMenuBlock < 0)
             return -1
         const row = controller.trackedRow(taskMenuBlock)
@@ -3014,25 +3459,27 @@ FocusScope {
         return row
     }
     /// Start or stop the timer of the task at `row` (one timer at a time: another one stops).
-    function toggleTaskClock(row) {
+    function toggleTaskClock(row: int): bool {
         if (!controller || row < 0 || taskStatusOf(row) === "")
             return false
-        const running = controller.taskInfo(row).clockRunning === true
+        taskInfo.map = controller.taskInfo(row)
+        const running = taskInfo.map.clockRunning === true
         if (!controller.toggleTaskClock(row))
             return false
-        notice(running ? qsTr("Timer stopped") : qsTr("Timer started"), "success")
+        notice(running ? qsTr("Timer stopped") : qsTr("Timer started"), "success", null)
         return true
     }
+    MapHolder { id: taskInfo }
     /// The block the palette's task commands act on: the one being edited, else the selected one.
-    function currentTaskRow() {
+    function currentTaskRow(): int {
         const row = currentRow()
         return row >= 0 && taskStatusOf(row) !== "" ? row : -1
     }
     /// The palette's "Licznik czasu zadania": the current task's timer.
-    function toggleCurrentTaskClock() {
+    function toggleCurrentTaskClock(): void {
         const row = currentTaskRow()
         if (row < 0) {
-            notice(qsTr("Put the cursor in a task first"), "info")
+            notice(qsTr("Put the cursor in a task first"), "info", null)
             return
         }
         toggleTaskClock(row)
@@ -3040,7 +3487,7 @@ FocusScope {
     /// "Dodaj zależność…": the picker for the task at `row`.
     property TaskDependencyDialog dependencyDialog: null
     property int dependencyBlock: -1
-    function openDependencyPicker(row) {
+    function openDependencyPicker(row: int): void {
         if (!controller || row < 0 || taskStatusOf(row) === "")
             return
         if (!dependencyDialog)
@@ -3050,10 +3497,10 @@ FocusScope {
         dependencyBlock = controller.trackBlock(row)
         dependencyDialog.open()
     }
-    function openCurrentDependencyPicker() {
+    function openCurrentDependencyPicker(): void {
         const row = currentTaskRow()
         if (row < 0) {
-            notice(qsTr("Put the cursor in a task first"), "info")
+            notice(qsTr("Put the cursor in a task first"), "info", null)
             return
         }
         openDependencyPicker(row)
@@ -3061,15 +3508,16 @@ FocusScope {
     Component {
         id: dependencyDialogComponent
         TaskDependencyDialog {
-            candidates: (text) => {
+            id: dependencies
+            onSearchRequested: (text) => {
                 const row = editor.controller && editor.dependencyBlock >= 0
                           ? editor.controller.trackedRow(editor.dependencyBlock) : -1
-                return row >= 0 ? editor.controller.dependencyCandidates(row, text) : []
+                dependencies.items = row >= 0 ? editor.controller.dependencyCandidates(row, text) : []
             }
             onChosen: (path, line) => {
                 const row = editor.controller.trackedRow(editor.dependencyBlock)
                 if (row >= 0 && editor.controller.addTaskDependency(row, path, line))
-                    editor.notice(qsTr("Dependency added"), "success")
+                    editor.notice(qsTr("Dependency added"), "success", null)
             }
             onClosed: {
                 if (editor.controller && editor.dependencyBlock >= 0)
@@ -3099,8 +3547,8 @@ FocusScope {
     }
 
     EditorDialogs {
-        id: dialogs
-        editor: editor
+        id: dialogsItem
+        editor: editor as B.BlockEditor
         controller: editor.controller
     }
 
@@ -3123,7 +3571,7 @@ FocusScope {
         height: editor.toolbarHeight
         z: 10
         sourceComponent: MobileEditToolbar {
-            editor: editor
+            editor: editor as B.BlockEditor
         }
     }
 
@@ -3138,7 +3586,7 @@ FocusScope {
                 && (editor.inSpan ? editor.spanTools : editor.controller.multiSelection)
         visible: active
         z: 11
-        anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+        anchors.horizontalCenter: editor.dockHost.horizontalCenter
         y: Theme.space2
         sourceComponent: Item {
             implicitWidth: card.width
@@ -3158,7 +3606,7 @@ FocusScope {
                     x: Theme.space1
                     y: Theme.space1
                     height: Theme.controlHeight
-                    editor: editor
+                    editor: editor as B.BlockEditor
                 }
             }
         }
@@ -3173,35 +3621,49 @@ FocusScope {
     property BMenu textMenu: null
     property InlineEditor textMenuEdit: null
     /// The misspelled word the menu is about ({from, to, word, text}; {}: none).
-    property var textMenuSpelling: ({})
+    MapHolder {
+        id: textMenuSpelling
+        /// The word as checked ("" when the menu is about none).
+        function word(): string { return textMenuSpelling.map.word === undefined ? "" : textMenuSpelling.map.word }
+        function text(): string { return textMenuSpelling.map.text ? textMenuSpelling.map.text : "" }
+    }
     /// Only the spelling's part (touch UIs).
     property bool textMenuSpellingOnly: false
-    function openTextMenu(edit, x, y) {
+    function openTextMenu(edit: InlineEditor, x: real, y: real): void {
         if (!edit || !controller)
             return
         // A click outside the selected text moves the caret there first.
-        const pos = edit.positionAt(x, y)
-        if (pos < edit.selectionStart || pos > edit.selectionEnd || edit.selectionStart === edit.selectionEnd)
+        const pos = edit.positionAt(x, y) + 0 // (typed copies: TextEdit's own cannot be compared)
+        const start = edit.selectionStart + 0
+        const end = edit.selectionEnd + 0
+        if (pos < start || pos > end || start === end)
             edit.cursorPosition = pos
-        showTextMenu(edit, edit.misspelledAt(pos), false, x, y)
+        chipFound.map = edit.misspelledAt(pos)
+        showTextMenu(edit, chipFound.map, false, x, y)
     }
     /// The corrections of the misspelled word at `pos` of the edited text (touch UIs: a tap on it).
-    function openSpellingMenu(edit, pos, x, y) {
+    function openSpellingMenu(edit: InlineEditor, pos: int, x: real, y: real): void {
         if (!edit || !controller)
             return
-        const word = edit.misspelledAt(pos)
-        if (word.word !== undefined)
-            showTextMenu(edit, word, true, x, y)
+        chipFound.map = edit.misspelledAt(pos)
+        if (chipFound.map.word !== undefined)
+            showTextMenu(edit, chipFound.map, true, x, y)
     }
-    function showTextMenu(edit, spelling, spellingOnly, x, y) {
+    /// SpellCheck's corrections of `word` (none until asked).
+    function suggestionsOf(word: string): list<string> {
+        return SpellCheck.suggestionsFor(word)
+    }
+    readonly property list<string> noStrings: []
+    function showTextMenu(edit: InlineEditor, spelling: var, spellingOnly: bool, x: real, y: real): void {
         if (!textMenu)
             textMenu = textMenuComponent.createObject(editor) as BMenu
         textMenuEdit = edit
-        textMenuSpelling = spelling
-        textMenuSpellingOnly = spellingOnly && spelling.word !== undefined
+        textMenuSpelling.map = spelling
+        const word = textMenuSpelling.word()
+        textMenuSpellingOnly = spellingOnly && word !== ""
         // Asked once per word (the answer is kept: SpellCheck.suggestionsFor).
-        if (spelling.word !== undefined && SpellCheck.suggestionsFor(spelling.word).length === 0)
-            SpellCheck.requestSuggestions(spelling.word)
+        if (word !== "" && suggestionsOf(word).length === 0)
+            SpellCheck.requestSuggestions(word)
         textMenu.bottomMargin = menuBottomMargin()
         textMenu.popup(edit, x, y)
     }
@@ -3211,35 +3673,39 @@ FocusScope {
             id: menu
             objectName: "editTextMenu"
             readonly property InlineEditor edit: editor.textMenuEdit
-            readonly property bool hasSelection: edit !== null && edit.selectionStart !== edit.selectionEnd
-            readonly property var spelling: editor.textMenuSpelling
-            readonly property bool misspelled: spelling.word !== undefined
+            readonly property bool hasSelection: edit !== null && editor.differs(edit.selectionStart, edit.selectionEnd)
+            /// The misspelled word ("" when none).
+            readonly property string word: textMenuSpelling.word()
+            readonly property bool misspelled: word !== ""
             readonly property bool textItems: !editor.textMenuSpellingOnly
-            /// The corrections of `spelling.word`; `suggesting` until they come.
-            property var suggestions: []
+            /// The corrections of `word`; `suggesting` until they come.
+            property list<string> suggestions
             property bool suggesting: false
-            onSpellingChanged: {
-                suggestions = misspelled ? SpellCheck.suggestionsFor(spelling.word) : []
-                suggesting = misspelled && suggestions.length === 0
+            readonly property list<string> shownSuggestions: misspelled ? suggestions : editor.noStrings
+            Connections {
+                target: textMenuSpelling
+                function onMapChanged() {
+                    menu.suggestions = menu.misspelled ? editor.suggestionsOf(menu.word) : editor.noStrings
+                    menu.suggesting = menu.misspelled && menu.suggestions.length === 0
+                }
             }
             Connections {
                 target: SpellCheck
-                function onSuggestionsReady(word, list) {
-                    if (menu.misspelled && word === menu.spelling.word) {
+                function onSuggestionsReady(word: string, list: list<string>) {
+                    if (menu.misspelled && word === menu.word) {
                         menu.suggestions = list
                         menu.suggesting = false
                     }
                 }
             }
-            function replaceWith(text) {
-                const word = spelling
-                if (edit && word.word !== undefined)
-                    edit.replaceWord(word.from, word.to, text)
+            function replaceWith(text: string): void {
+                if (edit && menu.misspelled)
+                    edit.replaceWord(textMenuSpelling.map.from, textMenuSpelling.map.to, text)
             }
 
             // The spelling: corrections, then the dictionary.
             Instantiator {
-                model: menu.misspelled ? menu.suggestions : []
+                model: menu.shownSuggestions
                 delegate: BMenuItem {
                     required property string modelData
                     objectName: "spellSuggestion"
@@ -3247,8 +3713,8 @@ FocusScope {
                     font.weight: Font.DemiBold
                     onTriggered: menu.replaceWith(modelData)
                 }
-                onObjectAdded: (index, object) => menu.insertItem(index, object)
-                onObjectRemoved: (index, object) => menu.removeItem(object)
+                onObjectAdded: (index, object) => menu.insertItem(index, object as Item)
+                onObjectRemoved: (index, object) => menu.removeItem(object as Item)
             }
             BMenuItem {
                 objectName: "spellNoSuggestions"
@@ -3262,9 +3728,9 @@ FocusScope {
                 visible: menu.misspelled
                 height: visible ? implicitHeight : 0
                 //: %1: the word, added to the personal dictionary of spell checking
-                text: qsTr("Add “%1” to dictionary").arg(menu.spelling.text || "")
+                text: qsTr("Add “%1” to dictionary").arg(textMenuSpelling.text())
                 iconName: "plus"
-                onTriggered: SpellCheck.addToDictionary(menu.spelling.word)
+                onTriggered: SpellCheck.addToDictionary(menu.word)
             }
             BMenuItem {
                 objectName: "spellIgnore"
@@ -3272,7 +3738,7 @@ FocusScope {
                 height: visible ? implicitHeight : 0
                 text: qsTr("Ignore", "spelling")
                 iconName: "eye-off"
-                onTriggered: SpellCheck.ignore(menu.spelling.word)
+                onTriggered: SpellCheck.ignore(menu.word)
             }
             BMenuSeparator {
                 visible: menu.misspelled && menu.textItems
@@ -3324,10 +3790,11 @@ FocusScope {
                 text: qsTr("Highlight…")
                 iconName: "highlighter"
                 onTriggered: {
-                    const edit = menu.edit
-                    if (edit)
-                        editor.later(() => editor.openHighlightMenu(edit, edit, edit.cursorRectangle.x,
-                                                                    edit.cursorRectangle.y + edit.cursorRectangle.height))
+                    if (menu.edit) {
+                        menuLater.edit = menu.edit
+                        menuLater.highlight = true
+                        menuLater.restart()
+                    }
                 }
             }
             BMenuItem {
@@ -3345,9 +3812,11 @@ FocusScope {
                 text: qsTr("Block…")
                 iconName: "ellipsis"
                 onTriggered: {
-                    const edit = menu.edit
-                    if (edit)
-                        editor.later(() => editor.openBlockMenu(edit.row, edit, 0, edit.cursorRectangle.y + edit.cursorRectangle.height))
+                    if (menu.edit) {
+                        menuLater.edit = menu.edit
+                        menuLater.highlight = false
+                        menuLater.restart()
+                    }
                 }
             }
             // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
@@ -3363,8 +3832,30 @@ FocusScope {
     /// step; the highlighted text stays selected. Made when first opened.
     property BMenu highlightMenu: null
     property InlineEditor highlightMenuEdit: null
+    /// The text menu's "Zakreśl…" and "Blok…" open their menus once it is closed: at the caret of
+    /// `edit` (`highlight`: the colours, else the block menu).
+    Timer {
+        id: menuLater
+        property InlineEditor edit: null
+        property bool highlight: false
+        interval: 0
+        onTriggered: {
+            const edit = menuLater.edit
+            if (!editor.alive || !edit)
+                return
+            const bottom = edit.caretRect.y + edit.caretRect.height
+            if (menuLater.highlight)
+                editor.openHighlightMenu(edit, edit, edit.caretRect.x, bottom)
+            else
+                editor.openBlockMenu(edit.row, edit, 0, bottom)
+        }
+    }
+    /// `a` !== `b` for two values that are only passed on here (shadowable ones cannot be compared).
+    function differs(a: int, b: int): bool {
+        return a !== b
+    }
     /// What a palette colour (TextHelper.highlightColors) is called in the menu.
-    function highlightColorLabel(name) {
+    function highlightColorLabel(name: string): string {
         switch (name) {
         case "default": return qsTr("Default", "highlight colour")
         case "red": return qsTr("Red")
@@ -3380,26 +3871,41 @@ FocusScope {
         return name
     }
     /// Highlight the selection of the edited text `edit` in `color` (a palette name; "" removes).
-    function applyHighlight(edit, color) {
+    function applyHighlight(edit: InlineEditor, color: string): void {
         if (!edit || !controller || !edit.active)
             return
         EditorInput.commitPreedit(edit)
-        const r = controller.setHighlight(edit.row, edit.selectionStart, edit.selectionEnd, color)
-        if (!r.changed) {
+        highlighted.map = controller.setHighlight(edit.row, edit.selectionStart, edit.selectionEnd, color)
+        if (!highlighted.map.changed) {
             if (color === "")
-                notice(qsTr("No highlight here"), "info")
-            else if (r.refused)
-                notice(qsTr("Select text within one line, not across a highlight's edge"), "info")
+                notice(qsTr("No highlight here"), "info", null)
+            else if (highlighted.map.refused)
+                notice(qsTr("Select text within one line, not across a highlight's edge"), "info", null)
             return
         }
-        later(() => {
-            if (edit.active) {
-                edit.ensureFocus()
-                edit.select(r.from, r.to)
-            }
-        })
+        highlightLater.edit = edit
+        highlightLater.from = highlighted.map.from
+        highlightLater.to = highlighted.map.to
+        highlightLater.restart()
     }
-    function openHighlightMenu(edit, item, x, y) {
+    /// PageController.setHighlight's result.
+    MapHolder { id: highlighted }
+    /// The highlighted text selected again once the edit has settled.
+    Timer {
+        id: highlightLater
+        property InlineEditor edit: null
+        property int from: 0
+        property int to: 0
+        interval: 0
+        onTriggered: {
+            const edit = highlightLater.edit
+            if (editor.alive && edit && edit.active) {
+                edit.ensureFocus()
+                edit.select(highlightLater.from, highlightLater.to)
+            }
+        }
+    }
+    function openHighlightMenu(edit: InlineEditor, item: Item, x: real, y: real): void {
         if (!edit || !controller)
             return
         if (!highlightMenu)
@@ -3409,7 +3915,7 @@ FocusScope {
         highlightMenu.popup(item, x, y)
     }
     /// The touch toolbar's "Zakreśl": the colours above the bar.
-    function openHighlightMenuAbove(edit, item) {
+    function openHighlightMenuAbove(edit: InlineEditor, item: Item): void {
         if (!edit || !controller)
             return
         if (!highlightMenu)
@@ -3426,14 +3932,15 @@ FocusScope {
             Instantiator {
                 model: TextHelper.highlightColors()
                 delegate: BMenuItem {
-                    required property var modelData
-                    objectName: "highlight-" + modelData.name
-                    text: editor.highlightColorLabel(modelData.name)
-                    swatch: modelData.name === "default" ? Theme.mark : modelData.tint
-                    onTriggered: editor.applyHighlight(editor.highlightMenuEdit, modelData.name)
+                    required property string name
+                    required property color tint
+                    objectName: "highlight-" + name
+                    text: editor.highlightColorLabel(name)
+                    swatch: name === "default" ? Theme.mark : tint
+                    onTriggered: editor.applyHighlight(editor.highlightMenuEdit, name)
                 }
-                onObjectAdded: (index, object) => colours.insertItem(index, object)
-                onObjectRemoved: (index, object) => colours.removeItem(object)
+                onObjectAdded: (index, object) => colours.insertItem(index, object as Item)
+                onObjectRemoved: (index, object) => colours.removeItem(object as Item)
             }
             BMenuSeparator {}
             BMenuItem {
@@ -3447,7 +3954,8 @@ FocusScope {
         }
     }
 
-    /// The dialogs (for tests and the playground's scripted states).
-    readonly property alias dialogs: dialogs
-    readonly property alias listView: list
+    /// The dialogs (for tests and the playground's scripted states). (final: looked into through
+    /// `editor` by the touch toolbar and the views.)
+    final property EditorDialogs dialogs: dialogsItem
+    final property ListView listView: list
 }

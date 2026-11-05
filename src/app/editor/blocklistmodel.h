@@ -173,6 +173,11 @@ public:
     /// A few roles of `row` by name (view, kind, taskStatus, depth, hasChildren, collapsed,
     /// visible, blockId, headingLevel, plainText, editText, listMarker); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
+    /// get(row)'s view, kind and taskStatus typed, for QML compiled ahead of time ("" for an
+    /// invalid row).
+    Q_INVOKABLE QString viewAt(int row) const;
+    Q_INVOKABLE QString kindAt(int row) const;
+    Q_INVOKABLE QString taskStatusAt(int row) const;
 
     // --- Document ----------------------------------------------------------------------------
     const markdown::BlockDocument &document() const { return m_doc; }

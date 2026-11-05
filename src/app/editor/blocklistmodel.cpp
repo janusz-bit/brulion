@@ -1818,6 +1818,21 @@ QVariantMap BlockListModel::get(int row) const
             {u"html"_s, data(idx, HtmlRole)}};
 }
 
+QString BlockListModel::viewAt(int row) const
+{
+    return docIndexOfRow(row) < 0 ? QString() : data(index(row), ViewRole).toString();
+}
+
+QString BlockListModel::kindAt(int row) const
+{
+    return docIndexOfRow(row) < 0 ? QString() : data(index(row), KindRole).toString();
+}
+
+QString BlockListModel::taskStatusAt(int row) const
+{
+    return docIndexOfRow(row) < 0 ? QString() : data(index(row), TaskStatusRole).toString();
+}
+
 // --- View state ------------------------------------------------------------------------------
 
 void BlockListModel::setZoomUid(quint64 uid)

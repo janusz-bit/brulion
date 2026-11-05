@@ -30,7 +30,7 @@ import Brulion
 Rectangle {
     id: bar
 
-    property BlockEditor editor
+    final property BlockEditor editor
     /// "block" | "cell" | "source" | "selection" (see above).
     readonly property string mode: editor ? editor.toolbarMode : ""
     /// The tools shown: `mode`, kept while the bar is hidden between two edits.
@@ -62,7 +62,7 @@ Rectangle {
     Component.onCompleted: showMode()
     // A tool set is made when its mode first comes (latched here: a Loader loads synchronously
     // inside its `active` binding) and then kept.
-    function showMode() {
+    function showMode(): void {
         if (mode === "")
             return
         shownMode = mode
@@ -78,13 +78,13 @@ Rectangle {
 
     /// Commit the word the keyboard is composing before a button acts on the block: otherwise
     /// it is dropped when the controller resets the block's text.
-    function commitComposition() {
+    function commitComposition(): void {
         if (edit)
             EditorInput.commitPreedit(edit)
     }
 
     /// Insert `s` at the caret of the block (or of the source in source mode).
-    function insertText(s) {
+    function insertText(s: string): void {
         const target = bar.mode === "source" ? bar.sourceEdit : bar.edit
         if (!target || target.readOnly)
             return
@@ -99,41 +99,44 @@ Rectangle {
         target.insert(target.cursorPosition, lead + s)
     }
     /// Close the keyboard and end the editing (the toolbar goes with it).
-    function hideKeyboard() {
+    function hideKeyboard(): void {
         if (bar.mode === "block") {
             bar.commitComposition()
-            Qt.inputMethod.hide()
+            DeviceInfo.hideInputMethod()
             bar.editor.stopEditing(false)
         } else if (bar.mode === "cell") {
             // The composed word first: hiding the keyboard may drop it.
             if (bar.table && bar.table.cellInput)
                 EditorInput.commitPreedit(bar.table.cellInput)
-            Qt.inputMethod.hide()
+            DeviceInfo.hideInputMethod()
             if (bar.table)
                 bar.table.closeCell()
         } else if (bar.mode === "source") {
             if (bar.sourceEdit)
                 EditorInput.commitPreedit(bar.sourceEdit)
-            Qt.inputMethod.hide()
+            DeviceInfo.hideInputMethod()
             bar.editor.releaseSourceKeyboard()
         }
     }
 
     component ToolButton: BIconButton {
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        // (Centred in the row; a binding to `undefined` anchors is not compiled.)
+        y: parent ? (parent.height - height) / 2 : 0
         focusPolicy: Qt.NoFocus
         size: "small"
         enabled: bar.row >= 0
     }
     component Separator: Rectangle {
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        // (Centred in the row; a binding to `undefined` anchors is not compiled.)
+        y: parent ? (parent.height - height) / 2 : 0
         width: 1
         height: bar.height * 0.5
         color: Theme.border
     }
     /// Indent, outdent, move: the outline's first tools; in a document after the writing tools.
     component StructureTools: Row {
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        // (Centred in the row; a binding to `undefined` anchors is not compiled.)
+        y: parent ? (parent.height - height) / 2 : 0
         ToolButton {
             iconName: "list-indent-decrease"
             label: qsTr("Outdent")
@@ -159,7 +162,8 @@ Rectangle {
     }
     /// Task, [[, #, /.
     component WritingTools: Row {
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        // (Centred in the row; a binding to `undefined` anchors is not compiled.)
+        y: parent ? (parent.height - height) / 2 : 0
         ToolButton {
             id: taskButton
             objectName: "toolbarTask"
@@ -456,15 +460,14 @@ Rectangle {
         width: Theme.touchUi ? Theme.touchTarget : 32
         gradient: Gradient {
             orientation: Gradient.Horizontal
-            GradientStop { position: 0; color: Theme.alpha(Theme.bgElevated, more.atEnd ? 0 : 1) }
+            GradientStop { position: 0; color: Theme.bgElevated.alpha(more.atEnd ? 0 : 1) }
             GradientStop { position: 0.45; color: Theme.bgElevated }
-            GradientStop { position: 1; color: Theme.alpha(Theme.bgElevated, more.atEnd ? 1 : 0) }
+            GradientStop { position: 1; color: Theme.bgElevated.alpha(more.atEnd ? 1 : 0) }
         }
         BIcon {
             anchors.verticalCenter: parent.verticalCenter
-            anchors.right: more.atEnd ? parent.right : undefined
-            anchors.left: more.atEnd ? undefined : parent.left
-            anchors.margins: 4
+            // At the right edge (atEnd) or the left one, 4 px in.
+            x: more.atEnd ? parent.width - width - 4 : 4
             name: more.atEnd ? "chevron-right" : "chevron-left"
             size: Theme.iconSizeSm
             color: Theme.fgMuted

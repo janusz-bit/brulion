@@ -10,7 +10,9 @@ Item {
     id: root
 
     property PageController controller
-    readonly property var crumbs: controller ? controller.breadcrumb : []
+    readonly property list<var> crumbs: controller ? controller.breadcrumb : []
+    /// BBreadcrumb's entries without a page.
+    readonly property list<var> noPage: [{ title: "" }]
 
     implicitHeight: row.implicitHeight + Theme.space2
 
@@ -28,17 +30,12 @@ Item {
         BBreadcrumb {
             Layout.fillWidth: true
             rootIcon: "file-text"
-            model: {
-                const out = [{ title: root.controller ? root.controller.title : "" }]
-                for (let i = 0; i < root.crumbs.length; ++i)
-                    out.push({ title: root.crumbs[i].title !== "" ? root.crumbs[i].title : "…" })
-                return out
-            }
+            model: root.controller ? root.controller.breadcrumbItems(root.controller.title, root.crumbs) : root.noPage
             onActivated: (index) => {
                 if (index === 0)
                     root.controller.zoomTo(-1)
                 else if (index - 1 < root.crumbs.length)
-                    root.controller.zoomTo(root.crumbs[index - 1].row)
+                    root.controller.zoomTo(root.controller.breadcrumbRow(index - 1))
             }
         }
     }

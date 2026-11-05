@@ -49,6 +49,17 @@ public:
     /// Shift for handlers whose signal does not carry it (a frame's, a bullet's tap).
     Q_INVOKABLE int keyboardModifiers() const;
 
+    /// Where `after` differs from `before` as one replaced range: [from, endAfter, endBefore] —
+    /// the common start and end left out (TextDelta::between). The inline editor reads a typed
+    /// text from it (a text with a line break in it splits the block).
+    Q_INVOKABLE QList<int> changedRange(const QString &before, const QString &after) const;
+
+    /// The number of child items of `item` and the one at `index` in their stacking order
+    /// (QQuickItem::childItems(); 0 / null for a null item or an index out of range): compiled
+    /// QML cannot read an Item's `children` list.
+    Q_INVOKABLE int childCount(QQuickItem *item) const;
+    Q_INVOKABLE QQuickItem *childAt(QQuickItem *item, int index) const;
+
     // --- Drivers for tests -------------------------------------------------------------------
     /// Press and release `key` (Qt::Key) with `modifiers` (Qt::KeyboardModifiers) and `text` in
     /// the window of `item`, delivered like a real key to the window's focus item.

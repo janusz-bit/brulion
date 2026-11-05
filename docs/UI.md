@@ -1094,7 +1094,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `headingLevel`, `hasChildren`, `collapsed`, `taskStatus`, `blockId`, `lang`, calc results,
   table models… Zoom (one block's subtree) and folding are model-level; rows survive edits
   (no model resets).
-* `qml/editor/BlockEditor.qml`: a `ListView` of `BlockDelegate`s. An unfocused block shows its
+* `qml/editor/BlockEditor.qml`: a `ListView` of `BlockDelegate`s. A delegate takes the roles every
+  block reads as typed `required property`s (`shown` is the role `visible`); the roles only some
+  blocks or views read — the rendered `html`, `editText`, a table's or chart's data, a query… —
+  come from `BlockDelegate.rowData` (`BlockRowData`, `src/app/editor/blockrowdata.h`: typed,
+  read on demand from the delegate's model object, so a hidden row or a code block never renders
+  a text it does not show). An unfocused block shows its
   rendered rich text (links: `page:`, `part:` (a path part of `[[Folder/Page]]`), `tag:`, `block:`,
   `ext:`, `task:`, `reminder:` URLs; the token menus' `date:`, `recur:`, `prio:` and `day:`). A text with tinted spans (the renderer's
   chips and tags, inline code, highlights: a `background-color` in its HTML) is shown by a
@@ -1104,7 +1109,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   frame — and keeps their colour and kind (a span with its own text colour is a pill, a
   fixed-pitch one or any other a box) on the format, and lays one rectangle per line segment
   out of the document's own layout, centred on the span's glyphs (its font's ascent and descent
-  around the baseline); a `Repeater` draws them under the text. Every other text stays a `Text`
+  around the baseline); a `Repeater` draws them under the text (`shapes`: typed `richTextPill`s). Every other text stays a `Text`
   (cheaper rows); clicks, long presses, right-clicks and the cursor shape go through the same
   overlay for both (`BlockText.linkAt`).
   **Rendered text outside the blocks** — linked references (`ContentRefRow`), Tasks and calendar
@@ -1770,8 +1775,8 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   the browser, docs/WEB.md "Schowek") and refuses more than 800 KB (Android's clipboard takes
   about 1 MB per transaction) with a toast — never cut short. Cut = copy, then delete as one undo
   step. The toasts "Wycięto %n bloków" and "Usunięto %n bloków" (two or more blocks) have
-  "Cofnij": the editor's `message(text, kind, action)` carries `{text, run}`
-  (`BlockEditor.undoAction()`), the page views pass it to `AppController.toastAction` and the
+  "Cofnij": the editor's `message(text, kind, action)` carries an `EditorToastAction` (`text`,
+  `run()`; `BlockEditor.undoAction()`), the page views pass it to `AppController.toastAction` and the
   shell's toast shows the button; it runs `PageController.undoStep(token)`, which undoes that edit
   only while it is still the page's last step (`undoToken()` taken right after it names the
   history, the position and the step there) — after other edits (one made in its place after

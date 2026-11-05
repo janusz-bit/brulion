@@ -674,6 +674,11 @@ public:
     Q_INVOKABLE QVariantMap dateChip(int row, const QString &url) const;
     /// dateChip(row, url)'s "url" ("" without one): typed, for QML compiled ahead of time.
     Q_INVOKABLE QString dateChipUrl(int row, const QString &url) const;
+    /// The zoom breadcrumb's entries for BBreadcrumb (ZoomBreadcrumb): [{ title }] — the page
+    /// `pageTitle`, then each entry of `crumbs` (breadcrumb()), "…" for one without a title.
+    Q_INVOKABLE QVariantList breadcrumbItems(const QString &pageTitle, const QVariantList &crumbs) const;
+    /// The row of breadcrumb() entry `i` (-1 out of range).
+    Q_INVOKABLE int breadcrumbRow(int i) const;
     /// One edit of a token menu on body range [from, to) of a row (markdown::applyTokenAction():
     /// "set", "move", "shift", "alarm", "reminder", "remove", "recurrence", "priority",
     /// "blockRecurrence", "blockPriority"; on a [[day]] link "set", "move", "shift") — only the

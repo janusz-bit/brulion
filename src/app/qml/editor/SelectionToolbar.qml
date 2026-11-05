@@ -22,7 +22,7 @@ import Brulion
 Row {
     id: bar
 
-    property BlockEditor editor
+    final property BlockEditor editor
     /// In the touch toolbar's slot (else the desktop's floating bar).
     property bool docked: false
     readonly property PageController controller: editor ? editor.controller : null
@@ -43,14 +43,21 @@ Row {
     /// blocks), read when "Więcej" opens.
     property string unmovable: ""
     /// Indenting and moving from the menu: a selection with gaps says why instead.
-    function moveOr(action) {
-        if (unmovable !== "")
-            editor.notice(unmovable, "info")
-        else
-            action()
+    /// `action`: "indent", "outdent", "up", "down".
+    function moveOr(action: string): void {
+        if (unmovable !== "") {
+            editor.notice(unmovable, "info", null)
+            return
+        }
+        switch (action) {
+        case "indent": controller.indentSelection(); break
+        case "outdent": controller.outdentSelection(); break
+        case "up": controller.moveSelectionUp(); break
+        case "down": controller.moveSelectionDown(); break
+        }
     }
     /// The task status menu: not over several days.
-    function setStatus(status) {
+    function setStatus(status: string): void {
         if (!editor.spanRefuses())
             controller.setSelectionTaskStatus(status)
     }
@@ -62,7 +69,8 @@ Row {
     // `unavailable` (BIconButton): shown but not possible now, the reason as its tooltip; a tap
     // says why.
     component Tool: BIconButton {
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        // (Centred in the row; a binding to `undefined` anchors is not compiled.)
+        y: parent ? (parent.height - height) / 2 : 0
         focusPolicy: Qt.NoFocus
         size: "small"
         enabled: bar.count > 0
@@ -166,7 +174,7 @@ Row {
     // ---- Więcej ---------------------------------------------------------------------------------
     /// The menu (made when first opened): above the docked bar, below the floating one.
     property BMenu menu: null
-    function openMenu() {
+    function openMenu(): void {
         if (!menu)
             menu = menuComponent.createObject(bar) as BMenu
         // A document's paragraphs and headings have no outline: no Zwiększ / Zmniejsz wcięcie.
@@ -185,7 +193,7 @@ Row {
             // Above the bar (it sits on the keyboard's place): the height it will have.
             let h = menu.topPadding + menu.bottomPadding
             for (let i = 0; i < menu.count; ++i) {
-                const entry = menu.itemAt(i)
+                const entry = menu.itemAt(i) as Item
                 if (entry && entry.height !== 0) // (items are not visible while the menu is closed)
                     h += entry.implicitHeight
             }
@@ -246,7 +254,7 @@ Row {
                 iconName: "list-indent-increase"
                 shortcut: bar.docked ? "" : "Tab"
                 unavailable: bar.unmovable
-                onTriggered: bar.moveOr(() => bar.controller.indentSelection())
+                onTriggered: bar.moveOr("indent")
             }
             OptionalItem {
                 objectName: "selectionOutdent"
@@ -255,7 +263,7 @@ Row {
                 iconName: "list-indent-decrease"
                 shortcut: bar.docked ? "" : "Shift+Tab"
                 unavailable: bar.unmovable
-                onTriggered: bar.moveOr(() => bar.controller.outdentSelection())
+                onTriggered: bar.moveOr("outdent")
             }
             BMenuItem {
                 objectName: "selectionMoveUp"
@@ -263,7 +271,7 @@ Row {
                 iconName: "move-up"
                 shortcut: bar.docked ? "" : "Alt+Up"
                 unavailable: bar.unmovable
-                onTriggered: bar.moveOr(() => bar.controller.moveSelectionUp())
+                onTriggered: bar.moveOr("up")
             }
             BMenuItem {
                 objectName: "selectionMoveDown"
@@ -271,7 +279,7 @@ Row {
                 iconName: "move-down"
                 shortcut: bar.docked ? "" : "Alt+Down"
                 unavailable: bar.unmovable
-                onTriggered: bar.moveOr(() => bar.controller.moveSelectionDown())
+                onTriggered: bar.moveOr("down")
             }
             BMenu {
                 objectName: "selectionTaskMenu"

@@ -22,8 +22,8 @@ import Brulion
 Flickable {
     id: root
 
-    property BlockEditor editor
-    property PageController controller
+    final property BlockEditor editor
+    final property PageController controller
     /// The source's text editor (the touch toolbar inserts into it and uses its undo).
     readonly property alias textEdit: source
     /// Room at the bottom for the toolbar docked on the editor's bottom edge.
@@ -37,30 +37,35 @@ Flickable {
     clip: true
     TouchFlick.enabled: true
 
-    function focusEditor() { source.forceActiveFocus() }
+    function focusEditor(): void { source.forceActiveFocus() }
     /// The find bar's current match: selected and scrolled to; the bar may keep the keyboard.
-    function showRange(from, to, keepKeyboard) {
+    function showRange(from: int, to: int, keepKeyboard: bool): void {
         source.select(from, to)
         if (!keepKeyboard)
             source.forceActiveFocus()
-        const rect = source.positionToRectangle(from)
+        root.rect = source.positionToRectangle(from)
+        const rect = root.rect
         const top = source.y + rect.y
         const visibleHeight = root.height - root.toolbarRoom
         if (top < root.contentY + Theme.space4 || top + rect.height > root.contentY + visibleHeight - Theme.space4)
             root.contentY = Math.max(0, Math.min(top - visibleHeight / 3, root.contentHeight - visibleHeight))
     }
     /// The find bar's replaces: one step of the text's own undo history.
-    function replaceRanges(ranges, text) {
+    function replaceRanges(ranges: list<var>, text: string): void {
         EditorInput.replaceRanges(source.textDocument, ranges, text)
     }
     /// "Hide keyboard" on the toolbar: the text gives up the keyboard (a tap brings it back).
-    function releaseKeyboard() { source.focus = false }
+    function releaseKeyboard(): void { source.focus = false }
+    /// A rectangle of the text, read (positionToRectangle()'s and cursorRectangle's results
+    /// cannot be looked into).
+    property rect rect
     /// Keep the caret inside the visible part (above the toolbar), not while the keyboard slides.
-    function keepCaretVisible() {
+    function keepCaretVisible(): void {
         if (!source.activeFocus || KeyboardInsets.animating)
             return
-        const top = source.y + source.cursorRectangle.y
-        const bottom = top + source.cursorRectangle.height
+        root.rect = source.cursorRectangle
+        const top = source.y + root.rect.y
+        const bottom = top + root.rect.height
         const visibleHeight = root.height - root.toolbarRoom
         if (root.editor && root.editor.typewriter) {
             // Typewriter scrolling: the caret's line in the middle.
@@ -81,11 +86,17 @@ Flickable {
         const shrank = height < lastHeight - 0.5
         lastHeight = height
         if (shrank)
-            Qt.callLater(root.keepCaretVisible)
+            caretLater.restart()
     }
-    onToolbarRoomChanged: Qt.callLater(root.keepCaretVisible)
+    onToolbarRoomChanged: caretLater.restart()
     readonly property bool keyboardSliding: KeyboardInsets.animating
-    onKeyboardSlidingChanged: if (!keyboardSliding && KeyboardInsets.shown) Qt.callLater(root.keepCaretVisible)
+    onKeyboardSlidingChanged: if (!keyboardSliding && KeyboardInsets.shown) caretLater.restart()
+    /// keepCaretVisible() once the event loop is idle (repeated requests are one).
+    Timer {
+        id: caretLater
+        interval: 0
+        onTriggered: root.keepCaretVisible()
+    }
     Component.onDestruction: if (editor) editor.sourceEditing = false
 
     T.ScrollBar.vertical: BScrollBar {}
@@ -209,9 +220,11 @@ Flickable {
             objectName: "sourceTouchTap" // the shell self-test holds a long press until it selected
             gesturePolicy: TapHandler.ReleaseWithinBounds
             onTapped: (eventPoint) => {
+                const x = eventPoint.position.x
+                const y = eventPoint.position.y
                 source.forceActiveFocus()
-                source.cursorPosition = source.positionAt(eventPoint.position.x, eventPoint.position.y)
-                Qt.inputMethod.show()
+                source.cursorPosition = source.positionAt(x, y)
+                DeviceInfo.showInputMethod()
             }
             onLongPressed: {
                 source.forceActiveFocus()

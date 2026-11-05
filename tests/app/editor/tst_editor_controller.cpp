@@ -295,7 +295,15 @@ private Q_SLOTS:
             QCOMPARE(info.value(u"headingLevel"_s).toInt(), f.role(r, "headingLevel").toInt());
             if (info.value(u"view"_s).toString() == u"heading")
                 QVERIFY(info.value(u"headingLevel"_s).toInt() > 0);
+            // The typed accessors say what get() says; the role `shown` is `visible`.
+            QCOMPARE(f.model()->viewAt(r), info.value(u"view"_s).toString());
+            QCOMPARE(f.model()->kindAt(r), info.value(u"kind"_s).toString());
+            QCOMPARE(f.model()->taskStatusAt(r), info.value(u"taskStatus"_s).toString());
+            QCOMPARE(f.role(r, "shown"), f.role(r, "visible"));
         }
+        QCOMPARE(f.model()->viewAt(-1), QString());
+        QCOMPARE(f.model()->kindAt(f.count()), QString());
+        QCOMPARE(f.model()->taskStatusAt(f.count() + 5), QString());
         // Tasks, depth and children.
         int kup = -1;
         for (int r = 0; r < f.count(); ++r) {
@@ -1285,6 +1293,18 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(crumbs.size(), 2);
         QCOMPARE(crumbs[0].toMap().value(u"title"_s).toString(), u"a"_s);
         QCOMPARE(crumbs[1].toMap().value(u"row"_s).toInt(), 1);
+        // The breadcrumb bar's entries and rows (ZoomBreadcrumb).
+        QCOMPARE(f.page.breadcrumbRow(0), 0);
+        QCOMPARE(f.page.breadcrumbRow(1), 1);
+        QCOMPARE(f.page.breadcrumbRow(2), -1);
+        QCOMPARE(f.page.breadcrumbRow(-1), -1);
+        const QVariantList untitled{QVariantMap{{u"row"_s, 3}, {u"title"_s, QString()}}};
+        QCOMPARE(f.page.breadcrumbItems(u"Łąka"_s, crumbs),
+                 QVariantList({QVariantMap{{u"title"_s, u"Łąka"_s}}, QVariantMap{{u"title"_s, u"a"_s}},
+                               QVariantMap{{u"title"_s, u"a1"_s}}}));
+        QCOMPARE(f.page.breadcrumbItems(QString(), untitled),
+                 QVariantList({QVariantMap{{u"title"_s, QString()}}, QVariantMap{{u"title"_s, u"…"_s}}}));
+        QCOMPARE(f.page.breadcrumbItems(u"Strona"_s, {}), QVariantList({QVariantMap{{u"title"_s, u"Strona"_s}}}));
         // Enter at the end of the zoomed block adds a first child inside the zoom.
         f.page.startEditing(1, 2);
         const QVariantMap r = f.page.split(1, 2);
