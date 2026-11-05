@@ -11,7 +11,7 @@ import Brulion
 Rectangle {
     id: root
 
-    property BlockDelegate block
+    final property BlockDelegate block
     readonly property real firstLineCenter: formula.y + formula.firstLineCenter
 
     implicitHeight: formula.y + formula.implicitHeight + Theme.space3

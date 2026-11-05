@@ -8,7 +8,7 @@ import Brulion
 Rectangle {
     id: root
 
-    property BlockDelegate block
+    final property BlockDelegate block
     readonly property real firstLineCenter: code.y + Theme.lineHeightPx(Theme.textSm, 1.5) / 2
 
     implicitHeight: code.y + code.implicitHeight + Theme.space3
@@ -20,11 +20,11 @@ Rectangle {
 
     Text {
         id: label
-        visible: root.block.model.lang !== ""
+        visible: root.block.rowData.lang !== ""
         anchors.right: parent.right
         anchors.rightMargin: Theme.space3
         y: Theme.space2
-        text: root.block.model.lang
+        text: root.block.rowData.lang
         textFormat: Text.PlainText
         font.family: Theme.fontMono
         font.pixelSize: Theme.textXs

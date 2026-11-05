@@ -19,14 +19,13 @@ import Brulion
 Rectangle {
     id: root
 
-    property BlockDelegate block
+    final property BlockDelegate block
     readonly property BlockEditor editor: block.editor
-    readonly property var query: block.model.query || ({})
-    readonly property var filters: query.filters || []
-    readonly property var terms: query.terms || []
+    readonly property list<var> filters: root.block.rowData.query.filters
+    readonly property list<string> terms: root.block.rowData.query.terms
     readonly property real firstLineCenter: Theme.space3 + headerRow.height / 2
     readonly property bool live: results.available
-    readonly property bool emptySource: (block.model.editText || "").trim() === ""
+    readonly property bool emptySource: Js.trim(root.block.rowData.editText) === ""
     readonly property int itemFontSize: Theme.textEditor
     readonly property int itemLineHeight: Theme.lineHeightPx(itemFontSize, 1.45)
 
@@ -46,13 +45,18 @@ Rectangle {
     QueryResultModel {
         id: results
         controller: root.block.controller
-        source: root.block.model.editText
+        source: root.block.rowData.editText
         // The block is created with its rows (while the page scrolls): on a phone 20 of them are
         // about a screenful and take less than half the time of 50 ("Show more" adds the rest).
         maxItems: Theme.touchUi ? 20 : 50
     }
 
-    function filterLabel(key) {
+    /// What results.open() / activateLink() answered: { action, row, … }.
+    MapHolder { id: answer }
+    /// The result row whose link menu is open (its link opens there: onLinkMenuOpenRequested).
+    property int menuRow: -1
+
+    function filterLabel(key: string): string {
         switch (key) {
         case "type": return qsTr("type")
         case "status": return qsTr("status")
@@ -71,7 +75,7 @@ Rectangle {
         default: return key
         }
     }
-    function chipVariant(key) {
+    function chipVariant(key: string): string {
         switch (key) {
         case "tag": return "tag"
         case "due": return "due"
@@ -82,7 +86,7 @@ Rectangle {
         }
     }
     /// "3 tasks", "12 of 40 blocks" — what the header says about the results.
-    function countText() {
+    function countText(): string {
         if (!results.ready || !results.ok || root.emptySource || results.itemCount === 0)
             return ""
         const n = results.itemCount
@@ -96,42 +100,52 @@ Rectangle {
         return results.total > n ? qsTr("%1 of %2").arg(what).arg(results.total) : what
     }
     /// The page of an item for its quiet link: daily notes by their date.
-    function pageLabel(title, journal) {
+    function pageLabel(title: string, journal: string): string {
         return journal !== "" ? DatesHelper.formatHuman(journal) : title
     }
     /// Opening an item: on this page the editor scrolls to the block.
-    function openResult(index) {
-        const r = results.open(index, false)
-        if (r && r.action === "scrollTo")
-            root.editor.revealRow(r.row)
+    function openResult(index: int): void {
+        answer.map = results.open(index, false)
+        if (answer.map.action === "scrollTo")
+            root.editor.revealRow(answer.map.row)
+    }
+    /// What results.activateLink() answered: scroll to a row of this page, or say it was not found.
+    function followAnswer(): void {
+        if (answer.map.action === "scrollTo")
+            root.editor.revealRow(answer.map.row)
+        else if (answer.map.action === "notFound")
+            root.editor.noticeNotFound(answer.map)
+    }
+    /// The link at (x, y) of `text` ("" none).
+    function linkIn(text: BRichText, x: real, y: real): string {
+        return text.linkAt(x, y)
     }
     /// The menu of the token or link at `pos` of a result row (`row`: its delegate); false: none.
-    function resultMenu(row, pos) {
-        const text = row.textItem
-        const p = text.mapFromItem(row, pos.x, pos.y)
-        const link = text.linkAt(p.x, p.y)
+    function resultMenu(index: int, path: string, line: int, raw: string, text: BRichText, x: real, y: real): bool {
+        const link = root.linkIn(text, x, y)
         if (link === "" || link === "open:")
             return false
-        if (root.editor.openTokenMenuIn(row.path, row.line, row.raw, link, text, p.x, p.y))
+        if (root.editor.openTokenMenuIn(path, line, raw, link, text, x, y))
             return true
-        return root.editor.openLinkMenu(link, row.path, (newPane) => {
-            const r = results.activateLink(row.index, link, newPane)
-            if (r && r.action === "scrollTo")
-                root.editor.revealRow(r.row)
-            else if (r && r.action === "notFound")
-                root.editor.noticeNotFound(r)
-        }, text, p.x, p.y)
+        root.menuRow = index
+        return root.editor.openLinkMenu(link, path, root.block.index, root, text, x, y)
     }
-    function activateResultLink(index, link) {
+    Connections {
+        target: root.editor
+        function onLinkMenuOpenRequested(requester: Item, link: string, newPane: bool) {
+            if (requester !== root)
+                return
+            answer.map = results.activateLink(root.menuRow, link, newPane)
+            root.followAnswer()
+        }
+    }
+    function activateResultLink(index: int, link: string): void {
         if (link === "open:") {
             openResult(index)
             return
         }
-        const r = results.activateLink(index, link, false)
-        if (r && r.action === "scrollTo")
-            root.editor.revealRow(r.row)
-        else if (r && r.action === "notFound")
-            root.editor.noticeNotFound(r)
+        answer.map = results.activateLink(index, link, false)
+        root.followAnswer()
     }
 
     // A column laid out with bindings, not a ColumnLayout: the block has its final height when the
@@ -227,20 +241,18 @@ Rectangle {
                 let x = 0
                 let line = 0
                 let total = 0
-                const repeaters = [filterChips, termChips]
-                for (const r of repeaters) {
-                    for (let i = 0; i < r.count; ++i) {
-                        const chip = r.itemAt(i)
-                        if (!chip)
-                            continue
-                        if (x > 0 && x + chip.width > width) {
-                            total += line + spacing
-                            x = 0
-                            line = 0
-                        }
-                        x += chip.width + spacing
-                        line = Math.max(line, chip.height)
+                const filterCount = filterChips.count
+                for (let i = 0; i < filterCount + termChips.count; ++i) {
+                    const chip = i < filterCount ? filterChips.itemAt(i) : termChips.itemAt(i - filterCount)
+                    if (!chip)
+                        continue
+                    if (x > 0 && x + chip.width > filtersFlow.width) {
+                        total += line + filtersFlow.spacing
+                        x = 0
+                        line = 0
                     }
+                    x += chip.width + filtersFlow.spacing
+                    line = Math.max(line, chip.height)
                 }
                 return total + line
             }
@@ -251,11 +263,15 @@ Rectangle {
                 onItemRemoved: revision++
                 model: root.filters
                 delegate: BChip {
-                    required property var modelData
+                    id: filterChip
+                    required property string key
+                    required property string value
+                    required property bool negated
                     size: "small"
-                    variant: root.chipVariant(modelData.key)
+                    variant: root.chipVariant(filterChip.key)
                     showIcon: variant !== "neutral" && variant !== "done"
-                    text: root.editor.autoTextSafe((modelData.negated ? "≠ " : "") + root.filterLabel(modelData.key) + ": " + modelData.value)
+                    text: root.editor.autoTextSafe((filterChip.negated ? "≠ " : "") + root.filterLabel(filterChip.key) + ": "
+                                                   + filterChip.value)
                 }
             }
             Repeater {
@@ -265,7 +281,7 @@ Rectangle {
                 onItemRemoved: revision++
                 model: root.terms
                 delegate: BChip {
-                    required property var modelData
+                    required property string modelData
                     size: "small"
                     iconName: "search"
                     text: root.editor.autoTextSafe("„" + modelData + "”")
@@ -360,16 +376,24 @@ Rectangle {
                     readonly property bool closed: status === "done" || status === "cancelled"
                     /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
                     property string hoveredLink: ""
-                    function trackLink(pos) {
-                        const p = itemText.mapFromItem(row, pos.x, pos.y)
-                        const link = row.group ? "" : itemText.linkAt(p.x, p.y)
-                        const h = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""
+                    /// The pointer at (x, y) of the row: the link there underlined; at() its place in the text.
+                    property point at
+                    /// Where a right-click was, in the scene (the block menu's place).
+                    property point scene
+                    function trackLink(x: real, y: real): void {
+                        row.at = itemText.mapFromItem(row, x, y)
+                        const link = row.group ? "" : itemText.linkAt(row.at.x, row.at.y)
+                        const h = link !== "" && !Js.startsWith(link, "task:") && !root.editor.editsOnClick(link) ? link : ""
                         if (h !== row.hoveredLink)
                             row.hoveredLink = h
-                        return p
+                    }
+                    /// The menu of the token or link at (x, y) of the row; false: none there.
+                    function menuAt(x: real, y: real): bool {
+                        row.at = itemText.mapFromItem(row, x, y)
+                        return root.resultMenu(row.index, row.path, row.line, row.raw, itemText, row.at.x, row.at.y)
                     }
                     readonly property string itemHtml: row.group ? "" : row.html + (row.showPage && row.title !== ""
-                        ? "&nbsp;&nbsp;<a href=\"open:\" style=\"color:" + Theme.fgFaint + ";text-decoration:none\">·&nbsp;"
+                        ? "&nbsp;&nbsp;<a href=\"open:\" style=\"color:" + BlockViews.colorName(Theme.fgFaint) + ";text-decoration:none\">·&nbsp;"
                           + TextHelper.escapeHtml(root.pageLabel(row.title, row.journal)) + "</a>" : "")
                     /// Touch: one line of text centred in a 44 px row (the checkbox's target).
                     readonly property real pad: Theme.touchUi ? Math.max(3, Math.round((Theme.touchTarget - root.itemLineHeight) / 2)) : 1
@@ -457,7 +481,7 @@ Rectangle {
                         shown: !row.group
                         onActivated: (href, x, y) => {
                             if (root.editor.editsOnClick(href))
-                                root.resultMenu(row, row.mapFromItem(itemText, x, y))
+                                root.resultMenu(row.index, row.path, row.line, row.raw, itemText, x, y)
                             else
                                 root.activateResultLink(row.index, href)
                         }
@@ -468,9 +492,9 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         onPointChanged: {
                             // The link under the resting pointer: its preview (LinkPreviews).
-                            const p = row.trackLink(point.position)
+                            row.trackLink(itemHover.point.position.x, itemHover.point.position.y)
                             LinkPreviews.hover(itemText, row.hoveredLink, row.path, root.block.controller ? root.block.controller.host : null,
-                                               p.x, p.y)
+                                               row.at.x, row.at.y)
                         }
                         onHoveredChanged: {
                             if (!hovered) {
@@ -486,13 +510,13 @@ Rectangle {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
                         onPressedChanged: {
                             if (pressed)
-                                row.trackLink(itemTap.point.position)
+                                row.trackLink(itemTap.point.position.x, itemTap.point.position.y)
                             else if (!itemHover.hovered)
                                 row.hoveredLink = ""
                         }
                         onTapped: (eventPoint) => {
-                            const p = itemText.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
-                            const link = itemText.linkAt(p.x, p.y)
+                            row.at = itemText.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
+                            const link = itemText.linkAt(row.at.x, row.at.y)
                             if (link !== "")
                                 root.activateResultLink(row.index, link)
                             else
@@ -507,8 +531,11 @@ Rectangle {
                         acceptedButtons: Qt.RightButton
                         gesturePolicy: TapHandler.WithinBounds
                         onTapped: (eventPoint) => {
-                            if (!root.resultMenu(row, eventPoint.position))
-                                root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+                            const x = eventPoint.position.x
+                            const y = eventPoint.position.y
+                            row.scene = eventPoint.scenePosition
+                            if (!row.menuAt(x, y))
+                                root.editor.openBlockMenuAt(root.block.index, row.scene)
                         }
                     }
                     TapHandler {
@@ -517,7 +544,7 @@ Rectangle {
                         acceptedDevices: PointerDevice.TouchScreen
                         onLongPressed: {
                             if (!root.editor.selectionMode)
-                                root.resultMenu(row, resultHold.point.position)
+                                row.menuAt(resultHold.point.position.x, resultHold.point.position.y)
                         }
                     }
                 }

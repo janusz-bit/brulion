@@ -13,7 +13,7 @@ import Brulion
 Rectangle {
     id: root
 
-    property BlockDelegate block
+    final property BlockDelegate block
     /// The source is on screen: while editing, or when there is no diagram to show.
     readonly property bool showSource: root.block.editing || diagram.status !== "ok"
     readonly property real codeLine: Theme.lineHeightPx(Theme.textSm, 1.5)
@@ -84,9 +84,9 @@ Rectangle {
             id: diagram
             objectName: "mermaidDiagram"
             // (At most MermaidView.MaxPaintExtent wide: the view scales anything larger down.)
-            width: Math.max(scroller.width, Math.min(diagramSize.width * 0.7, 4096))
+            width: Math.max(scroller.width, Math.min(diagram.diagramSize.width * 0.7, 4096))
             height: implicitHeight
-            source: root.block.model.editText
+            source: root.block.rowData.editText
             fontFamily: Theme.fontUi
             fontPixelSize: Theme.textSm + 1
             textColor: Theme.fg
@@ -103,7 +103,7 @@ Rectangle {
             TapHandler {
                 id: tap
                 enabled: !root.block.editing
-                onTapped: if (!root.block.editor.blockTapped(root.block.index, tap.point.modifiers))
+                onTapped: if (!root.block.editor.blockTappedWith(root.block.index, tap.point.modifiers))
                               root.block.editor.startEditing(root.block.index, -1)
             }
             TapHandler {

@@ -66,6 +66,8 @@ private Q_SLOTS:
     void split();
     void pad_data();
     void pad();
+    void uriComponent_data();
+    void uriComponent();
     void numbers_data();
     void numbers();
     void numberToString_data();
@@ -216,6 +218,32 @@ void TstJsHelper::pad()
     const QString call = u"("_s + QString::number(length) + u',' + lit(fill) + u')';
     QCOMPARE(js.padStart(s, length, fill), evalString(lit(s) + u".padStart"_s + call));
     QCOMPARE(js.padEnd(s, length, fill), evalString(lit(s) + u".padEnd"_s + call));
+}
+
+void TstJsHelper::uriComponent_data()
+{
+    QTest::addColumn<QString>("s");
+    QTest::newRow("empty") << QString();
+    QTest::newRow("plain") << u"praca-2026_v1.md~"_s;
+    QTest::newRow("polish") << u"Zażółć gęślą jaźń"_s;
+    QTest::newRow("reserved") << u"a b&c=d/e?f#g:h@i+j,k;l$"_s;
+    QTest::newRow("marks") << u"!*'()"_s;
+    QTest::newRow("percent") << u"100% pewne"_s;
+    QTest::newRow("emoji") << u"tag 🎉"_s;
+}
+
+void TstJsHelper::uriComponent()
+{
+    QFETCH(QString, s);
+    const QString encoded = js.encodeURIComponent(s);
+    QCOMPARE(encoded, evalString(u"encodeURIComponent("_s + lit(s) + u')'));
+    QCOMPARE(js.decodeURIComponent(encoded), evalString(u"decodeURIComponent("_s + lit(encoded) + u')'));
+    QCOMPARE(js.decodeURIComponent(encoded), s);
+    // Escapes of reserved characters are decoded too (decodeURI would keep them).
+    QCOMPARE(js.decodeURIComponent(u"tag%3Apraca%2Fdom"_s), evalString(u"decodeURIComponent('tag%3Apraca%2Fdom')"_s));
+    // Malformed: kept (the engine throws).
+    QCOMPARE(js.decodeURIComponent(u"100%"_s), u"100%"_s);
+    QCOMPARE(js.decodeURIComponent(u"%zz%41"_s), u"%zzA"_s);
 }
 
 void TstJsHelper::numbers_data()

@@ -18,15 +18,20 @@ import Brulion
 Column {
     id: root
 
-    property BlockDelegate block
-    property var transclusions: []
-    /// The embeds shown: `transclusions`, except while a task's status menu is open in them (and a
-    /// moment after it closed: the menu is still closing on its row) — then the ones from when it
+    final property BlockDelegate block
+    property list<var> transclusions
+    /// A task's status menu is open in the embeds (or closed a moment ago: the menu is still
+    /// closing on its row): they wait, `frozen` is shown.
+    readonly property bool waiting: menuBox !== null || releaseTimer.running
+    /// The embeds shown: `transclusions`, except while waiting — then the ones from when the menu
     /// opened.
-    readonly property var shown: menuBox !== null || releaseTimer.running ? frozen : transclusions
+    readonly property list<var> shown: waiting ? frozen : transclusions
     /// The checkbox whose status menu is open (null: none; also when it is destroyed).
     property TaskBox menuBox: null
-    property var frozen: []
+    property list<var> frozen
+    /// The embedded block whose link menu is open (its link opens there: onLinkMenuOpenRequested).
+    property string menuPath: ""
+    property int menuLine: -1
     readonly property BlockEditor editor: block ? block.editor : null
     readonly property PageController controller: block ? block.controller : null
     /// Centre of the first header line (the block's bullet aligns with it).
@@ -53,10 +58,10 @@ Column {
         return h
     }
 
-    function iconFor(kind) {
+    function iconFor(kind: string): string {
         return kind === "heading" ? "heading" : kind === "block" ? "link" : "file-text"
     }
-    function messageText(message, title) {
+    function messageText(message: string, title: string): string {
         switch (message) {
         case "missingPage": return qsTr("“%1” does not exist yet.").arg(title)
         case "missingSection": return qsTr("There is no such section on this page.")
@@ -67,15 +72,15 @@ Column {
         default: return ""
         }
     }
-    function headingSize(level) {
+    function headingSize(level: int): int {
         return level === 1 ? Theme.textLg : level === 2 ? Theme.textMd : root.bodySize
     }
-    function open(href) {
+    function open(href: string): void {
         if (root.editor && href !== "")
             root.editor.activateLink(root.block.index, href)
     }
     /// A checkbox's status menu opened or closed.
-    function menuShown(box: TaskBox, open: bool) {
+    function menuShown(box: TaskBox, open: bool): void {
         if (open) {
             if (root.menuBox !== box) {
                 root.frozen = root.shown // the same array: the rows stay
@@ -89,25 +94,15 @@ Column {
     /// An embedded task's line in its file now: while the rows waited for a menu, the file may
     /// have changed (a line added above the task). The same block of the same file in the embeds
     /// as they are now (the nearest one when the text repeats); -1 when it is not there any more.
-    function currentLine(data): int {
-        const path = data.path
-        const line = data.line
-        if (root.shown === root.transclusions)
+    function currentLine(path: string, line: int, html: string): int {
+        if (!root.waiting)
             return line
-        let best = -1
-        for (const frame of root.transclusions || []) {
-            for (const b of frame.blocks || []) {
-                if (b.kind !== "embed" && (b.task || "") !== "" && b.path === path && b.html === data.html
-                        && (best < 0 || Math.abs(b.line - line) < Math.abs(best - line)))
-                    best = b.line
-            }
-        }
-        return best
+        return BlockViews.transclusionTaskLine(root.transclusions, path, html, line)
     }
-    function setStatus(data, status: string) {
-        const line = currentLine(data)
-        if (line >= 0)
-            root.controller.setTaskStatusAt(data.path, line, status)
+    function setStatus(path: string, line: int, html: string, status: string): void {
+        const now = currentLine(path, line, html)
+        if (now >= 0)
+            root.controller.setTaskStatusAt(path, now, status)
     }
 
     Timer {
@@ -117,31 +112,45 @@ Column {
 
     /// The menu of the token or link at (x, y) of an embedded block's text (`data`: its entry;
     /// the change goes to the block's own file); false when there is none there.
-    function linkMenu(data, text, x, y) {
-        const link = text.linkAt(x, y)
+    /// The link at (x, y) of `text` ("" none).
+    function linkIn(text: BRichText, x: real, y: real): string {
+        return text.linkAt(x, y)
+    }
+    function linkMenu(path: string, line: int, raw: string, text: BRichText, x: real, y: real): bool {
+        const link = root.linkIn(text, x, y)
         if (link === "" || !root.editor)
             return false
-        if (root.editor.openTokenMenuIn(data.path || "", data.line, data.raw || "", link, text, x, y))
+        if (root.editor.openTokenMenuIn(path, line, raw, link, text, x, y))
             return true
-        return root.editor.openLinkMenu(link, data.path || "", (newPane) => {
+        root.menuPath = path
+        root.menuLine = line
+        return root.editor.openLinkMenu(link, path, root.block.index, root, text, x, y)
+    }
+    Connections {
+        target: root.editor
+        function onLinkMenuOpenRequested(requester: Item, link: string, newPane: bool) {
+            if (requester !== root)
+                return
             if (newPane)
                 root.controller.activateLink(root.block.index, link, true)
             else
-                root.activate(link, data.path || "", data.line)
-        }, text, x, y)
+                root.activate(link, root.menuPath, root.menuLine)
+        }
     }
+    /// What controller.openLocation() answered.
+    MapHolder { id: answer }
     /// A link inside the embedded text: tasks and reminders belong to the source block; a click on
     /// a date, 🔁 or priority chip edits the block with the embed (their menu is the right button's).
-    function activate(link, path, line) {
+    function activate(link: string, path: string, line: int): void {
         if (root.editor.editsOnClick(link)) {
             root.editor.startEditing(root.block.index, -1)
             return
         }
-        if (link.startsWith("task:") || link.startsWith("reminder:")) {
+        if (Js.startsWith(link, "task:") || Js.startsWith(link, "reminder:")) {
             if (path !== "") {
-                const r = root.controller.openLocation(path, line, false)
-                if (r && r.action === "scrollTo")
-                    root.editor.revealRow(r.row)
+                answer.map = root.controller.openLocation(path, line, false)
+                if (answer.map.action === "scrollTo")
+                    root.editor.revealRow(answer.map.row)
             }
             return
         }
@@ -158,7 +167,16 @@ Column {
             id: frame
             required property var modelData
             required property int index
-            readonly property var entries: modelData.blocks || []
+            /// The embed: { kind, target, title, href, path, found, message, more, blocks }.
+            readonly property MapHolder rec: MapHolder { map: frame.modelData }
+            readonly property bool found: frame.rec.map.found === true
+            readonly property string title: frame.rec.map.title
+            readonly property string href: frame.rec.map.href
+            readonly property string message: frame.rec.map.message
+            readonly property int more: frame.rec.map.more || 0
+            function entries(): list<var> {
+                return frame.rec.map.blocks
+            }
             width: root.width
             height: frameColumn.height + Theme.space2
             radius: Theme.radius
@@ -166,7 +184,7 @@ Column {
             border.width: 1
             border.color: Theme.borderSubtle
             Accessible.role: Accessible.Grouping
-            Accessible.name: qsTr("Embedded: %1").arg(modelData.title)
+            Accessible.name: qsTr("Embedded: %1").arg(frame.title)
 
             // The source's edge: a thin line in the link colour.
             Rectangle {
@@ -175,7 +193,7 @@ Column {
                 width: 2
                 height: parent.height - 2 * Theme.radius
                 radius: 1
-                color: frame.modelData.found ? Theme.alpha(Theme.link, 0.55) : Theme.borderStrong
+                color: frame.found ? Theme.alpha(Theme.link, 0.55) : Theme.borderStrong
             }
 
             Column {
@@ -205,19 +223,19 @@ Column {
                         anchors.fill: parent
                         spacing: Theme.space1 + 2
                         BIcon {
-                            name: root.iconFor(frame.modelData.kind)
+                            name: root.iconFor(frame.rec.map.kind)
                             size: Theme.iconSizeSm - 2
-                            color: frame.modelData.found ? Theme.link : Theme.fgFaint
+                            color: frame.found ? Theme.link : Theme.fgFaint
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: frame.modelData.title
+                            text: frame.title
                             textFormat: Text.PlainText
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textSm
                             font.weight: Theme.weightMedium
                             font.underline: headerHover.hovered
-                            color: frame.modelData.found ? Theme.link : Theme.linkMissing
+                            color: frame.found ? Theme.link : Theme.linkMissing
                             elide: Text.ElideRight
                         }
                         BIcon {
@@ -230,10 +248,10 @@ Column {
                     HoverHandler { id: headerHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
                     TapHandler {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
-                        onTapped: root.open(frame.modelData.href)
+                        onTapped: root.open(frame.href)
                     }
                     Accessible.role: Accessible.Link
-                    Accessible.name: frame.modelData.title
+                    Accessible.name: frame.title
                 }
 
                 // ---- Embedded blocks ------------------------------------------------------------------
@@ -242,24 +260,38 @@ Column {
                     property int revision: 0
                     onItemAdded: revision++
                     onItemRemoved: revision++
-                    model: frame.entries
+                    model: frame.entries()
                     delegate: Item {
                         id: entry
                         required property var modelData
-                        readonly property bool nested: modelData.kind === "embed"
-                        readonly property string task: modelData.task || ""
+                        /// The entry: a block { kind "block", html, depth, view, headingLevel, task,
+                        /// path, line, raw } or a nested embed { kind "embed", title, href, depth,
+                        /// found, message, path }.
+                        readonly property MapHolder rec: MapHolder { map: entry.modelData }
+                        readonly property bool nested: rec.map.kind === "embed"
+                        readonly property string task: rec.map.task || ""
                         readonly property bool isTask: !nested && task !== ""
                         readonly property bool closed: task === "done" || task === "cancelled"
-                        readonly property int level: modelData.headingLevel || 0
-                        readonly property bool rule: modelData.view === "rule"
+                        readonly property int level: rec.map.headingLevel || 0
+                        readonly property bool rule: rec.map.view === "rule"
+                        readonly property string view: rec.map.view || ""
+                        readonly property string path: rec.map.path || ""
+                        readonly property int line: rec.map.line || 0
+                        readonly property string raw: rec.map.raw || ""
+                        readonly property string html: rec.map.html || ""
+                        readonly property string title: rec.map.title || ""
+                        readonly property string message: rec.map.message || ""
+                        readonly property int depth: rec.map.depth || 0
                         readonly property int fontSize: entry.level > 0 ? root.headingSize(entry.level) : root.bodySize
                         readonly property int lineHeightPx: Theme.lineHeightPx(fontSize, entry.level > 0 ? 1.4 : 1.55)
-                        readonly property real indent: Math.min(6, modelData.depth || 0) * root.indentStep
+                        readonly property real indent: Math.min(6, entry.depth) * root.indentStep
                         /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
                         property string hoveredLink: ""
-                        function trackLink(x: real, y: real) {
+                        /// Where a right-click was, in the scene (the block menu's place).
+                        property point scene
+                        function trackLink(x: real, y: real): void {
                             const link = body.linkAt(x, y)
-                            const h = link !== "" && !link.startsWith("task:") && !root.editor.editsOnClick(link) ? link : ""
+                            const h = link !== "" && !Js.startsWith(link, "task:") && !root.editor.editsOnClick(link) ? link : ""
                             if (h !== entry.hoveredLink)
                                 entry.hoveredLink = h
                         }
@@ -270,7 +302,7 @@ Column {
 
                         // Guide lines for nested blocks (like the outline).
                         Repeater {
-                            model: Math.min(6, entry.modelData.depth || 0)
+                            model: Math.min(6, entry.depth)
                             delegate: Rectangle {
                                 required property int index
                                 x: index * root.indentStep + 4
@@ -299,7 +331,7 @@ Column {
                             topPadding: 2
                             BIcon {
                                 anchors.verticalCenter: parent.verticalCenter
-                                name: entry.modelData.message === "cycle" ? "repeat" : "link"
+                                name: entry.message === "cycle" ? "repeat" : "link"
                                 size: Theme.iconSizeSm - 3
                                 color: Theme.fgFaint
                             }
@@ -307,17 +339,17 @@ Column {
                                 id: nestedTitle
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: Math.min(implicitWidth, nestedHeader.width - 20)
-                                text: entry.nested ? entry.modelData.title + (entry.modelData.message !== ""
-                                      ? " — " + root.messageText(entry.modelData.message, entry.modelData.title) : "") : ""
+                                text: entry.nested ? entry.title + (entry.message !== ""
+                                      ? " — " + root.messageText(entry.message, entry.title) : "") : ""
                                 textFormat: Text.PlainText
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textXs
-                                font.italic: entry.modelData.message !== ""
-                                color: entry.modelData.message !== "" ? Theme.fgFaint : Theme.link
+                                font.italic: entry.message !== ""
+                                color: entry.message !== "" ? Theme.fgFaint : Theme.link
                                 elide: Text.ElideRight
                                 TapHandler {
                                     gesturePolicy: TapHandler.ReleaseWithinBounds
-                                    onTapped: root.open(entry.modelData.href || "")
+                                    onTapped: root.open(entry.rec.map.href || "")
                                 }
                                 HoverHandler { enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
                             }
@@ -329,14 +361,14 @@ Column {
                             visible: entry.isTask
                             status: entry.task
                             enabled: root.controller !== null
-                                     && (root.controller.queriesAvailable || entry.modelData.path === root.controller.path)
+                                     && (root.controller.queriesAvailable || entry.path === root.controller.path)
                             opacity: enabled ? 1 : 0.6
                             x: entry.indent - Math.round((width - boxSize) / 2) + 2
                             y: Math.round(entry.lineHeightPx / 2 - height / 2) + 1
-                            onToggled: root.controller.toggleTaskAt(entry.modelData.path, root.currentLine(entry.modelData), entry.task)
+                            onToggled: root.controller.toggleTaskAt(entry.path, root.currentLine(entry.path, entry.line, entry.html), entry.task)
                             onStatusChosen: (status) => {
                                 if (status !== entry.task)
-                                    root.setStatus(entry.modelData, status)
+                                    root.setStatus(entry.path, entry.line, entry.html, status)
                             }
                             onMenuOpenChanged: root.menuShown(taskBox, menuOpen)
                         }
@@ -347,15 +379,15 @@ Column {
                             x: entry.indent + (entry.isTask ? root.editor.taskBoxWidth + 2 : 0)
                             y: 1
                             width: parent.width - x
-                            html: entry.nested || entry.rule ? "" : entry.modelData.html
+                            html: entry.nested || entry.rule ? "" : entry.html
                             hoveredLink: entry.hoveredLink
-                            font.family: entry.modelData.view === "code" ? Theme.fontMono : Theme.fontEditor
-                            font.pixelSize: entry.modelData.view === "code" ? Theme.textSm : entry.fontSize
+                            font.family: entry.view === "code" ? Theme.fontMono : Theme.fontEditor
+                            font.pixelSize: entry.view === "code" ? Theme.textSm : entry.fontSize
                             font.weight: entry.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
                             font.strikeout: entry.task === "cancelled"
                             lineHeight: entry.lineHeightPx
-                            color: entry.closed ? Theme.fgFaint : entry.modelData.view === "quote" ? Theme.fgMuted : Theme.fg
-                            accessibleName: entry.modelData.raw || ""
+                            color: entry.closed ? Theme.fgFaint : entry.view === "quote" ? Theme.fgMuted : Theme.fg
+                            accessibleName: entry.raw
 
                             HoverHandler {
                                 id: bodyHover
@@ -364,7 +396,7 @@ Column {
                                 onPointChanged: {
                                     entry.trackLink(point.position.x, point.position.y)
                                     // The link under the resting pointer: its preview (LinkPreviews).
-                                    LinkPreviews.hover(body, entry.hoveredLink, entry.modelData.path || "",
+                                    LinkPreviews.hover(body, entry.hoveredLink, entry.path,
                                                        root.controller ? root.controller.host : null,
                                                        point.position.x, point.position.y)
                                 }
@@ -381,14 +413,14 @@ Column {
                             x: body.x
                             y: body.y
                             textItem: body.textItem
-                            html: entry.nested || entry.rule ? "" : entry.modelData.html
+                            html: entry.nested || entry.rule ? "" : entry.html
                             lineHeight: entry.lineHeightPx
                             shown: body.visible
                             onActivated: (href, x, y) => {
                                 if (root.editor.editsOnClick(href)) // a date chip: its menu
-                                    root.linkMenu(entry.modelData, body, x, y)
+                                    root.linkMenu(entry.path, entry.line, entry.raw, body, x, y)
                                 else
-                                    root.activate(href, entry.modelData.path || "", entry.modelData.line)
+                                    root.activate(href, entry.path, entry.line)
                             }
                         }
                         // Clicks go to an item above the rich text, not to the Text (which would
@@ -406,11 +438,13 @@ Column {
                                         entry.hoveredLink = ""
                                 }
                                 onTapped: (eventPoint) => {
+                                    const x = eventPoint.position.x
+                                    const y = eventPoint.position.y
                                     if (root.editor.blockTapped(root.block.index))
                                         return // the touch selection mode
-                                    const link = body.linkAt(eventPoint.position.x, eventPoint.position.y)
+                                    const link = body.linkAt(x, y)
                                     if (link !== "")
-                                        root.activate(link, entry.modelData.path || "", entry.modelData.line)
+                                        root.activate(link, entry.path, entry.line)
                                     else
                                         root.editor.startEditing(root.block.index, -1)
                                 }
@@ -421,9 +455,11 @@ Column {
                                 acceptedButtons: Qt.RightButton
                                 gesturePolicy: TapHandler.WithinBounds
                                 onTapped: (eventPoint) => {
-                                    const p = eventPoint.position
-                                    if (!root.linkMenu(entry.modelData, body, p.x, p.y))
-                                        root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+                                    const x = eventPoint.position.x
+                                    const y = eventPoint.position.y
+                                    entry.scene = eventPoint.scenePosition
+                                    if (!root.linkMenu(entry.path, entry.line, entry.raw, body, x, y))
+                                        root.editor.openBlockMenuAt(root.block.index, entry.scene)
                                 }
                             }
                             TapHandler {
@@ -432,7 +468,7 @@ Column {
                                 acceptedDevices: PointerDevice.TouchScreen
                                 onLongPressed: {
                                     if (!root.editor.selectionMode)
-                                        root.linkMenu(entry.modelData, body, embedHold.point.position.x, embedHold.point.position.y)
+                                        root.linkMenu(entry.path, entry.line, entry.raw, body, embedHold.point.position.x, embedHold.point.position.y)
                                 }
                             }
                         }
@@ -445,7 +481,7 @@ Column {
                     visible: text !== ""
                     width: parent.width
                     bottomPadding: Theme.space1
-                    text: frame.modelData.message !== "" ? root.messageText(frame.modelData.message, frame.modelData.title) : ""
+                    text: frame.message !== "" ? root.messageText(frame.message, frame.title) : ""
                     textFormat: Text.PlainText
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
@@ -456,16 +492,16 @@ Column {
                 }
                 Text {
                     id: moreText
-                    visible: (frame.modelData.more || 0) > 0
+                    visible: frame.more > 0
                     width: parent.width
                     topPadding: Theme.space1
                     bottomPadding: Theme.space1
-                    text: qsTr("%n more block(s) — open the page", "", frame.modelData.more || 0)
+                    text: qsTr("%n more block(s) — open the page", "", frame.more)
                     textFormat: Text.PlainText
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
                     color: Theme.link
-                    TapHandler { onTapped: root.open(frame.modelData.href) }
+                    TapHandler { onTapped: root.open(frame.href) }
                     HoverHandler { enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
                 }
             }

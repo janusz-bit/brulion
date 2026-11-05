@@ -37,21 +37,28 @@ T.Popup {
     /// "⋯" in the bar: the picture's menu at `item`.
     signal menuRequested(Item item)
 
-    readonly property bool scalable: /^svgz?$/i.test((picture && picture.format) || "")
-    readonly property bool decodable: !!picture && picture.decodable !== false
-    readonly property url source: picture && picture.state === "ready" && decodable ? picture.url : ""
-    readonly property bool sizeKnown: !!picture && (picture.width || 0) > 0 && (picture.height || 0) > 0
+    /// `picture` with its keys readable (a key it lacks reads as undefined; null: none).
+    readonly property MapHolder rec: MapHolder { map: viewer.picture }
+    readonly property string format: rec.map.format || ""
+    readonly property string name: rec.map.name || ""
+    readonly property string alt: rec.map.alt || ""
+    readonly property real pictureWidth: rec.map.width || 0
+    readonly property real pictureHeight: rec.map.height || 0
+    readonly property bool scalable: Js.test(format, "^svgz?$", "i")
+    readonly property bool decodable: viewer.picture !== null && viewer.picture !== undefined && rec.map.decodable !== false
+    readonly property url source: rec.map.state === "ready" && decodable ? "" + (rec.map.url || "") : ""
+    readonly property bool sizeKnown: pictureWidth > 0 && pictureHeight > 0
     /// The picture's own pixels (the loaded size when the embed does not know them).
-    readonly property size shownSize: sizeKnown ? Qt.size(picture.width, picture.height)
+    readonly property size shownSize: sizeKnown ? Qt.size(pictureWidth, pictureHeight)
                                      : Qt.size(Math.max(1, image.implicitWidth), Math.max(1, image.implicitHeight))
-    /// What the picture is decoded at: its own shape, at most 2048 px a side.
-    readonly property var decodeSize: {
-        if (!sizeKnown)
-            return scalable ? undefined : Qt.size(2048, 2048)
-        const k = scalable ? Math.min(2048 / picture.width, 2048 / picture.height)
-                           : Math.min(1, 2048 / picture.width, 2048 / picture.height)
-        return Qt.size(Math.max(1, Math.round(picture.width * k)), Math.max(1, Math.round(picture.height * k)))
-    }
+    /// What the picture is decoded at: its own shape, at most 2048 px a side (an SVG of unknown
+    /// size: as it comes, an empty size).
+    readonly property real decodeScale: !sizeKnown ? 1
+                                        : scalable ? Math.min(2048 / pictureWidth, 2048 / pictureHeight)
+                                                   : Math.min(1, 2048 / pictureWidth, 2048 / pictureHeight)
+    readonly property size decodeSize: !sizeKnown ? (scalable ? Qt.size(-1, -1) : Qt.size(2048, 2048))
+                                       : Qt.size(Math.max(1, Math.round(pictureWidth * decodeScale)),
+                                                 Math.max(1, Math.round(pictureHeight * decodeScale)))
     readonly property real fitScale: {
         const k = Math.min(flick.width / shownSize.width, flick.height / shownSize.height)
         return scalable ? k : Math.min(1, k)
@@ -61,11 +68,11 @@ T.Popup {
     readonly property string sizeToggleText: actualSize ? qsTranslate("ContentPictureView", "Fit to view")
                                                         : qsTranslate("ContentPictureView", "Zoom to actual size")
     readonly property string sizeToggleIcon: (fitScale < 1) !== actualSize ? "zoom-in" : "zoom-out"
-    readonly property real safeTop: parent && parent.SafeArea ? parent.SafeArea.margins.top : 0
-    readonly property real safeBottom: parent && parent.SafeArea ? parent.SafeArea.margins.bottom : 0
+    readonly property real safeTop: viewer.parent ? viewer.parent.SafeArea.margins.top : 0
+    readonly property real safeBottom: viewer.parent ? viewer.parent.SafeArea.margins.bottom : 0
 
     /// Fitted ↔ the picture's own pixels, centred in the other view.
-    function toggleSize() {
+    function toggleSize(): void {
         if (!canZoom && !actualSize)
             return
         actualSize = !actualSize
@@ -135,7 +142,7 @@ T.Popup {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.alignment: Qt.AlignVCenter
-                    text: (viewer.picture && viewer.picture.name) || ""
+                    text: viewer.name
                     textFormat: Text.PlainText // a name from anywhere is no markup
                     elide: Text.ElideMiddle
                     font.family: Theme.fontUi
@@ -222,8 +229,7 @@ T.Popup {
                 smooth: true
                 mipmap: true
                 Accessible.role: Accessible.Graphic
-                Accessible.name: viewer.picture && viewer.picture.alt ? viewer.picture.alt
-                                                                       : ((viewer.picture && viewer.picture.name) || "")
+                Accessible.name: viewer.alt !== "" ? viewer.alt : viewer.name
 
                 TapHandler { onTapped: viewer.toggleSize() }
                 HoverHandler {
@@ -241,7 +247,7 @@ T.Popup {
             }
             Text {
                 objectName: "webPictureViewerMessage"
-                visible: !viewer.decodable || viewer.source.toString() === "" || image.status === Image.Error
+                visible: !viewer.decodable || "" + viewer.source === "" || image.status === Image.Error
                 x: (flick.width - width) / 2
                 y: (flick.height - height) / 2
                 width: Math.min(flick.width - 2 * Theme.space6, 480)
@@ -249,8 +255,8 @@ T.Popup {
                 wrapMode: Text.Wrap
                 text: !viewer.decodable
                       ? qsTranslate("ContentPictureView", "Pictures in the %1 format cannot be shown on this device.")
-                            .arg((viewer.picture && viewer.picture.format) || "")
-                      : qsTranslate("ContentPictureView", "Cannot load %1").arg((viewer.picture && viewer.picture.name) || "")
+                            .arg(viewer.format)
+                      : qsTranslate("ContentPictureView", "Cannot load %1").arg(viewer.name)
                 textFormat: Text.PlainText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
