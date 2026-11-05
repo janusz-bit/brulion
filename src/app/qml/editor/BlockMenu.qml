@@ -23,11 +23,13 @@ import Brulion
 // row or column has its cell opened for typing. Any table's menu also has Filtruj wiersze,
 // Kopiuj jako CSV and Zapisz jako CSV….
 //
-//   BlockMenu { editor: editor }    menu.openFor(row); menu.popup(item, x, y)
+//   BlockMenu { editor: editor }    menu.openFor(row, -2, 0, 0, 0, ""); menu.popup(item, x, y)
 BMenu {
     id: menu
 
-    property BlockEditor editor
+    /// The editor (an Item: BlockEditor passes itself, see blockItem in the block views).
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     readonly property PageController controller: editor ? editor.controller : null
     /// controller.trackBlock() handle of the block (-1: none).
     property int handle: -1
@@ -56,6 +58,8 @@ BMenu {
     readonly property bool inCell: cellRow > -2
     /// The block is a table (its CSV and filter items).
     property bool table: false
+    /// Bumped when a click toggled an alignment's check mark: its binding takes over again.
+    property int checkRevision: 0
 
     // Submenu items are OptionalItems too, shown as their OptionalMenu says. Set before the first
     // submenu below: a menu makes the item of a submenu as soon as it gets it.
@@ -66,45 +70,69 @@ BMenu {
         }
     }
 
-    /// Follow the block at `row` (until the next openFor) and take its shape. `cell`: the table
-    /// cell it was opened from.
-    function openFor(row: int, cell) {
+    /// Follow the block at `row` (until the next openFor) and take its shape. The table cell it
+    /// was opened from: its row (`cellRow`, -1 the header, -2 no cell), column, the table's size and
+    /// the column's alignment.
+    function openFor(row: int, cellRow: int, cellColumn: int, cellRows: int, cellColumns: int, cellAlign: string): void {
         if (!controller)
             return
         if (handle >= 0)
             controller.untrack(handle)
         handle = controller.trackBlock(row)
-        cellRow = cell ? cell.row : -2
-        cellColumn = cell ? cell.column : -1
-        tableRows = cell ? cell.rows : 0
-        tableColumns = cell ? cell.columns : 0
-        cellAlign = cell ? cell.align : ""
-        const info = controller.blocks.get(row)
-        table = info.view === "table"
-        listItem = info.kind === "listItem"
+        menu.cellRow = cellRow
+        menu.cellColumn = cellRow > -2 ? cellColumn : -1
+        menu.tableRows = cellRow > -2 ? cellRows : 0
+        menu.tableColumns = cellRow > -2 ? cellColumns : 0
+        menu.cellAlign = cellRow > -2 ? cellAlign : ""
+        info.map = controller.blocks.get(row)
+        table = info.map.view === "table"
+        listItem = info.map.kind === "listItem"
         heading = controller.isHeading(row)
-        hasChildren = info.hasChildren
-        collapsed = info.collapsed
+        hasChildren = info.map.hasChildren === true
+        collapsed = info.map.collapsed === true
         // Over several days even one block of this day is part of the span.
         const span = editor.inSpan
-        inSelection = (controller.multiSelection || span) && controller.selectedRows().indexOf(row) >= 0
+        inSelection = (controller.multiSelection || span) && menu.selectedRows().indexOf(row) >= 0
         selectionCount = !inSelection ? 1 : span ? editor.stream.count : controller.selectionCount
         unmovable = !inSelection ? "" : span ? editor.spanReason : !controller.selectionContiguous ? editor.gapReason : ""
         uncuttable = inSelection && span ? editor.spanReason : ""
     }
-    /// Indent or move: the selection the block is part of (`selection`), else the block (`one`) —
-    /// a selection with gaps says why not instead.
-    function moveOr(one, selection) {
-        if (!inSelection)
-            act(one)
-        else if (unmovable !== "")
-            editor.notice(unmovable, "info")
-        else
-            act(selection)
+    /// The block's shape when the menu opened (BlockListModel.get()).
+    MapHolder { id: info }
+    /// The rows of the block selection.
+    function selectedRows(): list<var> {
+        return controller.selectedRows()
+    }
+    /// Indent or move (`how`: "indent", "outdent", "up", "down"): the selection the block is part
+    /// of, else the block — a selection with gaps says why not instead.
+    function moveOr(how: string): void {
+        const r = row()
+        if (r < 0)
+            return
+        if (!inSelection) {
+            if (how === "indent")
+                controller.indent(r)
+            else if (how === "outdent")
+                controller.outdent(r)
+            else if (how === "up")
+                controller.moveUp(r)
+            else
+                controller.moveDown(r)
+        } else if (unmovable !== "") {
+            editor.notice(unmovable, "info", null)
+        } else if (how === "indent") {
+            controller.indentSelection()
+        } else if (how === "outdent") {
+            controller.outdentSelection()
+        } else if (how === "up") {
+            controller.moveSelectionUp()
+        } else {
+            controller.moveSelectionDown()
+        }
     }
     /// Copying and cutting act on the selection the block is part of, else on the block (with its
     /// children), which becomes the selection.
-    function selectFor(r: int) {
+    function selectFor(r: int): void {
         if (menu.inSelection)
             return
         if (Theme.touchUi)
@@ -129,20 +157,17 @@ BMenu {
         }
         return h
     }
-    /// Run `fn(row)` for the block when it is still there.
-    function act(fn) {
-        const r = row()
-        if (r >= 0)
-            fn(r)
-    }
-
-    /// A new row or column: `insert(row of the table's block)`, then cell (r, c) opened for typing
-    /// once the menu has given the keys back.
-    function insertAndEdit(insert, r: int, c: int) {
-        act((block) => {
-            insert(block)
-            menu.editor.editTableCellOnceClosed(menu, block, r, c)
-        })
+    /// A new row (`what` "row": at table row `at`) or column ("column": at column `at`), then cell
+    /// (r, c) opened for typing once the menu has given the keys back.
+    function insertAndEdit(what: string, at: int, r: int, c: int): void {
+        const block = row()
+        if (block < 0)
+            return
+        if (what === "row")
+            controller.insertTableRow(block, at)
+        else
+            controller.insertTableColumn(block, at)
+        menu.editor.editTableCellOnceClosed(menu, block, r, c)
     }
 
     component OptionalItem: BMenuItem {
@@ -155,12 +180,15 @@ BMenu {
     }
     /// One of the column's alignments, ticked when it is the column's.
     component AlignItem: BMenuItem {
+        id: alignItem
         required property string align
         checkable: true
-        checked: menu.cellAlign === align
+        checked: menu.checkRevision >= 0 && menu.cellAlign === align
         onTriggered: {
-            checked = Qt.binding(() => menu.cellAlign === align) // the click toggled it
-            menu.act((r) => menu.controller.setTableColumnAlign(r, menu.cellColumn, align))
+            ++menu.checkRevision // the click toggled it: the binding again (an assignment would end it)
+            const r = menu.row()
+            if (r >= 0)
+                menu.controller.setTableColumnAlign(r, menu.cellColumn, alignItem.align)
         }
     }
 
@@ -169,7 +197,13 @@ BMenu {
         text: menu.inSelection ? qsTr("Copy %n block(s)", "", menu.selectionCount) : qsTr("Copy")
         iconName: "copy"
         shortcut: "Ctrl+C"
-        onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.copySelection(false) })
+        onTriggered: {
+            const r = menu.row()
+            if (r < 0)
+                return
+            menu.selectFor(r)
+            menu.editor.copySelection(false)
+        }
     }
     BMenuItem {
         objectName: "blockMenuCut"
@@ -177,49 +211,73 @@ BMenu {
         iconName: "scissors"
         shortcut: "Ctrl+X"
         unavailable: menu.uncuttable
-        onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.cutSelection() })
+        onTriggered: {
+            const r = menu.row()
+            if (r < 0)
+                return
+            menu.selectFor(r)
+            menu.editor.cutSelection()
+        }
     }
     BMenuItem {
         objectName: "blockMenuCopyText"
         text: qsTr("Copy as plain text")
         iconName: "copy"
-        onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.copySelection(true) })
+        onTriggered: {
+            const r = menu.row()
+            if (r < 0)
+                return
+            menu.selectFor(r)
+            menu.editor.copySelection(true)
+        }
     }
     OptionalItem {
         objectName: "tableCopyCsv"
         shown: menu.table && !menu.inSelection
         text: qsTr("Copy as CSV")
         iconName: "copy"
-        onTriggered: menu.act((r) => {
-            if (menu.controller.copyTableCsv(r))
-                menu.editor.notice(qsTr("The table was copied as CSV."), "success")
-        })
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0 && menu.controller.copyTableCsv(r))
+                menu.editor.notice(qsTr("The table was copied as CSV."), "success", null)
+        }
     }
     OptionalItem {
         objectName: "tableSaveCsv"
         shown: menu.table && !menu.inSelection
         text: qsTr("Save as CSV…")
         iconName: "download"
-        onTriggered: menu.act((r) => menu.editor.dialogs.saveTableCsv(r))
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.editor.dialogs.saveTableCsv(r)
+        }
     }
     OptionalItem {
         objectName: "tableFilterRows"
         shown: menu.table && !menu.inSelection
         text: menu.editor && menu.editor.tableFiltering(menu.row()) ? qsTr("Hide filters") : qsTr("Filter rows")
         iconName: "filter"
-        onTriggered: menu.act((r) => {
+        onTriggered: {
+            const r = menu.row()
+            if (r < 0)
+                return
             if (menu.editor.tableFiltering(r))
                 menu.controller.setTableFilterOpen(r, false)
             else
                 menu.editor.openTableFilter(r, menu.inCell ? menu.cellColumn : 0, menu)
-        })
+        }
     }
     OptionalItem {
         objectName: "blockMenuSelect"
         shown: !menu.inSelection
         text: qsTr("Select")
         iconName: "square-dashed"
-        onTriggered: menu.act((r) => menu.editor.selectBlock(r))
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.editor.selectBlock(r)
+        }
     }
     BMenuSeparator {}
     OptionalMenu {
@@ -233,16 +291,14 @@ BMenu {
             text: qsTr("Insert row above")
             iconName: "arrow-up"
             enabled: menu.cellRow >= 0
-            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableRow(r, menu.cellRow),
-                                            menu.cellRow, menu.cellColumn)
+            onTriggered: menu.insertAndEdit("row", menu.cellRow, menu.cellRow, menu.cellColumn)
         }
         BMenuItem {
             objectName: "tableRowBelow"
             text: qsTr("Insert row below")
             iconName: "arrow-down"
             shortcut: "Ctrl+Enter"
-            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableRow(r, menu.cellRow + 1),
-                                            menu.cellRow + 1, menu.cellColumn)
+            onTriggered: menu.insertAndEdit("row", menu.cellRow + 1, menu.cellRow + 1, menu.cellColumn)
         }
         BMenuSeparator {}
         BMenuItem {
@@ -251,7 +307,11 @@ BMenu {
             iconName: "move-up"
             shortcut: "Alt+Up"
             enabled: menu.cellRow > 0
-            onTriggered: menu.act((r) => menu.controller.moveTableRow(r, menu.cellRow, menu.cellRow - 1))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.controller.moveTableRow(r, menu.cellRow, menu.cellRow - 1)
+            }
         }
         BMenuItem {
             objectName: "tableRowDown"
@@ -259,7 +319,11 @@ BMenu {
             iconName: "move-down"
             shortcut: "Alt+Down"
             enabled: menu.cellRow >= 0 && menu.cellRow + 1 < menu.tableRows
-            onTriggered: menu.act((r) => menu.controller.moveTableRow(r, menu.cellRow, menu.cellRow + 1))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.controller.moveTableRow(r, menu.cellRow, menu.cellRow + 1)
+            }
         }
         BMenuSeparator {}
         BMenuItem {
@@ -268,7 +332,11 @@ BMenu {
             iconName: "trash-2"
             danger: true
             enabled: menu.cellRow >= 0
-            onTriggered: menu.act((r) => menu.controller.removeTableRow(r, menu.cellRow))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.controller.removeTableRow(r, menu.cellRow)
+            }
         }
     }
     OptionalMenu {
@@ -281,15 +349,13 @@ BMenu {
             objectName: "tableColumnLeft"
             text: qsTr("Insert column on the left")
             iconName: "arrow-left"
-            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableColumn(r, menu.cellColumn),
-                                            -1, menu.cellColumn)
+            onTriggered: menu.insertAndEdit("column", menu.cellColumn, -1, menu.cellColumn)
         }
         BMenuItem {
             objectName: "tableColumnRight"
             text: qsTr("Insert column on the right")
             iconName: "arrow-right"
-            onTriggered: menu.insertAndEdit((r) => menu.controller.insertTableColumn(r, menu.cellColumn + 1),
-                                            -1, menu.cellColumn + 1)
+            onTriggered: menu.insertAndEdit("column", menu.cellColumn + 1, -1, menu.cellColumn + 1)
         }
         BMenuSeparator {}
         BMenuItem {
@@ -297,26 +363,32 @@ BMenu {
             text: qsTr("Sort ascending")
             iconName: "arrow-up-narrow-wide"
             enabled: menu.tableRows > 1
-            onTriggered: menu.act((r) => {
-                if (!menu.controller.sortTable(r, menu.cellColumn, false))
-                    menu.editor.notice(qsTr("The rows are in that order already."), "info")
-            })
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0 && !menu.controller.sortTable(r, menu.cellColumn, false))
+                    menu.editor.notice(qsTr("The rows are in that order already."), "info", null)
+            }
         }
         BMenuItem {
             objectName: "tableSortDescending"
             text: qsTr("Sort descending")
             iconName: "arrow-down-wide-narrow"
             enabled: menu.tableRows > 1
-            onTriggered: menu.act((r) => {
-                if (!menu.controller.sortTable(r, menu.cellColumn, true))
-                    menu.editor.notice(qsTr("The rows are in that order already."), "info")
-            })
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0 && !menu.controller.sortTable(r, menu.cellColumn, true))
+                    menu.editor.notice(qsTr("The rows are in that order already."), "info", null)
+            }
         }
         BMenuItem {
             objectName: "tableFilterColumn"
             text: qsTr("Filter by this column…")
             iconName: "filter"
-            onTriggered: menu.act((r) => menu.editor.openTableFilter(r, menu.cellColumn, menu))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.editor.openTableFilter(r, menu.cellColumn, menu)
+            }
         }
         BMenuSeparator {}
         BMenuItem {
@@ -325,7 +397,11 @@ BMenu {
             iconName: "arrow-left"
             shortcut: "Alt+Left"
             enabled: menu.cellColumn > 0
-            onTriggered: menu.act((r) => menu.controller.moveTableColumn(r, menu.cellColumn, menu.cellColumn - 1))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.controller.moveTableColumn(r, menu.cellColumn, menu.cellColumn - 1)
+            }
         }
         BMenuItem {
             objectName: "tableColumnMoveRight"
@@ -333,7 +409,11 @@ BMenu {
             iconName: "arrow-right"
             shortcut: "Alt+Right"
             enabled: menu.cellColumn + 1 < menu.tableColumns
-            onTriggered: menu.act((r) => menu.controller.moveTableColumn(r, menu.cellColumn, menu.cellColumn + 1))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.controller.moveTableColumn(r, menu.cellColumn, menu.cellColumn + 1)
+            }
         }
         BMenuSeparator {}
         AlignItem { objectName: "tableAlignLeft"; align: "left"; text: qsTr("Align left") }
@@ -347,7 +427,11 @@ BMenu {
             iconName: "trash-2"
             danger: true
             enabled: menu.tableColumns > 1
-            onTriggered: menu.act((r) => menu.controller.removeTableColumn(r, menu.cellColumn))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.controller.removeTableColumn(r, menu.cellColumn)
+            }
         }
     }
     OptionalItem {
@@ -355,14 +439,22 @@ BMenu {
         shown: !menu.documentMode
         text: qsTr("Zoom in")
         iconName: "search"
-        onTriggered: menu.act((r) => menu.controller.zoomInto(r))
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.controller.zoomInto(r)
+        }
     }
     OptionalItem {
         shown: menu.hasChildren && !menu.documentMode
         text: menu.collapsed ? qsTr("Expand") : qsTr("Collapse")
         iconName: menu.collapsed ? "chevrons-up-down" : "chevrons-down-up"
         shortcut: "Ctrl+."
-        onTriggered: menu.act((r) => menu.controller.toggleFold(r))
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.controller.toggleFold(r)
+        }
     }
     BMenu {
         id: copyMenu
@@ -375,44 +467,72 @@ BMenu {
             text: qsTr("Block reference ((…))")
             iconName: "link"
             shortcut: menu.editor ? menu.editor.copyRefShortcut : ""
-            onTriggered: menu.act((r) => menu.editor.copyLink(r, "blockRef"))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.editor.copyLink(r, "blockRef")
+            }
         }
         BMenuItem {
             objectName: "copyBlockLink"
             text: qsTr("Link to block [[…#^…]]")
             iconName: "bookmark"
-            onTriggered: menu.act((r) => menu.editor.copyLink(r, "blockLink"))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.editor.copyLink(r, "blockLink")
+            }
         }
         OptionalItem {
             objectName: "copyHeadingLink"
             shown: menu.heading
             text: qsTr("Link to heading [[…#…]]")
             iconName: "heading"
-            onTriggered: menu.act((r) => menu.editor.copyLink(r, "heading"))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.editor.copyLink(r, "heading")
+            }
         }
         BMenuItem {
             objectName: "copyEmbed"
             text: qsTr("Embed")
             iconName: "rows-2"
-            onTriggered: menu.act((r) => menu.editor.copyLink(r, "embed"))
+            onTriggered: {
+                const r = menu.row()
+                if (r >= 0)
+                    menu.editor.copyLink(r, "embed")
+            }
         }
     }
     BMenuItem {
         text: qsTr("Insert picture…")
         iconName: "image"
-        onTriggered: menu.act((r) => menu.editor.dialogs.pickImage(r, -1))
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.editor.dialogs.pickImage(r, -1)
+        }
     }
     BMenuItem {
         objectName: "blockMenuDrawing"
         text: qsTr("Insert drawing")
         iconName: "pen-tool"
-        onTriggered: menu.act((r) => menu.editor.insertDrawing(r, -1))
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.editor.insertDrawing(r, -1)
+        }
     }
     BMenuItem {
         objectName: "blockMenuDrawingOn"
         text: qsTr("Insert a drawing on a picture or PDF…")
         iconName: "pen-tool"
-        onTriggered: menu.act((r) => menu.editor.dialogs.pickDrawingBackdrop(r, -1))
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.editor.dialogs.pickDrawingBackdrop(r, -1)
+        }
     }
     BMenuSeparator {}
     OptionalItem {
@@ -421,7 +541,7 @@ BMenu {
         iconName: "list-indent-increase"
         shortcut: "Tab"
         unavailable: menu.unmovable
-        onTriggered: menu.moveOr((r) => menu.controller.indent(r), () => menu.controller.indentSelection())
+        onTriggered: menu.moveOr("indent")
     }
     OptionalItem {
         shown: !menu.documentMode || menu.listItem
@@ -429,7 +549,7 @@ BMenu {
         iconName: "list-indent-decrease"
         shortcut: "Shift+Tab"
         unavailable: menu.unmovable
-        onTriggered: menu.moveOr((r) => menu.controller.outdent(r), () => menu.controller.outdentSelection())
+        onTriggered: menu.moveOr("outdent")
     }
     BMenuItem {
         objectName: "blockMenuMoveUp"
@@ -437,14 +557,14 @@ BMenu {
         iconName: "move-up"
         shortcut: "Alt+Up"
         unavailable: menu.unmovable
-        onTriggered: menu.moveOr((r) => menu.controller.moveUp(r), () => menu.controller.moveSelectionUp())
+        onTriggered: menu.moveOr("up")
     }
     BMenuItem {
         text: qsTr("Move down")
         iconName: "move-down"
         shortcut: "Alt+Down"
         unavailable: menu.unmovable
-        onTriggered: menu.moveOr((r) => menu.controller.moveDown(r), () => menu.controller.moveSelectionDown())
+        onTriggered: menu.moveOr("down")
     }
     BMenuSeparator {}
     BMenuItem {
@@ -453,6 +573,14 @@ BMenu {
         iconName: "trash-2"
         danger: true
         unavailable: menu.uncuttable
-        onTriggered: menu.act((r) => menu.inSelection ? menu.editor.deleteSelection() : menu.controller.deleteBlock(r))
+        onTriggered: {
+            const r = menu.row()
+            if (r < 0)
+                return
+            if (menu.inSelection)
+                menu.editor.deleteSelection()
+            else
+                menu.controller.deleteBlock(r)
+        }
     }
 }

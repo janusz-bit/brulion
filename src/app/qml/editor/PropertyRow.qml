@@ -29,26 +29,34 @@ FocusScope {
     objectName: "propertyRow_" + key
 
     required property string key
-    required property PropertiesPanel panel
+    /// The panel (an Item: PropertiesPanel cannot pass itself typed — the file's own type).
+    required property Item panelItem
+    readonly property PropertiesPanel panel: panelItem as PropertiesPanel
 
-    readonly property var property: panel.propertyOf(key)
-    readonly property bool present: property !== undefined && property !== null
-    readonly property BlockEditor editor: panel.editor
-    readonly property PageController controller: panel.controller
+    /// The property ({ key, value, type, source, raw, items, empty, editable, multiline, linkDate,
+    /// html }: PropertiesPanel.propertyOf); an empty map while the key is not there.
+    readonly property MapHolder entry: MapHolder { map: row.panel.propertyOf(row.key) }
+    readonly property bool present: entry.map.key !== undefined
+    final property BlockEditor editor: panel.editor
+    final property PageController controller: panel.controller
     readonly property int blockRow: panel.blockRow
-    readonly property string source: present ? property.source : panel.source
-    readonly property bool editable: present && property.editable && panel.editable
-    readonly property bool empty: present && property.empty
-    readonly property bool fixedType: key.toLowerCase() === "tags" || key.toLowerCase() === "tag"
-                                      || key.toLowerCase() === "aliases" || key.toLowerCase() === "alias"
+    readonly property string source: present ? BlockViews.textAt(entry.map, "source") : panel.source
+    readonly property bool editable: present && entry.map.editable === true && panel.editable
+    readonly property bool empty: present && entry.map.empty === true
+    /// The value as one line (`value` of the entry).
+    readonly property string valueText: BlockViews.textAt(entry.map, "value")
+    /// The value as written (String(raw): a date's "YYYY-MM-DD", a text with its line breaks).
+    readonly property string rawText: present ? BlockViews.textAt(entry.map, "raw") : ""
+    readonly property string lowerKey: Js.toLowerCase(key)
+    readonly property bool fixedType: lowerKey === "tags" || lowerKey === "tag" || lowerKey === "aliases" || lowerKey === "alias"
     /// The type the value is edited as: the value's own; an empty one takes the type chosen in
     /// the menu this session, else the key's type in the notebook.
     readonly property string type: {
-        const own = present ? property.type : "text"
+        const own = present ? BlockViews.textAt(entry.map, "type") : "text"
         if (!empty || fixedType)
             return own
-        const chosen = editor ? editor.propertyTypeOverride[key] : undefined
-        if (chosen)
+        const chosen = editor ? BlockViews.textAt(editor.propertyTypeOverride, key) : ""
+        if (chosen !== "")
             return chosen
         const notebook = controller ? controller.notebookPropertyType(key) : ""
         return notebook !== "" && notebook !== "unsupported" ? notebook : own
@@ -84,9 +92,9 @@ FocusScope {
     property string error: ""
     property string errorStatus: ""
     /// A field closes with a refused value: its reason in a toast (unless one said it already).
-    function noticeError() {
+    function noticeError(): void {
         if (error !== "" && errorStatus === "invalidValue")
-            editor.notice(error, "error")
+            editor.notice(error, "error", null)
     }
     /// The editor is about to show another page: an open field writes what it holds now.
     signal leaving()
@@ -97,9 +105,14 @@ FocusScope {
     activeFocusOnTab: true
 
     Accessible.role: Accessible.ListItem
-    Accessible.name: qsTr("Property %1: %2").arg(key).arg(present ? property.value : "")
+    Accessible.name: qsTr("Property %1: %2").arg(key).arg(row.valueText)
 
-    function typeIcon(t) {
+    /// What the last edit answered ({ ok, status, reason, lost }).
+    MapHolder { id: result }
+    /// BlockEditor.propertyFocus read.
+    MapHolder { id: focusRequest }
+
+    function typeIcon(t: string): string {
         switch (t) {
         case "number": return "sigma"
         case "checkbox": return "square-check-big"
@@ -112,7 +125,7 @@ FocusScope {
         default: return "type"
         }
     }
-    function typeName(t) {
+    function typeName(t: string): string {
         switch (t) {
         case "number": return qsTr("Number")
         case "checkbox": return qsTr("Checkbox")
@@ -128,37 +141,46 @@ FocusScope {
 
     // ---- edits ------------------------------------------------------------------------------------
     /// Write `value` as the row's type; false (and `error` set) when it was refused.
-    function setValue(value) {
+    function setValue(value: var): bool {
         if (!controller || !present)
             return false
-        const r = controller.setPageProperty(source, key, value, type)
-        error = r.ok ? "" : r.reason
-        errorStatus = r.ok ? "" : r.status
-        if (!r.ok && r.status !== "invalidValue")
-            editor.notice(r.reason, "error")
-        return r.ok
+        result.map = controller.setPageProperty(source, key, value, type)
+        const ok = result.map.ok === true
+        error = ok ? "" : BlockViews.textAt(result.map, "reason")
+        errorStatus = ok ? "" : BlockViews.textAt(result.map, "status")
+        if (!ok && result.map.status !== "invalidValue")
+            editor.notice(result.map.reason, "error", null)
+        return ok
     }
-    function remove() {
+    function remove(): void {
         if (!controller || !editable)
             return
         // The row goes with its property: only locals after the edit.
         const ed = editor
         const ctl = controller
-        const before = ctl.undoToken()
+        const before = row.undoToken()
         const name = key
-        const next = panel.neighbourOf(key)
-        const r = ctl.removePageProperty(source, key)
-        if (!r.ok) {
-            ed.notice(r.reason, "error")
+        const next = row.neighbour()
+        result.map = ctl.removePageProperty(source, key)
+        if (!result.map.ok) {
+            ed.notice(result.map.reason, "error", null)
             return
         }
-        ed.notice(qsTr("Removed property “%1”").arg(name), "info", ed.undoAction(before))
+        ed.noticeUndoable(qsTr("Removed property “%1”").arg(name), "info", before)
         if (next !== "")
             ed.propertyFocus = { key: next, part: "row" }
         else
             ed.listView.forceActiveFocus()
     }
-    function setType(t) {
+    /// The page's undo token now (PageController.undoToken).
+    function undoToken(): string {
+        return row.controller.undoToken()
+    }
+    /// The key of the row after this one (else before it).
+    function neighbour(): string {
+        return row.panel.neighbourOf(row.key)
+    }
+    function setType(t: string): void {
         if (!controller || !editable || t === type)
             return
         if (empty) {
@@ -167,41 +189,50 @@ FocusScope {
             if (t !== "list")
                 return
         }
-        const before = controller.undoToken()
-        const r = controller.setPagePropertyType(source, key, t)
-        if (!r.ok)
-            editor.notice(r.reason, "error")
-        else if (r.lost)
-            editor.notice(r.reason, "info", editor.undoAction(before))
+        const before = row.undoToken()
+        result.map = controller.setPagePropertyType(source, key, t)
+        if (!result.map.ok)
+            editor.notice(result.map.reason, "error", null)
+        else if (result.map.lost)
+            editor.noticeUndoable(result.map.reason, "info", before)
     }
-    function rename(newKey) {
-        const k = newKey.trim()
+    function rename(newKey: string): bool {
+        const k = Js.trim(newKey)
         if (k === "" || k === key) {
             renaming = false
             focusRow()
             return true
         }
         const ed = editor
-        const r = controller.renamePageProperty(source, key, k)
-        if (!r.ok) {
-            error = r.reason
+        result.map = controller.renamePageProperty(source, key, k)
+        if (!result.map.ok) {
+            error = result.map.reason
             return false
         }
         // (This row goes: the row of the new name takes the keyboard.)
         ed.propertyFocus = { key: k, part: "row" }
         return true
     }
-    function copyValue() {
+    /// The list's items (a list, tags, aliases; none for other values).
+    function items(): list<string> {
+        if (!present || entry.map.items === undefined)
+            return []
+        return entry.map.items
+    }
+    /// No values held (the suggestions of a text value leave none out).
+    readonly property list<string> noValues: []
+    function copyValue(): void {
         if (!present)
             return
-        const text = property.items && property.items.length > 0 ? property.items.join(", ") : String(property.value || "")
-        const r = controller.copyText(text)
-        if (r.ok)
-            editor.notice(qsTr("Copied %1").arg(text), "success")
+        const list = row.items()
+        const text = list.length > 0 ? list.join(", ") : row.valueText
+        result.map = controller.copyText(text)
+        if (result.map.ok)
+            editor.notice(qsTr("Copied %1").arg(text), "success", null)
     }
 
     // ---- focus ------------------------------------------------------------------------------------
-    function focusRow() {
+    function focusRow(): void {
         editingValue = false
         renaming = false
         row.forceActiveFocus()
@@ -209,19 +240,19 @@ FocusScope {
     }
     /// A field of this row (or the row) got the keyboard: block editing ends, the editor keeps it
     /// above the on-screen keyboard (BlockEditor.editingProperty).
-    function fieldFocused(item) {
+    function fieldFocused(item: Item): void {
         if (controller && controller.editingRow >= 0)
             controller.stopEditing()
         editor.editingProperty = item
-        editor.later(() => editor.ensureEditVisible())
+        editor.laterEnsureEditVisible()
     }
-    function startValueEdit() {
+    function startValueEdit(): void {
         if (!editable)
             return
         error = ""
         switch (type) {
         case "checkbox":
-            setValue(!(present && property.raw === true))
+            setValue(!(present && entry.map.raw === true))
             break
         case "date":
         case "datetime":
@@ -239,38 +270,51 @@ FocusScope {
             editingValue = true
         }
     }
-    function startRename() {
+    function startRename(): void {
         if (!editable)
             return
         error = ""
         renaming = true
     }
-    function pickDate() {
-        const current = present && !empty ? String(property.raw).replace("T", " ") : ""
-        const r = row
-        editor.dialogs.pickPropertyDate((action, value) => {
-            if (!r || !r.present)
+    /// The date dialog's request of this row (EditorDialogs.applied).
+    readonly property string dateTarget: "property:" + key
+    function pickDate(): void {
+        const current = present && !empty ? Js.replace(rawText, "T", " ") : ""
+        editor.dialogs.pickPropertyDate(row.dateTarget, key, current, type === "datetime")
+    }
+    Connections {
+        target: row.editor ? row.editor.dialogs : null
+        function onApplied(target: string, action: string, a: var, b: var) {
+            if (target !== row.dateTarget || !row.present)
                 return
             if (action === "remove")
-                r.setValue(null)
+                row.setValue(null)
             else if (action === "set")
-                r.setValue(value)
-            r.focusRow()
-        }, key, current, type === "datetime")
+                row.setValue(a)
+            row.focusRow()
+        }
     }
-    function openMenu(item, x, y) {
+    function openMenu(item: Item, x: real, y: real): void {
         panel.openMenu(row, item, x, y)
     }
     /// A focus request for this row (BlockEditor.propertyFocus: after adding, renaming, removing).
-    function takeFocusRequest() {
-        const f = editor ? editor.propertyFocus : null
-        if (!f || f.key !== key)
+    function takeFocusRequest(): void {
+        if (!editor || editor.propertyFocus === null || editor.propertyFocus === undefined)
+            return
+        focusRequest.map = editor.propertyFocus
+        if (focusRequest.map.key !== key)
             return
         editor.propertyFocus = null
-        const part = f.part
-        Qt.callLater(() => {
-            if (!row)
-                return
+        row.focusPart = focusRequest.map.part || ""
+        focusTimer.restart()
+    }
+    /// The part a focus request asked for (taken once the events being handled are done).
+    property string focusPart: ""
+    Timer {
+        id: focusTimer
+        interval: 0
+        onTriggered: {
+            const part = row.focusPart
             if (part === "value")
                 row.startValueEdit()
             else if (part === "key")
@@ -279,7 +323,7 @@ FocusScope {
                 row.focusRow()
             if (part !== "value" || (row.type !== "date" && row.type !== "datetime"))
                 row.fieldFocused(row)
-        })
+        }
     }
     Component.onCompleted: takeFocusRequest()
     Connections {
@@ -349,14 +393,19 @@ FocusScope {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         onTapped: (point) => row.openMenu(row, point.position.x, point.position.y)
     }
+    /// Where a long press was, in the list's coordinates.
+    property point pressAt
     TapHandler {
+        id: rowHold
         acceptedDevices: PointerDevice.TouchScreen
         onLongPressed: {
             const list = valueLoader.item as PropertyListValue
-            const at = list ? list.mapFromItem(row, point.position.x, point.position.y) : Qt.point(0, 0)
-            if (list && list.chipAt(at.x, at.y) !== null)
-                return
-            row.openMenu(row, point.position.x, point.position.y)
+            if (list) {
+                row.pressAt = list.mapFromItem(row, rowHold.point.position.x, rowHold.point.position.y)
+                if (list.chipAt(row.pressAt.x, row.pressAt.y) !== null)
+                    return
+            }
+            row.openMenu(row, rowHold.point.position.x, rowHold.point.position.y)
         }
     }
 
@@ -431,26 +480,28 @@ FocusScope {
             errorText: row.error
             accessibleName: qsTr("New name of “%1”").arg(row.key)
             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-            provider: (typed) => row.controller.suggestPropertyKeys(typed, 8).map(
-                          k => ({ title: k.key, icon: row.typeIcon(k.type), value: k.key }))
+            suggesting: true
+            onSuggestionsRequested: (typed) => {
+                renameField.suggestions = BlockViews.propertyKeyRows(row.controller.suggestPropertyKeys(typed, 8), false, true)
+            }
             property bool done: false
             Component.onCompleted: {
                 forceActiveFocus()
                 selectAll()
                 row.fieldFocused(renameField)
             }
-            onPicked: (value) => { if (row.rename(String(value))) done = true }
-            onCommitted: (text) => { if (row.rename(text)) done = true }
+            onPicked: (value) => { if (row.rename(value)) renameField.done = true }
+            onCommitted: (text) => { if (row.rename(text)) renameField.done = true }
             onCancelled: {
-                done = true
+                renameField.done = true
                 row.error = ""
                 row.focusRow()
             }
             onActiveFocusChanged: {
-                if (activeFocus || done)
+                if (renameField.activeFocus || renameField.done)
                     return
-                done = true
-                if (!row.rename(text))
+                renameField.done = true
+                if (!row.rename(renameField.text))
                     row.renaming = false
             }
             Connections {
@@ -460,7 +511,7 @@ FocusScope {
                         return
                     renameField.done = true
                     if (!row.rename(renameField.text))
-                        row.editor.notice(row.error, "error")
+                        row.editor.notice(row.error, "error", null)
                 }
             }
         }
@@ -491,12 +542,15 @@ FocusScope {
         Item {
             id: textBox
             readonly property real lineHeight: row.rowHeight - 2 * Theme.space1
-            readonly property string valueHtml: !row.present || row.empty ? "" : (row.property.html || "")
+            readonly property string valueHtml: !row.present || row.empty ? "" : BlockViews.textAt(row.entry.map, "html")
             /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
             property string hoveredLink: ""
-            function trackLink(x: real, y: real) {
-                const p = displayCell.mapToItem(display, x, y)
-                const link = row.editingValue || valueHtml === "" ? "" : display.linkAt(p.x, p.y)
+            /// The link at (x, y) of the value's cell ("" none): the cell and the text are siblings.
+            function linkAtCell(x: real, y: real): string {
+                return display.linkAt(x + displayCell.x - display.x, y + displayCell.y - display.y)
+            }
+            function trackLink(x: real, y: real): void {
+                const link = row.editingValue || textBox.valueHtml === "" ? "" : textBox.linkAtCell(x, y)
                 if (link !== textBox.hoveredLink)
                     textBox.hoveredLink = link
             }
@@ -511,7 +565,7 @@ FocusScope {
                 text: !row.present ? "" : row.empty ? qsTr("Empty") : TextHelper.hoveredLinkHtml(textBox.valueHtml, textBox.hoveredLink)
                 textFormat: row.present && !row.empty ? Text.RichText : Text.PlainText
                 wrapMode: Text.Wrap
-                maximumLineCount: row.present && row.property.multiline ? 6 : 3
+                maximumLineCount: row.present && row.entry.map.multiline === true ? 6 : 3
                 elide: Text.ElideRight
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
@@ -528,12 +582,9 @@ FocusScope {
                 height: Math.max(textBox.implicitHeight, row.cellHeight)
                 HoverHandler {
                     id: displayHover
-                    cursorShape: {
-                        const p = displayCell.mapToItem(display, displayHover.point.position.x, displayHover.point.position.y)
-                        return display.linkAt(p.x, p.y) !== "" ? Qt.PointingHandCursor
-                                                               : row.editable ? Qt.IBeamCursor : Qt.ArrowCursor
-                    }
-                    onPointChanged: textBox.trackLink(point.position.x, point.position.y)
+                    cursorShape: textBox.linkAtCell(displayHover.point.position.x, displayHover.point.position.y) !== ""
+                                 ? Qt.PointingHandCursor : row.editable ? Qt.IBeamCursor : Qt.ArrowCursor
+                    onPointChanged: textBox.trackLink(displayHover.point.position.x, displayHover.point.position.y)
                     onHoveredChanged: if (!hovered && !displayTap.pressed) textBox.hoveredLink = ""
                 }
                 TapHandler {
@@ -545,8 +596,7 @@ FocusScope {
                             textBox.hoveredLink = ""
                     }
                     onTapped: (point) => {
-                        const p = displayCell.mapToItem(display, point.position.x, point.position.y)
-                        const link = display.linkAt(p.x, p.y)
+                        const link = textBox.linkAtCell(point.position.x, point.position.y)
                         if (link !== "")
                             row.editor.activateLink(row.blockRow, link)
                         else
@@ -567,7 +617,7 @@ FocusScope {
                 width: parent.width
                 active: row.editingValue
                 visible: active
-                sourceComponent: row.present && row.property.multiline ? areaField : lineField
+                sourceComponent: row.present && row.entry.map.multiline === true ? areaField : lineField
             }
             Component {
                 id: lineField
@@ -577,36 +627,44 @@ FocusScope {
                     size: "small"
                     errorText: row.error
                     accessibleName: qsTr("Value of “%1”").arg(row.key)
-                    provider: (typed) => row.controller.suggestPropertyValues(row.key, typed, 8).map(
-                                  v => ({ title: String(v.value), icon: v.kind === "page" ? "file-text" : "",
-                                          subtitle: v.kind === "page" ? qsTr("page") : "", value: v.value }))
+                    suggesting: true
+                    // The notebook's values of the key ("[[": pages).
+                    onSuggestionsRequested: (typed) => {
+                        valueField.suggestions = BlockViews.propertyValueRows(
+                                    row.controller.suggestPropertyValues(row.key, typed, 8), false, row.noValues, "PropertyRow")
+                    }
                     /// The value when the field opened (what it starts with).
                     property string initial: ""
                     property bool done: false
-                    function commit(value) {
-                        if (done)
+                    function commit(value: string): void {
+                        if (valueField.done)
                             return
-                        done = true
-                        if (value !== initial)
+                        valueField.done = true
+                        if (value !== valueField.initial)
                             row.setValue(value)
                         row.editingValue = false
                     }
                     Component.onCompleted: {
-                        initial = row.present && !row.empty ? String(row.property.raw) : ""
+                        initial = row.present && !row.empty ? row.rawText : ""
                         text = initial
                         forceActiveFocus()
                         cursorPosition = length
                         row.fieldFocused(valueField)
                     }
-                    Component.onDestruction: if (!done && text !== initial) { done = true; row.setValue(text) }
-                    onPicked: (value) => { commit(String(value)); row.focusRow() }
-                    onCommitted: (text) => { commit(text); row.focusRow() }
+                    Component.onDestruction: {
+                        if (!valueField.done && valueField.text !== valueField.initial) {
+                            valueField.done = true
+                            row.setValue(valueField.text)
+                        }
+                    }
+                    onPicked: (value) => { valueField.commit(value); row.focusRow() }
+                    onCommitted: (text) => { valueField.commit(text); row.focusRow() }
                     onCancelled: {
-                        done = true
+                        valueField.done = true
                         row.editingValue = false
                         row.focusRow()
                     }
-                    onActiveFocusChanged: if (!activeFocus) commit(text)
+                    onActiveFocusChanged: if (!valueField.activeFocus) valueField.commit(valueField.text)
                     Connections {
                         target: row
                         function onLeaving() {
@@ -628,23 +686,28 @@ FocusScope {
                     /// The value when the area opened (what it starts with).
                     property string initial: ""
                     property bool done: false
-                    function commit() {
-                        if (done)
+                    function commit(): void {
+                        if (valueArea.done)
                             return
-                        done = true
-                        if (text !== initial)
-                            row.setValue(text)
+                        valueArea.done = true
+                        if (valueArea.text !== valueArea.initial)
+                            row.setValue(valueArea.text)
                         row.editingValue = false
                     }
                     Component.onCompleted: {
-                        initial = row.present && !row.empty ? String(row.property.raw) : ""
+                        initial = row.present && !row.empty ? row.rawText : ""
                         text = initial
                         forceActiveFocus()
                         cursorPosition = length
                         row.fieldFocused(valueArea)
                     }
-                    Component.onDestruction: if (!done && text !== initial) { done = true; row.setValue(text) }
-                    onActiveFocusChanged: if (!activeFocus) commit()
+                    Component.onDestruction: {
+                        if (!valueArea.done && valueArea.text !== valueArea.initial) {
+                            valueArea.done = true
+                            row.setValue(valueArea.text)
+                        }
+                    }
+                    onActiveFocusChanged: if (!valueArea.activeFocus) valueArea.commit()
                     Connections {
                         target: row
                         function onLeaving() {
@@ -655,11 +718,11 @@ FocusScope {
                     }
                     Keys.onPressed: (event) => {
                         if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)) {
-                            commit()
+                            valueArea.commit()
                             row.focusRow()
                             event.accepted = true
                         } else if (event.key === Qt.Key_Escape) {
-                            done = true
+                            valueArea.done = true
                             row.editingValue = false
                             row.focusRow()
                             event.accepted = true
@@ -682,7 +745,7 @@ FocusScope {
                 width: parent.width
                 height: numberBox.lineHeight
                 verticalAlignment: Text.AlignVCenter
-                text: !row.present ? "" : row.empty ? qsTr("Empty") : row.property.value
+                text: !row.present ? "" : row.empty ? qsTr("Empty") : row.valueText
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 font.family: Theme.fontUi
@@ -716,24 +779,24 @@ FocusScope {
                     property string initial: ""
                     property bool done: false
                     /// Write it; the field stays open with the error when it is no number.
-                    function commit() {
-                        if (done)
+                    function commit(): bool {
+                        if (numberField.done)
                             return true
-                        if (text !== initial && !row.setValue(text))
+                        if (numberField.text !== numberField.initial && !row.setValue(numberField.text))
                             return false
-                        done = true
+                        numberField.done = true
                         row.error = ""
                         row.editingValue = false
                         return true
                     }
                     Component.onCompleted: {
-                        initial = row.present && !row.empty ? String(row.property.value) : ""
+                        initial = row.present && !row.empty ? row.valueText : ""
                         text = initial
                         forceActiveFocus()
                         selectAll()
                         row.fieldFocused(numberField)
                     }
-                    Component.onDestruction: if (!done && text !== initial) row.setValue(text)
+                    Component.onDestruction: if (!numberField.done && numberField.text !== numberField.initial) row.setValue(numberField.text)
                     Connections {
                         target: row
                         function onLeaving() {
@@ -745,19 +808,19 @@ FocusScope {
                             }
                         }
                     }
-                    onAccepted: if (commit()) row.focusRow()
+                    onAccepted: if (numberField.commit()) row.focusRow()
                     onEscapePressed: {
-                        done = true
+                        numberField.done = true
                         row.error = ""
                         row.editingValue = false
                         row.focusRow()
                     }
                     onActiveFocusChanged: {
-                        if (activeFocus || done)
+                        if (numberField.activeFocus || numberField.done)
                             return
-                        if (!commit()) {
+                        if (!numberField.commit()) {
                             // Not a number: nothing written, the field closes (the error was said).
-                            done = true
+                            numberField.done = true
                             row.editingValue = false
                             row.noticeError()
                         }
@@ -781,7 +844,7 @@ FocusScope {
                 height: Math.max(parent.height, Theme.touchUi ? Theme.touchTarget : 0)
                 enabled: row.editable
                 checkable: false
-                checked: row.present && row.property.raw === true
+                checked: row.present && row.entry.map.raw === true
                 focusPolicy: Qt.NoFocus
                 hoverEnabled: !Theme.touchUi
                 Accessible.role: Accessible.CheckBox
@@ -794,6 +857,7 @@ FocusScope {
                 background: Item {}
                 contentItem: Item {
                     Rectangle {
+                        id: checkBoxFrame
                         readonly property int boxSize: Theme.touchUi ? 22 : 18
                         x: 2
                         anchors.verticalCenter: parent.verticalCenter
@@ -808,7 +872,7 @@ FocusScope {
                         BIcon {
                             anchors.centerIn: parent
                             name: "check"
-                            size: parent.boxSize - 4
+                            size: checkBoxFrame.boxSize - 4
                             color: Theme.dark ? Theme.bg : "#ffffff"
                             visible: check.checked
                         }
@@ -861,7 +925,7 @@ FocusScope {
                         text: {
                             if (!row.present || row.empty)
                                 return qsTr("Empty")
-                            const raw = String(row.property.raw).replace("T", " ")
+                            const raw = Js.replace(row.rawText, "T", " ")
                             const shown = DatesHelper.formatShort(raw)
                             return shown !== "" ? shown : raw
                         }
@@ -880,8 +944,8 @@ FocusScope {
     Component {
         id: listValue
         PropertyListValue {
-            entry: row.property || ({})
-            row: row
+            entry: row.entry.map
+            rowItem: row
         }
     }
 }

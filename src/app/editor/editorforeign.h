@@ -8,6 +8,7 @@
 
 #include "blocklistmodel.h"
 #include "blockrowdata.h"
+#include "blockviews.h"
 #include "chartview.h"
 #include "editorhost.h"
 #include "editorinput.h"
@@ -161,6 +162,26 @@ struct EditorHostForeign {
     QML_FOREIGN(brulion::EditorHost)
     QML_NAMED_ELEMENT(EditorHost)
     QML_UNCREATABLE("EditorHost is an interface implemented in C++")
+};
+
+// The block views' helpers (blockviews.h) for compiled QML.
+struct BlockViewsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::BlockViews)
+    QML_NAMED_ELEMENT(BlockViews)
+    QML_SINGLETON
+};
+
+struct ChipFlowForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::ChipFlow)
+    QML_NAMED_ELEMENT(ChipFlow)
+};
+
+struct KeyListModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::KeyListModel)
+    QML_NAMED_ELEMENT(KeyListModel)
 };
 
 } // namespace brulion::editor

@@ -54,6 +54,7 @@ qt_add_library(brulion_editor STATIC
     editorinput.h editorinput.cpp
     mermaidview.h mermaidview.cpp
     chartview.h chartview.cpp
+    blockviews.h blockviews.cpp
 )
 target_include_directories(brulion_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_editor

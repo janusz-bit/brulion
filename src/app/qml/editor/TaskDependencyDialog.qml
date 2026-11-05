@@ -9,21 +9,23 @@ import Brulion
 // PlanningActions.addDependency in Tasks).
 //
 //   TaskDependencyDialog {
-//       candidates: (text) => controller.dependencyCandidates(row, text)
+//       onSearchRequested: (text) => items = controller.dependencyCandidates(row, text)
 //       onChosen: (path, line) => controller.addTaskDependency(row, path, line)
 //   }
 //
-// `candidates(text)` gives [{ path, line, text, title, id, status }] (notebook::dependencyCandidates:
-// words of the text, diacritics ignored).
+// searchRequested(text) asks for the tasks to offer (on opening and as the search text changes);
+// the owner sets `items` to [{ path, line, text, title, id, status }] at once
+// (notebook::dependencyCandidates: words of the text, diacritics ignored).
 BDialog {
     id: dialog
     objectName: "taskDependencyDialog"
 
-    /// (text) => the tasks to offer.
-    property var candidates: (text) => []
-    property var items: []
+    /// The tasks offered (the owner sets them on searchRequested).
+    property list<var> items
     property int current: -1
 
+    /// The tasks matching `text` are wanted in `items` (set them in the handler).
+    signal searchRequested(string text)
     signal chosen(string path, int line)
 
     title: qsTr("Add dependency")
@@ -33,19 +35,22 @@ BDialog {
     acceptEnabled: current >= 0 && current < items.length
     initialFocusItem: field
 
-    function refresh() {
-        items = candidates(field.text) || []
+    function refresh(): void {
+        dialog.searchRequested(field.text)
         current = items.length > 0 ? 0 : -1
     }
+    /// The chosen task ({ path, line, … }).
+    MapHolder { id: choice }
 
     onAboutToShow: {
         field.text = ""
         refresh()
     }
     onAccepted: {
-        const item = items[current]
-        if (item)
-            chosen(item.path, item.line)
+        if (current < 0 || current >= items.length)
+            return
+        choice.map = items[current]
+        chosen(choice.map.path, choice.map.line)
     }
 
     BSearchField {
@@ -70,16 +75,20 @@ BDialog {
         currentIndex: dialog.current
         onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
         delegate: BListItem {
+            id: candidate
             required property var modelData
             required property int index
+            /// The task: { path, line, text, title, id, status }.
+            readonly property MapHolder task: MapHolder { map: candidate.modelData }
+            readonly property string taskId: candidate.task.map.id || ""
             objectName: "taskDependencyItem_" + index
             width: ListView.view.width
-            iconName: modelData.status === "doing" ? "clock" : "square"
-            text: modelData.text
-            subtitle: modelData.title + (modelData.id ? "  🆔 " + modelData.id : "")
+            iconName: candidate.task.map.status === "doing" ? "clock" : "square"
+            text: candidate.task.map.text
+            subtitle: candidate.task.map.title + (candidate.taskId !== "" ? "  🆔 " + candidate.taskId : "")
             selected: index === dialog.current
             onClicked: {
-                dialog.current = index
+                dialog.current = candidate.index
                 dialog.tryAccept()
             }
         }

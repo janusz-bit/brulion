@@ -13,7 +13,10 @@ import Brulion
 Rectangle {
     id: root
 
-    property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     /// The source is on screen: while editing, or when there is no chart to show.
     readonly property bool showSource: root.block.editing || chart.status !== "ok"
     readonly property real codeLine: Theme.lineHeightPx(Theme.textSm, 1.5)
@@ -72,8 +75,8 @@ Rectangle {
         y: root.showSource ? sourceLoader.y + sourceLoader.height + Theme.space3 : Theme.space3
         width: parent.width - 2 * Theme.space3
         height: visible ? implicitHeight : 0
-        source: root.block.model.editText
-        chartData: root.block.model.chartData || ({})
+        source: root.block.rowData.editText
+        chartData: root.block.rowData.chartData
         english: root.block.controller.locale === "en"
         fontFamily: Theme.fontUi
         fontPixelSize: Theme.textSm
@@ -92,7 +95,7 @@ Rectangle {
         TapHandler {
             id: tap
             enabled: !root.block.editing
-            onTapped: if (!root.block.editor.blockTapped(root.block.index, tap.point.modifiers))
+            onTapped: if (!root.block.editor.blockTappedWith(root.block.index, tap.point.modifiers))
                           root.block.editor.startEditing(root.block.index, -1)
         }
         TapHandler {

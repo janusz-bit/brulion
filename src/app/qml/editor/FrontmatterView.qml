@@ -15,40 +15,54 @@ Rectangle {
     id: root
     objectName: "frontmatterView"
 
-    property BlockDelegate block
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
     readonly property BlockEditor editor: block.editor
     readonly property bool expanded: editor.propertiesExpanded && !block.editing
     readonly property bool open: expanded || block.editing
-    readonly property var properties: block.model.properties || []
-    readonly property var info: block.model.propertiesInfo || ({})
+    readonly property list<var> properties: root.block.rowData.properties
+    readonly property var info: root.block.rowData.propertiesInfo
+    /// `info` ({ source, editable, problem, canAdd }) with its keys readable.
+    readonly property MapHolder infoRec: MapHolder { map: root.block.rowData.propertiesInfo }
     readonly property real firstLineCenter: header.height / 2
     readonly property real innerPad: Theme.space2
     /// The tags and aliases properties the page header shows as chips while the panel is folded
     /// ("source:key"; none where the editor has no such header — a journal day in the stream).
-    readonly property var headerListKeys: {
-        if (!editor.headerShowsListChips || !editor.controller)
+    readonly property list<string> headerListKeys: root.listChipKeys()
+    function listChipKeys(): list<string> {
+        if (!root.editor.headerShowsListChips || !root.editor.controller)
             return []
-        const pp = editor.controller.pageProperties
-        return (pp.tags || []).concat(pp.aliases || []).map(t => t.source + ":" + t.property)
+        return BlockViews.headerListKeys(root.editor.controller.pageProperties)
     }
     /// The folded header's preview of the values: without the tags and aliases the page header
     /// shows right above (never twice), dates as the open panel shows them ("czw, 29 paź").
     readonly property string preview: {
-        const parts = []
-        for (const p of properties) {
-            if (parts.join(" · ").length > 160)
+        // (Each list read fresh: a call in the loop could change one held in a local.)
+        let out = ""
+        const count = root.fields("key").length
+        for (let i = 0; i < count; ++i) {
+            if (out.length > 160)
                 break
-            if ((p.type === "tags" || p.type === "aliases") && headerListKeys.indexOf(p.source + ":" + p.key) >= 0)
+            const type = root.fields("type")[i]
+            const key = root.fields("key")[i]
+            if ((type === "tags" || type === "aliases") && root.headerListKeys.indexOf(root.fields("source")[i] + ":" + key) >= 0)
                 continue
-            let value = p.value
-            if (!p.empty && (p.type === "date" || p.type === "datetime")) {
-                const shown = DatesHelper.formatShort(String(p.raw).replace("T", " "))
+            const empty = root.fields("empty")[i] === "true"
+            let value = root.fields("value")[i]
+            if (!empty && (type === "date" || type === "datetime")) {
+                const shown = DatesHelper.formatShort(Js.replace(root.fields("raw")[i], "T", " "))
                 if (shown !== "")
                     value = shown
             }
-            parts.push(p.key + ": " + (p.empty ? "–" : value))
+            out += (out !== "" ? " · " : "") + key + ": " + (empty ? "–" : value)
         }
-        return parts.join(" · ")
+        return out
+    }
+    /// String(p[field]) of each property.
+    function fields(field: string): list<string> {
+        return BlockViews.fieldTexts(root.properties, field)
     }
 
     // Folded (as it is created): the header's own height. Expanded: the header and the panel
@@ -64,14 +78,14 @@ Rectangle {
     border.width: root.block.editing ? 1 : 0
     border.color: Theme.alpha(Theme.focusRing, 0.5)
 
-    function toggle() {
+    function toggle(): void {
         if (block.editing) {
             editor.stopEditing(true)
             return
         }
         editor.setPropertiesExpanded(!editor.propertiesExpanded)
     }
-    function openHeaderMenu() {
+    function openHeaderMenu(): void {
         if (!headerMenu)
             headerMenu = headerMenuComponent.createObject(root) as BMenu
         headerMenu.bottomMargin = editor.menuBottomMargin()
@@ -134,7 +148,7 @@ Rectangle {
         BIconButton {
             id: addButton
             objectName: "propertiesHeaderAdd"
-            visible: root.expanded && root.info.canAdd !== false && root.info.editable !== false
+            visible: root.expanded && root.infoRec.map.canAdd !== false && root.infoRec.map.editable !== false
             anchors.right: moreButton.left
             anchors.verticalCenter: parent.verticalCenter
             size: "small"
@@ -168,7 +182,7 @@ Rectangle {
         visible: active
         sourceComponent: PropertiesPanel {
             objectName: "propertiesPanel"
-            editor: root.editor
+            editorItem: root.editor
             controller: root.block.controller
             blockRow: root.block.index
             properties: root.properties

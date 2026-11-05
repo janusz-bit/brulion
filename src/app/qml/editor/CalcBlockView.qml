@@ -12,35 +12,41 @@ import Brulion
 Rectangle {
     id: root
 
-    property BlockDelegate block
-    readonly property var results: block.model.calcResults || []
+    /// The delegate (an Item: BlockDelegate passes itself, and a file cannot store itself into
+    /// a property of its own type — compiled, a module-qualified cast crashes).
+    property Item blockItem
+    final property BlockDelegate block: blockItem as BlockDelegate
+    readonly property list<var> results: root.block.rowData.calcResults
     /// The note's text size (the editor's), and its line height for a list of lines.
     readonly property int fontSize: root.block && root.block.editor ? root.block.editor.fontSize : Theme.textEditor
     readonly property int lineHeightPx: Theme.lineHeightPx(fontSize, Theme.lineHeight)
     /// The family the note's text is drawn in ("serif" resolved, e.g. "Noto Serif"): the inputs'
     /// TextEdit gets that name, so its text stays in the note's font while it is edited.
-    readonly property string family: familyProbe.fontInfo.family !== "" ? familyProbe.fontInfo.family : Theme.fontEditor
+    readonly property string family: BlockViews.resolvedFamily(familyProbe.font) !== ""
+                                     ? BlockViews.resolvedFamily(familyProbe.font) : Theme.fontEditor
     readonly property real firstLineCenter: input.y + lineHeightPx / 2
     /// Width reserved for the results column (widest result, at most 45 %).
     readonly property real resultsWidth: {
-        let w = 0
-        for (let i = 0; i < results.length; ++i) {
-            const r = results[i]
-            const t = r.error !== "" ? r.error : r.value
-            if (t !== "")
-                w = Math.max(w, metrics.advanceWidth(t))
-        }
-        return Math.min(parent ? parent.width * 0.45 : 200, Math.ceil(w) + Theme.space6)
+        const w = root.widestOf(root.resultTexts())
+        return Math.min(root.parent ? root.parent.width * 0.45 : 200, Math.ceil(w) + Theme.space6)
     }
-    /// Offsets of the line starts in the input text.
-    readonly property var lineStarts: {
-        const t = input.text
-        const starts = [0]
-        for (let i = 0; i < t.length; ++i) {
-            if (t.charAt(i) === "\n")
-                starts.push(i + 1)
-        }
-        return starts
+    /// The input's lines (a result's line is checked for a total).
+    readonly property list<string> inputLines: Js.split(input.text, "\n")
+
+    /// What each result shows: its error, else its value.
+    function resultTexts(): list<string> {
+        return BlockViews.calcResultTexts(root.results)
+    }
+    /// The widest of `texts` in the results' font.
+    function widestOf(texts: list<string>): real {
+        return BlockViews.widestText(metrics.font, texts)
+    }
+    function rectTop(r: rect): real {
+        return r.y
+    }
+    /// The offset of line `line` of the input text (0 past its last line).
+    function lineStart(line: int): int {
+        return BlockViews.lineStart(input.text, line)
     }
 
     implicitHeight: input.y + input.implicitHeight + Theme.space3
@@ -114,11 +120,15 @@ Rectangle {
         delegate: Text {
             id: result
             objectName: "calcResult" // (the editor's self-tests)
-            required property var modelData
             required property int index
-            readonly property bool isError: modelData.error !== ""
-            readonly property bool isTotal: /^\s*(sum|suma|total|razem|avg|średnia|srednia)\s*$/i.test(input.text.split("\n")[modelData.line] || "")
-            readonly property int offset: modelData.line < root.lineStarts.length ? root.lineStarts[modelData.line] : 0
+            required property int line
+            required property string value
+            required property string error
+            required property string assigned
+            readonly property bool isError: error !== ""
+            readonly property bool isTotal: Js.test(line >= 0 && line < root.inputLines.length ? root.inputLines[line] : "",
+                                                    "^\\s*(sum|suma|total|razem|avg|średnia|srednia)\\s*$", "i")
+            readonly property int offset: root.lineStart(line)
             visible: text !== ""
             x: root.width - root.resultsWidth
             width: root.resultsWidth - Theme.space4
@@ -129,7 +139,7 @@ Rectangle {
             y: {
                 if (input.contentHeight < 0 || input.width < 0)
                     return input.y
-                return input.y + (offset <= input.length ? input.positionToRectangle(offset).y : 0)
+                return input.y + (result.offset <= input.length ? root.rectTop(input.positionToRectangle(result.offset)) : 0)
             }
             height: root.lineHeightPx
             // On the line's baseline: the input's lines have their text at the top of the line
@@ -137,7 +147,7 @@ Rectangle {
             verticalAlignment: Text.AlignTop
             topPadding: isError ? Math.max(0, Math.round(metrics.ascent - errorMetrics.ascent)) : 0
             horizontalAlignment: Text.AlignRight
-            text: isError ? modelData.error : modelData.value
+            text: isError ? result.error : result.value
             textFormat: Text.PlainText
             elide: Text.ElideLeft
             // A message in the UI font, smaller; a number in the note's, with tabular figures.
@@ -145,14 +155,14 @@ Rectangle {
             font.pixelSize: isError ? Theme.textSm : root.fontSize
             font.weight: isTotal ? Theme.weightSemiBold : Theme.weightNormal
             font.features: { "tnum": 1 }
-            color: isError ? Theme.dangerText : modelData.assigned !== "" && !isTotal ? Theme.fgMuted : Theme.fg
+            color: isError ? Theme.dangerText : result.assigned !== "" && !isTotal ? Theme.fgMuted : Theme.fg
             Accessible.role: Accessible.StaticText
             Accessible.name: (isError ? qsTr("Error: %1") : qsTr("Result: %1")).arg(text)
             Rectangle {
                 visible: result.isTotal && !result.isError
                 anchors.right: parent.right
                 anchors.top: parent.top
-                width: Math.min(parent.width, parent.contentWidth + 4)
+                width: Math.min(result.width, result.contentWidth + 4)
                 height: 1
                 color: Theme.borderStrong
             }

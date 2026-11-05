@@ -39,7 +39,7 @@ import Brulion
 Column {
     id: root
 
-    property var embeds: []
+    property list<var> embeds
     signal clicked(string target)
     /// A click on a drawing (`drawing`: an SVG with an embedded scene): the drawing editor.
     signal drawingClicked(string path)
@@ -56,8 +56,8 @@ Column {
     signal backgroundLongPressed()
 
     /// See BlockEditor.autoTextSafe (BChip shows its text with Text.AutoText).
-    function autoTextSafe(s) {
-        return s && s.indexOf("<") >= 0 ? TextHelper.escapeHtml(s) : (s || "")
+    function autoTextSafe(s: string): string {
+        return Js.indexOf(s, "<") >= 0 ? TextHelper.escapeHtml(s) : s
     }
 
     spacing: Theme.space2
@@ -84,37 +84,49 @@ Column {
         delegate: Item {
             id: embed
             required property var modelData
-            readonly property bool web: modelData.web === true
+            /// The embed (BlockListModel's `embeds`: an attachment, a PDF or a picture from the
+            /// internet — their keys differ; a key an embed lacks reads as undefined).
+            readonly property MapHolder rec: MapHolder { map: embed.modelData }
+            readonly property bool web: rec.map.web === true
             /// A PDF (BlockListModel's PDF embed); shown as its thumbnail where PDFs are drawn.
-            readonly property bool pdf: modelData.pdf === true
-            readonly property bool pdfTile: pdf && modelData.viewable === true && modelData.state !== "unsupported"
-            readonly property bool image: !pdf && modelData.image && (web || modelData.url.toString() !== "")
+            readonly property bool pdf: rec.map.pdf === true
+            readonly property bool pdfTile: pdf && rec.map.viewable === true && rec.map.state !== "unsupported"
+            readonly property string urlText: "" + (rec.map.url || "")
+            readonly property string darkUrlText: "" + (rec.map.darkUrl || "")
+            readonly property bool image: !pdf && rec.map.image === true && (web || urlText !== "")
+            readonly property string state_: rec.map.state || ""
+            readonly property string name: rec.map.name || ""
+            readonly property string alt: rec.map.alt || ""
+            readonly property string target: rec.map.target || ""
+            readonly property string host: rec.map.host || ""
+            readonly property string format: rec.map.format || ""
             /// A picture from the internet not shown (yet): the frame tells why and what to do.
-            readonly property bool webPending: web && modelData.state !== "ready"
-            readonly property bool decodable: modelData.decodable !== false
-            readonly property bool drawing: modelData.drawing === true
+            readonly property bool webPending: web && state_ !== "ready"
+            readonly property bool decodable: rec.map.decodable !== false
+            readonly property bool drawing: rec.map.drawing === true
             /// SVG: a local file by its name; a picture from the internet by the format the host
             /// found in its bytes (its URL need not end with .svg, `name` is "host › segment").
-            readonly property bool scalable: drawing || (web ? /^svgz?$/i.test(modelData.format || "")
-                                                             : /\.svgz?$/i.test(modelData.name || ""))
+            readonly property bool scalable: drawing || (web ? Js.test(format, "^svgz?$", "i")
+                                                             : Js.test(name, "\\.svgz?$", "i"))
+            readonly property real fileWidth: rec.map.width || 0
+            readonly property real fileHeight: rec.map.height || 0
             /// The picture's size as the Image below shows it once loaded: a raster picture's pixels,
             /// at most 2048 a side; an SVG fitted into 1024 × 420 (rendered at the screen's pixel
-            /// ratio) — null when the model does not know the file's size (then: once loaded).
-            readonly property var knownSize: {
-                const w = modelData.width || 0
-                const h = modelData.height || 0
-                if (w <= 0 || h <= 0)
-                    return null
-                if (modelData.drawing === true) {
-                    // A drawing at its own size (one unit a pixel, as drawn), never enlarged.
-                    const s = Math.min(1, 1024 / w, 420 / h)
-                    return { width: Math.floor(w * s), height: Math.floor(h * s) }
-                }
-                const dpr = scalable && Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
-                const box = scalable ? [1024 * dpr, 420 * dpr] : [2048, 2048]
-                const k = scalable || w > box[0] || h > box[1] ? Math.min(box[0] / w, box[1] / h) : 1
-                return { width: Math.floor(w * k) / dpr, height: Math.floor(h * k) / dpr }
-            }
+            /// ratio) — not known (sizeKnown false) when the model does not know the file's size
+            /// (then: once loaded).
+            readonly property bool sizeKnown: fileWidth > 0 && fileHeight > 0
+            /// A drawing at its own size (one unit a pixel, as drawn), never enlarged.
+            readonly property real drawingScale: sizeKnown ? Math.min(1, 1024 / fileWidth, 420 / fileHeight) : 1
+            readonly property real dpr: scalable && Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
+            readonly property real boxWidth: scalable ? 1024 * dpr : 2048
+            readonly property real boxHeight: scalable ? 420 * dpr : 2048
+            readonly property real fitScale: !sizeKnown ? 1
+                                            : scalable || fileWidth > boxWidth || fileHeight > boxHeight
+                                              ? Math.min(boxWidth / fileWidth, boxHeight / fileHeight) : 1
+            readonly property real knownWidth: !sizeKnown ? 0 : drawing ? Math.floor(fileWidth * drawingScale)
+                                                                       : Math.floor(fileWidth * fitScale) / dpr
+            readonly property real knownHeight: !sizeKnown ? 0 : drawing ? Math.floor(fileHeight * drawingScale)
+                                                                        : Math.floor(fileHeight * fitScale) / dpr
             width: root.width
             height: embed.pdfTile ? pdfLoader.height : image ? picture.height : chip.height
 
@@ -144,12 +156,12 @@ Column {
                 /// cache still had the file's old picture, replaced since): the frame takes the
                 /// picture's shape, never stretching it. Normally the two agree, so nothing moves
                 /// when it has loaded (an SVG's rendered size differs slightly, in its rounding).
-                readonly property bool otherShape: loaded && embed.knownSize !== null
-                    && Math.abs(img.implicitWidth * embed.knownSize.height - img.implicitHeight * embed.knownSize.width)
-                       > 0.02 * img.implicitWidth * embed.knownSize.height
-                readonly property real naturalWidth: embed.knownSize && !otherShape ? embed.knownSize.width
+                readonly property bool otherShape: loaded && embed.sizeKnown
+                    && Math.abs(img.implicitWidth * embed.knownHeight - img.implicitHeight * embed.knownWidth)
+                       > 0.02 * img.implicitWidth * embed.knownHeight
+                readonly property real naturalWidth: embed.sizeKnown && !otherShape ? embed.knownWidth
                                                      : loaded ? img.implicitWidth : 320
-                readonly property real naturalHeight: embed.knownSize && !otherShape ? embed.knownSize.height
+                readonly property real naturalHeight: embed.sizeKnown && !otherShape ? embed.knownHeight
                                                       : loaded ? img.implicitHeight : 180
                 // Natural size, at most the column width and 420 px high; a picture from the
                 // internet not shown yet at least as high as its placeholder.
@@ -173,11 +185,11 @@ Column {
                     anchors.fill: parent
                     anchors.margins: 1
                     source: !embed.image || !embed.decodable || embed.webPending ? ""
-                            : embed.drawing && Theme.dark && String(embed.modelData.darkUrl || "") !== "" ? embed.modelData.darkUrl
-                            : embed.modelData.url
+                            : embed.drawing && Theme.dark && embed.darkUrlText !== "" ? embed.darkUrlText
+                            : embed.urlText
                     // (Logical pixels for a drawing: Qt renders image providers at the screen's ratio.)
-                    sourceSize: embed.drawing && embed.knownSize
-                                ? Qt.size(Math.ceil(embed.knownSize.width), Math.ceil(embed.knownSize.height))
+                    sourceSize: embed.drawing && embed.sizeKnown
+                                ? Qt.size(Math.ceil(embed.knownWidth), Math.ceil(embed.knownHeight))
                                 : embed.scalable ? Qt.size(1024, 420) : Qt.size(2048, 2048)
                     retainWhileLoading: embed.drawing
                     fillMode: embed.scalable ? Image.PreserveAspectFit : Image.Stretch
@@ -185,12 +197,12 @@ Column {
                     smooth: true
                     mipmap: true
                     Accessible.role: Accessible.Graphic
-                    Accessible.name: embed.modelData.alt !== "" ? embed.modelData.alt : embed.modelData.name
+                    Accessible.name: embed.alt !== "" ? embed.alt : embed.name
                 }
                 BSpinner {
                     anchors.centerIn: parent
                     size: 20
-                    running: (img.status === Image.Loading && !picture.loaded) || (embed.web && embed.modelData.state === "loading")
+                    running: (img.status === Image.Loading && !picture.loaded) || (embed.web && embed.state_ === "loading")
                     visible: running
                 }
                 // A picture from the internet waiting to be shown (asking first) or that failed.
@@ -199,9 +211,9 @@ Column {
                 Column {
                     id: placeholder
                     objectName: "webPicturePlaceholder"
-                    readonly property bool failed: embed.modelData.state === "failed"
+                    readonly property bool failed: embed.state_ === "failed"
                     visible: embed.webPending
-                    opacity: embed.modelData.state === "loading" ? 0 : 1
+                    opacity: embed.state_ === "loading" ? 0 : 1
                     enabled: opacity > 0
                     anchors.centerIn: parent
                     width: parent.width - 2 * Theme.space3
@@ -221,7 +233,7 @@ Column {
                         wrapMode: Text.Wrap
                         maximumLineCount: placeholder.failed ? 3 : 2
                         elide: Text.ElideRight
-                        text: placeholder.failed ? embed.modelData.error || "" : embed.modelData.alt || ""
+                        text: placeholder.failed ? embed.rec.map.error || "" : embed.alt
                         textFormat: Text.PlainText
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm
@@ -233,7 +245,7 @@ Column {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideMiddle
-                        text: qsTr("Picture from %1").arg(embed.modelData.host)
+                        text: qsTr("Picture from %1").arg(embed.host)
                         textFormat: Text.PlainText
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm
@@ -252,7 +264,7 @@ Column {
                             size: "small"
                             iconName: placeholder.failed ? "refresh-cw" : "eye"
                             text: placeholder.failed ? qsTr("Try again") : qsTr("Show")
-                            onClicked: root.showWeb(embed.modelData.target)
+                            onClicked: root.showWeb(embed.target)
                         }
                         BButton {
                             id: saveButton
@@ -261,7 +273,7 @@ Column {
                             variant: "ghost"
                             iconName: "download"
                             text: qsTr("Save to notebook")
-                            onClicked: root.downloadWeb(embed.modelData.target)
+                            onClicked: root.downloadWeb(embed.target)
                         }
                     }
                 }
@@ -274,28 +286,29 @@ Column {
                     wrapMode: Text.Wrap
                     // The picture view's own sentence (one translation for both).
                     text: !embed.decodable
-                          ? embed.modelData.name + "\n"
+                          ? embed.name + "\n"
                             + qsTranslate("ContentPictureView", "Pictures in the %1 format cannot be shown on this device.")
-                              .arg(embed.modelData.format)
-                          : qsTr("Cannot load %1").arg(embed.modelData.name)
+                              .arg(embed.format)
+                          : qsTr("Cannot load %1").arg(embed.name)
                     textFormat: Text.PlainText
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
                     color: Theme.fgMuted
                 }
                 TapHandler {
+                    id: pictureTap
                     enabled: !embed.webPending
                     acceptedButtons: Qt.LeftButton
                     onTapped: {
                         if (embed.web)
                             root.webOpen(embed.modelData)
-                        else if (embed.modelData.drawing === true)
-                            root.drawingClicked(embed.modelData.path)
+                        else if (embed.drawing)
+                            root.drawingClicked(embed.rec.map.path || "")
                         else
-                            root.clicked(embed.modelData.target)
+                            root.clicked(embed.target)
                     }
-                    onLongPressed: if (embed.web) root.webMenu(embed.modelData.target, embed.modelData.host, picture,
-                                                                point.position.x, point.position.y)
+                    onLongPressed: if (embed.web) root.webMenu(embed.target, embed.host, picture,
+                                                                pictureTap.point.position.x, pictureTap.point.position.y)
                 }
                 // A right-click on a shown picture from the internet: its menu. Not a finger (Qt
                 // gives one to every TapHandler; touch: the long press above). WithinBounds: the
@@ -306,14 +319,14 @@ Column {
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                     acceptedButtons: Qt.RightButton
                     gesturePolicy: TapHandler.WithinBounds
-                    onTapped: (point) => root.webMenu(embed.modelData.target, embed.modelData.host, picture,
+                    onTapped: (point) => root.webMenu(embed.target, embed.host, picture,
                                                       point.position.x, point.position.y)
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !Theme.touchUi && !embed.webPending }
                 // A drawing: a pen in the corner says a click edits it.
                 Rectangle {
                     objectName: "embedDrawingBadge"
-                    visible: embed.modelData.drawing === true && picture.loaded && picture.width >= 72 && picture.height >= 48
+                    visible: embed.drawing && picture.loaded && picture.width >= 72 && picture.height >= 48
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.margins: Theme.space2
@@ -350,10 +363,10 @@ Column {
                 objectName: embed.pdf ? "pdfEmbedChip" : ""
                 visible: !embed.image && !embed.pdfTile
                 interactive: true
-                iconName: embed.pdf ? "file-text" : embed.modelData.image ? "image" : "file"
-                text: root.autoTextSafe(embed.modelData.name)
-                onClicked: embed.pdf ? root.pdfClicked(embed.modelData.path || "", embed.modelData.page || 1)
-                                     : root.clicked(embed.modelData.target)
+                iconName: embed.pdf ? "file-text" : embed.rec.map.image === true ? "image" : "file"
+                text: root.autoTextSafe(embed.name)
+                onClicked: embed.pdf ? root.pdfClicked(embed.rec.map.path || "", embed.rec.map.page || 1)
+                                     : root.clicked(embed.target)
                 HoverHandler {
                     id: chipHover
                     enabled: embed.pdf && !Theme.touchUi
@@ -363,7 +376,7 @@ Column {
                     // Where the click goes (PageController::openPdf): Brulion's viewer where it
                     // draws PDFs (the chip then means only that no thumbnail could be cached),
                     // else the browser's own viewer or the system's app.
-                    text: embed.modelData.viewable === true ? qsTr("Open in the PDF viewer")
+                    text: embed.rec.map.viewable === true ? qsTr("Open in the PDF viewer")
                           : Qt.platform.os === "wasm" ? qsTr("Open in a new tab") : qsTr("Open in another app")
                 }
             }

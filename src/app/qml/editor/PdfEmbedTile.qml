@@ -24,15 +24,24 @@ Item {
 
     signal clicked(string path, int page)
 
-    readonly property string state_: entry.state || "loading"
-    readonly property int pages: entry.pages || 0
-    readonly property int page: entry.page || 1
+    /// `entry` with its keys readable (a key it lacks reads as undefined).
+    readonly property MapHolder rec: MapHolder { map: tile.entry }
+    readonly property string state_: rec.map.state || "loading"
+    readonly property int pages: rec.map.pages || 0
+    readonly property int page: rec.map.page || 1
+    readonly property string name: rec.map.name || ""
+    readonly property string path: rec.map.path || ""
+    readonly property string error: rec.map.error || ""
+    readonly property real pageWidth: rec.map.pageWidth || 0
+    readonly property real pageHeight: rec.map.pageHeight || 0
+    readonly property real thumbWidth: rec.map.width || 0
+    readonly property real thumbHeight: rec.map.height || 0
     /// The page's height / width: from its size in points, else the thumbnail's pixels, else A4.
     readonly property real aspect: {
-        if ((entry.pageWidth || 0) > 0 && (entry.pageHeight || 0) > 0)
-            return Math.min(32, Math.max(1 / 32, entry.pageHeight / entry.pageWidth))
-        if ((entry.width || 0) > 0 && (entry.height || 0) > 0)
-            return entry.height / entry.width
+        if (pageWidth > 0 && pageHeight > 0)
+            return Math.min(32, Math.max(1 / 32, pageHeight / pageWidth))
+        if (thumbWidth > 0 && thumbHeight > 0)
+            return thumbHeight / thumbWidth
         return 1.414
     }
     readonly property real frameWidth: {
@@ -51,10 +60,10 @@ Item {
     // readers and UiAutomator do not read).
     Accessible.name: tile.state_ === "failed"
                      //: A PDF embedded in a note that cannot be shown, for screen readers: its name, why ("PDF chroniony hasłem")
-                     ? qsTr("PDF %1: %2").arg(entry.name || "").arg(entry.error || "")
+                     ? qsTr("PDF %1: %2").arg(tile.name).arg(tile.error)
                      //: A PDF embedded in a note, for screen readers: its name, the page shown, the page count
-                     : qsTr("PDF %1, page %2 of %3").arg(entry.name || "").arg(tile.page).arg(tile.pages > 0 ? tile.pages : "?")
-    Accessible.onPressAction: tile.clicked(entry.path || "", tile.page)
+                     : qsTr("PDF %1, page %2 of %3").arg(tile.name).arg(tile.page).arg(tile.pages > 0 ? "" + tile.pages : "?")
+    Accessible.onPressAction: tile.clicked(tile.path, tile.page)
 
     Rectangle {
         id: frame
@@ -72,7 +81,7 @@ Item {
             objectName: "pdfEmbedImage"
             anchors.fill: parent
             anchors.margins: 3
-            source: tile.state_ === "ready" ? (tile.entry.url || "") : ""
+            source: tile.state_ === "ready" ? "" + (tile.rec.map.url || "") : ""
             // Decoded at the shown size (× the screen's ratio, by Qt).
             sourceSize: Qt.size(Math.ceil(width), Math.ceil(height))
             fillMode: Image.PreserveAspectFit
@@ -95,7 +104,7 @@ Item {
             spacing: Theme.space2
             BIcon {
                 anchors.horizontalCenter: parent.horizontalCenter
-                name: tile.entry.locked === true ? "lock" : "triangle-alert"
+                name: tile.rec.map.locked === true ? "lock" : "triangle-alert"
                 size: Theme.iconSize
                 color: "#5f6368"
             }
@@ -105,7 +114,7 @@ Item {
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
-                text: tile.entry.error || ""
+                text: tile.error
                 textFormat: Text.PlainText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
@@ -133,7 +142,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, Math.min(implicitWidth, caption.width - Theme.iconSizeSm - details.implicitWidth
                                                        - 2 * caption.spacing))
-            text: tile.entry.name || ""
+            text: tile.name
             textFormat: Text.PlainText // a file name from anywhere is no markup
             elide: Text.ElideMiddle
             font.family: Theme.fontUi
@@ -144,13 +153,13 @@ Item {
             id: details
             anchors.verticalCenter: parent.verticalCenter
             text: {
-                const parts = []
+                let out = ""
                 if (tile.pages > 0)
-                    parts.push(qsTr("%n page(s)", "", tile.pages))
+                    out = qsTr("%n page(s)", "", tile.pages)
                 if (tile.page > 1 && (tile.pages === 0 || tile.page <= tile.pages))
                     //: The page of a PDF an embed shows ("s. 3")
-                    parts.push(qsTr("p. %1").arg(tile.page))
-                return parts.length > 0 ? "· " + parts.join(" · ") : ""
+                    out += (out !== "" ? " · " : "") + qsTr("p. %1").arg(tile.page)
+                return out !== "" ? "· " + out : ""
             }
             textFormat: Text.PlainText
             font.family: Theme.fontUi
@@ -161,7 +170,7 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        onTapped: tile.clicked(tile.entry.path || "", tile.page)
+        onTapped: tile.clicked(tile.path, tile.page)
     }
     HoverHandler {
         cursorShape: Qt.PointingHandCursor
