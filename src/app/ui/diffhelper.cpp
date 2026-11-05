@@ -412,7 +412,9 @@ QVariantList DiffHelper::splitRows(const QString &oldText, const QString &newTex
                                         {u"oldNo"_s, o + 1},
                                         {u"newNo"_s, n + 1},
                                         {u"left"_s, oldLines.at(o).text},
-                                        {u"right"_s, newLines.at(n).text}});
+                                        {u"right"_s, newLines.at(n).text},
+                                        {u"leftText"_s, oldLines.at(o).text},
+                                        {u"rightText"_s, newLines.at(n).text}});
             },
             [&](const Region &r) {
                 const qsizetype count = std::max(r.deleted.size(), r.inserted.size());
@@ -429,6 +431,8 @@ QVariantList DiffHelper::splitRows(const QString &oldText, const QString &newTex
                             {u"newNo"_s, n + 1},
                             {u"left"_s, hasOld ? oldLines.at(o).text : QString()},
                             {u"right"_s, hasNew ? newLines.at(n).text : QString()},
+                            {u"leftText"_s, hasOld ? oldLines.at(o).text : QString()},
+                            {u"rightText"_s, hasNew ? newLines.at(n).text : QString()},
                             {u"leftSegments"_s, QVariantList()},
                             {u"rightSegments"_s, QVariantList()},
                     };
@@ -441,6 +445,27 @@ QVariantList DiffHelper::splitRows(const QString &oldText, const QString &newTex
                 }
             });
     return collapse(rows, context);
+}
+
+QVariantList DiffHelper::viewRows(const QString &oldText, const QString &newText, bool split, int context) const
+{
+    QVariantList rows = split ? splitRows(oldText, newText, context) : unifiedRows(oldText, newText, context);
+    static const std::pair<QString, QVariant> defaults[] = {
+            {u"kind"_s, QString()},       {u"oldNo"_s, 0},
+            {u"newNo"_s, 0},              {u"count"_s, 0},
+            {u"text"_s, QString()},       {u"leftText"_s, QString()},
+            {u"rightText"_s, QString()},  {u"segments"_s, QVariantList()},
+            {u"leftSegments"_s, QVariantList()}, {u"rightSegments"_s, QVariantList()},
+    };
+    for (QVariant &r : rows) {
+        QVariantMap row = r.toMap();
+        for (const auto &[key, value] : defaults) {
+            if (!row.contains(key))
+                row.insert(key, value);
+        }
+        r = row;
+    }
+    return rows;
 }
 
 QVariantMap DiffHelper::stats(const QString &oldText, const QString &newText) const

@@ -582,7 +582,7 @@ private Q_SLOTS:
         QTest::newRow("arrows") << u"↑+↓"_s << QStringList{u"↑"_s, u"↓"_s};
         QTest::newRow("Polish") << u"Alt+ł"_s << QStringList{u"Alt"_s, u"ł"_s};
         QTest::newRow("empty") << QString() << QStringList();
-        QTest::newRow("only plus") << u"+"_s << QStringList();
+        QTest::newRow("only plus") << u"+"_s << QStringList{u"+"_s};
     }
 
     void shortcutKeys()
@@ -693,6 +693,32 @@ private Q_SLOTS:
         QCOMPARE(fromSunday.at(0), names.at(6));
         QCOMPARE(fromSunday.at(1), names.at(0));
         QCOMPARE(d.weekdayNamesFrom(6, u"full"_s, u"en"_s).first(), u"Saturday"_s);
+    }
+
+    void viewRowsHaveEveryKey()
+    {
+        brulion::ui::DiffHelper h;
+        const QString a = u"jeden\ndwa\ntrzy\ncztery\npięć\nsześć\nsiedem\nosiem\n"_s;
+        const QString b = u"jeden\nDWA\ntrzy\ncztery\npięć\nsześć\nsiedem\nosiem\ndziewięć\n"_s;
+        const QStringList keys{u"count"_s, u"kind"_s, u"leftSegments"_s, u"leftText"_s, u"newNo"_s, u"oldNo"_s,
+                               u"rightSegments"_s, u"rightText"_s, u"segments"_s, u"text"_s};
+        for (bool split : {false, true}) {
+            const QVariantList rows = h.viewRows(a, b, split, 1);
+            const QVariantList plain = split ? h.splitRows(a, b, 1) : h.unifiedRows(a, b, 1);
+            QCOMPARE(rows.size(), plain.size());
+            QVERIFY(kinds(rows).contains(u's'));
+            for (qsizetype i = 0; i < rows.size(); ++i) {
+                const QVariantMap row = rows.at(i).toMap();
+                for (const QString &k : keys)
+                    QVERIFY2(row.contains(k), qPrintable(k));
+                // The row's own values are kept.
+                const QVariantMap own = plain.at(i).toMap();
+                for (auto it = own.cbegin(); it != own.cend(); ++it)
+                    QCOMPARE(row.value(it.key()), it.value());
+                if (split)
+                    QCOMPARE(row.value(u"leftText"_s), own.value(u"left"_s, QString()));
+            }
+        }
     }
 
     void conflictIndexesAndResolveWith()

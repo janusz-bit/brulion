@@ -11,7 +11,8 @@
 //   kind      "equal" | "delete" | "insert" | "change" (split only: a deleted line paired with
 //             its replacement) | "skip" (collapsed unchanged lines; `count` of them)
 //   oldNo, newNo   1-based line numbers (0 = none on that side)
-//   text (unified) / left, right (split)            the line text without terminator
+//   text (unified) / left, right (split)            the line text without terminator; split
+//             rows also as leftText, rightText (BDiffView's delegate: an Item's `left` is its own)
 //   segments (unified) / leftSegments, rightSegments  [{ text, changed }] word-level changes
 //             of paired lines; empty when the whole line is new/removed or too different
 //   count, oldStart, newStart   ("skip" rows) hidden line count and the first hidden lines
@@ -54,6 +55,10 @@ public:
     Q_INVOKABLE QVariantList unifiedRows(const QString &oldText, const QString &newText, int context = 3) const;
     /// Side-by-side rows: changed lines are paired ("change"), extra ones are "delete"/"insert".
     Q_INVOKABLE QVariantList splitRows(const QString &oldText, const QString &newText, int context = 3) const;
+    /// splitRows() (`split`) or unifiedRows() with every key of both in every row (BDiffView's
+    /// delegate requires them all): kind, oldNo, newNo, count, text, leftText, rightText ("" / 0
+    /// when the row has none), segments, leftSegments, rightSegments ([] when none).
+    Q_INVOKABLE QVariantList viewRows(const QString &oldText, const QString &newText, bool split, int context) const;
     /// { added, removed, unchanged } line counts.
     Q_INVOKABLE QVariantMap stats(const QString &oldText, const QString &newText) const;
 

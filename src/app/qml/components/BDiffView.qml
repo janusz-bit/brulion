@@ -39,10 +39,7 @@ Item {
     readonly property int unchangedCount: statsHolder.map.unchanged
     readonly property bool identical: addedCount === 0 && removedCount === 0
     /// DiffHelper's rows, each with every key the row delegates read.
-    readonly property list<var> rows: UiModels.withDefaults(split ? DiffHelper.splitRows(oldText, newText, expanded ? -1 : context)
-                                                                  : DiffHelper.unifiedRows(oldText, newText, expanded ? -1 : context), {
-        kind: "", oldNo: 0, newNo: 0, count: 0, text: "", left: "", right: ""
-    }) // (a missing list arrives as an empty one)
+    readonly property list<var> rows: DiffHelper.viewRows(oldText, newText, split, expanded ? -1 : context)
     /// Some unchanged lines are collapsed into a "skip" row.
     readonly property list<string> rowKinds: UiModels.stringFields(rows, "kind")
     readonly property bool hasSkips: rowKinds.indexOf("skip") >= 0
@@ -222,8 +219,8 @@ Item {
         required property int count
         /// unified rows: the line; split rows: the old and the new line.
         required property string text
-        required property string left
-        required property string right
+        required property string leftText
+        required property string rightText
         /// Word segments [{ text, changed }] (DiffHelper.segmentsHtml).
         required property list<var> segments
         required property list<var> leftSegments
@@ -337,15 +334,15 @@ Item {
             id: srow
             readonly property RowLoader row: parent as RowLoader
             readonly property string kind: row ? row.kind : ""
-            readonly property string left: row ? row.left : ""
-            readonly property string right: row ? row.right : ""
+            readonly property string leftLine: row ? row.leftText : ""
+            readonly property string rightLine: row ? row.rightText : ""
             readonly property bool leftChanged: kind === "delete" || kind === "change"
             readonly property bool rightChanged: kind === "insert" || kind === "change"
             readonly property real half: width / 2
             width: list.width
             implicitHeight: Math.ceil(Math.max(leftText.implicitHeight, rightText.implicitHeight, 16) + 6)
             Accessible.role: Accessible.StaticText
-            Accessible.name: kind === "equal" ? left : qsTr("Before: %1. After: %2").arg(left).arg(right)
+            Accessible.name: kind === "equal" ? leftLine : qsTr("Before: %1. After: %2").arg(leftLine).arg(rightLine)
 
             Rectangle {
                 width: srow.half
@@ -375,7 +372,7 @@ Item {
                 y: 3
                 width: srow.half - x - 8
                 segments: srow.row ? srow.row.leftSegments : []
-                text: segments.length > 0 ? DiffHelper.segmentsHtml(segments, control.delStrongText) : srow.left
+                text: segments.length > 0 ? DiffHelper.segmentsHtml(segments, control.delStrongText) : srow.leftLine
             }
             Gutter {
                 id: rightNo
@@ -388,7 +385,7 @@ Item {
                 y: 3
                 width: srow.half - rightNo.width - 8
                 segments: srow.row ? srow.row.rightSegments : []
-                text: segments.length > 0 ? DiffHelper.segmentsHtml(segments, control.addStrongText) : srow.right
+                text: segments.length > 0 ? DiffHelper.segmentsHtml(segments, control.addStrongText) : srow.rightLine
             }
         }
     }

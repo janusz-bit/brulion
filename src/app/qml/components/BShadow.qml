@@ -42,7 +42,7 @@ Item {
             offset.x: 0
             offset.y: shadow.specOffsetY
             spread: shadow.specSpread
-            color: Theme.shadow.alpha(shadow.specOpacity * 2.2)
+            color: Theme.shadow.alpha(Math.min(1, shadow.specOpacity * 2.2))
         }
     }
 

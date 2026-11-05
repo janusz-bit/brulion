@@ -54,22 +54,28 @@ BDialog {
                                     || repeatKind === "monthly" || repeatKind === "yearly" || repeatKind === "custom"
     readonly property list<int> _noDays: []
     /// The rule object (DatesHelper.makeRule); null for none.
-    readonly property var rule: {
-        switch (repeatKind) {
-        case "daily": return DatesHelper.makeRule("day", 1, _noDays, false)
-        case "weekdays": return DatesHelper.makeRule("day", 1, _noDays, true)
-        case "weekly": return DatesHelper.makeRule("week", 1, effectiveWeekdays, false)
-        case "monthly": return DatesHelper.makeRule("month", 1, _noDays, false)
-        case "yearly": return DatesHelper.makeRule("year", 1, _noDays, false)
-        case "custom": return DatesHelper.makeRule(repeatUnit, Math.max(1, repeatInterval), effectiveWeekdays, false)
-        default: return null
+    readonly property var rule: hasRule ? ruleHolder.map : null
+    // (A typed map: what formatRule() and nextOccurrences() take; freq "" for none.)
+    MapHolder {
+        id: ruleHolder
+        map: {
+            switch (control.repeatKind) {
+            case "daily": return DatesHelper.makeRule("day", 1, control._noDays, false)
+            case "weekdays": return DatesHelper.makeRule("day", 1, control._noDays, true)
+            case "weekly": return DatesHelper.makeRule("week", 1, control.effectiveWeekdays, false)
+            case "monthly": return DatesHelper.makeRule("month", 1, control._noDays, false)
+            case "yearly": return DatesHelper.makeRule("year", 1, control._noDays, false)
+            case "custom": return DatesHelper.makeRule(control.repeatUnit, Math.max(1, control.repeatInterval),
+                                                       control.effectiveWeekdays, false)
+            default: return DatesHelper.makeRule("", 0, control._noDays, false)
+            }
         }
     }
-    readonly property string canonicalRule: hasRule ? DatesHelper.formatRule(rule, "en") : ""
+    readonly property string canonicalRule: hasRule ? DatesHelper.formatRule(ruleHolder.map, "en") : ""
     // The locale passed for real (a method call is not tracked; a bare `void DatesHelper.locale` is
     // compiled away with the dependency): the label and the weekday names follow a language change.
-    readonly property string ruleLabel: hasRule ? DatesHelper.formatRule(rule, DatesHelper.locale) : ""
-    readonly property list<string> nextDates: hasRule && valid ? DatesHelper.nextOccurrences(rule, at, 3) : []
+    readonly property string ruleLabel: hasRule ? DatesHelper.formatRule(ruleHolder.map, DatesHelper.locale) : ""
+    readonly property list<string> nextDates: hasRule && valid ? DatesHelper.nextOccurrences(ruleHolder.map, at, 3) : []
     readonly property string nextDatesText: {
         let text = ""
         for (let i = 0; i < nextDates.length; ++i)
