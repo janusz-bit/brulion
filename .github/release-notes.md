@@ -2,7 +2,7 @@
 
 **Nowości w {{VERSION}}**
 
-Wersje 0.10.0 i 0.10.1 nie zostały opublikowane, więc ich nowości trafiają do Ciebie dopiero w tym wydaniu.
+Wersje 0.10.0, 0.10.1 i 0.10.2 nie zostały opublikowane, więc ich nowości trafiają do Ciebie dopiero w tym wydaniu.
 
 * **Wprowadzenie przy pierwszym uruchomieniu** — kilka kroków, które można pominąć: język, wygląd, uprawnienia potrzebne przypomnieniom na tym urządzeniu (z próbnym powiadomieniem) i ustawienia pierwszego notatnika. Uruchomisz je ponownie w **Ustawienia → Ogólne → Uruchom wprowadzenie ponownie**. Domyślny język interfejsu to teraz angielski, a domyślny wygląd — ciemny, z czarnym tłem; kto wcześniej nie wybrał języka, polski włączy w **Settings → General** (Ustawienia → Ogólne).
 * **Przypomnienia z innych urządzeń na Androidzie** — przypomnienie dopisane na komputerze zadzwoni na telefonie, choć Brulion jest zamknięty: co 15, 30 albo 60 minut Android sam sprawdza notatki w tle (przy Nextcloud najpierw je synchronizuje) i nastawia, co znalazł; usunięte i przesunięte przypomnienia znikają albo się przesuwają. **Ustawienia → Przypomnienia → Sprawdzaj notatki w tle**, z czasem ostatniego sprawdzenia.

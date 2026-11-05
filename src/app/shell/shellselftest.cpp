@@ -6681,12 +6681,16 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
             return true;
         };
         waitFor([&] { return rowsInOrder({u"favorites"_s, u"pages"_s, u"recent"_s}); });
+        // The pointer away from the rows: left where it clicked, it hovers the button of the
+        // section that moved down there, whose tooltip (after 550 ms) covers the button above.
+        mouseMove(window, QPointF(1, 1));
         activate(shownItem(u"sidebarSectionUp_pages"_s));
         check(waitFor([&] {
                   return settings->sidebarSections() == QStringList{u"pages"_s, u"favorites"_s, u"recent"_s};
               }),
               "and once more to the top");
         waitFor([&] { return rowsInOrder({u"pages"_s, u"favorites"_s, u"recent"_s}); });
+        mouseMove(window, QPointF(1, 1));
         QQuickItem *up = shownItem(u"sidebarSectionUp_pages"_s);
         check(up && !up->isEnabled(), "the first section cannot move further up");
         Workspace *ws = app->workspace();

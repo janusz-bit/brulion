@@ -1,0 +1,8 @@
+Nowości w 0.10.3:
+• Wprowadzenie przy pierwszym uruchomieniu
+• Przypomnienia z innych urządzeń na Androidzie
+• Pasek widoków i wyszukiwarka u góry
+• Repozytorium F-Droid
+• Wersja w przeglądarce w jednym pliku
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.10.3

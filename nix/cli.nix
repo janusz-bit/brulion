@@ -58,7 +58,10 @@ stdenv.mkDerivation (finalAttrs: {
     $out/bin/brulion-cli --vault "$TMPDIR/Notatki" --now "2026-10-14 10:30" capture "Zadzwonić jutro o 9"
     grep -q -- "- \[ \] Zadzwonić ⏰ 2026-10-15 09:00" "$TMPDIR/Notatki/journals/2026-10-14.md"
     $out/bin/brulion-cli --vault "$TMPDIR/Notatki" info >/dev/null
-    LANG=pl_PL.UTF-8 $out/bin/brulion-cli help | grep -q "Opcje globalne:"
+    # Into a file, not a pipe: grep -q stops at the first match and the help, still writing,
+    # would die of SIGPIPE (a failure under pipefail).
+    LANG=pl_PL.UTF-8 $out/bin/brulion-cli help >"$TMPDIR/help.txt"
+    grep -q "Opcje globalne:" "$TMPDIR/help.txt"
     test -f $out/share/brulion/agent-skills/brulion/SKILL.md
     runHook postInstallCheck
   '';
