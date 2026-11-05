@@ -1229,7 +1229,7 @@ private Q_SLOTS:
         const QString trashed = app->workspace()->deletePage(page);
         QVERIFY(!trashed.isEmpty());
         QVERIFY(!app->workspace()->exists(page));
-        const int restore = app->toastRestore(u"Przeniesiono do kosza"_s, u"Cofnij"_s, { trashed });
+        const int restore = app->toastRestore(u"Przeniesiono do kosza"_s, u"Cofnij"_s, {trashed});
         QCOMPARE(shown.size(), 4);
         QCOMPARE(shown.last().at(0).toInt(), restore);
         QCOMPARE(shown.last().at(2).toString(), u"info"_s);
@@ -1245,12 +1245,12 @@ private Q_SLOTS:
         QTest::addColumn<QString>("folder");
         QTest::addColumn<QStringList>("chain");
         QTest::newRow("none") << QString() << QStringList();
-        QTest::newRow("one") << u"Projekty"_s << QStringList{ u"Projekty"_s };
+        QTest::newRow("one") << u"Projekty"_s << QStringList{u"Projekty"_s};
         QTest::newRow("three") << u"Firma/Łódź/Zażółć"_s
-                               << QStringList{ u"Firma"_s, u"Firma/Łódź"_s, u"Firma/Łódź/Zażółć"_s };
+                               << QStringList{u"Firma"_s, u"Firma/Łódź"_s, u"Firma/Łódź/Zażółć"_s};
         // As JavaScript's split("/") did: empty parts stay.
-        QTest::newRow("empty part") << u"a//b"_s << QStringList{ u"a"_s, u"a/"_s, u"a//b"_s };
-        QTest::newRow("trailing slash") << u"a/"_s << QStringList{ u"a"_s, u"a/"_s };
+        QTest::newRow("empty part") << u"a//b"_s << QStringList{u"a"_s, u"a/"_s, u"a//b"_s};
+        QTest::newRow("trailing slash") << u"a/"_s << QStringList{u"a"_s, u"a/"_s};
     }
     void folderChain()
     {

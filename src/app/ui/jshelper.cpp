@@ -194,10 +194,7 @@ QString jsNumberToString(double x)
 
 } // namespace
 
-JsHelper::JsHelper(QObject *parent)
-    : QObject(parent)
-{
-}
+JsHelper::JsHelper(QObject *parent) : QObject(parent) { }
 
 // --- String.prototype ---
 
@@ -375,7 +372,10 @@ QString JsHelper::decodeURIComponent(const QString &s) const
 {
     // (QByteArray::fromPercentEncoding() also decodes escapes without two hex digits.)
     const auto hex = [](char c) {
-        return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+        return c >= '0' && c <= '9'   ? c - '0'
+               : c >= 'a' && c <= 'f' ? c - 'a' + 10
+               : c >= 'A' && c <= 'F' ? c - 'A' + 10
+                                      : -1;
     };
     const QByteArray in = s.toUtf8();
     QByteArray out;
@@ -415,10 +415,10 @@ double JsHelper::toNumber(const QString &s) const
             double value = 0;
             for (qsizetype i = 2; i < t.size(); ++i) {
                 const int d = t.at(i).isDigit() && t.at(i).unicode() < 0x80
-                    ? t.at(i).digitValue()
-                    : (t.at(i).toLower() >= u'a' && t.at(i).toLower() <= u'z'
-                           ? t.at(i).toLower().unicode() - 'a' + 10
-                           : 99);
+                                      ? t.at(i).digitValue()
+                                      : (t.at(i).toLower() >= u'a' && t.at(i).toLower() <= u'z'
+                                                 ? t.at(i).toLower().unicode() - 'a' + 10
+                                                 : 99);
                 if (d >= base)
                     return kNaN;
                 value = value * base + d;
@@ -426,8 +426,7 @@ double JsHelper::toNumber(const QString &s) const
             return value;
         }
     }
-    static const QRegularExpression decimal(
-        u"^[+-]?(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"_s);
+    static const QRegularExpression decimal(u"^[+-]?(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"_s);
     if (!decimal.match(t).hasMatch())
         return kNaN;
     bool ok = false;
@@ -475,8 +474,7 @@ double JsHelper::parseInt(const QString &s) const
 double JsHelper::parseFloat(const QString &s) const
 {
     const QString t = trimStart(s);
-    static const QRegularExpression number(
-        u"^[+-]?(?:Infinity|(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)"_s);
+    static const QRegularExpression number(u"^[+-]?(?:Infinity|(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)"_s);
     const QRegularExpressionMatch m = number.match(t);
     if (!m.hasMatch())
         return kNaN;
@@ -601,8 +599,7 @@ QStringList JsHelper::splitRegExp(const QString &s, const QString &pattern, cons
     const QRegularExpression &re = regExp(pattern, flags);
     QStringList out;
     if (s.isEmpty()) {
-        if (!re.match(s, 0, QRegularExpression::NormalMatch, QRegularExpression::AnchorAtOffsetMatchOption)
-                 .hasMatch())
+        if (!re.match(s, 0, QRegularExpression::NormalMatch, QRegularExpression::AnchorAtOffsetMatchOption).hasMatch())
             out.append(s);
         return out;
     }
@@ -611,7 +608,7 @@ QStringList JsHelper::splitRegExp(const QString &s, const QString &pattern, cons
     qsizetype q = 0;
     while (q < s.size()) {
         const QRegularExpressionMatch m =
-            re.match(s, q, QRegularExpression::NormalMatch, QRegularExpression::AnchorAtOffsetMatchOption);
+                re.match(s, q, QRegularExpression::NormalMatch, QRegularExpression::AnchorAtOffsetMatchOption);
         if (!m.hasMatch() || m.capturedEnd(0) == p) {
             ++q;
             continue;

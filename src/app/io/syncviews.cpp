@@ -7,10 +7,7 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::ioviews {
 
-SyncRunInfo::SyncRunInfo(QObject *parent)
-    : QObject(parent)
-{
-}
+SyncRunInfo::SyncRunInfo(QObject *parent) : QObject(parent) { }
 
 void SyncRunInfo::setSync(shell::WorkspaceSync *sync)
 {
@@ -71,10 +68,7 @@ QVariantList SyncRunInfo::slowest() const
     return stats().value(u"slowest"_s).toList();
 }
 
-IoLists::IoLists(QObject *parent)
-    : QObject(parent)
-{
-}
+IoLists::IoLists(QObject *parent) : QObject(parent) { }
 
 int IoLists::countWhere(const QVariantList &rows, const QString &key, const QString &value) const
 {

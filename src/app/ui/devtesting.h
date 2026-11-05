@@ -45,8 +45,8 @@ public:
     Q_INVOKABLE bool mouseRelease(QObject *item, qreal x, qreal y, int button, int modifiers, int delay);
     Q_INVOKABLE bool mouseClick(QObject *item, qreal x, qreal y, int button, int modifiers, int delay);
     Q_INVOKABLE bool mouseMove(QObject *item, qreal x, qreal y, int delay, int buttons, int modifiers);
-    Q_INVOKABLE bool mouseWheel(QObject *item, qreal x, qreal y, int buttons, int modifiers, int xDelta,
-                                int yDelta, int delay);
+    Q_INVOKABLE bool mouseWheel(QObject *item, qreal x, qreal y, int buttons, int modifiers, int xDelta, int yDelta,
+                                int delay);
     /// touchEvent(item).press(0, item, x, y).commit(): finger 0 down at (x, y) of `item`.
     Q_INVOKABLE void touchPress(QObject *item, qreal x, qreal y);
     /// touchEvent(item).move(0, item, x, y).commit()

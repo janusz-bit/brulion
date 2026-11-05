@@ -7,10 +7,7 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
-CleanupSelection::CleanupSelection(QObject *parent)
-    : QObject(parent)
-{
-}
+CleanupSelection::CleanupSelection(QObject *parent) : QObject(parent) { }
 
 void CleanupSelection::setFiles(const QVariantList &files)
 {

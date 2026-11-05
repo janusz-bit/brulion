@@ -5,17 +5,14 @@
 
 namespace brulion::editor {
 
-BlockRowData::BlockRowData(QObject *parent)
-    : QObject(parent)
-{
-}
+BlockRowData::BlockRowData(QObject *parent) : QObject(parent) { }
 
 QObject *BlockRowData::source() const
 {
     if (!m_sourceLooked && parent()) {
         const QVariant model = parent()->property("model");
         m_source = model.metaType() == QMetaType::fromType<QJSValue>() ? model.value<QJSValue>().toQObject()
-                                                                        : model.value<QObject *>();
+                                                                       : model.value<QObject *>();
         m_sourceLooked = !m_source.isNull();
     }
     return m_source.data();

@@ -214,7 +214,7 @@ private Q_SLOTS:
         QCOMPARE(conflict.value(u"source"_s).toString(), u"brulion"_s);
         QCOMPARE(conflict.value(u"device"_s).toString(), u"Telefon-Janusza"_s);
         const QString copy = conflict.value(u"copy"_s).toString();
-        QCOMPARE(sync->conflictCopies(), QStringList{ copy });
+        QCOMPARE(sync->conflictCopies(), QStringList{copy});
         const QVariantMap details = sync->conflictDetails(copy);
         QCOMPARE(details.value(u"ours"_s).toString(), u"- notatka zmieniona na telefonie\n- dopisane na laptopie: żółć\n"_s);
         QCOMPARE(details.value(u"theirs"_s).toString(), u"- notatka zmieniona na laptopie\n- dopisane na laptopie: żółć\n"_s);

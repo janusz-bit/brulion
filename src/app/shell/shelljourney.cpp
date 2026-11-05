@@ -457,8 +457,8 @@ void Journey::tasks()
         const QVariant task = r->property("task");
         const QString text = !task.isValid() ? r->property("text").toString()
                              : task.canConvert<QObject *>() && task.value<QObject *>()
-                                 ? task.value<QObject *>()->property("text").toString()
-                                 : task.toMap().value(u"text"_s).toString();
+                                     ? task.value<QObject *>()->property("text").toString()
+                                     : task.toMap().value(u"text"_s).toString();
         return text.contains(u"Kupić bilety do kina"_s);
     });
     QQuickItem *box = nullptr;

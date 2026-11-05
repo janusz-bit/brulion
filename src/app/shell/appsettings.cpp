@@ -1392,7 +1392,7 @@ QStringList AppSettings::recentSearches() const
         return out;
     }
     const QString one = saved.toString();
-    return one.isEmpty() ? QStringList() : QStringList{ one };
+    return one.isEmpty() ? QStringList() : QStringList{one};
 }
 
 QStringList AppSettings::rememberSearch(const QString &query)
@@ -1401,7 +1401,7 @@ QStringList AppSettings::rememberSearch(const QString &query)
     if (q.isEmpty())
         return recentSearches();
     const QString key = text::foldKey(q);
-    QStringList list{ q };
+    QStringList list{q};
     for (const QString &r : recentSearches()) {
         if (list.size() >= 8)
             break;

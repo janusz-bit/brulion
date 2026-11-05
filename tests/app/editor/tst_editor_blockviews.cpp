@@ -153,7 +153,8 @@ private Q_SLOTS:
         QCOMPARE(formula.value(u"display"_s).toString(), u"17"_s);
         QCOMPARE(formula.value(u"formula"_s).toBool(), true);
         // Outside the table: every key, empty.
-        for (const auto &[r, c] : {std::pair{3, 0}, std::pair{0, 2}, std::pair{-2, 0}, std::pair{0, -1}, std::pair{-1, 5}}) {
+        for (const auto &[r, c] :
+             {std::pair{3, 0}, std::pair{0, 2}, std::pair{-2, 0}, std::pair{0, -1}, std::pair{-1, 5}}) {
             const QVariantMap none = views.tableCell(table(), r, c);
             QCOMPARE(none.size(), 6);
             QCOMPARE(none.value(u"display"_s).toString(), QString());
@@ -164,7 +165,10 @@ private Q_SLOTS:
     void calcResults()
     {
         const QVariantList results{
-                QVariantMap{{u"line"_s, 0}, {u"value"_s, u"12,5 zł"_s}, {u"error"_s, QString()}, {u"assigned"_s, u"cena"_s}},
+                QVariantMap{{u"line"_s, 0},
+                            {u"value"_s, u"12,5 zł"_s},
+                            {u"error"_s, QString()},
+                            {u"assigned"_s, u"cena"_s}},
                 QVariantMap{{u"line"_s, 2}, {u"value"_s, QString()}, {u"error"_s, u"Nieznana zmienna „ż”"_s}},
                 QVariantMap{{u"line"_s, 3}, {u"value"_s, QString()}, {u"error"_s, QString()}}};
         QCOMPARE(BlockViews().calcResultTexts(results),
@@ -195,12 +199,18 @@ private Q_SLOTS:
 
     void properties()
     {
-        const QVariantList props{
-                QVariantMap{{u"key"_s, u"status"_s}, {u"value"_s, u"w toku"_s}, {u"type"_s, u"text"_s},
-                            {u"raw"_s, u"w toku"_s}, {u"empty"_s, false}, {u"source"_s, u"yaml"_s}},
-                QVariantMap{{u"key"_s, u"termin"_s}, {u"value"_s, u"2026-10-28"_s}, {u"type"_s, u"date"_s},
-                            {u"raw"_s, u"2026-10-28T09:00"_s}, {u"empty"_s, false}},
-                QVariantMap{{u"key"_s, u"ilość"_s}, {u"raw"_s, 3.5}, {u"empty"_s, true}}};
+        const QVariantList props{QVariantMap{{u"key"_s, u"status"_s},
+                                             {u"value"_s, u"w toku"_s},
+                                             {u"type"_s, u"text"_s},
+                                             {u"raw"_s, u"w toku"_s},
+                                             {u"empty"_s, false},
+                                             {u"source"_s, u"yaml"_s}},
+                                 QVariantMap{{u"key"_s, u"termin"_s},
+                                             {u"value"_s, u"2026-10-28"_s},
+                                             {u"type"_s, u"date"_s},
+                                             {u"raw"_s, u"2026-10-28T09:00"_s},
+                                             {u"empty"_s, false}},
+                                 QVariantMap{{u"key"_s, u"ilość"_s}, {u"raw"_s, 3.5}, {u"empty"_s, true}}};
         const BlockViews views;
         QCOMPARE(views.propertyOf(props, u"termin"_s).value(u"type"_s).toString(), u"date"_s);
         QVERIFY(views.propertyOf(props, u"Termin"_s).isEmpty());
@@ -246,7 +256,8 @@ private Q_SLOTS:
         QTest::newRow("one") << u"dom"_s << QStringList{u"dom"_s};
         QTest::newRow("commas") << u"a, b ,c"_s << QStringList{u"a"_s, u"b"_s, u"c"_s};
         QTest::newRow("empty parts dropped") << u" , ą,, "_s << QStringList{u"ą"_s};
-        QTest::newRow("link with a comma") << u"[[Kraków, Polska]], x"_s << QStringList{u"[[Kraków, Polska]]"_s, u"x"_s};
+        QTest::newRow("link with a comma")
+                << u"[[Kraków, Polska]], x"_s << QStringList{u"[[Kraków, Polska]]"_s, u"x"_s};
         QTest::newRow("quoted comma") << u"\"a, b\", c"_s << QStringList{u"\"a, b\""_s, u"c"_s};
         QTest::newRow("unclosed link") << u"[[a, b"_s << QStringList{u"[[a, b"_s};
         QTest::newRow("nothing") << QString() << QStringList{};
@@ -328,14 +339,15 @@ private Q_SLOTS:
     {
         const auto block = [](const QString &kind, const QString &task, const QString &path, const QString &html,
                               int line) {
-            return QVariantMap{{u"kind"_s, kind}, {u"task"_s, task}, {u"path"_s, path}, {u"html"_s, html}, {u"line"_s, line}};
+            return QVariantMap{
+                    {u"kind"_s, kind}, {u"task"_s, task}, {u"path"_s, path}, {u"html"_s, html}, {u"line"_s, line}};
         };
         const QVariantList frames{
                 QVariantMap{{u"blocks"_s, QVariantList{block(u"block"_s, u"todo"_s, u"a.md"_s, u"Kupić mąkę"_s, 3),
-                                                        block(u"block"_s, QString(), u"a.md"_s, u"Kupić mąkę"_s, 4),
-                                                        block(u"embed"_s, u"todo"_s, u"a.md"_s, u"Kupić mąkę"_s, 5)}}},
+                                                       block(u"block"_s, QString(), u"a.md"_s, u"Kupić mąkę"_s, 4),
+                                                       block(u"embed"_s, u"todo"_s, u"a.md"_s, u"Kupić mąkę"_s, 5)}}},
                 QVariantMap{{u"blocks"_s, QVariantList{block(u"block"_s, u"doing"_s, u"a.md"_s, u"Kupić mąkę"_s, 12),
-                                                        block(u"block"_s, u"todo"_s, u"b.md"_s, u"Kupić mąkę"_s, 6)}}},
+                                                       block(u"block"_s, u"todo"_s, u"b.md"_s, u"Kupić mąkę"_s, 6)}}},
                 QVariantMap{{u"title"_s, u"no blocks"_s}}};
         const BlockViews views;
         QCOMPARE(views.transclusionTaskLine(frames, u"a.md"_s, u"Kupić mąkę"_s, 4), 3);

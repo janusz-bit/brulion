@@ -121,18 +121,19 @@ private Q_SLOTS:
     /// JournalsView's "Go to day" marks: the days with a daily note among a month grid's cells.
     void journalMarks()
     {
-        auto ws = open({ { u"journals/2026-10-13.md"_s, u"- poniedziałek: żółw\n"_s },
-                         { u"journals/2026-10-14.md"_s, u"- wtorek\n"_s },
-                         { u"journals/2026-11-02.md"_s, u"- listopad\n"_s },
-                         { u"journals/2026-11-20.md"_s, u"- poza siatką\n"_s },
-                         { u"Strona.md"_s, u"- nie dziennik\n"_s } });
-        auto cell = [](const QString &date) { return QVariant(QVariantMap{ { u"date"_s, date }, { u"day"_s, 1 } }); };
-        const QVariantMap marks = ws->journalMarks({ cell(u"2026-09-28"_s), cell(u"2026-10-15"_s), cell(u"2026-11-08"_s) });
-        QCOMPARE(marks.keys(), (QStringList{ u"2026-10-13"_s, u"2026-10-14"_s, u"2026-11-02"_s }));
-        QCOMPARE(marks.value(u"2026-10-13"_s).toStringList(), QStringList{ u"journal"_s });
+        auto ws = open({{u"journals/2026-10-13.md"_s, u"- poniedziałek: żółw\n"_s},
+                        {u"journals/2026-10-14.md"_s, u"- wtorek\n"_s},
+                        {u"journals/2026-11-02.md"_s, u"- listopad\n"_s},
+                        {u"journals/2026-11-20.md"_s, u"- poza siatką\n"_s},
+                        {u"Strona.md"_s, u"- nie dziennik\n"_s}});
+        auto cell = [](const QString &date) { return QVariant(QVariantMap{{u"date"_s, date}, {u"day"_s, 1}}); };
+        const QVariantMap marks =
+                ws->journalMarks({cell(u"2026-09-28"_s), cell(u"2026-10-15"_s), cell(u"2026-11-08"_s)});
+        QCOMPARE(marks.keys(), (QStringList{u"2026-10-13"_s, u"2026-10-14"_s, u"2026-11-02"_s}));
+        QCOMPARE(marks.value(u"2026-10-13"_s).toStringList(), QStringList{u"journal"_s});
         // No cells, cells without dates: nothing.
         QVERIFY(ws->journalMarks({}).isEmpty());
-        QVERIFY(ws->journalMarks({ QVariantMap{ { u"day"_s, 1 } } }).isEmpty());
+        QVERIFY(ws->journalMarks({QVariantMap{{u"day"_s, 1}}}).isEmpty());
     }
 
     void backgroundIndexing()

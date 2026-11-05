@@ -33,11 +33,11 @@ namespace brulion::editor {
 
 namespace {
 
-const QList<int> StructuralRoles{
-        BlockListModel::DepthRole,      BlockListModel::HasChildrenRole, BlockListModel::CollapsedRole,
-        BlockListModel::VisibleRole,    BlockListModel::IsEditingRole,   BlockListModel::IsSelectedRole,
-        BlockListModel::IsZoomRootRole, BlockListModel::PrevKindRole,    BlockListModel::SelectionEdgeRole,
-        BlockListModel::ShownRole};
+const QList<int> StructuralRoles{BlockListModel::DepthRole,         BlockListModel::HasChildrenRole,
+                                 BlockListModel::CollapsedRole,     BlockListModel::VisibleRole,
+                                 BlockListModel::IsEditingRole,     BlockListModel::IsSelectedRole,
+                                 BlockListModel::IsZoomRootRole,    BlockListModel::PrevKindRole,
+                                 BlockListModel::SelectionEdgeRole, BlockListModel::ShownRole};
 
 /// Where a selected row sits in the band of selected visible rows (selectionEdge role).
 enum SelectionEdge : quint8 { NoEdge, SingleEdge, FirstEdge, MiddleEdge, LastEdge };

@@ -79,14 +79,15 @@ private Q_SLOTS:
         QFETCH(QString, expression);
         QJSEngine engine;
         const QJSValue value = engine.evaluate(expression);
-        QCOMPARE(brulion::ui::jsString(value.toVariant()), engine.evaluate(u"String("_s + expression + u")"_s).toString());
+        QCOMPARE(brulion::ui::jsString(value.toVariant()),
+                 engine.evaluate(u"String("_s + expression + u")"_s).toString());
     }
 
     void fieldsOfMapsAndJsObjects()
     {
         QJSEngine engine;
         const QJSValue object = engine.evaluate(u"({ title: 'Żółw', count: 3, done: true, empty: '', none: null,"
-                                                 u" tags: ['dom', 'ogród'] })"_s);
+                                                u" tags: ['dom', 'ogród'] })"_s);
         UiModels m;
         for (const QVariant &v : {QVariant::fromValue(object), object.toVariant()}) {
             QCOMPARE(m.stringField(v, u"title"_s), u"Żółw"_s);
@@ -156,7 +157,8 @@ private Q_SLOTS:
     {
         UiModels m;
         const QVariantList rows{row({{u"id"_s, u"a"_s}}), row({{u"id"_s, u"b"_s}, {u"enabled"_s, false}}),
-                                row({{u"id"_s, u"c"_s}, {u"enabled"_s, true}}), row({{u"id"_s, u"d"_s}, {u"enabled"_s, 0}})};
+                                row({{u"id"_s, u"c"_s}, {u"enabled"_s, true}}),
+                                row({{u"id"_s, u"d"_s}, {u"enabled"_s, 0}})};
         // Only `enabled: false` hides a row (JavaScript's c.enabled !== false).
         QCOMPARE(field(m.enabledRows(rows), u"id"_s), (QStringList{u"a"_s, u"c"_s, u"d"_s}));
         QCOMPARE(field(m.rowsByKey(rows, u"id"_s, {u"d"_s, u"x"_s, u"a"_s}), u"id"_s), (QStringList{u"d"_s, u"a"_s}));
@@ -167,7 +169,8 @@ private Q_SLOTS:
     {
         UiModels m;
         const QVariantList rows = m.withDefaults(
-                {row({{u"kind"_s, u"embed"_s}, {u"title"_s, u"Ogród"_s}}), row({{u"kind"_s, u"block"_s}, {u"title"_s, QVariant::fromValue(nullptr)}, {u"depth"_s, 2}})},
+                {row({{u"kind"_s, u"embed"_s}, {u"title"_s, u"Ogród"_s}}),
+                 row({{u"kind"_s, u"block"_s}, {u"title"_s, QVariant::fromValue(nullptr)}, {u"depth"_s, 2}})},
                 row({{u"kind"_s, QString()}, {u"title"_s, QString()}, {u"depth"_s, 0}}));
         QCOMPARE(field(rows, u"kind"_s), (QStringList{u"embed"_s, u"block"_s}));
         QCOMPARE(field(rows, u"title"_s), (QStringList{u"Ogród"_s, QString()}));
@@ -181,7 +184,10 @@ private Q_SLOTS:
         f.setMarkColor(u"#2c6aa3"_s);
         f.setDefaultIcon(u"file-text"_s);
         f.setItems({row({{u"title"_s, u"Dom"_s}, {u"path"_s, u"Dom.md"_s}}),
-                    row({{u"title"_s, u"Żółw"_s}, {u"subtitle"_s, u"Zwierzęta"_s}, {u"icon"_s, u"turtle"_s}, {u"path"_s, u"Zolw.md"_s}}),
+                    row({{u"title"_s, u"Żółw"_s},
+                         {u"subtitle"_s, u"Zwierzęta"_s},
+                         {u"icon"_s, u"turtle"_s},
+                         {u"path"_s, u"Zolw.md"_s}}),
                     row({{u"title"_s, u"Zebra"_s}, {u"emoji"_s, u"🦓"_s}, {u"shortcut"_s, u"Ctrl+Z"_s}})});
         // Empty query: all, in order, nothing marked.
         QCOMPARE(f.count(), 3);
@@ -236,7 +242,8 @@ private Q_SLOTS:
     void paletteFilterTakesJsObjects()
     {
         QJSEngine engine;
-        const QVariant items = engine.evaluate(u"[{ title: 'Łąka', action: function () {} }, { title: 'Las' }]"_s).toVariant();
+        const QVariant items =
+                engine.evaluate(u"[{ title: 'Łąka', action: function () {} }, { title: 'Las' }]"_s).toVariant();
         PaletteFilter f;
         f.setItems(items.toList());
         f.setQuery(u"laka"_s);

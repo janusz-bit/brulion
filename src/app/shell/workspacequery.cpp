@@ -151,7 +151,7 @@ QVariantMap Workspace::journalMarks(const QVariantList &cells) const
     const QString from = cells.first().toMap().value(u"date"_s).toString();
     const QString to = cells.last().toMap().value(u"date"_s).toString();
     for (const QString &date : journalDates(from, to))
-        marks.insert(date, QStringList{ u"journal"_s });
+        marks.insert(date, QStringList{u"journal"_s});
     return marks;
 }
 

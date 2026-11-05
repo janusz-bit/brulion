@@ -1025,12 +1025,12 @@ bool callQml(QObject *object, const char *name, const QVariantList &args, QVaria
         const QMetaType type = method.parameterMetaType(int(i));
         if (type == QMetaType::fromType<QVariant>()) {
             values[i] = QVariant::fromValue(args.at(i));
-            arguments[i] = { type.iface(), "QVariant", values[i].constData() };
+            arguments[i] = {type.iface(), "QVariant", values[i].constData()};
         } else {
             values[i] = args.at(i);
             if (values[i].metaType() != type && !values[i].convert(type))
                 return false;
-            arguments[i] = { type.iface(), type.name(), values[i].constData() };
+            arguments[i] = {type.iface(), type.name(), values[i].constData()};
         }
     }
     const QMetaType returnType = method.returnMetaType();

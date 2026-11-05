@@ -23,8 +23,7 @@
 
 namespace brulion::shell {
 
-class ViewTraits : public QObject
-{
+class ViewTraits : public QObject {
     Q_OBJECT
     /// The view (a ShellRouteView's Loader.item); null for none.
     Q_PROPERTY(QObject *view READ view WRITE setView NOTIFY viewChanged FINAL)

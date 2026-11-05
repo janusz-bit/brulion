@@ -221,7 +221,7 @@ private Q_SLOTS:
             QVERIFY(d.value(u"width"_s).toReal() <= 800 + 256);
             QVERIFY(d.value(u"height"_s).toReal() <= 1200 + 256);
             QCOMPARE(d.value(u"box"_s).toRectF(), QRectF(d.value(u"x"_s).toReal(), d.value(u"y"_s).toReal(),
-                                                          d.value(u"width"_s).toReal(), d.value(u"height"_s).toReal()));
+                                                         d.value(u"width"_s).toReal(), d.value(u"height"_s).toReal()));
         }
         QVERIFY(withDetail >= 1);
         // The pages' rows carry it too (detailUrl, detailBox: the QML delegates' roles).
@@ -265,8 +265,9 @@ private Q_SLOTS:
         {
             // `box`: the same rectangle as x, y, width, height (QML's typed delegates).
             const QVariantMap hit = model->hitRects(3).first().toMap();
-            QCOMPARE(hit.value(u"box"_s).toRectF(), QRectF(hit.value(u"x"_s).toReal(), hit.value(u"y"_s).toReal(),
-                                                            hit.value(u"width"_s).toReal(), hit.value(u"height"_s).toReal()));
+            QCOMPARE(hit.value(u"box"_s).toRectF(),
+                     QRectF(hit.value(u"x"_s).toReal(), hit.value(u"y"_s).toReal(), hit.value(u"width"_s).toReal(),
+                            hit.value(u"height"_s).toReal()));
         }
         // Shown at once: the view moved to page 3.
         QVERIFY(!moved.isEmpty());
@@ -468,7 +469,7 @@ private Q_SLOTS:
         QVERIFY(r.value(u"x"_s).toReal() > 0.05 && r.value(u"x"_s).toReal() < 0.15);
         QVERIFY(r.value(u"y"_s).toReal() > 0.05 && r.value(u"y"_s).toReal() < 0.16);
         QCOMPARE(r.value(u"box"_s).toRectF(), QRectF(r.value(u"x"_s).toReal(), r.value(u"y"_s).toReal(),
-                                                      r.value(u"width"_s).toReal(), r.value(u"height"_s).toReal()));
+                                                     r.value(u"width"_s).toReal(), r.value(u"height"_s).toReal()));
         // The floating "Kopiuj" goes over the first rectangle, on the selection's page.
         QCOMPARE(model->selectionAnchor(), r.value(u"box"_s).toRectF());
         QCOMPARE(model->selectionPageRect(), model->pageRect(1));
@@ -585,8 +586,9 @@ private Q_SLOTS:
         const QVariantMap first = links.at(0).toMap();
         QVERIFY(std::abs(first.value(u"x"_s).toReal() - 55.0 / 595) < 0.01);
         QVERIFY(std::abs(first.value(u"y"_s).toReal() - (842.0 - 724) / 842) < 0.01);
-        QCOMPARE(first.value(u"box"_s).toRectF(), QRectF(first.value(u"x"_s).toReal(), first.value(u"y"_s).toReal(),
-                                                          first.value(u"width"_s).toReal(), first.value(u"height"_s).toReal()));
+        QCOMPARE(first.value(u"box"_s).toRectF(),
+                 QRectF(first.value(u"x"_s).toReal(), first.value(u"y"_s).toReal(), first.value(u"width"_s).toReal(),
+                        first.value(u"height"_s).toReal()));
         QVERIFY(model->linkRects(2).isEmpty());
         // Another file: the outline and the links go.
         model->setFile(fixture(u"wyklad.pdf"_s));

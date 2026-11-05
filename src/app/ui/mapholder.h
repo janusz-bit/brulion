@@ -23,10 +23,7 @@ class MapHolder : public QObject {
     Q_PROPERTY(QVariantMap map READ map WRITE setMap NOTIFY mapChanged FINAL)
 
 public:
-    explicit MapHolder(QObject *parent = nullptr)
-        : QObject(parent)
-    {
-    }
+    explicit MapHolder(QObject *parent = nullptr) : QObject(parent) { }
 
     QVariantMap map() const { return m_map; }
     /// Announces every write (also of an equal map), like a JavaScript `var` property.

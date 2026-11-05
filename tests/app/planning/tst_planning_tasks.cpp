@@ -566,7 +566,8 @@ private Q_SLOTS:
         const QVariantMap folderRow = m.paletteChoices(u"folder"_s).at(1).toMap();
         QCOMPARE(folderRow.value(u"value"_s).toString(), u"Projekty"_s);
         QCOMPARE(folderRow.value(u"icon"_s).toString(), u"folder"_s);
-        QCOMPARE(folderRow.value(u"subtitle"_s).toString(), QCoreApplication::translate("TasksFilterBar", "%n tasks", nullptr, 8));
+        QCOMPARE(folderRow.value(u"subtitle"_s).toString(),
+                 QCoreApplication::translate("TasksFilterBar", "%n tasks", nullptr, 8));
         const QVariantMap pageRow = m.paletteChoices(u"page"_s).first().toMap();
         QCOMPARE(pageRow.value(u"title"_s).toString(), u"Remont"_s);
         QCOMPARE(pageRow.value(u"icon"_s).toString(), u"file-text"_s);

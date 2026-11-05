@@ -451,11 +451,16 @@ QVariantList DiffHelper::viewRows(const QString &oldText, const QString &newText
 {
     QVariantList rows = split ? splitRows(oldText, newText, context) : unifiedRows(oldText, newText, context);
     static const std::pair<QString, QVariant> defaults[] = {
-            {u"kind"_s, QString()},       {u"oldNo"_s, 0},
-            {u"newNo"_s, 0},              {u"count"_s, 0},
-            {u"text"_s, QString()},       {u"leftText"_s, QString()},
-            {u"rightText"_s, QString()},  {u"segments"_s, QVariantList()},
-            {u"leftSegments"_s, QVariantList()}, {u"rightSegments"_s, QVariantList()},
+            {u"kind"_s, QString()},
+            {u"oldNo"_s, 0},
+            {u"newNo"_s, 0},
+            {u"count"_s, 0},
+            {u"text"_s, QString()},
+            {u"leftText"_s, QString()},
+            {u"rightText"_s, QString()},
+            {u"segments"_s, QVariantList()},
+            {u"leftSegments"_s, QVariantList()},
+            {u"rightSegments"_s, QVariantList()},
     };
     for (QVariant &r : rows) {
         QVariantMap row = r.toMap();

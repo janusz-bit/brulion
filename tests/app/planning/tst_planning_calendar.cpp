@@ -316,12 +316,17 @@ private Q_SLOTS:
         const auto entry = [](const QString &title, int minutes, bool closed) {
             return QVariant(QVariantMap{{u"title"_s, title}, {u"minutes"_s, minutes}, {u"closed"_s, closed}});
         };
-        const QVariantList items{entry(u"Śniadanie"_s, 8 * 60, true), entry(u"Spotkanie"_s, 8 * 60 + 30, false),
-                                 entry(u"Zadzwonić"_s, 9 * 60 + 10, false), entry(u"Żaglówka"_s, -1, false),
-                                 entry(u"Rachunek"_s, -1, true), entry(u"Kolacja"_s, 19 * 60, false)};
+        const QVariantList items{entry(u"Śniadanie"_s, 8 * 60, true),
+                                 entry(u"Spotkanie"_s, 8 * 60 + 30, false),
+                                 entry(u"Zadzwonić"_s, 9 * 60 + 10, false),
+                                 entry(u"Żaglówka"_s, -1, false),
+                                 entry(u"Rachunek"_s, -1, true),
+                                 entry(u"Kolacja"_s, 19 * 60, false)};
         QCOMPARE(kindsOf(brulion::planning::openEntriesFirst(items), u"title"_s),
-                 (QStringList{u"Spotkanie"_s, u"Zadzwonić"_s, u"Żaglówka"_s, u"Kolacja"_s, u"Śniadanie"_s, u"Rachunek"_s}));
-        QCOMPARE(kindsOf(brulion::planning::allDayEntries(items), u"title"_s), (QStringList{u"Żaglówka"_s, u"Rachunek"_s}));
+                 (QStringList{u"Spotkanie"_s, u"Zadzwonić"_s, u"Żaglówka"_s, u"Kolacja"_s, u"Śniadanie"_s,
+                              u"Rachunek"_s}));
+        QCOMPARE(kindsOf(brulion::planning::allDayEntries(items), u"title"_s),
+                 (QStringList{u"Żaglówka"_s, u"Rachunek"_s}));
         QVERIFY(brulion::planning::openEntriesFirst({}).isEmpty());
         QVERIFY(brulion::planning::allDayEntries({}).isEmpty());
 
@@ -353,7 +358,8 @@ private Q_SLOTS:
     void gridRoles()
     {
         auto index = makeIndex({
-                {u"Dom.md"_s, u"- [ ] Farba 📅 2026-10-15\n- [ ] Rata 📅 2026-10-15\n- przypomnienie ⏰ 2026-10-15 12:00\n"_s},
+                {u"Dom.md"_s,
+                 u"- [ ] Farba 📅 2026-10-15\n- [ ] Rata 📅 2026-10-15\n- przypomnienie ⏰ 2026-10-15 12:00\n"_s},
         });
         CalendarModel m;
         m.setToday(u"2026-10-15"_s);

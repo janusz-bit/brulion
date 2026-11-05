@@ -12,8 +12,8 @@ namespace brulion::shell {
 
 /// The texts of the rows (translated by the dialog).
 struct FolderChoiceTexts {
-    QString rootName;      ///< "Notebook root"
-    QString newFolder;     ///< "New folder “%1”"
+    QString rootName;       ///< "Notebook root"
+    QString newFolder;      ///< "New folder “%1”"
     QString createSubtitle; ///< "Create it and move here" / "Create it"
 };
 

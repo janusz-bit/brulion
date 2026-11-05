@@ -195,22 +195,24 @@ QtObject {
         QTest::addColumn<QStringList>("disabled");
 
         QTest::newRow("all") << QString() << QString() << u"Projekty"_s << true
-                             << QStringList{QString(), u"Archiwum"_s, u"Projekty"_s, u"Projekty/Łódź"_s, u"Projekty/Zażółć"_s}
+                             << QStringList{QString(), u"Archiwum"_s, u"Projekty"_s, u"Projekty/Łódź"_s,
+                                            u"Projekty/Zażółć"_s}
                              << QStringList{u"Projekty"_s};
-        QTest::newRow("pick: nothing disabled") << QString() << QString() << u"Projekty"_s << false
-                                                << QStringList{QString(), u"Archiwum"_s, u"Projekty"_s, u"Projekty/Łódź"_s, u"Projekty/Zażółć"_s}
-                                                << QStringList{};
-        QTest::newRow("a folder moved: not into itself") << QString() << u"Projekty"_s << QString() << true
-                                                         << QStringList{QString(), u"Archiwum"_s}
-                                                         << QStringList{QString()};
+        QTest::newRow("pick: nothing disabled")
+                << QString() << QString() << u"Projekty"_s << false
+                << QStringList{QString(), u"Archiwum"_s, u"Projekty"_s, u"Projekty/Łódź"_s, u"Projekty/Zażółć"_s}
+                << QStringList{};
+        QTest::newRow("a folder moved: not into itself")
+                << QString() << u"Projekty"_s << QString() << true << QStringList{QString(), u"Archiwum"_s}
+                << QStringList{QString()};
         // Without diacritics; the root's name does not match.
         QTest::newRow("lodz") << u"lodz"_s << QString() << QString() << true
                               << QStringList{u"Projekty/Łódź"_s, u"+lodz"_s} << QStringList{};
         // The root found by its name; a typed name of a folder that exists: no new row.
         QTest::newRow("root") << u"notebook"_s << QString() << QString() << true
                               << QStringList{QString(), u"+notebook"_s} << QStringList{QString()};
-        QTest::newRow("existing, other case") << u" ARCHIWUM "_s << QString() << QString() << true
-                                              << QStringList{u"Archiwum"_s} << QStringList{};
+        QTest::newRow("existing, other case")
+                << u" ARCHIWUM "_s << QString() << QString() << true << QStringList{u"Archiwum"_s} << QStringList{};
         // Slashes at the ends of a new folder dropped.
         QTest::newRow("new nested") << u"/Nowy/Dział/"_s << QString() << QString() << false
                                     << QStringList{u"+Nowy/Dział"_s} << QStringList{};
@@ -224,8 +226,8 @@ QtObject {
         QFETCH(QStringList, rows);
         QFETCH(QStringList, disabled);
         const QStringList all{u"Archiwum"_s, u"Projekty"_s, u"Projekty/Łódź"_s, u"Projekty/Zażółć"_s};
-        const QVariantList out = brulion::shell::folderChoices(all, query, own, current, moving,
-                                                               {u"Notebook root"_s, u"New folder “%1”"_s, u"Create it"_s});
+        const QVariantList out = brulion::shell::folderChoices(
+                all, query, own, current, moving, {u"Notebook root"_s, u"New folder “%1”"_s, u"Create it"_s});
         QCOMPARE(folders(out), rows);
         QStringList off;
         for (const QVariant &row : out) {

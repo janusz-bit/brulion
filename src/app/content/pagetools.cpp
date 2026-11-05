@@ -149,7 +149,7 @@ QVariantList PageTools::aliasChips() const
 {
     QVariantList out;
     for (const QString &alias : m_summary.value(u"aliases"_s).toStringList())
-        out.append(QVariantMap{ { u"name"_s, alias }, { u"key"_s, QString() }, { u"editable"_s, false } });
+        out.append(QVariantMap{{u"name"_s, alias}, {u"key"_s, QString()}, {u"editable"_s, false}});
     return out;
 }
 
@@ -158,8 +158,8 @@ QVariantList PageTools::tagChips() const
     QVariantList out;
     for (const QVariant &tag : m_summary.value(u"tags"_s).toList()) {
         const QVariantMap t = tag.toMap();
-        out.append(QVariantMap{ { u"name"_s, t.value(u"display"_s) }, { u"key"_s, t.value(u"tag"_s) },
-                                { u"editable"_s, false } });
+        out.append(
+                QVariantMap{{u"name"_s, t.value(u"display"_s)}, {u"key"_s, t.value(u"tag"_s)}, {u"editable"_s, false}});
     }
     return out;
 }
@@ -502,7 +502,7 @@ QVariantMap PageTools::calendarMarks(const QString &from, const QString &to, con
     if (!m_workspace)
         return out;
     for (const QString &day : m_workspace->journalDates(from, to))
-        out.insert(day, QStringList{ u"journal"_s });
+        out.insert(day, QStringList{u"journal"_s});
     for (const QVariant &value : m_workspace->calendarItems(from, to)) {
         const QVariantMap item = value.toMap();
         const QString kind = item.value(u"kind"_s).toString();
@@ -510,9 +510,9 @@ QVariantMap PageTools::calendarMarks(const QString &from, const QString &to, con
             continue;
         const QString date = item.value(u"date"_s).toString();
         const QString mark = kind == u"due" && date < today && item.value(u"status"_s).toString() != u"done"
-                                 ? u"overdue"_s
+                                     ? u"overdue"_s
                              : kind == u"reminder" ? (item.value(u"alarm"_s).toBool() ? u"alarm"_s : u"reminder"_s)
-                                                    : kind;
+                                                   : kind;
         QStringList list = out.value(date).toStringList();
         if (!list.contains(mark) && list.size() < 3)
             list.append(mark);
@@ -540,10 +540,10 @@ QVariantList PageTools::tagSuggestions(const QVariantList &values) const
         const QVariantMap v = row.toMap();
         const QString value = v.value(u"value"_s).toString();
         const int count = v.value(u"count"_s).toInt();
-        out.append(QVariantMap{ { u"title"_s, QString(u'#' + value) },
-                                { u"value"_s, value },
-                                { u"subtitle"_s, count > 0 ? QString::number(count) : QString() },
-                                { u"icon"_s, QString() } });
+        out.append(QVariantMap{{u"title"_s, QString(u'#' + value)},
+                               {u"value"_s, value},
+                               {u"subtitle"_s, count > 0 ? QString::number(count) : QString()},
+                               {u"icon"_s, QString()}});
     }
     return out;
 }

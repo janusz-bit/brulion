@@ -27,10 +27,8 @@ bool isNumber(const QVariant &v)
     case QMetaType::Short:
     case QMetaType::UShort:
     case QMetaType::Long:
-    case QMetaType::ULong:
-        return true;
-    default:
-        return false;
+    case QMetaType::ULong: return true;
+    default: return false;
     }
 }
 
@@ -140,8 +138,8 @@ QStringList UiModels::stringListField(const QVariant &object, const QString &key
     QStringList out;
     if (v.metaType().id() == QMetaType::QStringList)
         return v.toStringList();
-    if (v.metaType().id() != QMetaType::QVariantList && !(v.metaType().name() == QByteArrayView("QJSValue")
-                                                             && v.canConvert<QVariantList>()))
+    if (v.metaType().id() != QMetaType::QVariantList
+        && !(v.metaType().name() == QByteArrayView("QJSValue") && v.canConvert<QVariantList>()))
         return out;
     for (const QVariant &item : v.toList())
         out.append(jsString(item));
@@ -218,7 +216,8 @@ QVariantList UiModels::crumbRows(const QVariantList &model) const
 QVariantList UiModels::shownCrumbs(const QVariantList &rows, int visibleTail, bool collapsed) const
 {
     const auto part = [this](const QVariant &row, int index) {
-        return QVariantMap{{u"title"_s, stringField(row, u"title"_s)}, {u"icon"_s, stringField(row, u"icon"_s)},
+        return QVariantMap{{u"title"_s, stringField(row, u"title"_s)},
+                           {u"icon"_s, stringField(row, u"icon"_s)},
                            {u"partIndex"_s, index}};
     };
     QVariantList out;
@@ -350,8 +349,8 @@ void PaletteFilter::update()
     m_sources.clear();
     const QList<FuzzyRanked> ranked = fuzzyRankList(m_query, m_titles, m_maxResults, m_subtitles);
     for (const FuzzyRanked &r : ranked) {
-        const QString markup = r.positions.isEmpty() ? QString()
-                                                     : markMatchesHtml(m_titles.at(r.index), r.positions, m_markColor);
+        const QString markup =
+                r.positions.isEmpty() ? QString() : markMatchesHtml(m_titles.at(r.index), r.positions, m_markColor);
         m_rows.append(row(m_items.at(r.index), markup));
         m_sources.append(r.index);
     }
@@ -426,7 +425,10 @@ QVariant ToastListModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> ToastListModel::roleNames() const
 {
-    return {{ToastIdRole, "toastId"}, {TextRole, "text"}, {KindRole, "kind"}, {ActionTextRole, "actionText"},
+    return {{ToastIdRole, "toastId"},
+            {TextRole, "text"},
+            {KindRole, "kind"},
+            {ActionTextRole, "actionText"},
             {TimeoutRole, "timeout"}};
 }
 

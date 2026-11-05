@@ -99,7 +99,7 @@ void setUp(QTextDocument &doc, qreal width = TextWidth)
 /// A typed shape as the map `pills` gives for it.
 QVariantMap shapeMap(const RichTextPill &p)
 {
-    return {{u"x"_s, p.x}, {u"y"_s, p.y}, {u"width"_s, p.width}, {u"height"_s, p.height},
+    return {{u"x"_s, p.x},         {u"y"_s, p.y},       {u"width"_s, p.width}, {u"height"_s, p.height},
             {u"color"_s, p.color}, {u"kind"_s, p.kind}, {u"icon"_s, p.icon}};
 }
 

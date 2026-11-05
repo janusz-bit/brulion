@@ -25,10 +25,17 @@ namespace {
 /// A row of Workspace::unreferencedFiles().
 QVariant file(const QString &path, bool attachment, int openTasks = 0, int reminders = 0)
 {
-    return QVariantMap{ { u"path"_s, path },           { u"title"_s, path },          { u"folder"_s, QString() },
-                        { u"attachment"_s, attachment }, { u"picture"_s, false },     { u"pdf"_s, false },
-                        { u"size"_s, 10 },             { u"sizeText"_s, u"10 B"_s }, { u"modified"_s, u"dziś"_s },
-                        { u"openTasks"_s, openTasks }, { u"reminders"_s, reminders } };
+    return QVariantMap{{u"path"_s, path},
+                       {u"title"_s, path},
+                       {u"folder"_s, QString()},
+                       {u"attachment"_s, attachment},
+                       {u"picture"_s, false},
+                       {u"pdf"_s, false},
+                       {u"size"_s, 10},
+                       {u"sizeText"_s, u"10 B"_s},
+                       {u"modified"_s, u"dziś"_s},
+                       {u"openTasks"_s, openTasks},
+                       {u"reminders"_s, reminders}};
 }
 
 QStringList pathsOf(const QVariantList &rows)
@@ -77,7 +84,7 @@ private Q_SLOTS:
         QFETCH(QVariant, value);
         QFETCH(QString, text);
         auto app = makeApp();
-        QVariantMap route{ { u"view"_s, u"page"_s } };
+        QVariantMap route{{u"view"_s, u"page"_s}};
         if (value.isValid())
             route.insert(u"key"_s, value);
         QCOMPARE(app->routeText(route, u"key"_s), text);
@@ -141,21 +148,25 @@ private Q_SLOTS:
     void routeWith()
     {
         auto app = makeApp();
-        const QVariantMap journal{ { u"view"_s, u"journal"_s },   { u"date"_s, u"2026-10-14"_s },
-                                   { u"line"_s, 0 },              { u"blockId"_s, u"żółw-1"_s },
-                                   { u"source"_s, QVariant::fromValue(nullptr) }, { u"fromTag"_s, true } };
-        const QVariantMap page = app->routeWith({ { u"view"_s, u"page"_s }, { u"path"_s, u"journals/2026-10-14.md"_s } },
-                                                journal, { u"line"_s, u"blockId"_s, u"heading"_s, u"source"_s, u"open"_s });
+        const QVariantMap journal{{u"view"_s, u"journal"_s},
+                                  {u"date"_s, u"2026-10-14"_s},
+                                  {u"line"_s, 0},
+                                  {u"blockId"_s, u"żółw-1"_s},
+                                  {u"source"_s, QVariant::fromValue(nullptr)},
+                                  {u"fromTag"_s, true}};
+        const QVariantMap page =
+                app->routeWith({{u"view"_s, u"page"_s}, {u"path"_s, u"journals/2026-10-14.md"_s}}, journal,
+                               {u"line"_s, u"blockId"_s, u"heading"_s, u"source"_s, u"open"_s});
         // The keys asked for that the route has (a null one too); `date`, `fromTag` not.
-        QCOMPARE(page, (QVariantMap{ { u"view"_s, u"page"_s },
-                                     { u"path"_s, u"journals/2026-10-14.md"_s },
-                                     { u"line"_s, 0 },
-                                     { u"blockId"_s, u"żółw-1"_s },
-                                     { u"source"_s, QVariant::fromValue(nullptr) } }));
+        QCOMPARE(page, (QVariantMap{{u"view"_s, u"page"_s},
+                                    {u"path"_s, u"journals/2026-10-14.md"_s},
+                                    {u"line"_s, 0},
+                                    {u"blockId"_s, u"żółw-1"_s},
+                                    {u"source"_s, QVariant::fromValue(nullptr)}}));
         // A key of the base the route also has: the route's.
-        QCOMPARE(app->routeWith({ { u"view"_s, u"page"_s } }, { { u"view"_s, u"tag"_s } }, { u"view"_s }),
-                 (QVariantMap{ { u"view"_s, u"tag"_s } }));
-        QCOMPARE(app->routeWith({ { u"view"_s, u"page"_s } }, {}, { u"line"_s }), (QVariantMap{ { u"view"_s, u"page"_s } }));
+        QCOMPARE(app->routeWith({{u"view"_s, u"page"_s}}, {{u"view"_s, u"tag"_s}}, {u"view"_s}),
+                 (QVariantMap{{u"view"_s, u"tag"_s}}));
+        QCOMPARE(app->routeWith({{u"view"_s, u"page"_s}}, {}, {u"line"_s}), (QVariantMap{{u"view"_s, u"page"_s}}));
     }
 
     // ---- SearchView's recent searches -----------------------------------------------------------
@@ -165,12 +176,12 @@ private Q_SLOTS:
         {
             AppSettings s(file, m_tmp.path());
             QVERIFY(s.recentSearches().isEmpty());
-            QCOMPARE(s.rememberSearch(u"  Żółw  "_s), QStringList{ u"Żółw"_s });
-            QCOMPARE(s.rememberSearch(u"jutro"_s), (QStringList{ u"jutro"_s, u"Żółw"_s }));
+            QCOMPARE(s.rememberSearch(u"  Żółw  "_s), QStringList{u"Żółw"_s});
+            QCOMPARE(s.rememberSearch(u"jutro"_s), (QStringList{u"jutro"_s, u"Żółw"_s}));
             // The same after folding case and diacritics: moved to the front, written as now.
-            QCOMPARE(s.rememberSearch(u"ZOLW"_s), (QStringList{ u"ZOLW"_s, u"jutro"_s }));
+            QCOMPARE(s.rememberSearch(u"ZOLW"_s), (QStringList{u"ZOLW"_s, u"jutro"_s}));
             // Nothing typed: nothing changes.
-            QCOMPARE(s.rememberSearch(u"   "_s), (QStringList{ u"ZOLW"_s, u"jutro"_s }));
+            QCOMPARE(s.rememberSearch(u"   "_s), (QStringList{u"ZOLW"_s, u"jutro"_s}));
             for (int i = 1; i <= 10; ++i)
                 s.rememberSearch(u"szukam %1"_s.arg(i));
             const QStringList eight = s.recentSearches();
@@ -197,7 +208,7 @@ private Q_SLOTS:
             raw.sync();
         }
         AppSettings s(file, m_tmp.path());
-        QCOMPARE(s.recentSearches(), QStringList{ u"gęś"_s });
+        QCOMPARE(s.recentSearches(), QStringList{u"gęś"_s});
     }
 
     // ---- CleanupView's selection ----------------------------------------------------------------
@@ -205,25 +216,26 @@ private Q_SLOTS:
     {
         CleanupSelection selection;
         QSignalSpy changed(&selection, &CleanupSelection::changed);
-        selection.setFiles({ file(u"Notatka.md"_s, false, 2, 0), file(u"obraz.png"_s, true),
-                             file(u"Żółw.md"_s, false, 0, 1), file(u"plik.pdf"_s, true) });
+        selection.setFiles({file(u"Notatka.md"_s, false, 2, 0), file(u"obraz.png"_s, true),
+                            file(u"Żółw.md"_s, false, 0, 1), file(u"plik.pdf"_s, true)});
         QCOMPARE(changed.size(), 1);
         QCOMPARE(selection.attachmentCount(), 2);
-        QCOMPARE(pathsOf(selection.shown()), (QStringList{ u"Notatka.md"_s, u"obraz.png"_s, u"Żółw.md"_s, u"plik.pdf"_s }));
+        QCOMPARE(pathsOf(selection.shown()),
+                 (QStringList{u"Notatka.md"_s, u"obraz.png"_s, u"Żółw.md"_s, u"plik.pdf"_s}));
         QVERIFY(selection.shownTicked().isEmpty());
 
         // Ticks of shown rows, in the list's order; a tick of a missing file stays but is not shown.
-        selection.setTicked({ u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s });
-        QCOMPARE(selection.shownTicked(), (QStringList{ u"Notatka.md"_s, u"plik.pdf"_s }));
+        selection.setTicked({u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s});
+        QCOMPARE(selection.shownTicked(), (QStringList{u"Notatka.md"_s, u"plik.pdf"_s}));
         QCOMPARE(selection.tickedWithWork(), 1);
-        QCOMPARE(selection.existingTicks(), (QStringList{ u"plik.pdf"_s, u"Notatka.md"_s }));
+        QCOMPARE(selection.existingTicks(), (QStringList{u"plik.pdf"_s, u"Notatka.md"_s}));
 
         selection.setKind(u"notes"_s);
-        QCOMPARE(pathsOf(selection.shown()), (QStringList{ u"Notatka.md"_s, u"Żółw.md"_s }));
-        QCOMPARE(selection.shownTicked(), QStringList{ u"Notatka.md"_s });
+        QCOMPARE(pathsOf(selection.shown()), (QStringList{u"Notatka.md"_s, u"Żółw.md"_s}));
+        QCOMPARE(selection.shownTicked(), QStringList{u"Notatka.md"_s});
         selection.setKind(u"attachments"_s);
-        QCOMPARE(pathsOf(selection.shown()), (QStringList{ u"obraz.png"_s, u"plik.pdf"_s }));
-        QCOMPARE(selection.shownTicked(), QStringList{ u"plik.pdf"_s });
+        QCOMPARE(pathsOf(selection.shown()), (QStringList{u"obraz.png"_s, u"plik.pdf"_s}));
+        QCOMPARE(selection.shownTicked(), QStringList{u"plik.pdf"_s});
         QCOMPARE(selection.tickedWithWork(), 0);
         // An unknown kind shows everything.
         selection.setKind(u"coś"_s);
@@ -232,19 +244,19 @@ private Q_SLOTS:
         // Changed copies of the ticks; the selection itself changes only when they are set.
         selection.setKind(u"notes"_s);
         QCOMPARE(selection.withTicked(u"Żółw.md"_s, true),
-                 (QStringList{ u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s, u"Żółw.md"_s }));
+                 (QStringList{u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s, u"Żółw.md"_s}));
         QCOMPARE(selection.withTicked(u"Notatka.md"_s, true), selection.ticked()); // already ticked
-        QCOMPARE(selection.withTicked(u"Notatka.md"_s, false), (QStringList{ u"plik.pdf"_s, u"zniknął.md"_s }));
+        QCOMPARE(selection.withTicked(u"Notatka.md"_s, false), (QStringList{u"plik.pdf"_s, u"zniknął.md"_s}));
         QCOMPARE(selection.withAllShown(true),
-                 (QStringList{ u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s, u"Żółw.md"_s }));
-        QCOMPARE(selection.withAllShown(false), (QStringList{ u"plik.pdf"_s, u"zniknął.md"_s }));
-        QCOMPARE(selection.ticked(), (QStringList{ u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s }));
+                 (QStringList{u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s, u"Żółw.md"_s}));
+        QCOMPARE(selection.withAllShown(false), (QStringList{u"plik.pdf"_s, u"zniknął.md"_s}));
+        QCOMPARE(selection.ticked(), (QStringList{u"plik.pdf"_s, u"Notatka.md"_s, u"zniknął.md"_s}));
 
         // The ticks a route keeps for Back.
-        QCOMPARE(selection.routeTicks({ { u"view"_s, u"cleanup"_s },
-                                        { u"selected"_s, QVariantList{ u"a.md"_s, u"ż.png"_s } } }),
-                 (QStringList{ u"a.md"_s, u"ż.png"_s }));
-        QVERIFY(selection.routeTicks({ { u"view"_s, u"cleanup"_s } }).isEmpty());
+        QCOMPARE(
+                selection.routeTicks({{u"view"_s, u"cleanup"_s}, {u"selected"_s, QVariantList{u"a.md"_s, u"ż.png"_s}}}),
+                (QStringList{u"a.md"_s, u"ż.png"_s}));
+        QVERIFY(selection.routeTicks({{u"view"_s, u"cleanup"_s}}).isEmpty());
 
         // Setting the same again changes nothing.
         const int before = int(changed.size());

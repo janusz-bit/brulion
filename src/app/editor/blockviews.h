@@ -40,8 +40,8 @@ public:
     Q_INVOKABLE int tableNextShownRow(const QVariantMap &table, int row, int step) const;
     /// Natural column widths (header in `headerFont`, cells in `cellFont`, plus `padding` on both
     /// sides, 56…280 px), stretched to fill `width` when they are narrower together.
-    Q_INVOKABLE QList<qreal> tableColumnWidths(const QVariantMap &table, const QFont &headerFont,
-                                               const QFont &cellFont, qreal width, int padding) const;
+    Q_INVOKABLE QList<qreal> tableColumnWidths(const QVariantMap &table, const QFont &headerFont, const QFont &cellFont,
+                                               qreal width, int padding) const;
     /// Cell (`row`, `column`): { text, display, html, plain, error, formula }; row -1 the header
     /// (display and text: the header's text, html its rendering); outside the table empty values.
     Q_INVOKABLE QVariantMap tableCell(const QVariantMap &table, int row, int column) const;
@@ -87,8 +87,8 @@ public:
     /// PageController.suggestPropertyValues() as BSuggestField rows: a page with its icon and
     /// "page" (in the translation context `context`); `forList` (PropertyListValue): tags as
     /// "#tag", how many pages use a value, values already in `held` (any case) left out.
-    Q_INVOKABLE QVariantList propertyValueRows(const QVariantList &suggestions, bool forList,
-                                               const QStringList &held, const QString &context) const;
+    Q_INVOKABLE QVariantList propertyValueRows(const QVariantList &suggestions, bool forList, const QStringList &held,
+                                               const QString &context) const;
 
     // --- Drawings on a picture or PDF (EditorDialogs: DrawingBackdrops' prepared items) ---------
     /// The items without an error (`error` empty).
@@ -99,8 +99,8 @@ public:
     // --- Embeds (TransclusionView: `transclusions`) ------------------------------------------------
     /// The line of the embedded task of `path` showing `html` in `transclusions` (the nearest to
     /// `line` when the text repeats); -1 when it is not there.
-    Q_INVOKABLE int transclusionTaskLine(const QVariantList &transclusions, const QString &path,
-                                         const QString &html, int line) const;
+    Q_INVOKABLE int transclusionTaskLine(const QVariantList &transclusions, const QString &path, const QString &html,
+                                         int line) const;
 };
 
 /// Places its visible children (those with a width) left to right, a new line when one does not

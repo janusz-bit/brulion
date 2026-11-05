@@ -1,14 +1,14 @@
 #include "devtesting.h"
 
-#include <QJSEngine>
-#include <QJSValue>
-#include <QQmlComponent>
-#include <QQmlEngine>
-#include <QQuickItem>
 #include <QAccessible>
 #include <QFont>
+#include <QJSEngine>
+#include <QJSValue>
 #include <QLocale>
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QQmlListReference>
+#include <QQuickItem>
 #include <QUrl>
 
 #include <algorithm>
@@ -26,10 +26,7 @@ int lengthAtPath(const QVariant &value, const QString &path);
 
 // --- DevEvents --------------------------------------------------------------------------------
 
-DevEvents::DevEvents(QObject *parent)
-    : QObject(parent)
-{
-}
+DevEvents::DevEvents(QObject *parent) : QObject(parent) { }
 
 QJSValue DevEvents::testEvent()
 {
@@ -97,8 +94,7 @@ bool DevEvents::mouseWheel(QObject *item, qreal x, qreal y, int buttons, int mod
                            int delay)
 {
     QJSEngine *engine = qjsEngine(this);
-    return engine
-        && call("mouseWheel", {engine->toScriptValue(item), x, y, buttons, modifiers, xDelta, yDelta, delay});
+    return engine && call("mouseWheel", {engine->toScriptValue(item), x, y, buttons, modifiers, xDelta, yDelta, delay});
 }
 
 void DevEvents::touch(const char *point, QObject *item, qreal x, qreal y)
@@ -138,10 +134,7 @@ void DevEvents::touchRelease(QObject *item, qreal x, qreal y)
 
 // --- DevBlock, DevRecord -----------------------------------------------------------------------
 
-DevBlock::DevBlock(QObject *parent)
-    : QObject(parent)
-{
-}
+DevBlock::DevBlock(QObject *parent) : QObject(parent) { }
 
 void DevBlock::read(const QVariantMap &row)
 {
@@ -149,10 +142,7 @@ void DevBlock::read(const QVariantMap &row)
     Q_EMIT changed();
 }
 
-DevRecord::DevRecord(QObject *parent)
-    : QObject(parent)
-{
-}
+DevRecord::DevRecord(QObject *parent) : QObject(parent) { }
 
 void DevRecord::setValue(const QVariantMap &value)
 {
@@ -195,10 +185,7 @@ void collectNamed(QQuickItem *item, const QString &name, QList<QQuickItem *> &ou
 
 } // namespace
 
-DevTest::DevTest(QObject *parent)
-    : QObject(parent)
-{
-}
+DevTest::DevTest(QObject *parent) : QObject(parent) { }
 
 QQuickItem *DevTest::findItem(QQuickItem *root, const QString &name) const
 {
@@ -279,20 +266,20 @@ QString jsNumber(double value)
 QQuickItem *DevTest::findShown(QQuickItem *root, const QString &name) const
 {
     return firstWhere(
-        root, [&](QQuickItem *item) { return item->objectName() == name; },
-        [](QQuickItem *item) { return item->isVisible(); });
+            root, [&](QQuickItem *item) { return item->objectName() == name; },
+            [](QQuickItem *item) { return item->isVisible(); });
 }
 
 QQuickItem *DevTest::findRendered(QQuickItem *root) const
 {
     return firstWhere(
-        root,
-        [](QQuickItem *item) {
-            // Text.RichText and TextEdit.RichText are both 1.
-            return ownsProperty(item, "textFormat") && item->property("textFormat").toInt() == 1
-                && ownsMember(item, "linkAt");
-        },
-        [](QQuickItem *item) { return item->isVisible(); });
+            root,
+            [](QQuickItem *item) {
+                // Text.RichText and TextEdit.RichText are both 1.
+                return ownsProperty(item, "textFormat") && item->property("textFormat").toInt() == 1
+                       && ownsMember(item, "linkAt");
+            },
+            [](QQuickItem *item) { return item->isVisible(); });
 }
 
 QString DevTest::linkAt(QQuickItem *text, qreal x, qreal y) const
@@ -306,37 +293,40 @@ QString DevTest::linkAt(QQuickItem *text, qreal x, qreal y) const
 QQuickItem *DevTest::findText(QQuickItem *root, const QString &text) const
 {
     return firstWhere(
-        root,
-        [&](QQuickItem *item) { return ownsProperty(item, "textFormat") && item->property("text").toString() == text; },
-        [](QQuickItem *) { return true; });
+            root,
+            [&](QQuickItem *item) {
+                return ownsProperty(item, "textFormat") && item->property("text").toString() == text;
+            },
+            [](QQuickItem *) { return true; });
 }
 
 QQuickItem *DevTest::findTextContaining(QQuickItem *root, const QString &needle) const
 {
     return firstWhere(
-        root,
-        [&](QQuickItem *item) {
-            return ownsProperty(item, "textFormat") && item->property("text").toString().contains(needle);
-        },
-        [](QQuickItem *item) { return item->isVisible(); });
+            root,
+            [&](QQuickItem *item) {
+                return ownsProperty(item, "textFormat") && item->property("text").toString().contains(needle);
+            },
+            [](QQuickItem *item) { return item->isVisible(); });
 }
 
 QQuickItem *DevTest::findWhere(QQuickItem *root, const QString &name, const QVariant &value, bool visibleOnly) const
 {
     const QByteArray key = name.toUtf8();
     return firstWhere(
-        root,
-        [&](QQuickItem *item) {
-            return ownsProperty(item, key.constData()) && item->property(key.constData()) == value
-                && (!visibleOnly || item->isVisible());
-        },
-        [](QQuickItem *) { return true; });
+            root,
+            [&](QQuickItem *item) {
+                return ownsProperty(item, key.constData()) && item->property(key.constData()) == value
+                       && (!visibleOnly || item->isVisible());
+            },
+            [](QQuickItem *) { return true; });
 }
 
 QQuickItem *DevTest::findWithMembers(QQuickItem *root, const QStringList &names) const
 {
     const QList<QByteArray> keys = utf8(names);
-    return firstWhere(root, [&](QQuickItem *item) { return ownsMembers(item, keys); }, [](QQuickItem *) { return true; });
+    return firstWhere(
+            root, [&](QQuickItem *item) { return ownsMembers(item, keys); }, [](QQuickItem *) { return true; });
 }
 
 int DevTest::countWithMembers(QObject *object, const QStringList &names) const
@@ -385,7 +375,7 @@ QString DevTest::clockNumbers(QQuickItem *clock, int textSm) const
         const QList<QQuickItem *> inside = item->childItems();
         const QVariant radius = item->property("radius");
         const bool isBubble = !hour && !minute && inside.size() == 1 && ownsMember(inside.first(), "text")
-            && radius.isValid() && std::abs(radius.toDouble() - item->width() / 2) < 0.01;
+                              && radius.isValid() && std::abs(radius.toDouble() - item->width() / 2) < 0.01;
         if (!hour && !minute && !isBubble)
             continue;
         QQuickItem *text = nullptr;
@@ -421,12 +411,13 @@ QString DevTest::clockNumbers(QQuickItem *clock, int textSm) const
             const Circle &b = numbers.at(j);
             const double d = std::hypot(a.x - b.x, a.y - b.y);
             if (d < a.r + b.r - 0.01)
-                overlaps.append(u"%1/%2 %3 < %4"_s.arg(a.label, b.label, QString::number(d, 'f', 1), jsNumber(a.r + b.r)));
+                overlaps.append(
+                        u"%1/%2 %3 < %4"_s.arg(a.label, b.label, QString::number(d, 'f', 1), jsNumber(a.r + b.r)));
         }
         const double toBubble = bubble ? std::hypot(a.x - bubble->x, a.y - bubble->y) : 0;
         if (bubble && toBubble > 0.5 && toBubble < a.r + bubble->r - 0.01)
             overlaps.append(u"%1/%2 %3 < %4"_s.arg(bubble->label, a.label, QString::number(toBubble, 'f', 1),
-                                                    jsNumber(a.r + bubble->r)));
+                                                   jsNumber(a.r + bubble->r)));
     }
     if (bubble && !fits(*bubble, 10))
         cramped.append(u"%1 (%2 px text in %3)"_s.arg(bubble->label, QString::number(bubble->textWidth, 'f', 1),
@@ -647,10 +638,12 @@ bool DevTest::sameWithoutLines(const QString &a, const QString &b, const QString
 
 int DevTest::indexWithObject(const QVariant &list, const QString &key, QObject *object) const
 {
-    const QVariantList entries = (list.metaType() == QMetaType::fromType<QJSValue>() ? list.value<QJSValue>().toVariant() : list).toList();
+    const QVariantList entries =
+            (list.metaType() == QMetaType::fromType<QJSValue>() ? list.value<QJSValue>().toVariant() : list).toList();
     for (qsizetype i = 0; i < entries.size(); ++i) {
         const QVariant entry = entries.at(i).metaType() == QMetaType::fromType<QJSValue>()
-                                   ? entries.at(i).value<QJSValue>().toVariant() : entries.at(i);
+                                       ? entries.at(i).value<QJSValue>().toVariant()
+                                       : entries.at(i);
         if (entry.toMap().value(key).value<QObject *>() == object)
             return int(i);
     }
@@ -667,7 +660,8 @@ QVariantList DevTest::rowsContaining(const QVariant &list, const QString &key, c
     QVariantList out;
     const QVariantList rows = listOf(list);
     for (const QVariant &row : rows) {
-        const QVariant map = row.metaType() == QMetaType::fromType<QJSValue>() ? row.value<QJSValue>().toVariant() : row;
+        const QVariant map =
+                row.metaType() == QMetaType::fromType<QJSValue>() ? row.value<QJSValue>().toVariant() : row;
         if (text.isEmpty() || map.toMap().value(key).toString().contains(text))
             out.append(map);
     }

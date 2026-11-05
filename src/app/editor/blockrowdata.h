@@ -71,8 +71,20 @@ Q_SIGNALS:
     void propertiesInfoChanged();
 
 private:
-    enum Role { Html, EditText, Lang, CalloutType, IsSelected, CalcResults, TableData, ChartData, Query,
-                Properties, PropertiesInfo, RoleCount };
+    enum Role {
+        Html,
+        EditText,
+        Lang,
+        CalloutType,
+        IsSelected,
+        CalcResults,
+        TableData,
+        ChartData,
+        Query,
+        Properties,
+        PropertiesInfo,
+        RoleCount
+    };
     /// The value of `role` on the delegate's model object (invalid without one); the first read
     /// of a role connects the object's change signal for it to ours.
     QVariant value(Role role, const char *name, void (BlockRowData::*changed)()) const;
@@ -81,7 +93,7 @@ private:
 
     mutable QPointer<QObject> m_source;
     mutable bool m_sourceLooked = false; ///< found (looked up again until it is)
-    mutable int m_connected = 0; ///< bit per Role: its change signal is connected
+    mutable int m_connected = 0;         ///< bit per Role: its change signal is connected
 };
 
 } // namespace brulion::editor

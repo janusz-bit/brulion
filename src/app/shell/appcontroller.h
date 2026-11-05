@@ -609,9 +609,9 @@ public:
     /// "Przenieś do…"'s rows for `query` over the notebook's folders (folderchoices.h): the root
     /// (`rootName`), the folders matching it without `ownFolder` and its subfolders, a new folder
     /// (`newFolderText`'s %1, subtitle `createText`); `moving`: `currentFolder`'s row disabled.
-    Q_INVOKABLE QVariantList folderChoices(const QString &query, const QString &ownFolder,
-                                           const QString &currentFolder, bool moving, const QString &rootName,
-                                           const QString &newFolderText, const QString &createText) const;
+    Q_INVOKABLE QVariantList folderChoices(const QString &query, const QString &ownFolder, const QString &currentFolder,
+                                           bool moving, const QString &rootName, const QString &newFolderText,
+                                           const QString &createText) const;
     /// `base` plus the `keys` that `route` has (even null ones): a view's route made from
     /// another's parameters (JournalsView's one day as a PageView route).
     Q_INVOKABLE QVariantMap routeWith(const QVariantMap &base, const QVariantMap &route, const QStringList &keys) const;
@@ -772,8 +772,8 @@ private:
     bool m_startToday = false;
     QVariantMap m_routeAfterOpen; ///< openVaultAt()
     QString m_routeAfterOpenVault; ///< openRoute() while opening: the notebook the route belongs to
-    int m_lastToastId = 0;              ///< toastWithAction()'s ids
-    QHash<int, int> m_toastIdsByHostId; ///< the toast host's id → toastWithAction()'s
+    int m_lastToastId = 0;         ///< toastWithAction()'s ids
+    QHash<int, int> m_toastIdsByHostId;      ///< the toast host's id → toastWithAction()'s
     QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
     QHash<int, QJSValue> m_functionToasts;   ///< toastAction()'s ids → the function
 #ifdef Q_OS_WASM

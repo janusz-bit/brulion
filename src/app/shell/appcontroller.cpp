@@ -1771,8 +1771,7 @@ QString AppController::routeText(const QVariantMap &route, const QString &key) c
             return QString::number(qint64(d));
         return QString::number(d, 'g', QLocale::FloatingPointShortest);
     }
-    default:
-        return value.toString();
+    default: return value.toString();
     }
 }
 
@@ -1792,10 +1791,8 @@ bool AppController::routeFlag(const QVariantMap &route, const QString &key) cons
     if (!value.isValid() || value.isNull())
         return false;
     switch (value.typeId()) {
-    case QMetaType::Bool:
-        return value.toBool();
-    case QMetaType::QString:
-        return !value.toString().isEmpty();
+    case QMetaType::Bool: return value.toBool();
+    case QMetaType::QString: return !value.toString().isEmpty();
     case QMetaType::Int:
     case QMetaType::UInt:
     case QMetaType::LongLong:
@@ -1805,8 +1802,7 @@ bool AppController::routeFlag(const QVariantMap &route, const QString &key) cons
         const double d = value.toDouble();
         return d != 0 && !std::isnan(d);
     }
-    default:
-        return true;
+    default: return true;
     }
 }
 
@@ -1897,12 +1893,12 @@ QStringList AppController::routeStrings(const QVariantMap &route, const QString 
     return value.toStringList();
 }
 
-QVariantList AppController::folderChoices(const QString &query, const QString &ownFolder,
-                                          const QString &currentFolder, bool moving, const QString &rootName,
-                                          const QString &newFolderText, const QString &createText) const
+QVariantList AppController::folderChoices(const QString &query, const QString &ownFolder, const QString &currentFolder,
+                                          bool moving, const QString &rootName, const QString &newFolderText,
+                                          const QString &createText) const
 {
     return shell::folderChoices(m_workspace ? m_workspace->folderPaths() : QStringList(), query, ownFolder,
-                                currentFolder, moving, { rootName, newFolderText, createText });
+                                currentFolder, moving, {rootName, newFolderText, createText});
 }
 
 QVariantList AppController::routeList(const QVariantMap &route, const QString &key) const

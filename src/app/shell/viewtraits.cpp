@@ -14,18 +14,18 @@ struct Trait {
     int flag;
 };
 constexpr Trait kTraits[] = {
-    { "title", 0 },
-    { "sidePanel", 0 },
-    { "noteMode", 0 },
-    { "editing", 1 << 0 },
-    { "toolbarDocked", 1 << 1 },
-    { "replacesBottomNav", 1 << 2 },
-    { "pictureRoute", 1 << 3 },
-    { "pictureAsText", 1 << 4 },
-    { "pdfRoute", 1 << 5 },
-    { "fileRoute", 1 << 6 },
-    { "sourceMode", 1 << 7 },
-    { "edgeSwipe", 1 << 8 },
+        {"title", 0},
+        {"sidePanel", 0},
+        {"noteMode", 0},
+        {"editing", 1 << 0},
+        {"toolbarDocked", 1 << 1},
+        {"replacesBottomNav", 1 << 2},
+        {"pictureRoute", 1 << 3},
+        {"pictureAsText", 1 << 4},
+        {"pdfRoute", 1 << 5},
+        {"fileRoute", 1 << 6},
+        {"sourceMode", 1 << 7},
+        {"edgeSwipe", 1 << 8},
 };
 
 /// A `var` property's value as the plain QVariant (a QJSValue unwrapped).
@@ -38,10 +38,7 @@ QVariant plain(const QVariant &value)
 
 } // namespace
 
-ViewTraits::ViewTraits(QObject *parent)
-    : QObject(parent)
-{
-}
+ViewTraits::ViewTraits(QObject *parent) : QObject(parent) { }
 
 void ViewTraits::setView(QObject *view)
 {
@@ -80,8 +77,7 @@ void ViewTraits::refresh()
     const QVariant title = read("title");
     const QString newTitle = title.metaType() == QMetaType::fromType<QString>() ? title.toString() : QString();
     const QVariant noteMode = read("noteMode");
-    const QString newNoteMode =
-        noteMode.metaType() == QMetaType::fromType<QString>() ? noteMode.toString() : QString();
+    const QString newNoteMode = noteMode.metaType() == QMetaType::fromType<QString>() ? noteMode.toString() : QString();
     QQmlComponent *newSidePanel = qobject_cast<QQmlComponent *>(read("sidePanel").value<QObject *>());
     int newFlags = 0;
     for (const Trait &trait : kTraits) {
@@ -159,9 +155,10 @@ void ViewTraits::applyPendingState()
         const QMetaType type = m.parameterMetaType(0);
         QVariant argument(m_pending);
         if (type == QMetaType::fromType<QVariant>()) {
-            m.invoke(m_view, Qt::DirectConnection, QMetaMethodArgument{ type.iface(), "QVariant", &argument });
+            m.invoke(m_view, Qt::DirectConnection, QMetaMethodArgument{type.iface(), "QVariant", &argument});
         } else if (argument.convert(type)) {
-            m.invoke(m_view, Qt::DirectConnection, QMetaMethodArgument{ type.iface(), type.name(), argument.constData() });
+            m.invoke(m_view, Qt::DirectConnection,
+                     QMetaMethodArgument{type.iface(), type.name(), argument.constData()});
         }
     }
     m_pending.clear();

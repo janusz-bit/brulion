@@ -1084,9 +1084,9 @@ private Q_SLOTS:
     void pageToolsHeaderSummary()
     {
         auto ws = open({
-                { u"Praca/Raport.md"_s, u"---\naliases: [Sprawozdanie]\ntags: [praca, \"#Pilne\"]\n---\n- treść\n"_s },
-                { u"Praca.md"_s, u"- strona tagu\n"_s },
-                { u"Notatka.md"_s, u"- #praca/raporty i #praca/spotkania, znowu #praca/raporty\n- #praca\n"_s },
+                {u"Praca/Raport.md"_s, u"---\naliases: [Sprawozdanie]\ntags: [praca, \"#Pilne\"]\n---\n- treść\n"_s},
+                {u"Praca.md"_s, u"- strona tagu\n"_s},
+                {u"Notatka.md"_s, u"- #praca/raporty i #praca/spotkania, znowu #praca/raporty\n- #praca\n"_s},
         });
         PageTools tools;
         QSignalSpy changed(&tools, &PageTools::summaryChanged);
@@ -1103,7 +1103,7 @@ private Q_SLOTS:
         const QVariantList aliases = tools.aliasChips();
         QCOMPARE(aliases.size(), 1);
         QCOMPARE(aliases.first().toMap(),
-                 (QVariantMap{ { u"name"_s, u"Sprawozdanie"_s }, { u"key"_s, QString() }, { u"editable"_s, false } }));
+                 (QVariantMap{{u"name"_s, u"Sprawozdanie"_s}, {u"key"_s, QString()}, {u"editable"_s, false}}));
         const QVariantList tags = tools.tagChips();
         QCOMPARE(tags.size(), 2);
         QCOMPARE(tags.at(0).toMap().value(u"key"_s).toString(), u"praca"_s);
@@ -1111,7 +1111,7 @@ private Q_SLOTS:
         QCOMPARE(tags.at(1).toMap().value(u"editable"_s).toBool(), false);
         // Every row has every key (QML delegates require them).
         for (const QVariant &row : tags)
-            QCOMPARE(row.toMap().keys(), (QStringList{ u"editable"_s, u"key"_s, u"name"_s }));
+            QCOMPARE(row.toMap().keys(), (QStringList{u"editable"_s, u"key"_s, u"name"_s}));
 
         // The page named by a tag: its key, text and sub-tags.
         tools.setPath(u"Praca.md"_s);
@@ -1122,7 +1122,7 @@ private Q_SLOTS:
         for (const QVariant &t : tools.subTags())
             sub.append(t.toMap().value(u"tag"_s).toString());
         sub.sort();
-        QCOMPARE(sub, (QStringList{ u"praca/raporty"_s, u"praca/spotkania"_s }));
+        QCOMPARE(sub, (QStringList{u"praca/raporty"_s, u"praca/spotkania"_s}));
         QVERIFY(tools.folderParts().isEmpty());
 
         // A change in the notebook (another sub-tag): the summary follows.
@@ -1142,12 +1142,11 @@ private Q_SLOTS:
     void calendarMarksAndEntries()
     {
         auto ws = open({
-                { u"journals/2026-10-12.md"_s, u"- dzień z notatką\n"_s },
-                { u"Plan.md"_s,
-                  u"- [ ] Zaległe 📅 2026-10-12\n"
-                  u"- [x] Zrobione 📅 2026-10-12 ✅ 2026-10-12\n"
-                  u"- [ ] Spotkanie 📅 2026-10-15 ⏰ 2026-10-15 09:00\n"
-                  u"- [ ] Na jutro ⏳ 2026-10-16 ⏰! 2026-10-16 06:00\n"_s },
+                {u"journals/2026-10-12.md"_s, u"- dzień z notatką\n"_s},
+                {u"Plan.md"_s, u"- [ ] Zaległe 📅 2026-10-12\n"
+                               u"- [x] Zrobione 📅 2026-10-12 ✅ 2026-10-12\n"
+                               u"- [ ] Spotkanie 📅 2026-10-15 ⏰ 2026-10-15 09:00\n"
+                               u"- [ ] Na jutro ⏳ 2026-10-16 ⏰! 2026-10-16 06:00\n"_s},
         });
         PageTools tools;
         tools.setWorkspace(ws.get());
@@ -1167,7 +1166,9 @@ private Q_SLOTS:
             QCOMPARE(kinds.toStringList().removeDuplicates(), 0);
         // The same day seen from earlier: nothing is overdue yet.
         QVERIFY(!tools.calendarMarks(u"2026-10-12"_s, u"2026-10-12"_s, u"2026-10-01"_s)
-                         .value(u"2026-10-12"_s).toStringList().contains(u"overdue"_s));
+                         .value(u"2026-10-12"_s)
+                         .toStringList()
+                         .contains(u"overdue"_s));
         QVERIFY(tools.calendarMarks(u"zły"_s, u"2026-10-12"_s, u"2026-10-14"_s).isEmpty());
 
         // A day's entries leave its journal out.
@@ -1177,7 +1178,7 @@ private Q_SLOTS:
             const QVariantMap m = e.toMap();
             QVERIFY(m.value(u"kind"_s).toString() != u"journal"_s);
             QCOMPARE(m.value(u"path"_s).toString(), u"Plan.md"_s);
-            for (const QString &key : { u"title"_s, u"time"_s, u"status"_s, u"alarm"_s, u"line"_s })
+            for (const QString &key : {u"title"_s, u"time"_s, u"status"_s, u"alarm"_s, u"line"_s})
                 QVERIFY2(m.contains(key), qPrintable(key));
         }
         QVERIFY(tools.calendarEntries(u"2026-10-13"_s).isEmpty());
@@ -1192,14 +1193,16 @@ private Q_SLOTS:
         QTest::addColumn<QVariantList>("values");
         QTest::addColumn<QVariantList>("rows");
         auto row = [](const QString &title, const QString &value, const QString &subtitle) {
-            return QVariantMap{ { u"title"_s, title }, { u"value"_s, value }, { u"subtitle"_s, subtitle }, { u"icon"_s, QString() } };
+            return QVariantMap{
+                    {u"title"_s, title}, {u"value"_s, value}, {u"subtitle"_s, subtitle}, {u"icon"_s, QString()}};
         };
         QTest::newRow("none") << QVariantList() << QVariantList();
-        QTest::newRow("counts") << QVariantList{ QVariantMap{ { u"value"_s, u"praca"_s }, { u"count"_s, 3 } },
-                                                 QVariantMap{ { u"value"_s, u"żółw"_s }, { u"count"_s, 0 } } }
-                                << QVariantList{ row(u"#praca"_s, u"praca"_s, u"3"_s), row(u"#żółw"_s, u"żółw"_s, QString()) };
-        QTest::newRow("no count") << QVariantList{ QVariantMap{ { u"value"_s, u"Zażółć gęślą"_s } } }
-                                  << QVariantList{ row(u"#Zażółć gęślą"_s, u"Zażółć gęślą"_s, QString()) };
+        QTest::newRow("counts") << QVariantList{QVariantMap{{u"value"_s, u"praca"_s}, {u"count"_s, 3}},
+                                                QVariantMap{{u"value"_s, u"żółw"_s}, {u"count"_s, 0}}}
+                                << QVariantList{row(u"#praca"_s, u"praca"_s, u"3"_s),
+                                                row(u"#żółw"_s, u"żółw"_s, QString())};
+        QTest::newRow("no count") << QVariantList{QVariantMap{{u"value"_s, u"Zażółć gęślą"_s}}}
+                                  << QVariantList{row(u"#Zażółć gęślą"_s, u"Zażółć gęślą"_s, QString())};
     }
     void tagSuggestions()
     {

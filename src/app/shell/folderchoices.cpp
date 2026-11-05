@@ -22,8 +22,8 @@ QVariantList folderChoices(const QStringList &allFolders, const QString &query, 
     const QString q = query.trimmed();
     const ui::TextHelper helper;
     QVariantList out;
-    const auto row = [&](const QString &folder, const QString &title, const QString &subtitle,
-                         const QString &icon, bool create) {
+    const auto row = [&](const QString &folder, const QString &title, const QString &subtitle, const QString &icon,
+                         bool create) {
         out.append(QVariantMap{{u"folder"_s, folder},
                                {u"title"_s, title},
                                {u"subtitle"_s, subtitle},
@@ -48,8 +48,8 @@ QVariantList folderChoices(const QStringList &allFolders, const QString &query, 
     const QString typed = QString(q).remove(edgeSlashes);
     if (!typed.isEmpty()) {
         const QString lower = typed.toLower();
-        const bool exists = std::any_of(folders.cbegin(), folders.cend(),
-                                        [&](const QString &f) { return f.toLower() == lower; });
+        const bool exists =
+                std::any_of(folders.cbegin(), folders.cend(), [&](const QString &f) { return f.toLower() == lower; });
         if (!exists)
             row(typed, QString(texts.newFolder).arg(typed), texts.createSubtitle, u"folder-plus"_s, true);
     }

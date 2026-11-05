@@ -762,12 +762,8 @@ QVariantMap PdfViewModel::detail(int page) const
     url.setQuery(url.query(QUrl::FullyEncoded) + u"&clip="_s + number(x0) + u',' + number(y0) + u',' + number(x1 - x0)
                          + u',' + number(y1 - y0),
                  QUrl::StrictMode);
-    return {{u"url"_s, url},
-            {u"x"_s, x0},
-            {u"y"_s, y0},
-            {u"width"_s, x1 - x0},
-            {u"height"_s, y1 - y0},
-            {u"box"_s, QRectF(x0, y0, x1 - x0, y1 - y0)}};
+    return {{u"url"_s, url},       {u"x"_s, x0},           {u"y"_s, y0},
+            {u"width"_s, x1 - x0}, {u"height"_s, y1 - y0}, {u"box"_s, QRectF(x0, y0, x1 - x0, y1 - y0)}};
 }
 
 // ---- Search ---------------------------------------------------------------------------------

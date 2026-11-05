@@ -112,8 +112,7 @@ void TstJsHelper::strings()
     QCOMPARE(js.endsWith(s, arg), eval(S + u".endsWith("_s + A + u')').toBool());
     QCOMPARE(js.toLowerCase(s), evalString(S + u".toLowerCase()"_s));
     QCOMPARE(js.toUpperCase(s), evalString(S + u".toUpperCase()"_s));
-    QCOMPARE(js.replace(s, arg, u"<>"_s),
-             evalString(S + u".replace("_s + A + u", () => \"<>\")"_s));
+    QCOMPARE(js.replace(s, arg, u"<>"_s), evalString(S + u".replace("_s + A + u", () => \"<>\")"_s));
     // The engine has no replaceAll: split + join is the same for a non-empty search.
     if (arg.isEmpty())
         QCOMPARE(js.replaceAll(u"abc"_s, arg, u"–"_s), u"–a–b–c–"_s);
@@ -252,10 +251,12 @@ void TstJsHelper::uriComponent()
 void TstJsHelper::numbers_data()
 {
     QTest::addColumn<QString>("s");
-    for (const char *c : {"", " ", "0", "42", " 42 ", "-7", "+3", "3.5", ".5", "5.", "1e3", "1E-2", "-1.5e+2",
-                          "0x1F", "0X1f", "0o17", "0b101", "0x", "0xg", "-0x10", "12px", "px12", "1,5", "1.2.3",
-                          "Infinity", "-Infinity", "+Infinity", "infinity", "NaN", "1e400", "1e-400", "٣",
-                          "  -12.5abc", "\t\n7", "00012", "1_000", "e5", ".", "-", "+", "-.5"}) {
+    for (const char *c :
+         {"",         " ",     "0",     "42",      " 42 ", "-7",         "+3",       "3.5",       ".5",
+          "5.",       "1e3",   "1E-2",  "-1.5e+2", "0x1F", "0X1f",       "0o17",     "0b101",     "0x",
+          "0xg",      "-0x10", "12px",  "px12",    "1,5",  "1.2.3",      "Infinity", "-Infinity", "+Infinity",
+          "infinity", "NaN",   "1e400", "1e-400",  "٣",    "  -12.5abc", "\t\n7",    "00012",     "1_000",
+          "e5",       ".",     "-",     "+",       "-.5"}) {
         QTest::newRow(c) << QString::fromUtf8(c);
     }
 }
@@ -280,9 +281,31 @@ void TstJsHelper::numbers()
 void TstJsHelper::numberToString_data()
 {
     QTest::addColumn<QString>("literal");
-    for (const char *c : {"0", "-0", "1", "-1", "0.5", "0.1", "0.1 + 0.2", "1/3", "123456789012345680000",
-                          "1e21", "1.5e21", "1e-6", "1e-7", "0.000001234", "123.456", "-1e-7", "2**53",
-                          "2**53 + 2", "1/0", "-1/0", "0/0", "5e-324", "1.7976931348623157e308", "100", "1e20"}) {
+    for (const char *c : {"0",
+                          "-0",
+                          "1",
+                          "-1",
+                          "0.5",
+                          "0.1",
+                          "0.1 + 0.2",
+                          "1/3",
+                          "123456789012345680000",
+                          "1e21",
+                          "1.5e21",
+                          "1e-6",
+                          "1e-7",
+                          "0.000001234",
+                          "123.456",
+                          "-1e-7",
+                          "2**53",
+                          "2**53 + 2",
+                          "1/0",
+                          "-1/0",
+                          "0/0",
+                          "5e-324",
+                          "1.7976931348623157e308",
+                          "100",
+                          "1e20"}) {
         QTest::newRow(c) << QString::fromLatin1(c);
     }
 }
@@ -298,9 +321,19 @@ void TstJsHelper::atan2_data()
 {
     QTest::addColumn<QString>("y");
     QTest::addColumn<QString>("x");
-    for (const auto &[y, x] : std::initializer_list<std::pair<const char *, const char *>>{
-                 {"1", "1"}, {"-1", "1"}, {"1", "-1"}, {"-1", "-1"}, {"0", "0"}, {"-0", "-1"}, {"0", "-1"},
-                 {"1", "0"}, {"-1", "0"}, {"1/0", "1/0"}, {"0/0", "1"}, {"3", "-4"}, {"1e-300", "1e300"}}) {
+    for (const auto &[y, x] : std::initializer_list<std::pair<const char *, const char *>>{{"1", "1"},
+                                                                                           {"-1", "1"},
+                                                                                           {"1", "-1"},
+                                                                                           {"-1", "-1"},
+                                                                                           {"0", "0"},
+                                                                                           {"-0", "-1"},
+                                                                                           {"0", "-1"},
+                                                                                           {"1", "0"},
+                                                                                           {"-1", "0"},
+                                                                                           {"1/0", "1/0"},
+                                                                                           {"0/0", "1"},
+                                                                                           {"3", "-4"},
+                                                                                           {"1e-300", "1e300"}}) {
         QTest::addRow("%s,%s", y, x) << QString::fromLatin1(y) << QString::fromLatin1(x);
     }
 }
@@ -329,8 +362,8 @@ void TstJsHelper::toFixed_data()
 {
     QTest::addColumn<QString>("literal");
     QTest::addColumn<int>("digits");
-    for (const char *c : {"0", "-0", "1.005", "2.5", "0.5", "-2.5", "1.45", "123.456", "-0.001", "1e21", "1e20",
-                          "0/0", "1/0", "0.000001"}) {
+    for (const char *c : {"0", "-0", "1.005", "2.5", "0.5", "-2.5", "1.45", "123.456", "-0.001", "1e21", "1e20", "0/0",
+                          "1/0", "0.000001"}) {
         for (int d : {0, 1, 2, 5})
             QTest::addRow("%s,%d", c, d) << QString::fromLatin1(c) << d;
     }
@@ -447,8 +480,8 @@ void TstJsHelper::objects()
 void TstJsHelper::stringify_data()
 {
     QTest::addColumn<QString>("literal");
-    for (const char *c : {"1", "1.5", "-0", "\"zażółć \\\" \\\\ \\n\"", "true", "null", "[]", "{}", "[1,\"a\",null,[2]]",
-                          "{\"a\":[true,{\"c\":\"ł\"}],\"b\":1}", "0/0", "1e21", "\"\\u0001\""}) {
+    for (const char *c : {"1", "1.5", "-0", "\"zażółć \\\" \\\\ \\n\"", "true", "null", "[]", "{}",
+                          "[1,\"a\",null,[2]]", "{\"a\":[true,{\"c\":\"ł\"}],\"b\":1}", "0/0", "1e21", "\"\\u0001\""}) {
         QTest::newRow(c) << QString::fromUtf8(c);
     }
 }
@@ -457,7 +490,8 @@ void TstJsHelper::stringify()
 {
     QFETCH(QString, literal);
     const QJSValue value = eval(u"("_s + literal + u')');
-    QCOMPARE(js.stringify(value.toVariant(QJSValue::ConvertJSObjects)), evalString(u"JSON.stringify("_s + literal + u')'));
+    QCOMPARE(js.stringify(value.toVariant(QJSValue::ConvertJSObjects)),
+             evalString(u"JSON.stringify("_s + literal + u')'));
     QCOMPARE(js.stringify(QVariant()), QString());
 }
 

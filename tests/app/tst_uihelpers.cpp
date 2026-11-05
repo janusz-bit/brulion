@@ -662,7 +662,8 @@ private Q_SLOTS:
     void datesMakeRule()
     {
         brulion::ui::DatesHelper d;
-        QCOMPARE(d.formatRule(d.makeRule(u"week"_s, 1, ints({1, 3}), false), u"en"_s), u"every week on Monday, Wednesday"_s);
+        QCOMPARE(d.formatRule(d.makeRule(u"week"_s, 1, ints({1, 3}), false), u"en"_s),
+                 u"every week on Monday, Wednesday"_s);
         QCOMPARE(d.formatRule(d.makeRule(u"day"_s, 1, {}, true), u"en"_s), u"every weekday"_s);
         QCOMPARE(d.formatRule(d.makeRule(u"month"_s, 3, {}, false), u"en"_s), u"every 3 months"_s);
         QCOMPARE(d.formatRule(d.makeRule(u"week"_s, 2, ints({5}), false), u"pl"_s),
@@ -700,8 +701,8 @@ private Q_SLOTS:
         brulion::ui::DiffHelper h;
         const QString a = u"jeden\ndwa\ntrzy\ncztery\npięć\nsześć\nsiedem\nosiem\n"_s;
         const QString b = u"jeden\nDWA\ntrzy\ncztery\npięć\nsześć\nsiedem\nosiem\ndziewięć\n"_s;
-        const QStringList keys{u"count"_s, u"kind"_s, u"leftSegments"_s, u"leftText"_s, u"newNo"_s, u"oldNo"_s,
-                               u"rightSegments"_s, u"rightText"_s, u"segments"_s, u"text"_s};
+        const QStringList keys{u"count"_s, u"kind"_s,          u"leftSegments"_s, u"leftText"_s, u"newNo"_s,
+                               u"oldNo"_s, u"rightSegments"_s, u"rightText"_s,    u"segments"_s, u"text"_s};
         for (bool split : {false, true}) {
             const QVariantList rows = h.viewRows(a, b, split, 1);
             const QVariantList plain = split ? h.splitRows(a, b, 1) : h.unifiedRows(a, b, 1);

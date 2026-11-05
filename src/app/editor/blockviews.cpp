@@ -15,7 +15,7 @@ namespace brulion::editor {
 
 // ---- BlockViews -------------------------------------------------------------------------------
 
-BlockViews::BlockViews(QObject *parent) : QObject(parent) {}
+BlockViews::BlockViews(QObject *parent) : QObject(parent) { }
 
 namespace {
 
@@ -96,8 +96,8 @@ QList<qreal> BlockViews::tableColumnWidths(const QVariantMap &table, const QFont
             const QVariantMap cell = cells.at(c).toMap();
             if (cell.isEmpty())
                 continue;
-            const QString text = cell.contains(u"plain"_s) ? cell.value(u"plain"_s).toString()
-                                                            : cell.value(u"display"_s).toString();
+            const QString text =
+                    cell.contains(u"plain"_s) ? cell.value(u"plain"_s).toString() : cell.value(u"display"_s).toString();
             w = std::max(w, cellMetrics.horizontalAdvance(text));
         }
         w = std::min<qreal>(280, std::max<qreal>(56, std::ceil(w) + 2 * padding));
@@ -221,8 +221,7 @@ QString BlockViews::valueText(const QVariant &value) const
     if (!value.isValid() || value.isNull())
         return {};
     switch (value.typeId()) {
-    case QMetaType::Bool:
-        return value.toBool() ? u"true"_s : u"false"_s;
+    case QMetaType::Bool: return value.toBool() ? u"true"_s : u"false"_s;
     case QMetaType::Double:
     case QMetaType::Float: {
         const double d = value.toDouble();
@@ -232,16 +231,14 @@ QString BlockViews::valueText(const QVariant &value) const
             return d > 0 ? u"Infinity"_s : u"-Infinity"_s;
         return QString::number(d, 'g', QLocale::FloatingPointShortest);
     }
-    case QMetaType::QStringList:
-        return value.toStringList().join(u',');
+    case QMetaType::QStringList: return value.toStringList().join(u',');
     case QMetaType::QVariantList: {
         QStringList parts;
         for (const QVariant &v : value.toList())
             parts.append(valueText(v));
         return parts.join(u',');
     }
-    default:
-        return value.toString();
+    default: return value.toString();
     }
 }
 
@@ -388,7 +385,7 @@ int BlockViews::transclusionTaskLine(const QVariantList &transclusions, const QS
 
 // ---- ChipFlow ---------------------------------------------------------------------------------
 
-ChipFlow::ChipFlow(QQuickItem *parent) : QQuickItem(parent) {}
+ChipFlow::ChipFlow(QQuickItem *parent) : QQuickItem(parent) { }
 
 void ChipFlow::setSpacing(qreal spacing)
 {
@@ -479,8 +476,8 @@ void ChipFlow::relayout()
     const Layout layout = compute(width());
     // Hidden items keep their place at 0, 0 (as the bindings it replaces had them).
     for (QQuickItem *c : childItems()) {
-        const auto it = std::find_if(layout.places.cbegin(), layout.places.cend(),
-                                     [c](const Place &p) { return p.item == c; });
+        const auto it =
+                std::find_if(layout.places.cbegin(), layout.places.cend(), [c](const Place &p) { return p.item == c; });
         if (it != layout.places.cend())
             c->setPosition(QPointF(it->x, it->y));
         else
@@ -525,7 +522,7 @@ void ChipFlow::componentComplete()
 
 // ---- KeyListModel -----------------------------------------------------------------------------
 
-KeyListModel::KeyListModel(QObject *parent) : QAbstractListModel(parent) {}
+KeyListModel::KeyListModel(QObject *parent) : QAbstractListModel(parent) { }
 
 void KeyListModel::setKeys(const QStringList &keys)
 {

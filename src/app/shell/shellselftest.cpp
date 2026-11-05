@@ -472,7 +472,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
             row = row->parentItem();
         // Its `task` model object's `path`; without one the row's own (a required property).
         const QObject *task = row ? row->property("task").value<QObject *>() : nullptr;
-        const QString path = task ? task->property("path").toString()
+        const QString path = task  ? task->property("path").toString()
                              : row ? row->property("path").toString()
                                    : QString();
         const QString before = path.isEmpty() ? QString() : ws->readFile(path);
@@ -2240,7 +2240,8 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             QMetaObject::invokeMethod(list, "positionViewAtBeginning");
             settle(100);
             const qreal top = list->property("contentY").toReal();
-            uidriver::callQml(sidebar, "beginDrag", {QVariant(remont), QVariant(false), QVariant(u"Remont mieszkania"_s)});
+            uidriver::callQml(sidebar, "beginDrag",
+                              {QVariant(remont), QVariant(false), QVariant(u"Remont mieszkania"_s)});
             const QPointF still = list->mapToScene(QPointF(list->width() / 2, list->height() - 12));
             uidriver::callQml(sidebar, "dragTo", {QVariant(still)});
             const QString first = sidebar->property("dropFolder").toString();
@@ -3735,20 +3736,19 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         check(waitFor(
                       [&] {
                           link = findShown(pdfView(), [](QQuickItem *item) {
-                              return item->objectName() == u"pdfLink"_s
-                                     && item->property("page").toInt() == 2;
+                              return item->objectName() == u"pdfLink"_s && item->property("page").toInt() == 2;
                           });
                           return opened(1) && link != nullptr;
                       },
                       10000),
               "page 1's links are there");
-        const bool webLink = findShown(pdfView(),
-                                       [](QQuickItem *item) {
-                                           return item->objectName() == u"pdfLink"_s
-                                                  && item->property("url").toString().startsWith(
-                                                          u"https://example.org/"_s);
-                                       })
-                             != nullptr;
+        const bool webLink =
+                findShown(pdfView(),
+                          [](QQuickItem *item) {
+                              return item->objectName() == u"pdfLink"_s
+                                     && item->property("url").toString().startsWith(u"https://example.org/"_s);
+                          })
+                != nullptr;
         // (Only page 1 has links: three of its six — never the script, the javascript: address, the launch.)
         const int linkCount = int(
                 uidriver::matching(window, [](QQuickItem *item) { return item->objectName() == u"pdfLink"_s; }).size());

@@ -251,8 +251,7 @@ QVariantList ShortcutMap::shellBindings() const
     for (const QVariant &binding : bindings()) {
         const QVariantMap b = binding.toMap();
         const QString id = b.value(u"id"_s).toString();
-        if (viewsOwn.contains(id)
-            || (id == u"block.copyRef" && b.value(u"sequence"_s).toString() == u"Ctrl+Shift+C"))
+        if (viewsOwn.contains(id) || (id == u"block.copyRef" && b.value(u"sequence"_s).toString() == u"Ctrl+Shift+C"))
             continue;
         out.append(binding);
     }

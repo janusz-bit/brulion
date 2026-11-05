@@ -266,10 +266,10 @@ QString DrawingCanvas::displayColorName(const QString &stored, bool highlighter)
 
 QStringList DrawingCanvas::paperColors() const
 {
-    QStringList out{ u"#ffffff"_s, u"#fbf7ee"_s, u"#f5f0e1"_s, u"#f1f3f5"_s, u"#dee2e6"_s, u"#adb5bd"_s,
-                     u"#868e96"_s, u"#495057"_s, u"#343a40"_s, u"#1f2430"_s, u"#121212"_s, u"#000000"_s };
+    QStringList out{u"#ffffff"_s, u"#fbf7ee"_s, u"#f5f0e1"_s, u"#f1f3f5"_s, u"#dee2e6"_s, u"#adb5bd"_s,
+                    u"#868e96"_s, u"#495057"_s, u"#343a40"_s, u"#1f2430"_s, u"#121212"_s, u"#000000"_s};
     // (Saturation, lightness) of each shade, as Qt.hsla() made them.
-    static constexpr float Shades[3][2] = { { 0.9f, 0.93f }, { 0.75f, 0.82f }, { 0.5f, 0.25f } };
+    static constexpr float Shades[3][2] = {{0.9f, 0.93f}, {0.75f, 0.82f}, {0.5f, 0.25f}};
     for (const auto &shade : Shades) {
         for (int h = 0; h < 12; ++h)
             out.append(QColor::fromHslF(float(double(h) / 12), shade[0], shade[1], 1).name());

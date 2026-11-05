@@ -1,8 +1,8 @@
 // QML registration of the GUI-free helpers in brulion_ui_helpers (src/app/ui/CMakeLists.txt):
 // the classes themselves know nothing about QML; these wrappers make them singletons of the
-// app's QML module "Brulion" (DatesHelper, TextHelper, Js, DiffHelper, ThemePalette, UiModels; the types ThemeColors and PaletteFilter), so qmllint/qmlcachegen
-// still see their full API (from the library's extracted metatypes); KeyboardInsets and
-// GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
+// app's QML module "Brulion" (DatesHelper, TextHelper, Js, DiffHelper, ThemePalette, UiModels; the types ThemeColors
+// and PaletteFilter), so qmllint/qmlcachegen still see their full API (from the library's extracted metatypes);
+// KeyboardInsets and GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
 // (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; and FilePicker (brulion_ui_files),
 // the system's file picker (`FilePicker { fileMode: FilePicker.OpenFiles }`).
@@ -13,8 +13,8 @@
 #include "filepicker.h"
 #include "gestureinsets.h"
 #include "jshelper.h"
-#include "mapholder.h"
 #include "keyboardinsets.h"
+#include "mapholder.h"
 #include "rowscroll.h"
 #include "texthelper.h"
 #include "themepalette.h"
