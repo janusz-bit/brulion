@@ -3,8 +3,9 @@
 // "black" for OLED screens), the accent colour (presets "red" — the logo's margin red, the
 // default —, "blue", "green", "teal", "violet", "graphite", or "custom" with any "#rrggbb"),
 // and the text colours, kept here so the tests check every one of them on every surface.
-// QML singleton `ThemePalette` (registered by qmlforeign.h); Theme.qml reads
-// `ThemePalette.colors(dark, lightSurface, darkSurface, accent, customAccent)`.
+// QML singleton `ThemePalette` (registered by qmlforeign.h); Theme.qml reads the colours from a
+// `ThemeColors` object (below: the same map as `ThemePalette.colors(dark, lightSurface, darkSurface,
+// accent, customAccent)`, as typed properties for compiled QML).
 //
 // Contrast (WCAG 2): a custom colour stays readable by itself — deriveAccent() moves its HSL
 // lightness (darker on light surfaces, lighter on dark ones) until the accent as a mark reaches
@@ -128,6 +129,107 @@ public:
     Q_INVOKABLE QString normalizeColor(const QString &text) const;
     /// Contrast ratio of two colours ("#rrggbb"); 0 when one is malformed.
     Q_INVOKABLE double contrastRatio(const QString &a, const QString &b) const;
+    /// String(c) of a QML colour from its channels (c.r, c.g, c.b, c.a, 0 … 1): "#rrggbb", or
+    /// "#aarrggbb" when it is translucent — for compiled QML, where a colour does not convert to
+    /// text.
+    Q_INVOKABLE QString colorText(double r, double g, double b, double a) const;
+};
+
+/// The colours of paletteMap() for the inputs below, as FINAL properties that compiled QML can read
+/// (Theme.qml: `readonly property ThemeColors palette: ThemeColors { dark: theme.dark; … }` and
+/// `readonly property color bg: palette.bg`). QML type `ThemeColors` (qmlforeign.h).
+class ThemeColors : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool dark READ dark WRITE setDark NOTIFY inputsChanged FINAL)
+    Q_PROPERTY(QString lightSurface READ lightSurface WRITE setLightSurface NOTIFY inputsChanged FINAL)
+    Q_PROPERTY(QString darkSurface READ darkSurface WRITE setDarkSurface NOTIFY inputsChanged FINAL)
+    Q_PROPERTY(QString accentName READ accentName WRITE setAccentName NOTIFY inputsChanged FINAL)
+    Q_PROPERTY(QString customAccent READ customAccent WRITE setCustomAccent NOTIFY inputsChanged FINAL)
+    /// paletteMap() of the inputs (what ThemePalette.colors() returns).
+    Q_PROPERTY(QVariantMap map READ map NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString bg READ bg NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString bgElevated READ bgElevated NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString bgElevated2 READ bgElevated2 NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString bgSunken READ bgSunken NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString border READ border NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString borderSubtle READ borderSubtle NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString borderStrong READ borderStrong NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString borderControl READ borderControl NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString accent READ accent NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString accentHover READ accentHover NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString accentText READ accentText NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString accentSolid READ accentSolid NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString fg READ fg NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString fgMuted READ fgMuted NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString fgFaint READ fgFaint NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString link READ link NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString linkMissing READ linkMissing NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString tagFg READ tagFg NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString dangerText READ dangerText NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString warningText READ warningText NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString successText READ successText NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString chipDueFg READ chipDueFg NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString chipScheduledFg READ chipScheduledFg NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString chipReminderFg READ chipReminderFg NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString chipRecurrenceFg READ chipRecurrenceFg NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString scrimModal READ scrimModal NOTIFY colorsChanged FINAL)
+
+public:
+    explicit ThemeColors(QObject *parent = nullptr);
+
+    bool dark() const { return m_dark; }
+    void setDark(bool dark);
+    QString lightSurface() const { return m_lightSurface; }
+    void setLightSurface(const QString &name);
+    QString darkSurface() const { return m_darkSurface; }
+    void setDarkSurface(const QString &name);
+    QString accentName() const { return m_accentName; }
+    void setAccentName(const QString &name);
+    QString customAccent() const { return m_customAccent; }
+    void setCustomAccent(const QString &color);
+
+    QVariantMap map() const { return m_map; }
+    QString bg() const { return token(u"bg"); }
+    QString bgElevated() const { return token(u"bgElevated"); }
+    QString bgElevated2() const { return token(u"bgElevated2"); }
+    QString bgSunken() const { return token(u"bgSunken"); }
+    QString border() const { return token(u"border"); }
+    QString borderSubtle() const { return token(u"borderSubtle"); }
+    QString borderStrong() const { return token(u"borderStrong"); }
+    QString borderControl() const { return token(u"borderControl"); }
+    QString accent() const { return token(u"accent"); }
+    QString accentHover() const { return token(u"accentHover"); }
+    QString accentText() const { return token(u"accentText"); }
+    QString accentSolid() const { return token(u"accentSolid"); }
+    QString fg() const { return token(u"fg"); }
+    QString fgMuted() const { return token(u"fgMuted"); }
+    QString fgFaint() const { return token(u"fgFaint"); }
+    QString link() const { return token(u"link"); }
+    QString linkMissing() const { return token(u"linkMissing"); }
+    QString tagFg() const { return token(u"tagFg"); }
+    QString dangerText() const { return token(u"dangerText"); }
+    QString warningText() const { return token(u"warningText"); }
+    QString successText() const { return token(u"successText"); }
+    QString chipDueFg() const { return token(u"chipDueFg"); }
+    QString chipScheduledFg() const { return token(u"chipScheduledFg"); }
+    QString chipReminderFg() const { return token(u"chipReminderFg"); }
+    QString chipRecurrenceFg() const { return token(u"chipRecurrenceFg"); }
+    QString scrimModal() const { return token(u"scrimModal"); }
+
+Q_SIGNALS:
+    void inputsChanged();
+    void colorsChanged();
+
+private:
+    QString token(QStringView name) const;
+    void update();
+
+    bool m_dark = false;
+    QString m_lightSurface;
+    QString m_darkSurface;
+    QString m_accentName;
+    QString m_customAccent;
+    QVariantMap m_map;
 };
 
 } // namespace brulion::ui

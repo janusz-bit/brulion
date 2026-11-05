@@ -775,11 +775,11 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   and the sidebar's / All pages' row menus' **Otwórz w nowej karcie**; the top bar's Więcej and the
   palette's **Otwórz w nowej karcie** (a copy of the view shown) and **Nowa karta**. A new tab goes
   right after the focused one, is shown and has no history (Back does nothing there; its first
-  route is the page). These go through `OpenIn` (`qml/components/OpenIn.qml`): the shell sets
-  `OpenIn.openIn` → `AppController.openIn(target, fn)`, which runs the click's own function (the
-  editor's `activateLink`, a row's `openPage`) with its one navigation going to a new tab
-  (`target` "tab") or window ("window") — the editor and the lists need no shell (without it, in the
-  editor's tests, only the usual click). At most `TabSet::MaxTabs` (100) tabs: more says so.
+  route is the page). These go through `OpenIn` (`qml/components/OpenIn.qml`): a click brackets
+  its own navigation (the editor's `activateLink`, a row's `openPage`) with `OpenIn.begin(target)`
+  and `OpenIn.end()`, and the shell (which sets `OpenIn.tabs`) sends that one navigation to a new tab
+  (`target` "tab") or window ("window") — `AppController.beginOpenIn` / `endOpenIn` — the editor and
+  the lists need no shell (without it, in the editor's tests, only the usual click). At most `TabSet::MaxTabs` (100) tabs: more says so.
 * **The tab bar** (`ShellTabBar`, wide windows): between the top bar and the view, shown while
   there are two tabs or more (or the view is split). Equal widths (120–220 px; past that the bar
   scrolls with the wheel), the view's icon and title (`AppShell.routeTitle`), × (shown on the
@@ -3226,19 +3226,21 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
 * **Theme** (`Theme` singleton): every colour, font, size, radius, duration comes from it —
   semantic colours (`bg`, `bgElevated`, `bgSunken`, `fg`, `fgMuted`, `fgFaint`, `border*`,
   `guide` / `guideOnSunken` (indent guides; aliases of the border tokens),
-  `accent`, `link`, `tag*`, `chip*` via `Theme.chip(kind)`, `selection`, `focusRing`,
+  `accent`, `link`, `tag*`, `chip*` via `Theme.chipBg(kind)` / `chipFg(kind)` / `chipIcon(kind)`,
+  `selection`, `focusRing`,
   `danger*`/`warning*`/`success*`, `diff*`), typography (`fontUi`, `fontEditor`,
-  `fontMono`, `text*` sizes), spacing `space1…space16`, radii, `elevation(level)`,
+  `fontMono`, `text*` sizes), spacing `space1…space16`, radii, `elevationBlur(level)` /
+  `elevationOffsetY` / `elevationSpread` / `elevationOpacity`,
   durations (0 with `reducedMotion`), `touchTarget` and control heights. Paragraph line
   heights are fixed pixel heights so they look the same with every font:
-  `lineHeightMode: Text.FixedHeight; lineHeight: Theme.lineHeightPx(font.pixelSize)`
+  `lineHeightMode: Text.FixedHeight; lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)`
   (a proportional `lineHeight` multiplies the font's own spacing, 1.15–1.4 em depending on the
   font). White text goes on `danger`/`accentSolid`/`primary` fills only — the brand red
   `accent` is for lines, dots and focus marks (3.7:1 with white). The surfaces (`bg*`,
   `border*`), the accent family and the text colours come from **`ThemePalette`**
   (`src/app/ui/themepalette.h`, library `brulion_ui_helpers`, QML singleton):
-  `Theme.colors = ThemePalette.colors(dark, lightSurface, darkSurface, accentName,
-  customAccent)`; `accentBg` is the accent at 12 % / 18 %. `tst_ui_themepalette` checks every
+  Theme's `palette` is a `ThemeColors` (the same file: `ThemePalette.colors(dark, lightSurface,
+  darkSurface, accentName, customAccent)` as typed properties, `Theme.colors` its map); `accentBg` is the accent at 12 % / 18 %. `tst_ui_themepalette` checks every
   preset and custom extremes on every surface (and that the defaults are exactly the old
   literals); `danger*` never follows the accent (`Theme.marginRed` where a red mark is meant).
   Inputs set by the shell (Main.qml binds them to AppSettings; `--accent`, `--surface`,

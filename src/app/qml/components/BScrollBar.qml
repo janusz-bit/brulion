@@ -32,7 +32,7 @@ T.ScrollBar {
         implicitWidth: control.interactive ? (wide ? 8 : 5) : 4
         implicitHeight: control.interactive ? (wide ? 8 : 5) : 4
         radius: Math.min(width, height) / 2
-        color: control.pressed ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.42) : Theme.scrollbar
+        color: control.pressed ? Theme.fg.alpha(0.42) : Theme.scrollbar
         opacity: control.policy === T.ScrollBar.AlwaysOn || control.active || control.hovered
                  || control.listMoving ? 1 : 0
 

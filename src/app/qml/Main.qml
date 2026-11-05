@@ -64,18 +64,24 @@ ApplicationWindow {
     // yet) that is the window's content item — outside every view, where no key (Tab, Escape,
     // the Android back key) reaches the shell any more. Give the focus back to the screen then.
     onActiveFocusItemChanged: {
-        if (activeFocusItem === contentItem)
-            Qt.callLater(() => {
-                if (window.activeFocusItem === window.contentItem)
-                    stage.forceActiveFocus()
-            })
+        if (window.activeFocusItem === window.contentItem)
+            focusBack.restart()
+    }
+    // (Once the popup has closed.)
+    Timer {
+        id: focusBack
+        interval: 0
+        onTriggered: {
+            if (window.activeFocusItem === window.contentItem)
+                stage.forceActiveFocus()
+        }
     }
 
     // Back from a page's own window (docs/UI.md "Tabs, split view and windows"): navigation goes to
     // this window's focused tab again.
     onActiveChanged: if (active && AppController.status === "ready") AppController.mainWindowActivated()
 
-    function showAndRaise() {
+    function showAndRaise(): void {
         if (window.visibility === Window.Minimized || !window.visible)
             window.showNormal()
         window.raise()
@@ -143,7 +149,7 @@ ApplicationWindow {
     }
     readonly property ShellTrayCalendar trayCalendarWindow: trayCalendar.item as ShellTrayCalendar
 
-    function hideTrayCalendar() {
+    function hideTrayCalendar(): void {
         if (window.trayCalendarWindow && window.trayCalendarWindow.visible)
             window.trayCalendarWindow.hide()
     }
@@ -151,7 +157,7 @@ ApplicationWindow {
     /// closes an open one, and keeps it closed when it has just hidden itself because that very
     /// click took its activation (AppController.trayPopupShouldReopen, asked on every tray action
     /// so that an old hide never swallows a later click).
-    function showTrayCalendar(toggle: bool) {
+    function showTrayCalendar(toggle: bool): void {
         trayCalendar.active = true
         const popup = window.trayCalendarWindow
         if (!popup)
@@ -196,9 +202,10 @@ ApplicationWindow {
         parent: T.Overlay.overlay
         z: 2000
         active: KeyboardInsets.source === "simulated" && KeyboardInsets.overlap > 0
-        anchors.left: parent ? parent.left : undefined
-        anchors.right: parent ? parent.right : undefined
-        anchors.bottom: parent ? parent.bottom : undefined
+        // (At the overlay's bottom, as wide as it.)
+        x: 0
+        y: parent ? parent.height - height : 0
+        width: parent ? parent.width : 0
         height: KeyboardInsets.overlap
         sourceComponent: BKeyboardPlaceholder {}
     }
@@ -206,9 +213,9 @@ ApplicationWindow {
     Connections {
         target: AppController
 
-        function onToastRequested(text, kind) {
+        function onToastRequested(text: string, kind: string) {
             // Errors (a note could not be saved, storage is missing) stay until closed.
-            toastHost.show(text, kind === "error" ? { kind: kind, timeout: 0 } : { kind: kind })
+            toastHost.showToast(text, kind, "", kind === "error" ? 0 : -1)
         }
         // A toast with a button (the editor's "Cofnij" after deleting or cutting blocks).
         function onToastActionRequested(text, kind, actionText, onAction) {
@@ -219,7 +226,7 @@ ApplicationWindow {
             window.hideTrayCalendar()
             window.showAndRaise()
         }
-        function onUiActionRequested(action) {
+        function onUiActionRequested(action: string) {
             switch (action) {
             case "toggleTheme":
                 AppSettings.themeMode = Theme.dark ? "light" : "dark"
@@ -238,7 +245,7 @@ ApplicationWindow {
             }
             // The other actions open the shell's popups (AppShell); without a vault there is none.
             if (AppController.status !== "ready" && (action === "capture" || action === "newPage"))
-                toastHost.show(qsTr("Open a notebook first."), { kind: "warning" })
+                toastHost.showToast(qsTr("Open a notebook first."), "warning", "", -1)
         }
     }
 

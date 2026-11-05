@@ -72,6 +72,8 @@ private Q_SLOTS:
     void numberToString();
     void toFixed_data();
     void toFixed();
+    void atan2_data();
+    void atan2();
     void regExp_data();
     void regExp();
     void regExpBeyondTheEngine();
@@ -261,6 +263,27 @@ void TstJsHelper::numberToString()
     QFETCH(QString, literal);
     const double x = eval(literal).toNumber();
     QCOMPARE(js.numberToString(x), evalString(u"String("_s + literal + u')'));
+}
+
+void TstJsHelper::atan2_data()
+{
+    QTest::addColumn<QString>("y");
+    QTest::addColumn<QString>("x");
+    for (const auto &[y, x] : std::initializer_list<std::pair<const char *, const char *>>{
+                 {"1", "1"}, {"-1", "1"}, {"1", "-1"}, {"-1", "-1"}, {"0", "0"}, {"-0", "-1"}, {"0", "-1"},
+                 {"1", "0"}, {"-1", "0"}, {"1/0", "1/0"}, {"0/0", "1"}, {"3", "-4"}, {"1e-300", "1e300"}}) {
+        QTest::addRow("%s,%s", y, x) << QString::fromLatin1(y) << QString::fromLatin1(x);
+    }
+}
+
+void TstJsHelper::atan2()
+{
+    QFETCH(QString, y);
+    QFETCH(QString, x);
+    const double got = js.atan2(eval(y).toNumber(), eval(x).toNumber());
+    const double expected = eval(u"Math.atan2("_s + y + u", "_s + x + u')').toNumber();
+    const auto same = [](double a, double b) { return (std::isnan(a) && std::isnan(b)) || a == b; };
+    QVERIFY2(same(got, expected), qPrintable(u"%1 vs %2"_s.arg(got).arg(expected)));
 }
 
 void TstJsHelper::toFixed_data()

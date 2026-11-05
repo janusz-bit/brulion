@@ -31,7 +31,7 @@ Item {
         readonly property real r: (spinner.size - spinner.strokeWidth) / 2
 
         ShapePath {
-            strokeColor: Qt.rgba(spinner.color.r, spinner.color.g, spinner.color.b, 0.22)
+            strokeColor: spinner.color.alpha(0.22)
             strokeWidth: spinner.strokeWidth
             fillColor: "transparent"
             PathAngleArc {

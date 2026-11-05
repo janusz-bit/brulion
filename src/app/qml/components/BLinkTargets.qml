@@ -26,9 +26,9 @@ Item {
     /// The text is shown (false while its raw Markdown is edited: no link items).
     property bool shown: true
     /// The link items exist (shown, a screen reader is on and the text has links).
-    readonly property bool active: shown && DeviceInfo.screenReader && root.html.indexOf("<a ") >= 0
+    readonly property bool active: shown && DeviceInfo.screenReader && Js.indexOf(root.html, "<a ") >= 0
     /// The current link items' data [{href, text, x, y, width, height}] (self-tests).
-    readonly property var linkData: loader.item ? (loader.item as LinkLayer).links : []
+    readonly property list<var> linkData: loader.item ? (loader.item as LinkLayer).links : []
 
     /// A link item was activated: do what a click on `href` at (x, y) of the text item does.
     signal activated(string href, real x, real y)
@@ -64,7 +64,11 @@ Item {
         property string html
         property real lineHeight: 0
         property real maxHeight: 0
-        readonly property var links: richLinks.links
+        readonly property list<var> links: richLinks.links
+        readonly property TextEdit edit: textItem as TextEdit
+        readonly property Text plainText: textItem as Text
+        /// A font with nothing set (Qt.font({})).
+        property font defaultFont
         // Every property set first, then one layout (each setter of an enabled RichTextLinks
         // lays the text out).
         property bool ready: false
@@ -76,40 +80,48 @@ Item {
         RichTextLinks {
             id: richLinks
             enabled: layer.ready
-            textDocument: layer.textItem instanceof TextEdit ? (layer.textItem as TextEdit).textDocument : null
-            html: layer.textItem instanceof TextEdit ? "" : layer.html
-            font: layer.textItem instanceof TextEdit ? (layer.textItem as TextEdit).font
-                  : layer.textItem instanceof Text ? (layer.textItem as Text).font : Qt.font({})
+            textDocument: layer.edit !== null ? layer.edit.textDocument : null
+            html: layer.edit !== null ? "" : layer.html
+            // The text item's font (Bindings: a font read from a Text or TextEdit converts only to
+            // a `var` in compiled code).
+            font: layer.defaultFont
             width: layer.width
             lineHeight: layer.lineHeight
-            alignment: layer.textItem instanceof Text ? (layer.textItem as Text).horizontalAlignment
-                       : layer.textItem instanceof TextEdit ? (layer.textItem as TextEdit).horizontalAlignment : Text.AlignLeft
+            alignment: layer.plainText !== null ? layer.plainText.horizontalAlignment
+                       : layer.edit !== null ? layer.edit.horizontalAlignment : Text.AlignLeft
             maxHeight: layer.maxHeight
+        }
+
+        Binding {
+            target: richLinks
+            property: "font"
+            value: layer.edit !== null ? layer.edit.font : layer.plainText.font
+            when: layer.edit !== null || layer.plainText !== null
         }
 
         Repeater {
             model: richLinks.links
             delegate: Item {
                 id: target
-                required property var modelData
+                required x
+                required y
+                required width
+                required height
+                /// The link's text and href (the href also for self-tests).
+                required property string text
+                required property string href
                 objectName: "linkTarget"
-                x: modelData.x
-                y: modelData.y
-                width: modelData.width
-                height: modelData.height
                 activeFocusOnTab: false
                 Accessible.role: Accessible.Link
-                Accessible.name: modelData.text
+                Accessible.name: target.text
                 Accessible.focusable: true
                 Accessible.onPressAction: target.activate()
                 Keys.onReturnPressed: target.activate()
                 Keys.onEnterPressed: target.activate()
                 Keys.onSpacePressed: target.activate()
-                function activate() {
-                    layer.activated(target.modelData.href, target.x + target.width / 2, target.y + target.height / 2)
+                function activate(): void {
+                    layer.activated(target.href, target.x + target.width / 2, target.y + target.height / 2)
                 }
-                /// The href (self-tests).
-                readonly property string href: modelData.href
 
                 // Which link the keyboard or screen-reader focus is on.
                 Rectangle {

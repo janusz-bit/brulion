@@ -8,12 +8,14 @@ import Brulion
 //
 //   BReminderDialog {
 //       id: reminderDialog
-//       onReminderAccepted: (r) => page.setReminder(blockId, r)   // { at, alarm, recurrence }
+//       onReminderChosen: (at, alarm, recurrence) => page.setReminder(blockId, at, alarm, recurrence)
 //       onDeleteRequested: page.removeReminder(blockId)
 //   }
-//   reminderDialog.edit({ at: "2026-10-15 09:00", alarm: false, recurrence: "every week on Monday",
-//                         context: "Zadzwonić do mamy" })
+//   reminderDialog.editWith("2026-10-15 09:00", false, "every week on Monday", "Zadzwonić do mamy")
 //   reminderDialog.create("Zadzwonić do mamy")
+//
+// (The older forms still work, not compiled: edit({ at, alarm, recurrence, context }) and
+// reminderAccepted(reminder) with { at, alarm, recurrence }, emitted before reminderChosen.)
 //
 // Result: at = "YYYY-MM-DD HH:mm" (local wall-clock time), alarm = bool, recurrence =
 // canonical English rule written into the file ("every week on Monday", via
@@ -31,83 +33,102 @@ BDialog {
 
     // Recurrence draft.
     property string repeatKind: "none"   // none | daily | weekdays | weekly | monthly | yearly | custom
-    property var repeatWeekdays: []
+    property list<int> repeatWeekdays
     property int repeatInterval: 2
     property string repeatUnit: "week"   // day | week | month | year
 
     signal reminderAccepted(var reminder)
+    /// Save: the reminder chosen (recurrence: canonicalRule, "" for none).
+    signal reminderChosen(string at, bool alarm, string recurrence)
     signal deleteRequested()
 
-    readonly property string atDate: at.length >= 10 ? at.slice(0, 10) : ""
-    readonly property string atTime: at.length >= 16 ? at.slice(11, 16) : ""
+    readonly property string atDate: at.length >= 10 ? Js.slice(at, 0, 10) : ""
+    readonly property string atTime: at.length >= 16 ? Js.slice(at, 11, 16) : ""
     readonly property bool valid: atDate !== "" && atTime !== ""
     readonly property bool past: valid && DatesHelper.compare(at, DatesHelper.now()) <= 0
-    readonly property var rule: {
-        const dow = atDate !== "" ? DatesHelper.dayOfWeek(atDate) : 1
-        switch (repeatKind) {
-        case "daily": return { freq: "day", interval: 1 }
-        case "weekdays": return { freq: "day", interval: 1, weekdaysOnly: true }
-        case "weekly": return { freq: "week", interval: 1, weekdays: repeatWeekdays.length > 0 ? repeatWeekdays : [dow] }
-        case "monthly": return { freq: "month", interval: 1 }
-        case "yearly": return { freq: "year", interval: 1 }
-        case "custom": return {
-            freq: repeatUnit, interval: Math.max(1, repeatInterval),
-            weekdays: repeatUnit === "week" ? (repeatWeekdays.length > 0 ? repeatWeekdays : [dow]) : []
-        }
-        default: return null
+    /// The weekdays of a weekly rule (the chosen ones, else the date's own); [] for other rules.
+    readonly property list<int> effectiveWeekdays: repeatKind === "weekly" || (repeatKind === "custom" && repeatUnit === "week")
+                                                   ? (repeatWeekdays.length > 0 ? repeatWeekdays : [atDate !== "" ? DatesHelper.dayOfWeek(atDate) : 1])
+                                                   : []
+    readonly property bool hasRule: repeatKind === "daily" || repeatKind === "weekdays" || repeatKind === "weekly"
+                                    || repeatKind === "monthly" || repeatKind === "yearly" || repeatKind === "custom"
+    readonly property list<int> _noDays: []
+    /// The rule object (DatesHelper.makeRule); null for none.
+    readonly property var rule: hasRule ? ruleHolder.map : null
+    // (A typed map: what formatRule() and nextOccurrences() take; freq "" for none.)
+    MapHolder {
+        id: ruleHolder
+        map: {
+            switch (control.repeatKind) {
+            case "daily": return DatesHelper.makeRule("day", 1, control._noDays, false)
+            case "weekdays": return DatesHelper.makeRule("day", 1, control._noDays, true)
+            case "weekly": return DatesHelper.makeRule("week", 1, control.effectiveWeekdays, false)
+            case "monthly": return DatesHelper.makeRule("month", 1, control._noDays, false)
+            case "yearly": return DatesHelper.makeRule("year", 1, control._noDays, false)
+            case "custom": return DatesHelper.makeRule(control.repeatUnit, Math.max(1, control.repeatInterval),
+                                                       control.effectiveWeekdays, false)
+            default: return DatesHelper.makeRule("", 0, control._noDays, false)
+            }
         }
     }
-    readonly property string canonicalRule: rule ? DatesHelper.formatRule(rule, "en") : ""
+    readonly property string canonicalRule: hasRule ? DatesHelper.formatRule(ruleHolder.map, "en") : ""
     // The locale passed for real (a method call is not tracked; a bare `void DatesHelper.locale` is
     // compiled away with the dependency): the label and the weekday names follow a language change.
-    readonly property string ruleLabel: rule ? DatesHelper.formatRule(rule, DatesHelper.locale) : ""
-    readonly property var nextDates: rule && valid ? DatesHelper.nextOccurrences(rule, at, 3) : []
+    readonly property string ruleLabel: hasRule ? DatesHelper.formatRule(ruleHolder.map, DatesHelper.locale) : ""
+    readonly property list<string> nextDates: hasRule && valid ? DatesHelper.nextOccurrences(ruleHolder.map, at, 3) : []
+    readonly property string nextDatesText: {
+        let text = ""
+        for (let i = 0; i < nextDates.length; ++i)
+            text += (i > 0 ? "  ·  " : "") + DatesHelper.formatHuman(Js.slice(nextDates[i], 0, 10))
+        return text
+    }
 
-    property var quickPicks: []
+    /// { label, at, enabled } per quick pick.
+    property list<var> quickPicks
+    readonly property list<var> repeatChoices: [
+        { kind: "none", label: qsTr("Don't repeat") },
+        { kind: "daily", label: qsTr("Daily") },
+        { kind: "weekdays", label: qsTr("Weekdays") },
+        { kind: "weekly", label: qsTr("Weekly") },
+        { kind: "monthly", label: qsTr("Monthly") },
+        { kind: "yearly", label: qsTr("Yearly") },
+        { kind: "custom", label: qsTr("Custom…") }
+    ]
 
-    function refreshQuickPicks() {
-        const now = DatesHelper.now()
-        const today = DatesHelper.today
-        const tomorrow = DatesHelper.addDays(today, 1)
-        const dow = DatesHelper.dayOfWeek(today)
-        const monday = DatesHelper.addDays(today, ((8 - dow) % 7) || 7)
+    function refreshQuickPicks(): void {
+        // ("" + and 0 +: plain values, which compiled code passes on to the calls after them.)
+        const now = "" + DatesHelper.now()
+        const today = "" + DatesHelper.today
+        const tomorrow = "" + DatesHelper.addDays(today, 1)
+        const dow = 0 + DatesHelper.dayOfWeek(today)
+        const toMonday = (8 - dow) % 7
+        const monday = "" + DatesHelper.addDays(today, toMonday !== 0 ? toMonday : 7)
         const tonight = today + " 19:00"
+        const in10 = DatesHelper.addMinutes(now, 10)
+        const in60 = DatesHelper.addMinutes(now, 60)
+        const tonightLater = DatesHelper.compare(tonight, now) > 0
+        const labels = [qsTr("in 10 min"), qsTr("in an hour"), qsTr("today 19:00"), qsTr("tomorrow 8:00"),
+                        qsTr("Monday 9:00")]
         quickPicks = [
-            { label: qsTr("in 10 min"), at: DatesHelper.addMinutes(now, 10), enabled: true },
-            { label: qsTr("in an hour"), at: DatesHelper.addMinutes(now, 60), enabled: true },
-            { label: qsTr("today 19:00"), at: tonight, enabled: DatesHelper.compare(tonight, now) > 0 },
-            { label: qsTr("tomorrow 8:00"), at: tomorrow + " 08:00", enabled: true },
-            { label: qsTr("Monday 9:00"), at: monday + " 09:00", enabled: true }
+            { label: labels[0], at: in10, enabled: true },
+            { label: labels[1], at: in60, enabled: true },
+            { label: labels[2], at: tonight, enabled: tonightLater },
+            { label: labels[3], at: tomorrow + " 08:00", enabled: true },
+            { label: labels[4], at: monday + " 09:00", enabled: true }
         ]
     }
 
-    function setRecurrence(text) {
-        repeatKind = "none"
-        repeatWeekdays = []
-        repeatInterval = 2
-        repeatUnit = "week"
-        if (!text)
-            return
-        const r = DatesHelper.parseRule(text)
-        if (!r.ok)
-            return
-        const days = r.weekdays || []
-        if (r.interval === 1 && !r.whenDone && !r.monthDay && !r.lastDayOfMonth) {
-            if (r.freq === "day" && r.weekdaysOnly) { repeatKind = "weekdays"; return }
-            if (r.freq === "day" && !r.weekdaysOnly) { repeatKind = "daily"; return }
-            if (r.freq === "week" && !r.weekdaysOnly) { repeatKind = "weekly"; repeatWeekdays = days; return }
-            if (r.freq === "month") { repeatKind = "monthly"; return }
-            if (r.freq === "year") { repeatKind = "yearly"; return }
-        }
-        repeatKind = "custom"
-        repeatInterval = r.interval
-        repeatUnit = r.freq
-        repeatWeekdays = days
+    function setRecurrence(text: string): void {
+        const kind = DatesHelper.repeatKind(text)
+        repeatKind = kind
+        repeatWeekdays = kind === "weekly" || kind === "custom" ? DatesHelper.ruleWeekdays(text) : []
+        repeatInterval = kind === "custom" ? DatesHelper.ruleInterval(text) : 2
+        repeatUnit = kind === "custom" ? DatesHelper.ruleFreq(text) : "week"
     }
 
     /// Open for a new reminder (default: tomorrow 9:00).
-    function create(contextText) {
-        context = contextText || ""
+    function create(contextText: string): void {
+        context = contextText
         editing = false
         alarm = false
         at = DatesHelper.addDays(DatesHelper.today, 1) + " 09:00"
@@ -117,32 +138,41 @@ BDialog {
         open()
     }
 
-    /// Open for an existing reminder { at, alarm, recurrence, context }.
-    function edit(reminder) {
-        const r = reminder || {}
-        context = r.context || ""
+    /// Open for an existing reminder.
+    function editWith(at: string, alarm: bool, recurrence: string, context: string): void {
+        control.context = context
         editing = true
-        alarm = !!r.alarm
-        at = r.at || ""
-        setRecurrence(r.recurrence || "")
+        control.alarm = alarm
+        control.at = at
+        setRecurrence(recurrence)
         refreshQuickPicks()
         picker.syncFromDialog()
         open()
     }
 
-    function toggleWeekday(day) {
-        const dow = atDate !== "" ? DatesHelper.dayOfWeek(atDate) : 1
-        let days = repeatWeekdays.length > 0 ? repeatWeekdays.slice() : [dow]
-        const i = days.indexOf(day)
-        if (i >= 0) {
-            if (days.length > 1)
-                days.splice(i, 1)
-        } else {
-            days.push(day)
-        }
-        days.sort((a, b) => a - b)
-        repeatWeekdays = days
+    /// The older form of editWith(): { at, alarm, recurrence, context } (a missing key: none).
+    function edit(reminder: var): void {
+        // (Kept in a property, the fields as plain values: compiled code passes them on after the
+        // calls that read the others.)
+        _editArgument = reminder
+        const at = "" + UiModels.stringField(_editArgument, "at")
+        const alarm = UiModels.boolField(_editArgument, "alarm") === true
+        const recurrence = "" + UiModels.stringField(_editArgument, "recurrence")
+        const context = "" + UiModels.stringField(_editArgument, "context")
+        _editArgument = null
+        editWith(at, alarm, recurrence, context)
     }
+    property var _editArgument: null
+
+    function toggleWeekday(day: int): void {
+        repeatWeekdays = DatesHelper.toggledWeekday(effectiveWeekdays, day)
+    }
+
+    /// The interval field shows repeatInterval (also after editing: the clean value).
+    function syncIntervalField(): void {
+        intervalField.text = "" + repeatInterval
+    }
+    onRepeatIntervalChanged: syncIntervalField()
 
     title: editing ? qsTr("Edit reminder") : qsTr("New reminder")
     iconName: alarm ? "alarm-clock" : "bell"
@@ -171,7 +201,10 @@ BDialog {
     // What is still typed in the picker counts (the field may keep the focus: Ctrl+Enter, a
     // touch keyboard's Save tap).
     onAcceptRequested: picker.commitPending()
-    onAccepted: reminderAccepted({ at: control.at, alarm: control.alarm, recurrence: control.canonicalRule })
+    onAccepted: {
+        control.reminderAccepted({ at: control.at, alarm: control.alarm, recurrence: control.canonicalRule })
+        control.reminderChosen(control.at, control.alarm, control.canonicalRule)
+    }
 
     // Summary of the chosen moment (shown at the top of the single-column layout and at
     // the top of the right column in the two-column layout).
@@ -238,14 +271,16 @@ BDialog {
                 Repeater {
                     model: control.quickPicks
                     delegate: BChip {
-                        required property var modelData
-                        text: modelData.label
+                        id: quickPick
+                        required property string label
+                        required property string at
+                        required enabled
+                        text: label
                         iconName: "clock"
                         interactive: true
-                        enabled: modelData.enabled
-                        selected: control.at === modelData.at
+                        selected: control.at === quickPick.at
                         onClicked: {
-                            control.at = modelData.at
+                            control.at = quickPick.at
                             picker.syncFromDialog()
                         }
                     }
@@ -261,7 +296,7 @@ BDialog {
                 applyTypedOnFocusLoss: true
                 marks: control.marks
                 // Opening, a quick pick: the dialog's moment replaces whatever was typed.
-                function syncFromDialog() {
+                function syncFromDialog(): void {
                     clearTyped()
                     selectedDate = control.atDate
                     time = control.atTime
@@ -271,9 +306,10 @@ BDialog {
                     }
                 }
                 onPicked: (value) => {
-                    const s = DatesHelper.splitSpec(value)
-                    if (s.ok)
-                        control.at = s.date + " " + (s.time !== "" ? s.time : defaultTime)
+                    const date = DatesHelper.specDate(value)
+                    const time = DatesHelper.specTime(value)
+                    if (date !== "")
+                        control.at = date + " " + (time !== "" ? time : picker.defaultTime)
                 }
             }
         }
@@ -331,22 +367,16 @@ BDialog {
                     Layout.fillWidth: true
                     spacing: 6
                     Repeater {
-                        model: [
-                            { kind: "none", label: qsTr("Don't repeat") },
-                            { kind: "daily", label: qsTr("Daily") },
-                            { kind: "weekdays", label: qsTr("Weekdays") },
-                            { kind: "weekly", label: qsTr("Weekly") },
-                            { kind: "monthly", label: qsTr("Monthly") },
-                            { kind: "yearly", label: qsTr("Yearly") },
-                            { kind: "custom", label: qsTr("Custom…") }
-                        ]
+                        model: control.repeatChoices
                         delegate: BChip {
-                            required property var modelData
-                            text: modelData.label
+                            id: repeatChoice
+                            required property string kind
+                            required property string label
+                            text: label
                             showIcon: false
                             interactive: true
-                            selected: control.repeatKind === modelData.kind
-                            onClicked: control.repeatKind = modelData.kind
+                            selected: control.repeatKind === repeatChoice.kind
+                            onClicked: control.repeatKind = repeatChoice.kind
                         }
                     }
                 }
@@ -367,19 +397,19 @@ BDialog {
                         Layout.preferredWidth: Theme.touchUi ? 64 : 56
                         implicitWidth: Layout.preferredWidth
                         size: "small"
-                        text: String(control.repeatInterval)
+                        Component.onCompleted: control.syncIntervalField()
                         horizontalAlignment: TextInput.AlignHCenter
                         inputMethodHints: Qt.ImhDigitsOnly
                         validator: IntValidator { bottom: 1; top: 999 }
                         accessibleName: qsTr("Interval")
                         onTextEdited: {
-                            const n = parseInt(text, 10)
+                            const n = Js.parseInt(intervalField.text)
                             if (n >= 1)
                                 control.repeatInterval = n
                         }
-                        // Show the clean value again and keep following repeatInterval
-                        // (a plain assignment would break the binding above).
-                        onEditingFinished: text = Qt.binding(() => String(control.repeatInterval))
+                        // Show the clean value again (the field follows repeatInterval:
+                        // syncIntervalField()).
+                        onEditingFinished: control.syncIntervalField()
                     }
                     BSegmented {
                         Layout.fillWidth: true
@@ -404,9 +434,9 @@ BDialog {
                     Layout.fillWidth: true
                     visible: control.repeatKind === "weekly" || (control.repeatKind === "custom" && control.repeatUnit === "week")
                     spacing: 4
-                    readonly property var effective: control.rule && control.rule.weekdays ? control.rule.weekdays : []
-                    readonly property var shortNames: DatesHelper.weekdayNames("short", DatesHelper.locale)
-                    readonly property var fullNames: DatesHelper.weekdayNames("full", DatesHelper.locale)
+                    readonly property list<int> effective: control.effectiveWeekdays
+                    readonly property list<string> shortNames: DatesHelper.weekdayNames("short", DatesHelper.locale)
+                    readonly property list<string> fullNames: DatesHelper.weekdayNames("full", DatesHelper.locale)
                     readonly property real buttonSize: Math.min(Theme.touchUi ? 44 : 36, (width - 6 * spacing) / 7)
                     Accessible.role: Accessible.Grouping
                     Accessible.name: qsTr("Repeat on")
@@ -439,7 +469,7 @@ BDialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.topMargin: 2
-                    visible: control.rule !== null
+                    visible: control.hasRule
                     spacing: 2
                     Row {
                         Layout.fillWidth: true
@@ -461,7 +491,7 @@ BDialog {
                     Text {
                         Layout.fillWidth: true
                         visible: control.nextDates.length > 0
-                        text: qsTr("Next: %1").arg(control.nextDates.map(d => DatesHelper.formatHuman(d.slice(0, 10))).join("  ·  "))
+                        text: qsTr("Next: %1").arg(control.nextDatesText)
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textXs
                         color: Theme.fgMuted

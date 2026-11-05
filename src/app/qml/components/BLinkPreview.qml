@@ -24,8 +24,15 @@ T.Popup {
     readonly property bool pointerInside: popupHover.hovered
     /// The previewed text (LinkPreview.preview).
     readonly property var info: preview.preview
-    readonly property var entries: info.blocks || []
-    readonly property bool found: info.found === true
+    /// Its rows, each with every key the delegate reads (embed headers and blocks differ).
+    readonly property list<var> entries: UiModels.withDefaults(UiModels.field(preview.preview, "blocks"), {
+        kind: "", view: "", task: "", headingLevel: 0, depth: 0, title: "", html: "", raw: "", path: ""
+    })
+    readonly property bool found: preview.preview.found === true
+    readonly property string infoTitle: UiModels.stringField(preview.preview, "title")
+    readonly property string infoKind: UiModels.stringField(preview.preview, "kind")
+    readonly property string infoMessage: UiModels.stringField(preview.preview, "message")
+    readonly property int infoMore: UiModels.numberField(preview.preview, "more", 0)
     /// Room for the text (the rest scrolls).
     readonly property real maxBodyHeight: Math.max(120, Math.min(360, (parent ? parent.height : 600) * 0.5))
 
@@ -48,7 +55,7 @@ T.Popup {
 
     /// Opens (or moves) the preview at the pointer (x, y) of its parent: under it, above it when
     /// there is no room below. Nothing opens for a link without a preview (an attachment).
-    function show(px: real, py: real) {
+    function show(px: real, py: real): void {
         if (shownKey === href + "\n" + fromPath)
             preview.refresh() // (the same link again: the note may have changed)
         shownKey = href + "\n" + fromPath
@@ -83,8 +90,8 @@ T.Popup {
     /// `link` when a click on it in the preview follows it ("" for a task's checkbox, a reminder
     /// and the chips a click edits in the note: the preview changes nothing).
     function followable(link: string): string {
-        return link.startsWith("task:") || link.startsWith("reminder:") || link.startsWith("date:")
-               || link.startsWith("recur:") || link.startsWith("prio:") || link.startsWith("day:") ? "" : link
+        return Js.startsWith(link, "task:") || Js.startsWith(link, "reminder:") || Js.startsWith(link, "date:")
+               || Js.startsWith(link, "recur:") || Js.startsWith(link, "prio:") || Js.startsWith(link, "day:") ? "" : link
     }
     function iconFor(kind: string): string {
         return kind === "heading" ? "heading" : kind === "block" ? "link" : "file-text"
@@ -147,12 +154,12 @@ T.Popup {
                 width: parent.width - 2 * Theme.space3
                 height: Math.max(24, title.implicitHeight)
                 Accessible.role: Accessible.Link
-                Accessible.name: popup.info.title || ""
+                Accessible.name: popup.infoTitle
                 Accessible.onPressAction: popup.activated(popup.href, popup.fromPath, false)
                 BIcon {
                     id: kindIcon
                     anchors.verticalCenter: parent.verticalCenter
-                    name: popup.iconFor(popup.info.kind || "page")
+                    name: popup.iconFor(popup.infoKind !== "" ? popup.infoKind : "page")
                     size: Theme.iconSizeSm - 2
                     color: popup.found ? Theme.link : Theme.fgFaint
                 }
@@ -162,7 +169,7 @@ T.Popup {
                     anchors.verticalCenter: parent.verticalCenter
                     x: kindIcon.width + Theme.space1 + 2
                     width: parent.width - x - openIcon.width - Theme.space1
-                    text: popup.info.title || ""
+                    text: popup.infoTitle
                     textFormat: Text.PlainText
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
@@ -186,8 +193,11 @@ T.Popup {
                     gesturePolicy: TapHandler.ReleaseWithinBounds
                     acceptedButtons: OpenIn.tabs ? Qt.LeftButton | Qt.MiddleButton : Qt.LeftButton
                     // Ctrl+click, a middle click: in a new tab (OpenIn).
-                    onTapped: (eventPoint, button) => OpenIn.run(OpenIn.clickTarget(button, headerTap.point.modifiers),
-                                                                 () => popup.activated(popup.href, popup.fromPath, false))
+                    onTapped: (eventPoint, button) => {
+                        OpenIn.begin(OpenIn.clickTarget(button, headerTap.point.modifiers))
+                        popup.activated(popup.href, popup.fromPath, false)
+                        OpenIn.end()
+                    }
                 }
             }
 
@@ -199,7 +209,7 @@ T.Popup {
                 x: Theme.space3
                 y: header.y + header.height + Theme.space1
                 width: parent.width - 2 * Theme.space3
-                text: popup.messageText(popup.info.message || "", popup.info.title || "")
+                text: popup.messageText(popup.infoMessage, popup.infoTitle)
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 font.family: Theme.fontUi
@@ -242,25 +252,32 @@ T.Popup {
                         model: popup.entries
                         delegate: Item {
                             id: entry
-                            required property var modelData
                             required property int index
+                            required property string kind
+                            required property string view
+                            required property string task
+                            required property int headingLevel
+                            required property int depth
+                            required property string title
+                            required property string html
+                            required property string raw
+                            required property string path
                             y: {
                                 if (entryRows.revision < 0 || entry.index === 0)
                                     return 0
                                 const above = entryRows.itemAt(entry.index - 1)
                                 return above ? above.y + above.height : 0
                             }
-                            readonly property bool nested: modelData.kind === "embed"
-                            readonly property bool rule: modelData.view === "rule"
-                            readonly property string task: modelData.task || ""
+                            readonly property bool nested: kind === "embed"
+                            readonly property bool rule: view === "rule"
                             readonly property bool isTask: !nested && task !== ""
-                            readonly property int level: modelData.headingLevel || 0
-                            readonly property bool code: modelData.view === "code"
+                            readonly property int level: headingLevel
+                            readonly property bool code: view === "code"
                             readonly property int fontSize: code ? Theme.textSm : popup.headingSize(level)
                             readonly property real lineHeightPx: Theme.lineHeightPx(fontSize, level > 0 ? 1.35 : 1.5)
-                            readonly property real indent: Math.min(6, modelData.depth || 0) * 16
+                            readonly property real indent: Math.min(6, depth) * 16
                             property string hoveredLink: ""
-                            function trackLink(x: real, y: real) {
+                            function trackLink(x: real, y: real): void {
                                 const link = popup.followable(text.linkAt(x - text.x, y - text.y))
                                 if (link !== entry.hoveredLink)
                                     entry.hoveredLink = link
@@ -282,7 +299,7 @@ T.Popup {
                                 x: entry.indent
                                 width: parent.width - x
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: entry.nested ? "↳ " + (entry.modelData.title || "") : ""
+                                text: entry.nested ? "↳ " + entry.title : ""
                                 textFormat: Text.PlainText
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textXs
@@ -303,7 +320,7 @@ T.Popup {
                                 x: entry.indent + (entry.isTask ? 22 : 0)
                                 y: 1
                                 width: parent.width - x
-                                html: visible ? entry.modelData.html || "" : ""
+                                html: visible ? entry.html : ""
                                 hoveredLink: entry.hoveredLink
                                 font.family: entry.code ? Theme.fontMono : Theme.fontEditor
                                 font.pixelSize: entry.fontSize
@@ -311,8 +328,8 @@ T.Popup {
                                 font.strikeout: entry.task === "cancelled"
                                 lineHeight: entry.lineHeightPx
                                 color: entry.task === "done" || entry.task === "cancelled" ? Theme.fgFaint
-                                       : entry.modelData.view === "quote" ? Theme.fgMuted : Theme.fg
-                                accessibleName: entry.modelData.raw || ""
+                                       : entry.view === "quote" ? Theme.fgMuted : Theme.fg
+                                accessibleName: entry.raw
                             }
                             HoverHandler {
                                 id: entryHover
@@ -325,11 +342,13 @@ T.Popup {
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
                                 acceptedButtons: OpenIn.tabs ? Qt.LeftButton | Qt.MiddleButton : Qt.LeftButton
                                 onTapped: (eventPoint, button) => {
-                                    const p = eventPoint.position
-                                    const link = popup.followable(text.linkAt(p.x - text.x, p.y - text.y))
-                                    if (link !== "")
-                                        OpenIn.run(OpenIn.clickTarget(button, entryTap.point.modifiers),
-                                                   () => popup.activated(link, entry.modelData.path || popup.fromPath, false))
+                                    const link = popup.followable(text.linkAt(eventPoint.position.x - text.x,
+                                                                              eventPoint.position.y - text.y))
+                                    if (link === "")
+                                        return
+                                    OpenIn.begin(OpenIn.clickTarget(button, entryTap.point.modifiers))
+                                    popup.activated(link, entry.path !== "" ? entry.path : popup.fromPath, false)
+                                    OpenIn.end()
                                 }
                             }
                         }
@@ -340,11 +359,11 @@ T.Popup {
             // Blocks left out (MaxTransclusionBlocks).
             Text {
                 id: more
-                visible: (popup.info.more || 0) > 0
+                visible: popup.infoMore > 0
                 x: Theme.space3
                 y: flick.visible ? flick.y + flick.height + Theme.space1 : flick.y
                 width: parent.width - 2 * Theme.space3
-                text: qsTr("… and %n more block(s)", "", popup.info.more || 0)
+                text: qsTr("… and %n more block(s)", "", popup.infoMore)
                 textFormat: Text.PlainText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs

@@ -30,9 +30,9 @@ BDialog {
     signal picked(string time)
 
     /// Open for `value` ("HH:mm"; empty or invalid starts at the current time), on the hours.
-    function openFor(value) {
-        const t = DatesHelper.normalizeTime(value || "")
-        clock.time = t !== "" ? t : DatesHelper.now().slice(11, 16)
+    function openFor(value: string): void {
+        const t = DatesHelper.normalizeTime(value)
+        clock.time = t !== "" ? t : Js.slice(DatesHelper.now(), 11, 16)
         clock.mode = "hour"
         open()
     }
@@ -50,7 +50,7 @@ BDialog {
             iconName: "clock"
             variant: "ghost"
             onClicked: {
-                clock.time = DatesHelper.now().slice(11, 16)
+                clock.time = Js.slice(DatesHelper.now(), 11, 16)
                 clock.mode = "minute"
             }
         }

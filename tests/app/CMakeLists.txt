@@ -19,6 +19,11 @@ brulion_add_test(tst_keyboardinsets
 brulion_add_test(tst_gestureinsets
     SOURCES tst_gestureinsets.cpp
     LIBS brulion_ui_helpers)
+# UiModels and PaletteFilter (brulion_ui_helpers): the rows of the components' JavaScript models
+# and fields of JavaScript objects, with the JavaScript engine's semantics.
+brulion_add_test(tst_ui_models
+    SOURCES tst_uimodels.cpp
+    LIBS brulion_ui_helpers Qt6::Qml)
 # ThemePalette (brulion_ui_helpers): the appearance settings' colours — the default look unchanged,
 # contrast of every accent on every surface, malformed colours — and the font pickers' filter.
 brulion_add_test(tst_ui_themepalette

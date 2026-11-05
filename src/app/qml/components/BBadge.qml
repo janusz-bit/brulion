@@ -21,7 +21,7 @@ Rectangle {
     property string variant: "neutral"
     property bool solid: variant === "accent" || variant === "danger"
 
-    readonly property string label: count >= 0 ? (count > max ? max + "+" : String(count)) : text
+    readonly property string label: count >= 0 ? (count > max ? max + "+" : "" + count) : text
     readonly property color softBg: {
         switch (variant) {
         case "accent": return Theme.accentBg

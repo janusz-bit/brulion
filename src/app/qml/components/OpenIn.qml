@@ -2,21 +2,29 @@ pragma Singleton
 import QtQuick
 
 // OpenIn — where a link or a page's row opens besides "here": a new tab, or a window of its
-// own (docs/UI.md "Tabs, split view and windows"). The app's shell sets `openIn` (AppShell:
-// AppController.openIn); without it (the editor's tests and playground) only the usual click is
-// offered, so the editor and the lists need no shell.
+// own (docs/UI.md "Tabs, split view and windows"). The app's shell sets `tabs` and connects
+// beginRequested / endRequested (AppShell: AppController.beginOpenIn / endOpenIn); without it
+// (the editor's tests and playground) only the usual click is offered, so the editor and the lists
+// need no shell.
 //
 //   TapHandler { acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-//                onTapped: (point, button) => OpenIn.run(OpenIn.clickTarget(button, point.modifiers),
-//                                                              () => open()) }
+//                onTapped: (point, button) => {
+//                    OpenIn.begin(OpenIn.clickTarget(button, point.modifiers))
+//                    open()            // what a click does: its navigation goes to the target
+//                    OpenIn.end()
+//                } }
 QtObject {
-    /// function (target, open): runs `open` — what a click does — with its navigation going to
-    /// `target` ("tab" | "window"); null where there are no tabs.
-    property var openIn: null
+    id: openIn
+
+    /// New tabs can be opened (the app's shell sets it).
+    property bool tabs: false
     /// Pages may open in windows of their own (desktop).
     property bool windows: false
-    /// New tabs can be opened (the app's shell).
-    readonly property bool tabs: openIn !== null
+
+    /// The navigation that follows (until end()) goes to `target` ("tab" | "window").
+    signal beginRequested(string target)
+    /// end(): navigation goes where it usually does again.
+    signal endRequested()
 
     /// Where a click with `button` and `modifiers` asks to open: "tab" for the middle button or
     /// Ctrl+click, else "" (here).
@@ -27,12 +35,20 @@ QtObject {
             return "tab"
         return (modifiers & Qt.ControlModifier) ? "tab" : ""
     }
-    /// Run `open` (a function that navigates as a click does) with its page opening in `target`
-    /// ("" or no tabs: as usual).
+    /// The navigation until end() opens its page in `target` ("" or no tabs: as usual).
+    function begin(target: string): void {
+        if (target !== "" && tabs)
+            beginRequested(target)
+    }
+    /// After the navigation that begin() was for.
+    function end(): void {
+        endRequested()
+    }
+    /// The older form, not compiled (it takes a function): run `open` (a function that navigates
+    /// as a click does) between begin(target) and end().
     function run(target: string, open: var): void {
-        if (target !== "" && openIn !== null)
-            openIn(target, open)
-        else
-            open()
+        begin(target)
+        open()
+        end()
     }
 }

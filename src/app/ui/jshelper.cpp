@@ -482,6 +482,11 @@ QString JsHelper::numberToString(double x) const
     return jsNumberToString(x);
 }
 
+double JsHelper::atan2(double y, double x) const
+{
+    return std::atan2(y, x);
+}
+
 // --- Regular expressions ---
 
 const QRegularExpression &JsHelper::regExp(const QString &pattern, const QString &flags) const

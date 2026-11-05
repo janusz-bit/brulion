@@ -92,7 +92,7 @@ T.Menu {
     }
 
     T.Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.0)
+        color: "transparent"
     }
 
     enter: Transition {

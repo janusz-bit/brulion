@@ -43,7 +43,7 @@ BDialog {
             text: control.message
             wrapMode: Text.Wrap
             lineHeightMode: Text.FixedHeight
-            lineHeight: Theme.lineHeightPx(font.pixelSize)
+            lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
             font.family: Theme.fontUi
             font.pixelSize: Theme.textBase
             color: Theme.fg

@@ -70,6 +70,7 @@ T.Button {
     }
 
     background: Rectangle {
+        id: backgroundRect
         radius: Theme.radius
         antialiasing: true
         color: {
@@ -92,7 +93,7 @@ T.Button {
 
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
+            radius: backgroundRect.radius
             visible: control.variant === "secondary"
             color: control.checked ? Theme.bgSelected : control.down ? Theme.bgPressed : control.hovered ? Theme.bgHover : "transparent"
         }

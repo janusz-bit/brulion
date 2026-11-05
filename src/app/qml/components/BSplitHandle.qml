@@ -43,7 +43,7 @@ Item {
         y: handle.horizontal ? 0 : (handle.height - thickness) / 2
         width: handle.horizontal ? thickness : handle.width
         height: handle.horizontal ? handle.height : thickness
-        color: handle.pressed ? Theme.focusRing : Qt.rgba(Theme.focusRing.r, Theme.focusRing.g, Theme.focusRing.b, 0.7)
+        color: handle.pressed ? Theme.focusRing : Theme.focusRing.alpha(0.7)
         opacity: handle.active ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
     }

@@ -68,8 +68,17 @@ QtObject {
     readonly property bool touchUi: forceTouch || DeviceInfo.mobile || (narrow && DeviceInfo.hasTouchScreen)
     /// Compact density: smaller controls and rows with a mouse (touch UIs keep their targets).
     readonly property bool dense: density === "compact" && !touchUi
-    /// The colours the appearance settings change (ThemePalette.colors(): "#rrggbb" by token name).
-    readonly property var colors: ThemePalette.colors(dark, lightSurface, darkSurface, accentName, customAccent)
+    /// The colours the appearance settings change ("#rrggbb" strings by token name, C++:
+    /// ThemeColors, the same as ThemePalette.colors()) — typed properties for the tokens below.
+    readonly property ThemeColors palette: ThemeColors {
+        dark: theme.dark
+        lightSurface: theme.lightSurface
+        darkSurface: theme.darkSurface
+        accentName: theme.accentName
+        customAccent: theme.customAccent
+    }
+    /// The same as a map by token name (`FilePicker { colors: Theme.colors }`).
+    readonly property var colors: palette.map
 
     // ---- Brand ---------------------------------------------------------------------------
     readonly property color ink: "#1f2430"
@@ -77,31 +86,39 @@ QtObject {
     readonly property color marginRed: "#e2574c"
     readonly property color amber: "#f2b33d"
     readonly property color gridBlue: "#9fc3e6"
+    // Bases of the translucent tokens below (`base.alpha(a)` is Qt.rgba() of its channels).
+    readonly property color _fgDarkBase: "#e8e4da"
+    readonly property color _scrimDarkBase: "#080a10"
+    readonly property color _successDarkBase: "#6fbf8a"
+    readonly property color _successLightBase: "#3f8f5a"
+    readonly property color _scheduledDarkBase: "#b9a3d8"
+    readonly property color _scheduledLightBase: "#7a5ea3"
+    readonly property color _black: "#000000"
 
     // ---- Surfaces ------------------------------------------------------------------------
     // Defaults (paper / slate): bg #fbf7ee / #1c2130, bgElevated #fffdf7 / #232a3b, bgElevated2
     // #fffefb / #2b3245, bgSunken #f3eee2 / #171b28.
-    readonly property color bg: colors.bg                     // page / window
-    readonly property color bgElevated: colors.bgElevated     // cards, dialogs, menus
-    readonly property color bgElevated2: colors.bgElevated2   // popups over cards
-    readonly property color bgSunken: colors.bgSunken         // sidebar, wells, code
-    readonly property color bgHover: dark ? Qt.rgba(232/255, 228/255, 218/255, 0.06) : Qt.rgba(31/255, 36/255, 48/255, 0.055)
-    readonly property color bgPressed: dark ? Qt.rgba(232/255, 228/255, 218/255, 0.11) : Qt.rgba(31/255, 36/255, 48/255, 0.10)
-    readonly property color bgSelected: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.16) : Qt.rgba(159/255, 195/255, 230/255, 0.30)
+    readonly property color bg: palette.bg                     // page / window
+    readonly property color bgElevated: palette.bgElevated     // cards, dialogs, menus
+    readonly property color bgElevated2: palette.bgElevated2   // popups over cards
+    readonly property color bgSunken: palette.bgSunken         // sidebar, wells, code
+    readonly property color bgHover: dark ? theme._fgDarkBase.alpha(0.06) : theme.ink.alpha(0.055)
+    readonly property color bgPressed: dark ? theme._fgDarkBase.alpha(0.11) : theme.ink.alpha(0.10)
+    readonly property color bgSelected: dark ? theme.gridBlue.alpha(0.16) : theme.gridBlue.alpha(0.30)
     readonly property color bgInverse: dark ? "#e8e4da" : "#1f2430"
     /// Behind edge sheets (bottom sheets, the full-screen palette, the drawer): the page dims.
-    readonly property color scrim: dark ? Qt.rgba(8/255, 10/255, 16/255, 0.62) : Qt.rgba(31/255, 36/255, 48/255, 0.40)
+    readonly property color scrim: dark ? theme._scrimDarkBase.alpha(0.62) : theme.ink.alpha(0.40)
     /// Behind centred modal panels (the floating command palette and quick switcher, a centred
     /// BDialog): the page recedes — light: a wash of the page tinted toward ink (paper about
     /// #ddd9d3, page text about 2.5:1 instead of 7:1, the panel's lighter fill stands out); dark:
     /// the scrim's ink at 72 % (page text about 2:1). ThemePalette.modalScrim, per surface.
-    readonly property color scrimModal: colors.scrimModal
+    readonly property color scrimModal: palette.scrimModal
 
     // ---- Text ----------------------------------------------------------------------------
     // fg #1f2430 / #e8e4da, fgMuted #535a6a / #a9aebb, fgFaint #676c7b / #8f96a7.
-    readonly property color fg: colors.fg
-    readonly property color fgMuted: colors.fgMuted
-    readonly property color fgFaint: colors.fgFaint
+    readonly property color fg: palette.fg
+    readonly property color fgMuted: palette.fgMuted
+    readonly property color fgFaint: palette.fgFaint
     readonly property color fgInverse: dark ? "#1c2130" : "#fbf7ee"
     readonly property color fgOnAccent: "#ffffff"
     readonly property real disabledOpacity: 0.45
@@ -109,10 +126,10 @@ QtObject {
     // ---- Lines ---------------------------------------------------------------------------
     // Defaults: border #e4dccb / #343c51, borderSubtle #ece6d8 / #2b3245, borderStrong #cdc2ab /
     // #48526b, borderControl #928775 / #6c7793.
-    readonly property color border: colors.border
-    readonly property color borderSubtle: colors.borderSubtle
-    readonly property color borderStrong: colors.borderStrong
-    readonly property color borderControl: colors.borderControl // ≥ 3:1 (checkbox, switch)
+    readonly property color border: palette.border
+    readonly property color borderSubtle: palette.borderSubtle
+    readonly property color borderStrong: palette.borderStrong
+    readonly property color borderControl: palette.borderControl // ≥ 3:1 (checkbox, switch)
     /// Indent guides (the outline's level lines, the page tree's): quiet but seen, about
     /// Obsidian's level (1.28:1 on paper, 1.46:1 on slate). Not text, not a control.
     readonly property color guide: border
@@ -127,72 +144,105 @@ QtObject {
     readonly property color primaryFg: dark ? "#1c2130" : "#fbf7ee"
     // The accent (default: the margin red #e2574c; hover #d14b40 / #ec6a5f, text #ad3e2c /
     // #ef7a6f, solid #c4463a).
-    readonly property color accent: colors.accent                         // marks (≥ 3:1)
-    readonly property color accentHover: colors.accentHover
-    readonly property color accentText: colors.accentText                 // accent text on bg
-    readonly property color accentBg: Qt.rgba(accent.r, accent.g, accent.b, dark ? 0.18 : 0.12)
+    readonly property color accent: palette.accent                         // marks (≥ 3:1)
+    readonly property color accentHover: palette.accentHover
+    readonly property color accentText: palette.accentText                 // accent text on bg
+    readonly property color accentBg: accent.alpha(dark ? 0.18 : 0.12)
     /// Accent fill under white text (solid badges): the brand red itself is only 3.7:1 with white.
-    readonly property color accentSolid: colors.accentSolid
-    readonly property color link: colors.link                             // #2c6aa3 / #9fc3e6
+    readonly property color accentSolid: palette.accentSolid
+    readonly property color link: palette.link                             // #2c6aa3 / #9fc3e6
     readonly property color linkHover: dark ? "#c3daf1" : "#1f5486"
-    readonly property color linkMissing: colors.linkMissing               // #7a5ea3 / #b9a3d8
+    readonly property color linkMissing: palette.linkMissing               // #7a5ea3 / #b9a3d8
     // Tags and due dates: a light tint, well apart from the selection (bgSelected) it used to match.
-    readonly property color tagBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.10) : Qt.rgba(159/255, 195/255, 230/255, 0.16)
-    readonly property color tagFg: colors.tagFg                           // #2b5f8f / #b9d4ee
+    readonly property color tagBg: dark ? theme.gridBlue.alpha(0.10) : theme.gridBlue.alpha(0.16)
+    readonly property color tagFg: palette.tagFg                           // #2b5f8f / #b9d4ee
 
     // ---- Status --------------------------------------------------------------------------
     readonly property color danger: dark ? "#c94a3e" : "#c8473b"          // fills under white text (≥ 4.5:1)
     readonly property color dangerHover: dark ? "#bd4337" : "#b23c31"
     readonly property color dangerFg: "#ffffff"
-    readonly property color dangerText: colors.dangerText                 // also on dangerBg chips (#a8382d / #f3877c)
-    readonly property color dangerBg: dark ? Qt.rgba(226/255, 87/255, 76/255, 0.18) : Qt.rgba(226/255, 87/255, 76/255, 0.12)
+    readonly property color dangerText: palette.dangerText                 // also on dangerBg chips (#a8382d / #f3877c)
+    readonly property color dangerBg: dark ? theme.marginRed.alpha(0.18) : theme.marginRed.alpha(0.12)
     readonly property color warning: "#f2b33d"
-    readonly property color warningText: colors.warningText               // #835500 / #f2b33d
-    readonly property color warningBg: dark ? Qt.rgba(242/255, 179/255, 61/255, 0.16) : Qt.rgba(242/255, 179/255, 61/255, 0.22)
+    readonly property color warningText: palette.warningText               // #835500 / #f2b33d
+    readonly property color warningBg: dark ? theme.amber.alpha(0.16) : theme.amber.alpha(0.22)
     readonly property color success: dark ? "#6fbf8a" : "#2f7a4c"
-    readonly property color successText: colors.successText               // #2a6e44 / #7fcb98
-    readonly property color successBg: dark ? Qt.rgba(111/255, 191/255, 138/255, 0.16) : Qt.rgba(63/255, 143/255, 90/255, 0.14)
+    readonly property color successText: palette.successText               // #2a6e44 / #7fcb98
+    readonly property color successBg: dark ? theme._successDarkBase.alpha(0.16) : theme._successLightBase.alpha(0.14)
     readonly property color info: dark ? "#9fc3e6" : "#2c6aa3"
     readonly property color infoText: dark ? "#9fc3e6" : "#2c6aa3"
-    readonly property color infoBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.14) : Qt.rgba(159/255, 195/255, 230/255, 0.28)
+    readonly property color infoBg: dark ? theme.gridBlue.alpha(0.14) : theme.gridBlue.alpha(0.28)
 
     // ---- Chips (dates, reminders, tags inside rendered text) ------------------------------
-    readonly property color chipDueBg: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.10) : Qt.rgba(159/255, 195/255, 230/255, 0.16)
-    readonly property color chipDueFg: colors.chipDueFg                   // #2b5f8f / #b9d4ee
+    readonly property color chipDueBg: dark ? theme.gridBlue.alpha(0.10) : theme.gridBlue.alpha(0.16)
+    readonly property color chipDueFg: palette.chipDueFg                   // #2b5f8f / #b9d4ee
     readonly property color chipOverdueBg: dangerBg
     readonly property color chipOverdueFg: dangerText
-    readonly property color chipScheduledBg: dark ? Qt.rgba(185/255, 163/255, 216/255, 0.16) : Qt.rgba(122/255, 94/255, 163/255, 0.12)
-    readonly property color chipScheduledFg: colors.chipScheduledFg       // #6a4f93 / #c7b5e2
-    readonly property color chipReminderBg: dark ? Qt.rgba(242/255, 179/255, 61/255, 0.16) : Qt.rgba(242/255, 179/255, 61/255, 0.24)
-    readonly property color chipReminderFg: colors.chipReminderFg         // #7a4f00 / #f5c66a
-    readonly property color chipAlarmBg: dark ? Qt.rgba(242/255, 179/255, 61/255, 0.28) : "#f2b33d"
+    readonly property color chipScheduledBg: dark ? theme._scheduledDarkBase.alpha(0.16) : theme._scheduledLightBase.alpha(0.12)
+    readonly property color chipScheduledFg: palette.chipScheduledFg       // #6a4f93 / #c7b5e2
+    readonly property color chipReminderBg: dark ? theme.amber.alpha(0.16) : theme.amber.alpha(0.24)
+    readonly property color chipReminderFg: palette.chipReminderFg         // #7a4f00 / #f5c66a
+    readonly property color chipAlarmBg: dark ? theme.amber.alpha(0.28) : "#f2b33d"
     readonly property color chipAlarmFg: dark ? "#ffd27a" : "#1f2430"
-    readonly property color chipRecurrenceBg: dark ? Qt.rgba(111/255, 191/255, 138/255, 0.14) : Qt.rgba(63/255, 143/255, 90/255, 0.12)
-    readonly property color chipRecurrenceFg: colors.chipRecurrenceFg     // #2a6e44 / #8fd3a6
-    readonly property color chipDoneBg: dark ? Qt.rgba(232/255, 228/255, 218/255, 0.08) : Qt.rgba(31/255, 36/255, 48/255, 0.06)
+    readonly property color chipRecurrenceBg: dark ? theme._successDarkBase.alpha(0.14) : theme._successLightBase.alpha(0.12)
+    readonly property color chipRecurrenceFg: palette.chipRecurrenceFg     // #2a6e44 / #8fd3a6
+    readonly property color chipDoneBg: dark ? theme._fgDarkBase.alpha(0.08) : theme.ink.alpha(0.06)
     readonly property color chipDoneFg: fgMuted
-    readonly property color chipNeutralBg: dark ? Qt.rgba(232/255, 228/255, 218/255, 0.08) : Qt.rgba(31/255, 36/255, 48/255, 0.06)
+    readonly property color chipNeutralBg: dark ? theme._fgDarkBase.alpha(0.08) : theme.ink.alpha(0.06)
     readonly property color chipNeutralFg: fgMuted
 
     /// { bg, fg, icon } for a chip variant: tag, due, overdue, scheduled, reminder, alarm,
-    /// recurrence, done, neutral.
-    function chip(kind) {
+    /// recurrence, done, neutral. (A member of its result does not compile: chipBg(), chipFg()
+    /// and chipIcon() give the same typed.)
+    function chip(kind: string): var {
+        return { bg: chipBg(kind), fg: chipFg(kind), icon: chipIcon(kind) }
+    }
+    /// The background of a chip variant (chip()).
+    function chipBg(kind: string): color {
         switch (kind) {
-        case "tag": return { bg: tagBg, fg: tagFg, icon: "hash" }
-        case "due": return { bg: chipDueBg, fg: chipDueFg, icon: "calendar" }
-        case "overdue": return { bg: chipOverdueBg, fg: chipOverdueFg, icon: "calendar" }
-        case "scheduled": return { bg: chipScheduledBg, fg: chipScheduledFg, icon: "hourglass" }
-        case "reminder": return { bg: chipReminderBg, fg: chipReminderFg, icon: "bell" }
-        case "alarm": return { bg: chipAlarmBg, fg: chipAlarmFg, icon: "alarm-clock" }
-        case "recurrence": return { bg: chipRecurrenceBg, fg: chipRecurrenceFg, icon: "repeat" }
-        case "done": return { bg: chipDoneBg, fg: chipDoneFg, icon: "check" }
-        default: return { bg: chipNeutralBg, fg: chipNeutralFg, icon: "" }
+        case "tag": return tagBg
+        case "due": return chipDueBg
+        case "overdue": return chipOverdueBg
+        case "scheduled": return chipScheduledBg
+        case "reminder": return chipReminderBg
+        case "alarm": return chipAlarmBg
+        case "recurrence": return chipRecurrenceBg
+        case "done": return chipDoneBg
+        default: return chipNeutralBg
+        }
+    }
+    /// The text colour of a chip variant (chip()).
+    function chipFg(kind: string): color {
+        switch (kind) {
+        case "tag": return tagFg
+        case "due": return chipDueFg
+        case "overdue": return chipOverdueFg
+        case "scheduled": return chipScheduledFg
+        case "reminder": return chipReminderFg
+        case "alarm": return chipAlarmFg
+        case "recurrence": return chipRecurrenceFg
+        case "done": return chipDoneFg
+        default: return chipNeutralFg
+        }
+    }
+    /// The default icon of a chip variant (chip()); "" for neutral.
+    function chipIcon(kind: string): string {
+        switch (kind) {
+        case "tag": return "hash"
+        case "due": return "calendar"
+        case "overdue": return "calendar"
+        case "scheduled": return "hourglass"
+        case "reminder": return "bell"
+        case "alarm": return "alarm-clock"
+        case "recurrence": return "repeat"
+        case "done": return "check"
+        default: return ""
         }
     }
 
     /// Dot colour for date marks (BDatePicker): due, overdue, scheduled, reminder, alarm,
     /// journal, done, event.
-    function markColor(kind) {
+    function markColor(kind: string): color {
         switch (kind) {
         case "overdue": return dangerText
         case "reminder": case "alarm": return dark ? "#f2b33d" : "#c98a12"
@@ -204,19 +254,19 @@ QtObject {
     }
 
     // ---- Editing, selection, focus, diff ---------------------------------------------------
-    readonly property color selection: dark ? Qt.rgba(159/255, 195/255, 230/255, 0.30) : Qt.rgba(159/255, 195/255, 230/255, 0.55)
+    readonly property color selection: dark ? theme.gridBlue.alpha(0.30) : theme.gridBlue.alpha(0.55)
     readonly property color selectionFg: fg
-    readonly property color mark: dark ? Qt.rgba(242/255, 179/255, 61/255, 0.30) : Qt.rgba(242/255, 179/255, 61/255, 0.38)
+    readonly property color mark: dark ? theme.amber.alpha(0.30) : theme.amber.alpha(0.38)
     readonly property color focusRing: dark ? "#9fc3e6" : "#3b7dc0"
-    readonly property color diffAddBg: dark ? Qt.rgba(111/255, 191/255, 138/255, 0.13) : Qt.rgba(63/255, 143/255, 90/255, 0.13)
-    readonly property color diffAddStrong: dark ? Qt.rgba(111/255, 191/255, 138/255, 0.32) : Qt.rgba(63/255, 143/255, 90/255, 0.30)
+    readonly property color diffAddBg: dark ? theme._successDarkBase.alpha(0.13) : theme._successLightBase.alpha(0.13)
+    readonly property color diffAddStrong: dark ? theme._successDarkBase.alpha(0.32) : theme._successLightBase.alpha(0.30)
     readonly property color diffAddFg: successText
-    readonly property color diffDelBg: dark ? Qt.rgba(226/255, 87/255, 76/255, 0.14) : Qt.rgba(226/255, 87/255, 76/255, 0.11)
-    readonly property color diffDelStrong: dark ? Qt.rgba(226/255, 87/255, 76/255, 0.36) : Qt.rgba(226/255, 87/255, 76/255, 0.28)
+    readonly property color diffDelBg: dark ? theme.marginRed.alpha(0.14) : theme.marginRed.alpha(0.11)
+    readonly property color diffDelStrong: dark ? theme.marginRed.alpha(0.36) : theme.marginRed.alpha(0.28)
     readonly property color diffDelFg: dangerText
-    readonly property color scrollbar: dark ? Qt.rgba(232/255, 228/255, 218/255, 0.22) : Qt.rgba(31/255, 36/255, 48/255, 0.24)
+    readonly property color scrollbar: dark ? theme._fgDarkBase.alpha(0.22) : theme.ink.alpha(0.24)
     readonly property color switchThumb: dark ? "#dfe2e8" : "#ffffff"
-    readonly property color shadow: dark ? Qt.rgba(0, 0, 0, 0.5) : Qt.rgba(31/255, 36/255, 48/255, 0.18)
+    readonly property color shadow: dark ? theme._black.alpha(0.5) : theme.ink.alpha(0.18)
 
     // ---- Typography ----------------------------------------------------------------------
     // A chosen family missing on this device (chosen elsewhere, uninstalled) gives the default.
@@ -247,10 +297,15 @@ QtObject {
     readonly property real lineHeightTight: 1.25    // headings
     readonly property real lineHeight: 1.5          // paragraphs, descriptions
     readonly property real lineHeightLoose: lineSpacing === "compact" ? 1.45 : lineSpacing === "relaxed" ? 1.9 : 1.65 // editor prose
-    /// Line height in pixels for `pixelSize` (default ratio: lineHeight).
-    function lineHeightPx(pixelSize, ratio) {
+    /// Line height in pixels for `pixelSize` (ratio undefined: lineHeight). Compiled callers pass
+    /// both arguments (`Theme.lineHeightPx(px, Theme.lineHeight)`): a call with fewer does not compile.
+    function lineHeightPx(pixelSize: real, ratio: var): int {
         return Math.round(pixelSize * (ratio === undefined ? lineHeight : ratio))
     }
+    /// The UI font at the base size (fontUi, textBase) — a default for a component's `font`.
+    property font fontUiBase
+    fontUiBase.family: fontUi
+    fontUiBase.pixelSize: textBase
     readonly property int weightNormal: Font.Normal
     readonly property int weightMedium: Font.Medium
     readonly property int weightSemiBold: Font.DemiBold
@@ -302,13 +357,37 @@ QtObject {
     readonly property int focusRingWidth: 2
 
     // ---- Elevation (BShadow) --------------------------------------------------------------
-    /// { blur, offsetY, spread, opacity } for levels 0 (flat) … 3 (dialogs).
-    function elevation(level) {
+    /// { blur, offsetY, spread, opacity } for levels 0 (flat) … 3 (dialogs); each typed:
+    /// elevationBlur(), elevationOffsetY(), elevationSpread(), elevationOpacity().
+    function elevation(level: int): var {
+        return { blur: elevationBlur(level), offsetY: elevationOffsetY(level), spread: elevationSpread(level),
+                 opacity: elevationOpacity(level) }
+    }
+    function elevationBlur(level: int): real {
         switch (level) {
-        case 1: return { blur: 6, offsetY: 1, spread: 0, opacity: dark ? 0.35 : 0.10 }
-        case 2: return { blur: 18, offsetY: 4, spread: 0, opacity: dark ? 0.45 : 0.14 }
-        case 3: return { blur: 40, offsetY: 14, spread: -4, opacity: dark ? 0.6 : 0.22 }
-        default: return { blur: 0, offsetY: 0, spread: 0, opacity: 0 }
+        case 1: return 6
+        case 2: return 18
+        case 3: return 40
+        default: return 0
+        }
+    }
+    function elevationOffsetY(level: int): real {
+        switch (level) {
+        case 1: return 1
+        case 2: return 4
+        case 3: return 14
+        default: return 0
+        }
+    }
+    function elevationSpread(level: int): real {
+        return level === 3 ? -4 : 0
+    }
+    function elevationOpacity(level: int): real {
+        switch (level) {
+        case 1: return dark ? 0.35 : 0.10
+        case 2: return dark ? 0.45 : 0.14
+        case 3: return dark ? 0.6 : 0.22
+        default: return 0
         }
     }
 
@@ -323,7 +402,7 @@ QtObject {
 
     // ---- Helpers -------------------------------------------------------------------------
     /// `c` with alpha `a` (0–1).
-    function alpha(c, a) {
-        return Qt.rgba(c.r, c.g, c.b, a)
+    function alpha(c: color, a: real): color {
+        return c.alpha(a)
     }
 }

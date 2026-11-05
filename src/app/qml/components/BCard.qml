@@ -70,20 +70,20 @@ T.Pane {
             color: {
                 switch (control.tone) {
                 case "sunken": return Theme.bgSunken
-                case "accent": return Qt.tint(Theme.bgElevated, Theme.accentBg)
-                case "warning": return Qt.tint(Theme.bgElevated, Theme.warningBg)
-                case "danger": return Qt.tint(Theme.bgElevated, Theme.dangerBg)
-                case "success": return Qt.tint(Theme.bgElevated, Theme.successBg)
+                case "accent": return Theme.bgElevated.tint(Theme.accentBg)
+                case "warning": return Theme.bgElevated.tint(Theme.warningBg)
+                case "danger": return Theme.bgElevated.tint(Theme.dangerBg)
+                case "success": return Theme.bgElevated.tint(Theme.successBg)
                 default: return Theme.bgElevated
                 }
             }
             border.width: 1
             border.color: {
                 switch (control.tone) {
-                case "accent": return Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.35)
-                case "danger": return Qt.rgba(Theme.marginRed.r, Theme.marginRed.g, Theme.marginRed.b, 0.35)
-                case "warning": return Qt.rgba(Theme.warning.r, Theme.warning.g, Theme.warning.b, 0.55)
-                case "success": return Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.35)
+                case "accent": return Theme.accent.alpha(0.35)
+                case "danger": return Theme.marginRed.alpha(0.35)
+                case "warning": return Theme.warning.alpha(0.55)
+                case "success": return Theme.success.alpha(0.35)
                 case "sunken": return Theme.borderSubtle
                 default: return control.clickable && control.hovered ? Theme.borderStrong : Theme.border
                 }

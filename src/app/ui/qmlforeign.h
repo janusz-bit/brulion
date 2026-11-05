@@ -1,6 +1,6 @@
 // QML registration of the GUI-free helpers in brulion_ui_helpers (src/app/ui/CMakeLists.txt):
 // the classes themselves know nothing about QML; these wrappers make them singletons of the
-// app's QML module "Brulion" (DatesHelper, TextHelper, Js, DiffHelper, ThemePalette), so qmllint/qmlcachegen
+// app's QML module "Brulion" (DatesHelper, TextHelper, Js, DiffHelper, ThemePalette, UiModels; the types ThemeColors and PaletteFilter), so qmllint/qmlcachegen
 // still see their full API (from the library's extracted metatypes); KeyboardInsets and
 // GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
@@ -13,11 +13,13 @@
 #include "filepicker.h"
 #include "gestureinsets.h"
 #include "jshelper.h"
+#include "mapholder.h"
 #include "keyboardinsets.h"
 #include "rowscroll.h"
 #include "texthelper.h"
 #include "themepalette.h"
 #include "touchflick.h"
+#include "uimodels.h"
 
 #include <QJSEngine>
 #include <QtQml/qqmlregistration.h>
@@ -54,6 +56,13 @@ public:
     static JsHelper *create(QQmlEngine *, QJSEngine *) { return new JsHelper; }
 };
 
+// A QVariantMap in a typed property, for compiled QML (mapholder.h).
+struct MapHolderForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::MapHolder)
+    QML_NAMED_ELEMENT(MapHolder)
+};
+
 struct DiffHelperForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ui::DiffHelper)
@@ -70,6 +79,33 @@ struct ThemePaletteForeign {
     QML_SINGLETON
 public:
     static ThemePalette *create(QQmlEngine *, QJSEngine *) { return new ThemePalette; }
+};
+
+struct UiModelsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::UiModels)
+    QML_NAMED_ELEMENT(UiModels)
+    QML_SINGLETON
+public:
+    static UiModels *create(QQmlEngine *, QJSEngine *) { return new UiModels; }
+};
+
+struct ToastListModelForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::ToastListModel)
+    QML_NAMED_ELEMENT(ToastListModel)
+};
+
+struct PaletteFilterForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::PaletteFilter)
+    QML_NAMED_ELEMENT(PaletteFilter)
+};
+
+struct ThemeColorsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::ThemeColors)
+    QML_NAMED_ELEMENT(ThemeColors)
 };
 
 struct KeyboardInsetsForeign {

@@ -4,7 +4,9 @@
 #include "themepalette.h"
 
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QInputDevice>
+#include <QInputMethod>
 
 #include <algorithm>
 
@@ -18,6 +20,26 @@ DeviceInfo::DeviceInfo(QObject *parent)
     , m_simulated(qEnvironmentVariableIntValue("BRULION_SIMULATE_SCREEN_READER") == 1)
 {
     QAccessible::installActivationObserver(this);
+    if (QInputMethod *im = QGuiApplication::inputMethod())
+        connect(im, &QInputMethod::visibleChanged, this, &DeviceInfo::inputMethodVisibleChanged);
+}
+
+bool DeviceInfo::inputMethodVisible() const
+{
+    const QInputMethod *im = QGuiApplication::inputMethod();
+    return im && im->isVisible();
+}
+
+void DeviceInfo::hideInputMethod() const
+{
+    if (QInputMethod *im = QGuiApplication::inputMethod())
+        im->hide();
+}
+
+void DeviceInfo::showInputMethod() const
+{
+    if (QInputMethod *im = QGuiApplication::inputMethod())
+        im->show();
 }
 
 DeviceInfo::~DeviceInfo()

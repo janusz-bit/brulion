@@ -73,7 +73,7 @@ ColumnLayout {
         horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
         wrapMode: Text.Wrap
         lineHeightMode: Text.FixedHeight
-        lineHeight: Theme.lineHeightPx(font.pixelSize)
+        lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
         font.family: Theme.fontUi
         font.pixelSize: root.compact ? Theme.textSm : Theme.textBase
         color: Theme.fgMuted

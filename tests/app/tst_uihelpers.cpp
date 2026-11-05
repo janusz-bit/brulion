@@ -568,6 +568,179 @@ private Q_SLOTS:
         brulion::ui::DatesHelper d;
         QCOMPARE(d.normalizeTime(input), expected);
     }
+
+    // ---- Typed parts for compiled QML ------------------------------------------------------
+
+    void shortcutKeys_data()
+    {
+        QTest::addColumn<QString>("sequence");
+        QTest::addColumn<QStringList>("keys");
+        QTest::newRow("three") << u"Ctrl+Shift+F"_s << QStringList{u"Ctrl"_s, u"Shift"_s, u"F"_s};
+        QTest::newRow("plus key") << u"Ctrl++"_s << QStringList{u"Ctrl"_s, u"+"_s};
+        QTest::newRow("plus first") << u"++Ctrl"_s << QStringList{u"+"_s, u"Ctrl"_s};
+        QTest::newRow("one") << u"Enter"_s << QStringList{u"Enter"_s};
+        QTest::newRow("arrows") << u"↑+↓"_s << QStringList{u"↑"_s, u"↓"_s};
+        QTest::newRow("Polish") << u"Alt+ł"_s << QStringList{u"Alt"_s, u"ł"_s};
+        QTest::newRow("empty") << QString() << QStringList();
+        QTest::newRow("only plus") << u"+"_s << QStringList{u"+"_s};
+    }
+
+    void shortcutKeys()
+    {
+        QFETCH(QString, sequence);
+        QFETCH(QStringList, keys);
+        QCOMPARE(brulion::ui::TextHelper().shortcutKeys(sequence), keys);
+    }
+
+    void fuzzyRankTexts()
+    {
+        brulion::ui::TextHelper t;
+        const QStringList texts{u"Źródło Serif"_s, u"DejaVu Sans"_s, u"Zrodlo Mono"_s, u"Noto"_s};
+        QCOMPARE(t.fuzzyRankTexts(QString(), texts), texts);
+        const QStringList ranked = t.fuzzyRankTexts(u"zrodlo"_s, texts);
+        QCOMPARE(ranked.size(), 2);
+        QVERIFY(ranked.contains(u"Źródło Serif"_s) && ranked.contains(u"Zrodlo Mono"_s));
+        QCOMPARE(t.fuzzyRankTexts(QString(), texts, 2), (QStringList{u"Źródło Serif"_s, u"DejaVu Sans"_s}));
+        // The same order as fuzzyRank().
+        const QVariantList full = t.fuzzyRank(u"o"_s, texts);
+        QStringList expected;
+        for (const QVariant &r : full)
+            expected.append(texts.at(r.toMap().value(u"index"_s).toInt()));
+        QCOMPARE(t.fuzzyRankTexts(u"o"_s, texts), expected);
+    }
+
+    void datesSpecParts()
+    {
+        brulion::ui::DatesHelper d;
+        QCOMPARE(d.specDate(u"2026-10-15 09:30"_s), u"2026-10-15"_s);
+        QCOMPARE(d.specTime(u"2026-10-15 09:30"_s), u"09:30"_s);
+        QCOMPARE(d.specDate(u"2026-10-15"_s), u"2026-10-15"_s);
+        QCOMPARE(d.specTime(u"2026-10-15"_s), QString());
+        QCOMPARE(d.specDate(u"jutro"_s), QString());
+        QCOMPARE(d.specTime(u"jutro"_s), QString());
+        // As splitSpec() gives them.
+        const QVariantMap split = d.splitSpec(u"2026-02-28 23:59"_s);
+        QCOMPARE(d.specDate(u"2026-02-28 23:59"_s), split.value(u"date"_s).toString());
+        QCOMPARE(d.specTime(u"2026-02-28 23:59"_s), split.value(u"time"_s).toString());
+    }
+
+    void datesRepeatKind_data()
+    {
+        QTest::addColumn<QString>("rule");
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("freq");
+        QTest::addColumn<int>("interval");
+        QTest::addColumn<QList<int>>("weekdays");
+        QTest::newRow("empty") << QString() << u"none"_s << QString() << 0 << QList<int>();
+        QTest::newRow("not a rule") << u"kiedyś"_s << u"none"_s << QString() << 0 << QList<int>();
+        QTest::newRow("daily") << u"every day"_s << u"daily"_s << u"day"_s << 1 << QList<int>();
+        QTest::newRow("codziennie") << u"codziennie"_s << u"daily"_s << u"day"_s << 1 << QList<int>();
+        QTest::newRow("weekdays") << u"every weekday"_s << u"weekdays"_s << u"day"_s << 1 << QList<int>();
+        QTest::newRow("weekly") << u"every week on Monday, Friday"_s << u"weekly"_s << u"week"_s << 1 << ints({1, 5});
+        QTest::newRow("w poniedziałek") << u"co tydzień w poniedziałek"_s << u"weekly"_s << u"week"_s << 1 << ints({1});
+        QTest::newRow("monthly") << u"every month"_s << u"monthly"_s << u"month"_s << 1 << QList<int>();
+        QTest::newRow("yearly") << u"every year"_s << u"yearly"_s << u"year"_s << 1 << QList<int>();
+        QTest::newRow("two weeks") << u"every 2 weeks on Friday"_s << u"custom"_s << u"week"_s << 2 << ints({5});
+        QTest::newRow("month day") << u"every month on the 15th"_s << u"custom"_s << u"month"_s << 1 << QList<int>();
+        QTest::newRow("when done") << u"every day when done"_s << u"custom"_s << u"day"_s << 1 << QList<int>();
+    }
+
+    void datesRepeatKind()
+    {
+        QFETCH(QString, rule);
+        QFETCH(QString, kind);
+        QFETCH(QString, freq);
+        QFETCH(int, interval);
+        QFETCH(QList<int>, weekdays);
+        brulion::ui::DatesHelper d;
+        QCOMPARE(d.repeatKind(rule), kind);
+        QCOMPARE(d.ruleFreq(rule), freq);
+        QCOMPARE(d.ruleInterval(rule), interval);
+        QCOMPARE(d.ruleWeekdays(rule), weekdays);
+    }
+
+    void datesMakeRule()
+    {
+        brulion::ui::DatesHelper d;
+        QCOMPARE(d.formatRule(d.makeRule(u"week"_s, 1, ints({1, 3}), false), u"en"_s), u"every week on Monday, Wednesday"_s);
+        QCOMPARE(d.formatRule(d.makeRule(u"day"_s, 1, {}, true), u"en"_s), u"every weekday"_s);
+        QCOMPARE(d.formatRule(d.makeRule(u"month"_s, 3, {}, false), u"en"_s), u"every 3 months"_s);
+        QCOMPARE(d.formatRule(d.makeRule(u"week"_s, 2, ints({5}), false), u"pl"_s),
+                 d.formatRule(d.parseRule(u"every 2 weeks on Friday"_s), u"pl"_s));
+        QCOMPARE(d.formatRule(d.makeRule(u"hour"_s, 1, {}, false), u"en"_s), QString());
+        QCOMPARE(d.nextOccurrences(d.makeRule(u"day"_s, 1, {}, false), u"2026-10-15 09:00"_s, 2),
+                 (QStringList{u"2026-10-16 09:00"_s, u"2026-10-17 09:00"_s}));
+    }
+
+    void datesToggledWeekday()
+    {
+        brulion::ui::DatesHelper d;
+        QCOMPARE(d.toggledWeekday(ints({1, 5}), 3), ints({1, 3, 5}));
+        QCOMPARE(d.toggledWeekday(ints({5, 1}), 3), ints({1, 3, 5}));
+        QCOMPARE(d.toggledWeekday(ints({1, 3, 5}), 3), ints({1, 5}));
+        // The only one stays.
+        QCOMPARE(d.toggledWeekday(ints({4}), 4), ints({4}));
+        QCOMPARE(d.toggledWeekday({}, 7), ints({7}));
+    }
+
+    void datesWeekdayNamesFrom()
+    {
+        brulion::ui::DatesHelper d;
+        const QStringList names = d.weekdayNames(u"short"_s, u"pl"_s);
+        QCOMPARE(d.weekdayNamesFrom(1, u"short"_s, u"pl"_s), names);
+        const QStringList fromSunday = d.weekdayNamesFrom(7, u"short"_s, u"pl"_s);
+        QCOMPARE(fromSunday.size(), 7);
+        QCOMPARE(fromSunday.at(0), names.at(6));
+        QCOMPARE(fromSunday.at(1), names.at(0));
+        QCOMPARE(d.weekdayNamesFrom(6, u"full"_s, u"en"_s).first(), u"Saturday"_s);
+    }
+
+    void viewRowsHaveEveryKey()
+    {
+        brulion::ui::DiffHelper h;
+        const QString a = u"jeden\ndwa\ntrzy\ncztery\npięć\nsześć\nsiedem\nosiem\n"_s;
+        const QString b = u"jeden\nDWA\ntrzy\ncztery\npięć\nsześć\nsiedem\nosiem\ndziewięć\n"_s;
+        const QStringList keys{u"count"_s, u"kind"_s, u"leftSegments"_s, u"leftText"_s, u"newNo"_s, u"oldNo"_s,
+                               u"rightSegments"_s, u"rightText"_s, u"segments"_s, u"text"_s};
+        for (bool split : {false, true}) {
+            const QVariantList rows = h.viewRows(a, b, split, 1);
+            const QVariantList plain = split ? h.splitRows(a, b, 1) : h.unifiedRows(a, b, 1);
+            QCOMPARE(rows.size(), plain.size());
+            QVERIFY(kinds(rows).contains(u's'));
+            for (qsizetype i = 0; i < rows.size(); ++i) {
+                const QVariantMap row = rows.at(i).toMap();
+                for (const QString &k : keys)
+                    QVERIFY2(row.contains(k), qPrintable(k));
+                // The row's own values are kept.
+                const QVariantMap own = plain.at(i).toMap();
+                for (auto it = own.cbegin(); it != own.cend(); ++it)
+                    QCOMPARE(row.value(it.key()), it.value());
+                if (split)
+                    QCOMPARE(row.value(u"leftText"_s), own.value(u"left"_s, QString()));
+            }
+        }
+    }
+
+    void conflictIndexesAndResolveWith()
+    {
+        brulion::ui::DiffHelper h;
+        const QString ours = u"a\nzażółć\nc\nd\nłódź\n"_s;
+        const QString theirs = u"a\ngęślą\nc\nd\njaźń\n"_s;
+        const QVariantList hunks = h.conflictHunks(ours, theirs);
+        const QList<int> indexes = h.conflictIndexes(hunks);
+        QCOMPARE(indexes.size(), 2);
+        for (int i : indexes)
+            QCOMPARE(hunks.at(i).toMap().value(u"kind"_s).toString(), u"conflict"_s);
+        QVERIFY(h.conflictIndexes({}).isEmpty());
+
+        // "" counts as ours; the manual text is used for "manual" only.
+        const QVariantList choices{QVariantMap{{u"choice"_s, u"ours"_s}, {u"text"_s, QString()}},
+                                   QVariantMap{{u"choice"_s, u"manual"_s}, {u"text"_s, u"ręcznie"_s}}};
+        QCOMPARE(h.resolveHunksWith(hunks, {QString(), u"manual"_s}, {u"ignored"_s, u"ręcznie"_s}),
+                 h.resolveHunks(hunks, choices));
+        QCOMPARE(h.resolveHunksWith(hunks, {u"theirs"_s, u"theirs"_s}, {}), theirs);
+        QCOMPARE(h.resolveHunksWith(hunks, {}, {}), ours);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestUiHelpers)

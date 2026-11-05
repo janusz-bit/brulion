@@ -9,7 +9,7 @@ import Brulion
 Rectangle {
     id: board
 
-    readonly property var rows: [10, 9, 9, 5]
+    readonly property list<int> rows: [10, 9, 9, 5]
     readonly property real gap: Math.max(4, Math.round(width / 120))
     readonly property real rowHeight: (height - gap * (rows.length + 1)) / rows.length
 

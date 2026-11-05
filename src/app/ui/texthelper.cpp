@@ -175,8 +175,25 @@ QVariantMap TextHelper::fuzzyMatch(const QString &query, const QString &text) co
     return {{u"score"_s, match.score}, {u"positions"_s, positions}};
 }
 
-QVariantList TextHelper::fuzzyRank(const QString &query, const QStringList &texts, int limit,
-                                   const QStringList &secondary) const
+QStringList TextHelper::shortcutKeys(const QString &sequence) const
+{
+    QStringList out;
+    if (sequence.isEmpty())
+        return out;
+    const QStringList parts = sequence.split(u'+');
+    for (qsizetype i = 0; i < parts.size(); ++i) {
+        if (parts.at(i).isEmpty() && i + 1 < parts.size() && parts.at(i + 1).isEmpty()) {
+            out.append(u"+"_s);
+            ++i;
+        } else if (!parts.at(i).isEmpty()) {
+            out.append(parts.at(i));
+        }
+    }
+    return out;
+}
+
+QList<FuzzyRanked> fuzzyRankList(const QString &query, const QStringList &texts, int limit,
+                                 const QStringList &secondary)
 {
     struct Ranked {
         int index;
@@ -209,9 +226,20 @@ QVariantList TextHelper::fuzzyRank(const QString &query, const QStringList &text
     }
     if (limit > 0 && ranked.size() > limit)
         ranked.resize(limit);
-    QVariantList out;
+    QList<FuzzyRanked> out;
     out.reserve(ranked.size());
-    for (const Ranked &r : std::as_const(ranked)) {
+    for (const Ranked &r : std::as_const(ranked))
+        out.append({r.index, r.score, r.positions});
+    return out;
+}
+
+QVariantList TextHelper::fuzzyRank(const QString &query, const QStringList &texts, int limit,
+                                   const QStringList &secondary) const
+{
+    QVariantList out;
+    const QList<FuzzyRanked> ranked = fuzzyRankList(query, texts, limit, secondary);
+    out.reserve(ranked.size());
+    for (const FuzzyRanked &r : ranked) {
         QVariantList positions;
         for (int p : r.positions)
             positions.append(p);
@@ -220,11 +248,29 @@ QVariantList TextHelper::fuzzyRank(const QString &query, const QStringList &text
     return out;
 }
 
+QStringList TextHelper::fuzzyRankTexts(const QString &query, const QStringList &texts, int limit) const
+{
+    QStringList out;
+    const QList<FuzzyRanked> ranked = fuzzyRankList(query, texts, limit, {});
+    out.reserve(ranked.size());
+    for (const FuzzyRanked &r : ranked)
+        out.append(texts.at(r.index));
+    return out;
+}
+
 QString TextHelper::markMatches(const QString &text, const QVariantList &positions, const QString &color) const
 {
+    QList<int> list;
+    list.reserve(positions.size());
+    for (const QVariant &p : positions)
+        list.append(p.toInt());
+    return markMatchesHtml(text, list, color);
+}
+
+QString markMatchesHtml(const QString &text, const QList<int> &positions, const QString &color)
+{
     QList<bool> marked(text.size(), false);
-    for (const QVariant &p : positions) {
-        const int i = p.toInt();
+    for (const int i : positions) {
         if (i >= 0 && i < text.size())
             marked[i] = true;
     }

@@ -26,7 +26,12 @@ QtObject {
 
     /// The text, link and its note the next preview is for (while openTimer runs).
     property Item pendingItem: null
-    property var pending: null
+    /// The pending link, its note, its host and the pointer's place in pendingItem.
+    property string pendingHref
+    property string pendingFromPath
+    property EditorHost pendingHost: null
+    property real pendingX: 0
+    property real pendingY: 0
 
     /// The open preview: the text its link is in (null when it goes away), the link, the note
     /// the link is written in, the host it is read through.
@@ -38,17 +43,17 @@ QtObject {
     property bool overLink: false
     property bool overPopup: false
     /// The popup (BLinkPreview), created in the first window a preview opens in.
-    property var popup: null
+    property BLinkPreview popup: null
     readonly property bool shown: popup !== null && popup.visible
 
     /// The link's scheme is one previews are shown for.
     function previewable(href: string): bool {
-        return (href.startsWith("page:") && href.length > 5) || (href.startsWith("block:") && href.length > 6)
+        return (Js.startsWith(href, "page:") && href.length > 5) || (Js.startsWith(href, "block:") && href.length > 6)
     }
 
     /// The pointer rests at (x, y) of `item` on the link `href` ("" or a link without a preview:
     /// none) of text written in `fromPath`, read through `host` (Workspace, the editor's host).
-    function hover(item: Item, href: string, fromPath: string, host: EditorHost, x: real, y: real) {
+    function hover(item: Item, href: string, fromPath: string, host: EditorHost, x: real, y: real): void {
         if (!item || Theme.touchUi)
             return
         if (!hub.previewable(href) || !host) {
@@ -64,24 +69,27 @@ QtObject {
             }
             return
         }
-        if (hub.pendingItem === item && hub.pending && hub.pending.href === href && hub.openTimer.running) {
-            hub.pending.x = x // (the pointer moves along the link: the timer goes on)
-            hub.pending.y = y
+        if (hub.pendingItem === item && hub.pendingHref === href && hub.openTimer.running) {
+            hub.pendingX = x // (the pointer moves along the link: the timer goes on)
+            hub.pendingY = y
             return
         }
         hub.pendingItem = item
-        hub.pending = { href: href, fromPath: fromPath, host: host, x: x, y: y }
+        hub.pendingHref = href
+        hub.pendingFromPath = fromPath
+        hub.pendingHost = host
+        hub.pendingX = x
+        hub.pendingY = y
         hub.openTimer.restart()
         if (hub.anchorItem === item)
             hub.overLink = false // another link of the same text
         hub.closeLater()
     }
     /// The pointer left `item` (or rests on no previewable link of it).
-    function leave(item: Item) {
+    function leave(item: Item): void {
         if (item && hub.pendingItem === item) {
             hub.openTimer.stop()
-            hub.pendingItem = null
-            hub.pending = null
+            hub.forgetPending()
         }
         if (item && hub.anchorItem === item) {
             hub.overLink = false
@@ -89,26 +97,32 @@ QtObject {
         }
     }
     /// The pointer entered or left the preview.
-    function setOverPopup(over: bool) {
+    /// No preview is pending.
+    function forgetPending(): void {
+        hub.pendingItem = null
+        hub.pendingHref = ""
+        hub.pendingFromPath = ""
+        hub.pendingHost = null
+    }
+    function setOverPopup(over: bool): void {
         hub.overPopup = over
         if (over)
             hub.closeTimer.stop()
         else
             hub.closeLater()
     }
-    function closeLater() {
+    function closeLater(): void {
         if (hub.shown && !hub.overLink && !hub.overPopup)
             hub.closeTimer.restart()
     }
     property bool closing: false
-    function close() {
+    function close(): void {
         if (hub.closing)
             return
         hub.closing = true
         hub.openTimer.stop()
         hub.closeTimer.stop()
-        hub.pendingItem = null
-        hub.pending = null
+        hub.forgetPending()
         hub.overLink = false
         hub.overPopup = false
         hub.anchorItem = null
@@ -124,13 +138,16 @@ QtObject {
         hub.close()
     }
     /// Open the preview of `pendingItem`'s link now (the timer; tests).
-    function openNow() {
+    function openNow(): void {
         hub.openTimer.stop()
         const item = hub.pendingItem
-        const p = hub.pending
-        hub.pendingItem = null
-        hub.pending = null
-        if (!item || !p || !item.visible)
+        const href = hub.pendingHref
+        const fromPath = hub.pendingFromPath
+        const host = hub.pendingHost
+        const x = hub.pendingX
+        const y = hub.pendingY
+        hub.forgetPending()
+        if (!item || href === "" || !item.visible)
             return
         // The window's root item: the popup lives in the window of the text it previews.
         let root = item
@@ -142,19 +159,22 @@ QtObject {
             hub.popup = null
         }
         if (!hub.popup)
-            hub.popup = hub.popupComponent.createObject(root, { parent: root })
+            hub.popup = hub.popupComponent.createObject(root, { parent: root }) as BLinkPreview
         if (!hub.popup)
             return
         hub.closeTimer.stop()
         hub.anchorItem = item
-        hub.href = p.href
-        hub.fromPath = p.fromPath
-        hub.host = p.host
+        hub.href = href
+        hub.fromPath = fromPath
+        hub.host = host
         hub.overLink = true
         hub.overPopup = false
-        const at = item.mapToItem(root, p.x, p.y)
-        hub.popup.show(at.x, at.y)
+        hub._at = item.mapToItem(root, x, y)
+        hub.popup.show(hub._at.x, hub._at.y)
     }
+
+    /// Where the preview opens (openNow(); a method's point is read through a typed property).
+    property point _at
 
     // The text under the open preview went away (a row scrolled out, the page closed): so does it.
     onAnchorItemChanged: if (!hub.anchorItem && !hub.closing && hub.popup && hub.popup.visible) hub.close()
