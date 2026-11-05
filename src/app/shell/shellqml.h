@@ -11,6 +11,7 @@
 //   CommandModel     singleton — the command palette's commands
 //   ShortcutMap      singleton — the commands' keyboard shortcuts (custom ones too)
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
+//   ViewTraits       creatable — ViewTraits { view: loader.item } (ShellRouteView)
 #pragma once
 
 #include "appcontroller.h"
@@ -20,6 +21,7 @@
 #include "foldertreemodel.h"
 #include "replacesession.h"
 #include "shortcutmap.h"
+#include "viewtraits.h"
 #include "workspace.h"
 #include "workspacebackups.h"
 #include "workspacereminders.h"
@@ -149,6 +151,12 @@ struct FolderTreeModelForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::FolderTreeModel)
     QML_NAMED_ELEMENT(FolderTreeModel)
+};
+
+struct ViewTraitsForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::ViewTraits)
+    QML_NAMED_ELEMENT(ViewTraits)
 };
 
 } // namespace brulion::shell

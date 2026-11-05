@@ -17,38 +17,52 @@ BDialog {
     /// PageTools.renameImpact() of the page: { notes, links, tags } — the links and tags naming it,
     /// which any new name rewrites (said before a name is typed).
     property var impact: ({})
-    readonly property int changes: (impact.links || 0) + (impact.tags || 0)
+    readonly property int impactTags: AppController.routeInt(impact, "tags", 0)
+    readonly property int changes: AppController.routeInt(impact, "links", 0) + impactTags
     /// The name typed; a "/" in it moves the page or folder.
-    readonly property string typed: nameField.typedText.trim()
-    readonly property string currentName: isDir ? path.split("/").pop() : Workspace.pageTitle(path)
-    readonly property bool moves: typed.indexOf("/") >= 0
-    /// Workspace.renameImpact() of what is typed (exact; a moment after typing stops).
+    readonly property string typed: Js.trim(nameField.typedText)
+    readonly property string currentName: isDir ? Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1) : Workspace.pageTitle(path)
+    readonly property bool moves: Js.includes(typed, "/")
+    /// Workspace.renameImpact() of what is typed (exact; a moment after typing stops), and the
+    /// name it is for.
     property var live: ({})
+    property string liveTyped
+    readonly property bool liveOk: AppController.routeFlag(live, "ok")
+    readonly property string livePath: AppController.routeText(live, "path")
     /// The live impact applies: a new name typed.
-    readonly property bool useLive: typed !== "" && typed !== currentName && live.typed === typed
+    readonly property bool useLive: typed !== "" && typed !== currentName && liveTyped === typed
 
-    function openFor(itemPath, folder) {
-        path = itemPath
-        isDir = folder === true
-        impact = isDir ? ({}) : tools.renameImpact(itemPath)
-        live = ({})
-        nameField.text = isDir ? itemPath.split("/").pop() : Workspace.pageTitle(itemPath)
-        open()
+    function openFor(itemPath: string, folder: bool): void {
+        dialog.path = itemPath
+        dialog.isDir = folder
+        dialog.impact = dialog.isDir ? ({}) : tools.renameImpact(itemPath)
+        dialog.live = ({})
+        dialog.liveTyped = ""
+        nameField.text = dialog.isDir ? Js.sliceFrom(itemPath, Js.lastIndexOf(itemPath, "/") + 1) : Workspace.pageTitle(itemPath)
+        dialog.open()
     }
-    function computeLive() {
-        if (!dialog.opened || typed === "" || typed === currentName) {
-            live = ({})
+    function computeLive(): void {
+        if (!dialog.opened || dialog.typed === "" || dialog.typed === dialog.currentName) {
+            dialog.live = ({})
+            dialog.liveTyped = ""
             return
         }
-        const result = Workspace.renameImpact(path, typed, isDir, true)
-        result.typed = typed
-        live = result
+        dialog.live = Workspace.renameImpact(dialog.path, dialog.typed, dialog.isDir, true)
+        dialog.liveTyped = dialog.typed
+    }
+    property var _result: ({})
+    function intOf(map: var, key: string): int {
+        return AppController.routeInt(map, key, 0)
+    }
+    function textOf(text: string): string {
+        return text
     }
     /// "Zaktualizowane linki: 3 (w 2 notatkach)", with the notebook settings that follow.
-    function liveText() {
-        if (!live.ok)
-            return live.error || ""
-        return words.impactText(live)
+    function liveText(): string {
+        if (!dialog.liveOk)
+            return AppController.routeText(dialog.live, "error")
+        return words.impactText(words.count(dialog.live, "links"), words.count(dialog.live, "tags"),
+                                words.count(dialog.live, "notes"), words.strings(dialog.live, "specials"))
     }
 
     PageTools { id: tools; workspace: Workspace }
@@ -65,28 +79,32 @@ BDialog {
     subtitle: useLive ? liveText()
               : isDir ? qsTr("Links and tags that name the folder are updated.")
               : dialog.changes === 0 ? qsTr("Links and tags that name this page are updated in all notes.")
-              : ((impact.tags || 0) > 0 ? qsTr("%n link(s) and tag(s) %1 will be updated to the new name.", "", dialog.changes)
-                                        : qsTr("%n link(s) %1 will be updated to the new name.", "", dialog.changes))
-                .arg(qsTr("in %n note(s)", "", impact.notes || 0))
+              : (dialog.impactTags > 0 ? qsTr("%n link(s) and tag(s) %1 will be updated to the new name.", "", dialog.changes)
+                                       : qsTr("%n link(s) %1 will be updated to the new name.", "", dialog.changes))
+                .arg(qsTr("in %n note(s)", "", AppController.routeInt(dialog.impact, "notes", 0)))
     iconName: "pencil"
     acceptText: moves ? qsTr("Move") : qsTr("Rename")
-    acceptEnabled: typed !== "" && (!useLive || live.ok === true)
+    acceptEnabled: typed !== "" && (!useLive || dialog.liveOk)
     initialFocusItem: nameField
     preferredWidth: Theme.dialogWidthSm
 
     onOpened: nameField.selectAll()
     onAccepted: {
-        const name = typed
+        const name = dialog.typed
         // What the rename rewrites, counted now (not a moment ago); a "/" moves.
-        const result = Workspace.renameImpact(dialog.path, name, dialog.isDir, true)
-        const renamed = dialog.isDir ? Workspace.renameFolder(dialog.path, name, true)
-                                     : Workspace.renamePage(dialog.path, name, true)
+        // (Typed copies — a property, typed functions: a call's result read after another call
+        // is not compiled.)
+        dialog._result = Workspace.renameImpact(dialog.path, name, dialog.isDir, true)
+        const resultTags = dialog.intOf(dialog._result, "tags")
+        const n = dialog.intOf(dialog._result, "links") + resultTags
+        const renamed = dialog.textOf(dialog.isDir ? Workspace.renameFolder(dialog.path, name, true)
+                                                   : Workspace.renamePage(dialog.path, name, true))
         if (renamed === "" || renamed === dialog.path)
             return
-        const n = (result.links || 0) + (result.tags || 0)
-        const tags = (result.tags || 0) > 0
-        const title = dialog.isDir ? renamed.split("/").pop() : Workspace.pageTitle(renamed)
-        if (moves) {
+        const tags = resultTags > 0
+        const title = dialog.textOf(dialog.isDir ? Js.sliceFrom(renamed, Js.lastIndexOf(renamed, "/") + 1)
+                                                 : Workspace.pageTitle(renamed))
+        if (dialog.moves) {
             // Moved, and renamed too when the name after the last "/" is another one.
             AppController.toast(words.movedText(Workspace.folderOf(renamed), n, tags,
                                                 title !== dialog.currentName ? title : ""), "success")
@@ -107,13 +125,13 @@ BDialog {
     // Where a "/" puts it.
     RowLayout {
         objectName: "renameNewPlace"
-        visible: dialog.moves && dialog.useLive && (dialog.live.path || "") !== ""
+        visible: dialog.moves && dialog.useLive && dialog.livePath !== ""
         Layout.fillWidth: true
         spacing: Theme.space2
         BIcon { name: "folder-input"; size: Theme.iconSizeSm; color: Theme.fgMuted }
         BText {
             Layout.fillWidth: true
-            text: qsTr("New place: %1").arg(String(dialog.live.path || "").replace(/\.md$/i, ""))
+            text: qsTr("New place: %1").arg(Js.replaceRegExp(dialog.livePath, "\\.md$", "i", ""))
             variant: "muted"
             elide: Text.ElideMiddle
         }

@@ -91,6 +91,8 @@ class Autostart;
 class WasmNotifier;
 }
 
+class QWindow;
+
 namespace brulion::shell {
 
 class CommandModel;
@@ -130,7 +132,7 @@ class AppController : public QObject {
     Q_PROPERTY(bool sourceModeShown READ sourceModeShown WRITE setSourceModeShown NOTIFY sourceModeShownChanged FINAL)
 
     // ---- Tabs (tabs.h) ------------------------------------------------------------------
-    /// The main window's bar: [{ id, route, canGoBack, canGoForward }] in order.
+    /// The main window's bar: [{ id, tabId (= id), route, canGoBack, canGoForward }] in order.
     Q_PROPERTY(QVariantList tabs READ tabs NOTIFY tabsChanged FINAL)
     Q_PROPERTY(int tabCount READ tabCount NOTIFY tabsChanged FINAL)
     /// The tab navigation goes to: the focused pane's, or a page window's while it has the focus.
@@ -489,7 +491,7 @@ public:
     /// Show a toast: kind "info" | "success" | "warning" | "error".
     Q_INVOKABLE void toast(const QString &text, const QString &kind = QStringLiteral("info"));
     /// Show a toast with a button (the editor's "Cofnij"): `onAction`, a function, runs when it is
-    /// pressed (Main.qml shows it like toast()).
+    /// pressed (Main.qml shows it as toastWithAction()'s).
     Q_INVOKABLE void toastAction(const QString &text, const QString &kind, const QString &actionText,
                                  const QJSValue &onAction);
     /// Ask the shell to open one of its popups: "palette", "switcher", "capture", "newPage",
@@ -552,6 +554,63 @@ public:
     void setClock(std::function<QDateTime()> clock);
     QDateTime now() const;
 
+    // ---- Route parameters for compiled QML ------------------------------------------------
+    // Views get their route as `property var route` (a QVariantMap); reading `route.key` there
+    // is not compiled by qmlcachegen, these are (also for other maps held in `var`, e.g. the
+    // results of Workspace calls). All accept a missing key and a null route.
+    /// The value of `key` as text ("" when missing or null; a number as its text: 12 → "12").
+    Q_INVOKABLE QString routeText(const QVariantMap &route, const QString &key) const;
+    /// The value of `key` as an int (`fallback` when missing, null or not a number).
+    Q_INVOKABLE int routeInt(const QVariantMap &route, const QString &key, int fallback) const;
+    /// JavaScript's truthiness of the value of `key` (`if (route.key)`): false when missing,
+    /// null, false, 0, NaN or ""; true otherwise (also for the text "false" and an empty list).
+    Q_INVOKABLE bool routeFlag(const QVariantMap &route, const QString &key) const;
+
+    // ---- The shell's compiled QML (no functions as values) ------------------------------------
+    /// A toast with a button, without a function to run (compiled QML): its id (> 0);
+    /// toastActionTriggered(id) when the button is pressed. Main.qml shows it
+    /// (toastWithActionRequested) and reports its toast host's id (setToastHostId) and the
+    /// button (hostToastActionTriggered).
+    Q_INVOKABLE int toastWithAction(const QString &text, const QString &kind, const QString &actionText);
+    /// An "info" toast whose button restores `trashPaths` from the trash (Workspace::restoreAll),
+    /// also once the view that deleted them is gone: its id.
+    Q_INVOKABLE int toastRestore(const QString &text, const QString &actionText, const QStringList &trashPaths);
+    /// Main.qml: toast `id` of toastWithAction() is shown by the window's toast host as `hostId`.
+    Q_INVOKABLE void setToastHostId(int id, int hostId);
+    /// Main.qml: the button of the toast host's toast `hostId` was pressed (toastAction()'s
+    /// function runs, toastRestore()'s pages come back, else toastActionTriggered()).
+    Q_INVOKABLE void hostToastActionTriggered(int hostId);
+    /// Main.qml: the toast host's toast `hostId` went (its action is forgotten).
+    Q_INVOKABLE void hostToastRemoved(int hostId);
+    /// openIn() in two steps (OpenIn.begin / OpenIn.end): the next navigation goes to `target`
+    /// ("tab" | "window") until endOpenIn().
+    Q_INVOKABLE void beginOpenIn(const QString &target);
+    Q_INVOKABLE void endOpenIn();
+    /// The folders down to `folder`, each by its path: "a/b/c" → ["a", "a/b", "a/b/c"]; "" → []
+    /// (split at every "/", as JavaScript's split: "a//b" → ["a", "a/", "a//b"]). The top bar's
+    /// breadcrumb.
+    Q_INVOKABLE QStringList folderChain(const QString &folder) const;
+    /// The value of `key` as a list of strings ([] when missing or null; one string → [it]), as
+    /// routeText() for lists: the specials of Workspace.moveImpact() / folderInfo().
+    Q_INVOKABLE QStringList routeStrings(const QVariantMap &route, const QString &key) const;
+    /// The value of `key` as a list ([] when missing or null): the specials of folderInfo().
+    Q_INVOKABLE QVariantList routeList(const QVariantMap &route, const QString &key) const;
+    /// Move the tray calendar `popup` to trayPopupPosition() for its size (a QPoint result's x
+    /// and y cannot be read by compiled QML).
+    Q_INVOKABLE void placeTrayPopup(QWindow *popup) const;
+    /// The recent pages ([{ path, title }], Workspace::recentPages) without `path`, at most
+    /// `limit` of them: the sidebar's "Ostatnie".
+    Q_INVOKABLE QVariantList recentPagesExcept(const QString &path, int limit) const;
+    /// `object`'s property `name` (invalid when it has none): a property a QML type adds that its
+    /// base type, all compiled QML knows of it, lacks (a list delegate's required property).
+    Q_INVOKABLE QVariant propertyOf(QObject *object, const QString &name) const;
+    /// "Przenieś do…"'s rows for `query` over the notebook's folders (folderchoices.h): the root
+    /// (`rootName`), the folders matching it without `ownFolder` and its subfolders, a new folder
+    /// (`newFolderText`'s %1, subtitle `createText`); `moving`: `currentFolder`'s row disabled.
+    Q_INVOKABLE QVariantList folderChoices(const QString &query, const QString &ownFolder,
+                                           const QString &currentFolder, bool moving, const QString &rootName,
+                                           const QString &newFolderText, const QString &createText) const;
+
 Q_SIGNALS:
     void statusChanged();
     void introPendingChanged();
@@ -579,8 +638,6 @@ Q_SIGNALS:
     /// The UI language setting changed ("pl" | "en"); main() swaps the translation.
     void languageChanged(const QString &language);
     void toastRequested(const QString &text, const QString &kind);
-    void toastActionRequested(const QString &text, const QString &kind, const QString &actionText,
-                              const QJSValue &onAction);
     void showWindowRequested();
     void uiActionRequested(const QString &action);
     void itemActionRequested(const QString &action, const QString &path);
@@ -589,6 +646,10 @@ Q_SIGNALS:
     void notificationRequested(const QString &title, const QString &body);
     /// quit() was called: main() ends the event loop.
     void quitRequested();
+    /// toastWithAction(): Main.qml shows toast `id`.
+    void toastWithActionRequested(int id, const QString &text, const QString &kind, const QString &actionText);
+    /// The button of toastWithAction()'s toast `id` was pressed.
+    void toastActionTriggered(int id);
 
 private Q_SLOTS:
     void onFirstFrame();
@@ -706,6 +767,10 @@ private:
     bool m_startToday = false;
     QVariantMap m_routeAfterOpen; ///< openVaultAt()
     QString m_routeAfterOpenVault; ///< openRoute() while opening: the notebook the route belongs to
+    int m_lastToastId = 0;              ///< toastWithAction()'s ids
+    QHash<int, int> m_toastIdsByHostId; ///< the toast host's id → toastWithAction()'s
+    QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
+    QHash<int, QJSValue> m_functionToasts;   ///< toastAction()'s ids → the function
 #ifdef Q_OS_WASM
     platform::WasmNotifier *m_wasmNotifier = nullptr;
 #endif

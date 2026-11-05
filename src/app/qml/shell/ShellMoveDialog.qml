@@ -42,80 +42,84 @@ BDialog {
     signal moveRequested(string path, string folder, bool create)
 
     readonly property string currentFolder: mode === "move" ? Workspace.folderOf(path) : pickCurrent
-    readonly property string itemName: path === "" ? "" : path.toLowerCase().endsWith(".md")
-                                                           ? Workspace.pageTitle(path) : path.split("/").pop()
+    readonly property string itemName: path === "" ? "" : Js.endsWith(Js.toLowerCase(path), ".md")
+                                                           ? Workspace.pageTitle(path) : Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1)
+    /// Workspace.moveImpact()'s fields.
+    readonly property bool impactOk: AppController.routeFlag(impact, "ok")
+    readonly property bool impactSame: AppController.routeFlag(impact, "same")
+    /// `ok` is there and false (an empty impact: none yet).
+    readonly property bool impactRefused: Js.hasKey(impact, "ok") && !impactOk
 
-    function openFor(itemPath, folder) {
-        mode = "move"
-        path = itemPath
-        isDir = folder === true
-        open()
+    function openFor(itemPath: string, folder: bool): void {
+        dialog.mode = "move"
+        dialog.path = itemPath
+        dialog.isDir = folder
+        dialog.open()
     }
-    function pickFolder(current) {
-        mode = "pick"
-        path = ""
-        isDir = false
-        pickCurrent = current || ""
-        open()
+    function pickFolder(current: string): void {
+        dialog.mode = "pick"
+        dialog.path = ""
+        dialog.isDir = false
+        dialog.pickCurrent = current
+        dialog.open()
     }
-    function choose(row) {
-        if (!row || row.disabled)
-            return
-        if (mode === "pick") {
-            let folder = row.folder
-            if (row.create) {
-                folder = Workspace.createFolder(row.folder)
-                if (folder === "")
+    /// Choose the row of `folder` (`create`: the row creating it).
+    function choose(folder: string, create: bool): void {
+        if (dialog.mode === "pick") {
+            let chosenFolder = folder
+            if (create) {
+                chosenFolder = Workspace.createFolder(folder)
+                if (chosenFolder === "")
                     return // the workspace said why
             }
-            dialog.chosen(folder)
+            dialog.chosen(chosenFolder)
             dialog.close()
             return
         }
-        target = row.folder
-        createTarget = row.create === true
-        hasTarget = true
-        impact = Workspace.moveImpact(path, row.folder)
+        dialog.target = folder
+        dialog.createTarget = create
+        dialog.hasTarget = true
+        dialog.impact = Workspace.moveImpact(dialog.path, folder)
+    }
+    /// Choose row `index` of `rows` (none, or a disabled one: nothing).
+    function chooseAt(index: int): void {
+        if (index < 0 || index >= dialog.rows.length)
+            return
+        if (dialog.rowFlag(index, "disabled"))
+            return
+        dialog.choose(dialog.rowText(index, "folder"), dialog.rowFlag(index, "create"))
+    }
+    /// A field of row `index` (typed).
+    function rowText(index: int, key: string): string {
+        return AppController.routeText(dialog.rows[index], key)
+    }
+    function rowFlag(index: int, key: string): bool {
+        return AppController.routeFlag(dialog.rows[index], key)
     }
     /// "Zaktualizowane linki: 3 (w 2 notatkach)" — what the move rewrites, with every notebook
     /// setting that follows.
-    function impactText() {
-        if (!hasTarget)
+    function impactText(): string {
+        if (!dialog.hasTarget)
             return qsTr("Choose where to move it.")
-        if (!impact.ok)
-            return impact.error || ""
-        if (impact.same)
+        if (!dialog.impactOk)
+            return AppController.routeText(dialog.impact, "error")
+        if (dialog.impactSame)
             return qsTr("It is in this folder already.")
-        return words.impactText(impact)
+        return words.impactText(words.count(dialog.impact, "links"), words.count(dialog.impact, "tags"),
+                                words.count(dialog.impact, "notes"), words.strings(dialog.impact, "specials"))
     }
 
     ShellMoveWords { id: words }
 
-    /// The rows: the root, the folders matching the query, a new folder of the typed name.
-    readonly property var rows: {
+    /// The rows: the root, the folders matching the query, a new folder of the typed name —
+    /// { folder, title, subtitle, icon, create, disabled } (AppController.folderChoices).
+    readonly property list<var> rows: {
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
         if (!visible || Workspace.revision < 0)
             return []
-        const own = mode === "move" && isDir ? path : ""
-        const folders = Workspace.folderPaths().filter(f => own === "" || (f !== own && !f.startsWith(own + "/")))
-        const q = query.trim()
-        const out = []
-        const rootName = qsTr("Notebook root")
-        if (q === "" || TextHelper.fold(rootName).indexOf(TextHelper.fold(q)) >= 0)
-            out.push({ folder: "", title: rootName, subtitle: "", icon: "house", create: false })
-        const names = folders.map(f => f.split("/").pop())
-        for (const r of TextHelper.fuzzyRank(q, names, 100, folders)) {
-            const f = folders[r.index]
-            out.push({ folder: f, title: names[r.index], icon: "folder", create: false,
-                       subtitle: f.indexOf("/") >= 0 ? f.slice(0, f.lastIndexOf("/")) : "" })
-        }
-        const typed = q.replace(/^\/+|\/+$/g, "")
-        if (typed !== "" && !folders.some(f => f.toLowerCase() === typed.toLowerCase()))
-            out.push({ folder: typed, title: qsTr("New folder “%1”").arg(typed), icon: "folder-plus", create: true,
-                       subtitle: mode === "move" ? qsTr("Create it and move here") : qsTr("Create it") })
-        for (const row of out)
-            row.disabled = mode === "move" && !row.create && row.folder === currentFolder
-        return out
+        return AppController.folderChoices(query, mode === "move" && isDir ? path : "", currentFolder, mode === "move",
+                                           qsTr("Notebook root"), qsTr("New folder “%1”"),
+                                           mode === "move" ? qsTr("Create it and move here") : qsTr("Create it"))
     }
 
     objectName: "shellMoveDialog"
@@ -123,7 +127,7 @@ BDialog {
     subtitle: mode === "pick" ? "" : currentFolder !== "" ? qsTr("Now in %1").arg(currentFolder) : qsTr("Now in the notebook root")
     iconName: mode === "pick" ? "folder" : "folder-input"
     acceptText: qsTr("Move here")
-    acceptEnabled: mode === "move" && hasTarget && impact.ok === true && !impact.same
+    acceptEnabled: mode === "move" && hasTarget && impactOk && !impactSame
     showFooter: mode === "move"
     initialFocusItem: search
     preferredWidth: Theme.dialogWidth
@@ -153,7 +157,7 @@ BDialog {
             list.currentIndex = 0
             list.forceActiveFocus()
         }
-        onAccepted: if (dialog.rows.length > 0) dialog.choose(dialog.rows[0])
+        onAccepted: dialog.chooseAt(0)
     }
 
     ListView {
@@ -170,21 +174,29 @@ BDialog {
         T.ScrollBar.vertical: BScrollBar {}
         Accessible.role: Accessible.List
         Accessible.name: dialog.title
-        Keys.onReturnPressed: dialog.choose(dialog.rows[currentIndex])
-        Keys.onEnterPressed: dialog.choose(dialog.rows[currentIndex])
+        Keys.onReturnPressed: dialog.chooseAt(list.currentIndex)
+        Keys.onEnterPressed: dialog.chooseAt(list.currentIndex)
         delegate: BListItem {
-            required property var modelData
+            id: row
             required property int index
+            // (The row's fields: AppController.folderChoices.)
+            // (`icon` and `subtitle` are the item's own properties: read from the row.)
+            required property string folder
+            required property string title
+            required property bool create
+            required property bool disabled
+            readonly property string rowIcon: index < dialog.rows.length ? AppController.routeText(dialog.rows[index], "icon") : ""
+            readonly property string folderSubtitle: index < dialog.rows.length ? AppController.routeText(dialog.rows[index], "subtitle") : ""
             objectName: "moveDialogRow"
             width: ListView.view.width
-            iconName: modelData.icon
-            text: modelData.title
-            subtitle: modelData.disabled ? qsTr("Here now") : modelData.subtitle
-            enabled: !modelData.disabled
-            selected: dialog.mode === "move" ? dialog.hasTarget && dialog.target === modelData.folder
-                                               && dialog.createTarget === modelData.create
-                                             : !modelData.create && modelData.folder === dialog.pickCurrent
-            onClicked: dialog.choose(modelData)
+            iconName: row.rowIcon
+            text: row.title
+            subtitle: row.disabled ? qsTr("Here now") : row.folderSubtitle
+            enabled: !row.disabled
+            selected: dialog.mode === "move" ? dialog.hasTarget && dialog.target === row.folder
+                                               && dialog.createTarget === row.create
+                                             : !row.create && row.folder === dialog.pickCurrent
+            onClicked: dialog.chooseAt(row.index)
         }
         BText {
             anchors.centerIn: parent
@@ -199,8 +211,9 @@ BDialog {
         visible: dialog.mode === "move"
         Layout.fillWidth: true
         text: dialog.impactText()
-        variant: dialog.hasTarget && dialog.impact.ok === false ? "body" : "muted"
-        color: dialog.hasTarget && dialog.impact.ok === false ? Theme.dangerText : Theme.fgMuted
+        // (impact.ok false: a move that cannot be made, said in the danger colour.)
+        variant: dialog.hasTarget && dialog.impactRefused ? "body" : "muted"
+        color: dialog.hasTarget && dialog.impactRefused ? Theme.dangerText : Theme.fgMuted
         wrapMode: Text.Wrap
     }
 }

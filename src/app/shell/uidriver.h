@@ -20,6 +20,8 @@
 #include <QList>
 #include <QPointF>
 #include <QString>
+#include <QVariant>
+#include <QVariantList>
 
 #include <functional>
 #include <optional>
@@ -229,5 +231,14 @@ void mouseClickNow(QQuickWindow *window, QPointF scenePos, Qt::MouseButton butto
 void mouseDragNow(QQuickWindow *window, QPointF from, QPointF to, int holdMs = 0, bool escape = false);
 /// A tap on touch UIs (the phone run), a left click otherwise.
 void tapOrClickNow(QQuickWindow *window, QPointF scenePos, bool touch);
+
+// ---- Calling QML functions -------------------------------------------------------------------
+
+/// Call the QML function `name` of `object` with `args`, each converted to the type its
+/// parameter declares (QVariant for an untyped or `var` one: compiled QML types its functions,
+/// QMetaObject::invokeMethod() wants the exact types). `result` (optional) gets what it returns
+/// (invalid for none or `void`; a QJSValue as its QVariant). False when the object has no such
+/// function or an argument does not convert.
+bool callQml(QObject *object, const char *name, const QVariantList &args = {}, QVariant *result = nullptr);
 
 } // namespace brulion::uidriver

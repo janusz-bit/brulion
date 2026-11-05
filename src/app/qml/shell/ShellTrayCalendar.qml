@@ -37,11 +37,9 @@ ApplicationWindow {
     /// A notebook is open or opening (quick capture waits for it: AppController::quickCapture).
     readonly property bool notebookOpening: AppController.status === "boot" || AppController.status === "loading"
 
-    function open() {
+    function open(): void {
         calendar.showDay(DatesHelper.today)
-        const p = AppController.trayPopupPosition(popup.width, popup.height)
-        popup.x = p.x
-        popup.y = p.y
+        AppController.placeTrayPopup(popup)
         popup.wasActive = false
         popup.show()
         popup.raise()

@@ -5,11 +5,12 @@ import QtQuick.Layouts
 import Brulion
 
 // ShellPageWindow — a page in a window of its own (desktop; docs/UI.md "Tabs, split view and
-// windows"): a tab outside the main window's bar (AppController.windowTabs), made and destroyed by
-// AppShell as that list changes. Its bar has back / forward (the tab's own history), the title and
-// "Przenieś do okna głównego" (AppController.attachTab: a tab of the bar again); under it the tab's
-// view (ShellTabPane). It edits through the same Workspace as the main window, so an edit in one
-// shows in the other (the editors merge each other's saves: EditorHost::fileChanged).
+// windows"): a tab outside the main window's bar (AppController.windowTabs), made by AppShell as
+// that list grows; it destroys itself once its tab is not in it. Its bar has back / forward (the
+// tab's own history), the title and "Przenieś do okna głównego" (AppController.attachTab: a tab
+// of the bar again); under it the tab's view (ShellTabPane). It edits through the same Workspace
+// as the main window, so an edit in one shows in the other (the editors merge each other's saves:
+// EditorHost::fileChanged).
 // While it has the focus, its tab is the one navigation goes to (links followed in it open in it);
 // the main window takes that back when it gets the focus (Main.qml, AppController.
 // mainWindowActivated). Its view's own shortcuts (Ctrl+E, Ctrl+F…) work in it; Alt+← / Alt+→ go
@@ -20,11 +21,15 @@ ApplicationWindow {
     objectName: "shellPageWindow"
 
     required property int tabId
-    /// The title of a route (AppShell.routeTitle).
-    property var titleOf: (route) => ""
     /// The tab's route (followed: AppController.tabRouteChanged).
     property var route: AppController.tabRoute(tabId)
-    readonly property string pageTitle: pane.routeView.viewTitle !== "" ? pane.routeView.viewTitle : titleOf(route)
+    readonly property string pageTitle: pane.routeView.viewTitle !== "" ? pane.routeView.viewTitle
+                                                                         : titles.routeTitle(titles.field(window.route, "view"),
+                                                                                             titles.field(window.route, "path"),
+                                                                                             titles.field(window.route, "date"),
+                                                                                             titles.field(window.route, "tag"))
+
+    ShellRouteTitles { id: titles }
 
     width: 760
     height: 720
@@ -42,13 +47,21 @@ ApplicationWindow {
 
     Connections {
         target: AppController
-        function onTabRouteChanged(id) {
+        function onTabRouteChanged(id: int) {
             if (id === window.tabId)
                 window.route = AppController.tabRoute(window.tabId)
         }
         function onTabsChanged() {
             // (Its back/forward buttons.)
             window.route = AppController.tabRoute(window.tabId)
+        }
+        // Its tab went (closed, or moved to the main window): hidden at once (destroy() waits
+        // for the event loop), then destroyed. (AppShell makes the windows.)
+        function onWindowTabsChanged() {
+            if (AppController.windowTabs.indexOf(window.tabId) < 0) {
+                window.hide()
+                window.destroy()
+            }
         }
     }
 
@@ -69,14 +82,15 @@ ApplicationWindow {
 
                 BIconButton {
                     objectName: "pageWindowBack"
-                    enabled: window.route && AppController.tabCanGoBack(window.tabId)
+                    enabled: titles.field(window.route, "view") !== "" && AppController.tabCanGoBack(window.tabId)
                     iconName: "arrow-left"
                     label: qsTr("Back")
                     shortcut: "Alt+Left"
                     onClicked: AppController.back(window.tabId)
                 }
                 BIconButton {
-                    enabled: window.route && AppController.tabCanGoForward(window.tabId)
+                    // (window.route: the binding follows the tab's navigation.)
+                    enabled: titles.field(window.route, "view") !== "" && AppController.tabCanGoForward(window.tabId)
                     iconName: "arrow-right"
                     label: qsTr("Forward")
                     shortcut: "Alt+Right"

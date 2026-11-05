@@ -4,8 +4,10 @@
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QHash>
+#include <QJSValue>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QMetaMethod>
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -16,6 +18,7 @@
 #include <qtestsupport_gui.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <memory>
 
@@ -998,6 +1001,63 @@ void tapOrClickNow(QQuickWindow *window, QPointF scenePos, bool touch)
         touchTapNow(window, scenePos);
     else
         mouseClickNow(window, scenePos);
+}
+
+bool callQml(QObject *object, const char *name, const QVariantList &args, QVariant *result)
+{
+    if (!object)
+        return false;
+    const QMetaObject *meta = object->metaObject();
+    QMetaMethod method;
+    for (int i = meta->methodCount() - 1; i >= 0; --i) {
+        const QMetaMethod m = meta->method(i);
+        if (m.methodType() != QMetaMethod::Signal && m.parameterCount() == args.size() && m.name() == name) {
+            method = m;
+            break;
+        }
+    }
+    if (!method.isValid() || args.size() > 4)
+        return false;
+    // Each argument as its parameter's type (a QVariant holds a `var` parameter's value).
+    std::array<QVariant, 4> values;
+    std::array<QMetaMethodArgument, 4> arguments{};
+    for (qsizetype i = 0; i < args.size(); ++i) {
+        const QMetaType type = method.parameterMetaType(int(i));
+        if (type == QMetaType::fromType<QVariant>()) {
+            values[i] = QVariant::fromValue(args.at(i));
+            arguments[i] = { type.iface(), "QVariant", values[i].constData() };
+        } else {
+            values[i] = args.at(i);
+            if (values[i].metaType() != type && !values[i].convert(type))
+                return false;
+            arguments[i] = { type.iface(), type.name(), values[i].constData() };
+        }
+    }
+    const QMetaType returnType = method.returnMetaType();
+    const bool returns = returnType.isValid() && returnType != QMetaType::fromType<void>();
+    QVariant returned = returns ? QVariant(returnType) : QVariant();
+    QTemplatedMetaMethodReturnArgument<void> r;
+    r.metaType = returns ? returnType.iface() : nullptr;
+    r.name = returns ? method.typeName() : nullptr;
+    r.data = returns ? returned.data() : nullptr;
+    bool ok = false;
+    switch (args.size()) {
+    case 0: ok = method.invoke(object, Qt::DirectConnection, r); break;
+    case 1: ok = method.invoke(object, Qt::DirectConnection, r, arguments[0]); break;
+    case 2: ok = method.invoke(object, Qt::DirectConnection, r, arguments[0], arguments[1]); break;
+    case 3: ok = method.invoke(object, Qt::DirectConnection, r, arguments[0], arguments[1], arguments[2]); break;
+    default:
+        ok = method.invoke(object, Qt::DirectConnection, r, arguments[0], arguments[1], arguments[2], arguments[3]);
+        break;
+    }
+    if (ok && result) {
+        if (returned.metaType() == QMetaType::fromType<QVariant>())
+            returned = returned.value<QVariant>();
+        if (returned.metaType() == QMetaType::fromType<QJSValue>())
+            returned = returned.value<QJSValue>().toVariant();
+        *result = returned;
+    }
+    return ok;
 }
 
 } // namespace brulion::uidriver

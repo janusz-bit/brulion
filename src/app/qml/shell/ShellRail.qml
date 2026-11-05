@@ -20,23 +20,23 @@ Rectangle {
 
     signal navigated()
 
-    readonly property var route: AppController.currentRoute
-    /// The views offered, without the ones hidden in the settings.
-    readonly property var entries: [
-        { view: "journals", also: "journal", title: qsTr("Journals"), icon: "book-open" },
-        { view: "calendar", title: qsTr("Calendar"), icon: "calendar" },
-        { view: "tasks", title: qsTr("Tasks"), icon: "list-todo" },
-        { view: "habits", title: qsTr("Habits"), icon: "flame" },
-        { view: "allPages", title: qsTr("All pages"), icon: "files" },
-        { view: "tags", also: "tag", title: qsTr("Tags"), icon: "tags" },
-        { view: "graph", title: qsTr("Graph"), icon: "waypoints" },
-        { view: "search", title: qsTr("Search"), icon: "search" }
-    ].filter(e => AppSettings.sidebarHidden.indexOf(e.view) < 0)
+    readonly property string routeView: AppController.currentView
+    /// The views offered (the ones hidden in the settings are not shown: AppSettings.sidebarHidden).
+    readonly property list<var> entries: [
+        { entryView: "journals", entryAlso: "journal", entryTitle: qsTr("Journals"), entryIcon: "book-open" },
+        { entryView: "calendar", entryAlso: "", entryTitle: qsTr("Calendar"), entryIcon: "calendar" },
+        { entryView: "tasks", entryAlso: "", entryTitle: qsTr("Tasks"), entryIcon: "list-todo" },
+        { entryView: "habits", entryAlso: "", entryTitle: qsTr("Habits"), entryIcon: "flame" },
+        { entryView: "allPages", entryAlso: "", entryTitle: qsTr("All pages"), entryIcon: "files" },
+        { entryView: "tags", entryAlso: "tag", entryTitle: qsTr("Tags"), entryIcon: "tags" },
+        { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryIcon: "waypoints" },
+        { entryView: "search", entryAlso: "", entryTitle: qsTr("Search"), entryIcon: "search" }
+    ]
     /// The buttons' squares and the room on both sides of them.
     readonly property int buttonSize: Theme.touchUi ? Theme.touchTarget : Theme.controlHeight
     readonly property int sidePadding: Theme.space2
 
-    function go(route) {
+    function go(route: var): void {
         AppController.navigate(route)
         rail.navigated()
     }
@@ -116,7 +116,7 @@ Rectangle {
                     color: Theme.accentSolid
                     BText {
                         anchors.centerIn: parent
-                        text: (Workspace.name || "B").trim().charAt(0).toUpperCase()
+                        text: Js.toUpperCase(Js.charAt(Js.trim(Workspace.name !== "" ? Workspace.name : "B"), 0))
                         color: Theme.fgOnAccent
                         font.weight: Theme.weightSemiBold
                         font.pixelSize: Math.round(parent.height * 0.52)
@@ -146,14 +146,19 @@ Rectangle {
                 Repeater {
                     model: rail.entries
                     delegate: RailButton {
-                        required property var modelData
-                        objectName: "sidebarNav_" + modelData.view
-                        label: modelData.title
-                        iconName: modelData.icon
-                        shortcut: ShortcutMap.sequences["go." + modelData.view] || ""
-                        selected: rail.route.view === modelData.view
-                                  || (modelData.also !== undefined && rail.route.view === modelData.also)
-                        onClicked: rail.go({ view: modelData.view })
+                        id: entry
+                        required property string entryView
+                        required property string entryAlso
+                        required property string entryTitle
+                        required property string entryIcon
+                        objectName: "sidebarNav_" + entryView
+                        // Hidden in the settings: not shown (the layout leaves no gap).
+                        visible: AppSettings.sidebarHidden.indexOf(entryView) < 0
+                        label: entryTitle
+                        iconName: entryIcon
+                        shortcut: AppController.routeText(ShortcutMap.sequences, "go." + entryView)
+                        selected: rail.routeView === entryView || (entryAlso !== "" && rail.routeView === entryAlso)
+                        onClicked: rail.go({ view: entry.entryView })
                     }
                 }
                 // Import (the drawer on phones: notes from other apps, docs/UI.md).
@@ -162,7 +167,7 @@ Rectangle {
                     visible: Theme.narrow
                     label: qsTr("Import notes")
                     iconName: "download"
-                    selected: rail.route.view === "importExport"
+                    selected: rail.routeView === "importExport"
                     onClicked: rail.go({ view: "importExport", tab: "import" })
                 }
             }
@@ -179,7 +184,7 @@ Rectangle {
             label: qsTr("Settings")
             iconName: "settings"
             shortcut: ShortcutMap.sequences["go.settings"] || ""
-            selected: rail.route.view === "settings"
+            selected: rail.routeView === "settings"
             onClicked: rail.go({ view: "settings" })
         }
     }
@@ -193,21 +198,27 @@ Rectangle {
         readonly property string docsPath: AppController.docsVaultPath
 
         Repeater {
-            model: AppSettings.recentVaults.filter(v => v.path !== notebookMenu.docsPath)
+            // (The documentation is the item below: its row is not shown.)
+            model: AppSettings.recentVaults
             delegate: BMenuItem {
-                required property var modelData
+                id: recent
+                required property string path
+                required property string name
                 objectName: "notebookMenuRecent"
+                visible: path !== notebookMenu.docsPath
+                height: visible ? implicitHeight : 0
                 // Not `checked`: a checkable item has already toggled it when onTriggered runs,
-                // so the first click on another notebook would do nothing.
-                readonly property bool isCurrent: modelData.path === notebookMenu.current
-                text: modelData.name
+                // so the first click on another notebook would do nothing. (A Binding: it
+                // follows isCurrent again after the toggle; onTriggered puts it back at once.)
+                readonly property bool isCurrent: path === notebookMenu.current
+                text: name
                 iconName: "folder"
                 checkable: true
-                checked: isCurrent
+                Binding on checked { value: recent.isCurrent }
                 onTriggered: {
-                    checked = Qt.binding(() => isCurrent)
-                    if (!isCurrent)
-                        AppController.openRecentVault(modelData.path)
+                    recent.checked = recent.isCurrent
+                    if (!recent.isCurrent)
+                        AppController.openRecentVault(recent.path)
                     rail.navigated()
                 }
             }
@@ -219,12 +230,13 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Brulion documentation")
             iconName: "book-open"
+            id: docsItem
             readonly property bool isCurrent: notebookMenu.docsPath === notebookMenu.current
             checkable: true
-            checked: isCurrent
+            Binding on checked { value: docsItem.isCurrent }
             onTriggered: {
-                checked = Qt.binding(() => isCurrent)
-                if (!isCurrent)
+                docsItem.checked = docsItem.isCurrent
+                if (!docsItem.isCurrent)
                     AppController.openDocsVault()
                 rail.navigated()
             }

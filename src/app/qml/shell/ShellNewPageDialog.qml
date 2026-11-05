@@ -25,35 +25,37 @@ BDialog {
     /// A page (or with `makeFolder` a folder) in `folderPath`. A page goes there when the folder
     /// is given or `chosen` (the root of a page shown at the root), else into the notebook's
     /// folder for new pages.
-    function openFor(folderPath, makeFolder, chosen) {
-        folder = folderPath || ""
-        folderChosen = folder !== "" || chosen === true
-        folderMode = makeFolder === true
-        open()
+    function openFor(folderPath: string, makeFolder: bool, chosen: bool): void {
+        dialog.folder = folderPath
+        dialog.folderChosen = dialog.folder !== "" || chosen
+        dialog.folderMode = makeFolder
+        dialog.open()
     }
+    /// The notebook's folder for new pages ("" = the root).
+    readonly property string newPagesFolder: AppController.routeText(Workspace.config, "newPagesFolder")
 
     title: folderMode ? qsTr("New folder") : qsTr("New page")
     subtitle: !folderMode ? "" : folder !== "" ? qsTr("In %1").arg(folder) : qsTr("In the notebook root")
     iconName: folderMode ? "folder-plus" : "square-pen"
     acceptText: qsTr("Create")
-    acceptEnabled: nameField.typedText.replace(/[\/\\\s]/g, "") !== ""
+    acceptEnabled: Js.replaceRegExp(nameField.typedText, "[\\/\\\\\\s]", "g", "") !== ""
     initialFocusItem: nameField
     preferredWidth: folderMode ? Theme.dialogWidthSm : Theme.dialogWidth
 
     onAboutToShow: {
         nameField.text = ""
-        mode = modeChoice.preferred()
+        dialog.mode = modeChoice.preferred()
     }
     onAccepted: {
-        const name = nameField.text.trim()
-        if (folderMode) {
-            const created = Workspace.createFolder(folder !== "" ? folder + "/" + name : name)
+        const name = Js.trim(nameField.text)
+        if (dialog.folderMode) {
+            const created = Workspace.createFolder(dialog.folder !== "" ? dialog.folder + "/" + name : name)
             if (created !== "")
                 AppController.requestItemAction("reveal", created)
             return
         }
-        modeChoice.remember(mode)
-        const created = Workspace.createPage(name, folderChosen ? folder : (Workspace.config.newPagesFolder || ""), mode)
+        modeChoice.remember(dialog.mode)
+        const created = Workspace.createPage(name, dialog.folderChosen ? dialog.folder : dialog.newPagesFolder, dialog.mode)
         if (created !== "")
             AppController.openPage(created)
     }
@@ -86,8 +88,8 @@ BDialog {
             visible: !dialog.folderChosen
             height: Theme.controlHeight
             verticalAlignment: Text.AlignVCenter
-            text: (Workspace.config.newPagesFolder || "") !== ""
-                  ? qsTr("In folder: %1").arg(Workspace.config.newPagesFolder) : qsTr("In the notebook root")
+            text: dialog.newPagesFolder !== ""
+                  ? qsTr("In folder: %1").arg(dialog.newPagesFolder) : qsTr("In the notebook root")
             variant: "muted"
         }
         BButton {
@@ -96,7 +98,7 @@ BDialog {
             variant: "ghost"
             iconName: "folder-input"
             text: qsTr("Change…")
-            onClicked: picker.pickFolder(dialog.folderChosen ? dialog.folder : (Workspace.config.newPagesFolder || ""))
+            onClicked: picker.pickFolder(dialog.folderChosen ? dialog.folder : dialog.newPagesFolder)
         }
     }
     BText {

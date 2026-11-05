@@ -203,17 +203,30 @@ ApplicationWindow {
         sourceComponent: BKeyboardPlaceholder {}
     }
 
+    // Toasts with a button (AppController.toastWithAction, toastRestore, toastAction): shown
+    // here, their button reported back by id (no function in QML: compiled).
+    Connections {
+        target: AppController
+        function onToastWithActionRequested(id: int, text: string, kind: string, actionText: string) {
+            AppController.setToastHostId(id, toastHost.showToast(text, kind, actionText, -1))
+        }
+    }
+    Connections {
+        target: toastHost
+        function onActionTriggered(toastId: int) {
+            AppController.hostToastActionTriggered(toastId)
+        }
+        function onToastRemoved(toastId: int) {
+            AppController.hostToastRemoved(toastId)
+        }
+    }
+
     Connections {
         target: AppController
 
         function onToastRequested(text, kind) {
             // Errors (a note could not be saved, storage is missing) stay until closed.
             toastHost.show(text, kind === "error" ? { kind: kind, timeout: 0 } : { kind: kind })
-        }
-        // A toast with a button (the editor's "Cofnij" after deleting or cutting blocks).
-        function onToastActionRequested(text, kind, actionText, onAction) {
-            toastHost.show(text, { kind: kind, actionText: actionText,
-                                   onAction: () => { if (typeof onAction === "function") onAction() } })
         }
         function onShowWindowRequested() {
             window.hideTrayCalendar()

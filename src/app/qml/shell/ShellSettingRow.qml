@@ -35,15 +35,18 @@ GridLayout {
             const child = slot.children[i]
             if (!child.visible)
                 continue
-            if (child instanceof Flow || child instanceof BTextField)
+            if ((child as Flow) !== null || (child as BTextField) !== null)
                 return false
-            controls += child.naturalWidth !== undefined ? child.naturalWidth : child.implicitWidth
+            // (`naturalWidth`: BButton's and BSegmented's width without `fill`.)
+            const button = child as BButton
+            const segmented = child as BSegmented
+            controls += button !== null ? button.naturalWidth : segmented !== null ? segmented.naturalWidth : child.implicitWidth
             ++shown
         }
         if (shown === 0)
             return false
         controls += (shown - 1) * slot.spacing
-        const textRoom = row.width - columnSpacing - controls
+        const textRoom = row.width - row.columnSpacing - controls
         return titleText.implicitWidth <= textRoom && textRoom >= 0.4 * row.width
     }
     /// The row has controls (shown or not); one without titles the rows after it.
@@ -83,23 +86,39 @@ GridLayout {
         /// The controls shown now (a lone button fills the stacked row, one beside another does not).
         readonly property int shownCount: {
             let n = 0
-            for (let i = 0; i < children.length; ++i)
-                if (children[i].visible)
+            for (let i = 0; i < slot.children.length; ++i)
+                if (slot.children[i].visible)
                     ++n
             return n
         }
-        // A child with a `fill` property fills the row while stacked: BSegmented always, a
-        // framed BButton only as the row's only shown control.
-        onChildrenChanged: {
-            for (let i = 0; i < children.length; ++i) {
-                const child = children[i]
-                if (child.fill === undefined)
+        // Stacked, a control with `fill` (BButton, BSegmented) takes the row's width: a segmented
+        // control always, a button when it is the only control shown and not a ghost one. What
+        // that depends on, as text: `fill` (and Layout.fillWidth) are set again when it changes.
+        readonly property string fillInputs: {
+            let inputs = (row.stacked ? "s" : "w") + slot.shownCount
+            for (let i = 0; i < slot.children.length; ++i) {
+                const button = slot.children[i] as BButton
+                inputs += button !== null ? "|" + button.variant + (button.visible ? "1" : "0") : "|"
+            }
+            return inputs
+        }
+        function applyFill(): void {
+            for (let i = 0; i < slot.children.length; ++i) {
+                const button = slot.children[i] as BButton
+                if (button !== null) {
+                    button.fill = row.stacked && button.variant !== "ghost" && button.visible && slot.shownCount === 1
+                    button.Layout.fillWidth = button.fill
                     continue
-                const button = child instanceof BButton
-                child.fill = Qt.binding(() => row.stacked && (!button || (child.variant !== "ghost" && child.visible
-                                                                          && slot.shownCount === 1)))
-                child.Layout.fillWidth = Qt.binding(() => child.fill)
+                }
+                const segmented = slot.children[i] as BSegmented
+                if (segmented !== null) {
+                    segmented.fill = row.stacked
+                    segmented.Layout.fillWidth = segmented.fill
+                }
             }
         }
+        onFillInputsChanged: slot.applyFill()
+        onChildrenChanged: slot.applyFill()
+        Component.onCompleted: slot.applyFill()
     }
 }

@@ -8,7 +8,7 @@ import Brulion
 BCard {
     id: banner
 
-    readonly property var updates: AppController.updates
+    readonly property AppUpdates updates: AppController.updates
 
     objectName: "shellUpdateBanner"
     padding: Theme.space2

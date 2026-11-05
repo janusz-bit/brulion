@@ -1,5 +1,7 @@
 #include "appcontroller.h"
 
+#include "folderchoices.h"
+
 #include "log/categories.h"
 
 #include "appsettings.h"
@@ -27,6 +29,7 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QLoggingCategory>
 #include <QMetaMethod>
 #include <QStandardPaths>
@@ -35,6 +38,7 @@
 #include <QWindow>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #ifdef Q_OS_ANDROID
@@ -466,7 +470,9 @@ QVariantList AppController::tabs() const
     QVariantList out;
     for (const int id : m_tabs.bar()) {
         const RouteHistory *h = m_tabs.history(id);
+        // "tabId" too: a delegate's required property cannot be named "id".
         out.append(QVariantMap{{u"id"_s, id},
+                               {u"tabId"_s, id},
                                {u"route"_s, h->current()},
                                {u"canGoBack"_s, h->canGoBack()},
                                {u"canGoForward"_s, h->canGoForward()}});
@@ -1699,7 +1705,9 @@ void AppController::toast(const QString &text, const QString &kind)
 void AppController::toastAction(const QString &text, const QString &kind, const QString &actionText,
                                 const QJSValue &onAction)
 {
-    Q_EMIT toastActionRequested(text, kind, actionText, onAction);
+    const int id = ++m_lastToastId;
+    m_functionToasts.insert(id, onAction);
+    Q_EMIT toastWithActionRequested(id, text, kind, actionText);
 }
 
 void AppController::requestUiAction(const QString &action)
@@ -1747,6 +1755,187 @@ void AppController::setClock(std::function<QDateTime()> clock)
 QDateTime AppController::now() const
 {
     return m_clock ? m_clock() : QDateTime::currentDateTime();
+}
+
+QString AppController::routeText(const QVariantMap &route, const QString &key) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return {};
+    switch (value.typeId()) {
+    case QMetaType::Double:
+    case QMetaType::Float: {
+        // A whole number without ".0", like JavaScript (12.0 → "12").
+        const double d = value.toDouble();
+        if (d == std::trunc(d) && std::abs(d) < 1e15)
+            return QString::number(qint64(d));
+        return QString::number(d, 'g', QLocale::FloatingPointShortest);
+    }
+    default:
+        return value.toString();
+    }
+}
+
+int AppController::routeInt(const QVariantMap &route, const QString &key, int fallback) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return fallback;
+    bool ok = false;
+    const int n = value.toInt(&ok);
+    return ok ? n : fallback;
+}
+
+bool AppController::routeFlag(const QVariantMap &route, const QString &key) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return false;
+    switch (value.typeId()) {
+    case QMetaType::Bool:
+        return value.toBool();
+    case QMetaType::QString:
+        return !value.toString().isEmpty();
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong:
+    case QMetaType::Double:
+    case QMetaType::Float: {
+        const double d = value.toDouble();
+        return d != 0 && !std::isnan(d);
+    }
+    default:
+        return true;
+    }
+}
+
+int AppController::toastWithAction(const QString &text, const QString &kind, const QString &actionText)
+{
+    const int id = ++m_lastToastId;
+    Q_EMIT toastWithActionRequested(id, text, kind, actionText);
+    return id;
+}
+
+int AppController::toastRestore(const QString &text, const QString &actionText, const QStringList &trashPaths)
+{
+    const int id = ++m_lastToastId;
+    m_restoreToasts.insert(id, trashPaths);
+    Q_EMIT toastWithActionRequested(id, text, u"info"_s, actionText);
+    return id;
+}
+
+void AppController::setToastHostId(int id, int hostId)
+{
+    if (id > 0 && hostId > 0)
+        m_toastIdsByHostId.insert(hostId, id);
+}
+
+void AppController::hostToastActionTriggered(int hostId)
+{
+    const int id = m_toastIdsByHostId.take(hostId);
+    if (id <= 0)
+        return;
+    if (m_restoreToasts.contains(id)) {
+        if (m_workspace)
+            m_workspace->restoreAll(m_restoreToasts.take(id));
+        return;
+    }
+    if (m_functionToasts.contains(id)) {
+        QJSValue onAction = m_functionToasts.take(id);
+        if (onAction.isCallable())
+            onAction.call();
+        return;
+    }
+    Q_EMIT toastActionTriggered(id);
+}
+
+void AppController::hostToastRemoved(int hostId)
+{
+    const int id = m_toastIdsByHostId.take(hostId);
+    m_restoreToasts.remove(id);
+    m_functionToasts.remove(id);
+}
+
+void AppController::beginOpenIn(const QString &target)
+{
+    m_openIn = target;
+}
+
+void AppController::endOpenIn()
+{
+    m_openIn.clear();
+}
+
+QStringList AppController::folderChain(const QString &folder) const
+{
+    QStringList out;
+    if (folder.isEmpty())
+        return out;
+    qsizetype from = 0;
+    while (true) {
+        const qsizetype slash = folder.indexOf(u'/', from);
+        if (slash < 0)
+            break;
+        out.append(folder.left(slash));
+        from = slash + 1;
+    }
+    out.append(folder);
+    return out;
+}
+
+QStringList AppController::routeStrings(const QVariantMap &route, const QString &key) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return {};
+    return value.toStringList();
+}
+
+QVariantList AppController::folderChoices(const QString &query, const QString &ownFolder,
+                                          const QString &currentFolder, bool moving, const QString &rootName,
+                                          const QString &newFolderText, const QString &createText) const
+{
+    return shell::folderChoices(m_workspace ? m_workspace->folderPaths() : QStringList(), query, ownFolder,
+                                currentFolder, moving, { rootName, newFolderText, createText });
+}
+
+QVariantList AppController::routeList(const QVariantMap &route, const QString &key) const
+{
+    const QVariant value = route.value(key);
+    if (!value.isValid() || value.isNull())
+        return {};
+    return value.toList();
+}
+
+void AppController::placeTrayPopup(QWindow *popup) const
+{
+    if (popup)
+        popup->setPosition(trayPopupPosition(popup->width(), popup->height()));
+}
+
+QVariantList AppController::recentPagesExcept(const QString &path, int limit) const
+{
+    QVariantList out;
+    if (!m_workspace)
+        return out;
+    for (const QVariant &page : m_workspace->recentPages()) {
+        if (out.size() >= limit)
+            break;
+        if (page.toMap().value(u"path"_s).toString() != path)
+            out.append(page);
+    }
+    return out;
+}
+
+QVariant AppController::propertyOf(QObject *object, const QString &name) const
+{
+    if (!object)
+        return {};
+    const QByteArray key = name.toUtf8();
+    if (object->metaObject()->indexOfProperty(key.constData()) < 0)
+        return {};
+    return object->property(key.constData());
 }
 
 } // namespace brulion::shell
