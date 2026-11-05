@@ -19,8 +19,10 @@ FocusScope {
     id: root
 
     property var route: ({})
-    readonly property string tag: route && route.view === "tag" && route.tag ? String(route.tag) : ""
+    readonly property string tag: AppController.routeText(route, "view") === "tag" ? AppController.routeText(route, "tag") : ""
     readonly property int maximumWidth: 860
+    /// The accent as text ("#rrggbb", like String(color)) for TextHelper.markMatches.
+    readonly property string accentText: AppController.routeText({ color: Theme.accentText }, "color")
     readonly property real sideMargin: Math.max(Theme.compact ? Theme.space3 : Theme.space6, (width - maximumWidth) / 2)
 
     readonly property var rendererPalette: ({
@@ -38,11 +40,11 @@ FocusScope {
     })
 
     /// `tag:` query of a tag key (quoted when it has a space, a comma or a quote).
-    function tagQuery(key) {
-        return "tag:" + (/[\s,"]/.test(key) ? "\"" + key + "\"" : key)
+    function tagQuery(key: string): string {
+        return "tag:" + (Js.test(key, "[\\s,\"]", "") ? "\"" + key + "\"" : key)
     }
-    function safe(s) {
-        return s && s.indexOf("<") >= 0 ? TextHelper.escapeHtml(s) : (s || "")
+    function safe(s: string): string {
+        return Js.indexOf(s, "<") >= 0 ? TextHelper.escapeHtml(s) : s
     }
 
     focus: true
@@ -66,7 +68,7 @@ FocusScope {
             id: all
             focus: true
             Component.onCompleted: {
-                tags.sortKey = String(AppSettings.value("tags/sort", "count"))
+                tags.sortKey = "" + AppSettings.value("tags/sort", "count")
                 // Not on touch screens: the on-screen keyboard would cover the tags.
                 if (!Theme.touchUi)
                     filterField.forceActiveFocus()
@@ -97,7 +99,7 @@ FocusScope {
                             tagList.currentIndex = 0
                             tagList.forceActiveFocus()
                         }
-                        onAccepted: if (tags.count > 0) AppController.openTag(tags.get(0).tag)
+                        onAccepted: if (tags.count > 0) AppController.openTag(AppController.routeText(tags.get(0), "tag"))
                     }
                     BSegmented {
                         model: [{ value: "count", text: qsTr("Most used"), icon: "list" },
@@ -106,14 +108,14 @@ FocusScope {
                         currentValue: tags.sortKey
                         accessibleName: qsTr("Sort tags")
                         onActivated: (value) => {
-                            tags.sortKey = value
                             AppSettings.setValue("tags/sort", value)
+                            tags.sortKey = value
                         }
                     }
                 }
                 BText {
                     Layout.leftMargin: root.sideMargin + 2
-                    text: filterField.text.trim() !== "" ? qsTr("%1 of %n tag(s)", "", tags.totalCount).arg(tags.count)
+                    text: Js.trim(filterField.text) !== "" ? qsTr("%1 of %n tag(s)", "", tags.totalCount).arg(tags.count)
                                                          : qsTr("%n tag(s)", "", tags.totalCount)
                     variant: "caption"
                     color: Theme.fgFaint
@@ -134,8 +136,8 @@ FocusScope {
                     T.ScrollBar.vertical: BScrollBar {}
                     Accessible.role: Accessible.List
                     Accessible.name: qsTr("Tags")
-                    Keys.onReturnPressed: if (currentIndex >= 0) AppController.openTag(tags.get(currentIndex).tag)
-                    Keys.onEnterPressed: if (currentIndex >= 0) AppController.openTag(tags.get(currentIndex).tag)
+                    Keys.onReturnPressed: if (currentIndex >= 0) AppController.openTag(AppController.routeText(tags.get(currentIndex), "tag"))
+                    Keys.onEnterPressed: if (currentIndex >= 0) AppController.openTag(AppController.routeText(tags.get(currentIndex), "tag"))
                     Keys.onUpPressed: (event) => {
                         if (currentIndex <= 0)
                             filterField.forceActiveFocus()
@@ -143,46 +145,61 @@ FocusScope {
                             event.accepted = false
                     }
 
-                    delegate: BListItem {
+                    // An Item around the row: the role `count` would override BListItem's own count.
+                    delegate: Item {
                         id: item
                         required property int index
-                        required property var model
-                        readonly property bool nested: tags.sortKey === "name" && item.model.depth > 0 && filterField.text.trim() === ""
-                        // The count and the way to the tag overview (a click opens the tag's page).
-                        trailing: Row {
-                            spacing: Theme.space1
-                            BBadge {
-                                anchors.verticalCenter: parent.verticalCenter
-                                count: item.model.count
-                                variant: item.selected ? "accent" : "neutral"
-                            }
-                            BIconButton {
-                                objectName: "tagOverviewButton"
-                                anchors.verticalCenter: parent.verticalCenter
-                                iconName: "tags"
-                                size: "small"
-                                label: qsTr("Tag overview")
-                                Accessible.description: qsTr("Everything tagged #%1").arg(item.model.display)
-                                onClicked: AppController.navigate({ view: "tag", tag: item.model.tag, overview: true })
-                            }
-                        }
+                        required property string tag
+                        required property string display
+                        required property int count
+                        required property int pageCount
+                        required property int depth
+                        required property string leaf
+                        required property list<var> matches
+                        required property string pageTitle
+                        readonly property bool nested: tags.sortKey === "name" && item.depth > 0 && Js.trim(filterField.text) === ""
                         // Full width (ListView places delegates at x 0); the row itself is inset.
                         width: tagList.width
-                        leftInset: root.sideMargin - Theme.space2
-                        rightInset: root.sideMargin - Theme.space2
-                        leftPadding: root.sideMargin + (nested ? item.model.depth * (Theme.touchUi ? 22 : 20) : 0)
-                        rightPadding: root.sideMargin
-                        iconName: "hash"
-                        iconColor: Theme.tagFg
-                        text: nested ? item.model.leaf : item.model.display
-                        titleMarkup: item.model.matches.length > 0
-                                     ? TextHelper.markMatches(item.model.display, item.model.matches, String(Theme.accentText)) : ""
-                        // Where a click goes: the page the tag names, when it is not just the tag's name.
-                        subtitle: item.model.pageTitle !== "" && item.model.pageTitle.toLowerCase() !== item.model.leaf.toLowerCase()
-                                  ? qsTr("%n note(s)", "", item.model.pageCount) + " · → " + item.model.pageTitle
-                                  : qsTr("%n note(s)", "", item.model.pageCount)
-                        selected: tagList.currentIndex === item.index && tagList.activeFocus
-                        onClicked: AppController.openTag(item.model.tag)
+                        implicitHeight: tagRow.implicitHeight
+                        height: implicitHeight
+
+                        BListItem {
+                            id: tagRow
+                            width: parent.width
+                            // The count and the way to the tag overview (a click opens the tag's page).
+                            trailing: Row {
+                                spacing: Theme.space1
+                                BBadge {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    count: item.count
+                                    variant: tagRow.selected ? "accent" : "neutral"
+                                }
+                                BIconButton {
+                                    objectName: "tagOverviewButton"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    iconName: "tags"
+                                    size: "small"
+                                    label: qsTr("Tag overview")
+                                    Accessible.description: qsTr("Everything tagged #%1").arg(item.display)
+                                    onClicked: AppController.navigate({ view: "tag", tag: item.tag, overview: true })
+                                }
+                            }
+                            leftInset: root.sideMargin - Theme.space2
+                            rightInset: root.sideMargin - Theme.space2
+                            leftPadding: root.sideMargin + (item.nested ? item.depth * (Theme.touchUi ? 22 : 20) : 0)
+                            rightPadding: root.sideMargin
+                            iconName: "hash"
+                            iconColor: Theme.tagFg
+                            text: item.nested ? item.leaf : item.display
+                            titleMarkup: item.matches.length > 0
+                                         ? TextHelper.markMatches(item.display, item.matches, root.accentText) : ""
+                            // Where a click goes: the page the tag names, when it is not just the tag's name.
+                            subtitle: item.pageTitle !== "" && ("" + Js.toLowerCase(item.pageTitle)) !== ("" + Js.toLowerCase(item.leaf))
+                                      ? qsTr("%n note(s)", "", item.pageCount) + " · → " + item.pageTitle
+                                      : qsTr("%n note(s)", "", item.pageCount)
+                            selected: tagList.currentIndex === item.index && tagList.activeFocus
+                            onClicked: AppController.openTag(item.tag)
+                        }
                     }
 
                     BEmptyState {
@@ -191,7 +208,7 @@ FocusScope {
                         width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
                         visible: tags.count === 0 && Workspace.ready
                         iconName: "hash"
-                        title: filterField.text.trim() !== "" ? qsTr("No tag matches “%1”").arg(filterField.text.trim()) : qsTr("No tags yet")
+                        title: Js.trim(filterField.text) !== "" ? qsTr("No tag matches “%1”").arg(Js.trim(filterField.text)) : qsTr("No tags yet")
                         description: qsTr("Tag blocks with #word (also #nested/tag or #[[two words]]); pages can have tags: in their properties.")
                     }
                 }
@@ -277,13 +294,25 @@ FocusScope {
                             spacing: Theme.space1
                             Repeater {
                                 model: tagged.subTags
-                                delegate: BChip {
-                                    required property var modelData
-                                    variant: "tag"
-                                    interactive: true
-                                    text: "#" + root.safe(modelData.display) + " · " + modelData.count
-                                    Accessible.name: qsTr("Tag %1").arg(modelData.display)
-                                    onClicked: AppController.navigate({ view: "tag", tag: modelData.tag, overview: true })
+                                // subTags: [{ tag, display, count }] (an Item around the chip: the
+                                // role `display` would override the button's own).
+                                delegate: Item {
+                                    id: subTag
+                                    required property string tag
+                                    required property string display
+                                    required property int count
+                                    implicitWidth: subTagChip.implicitWidth
+                                    implicitHeight: subTagChip.implicitHeight
+                                    width: implicitWidth
+                                    height: implicitHeight
+                                    BChip {
+                                        id: subTagChip
+                                        variant: "tag"
+                                        interactive: true
+                                        text: "#" + root.safe(subTag.display) + " · " + subTag.count
+                                        Accessible.name: qsTr("Tag %1").arg(subTag.display)
+                                        onClicked: AppController.navigate({ view: "tag", tag: subTag.tag, overview: true })
+                                    }
                                 }
                             }
                         }
@@ -323,42 +352,54 @@ FocusScope {
                 delegate: Item {
                     id: entry
                     required property int index
-                    required property var model
+                    required property string rowType
+                    required property string path
+                    required property string title
+                    required property string folder
+                    required property string journalDate
+                    required property int count
+                    required property bool collapsed
+                    required property bool pageLevel
+                    required property int line
+                    required property string html
+                    required property string text
+                    required property string breadcrumb
+                    required property string taskStatus
                     width: list.width
-                    implicitHeight: entry.model.rowType === "page" ? groupHeader.implicitHeight + (entry.index > 0 ? Theme.space3 : 0)
+                    implicitHeight: entry.rowType === "page" ? groupHeader.implicitHeight + (entry.index > 0 ? Theme.space3 : 0)
                                                                    : refRow.implicitHeight
                     height: implicitHeight
 
                     ContentRefGroupHeader {
                         id: groupHeader
-                        visible: entry.model.rowType === "page"
+                        visible: entry.rowType === "page"
                         anchors.bottom: parent.bottom
                         x: root.sideMargin
                         width: parent.width - 2 * root.sideMargin
                         refs: tagged
-                        path: entry.model.path
-                        title: entry.model.title
-                        folder: entry.model.folder
-                        journalDate: entry.model.journalDate
-                        count: entry.model.count
-                        collapsed: entry.model.collapsed
+                        path: entry.path
+                        title: entry.title
+                        folder: entry.folder
+                        journalDate: entry.journalDate
+                        count: entry.count
+                        collapsed: entry.collapsed
                         // A page tagged as a whole (its properties) and not in any block.
-                        pageLevel: entry.model.pageLevel && entry.model.count === 0
+                        pageLevel: entry.pageLevel && entry.count === 0
                         compact: Theme.compact
                     }
                     ContentRefRow {
                         id: refRow
-                        visible: entry.model.rowType === "ref"
+                        visible: entry.rowType === "ref"
                         x: root.sideMargin + (Theme.compact ? Theme.space2 : Theme.space6)
                         width: parent.width - x - root.sideMargin
                         tools: tools
-                        html: entry.model.html
-                        plain: entry.model.text
-                        breadcrumb: entry.model.breadcrumb
-                        taskStatus: entry.model.taskStatus
-                        sourcePath: entry.model.path
-                        line: entry.model.line
-                        onOpened: (newPane) => AppController.openPage(entry.model.path, entry.model.line, newPane)
+                        html: entry.html
+                        plain: entry.text
+                        breadcrumb: entry.breadcrumb
+                        taskStatus: entry.taskStatus
+                        sourcePath: entry.path
+                        line: entry.line
+                        onOpened: (newPane) => AppController.openPage(entry.path, entry.line, newPane)
                         onTaskToggled: tagged.toggleTask(entry.index)
                         onTaskStatusRequested: (status) => tagged.setTaskStatus(entry.index, status)
                     }

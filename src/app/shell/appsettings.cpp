@@ -1382,6 +1382,41 @@ void AppSettings::setValue(const QString &k, const QVariant &value)
     Q_EMIT valueChanged(k);
 }
 
+QStringList AppSettings::recentSearches() const
+{
+    const QVariant saved = m_settings->value(u"search/recent"_s);
+    if (saved.typeId() == QMetaType::QVariantList || saved.typeId() == QMetaType::QStringList) {
+        QStringList out;
+        for (const QVariant &v : saved.toList())
+            out.append(v.toString());
+        return out;
+    }
+    const QString one = saved.toString();
+    return one.isEmpty() ? QStringList() : QStringList{ one };
+}
+
+QStringList AppSettings::rememberSearch(const QString &query)
+{
+    const QString q = query.trimmed();
+    if (q.isEmpty())
+        return recentSearches();
+    const QString key = text::foldKey(q);
+    QStringList list{ q };
+    for (const QString &r : recentSearches()) {
+        if (list.size() >= 8)
+            break;
+        if (text::foldKey(r) != key)
+            list.append(r);
+    }
+    setValue(u"search/recent"_s, list);
+    return list;
+}
+
+void AppSettings::clearRecentSearches()
+{
+    setValue(u"search/recent"_s, QStringList());
+}
+
 void AppSettings::sync()
 {
     m_settings->sync();

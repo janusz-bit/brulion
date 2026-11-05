@@ -376,6 +376,15 @@ public:
     Q_INVOKABLE QVariant value(const QString &key, const QVariant &defaultValue = {}) const;
     Q_INVOKABLE void setValue(const QString &key, const QVariant &value);
 
+    // ---- SearchView's recent searches ("search/recent") ------------------------------------
+    /// The recent searches, newest first (a single stored text is a list of one).
+    Q_INVOKABLE QStringList recentSearches() const;
+    /// Put `query` (trimmed; "" changes nothing) first, without an older one that is the same
+    /// after folding case and diacritics, keep at most 8 and store them; returns the new list.
+    Q_INVOKABLE QStringList rememberSearch(const QString &query);
+    /// Forget the recent searches.
+    Q_INVOKABLE void clearRecentSearches();
+
     /// Write pending changes to disk now (QSettings also does it by itself).
     void sync();
     /// The settings file in use.

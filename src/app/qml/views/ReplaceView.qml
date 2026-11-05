@@ -24,10 +24,10 @@ FocusScope {
     Component.onCompleted: {
         session.reset()
         // Back from a hit keeps what was unticked; any other visit starts from everything ticked.
-        if (!route.ticksKept)
+        if (!AppController.routeFlag(route, "ticksKept"))
             session.dropKeptTicks()
-        session.replacement = route.replacement || ""
-        session.query = route.query || ""
+        session.replacement = AppController.routeText(route, "replacement")
+        session.query = AppController.routeText(route, "query")
         queryField.text = session.query
         replacementField.text = session.replacement
         queryField.forceActiveFocus()
@@ -36,7 +36,7 @@ FocusScope {
     }
     Component.onDestruction: session.reset()
 
-    function open(path, line) {
+    function open(path: string, line: int): void {
         session.keepTicks()
         AppController.replaceRoute({ view: "replace", query: session.query, replacement: session.replacement, ticksKept: true })
         AppController.navigate({ view: "page", path: path, line: line - 1 })
@@ -133,7 +133,7 @@ FocusScope {
                 objectName: "replaceTickAll"
                 text: qsTr("%n occurrence(s)", "", root.session.hitCount) + " · " + qsTr("%n note(s)", "", root.session.fileCount)
                 tristate: true
-                nextCheckState: () => root.session.tickedHits === root.session.hitCount ? Qt.Unchecked : Qt.Checked
+                // A click ticks everything unless all is ticked; the binding below then shows it.
                 onClicked: root.session.tickAll(root.session.tickedHits !== root.session.hitCount)
                 Binding on checkState {
                     value: root.session.tickedHits === 0 ? Qt.Unchecked
@@ -155,12 +155,11 @@ FocusScope {
             variant: "muted"
             wrapMode: Text.Wrap
             text: {
-                const parts = []
-                if (root.session.hiddenHits > 0)
-                    parts.push(qsTr("%n more not shown: they are replaced with their ticked note.", "", root.session.hiddenHits))
-                if (root.session.skippedNotes > 0)
-                    parts.push(qsTr("%n note(s) left out: not UTF-8 text, or too large.", "", root.session.skippedNotes))
-                return parts.join(" ")
+                const hidden = root.session.hiddenHits > 0
+                               ? qsTr("%n more not shown: they are replaced with their ticked note.", "", root.session.hiddenHits) : ""
+                const skipped = root.session.skippedNotes > 0
+                                ? qsTr("%n note(s) left out: not UTF-8 text, or too large.", "", root.session.skippedNotes) : ""
+                return hidden !== "" && skipped !== "" ? hidden + " " + skipped : hidden + skipped
             }
         }
 
@@ -211,7 +210,6 @@ FocusScope {
                         Layout.leftMargin: Theme.space2
                         tristate: true
                         Accessible.name: qsTr("Replace in %1").arg(row.title)
-                        nextCheckState: () => row.tick === 2 ? Qt.Unchecked : Qt.Checked
                         onClicked: root.session.setFileTicked(row.path, row.tick !== 2)
                         Binding on checkState {
                             value: row.tick === 0 ? Qt.Unchecked : row.tick === 2 ? Qt.Checked : Qt.PartiallyChecked

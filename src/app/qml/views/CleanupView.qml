@@ -18,72 +18,55 @@ FocusScope {
     readonly property real sideMargin: Math.max(Theme.compact ? Theme.space3 : Theme.space6, (width - maximumWidth) / 2)
     /// The notebook's links are not known yet (a notebook being opened): nothing to offer.
     readonly property bool loading: !Workspace.ready
-    property var files: []
-    property string kind: route.kind || "all" // "all" | "notes" | "attachments"
-    /// path -> true (replaced, not changed, so that bindings follow).
-    property var ticked: {
-        const out = {}
-        for (const path of route.selected || [])
-            out[path] = true
-        return out
-    }
+    property string kind: AppController.routeText(route, "kind") !== "" ? AppController.routeText(route, "kind") : "all" // "all" | "notes" | "attachments"
+    /// The ticked paths (replaced, not changed, so that bindings follow).
+    property list<string> ticked: selection.routeTicks(route)
+    readonly property list<var> files: selection.files
+    /// The rows of the kind shown, and the paths of those ticked (the shell's self-test reads them).
+    readonly property list<var> shown: selection.shown
+    readonly property list<string> shownTicked: selection.shownTicked
 
-    readonly property var shown: kind === "all" ? files
-                                 : files.filter(f => f.attachment === (kind === "attachments"))
-    readonly property var shownTicked: shown.filter(f => ticked[f.path])
-    readonly property int attachmentCount: files.filter(f => f.attachment).length
-    /// Of what is about to go: the files holding something still to do.
-    readonly property int tickedWithWork: shownTicked.filter(f => f.openTasks > 0 || f.reminders > 0).length
-
-    function reload() {
-        files = Workspace.unreferencedFiles()
+    function reload(): void {
+        selection.files = Workspace.unreferencedFiles()
         if (loading)
             return // no list yet: the ticks of the route wait for it
-        const left = {}
-        for (const file of files) {
-            if (ticked[file.path])
-                left[file.path] = true
-        }
-        ticked = left
+        ticked = selection.existingTicks()
     }
-    function setTicked(path, on) {
-        const next = Object.assign({}, ticked)
-        if (on)
-            next[path] = true
-        else
-            delete next[path]
-        ticked = next
+    function setTicked(path: string, on: bool): void {
+        ticked = selection.withTicked(path, on)
     }
-    function tickAllShown(on) {
-        const next = Object.assign({}, ticked)
-        for (const file of shown) {
-            if (on)
-                next[file.path] = true
-            else
-                delete next[file.path]
-        }
-        ticked = next
+    function tickAllShown(on: bool): void {
+        ticked = selection.withAllShown(on)
     }
-    function open(path) {
-        AppController.replaceRoute({ view: "cleanup", kind: kind, selected: Object.keys(ticked) })
+    function open(path: string): void {
+        AppController.replaceRoute({ view: "cleanup", kind: kind, selected: ticked })
         AppController.navigate({ view: "page", path: path })
     }
-    function moveTickedToTrash() {
-        const trashed = Workspace.deletePages(shownTicked.map(f => f.path))
+    function moveTickedToTrash(): void {
+        const trashed = root.trashed(Workspace.deletePages(selection.shownTicked))
         if (trashed.length > 0) {
-            // A bound method, not a function of this view: the toast outlives the view when the
+            // Restored by the controller, not by this view: the toast outlives the view when the
             // user goes elsewhere before pressing Cofnij.
-            AppController.toastAction(qsTr("%n file(s) moved to the trash", "", trashed.length), "info", qsTr("Undo"),
-                                      Workspace.restoreAll.bind(Workspace, trashed))
+            AppController.toastRestore(qsTr("%n file(s) moved to the trash", "", trashed.length), qsTr("Undo"), trashed)
         }
         reload()
     }
-    function subtitle(file) {
-        return [file.openTasks > 0 ? qsTr("%n open task(s)", "", file.openTasks) : "",
-                file.reminders > 0 ? qsTr("%n reminder(s)", "", file.reminders) : "",
-                file.folder,
-                file.sizeText,
-                file.modified].filter(s => s !== "").join(" · ")
+    function trashed(paths: list<string>): list<string> {
+        return paths
+    }
+    function nonEmpty(parts: list<string>): list<string> {
+        return Js.nonEmptyStrings(parts)
+    }
+    function subtitle(openTasks: int, reminders: int, folder: string, sizeText: string, modified: string): string {
+        return nonEmpty([openTasks > 0 ? qsTr("%n open task(s)", "", openTasks) : "",
+                         reminders > 0 ? qsTr("%n reminder(s)", "", reminders) : "",
+                         folder, sizeText, modified]).join(" · ")
+    }
+
+    CleanupSelection {
+        id: selection
+        kind: root.kind
+        ticked: root.ticked
     }
 
     focus: true
@@ -129,34 +112,34 @@ FocusScope {
             fill: Theme.compact
             accessibleName: qsTr("Show")
             model: [{ value: "all", text: qsTr("All (%1)").arg(root.files.length) },
-                    { value: "notes", text: qsTr("Notes (%1)").arg(root.files.length - root.attachmentCount) },
-                    { value: "attachments", text: qsTr("Attachments (%1)").arg(root.attachmentCount) }]
+                    { value: "notes", text: qsTr("Notes (%1)").arg(root.files.length - selection.attachmentCount) },
+                    { value: "attachments", text: qsTr("Attachments (%1)").arg(selection.attachmentCount) }]
             currentValue: root.kind
             onActivated: (value) => root.kind = value
         }
 
         Flow {
-            visible: root.shown.length > 0
+            visible: selection.shown.length > 0
             Layout.fillWidth: true
             spacing: Theme.space3
 
             BCheckBox {
                 objectName: "cleanupTickAll"
-                text: root.shownTicked.length > 0 ? qsTr("%n selected", "", root.shownTicked.length) : qsTr("Select all")
+                text: selection.shownTicked.length > 0 ? qsTr("%n selected", "", selection.shownTicked.length) : qsTr("Select all")
                 tristate: true
-                nextCheckState: () => root.shownTicked.length === root.shown.length ? Qt.Unchecked : Qt.Checked
-                // Not onToggled: from some ticked to all, `checked` stays true.
-                onClicked: root.tickAllShown(root.shownTicked.length !== root.shown.length)
+                // Not onToggled: from some ticked to all, `checked` stays true. A click ticks all
+                // unless all is ticked; the binding below then shows it.
+                onClicked: root.tickAllShown(selection.shownTicked.length !== selection.shown.length)
                 Binding on checkState {
-                    value: root.shownTicked.length === 0 ? Qt.Unchecked
-                           : root.shownTicked.length === root.shown.length ? Qt.Checked : Qt.PartiallyChecked
+                    value: selection.shownTicked.length === 0 ? Qt.Unchecked
+                           : selection.shownTicked.length === selection.shown.length ? Qt.Checked : Qt.PartiallyChecked
                 }
             }
             BButton {
                 objectName: "cleanupTrash"
                 variant: "danger"
                 iconName: "trash-2"
-                enabled: root.shownTicked.length > 0
+                enabled: selection.shownTicked.length > 0
                 text: qsTr("Move to trash")
                 onClicked: confirmDialog.open()
             }
@@ -172,7 +155,7 @@ FocusScope {
             Layout.rightMargin: -Theme.space2
             clip: true
             focus: true
-            model: root.shown
+            model: selection.shown
             currentIndex: -1
             keyNavigationEnabled: true
             boundsBehavior: Flickable.StopAtBounds
@@ -184,9 +167,17 @@ FocusScope {
             delegate: RowLayout {
                 id: entry
                 required property int index
-                required property var modelData
-                readonly property var file: modelData
-                readonly property bool tick: !!root.ticked[file.path]
+                required property string path
+                required property string title
+                required property string folder
+                required property bool attachment
+                required property bool picture
+                required property bool pdf
+                required property string sizeText
+                required property string modified
+                required property int openTasks
+                required property int reminders
+                readonly property bool tick: root.ticked.indexOf(path) >= 0
 
                 width: list.width
                 spacing: 0
@@ -194,23 +185,23 @@ FocusScope {
                 BCheckBox {
                     id: box
                     Layout.leftMargin: Theme.space2
-                    Accessible.name: qsTr("Select %1").arg(entry.file.title)
-                    onToggled: root.setTicked(entry.file.path, checked)
+                    Accessible.name: qsTr("Select %1").arg(entry.title)
+                    onToggled: root.setTicked(entry.path, checked)
                     Binding on checked { value: entry.tick }
                 }
                 BListItem {
                     Layout.fillWidth: true
-                    iconName: entry.file.picture ? "image" : entry.file.pdf ? "file" : entry.file.attachment ? "paperclip" : "file-text"
-                    text: entry.file.title
-                    subtitle: root.subtitle(entry.file)
+                    iconName: entry.picture ? "image" : entry.pdf ? "file" : entry.attachment ? "paperclip" : "file-text"
+                    text: entry.title
+                    subtitle: root.subtitle(entry.openTasks, entry.reminders, entry.folder, entry.sizeText, entry.modified)
                     selected: entry.tick
-                    onClicked: root.setTicked(entry.file.path, !entry.tick)
+                    onClicked: root.setTicked(entry.path, !entry.tick)
                     trailing: BIconButton {
                         size: "small"
                         variant: "ghost"
                         iconName: "external-link"
-                        label: qsTr("Open %1").arg(entry.file.title)
-                        onClicked: root.open(entry.file.path)
+                        label: qsTr("Open %1").arg(entry.title)
+                        onClicked: root.open(entry.path)
                     }
                 }
             }
@@ -219,7 +210,7 @@ FocusScope {
                 parent: list
                 anchors.centerIn: parent
                 width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
-                visible: !root.loading && root.shown.length === 0
+                visible: !root.loading && selection.shown.length === 0
                 iconName: "sparkles"
                 title: qsTr("Nothing to clean up")
                 description: qsTr("There are no notes or attachments without links here.")
@@ -237,9 +228,9 @@ FocusScope {
         objectName: "cleanupConfirm"
         parent: T.Overlay.overlay
         title: qsTr("Move to trash?")
-        message: qsTr("%n file(s) will be moved to the trash. You can restore them from there.", "", root.shownTicked.length)
-        detail: root.tickedWithWork > 0
-                ? qsTr("Files with open tasks or reminders among them: %1. Those tasks and reminders will stop showing.").arg(root.tickedWithWork) : ""
+        message: qsTr("%n file(s) will be moved to the trash. You can restore them from there.", "", selection.shownTicked.length)
+        detail: selection.tickedWithWork > 0
+                ? qsTr("Files with open tasks or reminders among them: %1. Those tasks and reminders will stop showing.").arg(selection.tickedWithWork) : ""
         confirmText: qsTr("Move to trash")
         destructive: true
         onAccepted: root.moveTickedToTrash()

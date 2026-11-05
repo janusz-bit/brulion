@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import QtQml.Models
 import Brulion
 
 // TasksView — route "tasks" ({query?}): every task of the vault (TaskListModel over
@@ -41,57 +42,94 @@ FocusScope {
         neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
     })
 
-    function applyRoute() {
-        if (!route)
-            return
-        if (route.query)
-            taskModel.applyQuery(route.query)
-        if (route.open === "query")
-            Qt.callLater(queryDialog.open)
-        else if (typeof route.open === "string" && route.open.startsWith("add:"))
-            Qt.callLater(() => {
-                if (quickAdd.field)
-                    quickAdd.field.text = route.open.slice(4)
-            })
+    MapHolder { id: routeInfo }
+    function applyRoute(): void {
+        routeInfo.map = route
+        const query = "" + AppController.routeText(routeInfo.map, "query")
+        const open = "" + AppController.routeText(routeInfo.map, "open")
+        if (query !== "")
+            taskModel.applyQuery(query)
+        if (open === "query") {
+            openQueryLater.restart()
+        } else if (Js.startsWith(open, "add:")) {
+            later.addText = Js.sliceFrom(open, 4)
+            fillAddLater.restart()
+        }
     }
-    function toggle(task) {
-        const wasClosed = task.status === "done" || task.status === "cancelled"
-        if (planningActions.toggleTask(task.path, task.line, task.text))
-            toasts.show(wasClosed ? qsTr("Task reopened") : qsTr("Task done"),
-                        { kind: "success", actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
+    /// A toast whose button undoes the last change of planningActions.
+    function undoToast(text: string, kind: string): void {
+        toasts.showToast(text, kind, qsTr("Undo"), -1)
     }
-    function setStatus(task, status) {
-        if (planningActions.setTaskStatus(task.path, task.line, status, task.text))
-            toasts.show(qsTr("Status changed"), { actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
+    function toggle(path: string, line: int, text: string, status: string): void {
+        const wasClosed = status === "done" || status === "cancelled"
+        if (planningActions.toggleTask(path, line, text))
+            undoToast(wasClosed ? qsTr("Task reopened") : qsTr("Task done"), "success")
+    }
+    function setStatus(path: string, line: int, text: string, status: string): void {
+        if (planningActions.setTaskStatus(path, line, status, text))
+            undoToast(qsTr("Status changed"), "")
     }
     /// The menu's timer (docs/SYNTAX.md §5): one at a time — another one stops.
-    function toggleClock(task) {
-        const running = task.clockRunning === true
-        if (planningActions.toggleClock(task.path, task.line, task.text))
-            toasts.show(running ? qsTr("Timer stopped") : qsTr("Timer started"),
-                        { kind: "success", actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
+    function toggleClock(path: string, line: int, text: string, running: bool): void {
+        if (planningActions.toggleClock(path, line, text))
+            undoToast(running ? qsTr("Timer stopped") : qsTr("Timer started"), "success")
     }
     /// "Dodaj zależność…": the picker of the task it will wait for.
-    function openDependencyPicker(task) {
-        dependencyDialog.task = { path: task.path, line: task.line, text: task.text }
+    function openDependencyPicker(path: string, line: int, text: string): void {
+        dependencyDialog.hasTask = true
+        dependencyDialog.taskPath = path
+        dependencyDialog.taskLine = line
+        dependencyDialog.taskText = text
         dependencyDialog.open()
     }
-    /// The menu of a task's chip: its token in the task's file (PlanningTokenMenu).
-    function openTokenMenu(task, kind, item, x, y) {
-        const value = kind === "due" ? task.due : kind === "scheduled" ? task.scheduled : kind === "start" ? task.start
-                    : kind === "reminder" ? task.reminderSpec : kind === "recurrence" ? task.recurrence : task.priorityName
-        tokenMenu.openToken({ path: task.path, line: task.line, text: task.text, kind: kind, value: value,
-                              alarm: task.reminderAlarm, rule: task.recurrence, priority: task.priorityName,
+    /// The menu of a task's chip: its token in the task's file (PlanningTokenMenu). `value`: the
+    /// token's value as the model gives it.
+    function openTokenMenu(path: string, line: int, text: string, kind: string, value: string, alarm: bool,
+                           rule: string, priority: string, item: Item, x: real, y: real): void {
+        tokenMenu.openToken({ path: path, line: line, text: text, kind: kind, value: value,
+                              alarm: alarm, rule: rule, priority: priority,
                               isTask: true, occurrence: false }, item, x, y)
     }
-    function activateLink(link, task) {
+    function activateLink(link: string, path: string): void {
         // A tag filters this list (Ctrl+click or a long press opens its page: TasksRow); everything
         // else navigates.
-        if (link.startsWith("tag:")) {
-            taskModel.tagFilter = decodeURIComponent(link.slice(4))
+        if (Js.startsWith(link, "tag:")) {
+            taskModel.tagFilter = Js.decodeURIComponent(Js.sliceFrom(link, 4))
             return
         }
-        planningActions.openLink(link, task.path)
+        planningActions.openLink(link, path)
+    }
+
+    // Deferred calls (instead of Qt.callLater).
+    QtObject {
+        id: later
+        /// The quick-add field's text from the route ("add:<text>").
+        property string addText
+    }
+    Timer {
+        id: openQueryLater
+        interval: 0
+        onTriggered: queryDialog.open()
+    }
+    Timer {
+        id: fillAddLater
+        interval: 0
+        onTriggered: {
+            if (quickAdd.field)
+                quickAdd.field.text = later.addText
+        }
+    }
+    Timer {
+        id: toTopLater
+        interval: 0
+        onTriggered: list.positionViewAtBeginning()
+    }
+    // Every toast button of this view is "Undo".
+    Connections {
+        target: toasts
+        function onActionTriggered(toastId: int) {
+            planningActions.undo()
+        }
     }
 
     onRouteChanged: applyRoute()
@@ -124,8 +162,9 @@ FocusScope {
     PlanningTokenMenu {
         id: tokenMenu
         actions: planningActions
-        onChanged: (text) => toasts.show(text, { actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
-        onMessage: (text, kind) => toasts.show(text, { kind: kind })
+        onChanged: (text) => root.undoToast(text, "")
+        onMessage: (text, kind) => toasts.showToast(text, kind, "", -1)
+        onFilterRequested: (tag) => taskModel.tagFilter = tag
     }
     PlanningActions {
         id: planningActions
@@ -135,7 +174,7 @@ FocusScope {
         now: DatesHelper.fixedNow
         weekStart: DatesHelper.weekStart
         locale: DatesHelper.locale
-        onFailed: (message) => toasts.show(message, { kind: "warning" })
+        onFailed: (message) => toasts.showToast(message, "warning", "", -1)
     }
 
     Rectangle {
@@ -169,7 +208,7 @@ FocusScope {
             width: list.width
             implicitHeight: headerColumn.implicitHeight + Theme.space2
             height: implicitHeight
-            onHeightChanged: if (!list.userScrolled) Qt.callLater(list.positionViewAtBeginning)
+            onHeightChanged: if (!list.userScrolled) toTopLater.restart()
             ColumnLayout {
                 id: headerColumn
                 width: Math.min(parent.width - 2 * (Theme.narrow ? Theme.space3 : Theme.space6), root.maximumWidth)
@@ -182,13 +221,15 @@ FocusScope {
                     Layout.fillWidth: true
                     actions: planningActions
                     onSubmitted: (line, parsed) => {
-                        const path = Workspace.ensureJournal(DatesHelper.today)
-                        if (path === "" || !planningActions.appendBlock(path, line)) {
-                            toasts.show(qsTr("The journal could not be saved."), { kind: "error" })
+                        // (The signal's values first: later calls could change them.)
+                        const block = "" + line
+                        const when = "" + AppController.routeText(parsed, "when")
+                        const path = "" + Workspace.ensureJournal(DatesHelper.today)
+                        if (path === "" || !planningActions.appendBlock(path, block)) {
+                            toasts.showToast(qsTr("The journal could not be saved."), "error", "", -1)
                             return
                         }
-                        toasts.show(parsed.when ? qsTr("Task added: %1").arg(parsed.when) : qsTr("Task added to today's journal"),
-                                    { kind: "success", actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
+                        root.undoToast(when !== "" ? qsTr("Task added: %1").arg(when) : qsTr("Task added to today's journal"), "success")
                     }
                     Component.onCompleted: quickAdd.field = quickAddField
                 }
@@ -203,14 +244,9 @@ FocusScope {
                 Text {
                     Layout.fillWidth: true
                     visible: taskModel.totalCount > 0
-                    text: {
-                        const parts = [qsTr("%n open", "", taskModel.openCount)]
-                        if (taskModel.overdueCount > 0)
-                            parts.push(qsTr("%n overdue", "", taskModel.overdueCount))
-                        if (taskModel.todayCount > 0)
-                            parts.push(qsTr("%n for today", "", taskModel.todayCount))
-                        return parts.join(" · ")
-                    }
+                    text: qsTr("%n open", "", taskModel.openCount)
+                          + (taskModel.overdueCount > 0 ? " · " + qsTr("%n overdue", "", taskModel.overdueCount) : "")
+                          + (taskModel.todayCount > 0 ? " · " + qsTr("%n for today", "", taskModel.todayCount) : "")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
                     color: Theme.fgMuted
@@ -219,48 +255,56 @@ FocusScope {
             }
         }
 
-        delegate: Item {
-            id: row
-
-            required property int index
-            required property var model
-            required property string rowType
-
-            width: ListView.view.width
-            height: loader.item ? loader.item.implicitHeight : 0
-
-            Loader {
-                id: loader
-                width: Math.min(parent.width - 2 * (Theme.narrow ? Theme.space2 : Theme.space5), root.maximumWidth + Theme.space2)
-                x: (parent.width - width) / 2
-                sourceComponent: row.rowType === "header" ? headerRow : taskRow
-            }
-            Component {
-                id: headerRow
-                BSectionHeader {
-                    topPadding: Theme.space4
-                    text: row.model.sectionLabel
-                    count: row.model.sectionCount
-                    collapsible: true
-                    expanded: !row.model.collapsed
-                    onExpandedToggled: taskModel.toggleSection(row.model.section)
+        // Rows of taskModel: a section header or a task (role rowType).
+        delegate: DelegateChooser {
+            role: "rowType"
+            DelegateChoice {
+                roleValue: "header"
+                Item {
+                    id: headerRow
+                    required property string section
+                    required property string sectionLabel
+                    required property int sectionCount
+                    required property bool collapsed
+                    width: ListView.view.width
+                    height: sectionHeader.implicitHeight
+                    BSectionHeader {
+                        id: sectionHeader
+                        width: Math.min(parent.width - 2 * (Theme.narrow ? Theme.space2 : Theme.space5), root.maximumWidth + Theme.space2)
+                        x: (parent.width - width) / 2
+                        topPadding: Theme.space4
+                        text: headerRow.sectionLabel
+                        count: headerRow.sectionCount
+                        collapsible: true
+                        expanded: !headerRow.collapsed
+                        onExpandedToggled: taskModel.toggleSection(headerRow.section)
+                    }
                 }
             }
-            Component {
-                id: taskRow
+            DelegateChoice {
+                roleValue: "task"
                 TasksRow {
-                    task: row.model
-                    focus: row.ListView.isCurrentItem
-                    onTaskToggled: root.toggle(row.model)
-                    onOpened: AppController.openPage(row.model.path, row.model.line)
-                    onLinkActivated: (url) => root.activateLink(url, row.model)
+                    id: taskRow
+                    /// The value of a chip's token as the model gives it.
+                    function tokenValue(kind: string): string {
+                        return kind === "due" ? due : kind === "scheduled" ? scheduled : kind === "start" ? start
+                             : kind === "reminder" ? reminderSpec : kind === "recurrence" ? recurrence : priorityName
+                    }
+                    width: Math.min(ListView.view.width - 2 * (Theme.narrow ? Theme.space2 : Theme.space5), root.maximumWidth + Theme.space2)
+                    x: (ListView.view.width - width) / 2
+                    focus: ListView.isCurrentItem
+                    onTaskToggled: root.toggle(taskRow.path, taskRow.line, taskRow.text, taskRow.status)
+                    onOpened: AppController.openPage(taskRow.path, taskRow.line)
+                    onLinkActivated: (url) => root.activateLink(url, taskRow.path)
                     onTagPageRequested: (tag) => AppController.openTag(tag)
-                    onStatusRequested: (status) => root.setStatus(row.model, status)
-                    onClockRequested: root.toggleClock(row.model)
-                    onDependencyRequested: root.openDependencyPicker(row.model)
-                    onTokenMenuRequested: (kind, item, x, y) => root.openTokenMenu(row.model, kind, item, x, y)
-                    onLinkMenuRequested: (url, item, x, y) =>
-                        tokenMenu.openLink(url, row.model.path, item, x, y, (tag) => { taskModel.tagFilter = tag })
+                    onStatusRequested: (status) => root.setStatus(taskRow.path, taskRow.line, taskRow.text, status)
+                    onClockRequested: root.toggleClock(taskRow.path, taskRow.line, taskRow.text, taskRow.clockRunning)
+                    onDependencyRequested: root.openDependencyPicker(taskRow.path, taskRow.line, taskRow.text)
+                    onTokenMenuRequested: (kind, item, x, y) =>
+                        root.openTokenMenu(taskRow.path, taskRow.line, taskRow.text, kind, taskRow.tokenValue(kind),
+                                           taskRow.reminderAlarm, taskRow.recurrence, taskRow.priorityName, item, x, y)
+                    // "Filtruj po tagu" first: PlanningTokenMenu.filterRequested.
+                    onLinkMenuRequested: (url, item, x, y) => tokenMenu.openLink(url, taskRow.path, item, x, y, true)
                 }
             }
         }
@@ -270,7 +314,7 @@ FocusScope {
     QtObject {
         id: quickAdd
         property TasksQuickAdd field: null
-        function focusField() {
+        function focusField(): void {
             list.positionViewAtBeginning()
             if (field)
                 field.focusField()
@@ -279,7 +323,7 @@ FocusScope {
     QtObject {
         id: filterBar
         property TasksFilterBar bar: null
-        function focusSearch() {
+        function focusSearch(): void {
             list.positionViewAtBeginning()
             if (bar)
                 bar.focusSearch()
@@ -315,18 +359,26 @@ FocusScope {
     }
     TaskDependencyDialog {
         id: dependencyDialog
-        property var task: null
-        candidates: (text) => task ? planningActions.dependencyCandidates(task.path, task.line, text) : []
+        // The task that will wait (hasTask false: none).
+        property bool hasTask: false
+        property string taskPath
+        property int taskLine
+        property string taskText
+        onSearchRequested: (text) => {
+            if (hasTask)
+                items = planningActions.dependencyCandidates(taskPath, taskLine, text)
+            else
+                items = []
+        }
         onChosen: (path, line) => {
-            if (task && planningActions.addDependency(task.path, task.line, task.text, path, line))
-                toasts.show(qsTr("Dependency added"), { kind: "success", actionText: qsTr("Undo"),
-                                                        onAction: () => planningActions.undo() })
+            if (hasTask && planningActions.addDependency(taskPath, taskLine, taskText, path, line))
+                root.undoToast(qsTr("Dependency added"), "success")
         }
     }
     TasksQueryDialog {
         id: queryDialog
         query: taskModel.queryText
-        onCopied: toasts.show(qsTr("Query copied — paste it into a page"), { kind: "success" })
+        onCopied: toasts.showToast(qsTr("Query copied — paste it into a page"), "success", "", -1)
     }
 
     BToastHost {

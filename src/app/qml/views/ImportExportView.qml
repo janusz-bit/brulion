@@ -22,10 +22,12 @@ FocusScope {
     property var route: ({})
     readonly property string title: qsTr("Import and export")
 
-    function applyRoute() {
-        if (route && route.tab)
-            tabs.currentIndex = route.tab === "export" ? 1 : 0
-        else if (route && (route.format || route.scope || (route.path && !route.files)))
+    function applyRoute(): void {
+        const tab = AppController.routeText(route, "tab")
+        if (tab !== "")
+            tabs.currentIndex = tab === "export" ? 1 : 0
+        else if (AppController.routeFlag(route, "format") || AppController.routeFlag(route, "scope")
+                 || (AppController.routeFlag(route, "path") && !AppController.routeFlag(route, "files")))
             tabs.currentIndex = 1
     }
     onRouteChanged: applyRoute()
@@ -90,17 +92,16 @@ FocusScope {
                 ImportPanel {
                     Layout.fillWidth: true
                     visible: Workspace.isOpen
-                    preset: root.route && (root.route.importer || root.route.files)
-                            ? { importer: root.route.importer || "", files: root.route.files || "" } : ({})
+                    // The panels read only their own keys of the route (importer, files).
+                    preset: root.route
                 }
             }
             Page {
                 ExportPanel {
                     Layout.fillWidth: true
                     visible: Workspace.isOpen
-                    preset: root.route && (root.route.format || root.route.scope || root.route.path || root.route.folder)
-                            ? { format: root.route.format || "", scope: root.route.scope || "", folder: root.route.folder || "", path: root.route.path || "" }
-                            : ({})
+                    // format, scope, folder, path
+                    preset: root.route
                 }
             }
         }

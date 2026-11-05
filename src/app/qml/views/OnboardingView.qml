@@ -18,16 +18,33 @@ Rectangle {
 
     property var route: ({})
 
-    readonly property var safe: SafeArea.margins
+    readonly property real safeTop: SafeArea.margins.top
+    readonly property real safeBottom: SafeArea.margins.bottom
+    /// What Brulion is, in three cards ({ icon, title, text }).
+    readonly property list<var> features: [
+        { icon: "file-text", title: qsTr("Plain files"),
+          text: qsTr("Every page is a .md file in a folder you choose — readable by Obsidian, Logseq or any editor.") },
+        { icon: "bell", title: qsTr("Journal and reminders"),
+          text: qsTr("A page for every day, tasks with dates, reminders and alarms that ring on time.") },
+        { icon: "folder-sync", title: qsTr("Sync your way"),
+          text: qsTr("Share the folder with Syncthing, or connect Nextcloud. No account needed.") }
+    ]
+    /// The two ways to sync ({ icon, title, text }).
+    readonly property list<var> syncWays: [
+        { icon: "folder-sync", title: "Syncthing",
+          text: qsTr("Share the notebook folder between computers and phones (on Android with Syncthing-Fork) and pick that folder in Brulion on every device. Edits arrive within seconds; conflicting copies can be merged in the sync center.") },
+        { icon: "cloud", title: "Nextcloud",
+          text: qsTr("Keep the notebook anywhere — also in app storage or in the browser — and connect your Nextcloud in Settings → Sync with an app password. Edits from several devices are merged, nothing is lost.") }
+    ]
     readonly property bool pending: AppController.pendingVaultPath !== ""
 
     color: Theme.bg
 
-    function openChosen() {
+    function openChosen(): void {
         AppController.openVault(AppController.isWasm ? AppController.defaultVaultPath : pathField.text)
     }
     /// Open the chosen notebook on its import screen (notes from another app).
-    function openChosenForImport() {
+    function openChosenForImport(): void {
         AppController.openVaultAt(AppController.isWasm ? AppController.defaultVaultPath : pathField.text,
                                   { view: "importExport", tab: "import" })
     }
@@ -35,10 +52,10 @@ Rectangle {
     Flickable {
         id: flick
         anchors.fill: parent
-        anchors.topMargin: root.safe.top
+        anchors.topMargin: root.safeTop
         // Ends at the on-screen keyboard (it covers the navigation bar too): the window's
         // BKeyboardFocusKeeper scrolls the focused folder field above it.
-        anchors.bottomMargin: Math.max(root.safe.bottom, KeyboardInsets.overlap)
+        anchors.bottomMargin: Math.max(root.safeBottom, KeyboardInsets.overlap)
         contentWidth: width
         contentHeight: column.implicitHeight + 2 * margin
         clip: true
@@ -79,7 +96,7 @@ Rectangle {
                     text: qsTr("Your notes as plain Markdown files: an outliner with a daily journal, tasks, reminders and calculations. Everything works offline and stays yours.")
                     variant: "muted"
                     font.pixelSize: Theme.textMd
-                    lineHeight: Theme.lineHeightPx(Theme.textMd)
+                    lineHeight: Theme.lineHeightPx(Theme.textMd, Theme.lineHeight)
                     wrapMode: Text.Wrap
                 }
             }
@@ -91,17 +108,12 @@ Rectangle {
                 rowSpacing: Theme.space3
 
                 Repeater {
-                    model: [
-                        { icon: "file-text", title: qsTr("Plain files"),
-                          text: qsTr("Every page is a .md file in a folder you choose — readable by Obsidian, Logseq or any editor.") },
-                        { icon: "bell", title: qsTr("Journal and reminders"),
-                          text: qsTr("A page for every day, tasks with dates, reminders and alarms that ring on time.") },
-                        { icon: "folder-sync", title: qsTr("Sync your way"),
-                          text: qsTr("Share the folder with Syncthing, or connect Nextcloud. No account needed.") }
-                    ]
+                    model: root.features
                     delegate: RowLayout {
                         id: feature
-                        required property var modelData
+                        required property string icon
+                        required property string title
+                        required property string text
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
                         Layout.alignment: Qt.AlignTop
@@ -115,7 +127,7 @@ Rectangle {
                             color: Theme.bgSunken
                             BIcon {
                                 anchors.centerIn: parent
-                                name: feature.modelData.icon
+                                name: feature.icon
                                 color: Theme.fgMuted
                             }
                         }
@@ -124,13 +136,13 @@ Rectangle {
                             spacing: 2
                             BText {
                                 Layout.fillWidth: true
-                                text: feature.modelData.title
+                                text: feature.title
                                 variant: "label"
                                 wrapMode: Text.Wrap
                             }
                             BText {
                                 Layout.fillWidth: true
-                                text: feature.modelData.text
+                                text: feature.text
                                 variant: "muted"
                                 font.pixelSize: Theme.textSm
                                 wrapMode: Text.Wrap
@@ -233,7 +245,7 @@ Rectangle {
                             text: AppController.isWasm ? qsTr("Start with an empty notebook") : qsTr("Open notebook")
                             iconName: AppController.isWasm ? "square-pen" : "notebook-pen"
                             variant: "primary"
-                            enabled: AppController.isWasm || pathField.text.trim() !== ""
+                            enabled: AppController.isWasm || Js.trim(pathField.text) !== ""
                             onClicked: root.openChosen()
                         }
                         BButton {
@@ -293,7 +305,7 @@ Rectangle {
                             objectName: "onboardingImport"
                             text: qsTr("Import notes")
                             iconName: "download"
-                            enabled: AppController.isWasm || pathField.text.trim() !== ""
+                            enabled: AppController.isWasm || Js.trim(pathField.text) !== ""
                             onClicked: root.openChosenForImport()
                         }
                     }
@@ -363,19 +375,21 @@ Rectangle {
                 }
                 Repeater {
                     model: AppSettings.recentVaults
+                    // AppSettings.recentVaults: [{ path, name, lastOpened }]
                     delegate: BListItem {
                         id: recentItem
-                        required property var modelData
+                        required property string name
+                        required property string path
                         Layout.fillWidth: true
-                        text: modelData.name
-                        subtitle: modelData.path
+                        text: name
+                        subtitle: path
                         iconName: "folder"
-                        onClicked: AppController.openRecentVault(modelData.path)
+                        onClicked: AppController.openRecentVault(path)
                         trailing: BIconButton {
                             iconName: "x"
                             label: qsTr("Remove from the list")
                             size: "small"
-                            onClicked: AppSettings.forgetRecentVault(recentItem.modelData.path)
+                            onClicked: AppSettings.forgetRecentVault(recentItem.path)
                         }
                     }
                 }
@@ -397,26 +411,23 @@ Rectangle {
                         wrapMode: Text.Wrap
                     }
                     Repeater {
-                        model: [
-                            { icon: "folder-sync", title: "Syncthing",
-                              text: qsTr("Share the notebook folder between computers and phones (on Android with Syncthing-Fork) and pick that folder in Brulion on every device. Edits arrive within seconds; conflicting copies can be merged in the sync center.") },
-                            { icon: "cloud", title: "Nextcloud",
-                              text: qsTr("Keep the notebook anywhere — also in app storage or in the browser — and connect your Nextcloud in Settings → Sync with an app password. Edits from several devices are merged, nothing is lost.") }
-                        ]
+                        model: root.syncWays
                         delegate: RowLayout {
                             id: syncItem
-                            required property var modelData
+                            required property string icon
+                            required property string title
+                            required property string text
                             Layout.fillWidth: true
                             spacing: Theme.space3
                             BIcon {
                                 Layout.alignment: Qt.AlignTop
                                 Layout.topMargin: 2
-                                name: syncItem.modelData.icon
+                                name: syncItem.icon
                                 color: Theme.fgMuted
                             }
                             BText {
                                 Layout.fillWidth: true
-                                text: "<b>" + syncItem.modelData.title + "</b> — " + syncItem.modelData.text
+                                text: "<b>" + syncItem.title + "</b> — " + syncItem.text
                                 textFormat: Text.StyledText
                                 font.pixelSize: Theme.textSm
                                 color: Theme.fgMuted

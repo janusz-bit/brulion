@@ -613,6 +613,9 @@ public:
     Q_INVOKABLE QVariantList journals(int offset = 0, int limit = 50) const;
     /// Days "YYYY-MM-DD" within [from, to] that have a daily note (calendar dots).
     Q_INVOKABLE QStringList journalDates(const QString &from, const QString &to) const;
+    /// BDatePicker marks of the days with a daily note among `cells` (a month grid's cells
+    /// [{ date, … }], first to last): { "YYYY-MM-DD": ["journal"] } (JournalsView's "Go to day").
+    Q_INVOKABLE QVariantMap journalMarks(const QVariantList &cells) const;
     /// A weekly or monthly note (docs/SYNTAX.md §1 "Weekly and monthly notes"; `period` "week" |
     /// "month", `date` any day of it, "YYYY-MM-DD"): { period, start, end ("YYYY-MM-DD"), week (the
     /// ISO week; 0 for a month), path (its existing file, else where it will be created — never

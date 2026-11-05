@@ -610,6 +610,9 @@ public:
     Q_INVOKABLE QVariantList folderChoices(const QString &query, const QString &ownFolder,
                                            const QString &currentFolder, bool moving, const QString &rootName,
                                            const QString &newFolderText, const QString &createText) const;
+    /// `base` plus the `keys` that `route` has (even null ones): a view's route made from
+    /// another's parameters (JournalsView's one day as a PageView route).
+    Q_INVOKABLE QVariantMap routeWith(const QVariantMap &base, const QVariantMap &route, const QStringList &keys) const;
 
 Q_SIGNALS:
     void statusChanged();

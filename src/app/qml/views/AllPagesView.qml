@@ -23,10 +23,12 @@ FocusScope {
     id: root
 
     property var route: ({})
-    readonly property string folder: route && route.path ? route.path : ""
+    readonly property string folder: AppController.routeText(route, "path")
     /// The folder's direct subfolders: [{ path, name, pages }] (Workspace.subfolders).
-    readonly property var subfolders: Workspace.revision >= 0 && Workspace.journalCount >= 0 && filterField.text.trim() === ""
-                                      ? Workspace.subfolders(root.folder) : []
+    readonly property list<var> subfolders: Workspace.revision >= 0 && Workspace.journalCount >= 0 && Js.trim(filterField.text) === ""
+                                            ? Workspace.subfolders(root.folder) : []
+    /// No highlighted matches (a daily note's title).
+    readonly property list<var> noMatches: []
     readonly property bool wide: width >= 760
     readonly property int maximumWidth: 1100
     /// Side margin of the rows (and the toolbar and column headers above them).
@@ -38,15 +40,21 @@ FocusScope {
     /// the Flow's width made grow on every polish, without end.
     readonly property real toolbarWidth: Math.max(0, width - 2 * toolbarMargin)
 
-    readonly property var sortKeys: [
-        { value: "title", text: qsTr("Title"), icon: "file-text" },
-        { value: "modified", text: qsTr("Changed"), icon: "clock" },
-        { value: "backlinks", text: qsTr("Backlinks"), icon: "link" },
-        { value: "folder", text: qsTr("Folder"), icon: "folder" },
-        { value: "tags", text: qsTr("Tags"), icon: "tags" }
+    readonly property list<var> sortKeys: [
+        { value: "title", text: qsTr("Title"), iconName: "file-text" },
+        { value: "modified", text: qsTr("Changed"), iconName: "clock" },
+        { value: "backlinks", text: qsTr("Backlinks"), iconName: "link" },
+        { value: "folder", text: qsTr("Folder"), iconName: "folder" },
+        { value: "tags", text: qsTr("Tags"), iconName: "tags" }
+    ]
+    /// The wide layout's column headers ({ key, text }).
+    readonly property list<var> columnHeads: [
+        { key: "title", text: qsTr("Title") }, { key: "folder", text: qsTr("Folder") },
+        { key: "modified", text: qsTr("Changed") }, { key: "backlinks", text: qsTr("Links") },
+        { key: "tags", text: qsTr("Tags") }
     ]
 
-    function sortBy(key) {
+    function sortBy(key: string): void {
         if (pages.sortKey === key) {
             pages.descending = !pages.descending
         } else {
@@ -57,28 +65,46 @@ FocusScope {
         AppSettings.setValue("allPages/sort", pages.sortKey + (pages.descending ? ":desc" : ":asc"))
     }
     /// Open row `row`'s page: here, in the side panel (`newPane`), or in `target` ("tab": a new tab).
-    function open(row, newPane, target) {
-        const p = pages.get(row)
-        if (p.path)
-            OpenIn.run(target || "", () => AppController.openPage(p.path, -1, newPane === true && !Theme.narrow))
+    function open(row: int, newPane: bool, target: string): void {
+        const path = "" + AppController.routeText(pages.get(row), "path")
+        if (path !== "") {
+            OpenIn.begin(target)
+            AppController.openPage(path, -1, newPane && !Theme.narrow)
+            OpenIn.end()
+        }
     }
-    function sortLabel(key) {
-        for (const k of sortKeys) {
-            if (k.value === key)
-                return k.text
+    function sortLabel(key: string): string {
+        for (let i = 0; i < sortKeys.length; ++i) {
+            if (AppController.routeText(sortKeys[i], "value") === key)
+                return AppController.routeText(sortKeys[i], "text")
         }
         return key
+    }
+    function splitText(text: string, separator: string): list<string> {
+        return Js.split(text, separator)
+    }
+    function flag(value: var): bool {
+        return value === true || value === "true"
+    }
+    /// "#a #b" of a page's tags.
+    function tagsText(tags: list<string>): string {
+        return tags.length > 0 ? "#" + tags.join(" #") : ""
+    }
+    function nonEmpty(parts: list<string>): list<string> {
+        return Js.nonEmptyStrings(parts)
     }
 
     focus: true
     Component.onCompleted: {
-        const saved = String(route && route.sort ? route.sort : AppSettings.value("allPages/sort", "title:asc")).split(":")
-        pages.sortKey = saved[0] || "title"
-        pages.descending = saved[1] === "desc" || (saved.length === 1 && (saved[0] === "modified" || saved[0] === "backlinks"))
-        pages.includeJournals = AppSettings.value("allPages/journals", false) === true
-                                || AppSettings.value("allPages/journals", false) === "true"
-        const sub = AppSettings.value("allPages/subfolders", true)
-        pages.recursive = sub === true || sub === "true"
+        const saved = root.splitText(AppController.routeFlag(route, "sort") ? AppController.routeText(route, "sort")
+                                                                             : "" + AppSettings.value("allPages/sort", "title:asc"), ":")
+        const key = saved.length > 0 ? saved[0] : ""
+        const order = saved.length > 1 ? saved[1] : ""
+        const parts = saved.length
+        pages.sortKey = key !== "" ? key : "title"
+        pages.descending = order === "desc" || (parts === 1 && (key === "modified" || key === "backlinks"))
+        pages.includeJournals = root.flag(AppSettings.value("allPages/journals", false))
+        pages.recursive = root.flag(AppSettings.value("allPages/subfolders", true))
         // Keyboard users can type to filter at once; on touch screens that would pop up the
         // on-screen keyboard over the list the user came to browse.
         if (!Theme.touchUi)
@@ -122,7 +148,7 @@ FocusScope {
                     list.currentIndex = 0
                     list.forceActiveFocus()
                 }
-                onAccepted: if (pages.count > 0) root.open(0, false)
+                onAccepted: if (pages.count > 0) root.open(0, false, "")
             }
             BButton {
                 id: sortButton
@@ -177,7 +203,7 @@ FocusScope {
             Layout.fillWidth: true
             Layout.leftMargin: root.toolbarMargin + 2
             Layout.rightMargin: root.toolbarMargin
-            text: filterField.text.trim() !== "" ? qsTr("%1 of %n page(s)", "", pages.totalCount).arg(pages.count)
+            text: Js.trim(filterField.text) !== "" ? qsTr("%1 of %n page(s)", "", pages.totalCount).arg(pages.count)
                                                  : qsTr("%n page(s)", "", pages.totalCount)
             variant: "caption"
             color: Theme.fgFaint
@@ -194,27 +220,25 @@ FocusScope {
             Row {
                 anchors.fill: parent
                 Repeater {
-                    model: [{ key: "title", text: qsTr("Title") }, { key: "folder", text: qsTr("Folder") },
-                            { key: "modified", text: qsTr("Changed") }, { key: "backlinks", text: qsTr("Links") },
-                            { key: "tags", text: qsTr("Tags") }]
+                    model: root.columnHeads
                     delegate: T.AbstractButton {
                         id: ch
-                        required property var modelData
-                        readonly property bool active: pages.sortKey === modelData.key
-                        readonly property bool alignRight: modelData.key === "backlinks"
-                        width: modelData.key === "title" ? parent.width - columns.fixed : columns[modelData.key]
+                        required property string key
+                        required text
+                        readonly property bool active: pages.sortKey === key
+                        readonly property bool alignRight: key === "backlinks"
+                        width: key === "title" ? parent.width - columns.fixed : columns.widthOf(key)
                         height: parent.height
-                        text: modelData.text
                         focusPolicy: Qt.TabFocus
                         hoverEnabled: !Theme.touchUi
                         Accessible.name: qsTr("Sort by %1").arg(text)
-                        onClicked: root.sortBy(modelData.key)
+                        onClicked: root.sortBy(key)
                         contentItem: RowLayout {
                             spacing: 2
                             layoutDirection: ch.alignRight ? Qt.RightToLeft : Qt.LeftToRight
                             Item { visible: ch.alignRight; implicitWidth: Theme.space4 - 2 }
                             // The titles start after the rows' icon.
-                            Item { visible: ch.modelData.key === "title"; implicitWidth: Theme.iconSizeSm + Theme.space2 * 2 - 2 }
+                            Item { visible: ch.key === "title"; implicitWidth: Theme.iconSizeSm + Theme.space2 * 2 - 2 }
                             BText {
                                 text: ch.text
                                 variant: "caption"
@@ -274,28 +298,30 @@ FocusScope {
                     model: root.subfolders
                     delegate: BListItem {
                         id: folderRow
-                        required property var modelData
+                        required property string path
+                        required property string name
+                        required property int pages
                         objectName: "allPagesFolderRow"
                         x: root.rowMargin
                         width: list.width - 2 * root.rowMargin
-                        iconName: modelData.path === (Workspace.config.journalsFolder || "") ? "calendar-days" : "folder"
-                        text: modelData.name
-                        count: modelData.pages
-                        Accessible.description: qsTr("%n page(s)", "", modelData.pages)
-                        onClicked: AppController.navigate({ view: "allPages", path: modelData.path })
-                        onPressAndHold: folderMenu.openFor(modelData.path, folderRow)
+                        iconName: path === AppController.routeText(Workspace.config, "journalsFolder") ? "calendar-days" : "folder"
+                        text: name
+                        count: folderRow.pages
+                        Accessible.description: qsTr("%n page(s)", "", folderRow.pages)
+                        onClicked: AppController.navigate({ view: "allPages", path: folderRow.path })
+                        onPressAndHold: folderMenu.openFor(folderRow.path, folderRow)
                         TapHandler {
                             // Right-click only (a finger has no buttons: see the page rows).
                             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                             acceptedButtons: Qt.RightButton
-                            onTapped: folderMenu.openFor(folderRow.modelData.path, folderRow)
+                            onTapped: folderMenu.openFor(folderRow.path, folderRow)
                         }
                     }
                 }
             }
 
-            Keys.onReturnPressed: (event) => root.open(currentIndex, (event.modifiers & Qt.ControlModifier) !== 0)
-            Keys.onEnterPressed: (event) => root.open(currentIndex, (event.modifiers & Qt.ControlModifier) !== 0)
+            Keys.onReturnPressed: (event) => root.open(currentIndex, (event.modifiers & Qt.ControlModifier) !== 0, "")
+            Keys.onEnterPressed: (event) => root.open(currentIndex, (event.modifiers & Qt.ControlModifier) !== 0, "")
             Keys.onUpPressed: (event) => {
                 if (currentIndex <= 0)
                     filterField.forceActiveFocus()
@@ -312,17 +338,33 @@ FocusScope {
                 readonly property int backlinks: 64
                 readonly property int tags: Math.round(rowWidth * 0.22)
                 readonly property int fixed: folder + modified + backlinks + tags
+                function widthOf(key: string): int {
+                    switch (key) {
+                    case "folder": return folder
+                    case "modified": return modified
+                    case "backlinks": return backlinks
+                    case "tags": return tags
+                    }
+                    return 0
+                }
             }
 
             delegate: T.ItemDelegate {
                 id: row
                 required property int index
-                required property var model
+                required property string path
+                required property string title
+                required property string folder
+                required property string journalDate
+                required property string modifiedLabel
+                required property int backlinks
+                required property list<string> tags
+                required property list<var> titleMatches
 
-                readonly property string journal: row.model.journalDate
-                readonly property string shownTitle: journal !== "" ? DatesHelper.formatLong(journal) : row.model.title
+                readonly property string journal: row.journalDate
+                readonly property string shownTitle: journal !== "" ? DatesHelper.formatLong(journal) : row.title
                 /// The page's own icon (docs/UI.md "Page icon and cover"), following its edits.
-                readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(row.model.path) : ({})
+                readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(row.path) : ({})
 
                 // Full width (ListView places delegates at x 0); the row itself is inset.
                 readonly property real margin: root.rowMargin
@@ -336,7 +378,7 @@ FocusScope {
                 highlighted: ListView.isCurrentItem
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.ListItem
-                Accessible.name: shownTitle + (row.model.folder !== "" ? ", " + row.model.folder : "")
+                Accessible.name: shownTitle + (row.folder !== "" ? ", " + row.folder : "")
                 // Ctrl+click: a new tab (OpenIn).
                 onClicked: root.open(row.index, false, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
                 onPressAndHold: rowMenu.openFor(row.index, row)
@@ -389,7 +431,7 @@ FocusScope {
                                 ContentHighlightText {
                                     Layout.fillWidth: true
                                     source: row.shownTitle
-                                    positions: row.journal !== "" ? [] : row.model.titleMatches
+                                    positions: row.journal !== "" ? root.noMatches : row.titleMatches
                                     font.weight: Theme.weightMedium
                                 }
                             }
@@ -398,7 +440,7 @@ FocusScope {
                             width: columns.folder
                             anchors.verticalCenter: parent.verticalCenter
                             rightPadding: Theme.space3
-                            text: row.model.folder
+                            text: row.folder
                             variant: "muted"
                             elide: Text.ElideMiddle
                         }
@@ -406,7 +448,7 @@ FocusScope {
                             width: columns.modified
                             anchors.verticalCenter: parent.verticalCenter
                             rightPadding: Theme.space3
-                            text: row.model.modifiedLabel
+                            text: row.modifiedLabel
                             variant: "muted"
                             elide: Text.ElideRight
                         }
@@ -415,13 +457,13 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
                             rightPadding: Theme.space4
                             horizontalAlignment: Text.AlignRight
-                            text: row.model.backlinks > 0 ? row.model.backlinks : "–"
-                            variant: row.model.backlinks > 0 ? "body" : "faint"
+                            text: row.backlinks > 0 ? "" + row.backlinks : "–"
+                            variant: row.backlinks > 0 ? "body" : "faint"
                         }
                         BText {
                             width: columns.tags
                             anchors.verticalCenter: parent.verticalCenter
-                            text: row.model.tags.map(t => "#" + t).join(" ")
+                            text: root.tagsText(row.tags)
                             variant: "small"
                             color: Theme.tagFg
                             elide: Text.ElideRight
@@ -446,18 +488,17 @@ FocusScope {
                             ContentHighlightText {
                                 Layout.fillWidth: true
                                 source: row.shownTitle
-                                positions: row.journal !== "" ? [] : row.model.titleMatches
+                                positions: row.journal !== "" ? root.noMatches : row.titleMatches
                                 font.weight: Theme.weightMedium
                                 font.pixelSize: Theme.textMd
                             }
                         }
                         BText {
                             Layout.fillWidth: true
-                            text: [row.model.folder,
-                                   row.model.modifiedLabel,
-                                   row.model.backlinks > 0 ? qsTr("%n link(s)", "", row.model.backlinks) : "",
-                                   row.model.tags.length > 0 ? row.model.tags.map(t => "#" + t).join(" ") : ""]
-                                  .filter(s => s !== "").join(" · ")
+                            text: root.nonEmpty([row.folder,
+                                                 row.modifiedLabel,
+                                                 row.backlinks > 0 ? qsTr("%n link(s)", "", row.backlinks) : "",
+                                                 root.tagsText(row.tags)]).join(" · ")
                             variant: "small"
                             color: Theme.fgMuted
                             elide: Text.ElideRight
@@ -471,17 +512,17 @@ FocusScope {
                 anchors.centerIn: parent
                 width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
                 visible: pages.count === 0 && Workspace.ready && root.subfolders.length === 0
-                iconName: filterField.text.trim() !== "" ? "search" : "files"
-                title: filterField.text.trim() !== "" ? qsTr("No page matches “%1”").arg(filterField.text.trim())
+                iconName: Js.trim(filterField.text) !== "" ? "search" : "files"
+                title: Js.trim(filterField.text) !== "" ? qsTr("No page matches “%1”").arg(Js.trim(filterField.text))
                                                       : root.folder !== "" ? qsTr("This folder has no pages") : qsTr("No pages yet")
-                description: filterField.text.trim() !== ""
+                description: Js.trim(filterField.text) !== ""
                              ? qsTr("The filter looks at titles, aliases and folders. Full-text search finds words inside notes.")
                              : qsTr("Pages are Markdown files in the notebook folder. Create one, or link to a new page with [[Name]] anywhere.")
-                actionText: filterField.text.trim() !== "" ? qsTr("Search inside notes") : qsTr("New page")
-                actionIcon: filterField.text.trim() !== "" ? "search" : "plus"
+                actionText: Js.trim(filterField.text) !== "" ? qsTr("Search inside notes") : qsTr("New page")
+                actionIcon: Js.trim(filterField.text) !== "" ? "search" : "plus"
                 onActionTriggered: {
-                    if (filterField.text.trim() !== "")
-                        AppController.search(filterField.text.trim())
+                    if (Js.trim(filterField.text) !== "")
+                        AppController.search(Js.trim(filterField.text))
                     else
                         newPage.openIn(root.folder)
                 }
@@ -497,16 +538,18 @@ FocusScope {
 
     Instantiator {
         model: root.sortKeys
+        // sortKeys: { value, text, iconName }
         delegate: BMenuItem {
-            required property var modelData
-            text: modelData.text
-            iconName: modelData.icon
+            id: sortItem
+            required property string value
+            required text
+            required iconName
             checkable: true
-            checked: pages.sortKey === modelData.value
-            onTriggered: root.sortBy(modelData.value)
+            checked: pages.sortKey === value
+            onTriggered: root.sortBy(sortItem.value)
         }
-        onObjectAdded: (index, object) => sortMenu.insertItem(index, object)
-        onObjectRemoved: (index, object) => sortMenu.removeItem(object)
+        onObjectAdded: (index, object) => sortMenu.insertItem(index, object as Item)
+        onObjectRemoved: (index, object) => sortMenu.removeItem(object as Item)
     }
     BMenu {
         id: sortMenu
@@ -524,15 +567,17 @@ FocusScope {
     BMenu {
         id: rowMenu
         property int row: -1
-        readonly property var page: row >= 0 ? pages.get(row) : ({})
-        function openFor(r, item) {
+        // The row's page ({ path, journalDate, … }).
+        readonly property string pagePath: row >= 0 ? AppController.routeText(pages.get(row), "path") : ""
+        readonly property string pageJournalDate: row >= 0 ? AppController.routeText(pages.get(row), "journalDate") : ""
+        function openFor(r: int, item: Item): void {
             row = r
             popup(item, Math.min(item.width - width, item.width / 2), item.height / 2)
         }
         BMenuItem {
             text: qsTr("Open")
             iconName: "file-text"
-            onTriggered: root.open(rowMenu.row, false)
+            onTriggered: root.open(rowMenu.row, false, "")
         }
         BMenuItem {
             visible: OpenIn.tabs
@@ -546,32 +591,32 @@ FocusScope {
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")
             iconName: "panel-right"
-            onTriggered: root.open(rowMenu.row, true)
+            onTriggered: root.open(rowMenu.row, true, "")
         }
         BMenuItem {
             objectName: "allPagesMenuMove"
             text: qsTr("Move to…")
             iconName: "folder-input"
-            onTriggered: AppController.requestItemAction("move", rowMenu.page.path)
+            onTriggered: AppController.requestItemAction("move", rowMenu.pagePath)
         }
         BMenuItem {
-            visible: rowMenu.page.journalDate === ""
+            visible: rowMenu.pageJournalDate === ""
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
-            onTriggered: AppController.requestItemAction("rename", rowMenu.page.path)
+            onTriggered: AppController.requestItemAction("rename", rowMenu.pagePath)
         }
         BMenuItem {
             text: qsTr("Version history")
             iconName: "history"
-            onTriggered: AppController.navigate({ view: "history", path: rowMenu.page.path })
+            onTriggered: AppController.navigate({ view: "history", path: rowMenu.pagePath })
         }
         BMenuSeparator {}
         BMenuItem {
             text: qsTr("Move to trash")
             iconName: "trash-2"
             danger: true
-            onTriggered: deleteDialog.openFor(rowMenu.page.path)
+            onTriggered: deleteDialog.openFor(rowMenu.pagePath)
         }
     }
     // A subfolder row's menu: the folder's actions live in the shell (its dialogs).
@@ -579,7 +624,7 @@ FocusScope {
         id: folderMenu
         objectName: "allPagesFolderMenu"
         property string path
-        function openFor(p, item) {
+        function openFor(p: string, item: Item): void {
             path = p
             popup(item, Math.min(item.width - width, item.width / 2), item.height / 2)
         }
@@ -619,7 +664,7 @@ FocusScope {
     BConfirmDialog {
         id: deleteDialog
         property string path
-        function openFor(p) {
+        function openFor(p: string): void {
             path = p
             open()
         }
@@ -631,8 +676,8 @@ FocusScope {
         onAccepted: {
             const trashPath = Workspace.deletePage(path)
             if (trashPath !== "") {
-                AppController.toastAction(qsTr("Moved to trash"), "info", qsTr("Undo"),
-                                          Workspace.restore.bind(Workspace, trashPath))
+                // Restored by the controller: the toast outlives this view.
+                AppController.toastRestore(qsTr("Moved to trash"), qsTr("Undo"), [trashPath])
             }
         }
     }

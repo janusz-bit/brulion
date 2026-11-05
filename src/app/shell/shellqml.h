@@ -12,11 +12,13 @@
 //   ShortcutMap      singleton — the commands' keyboard shortcuts (custom ones too)
 //   FolderTreeModel  creatable — FolderTreeModel { workspace: Workspace }
 //   ViewTraits       creatable — ViewTraits { view: loader.item } (ShellRouteView)
+//   CleanupSelection creatable — CleanupView's shown and ticked files
 #pragma once
 
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "appupdates.h"
+#include "cleanupselection.h"
 #include "commandmodel.h"
 #include "foldertreemodel.h"
 #include "replacesession.h"
@@ -157,6 +159,12 @@ struct ViewTraitsForeign {
     Q_GADGET
     QML_FOREIGN(brulion::shell::ViewTraits)
     QML_NAMED_ELEMENT(ViewTraits)
+};
+
+struct CleanupSelectionForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::CleanupSelection)
+    QML_NAMED_ELEMENT(CleanupSelection)
 };
 
 } // namespace brulion::shell

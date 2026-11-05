@@ -38,41 +38,144 @@ FocusScope {
 
     /// Where the view is scrolled (a tab keeps it while another tab is shown): one day as a page
     /// — its PageView's; the stream — { date (the day at the top), offset (px into it) }.
-    function viewState() {
+    function viewState(): var {
         if (root.single)
             return root.pageView ? root.pageView.viewState() : {}
-        const journals = listLoader.item
-        return journals ? journals.viewState() : {}
+        return root.streamList ? root.streamViewState() : {}
     }
-    function restoreViewState(state) {
+    function restoreViewState(state: var): void {
         if (root.single) {
             if (root.pageView)
                 root.pageView.restoreViewState(state)
-        } else if (listLoader.item) {
-            listLoader.item.restoreViewState(state)
+        } else if (root.streamList) {
+            root.restoreStreamState(state)
         }
     }
 
-    readonly property bool single: !!route && route.view === "journal"
-    readonly property string date: route && route.date ? route.date : DatesHelper.today
+    // ---- The journal stream's list and days (set by the stream while it exists) -------------------
+    property ListView streamList: null
+    property JournalListModel streamDays: null
+    /// A view state to scroll back to once the days are known (pendingDate "": none).
+    property string pendingDate
+    property real pendingOffset
+    /// The stream went to route.date (or to a restored view state) once.
+    property bool streamScrolled: false
+    /// The day (ContentJournalDay) of a stream row's item (null: none).
+    function dayOf(item: Item): ContentJournalDay {
+        if (!item)
+            return null
+        const children = root.childrenOf(item)
+        for (let i = 0; i < children.length; ++i) {
+            const day = children[i] as ContentJournalDay
+            if (day)
+                return day
+        }
+        return null
+    }
+    function childrenOf(item: Item): list<Item> {
+        return item.children
+    }
+    /// The stream's item at (x, y) of its content (null: none).
+    function streamItemAt(x: real, y: real): Item {
+        return root.streamList.itemAt(x, y)
+    }
+    function streamItemAtIndex(row: int): Item {
+        return root.streamList.itemAtIndex(row)
+    }
+    /// JournalsView.viewState() of the stream: { date (the day at the top), offset (px into it) }.
+    function streamViewState(): var {
+        const list = root.streamList
+        const item = root.streamItemAt(list.width / 2, list.contentY + 1)
+        const day = root.dayOf(item)
+        if (day)
+            return { date: day.date, offset: Math.round(list.contentY - item.y) }
+        return {}
+    }
+    MapHolder { id: stateInfo }
+    function restoreStreamState(state: var): void {
+        // { date, offset }
+        stateInfo.map = state
+        root.pendingDate = AppController.routeText(stateInfo.map, "date")
+        root.pendingOffset = AppController.routeInt(stateInfo.map, "offset", 0)
+        if (root.pendingDate !== "")
+            root.streamScrolled = true // not to route.date: where the tab was
+        applyStateLater.restart()
+    }
+    function applyStreamState(): void {
+        if (!root.streamList)
+            return
+        const row = root.pendingDate !== "" ? root.rowOfDate(root.pendingDate) : -1
+        if (row < 0)
+            return // (once the days are known: onRefreshed)
+        root.pendingDate = ""
+        root.streamList.positionViewAtIndex(row, ListView.Beginning)
+        root.streamList.forceLayout()
+        const item = root.streamItemAtIndex(row)
+        if (item) {
+            const top = root.streamList.originY
+            const y = item.y + root.pendingOffset
+            root.streamList.contentY = y > top ? y : top
+        }
+    }
+    /// Make the day at `row` the one written in (the stream's find bar goes on there): scrolled
+    /// to, created when it was not, activated.
+    function activateDay(row: int): void {
+        if (!root.streamList || row < 0 || row >= root.streamDays.count)
+            return
+        root.streamList.positionViewAtIndex(row, ListView.Contain)
+        root.streamList.forceLayout()
+        const day = root.dayOf(root.streamItemAtIndex(row))
+        if (day)
+            day.activated()
+    }
+    /// The stream's row of `date` or of the nearest earlier day with a note (-1: none).
+    function rowOfDate(date: string): int {
+        return root.streamDays.rowOfDate(date)
+    }
+    function scrollToDate(date: string): void {
+        if (!root.streamList)
+            return
+        const row = root.rowOfDate(date)
+        if (row >= 0)
+            root.streamList.positionViewAtIndex(row, ListView.Beginning)
+    }
+    // Deferred calls (instead of Qt.callLater).
+    Timer {
+        id: applyStateLater
+        interval: 0
+        onTriggered: root.applyStreamState()
+    }
+    Timer {
+        id: scrollToRouteLater
+        interval: 0
+        onTriggered: root.scrollToDate(AppController.routeText(root.route, "date"))
+    }
+
+    readonly property bool single: AppController.routeText(route, "view") === "journal"
+    readonly property string date: AppController.routeText(route, "date") !== "" ? AppController.routeText(route, "date") : DatesHelper.today
     readonly property PageView pageView: singleLoader.item as PageView
+    /// The parameters of a "journal" route its PageView gets.
+    readonly property list<string> pageRouteKeys: ["line", "blockId", "heading", "source", "open"]
     /// The day whose editor had the caret last (side panel context, editing state).
     property ContentJournalDay activeDay: null
+    /// The editor and the page of activeDay (null with none).
+    readonly property BlockEditor activeEditor: activeDay !== null ? activeDay.editor : null
+    readonly property PageController activeController: activeDay !== null ? activeDay.controller : null
 
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
                                            : (activeDay !== null && activeDay.editing)
     /// A touch toolbar is docked at the bottom (the shell keeps the content above it).
     readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
-                                                 : (activeDay !== null && activeDay.editor.toolbarVisible)
+                                                 : (activeEditor !== null && activeEditor.toolbarVisible)
     /// The shell's quick capture from the bottom navigation: the editing of the day written in
     /// ends first.
-    function endEditing() {
+    function endEditing(): void {
         if (single) {
             if (pageView)
                 pageView.endEditing()
-        } else if (activeDay) {
-            activeDay.editor.endTouchEditing()
+        } else if (activeEditor) {
+            activeEditor.endTouchEditing()
         }
     }
     /// One day as a page in source mode (the stream opens a day as a page for that).
@@ -80,7 +183,7 @@ FocusScope {
     /// The mode of the day being written in ("document" | "outline"; "" with none): the one the
     /// "toggleNoteMode" action switches.
     readonly property string noteMode: single ? (pageView !== null ? pageView.noteMode : "")
-                                       : activeDay !== null ? (activeDay.controller.documentMode ? "document" : "outline") : ""
+                                       : activeController !== null ? (activeController.documentMode ? "document" : "outline") : ""
     readonly property Component sidePanel: inSidePanel ? null : single ? (pageView ? pageView.sidePanel : null) : journalsPanel
 
     focus: true
@@ -92,15 +195,15 @@ FocusScope {
     // as a page: its PageView does it.
     Connections {
         target: AppController
-        function onUiActionRequested(action) {
+        function onUiActionRequested(action: string) {
             if (root.single || root.inSidePanel || !root.paneActive || !root.visible || !root.activeDay)
                 return
-            if (action.startsWith("copyLink:")) {
-                root.activeDay.editor.copyCurrentLink(action.slice(9))
+            if (Js.startsWith(action, "copyLink:")) {
+                root.activeEditor.copyCurrentLink(Js.sliceFrom(action, 9))
                 return
             }
             if (action === "saveWebPictures") {
-                root.activeDay.editor.downloadWebPictures("")
+                root.activeEditor.downloadWebPictures("")
                 return
             }
             if (action === "findInNote" || action === "replaceInNote") {
@@ -109,24 +212,24 @@ FocusScope {
             }
             if (action === "toggleSourceMode") {
                 // The day opens as a page in source mode (ContentJournalDay), as Ctrl+E there.
-                root.activeDay.editor.toggleSourceMode()
+                root.activeEditor.toggleSourceMode()
                 return
             }
             if (action === "addProperty") {
-                root.activeDay.editor.addProperty()
+                root.activeEditor.addProperty()
                 return
             }
             if (action === "taskClock") {
-                root.activeDay.editor.toggleCurrentTaskClock()
+                root.activeEditor.toggleCurrentTaskClock()
                 return
             }
             if (action === "taskDependency") {
-                root.activeDay.editor.openCurrentDependencyPicker()
+                root.activeEditor.openCurrentDependencyPicker()
                 return
             }
             if (action !== "toggleNoteMode")
                 return
-            if (!root.activeDay.controller.toggleMode())
+            if (!root.activeController.toggleMode())
                 AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")
         }
     }
@@ -136,19 +239,19 @@ FocusScope {
     Shortcut {
         sequence: ShortcutMap.sequences["page.addProperty"] || ""
         enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
-                 && !root.activeDay.controller.sourceMode
-        onActivated: root.activeDay.editor.addProperty()
+                 && !root.activeController.sourceMode
+        onActivated: root.activeEditor.addProperty()
     }
     // Markdown source of the day being written in (Ctrl+E): it opens as a page in source mode.
     Shortcut {
         sequence: ShortcutMap.sequences["page.source"] || ""
         enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
-        onActivated: root.activeDay.editor.toggleSourceMode()
+        onActivated: root.activeEditor.toggleSourceMode()
     }
 
     // ---- The find bar over the stream ------------------------------------------------------------
     property bool findOpen: false
-    function openFind(withReplace) {
+    function openFind(withReplace: bool): void {
         if (root.single || !root.activeDay)
             return
         if (!root.findOpen) {
@@ -163,29 +266,25 @@ FocusScope {
         else
             bar.focusField()
     }
-    function closeFind() {
+    function closeFind(): void {
         root.findOpen = false
-        if (root.activeDay)
-            root.activeDay.editor.findClosed()
+        if (root.activeEditor)
+            root.activeEditor.findClosed()
     }
     NoteFind {
         id: noteFind
         objectName: "journalFind"
-        controller: root.activeDay ? root.activeDay.controller : null
+        controller: root.activeController
         active: root.findOpen && !root.single
     }
     StreamFind {
         id: streamFind
         objectName: "journalStreamFind"
         host: Workspace
-        model: listLoader.item ? listLoader.item.daysModel : null
+        model: root.streamDays
         find: noteFind
         // Another day has the next match: there it goes (the list scrolls, the day is written in).
-        onDayRequested: (row, path) => {
-            const journals = listLoader.item
-            if (journals)
-                journals.activateDay(row)
-        }
+        onDayRequested: (row, path) => root.activateDay(row)
     }
     Loader {
         id: findBarLoader
@@ -193,12 +292,12 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         active: root.findOpen && !root.single
-        height: active && item ? item.implicitHeight : 0
+        height: active && item !== null ? (item as Item).implicitHeight : 0
         z: 2
         sourceComponent: FindBar {
             find: noteFind
             stream: streamFind
-            editor: root.activeDay ? root.activeDay.editor : null
+            editor: root.activeEditor
             placeholder: qsTr("Find in the journal")
             onCloseRequested: root.closeFind()
         }
@@ -224,14 +323,9 @@ FocusScope {
             inSidePanel: root.inSidePanel
             paneActive: root.paneActive
             focus: true
-            route: {
-                const r = { view: "page", path: root.route.path ? root.route.path : tools.journalPathFor(root.date) }
-                for (const key of ["line", "blockId", "heading", "source", "open"]) {
-                    if (root.route[key] !== undefined)
-                        r[key] = root.route[key]
-                }
-                return r
-            }
+            route: AppController.routeWith({ view: "page", path: AppController.routeText(root.route, "path") !== ""
+                                                                  ? AppController.routeText(root.route, "path") : tools.journalPathFor(root.date) },
+                                            root.route, root.pageRouteKeys)
         }
     }
 
@@ -250,115 +344,105 @@ FocusScope {
     Component {
         id: journalsComponent
 
-        FocusScope {
+        // The days' editors scroll with this list (BlockEditor.scroller, ContentJournalDay).
+        EditorScroller {
             id: journals
 
             /// The toolbar of the day being edited is docked on this frame's bottom edge.
-            readonly property bool toolbarDocked: root.activeDay !== null && root.activeDay.editor.toolbarVisible
+            readonly property bool toolbarDocked: root.activeDay !== null && root.activeEditor.toolbarVisible
             /// How far a drag selection may scroll the stream past the day it started in (that day
             /// must stay in the list's cache: destroyed, it would end the drag).
-            readonly property real selectionReach: list.dayCache / 2
+            selectionReach: list.dayCache / 2
             /// The day (ContentJournalDay) at a scene point, null in a gap or outside the days.
-            function dayAt(scene) {
-                const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
-                const y = Math.max(list.contentY, Math.min(list.contentY + list.height - 1, p.y))
-                const item = list.itemAt(Math.max(0, Math.min(list.width - 1, p.x)), y)
-                for (let i = 0; item && i < item.children.length; ++i) {
-                    const day = item.children[i] as ContentJournalDay
-                    if (day)
-                        return day
-                }
-                return null
+            function dayAt(scene: point): ContentJournalDay {
+                journals.mapped = list.contentItem.mapFromItem(null, scene.x, scene.y)
+                const y = Math.max(list.contentY, Math.min(list.contentY + list.height - 1, journals.mapped.y))
+                return root.dayOf(root.streamItemAt(Math.max(0, Math.min(list.width - 1, journals.mapped.x)), y))
             }
+            /// The editor of the day at a scene point (EditorScroller), null in a gap.
+            function editorAt(scene: point): BlockEditor {
+                const day = journals.dayAt(scene)
+                return day ? day.editor : null
+            }
+            /// (A mapped point: a Q_INVOKABLE's point result is read through a typed property.)
+            property point mapped
             /// Where the list scrolls (the autocomplete popup of a day follows it).
             readonly property real contentY: list.contentY
 
             /// Keep `rect` of `item` (a caret, a table cell) visible above the editing toolbar —
             /// the frame ends at the keyboard (the shell lifts it). Not while the keyboard slides:
             /// the day's editor asks again once it has settled.
-            function ensureVisible(item, rect) {
+            function ensureVisible(item: Item, rect: rect): void {
                 if (!item || KeyboardInsets.animating)
                     return
-                const p = item.mapToItem(list.contentItem, rect.x, rect.y)
+                journals.mapped = item.mapToItem(list.contentItem, rect.x, rect.y)
+                const py = journals.mapped.y
                 const margin = Theme.space8
                 const bottom = list.height - (toolbarDocked ? Theme.editToolbarHeight : 0)
-                const top = p.y - list.contentY
+                const top = py - list.contentY
                 if (top < margin)
-                    list.contentY = Math.max(list.originY, p.y - margin)
+                    list.contentY = Math.max(list.originY, py - margin)
                 else if (top + rect.height > bottom - margin)
-                    list.contentY = p.y + rect.height - bottom + margin
+                    list.contentY = py + rect.height - bottom + margin
             }
             /// Typewriter scrolling (BlockEditor.typewriter): `rect` of `item` to the middle of
             /// the visible part, as far as the stream goes.
-            function centerInView(item, rect) {
+            function centerInView(item: Item, rect: rect): void {
                 if (!item || KeyboardInsets.animating)
                     return
-                const p = item.mapToItem(list.contentItem, rect.x, rect.y)
+                journals.mapped = item.mapToItem(list.contentItem, rect.x, rect.y)
                 const visibleHeight = list.height - (toolbarDocked ? Theme.editToolbarHeight : 0)
                 const end = Math.max(list.originY, list.originY + list.contentHeight - list.height + list.bottomMargin)
-                const target = Math.max(list.originY, Math.min(end, p.y + rect.height / 2 - visibleHeight / 2))
+                const target = Math.max(list.originY, Math.min(end, journals.mapped.y + rect.height / 2 - visibleHeight / 2))
                 if (Math.abs(target - list.contentY) >= 1)
                     list.contentY = target
             }
-            function keepCaretInView() {
+            function keepCaretInView(): void {
                 if (root.activeDay)
                     root.activeDay.keepCaretVisible()
             }
-            function scrollBy(dy) {
+            function scrollBy(dy: real): void {
                 const end = Math.max(list.originY, list.originY + list.contentHeight - list.height + list.bottomMargin)
                 list.contentY = Math.max(list.originY, Math.min(end, list.contentY + dy))
             }
             /// A day's editor selects blocks with a finger (BlockEditor.setScrollingHeld): the stream
             /// does not flick meanwhile.
-            function holdScrolling(held) {
+            function holdScrolling(held: bool): void {
                 list.interactive = !held
             }
             /// The day model (StreamFind searches its days).
             readonly property JournalListModel daysModel: days
-            /// Make the day at `row` the one written in (the stream's find bar goes on there): scrolled
-            /// to, created when it was not, activated.
-            function activateDay(row) {
-                if (row < 0 || row >= days.count)
-                    return
-                list.positionViewAtIndex(row, ListView.Contain)
-                list.forceLayout()
-                const item = list.itemAtIndex(row)
-                if (item && item.day)
-                    item.day.activated()
+            /// Make the day at `row` the one written in (JournalsView.activateDay()).
+            function activateDay(row: int): void {
+                root.activateDay(row)
             }
-            function scrollToDate(date) {
-                const row = days.rowOfDate(date)
-                if (row >= 0)
-                    list.positionViewAtIndex(row, ListView.Beginning)
+            function scrollToDate(date: string): void {
+                root.scrollToDate(date)
             }
-            /// JournalsView.viewState() of the stream.
-            function viewState() {
-                const item = list.itemAt(list.width / 2, list.contentY + 1)
-                for (let i = 0; item && i < item.children.length; ++i) {
-                    const day = item.children[i] as ContentJournalDay
-                    if (day)
-                        return { date: day.date, offset: Math.round(list.contentY - item.y) }
+
+            Component.onCompleted: {
+                root.streamScrolled = false
+                root.streamList = list
+                root.streamDays = days
+                // route.open "jump": the date picker right away (screenshots, smoke tests).
+                if (AppController.routeText(root.route, "open") === "jump")
+                    jumpLater.restart()
+            }
+            Component.onDestruction: {
+                if (root.streamList === list) {
+                    root.streamList = null
+                    root.streamDays = null
                 }
-                return {}
             }
-            property var pendingState: null
-            function restoreViewState(state) {
-                journals.pendingState = state && state.date ? state : null
-                if (journals.pendingState)
-                    days.scrolled = true // not to route.date: where the tab was
-                Qt.callLater(() => { if (journals) journals.applyViewState() })
+            Timer {
+                id: jumpLater
+                interval: 0
+                onTriggered: jumpDialog.open()
             }
-            function applyViewState() {
-                const s = journals.pendingState
-                const row = s ? days.rowOfDate(s.date) : -1
-                if (row < 0)
-                    return // (once the days are known: onRefreshed)
-                journals.pendingState = null
-                list.positionViewAtIndex(row, ListView.Beginning)
-                list.forceLayout()
-                const item = list.itemAtIndex(row)
-                if (item)
-                    list.contentY = Math.max(list.originY, item.y + (s.offset || 0))
+            Timer {
+                id: caretLater
+                interval: 0
+                onTriggered: journals.keepCaretInView()
             }
 
             // One selection over several days: the days' controllers attach while they exist.
@@ -371,7 +455,7 @@ FocusScope {
                 // The selection's end is in a day scrolled far away (Shift+↑/↓): scroll there.
                 onRevealRequested: (path) => {
                     for (let i = 0; i < days.count; ++i) {
-                        if (days.get(i).path === path) {
+                        if (AppController.routeText(days.get(i), "path") === path) {
                             list.positionViewAtIndex(i, ListView.Contain)
                             return
                         }
@@ -383,25 +467,22 @@ FocusScope {
                 id: days
                 workspace: Workspace
                 today: DatesHelper.today
-                property bool scrolled: false
                 // route.date: once the days are known.
                 onRefreshed: {
-                    if (journals.pendingState)
-                        Qt.callLater(() => { if (journals) journals.applyViewState() })
-                    if (!scrolled && root.route && root.route.date && count > 0) {
-                        scrolled = true
-                        Qt.callLater(() => { if (journals && root && root.route) journals.scrollToDate(root.route.date) })
+                    if (root.pendingDate !== "")
+                        applyStateLater.restart()
+                    if (!root.streamScrolled && AppController.routeFlag(root.route, "date") && count > 0) {
+                        root.streamScrolled = true
+                        scrollToRouteLater.restart()
                     }
                 }
             }
-            // route.open "jump": the date picker right away (screenshots, smoke tests).
-            Component.onCompleted: if (root.route && root.route.open === "jump") Qt.callLater(jumpDialog.open)
 
             Connections {
                 target: root
                 function onRouteChanged() {
-                    if (!root.single && root.route && root.route.date)
-                        journals.scrollToDate(root.route.date)
+                    if (!root.single && AppController.routeFlag(root.route, "date"))
+                        root.scrollToDate(AppController.routeText(root.route, "date"))
                 }
             }
 
@@ -447,7 +528,7 @@ FocusScope {
                     const shrank = height < lastHeight - 0.5
                     lastHeight = height
                     if (shrank && journals.toolbarDocked)
-                        Qt.callLater(journals.keepCaretInView)
+                        caretLater.restart()
                 }
                 spacing: 0
                 keyNavigationEnabled: false
@@ -551,8 +632,8 @@ FocusScope {
                         onActivated: {
                             // (A selection over several days keeps the other days' parts.)
                             if (root.activeDay && root.activeDay !== dayView && !stream.active) {
-                                root.activeDay.controller.stopEditing()
-                                root.activeDay.controller.selectedRow = -1
+                                root.activeController.stopEditing()
+                                root.activeController.selectedRow = -1
                             }
                             root.activeDay = dayView
                         }
@@ -560,10 +641,15 @@ FocusScope {
                             if (dayItem.isToday && root.activeDay === null)
                                 root.activeDay = dayView
                             // route.open "write": start writing today (screenshots, smoke tests).
-                            if (dayItem.isToday && root.route && root.route.open === "write")
-                                Qt.callLater(dayView.begin)
+                            if (dayItem.isToday && AppController.routeText(root.route, "open") === "write")
+                                beginLater.restart()
                         }
                         Component.onDestruction: if (root.activeDay === dayView) root.activeDay = null
+                    }
+                    Timer {
+                        id: beginLater
+                        interval: 0
+                        onTriggered: dayView.begin()
                     }
                 }
 
@@ -618,16 +704,8 @@ FocusScope {
                 showFooter: false
                 preferredWidth: Theme.dialogWidthSm
 
-                readonly property var marks: {
-                    // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
-                    const cells = jumpPicker.cells
-                    if (!cells || cells.length === 0 || Workspace.revision < 0)
-                        return ({})
-                    const out = {}
-                    for (const d of Workspace.journalDates(cells[0].date, cells[cells.length - 1].date))
-                        out[d] = ["journal"]
-                    return out
-                }
+                // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+                readonly property var marks: Workspace.revision >= 0 ? Workspace.journalMarks(jumpPicker.cells) : ({})
 
                 BDatePicker {
                     id: jumpPicker
@@ -635,10 +713,10 @@ FocusScope {
                     selectedDate: DatesHelper.today
                     marks: jumpDialog.marks
                     onPicked: (value) => {
-                        const d = value.slice(0, 10)
+                        const d = "" + Js.slice(value, 0, 10)
                         jumpDialog.close()
                         if (days.exactRowOfDate(d) >= 0)
-                            journals.scrollToDate(d)
+                            root.scrollToDate(d)
                         else
                             AppController.navigate({ view: "journal", date: d })
                     }
@@ -657,8 +735,8 @@ FocusScope {
         id: journalsPanel
         ContentSidePanel {
             path: root.activeDay ? root.activeDay.path : tools.journalPathFor(DatesHelper.today)
-            controller: root.activeDay ? root.activeDay.controller : null
-            editor: root.activeDay ? root.activeDay.editor : null
+            controller: root.activeController
+            editor: root.activeEditor
         }
     }
 }

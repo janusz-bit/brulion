@@ -23,37 +23,44 @@ FocusScope {
 
     property var route: ({})
     readonly property string title: qsTr("Sync")
-    readonly property var tabIds: ["overview", "syncthing", "nextcloud", "conflicts"]
-    readonly property var sync: Workspace.sync
+    readonly property list<string> tabIds: ["overview", "syncthing", "nextcloud", "conflicts"]
+    readonly property WorkspaceSync sync: Workspace.sync
     readonly property int conflictCount: sync ? sync.conflictCount : 0
     readonly property int tabPadding: Theme.compact ? 9 : (Theme.touchUi ? 14 : 12)
     /// The conflict the user (or the route) opened.
     property string chosenCopy: ""
-    readonly property var conflicts: sync ? sync.conflicts : []
-    readonly property bool chosenListed: chosenCopy !== "" && conflicts.some(c => c.copy === chosenCopy)
+    /// The conflict copies (paths), as Workspace.sync.conflicts lists them.
+    readonly property list<string> conflictCopies: sync ? sync.conflictCopies : []
+    readonly property bool chosenListed: chosenCopy !== "" && conflictCopies.indexOf(chosenCopy) >= 0
     /// The conflict shown in the resolver: the chosen one while it exists; wide windows show the
     /// first one otherwise, narrow ones the list.
     readonly property string currentCopy: chosenListed ? chosenCopy
-                                        : (!Theme.narrow && conflicts.length > 0 ? conflicts[0].copy : "")
+                                        : (!Theme.narrow && conflictCopies.length > 0 ? conflictCopies[0] : "")
 
-    function showTab(id) {
+    function showTab(id: string): void {
         const i = tabIds.indexOf(id)
         if (i >= 0)
             tabs.currentIndex = i
     }
-    function applyRoute() {
-        if (!route)
-            return
-        if (route.copy) {
-            chosenCopy = route.copy
+    function applyRoute(): void {
+        if (AppController.routeFlag(route, "copy")) {
+            chosenCopy = AppController.routeText(route, "copy")
             showTab("conflicts")
-        } else if (route.run) {
+        } else if (AppController.routeFlag(route, "run")) {
             // A run's details (the event log's links, screenshots): on the Nextcloud tab.
             showTab("nextcloud")
-            Qt.callLater(historyList.open, route.run)
-        } else if (route.tab) {
-            showTab(route.tab)
+            openRunLater.run = AppController.routeInt(route, "run", 0)
+            openRunLater.restart()
+        } else if (AppController.routeFlag(route, "tab")) {
+            showTab(AppController.routeText(route, "tab"))
         }
+    }
+    // (Qt.callLater(historyList.open, run))
+    Timer {
+        id: openRunLater
+        property int run
+        interval: 0
+        onTriggered: historyList.open(run)
     }
 
     onRouteChanged: applyRoute()
@@ -92,7 +99,7 @@ FocusScope {
         spacing: Theme.space2
         Rectangle {
             Layout.alignment: Qt.AlignTop
-            Layout.topMargin: Math.round(Theme.lineHeightPx(Theme.textBase) / 2) - 2
+            Layout.topMargin: Math.round(Theme.lineHeightPx(Theme.textBase, Theme.lineHeight) / 2) - 2
             implicitWidth: 5
             implicitHeight: 5
             radius: 2.5
@@ -158,8 +165,9 @@ FocusScope {
                         subtitle: qsTr("Without a server: your devices exchange the files directly.")
                         trailing: [
                             BBadge {
-                                visible: !AppController.isWasm && (Workspace.syncthingFolder || !!(root.sync && root.sync.syncthing.enabled))
-                                text: root.sync && root.sync.syncthing.state === "idle" ? qsTr("Up to date") : qsTr("Shared")
+                                visible: !AppController.isWasm && (Workspace.syncthingFolder
+                                                                   || (root.sync !== null && AppController.routeFlag(root.sync.syncthing, "enabled")))
+                                text: root.sync !== null && AppController.routeText(root.sync.syncthing, "state") === "idle" ? qsTr("Up to date") : qsTr("Shared")
                                 variant: "success"
                             }
                         ]
@@ -183,9 +191,9 @@ FocusScope {
                         subtitle: qsTr("Through your own server (WebDAV) – also in the browser.")
                         trailing: [
                             BBadge {
-                                visible: !!root.sync && root.sync.state !== "disabled"
+                                visible: root.sync !== null && root.sync.state !== "disabled"
                                 text: {
-                                    switch (root.sync ? root.sync.state : "") {
+                                    switch (root.sync !== null ? root.sync.state : "") {
                                     case "syncing": return qsTr("Syncing")
                                     case "offline": return qsTr("Offline")
                                     case "error": return qsTr("Problem")
@@ -193,7 +201,7 @@ FocusScope {
                                     }
                                 }
                                 variant: {
-                                    switch (root.sync ? root.sync.state : "") {
+                                    switch (root.sync !== null ? root.sync.state : "") {
                                     case "syncing": return "info"
                                     case "offline": return "warning"
                                     case "error": return "danger"
@@ -207,10 +215,10 @@ FocusScope {
                         Bullet { text: qsTr("Changes from several devices are merged line by line.") }
                         BText {
                             Layout.fillWidth: true
-                            visible: !!root.sync && root.sync.statusText !== ""
-                            text: root.sync ? root.sync.statusText : ""
+                            visible: root.sync !== null && root.sync.statusText !== ""
+                            text: root.sync !== null ? root.sync.statusText : ""
                             variant: "small"
-                            color: root.sync && root.sync.state === "error" ? Theme.dangerText : Theme.fgMuted
+                            color: root.sync !== null && root.sync.state === "error" ? Theme.dangerText : Theme.fgMuted
                             wrapMode: Text.Wrap
                         }
                         Item { Layout.fillHeight: true }
@@ -221,20 +229,20 @@ FocusScope {
                                 // Another notebook syncs with this one's server folder: nothing
                                 // syncs until one of them gets another folder (the form below
                                 // the status on the Nextcloud tab).
-                                readonly property bool folderShared: !!root.sync && root.sync.folderSharedWith !== ""
+                                readonly property bool folderShared: root.sync !== null && root.sync.folderSharedWith !== ""
                                 text: folderShared ? qsTr("Choose another folder")
-                                    : root.sync && root.sync.configured ? qsTr("Settings") : qsTr("Set up Nextcloud")
+                                    : root.sync !== null && root.sync.configured ? qsTr("Settings") : qsTr("Set up Nextcloud")
                                 variant: folderShared ? "primary" : "secondary"
                                 iconName: "arrow-right"
                                 iconRight: true
                                 onClicked: root.showTab("nextcloud")
                             }
                             BButton {
-                                visible: !!root.sync && root.sync.active
+                                visible: root.sync !== null && root.sync.active
                                 text: qsTr("Sync now")
                                 iconName: "refresh-cw"
                                 variant: "primary"
-                                busy: !!root.sync && root.sync.state === "syncing"
+                                busy: root.sync !== null && root.sync.state === "syncing"
                                 onClicked: root.sync.syncNow()
                             }
                         }
@@ -281,7 +289,7 @@ FocusScope {
             Page {
                 SyncDeletionGuard {}
                 SyncStatusPanel {
-                    visible: !!root.sync && (root.sync.configured || root.sync.state !== "disabled")
+                    visible: root.sync !== null && (root.sync.configured || root.sync.state !== "disabled")
                     onShowConflicts: root.showTab("conflicts")
                 }
                 SyncHistoryList { id: historyList }

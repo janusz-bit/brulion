@@ -1928,6 +1928,17 @@ QVariantList AppController::recentPagesExcept(const QString &path, int limit) co
     return out;
 }
 
+QVariantMap AppController::routeWith(const QVariantMap &base, const QVariantMap &route, const QStringList &keys) const
+{
+    QVariantMap out = base;
+    for (const QString &key : keys) {
+        const auto it = route.constFind(key);
+        if (it != route.constEnd())
+            out.insert(key, it.value());
+    }
+    return out;
+}
+
 QVariant AppController::propertyOf(QObject *object, const QString &name) const
 {
     if (!object)

@@ -214,6 +214,7 @@ private Q_SLOTS:
         QCOMPARE(conflict.value(u"source"_s).toString(), u"brulion"_s);
         QCOMPARE(conflict.value(u"device"_s).toString(), u"Telefon-Janusza"_s);
         const QString copy = conflict.value(u"copy"_s).toString();
+        QCOMPARE(sync->conflictCopies(), QStringList{ copy });
         const QVariantMap details = sync->conflictDetails(copy);
         QCOMPARE(details.value(u"ours"_s).toString(), u"- notatka zmieniona na telefonie\n- dopisane na laptopie: żółć\n"_s);
         QCOMPARE(details.value(u"theirs"_s).toString(), u"- notatka zmieniona na laptopie\n- dopisane na laptopie: żółć\n"_s);
@@ -222,6 +223,7 @@ private Q_SLOTS:
         const QString merged = u"- notatka zmieniona na telefonie i laptopie\n- dopisane na laptopie: żółć\n"_s;
         QVERIFY(sync->resolveConflict(u"Notatka.md"_s, copy, merged));
         QCOMPARE(sync->conflictCount(), 0);
+        QVERIFY(sync->conflictCopies().isEmpty());
         m_clock.advance(60'000);
         QVERIFY(syncAndWait(sync));
         QCOMPARE(server.text(u"Brulion/Notatka.md"_s).value_or(QString()), merged);

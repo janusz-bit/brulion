@@ -53,77 +53,135 @@ FocusScope {
         return m === "week" || m === "agenda" ? m : "month"
     }
 
-    function setMode(m) {
+    function setMode(m: string): void {
         mode = m
         AppSettings.setValue("calendar/mode", m)
         body.forceActiveFocus()
     }
-    function applyRoute() {
-        if (!route)
-            return
-        if (route.date && DatesHelper.isValidDate(route.date))
-            cal.anchorDate = route.date
-        if (route.mode === "month" || route.mode === "week" || route.mode === "agenda")
-            mode = route.mode
-        if (route.open === "day" && !sideBySide && !stackedDay)
-            Qt.callLater(daySheet.open)
-        else if (route.open === "task" || route.open === "reminder")
-            Qt.callLater(() => addDialog.openFor(route.open, cal.anchorDate))
+    function applyRoute(): void {
+        const date = AppController.routeText(route, "date")
+        if (date !== "" && DatesHelper.isValidDate(date))
+            cal.anchorDate = date
+        const routeMode = AppController.routeText(route, "mode")
+        if (routeMode === "month" || routeMode === "week" || routeMode === "agenda")
+            mode = routeMode
+        const open = AppController.routeText(route, "open")
+        if (open === "day" && !sideBySide && !stackedDay) {
+            openDayLater.restart()
+        } else if (open === "task" || open === "reminder") {
+            later.addKind = open
+            openAddLater.restart()
+        }
     }
-    function openEntry(entry) {
+    // An entry (the planning components' signals): a CalendarModel item { key, kind, title, path,
+    // line, isTask, status, closed, alarm, date, time, spec, occurrence, rule, priority, … }, read
+    // through a typed map.
+    MapHolder { id: entryInfo }
+    function openEntry(entry: var): void {
+        entryInfo.map = entry
         if (daySheet.opened)
             daySheet.close()
-        AppController.openPage(entry.path, entry.line)
+        AppController.openPage(entryInfo.map.path, entryInfo.map.line)
     }
-    function toggleEntry(entry) {
-        const wasClosed = entry.closed === true
-        if (actions.toggleTask(entry.path, entry.line, entry.title))
-            toasts.show(wasClosed ? qsTr("Task reopened") : qsTr("Task done"),
-                        { kind: "success", actionText: qsTr("Undo"), onAction: () => actions.undo() })
+    /// A toast whose button undoes the last change of `actions`.
+    function undoToast(text: string, kind: string): void {
+        toasts.showToast(text, kind, qsTr("Undo"), -1)
     }
-    function setEntryStatus(entry, status) {
-        if (actions.setTaskStatus(entry.path, entry.line, status, entry.title))
-            toasts.show(qsTr("Status changed"), { actionText: qsTr("Undo"), onAction: () => actions.undo() })
+    function toggleEntry(entry: var): void {
+        entryInfo.map = entry
+        const wasClosed = entryInfo.map.closed === true
+        if (actions.toggleTask(entryInfo.map.path, entryInfo.map.line, entryInfo.map.title))
+            undoToast(wasClosed ? qsTr("Task reopened") : qsTr("Task done"), "success")
+    }
+    function setEntryStatus(entry: var, status: string): void {
+        entryInfo.map = entry
+        if (actions.setTaskStatus(entryInfo.map.path, entryInfo.map.line, status, entryInfo.map.title))
+            undoToast(qsTr("Status changed"), "")
     }
     /// The menu of an entry's date token (PlanningTokenMenu): the token as written (`spec`); a series'
     /// other dates change the whole series, a reminder's one time is snoozed.
-    function openEntryMenu(entry, item, x, y) {
-        tokenMenu.openToken({ path: entry.path, line: entry.line, text: entry.title, kind: entry.kind, value: entry.spec,
-                              alarm: entry.alarm, rule: entry.rule, priority: entry.priority,
-                              isTask: entry.isTask === true && (entry.status || "") !== "", occurrence: entry.occurrence,
-                              date: entry.date, time: entry.time }, item, x, y)
+    function openEntryMenu(entry: var, item: Item, x: real, y: real): void {
+        entryInfo.map = entry
+        const e = entryInfo.map
+        tokenMenu.openToken({ path: e.path, line: e.line, text: e.title, kind: e.kind, value: e.spec,
+                              alarm: e.alarm, rule: e.rule, priority: e.priority,
+                              isTask: e.isTask === true && e.status !== "", occurrence: e.occurrence,
+                              date: e.date, time: e.time }, item, x, y)
     }
-    function openJournal(date) {
+    function openJournal(date: string): void {
         if (daySheet.opened)
             daySheet.close()
         AppController.openJournal(date)
     }
     /// The weekly or monthly note of the period holding `date` (docs/SYNTAX.md §1): opened, created
     /// by its first change from the period's template.
-    function openPeriodNote(period, date) {
+    function openPeriodNote(period: string, date: string): void {
         if (daySheet.opened)
             daySheet.close()
         AppController.openPeriodicNote(period, date, 0)
     }
-    /// The note of the period in the header's title (the anchor's month or week).
-    readonly property var periodNote: {
+    /// The note of the period in the header's title (the anchor's month or week) exists.
+    readonly property bool periodHasNote: {
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
         if (mode === "agenda" || cal.anchorDate === "" || Workspace.revision < 0)
-            return ({})
-        return Workspace.periodicNote(mode === "week" ? "week" : "month", cal.anchorDate)
+            return false
+        return AppController.routeFlag(Workspace.periodicNote(mode === "week" ? "week" : "month", cal.anchorDate), "exists")
     }
-    function showDay(date) {
+    function showDay(date: string): void {
         cal.anchorDate = date
         if (!sideBySide && !stackedDay)
             daySheet.open()
     }
-    function appendToJournal(date, line, message) {
+    function appendToJournal(date: string, line: string, message: string): void {
         const path = Workspace.ensureJournal(date)
         if (path === "" || !actions.appendBlock(path, line)) {
-            toasts.show(qsTr("The journal could not be saved."), { kind: "error" })
+            toasts.showToast(qsTr("The journal could not be saved."), "error", "", -1)
             return
         }
-        toasts.show(message, { kind: "success", actionText: qsTr("Open"), onAction: () => AppController.openJournal(date) })
+        const toastId = toasts.showToast(message, "success", qsTr("Open"), -1)
+        const at = later.openIds.length
+        later.openIds[at] = toastId
+        later.openDates[at] = date
+    }
+    /// A reminder written into the journal of its day (the add dialog, the reminder dialog).
+    function addReminder(text: string, at: string, alarm: bool, recurrence: string): void {
+        const line = actions.reminderLine(text, at, alarm, recurrence)
+        const human = DatesHelper.formatHuman(at)
+        root.appendToJournal(Js.slice(at, 0, 10), line, qsTr("Reminder set for %1").arg(human))
+    }
+    /// `s` with its first letter in upper case.
+    function capitalized(s: string): string {
+        return s.length > 0 ? Js.toUpperCase(Js.charAt(s, 0)) + Js.sliceFrom(s, 1) : ""
+    }
+
+    // Deferred calls (instead of Qt.callLater) and what the toasts' buttons do.
+    QtObject {
+        id: later
+        /// The add dialog's kind from the route ("task" | "reminder").
+        property string addKind
+        /// Toasts whose button opens a journal (toast id → its date); the others' undo.
+        property list<int> openIds
+        property list<string> openDates
+    }
+    Timer {
+        id: openDayLater
+        interval: 0
+        onTriggered: daySheet.open()
+    }
+    Timer {
+        id: openAddLater
+        interval: 0
+        onTriggered: addDialog.openFor(later.addKind, cal.anchorDate)
+    }
+    Connections {
+        target: toasts
+        function onActionTriggered(toastId: int) {
+            const at = later.openIds.indexOf(toastId)
+            if (at >= 0)
+                AppController.openJournal(later.openDates[at])
+            else
+                actions.undo()
+        }
     }
 
     onRouteChanged: applyRoute()
@@ -159,8 +217,8 @@ FocusScope {
     PlanningTokenMenu {
         id: tokenMenu
         actions: actions
-        onChanged: (text) => toasts.show(text, { actionText: qsTr("Undo"), onAction: () => actions.undo() })
-        onMessage: (text, kind) => toasts.show(text, { kind: kind })
+        onChanged: (text) => root.undoToast(text, "")
+        onMessage: (text, kind) => toasts.showToast(text, kind, "", -1)
     }
     PlanningActions {
         id: actions
@@ -170,7 +228,7 @@ FocusScope {
         now: DatesHelper.fixedNow
         weekStart: DatesHelper.weekStart
         locale: DatesHelper.locale
-        onFailed: (message) => toasts.show(message, { kind: "warning" })
+        onFailed: (message) => toasts.showToast(message, "warning", "", -1)
     }
 
     Rectangle {
@@ -198,7 +256,7 @@ FocusScope {
             onToday: cal.goToday()
             onModeRequested: (m) => root.setMode(m)
             onOverdueRequested: root.showDay(DatesHelper.today)
-            titleHasNote: root.periodNote.exists === true
+            titleHasNote: root.periodHasNote
             onTitleClicked: root.openPeriodNote(root.mode === "week" ? "week" : "month", cal.anchorDate)
         }
 
@@ -325,13 +383,11 @@ FocusScope {
     BDialog {
         id: daySheet
         objectName: "calendarDaySheet"
-        title: {
-            const s = DatesHelper.formatLong(cal.anchorDate)
-            return s.length > 0 ? s.charAt(0).toLocaleUpperCase() + s.slice(1) : ""
-        }
+        title: root.capitalized(DatesHelper.formatLong(cal.anchorDate))
+        // A one-word day ("Jutro") only.
         subtitle: {
-            const h = DatesHelper.formatHuman(cal.anchorDate)
-            return h.indexOf(" ") < 0 ? h.charAt(0).toLocaleUpperCase() + h.slice(1) : ""
+            const h = "" + DatesHelper.formatHuman(cal.anchorDate)
+            return Js.indexOf(h, " ") < 0 ? root.capitalized(h) : ""
         }
         iconName: "calendar"
         showFooter: false
@@ -367,16 +423,17 @@ FocusScope {
     CalendarAddDialog {
         id: addDialog
         defaultTime: Workspace.config.defaultReminderTime || "09:00"
-        onTaskAdded: (text, date) => root.appendToJournal(date, actions.taskLine(text, date),
-                                                           qsTr("Task added to the journal of %1").arg(DatesHelper.formatShort(date)))
-        onReminderAdded: (text, at, alarm) => {
-            const date = at.slice(0, 10)
-            root.appendToJournal(date, actions.reminderLine(text, at, alarm, ""),
-                                 qsTr("Reminder set for %1").arg(DatesHelper.formatHuman(at)))
+        onTaskAdded: (text, date) => {
+            const label = "" + text
+            const day = "" + date
+            const line = actions.taskLine(label, day)
+            const shortDay = DatesHelper.formatShort(day)
+            root.appendToJournal(day, line, qsTr("Task added to the journal of %1").arg(shortDay))
         }
+        onReminderAdded: (text, at, alarm) => root.addReminder(text, at, alarm === true, "")
         onMoreOptionsRequested: (text, at, alarm) => {
             reminderDialog.draftText = text
-            reminderDialog.edit({ at: at, alarm: alarm, recurrence: "", context: text })
+            reminderDialog.editWith(at, alarm, "", text)
             reminderDialog.editing = false
         }
     }
@@ -384,13 +441,11 @@ FocusScope {
     BReminderDialog {
         id: reminderDialog
         property string draftText
-        marks: cal.marks(DatesHelper.addDays(cal.rangeStart, -31), DatesHelper.addDays(cal.rangeEnd, 62))
-        onReminderAccepted: (r) => {
-            const date = r.at.slice(0, 10)
-            const text = draftText !== "" ? draftText : qsTr("Reminder")
-            root.appendToJournal(date, actions.reminderLine(text, r.at, r.alarm, r.recurrence),
-                                 qsTr("Reminder set for %1").arg(DatesHelper.formatHuman(r.at)))
-        }
+        readonly property string marksFrom: DatesHelper.addDays(cal.rangeStart, -31)
+        readonly property string marksTo: DatesHelper.addDays(cal.rangeEnd, 62)
+        marks: cal.marks(marksFrom, marksTo)
+        onReminderChosen: (at, alarm, recurrence) => root.addReminder(draftText !== "" ? draftText : qsTr("Reminder"),
+                                                                     at, alarm, recurrence)
     }
 
     // Actionable toasts of this view ("Task done · Undo").

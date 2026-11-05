@@ -21,38 +21,81 @@ FocusScope {
     readonly property string title: qsTr("Habits")
     readonly property int maximumWidth: 720
 
-    function applyRoute() {
-        if (!route)
-            return
-        habitModel.month = route.month || ""
-        if (route.open === "add")
-            Qt.callLater(addDialog.open)
+    function applyRoute(): void {
+        habitModel.month = AppController.routeText(route, "month")
+        if (AppController.routeText(route, "open") === "add")
+            openAddLater.restart()
     }
-    /// Set habit `habit` (a model row) on `date` to `state`, with undo in the toast.
-    function setCheck(habit, date, state) {
-        const result = Workspace.setHabitCheck(habit.name, date, state, habit.isPage)
-        if (!result.ok) {
-            toasts.show(qsTr("The journal could not be saved."), { kind: "error" })
+    /// Set habit `name` (`isPage`: a page habit) on `date` to `state`, with undo in the toast.
+    MapHolder { id: checkResult }
+    function setCheck(name: string, isPage: bool, date: string, state: string): void {
+        // { ok, changed, path, line, before }
+        checkResult.map = Workspace.setHabitCheck(name, date, state, isPage)
+        if (checkResult.map.ok !== true) {
+            toasts.showToast(qsTr("The journal could not be saved."), "error", "", -1)
             return
         }
-        if (!result.changed)
+        if (checkResult.map.changed !== true)
             return
-        const before = result.before === "" ? "open" : result.before
-        const message = state === "done" ? (date === DatesHelper.today ? qsTr("Done for today: %1").arg(habit.name)
-                                                                         : qsTr("Marked done: %1").arg(habit.name))
-                      : state === "skipped" ? qsTr("Day skipped: %1").arg(habit.name)
-                      : qsTr("Check removed: %1").arg(habit.name)
-        toasts.show(message, { kind: state === "done" ? "success" : "info", actionText: qsTr("Undo"),
-                               onAction: () => Workspace.setHabitCheck(habit.name, date, before, habit.isPage) })
+        const before = "" + checkResult.map.before
+        const message = state === "done" ? (date === DatesHelper.today ? qsTr("Done for today: %1").arg(name)
+                                                                         : qsTr("Marked done: %1").arg(name))
+                      : state === "skipped" ? qsTr("Day skipped: %1").arg(name)
+                      : qsTr("Check removed: %1").arg(name)
+        const toastId = toasts.showToast(message, state === "done" ? "success" : "info", qsTr("Undo"), -1)
+        undo.remember(toastId, name, isPage, date, before === "" ? "open" : before)
     }
-    function addHabit(name, schedule) {
-        const path = Workspace.addHabit(name, schedule, habitModel.habitsPage)
+    function addHabit(name: string, schedule: string): void {
+        const path = "" + Workspace.addHabit(name, schedule, habitModel.habitsPage)
         if (path === "") {
-            toasts.show(qsTr("The habit could not be saved."), { kind: "error" })
+            toasts.showToast(qsTr("The habit could not be saved."), "error", "", -1)
             return
         }
-        toasts.show(qsTr("Habit added to “%1”").arg(Workspace.pageTitle(path)),
-                    { kind: "success", actionText: qsTr("Open"), onAction: () => AppController.openPage(path) })
+        const toastId = toasts.showToast(qsTr("Habit added to “%1”").arg(Workspace.pageTitle(path)),
+                                         "success", qsTr("Open"), -1)
+        undo.rememberOpen(toastId, path)
+    }
+
+    // What the toasts' buttons do, by toast id: undo a check (ids → the check before it), open
+    // the page of a habit just added (openIds → openPaths).
+    QtObject {
+        id: undo
+        property list<int> ids
+        property list<string> names
+        property list<bool> pages
+        property list<string> dates
+        property list<string> befores
+        property list<int> openIds
+        property list<string> openPaths
+        function remember(toastId: int, name: string, isPage: bool, date: string, before: string): void {
+            const at = ids.length
+            ids[at] = toastId
+            names[at] = name
+            pages[at] = isPage
+            dates[at] = date
+            befores[at] = before
+        }
+        function rememberOpen(toastId: int, path: string): void {
+            const at = openIds.length
+            openIds[at] = toastId
+            openPaths[at] = path
+        }
+    }
+    Connections {
+        target: toasts
+        function onActionTriggered(toastId: int) {
+            const at = undo.ids.indexOf(toastId)
+            if (at >= 0)
+                Workspace.setHabitCheck(undo.names[at], undo.dates[at], undo.befores[at], undo.pages[at])
+            const open = undo.openIds.indexOf(toastId)
+            if (open >= 0)
+                AppController.openPage(undo.openPaths[open])
+        }
+    }
+    Timer {
+        id: openAddLater
+        interval: 0
+        onTriggered: addDialog.open()
     }
 
     onRouteChanged: applyRoute()
@@ -139,11 +182,10 @@ FocusScope {
                         text: {
                             if (habitModel.count === 0)
                                 return qsTr("Recurring points of the day, ticked in the journal")
-                            const parts = [qsTr("%1 of %2 done today").arg(habitModel.doneTodayCount)
-                                           .arg(habitModel.doneTodayCount + habitModel.dueCount)]
-                            if (habitModel.problemCount > 0)
-                                parts.push(qsTr("%n with a problem", "", habitModel.problemCount))
-                            return parts.join(" · ")
+                            const done = qsTr("%1 of %2 done today").arg(habitModel.doneTodayCount)
+                                           .arg(habitModel.doneTodayCount + habitModel.dueCount)
+                            return habitModel.problemCount > 0
+                                    ? done + " · " + qsTr("%n with a problem", "", habitModel.problemCount) : done
                         }
                     }
                     BButton {
@@ -200,25 +242,17 @@ FocusScope {
             }
         }
 
-        delegate: Item {
-            id: row
-            required property int index
-            required property var model
-            width: ListView.view.width
-            height: habitCard.height
-
-            HabitCard {
-                id: habitCard
-                width: Math.min(parent.width - 2 * (Theme.narrow ? Theme.space3 : Theme.space6), root.maximumWidth)
-                x: (parent.width - width) / 2
-                habit: row.model
-                today: DatesHelper.today
-                weekdayNames: habitModel.weekdayNames
-                monthOffset: habitModel.monthOffset
-                onCheckRequested: (date, state) => root.setCheck(row.model, date, state)
-                onOpenRequested: AppController.openPage(row.model.path, row.model.isPage ? -1 : row.model.line)
-                onDayOpenRequested: (date) => AppController.openJournal(date)
-            }
+        // A habit row of habitModel (HabitCard takes its roles).
+        delegate: HabitCard {
+            id: habitCard
+            width: Math.min(ListView.view.width - 2 * (Theme.narrow ? Theme.space3 : Theme.space6), root.maximumWidth)
+            x: (ListView.view.width - width) / 2
+            today: DatesHelper.today
+            weekdayNames: habitModel.weekdayNames
+            monthOffset: habitModel.monthOffset
+            onCheckRequested: (date, state) => root.setCheck(habitCard.name, habitCard.isPage, date, state)
+            onOpenRequested: AppController.openPage(habitCard.path, habitCard.isPage ? -1 : habitCard.line)
+            onDayOpenRequested: (date) => AppController.openJournal(date)
         }
     }
 
