@@ -6663,11 +6663,29 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                                     == QStringList{u"favorites"_s, u"pages"_s, u"recent"_s};
                          }),
               "a section's “up” button moves it one place up (saved)");
+        // The rows are made anew for the new order: tap only once they are (a tap at the old
+        // row's place would reach the section that moved down there).
+        const auto rowY = [&](const QString &section) {
+            QQuickItem *item = shownNamed(window->contentItem(), u"sidebarSectionUp_"_s + section);
+            return item && shown(item) ? item->mapToScene(QPointF(0, 0)).y() : -1.0;
+        };
+        const auto rowsInOrder = [&](const QStringList &order) {
+            qreal previous = -1.0;
+            for (const QString &section : order) {
+                const qreal y = rowY(section);
+                if (y < 0 || y <= previous)
+                    return false;
+                previous = y;
+            }
+            return true;
+        };
+        waitFor([&] { return rowsInOrder({u"favorites"_s, u"pages"_s, u"recent"_s}); });
         activate(shownItem(u"sidebarSectionUp_pages"_s));
         check(waitFor([&] {
                   return settings->sidebarSections() == QStringList{u"pages"_s, u"favorites"_s, u"recent"_s};
               }),
               "and once more to the top");
+        waitFor([&] { return rowsInOrder({u"pages"_s, u"favorites"_s, u"recent"_s}); });
         QQuickItem *up = shownItem(u"sidebarSectionUp_pages"_s);
         check(up && !up->isEnabled(), "the first section cannot move further up");
         Workspace *ws = app->workspace();
