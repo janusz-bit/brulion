@@ -123,6 +123,7 @@ endif()
 set(BRULION_UI_SOURCES
     ui/qmlforeign.h
     ui/devtools.h ui/devtools.cpp
+    ui/devtesting.h ui/devtesting.cpp
     ui/scrollprobe.h ${_brulion_scroll_probe_sources}
     ui/deviceinfo.h ui/deviceinfo.cpp
     ui/keyboardsources.h ui/keyboardsources.cpp

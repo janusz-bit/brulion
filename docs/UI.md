@@ -3664,6 +3664,21 @@ On the laptop: `scripts/remote-build.sh -n ui brulion --run 'BRULION_BIN=$BRULIO
 tests/app/shell/screenshots.sh' --pull tests/screenshots`. Fast QML iteration: configure a
 separate build directory with `-DQT_QML_NO_CACHEGEN=ON`.
 
+### The playground's self-tests (`qml/dev`)
+
+The playground's self-tests (`--editor-script selftest`, `clock`, … and the files `qml/dev/*SelfTest.qml`)
+run on one step runner (EditorPlayground: `runSteps()`, `stepTimer`), compiled to C++ like the rest
+of the QML ("Compiled QML"): a test's steps are a function that writes each step as
+`if (window.at()) { … }`, in order; each tick of the runner calls it once and `at()` is true for the
+one step to run then (`stepIndex`). A helper standing for several steps calls `at()` for each of
+them; steps for one kind of device only sit in an `if (Theme.touchUi)` (a condition that holds for
+the whole run). A step waiting for something asynchronous repeats itself (at most `waitLimit`
+times): `if (window.at()) window.waitStep(ready, "what")`, or `window.waiting(ready)` alone for a
+finger held down until its gesture took effect. A step that throws is a failure and the next one
+runs (`DevTest.callCatching()`). Real input goes through `DevEvents` (QtTest's TestEvent, made when
+first used: `mouseClick()`, `touchPress()`, …); `DevBlock` gives a block's fields, `DevRecord` and
+`DevTest.valueAt()` any map's, `DevTest` finds items by name (`src/app/ui/devtesting.h`).
+
 ### UI benchmark (Brulion vs Obsidian)
 
 `tests/app/uibench/` compares Brulion's screens with the real Obsidian's, reproducibly: the same
