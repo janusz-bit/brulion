@@ -16,14 +16,17 @@ import {
   cdpPen, decodeDrawing, inkThickness, installSyntheticPen, lightShare, line, mouseStroke, openApp, png,
   requireWebGl2, screenOffset, syntheticStroke, waitGlobal,
 } from './lib/brulion.mjs';
-import { readFile, seed } from './lib/idbfs.mjs';
+import { readFile, seed, settingsIni } from './lib/idbfs.mjs';
 
 const DRAWING = 'Rysunki/Nacisk rysika — zażółć.svg';
 const ROUTE = { view: 'drawing', path: DRAWING };
+// The light look: the lines are measured as dark ink on light paper (the default look is dark,
+// with black paper).
+const SETTINGS = settingsIni('[ui]\nthemeMode=light\n');
 
 /** Opens the new (empty) drawing and returns its geometry on the page. */
 async function openDrawing(page, origin) {
-  await seed(page, origin, { files: { [DRAWING]: Buffer.alloc(0) } }); // 0 bytes: a new drawing
+  await seed(page, origin, { files: { [DRAWING]: Buffer.alloc(0) }, settings: SETTINGS }); // 0 bytes: a new drawing
   await openApp(page, origin, { selftest: 'pen', route: ROUTE });
   const report = await waitGlobal(page, 'brulionPenSelfTest', (v) => v.found && v.editable, 150_000);
   expect(report.strokeCount).toBe(0);
