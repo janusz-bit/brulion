@@ -7575,8 +7575,15 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     return ok;
                 };
                 const auto undoNow = [page] { QMetaObject::invokeMethod(page, "undo"); };
+                // Waits for it: a menu counts as open before its items are laid out (on a slow
+                // machine its rows show a little later).
                 const auto shownItem = [&](const QString &name) {
-                    return uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+                    QQuickItem *found = nullptr;
+                    waitFor([&] {
+                        found = uidriver::topmost(window, [&name](QQuickItem *i) { return i->objectName() == name; });
+                        return found != nullptr;
+                    });
+                    return found;
                 };
                 if (auto *list = editor->property("listView").value<QQuickItem *>())
                     QMetaObject::invokeMethod(list, "positionViewAtBeginning");
