@@ -69,6 +69,8 @@ QVariant PdfVisiblePages::data(const QModelIndex &index, int role) const
     case BaseWidthRole: return std::ceil(m_model->baseSizeOfIndex(i).width());
     case BaseHeightRole: return std::ceil(m_model->baseSizeOfIndex(i).height());
     case FailedRole: return m_model->failedIndex(i);
+    case DetailUrlRole: return m_model->detail(i + 1).value(u"url"_s).toUrl();
+    case DetailBoxRole: return m_model->detail(i + 1).value(u"box"_s).toRectF();
     default: return {};
     }
 }
@@ -82,7 +84,9 @@ QHash<int, QByteArray> PdfVisiblePages::roleNames() const
             {HeightRole, "pageHeight"},
             {BaseWidthRole, "baseWidth"},
             {BaseHeightRole, "baseHeight"},
-            {FailedRole, "failed"}};
+            {FailedRole, "failed"},
+            {DetailUrlRole, "detailUrl"},
+            {DetailBoxRole, "detailBox"}};
 }
 
 void PdfVisiblePages::reset()
@@ -138,6 +142,12 @@ void PdfVisiblePages::geometryChanged()
                            {XRole, YRole, WidthRole, HeightRole, BaseWidthRole, BaseHeightRole});
 }
 
+void PdfVisiblePages::detailsChanged()
+{
+    if (m_first >= 0)
+        Q_EMIT dataChanged(index(0), index(m_last - m_first), {DetailUrlRole, DetailBoxRole});
+}
+
 void PdfVisiblePages::pageChanged(int i)
 {
     if (m_first >= 0 && i >= m_first && i <= m_last)
@@ -160,6 +170,8 @@ struct PdfViewModel::SizeJob {
 PdfViewModel::PdfViewModel(QObject *parent) : QObject(parent), m_settleTimer(this), m_searchTimer(this)
 {
     m_pages = new PdfVisiblePages(this);
+    connect(this, &PdfViewModel::selectionChanged, this, &PdfViewModel::selectionPageRectChanged);
+    connect(this, &PdfViewModel::layoutChanged, this, &PdfViewModel::selectionPageRectChanged);
     m_searchAvailable = platform::pdfTextAvailable();
     m_selectionAvailable = platform::pdfSelectionAvailable();
     m_passwordAvailable = platform::pdfPasswordAvailable();
@@ -634,6 +646,7 @@ void PdfViewModel::settle()
     m_settledRect = QRectF(m_contentX, m_contentY, m_viewportWidth, m_viewportHeight);
     ++m_detailRevision;
     Q_EMIT detailChanged();
+    m_pages->detailsChanged();
 }
 
 QRectF PdfViewModel::pageRect(int page) const
@@ -749,7 +762,12 @@ QVariantMap PdfViewModel::detail(int page) const
     url.setQuery(url.query(QUrl::FullyEncoded) + u"&clip="_s + number(x0) + u',' + number(y0) + u',' + number(x1 - x0)
                          + u',' + number(y1 - y0),
                  QUrl::StrictMode);
-    return {{u"url"_s, url}, {u"x"_s, x0}, {u"y"_s, y0}, {u"width"_s, x1 - x0}, {u"height"_s, y1 - y0}};
+    return {{u"url"_s, url},
+            {u"x"_s, x0},
+            {u"y"_s, y0},
+            {u"width"_s, x1 - x0},
+            {u"height"_s, y1 - y0},
+            {u"box"_s, QRectF(x0, y0, x1 - x0, y1 - y0)}};
 }
 
 // ---- Search ---------------------------------------------------------------------------------
@@ -962,6 +980,7 @@ QVariantList PdfViewModel::hitRects(int page) const
                                    {u"y"_s, r.y()},
                                    {u"width"_s, r.width()},
                                    {u"height"_s, r.height()},
+                                   {u"box"_s, r},
                                    {u"current"_s, current}});
     }
     return out;
@@ -1161,13 +1180,25 @@ void PdfViewModel::clearSelection()
     Q_EMIT selectionChanged();
 }
 
+int PdfViewModel::outlineIndexForPage(int page) const
+{
+    int best = -1;
+    for (qsizetype i = 0; i < m_outline.size(); ++i) {
+        const int at = m_outline.at(i).toMap().value(u"page"_s).toInt();
+        if (at > 0 && at <= page)
+            best = int(i);
+    }
+    return best;
+}
+
 QVariantList PdfViewModel::selectionRects(int page) const
 {
     QVariantList out;
     if (page < 1 || page != m_selectionPage)
         return out;
     for (const QRectF &r : m_selectionRects)
-        out.append(QVariantMap{{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"width"_s, r.width()}, {u"height"_s, r.height()}});
+        out.append(QVariantMap{
+                {u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"width"_s, r.width()}, {u"height"_s, r.height()}, {u"box"_s, r}});
     return out;
 }
 
@@ -1272,10 +1303,13 @@ void PdfViewModel::loadLinks(int first, int last)
                     for (const platform::PdfLink &link : lease->links(page)) {
                         if (link.url.isEmpty() && (link.page < 1 || link.page > laid))
                             continue;
-                        links.append(QVariantMap{{u"x"_s, link.rect.x() / points.width()},
-                                                 {u"y"_s, link.rect.y() / points.height()},
-                                                 {u"width"_s, link.rect.width() / points.width()},
-                                                 {u"height"_s, link.rect.height() / points.height()},
+                        const QRectF box(link.rect.x() / points.width(), link.rect.y() / points.height(),
+                                         link.rect.width() / points.width(), link.rect.height() / points.height());
+                        links.append(QVariantMap{{u"x"_s, box.x()},
+                                                 {u"y"_s, box.y()},
+                                                 {u"width"_s, box.width()},
+                                                 {u"height"_s, box.height()},
+                                                 {u"box"_s, box},
                                                  {u"url"_s, link.url},
                                                  {u"page"_s, link.page},
                                                  {u"top"_s, link.top}});

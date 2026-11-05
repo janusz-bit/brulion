@@ -16,13 +16,20 @@ BDialog {
 
     property PageController controller
     property BlockEditor editor
-    readonly property var current: controller && controller.look ? (controller.look.icon || ({})) : ({})
-    readonly property bool hasIcon: !!current.kind
+    /// A map a call returned, read with AppController.route*() (compiled calls cannot take a map
+    /// held in a local after another call: kept here).
+    property var _held: ({})
+    /// The page's icon now (PageController.look.icon: kind "emoji" | "app" | "", name).
+    readonly property string currentKind: dialog.controller ? AppController.routeText(dialog.controller.look.icon, "kind") : ""
+    readonly property string currentName: dialog.controller ? AppController.routeText(dialog.controller.look.icon, "name") : ""
+    readonly property bool hasIcon: currentKind !== ""
     /// What the field holds as an icon ({ kind, name }; kind "" when it is none).
     readonly property var typed: TextHelper.pageIcon(emojiField.text)
+    readonly property string typedKind: AppController.routeText(dialog.typed, "kind")
+    readonly property string typedName: AppController.routeText(dialog.typed, "name")
 
     /// Common emoji (all drawn by the app's own emoji font where the system has none: the browser).
-    readonly property var emojis: ["📝", "📚", "📖", "📓", "📄", "📁", "📂", "📅", "📆", "🗓", "⏰", "⌛",
+    readonly property list<string> emojis: ["📝", "📚", "📖", "📓", "📄", "📁", "📂", "📅", "📆", "🗓", "⏰", "⌛",
         "✅", "✔", "⭐", "🌟", "✨", "💡", "🔥", "❤", "💯", "🎯", "🏆", "🏁", "🚩", "🚀", "✈", "🚗", "🚲",
         "🏠", "🏢", "🏫", "🏥", "🌍", "🌱", "🌳", "🌸", "🌹", "🍀", "☀", "🌙", "⛅", "❄", "⚡", "🌈",
         "🍎", "🍕", "🍰", "☕", "🍷", "🎉", "🎁", "🎂", "🎓", "🎨", "🎵", "🎮", "🎬", "📷", "💻", "📱",
@@ -31,7 +38,7 @@ BDialog {
         "🐱", "🐶", "👪", "👶", "😀", "😊", "😎", "🤔", "🙏", "👍", "👋", "🧳", "🛒", "🧹", "🤖", "🔍",
         "🗂", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣"]
     /// The app's icons offered for pages (assets/icons, Lucide).
-    readonly property var appIcons: ["file-text", "book-open", "notebook-pen", "bookmark", "house", "folder",
+    readonly property list<string> appIcons: ["file-text", "book-open", "notebook-pen", "bookmark", "house", "folder",
         "calendar", "calendar-days", "clock", "alarm-clock", "hourglass", "bell", "list-todo", "list-checks",
         "inbox", "star", "heart", "sparkles", "pin", "tag", "hash", "quote", "scroll-text", "message-square",
         "music", "image", "palette", "pen-tool", "highlighter", "code", "terminal", "calculator", "sigma",
@@ -41,22 +48,21 @@ BDialog {
         "git-merge"]
 
     /// Write `kind` / `name` ("" removes the icon) and close.
-    function pick(kind, name) {
-        if (!controller)
+    function pick(kind: string, name: string): void {
+        if (!dialog.controller)
             return
-        const before = controller.undoToken()
-        const r = controller.setPageIcon(kind, name)
-        if (!r.ok) {
-            AppController.toast(r.reason, "error")
+        const before = dialog.controller.undoToken()
+        dialog._held = dialog.controller.setPageIcon(kind, name)
+        if (!AppController.routeFlag(dialog._held, "ok")) {
+            AppController.toast(AppController.routeText(dialog._held, "reason"), "error")
             return
         }
         dialog.close()
-        if (r.status !== "changed")
+        if (AppController.routeText(dialog._held, "status") !== "changed")
             return
         const text = kind === "" ? qsTr("Page icon removed") : qsTr("Page icon set")
-        const action = editor ? editor.undoAction(before) : null
-        if (action)
-            AppController.toastAction(text, "success", action.text, action.run)
+        if (dialog.editor)
+            dialog.editor.noticeUndoable(text, "success", before)
         else
             AppController.toast(text, "success")
     }
@@ -64,9 +70,9 @@ BDialog {
     title: qsTr("Page icon")
     iconName: "sparkles"
     acceptText: qsTr("Use")
-    acceptEnabled: typed.kind !== ""
+    acceptEnabled: typedKind !== ""
     initialFocusItem: Theme.touchUi ? null : emojiField
-    onAccepted: pick(typed.kind, typed.name)
+    onAccepted: dialog.pick(dialog.typedKind, dialog.typedName)
     onAboutToShow: emojiField.text = ""
     footerLeading: BButton {
         objectName: "pageIconRemove"
@@ -81,8 +87,8 @@ BDialog {
         id: choice
         property string emoji
         property string appIcon
-        readonly property bool current: dialog.current.kind === (emoji !== "" ? "emoji" : "app")
-                                        && dialog.current.name === (emoji !== "" ? emoji : appIcon)
+        readonly property bool current: dialog.currentKind === (emoji !== "" ? "emoji" : "app")
+                                        && dialog.currentName === (emoji !== "" ? emoji : appIcon)
         implicitWidth: Theme.touchUi ? Theme.touchTarget : 36
         implicitHeight: implicitWidth
         focusPolicy: Qt.StrongFocus
@@ -109,8 +115,8 @@ BDialog {
         Layout.fillWidth: true
         placeholderText: qsTr("Type or paste an emoji")
         accessibleName: qsTr("Emoji")
-        errorText: text.trim() !== "" && dialog.typed.kind === "" ? qsTr("Not an emoji") : ""
-        onAccepted: if (dialog.typed.kind !== "") dialog.pick(dialog.typed.kind, dialog.typed.name)
+        errorText: Js.trim(text) !== "" && dialog.typedKind === "" ? qsTr("Not an emoji") : ""
+        onAccepted: if (dialog.typedKind !== "") dialog.pick(dialog.typedKind, dialog.typedName)
     }
     BSectionHeader {
         Layout.fillWidth: true

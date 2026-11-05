@@ -17,10 +17,17 @@ T.Popup {
     required property Item barHost
 
     readonly property var current: canvas.selectionStyle
+    /// selectionStyle's `key` as text ("" missing) and as a flag.
+    function styleText(key: string): string {
+        return AppController.routeText(panel.canvas.selectionStyle, key)
+    }
+    function styleFlag(key: string): bool {
+        return AppController.routeFlag(panel.canvas.selectionStyle, key)
+    }
     readonly property real gap: Theme.space2
 
     /// Excalidraw's light fills, which ink stays readable on.
-    readonly property var fillColors: [
+    readonly property list<var> fillColors: [
         { color: "#ffc9c9", label: qsTr("Light red") },
         { color: "#ffec99", label: qsTr("Light yellow") },
         { color: "#b2f2bb", label: qsTr("Light green") },
@@ -29,8 +36,8 @@ T.Popup {
         { color: "#dee2e6", label: qsTr("Light grey") }
     ]
 
-    function displayed(color) {
-        return panel.canvas.dark ? panel.canvas.displayColor(color) : color
+    function displayed(color: string): string {
+        return panel.canvas.dark ? panel.canvas.displayColorName(color, false) : color
     }
 
     x: Math.max(-barHost.x + gap, Math.min(area.width - barHost.x - width - gap, (barHost.width - width) / 2))
@@ -99,8 +106,9 @@ T.Popup {
         id: options
         required property string title
         required property string key
-        property var choices: []
-        property var value
+        property list<var> choices: []
+        /// The selection's value of `key`, as text (the choices' values compared as text).
+        readonly property string valueText: panel.styleText(options.key)
         spacing: 2
         width: parent ? parent.width : 0
         BText {
@@ -113,15 +121,13 @@ T.Popup {
             Repeater {
                 model: options.choices
                 delegate: Choice {
+                    id: choiceItem
                     required property var modelData
-                    objectName: "drawingStyle_" + options.key + "_" + modelData.value
-                    label: modelData.label
-                    selected: options.value === modelData.value
-                    onClicked: {
-                        const change = {}
-                        change[options.key] = modelData.value
-                        panel.canvas.styleSelection(change)
-                    }
+                    required property var value
+                    readonly property string valueText: AppController.routeText(modelData, "value")
+                    objectName: "drawingStyle_" + options.key + "_" + valueText
+                    selected: options.valueText === valueText
+                    onClicked: panel.canvas.styleSelection(Js.withKey({}, options.key, choiceItem.value))
                 }
             }
         }
@@ -141,7 +147,7 @@ T.Popup {
             spacing: Theme.space2
 
             Column {
-                visible: panel.current.fillable === true
+                visible: panel.styleFlag("fillable")
                 width: parent.width
                 spacing: 2
                 BText {
@@ -154,29 +160,30 @@ T.Popup {
                     Choice {
                         objectName: "drawingStyleNoFill"
                         label: qsTr("None", "fill")
-                        selected: panel.current.fill === "transparent"
+                        selected: panel.styleText("fill") === "transparent"
                         onClicked: panel.canvas.styleSelection({ fill: "transparent" })
                     }
                     Repeater {
                         model: panel.fillColors
                         delegate: BColorSwatch {
+                            id: fillSwatch
                             required property var modelData
-                            objectName: "drawingStyleFill" + modelData.color.slice(1)
-                            color: panel.displayed(modelData.color)
-                            label: modelData.label
+                            readonly property string fill: AppController.routeText(modelData, "color")
+                            objectName: "drawingStyleFill" + Js.sliceFrom(fill, 1)
+                            color: panel.displayed(fill)
+                            label: AppController.routeText(modelData, "label")
                             size: 22
                             focusPolicy: Qt.NoFocus
-                            selected: panel.current.fill === modelData.color
-                            onClicked: panel.canvas.styleSelection({ fill: modelData.color })
+                            selected: panel.styleText("fill") === fill
+                            onClicked: panel.canvas.styleSelection({ fill: fillSwatch.fill })
                         }
                     }
                 }
             }
             Options {
-                visible: panel.current.fillable === true && panel.current.fill !== "transparent"
+                visible: panel.styleFlag("fillable") && panel.styleText("fill") !== "transparent"
                 title: qsTr("Fill pattern")
                 key: "fillStyle"
-                value: panel.current.fillStyle
                 choices: [
                     { value: "solid", label: qsTr("Solid", "fill") },
                     { value: "hachure", label: qsTr("Hatched") },
@@ -184,10 +191,9 @@ T.Popup {
                 ]
             }
             Options {
-                visible: panel.current.thick === true
+                visible: panel.styleFlag("thick")
                 title: qsTr("Line thickness")
                 key: "thickness"
-                value: panel.current.thickness
                 choices: [
                     { value: 0, label: qsTr("Fine") },
                     { value: 1, label: qsTr("Medium") },
@@ -195,10 +201,9 @@ T.Popup {
                 ]
             }
             Options {
-                visible: panel.current.dashable === true
+                visible: panel.styleFlag("dashable")
                 title: qsTr("Line style")
                 key: "strokeStyle"
-                value: panel.current.strokeStyle
                 choices: [
                     { value: "solid", label: qsTr("Solid", "line") },
                     { value: "dashed", label: qsTr("Dashed") },
@@ -206,34 +211,30 @@ T.Popup {
                 ]
             }
             Options {
-                visible: panel.current.roundable === true
+                visible: panel.styleFlag("roundable")
                 title: qsTr("Corners")
                 key: "rounded"
-                value: panel.current.rounded
                 choices: [
                     { value: false, label: qsTr("Sharp") },
                     { value: true, label: qsTr("Rounded") }
                 ]
             }
             Options {
-                visible: panel.current.heads === true
+                visible: panel.styleFlag("heads")
                 title: qsTr("Line start")
                 key: "startHead"
-                value: panel.current.startHead
                 choices: panel.heads
             }
             Options {
-                visible: panel.current.heads === true
+                visible: panel.styleFlag("heads")
                 title: qsTr("Line end")
                 key: "endHead"
-                value: panel.current.endHead
                 choices: panel.heads
             }
             Options {
-                visible: panel.current.text === true
+                visible: panel.styleFlag("text")
                 title: qsTr("Text size")
                 key: "fontSize"
-                value: panel.current.fontSize
                 choices: [
                     { value: 16, label: qsTr("Small") },
                     { value: 20, label: qsTr("Medium", "text size") },
@@ -242,7 +243,7 @@ T.Popup {
                 ]
             }
             Column {
-                visible: panel.current.canAlign === true
+                visible: panel.styleFlag("canAlign")
                 width: parent.width
                 spacing: 2
                 BText {
@@ -253,32 +254,27 @@ T.Popup {
                     width: parent.width
                     spacing: 2
                     Repeater {
-                        model: [
-                            { value: "left", icon: "align-start-vertical", label: qsTr("Align left"), keys: "Ctrl+Shift+Left" },
-                            { value: "center", icon: "align-center-vertical", label: qsTr("Centre horizontally"), keys: "" },
-                            { value: "right", icon: "align-end-vertical", label: qsTr("Align right"), keys: "Ctrl+Shift+Right" },
-                            { value: "top", icon: "align-start-horizontal", label: qsTr("Align top"), keys: "Ctrl+Shift+Up" },
-                            { value: "middle", icon: "align-center-horizontal", label: qsTr("Centre vertically"), keys: "" },
-                            { value: "bottom", icon: "align-end-horizontal", label: qsTr("Align bottom"), keys: "Ctrl+Shift+Down" }
-                        ]
+                        model: panel.alignments
                         delegate: BIconButton {
+                            id: alignButton
                             required property var modelData
-                            objectName: "drawingStyleAlign_" + modelData.value
-                            iconName: modelData.icon
-                            label: modelData.label
-                            shortcut: modelData.keys
+                            readonly property string value: AppController.routeText(modelData, "value")
+                            objectName: "drawingStyleAlign_" + value
+                            iconName: AppController.routeText(modelData, "icon")
+                            label: AppController.routeText(modelData, "label")
+                            shortcut: AppController.routeText(modelData, "keys")
                             focusPolicy: Qt.NoFocus
-                            onClicked: panel.canvas.alignSelection(modelData.value)
+                            onClicked: panel.canvas.alignSelection(alignButton.value)
                         }
                     }
                     Item {
-                        visible: panel.current.canDistribute === true
+                        visible: panel.styleFlag("canDistribute")
                         width: Theme.space2
                         height: 1
                     }
                     BIconButton {
                         objectName: "drawingStyleDistribute_horizontal"
-                        visible: panel.current.canDistribute === true
+                        visible: panel.styleFlag("canDistribute")
                         iconName: "align-horizontal-distribute-center"
                         label: qsTr("Distribute horizontally")
                         shortcut: "Alt+H"
@@ -287,7 +283,7 @@ T.Popup {
                     }
                     BIconButton {
                         objectName: "drawingStyleDistribute_vertical"
-                        visible: panel.current.canDistribute === true
+                        visible: panel.styleFlag("canDistribute")
                         iconName: "align-vertical-distribute-center"
                         label: qsTr("Distribute vertically")
                         shortcut: "Alt+V"
@@ -299,7 +295,6 @@ T.Popup {
             Options {
                 title: qsTr("Opacity")
                 key: "opacity"
-                value: panel.current.opacity
                 choices: [
                     { value: 100, label: "100 %" },
                     { value: 75, label: "75 %" },
@@ -310,7 +305,16 @@ T.Popup {
         }
     }
 
-    readonly property var heads: [
+    /// The alignments of the "Wyrównaj" row.
+    readonly property list<var> alignments: [
+        { value: "left", icon: "align-start-vertical", label: qsTr("Align left"), keys: "Ctrl+Shift+Left" },
+        { value: "center", icon: "align-center-vertical", label: qsTr("Centre horizontally"), keys: "" },
+        { value: "right", icon: "align-end-vertical", label: qsTr("Align right"), keys: "Ctrl+Shift+Right" },
+        { value: "top", icon: "align-start-horizontal", label: qsTr("Align top"), keys: "Ctrl+Shift+Up" },
+        { value: "middle", icon: "align-center-horizontal", label: qsTr("Centre vertically"), keys: "" },
+        { value: "bottom", icon: "align-end-horizontal", label: qsTr("Align bottom"), keys: "Ctrl+Shift+Down" }
+    ]
+    readonly property list<var> heads: [
         { value: "", label: qsTr("None", "line end") },
         { value: "arrow", label: qsTr("Arrow") },
         { value: "triangle", label: qsTr("Triangle") },

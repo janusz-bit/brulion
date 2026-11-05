@@ -196,6 +196,9 @@ class DrawingCanvas : public QQuickPaintedItem {
     /// file's path and hands the picture's bytes to provideEmbeddedFile(), so they show instead of
     /// grey placeholders. They are never written into the file.
     Q_PROPERTY(QVariantList embeddedFiles READ embeddedFiles NOTIFY embeddedFilesChanged FINAL)
+    /// The last text editor request (textEditRequested's map; kept after the text ends) — its
+    /// members read compiled in QML (DrawingTextEditor).
+    Q_PROPERTY(QVariantMap textRequest READ textRequest NOTIFY textEditRequested FINAL)
 
 public:
     explicit DrawingCanvas(QQuickItem *parent = nullptr);
@@ -291,6 +294,7 @@ public:
     QString backdropPath() const;
     int backdropPage() const;
     QVariantList embeddedFiles() const { return m_embeddedLinks; }
+    QVariantMap textRequest() const { return m_textRequest; }
     /// The bytes of the embedded picture `fileId` (embeddedFiles): shown from now on, also after a
     /// merge (drawing::embeddedFileEntry: a PNG, JPEG, GIF, WebP or SVG). False: no such entry, or
     /// no picture.
@@ -406,6 +410,16 @@ public:
     /// A stored colour as the paper shows it now (the tool bar's swatches): mapped in the dark
     /// (drawing::darkRgba), a highlighter's colour as it is.
     Q_INVOKABLE QColor displayColor(const QColor &stored, bool highlighter = false) const;
+    /// displayColor() as QML writes a colour ("#rrggbb", "#aarrggbb" when not opaque) — a string
+    /// QML's compiled bindings can use; "" for an invalid colour.
+    Q_INVOKABLE QString displayColorName(const QString &stored, bool highlighter) const;
+    /// The paper colours the background dialog offers (DrawingPaperDialog): 12 greys, then 12 hues
+    /// in each of three shades.
+    Q_INVOKABLE QStringList paperColors() const;
+    /// `bytes` hold something (QML cannot ask a byte array for its length compiled).
+    Q_INVOKABLE bool hasBytes(const QByteArray &bytes) const { return !bytes.isEmpty(); }
+    /// load() of nothing: an empty drawing (a missing file).
+    Q_INVOKABLE QString loadEmpty() { return load(QByteArray()); }
     /// The contrast (1–21) of the default ink on a paper of this colour, both as now shown.
     Q_INVOKABLE double inkContrast(const QString &paper) const;
     /// Scene ↔ item coordinates.
@@ -652,6 +666,7 @@ private:
     /// file entries marked drawing::EmbeddedFileKey: put into every document shown, never written).
     QVariantList m_embeddedLinks;
     QJsonObject m_embeddedFiles;
+    QVariantMap m_textRequest;
     /// m_embeddedLinks of a file read (embeddedFilesChanged() when they differ, or `always`).
     void readEmbeddedLinks(const QByteArray &bytes, bool always);
     bool m_writable = true;

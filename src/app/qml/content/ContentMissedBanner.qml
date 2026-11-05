@@ -15,14 +15,14 @@ BCard {
 
     /// Most reminders listed (the rest are counted).
     property int maxShown: 3
-    readonly property var reminders: Workspace.reminders
-    readonly property var missed: reminders ? reminders.missed : []
+    readonly property WorkspaceReminders reminders: Workspace.reminders
+    readonly property list<var> missed: reminders ? reminders.missed : []
 
     visible: reminders !== null && reminders.missedCount > 0
 
-    function snooze(id) {
-        if (reminders.snooze(id))
-            AppController.toast(qsTr("Snoozed for %n min", "", reminders.snoozeMinutes), "success")
+    function snooze(id: string): void {
+        if (banner.reminders.snooze(id))
+            AppController.toast(qsTr("Snoozed for %n min", "", banner.reminders.snoozeMinutes), "success")
     }
     tone: "warning"
     padding: Theme.space3
@@ -55,8 +55,17 @@ BCard {
             model: banner.missed.slice(0, banner.maxShown)
             delegate: ColumnLayout {
                 id: item
+                // The rows of WorkspaceReminders.missed (every key is always present; `id` cannot
+                // be a property's name: read from modelData).
                 required property var modelData
-                readonly property string day: modelData.path ? Workspace.journalDate(modelData.path) : ""
+                readonly property string reminderId: AppController.routeText(modelData, "id")
+                required property string title
+                required property string body
+                required property string when
+                required property bool alarm
+                required property string path
+                required property bool task
+                readonly property string day: path !== "" ? Workspace.journalDate(path) : ""
                 Layout.fillWidth: true
                 spacing: Theme.space1
 
@@ -65,7 +74,7 @@ BCard {
                     spacing: Theme.space2
 
                     BIcon {
-                        name: item.modelData.alarm ? "alarm-clock" : "bell"
+                        name: item.alarm ? "alarm-clock" : "bell"
                         size: Theme.iconSizeSm
                         color: Theme.fgMuted
                         Layout.alignment: Qt.AlignTop
@@ -76,15 +85,15 @@ BCard {
                         spacing: 0
                         BText {
                             Layout.fillWidth: true
-                            text: item.modelData.title || item.modelData.body
+                            text: item.title !== "" ? item.title : item.body
                             wrapMode: Text.Wrap
                             maximumLineCount: 2
                             elide: Text.ElideRight
                         }
                         BText {
                             Layout.fillWidth: true
-                            text: item.modelData.when + (!item.modelData.path ? ""
-                                  : " · " + (item.day !== "" ? DatesHelper.formatShort(item.day) : Workspace.pageTitle(item.modelData.path)))
+                            text: item.when + (item.path === "" ? ""
+                                  : " · " + (item.day !== "" ? DatesHelper.formatShort(item.day) : Workspace.pageTitle(item.path)))
                             variant: "caption"
                             color: Theme.fgMuted
                             elide: Text.ElideRight
@@ -94,28 +103,28 @@ BCard {
                         visible: !Theme.compact
                         size: "small"
                         text: qsTr("Open")
-                        onClicked: banner.reminders.openMissed(item.modelData.id)
+                        onClicked: banner.reminders.openMissed(item.reminderId)
                     }
                     BIconButton {
                         visible: !Theme.compact
                         size: "small"
                         iconName: "clock"
                         label: qsTr("Snooze %n min", "", banner.reminders.snoozeMinutes)
-                        onClicked: banner.snooze(item.modelData.id)
+                        onClicked: banner.snooze(item.reminderId)
                     }
                     BIconButton {
-                        visible: !Theme.compact && item.modelData.task === true
+                        visible: !Theme.compact && item.task
                         size: "small"
                         iconName: "check"
                         label: qsTr("Done")
-                        onClicked: banner.reminders.complete(item.modelData.id)
+                        onClicked: banner.reminders.complete(item.reminderId)
                     }
                     BIconButton {
                         size: "small"
                         iconName: "x"
                         label: qsTr("Dismiss")
                         Layout.alignment: Qt.AlignTop
-                        onClicked: banner.reminders.dismissMissed(item.modelData.id)
+                        onClicked: banner.reminders.dismissMissed(item.reminderId)
                     }
                 }
                 // Phones: the actions under the text, which keeps the whole width.
@@ -126,22 +135,22 @@ BCard {
                     BButton {
                         size: "small"
                         text: qsTr("Open")
-                        onClicked: banner.reminders.openMissed(item.modelData.id)
+                        onClicked: banner.reminders.openMissed(item.reminderId)
                     }
                     BButton {
                         size: "small"
                         variant: "ghost"
                         iconName: "clock"
                         text: qsTr("Snooze %n min", "", banner.reminders.snoozeMinutes)
-                        onClicked: banner.snooze(item.modelData.id)
+                        onClicked: banner.snooze(item.reminderId)
                     }
                     BButton {
-                        visible: item.modelData.task === true
+                        visible: item.task
                         size: "small"
                         variant: "ghost"
                         iconName: "check"
                         text: qsTr("Done")
-                        onClicked: banner.reminders.complete(item.modelData.id)
+                        onClicked: banner.reminders.complete(item.reminderId)
                     }
                 }
             }

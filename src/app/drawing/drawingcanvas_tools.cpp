@@ -1194,6 +1194,7 @@ void DrawingCanvas::requestTextEdit(qsizetype index, QPointF scene)
     m_textEditing = true;
     invalidateCache();
     Q_EMIT textEditingChanged();
+    m_textRequest = r;
     Q_EMIT textEditRequested(r);
 }
 

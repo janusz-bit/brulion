@@ -77,6 +77,12 @@ public:
     /// (drawing::formatPageRanges).
     Q_INVOKABLE QList<int> parsePages(const QString &text, int count) const;
     Q_INVOKABLE QString formatPages(const QList<int> &pages) const;
+    /// The page picker's choice (DrawingBackdropDialog): `pages` in ascending order (repeats kept),
+    /// `pages` with `page` taken out when it is there and added otherwise (ascending), and every
+    /// page 1 … count.
+    Q_INVOKABLE QList<int> sortedPages(const QList<int> &pages) const;
+    Q_INVOKABLE QList<int> toggledPage(const QList<int> &pages, int page) const;
+    Q_INVOKABLE QList<int> allPages(int count) const;
     /// The browser (no file URLs there): its own file picker for a picture, stored in the notebook
     /// through the importer — picked(pick, path) follows, pickFailed(pick, name) when it could not
     /// be read or stored; nothing when cancelled. The pick's id (> 0); 0 elsewhere (QML uses

@@ -26,43 +26,56 @@ BDialog {
     property string format: "markdown-file"
     /// What happens once the file is ready: "save" | "downloads" | "browser".
     property string pending: ""
+    /// "Pictures from the internet": keep their addresses or include copies.
+    readonly property list<var> webPictureChoices: [
+        { value: "link", text: qsTr("Keep addresses"), icon: Theme.compact ? "" : "link" },
+        { value: "include", text: qsTr("Include copies"), icon: Theme.compact ? "" : "image" }
+    ]
+    /// The route "Więcej opcji eksportu…" opens.
+    property var _preset: ({})
 
-    readonly property var formats: [
-        { id: "markdown-file", name: qsTr("Markdown"), icon: "file-text",
+    readonly property list<var> formats: [
+        { value: "markdown-file", name: qsTr("Markdown"), iconName: "file-text",
           description: qsTr("The note exactly as it is stored — readable by Obsidian, Logseq and any text editor.") },
-        { id: "markdown-zip", name: qsTr("Markdown with attachments"), icon: "files",
+        { value: "markdown-zip", name: qsTr("Markdown with attachments"), iconName: "files",
           description: qsTr("A ZIP archive of the note with the pictures and files it links to.") },
-        { id: "html-single", name: qsTr("HTML"), icon: "file-output",
+        { value: "html-single", name: qsTr("HTML"), iconName: "file-output",
           description: qsTr("A web page that opens in any browser and can be printed or sent, with the pictures included.") },
-        { id: "pdf", name: qsTr("PDF"), icon: "printer",
+        { value: "pdf", name: qsTr("PDF"), iconName: "printer",
           description: qsTr("Pages ready to print or send, the same on every device – no other program needed.") },
-        { id: "docx", name: qsTr("Word (DOCX)"), icon: "type",
+        { value: "docx", name: qsTr("Word (DOCX)"), iconName: "type",
           description: qsTr("A document to edit in Word, LibreOffice Writer or Google Docs.") },
-        { id: "pandoc", name: qsTr("Pandoc Markdown"), icon: "book-open",
+        { value: "pandoc", name: qsTr("Pandoc Markdown"), iconName: "book-open",
           description: qsTr("A ZIP archive with one Markdown document for Pandoc, to turn into EPUB or other formats.") }
     ]
-    readonly property var current: formats.find(f => f.id === format) || formats[0]
+    /// The formats' values, in the order of `formats`.
+    readonly property list<string> formatValues: ["markdown-file", "markdown-zip", "html-single", "pdf", "docx", "pandoc"]
+    /// The chosen format's row of `formats` (the first one for an unknown format).
+    readonly property var current: formats[Math.max(0, formatValues.indexOf(format))]
+    readonly property string currentName: AppController.routeText(dialog.current, "name")
+    /// The page can be exported (ExportController.summary.valid).
+    readonly property bool exportable: AppController.routeFlag(exporter.summary, "valid")
     readonly property bool copyable: format === "markdown-file" || format === "html-single"
 
-    function openFor(pagePath, andPrint) {
-        pending = ""
-        path = pagePath
+    function openFor(pagePath: string, andPrint: bool): void {
+        dialog.pending = ""
+        dialog.path = pagePath
         exporter.discard()
-        open()
+        dialog.open()
         if (andPrint)
             dialog.startPrint()
     }
-    function produce(action) {
-        pending = action
+    function produce(action: string): void {
+        dialog.pending = action
         exporter.prepare()
     }
-    function startPrint() {
-        pending = ""
+    function startPrint(): void {
+        dialog.pending = ""
         exporter.print()
     }
-    function finishPending() {
-        const action = pending
-        pending = ""
+    function finishPending(): void {
+        const action = dialog.pending
+        dialog.pending = ""
         if (action === "browser") {
             exporter.saveInBrowser()
         } else if (action === "downloads") {
@@ -82,7 +95,7 @@ BDialog {
 
     onClosed: {
         exporter.cancel()
-        pending = ""
+        dialog.pending = ""
     }
 
     ExportController {
@@ -94,10 +107,10 @@ BDialog {
         format: dialog.format
         webPictures: AppSettings.exportWebPictures
         onStateChanged: {
-            if (state === "ready" && dialog.pending !== "")
+            if (exporter.state === "ready" && dialog.pending !== "")
                 dialog.finishPending()
-            else if (state === "error")
-                AppController.toast(errorText, "error")
+            else if (exporter.state === "error")
+                AppController.toast(exporter.errorText, "error")
         }
         onSaved: (message) => {
             AppController.toast(message, "success")
@@ -126,9 +139,12 @@ BDialog {
             model: dialog.formats
             delegate: T.AbstractButton {
                 id: tile
-                required property var modelData
-                readonly property bool chosen: dialog.format === modelData.id
-                objectName: "pageExportFormat_" + modelData.id
+                required property string value
+                required property string name
+                required property string iconName
+                required property string description
+                readonly property bool chosen: dialog.format === value
+                objectName: "pageExportFormat_" + value
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -138,10 +154,10 @@ BDialog {
                 focusPolicy: Qt.StrongFocus
                 enabled: !exporter.busy
                 Accessible.role: Accessible.RadioButton
-                Accessible.name: modelData.name
-                Accessible.description: modelData.description
+                Accessible.name: tile.name
+                Accessible.description: tile.description
                 Accessible.checked: chosen
-                onClicked: dialog.format = modelData.id
+                onClicked: dialog.format = tile.value
 
                 background: Rectangle {
                     radius: Theme.radius
@@ -153,13 +169,13 @@ BDialog {
                 contentItem: RowLayout {
                     spacing: Theme.space2
                     BIcon {
-                        name: tile.modelData.icon
+                        name: tile.iconName
                         size: Theme.iconSize
                         color: tile.chosen ? Theme.link : Theme.fgMuted
                     }
                     BText {
                         Layout.fillWidth: true
-                        text: tile.modelData.name
+                        text: tile.name
                         variant: "label"
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
@@ -171,7 +187,7 @@ BDialog {
     }
     BText {
         Layout.fillWidth: true
-        text: dialog.current.description
+        text: AppController.routeText(dialog.current, "description")
         variant: "muted"
         wrapMode: Text.Wrap
     }
@@ -191,10 +207,7 @@ BDialog {
             fill: true
             enabled: !exporter.busy
             accessibleName: qsTr("Pictures from the internet")
-            model: [
-                { value: "link", text: qsTr("Keep addresses"), icon: Theme.compact ? "" : "link" },
-                { value: "include", text: qsTr("Include copies"), icon: Theme.compact ? "" : "image" }
-            ]
+            model: dialog.webPictureChoices
             currentValue: exporter.webPictures
             onActivated: (value) => {
                 exporter.webPictures = value
@@ -232,7 +245,7 @@ BDialog {
             iconName: "download"
             text: AppController.isWasm ? qsTr("Download") : qsTr("Save as file…")
             busy: exporter.busy && dialog.pending !== ""
-            enabled: !exporter.busy && !!exporter.summary.valid
+            enabled: !exporter.busy && dialog.exportable
             onClicked: dialog.produce(AppController.isWasm ? "browser" : "save")
         }
         BButton {
@@ -240,7 +253,7 @@ BDialog {
             Layout.fillWidth: true
             iconName: "download"
             text: qsTr("Save to Downloads")
-            enabled: !exporter.busy && !!exporter.summary.valid
+            enabled: !exporter.busy && dialog.exportable
             onClicked: dialog.produce("downloads")
         }
         BButton {
@@ -250,7 +263,7 @@ BDialog {
             iconName: "printer"
             text: qsTr("Print…")
             busy: exporter.busy && dialog.pending === ""
-            enabled: !exporter.busy && !!exporter.summary.valid
+            enabled: !exporter.busy && dialog.exportable
             onClicked: dialog.startPrint()
         }
         BButton {
@@ -285,11 +298,12 @@ BDialog {
             text: qsTr("More export options…")
             enabled: !exporter.busy
             onClicked: {
-                const preset = { view: "importExport", tab: "export", scope: "page", path: dialog.path }
-                if (dialog.format !== "markdown-file")
-                    preset.format = dialog.format
+                // (Kept in a property: a call cannot take a map from a local after another call.)
+                dialog._preset = dialog.format !== "markdown-file"
+                        ? { view: "importExport", tab: "export", scope: "page", path: dialog.path, format: dialog.format }
+                        : { view: "importExport", tab: "export", scope: "page", path: dialog.path }
                 dialog.close()
-                AppController.navigate(preset)
+                AppController.navigate(dialog._preset)
             }
         }
     }
@@ -303,11 +317,11 @@ BDialog {
         colors: Theme.colors
         currentFolder: exporter.defaultSaveFolder
         // selectedFile: set by finishPending()
-        nameFilters: [dialog.current.name + " (*" + dialog.extension(dialog.format) + ")", qsTr("All files (*)")]
+        nameFilters: [dialog.currentName + " (*" + dialog.extension(dialog.format) + ")", qsTr("All files (*)")]
         onAccepted: exporter.saveTo(selectedFile)
     }
 
-    function extension(id) {
+    function extension(id: string): string {
         switch (id) {
         case "markdown-file": return ".md"
         case "html-single": return ".html"

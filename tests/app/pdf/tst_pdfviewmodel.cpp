@@ -220,8 +220,31 @@ private Q_SLOTS:
             // The visible part, 64 around it, snapped to 64 on each side.
             QVERIFY(d.value(u"width"_s).toReal() <= 800 + 256);
             QVERIFY(d.value(u"height"_s).toReal() <= 1200 + 256);
+            QCOMPARE(d.value(u"box"_s).toRectF(), QRectF(d.value(u"x"_s).toReal(), d.value(u"y"_s).toReal(),
+                                                          d.value(u"width"_s).toReal(), d.value(u"height"_s).toReal()));
         }
         QVERIFY(withDetail >= 1);
+        // The pages' rows carry it too (detailUrl, detailBox: the QML delegates' roles).
+        QAbstractListModel *pages = model->pages();
+        const QHash<int, QByteArray> roles = pages->roleNames();
+        const int urlRole = roles.key("detailUrl");
+        const int boxRole = roles.key("detailBox");
+        QVERIFY(urlRole > 0 && boxRole > 0);
+        int rowsWithDetail = 0;
+        for (int row = 0; row < pages->rowCount(); ++row) {
+            const QModelIndex index = pages->index(row);
+            const int page = pages->data(index, roles.key("page")).toInt();
+            const QVariantMap d = model->detail(page);
+            QCOMPARE(pages->data(index, urlRole).toUrl(), d.value(u"url"_s).toUrl());
+            QCOMPARE(pages->data(index, boxRole).toRectF(), d.value(u"box"_s).toRectF());
+            rowsWithDetail += d.isEmpty() ? 0 : 1;
+        }
+        QCOMPARE(rowsWithDetail, withDetail);
+        // A new settle tells the rows.
+        QSignalSpy rowsChanged(pages, &QAbstractItemModel::dataChanged);
+        model->settle();
+        QVERIFY(!rowsChanged.isEmpty());
+        QVERIFY(rowsChanged.first().at(2).value<QList<int>>().contains(urlRole));
     }
 
     void search()
@@ -239,6 +262,12 @@ private Q_SLOTS:
         QVERIFY(!model->hitRects(3).isEmpty());
         QVERIFY(model->hitRects(1).isEmpty());
         QVERIFY(model->hitRects(3).first().toMap().value(u"current"_s).toBool());
+        {
+            // `box`: the same rectangle as x, y, width, height (QML's typed delegates).
+            const QVariantMap hit = model->hitRects(3).first().toMap();
+            QCOMPARE(hit.value(u"box"_s).toRectF(), QRectF(hit.value(u"x"_s).toReal(), hit.value(u"y"_s).toReal(),
+                                                            hit.value(u"width"_s).toReal(), hit.value(u"height"_s).toReal()));
+        }
         // Shown at once: the view moved to page 3.
         QVERIFY(!moved.isEmpty());
         QCOMPARE(model->currentPage(), 3);
@@ -438,6 +467,11 @@ private Q_SLOTS:
         const QVariantMap r = rects.first().toMap();
         QVERIFY(r.value(u"x"_s).toReal() > 0.05 && r.value(u"x"_s).toReal() < 0.15);
         QVERIFY(r.value(u"y"_s).toReal() > 0.05 && r.value(u"y"_s).toReal() < 0.16);
+        QCOMPARE(r.value(u"box"_s).toRectF(), QRectF(r.value(u"x"_s).toReal(), r.value(u"y"_s).toReal(),
+                                                      r.value(u"width"_s).toReal(), r.value(u"height"_s).toReal()));
+        // The floating "Kopiuj" goes over the first rectangle, on the selection's page.
+        QCOMPARE(model->selectionAnchor(), r.value(u"box"_s).toRectF());
+        QCOMPARE(model->selectionPageRect(), model->pageRect(1));
         QVERIFY(model->selectionRects(2).isEmpty());
         // Copied as it is.
         QVERIFY(model->copySelection());
@@ -453,9 +487,13 @@ private Q_SLOTS:
         model->selectAll(3);
         QTRY_COMPARE(model->selectedText().simplified(), u"Strona trzecia: żółw"_s);
         // Cleared; nothing to copy then.
+        QSignalSpy pageRectChanged(model.get(), &PdfViewModel::selectionPageRectChanged);
         model->clearSelection();
         QVERIFY(model->selectedText().isEmpty());
         QCOMPARE(model->selectionPage(), 0);
+        QVERIFY(model->selectionAnchor().isEmpty());
+        QVERIFY(model->selectionPageRect().isEmpty());
+        QVERIFY(!pageRectChanged.isEmpty());
         QVERIFY(!model->copySelection());
         // A slide without text, a page out of range, NaN: nothing.
         model->selectText(2, QPointF(0, 0), QPointF(1, 1));
@@ -513,7 +551,20 @@ private Q_SLOTS:
             QVERIFY(std::abs(chapter.value(u"top"_s).toReal() - 0.5) < 0.02);
             QCOMPARE(model->outline().at(2).toMap().value(u"level"_s).toInt(), 1);
             QCOMPARE(model->outline().at(4).toMap().value(u"page"_s).toInt(), 0);
+            // The entry of a page: the last one leading to it or to a page before it.
+            QCOMPARE(model->outlineIndexForPage(0), -1);
+            for (int page = 1; page <= 4; ++page) {
+                int best = -1;
+                for (int i = 0; i < model->outline().size(); ++i) {
+                    const int at = model->outline().at(i).toMap().value(u"page"_s).toInt();
+                    if (at > 0 && at <= page)
+                        best = i;
+                }
+                QCOMPARE(model->outlineIndexForPage(page), best);
+            }
+            QVERIFY(model->outlineIndexForPage(2) >= 1); // "Rozdział 2" or one after it
         }
+        QCOMPARE(PdfViewModel().outlineIndexForPage(1), -1); // no outline
         // A target in the middle of page 2: a gap above it.
         const QPointF at = model->positionForTarget(2, 0.5);
         const QRectF page2 = model->pageRect(2);
@@ -531,6 +582,8 @@ private Q_SLOTS:
         const QVariantMap first = links.at(0).toMap();
         QVERIFY(std::abs(first.value(u"x"_s).toReal() - 55.0 / 595) < 0.01);
         QVERIFY(std::abs(first.value(u"y"_s).toReal() - (842.0 - 724) / 842) < 0.01);
+        QCOMPARE(first.value(u"box"_s).toRectF(), QRectF(first.value(u"x"_s).toReal(), first.value(u"y"_s).toReal(),
+                                                          first.value(u"width"_s).toReal(), first.value(u"height"_s).toReal()));
         QVERIFY(model->linkRects(2).isEmpty());
         // Another file: the outline and the links go.
         model->setFile(fixture(u"wyklad.pdf"_s));

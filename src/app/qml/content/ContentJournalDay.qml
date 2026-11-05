@@ -29,25 +29,25 @@ FocusScope {
     required property string path
     required property bool exists
     required property bool isToday
-    /// The journal list: ensureVisible(item, rect) and scrollBy(dy) (any object with them).
-    property var scroller: null
+    /// The journal list: ensureVisible(item, rect) and scrollBy(dy).
+    final property EditorScroller scroller: null
     /// Where the editor's touch toolbar docks (BlockEditor.toolbarHost); null: the day's editor.
-    property Item toolbarHost: null
+    final property Item toolbarHost: null
     /// The stream's selection over several days (JournalsView): the day's controller is attached
     /// to it while the day exists.
-    property StreamSelection stream: null
+    final property StreamSelection stream: null
     /// The stream's find bar (JournalsView): every day's editor tints its matches while it is open.
-    property NoteFind find: null
+    final property NoteFind find: null
     /// The search over the stream's days (JournalsView): the day's controller is attached to it
     /// while the day exists (its live text is searched instead of its file).
-    property StreamFind streamFind: null
+    final property StreamFind streamFind: null
     /// This day shows the tools of a selection over several days (it becomes the active day).
     readonly property bool spanTools: stream !== null && stream.active && stream.toolsController === page
     // (Also a day created again while scrolling: the keys, Back and the selection mode come here.)
     onSpanToolsChanged: {
-        if (spanTools) {
-            activated()
-            editor.spanFocusHere(stream.focusRow, false)
+        if (day.spanTools) {
+            day.activated()
+            dayEditor.spanFocusHere(day.stream.focusRow, false)
         }
     }
     property bool compactHeader: Theme.compact
@@ -55,23 +55,33 @@ FocusScope {
     /// This day's editor got the caret (JournalsView stops editing in the others).
     signal activated()
 
-    readonly property alias controller: page
-    readonly property alias editor: editor
+    final property PageController controller: page
+    final property BlockEditor editor: dayEditor
     readonly property bool editing: page.editingRow >= 0
     /// Nothing to show (also a day holding nothing but its note mode).
     readonly property bool empty: page.loaded && page.blocks.visibleCount === 0
     property bool _foldsRestored: false
+    /// The editor's last message with an action (a toast's button runs it: messageToast).
+    property EditorToastAction messageAction: null
+    property int messageToast: -1
+    Connections {
+        target: AppController
+        function onToastActionTriggered(id: int) {
+            if (id === day.messageToast && day.messageAction)
+                day.messageAction.run()
+        }
+    }
 
     // The day is laid out with plain bindings, no Layouts: the journal list positions a day with
     // the height it has when it is created, and a layout's size only arrives with the next polish
     // — a day growing after the list had placed it pushed every day below it down while the list
     // scrolled up (docs/UI.md "Scrolling performance"). Its editor builds all its blocks at once
     // for the same reason (BlockEditor.autoHeight).
-    implicitHeight: editor.y + editor.height
+    implicitHeight: dayEditor.y + dayEditor.height
     /// How far the editor's tap strip under the blocks is taller than the space it shows: on touch
     /// UIs a touch target instead of 12 px. The journal stream lets it reach into the gap before
     /// the next day by that much, so the days keep their spacing (0 while the day shows no blocks).
-    readonly property real footerOverhang: editor.height > 0 ? editor.bottomSpace - Theme.space3 : 0
+    readonly property real footerOverhang: dayEditor.height > 0 ? dayEditor.bottomSpace - Theme.space3 : 0
 
     Accessible.role: Accessible.Grouping
     Accessible.name: DatesHelper.formatLong(day.date)
@@ -79,30 +89,37 @@ FocusScope {
     /// Start writing in a day: a day without a note starts from the journal template (when the
     /// vault has one), the caret in its first empty block. Like a day opened on its own (PageView),
     /// the note is created by the first change, never by starting to write (startNewPage).
-    function begin() {
+    function begin(): void {
         if (!page.loaded)
             return
         if (page.blocks.visibleCount > 0) {
-            editor.startEditing(page.lastVisibleRow(), -1)
+            dayEditor.startEditing(page.lastVisibleRow(), -1)
             return
         }
-        editor.startEditing(page.startNewPage(page.exists ? "" : (Workspace.config.journalTemplate || "")), -1)
+        dayEditor.startEditing(page.startNewPage(page.exists ? "" : AppController.routeText(Workspace.config, "journalTemplate")), -1)
     }
-    function openAsPage(source) {
+    function openAsPage(source: bool): void {
         page.save()
         AppController.navigate(source ? { view: "journal", date: day.date, source: true }
                                        : { view: "journal", date: day.date })
     }
-    function keepCaretVisible() {
-        editor.ensureEditVisible()
+    function keepCaretVisible(): void {
+        dayEditor.ensureEditVisible()
     }
-    function restoreFolds() {
+    property list<var> _folds: []
+    function restoreFolds(): void {
         if (day._foldsRestored || !page.loaded)
             return
-        const folds = Workspace.foldState(page.path)
-        if (folds.length > 0)
-            page.setFoldState(folds)
+        day._folds = Workspace.foldState(page.path)
+        if (day._folds.length > 0)
+            page.setFoldState(day._folds)
         day._foldsRestored = true
+    }
+    // Deferred like the editor's later(): gone with the day (a stream scrolled away).
+    Timer {
+        id: revealLater
+        interval: 0
+        onTriggered: if (dayEditor.alive) dayEditor.ensureEditVisible()
     }
 
     PageController {
@@ -124,7 +141,7 @@ FocusScope {
                 day.activated()
                 // Through the editor's later(): the day may be gone by then (the stream left right
                 // after a block started being edited — a palette command, a link).
-                editor.later(() => editor.ensureEditVisible())
+                revealLater.restart()
             }
         }
         // The list is no place for a whole-file editor: the day opens as a page in source mode.
@@ -140,7 +157,7 @@ FocusScope {
         }
     }
     Component.onCompleted: {
-        restoreFolds()
+        day.restoreFolds()
         if (day.stream)
             day.stream.attach(page)
         if (day.streamFind)
@@ -152,14 +169,14 @@ FocusScope {
             day.stream.detach(page)
         if (day.streamFind)
             day.streamFind.detach(page)
-        editor.controller = null
+        dayEditor.controller = null
     }
 
     // The end of a selection over several days moved into this day: it is the active one, its
     // editor has the keyboard (and on touch UIs the selection mode); the keys scroll to it.
     Connections {
         target: day.stream
-        function onFocusMoved(controller, row, reveal) {
+        function onFocusMoved(controller: PageController, row: int, reveal: bool) {
             if (controller !== page)
                 return
             day.activated()
@@ -169,7 +186,7 @@ FocusScope {
 
     Connections {
         target: Workspace
-        function onPathRenamed(oldPath, newPath) {
+        function onPathRenamed(oldPath: string, newPath: string) {
             if (page.path === oldPath)
                 page.followRename(oldPath, newPath)
         }
@@ -182,15 +199,15 @@ FocusScope {
     // as a small line above "14 października 2026", so the date fits on one line.
     Item {
         id: headerRow
-        x: editor.contentX + editor.gutter
-        width: Math.max(0, day.width - x - Math.max(Theme.space2, editor.width - editor.contentX - editor.contentWidth))
+        x: dayEditor.contentX + dayEditor.gutter
+        width: Math.max(0, day.width - x - Math.max(Theme.space2, dayEditor.width - dayEditor.contentX - dayEditor.contentWidth))
         height: Math.max(dateColumn.height, openButton.visible ? openButton.implicitHeight : 0,
                          openIcon.visible ? openIcon.implicitHeight : 0)
 
         readonly property string longDate: DatesHelper.formatLong(day.date)
-        readonly property int comma: longDate.indexOf(", ")
-        readonly property string weekday: comma > 0 ? longDate.slice(0, comma) : ""
-        readonly property string restOfDate: comma > 0 ? longDate.slice(comma + 2) : longDate
+        readonly property int comma: Js.indexOf(longDate, ", ")
+        readonly property string weekday: comma > 0 ? Js.slice(longDate, 0, comma) : ""
+        readonly property string restOfDate: comma > 0 ? Js.sliceFrom(longDate, comma + 2) : longDate
         readonly property string relative: day.isToday ? qsTr("Today")
                                             : day.date === DatesHelper.addDays(DatesHelper.today, -1) ? qsTr("Yesterday") : ""
         /// The badge and the button at the right end.
@@ -284,8 +301,8 @@ FocusScope {
             implicitHeight: Math.max(Theme.touchTarget, prompt.implicitHeight + 2 * Theme.space2)
 
             Rectangle {
-                x: editor.contentX + editor.gutter - Theme.space2
-                width: Math.min(editor.contentWidth - editor.gutter + 2 * Theme.space2, parent.width - x - Theme.space2)
+                x: dayEditor.contentX + dayEditor.gutter - Theme.space2
+                width: Math.min(dayEditor.contentWidth - dayEditor.gutter + 2 * Theme.space2, parent.width - x - Theme.space2)
                 height: parent.height
                 radius: Theme.radius
                 color: promptTap.pressed ? Theme.bgPressed : promptHover.hovered || prompt.activeFocus ? Theme.bgHover : "transparent"
@@ -327,12 +344,12 @@ FocusScope {
     // The setting again whenever it changes (the panel's header writes it through
     // setPropertiesExpanded(), which replaces a plain binding).
     Binding {
-        target: editor
+        target: dayEditor
         property: "propertiesExpanded"
         value: AppSettings.propertiesExpanded
     }
     BlockEditor {
-        id: editor
+        id: dayEditor
         // (Every day tints the matches; the day written in also shows the current one.)
         find: day.find && day.find.active ? day.find : null
         objectName: "journalDayEditor"
@@ -346,19 +363,25 @@ FocusScope {
         toolbarHost: day.toolbarHost
         stream: day.stream
         // A table cell being edited makes this the active day too (its toolbar shows).
-        onEditingTableChanged: if (editingTable) day.activated()
+        onEditingTableChanged: if (dayEditor.editingTable) day.activated()
         // The editor has its width from the start (a binding, not a layout's polish), so its
         // blocks are laid out at their final width right away.
         controller: page
         focus: true
-        onMessage: (text, kind, action) => action ? AppController.toastAction(text, kind, action.text, action.run)
-                                                  : AppController.toast(text, kind)
+        onMessage: (text, kind, action) => {
+            if (action) {
+                day.messageAction = action
+                day.messageToast = AppController.toastWithAction(text, kind, action.text)
+            } else {
+                AppController.toast(text, kind)
+            }
+        }
         listView.interactive: false
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
         // Typewriter scrolling and the editor's own keys as the shortcuts are now (ShortcutMap).
         typewriter: AppSettings.typewriterScrolling
-        copyRefShortcut: ShortcutMap.sequences["block.copyRef"] || ""
-        sourceModeShortcut: ShortcutMap.sequences["page.source"] || ""
+        copyRefShortcut: AppController.routeText(ShortcutMap.sequences, "block.copyRef")
+        sourceModeShortcut: AppController.routeText(ShortcutMap.sequences, "page.source")
         // The properties panel open or folded: a device setting, shared with pages. Bound here
         // too, not only by the Binding above (applied when the day is complete, after the editor
         // made its rows): a day created while the stream scrolls has its panel open at once —
@@ -374,7 +397,7 @@ FocusScope {
         headingCap: day.compactHeader ? Theme.textXl : Theme.text2xl
         // A day switched to a document among outline days keeps their left edge (date, text);
         // when the journal is a document by default, its days use the full width.
-        documentInset: Workspace.config.journalMode === "document" ? 0 : outlineGutter
+        documentInset: Workspace.config.journalMode === "document" ? 0 : dayEditor.outlineGutter
     }
 
     // The editor is as tall as its blocks; an empty day shows the prompt instead (the editor
@@ -385,21 +408,21 @@ FocusScope {
     // until it holds.
     property bool _fitting: false
     property bool _refit: false
-    function fitEditorHeight() {
-        if (_fitting) {
-            _refit = true
+    function fitEditorHeight(): void {
+        if (day._fitting) {
+            day._refit = true
             return
         }
-        _fitting = true
+        day._fitting = true
         for (let i = 0; i < 4; ++i) {
-            _refit = false
-            editor.height = empty && page.editingRow < 0 ? 0 : editor.listView.contentHeight + editor.listView.y
-            if (!_refit)
+            day._refit = false
+            dayEditor.height = day.empty && page.editingRow < 0 ? 0 : dayEditor.listView.contentHeight + dayEditor.listView.y
+            if (!day._refit)
                 break
         }
-        _fitting = false
+        day._fitting = false
     }
-    onEmptyChanged: fitEditorHeight()
+    onEmptyChanged: day.fitEditorHeight()
     Connections {
         target: page
         function onEditingRowChanged() { day.fitEditorHeight() }
@@ -408,11 +431,11 @@ FocusScope {
     // The embedded editor's list is exactly as tall as its content: what still scrolls it
     // (positioning a row) scrolls the journal list instead.
     Connections {
-        target: editor.listView
+        target: dayEditor.listView
         function onContentHeightChanged() { day.fitEditorHeight() }
         function onYChanged() { day.fitEditorHeight() }
         function onContentYChanged() {
-            const lv = editor.listView
+            const lv = dayEditor.listView
             const delta = lv.contentY - lv.originY
             if (Math.abs(delta) < 0.5)
                 return

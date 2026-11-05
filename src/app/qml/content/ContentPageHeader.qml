@@ -44,8 +44,13 @@ Item {
     property string journalDate
     /// A weekly or monthly note's period (Workspace.periodicNoteOf), else {}.
     property var periodic: ({})
-    readonly property bool periodicNote: !!periodic && !!periodic.period
-    readonly property bool weekly: periodicNote && periodic.period === "week"
+    /// Its keys: period ("week" | "month", "" for none), start and end ("YYYY-MM-DD"), label.
+    readonly property string periodicPeriod: AppController.routeText(periodic, "period")
+    readonly property string periodicStart: AppController.routeText(periodic, "start")
+    readonly property string periodicEnd: AppController.routeText(periodic, "end")
+    readonly property string periodicLabel: AppController.routeText(periodic, "label")
+    readonly property bool periodicNote: periodicPeriod !== ""
+    readonly property bool weekly: periodicNote && periodicPeriod === "week"
     /// The first block repeats the title as "# Title": no second title above it.
     property bool startsWithTitle: false
     property bool inSidePanel: false
@@ -54,6 +59,9 @@ Item {
     /// An error for the title being typed ("" = fine).
     property string titleError
 
+    /// A map a call returned, read with AppController.route*() (compiled calls cannot take a map
+    /// held in a local after another call: kept here).
+    property var _held: ({})
     signal renameRequested(string title)
     signal menuRequested(Item anchor)
     /// The icon or the cover was clicked to be changed (PageView opens their dialogs).
@@ -65,29 +73,34 @@ Item {
     property Item menuAnchor: null
 
     readonly property bool small: Theme.compact || inSidePanel
-    /// The page's look (PageController.look).
-    readonly property var look: controller ? controller.look : ({})
-    readonly property var pageIcon: look.icon || ({})
-    readonly property var cover: look.cover || ({})
-    readonly property bool hasIcon: !!pageIcon.kind
-    readonly property bool hasCover: !!cover.kind
+    /// The page's look (PageController.look): its icon ({ kind, name }) and its cover ({ kind,
+    /// state, url, target, host, error, position }).
+    readonly property var pageIcon: header.controller ? header.controller.look.icon : ({})
+    readonly property var cover: header.controller ? header.controller.look.cover : ({})
+    readonly property bool hasIcon: AppController.routeText(header.pageIcon, "kind") !== ""
+    readonly property string coverKind: AppController.routeText(header.cover, "kind")
+    readonly property string coverTarget: AppController.routeText(header.cover, "target")
+    readonly property bool hasCover: coverKind !== ""
     /// The cover's picture is being moved (a drag): coverDraft is shown until it is written.
     property bool coverMoving: false
     property real coverDraft: 0.5
-    readonly property real coverPosition: coverMoving ? coverDraft : cover.position !== undefined ? cover.position : 0.5
-    function startCoverMove() {
-        coverDraft = coverPosition
-        coverMoving = true
+    /// The cover's `position` as written (0 top … 1 bottom; "" none: the middle).
+    readonly property string coverPositionText: AppController.routeText(header.cover, "position")
+    readonly property real coverPosition: coverMoving ? coverDraft
+                                                      : coverPositionText !== "" ? Js.toNumber(coverPositionText) : 0.5
+    function startCoverMove(): void {
+        header.coverDraft = header.coverPosition
+        header.coverMoving = true
     }
-    function finishCoverMove(save) {
-        if (save && controller) {
-            const r = controller.setPageCoverPosition(coverDraft)
-            if (!r.ok)
-                AppController.toast(r.reason, "error")
+    function finishCoverMove(save: bool): void {
+        if (save && header.controller) {
+            header._held = header.controller.setPageCoverPosition(header.coverDraft)
+            if (!AppController.routeFlag(header._held, "ok"))
+                AppController.toast(AppController.routeText(header._held, "reason"), "error")
         }
-        coverMoving = false
+        header.coverMoving = false
     }
-    onPathChanged: coverMoving = false
+    onPathChanged: header.coverMoving = false
     readonly property string path: controller ? controller.path : ""
     readonly property bool exists: controller ? controller.exists : false
     readonly property bool loaded: controller ? controller.loaded : false
@@ -99,12 +112,16 @@ Item {
     // the index has it. Both read for real: qmlcachegen compiles a bare `void Workspace.revision`
     // away, and the binding's dependency with it (the tag strip of a renamed page came only with
     // some later change).
-    readonly property var summary: {
-        const changes = Workspace.revision + (Workspace.indexing ? 1 : 0)
-        return path !== "" && changes >= 0 ? tools.summary(path) : ({})
+    // (PageTools does it: summaryTools below.)
+    PageTools {
+        id: summaryTools
+        workspace: Workspace
+        path: header.path
     }
-    readonly property var folderParts: summary.folderParts || []
-    readonly property bool favorite: Workspace.favorites.some(f => f.path === header.path)
+    /// The page's folders: [{ title, path }], outermost first.
+    readonly property list<var> folderParts: summaryTools.folderParts
+    // (Workspace.favorites read for the binding's dependency.)
+    readonly property bool favorite: Workspace.favorites.length >= 0 && header.path !== "" && Workspace.isFavorite(header.path)
     readonly property bool showTitle: !startsWithTitle || journal
     /// The side panel's folder breadcrumb row is shown (it carries the page actions then).
     readonly property bool breadcrumbRow: inSidePanel && folderParts.length > 0
@@ -112,77 +129,79 @@ Item {
     /// and tags' first line, beside the chips (without chips they keep a row of their own).
     readonly property bool actionsWithChips: !showTitle && !breadcrumbRow && chips.visible
     /// The tag that names this page ({ key, text, references, subTags }), or {}.
-    readonly property var tagInfo: summary.tag || ({})
+    readonly property var tagInfo: summaryTools.headerTag
+    /// Its key ("" none) and its text ("#praca").
+    readonly property string tagKey: AppController.routeText(header.tagInfo, "key")
+    readonly property string tagText: AppController.routeText(header.tagInfo, "text")
     /// That tag is in use (tagged blocks or sub-tags): Widok tagu among the page actions, Zadania
     /// z tym tagiem in the page menu, the sub-tags under the title.
-    readonly property bool tagInUse: (tagInfo.key || "") !== ""
-                                     && ((tagInfo.references || 0) > 0 || (tagInfo.subTags || []).length > 0)
+    readonly property bool tagInUse: tagKey !== ""
+                                     && (AppController.routeInt(header.tagInfo, "references", 0) > 0 || subTags.length > 0)
     /// The tag's sub-tags ({ tag, display, count }).
-    readonly property var subTags: tagInfo.subTags || []
+    readonly property list<var> subTags: summaryTools.subTags
     readonly property real textX: editor ? editor.contentX + editor.gutter : 0
     readonly property real textWidth: editor ? editor.contentWidth - editor.gutter : width
 
     implicitHeight: column.y + column.implicitHeight + (small ? Theme.space3 : Theme.space5)
 
-    function startTitleEdit() {
-        if (journal || !exists)
+    function startTitleEdit(): void {
+        if (header.journal || !header.exists)
             return
-        titleError = ""
-        titleField.text = controller.title
-        editingTitle = true
+        header.titleError = ""
+        titleField.text = header.controller.title
+        header.editingTitle = true
         titleField.forceActiveFocus()
         titleField.selectAll()
     }
-    function commitTitle() {
-        const title = titleField.text.trim()
-        if (title === controller.title || title === "") {
-            editingTitle = false
+    function commitTitle(): void {
+        const title = "" + Js.trim(titleField.text)
+        if (title === header.controller.title || title === "") {
+            header.editingTitle = false
             return
         }
-        const problem = tools.validateTitle(path, title)
+        const problem = header.tools.validateTitle(header.path, title)
         if (problem !== "") {
-            titleError = problem
+            header.titleError = problem
             return
         }
-        editingTitle = false
+        header.editingTitle = false
         header.renameRequested(title)
     }
-    function cancelTitle() {
-        editingTitle = false
-        titleError = ""
-        if (editor)
-            editor.forceActiveFocus()
+    function cancelTitle(): void {
+        header.editingTitle = false
+        header.titleError = ""
+        if (header.editor)
+            header.editor.forceActiveFocus()
     }
     // ---- Tags and aliases of the page's properties (docs/UI.md "Page properties") -------------
-    property var chipMenu: null
-    property var addMenu: null
+    property PropertyChipMenu chipMenu: null
+    property BMenu addMenu: null
     /// The menu of the tag or alias `name` (`kind` "tags" | "aliases") at `item`.
-    function openChipMenu(kind, name, item) {
-        if (!controller || !controller.loaded)
+    function openChipMenu(kind: string, name: string, item: Item): void {
+        if (!header.controller || !header.controller.loaded)
             return
-        if (!chipMenu)
-            chipMenu = chipMenuComponent.createObject(header)
-        chipMenu.kind = kind
-        chipMenu.item = name
-        chipMenu.popup(item, 0, item.height)
+        if (!header.chipMenu)
+            header.chipMenu = chipMenuComponent.createObject(header) as PropertyChipMenu
+        header.chipMenu.kind = kind
+        header.chipMenu.item = name
+        header.chipMenu.popup(item, 0, item.height)
     }
-    function openAddMenu(item) {
-        if (!addMenu)
-            addMenu = addMenuComponent.createObject(header)
-        addMenu.popup(item, 0, item.height)
+    function openAddMenu(item: Item): void {
+        if (!header.addMenu)
+            header.addMenu = addMenuComponent.createObject(header) as BMenu
+        header.addMenu.popup(item, 0, item.height)
     }
     /// Take `name` out of the page's tags / aliases (a toast with "Cofnij").
-    function removeListItem(kind, name) {
-        const before = controller.undoToken()
-        const r = controller.removePageListItem(kind, name)
-        if (!r.ok) {
-            AppController.toast(r.reason, "error")
+    function removeListItem(kind: string, name: string): void {
+        const before = header.controller.undoToken()
+        header._held = header.controller.removePageListItem(kind, name)
+        if (!AppController.routeFlag(header._held, "ok")) {
+            AppController.toast(AppController.routeText(header._held, "reason"), "error")
             return
         }
-        const text = chipMenu.removedText(kind, name, name)
-        const action = editor ? editor.undoAction(before) : null
-        if (action)
-            AppController.toastAction(text, "info", action.text, action.run)
+        const text = header.chipMenu.removedText(kind, name, name)
+        if (header.editor)
+            header.editor.noticeUndoable(text, "info", before)
         else
             AppController.toast(text, "info")
     }
@@ -193,7 +212,7 @@ Item {
             id: chipMenuItem
             onOpenRequested: AppController.openTag(chipMenuItem.item)
             onCopyRequested: {
-                if (header.controller.copyText(chipMenuItem.item).ok)
+                if (AppController.routeFlag(header.controller.copyText(chipMenuItem.item), "ok"))
                     AppController.toast(qsTr("Copied %1").arg(chipMenuItem.item), "success")
             }
             onRemoveRequested: header.removeListItem(chipMenuItem.kind, chipMenuItem.item)
@@ -253,10 +272,15 @@ Item {
     }
 
     /// `tag:` query of a tag key (quoted when it has a space, a comma or a quote).
-    function tagQuery(key) {
-        return "tag:" + (/[\s,"]/.test(key) ? "\"" + key + "\"" : key)
+    function tagQuery(key: string): string {
+        return "tag:" + (Js.test(key, "[\\s,\"]", "") ? "\"" + key + "\"" : key)
     }
-    function openDay(offset) {
+    /// The folder of the breadcrumb's part `index` in all pages.
+    function openFolder(index: int): void {
+        const part = header.folderParts[index]
+        AppController.navigate({ view: "allPages", path: AppController.routeText(part, "path") })
+    }
+    function openDay(offset: int): void {
         AppController.navigate({ view: "journal", date: DatesHelper.addDays(header.journalDate, offset) })
     }
 
@@ -269,9 +293,9 @@ Item {
                 visible: header.tagInUse
                 iconName: "hash"
                 label: qsTr("Tag overview")
-                Accessible.description: qsTr("Everything tagged %1").arg(header.tagInfo.text || "")
+                Accessible.description: qsTr("Everything tagged %1").arg(header.tagText)
                 size: "small"
-                onClicked: AppController.navigate({ view: "tag", tag: header.tagInfo.key, overview: true })
+                onClicked: AppController.navigate({ view: "tag", tag: header.tagKey, overview: true })
             }
             BIconButton {
                 objectName: "noteModeToggle"
@@ -322,7 +346,7 @@ Item {
             Layout.preferredHeight: visible ? (header.small ? 112 : 180) : 0
             Layout.bottomMargin: visible ? Theme.space2 : 0
             clip: true
-            readonly property string coverState: header.cover.state || ""
+            readonly property string coverState: AppController.routeText(header.cover, "state")
             readonly property bool ready: coverState === "ready" && coverImage.status === Image.Ready
 
             Rectangle {
@@ -339,7 +363,7 @@ Item {
                 width: coverBand.width
                 height: Math.max(coverBand.height, naturalHeight)
                 y: -(height - coverBand.height) * header.coverPosition
-                source: coverBand.coverState === "ready" ? header.cover.url : ""
+                source: coverBand.coverState === "ready" ? AppController.routeText(header.cover, "url") : ""
                 asynchronous: true
                 fillMode: Image.PreserveAspectCrop
                 sourceSize.width: Math.ceil(Math.max(1, coverBand.width) * Screen.devicePixelRatio)
@@ -360,9 +384,11 @@ Item {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     visible: text !== ""
-                    text: coverBand.coverState === "missing" ? qsTr("No picture “%1” in the notebook").arg(header.cover.target || "")
-                          : coverBand.coverState === "ask" ? qsTr("Cover from %1").arg(header.cover.host || "")
-                          : coverBand.coverState === "failed" ? (header.cover.error || qsTr("The picture could not be loaded"))
+                    text: coverBand.coverState === "missing" ? qsTr("No picture “%1” in the notebook").arg(header.coverTarget)
+                          : coverBand.coverState === "ask" ? qsTr("Cover from %1").arg(AppController.routeText(header.cover, "host"))
+                          : coverBand.coverState === "failed" ? (AppController.routeText(header.cover, "error") !== ""
+                                                                 ? AppController.routeText(header.cover, "error")
+                                                                 : qsTr("The picture could not be loaded"))
                           : coverBand.coverState === "ready" && coverImage.status === Image.Error ? qsTr("The picture could not be loaded")
                           : ""
                     variant: "muted"
@@ -373,11 +399,11 @@ Item {
                 BButton {
                     objectName: "pageCoverShow"
                     anchors.horizontalCenter: parent.horizontalCenter
-                    visible: header.cover.kind === "web" && (coverBand.coverState === "ask" || coverBand.coverState === "failed")
+                    visible: header.coverKind === "web" && (coverBand.coverState === "ask" || coverBand.coverState === "failed")
                     size: "small"
                     text: coverBand.coverState === "failed" ? qsTr("Try again") : qsTr("Show")
                     iconName: coverBand.coverState === "failed" ? "refresh-cw" : "eye"
-                    onClicked: if (header.controller) header.controller.showWebPicture(header.cover.target)
+                    onClicked: if (header.controller) header.controller.showWebPicture(header.coverTarget)
                 }
             }
             HoverHandler {
@@ -392,11 +418,11 @@ Item {
                 target: null
                 xAxis.enabled: false
                 property real startPosition: 0.5
-                onActiveChanged: if (active) startPosition = header.coverDraft
+                onActiveChanged: if (coverDrag.active) coverDrag.startPosition = header.coverDraft
                 onTranslationChanged: {
                     const room = coverImage.height - coverBand.height
-                    if (active && room > 0)
-                        header.coverDraft = Math.max(0, Math.min(1, startPosition - translation.y / room))
+                    if (coverDrag.active && room > 0)
+                        header.coverDraft = Math.max(0, Math.min(1, coverDrag.startPosition - coverDrag.translation.y / room))
                 }
             }
             Row {
@@ -477,8 +503,9 @@ Item {
                 visible: !header.journal && header.breadcrumbRow
                 Layout.fillWidth: true
                 rootIcon: "folder"
-                model: header.folderParts.map(p => ({ title: p.title }))
-                onActivated: (index) => AppController.navigate({ view: "allPages", path: header.folderParts[index].path })
+                // (Rows { title, path }: the breadcrumb shows the titles.)
+                model: header.folderParts
+                onActivated: (index) => header.openFolder(index)
             }
             RowLayout {
                 visible: header.journal
@@ -609,31 +636,31 @@ Item {
                 iconName: "chevron-left"
                 label: header.weekly ? qsTr("Previous week") : qsTr("Previous month")
                 size: "small"
-                onClicked: AppController.openPeriodicNote(header.periodic.period, header.periodic.start, -1)
+                onClicked: AppController.openPeriodicNote(header.periodicPeriod, header.periodicStart, -1)
             }
             BIconButton {
                 objectName: "periodicNext"
                 iconName: "chevron-right"
                 label: header.weekly ? qsTr("Next week") : qsTr("Next month")
                 size: "small"
-                onClicked: AppController.openPeriodicNote(header.periodic.period, header.periodic.start, 1)
+                onClicked: AppController.openPeriodicNote(header.periodicPeriod, header.periodicStart, 1)
             }
             BText {
                 objectName: "periodicLabel"
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.space1
-                text: header.periodicNote ? header.periodic.label : ""
+                text: header.periodicNote ? header.periodicLabel : ""
                 variant: "muted"
                 elide: Text.ElideRight
             }
             BButton {
-                readonly property bool current: header.periodicNote && DatesHelper.today >= header.periodic.start
-                                                && DatesHelper.today <= header.periodic.end
+                readonly property bool current: header.periodicNote && DatesHelper.today >= header.periodicStart
+                                                && DatesHelper.today <= header.periodicEnd
                 visible: header.periodicNote && !current
                 size: "small"
                 variant: "ghost"
                 text: header.weekly ? qsTr("This week") : qsTr("This month")
-                onClicked: AppController.openPeriodicNote(header.periodic.period, "", 0)
+                onClicked: AppController.openPeriodicNote(header.periodicPeriod, "", 0)
             }
         }
 
@@ -667,17 +694,23 @@ Item {
             id: chips
             objectName: "pageHeaderChips"
             readonly property bool live: header.loaded && header.controller !== null
-            readonly property var aliases: live ? (header.controller.pageProperties.aliases || [])
-                                                : (header.summary.aliases || []).map(a => ({ name: a }))
-            readonly property var tags: live ? (header.controller.pageProperties.tags || [])
-                                             : (header.summary.tags || []).map(t => ({ name: t.display, key: t.tag }))
+            // Rows { name, editable, key (tags from the index) }: the page's properties, else the
+            // index's summary (PageTools.aliasChips / tagChips).
+            readonly property list<var> aliases: live ? chips.liveChips("aliases") : summaryTools.aliasChips
+            readonly property list<var> tags: live ? chips.liveChips("tags") : summaryTools.tagChips
+            /// The page's properties' "tags" | "aliases" (PageController.pageProperties).
+            function liveChips(kind: string): list<var> {
+                if (kind === "tags")
+                    return header.controller.pageProperties.tags
+                return header.controller.pageProperties.aliases
+            }
             /// The field adding "tags" | "aliases" is open ("": none).
             property string adding: ""
             property string addError: ""
             /// This page's properties panel is shown and open right below: it has every chip with
             /// the same actions (a tag's page, ×, "+"), so the header does not repeat them.
             readonly property bool panelOpen: live && header.editor !== null && header.editor.propertiesExpanded
-                                              && header.controller.pageProperties.visibleRow >= 0
+                                              && AppController.routeInt(header.controller.pageProperties, "visibleRow", -1) >= 0
             visible: (aliases.length + tags.length > 0 || adding !== "") && !panelOpen
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
@@ -699,19 +732,20 @@ Item {
                 delegate: BChip {
                     id: aliasChip
                     required property var modelData
-                    readonly property bool editable: chips.live && aliasChip.modelData.editable === true
-                    objectName: "headerAlias_" + modelData.name
-                    text: header.editor ? header.editor.autoTextSafe(modelData.name) : modelData.name
+                    readonly property string name: AppController.routeText(modelData, "name")
+                    readonly property bool editable: chips.live && AppController.routeFlag(aliasChip.modelData, "editable")
+                    objectName: "headerAlias_" + name
+                    text: header.editor ? header.editor.autoTextSafe(aliasChip.name) : aliasChip.name
                     iconName: "bookmark"
                     interactive: editable
-                    Accessible.name: qsTr("Alias: %1").arg(modelData.name)
-                    onClicked: header.openChipMenu("aliases", aliasChip.modelData.name, aliasChip)
-                    onPressAndHold: header.openChipMenu("aliases", aliasChip.modelData.name, aliasChip)
+                    Accessible.name: qsTr("Alias: %1").arg(aliasChip.name)
+                    onClicked: header.openChipMenu("aliases", aliasChip.name, aliasChip)
+                    onPressAndHold: header.openChipMenu("aliases", aliasChip.name, aliasChip)
                     TapHandler {
                         enabled: aliasChip.editable
                         acceptedButtons: Qt.RightButton
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                        onTapped: header.openChipMenu("aliases", aliasChip.modelData.name, aliasChip)
+                        onTapped: header.openChipMenu("aliases", aliasChip.name, aliasChip)
                     }
                 }
             }
@@ -720,26 +754,29 @@ Item {
                 delegate: BChip {
                     id: tagChip
                     required property var modelData
-                    readonly property bool editable: chips.live && tagChip.modelData.editable === true
-                    objectName: "headerTag_" + modelData.name
+                    readonly property string name: AppController.routeText(modelData, "name")
+                    /// The tag's key (the index's rows; else the name is the tag).
+                    readonly property string key: AppController.routeText(modelData, "key")
+                    readonly property bool editable: chips.live && AppController.routeFlag(tagChip.modelData, "editable")
+                    objectName: "headerTag_" + name
                     variant: "tag"
-                    text: "#" + (header.editor ? header.editor.autoTextSafe(modelData.name) : modelData.name)
+                    text: "#" + (header.editor ? header.editor.autoTextSafe(tagChip.name) : tagChip.name)
                     interactive: true
-                    Accessible.name: qsTr("Tag %1").arg(modelData.name)
-                    onClicked: AppController.openTag(tagChip.modelData.key || tagChip.modelData.name)
-                    onPressAndHold: if (tagChip.editable) header.openChipMenu("tags", tagChip.modelData.name, tagChip)
+                    Accessible.name: qsTr("Tag %1").arg(tagChip.name)
+                    onClicked: AppController.openTag(tagChip.key !== "" ? tagChip.key : tagChip.name)
+                    onPressAndHold: if (tagChip.editable) header.openChipMenu("tags", tagChip.name, tagChip)
                     TapHandler {
                         enabled: tagChip.editable
                         acceptedButtons: Qt.RightButton
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                        onTapped: header.openChipMenu("tags", tagChip.modelData.name, tagChip)
+                        onTapped: header.openChipMenu("tags", tagChip.name, tagChip)
                     }
                 }
             }
             BIconButton {
                 id: chipsAdd
                 objectName: "pageHeaderAdd"
-                visible: chips.live && chips.adding === "" && header.controller.pageProperties.canAdd === true
+                visible: chips.live && chips.adding === "" && AppController.routeFlag(header.controller.pageProperties, "canAdd")
                          && !header.controller.sourceMode
                 size: "small"
                 iconName: "plus"
@@ -758,46 +795,51 @@ Item {
                     placeholderText: chips.adding === "tags" ? qsTr("Tag") : qsTr("Alias")
                     errorText: chips.addError
                     inputMethodHints: Qt.ImhNoAutoUppercase
-                    provider: chips.adding !== "tags" ? null : (typed) => header.controller.suggestPropertyValues("tags", typed, 8)
-                        .map(v => ({ title: "#" + v.value, value: v.value, subtitle: v.count > 0 ? String(v.count) : "" }))
-                    property bool done: false
-                    function add(text) {
-                        if (text.trim() === "")
-                            return true
-                        const r = header.controller.addPageListItem(chips.adding, text)
-                        chips.addError = r.ok ? "" : r.reason
-                        if (r.ok)
-                            chipField.text = ""
-                        return r.ok
+                    // Tags: the values the notebook already uses (PageTools.tagSuggestions).
+                    suggesting: chips.adding === "tags"
+                    onSuggestionsRequested: (typed) => {
+                        chipField.suggestions = summaryTools.tagSuggestions(
+                                    header.controller.suggestPropertyValues("tags", typed, 8))
                     }
-                    Component.onCompleted: forceActiveFocus()
+                    property bool done: false
+                    function add(value: string): bool {
+                        if (Js.trim(value) === "")
+                            return true
+                        header._held = header.controller.addPageListItem(chips.adding, value)
+                        const ok = AppController.routeFlag(header._held, "ok")
+                        chips.addError = ok ? "" : AppController.routeText(header._held, "reason")
+                        if (ok)
+                            chipField.text = ""
+                        return ok
+                    }
+                    Component.onCompleted: chipField.forceActiveFocus()
                     onTypedTextChanged: chips.addError = ""
-                    onPicked: (value) => add(String(value))
-                    onCommitted: (text) => {
-                        if (text.trim() === "")
+                    onPicked: (value) => chipField.add(value)
+                    onCommitted: (value) => {
+                        if (Js.trim(value) === "")
                             chips.adding = ""
                         else
-                            add(text)
+                            chipField.add(value)
                     }
                     onCancelled: {
-                        done = true
+                        chipField.done = true
                         chips.adding = ""
                         chips.addError = ""
                     }
                     /// Leaving the field (a tap elsewhere, another page shown): what it holds is
                     /// added and it closes; what cannot be added is said in a toast.
-                    function leave() {
-                        if (done)
+                    function leave(): void {
+                        if (chipField.done)
                             return
-                        done = true
-                        if (preeditText !== "")
+                        chipField.done = true
+                        if (chipField.preeditText !== "")
                             EditorInput.commitPreedit(chipField)
-                        if (!add(text))
+                        if (!chipField.add(chipField.text))
                             AppController.toast(chips.addError, "error")
                         chips.adding = ""
                         chips.addError = ""
                     }
-                    onActiveFocusChanged: if (!activeFocus) leave()
+                    onActiveFocusChanged: if (!chipField.activeFocus) chipField.leave()
                     Connections {
                         target: header.controller
                         function onPathAboutToChange() { chipField.leave() }
@@ -817,13 +859,15 @@ Item {
             Repeater {
                 model: header.subTags
                 delegate: BChip {
+                    id: subTagChip
                     required property var modelData
+                    readonly property string tagDisplay: AppController.routeText(modelData, "display")
                     variant: "tag"
                     interactive: true
-                    text: "#" + (header.editor ? header.editor.autoTextSafe(modelData.display) : modelData.display)
-                          + " · " + modelData.count
-                    Accessible.name: qsTr("Tag %1").arg(modelData.display)
-                    onClicked: AppController.openTag(modelData.tag)
+                    text: "#" + (header.editor ? header.editor.autoTextSafe(subTagChip.tagDisplay) : subTagChip.tagDisplay)
+                          + " · " + AppController.routeText(subTagChip.modelData, "count")
+                    Accessible.name: qsTr("Tag %1").arg(subTagChip.tagDisplay)
+                    onClicked: AppController.openTag(AppController.routeText(subTagChip.modelData, "tag"))
                 }
             }
         }

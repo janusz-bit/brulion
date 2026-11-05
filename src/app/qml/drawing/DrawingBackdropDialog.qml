@@ -30,7 +30,7 @@ BDialog {
     /// Why the pages cannot be shown ("" none).
     property string error: ""
     /// The chosen pages, ascending.
-    property var chosen: []
+    property list<int> chosen: []
     /// More than the limit was asked for (the note under the field).
     property bool capped: false
     /// The first page's height / width (the thumbnails' cells; clamped): portrait A4 1.41, a slide
@@ -42,64 +42,78 @@ BDialog {
     property int total: 0
 
     readonly property bool single: mode === "single"
-    readonly property string fileName: path.slice(path.lastIndexOf("/") + 1)
+    readonly property string fileName: Js.sliceFrom(path, Js.lastIndexOf(path, "/") + 1)
     readonly property int maxPages: 60
+    /// DrawingBackdrops.pdfInfo() of the file (kept: read with AppController.route*()).
+    property var _info: ({})
+    /// The prepared items (kept from the job's end to prepared()).
+    property list<var> _items: []
 
     /// The prepared backdrops ({ bytes, mimeType, width, height, path, page, name, error } each;
     /// "insert": the drawings' files in `svg` instead of `bytes`, DrawingBackdrops.prepare()).
-    signal prepared(var items)
+    signal prepared(list<var> items)
 
-    function openFor(vaultPath, openMode, page) {
+    function openFor(vaultPath: string, openMode: string, page: int): void {
         dialog.path = vaultPath
         dialog.mode = openMode
-        const info = DrawingBackdrops.pdfInfo(vaultPath)
-        dialog.pageCount = Math.max(0, info.pages)
-        dialog.error = info.error
-        dialog.pageAspect = info.width > 0 && info.height > 0 ? Math.min(2, Math.max(0.35, info.height / info.width)) : 1.3
+        dialog._info = DrawingBackdrops.pdfInfo(vaultPath)
+        dialog.pageCount = Math.max(0, AppController.routeInt(dialog._info, "pages", -1))
+        dialog.error = AppController.routeText(dialog._info, "error")
+        const width = Js.toNumber(AppController.routeText(dialog._info, "width"))
+        const height = Js.toNumber(AppController.routeText(dialog._info, "height"))
+        dialog.pageAspect = width > 0 && height > 0 ? Math.min(2, Math.max(0.35, height / width)) : 1.3
         dialog.capped = false
         dialog.job = 0
         dialog.done = 0
         dialog.total = 0
-        const first = Math.min(Math.max(1, page || 1), Math.max(1, dialog.pageCount))
+        const first = Math.min(Math.max(1, page > 0 ? page : 1), Math.max(1, dialog.pageCount))
         dialog.setChosen(dialog.pageCount === 0 ? [] : dialog.single || dialog.pageCount === 1 ? [first] : [])
         grid.keyboardUsed = false
         grid.currentIndex = dialog.pageCount > 0 ? first - 1 : -1
         dialog.open()
-        if (dialog.single && dialog.pageCount > 0)
-            Qt.callLater(() => grid.positionViewAtIndex(first - 1, GridView.Contain))
+        if (dialog.single && dialog.pageCount > 0) {
+            dialog._showIndex = first - 1
+            showLater.restart()
+        }
+    }
+    /// The page shown once the dialog is laid out (Qt.callLater).
+    property int _showIndex: -1
+    Timer {
+        id: showLater
+        interval: 0
+        onTriggered: grid.positionViewAtIndex(dialog._showIndex, GridView.Contain)
     }
 
-    function setChosen(pages) {
-        const sorted = pages.slice().sort((a, b) => a - b)
+    function sortedPages(pages: list<int>): list<int> {
+        return DrawingBackdrops.sortedPages(pages)
+    }
+    function setChosen(pages: list<int>): void {
+        const sorted = dialog.sortedPages(pages)
         dialog.capped = sorted.length > dialog.maxPages
         dialog.chosen = sorted.slice(0, dialog.maxPages)
         if (!pagesField.activeFocus)
             pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
     }
 
-    function toggle(page) {
+    function toggledPages(page: int): list<int> {
+        return DrawingBackdrops.toggledPage(dialog.chosen, page)
+    }
+    function toggle(page: int): void {
         if (dialog.job !== 0)
             return
         if (dialog.single) {
             dialog.setChosen([page])
             return
         }
-        const i = dialog.chosen.indexOf(page)
-        if (i >= 0) {
-            const next = dialog.chosen.slice()
-            next.splice(i, 1)
-            dialog.setChosen(next)
-        } else {
-            dialog.setChosen(dialog.chosen.concat([page]))
-        }
+        dialog.setChosen(dialog.toggledPages(page))
         pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
     }
+    function allPages(): list<int> {
+        return DrawingBackdrops.allPages(dialog.pageCount)
+    }
 
-    function chooseAll() {
-        const all = []
-        for (let p = 1; p <= dialog.pageCount; ++p)
-            all.push(p)
-        dialog.setChosen(all)
+    function chooseAll(): void {
+        dialog.setChosen(dialog.allPages())
         pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
     }
 
@@ -128,20 +142,21 @@ BDialog {
     Connections {
         target: DrawingBackdrops
         enabled: dialog.job !== 0
-        function onProgress(job, done, total) {
+        function onProgress(job: int, done: int, total: int) {
             if (job === dialog.job) {
                 dialog.done = done
                 dialog.total = total
             }
         }
-        function onFinished(job, items, cancelled) {
+        function onFinished(job: int, items: list<var>, cancelled: bool) {
             if (job !== dialog.job)
                 return
+            dialog._items = items
             dialog.job = 0
             if (cancelled)
                 return
             dialog.close()
-            dialog.prepared(items)
+            dialog.prepared(dialog._items)
         }
     }
 
@@ -167,8 +182,8 @@ BDialog {
             accessibleName: qsTr("Pages")
             enabled: dialog.job === 0
             inputMethodHints: Qt.ImhNoPredictiveText
-            onTextEdited: dialog.setChosen(DrawingBackdrops.parsePages(text, dialog.pageCount))
-            onEditingFinished: text = DrawingBackdrops.formatPages(dialog.chosen)
+            onTextEdited: dialog.setChosen(DrawingBackdrops.parsePages(pagesField.text, dialog.pageCount))
+            onEditingFinished: pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
         }
         BButton {
             objectName: "drawingBackdropAll"
@@ -219,18 +234,18 @@ BDialog {
         keyNavigationEnabled: true
         currentIndex: -1
         onCurrentIndexChanged: {
-            if (currentIndex < 0)
+            if (grid.currentIndex < 0)
                 return
-            positionViewAtIndex(currentIndex, GridView.Contain)
+            grid.positionViewAtIndex(grid.currentIndex, GridView.Contain)
             // One page: the arrows choose it (a group of radio buttons).
-            if (dialog.single && activeFocus && dialog.job === 0)
-                dialog.setChosen([currentIndex + 1])
+            if (dialog.single && grid.activeFocus && dialog.job === 0)
+                dialog.setChosen([grid.currentIndex + 1])
         }
         Keys.onPressed: (event) => {
             grid.keyboardUsed = true
             if ((event.key === Qt.Key_Space || ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                                                 && event.modifiers === Qt.NoModifier)) && currentIndex >= 0) {
-                dialog.toggle(currentIndex + 1)
+                                                 && event.modifiers === Qt.NoModifier)) && grid.currentIndex >= 0) {
+                dialog.toggle(grid.currentIndex + 1)
                 event.accepted = true
             }
         }
@@ -294,7 +309,7 @@ BDialog {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Theme.space1
-                text: cell.page
+                text: "" + cell.page
                 variant: cell.checked ? "label" : "caption"
             }
             TapHandler {

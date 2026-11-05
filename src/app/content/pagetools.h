@@ -5,6 +5,12 @@
 //
 //   PageTools { id: tools; workspace: Workspace }
 //   tools.renameImpact(page.path)   // { notes: 3, links: 5, tags: 2, queries: 1 }
+//
+// With a `path` it also keeps that page's summary() for the page header as typed properties
+// (folderParts, aliasChips, tagChips, headerTag, subTags), again whenever the notebook changes
+// (Workspace revision, indexing) — read compiled in QML, unlike members of a returned map:
+//
+//   PageTools { id: headerTools; workspace: Workspace; path: page.path }
 #pragma once
 
 #include <QObject>
@@ -26,6 +32,18 @@ namespace brulion::content {
 class PageTools : public QObject {
     Q_OBJECT
     Q_PROPERTY(QObject *workspace READ workspaceObject WRITE setWorkspaceObject NOTIFY workspaceChanged FINAL)
+    /// The page whose summary the properties below hold ("" none: they are empty).
+    Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged FINAL)
+    /// summary(path).folderParts: [{ title, path }] of the page's folders, outermost first.
+    Q_PROPERTY(QVariantList folderParts READ folderParts NOTIFY summaryChanged FINAL)
+    /// The page's aliases from the index as chips: [{ name, key: "", editable: false }].
+    Q_PROPERTY(QVariantList aliasChips READ aliasChips NOTIFY summaryChanged FINAL)
+    /// The page's own tags from the index as chips: [{ name (display), key (tag), editable: false }].
+    Q_PROPERTY(QVariantList tagChips READ tagChips NOTIFY summaryChanged FINAL)
+    /// summary(path).tag: { key, display, text, references, subTags } — {} when there is none.
+    Q_PROPERTY(QVariantMap headerTag READ headerTag NOTIFY summaryChanged FINAL)
+    /// That tag's subTags: [{ tag, display, count }].
+    Q_PROPERTY(QVariantList subTags READ subTags NOTIFY summaryChanged FINAL)
 
 public:
     explicit PageTools(QObject *parent = nullptr);
@@ -33,6 +51,14 @@ public:
     QObject *workspaceObject() const;
     void setWorkspaceObject(QObject *workspace);
     void setWorkspace(shell::Workspace *workspace);
+
+    QString path() const { return m_path; }
+    void setPath(const QString &path);
+    QVariantList folderParts() const;
+    QVariantList aliasChips() const;
+    QVariantList tagChips() const;
+    QVariantMap headerTag() const;
+    QVariantList subTags() const;
 
     /// What renaming `path` rewrites: { notes (other notes linking to it by name or path, or
     /// carrying a tag that names it, or a ```query naming it), links (those links, and the query
@@ -71,6 +97,17 @@ public:
     /// Put plain text on the clipboard.
     Q_INVOKABLE bool copyText(const QString &text) const;
 
+    /// The side panel's calendar (ContentMiniCalendar) — BDatePicker marks for the days `from` …
+    /// `to`: { "YYYY-MM-DD": [kinds] }, "journal" for a day with a journal, then the kinds of its
+    /// other calendar entries in their order, each once, at most three kinds a day: "overdue" (a
+    /// due task before `today` that is not done), "alarm" / "reminder", else the entry's kind.
+    Q_INVOKABLE QVariantMap calendarMarks(const QString &from, const QString &to, const QString &today) const;
+    /// The calendar entries of the day `date` but its journal (Workspace::calendarItems() rows).
+    Q_INVOKABLE QVariantList calendarEntries(const QString &date) const;
+    /// The page header's tag field (BSuggestField rows): PageController::suggestPropertyValues()
+    /// rows { value, count } as { title: "#value", value, subtitle: the count ("" for 0), icon: "" }.
+    Q_INVOKABLE QVariantList tagSuggestions(const QVariantList &values) const;
+
     /// [{ id: "markdown" | "html", name, extension }].
     Q_INVOKABLE QVariantList exportFormats() const;
     /// Suggested file name ("Dom.md", "Dom.html").
@@ -84,6 +121,8 @@ public:
 
 Q_SIGNALS:
     void workspaceChanged();
+    void pathChanged();
+    void summaryChanged();
 
 private:
     /// summary()'s `tag` of `path`.
@@ -91,7 +130,12 @@ private:
 
     QByteArray exportData(const QString &path, const QString &format) const;
 
+    /// summary(m_path) again (nothing for no path); summaryChanged() when it differs.
+    void refreshSummary();
+
     QPointer<shell::Workspace> m_workspace;
+    QString m_path;
+    QVariantMap m_summary;
 };
 
 } // namespace brulion::content
