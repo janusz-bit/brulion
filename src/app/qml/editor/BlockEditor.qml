@@ -2822,12 +2822,13 @@ FocusScope {
     function openTableBlockMenu(table: TableBlockView): void {
         if (!controller || !table || !table.block)
             return
-        const row = table.block.index
-        const cellRow = table.editRow
-        const cellColumn = table.editColumn
-        const cellRows = table.cellRowCount()
-        const cellColumns = table.columns
-        const cellAlign = table.cellAlignOf(cellColumn)
+        // (Typed copies: passed on after other calls.)
+        const row = table.block.index + 0
+        const cellRow = table.editRow + 0
+        const cellColumn = table.editColumn + 0
+        const cellRows = table.cellRowCount() + 0
+        const cellColumns = table.columns + 0
+        const cellAlign = table.cellAlignOf(cellColumn) + ""
         if (table.cellInput)
             EditorInput.commitPreedit(table.cellInput)
         DeviceInfo.hideInputMethod()
@@ -2989,6 +2990,11 @@ FocusScope {
         function rule(): string { return dateMenuChip.map.rule ? dateMenuChip.map.rule : "" }
         function priority(): string { return dateMenuChip.map.priority ? dateMenuChip.map.priority : "" }
         function at(): string { return dateMenuChip.map.at }
+        /// The reminder dialog's time: dialogAt, else at.
+        function dialogAt(): string { return dateMenuChip.map.dialogAt ? dateMenuChip.map.dialogAt : dateMenuChip.map.at }
+        function context(): string { return dateMenuChip.map.context ? dateMenuChip.map.context : "" }
+        /// The rule as the chip has it.
+        function rawRule(): string { return dateMenuChip.map.rule }
     }
     function isDateChipLink(link: string): bool {
         return Js.startsWith(link, "date:") || Js.startsWith(link, "reminder:") || Js.startsWith(link, "recur:")
@@ -3116,17 +3122,21 @@ FocusScope {
         const kind = dateMenuChip.kind()
         switch (action) {
         case "change":
-            if (kind === "reminder")
-                dialogs.editReminderWith("token", dateMenuChip.map.dialogAt ? dateMenuChip.map.dialogAt : dateMenuChip.at(),
-                                         dateMenuChip.map.alarm === true, dateMenuChip.rule(),
-                                         dateMenuChip.map.context ? dateMenuChip.map.context : "")
-            else if (kind === "recurrence")
-                dialogs.pickRecurrenceWith("token", dateMenuChip.map.rule, "recurrence")
-            else
-                dialogs.pickDateWith("token", kind, dateMenuChip.at())
+            if (kind === "reminder") {
+                const at = dateMenuChip.dialogAt()
+                const alarm = dateMenuChip.map.alarm === true
+                const rule = dateMenuChip.rule()
+                const context = dateMenuChip.context()
+                dialogs.editReminderWith("token", at, alarm, rule, context)
+            } else if (kind === "recurrence") {
+                dialogs.pickRecurrenceWith("token", dateMenuChip.rawRule(), "recurrence")
+            } else {
+                const at = dateMenuChip.at()
+                dialogs.pickDateWith("token", kind, at)
+            }
             break
         case "blockRecurrenceChange":
-            dialogs.pickRecurrenceWith("token", dateMenuChip.map.rule, "blockRecurrence")
+            dialogs.pickRecurrenceWith("token", dateMenuChip.rawRule(), "blockRecurrence")
             break
         default: tokenRun(action); break
         }
