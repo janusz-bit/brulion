@@ -1,0 +1,2 @@
+What's new in Brulion 0.10.1 (in Polish):
+https://github.com/janusz-bit/brulion/releases/tag/v0.10.1
