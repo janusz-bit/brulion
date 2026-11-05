@@ -1,9 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
-// (`block as B.BlockDelegate`: inside its own file the delegate's type is another one for the
-// compiler — "cannot convert from BlockDelegate to BlockDelegate".)
-import Brulion as B
 
 // BlockDelegate — one block of the BlockEditor (one row of BlockListModel): indentation with
 // thin vertical guide lines (one per ancestor level, continuous across rows), the fold arrow
@@ -57,7 +54,10 @@ Item {
     required property list<var> embeds
     required property list<var> transclusions
     // (final: the views of the block look into them through `block`.)
-    final property BlockEditor editor
+    final property BlockEditor editor: editorItem as BlockEditor
+    /// The editor as an Item: what BlockEditor gives its delegates (a file cannot give its own
+    /// root to a property of its own type in compiled code).
+    property Item editorItem
 
     final property PageController controller: editor ? editor.controller : null
     /// The roles only some blocks or views read (the rendered text, a table's data, …), typed and
@@ -530,7 +530,7 @@ Item {
         width: Math.max(40, block.contentRight - x)
         visible: textContent.live && !block.noTextLine
         live: block.textView && block.shown
-        block: block as B.BlockDelegate
+        blockItem: block
     }
     Loader {
         id: content
@@ -581,7 +581,7 @@ Item {
         x: block.contentLeft
         y: block.transclusionsY
         width: Math.max(40, block.contentRight - x)
-        block: block as B.BlockDelegate
+        blockItem: block
         transclusions: block.hasTransclusions ? block.transclusions : block.noItems
     }
 
@@ -621,7 +621,7 @@ Item {
                 BlockText {
                     id: text
                     width: parent.width
-                    block: block as B.BlockDelegate
+                    blockItem: block
                     quoted: !frame.callout
                 }
             }
@@ -629,35 +629,35 @@ Item {
     }
     Component {
         id: codeComponent
-        CodeBlockView { block: block as B.BlockDelegate }
+        CodeBlockView { blockItem: block }
     }
     Component {
         id: calcComponent
-        CalcBlockView { block: block as B.BlockDelegate }
+        CalcBlockView { blockItem: block }
     }
     Component {
         id: queryComponent
-        QueryBlockView { block: block as B.BlockDelegate }
+        QueryBlockView { blockItem: block }
     }
     Component {
         id: mathComponent
-        MathBlockView { block: block as B.BlockDelegate }
+        MathBlockView { blockItem: block }
     }
     Component {
         id: mermaidComponent
-        MermaidBlockView { block: block as B.BlockDelegate }
+        MermaidBlockView { blockItem: block }
     }
     Component {
         id: chartComponent
-        ChartBlockView { block: block as B.BlockDelegate }
+        ChartBlockView { blockItem: block }
     }
     Component {
         id: tableComponent
-        TableBlockView { block: block as B.BlockDelegate }
+        TableBlockView { blockItem: block }
     }
     Component {
         id: frontmatterComponent
-        FrontmatterView { block: block as B.BlockDelegate }
+        FrontmatterView { blockItem: block }
     }
     Component {
         id: ruleComponent
@@ -681,7 +681,7 @@ Item {
                 id: ruleText
                 visible: block.editing
                 width: parent.width
-                block: block as B.BlockDelegate
+                blockItem: block
             }
         }
     }

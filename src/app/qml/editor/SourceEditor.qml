@@ -22,7 +22,10 @@ import Brulion
 Flickable {
     id: root
 
-    final property BlockEditor editor
+    /// The editor as an Item, for the editor itself to pass (a file cannot give its own root to a
+    /// property of its own type in compiled code); `editor` follows it unless set directly.
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     final property PageController controller
     /// The source's text editor (the touch toolbar inserts into it and uses its undo).
     readonly property alias textEdit: source

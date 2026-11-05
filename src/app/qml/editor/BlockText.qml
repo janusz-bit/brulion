@@ -28,7 +28,10 @@ import Brulion
 Item {
     id: root
 
-    final property BlockDelegate block
+    final property BlockDelegate block: blockItem as BlockDelegate
+    /// The block as an Item: what BlockDelegate gives (a file cannot give its own root to a
+    /// property of its own type in compiled code); `block` follows it unless set directly.
+    property Item blockItem
     /// Quote style (muted, italic) for blockquotes.
     property bool quoted: false
     /// Centres the text (a formula block: ```math, MathBlockView).

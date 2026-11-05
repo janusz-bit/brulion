@@ -22,7 +22,10 @@ import Brulion
 Row {
     id: bar
 
-    final property BlockEditor editor
+    /// The editor as an Item, for the editor itself to pass (a file cannot give its own root to a
+    /// property of its own type in compiled code); `editor` follows it unless set directly.
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     /// In the touch toolbar's slot (else the desktop's floating bar).
     property bool docked: false
     readonly property PageController controller: editor ? editor.controller : null

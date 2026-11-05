@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
-import Brulion as B
 
 // InlineEditor — the TextEdit of a block being edited: raw Markdown (the block's `editText`:
 // without the task marker / fence lines the delegate draws itself), MarkdownHighlighter, the
@@ -39,9 +38,6 @@ TextEdit {
     final property bool completions: !multiline || continuation !== ""
     /// cursorRectangle, typed for the editor (TextEdit's own cannot be looked into from there).
     final property rect caretRect: cursorRectangle
-    /// This editor as the module's type, for calls into the editor (inside its own file the type is
-    /// another one for the compiler).
-    readonly property B.InlineEditor self: edit as B.InlineEditor
     property string highlightMode: "inline"
     property string placeholderText
     /// Misspelled words are underlined while the block is edited.
@@ -158,7 +154,7 @@ TextEdit {
         edit.selectFindMatch()
         // The find bar keeps the keyboard while it goes from match to match.
         if (editor.findKeepsKeyboard) {
-            editor.activeEditor = edit.self
+            editor.setActiveEditor(edit)
             return
         }
         forceActiveFocus()
@@ -196,7 +192,7 @@ TextEdit {
         cursorPosition = Math.max(0, Math.min(cursor < 0 ? length : cursor, length))
         syncing = false
         if (editor)
-            editor.updateCompletion(edit.self)
+            editor.updateCompletion(edit)
     }
 
     function insertLineBreak(): void {
@@ -267,7 +263,7 @@ TextEdit {
         softBreak = false
         lastText = t
         editor.controller.setEditText(row, t, cursorPosition)
-        editor.updateCompletion(edit.self)
+        editor.updateCompletion(edit)
     }
 
     /// EditorInput.changedRange(before, after): [start, end in after, end in before].
@@ -281,24 +277,24 @@ TextEdit {
         if (syncing || !active || !editor || !editor.controller)
             return
         editor.controller.cursorPosition = cursorPosition
-        editor.updateCompletion(edit.self)
+        editor.updateCompletion(edit)
     }
     onCursorRectangleChanged: if (activeFocus && editor) caretLater.restart()
     /// editor.ensureCaretVisible(edit) once the event loop is idle (Qt.callLater merged the calls).
     Timer {
         id: caretLater
         interval: 0
-        onTriggered: if (edit.editor) edit.editor.ensureCaretVisible(edit.self)
+        onTriggered: if (edit.editor) edit.editor.ensureCaretVisible(edit)
     }
     // Android keyboards compose every word as preedit: completions follow it while it is typed.
-    onPreeditTextChanged: if (editor && active) editor.updateCompletion(edit.self)
+    onPreeditTextChanged: if (editor && active) editor.updateCompletion(edit)
 
     onActiveFocusChanged: {
         if (!editor)
             return
         if (activeFocus) {
             editor.findKeepsKeyboard = false
-            editor.activeEditor = edit.self
+            editor.setActiveEditor(edit)
             caretLater.restart()
         } else {
             editor.editorFocusLost()
@@ -328,7 +324,7 @@ TextEdit {
         }
     }
     Keys.onPressed: (event) => {
-        if (edit.active && edit.editor && edit.editor.handleEditorKey(event, edit.self))
+        if (edit.active && edit.editor && edit.editor.handleEditorKey(event, edit))
             event.accepted = true
     }
 
@@ -343,7 +339,7 @@ TextEdit {
             const pos = edit.positionAt(x, y)
             misspelling.map = edit.misspelledAt(pos)
             if (misspelling.map.word !== undefined)
-                edit.editor.openSpellingMenu(edit.self, pos, x, y)
+                edit.editor.openSpellingMenu(edit, pos, x, y)
         }
     }
     // The text menu: a right-click in the edited text (its press is the text's: the editor's
@@ -353,7 +349,7 @@ TextEdit {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         acceptedButtons: Qt.RightButton
         gesturePolicy: TapHandler.WithinBounds
-        onTapped: (eventPoint) => edit.editor.openTextMenu(edit.self, eventPoint.position.x, eventPoint.position.y)
+        onTapped: (eventPoint) => edit.editor.openTextMenu(edit, eventPoint.position.x, eventPoint.position.y)
     }
     // Read-only (not editing) persistent editors (code, calculations): a click starts editing
     // there, Shift+click selects blocks; a finger held on it selects the block (touch UIs).

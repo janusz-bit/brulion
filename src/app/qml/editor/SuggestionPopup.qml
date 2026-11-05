@@ -13,7 +13,10 @@ import Brulion
 T.Popup {
     id: popup
 
-    final property BlockEditor editor
+    /// The editor as an Item, for the editor itself to pass (a file cannot give its own root to a
+    /// property of its own type in compiled code); `editor` follows it unless set directly.
+    property Item editorItem
+    final property BlockEditor editor: editorItem as BlockEditor
     property SuggestionModel model
     /// SuggestionModel.detect()'s trigger ({ mode, token, … }).
     property var trigger: ({})

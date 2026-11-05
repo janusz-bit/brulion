@@ -17,7 +17,10 @@ import Brulion
 QtObject {
     id: action
 
-    property BlockEditor editor
+    /// The editor as an Item, for the editor itself to pass (a file cannot give its own root to a
+    /// property of its own type in compiled code); `editor` follows it unless set directly.
+    property QtObject editorItem
+    property BlockEditor editor: editorItem as BlockEditor
     property string text
     property string kind
     property PageController controller

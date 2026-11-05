@@ -3,10 +3,6 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
-// The editor passed to the components it makes: as the module's type (`editor as B.BlockEditor`) —
-// inside its own file the editor's type is another one for the compiler ("cannot convert from
-// BlockEditor to BlockEditor").
-import Brulion as B
 
 // BlockEditor — one page as a Logseq-like outline of blocks (docs/UI.md "The block editor"), or,
 // in the document mode (controller.documentMode, docs/UI.md "Note modes"), as an Obsidian-like
@@ -117,6 +113,10 @@ FocusScope {
     readonly property real contentWidth: Math.max(120, Math.min(maxTextWidth, width - 2 * horizontalPadding))
     /// Where the caret/selection lives: the inline editor (TextEdit) being typed in.
     final property InlineEditor activeEditor: null
+    /// activeEditor = `input` (an InlineEditor, or null; see updateCompletion()).
+    function setActiveEditor(input: TextEdit): void {
+        activeEditor = input as InlineEditor
+    }
     readonly property bool touch: Theme.touchUi
 
     // ---- The touch toolbar, docked on the keyboard (docs/UI.md "On-screen keyboard") ------------
@@ -219,7 +219,7 @@ FocusScope {
     Component {
         id: toastActionComponent
         EditorToastAction {
-            editor: editor as B.BlockEditor
+            editorItem: editor
         }
     }
     /// `ctl` is still this editor's controller, on the page `path`.
@@ -1205,7 +1205,9 @@ FocusScope {
 
     /// Keep the caret of an inline editor visible (called after layout settled). Not while the
     /// keyboard slides (the view changes size every frame): once it has settled.
-    function ensureCaretVisible(edit: InlineEditor): void {
+    function ensureCaretVisible(input: TextEdit): void {
+        // (A TextEdit: an InlineEditor passes itself, which compiled code cannot do as its own type.)
+        const edit = input as InlineEditor
         if (!edit || !edit.activeFocus || KeyboardInsets.animating)
             return
         if (editor.typewriter)
@@ -1463,7 +1465,9 @@ FocusScope {
 
     /// Re-detect the completion trigger at the caret of `edit` (InlineEditor). A word being
     /// composed by the input method (Android keyboards compose every word) counts as typed.
-    function updateCompletion(edit: InlineEditor): void {
+    function updateCompletion(input: TextEdit): void {
+        // (A TextEdit: an InlineEditor passes itself, which compiled code cannot do as its own type.)
+        const edit = input as InlineEditor
         if (!edit || !edit.activeFocus || edit.readOnly || !edit.completions) {
             closeSuggestions()
             return
@@ -1552,8 +1556,8 @@ FocusScope {
     }
 
     /// Keys of an inline editor (InlineEditor.qml). Returns true when handled.
-    function handleEditorKey(event: KeyEvent, edit: InlineEditor): bool {
-        return handleEditorKeyCode(event.key, event.modifiers, edit)
+    function handleEditorKey(event: KeyEvent, input: TextEdit): bool {
+        return handleEditorKeyCode(event.key, event.modifiers, input as InlineEditor)
     }
     /// handleEditorKey() for key `key` with `modifiers` (also the self-tests' keys).
     function handleEditorKeyCode(key: int, modifiers: int, edit: InlineEditor): bool {
@@ -2288,7 +2292,7 @@ FocusScope {
                         x: Theme.space1
                         y: Theme.space1
                         width: parent.width - 2 * Theme.space1
-                        editor: editor as B.BlockEditor
+                        editorItem: editor
                         controller: editor.controller
                         draft: true
                     }
@@ -2308,7 +2312,7 @@ FocusScope {
         }
 
         delegate: BlockDelegate {
-            editor: editor as B.BlockEditor
+            editorItem: editor
         }
 
         footer: Item {
@@ -2406,12 +2410,13 @@ FocusScope {
         property real speed: 0
         /// The list's scrolling was held for this press (setScrollingHeld()).
         property bool holding: false
-        /// The block under the pointer (updateDragTarget()): this editor's or another day's.
-        property B.BlockEditor targetEditor: null
+        /// The block under the pointer (updateDragTarget()): of this editor's page or another day's.
+        property PageController targetController: null
         property int targetRow: -1
     }
-    /// Another day's editor under the pointer (updateDragTarget()).
-    property B.BlockEditor dragOther: null
+    /// Another day's editor under the pointer (updateDragTarget(); an Item: what the stream gives
+    /// is not this file's own type for the compiler).
+    property Item dragOther: null
     /// Blocks are being selected by dragging (tests read it).
     readonly property bool dragSelecting: drag.active
 
@@ -2443,7 +2448,7 @@ FocusScope {
             if (drag.startRow < 0 || (!drag.mouse && !drag.armed))
                 return
             updateDragTarget()
-            if (drag.targetRow < 0 || (drag.targetEditor.controller === controller && drag.targetRow === drag.startRow)
+            if (drag.targetRow < 0 || (drag.targetController === controller && drag.targetRow === drag.startRow)
                     || controller.blocks.viewAt(drag.startRow) === "frontmatter")
                 return
             drag.active = true
@@ -2476,18 +2481,18 @@ FocusScope {
         if (!drag.active || !controller || drag.fixedRow < 0)
             return
         updateDragTarget()
-        const target = drag.targetEditor
-        if (drag.targetRow < 0 || target.controller.blocks.viewAt(drag.targetRow) === "frontmatter")
+        const target = drag.targetController
+        if (drag.targetRow < 0 || target.blocks.viewAt(drag.targetRow) === "frontmatter")
             return
-        if (target.controller !== controller)
-            stream.extendFrom(controller, drag.fixedRow, target.controller, drag.targetRow)
+        if (target !== controller)
+            stream.extendFrom(controller, drag.fixedRow, target, drag.targetRow)
         else
             controller.selectRange(drag.fixedRow, drag.targetRow) // (back in this day: a span ends)
     }
-    /// The block under the pointer (drag.targetEditor, drag.targetRow): this editor's nearest block,
-    /// or, below or above this day of the journal stream, the block of the day there.
+    /// The block under the pointer (drag.targetController, drag.targetRow): this editor's nearest
+    /// block, or, below or above this day of the journal stream, the block of the day there.
     function updateDragTarget(): void {
-        drag.targetEditor = editor as B.BlockEditor
+        drag.targetController = controller
         drag.targetRow = rowNear(drag.scene)
         if (stream === null || !scroller)
             return
@@ -2495,12 +2500,12 @@ FocusScope {
         if (mapped.y >= 0 && mapped.y < editor.height)
             return
         dragOther = scroller.editorAt(drag.scene)
-        const other = dragOther
-        if (!other || other === drag.targetEditor || !other.controller || !other.controller.loaded)
+        const other = dragOther as BlockEditor
+        if (!other || other === editor || !other.controller || !other.controller.loaded)
             return
         const row = other.rowNear(drag.scene)
         if (row >= 0) {
-            drag.targetEditor = other
+            drag.targetController = other.controller
             drag.targetRow = row
         }
     }
@@ -2708,7 +2713,7 @@ FocusScope {
         anchors.fill: parent
         active: editor.controller !== null && editor.controller.sourceMode
         sourceComponent: SourceEditor {
-            editor: editor as B.BlockEditor
+            editorItem: editor
             controller: editor.controller
         }
         onLoaded: (item as SourceEditor).focusEditor()
@@ -2741,7 +2746,7 @@ FocusScope {
     Component {
         id: suggestionComponent
         SuggestionPopup {
-            editor: editor as B.BlockEditor
+            editorItem: editor
             model: suggestionModel
             onActivated: (index) => editor.acceptSuggestion(index)
         }
@@ -2836,7 +2841,7 @@ FocusScope {
     Component {
         id: blockMenuComponent
         BlockMenu {
-            editor: editor as B.BlockEditor
+            editorItem: editor
         }
     }
 
@@ -3548,7 +3553,7 @@ FocusScope {
 
     EditorDialogs {
         id: dialogsItem
-        editor: editor as B.BlockEditor
+        editorItem: editor
         controller: editor.controller
     }
 
@@ -3571,7 +3576,7 @@ FocusScope {
         height: editor.toolbarHeight
         z: 10
         sourceComponent: MobileEditToolbar {
-            editor: editor as B.BlockEditor
+            editorItem: editor
         }
     }
 
@@ -3606,7 +3611,7 @@ FocusScope {
                     x: Theme.space1
                     y: Theme.space1
                     height: Theme.controlHeight
-                    editor: editor as B.BlockEditor
+                    editorItem: editor
                 }
             }
         }
@@ -3629,7 +3634,9 @@ FocusScope {
     }
     /// Only the spelling's part (touch UIs).
     property bool textMenuSpellingOnly: false
-    function openTextMenu(edit: InlineEditor, x: real, y: real): void {
+    function openTextMenu(input: TextEdit, x: real, y: real): void {
+        // (A TextEdit: an InlineEditor passes itself, which compiled code cannot do as its own type.)
+        const edit = input as InlineEditor
         if (!edit || !controller)
             return
         // A click outside the selected text moves the caret there first.
@@ -3642,7 +3649,9 @@ FocusScope {
         showTextMenu(edit, chipFound.map, false, x, y)
     }
     /// The corrections of the misspelled word at `pos` of the edited text (touch UIs: a tap on it).
-    function openSpellingMenu(edit: InlineEditor, pos: int, x: real, y: real): void {
+    function openSpellingMenu(input: TextEdit, pos: int, x: real, y: real): void {
+        // (A TextEdit: an InlineEditor passes itself, which compiled code cannot do as its own type.)
+        const edit = input as InlineEditor
         if (!edit || !controller)
             return
         chipFound.map = edit.misspelledAt(pos)
