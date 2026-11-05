@@ -146,7 +146,11 @@ done | sort -n)
   printf 'CurrentVersion: %s\nCurrentVersionCode: %s\n' "$name" "$code"
 } >"$work/metadata/$APP_ID.yml"
 cp -r -- "$ROOT/fastlane/metadata/android" "$work/metadata/$APP_ID"
-cp -- "$ROOT/fastlane/metadata/android/en-US/images/icon.png" "$work/repo/icons/icon.png"
+# The repository's icon: fdroidserver 2.4.5 (PyPI) reads `repo_icon` as a path from the working
+# directory and copies it into repo/icons/ (a missing one becomes a QR code placeholder); newer
+# ones look in repo/icons/ first. Both find it this way.
+cp -- "$ROOT/fastlane/metadata/android/en-US/images/icon.png" "$work/icon.png"
+cp -- "$work/icon.png" "$work/repo/icons/icon.png"
 
 # The published index keeps the "added" dates of the versions already there (none yet: a new
 # repository, every version added now).

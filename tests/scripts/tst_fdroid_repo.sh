@@ -45,7 +45,7 @@ cp config.yml metadata/io.github.januszbit.brulion.yml "$STUB_LOG/"
 stat -c %a config.yml >"$STUB_LOG/config.mode"
 ls metadata/io.github.januszbit.brulion >"$STUB_LOG/locales.txt"
 ls repo >"$STUB_LOG/repo.txt"
-cmp -s repo/icons/icon.png "$STUB_ICON" && touch "$STUB_LOG/icon"
+cmp -s repo/icons/icon.png "$STUB_ICON" && cmp -s icon.png "$STUB_ICON" && touch "$STUB_LOG/icon"
 [[ $FDROID_KEYSTORE_PASS == 'hasło-ząb 123' && -s keystore.p12 ]] && touch "$STUB_LOG/key"
 for f in index-v1.jar index-v2.json entry.jar index.png; do echo signed >"repo/$f"; done
 mkdir -p repo/status && echo '{}' >repo/status/update.json
@@ -113,7 +113,7 @@ expect "config.yml is readable by its owner only" test "$(cat "$log/config.mode"
 expect "the default key alias" grep -qx 'repo_keyalias: brulion-fdroid' "$config"
 expect "no archive (only the repository's versions)" grep -qx 'archive_older: 0' "$config"
 expect "fdroid gets the key and its password" test -e "$log/key"
-expect "the repository's icon is the app's" test -e "$log/icon"
+expect "the repository's icon is the app's (in repo/icons/ and as repo_icon's path)" test -e "$log/icon"
 expect "the texts of every locale" bash -c "grep -qx en-US '$log/locales.txt' && grep -qx pl '$log/locales.txt'"
 
 meta=$log/io.github.januszbit.brulion.yml
