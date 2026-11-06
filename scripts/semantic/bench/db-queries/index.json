@@ -1,0 +1,92 @@
+{
+ "nfcorpus": {
+  "domain": "medycyna i żywienie",
+  "lang": "pl (MT)",
+  "source": "clarin-knext/nfcorpus-pl",
+  "kind": "real qrels",
+  "notes": 3633,
+  "queries": 323
+ },
+ "scifact": {
+  "domain": "biomedycyna (twierdzenia naukowe)",
+  "lang": "pl (MT)",
+  "source": "clarin-knext/scifact-pl",
+  "kind": "real qrels",
+  "notes": 5183,
+  "queries": 300
+ },
+ "legal-questions": {
+  "domain": "prawo (ustawy 1993–2004)",
+  "lang": "pl",
+  "source": "piotr-rybak/poleval2022 legal-questions",
+  "kind": "real qrels",
+  "notes": 25810,
+  "queries": 718
+ },
+ "allegro-faq": {
+  "domain": "pomoc techniczna sklepu",
+  "lang": "pl",
+  "source": "piotr-rybak/poleval2022 allegro-faq",
+  "kind": "real qrels",
+  "notes": 921,
+  "queries": 900
+ },
+ "polichat": {
+  "domain": "regulaminy uczelni",
+  "lang": "pl",
+  "source": "clarin-pl/polichat-rag-evaluation pwr_512",
+  "kind": "real qrels",
+  "notes": 8201,
+  "queries": 100
+ },
+ "webfaq": {
+  "domain": "FAQ z sieci (różne)",
+  "lang": "pl",
+  "source": "PaDaS-Lab/webfaq-retrieval pol",
+  "kind": "real qrels",
+  "note": "sample: 1000 test queries, 30000 docs",
+  "notes": 30000,
+  "queries": 1000
+ },
+ "rpg-dnd": {
+  "domain": "RPG: zasady i świat D&D 5.2.1 SRD",
+  "lang": "en",
+  "source": "oldmanumby/dnd.srd.5.2.1 (CC-BY-4.0); queries galgilor/dnd-5e-srd-anchor-positive-pairs (CC-BY-4.0)",
+  "kind": "vault, generated queries",
+  "notes": 1245,
+  "queries": 400
+ },
+ "osobiste-bluebook": {
+  "domain": "osobista baza wiedzy (tech + życie)",
+  "lang": "en",
+  "source": "lyz-code/blue-book (CC0)",
+  "kind": "vault, generated queries",
+  "notes": 1111,
+  "queries": 0
+ },
+ "logseq-docs": {
+  "domain": "notatki Logseq: strony + dzienniki",
+  "lang": "en",
+  "source": "logseq/docs (MIT)",
+  "kind": "vault, generated queries",
+  "notes": 233,
+  "queries": 0
+ },
+ "przepisy": {
+  "domain": "przepisy kulinarne",
+  "lang": "pl",
+  "source": "plwikibooks Książka kucharska (CC-BY-SA)",
+  "kind": "vault, generated queries",
+  "notes": 1008,
+  "queries": 0
+ },
+ "podroze": {
+  "domain": "przewodniki podróżne",
+  "lang": "pl",
+  "source": "plwikivoyage (CC-BY-SA)",
+  "kind": "vault, generated queries",
+  "note": "random 4000 articles of >= 600 chars",
+  "notes": 3996,
+  "queries": 0
+ }
+}

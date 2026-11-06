@@ -1,0 +1,7 @@
+- koszenie co tydzień, wysokość **4 cm**, nigdy więcej niż 1/3 źdźbła
+- wiosną wertykulacja i dosiew (mieszanka Barenbrug na słońce), 30 g/m²
+- nawóz jesienny z potasem (Substral), połowa września, 25 kg na 300 m²
+- kosiarka spalinowa — zmienić olej i naostrzyć nóż
+- mech: wapnowanie albo żelazo
+- podlewać rano, rzadko, ale obficie
+- [ ] kupić nowy nóż do kosiarki
