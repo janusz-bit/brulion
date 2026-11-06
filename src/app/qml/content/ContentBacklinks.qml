@@ -15,7 +15,10 @@ import Brulion
 //
 // Not a scrolling view: it grows with its content (PageView puts it under the blocks, the side
 // panel in a Flickable). Long lists show `pageSize` references and a "show more" button.
-// `compact` for the side panel. Group headers collapse their page's references.
+// `compact` for the side panel. Group headers collapse their page's references. The side panel's
+// accordion shows the two parts as sections of their own (`sectioned`: no headings here — the
+// section's header has them —; `showLinked` / `showUnlinked` pick the part, the unlinked mentions
+// listed at once).
 FocusScope {
     id: root
 
@@ -24,12 +27,17 @@ FocusScope {
     property var rendererPalette: ({})
     property bool compact: false
     property int pageSize: compact ? 30 : 50
-    /// Show the unlinked mentions section (the side panel leaves it out).
+    /// Show the linked references (an accordion section of unlinked mentions leaves them out).
+    property bool showLinked: true
+    /// Show the unlinked mentions section.
     property bool showUnlinked: true
+    /// A section of the side panel's accordion: no headings of its own.
+    property bool sectioned: false
     /// The unlinked mentions are listed (computing them reads every note: only when open).
     property bool unlinkedOpen: false
 
     readonly property int linkedCount: linked.refCount
+    readonly property int unlinkedCount: unlinked.refCount
     readonly property bool empty: linked.refCount === 0 && linked.pageCount === 0
 
     implicitHeight: column.implicitHeight
@@ -137,6 +145,7 @@ FocusScope {
 
         // ---- Linked references -------------------------------------------------------------------
         RowLayout {
+            visible: root.showLinked && !root.sectioned
             Layout.fillWidth: true
             Layout.bottomMargin: Theme.space2
             spacing: Theme.space2
@@ -156,9 +165,9 @@ FocusScope {
             }
         }
         BText {
-            visible: root.empty
+            visible: root.showLinked && root.empty
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.space6
+            Layout.leftMargin: root.sectioned ? Theme.space2 : Theme.space6
             Layout.bottomMargin: Theme.space2
             text: {
                 // A tag names a page too (docs/SYNTAX.md §3): #name, or #[[two words]].
@@ -172,13 +181,13 @@ FocusScope {
             wrapMode: Text.Wrap
         }
         RefList {
-            refs: linked
+            refs: root.showLinked ? linked : null
             tools: tools
             compact: root.compact
             rowWidth: column.width
         }
         BButton {
-            visible: linked.hiddenCount > 0
+            visible: root.showLinked && linked.hiddenCount > 0
             Layout.leftMargin: Theme.space6
             Layout.topMargin: Theme.space1
             variant: "ghost"
@@ -190,9 +199,10 @@ FocusScope {
 
         // ---- Unlinked mentions --------------------------------------------------------------------
         Item {
-            visible: root.showUnlinked
+            visible: root.showUnlinked && (!root.sectioned || (root.unlinkedOpen && unlinked.refCount > 1))
             Layout.fillWidth: true
-            Layout.topMargin: Theme.space5
+            Layout.topMargin: root.sectioned ? 0 : Theme.space5
+            Layout.bottomMargin: root.sectioned ? Theme.space1 : 0
             implicitHeight: unlinkedHeader.implicitHeight
 
             RowLayout {
@@ -201,6 +211,7 @@ FocusScope {
                 spacing: Theme.space2
                 BButton {
                     id: unlinkedToggle
+                    visible: !root.sectioned
                     variant: "ghost"
                     iconName: root.unlinkedOpen ? "chevron-down" : "chevron-right"
                     text: root.unlinkedOpen && unlinked.refCount > 0
@@ -224,8 +235,8 @@ FocusScope {
         BText {
             visible: root.showUnlinked && root.unlinkedOpen && unlinked.refCount === 0
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.space6
-            Layout.topMargin: Theme.space1
+            Layout.leftMargin: root.sectioned ? Theme.space2 : Theme.space6
+            Layout.topMargin: root.sectioned ? 0 : Theme.space1
             text: qsTr("No other note mentions “%1” without a link.").arg(Workspace.pageTitle(root.path))
             variant: "muted"
             wrapMode: Text.Wrap

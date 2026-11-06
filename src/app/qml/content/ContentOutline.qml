@@ -10,11 +10,19 @@ import Brulion
 // "Copy embed" (BlockEditor.copyLink: [[Page#Heading]], ![[Page#Heading]]).
 //
 //   ContentOutline { controller: page; editor: editor }
+//
+// `embedded`: a section of the side panel's accordion (ContentSidePanel) — no scrolling of its
+// own, as tall as its headings (implicitHeight), a one-line hint when there are none.
 Item {
     id: root
 
     property PageController controller
     property BlockEditor editor
+    property bool embedded: false
+    /// The headings listed.
+    readonly property int count: outline.count
+
+    implicitHeight: embedded ? (outline.count > 0 ? list.contentHeight + list.anchors.topMargin : emptyHint.implicitHeight) : 0
 
     readonly property int currentRow: controller ? (controller.editingRow >= 0 ? controller.editingRow : controller.selectedRow) : -1
 
@@ -27,13 +35,14 @@ Item {
         id: list
         TouchFlick.enabled: true
         anchors.fill: parent
-        anchors.topMargin: Theme.space2
+        anchors.topMargin: root.embedded ? 0 : Theme.space2
+        interactive: !root.embedded
         clip: true
         model: outline
         boundsBehavior: Flickable.StopAtBounds
         currentIndex: outline.count >= 0 ? outline.entryForSourceRow(root.currentRow) : -1
         keyNavigationEnabled: true
-        T.ScrollBar.vertical: BScrollBar {}
+        T.ScrollBar.vertical: BScrollBar { visible: !root.embedded }
         Accessible.role: Accessible.List
         Accessible.name: qsTr("Outline")
 
@@ -101,10 +110,20 @@ Item {
         }
     }
 
+    BText {
+        id: emptyHint
+        visible: root.embedded && outline.count === 0
+        x: Theme.space2
+        width: parent.width - 2 * Theme.space2
+        text: qsTr("No headings yet: “# Plan”, “## Shopping” show up here.")
+        variant: "muted"
+        font.pixelSize: Theme.textSm
+        wrapMode: Text.Wrap
+    }
     BEmptyState {
         anchors.centerIn: parent
         width: Math.min(parent.width - 2 * Theme.space4, implicitWidth)
-        visible: outline.count === 0
+        visible: !root.embedded && outline.count === 0
         compact: true
         iconName: "heading"
         title: qsTr("No headings yet")

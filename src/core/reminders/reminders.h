@@ -47,12 +47,18 @@
 //                    class CalendarCache — items(index, from, to) kept across index changes
 //                      (= calendarItems(); only the changed notes computed again)
 //
+//   dayplan.h        struct DayPlanEntry { optional time, title, path, line, optional status,
+//                      due, scheduled, reminder, alarm, recurring }
+//                    dayPlan(items, day) — the day's due / scheduled / reminder entries, one
+//                      row per block (earliest time), timed rows first
+//
 //   snooze.h         snoozeReminder(content, line, newAt) -> content — replaces the first ⏰
 //                      token of the line (keeping '!'); a recurring reminder instead gets a
 //                      one-off child bullet `- ⏰ newAt` (the series stays untouched)
 #pragma once
 
 #include "reminders/calendar.h"
+#include "reminders/dayplan.h"
 #include "reminders/notifications.h"
 #include "reminders/scheduler.h"
 #include "reminders/snooze.h"

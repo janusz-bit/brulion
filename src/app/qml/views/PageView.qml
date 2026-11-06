@@ -190,9 +190,10 @@ FocusScope {
             case "export":
                 exportDialog.openFor(page.path, false)
                 break
-            default: // a side panel tab
+            default: // a side panel section: a panel made now unfolds it, one shown already too
                 AppSettings.setValue("ui/sidePanel/tab", action)
                 AppController.sidePanelVisible = true
+                root.sidePanelRequested(action)
                 break
             }
         }
@@ -1094,8 +1095,16 @@ FocusScope {
             id: contextPanel
             // A picture's references (the index knows the notes that embed it; nothing loads it).
             path: root.pictureRoute || root.pdfRoute || root.fileRoute ? root.routePath : page.path
+            attachment: root.pictureRoute || root.pdfRoute || root.fileRoute
             controller: page
             editor: editor
+            Connections {
+                target: root
+                function onSidePanelRequested(section: string) {
+                    AppSettings.setValue("ui/sidePanel/tab", "")
+                    contextPanel.reveal(section)
+                }
+            }
             // Its tab, for refsInSidePanel (made again with the remembered tab each time the side
             // panel shows it).
             onCurrentTabChanged: root.sidePanelTab = contextPanel.currentTab

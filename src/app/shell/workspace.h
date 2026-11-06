@@ -557,6 +557,11 @@ public:
     /// or ""), kind ("journal" | "due" | "scheduled" | "start" | "reminder" | "done"), title,
     /// path, line, status ("" or a task status), recurring, alarm }].
     Q_INVOKABLE QVariantList calendarItems(const QString &from, const QString &to) const;
+    /// The plan of the day `date` (the side panel's "Day plan"; reminders/dayplan.h): one row
+    /// per block with a due date, a scheduled date or reminders that day — [{ time ("HH:mm" or
+    /// ""), title, path, line, status ("" or a task status), due, scheduled, reminder, alarm,
+    /// recurring }], timed rows first by time.
+    Q_INVOKABLE QVariantList dayPlan(const QString &date) const;
     /// Calendar ranges and queries whose caches are kept (the most recently asked first; tests).
     static constexpr int MaxCachedRanges = 4;
     static constexpr int MaxCachedQueries = 8;

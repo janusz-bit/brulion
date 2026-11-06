@@ -1,7 +1,8 @@
 # reminders — notifications for ⏰ reminders / ⏰! alarms (upcomingNotifications, NotificationSink),
 # the in-app ReminderScheduler, calendar entries (calendarItems) and snoozeReminder
-# (docs/SYNTAX.md §5-§7). Public headers: reminders.h (overview), notifications.h, scheduler.h,
-# calendar.h, snooze.h; internal helpers in reminders_p.h.
+# (docs/SYNTAX.md §5-§7) and a day's plan (dayPlan, the side panel). Public headers: reminders.h
+# (overview), notifications.h, scheduler.h, calendar.h, dayplan.h, snooze.h; internal helpers in
+# reminders_p.h.
 brulion_add_core_module(reminders
     SOURCES
         reminders.h
@@ -9,5 +10,6 @@ brulion_add_core_module(reminders
         notifications.h notifications.cpp
         scheduler.h scheduler.cpp
         calendar.h calendar.cpp
+        dayplan.h dayplan.cpp
         snooze.h snooze.cpp
     DEPS util text dates markdown index vault)

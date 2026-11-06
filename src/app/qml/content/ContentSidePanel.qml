@@ -4,11 +4,22 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ContentSidePanel — the side panel's context for the open page (wide windows, ShellSidePanel
-// loads a view's `sidePanel`): tabs Links (the page's linked references, compact), Outline
-// (its headings, live while typing; a click scrolls the editor there) and Calendar (a month
-// with the days that have a journal; a click opens that day, the day's dates and reminders are
-// listed under it). The chosen tab is remembered.
+// ContentSidePanel — the open page's context (docs/UI.md "Side panel"), one component for both
+// hosts: the side panel docked beside the text (wide windows, ShellSidePanel loads a view's
+// `sidePanel`) and the drawer from the right edge of narrow windows (ShellContextDrawer). An
+// accordion of folding sections (ContentPanelSection), all in one scrolling column:
+//
+//   a page        Outline (its headings, live while typing; a click scrolls the editor there),
+//                 Backlinks (linked references), Unlinked mentions (folded: they read every note),
+//                 Local graph (the pages around it);
+//   a journal day Day plan (its timed reminders and dates, Workspace.dayPlan), Tasks (open tasks
+//                 due by that day, overdue in red), A year ago (that day's journal a year before),
+//                 Backlinks, Calendar (folded: the month with its journal days).
+//
+// What is folded is no setting: every panel starts with the defaults above (a drawer opened again
+// is a new panel). `initialTab` names a section to unfold and scroll to ("links", "unlinked",
+// "outline", "calendar", "graph", "plan", "tasks", "yearAgo"; the page menu's and route.open's
+// side panel requests).
 //
 //   ContentSidePanel { path: page.path; controller: page; editor: editor }
 Item {
@@ -17,31 +28,65 @@ Item {
     property string path
     property PageController controller
     property BlockEditor editor
-    /// The tab shown first: "links" | "outline" | "calendar" (default: the last one used).
+    /// The section unfolded and shown first ("" none).
     property string initialTab: ""
+    /// The path is an attachment (a picture, a PDF): only its references.
+    property bool attachment: false
 
-    readonly property list<string> tabs: ["links", "outline", "calendar"]
-    /// The tab shown now ("links" | "outline" | "calendar"): the page leaves out its own references
-    /// section while this panel shows them (PageView.refsInSidePanel). A property, not the
-    /// remembered setting: AppSettings.value() is not tracked by bindings.
-    readonly property string currentTab: tabName(tabBar.currentIndex)
     readonly property string journalDate: path !== "" ? Workspace.journalDate(path) : ""
+    readonly property bool journal: journalDate !== "" && !attachment
+    /// "links" while the linked references are listed here (the page leaves out its own section
+    /// under the blocks then: PageView.refsInSidePanel), else "outline".
+    readonly property string currentTab: backlinksSection.expanded ? "links" : "outline"
+    /// The page's linked references (the drawer handle's badge), -1 while not known.
+    readonly property int backlinkCount: backlinksSection.contentItem
+                                         ? (backlinksSection.contentItem as ContentBacklinks).linkedCount : -1
 
     function rendererPalette(): var {
         return panel.editor ? panel.editor.rendererPalette : ({})
     }
-    /// The tab at `index` ("links" out of range).
-    function tabName(index: int): string {
-        return index >= 0 && index < panel.tabs.length ? panel.tabs[index] : "links"
+    function sectionFor(name: string): ContentPanelSection {
+        switch (name) {
+        case "links": return backlinksSection
+        case "unlinked": return unlinkedSection
+        case "outline": return outlineSection
+        case "calendar": return calendarSection
+        case "graph": return graphSection
+        case "plan": return planSection
+        case "tasks": return tasksSection
+        case "yearAgo": return yearAgoSection
+        }
+        return null
     }
-    function setting(key: string, fallback: string): string {
-        return AppSettings.value(key, fallback)
+    /// Unfold section `name` and scroll to it.
+    function reveal(name: string): void {
+        const s = panel.sectionFor(name)
+        if (!s || !s.visible)
+            return
+        s.expanded = true
+        scrollLater.target = s
+        scrollLater.restart()
+    }
+    // (One turn later: the unfolded section has its height then.)
+    Later {
+        id: scrollLater
+        property Item target: null
+        onTriggered: {
+            const s = scrollLater.target
+            if (s)
+                flick.contentY = Math.max(0, Math.min(s.y, flick.contentHeight - flick.height))
+        }
+    }
+    function requestedSection(): string {
+        return panel.initialTab !== "" ? panel.initialTab : "" + AppSettings.value("ui/sidePanel/tab", "")
     }
 
     Component.onCompleted: {
-        const remembered = panel.setting("ui/sidePanel/tab", "links")
-        const tab = panel.initialTab !== "" ? panel.initialTab : remembered
-        tabBar.currentIndex = Math.max(0, panel.tabs.indexOf(tab))
+        // A one-off request (the page menu, route.open): used once, then forgotten.
+        const requested = panel.requestedSection()
+        AppSettings.setValue("ui/sidePanel/tab", "")
+        if (requested !== "")
+            panel.reveal(requested)
     }
 
     Rectangle {
@@ -49,57 +94,127 @@ Item {
         color: Theme.bg
     }
 
-    ColumnLayout {
+    Flickable {
+        id: flick
+        objectName: "sidePanelSections"
+        TouchFlick.enabled: true
         anchors.fill: parent
-        spacing: 0
+        clip: true
+        contentWidth: width
+        contentHeight: column.implicitHeight + Theme.space4
+        boundsBehavior: Flickable.StopAtBounds
+        T.ScrollBar.vertical: BScrollBar {}
 
-        BTabBar {
-            id: tabBar
-            Layout.fillWidth: true
-            Layout.leftMargin: Theme.space2
-            stretch: true
-            onCurrentIndexChanged: AppSettings.setValue("ui/sidePanel/tab", panel.tabName(currentIndex))
-            BTabButton { text: qsTr("Links"); iconName: "link"; count: links.linkedCount }
-            BTabButton { text: qsTr("Outline"); iconName: "list" }
-            BTabButton { text: qsTr("Calendar"); iconName: "calendar-days" }
-        }
+        ColumnLayout {
+            id: column
+            y: Theme.space1
+            width: flick.width
+            spacing: 0
 
-        StackLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            currentIndex: tabBar.currentIndex
+            // ---- A journal day ---------------------------------------------------------------
+            ContentPanelSection {
+                id: planSection
+                objectName: "sectionPlan"
+                visible: panel.journal
+                Layout.fillWidth: true
+                title: qsTr("Day plan")
+                count: contentItem ? (contentItem as ContentDayPlan).count : -1
+                content: Component { ContentDayPlan { date: panel.journalDate } }
+            }
+            ContentPanelSection {
+                id: tasksSection
+                objectName: "sectionTasks"
+                visible: panel.journal
+                Layout.fillWidth: true
+                title: qsTr("Tasks")
+                count: contentItem ? (contentItem as ContentDayTasks).count : -1
+                content: Component { ContentDayTasks { date: panel.journalDate } }
+            }
+            ContentPanelSection {
+                id: yearAgoSection
+                objectName: "sectionYearAgo"
+                visible: panel.journal
+                Layout.fillWidth: true
+                title: qsTr("A year ago")
+                content: Component { ContentYearAgo { date: panel.journalDate } }
+            }
 
-            // ---- Links ------------------------------------------------------------------------------
-            Flickable {
-                id: linksFlick
-                TouchFlick.enabled: true
-                clip: true
-                contentWidth: width
-                contentHeight: links.implicitHeight + 2 * Theme.space3
-                boundsBehavior: Flickable.StopAtBounds
-                T.ScrollBar.vertical: BScrollBar {}
-
-                ContentBacklinks {
-                    id: links
-                    x: Theme.space2
-                    y: Theme.space3
-                    width: linksFlick.width - 2 * Theme.space2
-                    path: panel.path
-                    rendererPalette: panel.rendererPalette()
-                    compact: true
-                    showUnlinked: true
+            // ---- A page ------------------------------------------------------------------------
+            ContentPanelSection {
+                id: outlineSection
+                objectName: "sectionOutline"
+                visible: !panel.journal && !panel.attachment
+                Layout.fillWidth: true
+                title: qsTr("Outline")
+                count: contentItem ? (contentItem as ContentOutline).count : -1
+                content: Component {
+                    ContentOutline {
+                        embedded: true
+                        controller: panel.controller
+                        editor: panel.editor
+                    }
                 }
             }
 
-            // ---- Outline ----------------------------------------------------------------------------
-            ContentOutline {
-                controller: panel.controller
-                editor: panel.editor
+            // ---- Both --------------------------------------------------------------------------
+            ContentPanelSection {
+                id: backlinksSection
+                objectName: "sectionBacklinks"
+                Layout.fillWidth: true
+                title: qsTr("Backlinks")
+                count: panel.backlinkCount
+                content: Component {
+                    ContentBacklinks {
+                        path: panel.path
+                        rendererPalette: panel.rendererPalette()
+                        compact: true
+                        sectioned: true
+                        showUnlinked: false
+                    }
+                }
             }
-
-            // ---- Calendar ---------------------------------------------------------------------------
-            ContentMiniCalendar {
-                selectedDate: panel.journalDate !== "" ? panel.journalDate : DatesHelper.today
+            ContentPanelSection {
+                id: unlinkedSection
+                objectName: "sectionUnlinked"
+                visible: !panel.journal && !panel.attachment
+                // Folded at first: listing them reads every note.
+                expanded: false
+                Layout.fillWidth: true
+                title: qsTr("Unlinked mentions")
+                count: contentItem ? (contentItem as ContentBacklinks).unlinkedCount : -1
+                content: Component {
+                    ContentBacklinks {
+                        path: panel.path
+                        rendererPalette: panel.rendererPalette()
+                        compact: true
+                        sectioned: true
+                        showLinked: false
+                        unlinkedOpen: true
+                    }
+                }
+            }
+            ContentPanelSection {
+                id: graphSection
+                objectName: "sectionGraph"
+                visible: !panel.journal && !panel.attachment
+                Layout.fillWidth: true
+                title: qsTr("Local graph")
+                count: contentItem ? (contentItem as ContentLocalGraph).count : -1
+                content: Component { ContentLocalGraph { path: panel.path } }
+            }
+            ContentPanelSection {
+                id: calendarSection
+                objectName: "sectionCalendar"
+                visible: panel.journal
+                expanded: false
+                Layout.fillWidth: true
+                title: qsTr("Calendar")
+                content: Component {
+                    ContentMiniCalendar {
+                        implicitHeight: 420
+                        selectedDate: panel.journalDate !== "" ? panel.journalDate : DatesHelper.today
+                    }
+                }
             }
         }
     }

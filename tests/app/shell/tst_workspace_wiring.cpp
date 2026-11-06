@@ -372,6 +372,16 @@ private Q_SLOTS:
                          + v.toMap().value(u"time"_s).toString());
         QCOMPARE(kinds, (QStringList{ u"2026-10-14 reminder 17:00"_s, u"2026-10-14 journal "_s, u"2026-10-16 due "_s }));
         QVERIFY(ws->calendarItems(u"2026-01-01"_s, u"2028-01-01"_s).isEmpty()); // too long a range
+
+        // The side panel's day plan: the reminder of today, no journal row.
+        const QVariantList plan = ws->dayPlan(u"2026-10-14"_s);
+        QCOMPARE(plan.size(), 1);
+        const QVariantMap first = plan.first().toMap();
+        QCOMPARE(first.value(u"time"_s).toString(), u"17:00"_s);
+        QCOMPARE(first.value(u"path"_s).toString(), u"journals/2026-10-14.md"_s);
+        QVERIFY(first.value(u"reminder"_s).toBool() && !first.value(u"due"_s).toBool());
+        QVERIFY(ws->dayPlan(u"2026-10-15"_s).isEmpty());
+        QVERIFY(ws->dayPlan(u"wczoraj"_s).isEmpty());
     }
 
     // brulion-cli prints query results with notebook::queryResultJson(): the same keys and values

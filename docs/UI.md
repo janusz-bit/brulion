@@ -163,15 +163,13 @@ components — no Material/Fusion look, so all targets look identical.
     Under it, with two tabs or more, the **tab bar** (`ShellTabBar`), and the view: one pane or two
     side by side (the split view) — "Tabs, split view and windows".
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
-    context — for pages and journals the tabs **Links** (linked references and unlinked
-    mentions), **Outline** (headings: a click scrolls to one, a right-click / long press copies
-    its link `[[Page#Heading]]` or its embed), **Calendar** (month with journal days). While
-    the panel shows a page's **Links** (`ContentSidePanel.currentTab`, copied into
+    context — the accordion of "Side panel" below (`ContentSidePanel`). While the panel lists a
+    page's **Backlinks** (the section unfolded: `ContentSidePanel.currentTab` "links", copied into
     `PageView.sidePanelTab`), the page does not draw its own references section under the blocks
-    (`PageView.refsInSidePanel`; the same linked references and unlinked mentions are on screen
-    in the panel, as the header's chips hide while the open properties panel shows them); closing
-    the panel, pinning a page there or switching to Outline / Calendar brings the section back
-    at once. Narrow windows have no side panel and always show the section.
+    (`PageView.refsInSidePanel`; the same linked references are on screen in the panel, as the
+    header's chips hide while the open properties panel shows them); closing the panel, pinning a
+    page there or folding the section brings it back at once. Narrow windows reach the same panel
+    in a drawer from the right edge and always show the section.
 * **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the top bar's ☰,
   the bottom bar's **Menu**, or a swipe to the right from the left edge; a swipe to the left on
   the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and

@@ -7,6 +7,7 @@
 #include "markdown/markdown.h"
 #include "notebook/json.h"
 #include "reminders/calendar.h"
+#include "reminders/dayplan.h"
 #include "taskhelpers.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -230,6 +231,28 @@ QVariantList Workspace::calendarItems(const QString &from, const QString &to) co
     CalendarCache &cache = listCaches().ranges.get(a.toString(Qt::ISODate) + u'|' + b.toString(Qt::ISODate));
     for (const CalendarItem &item : cache.items(*m_index, a, b))
         out.append(notebook::calendarItemJson(item).toVariantMap());
+    return out;
+}
+
+QVariantList Workspace::dayPlan(const QString &date) const
+{
+    QVariantList out;
+    const QDate day = QDate::fromString(date, Qt::ISODate);
+    if (!m_index || !day.isValid())
+        return out;
+    CalendarCache &cache = listCaches().ranges.get(day.toString(Qt::ISODate) + u'|' + day.toString(Qt::ISODate));
+    for (const DayPlanEntry &e : brulion::dayPlan(cache.items(*m_index, day, day), day)) {
+        out.append(QVariantMap{{u"time"_s, e.time ? e.time->toString(u"HH:mm"_s) : QString()},
+                               {u"title"_s, e.title},
+                               {u"path"_s, e.path},
+                               {u"line"_s, e.line},
+                               {u"status"_s, e.status ? notebook::taskStatusName(*e.status) : QString()},
+                               {u"due"_s, e.due},
+                               {u"scheduled"_s, e.scheduled},
+                               {u"reminder"_s, e.reminder},
+                               {u"alarm"_s, e.alarm},
+                               {u"recurring"_s, e.recurring}});
+    }
     return out;
 }
 
