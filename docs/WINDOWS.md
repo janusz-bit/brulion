@@ -173,7 +173,7 @@ the one Windows 7 and 10 show when you click the clock (`ShellTrayCalendar.qml`)
   and after Alt+F4 — Brulion keeps running in the tray;
 * without an open notebook it shows only the month and a request to open a notebook.
 
-**Settings → Application → "Click on the tray icon"**: **Calendar** (the default on Windows)
+**Settings → Application → "Click on the tray icon"**: **Calendar** (the default)
 or **Window** (shows or hides the Brulion window, as before the calendar version). A double click
 always shows the window, and the calendar is also in the icon's menu (right-click → **Calendar**).
 

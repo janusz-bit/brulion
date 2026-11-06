@@ -16,7 +16,6 @@
 #include <QMetaProperty>
 #include <QSettings>
 #include <QSignalSpy>
-#include <QSysInfo>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -85,8 +84,8 @@ private Q_SLOTS:
         QVERIFY(s.currentVault().isEmpty());
         QVERIFY(s.recentVaults().isEmpty());
         QVERIFY(s.closeToTray());
-        // A click on the tray icon: the calendar on Windows, the window elsewhere.
-        QCOMPARE(s.trayClick(), QSysInfo::productType() == u"windows" ? u"calendar"_s : u"window"_s);
+        // A click on the tray icon: the tray calendar, on every desktop.
+        QCOMPARE(s.trayClick(), u"calendar"_s);
         QCOMPARE(s.trayClick(), AppSettings::defaultTrayClick());
         QVERIFY(s.remindersEnabled());
         QCOMPARE(s.snoozeMinutes(), 10);

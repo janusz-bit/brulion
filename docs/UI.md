@@ -271,13 +271,18 @@ components — no Material/Fusion look, so all targets look identical.
   and before the main window closes, so a shown calendar never keeps a really closed app
   running). It opens from the tray (`DesktopTray`): the menu's "Calendar" (`uiActionRequested
   ("trayCalendar")`) and, with Settings → Application → "Click on the tray icon" =
-  Calendar (`AppSettings.trayClick`, `app/trayClick`: "calendar" by default on Windows, "window"
-  elsewhere), a single left click ("toggleTrayCalendar": an open calendar closes); a double click
+  Calendar (`AppSettings.trayClick`, `app/trayClick`: "calendar" by default on every desktop), a
+  single left click ("toggleTrayCalendar": an open calendar closes); a double click
   always shows the window. Placement: `AppController.trayPopupPosition(w, h)` →
   `traypopup.h` — against the work area's edge nearest to the tray icon
   (`QSystemTrayIcon::geometry()`, Windows) or to the cursor (X11, where the icon's rectangle is
   empty), centred on it along that edge, 8 px away, kept inside the work area of the anchor's
-  screen; Wayland ignores it (the compositor places the window). It hides itself — always
+  screen. Wayland ignores a window's position and gives no click position (Qt's and KDE's
+  StatusNotifierItem drop it): there `src/platform/traywindow.h` makes the window — once, before
+  its first show — a layer-shell surface (KDE's LayerShellQt, in the Nix package) anchored to the
+  bottom-right corner of the active screen's work area, 8 px from its edges (off the panels' reserved
+  space), layer "top", keyboard on demand; a compositor without layer shell (GNOME) or a build
+  without LayerShellQt (the AppImage) leaves it an ordinary window the compositor places. It hides itself — always
   `hide()`, never a close: `onClosing` refuses Alt+F4's close — on Escape, the close button, and
   when it loses the activation after having had it (a click elsewhere; a refused activation keeps
   it open without the keyboard — no Escape — until the close button, an entry or a click on the

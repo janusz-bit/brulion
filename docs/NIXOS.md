@@ -98,12 +98,14 @@ nix run github:janusz-bit/brulion
   login. Each user can turn autostart off for themselves in the desktop's autostart settings
   (KDE: System Settings → Autostart; GNOME: Tweaks → Startup Applications) —
   this creates an entry with `Hidden=true` in `~/.config/autostart/`.
-* **Tray calendar**: icon menu → **Calendar** opens a small window with the month,
-  the tasks and reminders of the selected day, **Open Brulion** and **Quick capture…**.
-  *Settings → Application → Click on the tray icon → Calendar* opens it with a plain
-  click on the icon (by default on Linux a click shows the window). Under X11 the window appears
-  at the cursor and disappears after a click beside it; under Wayland the compositor places it where it wants, and may
-  not give it focus — then you close it with the **×** button or by clicking the icon again.
+* **Tray calendar**: a click on the icon (or icon menu → **Calendar**) opens a small window with
+  the month, the tasks and reminders of the selected day, **Open Brulion** and **Quick capture…**;
+  it disappears after a click beside it. *Settings → Application → Click on the tray icon →
+  Window* makes a click show the window instead. Under X11 the calendar appears at the cursor.
+  Under Wayland it sits in the bottom-right corner of the screen, above the panel (a layer-shell
+  surface: KDE Plasma, sway, Hyprland and other wlroots compositors); GNOME has no layer shell, so
+  there the compositor places it where it wants and may not give it focus — then you close it with
+  the **×** button or by clicking the icon again. The AppImage has no layer shell either.
   Details: docs/WINDOWS.md, "Tray calendar".
 * KDE Plasma, XFCE, Cinnamon, Budgie, waybar/swaybar: the tray works out of the box. **GNOME** has
   no tray — it needs the AppIndicator extension:
