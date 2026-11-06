@@ -1,0 +1,6 @@
+- szczepionka Vaxigrip Tetra, apteka przy Rynku, szczepienie przeprowadza farmaceutka (kwalifikacja 5 min), **69 zł**
+- w październiku, odporność buduje się ok. 2 tygodnie
+- po szczepieniu ręka bolała dzień, bez gorączki
+- mama (72 l.) ma darmowe w przychodni — umówić na wtorek
+- [x] ja
+- [ ] mama

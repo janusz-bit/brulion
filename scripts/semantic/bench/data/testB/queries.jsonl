@@ -1,0 +1,169 @@
+{"id": "testB-001", "query": "Severance The Bear", "relevant": ["Seriale do obejrzenia.md"], "category": "dokladne"}
+{"id": "testB-002", "query": "wyjazd uczniów do miasta Kopernika, słodkie pamiątki", "relevant": ["Wycieczka szkolna do Torunia.md"], "category": "synonim"}
+{"id": "testB-003", "query": "wdrażać nową wersję na stagingu", "relevant": ["Deployment na staging.md"], "category": "odmiana"}
+{"id": "testB-004", "query": "Oppenhiemer Nolna Murphy", "relevant": ["Oppenheimer.md"], "category": "literowka"}
+{"id": "testB-005", "query": "obejrzenie seriali", "relevant": ["Seriale do obejrzenia.md"], "category": "odmiana"}
+{"id": "testB-006", "query": "u dentysty plomby", "relevant": ["2025-03-14.md"], "category": "odmiana"}
+{"id": "testB-007", "query": "aktualizacja silnika danych w weekend", "relevant": ["Migracja bazy Postgres.md"], "category": "synonim"}
+{"id": "testB-008", "query": "ferie w górach, kwatera pod Giewontem", "relevant": ["Nocleg w Zakopanem.md"], "category": "synonim"}
+{"id": "testB-009", "query": "sterylizcja Luny kolnierz", "relevant": ["Sterylizacja Luny.md"], "category": "literowka"}
+{"id": "testB-010", "query": "crate at night clicker", "relevant": ["Puppy training.md"], "category": "dokladne"}
+{"id": "testB-011", "query": "lower DNS TTL before the switch", "relevant": ["Server migration checklist.md"], "category": "dokladne"}
+{"id": "testB-012", "query": "adopcji schronisk", "relevant": ["Adopcja ze schroniska.md"], "category": "odmiana"}
+{"id": "testB-013", "query": "tani przelot do stolicy Włoch", "relevant": ["Bilety do Rzymu.md"], "category": "synonim"}
+{"id": "testB-014", "query": "wyjazd koleją do dawnej siedziby królów, zwiedzanie zamku", "relevant": ["Weekend w Krakowie.md"], "category": "synonim"}
+{"id": "testB-015", "query": "prawo jzady duplikat", "relevant": ["Prawo jazdy — wymiana.md"], "category": "literowka"}
+{"id": "testB-016", "query": "zniczy chryzantemy zaduszki cmentarz", "relevant": ["2025-11-02.md"], "category": "literowka"}
+{"id": "testB-017", "query": "doroczna profilaktyka u lekarza zwierząt dla czworonoga", "relevant": ["Weterynarz — szczepienie Burka.md"], "category": "synonim"}
+{"id": "testB-018", "query": "wtorkowe pływanie", "relevant": ["Basen we wtorki.md"], "category": "odmiana"}
+{"id": "testB-019", "query": "apteczka ibuprofen plastry", "relevant": ["Lista do spakowania.md"], "category": "dokladne"}
+{"id": "testB-020", "query": "zadań domowych z ułamków", "relevant": ["Zadanie domowe z matematyki.md"], "category": "odmiana"}
+{"id": "testB-021", "query": "plan na pólmaraton interwaly zel", "relevant": ["Plan na półmaraton.md"], "category": "literowka"}
+{"id": "testB-022", "query": "PCC-3 plates registration certificate", "relevant": ["Rejestracja samochodu.md"], "category": "dokladne"}
+{"id": "testB-023", "query": "Diuna powieść o pustynnej planecie, ocena", "relevant": ["Dune.md"], "category": "jezyk"}
+{"id": "testB-024", "query": "karmami kotów", "relevant": ["Karma dla Mruczka.md"], "category": "odmiana"}
+{"id": "testB-025", "query": "publikacja kodu na serwer próbny", "relevant": ["Deployment na staging.md"], "category": "synonim"}
+{"id": "testB-026", "query": "Skaczące Małpki Minecraft tort", "relevant": ["Urodziny Antka.md"], "category": "dokladne"}
+{"id": "testB-027", "query": "Orlik szkole nr 12 wpłata", "relevant": ["Piłka w czwartki.md"], "category": "dokladne"}
+{"id": "testB-028", "query": "language school for kids, monthly fee", "relevant": ["Angielski Zosi.md"], "category": "jezyk"}
+{"id": "testB-029", "query": "narada pracowników, zleceniodawca prosi o opóźnienie oddania", "relevant": ["Spotkanie zespołu 10.03.md"], "category": "synonim"}
+{"id": "testB-030", "query": "wakacje koleją po Europie z plecakiem", "relevant": ["Interrail plan.md"], "category": "jezyk"}
+{"id": "testB-031", "query": "karnetów na siłowniach", "relevant": ["Karnet na siłownię.md"], "category": "odmiana"}
+{"id": "testB-032", "query": "serwisowanie rowerów górskich", "relevant": ["Serwis roweru górskiego.md"], "category": "odmiana"}
+{"id": "testB-033", "query": "wizyta u stomatologa, jubileusz krewnej", "relevant": ["2025-03-14.md"], "category": "synonim"}
+{"id": "testB-034", "query": "tresura szczeniaka golden retriever, zajęcia w parku w niedzielę", "relevant": ["Puppy training.md"], "category": "jezyk"}
+{"id": "testB-035", "query": "rehabilitcja kolana NFZ", "relevant": ["Kontuzja kolana.md"], "category": "literowka"}
+{"id": "testB-036", "query": "las Kabacki park Skaryszewski", "relevant": ["Spacery z psem.md"], "category": "dokladne"}
+{"id": "testB-037", "query": "basen wtroki okularki przeciekaja", "relevant": ["Basen we wtorki.md"], "category": "literowka"}
+{"id": "testB-038", "query": "pensjonat U Hanki", "relevant": ["Nocleg w Zakopanem.md"], "category": "dokladne"}
+{"id": "testB-039", "query": "winiety wegry", "relevant": ["Wakacje w Chorwacji.md"], "category": "literowka"}
+{"id": "testB-040", "query": "Fear is the mind-killer", "relevant": ["Dune.md"], "category": "dokladne"}
+{"id": "testB-041", "query": "zakup używanego auta od prywatnej osoby, tablice, formalności", "relevant": ["Rejestracja samochodu.md"], "category": "jezyk"}
+{"id": "testB-042", "query": "bagaż, wykaz rzeczy, kable i zasilacze", "relevant": ["Lista do spakowania.md"], "category": "synonim"}
+{"id": "testB-043", "query": "Lalka Prusa Wokulskii audiobook", "relevant": ["Lalka Prusa.md"], "category": "literowka"}
+{"id": "testB-044", "query": "Lisbon pastel de nata", "relevant": ["Trip to Lisbon.md"], "category": "dokladne"}
+{"id": "testB-045", "query": "obiady 6,50 zł dietę bez laktozy", "relevant": ["Świetlica i obiady.md"], "category": "dokladne"}
+{"id": "testB-046", "query": "dziennik przygotowań do maratonu, bolące ścięgno", "relevant": ["Marathon training log.md"], "category": "jezyk"}
+{"id": "testB-047", "query": "papier potwierdzający brak długów wobec instytucji emerytalnej", "relevant": ["ZUS zaświadczenie o dochodach.md"], "category": "synonim"}
+{"id": "testB-048", "query": "kleszcze pchly bravecto", "relevant": ["Kleszcze i pchły.md"], "category": "literowka"}
+{"id": "testB-049", "query": "grzecznych komentarzy", "relevant": ["Zasady code review.md"], "category": "odmiana"}
+{"id": "testB-050", "query": "Zdrofit Multisport", "relevant": ["Karnet na siłownię.md"], "category": "dokladne"}
+{"id": "testB-051", "query": "ochrona zdrowotna za granicą, zestawienie firm", "relevant": ["Ubezpieczenie turystyczne.md"], "category": "synonim"}
+{"id": "testB-052", "query": "Złotych Lwów akredytacji karnet", "relevant": ["Festiwal filmowy w Gdyni.md"], "category": "dokladne"}
+{"id": "testB-053", "query": "raport kwartalny dla szefa, hydraulik obiecał", "relevant": ["2025-06-09.md"], "category": "jezyk"}
+{"id": "testB-054", "query": "kto zajmie się moimi pupilami podczas wakacji", "relevant": ["Opiekun zwierząt na urlop.md"], "category": "synonim"}
+{"id": "testB-055", "query": "podsumowanie iteracji, wnioski na przyszłość", "relevant": ["Retro sprintu 42.md"], "category": "synonim"}
+{"id": "testB-056", "query": "demo dashboardu Kasia", "relevant": ["Spotkanie zespołu 10.03.md"], "category": "dokladne"}
+{"id": "testB-057", "query": "Kowalczyk bilans 8-latka", "relevant": ["Pediatra szczepienia.md"], "category": "dokladne"}
+{"id": "testB-058", "query": "Tarkowksiego film Solaris", "relevant": ["Solaris Lema.md"], "category": "literowka"}
+{"id": "testB-059", "query": "szczepienia weterynarza", "relevant": ["Weterynarz — szczepienie Burka.md"], "category": "odmiana"}
+{"id": "testB-060", "query": "zaproszeń urodzinowych", "relevant": ["Urodziny Antka.md"], "category": "odmiana"}
+{"id": "testB-061", "query": "zabawy na mrozie z dziećmi", "relevant": ["2025-01-12.md"], "category": "synonim"}
+{"id": "testB-062", "query": "wyjazd do Lizbony tramwaj", "relevant": ["Trip to Lisbon.md"], "category": "jezyk"}
+{"id": "testB-063", "query": "konserwacja bicykla przed wiosną", "relevant": ["Serwis roweru górskiego.md"], "category": "synonim"}
+{"id": "testB-064", "query": "kubernets staging smoke", "relevant": ["Deployment na staging.md"], "category": "literowka"}
+{"id": "testB-065", "query": "spacerów z psami", "relevant": ["Spacery z psem.md"], "category": "odmiana"}
+{"id": "testB-066", "query": "powieść o handlowcu zakochanym w szlachciance", "relevant": ["Lalka Prusa.md"], "category": "synonim"}
+{"id": "testB-067", "query": "spotkanie opiekunów ze szkołą, uwagi o charakterze pisma", "relevant": ["Wywiadówka 3b.md"], "category": "synonim"}
+{"id": "testB-068", "query": "wywiadówki klasy", "relevant": ["Wywiadówka 3b.md"], "category": "odmiana"}
+{"id": "testB-069", "query": "wyprawa jednośladem po górach na południowym wschodzie", "relevant": ["Bieszczady na rowerach.md"], "category": "synonim"}
+{"id": "testB-070", "query": "sterylizacji kotek", "relevant": ["Sterylizacja Luny.md"], "category": "odmiana"}
+{"id": "testB-071", "query": "Na Paluchu Reksio Fiona Bruno", "relevant": ["Adopcja ze schroniska.md"], "category": "dokladne"}
+{"id": "testB-072", "query": "ekranizacja kontra oryginał, łowca potworów", "relevant": ["Wiedźmin serial i książki.md"], "category": "synonim"}
+{"id": "testB-073", "query": "renew identity card online", "relevant": ["Wymiana dowodu osobistego.md"], "category": "jezyk"}
+{"id": "testB-074", "query": "ZUS ZNS niezaleganiu składkami", "relevant": ["ZUS zaświadczenie o dochodach.md"], "category": "dokladne"}
+{"id": "testB-075", "query": "database upgrade downtime Saturday night", "relevant": ["Migracja bazy Postgres.md"], "category": "jezyk"}
+{"id": "testB-076", "query": "Cambridge Young Learners exam fee", "relevant": ["Parent-teacher meeting.md"], "category": "dokladne"}
+{"id": "testB-077", "query": "rozmowa o pisowni syna i prezentacji o zainteresowaniach", "relevant": ["Parent-teacher meeting.md"], "category": "jezyk"}
+{"id": "testB-078", "query": "wycieczki szkolne Toruniu", "relevant": ["Wycieczka szkolna do Torunia.md"], "category": "odmiana"}
+{"id": "testB-079", "query": "martwy ciąg przysiad Hevy", "relevant": ["Trening siłowy PPL.md"], "category": "dokladne"}
+{"id": "testB-080", "query": "Rail Planner app offline", "relevant": ["Interrail plan.md"], "category": "dokladne"}
+{"id": "testB-081", "query": "jogi rozciągania", "relevant": ["Rozciąganie i joga.md"], "category": "odmiana"}
+{"id": "testB-082", "query": "należności za posiłki w placówce, zajęcia pozalekcyjne", "relevant": ["Świetlica i obiady.md"], "category": "synonim"}
+{"id": "testB-083", "query": "przyjęcie dla ośmiolatka z tematyką gry komputerowej", "relevant": ["Urodziny Antka.md"], "category": "synonim"}
+{"id": "testB-084", "query": "festiwalowych seansów gdyńskich", "relevant": ["Festiwal filmowy w Gdyni.md"], "category": "odmiana"}
+{"id": "testB-085", "query": "podsumowanie rachunków za pierwszy miesiąc roku", "relevant": ["2025-02-03.md"], "category": "synonim"}
+{"id": "testB-086", "query": "long run 26 km Achilles", "relevant": ["Marathon training log.md"], "category": "dokladne"}
+{"id": "testB-087", "query": "klienci przesuwają terminy", "relevant": ["Spotkanie zespołu 10.03.md"], "category": "odmiana"}
+{"id": "testB-088", "query": "kopanie z kolegami z biura", "relevant": ["Piłka w czwartki.md"], "category": "synonim"}
+{"id": "testB-089", "query": "Rocky alien engineer chords", "relevant": ["Project Hail Mary.md"], "category": "dokladne"}
+{"id": "testB-090", "query": "wdrażanie nowych programistów", "relevant": ["Onboarding nowego programisty.md"], "category": "odmiana"}
+{"id": "testB-091", "query": "szkolnych wyprawek", "relevant": ["Wyprawka szkolna.md"], "category": "odmiana"}
+{"id": "testB-092", "query": "przeprowadzka starej maszyny wirtualnej na nowy hosting, lista kontrolna", "relevant": ["Server migration checklist.md"], "category": "jezyk"}
+{"id": "testB-093", "query": "Oppenheimer Nolan IMAX", "relevant": ["Oppenheimer.md"], "category": "dokladne"}
+{"id": "testB-094", "query": "kolejka produkcji telewizyjnych do nadrobienia", "relevant": ["Seriale do obejrzenia.md"], "category": "synonim"}
+{"id": "testB-095", "query": "zameldować pobyt stały Wolę", "relevant": ["Meldunek.md"], "category": "dokladne"}
+{"id": "testB-096", "query": "snowman with kids sunday", "relevant": ["2025-01-12.md"], "category": "jezyk"}
+{"id": "testB-097", "query": "rozpiska ćwiczeń na masę mięśniową, suplementy", "relevant": ["Trening siłowy PPL.md"], "category": "synonim"}
+{"id": "testB-098", "query": "pensjonat Psi Raj", "relevant": ["Opiekun zwierząt na urlop.md"], "category": "dokladne"}
+{"id": "testB-099", "query": "paszportu dziecięcego", "relevant": ["Paszport dla Zosi.md"], "category": "odmiana"}
+{"id": "testB-100", "query": "rozmowa w pojeździe publicznym ze starym kumplem z uczelni", "relevant": ["2025-04-22.md"], "category": "synonim"}
+{"id": "testB-101", "query": "noclegu zakopiańskiego", "relevant": ["Nocleg w Zakopanem.md"], "category": "odmiana"}
+{"id": "testB-102", "query": "senior cat diet vomiting", "relevant": ["Karma dla Mruczka.md"], "category": "jezyk"}
+{"id": "testB-103", "query": "Kelvin Harey Solaris", "relevant": ["Solaris Lema.md"], "category": "dokladne"}
+{"id": "testB-104", "query": "pomoc synowi w rachunkach z częściami całości", "relevant": ["Zadanie domowe z matematyki.md"], "category": "synonim"}
+{"id": "testB-105", "query": "harmonogram ćwiczeń na dystansie 21 kilometrów", "relevant": ["Plan na półmaraton.md"], "category": "synonim"}
+{"id": "testB-106", "query": "logrotete nginx 502", "relevant": ["Awaria produkcji 2025-02-19.md"], "category": "literowka"}
+{"id": "testB-107", "query": "wniosków świadczeń", "relevant": ["Ulga prorodzinna i 800 plus.md"], "category": "odmiana"}
+{"id": "testB-108", "query": "obiadów świetlic", "relevant": ["Świetlica i obiady.md"], "category": "odmiana"}
+{"id": "testB-109", "query": "ćwiczenia zwiększające gibkość, mata, asany", "relevant": ["Rozciąganie i joga.md"], "category": "synonim"}
+{"id": "testB-110", "query": "zasiłek chorobwy wynagrodzenia", "relevant": ["ZUS L4 i zasiłek.md"], "category": "literowka"}
+{"id": "testB-111", "query": "annual tax return refund", "relevant": ["Rozliczenie PIT 2024.md"], "category": "jezyk"}
+{"id": "testB-112", "query": "dokument podróży dla córki, wymagane fotografie", "relevant": ["Paszport dla Zosi.md"], "category": "synonim"}
+{"id": "testB-113", "query": "odwiedziny nekropolii przodków, lampiony", "relevant": ["2025-11-02.md"], "category": "synonim"}
+{"id": "testB-114", "query": "ubezpieczenia pupila", "relevant": ["Ubezpieczenie psa.md"], "category": "odmiana"}
+{"id": "testB-115", "query": "przeczytanie Mistrza Małgorzaty", "relevant": ["Książki na 2025.md"], "category": "odmiana"}
+{"id": "testB-116", "query": "quarterly report plumber kayak", "relevant": ["2025-06-09.md"], "category": "dokladne"}
+{"id": "testB-117", "query": "Jaskier Yennefer Cavill", "relevant": ["Wiedźmin serial i książki.md"], "category": "dokladne"}
+{"id": "testB-118", "query": "rowerowa wyprawa Bieszczadami", "relevant": ["Bieszczady na rowerach.md"], "category": "odmiana"}
+{"id": "testB-119", "query": "zakupy dla uczniów przed rozpoczęciem roku", "relevant": ["Wyprawka szkolna.md"], "category": "synonim"}
+{"id": "testB-120", "query": "paczkomatu WAW12M żarówki E27", "relevant": ["2025-02-03.md"], "category": "dokladne"}
+{"id": "testB-121", "query": "polska powieść sci-fi o nieporozumieniu z pozaziemskim umysłem", "relevant": ["Solaris Lema.md"], "category": "synonim"}
+{"id": "testB-122", "query": "uszkodzenie stawu, specjalista od układu kostnego", "relevant": ["Kontuzja kolana.md"], "category": "synonim"}
+{"id": "testB-123", "query": "astronauta budzi się na statku bez pamięci, obcy inżynier", "relevant": ["Project Hail Mary.md"], "category": "jezyk"}
+{"id": "testB-124", "query": "Compensa okres karencji", "relevant": ["Ubezpieczenie psa.md"], "category": "dokladne"}
+{"id": "testB-125", "query": "pływalnia Inflanckiej tor nr 3", "relevant": ["Basen we wtorki.md"], "category": "dokladne"}
+{"id": "testB-126", "query": "migracji baz Postgresa", "relevant": ["Migracja bazy Postgres.md"], "category": "odmiana"}
+{"id": "testB-127", "query": "przegląd rodzimej kinematografii nad Bałtykiem", "relevant": ["Festiwal filmowy w Gdyni.md"], "category": "synonim"}
+{"id": "testB-128", "query": "certyfkat wygsa", "relevant": ["Certyfikat SSL wygasa.md"], "category": "literowka"}
+{"id": "testB-129", "query": "biletów na koncerty", "relevant": ["2025-04-22.md"], "category": "odmiana"}
+{"id": "testB-130", "query": "zestawienie cen członkostwa w klubie sportowym", "relevant": ["Karnet na siłownię.md"], "category": "synonim"}
+{"id": "testB-131", "query": "ubezpieczeń turystycznych", "relevant": ["Ubezpieczenie turystyczne.md"], "category": "odmiana"}
+{"id": "testB-132", "query": "urlop nad Adriatykiem, dojazd samochodem", "relevant": ["Wakacje w Chorwacji.md"], "category": "synonim"}
+{"id": "testB-133", "query": "Warta Travel EKUZ", "relevant": ["Ubezpieczenie turystyczne.md"], "category": "dokladne"}
+{"id": "testB-134", "query": "rekordowego przysiadu i martwego ciągu", "relevant": ["Trening siłowy PPL.md"], "category": "odmiana"}
+{"id": "testB-135", "query": "kopalnia soli Wieliczce", "relevant": ["Weekend w Krakowie.md"], "category": "dokladne"}
+{"id": "testB-136", "query": "rezerwacja lotów Ryanaira", "relevant": ["Bilety do Rzymu.md"], "category": "odmiana"}
+{"id": "testB-137", "query": "pomoc finansowa państwa na potomstwo", "relevant": ["Ulga prorodzinna i 800 plus.md"], "category": "synonim"}
+{"id": "testB-138", "query": "półmaratonowy interwał", "relevant": ["Plan na półmaraton.md"], "category": "odmiana"}
+{"id": "testB-139", "query": "pakowanie ubrań i apteczek", "relevant": ["Lista do spakowania.md"], "category": "odmiana"}
+{"id": "testB-140", "query": "production outage disk full", "relevant": ["Awaria produkcji 2025-02-19.md"], "category": "jezyk"}
+{"id": "testB-141", "query": "Chłopi Reymont Harari", "relevant": ["Książki na 2025.md"], "category": "dokladne"}
+{"id": "testB-142", "query": "podgrzewacz wody ze sklepu RTV", "relevant": ["2025-09-17.md"], "category": "synonim"}
+{"id": "testB-143", "query": "zupy dyniowej", "relevant": ["2025-09-17.md"], "category": "odmiana"}
+{"id": "testB-144", "query": "zgubione uprawnienia do kierowania, nowy egzemplarz", "relevant": ["Prawo jazdy — wymiana.md"], "category": "synonim"}
+{"id": "testB-145", "query": "noworoczne postanowienie, literatura do pochłonięcia", "relevant": ["Książki na 2025.md"], "category": "synonim"}
+{"id": "testB-146", "query": "weekendowy wypad do Krakowa", "relevant": ["Weekend w Krakowie.md"], "category": "odmiana"}
+{"id": "testB-147", "query": "zgłoszenie adresu zamieszkania po zmianie lokum", "relevant": ["Meldunek.md"], "category": "synonim"}
+{"id": "testB-148", "query": "certyfikatu wygasanie", "relevant": ["Certyfikat SSL wygasa.md"], "category": "odmiana"}
+{"id": "testB-149", "query": "pediatry szczepień", "relevant": ["Pediatra szczepienia.md"], "category": "odmiana"}
+{"id": "testB-150", "query": "roczne zeznanie podatkowe małżonków", "relevant": ["Rozliczenie PIT 2024.md"], "category": "synonim"}
+{"id": "testB-151", "query": "PR maksymalnie 400 linii", "relevant": ["Zasady code review.md"], "category": "dokladne"}
+{"id": "testB-152", "query": "serialowego wiedźmina", "relevant": ["Wiedźmin serial i książki.md"], "category": "odmiana"}
+{"id": "testB-153", "query": "pierwszy dzień Oli laptop", "relevant": ["Onboarding nowego programisty.md"], "category": "dokladne"}
+{"id": "testB-154", "query": "lekarz dziecięcy, termin na zastrzyk", "relevant": ["Pediatra szczepienia.md"], "category": "synonim"}
+{"id": "testB-155", "query": "ułamkami wspólnym mianowniku pizzy", "relevant": ["Zadanie domowe z matematyki.md"], "category": "dokladne"}
+{"id": "testB-156", "query": "rsync nginx cron jobs", "relevant": ["Server migration checklist.md"], "category": "dokladne"}
+{"id": "testB-157", "query": "wyłączenie portalu w środku nocy, zabrakło pojemności", "relevant": ["Awaria produkcji 2025-02-19.md"], "category": "synonim"}
+{"id": "testB-158", "query": "biografia fizyka, który zbudował bombę jądrową", "relevant": ["Oppenheimer.md"], "category": "synonim"}
+{"id": "testB-159", "query": "kleszczy i pcheł", "relevant": ["Kleszcze i pchły.md"], "category": "odmiana"}
+{"id": "testB-160", "query": "klucz do https przestaje być ważny", "relevant": ["Certyfikat SSL wygasa.md"], "category": "synonim"}
+{"id": "testB-161", "query": "kto finansuje kurację domową", "relevant": ["ZUS L4 i zasiłek.md"], "category": "synonim"}
+{"id": "testB-162", "query": "piłkarskie czwartkowe granie", "relevant": ["Piłka w czwartki.md"], "category": "odmiana"}
+{"id": "testB-163", "query": "reguły oceny cudzego kodu przed scaleniem", "relevant": ["Zasady code review.md"], "category": "synonim"}
+{"id": "testB-164", "query": "wymiana dowdu osobistego", "relevant": ["Wymiana dowodu osobistego.md"], "category": "literowka"}
+{"id": "testB-165", "query": "przyjęcie świeżego pracownika, instrukcja startowa", "relevant": ["Onboarding nowego programisty.md"], "category": "synonim"}
+{"id": "testB-166", "query": "WIP retro sprint", "relevant": ["Retro sprintu 42.md"], "category": "dokladne"}
+{"id": "testB-167", "query": "Lingua Duolingo", "relevant": ["Angielski Zosi.md"], "category": "dokladne"}
+{"id": "testB-168", "query": "Rzym Ciampnio autobus Terravison", "relevant": ["Bilety do Rzymu.md"], "category": "literowka"}
+{"id": "testB-169", "query": "wymiana łańcucha i kasety", "relevant": ["Serwis roweru górskiego.md"], "category": "dokladne"}

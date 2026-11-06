@@ -1,0 +1,6 @@
+- 9 października, ul. Piotrkowska 118, zapomniałem wykupić bilet w parkomacie
+- kartka za wycieraczką: **opłata dodatkowa 250 zł**, a po 14 dniach 350 zł
+- Strefa Płatnego Parkowania, Zarząd Dróg i Transportu
+- zapłacone przelewem 16.10, tytuł: numer rejestracyjny + nr wezwania 2025/ZDiT/884211
+- odwołanie bez sensu — bilet był kupiony na złą tablicę rejestracyjną
+- na przyszłość: aplikacja mPay / SkyCash z automatycznym stopem

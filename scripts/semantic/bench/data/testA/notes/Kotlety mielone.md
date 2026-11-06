@@ -1,0 +1,6 @@
+- 600 g mięsa mielonego wieprzowo-wołowego
+- 1 bułka namoczona w mleku
+- cebula, 1 jajko, czosnek, majeranek, sól, pieprz
+- obtoczyć w bułce tartej, smażyć na złoty kolor po 4–5 minut z każdej strony
+- do tego ziemniaki z koperkiem i mizeria
+- dzieci lubią z ketchupem

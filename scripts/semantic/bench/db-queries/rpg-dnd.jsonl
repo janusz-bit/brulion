@@ -1,0 +1,176 @@
+{"id": "rpg-dnd-g001", "query": "bag holds 500 pounds 64 cubic feet", "relevant": ["Bag_of_Holding.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g002", "query": "Fireball 8d6 Fire damage 20-foot-radius", "relevant": ["Fireball.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g003", "query": "ten berries restore 1 Hit Point", "relevant": ["Goodberry.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g004", "query": "rust monster antennae ferrous metal", "relevant": ["Rust_Monster.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g005", "query": "gelatinous cube engulf transparent", "relevant": ["Gelatinous_Cube.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g006", "query": "Counterspell spell dissipates slot isn't expended", "relevant": ["Counterspell.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g007", "query": "rope hovers upward portal extradimensional space", "relevant": ["Rope_Trick.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g008", "query": "corpse answer up to five questions", "relevant": ["Speak_with_Dead.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g009", "query": "bottle thick smoke Heavily Obscured", "relevant": ["Eversmoking_Bottle.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g010", "query": "rod button fixed in place 8,000 pounds", "relevant": ["Immovable_Rod.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g011", "query": "Caltrops DC 15 Dexterity Speed reduced to 0", "relevant": ["Caltrops.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g012", "query": "Hunter's Mark extra 1d6 Force damage quarry", "relevant": ["Hunter's_Mark.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g013", "query": "cloak breathe underwater Swim Speed 60 feet", "relevant": ["Cloak_of_the_Manta_Ray.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g014", "query": "Alchemist's Fire flask 1d4 Fire damage start burning", "relevant": ["Alchemist's_Fire.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g015", "query": "Antitoxin advantage saving throws Poisoned condition", "relevant": ["Antitoxin.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g016", "query": "torch burns 1 hour Bright Light 20-foot radius", "relevant": ["Torch.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g017", "query": "tinderbox flint fire steel tinder", "relevant": ["Tinderbox.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g018", "query": "Heroic Inspiration reroll any die", "relevant": ["Heroic_Inspiration.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g019", "query": "roll weapon's damage dice twice use either roll", "relevant": ["Savage_Attacker.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g020", "query": "Improve Fate 2d4 bonus or penalty D20 Test", "relevant": ["Boon_of_Fate.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g021", "query": "every foot of movement costs 1 extra foot", "relevant": ["Difficult_Terrain.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g022", "query": "1d6 Bludgeoning damage every 10 feet fell maximum 20d6", "relevant": ["Falling_ Hazard.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g023", "query": "reduce a creature to 1 Hit Point Unconscious first aid", "relevant": ["Knocking_Out_a_Creature.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g024", "query": "Passive Perception equals 10 plus Wisdom (Perception) check bonus", "relevant": ["Passive_Perception.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g025", "query": "mimic Adhesive object form Grappled pseudopod", "relevant": ["Mimic.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g026", "query": "stirge proboscis attaches Necrotic damage", "relevant": ["Stirge.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g027", "query": "hydra five heads grows two heads Fire damage", "relevant": ["Hydra.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g028", "query": "flesh golem berserk Aversion to Fire", "relevant": ["Flesh_Golem.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g029", "query": "treant Animate Trees Hail of Bark", "relevant": ["Treant.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g030", "query": "ring 3 charges cast Wish nonmagical", "relevant": ["Ring_of_Three_Wishes.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g031", "query": "Efficient Quiver three compartments Javelins", "relevant": ["Efficient_Quiver.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g032", "query": "Folding Boat Rowboat Keelboat command word", "relevant": ["Folding_Boat.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g033", "query": "45 pounds of food and 30 gallons of water", "relevant": ["Create_Food_and_Water.md"], "category": "dokladne"}
+{"id": "rpg-dnd-g034", "query": "ninth-level cleric spell that mends an entire army in a single action", "relevant": ["Mass_Heal.md"], "category": "synonim"}
+{"id": "rpg-dnd-g035", "query": "see-through blob that swallows dungeon explorers", "relevant": ["Gelatinous_Cube.md"], "category": "synonim"}
+{"id": "rpg-dnd-g036", "query": "stop an enemy wizard's incantation halfway", "relevant": ["Counterspell.md"], "category": "synonim"}
+{"id": "rpg-dnd-g037", "query": "freeze the clock so I act several turns in a row", "relevant": ["Time_Stop.md"], "category": "synonim"}
+{"id": "rpg-dnd-g038", "query": "short hop teleport wrapped in silvery vapor", "relevant": ["Misty_Step.md"], "category": "synonim"}
+{"id": "rpg-dnd-g039", "query": "ultimate reality-altering magic spoken aloud", "relevant": ["Wish.md"], "category": "synonim"}
+{"id": "rpg-dnd-g040", "query": "grow a backup body so a soul can return after dying", "relevant": ["Clone.md"], "category": "synonim"}
+{"id": "rpg-dnd-g041", "query": "make a snow duplicate of a person that obeys you", "relevant": ["Simulacrum.md"], "category": "synonim"}
+{"id": "rpg-dnd-g042", "query": "soul leaves body into a gem container to possess someone", "relevant": ["Magic_Jar.md"], "category": "synonim"}
+{"id": "rpg-dnd-g043", "query": "everyone falls up toward the ceiling", "relevant": ["Reverse_Gravity.md"], "category": "synonim"}
+{"id": "rpg-dnd-g044", "query": "overnight dome shelter that keeps out weather", "relevant": ["Tiny_Hut.md"], "category": "synonim"}
+{"id": "rpg-dnd-g045", "query": "enchanted talking face that repeats a message when triggered", "relevant": ["Magic_Mouth.md"], "category": "synonim"}
+{"id": "rpg-dnd-g046", "query": "portal chalked on the floor linking to a permanent sigil", "relevant": ["Teleportation_Circle.md"], "category": "synonim"}
+{"id": "rpg-dnd-g047", "query": "warlock cantrip crackling beam, more beams as you level", "relevant": ["Eldritch_Blast.md"], "category": "synonim"}
+{"id": "rpg-dnd-g048", "query": "warlock curse making a foe clumsy at one stat", "relevant": ["Hex.md"], "category": "synonim"}
+{"id": "rpg-dnd-g049", "query": "creature that corrodes armor and weapons made of iron", "relevant": ["Rust_Monster.md"], "category": "synonim"}
+{"id": "rpg-dnd-g050", "query": "chicken-lizard whose bite slowly turns victims to stone", "relevant": ["Cockatrice.md"], "category": "synonim"}
+{"id": "rpg-dnd-g051", "query": "multi-headed beast that regrows heads unless burned", "relevant": ["Hydra.md"], "category": "synonim"}
+{"id": "rpg-dnd-g052", "query": "walking tree shepherd of the forest", "relevant": ["Treant.md"], "category": "synonim"}
+{"id": "rpg-dnd-g053", "query": "armored land shark erupting from the ground", "relevant": ["Bulette.md"], "category": "synonim"}
+{"id": "rpg-dnd-g054", "query": "gargantuan tunneling worm that swallows whole", "relevant": ["Purple_Worm.md"], "category": "synonim"}
+{"id": "rpg-dnd-g055", "query": "apocalyptic kaiju that bounces back ranged spells", "relevant": ["Tarrasque.md"], "category": "synonim"}
+{"id": "rpg-dnd-g056", "query": "tiny flying bloodsucker clinging to victims", "relevant": ["Stirge.md"], "category": "synonim"}
+{"id": "rpg-dnd-g057", "query": "being taken off guard when a battle begins", "relevant": ["Surprise.md"], "category": "synonim"}
+{"id": "rpg-dnd-g058", "query": "sleeping through the night to recover everything", "relevant": ["Long_Rest.md"], "category": "synonim"}
+{"id": "rpg-dnd-g059", "query": "free swing when an enemy walks away", "relevant": ["Opportunity_Attacks.md"], "category": "synonim"}
+{"id": "rpg-dnd-g060", "query": "maximum load a hero can haul", "relevant": ["Carrying_Capacity.md"], "category": "synonim"}
+{"id": "rpg-dnd-g061", "query": "weekly cost of living from squalid to aristocratic", "relevant": ["Lifestyle_Expenses.md"], "category": "synonim"}
+{"id": "rpg-dnd-g062", "query": "wages of mercenaries and porters", "relevant": ["Hirelings.md"], "category": "synonim"}
+{"id": "rpg-dnd-g063", "query": "ablaze, drop and tumble in the dirt to smother the flames", "relevant": ["Burning_ Hazard.md"], "category": "synonim"}
+{"id": "rpg-dnd-g064", "query": "wounded to half health", "relevant": ["Bloodied.md"], "category": "synonim"}
+{"id": "rpg-dnd-g065", "query": "bond with at most three enchanted items", "relevant": ["Attunement.md"], "category": "synonim"}
+{"id": "rpg-dnd-g066", "query": "feat to go first in a fight and swap turn order with an ally", "relevant": ["Alert.md"], "category": "synonim"}
+{"id": "rpg-dnd-g067", "query": "feat that lets you pick up three new talents", "relevant": ["Skilled.md"], "category": "synonim"}
+{"id": "rpg-dnd-g068", "query": "black cloth that opens a pit into another dimension", "relevant": ["Portable_Hole.md"], "category": "synonim"}
+{"id": "rpg-dnd-g069", "query": "black orb that obliterates everything it touches", "relevant": ["Sphere_of_Annihilation.md"], "category": "synonim"}
+{"id": "rpg-dnd-g070", "query": "submarine barrel that turns into a lobster", "relevant": ["Apparatus_of_the_Crab.md"], "category": "synonim"}
+{"id": "rpg-dnd-g071", "query": "bottle that traps beings from other realms", "relevant": ["Iron_Flask.md"], "category": "synonim"}
+{"id": "rpg-dnd-g072", "query": "romance elixir making you adore the first person you see", "relevant": ["Philter_of_Love.md"], "category": "synonim"}
+{"id": "rpg-dnd-g073", "query": "garment with eyeball patterns giving all-around sight", "relevant": ["Robe_of_Eyes.md"], "category": "synonim"}
+{"id": "rpg-dnd-g074", "query": "cloak creating a decoy image so enemies miss", "relevant": ["Cloak_of_Displacement.md"], "category": "synonim"}
+{"id": "rpg-dnd-g075", "query": "beaded jewelry that throws explosions", "relevant": ["Necklace_of_Fireballs.md"], "category": "synonim"}
+{"id": "rpg-dnd-g076", "query": "going without drinking for a day", "relevant": ["Dehydration_ Hazard.md"], "category": "synonim"}
+{"id": "rpg-dnd-g077", "query": "a brief breather in the middle of an adventuring day", "relevant": ["Short_Rest.md"], "category": "synonim"}
+{"id": "rpg-dnd-g078", "query": "czar leczący sześć istot akcją bonusową", "relevant": ["Mass_Healing_Word.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g079", "query": "leczenie 700 punktów życia rozdzielone między wiele istot", "relevant": ["Mass_Heal.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g080", "query": "czar 6 poziomu leczący 70 punktów życia jednego celu", "relevant": ["Heal.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g081", "query": "dorosły czarny smok", "relevant": ["Adult_Black_Dragon.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g082", "query": "pradawny biały smok", "relevant": ["Ancient_White_Dragon.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g083", "query": "młody czerwony smok", "relevant": ["Young_Red_Dragon.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g084", "query": "pisklę czarnego smoka oddech kwasem", "relevant": ["Black_Dragon_Wyrmling.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g085", "query": "torba przechowywania pojemność 500 funtów", "relevant": ["Bag_of_Holding.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g086", "query": "torba pożerająca zawartość", "relevant": ["Bag_of_Devouring.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g087", "query": "kula ognia 8d6 promień 20 stóp", "relevant": ["Fireball.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g088", "query": "opóźniona kula ognia z żarzącą się kulką", "relevant": ["Delayed_Blast_Fireball.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g089", "query": "dobra jagoda czar druida", "relevant": ["Goodberry.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g090", "query": "potwór rdzewiejący metalowe zbroje", "relevant": ["Rust_Monster.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g091", "query": "galaretowaty sześcian", "relevant": ["Gelatinous_Cube.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g092", "query": "sowoniedźwiedź", "relevant": ["Owlbear.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g093", "query": "leczenie ran dotykiem 2d8", "relevant": ["Cure_Wounds.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g094", "query": "przeciwzaklęcie przerywające rzucanie czaru", "relevant": ["Counterspell.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g095", "query": "spadanie jak piórko pięć istot 60 stóp na rundę", "relevant": ["Feather_Fall.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g096", "query": "magiczna dłoń otwierająca drzwi do 10 funtów", "relevant": ["Mage_Hand.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g097", "query": "wykrywanie magii aura 30 stóp", "relevant": ["Detect_Magic.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g098", "query": "rozmowa ze zwłokami", "relevant": ["Speak_with_Dead.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g099", "query": "wskrzeszenie zmarłego nie dłużej niż 10 dni", "relevant": ["Raise_Dead.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g100", "query": "pierścień chodzenia po wodzie", "relevant": ["Ring_of_Water_Walking.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g101", "query": "buty lewitacji", "relevant": ["Boots_of_Levitation.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g102", "query": "pręt który zawisa w powietrzu po naciśnięciu guzika", "relevant": ["Immovable_Rod.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g103", "query": "różdżka pajęczyny", "relevant": ["Wand_of_Web.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g104", "query": "klej łączący przedmioty na stałe legendarny", "relevant": ["Sovereign_Glue.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g105", "query": "lina do wspinaczki która sama się porusza", "relevant": ["Rope_of_Climbing.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g106", "query": "mikstura oddychania pod wodą", "relevant": ["Potion_of_Water_Breathing.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g107", "query": "proszek kichania i duszenia", "relevant": ["Dust_of_Sneezing_and_Choking.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g108", "query": "wiecznie dymiąca butelka", "relevant": ["Eversmoking_Bottle.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g109", "query": "kulki łożyskowe przewracają przeciwników", "relevant": ["Ball_Bearings.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g110", "query": "aura życia odporność na obrażenia nekrotyczne", "relevant": ["Aura_of_Life.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g111", "query": "krąg śmierci", "relevant": ["Circle_of_Death.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g112", "query": "tańczące światła", "relevant": ["Dancing_Lights.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g113", "query": "mistyczny promień czarnoksiężnika", "relevant": ["Eldritch_Blast.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g114", "query": "znak łowcy", "relevant": ["Hunter's_Mark.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g115", "query": "mglisty krok", "relevant": ["Misty_Step.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g116", "query": "zatrzymanie czasu", "relevant": ["Time_Stop.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g117", "query": "sklonować stworzenie 120 dni", "relevant": ["Clone.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g118", "query": "kopia z lodu lub śniegu", "relevant": ["Simulacrum.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g119", "query": "ściana cierni", "relevant": ["Wall_of_Thorns.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g120", "query": "sztuczka z liną", "relevant": ["Rope_Trick.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g121", "query": "magiczne usta wiadomość 25 słów", "relevant": ["Magic_Mouth.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g122", "query": "odwrócenie grawitacji", "relevant": ["Reverse_Gravity.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g123", "query": "wybuch słońca oślepienie", "relevant": ["Sunburst.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g124", "query": "słowo mocy zabij", "relevant": ["Power_Word_Kill.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g125", "query": "mimik", "relevant": ["Mimic.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g126", "query": "licz nieumarły czarodziej", "relevant": ["Lich.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g127", "query": "drzewiec animuje drzewa", "relevant": ["Treant.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g128", "query": "hydra odrastające głowy", "relevant": ["Hydra.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g129", "query": "kokatriks zamienia w kamień", "relevant": ["Cockatrice.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g130", "query": "meduza spojrzenie zamieniające w kamień", "relevant": ["Medusa.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g131", "query": "chodzący kopiec roślinny pochłaniający błyskawice", "relevant": ["Shambling_Mound.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g132", "query": "golem z ciała", "relevant": ["Flesh_Golem.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g133", "query": "jednorożec", "relevant": ["Unicorn.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g134", "query": "gargulec", "relevant": ["Gargoyle.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g135", "query": "zaskoczenie w walce", "relevant": ["Surprise.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g136", "query": "utrata koncentracji na czarze", "relevant": ["Concentration.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g137", "query": "osłona połowiczna trzy czwarte pełna", "relevant": ["Cover.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g138", "query": "atak okazji", "relevant": ["Opportunity_Attacks.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g139", "query": "trudny teren", "relevant": ["Difficult_Terrain.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g140", "query": "obrażenia od upadku", "relevant": ["Falling_ Hazard.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g141", "query": "duszenie wstrzymanie oddechu", "relevant": ["Suffocation_ Hazard.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g142", "query": "głód i niedożywienie", "relevant": ["Malnutrition_ Hazard.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g143", "query": "udźwig postaci", "relevant": ["Carrying_Capacity.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g144", "query": "najemnicy koszt", "relevant": ["Hirelings.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g145", "query": "trafienie krytyczne", "relevant": ["Critical_Hit.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g146", "query": "próg obrażeń", "relevant": ["Damage_Threshold.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g147", "query": "broń improwizowana", "relevant": ["Improvised_Weapons.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g148", "query": "przepisywanie czaru na zwój", "relevant": ["Scribing_Spell_Scrolls.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g149", "query": "warzenie mikstury leczenia", "relevant": ["Brewing_Potions_of_Healing.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g150", "query": "heroiczna inspiracja", "relevant": ["Heroic_Inspiration.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g151", "query": "sześcian siły ładunki", "relevant": ["Cube_of_Force.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g152", "query": "studnia wielu światów", "relevant": ["Well_of_Many_Worlds.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g153", "query": "natychmiastowa forteca adamantowa figurka", "relevant": ["Instant_Fortress.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g154", "query": "róg Walhalli duchy wojowników", "relevant": ["Horn_of_Valhalla.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g155", "query": "kula unicestwienia", "relevant": ["Sphere_of_Annihilation.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g156", "query": "krasnoludzka zbroja płytowa", "relevant": ["Dwarven_Plate.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g157", "query": "naszyjnik z kulami ognia", "relevant": ["Necklace_of_Fireballs.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g158", "query": "karafka niekończącej się wody", "relevant": ["Decanter_of_Endless_Water.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g159", "query": "wyczuwanie drgań podłoża", "relevant": ["Tremorsense.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g160", "query": "ślepowidzenie", "relevant": ["Blindsight.md"], "category": "jezyk"}
+{"id": "rpg-dnd-g161", "query": "firebal spel 8d6", "relevant": ["Fireball.md"], "category": "literowka"}
+{"id": "rpg-dnd-g162", "query": "gelatinus cube", "relevant": ["Gelatinous_Cube.md"], "category": "literowka"}
+{"id": "rpg-dnd-g163", "query": "owlbaer", "relevant": ["Owlbear.md"], "category": "literowka"}
+{"id": "rpg-dnd-g164", "query": "counterspel", "relevant": ["Counterspell.md"], "category": "literowka"}
+{"id": "rpg-dnd-g165", "query": "eldrich blast warlock", "relevant": ["Eldritch_Blast.md"], "category": "literowka"}
+{"id": "rpg-dnd-g166", "query": "hunters mrk ranger", "relevant": ["Hunter's_Mark.md"], "category": "literowka"}
+{"id": "rpg-dnd-g167", "query": "vorpal swrod", "relevant": ["Vorpal_Sword.md"], "category": "literowka"}
+{"id": "rpg-dnd-g168", "query": "bag of holdng", "relevant": ["Bag_of_Holding.md"], "category": "literowka"}
+{"id": "rpg-dnd-g169", "query": "teleportaton circle", "relevant": ["Teleportation_Circle.md"], "category": "literowka"}
+{"id": "rpg-dnd-g170", "query": "rope of climing", "relevant": ["Rope_of_Climbing.md"], "category": "literowka"}
+{"id": "rpg-dnd-g171", "query": "dancing lihgts", "relevant": ["Dancing_Lights.md"], "category": "literowka"}
+{"id": "rpg-dnd-g172", "query": "sphere of anihilation", "relevant": ["Sphere_of_Annihilation.md"], "category": "literowka"}
+{"id": "rpg-dnd-g173", "query": "pasive perception", "relevant": ["Passive_Perception.md"], "category": "literowka"}
+{"id": "rpg-dnd-g174", "query": "opportunty attack", "relevant": ["Opportunity_Attacks.md"], "category": "literowka"}
+{"id": "rpg-dnd-g175", "query": "mimick chest monster", "relevant": ["Mimic.md"], "category": "literowka"}
+{"id": "rpg-dnd-g176", "query": "time stpo", "relevant": ["Time_Stop.md"], "category": "literowka"}

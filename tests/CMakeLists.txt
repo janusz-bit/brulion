@@ -60,6 +60,10 @@ endif()
 if(TARGET brulion-cli)
     add_subdirectory(cli)
 endif()
+# The semantic search benchmark tool, when the model runner is built (src/core/semantic).
+if(TARGET brulion_semantic_llama)
+    add_subdirectory(searchbench)
+endif()
 # Shell scripts from scripts/ (release.sh, appimage-update-check.sh); bash scripts for Linux, not
 # run on Windows (tests/scripts/CMakeLists.txt).
 add_subdirectory(scripts)

@@ -1,0 +1,108 @@
+{"id": "logseq-docs-g001", "query": "Logseq Sync encryption age ChaCha20", "relevant": ["Logseq Sync Encryption.md"], "category": "dokladne"}
+{"id": "logseq-docs-g002", "query": "calculator factorial modulo", "relevant": ["Calculator.md"], "category": "dokladne"}
+{"id": "logseq-docs-g003", "query": "numbered list toggle", "relevant": ["Numbered List.md"], "category": "dokladne"}
+{"id": "logseq-docs-g004", "query": "raw paste shift", "relevant": ["Copy and Paste.md"], "category": "dokladne"}
+{"id": "logseq-docs-g005", "query": "local http server api token", "relevant": ["Local Http server.md"], "category": "dokladne"}
+{"id": "logseq-docs-g006", "query": "undo redo global page only mode", "relevant": ["Undo and Redo.md"], "category": "dokladne"}
+{"id": "logseq-docs-g007", "query": "snap to grid magnet", "relevant": ["Snap to grid.md"], "category": "dokladne"}
+{"id": "logseq-docs-g008", "query": "git auto-commit interval", "relevant": ["Git Auto-Commit.md"], "category": "dokladne"}
+{"id": "logseq-docs-g009", "query": "cloze cue", "relevant": ["Cloze.md"], "category": "dokladne"}
+{"id": "logseq-docs-g010", "query": "zotero import items", "relevant": ["Zotero.md"], "category": "dokladne"}
+{"id": "logseq-docs-g011", "query": "write changelog v0.0.9", "relevant": ["2021_02_20.md"], "category": "dokladne"}
+{"id": "logseq-docs-g012", "query": "NOW write changelog v0.0.10", "relevant": ["2021_02_26.md"], "category": "dokladne"}
+{"id": "logseq-docs-g013", "query": "test something", "relevant": ["2020_09_23.md"], "category": "dokladne"}
+{"id": "logseq-docs-g014", "query": "migrate to Logseq Beta convert headings", "relevant": ["Migrate to Logseq Beta.md"], "category": "dokladne"}
+{"id": "logseq-docs-g015", "query": "logseq protocol quickCapture", "relevant": ["Logseq Protocol.md"], "category": "dokladne"}
+{"id": "logseq-docs-g016", "query": "query function sum average", "relevant": ["Query function.md"], "category": "dokladne"}
+{"id": "logseq-docs-g017", "query": "learn Datalog today", "relevant": ["Learn Datalog Today.md"], "category": "dokladne"}
+{"id": "logseq-docs-g018", "query": "global config.edn merge", "relevant": ["Global config.edn.md"], "category": "dokladne"}
+{"id": "logseq-docs-g019", "query": "sacred hours time management", "relevant": ["Tweet___This 1 Tiny Time Managem...___.md"], "category": "dokladne"}
+{"id": "logseq-docs-g020", "query": "gallery cards URL properties covers", "relevant": ["Changelog.md"], "category": "dokladne"}
+{"id": "logseq-docs-g021", "query": "slide Reveal.js fullscreen", "relevant": ["slide.md"], "category": "dokladne"}
+{"id": "logseq-docs-g022", "query": "number crunching with exponents and cosines", "relevant": ["Calculator.md"], "category": "synonim"}
+{"id": "logseq-docs-g023", "query": "rewind a blunder I just made", "relevant": ["Undo and Redo.md"], "category": "synonim"}
+{"id": "logseq-docs-g024", "query": "study method revisiting hard material at growing gaps", "relevant": ["Spaced Repetition.md"], "category": "synonim"}
+{"id": "logseq-docs-g025", "query": "sketching surface placing ideas side by side", "relevant": ["Whiteboard.md"], "category": "synonim"}
+{"id": "logseq-docs-g026", "query": "timed history snapshots of my notes folder", "relevant": ["Git Auto-Commit.md"], "category": "synonim"}
+{"id": "logseq-docs-g027", "query": "subscription offering keeping collections identical on handset and laptop", "relevant": ["Logseq Sync.md"], "category": "synonim"}
+{"id": "logseq-docs-g028", "query": "bring bibliography entries in as notes", "relevant": ["Zotero.md"], "category": "synonim"}
+{"id": "logseq-docs-g029", "query": "let outside programs talk to my notes through a web endpoint with a secret key", "relevant": ["Local Http server.md"], "category": "synonim"}
+{"id": "logseq-docs-g030", "query": "bookmarklet to clip web snippets into the daily diary", "relevant": ["Logseq Protocol.md"], "category": "synonim"}
+{"id": "logseq-docs-g031", "query": "irreversible overhaul of naming convention for saved documents", "relevant": ["Filename format.md"], "category": "synonim"}
+{"id": "logseq-docs-g032", "query": "conceal the solution until you tap it, for memory drills", "relevant": ["Cloze.md"], "category": "synonim"}
+{"id": "logseq-docs-g033", "query": "typesetting equations and chemical formulas", "relevant": ["Math Block.md"], "category": "synonim"}
+{"id": "logseq-docs-g034", "query": "scribble diagrams inside an outline item", "relevant": ["Draw.md"], "category": "synonim"}
+{"id": "logseq-docs-g035", "query": "locate words on the screen I am viewing", "relevant": ["Find in page.md"], "category": "synonim"}
+{"id": "logseq-docs-g036", "query": "turn notes into a talk deck", "relevant": ["slide.md"], "category": "synonim"}
+{"id": "logseq-docs-g037", "query": "enumerated entries that count up by themselves", "relevant": ["Numbered List.md"], "category": "synonim"}
+{"id": "logseq-docs-g038", "query": "night appearance matching my computer's choice", "relevant": ["setting___theme modes.md"], "category": "synonim"}
+{"id": "logseq-docs-g039", "query": "peek bubble that appears when the pointer rests on a link", "relevant": ["setting___enable tooltip.md"], "category": "synonim"}
+{"id": "logseq-docs-g040", "query": "stop crash reports and telemetry", "relevant": ["setting___send usage data and diagnostics to logseq.md"], "category": "synonim"}
+{"id": "logseq-docs-g041", "query": "stop underscores from slanting my words", "relevant": ["tips_and_tricks.md"], "category": "synonim"}
+{"id": "logseq-docs-g042", "query": "transform legacy notes from the former software generation to dash-based outline", "relevant": ["Migrate to Logseq Beta.md"], "category": "synonim"}
+{"id": "logseq-docs-g043", "query": "walkthrough for crafting a brainstorming diagram extension", "relevant": ["Plugins 02 - Build a mind map plugin.md"], "category": "synonim"}
+{"id": "logseq-docs-g044", "query": "collective practice event on retrieval abilities held in warm months", "relevant": ["Community___Query Learning Sprint (Summer 2022).md"], "category": "synonim"}
+{"id": "logseq-docs-g045", "query": "anniversary post introducing the folks behind the product", "relevant": ["one year in logseq.md"], "category": "synonim"}
+{"id": "logseq-docs-g046", "query": "recorded walkthroughs from community members", "relevant": ["videos.md"], "category": "synonim"}
+{"id": "logseq-docs-g047", "query": "chores, their status flow and urgency ranking", "relevant": ["Tasks.md"], "category": "synonim"}
+{"id": "logseq-docs-g048", "query": "keep attachments in a separate location referenced by nickname", "relevant": ["Assets alias.md"], "category": "synonim"}
+{"id": "logseq-docs-g049", "query": "reciprocal connections between subjects", "relevant": ["Why linking matters.md"], "category": "synonim"}
+{"id": "logseq-docs-g050", "query": "kalkulator silnia reszta z dzielenia", "relevant": ["Calculator.md"], "category": "jezyk"}
+{"id": "logseq-docs-g051", "query": "cofanie i ponawianie zmian", "relevant": ["Undo and Redo.md"], "category": "jezyk"}
+{"id": "logseq-docs-g052", "query": "płatna synchronizacja grafów między urządzeniami w wersji beta", "relevant": ["Logseq Sync.md"], "category": "jezyk"}
+{"id": "logseq-docs-g053", "query": "algorytm szyfrowania nazw plików", "relevant": ["Logseq Sync Encryption.md"], "category": "jezyk"}
+{"id": "logseq-docs-g054", "query": "automatyczne zapisywanie zmian w repozytorium", "relevant": ["Git Auto-Commit.md"], "category": "jezyk"}
+{"id": "logseq-docs-g055", "query": "import pozycji z bibliografii", "relevant": ["Zotero.md"], "category": "jezyk"}
+{"id": "logseq-docs-g056", "query": "fiszki do nauki", "relevant": ["Flashcards.md"], "category": "jezyk"}
+{"id": "logseq-docs-g057", "query": "powtórki rozłożone w czasie", "relevant": ["Spaced Repetition.md"], "category": "jezyk"}
+{"id": "logseq-docs-g058", "query": "tablice: przestrzenne płótno z kształtami i łącznikami", "relevant": ["Whiteboard.md"], "category": "jezyk"}
+{"id": "logseq-docs-g059", "query": "blokowanie elementów na tablicy", "relevant": ["Whiteboard___Element locking.md"], "category": "jezyk"}
+{"id": "logseq-docs-g060", "query": "lista numerowana", "relevant": ["Numbered List.md"], "category": "jezyk"}
+{"id": "logseq-docs-g061", "query": "wklejanie bez formatowania", "relevant": ["Copy and Paste.md"], "category": "jezyk"}
+{"id": "logseq-docs-g062", "query": "eksport grafu do formatu OPML", "relevant": ["Export.md"], "category": "jezyk"}
+{"id": "logseq-docs-g063", "query": "publikowanie grafu jako strona internetowa", "relevant": ["Publishing.md"], "category": "jezyk"}
+{"id": "logseq-docs-g064", "query": "jak opublikować graf na GitHub Pages", "relevant": ["Publishing (Desktop App Only).md"], "category": "jezyk"}
+{"id": "logseq-docs-g065", "query": "własne skróty klawiszowe", "relevant": ["Keyboard shortcuts.md"], "category": "jezyk"}
+{"id": "logseq-docs-g066", "query": "wyszukiwanie stron i bloków", "relevant": ["Search.md"], "category": "jezyk"}
+{"id": "logseq-docs-g067", "query": "szukanie widocznego tekstu na stronie skrótem Cmd-f", "relevant": ["Find in page.md"], "category": "jezyk"}
+{"id": "logseq-docs-g068", "query": "szablon notatki ze spotkania", "relevant": ["templates.md"], "category": "jezyk"}
+{"id": "logseq-docs-g069", "query": "makra wielokrotnego użytku", "relevant": ["Macros.md"], "category": "jezyk"}
+{"id": "logseq-docs-g070", "query": "wzory matematyczne i chemiczne", "relevant": ["Math Block.md"], "category": "jezyk"}
+{"id": "logseq-docs-g071", "query": "blok kodu z podświetlaniem składni", "relevant": ["Code block.md"], "category": "jezyk"}
+{"id": "logseq-docs-g072", "query": "rysowanie w bloku w Excalidraw", "relevant": ["Draw.md"], "category": "jezyk"}
+{"id": "logseq-docs-g073", "query": "tryb ciemny i jasny", "relevant": ["setting___theme modes.md"], "category": "jezyk"}
+{"id": "logseq-docs-g074", "query": "zmiana języka interfejsu", "relevant": ["setting___language.md"], "category": "jezyk"}
+{"id": "logseq-docs-g075", "query": "format daty dziennika", "relevant": ["setting___preferred journal format.md"], "category": "jezyk"}
+{"id": "logseq-docs-g076", "query": "wyłączenie wysyłania danych diagnostycznych", "relevant": ["setting___send usage data and diagnostics to logseq.md"], "category": "jezyk"}
+{"id": "logseq-docs-g077", "query": "wyłączenie pustych dzienników", "relevant": ["setting___enable journals.md"], "category": "jezyk"}
+{"id": "logseq-docs-g078", "query": "niedozwolone znaki w nazwach plików", "relevant": ["Logseq file and folder naming rules.md"], "category": "jezyk"}
+{"id": "logseq-docs-g079", "query": "lokalny serwer HTTP do dostępu do bazy", "relevant": ["Local Http server.md"], "category": "jezyk"}
+{"id": "logseq-docs-g080", "query": "tworzenie wtyczki hello world", "relevant": ["Plugins 01.md"], "category": "jezyk"}
+{"id": "logseq-docs-g081", "query": "wtyczka mapy myśli", "relevant": ["Plugins 02 - Build a mind map plugin.md"], "category": "jezyk"}
+{"id": "logseq-docs-g082", "query": "instalacja własnego motywu", "relevant": ["Custom theme.md"], "category": "jezyk"}
+{"id": "logseq-docs-g083", "query": "zewnętrzny katalog na obrazy i pliki PDF", "relevant": ["Assets alias.md"], "category": "jezyk"}
+{"id": "logseq-docs-g084", "query": "zapytania napisane w Datalogu na bazie Datascript", "relevant": ["Advanced Queries.md"], "category": "jezyk"}
+{"id": "logseq-docs-g085", "query": "wyniki zapytania w tabeli", "relevant": ["Query table.md"], "category": "jezyk"}
+{"id": "logseq-docs-g086", "query": "filtrowanie odnośników zwrotnych", "relevant": ["How to filter linked references.md"], "category": "jezyk"}
+{"id": "logseq-docs-g087", "query": "dlaczego warto linkować strony", "relevant": ["Why linking matters.md"], "category": "jezyk"}
+{"id": "logseq-docs-g088", "query": "wcięcia bloków rodzic dziecko", "relevant": ["What is indentation and why does it matter%3F.md"], "category": "jezyk"}
+{"id": "logseq-docs-g089", "query": "synchronizacja między urządzeniami zwykłą usługą plików", "relevant": ["How to sync your Logseq graph across devices.md"], "category": "jezyk"}
+{"id": "logseq-docs-g090", "query": "import istniejących plików markdown", "relevant": ["How to create a Logseq graph using existing Markdown files.md"], "category": "jezyk"}
+{"id": "logseq-docs-g091", "query": "osadzanie audio i wideo", "relevant": ["Embed Media - Audio, Photos, Videos.md"], "category": "jezyk"}
+{"id": "logseq-docs-g092", "query": "blokowanie czasu na skupienie wpis z Twittera", "relevant": ["Tweet___This 1 Tiny Time Managem...___.md"], "category": "jezyk"}
+{"id": "logseq-docs-g093", "query": "zrobione: napisać dziennik zmian wersji 0.0.9", "relevant": ["2021_02_20.md"], "category": "jezyk"}
+{"id": "logseq-docs-g094", "query": "teraz: przygotować changelog v0.0.10", "relevant": ["2021_02_26.md"], "category": "jezyk"}
+{"id": "logseq-docs-g095", "query": "liczby z przecinkami w kalkulatorze", "relevant": ["changelog_06.md"], "category": "jezyk"}
+{"id": "logseq-docs-g096", "query": "losowa próbka wyników zapytania", "relevant": ["Changelog_07_09.md"], "category": "jezyk"}
+{"id": "logseq-docs-g097", "query": "wersja kanarkowa dla wczesnych użytkowników", "relevant": ["canary changelog.md"], "category": "jezyk"}
+{"id": "logseq-docs-g098", "query": "Logseq Sinc encyption", "relevant": ["Logseq Sync Encryption.md"], "category": "literowka"}
+{"id": "logseq-docs-g099", "query": "calcualtor factorial", "relevant": ["Calculator.md"], "category": "literowka"}
+{"id": "logseq-docs-g100", "query": "nubered list toggle", "relevant": ["Numbered List.md"], "category": "literowka"}
+{"id": "logseq-docs-g101", "query": "zotero imoprt", "relevant": ["Zotero.md"], "category": "literowka"}
+{"id": "logseq-docs-g102", "query": "filename fromat triple-lowbar", "relevant": ["Filename format.md"], "category": "literowka"}
+{"id": "logseq-docs-g103", "query": "snap to gird", "relevant": ["Snap to grid.md"], "category": "literowka"}
+{"id": "logseq-docs-g104", "query": "keybord shortcuts custom", "relevant": ["Keyboard shortcuts.md"], "category": "literowka"}
+{"id": "logseq-docs-g105", "query": "clozze cue", "relevant": ["Cloze.md"], "category": "literowka"}
+{"id": "logseq-docs-g106", "query": "publising desktop app", "relevant": ["Publishing (Desktop App Only).md"], "category": "literowka"}
+{"id": "logseq-docs-g107", "query": "undo redu mode", "relevant": ["Undo and Redo.md"], "category": "literowka"}
+{"id": "logseq-docs-g108", "query": "tweet sacerd hours", "relevant": ["Tweet___This 1 Tiny Time Managem...___.md"], "category": "literowka"}
