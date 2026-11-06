@@ -81,6 +81,8 @@ W [[Zapytania|zapytaniach]] `is:blocked` (`jest:zablokowane`) wybiera zadania za
 ## Podzadania
 Zadanie z zadaniami wciętymi pod nim pokazuje licznik postępu, np. **3/5**: zrobione podzadania na tle wszystkich (na dowolnej głębokości). Anulowane podzadania się nie liczą — ani jako zrobione, ani jako czekające. Licznik widać w notatce, w wynikach zapytań i w widoku Zadania.
 
+W widoku **Zadania** podzadania są pod swoim zadaniem, wcięte według głębokości i w kolejności z notatki (także zrobione), w sekcji tego zadania. Podzadanie pilniejsze niż ta sekcja — zaległe pod zadaniem na później albo otwarte pod zrobionym — zostaje osobno we własnej sekcji. Filtry działają na podzadania jak na każde zadanie. Zadanie z podzadaniami można je zwinąć: kliknij strzałkę przed licznikiem (**3/5**) albo naciśnij Lewo / Prawo. Zwinięcie to tylko stan widoku — nic nie jest zapisywane w pliku. Widżet na ekranie głównym Androida zostaje płaską listą.
+
 ## Licznik czasu
 W menu statusu zadania jest **Uruchom licznik czasu** (i **Zatrzymaj licznik czasu**, gdy działa); w palecie poleceń — „Licznik czasu zadania” i „Zatrzymaj licznik czasu”. Działa jeden licznik naraz: uruchomienie nowego zatrzymuje poprzedni. Czas trafia do pliku, w szufladkę `:LOGBOOK:` pod zadaniem, w zapisie Logseqa — dlatego licznik przetrwa zamknięcie aplikacji i dotrze na inne urządzenia:
 

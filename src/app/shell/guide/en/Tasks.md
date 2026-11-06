@@ -81,6 +81,8 @@ In [[Queries|queries]] `is:blocked` picks blocked tasks, and `-is:blocked` the o
 ## Subtasks
 A task with tasks indented below it shows a progress counter, e.g. **3/5**: done subtasks out of all of them (at any depth). Cancelled subtasks don't count — neither as done nor as waiting. You see the counter in a note, in query results and in the Tasks view.
 
+In the **Tasks** view subtasks are listed under their task, indented by depth and in the note's order (done ones too), in the task's section. A subtask more urgent than that section — overdue under a task for later, or open under a done task — stays on its own in its own section. Filters apply to subtasks as to any task. A task with subtasks folds them: click the arrow before its counter (**3/5**) or press Left / Right. Folding is only how the view looks — nothing is written to the file. The home-screen widget on Android keeps a flat list.
+
 ## Time tracking
 The task's status menu has **Start timer** (and **Stop timer** while it runs); the command palette has “Start or stop task timer” and “Stop timer”. One timer runs at a time: starting a new one stops the previous one. The time goes into the file, into a `:LOGBOOK:` drawer below the task, in Logseq's notation — that is why the timer survives closing the app and reaches your other devices:
 

@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.12.0 — 6 listopada 2026
+
+**Nowe**
+- **Podzadania pod swoim zadaniem** — widok **Zadania** pokazuje podzadania (punkty `- [ ]` wcięte pod zadaniem) pod ich zadaniem, wcięte według głębokości i w kolejności z notatki, także zrobione, w sekcji tego zadania. Podzadanie pilniejsze niż ta sekcja — zaległe pod zadaniem na później albo otwarte pod zrobionym — zostaje osobno we własnej sekcji. Filtry działają na podzadania jak na każde zadanie. Widżet na ekranie głównym Androida zostaje płaską listą. Zobacz [[Zadania#Podzadania|Podzadania]].
+- **Zwijanie podzadań** — zadanie z podzadaniami zwija je strzałką przed licznikiem postępu (**3/5**) albo klawiszami Lewo / Prawo. Zwinięcie to tylko stan widoku: nic nie jest zapisywane w pliku.
+- **Dokumentacja po angielsku** — dokumentacja w aplikacji jest teraz także po angielsku, a dokumentacja („Dokumentacja Brulionu”) i przykładowy notatnik idą za językiem interfejsu; doszedł angielski przykładowy notatnik. Angielski interfejs ma angielskie przykłady (nawyki takie jak `habit:: every day`, reguły powtarzania).
+
+**Zmiany**
+- Na telefonie i w wąskich oknach przycisk ☰ jest zawsze pierwszy w górnym pasku, także przy otwartej klawiaturze. Na Androidzie nie ma strzałki wstecz: systemowe Wstecz albo gest chodzi po tej samej historii.
+- Płynniejsze przewijanie stron: blok wchodzący na ekran układa tekst raz zamiast dwa do czterech razy, a pasek przewijania wykonuje na klatkę około jednej trzeciej dotychczasowej pracy. Zmiana szerokości okna na stronie z 300 blokami trwa 26 ms zamiast 34 ms.
+
 ## 0.11.2 — 6 listopada 2026
 
 **Uwaga**
