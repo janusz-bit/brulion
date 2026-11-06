@@ -61,6 +61,7 @@ QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate t
     model.setWeekStart(int(options.weekStart));
     model.setLocale(options.locale);
     model.setStatusFilter(u"open"_s);
+    model.setNestSubtasks(false); // every task in its own section (the widget lists no subtasks)
     model.componentComplete();
 
     const QDate last = today.addDays(options.taskDays);

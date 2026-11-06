@@ -1069,6 +1069,14 @@ subtask is neither done nor waiting. Without subtasks (or only cancelled ones) n
 The counter follows the parent's own page (no index needed) and is shown after its text in the
 editor, query results and Tasks.
 
+The Tasks view lists a task's subtasks under it (indented, in the note's order, also the done ones)
+in the task's section; a subtask nested deeper follows its nearest task. A subtask that belongs to
+an earlier section than the one its task is shown in (overdue under a task for next week, open under
+a done one) is listed on its own in its section, so it is never hidden below a later date. Filters
+apply to subtasks as to any task: a subtask that does not match is not shown, and a matching one
+whose task does not match is listed on its own. A task's subtasks fold in the list (a view state:
+nothing is written into the note, unlike a folded block's `collapsed:: true`).
+
 ### Time tracking and status history (Logseq `:LOGBOOK:`)
 
 A task's time is kept in a Logseq `:LOGBOOK:` drawer — continuation lines of its list item, read

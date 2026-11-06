@@ -26,7 +26,10 @@ import Brulion
 // shows its preview (LinkPreviews, docs/UI.md "Link previews"). Task dependencies and time
 // (docs/SYNTAX.md §5): "Czeka na: …" when it is blocked (a click opens the task it waits for: a
 // taskdep: link), a missing id or a cycle, how many tasks wait for it, its subtasks "3/5" and its
-// clocked time; the menu starts or stops its timer and adds a dependency.
+// clocked time; the menu starts or stops its timer and adds a dependency. A subtask (depth > 0:
+// listed under the task it belongs to, TaskListModel nestSubtasks) is indented by its depth, the
+// row's highlight with it, without the page (its task's, shown above). A task with subtasks listed
+// under it folds them with its progress chip (a chevron before "3/5": foldToggled) or Left / Right.
 T.ItemDelegate {
     id: control
 
@@ -62,10 +65,19 @@ T.ItemDelegate {
     required property bool progressComplete
     required property string timeLabel
     required property bool clockRunning
+    required property int depth
+    required property string key
+    required property int subtaskCount
+    required property bool folded
+    /// How far the row is indented: a step per level (on a desktop the subtask's checkbox under its
+    /// task's text), at most five.
+    readonly property real indent: Math.min(depth, 5) * (Theme.touchUi ? 24 : 30)
     /// The status, "todo" for none.
     readonly property string statusOrTodo: status !== "" ? status : "todo"
 
     signal taskToggled()
+    /// Fold / unfold the subtasks listed under the task.
+    signal foldToggled()
     signal opened()
     signal linkActivated(string url)
     /// Ctrl+click on the #tag `tag`: open the page it names.
@@ -186,7 +198,8 @@ T.ItemDelegate {
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: implicitContentHeight + topPadding + bottomPadding
-    leftPadding: Theme.touchUi ? 2 : 4
+    leftInset: indent
+    leftPadding: indent + (Theme.touchUi ? 2 : 4)
     rightPadding: Theme.touchUi ? 10 : 8
     topPadding: Theme.touchUi ? 4 : 5
     bottomPadding: Theme.touchUi ? 6 : 6
@@ -194,7 +207,9 @@ T.ItemDelegate {
     hoverEnabled: !Theme.touchUi
 
     Accessible.role: Accessible.ListItem
-    Accessible.name: joinNonEmpty([text, statusLabel, dueLabel !== "" ? qsTr("due %1").arg(dueLabel) : "",
+    Accessible.name: joinNonEmpty([text, depth > 0 ? qsTr("subtask") : "",
+                                   subtaskCount > 0 && folded ? qsTr("%n subtask(s) folded", "", subtaskCount) : "",
+                                   statusLabel, dueLabel !== "" ? qsTr("due %1").arg(dueLabel) : "",
                                    overdue ? qsTr("overdue") : "", priorityLabel, where])
 
     onClicked: control.opened()
@@ -205,6 +220,16 @@ T.ItemDelegate {
     Keys.onReturnPressed: control.opened()
     Keys.onEnterPressed: control.opened()
     Keys.onSpacePressed: control.taskToggled()
+    Keys.onLeftPressed: (event) => {
+        event.accepted = control.subtaskCount > 0 && !control.folded
+        if (event.accepted)
+            control.foldToggled()
+    }
+    Keys.onRightPressed: (event) => {
+        event.accepted = control.subtaskCount > 0 && control.folded
+        if (event.accepted)
+            control.foldToggled()
+    }
     Keys.onMenuPressed: {
         control.openMenuFrom(control, Theme.space8, control.height)
         control.statusMenu.highlightStatus() // the keyboard starts at the task's status
@@ -425,11 +450,18 @@ T.ItemDelegate {
                 }
                 BChip {
                     objectName: "taskProgressChip"
-                    visible: control.progress !== ""
+                    // With subtasks listed under it: the button that folds them.
+                    readonly property bool folds: control.subtaskCount > 0
+                    visible: control.progress !== "" || folds
                     size: "small"
                     variant: control.progressComplete ? "done" : "neutral"
-                    iconName: "list-checks"
-                    text: control.progress
+                    iconName: !folds ? "list-checks" : control.folded ? "chevron-right" : "chevron-down"
+                    text: control.progress !== "" ? control.progress : qsTr("%n subtask(s)", "", control.subtaskCount)
+                    interactive: folds
+                    outlined: false
+                    Accessible.name: !folds ? text
+                                     : control.folded ? qsTr("Show subtasks, %1").arg(text) : qsTr("Hide subtasks, %1").arg(text)
+                    onClicked: control.foldToggled()
                 }
                 BChip {
                     objectName: "taskTimeChip"
@@ -448,6 +480,7 @@ T.ItemDelegate {
                     text: control.priorityLabel
                 }
                 Text {
+                    visible: control.depth === 0 // a subtask's page is its task's, shown above
                     height: Theme.touchUi ? 24 : 20
                     verticalAlignment: Text.AlignVCenter
                     leftPadding: 2

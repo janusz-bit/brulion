@@ -220,7 +220,15 @@ QVariant TaskListModel::data(const QModelIndex &index, int role) const
         return sectionRowData(row.section, role);
     if (row.item < 0 || row.item >= m_items.size())
         return {};
-    return taskRowData(m_items.at(row.item), role);
+    switch (role) {
+    case SectionRole: return row.section;
+    case SectionLabelRole: return sectionLabel(row.section);
+    case SectionCountRole: return m_sectionCounts.value(row.section);
+    case DepthRole: return row.depth;
+    case SubtaskCountRole: return row.subtasks;
+    case FoldedRole: return row.subtasks > 0 && m_folded.contains(rowKey(row));
+    default: return taskRowData(m_items.at(row.item), role);
+    }
 }
 
 QVariant TaskListModel::sectionRowData(const QString &section, int role) const
@@ -234,6 +242,8 @@ QVariant TaskListModel::sectionRowData(const QString &section, int role) const
     case CollapsedRole: return m_collapsed.contains(section);
     case KeyRole: return QString(u"header:"_s + section);
     case LineRole:
+    case DepthRole:
+    case SubtaskCountRole:
     case PriorityRole: return 0;
     case OverdueRole:
     case IsJournalRole:
@@ -438,6 +448,9 @@ QHash<int, QByteArray> TaskListModel::roleNames() const
             {DependencyProblemRole, "dependencyProblem"},
             {ProgressRole, "progress"},
             {ProgressCompleteRole, "progressComplete"},
+            {DepthRole, "depth"},
+            {SubtaskCountRole, "subtaskCount"},
+            {FoldedRole, "folded"},
             {TimeLabelRole, "timeLabel"},
             {ClockRunningRole, "clockRunning"},
             {ReminderLabelRole, "reminderLabel"},
@@ -621,6 +634,42 @@ bool TaskListModel::filtered() const
 {
     return !m_tag.isEmpty() || !m_page.isEmpty() || !m_folder.isEmpty() || !m_priority.isEmpty()
            || m_status != u"all" || !m_text.isEmpty();
+}
+
+void TaskListModel::setNestSubtasks(bool nest)
+{
+    if (m_nestSubtasks == nest)
+        return;
+    m_nestSubtasks = nest;
+    Q_EMIT nestSubtasksChanged();
+    if (m_completing) {
+        m_rebuildPending = true;
+        return;
+    }
+    layoutTasks();
+    rebuildRows();
+    Q_EMIT countsChanged();
+}
+
+void TaskListModel::toggleSubtasks(const QString &key)
+{
+    setSubtasksFolded(key, !m_folded.contains(key));
+}
+
+void TaskListModel::setSubtasksFolded(const QString &key, bool folded)
+{
+    if (m_folded.contains(key) == folded)
+        return;
+    if (!folded) {
+        m_folded.remove(key);
+    } else {
+        const auto task = std::find_if(m_layout.cbegin(), m_layout.cend(),
+                                       [&](const Row &row) { return rowKey(row) == key; });
+        if (task == m_layout.cend() || task->subtasks == 0)
+            return;
+        m_folded.insert(key, plainText(m_items.at(task->item).ref.task.text));
+    }
+    rebuildRows(); // (the rows that stay get dataChanged: the task's folded role)
 }
 
 void TaskListModel::setCollapsedSections(const QStringList &keys)
@@ -943,6 +992,12 @@ TaskListModel::Item TaskListModel::makeItem(const QueryItem &qi, QDate today, Qt
             const markdown::SubtaskProgress progress = markdown::subtaskProgress(*note, qi.blockIndex);
             item.progressDone = progress.done;
             item.progressTotal = progress.total;
+            for (int p = block.parent; p >= 0 && p < note->blocks.size(); p = note->blocks.at(p).parent) {
+                if (note->blocks.at(p).task)
+                    item.taskAncestors.append(p);
+                if (note->blocks.at(p).parent >= p)
+                    break; // (pre-order: a parent comes first; never loops)
+            }
             if (!qi.task->dependsOn.isEmpty() || !qi.task->id.isEmpty()) {
                 const TaskDependencies deps = m_index->taskDependencies(qi.path, qi.blockIndex);
                 item.blocked = deps.blocked;
@@ -1137,19 +1192,156 @@ void TaskListModel::rebuild()
     for (Item &item : m_items)
         item.rendered = false;
 
-    m_sectionCounts.clear();
     m_total = int(m_items.size());
     m_open = 0;
+    m_overdue = 0;
+    m_todayCount = 0;
     for (const Item &item : std::as_const(m_items)) {
-        ++m_sectionCounts[item.section];
         if (!isClosed(item.ref.task.status))
             ++m_open;
+        if (item.section == u"overdue")
+            ++m_overdue;
+        else if (item.section == u"today")
+            ++m_todayCount;
     }
-    m_overdue = m_sectionCounts.value(u"overdue"_s);
-    m_todayCount = m_sectionCounts.value(u"today"_s);
     m_vaultTasks = vaultTasks;
+    layoutTasks();
     rebuildRows();
     Q_EMIT countsChanged();
+}
+
+void TaskListModel::layoutTasks()
+{
+    const qsizetype n = m_items.size();
+    // The listed task each item follows (the nearest listed ancestor task), -1 for none.
+    QList<int> parentOf(n, -1);
+    if (m_nestSubtasks) {
+        QHash<QString, QHash<int, int>> byBlock; // path -> block index -> item
+        bool any = false;
+        for (int i = 0; i < n; ++i) {
+            const Item &item = m_items.at(i);
+            byBlock[item.ref.path].insert(item.ref.blockIndex, i);
+            any = any || !item.taskAncestors.isEmpty();
+        }
+        if (any) {
+            for (int i = 0; i < n; ++i) {
+                const Item &item = m_items.at(i);
+                if (item.taskAncestors.isEmpty())
+                    continue;
+                const QHash<int, int> &blocks = byBlock[item.ref.path];
+                for (const int ancestor : item.taskAncestors) {
+                    const auto it = blocks.constFind(ancestor);
+                    if (it != blocks.cend()) {
+                        parentOf[i] = *it;
+                        break;
+                    }
+                }
+            }
+            // The section a task is shown in: its own, or the one of the task it follows unless
+            // it is more urgent than that. Ancestors first (a parent's block index is smaller).
+            QList<int> order(n);
+            std::iota(order.begin(), order.end(), 0);
+            std::sort(order.begin(), order.end(), [&](int a, int b) {
+                const TaskRef &x = m_items.at(a).ref;
+                const TaskRef &y = m_items.at(b).ref;
+                return x.path != y.path ? x.path < y.path : x.blockIndex < y.blockIndex;
+            });
+            QList<qsizetype> shownRank(n, -1);
+            for (const int i : std::as_const(order)) {
+                const qsizetype own = m_items.at(i).sectionRank;
+                const int p = parentOf[i];
+                if (p >= 0 && shownRank[p] >= 0 && own >= shownRank[p]) {
+                    shownRank[i] = shownRank[p];
+                } else {
+                    parentOf[i] = -1;
+                    shownRank[i] = own;
+                }
+            }
+        }
+    }
+    // Each task's subtasks in the note's order.
+    QHash<int, QList<int>> children;
+    for (int i = 0; i < n; ++i) {
+        if (parentOf[i] >= 0)
+            children[parentOf[i]].append(i);
+    }
+    for (QList<int> &list : children) {
+        std::sort(list.begin(), list.end(), [&](int a, int b) {
+            return m_items.at(a).ref.blockIndex < m_items.at(b).ref.blockIndex;
+        });
+    }
+    m_layout.clear();
+    m_layout.reserve(n);
+    m_sectionCounts.clear();
+    QList<std::pair<int, int>> stack; // (item, depth)
+    for (int i = 0; i < n; ++i) {
+        if (parentOf[i] >= 0)
+            continue;
+        const QString &section = m_items.at(i).section;
+        const qsizetype first = m_layout.size();
+        stack.append({i, 0});
+        while (!stack.isEmpty()) {
+            const auto [item, depth] = stack.takeLast();
+            m_layout.append(Row{false, section, item, depth});
+            ++m_sectionCounts[section];
+            const auto kids = children.constFind(item);
+            if (kids == children.cend())
+                continue;
+            for (qsizetype k = kids->size() - 1; k >= 0; --k)
+                stack.append({kids->at(k), depth + 1});
+        }
+        // Each row's subtasks: the rows after it that are deeper, up to the next one that is not.
+        QList<qsizetype> open; // rows of this tree whose subtasks are still being counted
+        for (qsizetype r = first; r < m_layout.size(); ++r) {
+            while (!open.isEmpty() && m_layout.at(open.last()).depth >= m_layout.at(r).depth)
+                open.removeLast();
+            for (const qsizetype o : std::as_const(open))
+                ++m_layout[o].subtasks;
+            open.append(r);
+        }
+    }
+    followFoldedTasks();
+}
+
+void TaskListModel::followFoldedTasks()
+{
+    if (m_folded.isEmpty())
+        return;
+    // A folded task stays folded at its key while that line holds a task with the same text and
+    // subtasks; else the nearest task of its note with that text and subtasks takes the fold (an
+    // edit moved it); else the fold is gone.
+    QHash<QString, QList<qsizetype>> byPath; // the rows of a note's tasks with subtasks
+    for (qsizetype r = 0; r < m_layout.size(); ++r) {
+        if (m_layout.at(r).subtasks > 0)
+            byPath[m_items.at(m_layout.at(r).item).ref.path].append(r);
+    }
+    QHash<QString, QString> folded;
+    for (auto it = m_folded.cbegin(); it != m_folded.cend(); ++it) {
+        const qsizetype colon = it.key().lastIndexOf(u':');
+        const QString path = it.key().left(colon);
+        const int line = it.key().mid(colon + 1).toInt();
+        const QList<qsizetype> rows = byPath.value(path);
+        std::optional<qsizetype> best;
+        for (const qsizetype r : rows) {
+            const Item &item = m_items.at(m_layout.at(r).item);
+            if (plainText(item.ref.task.text) != it.value())
+                continue;
+            const int distance = std::abs(item.ref.task.line - line);
+            if (!best || distance < std::abs(m_items.at(m_layout.at(*best).item).ref.task.line - line))
+                best = r;
+        }
+        if (best) {
+            const Item &item = m_items.at(m_layout.at(*best).item);
+            folded.insert(taskKey(item.ref.path, item.ref.task.line), it.value());
+        }
+    }
+    m_folded = std::move(folded);
+}
+
+QString TaskListModel::rowKey(const Row &row) const
+{
+    const Item &item = m_items.at(row.item);
+    return taskKey(item.ref.path, item.ref.task.line);
 }
 
 void TaskListModel::rebuildRows()
@@ -1158,17 +1350,24 @@ void TaskListModel::rebuildRows()
     QStringList newKeys;
     {
         QString current;
-        for (int i = 0; i < m_items.size(); ++i) {
-            const Item &item = m_items.at(i);
-            if (item.section != current) {
-                current = item.section;
+        int foldedDepth = -1; // the depth of the folded task whose subtasks are skipped
+        for (const Row &task : std::as_const(m_layout)) {
+            if (task.section != current) {
+                current = task.section;
                 rows.append(Row{true, current, -1});
                 newKeys.append(u"header:"_s + current);
+                foldedDepth = -1;
             }
-            if (m_collapsed.contains(item.section))
+            if (m_collapsed.contains(task.section))
                 continue;
-            rows.append(Row{false, item.section, i});
-            newKeys.append(taskKey(item.ref.path, item.ref.task.line));
+            if (foldedDepth >= 0 && task.depth > foldedDepth)
+                continue;
+            foldedDepth = -1;
+            const QString key = rowKey(task);
+            if (task.subtasks > 0 && m_folded.contains(key))
+                foldedDepth = task.depth;
+            rows.append(task);
+            newKeys.append(key);
         }
     }
 

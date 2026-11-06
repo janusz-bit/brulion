@@ -24,12 +24,26 @@
 //
 // Rows are section headers and tasks (rowType "header" | "task"); the tasks of collapsed
 // sections are left out, their header stays (with the count). Empty sections have no header.
+//
+// Subtasks (nestSubtasks, default true): a listed task whose ancestor in its outline is a listed
+// task follows the nearest such ancestor, indented (depth 1, 2, …), its siblings in the note's
+// order — in that ancestor's section, also a done subtask of an open task. A subtask more urgent
+// than the section its ancestor is shown in (an earlier section: an overdue step of a task for
+// later, an open step of a done task) is listed on its own in its section instead, so nothing is
+// shown later than its own section says. Filters apply to subtasks as to any task. Section counts
+// (headers, `sections`) count the tasks shown in the section; overdueCount and todayCount count
+// the tasks by their own section. With nestSubtasks false every task is a row at depth 0.
+// A task's subtasks fold (toggleSubtasks(key), view state: nothing is written, kept while the model
+// lives; a folded task followed by its text when an edit moves it to another line of its note);
+// the section counts keep counting them.
 // Created from QML, the model builds its rows once, when the component is complete (not once
 // per property set on creation); afterwards every change of a property rebuilds at once.
 // After an index change only the changed notes are evaluated again (a QueryCache) and their
 // tasks merged into the sorted list; rows then move, appear or disappear as before.
 //
 // Header roles: rowType, section, sectionLabel, sectionCount, collapsed.
+// A task row's section is the section it is shown in; depth: 0, or how deep a subtask is nested;
+// subtaskCount: the subtasks listed under it (any depth, also folded ones); folded: they are hidden.
 // Task roles (also on headers, empty): key ("path:line"), text (plain), html (escaped rich
 // text: links and tags clickable — page:/tag: URLs), status, path, line, pageTitle, folder,
 // isJournal, due ("YYYY-MM-DD[ HH:mm]"), dueLabel ("jutro", "pt 17 paź"), overdue, scheduled,
@@ -92,6 +106,8 @@ class TaskListModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(QString sortKey READ sortKey WRITE setSortKey NOTIFY sortKeyChanged FINAL)
     /// Any filter set (the "clear filters" button).
     Q_PROPERTY(bool filtered READ filtered NOTIFY filtersChanged FINAL)
+    /// Subtasks under the task they belong to (see above); false: a flat list.
+    Q_PROPERTY(bool nestSubtasks READ nestSubtasks WRITE setNestSubtasks NOTIFY nestSubtasksChanged FINAL)
     /// Keys of collapsed sections (default ["done"]).
     Q_PROPERTY(QStringList collapsedSections READ collapsedSections WRITE setCollapsedSections NOTIFY collapsedSectionsChanged FINAL)
 
@@ -151,6 +167,9 @@ public:
         ProgressCompleteRole,
         TimeLabelRole,
         ClockRunningRole,
+        DepthRole,
+        SubtaskCountRole,
+        FoldedRole,
     };
     Q_ENUM(Role)
 
@@ -194,6 +213,8 @@ public:
     QString sortKey() const { return m_sort; }
     void setSortKey(const QString &key);
     bool filtered() const;
+    bool nestSubtasks() const { return m_nestSubtasks; }
+    void setNestSubtasks(bool nest);
     QStringList collapsedSections() const { return m_collapsed; }
     void setCollapsedSections(const QStringList &keys);
 
@@ -209,6 +230,9 @@ public:
 
     /// Collapse / expand a section.
     Q_INVOKABLE void toggleSection(const QString &key);
+    /// Fold / unfold the subtasks of the task "path:line" (a task without listed subtasks: nothing).
+    Q_INVOKABLE void toggleSubtasks(const QString &key);
+    Q_INVOKABLE void setSubtasksFolded(const QString &key, bool folded);
     /// Remove every filter (the sort stays).
     Q_INVOKABLE void clearFilters();
     /// Take the filters from a query text (route {view: "tasks", query}): tag, page, path,
@@ -265,6 +289,7 @@ Q_SIGNALS:
     void paletteChanged();
     void filtersChanged();
     void sortKeyChanged();
+    void nestSubtasksChanged();
     void collapsedSectionsChanged();
     void countsChanged();
     void refreshDelayChanged();
@@ -287,6 +312,8 @@ private:
         QString dependencyProblem;
         int progressDone = 0;
         int progressTotal = 0;
+        /// Block indices of the task's ancestors that are tasks, the nearest first.
+        QList<int> taskAncestors;
         // What the list is sorted by (itemLess()).
         qsizetype sectionRank = 0;
         std::optional<QDate> finished; ///< the done section's date
@@ -298,8 +325,10 @@ private:
     };
     struct Row {
         bool header = false;
-        QString section;
-        int item = -1; ///< index into m_items
+        QString section; ///< the section the row is shown in
+        int item = -1;   ///< index into m_items
+        int depth = 0;   ///< a subtask's nesting under the task it follows
+        int subtasks = 0; ///< the subtasks listed under it (layoutTasks())
     };
 
     QDate currentDay() const;
@@ -314,6 +343,11 @@ private:
     void rankTitles(QList<Item> &items);
     /// The list order: section, then the sort key's fields, then title, path and line.
     bool itemLess(const Item &a, const Item &b) const;
+    /// The task rows in display order (subtasks under their tasks) and the section counts.
+    void layoutTasks();
+    /// m_folded's keys after the tasks moved (layoutTasks()).
+    void followFoldedTasks();
+    QString rowKey(const Row &row) const;
     void rebuildRows();
     void filtersEdited();
     QVariant taskRowData(const Item &item, int role) const;
@@ -345,7 +379,10 @@ private:
     enum SortMode { SortByDue, SortByPriority, SortByCreated, SortByPage };
     SortMode m_sortMode = SortByDue; ///< m_sort as itemLess() reads it
     QList<Item> m_items;            ///< all matching tasks, sorted by section then sort key
-    QHash<QString, int> m_sectionCounts;
+    bool m_nestSubtasks = true;
+    QList<Row> m_layout;                ///< every task row in display order (layoutTasks())
+    QHash<QString, QString> m_folded;   ///< folded tasks: key ("path:line") -> plain text
+    QHash<QString, int> m_sectionCounts; ///< tasks shown per section
     QList<Row> m_rows;
     QStringList m_rowKeys;          ///< key of every row ("header:<section>", "path:line")
     QHash<QString, int> m_rowOfKey;

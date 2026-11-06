@@ -658,6 +658,131 @@ private Q_SLOTS:
         QCOMPARE(m.timeSummary(u"task"_s, u"all"_s).value(u"tasks"_s).toInt(), 1);
     }
 
+    // Subtasks follow the task they belong to (indented, in the note's order, in its section) —
+    // unless more urgent than that section; filters apply to them; a flat list without nesting.
+    void subtasksUnderTheirTask()
+    {
+        auto index = makeIndex({{u"Projekt.md"_s, u"- [ ] Przeprowadzka 📅 2026-10-19\n"
+                                                  "  - [x] Spakować książki ✅ 2026-10-14\n"
+                                                  "  - notatka bez zadania\n"
+                                                  "    - [ ] Zamówić kartony\n"
+                                                  "      - [ ] Policzyć pudła 🔽\n"
+                                                  "  - [ ] Wypowiedzieć umowę 📅 2026-10-14\n"
+                                                  "- [x] Stary projekt ✅ 2026-10-01\n"
+                                                  "  - [ ] Otwarty krok\n"
+                                                  "  - [x] Zamknięty krok ✅ 2026-10-01\n"_s}});
+        TaskListModel m;
+        QAbstractItemModelTester tester(&m, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setWeekStart(1);
+        m.setCollapsedSections({});
+        m.setVaultIndex(index.get());
+        const auto outline = [&m] {
+            QStringList out;
+            for (int r = 0; r < m.rowCount(); ++r) {
+                const QModelIndex i = m.index(r, 0);
+                if (m.data(i, TaskListModel::RowTypeRole).toString() == u"header")
+                    out << u"# %1 %2"_s.arg(m.data(i, TaskListModel::SectionRole).toString())
+                                    .arg(m.data(i, TaskListModel::SectionCountRole).toInt());
+                else
+                    out << u"%1%2"_s.arg(QString(2 * m.data(i, TaskListModel::DepthRole).toInt(), u' '),
+                                         m.data(i, TaskListModel::TextRole).toString());
+            }
+            return out;
+        };
+        QCOMPARE(outline(), (QStringList{u"# overdue 1"_s, u"Wypowiedzieć umowę"_s,
+                                         u"# later 4"_s, u"Przeprowadzka"_s, u"  Spakować książki"_s,
+                                         u"  Zamówić kartony"_s, u"    Policzyć pudła"_s,
+                                         u"# noDate 1"_s, u"Otwarty krok"_s,
+                                         u"# done 2"_s, u"Stary projekt"_s, u"  Zamknięty krok"_s}));
+        // A subtask's section is the one it is shown in; the counts by own section stay.
+        QCOMPARE(m.data(m.index(m.rowOfKey(u"Projekt.md:1"_s), 0), TaskListModel::SectionRole).toString(), u"later"_s);
+        QCOMPARE(m.get(m.rowOfKey(u"Projekt.md:4"_s)).value(u"depth"_s).toInt(), 2);
+        QCOMPARE(m.get(m.rowOfKey(u"Projekt.md:0"_s)).value(u"depth"_s).toInt(), 0);
+        QCOMPARE(m.totalCount(), 8);
+        QCOMPARE(m.overdueCount(), 1);
+        QCOMPARE(sectionCount(m, u"later"_s), 4);
+
+        // Done: its open subtasks are listed on their own (the done section is no place for them).
+        index->update(u"Projekt.md"_s, index->content(u"Projekt.md"_s)
+                                               .replace(u"- [ ] Przeprowadzka 📅 2026-10-19"_s,
+                                                        u"- [x] Przeprowadzka 📅 2026-10-19 ✅ 2026-10-15"_s));
+        QTRY_COMPARE(outline(), (QStringList{u"# overdue 1"_s, u"Wypowiedzieć umowę"_s,
+                                             u"# noDate 3"_s, u"Zamówić kartony"_s, u"  Policzyć pudła"_s,
+                                             u"Otwarty krok"_s,
+                                             u"# done 4"_s, u"Przeprowadzka"_s, u"  Spakować książki"_s,
+                                             u"Stary projekt"_s, u"  Zamknięty krok"_s}));
+
+        // Filters apply to subtasks: open ones only.
+        m.setStatusFilter(u"open"_s);
+        QCOMPARE(outline(), (QStringList{u"# overdue 1"_s, u"Wypowiedzieć umowę"_s,
+                                         u"# noDate 3"_s, u"Zamówić kartony"_s, u"  Policzyć pudła"_s,
+                                         u"Otwarty krok"_s}));
+
+        // A flat list: every task in its own section.
+        m.setStatusFilter(u"all"_s);
+        m.setNestSubtasks(false);
+        QCOMPARE(outline(), (QStringList{u"# overdue 1"_s, u"Wypowiedzieć umowę"_s,
+                                         u"# noDate 3"_s, u"Zamówić kartony"_s, u"Otwarty krok"_s,
+                                         u"Policzyć pudła"_s,
+                                         u"# done 4"_s, u"Przeprowadzka"_s, u"Spakować książki"_s,
+                                         u"Stary projekt"_s, u"Zamknięty krok"_s}));
+    }
+
+    // Folded subtasks: hidden rows, counts kept, the fold follows its task when an edit moves it.
+    void foldingSubtasks()
+    {
+        auto index = makeIndex({{u"Remont.md"_s, u"- [ ] Łazienka 📅 2026-10-19\n"
+                                                 "  - [ ] Kafelki\n"
+                                                 "    - [ ] Fuga\n"
+                                                 "  - [x] Wanna ✅ 2026-10-14\n"
+                                                 "- [ ] Kuchnia 📅 2026-10-19\n"_s}});
+        TaskListModel m;
+        QAbstractItemModelTester tester(&m, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        m.setRefreshDelay(0);
+        m.setToday(u"2026-10-15"_s);
+        m.setWeekStart(1);
+        m.setVaultIndex(index.get());
+        const auto texts = [&m] { return column(m, TaskListModel::TextRole); };
+        QCOMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kafelki"_s, u"Fuga"_s, u"Wanna"_s, u"Kuchnia"_s}));
+        QCOMPARE(m.get(m.rowOfKey(u"Remont.md:0"_s)).value(u"subtaskCount"_s).toInt(), 3);
+        QCOMPARE(m.get(m.rowOfKey(u"Remont.md:1"_s)).value(u"subtaskCount"_s).toInt(), 1);
+        QCOMPARE(m.get(m.rowOfKey(u"Remont.md:4"_s)).value(u"subtaskCount"_s).toInt(), 0);
+
+        // A task without subtasks does not fold.
+        m.toggleSubtasks(u"Remont.md:4"_s);
+        QVERIFY(!m.get(m.rowOfKey(u"Remont.md:4"_s)).value(u"folded"_s).toBool());
+
+        m.toggleSubtasks(u"Remont.md:1"_s);
+        QCOMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kafelki"_s, u"Wanna"_s, u"Kuchnia"_s}));
+        QVERIFY(m.get(m.rowOfKey(u"Remont.md:1"_s)).value(u"folded"_s).toBool());
+        m.toggleSubtasks(u"Remont.md:0"_s);
+        QCOMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kuchnia"_s}));
+        QCOMPARE(m.rowOfKey(u"Remont.md:3"_s), -1);
+        QCOMPARE(sectionCount(m, u"later"_s), 5); // folded ones still count
+        QCOMPARE(m.get(m.rowOfKey(u"Remont.md:0"_s)).value(u"subtaskCount"_s).toInt(), 3);
+
+        // A line above: the folds move with their tasks.
+        index->update(u"Remont.md"_s, u"- [ ] Projekt\n"_s + index->content(u"Remont.md"_s));
+        QTRY_COMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kuchnia"_s, u"Projekt"_s}));
+        QVERIFY(m.get(m.rowOfKey(u"Remont.md:1"_s)).value(u"folded"_s).toBool());
+
+        // Unfolded: the inner fold is still there.
+        m.setSubtasksFolded(u"Remont.md:1"_s, false);
+        QCOMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kafelki"_s, u"Wanna"_s, u"Kuchnia"_s, u"Projekt"_s}));
+        m.toggleSubtasks(u"Remont.md:2"_s);
+        QCOMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kafelki"_s, u"Fuga"_s, u"Wanna"_s, u"Kuchnia"_s, u"Projekt"_s}));
+
+        // Its subtasks gone, a task is not folded any more (none come back folded).
+        m.toggleSubtasks(u"Remont.md:2"_s);
+        index->update(u"Remont.md"_s, u"- [ ] Łazienka 📅 2026-10-19\n  - [ ] Kafelki\n"_s);
+        QTRY_COMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kafelki"_s}));
+        QVERIFY(!m.get(m.rowOfKey(u"Remont.md:1"_s)).value(u"folded"_s).toBool());
+        index->update(u"Remont.md"_s, u"- [ ] Łazienka 📅 2026-10-19\n  - [ ] Kafelki\n    - [ ] Fuga\n"_s);
+        QTRY_COMPARE(texts(), (QStringList{u"Łazienka"_s, u"Kafelki"_s, u"Fuga"_s}));
+    }
+
     void emptyAndNoIndex()
     {
         TaskListModel none;

@@ -291,6 +291,7 @@ FocusScope {
                     x: (ListView.view.width - width) / 2
                     focus: ListView.isCurrentItem
                     onTaskToggled: root.toggle(taskRow.path, taskRow.line, taskRow.text, taskRow.status)
+                    onFoldToggled: taskModel.toggleSubtasks(taskRow.key)
                     onOpened: AppController.openPage(taskRow.path, taskRow.line)
                     onLinkActivated: (url) => root.activateLink(url, taskRow.path)
                     onTagPageRequested: (tag) => AppController.openTag(tag)

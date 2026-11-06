@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="790"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="789"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="835"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="834"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="836"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="835"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="845"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="847"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="844"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="846"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -159,7 +159,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="987"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="980"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -167,7 +167,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="989"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="982"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -175,7 +175,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1003"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="996"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -183,7 +183,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1019"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1012"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -191,7 +191,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1092"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1085"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -199,7 +199,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2079"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2068"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -279,7 +279,7 @@
 <context>
     <name>CalendarWeekGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="251"/>
+        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="250"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -456,7 +456,7 @@
 <context>
     <name>DrawingBackdropDialog</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="121"/>
+        <location filename="../src/app/qml/drawing/DrawingBackdropDialog.qml" line="120"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -467,7 +467,7 @@
 <context>
     <name>DrawingView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/drawing/DrawingView.qml" line="443"/>
+        <location filename="../src/app/qml/drawing/DrawingView.qml" line="442"/>
         <source>%n pasted element(s) Brulion does not draw (frames, embedded pages) left out.</source>
         <translation>
             <numerusform>%n pasted element Brulion does not draw (frames, embedded pages) left out.</numerusform>
@@ -478,7 +478,7 @@
 <context>
     <name>EditorDialogs</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="442"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="441"/>
         <source>Inserted %n drawing(s)</source>
         <translation>
             <numerusform>Inserted %n drawing</numerusform>
@@ -519,8 +519,8 @@
 <context>
     <name>FindBar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="83"/>
-        <location filename="../src/app/qml/editor/FindBar.qml" line="100"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="82"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="99"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -528,7 +528,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="85"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="84"/>
         <source>in %n day(s)</source>
         <translation>
             <numerusform>in %n day</numerusform>
@@ -536,7 +536,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="88"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="87"/>
         <source>%n day(s) left as they were: they changed meanwhile or could not be written.</source>
         <translation>
             <numerusform>%n day left as it was: it changed meanwhile or could not be written.</numerusform>
@@ -544,7 +544,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="244"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="243"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -552,7 +552,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="250"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="249"/>
         <source>%n day(s)</source>
         <translation>
             <numerusform>%n day</numerusform>
@@ -560,7 +560,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="330"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="329"/>
         <source>%n match(es) inside links: they will point elsewhere.</source>
         <translation>
             <numerusform>%n match inside a link: it will point elsewhere.</numerusform>
@@ -568,7 +568,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="331"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="330"/>
         <source>%n match(es) in the page&apos;s properties.</source>
         <translation>
             <numerusform>%n match in the page&apos;s properties.</numerusform>
@@ -576,7 +576,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/FindBar.qml" line="342"/>
+        <location filename="../src/app/qml/editor/FindBar.qml" line="341"/>
         <source>Searched the latest %n day(s). Older ones: In the whole notebook…</source>
         <translation>
             <numerusform>Searched the latest %n day. Older ones: In the whole notebook…</numerusform>
@@ -633,7 +633,7 @@
 <context>
     <name>HabitsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/HabitsView.qml" line="188"/>
+        <location filename="../src/app/qml/views/HabitsView.qml" line="187"/>
         <source>%n with a problem</source>
         <translation>
             <numerusform>%n with a problem</numerusform>
@@ -814,7 +814,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="574"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="570"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -825,7 +825,7 @@
 <context>
     <name>LogsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="240"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="239"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -833,7 +833,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="410"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="409"/>
         <source>New entries (%n)</source>
         <translation>
             <numerusform>New entry (%n)</numerusform>
@@ -855,7 +855,7 @@
 <context>
     <name>PageView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="597"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="592"/>
         <source>%n word(s)</source>
         <translation>
             <numerusform>%n word</numerusform>
@@ -863,7 +863,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="597"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="592"/>
         <source>%n character(s)</source>
         <translation>
             <numerusform>%n character</numerusform>
@@ -871,7 +871,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="598"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="593"/>
         <source>%n without spaces</source>
         <comment>characters</comment>
         <translation>
@@ -880,7 +880,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="599"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="594"/>
         <source>%n min read</source>
         <translation>
             <numerusform>%n min read</numerusform>
@@ -902,7 +902,7 @@
 <context>
     <name>PropertiesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/blockviews.cpp" line="306"/>
+        <location filename="../src/app/editor/blockviews.cpp" line="303"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -1398,7 +1398,7 @@
 <context>
     <name>SyncView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="257"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="256"/>
         <source>%n note(s) changed on two devices at once</source>
         <translation>
             <numerusform>%n note changed on two devices at once</numerusform>
@@ -1406,7 +1406,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="351"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="350"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n note with two versions</numerusform>
@@ -1428,7 +1428,7 @@
 <context>
     <name>TableBlockView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TableBlockView.qml" line="810"/>
+        <location filename="../src/app/qml/editor/TableBlockView.qml" line="806"/>
         <source>%1 of %n row(s) shown</source>
         <translation>
             <numerusform>%1 of %n row shown</numerusform>
@@ -1484,10 +1484,10 @@
 <context>
     <name>TasksFilterBar</name>
     <message numerus="yes">
-        <location filename="../src/app/planning/tasklistmodel.cpp" line="392"/>
+        <location filename="../src/app/planning/tasklistmodel.cpp" line="405"/>
         <location filename="../tests/app/planning/tst_planning_tasks.cpp" line="564"/>
-        <location filename="../tests/app/planning/tst_planning_tasks.cpp" line="569"/>
-        <location filename="../tests/app/planning/tst_planning_tasks.cpp" line="574"/>
+        <location filename="../tests/app/planning/tst_planning_tasks.cpp" line="570"/>
+        <location filename="../tests/app/planning/tst_planning_tasks.cpp" line="575"/>
         <source>%n tasks</source>
         <translation>
             <numerusform>%n task</numerusform>
@@ -1498,11 +1498,27 @@
 <context>
     <name>TasksRow</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="424"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="211"/>
+        <source>%n subtask(s) folded</source>
+        <translation>
+            <numerusform>%n subtask folded</numerusform>
+            <numerusform>%n subtasks folded</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="449"/>
         <source>Blocks %n task(s)</source>
         <translation>
             <numerusform>Blocks %n task</numerusform>
             <numerusform>Blocks %n tasks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="459"/>
+        <source>%n subtask(s)</source>
+        <translation>
+            <numerusform>%n subtask</numerusform>
+            <numerusform>%n subtasks</numerusform>
         </translation>
     </message>
 </context>
@@ -1528,7 +1544,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="247"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="244"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -1536,7 +1552,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="248"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="245"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -1544,7 +1560,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="249"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="246"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -1552,7 +1568,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="343"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="341"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>
