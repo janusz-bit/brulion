@@ -1808,8 +1808,8 @@ private Q_SLOTS:
         QStringList names;
         for (const QVariant &v : ws->subfolders(QString()))
             names.append(v.toMap().value(u"name"_s).toString() + u' ' + v.toMap().value(u"pages"_s).toString());
-        // Attachment-only folders left out; journals counted without their days.
-        QCOMPARE(names, (QStringList{u"journals 0"_s, u"Łódź 1"_s, u"Projekty 2"_s, u"Rozdział 2 1"_s,
+        // Attachment-only folders left out; the journals folder counts its days (All pages lists them).
+        QCOMPARE(names, (QStringList{u"journals 1"_s, u"Łódź 1"_s, u"Projekty 2"_s, u"Rozdział 2 1"_s,
                                      u"Rozdział 10 1"_s, u"Zakupy 1"_s, u"Żagle 1"_s}));
         QCOMPARE(ws->subfolders(u"Projekty"_s).size(), 1);
         QCOMPARE(ws->pageCount(), 10);

@@ -8,7 +8,8 @@
 // descending reverses it (ties are always by title). filter: words that must all occur in the
 // title, an alias or the folder (case- and diacritic-insensitive). folder: only pages in this
 // folder and below — or only in it, without `recursive` (default true: subfolders too).
-// includeJournals: daily notes too (default false).
+// includeJournals: daily notes too (default false). In the journals folder (or below it) daily
+// notes are listed regardless: they are its pages (journalsFolderListed).
 //
 // Roles: path, title, folder, aliases (list), modified (ms since epoch), modifiedLabel ("today
 // 09:12"), size, backlinks (pages linking here or carrying a tag that names the page), tags
@@ -36,6 +37,8 @@ class PageListModel : public WorkspaceListModel {
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
     /// "YYYY-MM-DD" for "today"/"yesterday"; "" = the workspace clock.
     Q_PROPERTY(QString today READ today WRITE setToday NOTIFY todayChanged FINAL)
+    /// `folder` is the journals folder or inside it: daily notes listed whatever includeJournals says.
+    Q_PROPERTY(bool journalsFolderListed READ journalsFolderListed NOTIFY journalsFolderListedChanged FINAL)
     /// Pages in scope (folder, journals) before the text filter.
     Q_PROPERTY(int totalCount READ totalCount NOTIFY totalCountChanged FINAL)
 
@@ -75,6 +78,7 @@ public:
     QString today() const { return m_today; }
     void setToday(const QString &today);
     int totalCount() const { return m_total; }
+    bool journalsFolderListed() const { return m_journalsFolderListed; }
 
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -91,6 +95,7 @@ Q_SIGNALS:
     void localeChanged();
     void todayChanged();
     void totalCountChanged();
+    void journalsFolderListedChanged();
 
 protected:
     void refresh() override;
@@ -123,6 +128,7 @@ private:
     QString m_locale = QStringLiteral("pl");
     QString m_today;
     int m_total = 0;
+    bool m_journalsFolderListed = false;
     /// A sort change reorders everything: reset instead of diffing.
     bool m_resetNext = false;
 };

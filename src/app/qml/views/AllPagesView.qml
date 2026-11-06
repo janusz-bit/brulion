@@ -9,7 +9,7 @@ import Brulion
 // title, folder, last change, backlinks, tags. Wide windows show columns (click a column to sort
 // by it, again to reverse); phones show two-line rows and a sort menu. The filter finds titles,
 // aliases and folders without Polish letters ("lodz" → "Łódź"); "Journals" adds the daily
-// notes. route.path lists one folder (the top bar's breadcrumb and the sidebar's "Show folder
+// notes (the journals folder itself always lists them, without that chip). route.path lists one folder (the top bar's breadcrumb and the sidebar's "Show folder
 // pages" lead here): its pages, with those of its subfolders unless "With subfolders" is off
 // (remembered per device), and its subfolders as rows above them (at the root: the top-level
 // folders) — a phone's folder browser; the top bar's breadcrumb goes back up. "New page"
@@ -158,6 +158,8 @@ FocusScope {
                 onClicked: sortMenu.popup(sortButton, 0, sortButton.height)
             }
             BChip {
+                // In the journals folder its daily notes are always listed.
+                visible: !pages.journalsFolderListed
                 text: qsTr("Journals")
                 iconName: "calendar-days"
                 interactive: true
