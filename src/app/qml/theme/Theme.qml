@@ -11,9 +11,9 @@ import Brulion
 // on the backgrounds they are used on (fgFaint on bg/bgElevated/bgSunken included, chip text
 // on its tinted chip over any surface, white on the solid danger/accentSolid fills — the brand
 // red #e2574c is a fill for non-text marks only); state borders (borderControl, focusRing)
-// reach 3:1. The gallery's "Podstawy" section computes all of this live.
+// reach 3:1. The gallery's "Podstawy" (basics) section computes all of this live.
 //
-// Appearance settings (Ustawienia → Wygląd): the surfaces, the accent family and the text colours
+// Appearance settings (Settings → Appearance): the surfaces, the accent family and the text colours
 // come from ThemePalette (C++, src/app/ui/themepalette.h), which derives a readable accent from
 // any colour and whose tests check every accent on every surface (tst_ui_themepalette); the
 // defaults ("paper" / "slate", "red") are exactly the colours above. The accent marks things

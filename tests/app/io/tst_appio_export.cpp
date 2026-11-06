@@ -399,7 +399,7 @@ private Q_SLOTS:
         c.setFormat(u"html-single"_s);
         QVERIFY(c.webPicturesApply());
 
-        // "Zostaw adresy": nothing fetched, the URLs as written.
+        // "Keep addresses": nothing fetched, the URLs as written.
         c.prepare();
         QVERIFY(waitState(c, u"ready"_s));
         QString html = QString::fromUtf8(c.result().first().data);
@@ -407,7 +407,7 @@ private Q_SLOTS:
         QVERIFY(html.contains(u"<img src=\""_s + cached + u'"'));
         QVERIFY(server.requests.isEmpty());
 
-        // "Dołącz kopie": the cached one as it is, the missing ones fetched, a failure keeps its
+        // "Include copies": the cached one as it is, the missing ones fetched, a failure keeps its
         // address with a warning.
         c.setWebPictures(u"include"_s);
         QCOMPARE(c.state(), u"idle"_s);

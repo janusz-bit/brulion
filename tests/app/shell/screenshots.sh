@@ -41,13 +41,25 @@ delay="${DELAY:-1400}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
+# The sample notebook follows the UI language (src/app/shell/demovault.h): its folder and pages in
+# English, or in Polish for LOCALE=pl. (Arguments are split at spaces: \u0020 inside the JSON.)
+if [[ "$locale" == pl ]]; then
+  sample="Przykładowy brulion" projects=Projekty project='Projekty/Remont\u0020mieszkania.md'
+  recipes=Przepisy.md guide='Witaj\u0020w\u0020Brulionie.md' picture=assets/plan-mieszkania.svg
+  new_page=Prezenty.md idea=pomysł selection=Zamówić..Odebrać
+else
+  sample="Sample notebook" projects=Projects project='Projects/Home\u0020renovation.md'
+  recipes=Recipes.md guide='Welcome\u0020to\u0020Brulion.md' picture=assets/floor-plan.svg
+  new_page=Gifts.md idea=idea selection=Order..Pick
+fi
+
 declare -A shot_args=(
   [onboarding]="--onboarding"
   [journals]="--demo --route journals"
   [page]="--demo"
   [settings]="--demo --route settings"
   [settings-editor]="--demo --route {\"view\":\"settings\",\"section\":\"editor\"}"
-  # Ustawienia → Wygląd, and the look it makes: a teal accent on white paper / OLED black, the
+  # Settings → Appearance, and the look it makes: a teal accent on white paper / OLED black, the
   # compact density (desktop; phones keep their sizes), a custom colour derived to stay readable.
   [settings-appearance]="--demo --route {\"view\":\"settings\",\"section\":\"appearance\"}"
   [settings-appearance-black]="--demo --route {\"view\":\"settings\",\"section\":\"appearance\"} --accent green --surface black"
@@ -66,21 +78,21 @@ declare -A shot_args=(
   [capture]="--demo --route journals --popup capture"
   [drawer]="--demo --route journals --popup drawer"
   # Folders: the renovation project open (the tree shows it, the drawer on phones with each row's
-  # "⋯"), "Przenieś do…" for it, a new page in its folder (the folder chip), a new folder, and All
+  # "⋯"), "Move to…" for it, a new page in its folder (the folder chip), a new folder, and All
   # pages as a folder browser (the root's folders; the project folder with its breadcrumb).
-  [tree]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"}"
-  [drawer-tree]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup drawer"
-  [move]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup move"
-  [newpage-folder]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup newPage"
+  [tree]="--demo --route {\"view\":\"page\",\"path\":\"$project\"}"
+  [drawer-tree]="--demo --route {\"view\":\"page\",\"path\":\"$project\"} --popup drawer"
+  [move]="--demo --route {\"view\":\"page\",\"path\":\"$project\"} --popup move"
+  [newpage-folder]="--demo --route {\"view\":\"page\",\"path\":\"$project\"} --popup newPage"
   # A page at the notebook's root: the new page goes to the root (its chip); the templates folder
   # moved into the project folder, chosen: what changes, both settings that follow.
-  [newpage-root]="--demo --route {\"view\":\"page\",\"path\":\"Przepisy.md\"} --popup newPage"
-  [move-chosen]="--demo --route journals --popup move:templates>Projekty"
+  [newpage-root]="--demo --route {\"view\":\"page\",\"path\":\"$recipes\"} --popup newPage"
+  [move-chosen]="--demo --route journals --popup move:templates>$projects"
   [newfolder]="--demo --route journals --popup newFolder"
   # The message about a new version under the top bar (--update-available: no network).
   [update]="--demo --route journals --update-available 9.9.9"
   [allpages]="--demo --route allPages"
-  [allpages-folder]="--demo --route {\"view\":\"allPages\",\"path\":\"Projekty\"}"
+  [allpages-folder]="--demo --route {\"view\":\"allPages\",\"path\":\"$projects\"}"
   # The block editor in the real app on the guide page (qml/dev/PageScript.qml).
   [page-editing]="--demo --editor-script editing"
   # A simulated on-screen keyboard (--keyboard, drawn grey): the touch toolbar docked on it, the
@@ -89,7 +101,7 @@ declare -A shot_args=(
   [journals-editing-keyboard]="--demo --route {\"view\":\"journals\",\"open\":\"write\"} --keyboard 300"
   [capture-keyboard]="--demo --route journals --popup capture --keyboard 300"
   # While typing on a phone a toast shows at the top (not over the line being written); the
-  # toolbar's "Więcej" when the system has hidden the keyboard: the menu right above the toolbar.
+  # toolbar's "More" when the system has hidden the keyboard: the menu right above the toolbar.
   [page-editing-toast]="--demo --editor-script editing-toast --keyboard 300"
   [page-toolbar-menu]="--demo --editor-script toolbar-menu --keyboard 300"
   [page-suggest]="--demo --editor-script suggest"
@@ -100,25 +112,25 @@ declare -A shot_args=(
   [page-source]="--demo --editor-script source"
   [page-sidepanel]="--demo --editor-script sidepanel"
   [page-empty]="--demo --editor-script empty"
-  [page-new]="--demo --route {\"view\":\"page\",\"path\":\"Prezenty.md\"}"
+  [page-new]="--demo --route {\"view\":\"page\",\"path\":\"$new_page\"}"
   # A tag's page not written yet, opened from the tag: on phones not typing yet (the tagged blocks
   # listed below stay in view).
-  [page-tag-new]="--demo --route {\"view\":\"page\",\"path\":\"pomysł.md\",\"fromTag\":\"pomysł\"}"
+  [page-tag-new]="--demo --route {\"view\":\"page\",\"path\":\"$idea.md\",\"fromTag\":\"$idea\"}"
   # Note modes: the guide is a document; editing it; switched to an outline; the page menu with
-  # "Przełącz na konspekt"; the renovation project (an outline).
+  # "Switch to outline"; the renovation project (an outline).
   [page-doc-paragraph]="--demo --editor-script doc-paragraph"
   [page-doc-list]="--demo --editor-script doc-list"
   [page-doc-heading]="--demo --editor-script doc-heading"
   [page-doc-outline]="--demo --editor-script doc-outline"
-  [page-menu]="--demo --route {\"view\":\"page\",\"path\":\"Witaj\u0020w\u0020Brulionie.md\",\"open\":\"menu\"}"
-  [page-project]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"}"
+  [page-menu]="--demo --route {\"view\":\"page\",\"path\":\"$guide\",\"open\":\"menu\"}"
+  [page-project]="--demo --route {\"view\":\"page\",\"path\":\"$project\"}"
   # Three of the project's tasks selected (on phones the selection mode: its tools at the bottom).
-  [page-selection]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --editor-script select-range:Zamówić..Odebrać"
+  [page-selection]="--demo --route {\"view\":\"page\",\"path\":\"$project\"} --editor-script select-range:$selection"
   # A picture attachment: the picture with the notes that embed it, its text (read-only), and
   # its references in the side panel (wide windows).
-  [page-picture]="--demo --route {\"view\":\"page\",\"path\":\"assets/plan-mieszkania.svg\"}"
-  [page-picture-text]="--demo --route {\"view\":\"page\",\"path\":\"assets/plan-mieszkania.svg\",\"open\":\"text\"}"
-  [page-picture-links]="--demo --route {\"view\":\"page\",\"path\":\"assets/plan-mieszkania.svg\",\"open\":\"links\"}"
+  [page-picture]="--demo --route {\"view\":\"page\",\"path\":\"$picture\"}"
+  [page-picture-text]="--demo --route {\"view\":\"page\",\"path\":\"$picture\",\"open\":\"text\"}"
+  [page-picture-links]="--demo --route {\"view\":\"page\",\"path\":\"$picture\",\"open\":\"links\"}"
   # The document mode on a long Obsidian-like note (tests/app/shell/notemode/, added to the
   # sample notebook): reading, editing a paragraph, a nested list item, a wrapped nested task, the
   # same note switched to an outline, a heading and a numbered item being edited, a selected task, the
@@ -199,7 +211,7 @@ for shot in "${shots[@]}"; do
       home="$(mktemp -d)"
       vault_args=()
       if [[ -n "${shot_notemode[$shot]:-}" ]]; then
-        vault="$home/Przykładowy brulion"
+        vault="$home/$sample"
         fixtures=tests/app/shell/notemode
         XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
           QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \

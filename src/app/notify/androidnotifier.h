@@ -9,7 +9,7 @@
 // go alone. A tapped notification arrives as AndroidBridge::activated() and is forwarded as
 // activated() (main.cpp also hands it to AppController::openNotification()).
 //
-// "Zrobione" in a task reminder's notification or on the alarm screen: the Kotlin side queues
+// "Done" in a task reminder's notification or on the alarm screen: the Kotlin side queues
 // the tap (DoneQueue.kt; the app may be closed, the tap is persisted at once) and tells
 // AndroidBridge (doneRequestsQueued(), also on every return to the front). The queue is taken
 // only while a notebook is ready (setDoneTarget(): indexed, reminders running) and only that
@@ -17,7 +17,7 @@
 // stay queued for their notebook. They are forwarded as doneRequested() with the day of the tap
 // and written by WorkspaceReminders right away — a tap is never held only in memory.
 //
-// The background check (docs/ANDROID.md "Sprawdzanie notatek w tle"): setBackgroundCheck() hands
+// The background check (docs/ANDROID.md "Checking notes in the background"): setBackgroundCheck() hands
 // the Kotlin side the notebook whose reminders are armed (src/app/background/backgroundcheck.h);
 // its periodic job reads that notebook while Brulion is closed and arms what it finds.
 //

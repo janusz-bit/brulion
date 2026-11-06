@@ -10,7 +10,7 @@
 // folder and below — or only in it, without `recursive` (default true: subfolders too).
 // includeJournals: daily notes too (default false).
 //
-// Roles: path, title, folder, aliases (list), modified (ms since epoch), modifiedLabel ("dziś
+// Roles: path, title, folder, aliases (list), modified (ms since epoch), modifiedLabel ("today
 // 09:12"), size, backlinks (pages linking here or carrying a tag that names the page), tags
 // (display spellings), tagCount,
 // journalDate ("" for pages), titleMatches (positions of the filter words in the title).
@@ -34,7 +34,7 @@ class PageListModel : public WorkspaceListModel {
     /// With `folder` (or at the root): the pages of subfolders too (default) or only its own.
     Q_PROPERTY(bool recursive READ recursive WRITE setRecursive NOTIFY recursiveChanged FINAL)
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
-    /// "YYYY-MM-DD" for "dziś"/"wczoraj"; "" = the workspace clock.
+    /// "YYYY-MM-DD" for "today"/"yesterday"; "" = the workspace clock.
     Q_PROPERTY(QString today READ today WRITE setToday NOTIFY todayChanged FINAL)
     /// Pages in scope (folder, journals) before the text filter.
     Q_PROPERTY(int totalCount READ totalCount NOTIFY totalCountChanged FINAL)

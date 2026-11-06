@@ -171,7 +171,7 @@ jobs:
           ctest --test-dir build --output-on-failure --parallel "$(nproc)" --timeout 300
           --output-junit "$RUNNER_TEMP/ctest-junit.xml"
 
-      # A drawing on "Jak motyw" shows dark in a browser that prefers dark: its SVG's @media style
+      # A drawing on "Like the app" shows dark in a browser that prefers dark: its SVG's @media style
       # sheet (tests/data/drawing/auto_theme.svg, which tst_drawing compares byte for byte), in
       # Chrome (preinstalled on the runner) with the colour scheme emulated light and dark.
       - uses: actions/setup-node@v7

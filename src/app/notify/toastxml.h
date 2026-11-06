@@ -1,4 +1,4 @@
-// Windows toast notifications of reminders and alarms (docs/WINDOWS.md "Powiadomienia") — the
+// Windows toast notifications of reminders and alarms (docs/WINDOWS.md "Notifications") — the
 // pure parts, built on every platform so the desktop tests cover them; WindowsToastBus
 // (windowstoastbus.h, Windows only) shows the XML through WinRT's ToastNotificationManager.
 //
@@ -12,13 +12,13 @@
 //                                               their looping sound; reminders stay ~25 s, then
 //                                               wait in the Action Center
 //     <visual><binding template="ToastGeneric"><text>summary</text><text>body</text>…
-//     <actions><action content="Drzemka 10 min"
+//     <actions><action content="Snooze 10 min"
 //                      arguments="brulion-toast:id=7&amp;action=snooze"
 //                      activationType="foreground"/>…   one per action of the message except
 //                                               "default" (the click on the toast: `launch`)
 //     <audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>  or silent="true"
 //
-// Every action the message carries becomes a button: "Drzemka", "Zrobione" (a task's reminder:
+// Every action the message carries becomes a button: "Snooze", "Done" (a task's reminder:
 // marks the task done) and "OK".
 #pragma once
 

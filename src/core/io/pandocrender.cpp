@@ -539,7 +539,7 @@ QString PandocRenderer::renderListItem(const ParsedNote &note, int index) const
         marker = first.first(d + 1);
     }
     QString content;
-    // A list item that is one fenced block (`/Wzór matematyczny` in an outline or a journal writes
+    // A list item that is one fenced block (`/Math formula` in an outline or a journal writes
     // "- ```math") is that block, like the editor shows it.
     const auto fence = b.task ? std::nullopt : itemFence(b.text);
     const QString embedded = b.task || fence ? QString() : embeddedContent(b.text);

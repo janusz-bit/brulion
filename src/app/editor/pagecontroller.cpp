@@ -230,7 +230,7 @@ PageController::PageController(QObject *parent) : QObject(parent), m_model(new B
     }
     if (QCoreApplication::instance())
         connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &PageController::flush);
-    // Midnight: "jutro 17:30" becomes "dziś 17:30", overdue dates turn red, `today` queries move on.
+    // Midnight: "tomorrow 17:30" becomes "today 17:30", overdue dates turn red, `today` queries move on.
     connect(DayClock::instance(), &DayClock::dayChanged, this, &PageController::refreshToday);
 #ifdef BRULION_EDITOR_HAVE_SYNC_MERGE
     m_merge = [](const QString &base, const QString &local, const QString &remote) {
@@ -1736,7 +1736,7 @@ void PageController::logTaskStatus(quint64 uid, TaskStatus before, TaskStatus af
     const int line = m_model->document().at(r).line;
     QString t = text();
     if (after == TaskStatus::Doing) {
-        // As Logseq: "W toku" starts the clock — one at a time.
+        // As Logseq: "In progress" starts the clock — one at a time.
         stopTaskClocksElsewhere(*m_host, now, m_path);
         t = stopTaskClocksIn(t, now, line);
         t = markdown::startTaskClock(t, line, now);
@@ -2394,8 +2394,8 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
     QString markdown = text;
     while (markdown.endsWith(u'\n'))
         markdown.chop(1);
-    // One list item ("- jeden", "- [ ] Skuć 📅 …": a copied block) pasted into a text block brings
-    // its text, not its marker ("- - jeden"). Pasted over the whole text of a list item, a task or
+    // One list item ("- one", "- [ ] Paint 📅 …": a copied block) pasted into a text block brings
+    // its text, not its marker ("- - one"). Pasted over the whole text of a list item, a task or
     // a code, table… item becomes that block (its checkbox, its fence); over the whole text of a
     // paragraph, the paragraph becomes that list item. A numbered item only when it is this app's
     // own copy: elsewhere "2025. rok" is more often text than a list.
@@ -2657,8 +2657,8 @@ void PageController::setReminder(int row, const QString &at, bool alarm, const Q
     }
     // The caret at the end of the edited text stays there, after what was written — with a space
     // after it, as after a completed date: a "/" or "#" typed next starts a command or tag
-    // instead of sticking to the token ("/przypomnienie" in an empty block, then "/").
-    // That space (also one typed before "/przypomnienie", now after the token) is not saved while
+    // instead of sticking to the token ("/reminder" in an empty block, then "/").
+    // That space (also one typed before "/reminder", now after the token) is not saved while
     // nothing follows it (rememberEditorSpace()).
     const bool caretAtEnd = editingRow() == row && m_cursor >= m_model->editTextAt(row).size();
     QString tail;
@@ -2757,7 +2757,7 @@ QVariantMap PageController::dateChip(int row, const QString &url) const
     QVariantMap chip = tokenChip(m_model->document().at(row).body, url, m_model->renderOffsetAt(row),
                                  shape.task.has_value(), config);
     if (chip.value(u"kind"_s).toString() == u"day") {
-        // What a click on the link opens, and the link "Kopiuj link" copies.
+        // What a click on the link opens, and the link "Copy link" copies.
         const QString target = chip.value(u"target"_s).toString();
         const QString pageUrl = u"page:"_s + QString::fromLatin1(QUrl::toPercentEncoding(target));
         chip.insert(u"url"_s, pageUrl);
@@ -4129,8 +4129,8 @@ int PageController::downloadWebPictures(const QString &url)
         if (!m_webDownloads.contains(u))
             m_webDownloads.append(u);
     }
-    // Being stored: the new ones and those already on their way (a picture's "Zapisz w
-    // notatniku" chosen while it was fetched) — counted before the cached ones finish below.
+    // Being stored: the new ones and those already on their way (a picture's "Save to
+    // notebook" chosen while it was fetched) — counted before the cached ones finish below.
     const int pending = int(wanted.size());
     // Cached ones are stored at once, the rest once fetched (onWebPictureChanged()).
     for (const QString &u : std::as_const(wanted)) {
@@ -4360,7 +4360,7 @@ void PageController::openPdf(int row, const QString &path, int page, bool newPan
     QVariantMap route{{u"view"_s, u"page"_s}, {u"path"_s, path}};
     if (page > 1)
         route.insert(u"pdfPage"_s, page);
-    // Where it was opened from: "Rysuj na tej stronie" embeds the drawing right after this block.
+    // Where it was opened from: "Draw on this page" embeds the drawing right after this block.
     if (!m_path.isEmpty()) {
         route.insert(u"from"_s, m_path);
         if (validRow(row))

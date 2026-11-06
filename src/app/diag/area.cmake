@@ -1,5 +1,5 @@
 # Diagnostics area of the app (included by src/app/CMakeLists.txt in its scope, so relative paths
-# are relative to src/app): the event log's page ("Rejestr zdarzeń", route "logs") — the static
+# are relative to src/app): the event log's page ("Event log", route "logs") — the static
 # library brulion_diag and its QML.
 #
 #   LogController   QML singleton `Logs`: copy / share (Android share sheet) / save (Downloads,
@@ -10,7 +10,7 @@
 #   webselftest.h   the browser build's self-tests that need the running app (library
 #                   brulion_webselftest): ?selftest=webpictures (pictures from the internet as the
 #                   editor fetches them, an export with copies) and ?selftest=pen (the drawing
-#                   editor's canvas under a pen) — tests/web, docs/WEB.md "Testy w przeglądarkach"
+#                   editor's canvas under a pen) — tests/web, docs/WEB.md "Browser tests (Playwright)"
 # The Logger itself is the core's (src/core/log), installed by main.cpp. Tests: tests/app/diag.
 
 set(_brulion_diag_dir ${CMAKE_CURRENT_LIST_DIR})

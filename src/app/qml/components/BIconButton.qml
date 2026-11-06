@@ -6,8 +6,8 @@ import Brulion
 // BIconButton — square icon-only button. `label` is required: it is the accessible name and
 // the tooltip text (with `shortcut` shown as key caps).
 //
-//   BIconButton { iconName: "search"; label: qsTr("Szukaj"); shortcut: "Ctrl+Shift+F" }
-//   BIconButton { iconName: "pin"; label: qsTr("Przypnij"); checkable: true }
+//   BIconButton { iconName: "search"; label: qsTr("Search"); shortcut: "Ctrl+Shift+F" }
+//   BIconButton { iconName: "pin"; label: qsTr("Pin"); checkable: true }
 //
 // variant: "ghost" (default) | "secondary" (outlined) | "primary" | "danger"
 // size:    "small" | "normal" (default) | "large"

@@ -16,7 +16,7 @@
 //               canShow, signal fired(notification) for in-app toasts
 //
 // Notification maps (missed, upcoming, next, fired): { id, title, body, at ("YYYY-MM-DD HH:mm"),
-// when (human: "dziś 09:00", "wt 13 paź 18:00"), alarm, path, line, task (the reminder is on an
+// when (human: "today 09:00", "Tue, Oct 13 18:00"), alarm, path, line, task (the reminder is on an
 // open task: "Done" can complete it) }.
 #pragma once
 
@@ -103,7 +103,7 @@ public:
 
     // ---- settings -----------------------------------------------------------------------------
     /// Ids of the reminders the Android widgets' quick add arms natively while the app is closed
-    /// (QuickAdd.kt: "widget:<entry id>"); their "Zrobione" is found by place, see current().
+    /// (QuickAdd.kt: "widget:<entry id>"); their "Done" is found by place, see current().
     static constexpr QStringView ProvisionalIdPrefix = u"widget:";
 
     bool enabled() const { return m_enabled; }
@@ -126,8 +126,8 @@ public:
     bool firesWhenClosed() const;
     /// The notifier can show notifications right now.
     Q_INVOKABLE bool canShow() const;
-    /// The last background check of the notes (Android, docs/ANDROID.md "Sprawdzanie notatek w
-    /// tle"): { at ("YYYY-MM-DD HH:mm"), when ("dziś 10:32"), ok, applied (its reminders were
+    /// The last background check of the notes (Android, docs/ANDROID.md "Checking notes in the
+    /// background"): { at ("YYYY-MM-DD HH:mm"), when ("today 10:32"), ok, applied (its reminders were
     /// armed), reminders (how many), sync ("off" | "ok" | "failed" | "busy" | "skipped"), error };
     /// {} before the first one and on other platforms.
     Q_INVOKABLE QVariantMap backgroundCheckStatus() const;

@@ -1,4 +1,4 @@
-// Shares from other apps (notebook/share.h, "Udostępnij → Brulion"): the platform's JSON read
+// Shares from other apps (notebook/share.h, "Share → Brulion"): the platform's JSON read
 // defensively and written back (round trip), one capture text from a title, a text and a link (the
 // previous app's share target cases), the browser's share target query (form encoding, malformed
 // escapes, invalid UTF-8, unknown and repeated keys, the length cap), files opened with Brulion on a

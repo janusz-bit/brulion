@@ -1,4 +1,4 @@
-// Log — Brulion's event log (UI: "Rejestr zdarzeń"). Module "log"; QtCore only; no deps.
+// Log — Brulion's event log (UI: "Event log"). Module "log"; QtCore only; no deps.
 //
 // Code keeps logging with Qt's own macros and the categories below; the Logger captures every
 // Qt message (brulion.*, Qt's qt.*, QML warnings, console.*) through a chained message handler.

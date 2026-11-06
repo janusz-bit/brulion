@@ -11,7 +11,7 @@ import Brulion
 // click on the header creates it). It never takes the keyboard focus: the note being written
 // keeps it.
 //
-//   BLinkPreview { href: "page:Dom"; fromPath: "Plan.md"; host: Workspace
+//   BLinkPreview { href: "page:Home"; fromPath: "Plan.md"; host: Workspace
 //                  onActivated: (url, path, newPane) => … }
 //   preview.show(x, y)   // under (x, y) of its parent, above it near the bottom
 T.Popup {

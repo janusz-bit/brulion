@@ -9,11 +9,11 @@ import Brulion
 // tst_editor_qml_datechips_touch, a phone with --touch): a right-click (mouse) or a finger held
 // on a 📅 chip and on a ⏰ chip opens DateChipMenu — never the block menu, no block selected —;
 // its items tapped or clicked move the date (a day later, today), open the date dialog on the
-// chip's own date, remove the token; on a reminder an hour later and the alarm switch, "Zmień
-// datę i godzinę…" the reminder dialog; each change is one undo step and the rest of the line
+// chip's own date, remove the token; on a reminder an hour later and the alarm switch, "Change
+// date and time…" the reminder dialog; each change is one undo step and the rest of the line
 // stays as written; a plain click or tap on the chip still edits the text. The same gesture on the
-// ⏫ priority, the 🔁 rule (its quick rules), the reminder's "Priorytet" submenu, a [[day]] link (a
-// day later) opens their menus, and on a #tag and a [[link]] the link menu (LinkMenu: "Kopiuj"
+// ⏫ priority, the 🔁 rule (its quick rules), the reminder's "Priority" submenu, a [[day]] link (a
+// day later) opens their menus, and on a #tag and a [[link]] the link menu (LinkMenu: "Copy"
 // copies the tag, the link) — never the block menu.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {

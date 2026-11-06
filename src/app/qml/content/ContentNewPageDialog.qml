@@ -3,14 +3,14 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ContentNewPageDialog — "Nowa strona" from AllPagesView: a title (a "/" makes folders:
-// "Projekty/Dom"), created in `folder` (the folder being listed, else the vault's folder for new
+// ContentNewPageDialog — "New page" from AllPagesView: a title (a "/" makes folders:
+// "Projects/Home"), created in `folder` (the folder being listed, else the vault's folder for new
 // pages) and opened, in the note mode chosen here (ContentNoteModeChoice). A title that is taken
 // gets " 2"; one differing only in letter case from a page opens that page
 // (Workspace.createPage).
 //
 //   ContentNewPageDialog { id: newPage }
-//   newPage.openIn("Projekty")
+//   newPage.openIn("Projects")
 BDialog {
     id: dialog
 

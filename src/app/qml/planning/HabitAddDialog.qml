@@ -3,10 +3,11 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// HabitAddDialog — "Dodaj nawyk" of HabitsView: a name and a schedule ("codziennie", "pn, śr, pt",
-// "3 razy w tygodniu"), previewed in words as the core reads it (HabitListModel.describeSchedule);
-// accepted only for a new name and a schedule that is understood. The caller writes the definition
-// (Workspace.addHabit: "- Name" + "  habit:: schedule" on the habits' page).
+// HabitAddDialog — "Add habit" of HabitsView: a name and a schedule ("codziennie", "pn, śr, pt",
+// "3 razy w tygodniu" — Polish: daily, Mon, Wed, Fri, 3 times a week), previewed in words as the
+// core reads it (HabitListModel.describeSchedule); accepted only for a new name and a schedule
+// that is understood. The caller writes the definition (Workspace.addHabit: "- Name" +
+// "  habit:: schedule" on the habits' page).
 //
 //   HabitAddDialog { habits: habitModel; onAddRequested: (name, schedule) => … }
 BDialog {
@@ -60,7 +61,7 @@ BDialog {
         objectName: "habitAddSchedule"
         Layout.fillWidth: true
         placeholderText: qsTr("every day, Mon Wed Fri, 3 times a week…")
-        errorText: control.schedule !== "" && control.preview === "" ? qsTr("Not understood — try “codziennie”, “pn, śr, pt” or “3 razy w tygodniu”") : ""
+        errorText: control.schedule !== "" && control.preview === "" ? qsTr("Not understood — try “every day”, “mon, wed, fri” or “3 times a week”") : ""
         onAccepted: if (control.acceptEnabled) control.accept()
     }
     BText {

@@ -8,12 +8,12 @@ import Brulion
 //
 //   BMergeView {
 //       ours: localText; theirs: remoteText
-//       oursLabel: qsTr("Ten telefon"); theirsLabel: qsTr("Laptop (Nextcloud)")
+//       oursLabel: qsTr("This phone"); theirsLabel: qsTr("Laptop (Nextcloud)")
 //       onResolved: (text) => sync.resolve(path, text)
 //   }
 //
-// For each conflicting hunk the user picks "Moja" (ours), "Ich" (theirs), "Obie" (both:
-// ours then theirs) or "Ręcznie" (edit the text by hand, pre-filled with both). Unchanged
+// For each conflicting hunk the user picks "Mine" (ours), "Theirs" (theirs), "Both" (both:
+// ours then theirs) or "Manual" (edit the text by hand, pre-filled with both). Unchanged
 // parts are shown collapsed. `hunks` comes from DiffHelper.conflictHunks(ours, theirs) by
 // default; a caller with a 3-way merge (core sync merge3) may set `hunks` directly using the
 // same shape: [{ kind: "same", text, lines } | { kind: "conflict", ours, theirs }].

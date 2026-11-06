@@ -1,5 +1,5 @@
 // Time spent on tasks (docs/SYNTAX.md §5 "Time tracking and status history"): the `CLOCK:` entries
-// of their `:LOGBOOK:` drawers summed per day, page, tag or task — the Tasks view's "Czas pracy"
+// of their `:LOGBOOK:` drawers summed per day, page, tag or task — the Tasks view's "Time spent"
 // and `brulion-cli task time`. Part of the index module — see index/index.h.
 #pragma once
 

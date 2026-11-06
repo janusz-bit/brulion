@@ -8,24 +8,24 @@ import Brulion
 //   * the page header (qml/content/ContentPageHeader.qml): folder breadcrumb, the title edited in
 //     place (renaming rewrites links and the tags that name the page everywhere — a confirmation
 //     says how many when other notes link here or carry such a tag), a strip for the tag that
-//     names the page (tag overview, its tasks, sub-tags), favourite star, page menu (Historia wersji, Kopiuj odnośnik, Eksportuj stronę,
-//     panel boczny, tekst źródłowy, Przenieś do kosza), previous / next day for daily notes and the
+//     names the page (tag overview, its tasks, sub-tags), favourite star, page menu (Version history, Copy link, Export page…,
+//     Open in side panel, Markdown source, Move to trash), previous / next day for daily notes and the
 //     page's properties (aliases, tags, frontmatter values) as chips;
 //   * the blocks (route line / blockId / heading scroll there, select the block and flash it —
 //     a heading by PageController.rowOfHeading, Obsidian heading paths too; a block or heading
 //     that is not there is said, the page stays at its top; the zoom breadcrumb is the editor's),
 //     fold state kept per device (Workspace.foldState);
 //   * the references below the blocks (ContentBacklinks: linked references — links and tags
-//     naming the page — grouped by page, unlinked mentions with "Połącz"), scrolling with the
+//     naming the page — grouped by page, unlinked mentions with "Link"), scrolling with the
 //     page; a page opened from a #tag or a [[link]] before it exists lists them too;
-//   * the side panel's context (ContentSidePanel: Odnośniki / Konspekt / Kalendarz);
+//   * the side panel's context (ContentSidePanel: Links / Outline / Calendar);
 //   * a picture attachment (assets/photo.png) as a picture (ContentPictureView: fitted into the
 //     view, a click — or the size button — its own pixels, the notes that embed it below; the
-//     bar's "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E switch to the file read as text and
+//     bar's "Show as text" / "Show picture" and Ctrl+E switch to the file read as text and
 //     back — read-only, for text-like assets: a picture's bytes never reach the editor, where a
 //     typed character would have been saved over them; the side panel lists its references);
-//   * a PDF (assets/wykład.pdf) in the PDF viewer (ContentPdfView, docs/UI.md "PDF viewer": its
-//     pages, zoom, the page jump, search, "Otwórz w innej aplikacji", "Rysuj na tej stronie";
+//   * a PDF (assets/lecture.pdf) in the PDF viewer (ContentPdfView, docs/UI.md "PDF viewer": its
+//     pages, zoom, the page jump, search, "Open in another app", "Draw on this page";
 //     route.pdfPage, route.from / fromLine — where it was opened from —, its own route.open values),
 //     never loaded into the editor; any other attachment that is no note (DOCX, ZIP, MP3…) read-only
 //     as text (ContentPictureView's `textOnly`): no file's bytes reach the block editor.
@@ -35,23 +35,23 @@ import Brulion
 // old name; a page that does not exist yet (a link to a missing page) opens with an empty block
 // to type into (a day without a note: the journal template) — except for a page opened from a #tag
 // on a touch screen (route.fromTag: the keyboard would cover the tagged blocks listed below; the
-// header's "Zacznij pisać" or a tap under it starts it) — and the editor creates the file with its
+// header's "Start writing" or a tap under it starts it) — and the editor creates the file with its
 // first change; settings (text width, "open pages as source", Ctrl+E); merged external changes are
 // told with a toast.
-// The note mode (docs/UI.md "Note modes"): the header's toggle, the page menu's "Przełącz na
-// dokument / konspekt" and the palette's "Przełącz tryb notatki" (uiAction "toggleNoteMode")
+// The note mode (docs/UI.md "Note modes"): the header's toggle, the page menu's "Switch to
+// document / outline" and the palette's "Toggle note mode" (uiAction "toggleNoteMode")
 // switch it (PageController.toggleMode writes the `brulion:` key); a change of the notebook's
-// default modes re-resolves pages that have no key. "Dodaj właściwość" (the page menu, Ctrl+;, the
+// default modes re-resolves pages that have no key. "Add property" (the page menu, Ctrl+;, the
 // palette's uiAction "addProperty") opens the properties panel's add row (BlockEditor.addProperty);
-// whether the panel is open is a device setting (AppSettings.propertiesExpanded). The palette's "Kopiuj link do strony / …
-// odwołanie do bloku / … link do bloku / … link do nagłówka" (uiAction "copyLink:<kind>") copy
+// whether the panel is open is a device setting (AppSettings.propertiesExpanded). The palette's "Copy link to page / …
+// block reference / … link to block / … link to heading" (uiAction "copyLink:<kind>") copy
 // through the editor (BlockEditor.copyCurrentLink); the documentation notebook writes no block ids
 // (PageController.allowNewBlockIds).
 // route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
 // dialog), "menu" (the page menu), "unlinked" (the unlinked mentions, scrolled to), "links" |
 // "outline" | "calendar" (the side panel on that tab). route.source opens in source mode.
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
-// Ctrl+F, the page menu's "Znajdź i zamień…" and the palette's command open the find bar (FindBar,
+// Ctrl+F, the page menu's "Find and replace…" and the palette's command open the find bar (FindBar,
 // NoteFind; Ctrl+H with its replace row; route.open "find"; docs/UI.md "Find and replace"): in the
 // main pane only, and a PDF has its own search. These keys — and Ctrl+E, Ctrl+; — are the
 // commands' shortcuts as ShortcutMap has them (custom ones too).
@@ -235,7 +235,7 @@ FocusScope {
     /// The tab this page's context panel showed last in the side panel ("": never shown).
     property string sidePanelTab: ""
     /// The side panel shows this page's linked references and unlinked mentions (wide windows,
-    /// the panel's rule in AppShell; no page pinned there; its Odnośniki tab): the section under
+    /// the panel's rule in AppShell; no page pinned there; its Links tab): the section under
     /// the blocks is not drawn a second time. Closing the panel, pinning a page there or another
     /// tab brings it back at once.
     readonly property bool refsInSidePanel: !root.inSidePanel && !Theme.narrow && AppController.sidePanelVisible
@@ -247,11 +247,11 @@ FocusScope {
     readonly property string routePath: AppController.routeText(route, "path")
     /// A drawing of Obsidian's Excalidraw plugin (`Szkic.excalidraw.md`, a note whose frontmatter
     /// has `excalidraw-plugin`) or a `.excalidraw` scene: shown as its drawing, never in the block
-    /// editor (its Markdown is the plugin's; "Edytuj rysunek" opens the drawing editor).
+    /// editor (its Markdown is the plugin's; "Edit drawing" opens the drawing editor).
     readonly property bool drawingPage: Js.test(root.routePath, "\\.(md|excalidraw)$", "i") && Workspace.isDrawing(root.routePath)
     /// A picture attachment opens as a picture (its bytes are not a note, the editor never loads
     /// them), a drawing page as its drawing; the file read as text, read-only, when asked for
-    /// ("Pokaż jako tekst", Ctrl+E).
+    /// ("Show as text", Ctrl+E).
     readonly property bool pictureRoute: Workspace.isPicture(root.routePath) || root.drawingPage
     property bool pictureAsText: false
     /// A PDF opens in the PDF viewer (its bytes never reach the editor).
@@ -352,7 +352,7 @@ FocusScope {
             // A page that does not exist yet: something to type into. A day without a note starts
             // from the journal template, like in the journal stream — written only once changed; a
             // week or month without a note from its own template.
-            // A page opened from a #tag on a touch screen waits for a tap ("Zacznij pisać", the
+            // A page opened from a #tag on a touch screen waits for a tap ("Start writing", the
             // space under the header): the keyboard would cover the blocks with the tag it lists.
             const waits = Theme.touchUi && AppController.routeFlag(root.route, "fromTag") && root.journalDate === ""
             if (page.loaded && !page.exists && page.blocks.count === 0 && !waits)
@@ -487,7 +487,7 @@ FocusScope {
     property bool findOpen: false
     /// A note is shown in the editor: there is something to find in.
     readonly property bool findable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute && page.loaded
-    /// "Drukuj…" (the menu, the palette, Ctrl+P): a note — a picture, a PDF or another file has
+    /// "Print…" (the menu, the palette, Ctrl+P): a note — a picture, a PDF or another file has
     /// its own app for that.
     readonly property bool printable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
     onFindableChanged: if (!findable && findOpen) root.closeFind()
@@ -965,7 +965,7 @@ FocusScope {
             iconName: "panel-right"
             onTriggered: AppController.openPage(page.path, -1, true)
         }
-        // A page named by a tag in use: Zadania z tym tagiem (Widok tagu is the header's "#").
+        // A page named by a tag in use: Tasks with this tag (Tag overview is the header's "#").
         BMenuItem {
             objectName: "pageMenuTagTasks"
             visible: root.pageHeader !== null && root.pageHeader.tagInUse
@@ -974,7 +974,7 @@ FocusScope {
             iconName: "list-todo"
             onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagKey) })
         }
-        // The note mode (also the header's toggle on a wide header, Więcej, the palette).
+        // The note mode (also the header's toggle on a wide header, More, the palette).
         BMenuItem {
             objectName: "pageMenuNoteMode"
             text: page.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
@@ -1134,7 +1134,7 @@ FocusScope {
         }
     }
 
-    // "Dodaj właściwość" (docs/UI.md "Page properties"): the panel's add row.
+    // "Add property" (docs/UI.md "Page properties"): the panel's add row.
     Shortcut {
         sequence: ShortcutMap.sequences["page.addProperty"] || ""
         enabled: root.commandTarget && editor.visible && page.loaded && !page.sourceMode

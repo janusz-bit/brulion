@@ -437,7 +437,7 @@ QList<GroupedRefsModel::Group> BacklinksModel::collectLinked()
         g.refs.append(b.blockIndex >= 0 ? refForBlock(b.path, b.blockIndex) : refForLine(b.path, b.link.line));
     }
     // A tag names a page (docs/SYNTAX.md §3): the tagged blocks join their page's group; a page
-    // tagged as a whole marks its group ("cała strona").
+    // tagged as a whole marks its group ("whole page").
     const QList<TagReference> tagged = idx->tagReferences(path);
     for (const TagReference &r : tagged) {
         Group &g = group(r.path);

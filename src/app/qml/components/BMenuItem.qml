@@ -7,11 +7,11 @@ import Brulion
 // is shown as plain text: menus list page titles and folder and notebook names, which come from
 // anywhere (sync, imports) and must never turn into markup.
 //
-//   BMenuItem { text: qsTr("Kopiuj odnośnik"); iconName: "link"; shortcut: "Ctrl+Shift+C"
+//   BMenuItem { text: qsTr("Copy link"); iconName: "link"; shortcut: "Ctrl+Shift+C"
 //               onTriggered: copyLink() }
-//   BMenuItem { text: qsTr("Pokaż ukończone"); checkable: true; checked: showDone }
-//   BMenuItem { text: qsTr("Usuń"); iconName: "trash-2"; danger: true }
-//   BMenuItem { text: qsTr("Przenieś w górę"); unavailable: gaps ? qsTr("…why…") : "" }
+//   BMenuItem { text: qsTr("Show completed"); checkable: true; checked: showDone }
+//   BMenuItem { text: qsTr("Delete"); iconName: "trash-2"; danger: true }
+//   BMenuItem { text: qsTr("Move up"); unavailable: gaps ? qsTr("…why…") : "" }
 // `unavailable`: shown but not possible now — drawn disabled, the reason in a tooltip on hover;
 // it still triggers (and closes the menu), so the menu can say why with a toast on touch screens,
 // where there is no hover.

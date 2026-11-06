@@ -1,7 +1,7 @@
 // Brulion's additions to the Gradle project that androiddeployqt makes from Qt's template
 // (<build>/src/app/android-build/). androiddeployqt copies android/ over the template, so this file
 // lands next to Qt's own build.gradle, which stays untouched (a Qt upgrade brings its template).
-// docs/ANDROID.md, "Rozmiar APK".
+// docs/ANDROID.md, "APK size".
 //
 // Gradle's release builds (APK and AAB; androiddeployqt makes them for the CMake build types
 // Release, RelWithDebInfo and MinSizeRel) shrink the Java/Kotlin code with R8: the Kotlin standard

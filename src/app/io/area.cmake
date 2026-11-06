@@ -1,6 +1,6 @@
 # Sync and import/export area of the app (included by src/app/CMakeLists.txt in its scope, so
 # relative paths are relative to src/app): the static library brulion_ioviews — the C++ side of
-# SyncView, ImportExportView and the "Synchronizacja" section of the settings — and its QML.
+# SyncView, ImportExportView and the "Sync" section of the settings — and its QML.
 #
 #   ImportController   importers with how-to texts (also the phone's steps), reading picked files /
 #                      folders (desktop and Android: QML FilePicker, the system's picker — on
@@ -26,7 +26,7 @@
 #   SyncRunInfo, IoLists   WorkspaceSync's run details and lists for compiled QML (syncviews.h)
 #   ConflictResolver   one conflict copy: both texts, a base from the version history, merge3
 #                      hunks for BMergeView, keep mine / keep the copy / merge; drawings: both
-#                      files and their union (drawing::merge) for the previews, "Scal rysunki"
+#                      files and their union (drawing::merge) for the previews, "Merge drawings"
 # Tests: tests/app/io. The library uses the shell's Workspace and AppSettings (brulion_shell,
 # defined by the shell area, which CMake includes after this one — target names resolve later).
 

@@ -19,10 +19,10 @@ import java.io.FileOutputStream
 import java.io.IOException
 
 /**
- * "Drukuj…" of a page ([BrulionAndroid.printPdf], `ExportController::print` in the app): the PDF
+ * "Print…" of a page ([BrulionAndroid.printPdf], `ExportController::print` in the app): the PDF
  * Brulion made of it (the PDF export: its pages, A4 or Letter by the device's locale) handed to the
  * system's print service — PrintManager with a [PrintDocumentAdapter] that copies the file, no
- * WebView. The printers, the copies and "Zapisz jako PDF" are the system's; the file (in the app's
+ * WebView. The printers, the copies and "Save as PDF" are the system's; the file (in the app's
  * cache) is deleted when the print job's dialog is done with it.
  */
 internal object PdfPrint {

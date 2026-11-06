@@ -7,8 +7,8 @@ import Brulion
 // BPalette — searchable popup list, the base of BCommandPalette and BQuickSwitcher.
 //
 //   BPalette {
-//       items: [{ title: "Dziennik", subtitle: "", icon: "book-open", shortcut: "Ctrl+J" }, …]
-//       placeholderText: qsTr("Szukaj…")
+//       items: [{ title: "Journal", subtitle: "", icon: "book-open", shortcut: "Ctrl+J" }, …]
+//       placeholderText: qsTr("Search…")
 //       onItemActivated: (item) => …
 //   }
 //

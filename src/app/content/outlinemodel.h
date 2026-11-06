@@ -1,4 +1,4 @@
-// OutlineModel — the headings of the page being edited (the side panel's "Konspekt"), live from
+// OutlineModel — the headings of the page being edited (the side panel's "Outline"), live from
 // the block editor's BlockListModel (any model with the roles `headingLevel`, `plainText` and
 // optionally `view`, `line`): edits show up at once, without waiting for the save.
 //

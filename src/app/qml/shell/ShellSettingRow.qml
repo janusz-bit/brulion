@@ -16,7 +16,7 @@ import Brulion
 // up), switches and swatches keep their width.
 // A row without controls titles what follows it (no divider below it: ShellSettingDividers).
 //
-//   ShellSettingRow { title: qsTr("Motyw"); description: qsTr("…"); BSegmented { … } }
+//   ShellSettingRow { title: qsTr("Theme"); description: qsTr("…"); BSegmented { … } }
 GridLayout {
     id: row
 

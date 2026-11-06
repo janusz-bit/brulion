@@ -7,7 +7,7 @@
 // drawer's page tree, All pages, tasks and the editor's bullets; desktops: left and right clicks),
 // tags as page links (a #tag opens its page with the tagged blocks among its references; in
 // Tasks a click filters, Ctrl+click or a long press opens the page; the tag list's rows), folders
-// (reveal, "Przenieś do…", a root folder, mouse drag and drop with Escape, All pages' folders),
+// (reveal, "Move to…", a root folder, mouse drag and drop with Escape, All pages' folders),
 // switching to the documentation notebook and back with the sidebar's notebook switcher, tabs (the
 // shortcuts, opening in a new tab, the bar, the split view, a page window; the phone's switcher), and
 // closing the notebook from the UI. Prints one line per check (BRULION_SELFTEST_DEBUG=1 adds

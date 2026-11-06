@@ -1,5 +1,5 @@
-// A file of the notebook handed to the system's app for it (docs/UI.md "PDF viewer": "Otwórz w innej
-// aplikacji"; the browser build's PDFs open in a new tab). One implementation per build, chosen by
+// A file of the notebook handed to the system's app for it (docs/UI.md "PDF viewer": "Open in another
+// app"; the browser build's PDFs open in a new tab). One implementation per build, chosen by
 // src/platform/CMakeLists.txt:
 //
 //   desktop   QDesktopServices::openUrl(QUrl::fromLocalFile(path)): the default app (xdg-open,

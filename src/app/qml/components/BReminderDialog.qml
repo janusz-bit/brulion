@@ -11,8 +11,8 @@ import Brulion
 //       onReminderChosen: (at, alarm, recurrence) => page.setReminder(blockId, at, alarm, recurrence)
 //       onDeleteRequested: page.removeReminder(blockId)
 //   }
-//   reminderDialog.editWith("2026-10-15 09:00", false, "every week on Monday", "Zadzwonić do mamy")
-//   reminderDialog.create("Zadzwonić do mamy")
+//   reminderDialog.editWith("2026-10-15 09:00", false, "every week on Monday", "Call mum")
+//   reminderDialog.create("Call mum")
 //
 // (The older forms still work, not compiled: edit({ at, alarm, recurrence, context }) and
 // reminderAccepted(reminder) with { at, alarm, recurrence }, emitted before reminderChosen.)

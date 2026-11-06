@@ -176,7 +176,7 @@ jobs:
 
   # The editing toolbar on the on-screen keyboard in real browsers — Chrome, Brave (its
   # visualViewport bug, brave-browser#60074) and Firefox — on an Android 16 emulator (KVM):
-  # scripts/android-emulator-test.sh --web-keyboard, docs/WEB.md "Klawiatura ekranowa". Not for
+  # scripts/android-emulator-test.sh --web-keyboard, docs/WEB.md "On-screen keyboard (phone)". Not for
   # releases (release.yml sets skip-emulator for every release, pre-releases too: a flaky emulator
   # must not hold one back) and not needed for the deployment.
   keyboard-android:
@@ -226,7 +226,7 @@ jobs:
   # headers, the export with copies the browser receives) and the pen in the drawing editor (its
   # pressure reaches the stroke, the line grows thicker, the barrel button and the eraser end
   # erase, the file keeps the pressures), in Playwright's Chromium and Firefox (under Xvfb: its
-  # WebGL 2) against local https/http servers — tests/web, docs/WEB.md "Testy w przeglądarkach".
+  # WebGL 2) against local https/http servers — tests/web, docs/WEB.md "Browser tests (Playwright)".
   browsers:
     name: Pictures from the internet and pen pressure (Chromium, Firefox)
     needs: build

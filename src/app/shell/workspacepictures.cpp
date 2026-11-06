@@ -2,15 +2,15 @@
 //
 // The QML engine loads nothing from the network (src/app/ui/localnetwork.h): the Workspace
 // fetches a picture itself (webpicture::PictureFetcher — http(s), size and time limits, no
-// cookies, the bytes must be a picture) when the user allowed it — "Pokaż" on that picture, the
-// device's setting webPicturesShown, or "Pobierz do notatnika" — into the device's cache
+// cookies, the bytes must be a picture) when the user allowed it — "Show" on that picture, the
+// device's setting webPicturesShown, or "Save to notebook" — into the device's cache
 // (webpicture::PictureCache), and the editor shows the cached file. A failure is remembered for
 // the session (no retries on every repaint) until the user asks again.
 //
 // Without asking, a picture is fetched only from a host of the internet (a NAS or router at
-// 192.168.x.x or localhost waits for "Pokaż": a synced note must not make the device send
+// 192.168.x.x or localhost waits for "Show": a synced note must not make the device send
 // requests into its network), and only once a session (one the cache dropped since waits for
-// "Pokaż" too, not fetched again on every repaint); turning the setting off cancels the fetches
+// "Show" too, not fetched again on every repaint); turning the setting off cancels the fetches
 // it started. In the browser the cache is in the tab's memory (not IndexedDB): smaller, and gone
 // with the tab; the requests are ones a page may send to another site, the browser follows
 // redirects itself (no redirected() to check them), and a failed connection is told as what a
@@ -180,7 +180,7 @@ void Workspace::setWebPicturesShown(bool shown)
         return;
     m_webPicturesShown = shown;
     if (!shown && m_webPictures) {
-        // Consent withdrawn: what was fetched only for it stops; "Pokaż" and "Zapisz w notatniku"
+        // Consent withdrawn: what was fetched only for it stops; "Show" and "Save to notebook"
         // go on. The rows ask again.
         WebPictures *web = m_webPictures;
         // All at once: aborting one must not start another of them from the queue.

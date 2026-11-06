@@ -1,5 +1,5 @@
 // VaultIndex: the page-property keys and values in use (propertyKeys(), propertyValues()) — the
-// suggestions of the "Właściwości" panel and the type an empty value takes from the notebook.
+// suggestions of the "Properties" panel and the type an empty value takes from the notebook.
 #include "index/vaultindex.h"
 #include "index/vaultindex_p.h"
 

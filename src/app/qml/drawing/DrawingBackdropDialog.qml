@@ -9,15 +9,15 @@ import Brulion
 // image provider "pdfpage", drawn when they scroll into view; the cells shaped as the first page —
 // wide for slides) — a tap chooses or drops one; with the keyboard the arrows move between them
 // and Space chooses (in "single" the arrows choose, as in a group of radio buttons) —,
-// "Wszystkie" / "Żadna" and the field "Strony" ("1-3, 7"; kept in step with the thumbnails).
-// Mode "insert" (a note's "Rysunek na obrazie lub PDF…"): any pages, at most
-// DrawingBackdrops' 60, one drawing each — "Wstaw rysunki (N)"; mode "single" (the drawing
-// editor's backdrop): one page, the current one chosen — "Ustaw podkład". While the pages are
-// prepared ("Strona 3 z 12…", a progress bar) the dialog stays; "Anuluj" stops it. A PDF with a
+// "All" / "None" and the field "Pages" ("1-3, 7"; kept in step with the thumbnails).
+// Mode "insert" (a note's "Drawing on a picture or PDF…"): any pages, at most
+// DrawingBackdrops' 60, one drawing each — "Insert drawings (N)"; mode "single" (the drawing
+// editor's backdrop): one page, the current one chosen — "Set backdrop". While the pages are
+// prepared ("Page 3 of 12…", a progress bar) the dialog stays; "Cancel" stops it. A PDF with a
 // password, one that cannot be read or a build without PDF says so.
 //
 //   DrawingBackdropDialog { onPrepared: (items) => controller.insertDrawingsOn(row, from, to, items) }
-//   dialog.openFor("Załączniki/wykład 3.pdf", "insert", 1)
+//   dialog.openFor("Attachments/lecture 3.pdf", "insert", 1)
 BDialog {
     id: dialog
     objectName: "drawingBackdropDialog"
@@ -123,7 +123,7 @@ BDialog {
     acceptText: single ? qsTr("Set backdrop") : qsTr("Insert drawings (%1)").arg(chosen.length)
     acceptEnabled: error === "" && chosen.length > 0
     busy: job !== 0
-    // One page to choose: the arrows at once (insert: the field "Strony" first, Tab to the pages).
+    // One page to choose: the arrows at once (insert: the field "Pages" first, Tab to the pages).
     initialFocusItem: single && error === "" && pageCount > 0 ? grid : null
     onAcceptRequested: {
         // Prepared first (the dialog stays, with its progress); prepared() and the close follow.

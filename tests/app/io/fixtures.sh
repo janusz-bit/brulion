@@ -2,14 +2,18 @@
 # Fixtures shared by qml-smoke.sh and screenshots.sh of the sync and import/export views.
 #
 #   source tests/app/io/fixtures.sh
-#   io_conflict_vault <dir>     conflict copies: Syncthing ones of "Zakupy.md", of a picture and of
-#                               a drawing ("assets/Szkic.svg": tests/data/drawing/conflict_*.svg),
+#   io_conflict_vault <dir> [<locale>]  conflict copies: Syncthing ones of "Zakupy.md", of a picture
+#                               and of a drawing ("assets/Szkic.svg": tests/data/drawing/conflict_*.svg),
 #                               of an Obsidian drawing with other notes ("Excalidraw/Szkic
-#                               ogrodu.excalidraw.md"), a Brulion (Nextcloud) one of "Plan podróży.md"
-#   io_seeded_vault <bin> <dir> <now>   once: the sample notebook seeded by the app itself (--demo
-#                               only seeds an empty folder) plus io_conflict_vault — copy it per run
-#   io_history_base <home> <vault>   this device's version history of "Zakupy.md" holds the common
-#                               ancestor of both versions (written in History's on-disk format)
+#                               ogrodu.excalidraw.md"), a Brulion (Nextcloud) one of "Plan podróży.md";
+#                               with an English <locale> (default pl) the same in English
+#                               ("Shopping.md", "Sketch.svg", "Garden sketch…", "Trip plan.md", …)
+#   io_seeded_vault <bin> <dir> <now> [<locale>]   once: the sample notebook seeded by the app
+#                               itself (--demo only seeds an empty folder; in the language of
+#                               <locale>, default pl) plus io_conflict_vault — copy it per run
+#   io_history_base <home> <vault> [<locale>]   this device's version history of "Zakupy.md"
+#                               ("Shopping.md" in English) holds the common ancestor of both
+#                               versions (written in History's on-disk format)
 #   io_logseq_graph <dir>       a small Logseq graph to import (journal, pages, a picture)
 #   io_nextcloud_home <home> <vault>  settings of an XDG home with a Nextcloud account whose
 #                               server does not exist (chmura.invalid: fails at once, offline-safe),
@@ -21,31 +25,42 @@
 #                               a slow sync that timed out, a retry, a stall
 
 io_conflict_vault() {
-  local dir="$1" drawings
+  local dir="$1" locale="${2:-pl}" drawings
   drawings="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../data/drawing" && pwd)"
   mkdir -p "$dir/assets"
+  local sketch=Szkic garden="Szkic ogrodu" shopping=Zakupy trip="Plan podróży" receipt=paragon
+  local phone=Telefon-Łucji back="posadzić jabłoń przy płocie, ławka pod śliwą"
+  local ours='- mleko\n- chleb żytni\n- masło\n- jajka\n- kawa ziarnista\n'
+  local theirs='- mleko\n- chleb\n- masło\n- ser żółty\n- kawa ziarnista\n- herbata\n'
+  local trip_ours='# Plan podróży do Gdańska\n\n- Pociąg w piątek o 7:15\n- Nocleg na dwie noce\n'
+  local trip_theirs='# Plan podróży do Gdańska\n\n- Pociąg w czwartek o 7:15\n- Nocleg na trzy noce\n- Europejskie Centrum Solidarności\n'
+  if [[ "$locale" != pl ]]; then
+    sketch=Sketch garden="Garden sketch" shopping=Shopping trip="Trip plan" receipt=receipt
+    phone=Lucys-phone back="plant an apple tree by the fence, a bench under the plum tree"
+    ours='- milk\n- rye bread\n- butter\n- eggs\n- coffee beans\n'
+    theirs='- milk\n- bread\n- butter\n- cheddar\n- coffee beans\n- tea\n'
+    trip_ours='# Trip to Edinburgh\n\n- Train on Friday at 7:15\n- Two nights at the hotel\n'
+    trip_theirs='# Trip to Edinburgh\n\n- Train on Thursday at 7:15\n- Three nights at the hotel\n- Edinburgh Castle\n'
+  fi
   # A drawing changed on two devices: a line and a box in both, a blue line here, a red ellipse in
-  # the copy ("Scal rysunki").
-  cp "$drawings/conflict_ours.svg" "$dir/assets/Szkic.svg"
-  cp "$drawings/conflict_theirs.svg" "$dir/assets/Szkic.sync-conflict-20261013-184500-LAPTOP7.svg"
+  # the copy ("Merge drawings").
+  cp "$drawings/conflict_ours.svg" "$dir/assets/$sketch.svg"
+  cp "$drawings/conflict_theirs.svg" "$dir/assets/$sketch.sync-conflict-20261013-184500-LAPTOP7.svg"
   # An Obsidian Excalidraw drawing whose copy differs only in the notes on the back of the drawing
-  # ("Różnią się tylko notatki wokół rysunku": the notes compared, "Usuń kopię").
+  # ("Only the notes around the drawing differ": the notes compared, "Remove the copy").
   mkdir -p "$dir/Excalidraw"
-  cp "$drawings/obsidian_freedraw.excalidraw.md" "$dir/Excalidraw/Szkic ogrodu.excalidraw.md"
-  sed 's/^Notatka z tyłu: Zażółć gęślą jaźń$/Notatka z tyłu: posadzić jabłoń przy płocie, ławka pod śliwą/' \
+  cp "$drawings/obsidian_freedraw.excalidraw.md" "$dir/Excalidraw/$garden.excalidraw.md"
+  sed "s/^Notatka z tyłu: Zażółć gęślą jaźń\$/Notatka z tyłu: $back/" \
     "$drawings/obsidian_freedraw.excalidraw.md" \
-    > "$dir/Excalidraw/Szkic ogrodu.excalidraw.sync-conflict-20261013-184500-LAPTOP7.md"
-  # Zakupy: with io_history_base an automatic three-way merge (both appended after "masło", only
-  # this device changed the bread); without it a two-way merge.
-  printf -- '- mleko\n- chleb żytni\n- masło\n- jajka\n- kawa ziarnista\n' > "$dir/Zakupy.md"
-  printf -- '- mleko\n- chleb\n- masło\n- ser żółty\n- kawa ziarnista\n- herbata\n' \
-    > "$dir/Zakupy.sync-conflict-20261013-184500-LAPTOP7.md"
-  printf -- '# Plan podróży do Gdańska\n\n- Pociąg w piątek o 7:15\n- Nocleg na dwie noce\n' \
-    > "$dir/Plan podróży.md"
-  printf -- '# Plan podróży do Gdańska\n\n- Pociąg w czwartek o 7:15\n- Nocleg na trzy noce\n- Europejskie Centrum Solidarności\n' \
-    > "$dir/Plan podróży.conflict-Telefon-Łucji-20261014-091500.md"
+    > "$dir/Excalidraw/$garden.excalidraw.sync-conflict-20261013-184500-LAPTOP7.md"
+  # Zakupy (Shopping): with io_history_base an automatic three-way merge (both appended after the
+  # butter, only this device changed the bread); without it a two-way merge.
+  printf -- "$ours" > "$dir/$shopping.md"
+  printf -- "$theirs" > "$dir/$shopping.sync-conflict-20261013-184500-LAPTOP7.md"
+  printf -- "$trip_ours" > "$dir/$trip.md"
+  printf -- "$trip_theirs" > "$dir/$trip.conflict-$phone-20261014-091500.md"
   # Two real pictures (a receipt in two shades) for the side-by-side preview.
-  python3 - "$dir/assets/paragon.png" "$dir/assets/paragon.sync-conflict-20261013-184500-LAPTOP7.png" <<'PY'
+  python3 - "$dir/assets/$receipt.png" "$dir/assets/$receipt.sync-conflict-20261013-184500-LAPTOP7.png" <<'PY'
 import struct, sys, zlib
 def png(path, rgb, w=120, h=80):
     def chunk(tag, data):
@@ -88,23 +103,23 @@ EOF
 }
 
 io_seeded_vault() {
-  local bin="$1" dir="$2" now="$3"
+  local bin="$1" dir="$2" now="$3" locale="${4:-pl}"
   [[ -d "$dir" ]] && return 0
   local home
   home="$(mktemp -d)"
   XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
     QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-    "$bin" --demo --vault "$dir" --no-single-instance --size 400x400 --now "$now" --delay 200 \
+    "$bin" --demo --vault "$dir" --no-single-instance --size 400x400 --now "$now" --locale "$locale" --delay 200 \
     --screenshot "$home/seed.png" >/dev/null 2>&1 || true
   rm -rf "$home"
-  io_conflict_vault "$dir"
+  io_conflict_vault "$dir" "$locale"
 }
 
 io_history_base() {
-  local home="$1" vault="$2"
-  python3 - "$home/data/Brulion/Brulion" "$vault" <<'PY'
+  local home="$1" vault="$2" locale="${3:-pl}"
+  python3 - "$home/data/Brulion/Brulion" "$vault" "$locale" <<'PY'
 import hashlib, json, os, sys
-data, vault = sys.argv[1], sys.argv[2]
+data, vault, locale = sys.argv[1], sys.argv[2], sys.argv[3]
 def fnv(b):
     h = 0xcbf29ce484222325
     for x in b:
@@ -114,7 +129,10 @@ state = os.path.join(data, "vaults", fnv(os.path.realpath(vault).encode()))
 hist = os.path.join(state, "history")
 os.makedirs(os.path.join(hist, "index"), exist_ok=True)
 os.makedirs(os.path.join(hist, "objects"), exist_ok=True)
-text = "- mleko\n- chleb\n- masło\n- kawa ziarnista\n".encode()
+english = locale != "pl"
+text = ("- milk\n- bread\n- butter\n- coffee beans\n" if english
+        else "- mleko\n- chleb\n- masło\n- kawa ziarnista\n").encode()
+path = "Shopping.md" if english else "Zakupy.md"
 time = 1791880200000  # 2026-10-13 08:30 UTC (10:30 in Warsaw)
 def b36(n):
     d = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -125,8 +143,8 @@ def b36(n):
     return s or "0"
 eid = b36(time) + "-0001abcd"
 open(os.path.join(hist, "objects", eid + ".txt"), "wb").write(text)
-index = {"path": "Zakupy.md", "entries": [{"id": eid, "time": time, "size": len(text), "reason": "external", "hash": fnv(text)}]}
-name = hashlib.sha1("Zakupy.md".encode()).hexdigest() + ".json"
+index = {"path": path, "entries": [{"id": eid, "time": time, "size": len(text), "reason": "external", "hash": fnv(text)}]}
+name = hashlib.sha1(path.encode()).hexdigest() + ".json"
 open(os.path.join(hist, "index", name), "w").write(json.dumps(index))
 PY
 }

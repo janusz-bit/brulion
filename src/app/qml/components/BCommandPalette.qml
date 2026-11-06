@@ -7,8 +7,8 @@ import Brulion
 //   BCommandPalette {
 //       id: palette
 //       commands: [
-//           { id: "today", title: qsTr("Dzisiejszy dziennik"), icon: "book-open", shortcut: "Ctrl+J" },
-//           { id: "sync", title: qsTr("Synchronizuj teraz"), subtitle: qsTr("Nextcloud"), icon: "refresh-cw" }
+//           { id: "today", title: qsTr("Today's journal"), icon: "book-open", shortcut: "Ctrl+J" },
+//           { id: "sync", title: qsTr("Sync now"), subtitle: qsTr("Nextcloud"), icon: "refresh-cw" }
 //       ]
 //       onCommandIdActivated: (id) => app.run(id)
 //   }

@@ -1,8 +1,8 @@
 // PDFs on the real Workspace (src/app/shell/workspacepdf.cpp, docs/UI.md "PDF viewer"): isPdf and a
-// file's version; "Otwórz w innej aplikacji" through a recording hook (a PDF of the notebook handed
+// file's version; "Open in another app" through a recording hook (a PDF of the notebook handed
 // over, and the other kinds of the allow-list — a DOCX, a text file — with their MIME types; a path
 // leaving the notebook, a missing file, a folder, HTML named .pdf, a program named .docx, a ZIP, a
-// note refused with the message; no app / a blocked browser tab told); "Rysuj na tej stronie" (the drawing stored
+// note refused with the message; no app / a blocked browser tab told); "Draw on this page" (the drawing stored
 // and embedded right after the PDF's block, byte for byte; a second one with a free name; no note or
 // a deleted one → today's journal; a failed item refused); the drawings of a page found again; the
 // drawing editor's previous / next page (the note a drawing belongs to, the new drawing before or

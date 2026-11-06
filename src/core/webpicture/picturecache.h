@@ -1,7 +1,7 @@
 // PictureCache — pictures from the internet kept on the device (webpicture.h), one file per URL
 // in a folder of the app's cache: `<sha1 of the URL>.<format>`. The editor shows the cached file
-// (a file: URL, the QML engine loads nothing from the network), also offline; "Pobierz do
-// notatnika" copies it into the notebook. The cache is the device's, never synced; prune() keeps
+// (a file: URL, the QML engine loads nothing from the network), also offline; "Save to
+// notebook" copies it into the notebook. The cache is the device's, never synced; prune() keeps
 // it below a size by dropping the files used longest ago — lookup() marks a file used by its
 // modification time (at most once an hour; access times are often not kept, Android's noatime).
 #pragma once

@@ -4,7 +4,7 @@
 // "same" parts with "mine" gives merge3's text), and ConflictResolver over a real Workspace with
 // Syncthing conflict copies: a clean three-way merge applied, a real collision, no history at all,
 // an identical copy, a copy that is an older version of the note, keeping the copy, binary files.
-// Drawings ("Scal rysunki"): the union of both versions' elements written into the original (its
+// Drawings ("Merge drawings"): the union of both versions' elements written into the original (its
 // previous version in the history, the copy in the trash) — Syncthing's and Brulion's copies, the
 // Obsidian Excalidraw plugin's files (the Markdown around the scene kept), an identical or older
 // copy, a drawing Brulion does not edit (keep one), a decision made on a version that changed, a
@@ -664,7 +664,7 @@ private Q_SLOTS:
     void pluginDrawingNotesDifferMergeKeepsTheCopy()
     {
         // Both devices drew a line, and the other one changed the back of the card as well (what
-        // Nextcloud leaves as a conflict copy instead of merging): "Scal rysunki" merges the
+        // Nextcloud leaves as a conflict copy instead of merging): "Merge drawings" merges the
         // elements into the original and keeps the copy, whose notes would be lost with it.
         QFETCH(bool, otherPaper);
         const QString original = u"Excalidraw/Szkic.excalidraw.md"_s;
@@ -761,7 +761,7 @@ private Q_SLOTS:
     {
         // tests/app/io/syncthing-conflict.sh: a folder where two real Syncthing instances left their
         // own conflict copies of a Brulion drawing and of an Obsidian one, both changed on both
-        // devices. Each is recognised, merged ("Scal rysunki": the elements of both versions) and
+        // devices. Each is recognised, merged ("Merge drawings": the elements of both versions) and
         // its copy goes to the trash.
         const QString dir = qEnvironmentVariable("BRULION_SYNCTHING_CONFLICT_DIR");
         if (dir.isEmpty())

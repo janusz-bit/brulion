@@ -1,5 +1,5 @@
 // brulion habits module — recurring daily items with a streak and a month view, recorded in the
-// journal (docs/SYNTAX.md §5 "Nawyki / Habits"). GUI-free, never reads the clock: callers pass
+// journal (docs/SYNTAX.md §5 "Habits"). GUI-free, never reads the clock: callers pass
 // `today`. Dates are local calendar days (QDate) — no times, no time zones, no DST.
 //
 // API overview (namespace brulion::habits):

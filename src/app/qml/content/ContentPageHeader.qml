@@ -11,22 +11,22 @@ import Brulion
 // notes, the folder breadcrumb in the side panel (the shell's top bar shows it otherwise), and
 // the page's aliases and tags as chips — from the page's properties, editable there: a chip's menu
 // (a right-click, a long press) removes one, "+" adds a tag or an alias (the editor shows all
-// properties in its "Właściwości" panel, docs/UI.md "Page properties"). Next to the star, on a wide
+// properties in its "Properties" panel, docs/UI.md "Page properties"). Next to the star, on a wide
 // header: the note mode toggle (document / outline; its icon shows the current mode, a click asks
 // for the other one: modeToggleRequested) — a small header (phones, the side panel) leaves it to
-// the page menu ⋯, the top bar's Więcej and the palette. The page actions (the star, the menu)
+// the page menu ⋯, the top bar's More and the palette. The page actions (the star, the menu)
 // stand at the end of the title row; a page without one (it starts with its own "# Title") puts
 // them at the end of its chips' first line, else on a row of their own. An empty page
 // gets a "Start writing" button; a page that does not exist yet says that typing creates it.
 // A page named by a tag that is in use (docs/SYNTAX.md §3: #tag is a link to this page) gets, at
-// every width, "Widok tagu" (the tag overview) as a "#" button among the page actions, "Zadania z
-// tym tagiem" in the page menu (PageView; also in Widok tagu and every #tag's menu), and its
-// sub-tags as chips under the title (#praca/raporty under Praca), each opening its own page.
+// every width, "Tag overview" (the tag overview) as a "#" button among the page actions, "Tasks with
+// this tag" in the page menu (PageView; also in Tag overview and every #tag's menu), and its
+// sub-tags as chips under the title (#work/reports under Work), each opening its own page.
 // The page's look (docs/UI.md "Page icon and cover", PageController.look): its icon before the
 // title (above the chips for a page that starts with its own "# Title"; a click: iconRequested —
 // the icon dialog), its cover — a band above everything, the picture filling its width, moved up
-// or down with "Przesuń" (a drag, then "Zapisz": `banner_y`), changed with "Zmień okładkę"
-// (coverRequested). A cover from the internet shows only from the device's cache: "Pokaż" first
+// or down with "Reposition" (a drag, then "Save": `banner_y`), changed with "Change cover"
+// (coverRequested). A cover from the internet shows only from the device's cache: "Show" first
 // (unless the device allows such pictures), a spinner, the reason it failed; a file that is not in
 // the notebook (any more) is named.
 //
@@ -133,8 +133,8 @@ Item {
     /// Its key ("" none) and its text ("#praca").
     readonly property string tagKey: AppController.routeText(header.tagInfo, "key")
     readonly property string tagText: AppController.routeText(header.tagInfo, "text")
-    /// That tag is in use (tagged blocks or sub-tags): Widok tagu among the page actions, Zadania
-    /// z tym tagiem in the page menu, the sub-tags under the title.
+    /// That tag is in use (tagged blocks or sub-tags): Tag overview among the page actions, Tasks
+    /// with this tag in the page menu, the sub-tags under the title.
     readonly property bool tagInUse: tagKey !== ""
                                      && (AppController.routeInt(header.tagInfo, "references", 0) > 0 || subTags.length > 0)
     /// The tag's sub-tags ({ tag, display, count }).
@@ -191,7 +191,7 @@ Item {
             header.addMenu = addMenuComponent.createObject(header) as BMenu
         header.addMenu.popup(item, 0, item.height)
     }
-    /// Take `name` out of the page's tags / aliases (a toast with "Cofnij").
+    /// Take `name` out of the page's tags / aliases (a toast with "Undo").
     function removeListItem(kind: string, name: string): void {
         // (Strings from calls laundered: a call cannot take one a call before may change.)
         const before = "" + header.controller.undoToken()
@@ -206,7 +206,7 @@ Item {
         else
             AppController.toast(text, "info")
     }
-    // The same menu as the Właściwości panel's chips (PropertyChipMenu).
+    // The same menu as the Properties panel's chips (PropertyChipMenu).
     Component {
         id: chipMenuComponent
         PropertyChipMenu {
@@ -300,7 +300,7 @@ Item {
             }
             BIconButton {
                 objectName: "noteModeToggle"
-                // A small header leaves it to the page menu ⋯ (also the top bar's Więcej, the palette).
+                // A small header leaves it to the page menu ⋯ (also the top bar's More, the palette).
                 visible: header.loaded && !header.small
                 iconName: header.documentMode ? "file-text" : "list"
                 label: header.documentMode ? qsTr("Document mode") : qsTr("Outline mode")
@@ -432,7 +432,7 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.margins: Theme.space2
                 spacing: Theme.space1
-                // (With the keys: the page menu's "Zmień okładkę…".)
+                // (With the keys: the page menu's "Change cover…".)
                 visible: header.coverMoving || Theme.touchUi || coverHover.hovered
                 BButton {
                     objectName: "pageCoverMove"
@@ -687,7 +687,7 @@ Item {
         // ---- Properties summary ---------------------------------------------------------------------
         // The page's aliases and tags: from its properties once the page is loaded (an edit shows at
         // once), else from the index's summary. A chip from a property has a menu (a right-click, a
-        // long press; an alias's tap too): a tag's page or "Usuń z tej strony", an alias copied or
+        // long press; an alias's tap too): a tag's page or "Remove from this page", an alias copied or
         // removed. "+" at the end of the row adds a tag or an alias in a field there (or opens the
         // properties panel's add row). Without a title row the page actions stand at the end of
         // the first line (chipsActions): the chips wrap short of them.
@@ -850,8 +850,8 @@ Item {
         }
 
         // ---- The tag that names this page -----------------------------------------------------------
-        // Its sub-tags (#praca/raporty under Praca), each a page of its own (Widok tagu is the "#"
-        // among the page actions, Zadania z tym tagiem in the page menu).
+        // Its sub-tags (#work/reports under Work), each a page of its own (Tag overview is the "#"
+        // among the page actions, Tasks with this tag in the page menu).
         Flow {
             objectName: "pageSubTags"
             visible: header.tagInUse && header.subTags.length > 0

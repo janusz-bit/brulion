@@ -3,7 +3,7 @@
 """Turns the built browser version (dist-wasm/, scripts/wasm-build.sh) into one HTML file.
 
 The page opened from disk (file://), without a web server: the release's
-brulion-web-<version>.html (docs/WEB.md, "Jeden plik HTML").
+brulion-web-<version>.html (docs/WEB.md, "Single HTML file").
 
   scripts/wasm-single-file.py [DIST_DIR] [OUTPUT]
       DIST_DIR  the assembled site [dist-wasm]

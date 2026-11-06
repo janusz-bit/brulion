@@ -5,7 +5,7 @@ import Brulion
 
 // BTabButton — one tab of a BTabBar: text, optional icon and count badge.
 //
-//   BTabBar { BTabButton { text: qsTr("Zadania"); iconName: "list-todo"; count: 3 } }
+//   BTabBar { BTabButton { text: qsTr("Tasks"); iconName: "list-todo"; count: 3 } }
 T.TabButton {
     id: control
 

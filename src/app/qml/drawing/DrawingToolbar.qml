@@ -7,16 +7,16 @@ import Brulion
 // redo, the pen, the highlighter, the eraser, the selection (a lasso or a rectangle; a second click
 // opens the choice), the shapes (one button showing the last of them: rectangle, ellipse, diamond,
 // line, arrow and the polygons; a second click opens their menu) and text, the current tool's colours and widths (text: its sizes S, M, L, XL), the paper (plain,
-// lines, grid) and its backdrop ("Podkład z obrazu lub PDF…", "Inna strona PDF…", "Poprzednia /
-// Następna strona PDF", "Usuń podkład" and "Wklej"
-// in the paper's menu), its light or dark background ("Tło rysunku": as the app, light, dark,
-// "Kolor tła…": DrawingPaperDialog),
-// "Rysuj palcem" on touch screens, "Pokaż cały rysunek" and Gotowe.
+// lines, grid) and its backdrop ("Backdrop from a picture or PDF…", "Another PDF page…", "Previous /
+// Next PDF page", "Remove backdrop" and "Paste"
+// in the paper's menu), its light or dark background ("Drawing background": as the app, light, dark,
+// "Background colour…": DrawingPaperDialog),
+// "Draw with finger" on touch screens, "Show the whole drawing" and Done.
 // Wide windows: everything in one row above the paper. `compact` (phones; at the bottom, in
 // reach of the thumb): the colours and widths behind one swatch (a popup above the bar), the
-// paper, its background, finger drawing and fitting in "Więcej"; when one row cannot hold it all
+// paper, its background, finger drawing and fitting in "More"; when one row cannot hold it all
 // (`twoRows`: a phone held upright) the tools and the swatch get a line of their own above undo,
-// redo, "Więcej" and Gotowe — nothing hides off the edge. A row that still does not fit scrolls
+// redo, "More" and Done — nothing hides off the edge. A row that still does not fit scrolls
 // sideways. The swatches show the colours as the paper shows them (on dark paper the
 // pen's colours mapped as the strokes are, DrawingCanvas.displayColor); what is chosen and saved
 // is the colour as drawn on light paper.
@@ -44,7 +44,7 @@ Rectangle {
     readonly property int slot: Math.max(Theme.controlHeight, Theme.touchUi ? Theme.touchTarget : 0)
     /// What one compact row needs: ten buttons (undo, redo, the pen, the highlighter, the eraser,
     /// the selection, the shapes, text, the swatch — counted while hidden too, so the bar keeps its
-    /// shape when the tool changes — and "Więcej"), two separators, Gotowe and the margins.
+    /// shape when the tool changes — and "More"), two separators, Done and the margins.
     readonly property real oneRowWidth: 10 * slot + 2 + doneButton.implicitWidth + 3 * Theme.space2
     /// Compact and too narrow for one row: two lines (see the header).
     readonly property bool twoRows: compact && width > 0 && width < oneRowWidth
@@ -61,19 +61,19 @@ Rectangle {
     signal fingerToggled()
     signal fitRequested()
     signal done()
-    /// The backdrop's entries of the paper's menu ("Więcej" on phones): a picture or a PDF page
+    /// The backdrop's entries of the paper's menu ("More" on phones): a picture or a PDF page
     /// chosen, another page of its PDF, removed.
     signal backdropRequested()
     signal backdropPageRequested()
     /// The drawing of the previous (−1) or the next (1) page of the backdrop's PDF.
     signal pageStepRequested(int step)
-    /// "Wklej" (the clipboard's elements or text).
+    /// "Paste" (the clipboard's elements or text).
     signal pasteRequested()
     signal backdropRemoved()
-    /// "Kolor tła…" chosen in the background's menu ("Więcej" on phones).
+    /// "Background colour…" chosen in the background's menu ("More" on phones).
     signal paperColorRequested()
 
-    /// "Inna strona PDF…": the backdrop is a PDF's page and PDFs can be drawn here.
+    /// "Another PDF page…": the backdrop is a PDF's page and PDFs can be drawn here.
     readonly property bool backdropPdf: canvas.hasBackdrop && canvas.backdropPage > 0 && canvas.backdropPath !== ""
                                         && DrawingBackdrops.pdfAvailable
 
@@ -170,8 +170,8 @@ Rectangle {
     }
     readonly property bool shapeActive: bar.isShape(bar.canvas.tool)
 
-    /// Open the colours and widths (compact), the "Więcej" menu (compact), the paper's menu or
-    /// the background's (the "Więcej" menu on phones) — route.open, screenshots.
+    /// Open the colours and widths (compact), the "More" menu (compact), the paper's menu or
+    /// the background's (the "More" menu on phones) — route.open, screenshots.
     function openStyle(): void { stylePopup.open() }
     function openShapes(): void { shapeMenu.popup(shapeButton, 0, bar.atBottom ? -shapeMenu.implicitHeight : shapeButton.height) }
     function openMore(): void { moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight) }
@@ -550,7 +550,7 @@ Rectangle {
         }
     }
 
-    /// Two lines: the lower one (undo, redo, "Więcej", Gotowe).
+    /// Two lines: the lower one (undo, redo, "More", Done).
     Item {
         id: lowerLine
         visible: bar.twoRows

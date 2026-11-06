@@ -1,6 +1,6 @@
 # brulion_planning — the C++ side of the planning views (docs/UI.md: CalendarView, TasksView,
 # GraphView): CalendarModel (month / week / agenda over reminders::calendarItems), TaskListModel
-# (sections Zaległe … Zrobione, filters evaluated by the query engine, the equivalent ```query),
+# (sections Overdue … Done, filters evaluated by the query engine, the equivalent ```query),
 # HabitListModel (the habits: today's checks, streaks, rates, month grids over a habits::HabitCache),
 # ForceLayout (deterministic Barnes–Hut force layout) run on a worker thread by GraphSimulation
 # (inline in slices in the browser) + GraphModel (the link graph, local graph, toggles, cap) +

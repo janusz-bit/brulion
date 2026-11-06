@@ -4,7 +4,7 @@
      Apps for Android 7+ trust only the system's authorities by default; Brulion also trusts the
      ones the user installed (Settings → Security → Encryption & credentials), so a self-hosted
      Nextcloud with its own authority works once that is installed on the phone, as on a desktop
-     (the connection test's hint says so). docs/ANDROID.md, "HTTPS i OpenSSL". -->
+     (the connection test's hint says so). docs/ANDROID.md, "HTTPS and OpenSSL". -->
 <network-security-config xmlns:tools="http://schemas.android.com/tools">
     <base-config>
         <trust-anchors>

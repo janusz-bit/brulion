@@ -21,55 +21,55 @@
 
 <!-- SCREENSHOTS -->
 <p align="center">
-  <img src="docs/images/dziennik.png" width="880" alt="The journal in Brulion: today's page with a task, a due date, a reminder, links and tags, yesterday's below with a calculation block of expenses">
+  <img src="docs/images/journal.png" width="880" alt="The journal in Brulion: today's page with a task, a due date, a reminder, links and tags, yesterday's below with a calculation block of expenses">
   <br><sub><b>Journal</b> — a page for every day: tasks with dates, reminders, links, tags and calculations</sub>
 </p>
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/images/strona-odnosniki.png" alt="A renovation page with a cost table computed by formulas and a calculation block; the side panel lists the links from the journal and other pages">
+      <img src="docs/images/page-links.png" alt="A renovation page with a cost table computed by formulas and a calculation block; the side panel lists the links from the journal and other pages">
       <br><sub><b>A page and its references</b> — a table with formulas, a calculation block, and beside it everything that links to the page</sub>
     </td>
     <td width="50%" valign="top">
-      <img src="docs/images/kalendarz.png" alt="A month calendar with tasks, due dates, reminders and an alarm, finished entries with a check, and the selected day's panel with its buttons">
+      <img src="docs/images/calendar.png" alt="A month calendar with tasks, due dates, reminders and an alarm, finished entries with a check, and the selected day's panel with its buttons">
       <br><sub><b>Calendar</b> — month, week or agenda: due dates, reminders, alarms and recurring tasks</sub>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/images/przypomnienie.png" alt="The new reminder dialog: quick dates, a calendar, the time, the alarm switch and repetition">
+      <img src="docs/images/reminder.png" alt="The new reminder dialog: quick dates, a calendar, the time, the alarm switch and repetition">
       <br><sub><b>Reminders and alarms</b> — quick dates, dates in plain words (“tomorrow 9:00”), repetition</sub>
     </td>
     <td width="50%" valign="top">
-      <img src="docs/images/zadania-ciemny.png" alt="The task list in the dark theme, grouped into tomorrow, this week and later, with due dates, priorities and reminders">
+      <img src="docs/images/tasks-dark.png" alt="The task list in the dark theme, grouped into tomorrow, this week and later, with due dates, priorities and reminders">
       <br><sub><b>Tasks</b> (dark theme) — every task from your notes, filters and quick add</sub>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/images/graf-ciemny.png" alt="The graph of links between pages and journal days in the dark theme">
+      <img src="docs/images/graph-dark.png" alt="The graph of links between pages and journal days in the dark theme">
       <br><sub><b>Graph</b> (dark theme) — links between pages and journal days; tags too on request</sub>
     </td>
     <td width="50%" valign="top">
-      <img src="docs/images/synchronizacja.png" alt="The sync center: a note changed on two devices and the preview of both versions merged automatically">
+      <img src="docs/images/sync.png" alt="The sync center: a note changed on two devices and the preview of both versions merged automatically">
       <br><sub><b>Sync center</b> — a conflict from two devices merged line by line</sub>
     </td>
   </tr>
   <tr>
     <td colspan="2" align="center" valign="top">
-      <img src="docs/images/foldery-przenoszenie.png" width="640" alt="The folder tree with the open page in the Projects folder and the “Move to…” dialog with its folder search">
+      <img src="docs/images/folders-move.png" width="640" alt="The folder tree with the open page in the Projects folder and the “Move to…” dialog with its folder search">
       <br><sub><b>Folders</b> — the tree shows the open page, and “Move to…” moves pages and folders without breaking links</sub>
     </td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/images/telefon-dziennik.png" width="270" alt="The journal on a phone with the bottom navigation: Journal, Calendar, Search, Tasks, + Note and Menu">
+  <img src="docs/images/phone-journal.png" width="270" alt="The journal on a phone with the bottom navigation: Journal, Calendar, Search, Tasks, + Note and Menu">
   &nbsp;&nbsp;&nbsp;
-  <img src="docs/images/telefon-edycja-ciemny.png" width="270" alt="Editing a page on a phone in the dark theme with the toolbar right above the keyboard">
+  <img src="docs/images/phone-editing-dark.png" width="270" alt="Editing a page on a phone in the dark theme with the toolbar right above the keyboard">
   &nbsp;&nbsp;&nbsp;
-  <img src="docs/images/telefon-zaznaczenie.png" width="270" alt="Three selected tasks on a project page on a phone, with selection grips and the Copy, Cut, Delete bar at the bottom">
+  <img src="docs/images/phone-selection.png" width="270" alt="Three selected tasks on a project page on a phone, with selection grips and the Copy, Cut, Delete bar at the bottom">
   <br><sub><b>On a phone</b> — the journal with the bottom navigation, editing with the toolbar right above the keyboard (dark theme) and selected blocks with the selection tools</sub>
 </p>
 
@@ -106,9 +106,9 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 * Weekly (ISO week, `2026-W45.md`) and monthly notes (`2026-11.md`) next to the daily ones, with
   their own folders, file names and templates, opened from the calendar's week numbers and month
   title or with `Ctrl+Alt+W` / `Ctrl+Alt+M`; `Ctrl+F` in the journal searches every day at once.
-* **Habits**: a block with `habit:: codziennie` (`pn, śr, pt`, `3 razy w tygodniu`, `every day`…)
-  is a habit; each day's tick is a `- [x] Name #nawyk` task in that day's journal (also ticked in
-  the journal itself). The Habits view ticks today, shows the streaks, the completion rate and a
+* **Habits**: a block with `habit:: every day` (`mon, fri`, `3 times a week`, or in Polish
+  `codziennie`…) is a habit; each day's tick is a `- [x] Name #habit` task in that day's journal
+  (also ticked in the journal itself). The Habits view ticks today, shows the streaks, the completion rate and a
   month grid; `brulion-cli habit list` / `habit tick`.
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
@@ -169,15 +169,15 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   dictionaries on the desktop, the system's spell checker on Android.
 * Tables sorted from a column's menu (numbers, dates, Polish alphabetical order; the rows
   rewritten in the file, one undo step) and filtered with fields under the header (`> 100`,
-  `!text` — nothing written), copied or saved as CSV, and `/Tabela z CSV…` makes a table of a CSV
-  file. A ```` ```chart ```` block (`/Wykres`) draws a bar, line or pie chart of the table above it,
+  `!text` — nothing written), copied or saved as CSV, and `/Table from CSV…` makes a table of a CSV
+  file. A ```` ```chart ```` block (`/Chart`) draws a bar, line or pie chart of the table above it,
   a calc block or a query's results — in the theme's colours, with a text alternative for screen
   readers, as SVG in the HTML export.
 * Mermaid diagrams in ```` ```mermaid ```` blocks — flowcharts (with subgraphs and styles),
   sequence diagrams and pie charts — drawn by Brulion's own renderer in the theme's light or dark
   colours, nothing from a note ever executed; a click edits the source with a live preview, the
   HTML export has the diagram as SVG. Other Mermaid types stay their source.
-* Handwritten drawings in notes (`/Rysunek`): a stylus with pressure (its eraser end erases), a
+* Handwritten drawings in notes (`/Drawing`): a stylus with pressure (its eraser end erases), a
   highlighter, an eraser, shapes (rectangle, ellipse, diamond, line, arrow, triangles, polygons,
   a star, a block arrow, a speech bubble, a heart, a cloud), text and labels in shapes, lasso or
   rectangle selection (move, resize and rotate by handles, mirror, group, style — fill, lines,
@@ -186,14 +186,14 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   dark background per drawing, or "Like the app" — it then turns dark and light with the app at
   once, in the editor and in the previews in notes (colours as in Excalidraw's dark mode); fingers
   move and zoom the paper while you draw with a stylus (or draw — "Draw with finger"), a mouse
-  draws on the desktop. A drawing is a plain SVG attachment (`![[Rysunek ….svg]]`) with an
+  draws on the desktop. A drawing is a plain SVG attachment (`![[Drawing ….svg]]`) with an
   embedded Excalidraw scene: Obsidian and browsers show it as a picture (a "Like the app" drawing
   dark in Obsidian's dark theme), excalidraw.com opens it for editing (and Excalidraw drawings
   with shapes and text are edited in Brulion), Syncthing syncs it like any file. Drawings of the
   Obsidian Excalidraw plugin (`*.excalidraw.md`) and `.excalidraw` files are shown in notes and
   edited too, and saved back in their own format — Obsidian still opens them, with the notes on
-  the back of the drawing and the links in its texts. **Notes on slides:** "/Rysunek na obrazie lub
-  PDF" puts a picture, a slide or a lecture's PDF pages under a drawing (one drawing per page; on
+  the back of the drawing and the links in its texts. **Notes on slides:** "/Drawing on a picture or
+  PDF…" puts a picture, a slide or a lecture's PDF pages under a drawing (one drawing per page; on
   Android, Windows and Linux — pictures in the browser), and the backdrop turns dark with dark
   paper.
 * **PDF preview.** A PDF embedded in a note (`![[lecture.pdf]]`, also Obsidian's `#page=3`) shows
@@ -215,16 +215,45 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   contents.
 * Built with C++20 and Qt 6.11 Quick; GUI-free core libraries with thousands of unit tests.
 
-The screenshots above show the Polish UI with the bundled sample notebook (`brulion --demo`;
-the sample notebook and the in-app guide are written in Polish).
-Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK, the Windows
-installer or ZIP — a test version —, Brulion's own F-Droid repository at
-<https://janusz-bit.github.io/brulion/>, or the browser version as one HTML file opened from disk,
-`brulion-web-<version>.html`). Build: `nix develop`, then
-`scripts/dev-build.sh -t .`; the Android APK: `nix build .#brulion-android` (x86_64-linux hosts,
-unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
-English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
-[UI](docs/UI.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
+* **The guide inside**: the full user guide is a notebook of its own, "Brulion Documentation" on
+  the desktop and Android — switch to it and back with "Switch notebook" (the first letter of the
+  notebook's name at the top of the icon bar) or `Ctrl+Shift+B`. It updates with the app and
+  keeps your edits. Like the sample notebook it is written in the UI language (English or
+  Polish); outside the app the same pages are in the repository
+  ([src/app/shell/guide/en](src/app/shell/guide/en), in Polish
+  [src/app/shell/guide/pl](src/app/shell/guide/pl)).
+
+The screenshots above show the Polish UI with the bundled sample notebook (`brulion --demo`).
+
+## Install
+
+| Platform | How |
+|---|---|
+| **NixOS** | flake + the `programs.brulion` module (with autostart in the tray) — [docs/NIXOS.md](docs/NIXOS.md) |
+| **Other Linux** | AppImage (x86_64, aarch64) from [Releases](https://github.com/janusz-bit/brulion/releases); updates itself through AppImageUpdate, Gear Lever or AppImageLauncher |
+| **Windows** 10/11 (x86_64) — **test version** | the installer `Brulion-<version>-windows-x86_64-setup.exe` (for the current user, no administrator rights) or the portable `brulion-<version>-windows-x86_64.zip` from [Releases](https://github.com/janusz-bit/brulion/releases); the files are not signed (SmartScreen: "More info" → "Run anyway"); reminders as Windows notifications with Snooze/Done/OK, start at sign-in, a calendar with the day's tasks from a click on the tray icon — [docs/WINDOWS.md](docs/WINDOWS.md) |
+| **Android** (9+) | Brulion's own F-Droid repository — <https://janusz-bit.github.io/brulion/> (add it in F-Droid with the button or the QR code on that page; updates come through F-Droid) — or the APK file (arm64) from [Releases](https://github.com/janusz-bit/brulion/releases), the same APK with the same signature; a notice in the app with a link to the release also tells you about a new version (it can be turned off in the settings) — [docs/ANDROID.md](docs/ANDROID.md) |
+| **Browser** | one file, `brulion-web-<version>.html` from [Releases](https://github.com/janusz-bit/brulion/releases), opened from disk — no server, no internet — [docs/WEB.md](docs/WEB.md); on your own server (works offline after the first visit, installs as an app): `brulion-web-<version>.zip` from Releases or the NixOS module `services.brulion-web` |
+
+On NixOS:
+
+```nix
+# the system's flake.nix
+inputs.brulion.url = "github:janusz-bit/brulion";
+
+# in modules = [ … ]
+brulion.nixosModules.default
+{ programs.brulion = { enable = true; autostart = true; }; }
+```
+
+Or without installing: `nix run github:janusz-bit/brulion`.
+
+## Development
+
+Build: `nix develop`, then `scripts/dev-build.sh -t .`; the Android APK: `nix build
+.#brulion-android` (x86_64-linux hosts, unsigned; sign with `nix run .#brulion-android-sign --
+result/*.apk`). Developer docs: [architecture](docs/ARCHITECTURE.md), [Markdown
+dialect](docs/SYNTAX.md), [UI](docs/UI.md), [releases](docs/RELEASE.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
 outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), the compression of
 Obsidian Excalidraw plugin drawings ported from lz-string (MIT, © 2013 Pieroxy), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`); PDF
@@ -291,7 +320,7 @@ przykładowym notatnikiem.
   ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
   widok kalendarza i listy zadań. Przypomnienie dopisane na komputerze telefon nastawi sam: co
   15–60 minut Android sprawdza notatki w tle, po synchronizacji z Nextcloud, jeśli jest włączona
-  ([docs/ANDROID.md](docs/ANDROID.md#sprawdzanie-notatek-w-tle)). Status zadania (do zrobienia, w toku, zrobione, oczekujące,
+  ([docs/ANDROID.md](docs/ANDROID.md#checking-notes-in-the-background)). Status zadania (do zrobienia, w toku, zrobione, oczekujące,
   anulowane albo bez statusu) wybierasz z menu pola wyboru — prawy przycisk myszy lub
   przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku. Tak samo
   na znaczniku daty (📅 ⏳ 🛫 ✅ ➕ ❌) albo ⏰ otwiera się menu do zmiany daty: kalendarz, dziś,
@@ -306,16 +335,16 @@ przykładowym notatnikiem.
 * **Udostępnij / Otwórz w Brulionie.** Stronę z przeglądarki, tekst albo pliki `.md`/`.txt`
   z innej aplikacji zapiszesz w dzisiejszym dzienniku albo jako nową stronę — w oknie, w którym
   poprawisz tekst i tytuł: na Androidzie przez **Udostępnij → Brulion**
-  ([docs/ANDROID.md](docs/ANDROID.md#udostępnij--brulion)), na komputerze przez **Otwórz za
+  ([docs/ANDROID.md](docs/ANDROID.md#share--brulion)), na komputerze przez **Otwórz za
   pomocą → Brulion** w menedżerze plików (kopia trafia do notatnika, plik zostaje bez zmian;
-  [docs/WINDOWS.md](docs/WINDOWS.md#otwórz-za-pomocą), [docs/NIXOS.md](docs/NIXOS.md#otwórz-za-pomocą)),
+  [docs/WINDOWS.md](docs/WINDOWS.md#open-with), [docs/NIXOS.md](docs/NIXOS.md#open-with)),
   a w wersji w przeglądarce zainstalowanej jako aplikacja — tekst i odnośniki
-  ([docs/WEB.md](docs/WEB.md#udostępnianie-do-brulionu)).
+  ([docs/WEB.md](docs/WEB.md#sharing-to-brulion)).
 * **Widżety Androida.** Zadania na dziś („Mój dzień”: zaległe i dzisiejsze) z szybkim dodawaniem
   — dzień, godzina i alarm przyciskami, zapis do dziennika od razu, także przy zamkniętej
   aplikacji —, kalendarz z kropkami i agendą (najpierw zadania z godziną) oraz notatki
   (dzisiejszy dziennik, szybka notatka, ulubione i ostatnie strony)
-  ([docs/ANDROID.md](docs/ANDROID.md#widżety)).
+  ([docs/ANDROID.md](docs/ANDROID.md#widgets)).
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
   jednostki `5 km to mi`, waluty `12 zł + 5 zł`, `suma`), tabele z formułami jak w arkuszu
   (`=sum(above)`, `=[Cena]*[Ilość]`), obliczenia w tekście `` `= 2*21` ``.
@@ -383,7 +412,7 @@ przykładowym notatnikiem.
   Trilium, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar — także na
   telefonie (*Więcej → Importuj notatki*: pliki, ZIP albo cały folder skarbca, z podglądem przed
   zapisem; [docs/IMPORT.md](docs/IMPORT.md) — m.in. jak wyeksportować notatki z Trilium i co się
-  z czym zamienia; [docs/ANDROID.md](docs/ANDROID.md#import-notatek-obsidian-logseq-notion)).
+  z czym zamienia; [docs/ANDROID.md](docs/ANDROID.md#importing-notes-obsidian-logseq-notion)).
   Eksport do ZIP z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML lub jednego
   pliku HTML, Pandoc Markdown (jeden dokument do zamiany w Word, LibreOffice, PDF albo EPUB),
   JSON, iCalendar, OPML i CSV zadań.
@@ -420,11 +449,13 @@ przykładowym notatnikiem.
   zapytanie. Wybierasz, co przenieść do kosza: same notatki, same załączniki albo pojedyncze pliki.
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na
   żywych przykładach — do klikania, edytowania i psucia.
-* **Dokumentacja w środku.** Pełny poradnik po polsku to osobny notatnik „Dokumentacja
+* **Dokumentacja w środku.** Pełny poradnik to osobny notatnik „Dokumentacja
   Brulionu” (na komputerze i Androidzie): przycisk „Przełącz notatnik” (pierwsza litera nazwy
   notatnika na górze paska ikon) albo `Ctrl+Shift+B` i z powrotem. Aktualizuje się razem z aplikacją, a Twoje zmiany w nim
-  zostają; w przeglądarce te same strony są w repozytorium
-  ([src/app/shell/guide](src/app/shell/guide)).
+  zostają. Tak jak przykładowy brulion jest w języku interfejsu (polskim albo angielskim); w
+  przeglądarce te same strony są w repozytorium
+  ([src/app/shell/guide/pl](src/app/shell/guide/pl), po angielsku
+  [src/app/shell/guide/en](src/app/shell/guide/en)).
 
 ## Instalacja
 
@@ -463,7 +494,7 @@ Nextclouda — po prostu otwórz jego folder jako notatnik na każdym urządzeni
 mogą z niego korzystać na zmianę; folder, format i szablon dziennika oraz folder załączników
 Brulion sam przejmie z ustawień Obsidiana (`.obsidian/`). Co działa, co się różni i co Brulion
 dopisuje do folderu:
-[docs/IMPORT.md](docs/IMPORT.md#folder-obsidiana-bez-importu).
+[docs/IMPORT.md](docs/IMPORT.md#obsidian-folder-without-importing).
 
 **Nextcloud (WebDAV):** w *Centrum synchronizacji* (menu *Więcej* ⋮ lub *Ustawienia →
 Synchronizacja*) podaj adres serwera, użytkownika i **hasło aplikacji** (Nextcloud →
@@ -478,7 +509,7 @@ innego folderu — stan synchronizacji mówi, z którym notatnikiem dzielą fold
 wyłącza synchronizację we wszystkich notatnikach, a zapisanie innego serwera lub użytkownika —
 w pozostałych. Brulion synchronizuje w tle
 (domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci, a na Androidzie przy zamkniętej
-aplikacji — przy [sprawdzaniu notatek w tle](docs/ANDROID.md#sprawdzanie-notatek-w-tle); równoległe dopiski
+aplikacji — przy [sprawdzaniu notatek w tle](docs/ANDROID.md#checking-notes-in-the-background); równoległe dopiski
 w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
 10 plików) — dopóki nie potwierdzisz listy. Foldery też się synchronizują: pusty folder pojawia
@@ -496,7 +527,7 @@ W zakładce *Nextcloud* widać na żywo, co robi trwająca synchronizacja (etap,
 ok. 40”, aktualne pliki, czas trwania, ilość danych), ostrzeżenie, gdy serwer przestaje
 odpowiadać (po 3 minutach bez odpowiedzi synchronizacja jest przerywana i ponawiana — nigdy nie
 „synchronizuje się” w nieskończoność), odliczanie do kolejnej próby oraz **historię ostatnich 20
-synchronizacji**: kiedy i dlaczego się zaczęły, ile trwały, co przesłały, z błędami po polsku.
+synchronizacji**: kiedy i dlaczego się zaczęły, ile trwały, co przesłały, z opisem błędów w języku interfejsu.
 „Szczegóły” pokazują, na co poszedł czas (łączenie, sprawdzanie plików na serwerze i na
 urządzeniu, przesyłanie, zapis), żądania do serwera i pliki, których nie udało się
 zsynchronizować.
@@ -533,7 +564,7 @@ programistów* albo `brulion --remote-control`): `brulion-cli app state | find |
 | wait | screenshot …` i narzędzia `brulion-cli mcp --app-control` — dopóki jest włączone, każdy
 program Twojego konta może sterować oknem i czytać pokazywane notatki. Szczegóły:
 [docs/CLI.md](docs/CLI.md#remote-control), konfiguracja Hermesa:
-[docs/NIXOS.md](docs/NIXOS.md#agent-ai-hermes-i-wiersz-poleceń), poradnik dla agentów:
+[docs/NIXOS.md](docs/NIXOS.md#ai-agent-hermes-and-the-command-line), poradnik dla agentów:
 [packaging/agent/brulion/SKILL.md](packaging/agent/brulion/SKILL.md).
 
 ## Gdy coś nie działa — rejestr zdarzeń
@@ -621,7 +652,7 @@ scripts/dev-build.sh -t .        # zbuduj i uruchom wszystkie testy (JOBS=8 — 
 APK Androida z flake'a (na hoście x86_64-linux, niepodpisany): `nix build .#brulion-android`
 (arm64-v8a; `.#brulion-android-x86_64` dla emulatora, `.#brulion-android-aab` z AAB), podpis:
 `nix run .#brulion-android-sign -- result/*.apk` — patrz
-[docs/ANDROID.md](docs/ANDROID.md#budowanie-przez-nix-flake).
+[docs/ANDROID.md](docs/ANDROID.md#building-with-nix-flake).
 
 Zrzuty ekranu i testy interfejsu działają bez okna (`--screenshot`, `--journey`, skrypty
 `tests/app/*/screenshots.sh`) — patrz [docs/UI.md](docs/UI.md#dev-tools-screenshots-and-ui-tests).

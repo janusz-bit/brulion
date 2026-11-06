@@ -72,8 +72,9 @@ prepare_vault() { # prepare_vault <home> → the notebook's path
   else
     vault="$home/Przykładowy brulion"
   fi
-  # A first start seeds the sample notebook (and indexes the notebook), like a user's first run.
-  run_app "$home" --demo --vault "$vault" --size 800x600 --now "$now" --delay 1500 \
+  # A first start seeds the sample notebook (and indexes the notebook), like a user's first run —
+  # the Polish one (the sample notes follow the UI language), as the runs below show the Polish UI.
+  run_app "$home" --demo --vault "$vault" --size 800x600 --now "$now" --locale pl --delay 1500 \
     --screenshot "$home/prep.png" >/dev/null 2>&1 || true
   cp "tests/app/shell/notemode/Wyprawa w Bieszczady.md" "$vault/"
   mkdir -p "$vault/assets"

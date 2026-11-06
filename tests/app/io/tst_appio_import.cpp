@@ -1,5 +1,5 @@
 // ImportController and its helpers: the daily-note collision policy (appended under "## Import
-// (<źródło>)", line endings, BOM, frontmatter, importing the same thing twice), kinds, default and
+// (<source>)", line endings, BOM, frontmatter, importing the same thing twice), kinds, default and
 // user-typed target folders, reading a picked folder (skipped folders, limits), recognising the
 // source with an override, the dry-run preview, writing with unique names for taken paths, the
 // report, cancelling and the error states — against real Workspaces over temporary vaults.
@@ -986,7 +986,7 @@ private Q_SLOTS:
         QVERIFY(ws->exists(u"Import/Obsidian/Notatki/Zażółć gęślą jaźń.md"_s));
         QVERIFY(ws->exists(u"Import/Obsidian/Notatki/Łódź.md"_s));
         QVERIFY(c.report().value(u"warnings"_s).toStringList().join(u'\n').contains(u"Plan podróży"_s));
-        // "Otwórz zaimportowany folder": All pages in the folder.
+        // "Open the imported folder": All pages in the folder.
         QSignalSpy navigation(ws.get(), &brulion::shell::Workspace::navigationRequested);
         c.openTarget();
         QCOMPARE(navigation.size(), 1);

@@ -1,5 +1,5 @@
-// ThemePalette — the colours of Theme.qml that the appearance settings change (Ustawienia →
-// Wygląd, docs/UI.md "Look & feel"): the surfaces (light "paper" | "white", dark "slate" |
+// ThemePalette — the colours of Theme.qml that the appearance settings change (Settings →
+// Appearance, docs/UI.md "Look & feel"): the surfaces (light "paper" | "white", dark "slate" |
 // "black" for OLED screens), the accent colour (presets "red" — the logo's margin red, the
 // default —, "blue", "green", "teal", "violet", "graphite", or "custom" with any "#rrggbb"),
 // and the text colours, kept here so the tests check every one of them on every surface.

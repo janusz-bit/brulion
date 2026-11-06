@@ -51,12 +51,12 @@ FocusScope {
     readonly property string heading: date !== "" ? root.capitalized(DatesHelper.formatLong(date)) : ""
     readonly property string relative: date !== "" ? root.relativeOf(DatesHelper.formatHuman(date)) : ""
 
-    /// `human` (DatesHelper.formatHuman()) capitalized when it is a relative word ("Dziś"), else "".
+    /// `human` (DatesHelper.formatHuman()) capitalized when it is a relative word ("Today"), else "".
     function relativeOf(human: string): string {
         return Js.indexOf(human, " ") < 0 ? root.capitalized(human) : ""
     }
 
-    /// `s` with its first letter upper case (the locale's: "dziś" → "Dziś").
+    /// `s` with its first letter upper case (the locale's: "today" → "Today").
     function capitalized(s: string): string {
         return s.length > 0 ? Js.toUpperCase(Js.charAt(s, 0)) + Js.sliceFrom(s, 1) : ""
     }
@@ -203,7 +203,7 @@ FocusScope {
                     onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
                 }
             }
-            // Nothing planned: a short note under "Plan dnia", in line with it (no picture: the
+            // Nothing planned: a short note under "Plan of the day", in line with it (no picture: the
             // panel stays a list, not an empty page).
             BEmptyState {
                 Layout.fillWidth: true

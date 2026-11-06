@@ -4,19 +4,19 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ShellMoveDialog — "Przenieś do…": choose a folder for a page, an attachment or a folder
+// ShellMoveDialog — "Move to…": choose a folder for a page, an attachment or a folder
 // (Workspace.movePath: every link and tag keeps its target, docs/SYNTAX.md §2). A search field
 // over the notebook's folders (TextHelper.fuzzyRank of their names, then paths; at most 100),
-// "Główny folder notatnika" first; the item's current folder is shown but disabled, a folder's
-// own subtree is left out; the last row "Nowy folder „…”" creates the folder typed and moves
-// there. A chosen row shows what the move changes before "Przenieś tutaj" (Workspace.moveImpact:
-// "Zaktualizowane linki: 3 (w 2 notatkach)", or why it cannot move). A bottom sheet on phones.
+// "Notebook root" first; the item's current folder is shown but disabled, a folder's
+// own subtree is left out; the last row "New folder “…”" creates the folder typed and moves
+// there. A chosen row shows what the move changes before "Move here" (Workspace.moveImpact:
+// "Updated links: 3 (in 2 notes)", or why it cannot move). A bottom sheet on phones.
 //
-// Pick mode (`pickFolder(current)`, the new-page dialog's "Zmień…"): a tap chooses a folder at
+// Pick mode (`pickFolder(current)`, the new-page dialog's "Change…"): a tap chooses a folder at
 // once (`chosen(folder)`, "" = the root); nothing is moved.
 //
 //   ShellMoveDialog { id: move; onMoveRequested: (path, folder, links) => shell.performMove(...) }
-//   move.openFor("Projekty/Dom.md", false)
+//   move.openFor("Projects/Home.md", false)
 BDialog {
     id: dialog
 
@@ -96,7 +96,7 @@ BDialog {
     function rowFlag(index: int, key: string): bool {
         return AppController.routeFlag(dialog.rows[index], key)
     }
-    /// "Zaktualizowane linki: 3 (w 2 notatkach)" — what the move rewrites, with every notebook
+    /// "Updated links: 3 (in 2 notes)" — what the move rewrites, with every notebook
     /// setting that follows.
     function impactText(): string {
         if (!dialog.hasTarget)

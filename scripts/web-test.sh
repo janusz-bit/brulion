@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Browser tests of the web build (tests/web: Playwright, Chromium + Firefox) — pictures from the
 # internet (CORS, mixed content, no preflight, the export with copies) and the pen's pressure in
-# the drawing editor; docs/WEB.md "Testy w przeglądarkach". GitHub Actions runs it (wasm.yml, job
+# the drawing editor; docs/WEB.md "Browser tests (Playwright)". GitHub Actions runs it (wasm.yml, job
 # "browsers"), and so can anyone with a built site:
 #
 #   scripts/web-test.sh [--dist DIR] [--single-file FILE] [--install] [-- <playwright test arguments>]

@@ -77,7 +77,7 @@ public:
     /// (InlineRenderer::withFindHighlight(); docs/UI.md "Find and replace"). `html` unchanged for "".
     Q_INVOKABLE QString findHighlightedHtml(const QString &html, const QString &query, bool matchCase,
                                             bool matchDiacritics, bool wholeWord, const QString &color) const;
-    /// The editor's "Zakreśl" on a block's text (markdown::setHighlight(), docs/UI.md "Coloured
+    /// The editor's "Highlight" on a block's text (markdown::setHighlight(), docs/UI.md "Coloured
     /// highlights"): `color` a palette name ("default", "red", …) or "" to remove the highlight
     /// around the selection [from, to). { text, from, to (the highlighted text), changed }.
     Q_INVOKABLE QVariantMap setHighlight(const QString &text, int from, int to, const QString &color) const;

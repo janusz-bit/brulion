@@ -3,7 +3,7 @@
 // ringing alarms, the tray fallback, Wayland activation tokens), the sounds (freedesktop hints of
 // every choice, the sample notification), the Windows toast XML (scenarios, buttons, sounds,
 // escaping) and its activation arguments, a bus that rings itself (Windows' alarm toasts), the
-// JSON for Android's alarm scheduler, its "Zrobione" requests and sound channels, and the platform
+// JSON for Android's alarm scheduler, its "Done" requests and sound channels, and the platform
 // factory.
 #include "androidpayload.h"
 #include "desktopnotifier.h"
@@ -682,7 +682,7 @@ private Q_SLOTS:
         QCOMPARE(bus->sent.size(), 3);
     }
 
-    // An alarm with a short Windows sound ("Poczta") plays it once per toast: it is sent again
+    // An alarm with a short Windows sound ("Mail") plays it once per toast: it is sent again
     // every ring interval, as on Linux, and stays on screen silently when the time is over.
     void busThatRingsItselfShortSound()
     {
@@ -765,7 +765,7 @@ private Q_SLOTS:
         QCOMPARE(second.value(u"line"_s).toInt(), 0);
         QVERIFY(androidReminderPayload({}).isEmpty());
 
-        // The occurrence ("Zrobione" names it): its id and wall-clock time, and whether it is on
+        // The occurrence ("Done" names it): its id and wall-clock time, and whether it is on
         // a task.
         QCOMPARE(first.value(u"key"_s).toString(), a.id);
         QCOMPARE(first.value(u"local"_s).toString(), u"2026-10-14T18:00"_s);

@@ -8,7 +8,7 @@ import Brulion
 // double tap on a text or a shape with the select tool) where the text is, in its font, size
 // (× zoom), colour (as the paper shows it) and alignment, as wide as the text — or its shape's
 // inside, wrapped. Enter: a new line; Escape, Ctrl+Enter, a press on the paper beside it
-// (textCommitRequested) or "Gotowe" (touch screens): written (DrawingCanvas.commitText; emptied: the
+// (textCommitRequested) or "Done" (touch screens): written (DrawingCanvas.commitText; emptied: the
 // text deleted) — one undo step. On a phone the view moves so the text stays above the keyboard.
 // Its parent is the paper's area; the editor takes the keyboard's focus while it is open and gives
 // it back (closed()).

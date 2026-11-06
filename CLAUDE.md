@@ -9,7 +9,7 @@ Read before changing code:
 * `docs/ARCHITECTURE.md` — layers, modules, platform strategy.
 * `docs/UI.md` — QML UI, block editor, navigation, components.
 * `src/core/types.h` — shared data model. Change only when strictly needed, keep compatible.
-* `TODO.md` — ideas and known gaps (Polish), a plain list by category with no order or "in
+* `TODO.md` — ideas and known gaps, a plain list by category with no order or "in
   progress" marks. Implement an item only when the user asks for it (fully: tests, docs, i18n);
   once it is done in the repository, delete its entry.
 * Branch `archive/web-v1` holds the previous TypeScript/Tauri implementation (well-tested
@@ -72,5 +72,9 @@ builds) run on the x86_64 laptop via `flock <lock> laptop-run …` or in GitHub 
 * QML is compiled to C++ in full (qmlcachegen): typed functions and properties, no closures,
   no JavaScript String/Array methods (`Js` singleton instead) — rules in `docs/UI.md` "Compiled
   QML". `-Werror` builds and ctest `tst_qml_compiled` fail on anything left to the interpreter.
-* Comments and identifiers in English; English is the app's first language (default UI language,
-  also in the browser; README starts in English and has a Polish section); other user docs in Polish.
+* English is the project's main language: code, comments, identifiers, docs (`docs/`, `TODO.md`),
+  release notes, store/F-Droid texts and the default UI. Polish is the second language where users
+  see it: the UI translation (`i18n/`), README's Polish section, the Polish part of
+  `.github/release-notes.md` ("Nowości w …"), `fastlane/metadata/android/pl/`, and the in-app
+  notebooks (`src/app/shell/guide/pl/` next to `guide/en/`, the Polish sample in `demovault.cpp`) —
+  change both languages together. Polish stays as data: parser keywords, examples, test text.

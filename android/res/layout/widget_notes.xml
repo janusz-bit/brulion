@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The notes widget (NotesWidget.kt): the notebook, "Dziennik dziś" and "Szybka notatka", the
+<!-- The notes widget (NotesWidget.kt): the notebook, "Today's journal" and "Quick note", the
      favourite and recent pages. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"

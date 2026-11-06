@@ -7,7 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The pure part of OpenWith.kt ("Otwórz w innej aplikacji"): the provider's roots, the copy's name. */
+/** The pure part of OpenWith.kt ("Open in another app"): the provider's roots, the copy's name. */
 class OpenWithTest {
   private val roots = listOf("/data/user/0/io.github.januszbit.brulion/files", "/data/user/0/io.github.januszbit.brulion/cache", "/storage/emulated/0")
 

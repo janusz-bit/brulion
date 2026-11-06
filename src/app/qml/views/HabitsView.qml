@@ -5,10 +5,10 @@ import Brulion
 
 // HabitsView — route "habits" ({month?}, docs/UI.md "Habits"): every habit of the notebook
 // (HabitListModel over PlanningContext.vaultIndex; a habit is a block or page with `habit::`,
-// docs/SYNTAX.md §5 "Nawyki / Habits") as a HabitCard: today's check to tick (written as a task
-// tagged #nawyk into today's journal by Workspace.setHabitCheck — undo in the toast), the streaks,
-// the completion rate and a month grid whose past days can be ticked too. The month arrows move
-// every grid; "Dodaj nawyk" appends a definition to the habits' page (HabitAddDialog). A tick
+// docs/SYNTAX.md §5 "Habits") as a HabitCard: today's check to tick (written as a task tagged
+// #nawyk (Polish: habit) into today's journal by Workspace.setHabitCheck — undo in the toast), the
+// streaks, the completion rate and a month grid whose past days can be ticked too. The month arrows
+// move every grid; "Add habit" appends a definition to the habits' page (HabitAddDialog). A tick
 // written in the journal itself shows here as well (the index follows the note).
 //
 // Route parameters: month ("YYYY-MM"), open ("add" = the add dialog — screenshots).
@@ -263,7 +263,7 @@ FocusScope {
         visible: habitModel.count === 0 && !Workspace.indexing
         iconName: "flame"
         title: qsTr("No habits yet")
-        description: qsTr("Add one here, or give any point the property “habit:: codziennie” (or “pn, śr, pt”, “3 razy w tygodniu”). Tick it here or in the journal: “- [x] Name #nawyk”.")
+        description: qsTr("Add one here, or give any point the property “habit:: every day” (or “mon, wed, fri”, “3 times a week”). Tick it here or in the journal: “- [x] Name #habit”.")
         actionText: qsTr("Add habit")
         onActionTriggered: addDialog.open()
     }

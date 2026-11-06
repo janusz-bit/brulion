@@ -360,7 +360,7 @@ QJsonObject RemoteControl::state()
     out.insert(u"focusedItem"_s, focused);
     out.insert(u"editing"_s, editing);
     out.insert(u"conflicts"_s, conflicts());
-    // Conflict copies sync left to merge (Synchronizacja → Konflikty): not pages waiting here.
+    // Conflict copies sync left to merge (Sync → Conflicts): not pages waiting here.
     out.insert(u"syncConflicts"_s, ws->isOpen() && ws->sync() ? ws->sync()->conflictCount() : 0);
     out.insert(u"openPopups"_s, popups);
     QJsonArray toasts;
@@ -507,7 +507,7 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
                 resolved && paths::isMarkdown(*resolved) && vault->exists(*resolved))
                 route = pageRoute(*resolved);
         }
-        // 5. A date phrase ("wczoraj", "w piątek") when no page has that name.
+        // 5. A date phrase ("yesterday", "w piątek" — on Friday) when no page has that name.
         if (route.isEmpty() && !name.contains(u'/')) {
             const dates::UiLocale locale =
                     (m_options.language ? m_options.language() : m_app->settings()->language()) == u"en"

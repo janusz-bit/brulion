@@ -86,7 +86,7 @@ struct HighlightEdit {
     /// a highlight's marker, or the caret is inside a marker.
     bool refused = false;
 };
-/// The editor's "Zakreśl" (a pure edit of a block's text; [from, to) the selection):
+/// The editor's "Highlight…" (a pure edit of a block's text; [from, to) the selection):
 /// * a selection inside a highlight's text (or exactly covering one, markers included) changes
 ///   that highlight: `color` recolours it (Default: `==…==`, others `<mark style="…">…</mark>`),
 ///   nullopt removes its markers;

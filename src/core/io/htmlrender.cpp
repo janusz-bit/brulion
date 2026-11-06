@@ -493,7 +493,7 @@ QString HtmlRenderer::renderListItem(const ParsedNote &note, int index) const
         out += u" class=\""_s + cls + u'"';
     if (!b.id.isEmpty())
         out += u" id="_s + attr(m_links.idPrefix + blockAnchor(b.id));
-    // A list item that is one fenced block (`/Wzór matematyczny` in an outline or a journal writes
+    // A list item that is one fenced block (`/Math formula` in an outline or a journal writes
     // "- ```math") is shown as that block, like the editor does.
     const auto fence = b.task ? std::nullopt : itemFence(b.text);
     const QString embedded = b.task || fence ? QString() : embeddedContent(b.text);

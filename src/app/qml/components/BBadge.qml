@@ -4,7 +4,7 @@ import Brulion
 
 // BBadge — small pill with a count or a short label, or a dot.
 //
-//   BBadge { count: 12 }                    BBadge { text: qsTr("Nowe"); variant: "accent" }
+//   BBadge { count: 12 }                    BBadge { text: qsTr("New"); variant: "accent" }
 //   BBadge { dot: true; variant: "warning" }
 //
 // variant: "neutral" (default) | "accent" | "danger" | "warning" | "success" | "info".

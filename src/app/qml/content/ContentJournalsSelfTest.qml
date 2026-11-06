@@ -25,7 +25,7 @@ import Brulion
 //   * selecting blocks in a day (docs/UI.md "Selecting and copying"): a finger's long press (the
 //     selection mode; the stream holds still while the finger extends it, scrolls at the frame's
 //     edge and the selection goes on into the next day — StreamSelection —, the selection tools
-//     dock on the frame, Kopiuj with the days' links), another day's selection ending it, Back; a
+//     dock on the frame, Copy with the days' links), another day's selection ending it, Back; a
 //     mouse drag from a block into the next ones, the stream scrolled at its edge;
 //   * Enter at the end of a zoomed paragraph at the bottom of a long day: the zoom ends, the stream
 //     keeps the new block at the grown day's bottom in view; Ctrl+Z zooms back in, still in view.

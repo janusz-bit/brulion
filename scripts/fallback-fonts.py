@@ -40,7 +40,7 @@ OUT_DIR = ROOT / "assets" / "fonts"
 # Emoji people commonly write in notes, journals and task lists (single code points: no flags or
 # ZWJ sequences, which would add hundreds of glyphs). Brulion's own characters (⏰ 🔔 📅 ⏳ 🛫 ✅
 # ❌ 🔁 🔺 ⏫ …) come from src/ by themselves. About 100 KB in the browser download; keep
-# additions moderate (docs/WEB.md, "Rozmiar").
+# additions moderate (docs/WEB.md, "Size").
 COMMON_EMOJI = {
     "faces": "😀😃😄😁😆😅😂🤣🥲😊😇🙂🙃😉😌😍🥰😘😋😛😜🤪🤓😎🤩🥳😏😒😞😔😟😕🙁😣"
              "😖😫😩🥺😢😭😤😠😡🤯😳🥵🥶😱😨😰😓🤗🤔🤭🤫😶😐😑😬🙄😮😲🥱😴🤤😵🤐"

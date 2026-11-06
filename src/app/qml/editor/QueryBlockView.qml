@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import Brulion
 
 // QueryBlockView — a ```query block (docs/SYNTAX.md §10) with its live results: the query's
-// filters as chips ("typ: zadania", "tag: zakupy"), then the matches from the vault index
+// filters as chips ("type: tasks", "tag: shopping"), then the matches from the vault index
 // (QueryResultModel over the host's QueryHost): tasks with a checkbox that changes the task in
 // its own file (this page: an undoable edit; right-click / long press: the status menu), blocks
 // and pages rendered like the editor renders them (links, tags, date chips), `group:` results
@@ -405,7 +405,7 @@ Rectangle {
                                   : Math.max(itemText.implicitHeight + 2 * pad, Theme.touchUi ? Theme.touchTarget : 0)
 
                     // Each row has only the parts of its kind: up to 50 rows are created with the
-                    // block (while the page scrolls). Group header: "Remont łazienki · 3".
+                    // block (while the page scrolls). Group header: "Bathroom renovation · 3".
                     Loader {
                         id: groupLabel
                         active: row.group

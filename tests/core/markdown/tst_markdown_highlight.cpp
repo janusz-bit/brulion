@@ -1,6 +1,6 @@
 // Coloured highlights (markdown/highlight.h, docs/SYNTAX.md §11): reading `<mark>` tags and their
 // colours (Highlightr's styles and classes, other CSS mapped to the palette), the renderer's spans
-// (only palette colours, never the note's CSS), and the editor's "Zakreśl" edit (setHighlight).
+// (only palette colours, never the note's CSS), and the editor's "Highlight" edit (setHighlight).
 #include "markdown/highlight.h"
 #include "markdown/inlinerenderer.h"
 

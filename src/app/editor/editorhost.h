@@ -175,8 +175,8 @@ public:
     /// the running clocks (one at a time), the dependency picker's candidates. nullptr when the
     /// host has none: dependencies show as plain text then.
     virtual const VaultIndex *taskIndex() const { return nullptr; }
-    /// The "Historia statusów" setting (AppSettings::taskStatusHistory): status changes are
-    /// logged in the task's `:LOGBOOK:` and "W toku" starts and stops its clock, as in Logseq.
+    /// The "Log task status changes" setting (AppSettings::taskStatusHistory): status changes are
+    /// logged in the task's `:LOGBOOK:` and "In progress" starts and stops its clock, as in Logseq.
     virtual bool taskStatusHistory() const { return false; }
 
     // --- Assets ------------------------------------------------------------------------------
@@ -305,15 +305,15 @@ public:
         Q_UNUSED(path);
         return false;
     }
-    /// The file name, without ".svg", of a new drawing on page `page` of the PDF `name` ("Wykład 3
-    /// s. 4"), or on the picture `name` when `page` is 0 ("Plan (rysunek)"): the editor's "Rysunek na
-    /// obrazie lub PDF…" and the PDF viewer's "Rysuj na tej stronie" name them alike (translations
+    /// The file name, without ".svg", of a new drawing on page `page` of the PDF `name` ("Lecture 3
+    /// p. 4"), or on the picture `name` when `page` is 0 ("Plan (drawing)"): the editor's "Drawing on
+    /// a picture or PDF…" and the PDF viewer's "Draw on this page" name them alike (translations
     /// in PageController's context).
     static QString drawingFileNameOn(const QString &name, int page)
     {
         // (Both at once: a name with "%1" in it keeps it, the page goes where %2 is.)
         if (page > 0)
-            //: A drawing on page %2 of the PDF %1 ("Wykład 3 s. 4"); a file name, without the extension
+            //: A drawing on page %2 of the PDF %1 ("Lecture 3 p. 4"); a file name, without the extension
             return QCoreApplication::translate("brulion::editor::PageController", "%1 p. %2")
                     .arg(name, QString::number(page));
         //: A drawing on the picture %1; a file name, without the extension

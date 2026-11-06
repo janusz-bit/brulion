@@ -1,6 +1,6 @@
-// AppController: text and files shared to Brulion from another app ("Udostępnij → Brulion",
+// AppController: text and files shared to Brulion from another app ("Share → Brulion",
 // docs/ANDROID.md; the browser version's share target, docs/WEB.md; the --share developer option)
-// and files opened with Brulion on a desktop ("Otwórz za pomocą": --open, a second launch's `share`
+// and files opened with Brulion on a desktop ("Open with": --open, a second launch's `share`
 // message; docs/WINDOWS.md, docs/NIXOS.md). The pure parts — the platform's JSON, the share
 // target's query, the opened files, the capture text, page titles and contents, a file's journal
 // block, which opened file is a page of the notebook — are notebook/share.h.

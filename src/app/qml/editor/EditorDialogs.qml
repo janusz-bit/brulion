@@ -8,29 +8,29 @@ import Brulion
 // EditorDialogs — the dialogs the block editor opens (all asynchronous, never exec()):
 //   createReminder(row, alarm)      BReminderDialog → ⏰ / ⏰! token (+ 🔁) on the block
 //   editReminder(row, from, to)     a clicked reminder chip: edit / delete that token
-//   pickDate(row, field)            Termin (📅 due) / Zaplanuj (⏳ scheduled): BDatePicker
-//   pickCsvTable(row)               "/Tabela z CSV…": FilePicker → PageController.insertCsvFile
-//   saveTableCsv(row)               "Zapisz jako CSV…": FilePicker (save) → saveTableCsv
-//   pickDateAt(row, from, to, kind, at)  a date chip's "Zmień datę…" (DateChipMenu): that token
+//   pickDate(row, field)            Due date… (📅) / Scheduled… (⏳): BDatePicker
+//   pickCsvTable(row)               "/Table from CSV…": FilePicker → PageController.insertCsvFile
+//   saveTableCsv(row)               "Save as CSV…": FilePicker (save) → saveTableCsv
+//   pickDateAt(row, from, to, kind, at)  a date chip's "Change date…" (DateChipMenu): that token
 //                                   (kind "day": a [[day]] link, a date without a time)
-//   pickRecurrence(row)             Powtarzaj (🔁): quick choices or a rule typed in Polish/English
-//   pickRecurrenceAt(row, from, to, rule)  a 🔁 chip's "Zmień regułę…": that rule
+//   pickRecurrence(row)             Repeat… (🔁): quick choices or a rule typed in Polish/English
+//   pickRecurrenceAt(row, from, to, rule)  a 🔁 chip's "Change rule…": that rule
 //   pickDateWith / editReminderWith / pickRecurrenceWith(target, …)  the same dialogs for a token
 //                                   elsewhere (a query result, an embed, a table cell, Tasks, the
 //                                   calendar — there without an editor or controller): the choice
 //                                   is the signal applied(target, action, a, b) (DateChipMenu's
 //                                   actions); `target` is the caller's name for its request
 //   pickPropertyDate(target, title, at, withTime)  a page property's date (PropertyRow): the same
-//                                   dialog titled with the property's name, "Wyczyść" to empty it
-//   pickJournalDate(row, cursor)    Data…: a [[journal day]] link at the caret
-//   pickTemplate(row)               Szablon…: insert a template from the templates folder
-//   pickImage(row, cursor)          Obraz…: pictures from the system's file picker (desktop,
+//                                   dialog titled with the property's name, "Clear" to empty it
+//   pickJournalDate(row, cursor)    Date…: a [[journal day]] link at the caret
+//   pickTemplate(row)               Template…: insert a template from the templates folder
+//   pickImage(row, cursor)          Image…: pictures from the system's file picker (desktop,
 //                                   Android) or the browser's, stored as attachments, `![[…]]`
-//   pickFileLink(row, cursor)       Plik…: any files from the system's file picker or the browser's,
+//   pickFileLink(row, cursor)       File…: any files from the system's file picker or the browser's,
 //                                   kept in the notebook, `[[…]]` links at the caret
-//   pickWebImage(row, cursor)       Obraz z internetu…: a picture's address → `![](https://…)`,
-//                                   with "Zapisz w notatniku" stored as an attachment right away
-//   pickDrawingBackdrop(row, cursor)  Rysunek na obrazie lub PDF…: a picture or a PDF (the system's
+//   pickWebImage(row, cursor)       Picture from the internet…: a picture's address → `![](https://…)`,
+//                                   with "Save to notebook" stored as an attachment right away
+//   pickDrawingBackdrop(row, cursor)  Drawing on a picture or PDF…: a picture or a PDF (the system's
 //                                   picker; the browser's: pictures only) → a PDF's pages chosen in
 //                                   DrawingBackdropDialog → one drawing per page (a picture: one
 //                                   drawing) with it as the backdrop, embedded at the caret and
@@ -76,7 +76,7 @@ Item {
     property BDialog webImageDialog: null
     property FilePicker backdropPicker: null
     property DrawingBackdropDialog backdropDialog: null
-    /// "Rysunek na obrazie lub PDF…": the browser's pick and a picture being prepared (0 none).
+    /// "Drawing on a picture or PDF…": the browser's pick and a picture being prepared (0 none).
     property int backdropPick: 0
     property int backdropJob: 0
     /// The picked file's vault path until a drawing uses it: abandoned, its copy goes again
@@ -145,7 +145,7 @@ Item {
     property bool dateTimeRequired: false
     property bool dateRemovable: false
     property string dateRemoveText: ""
-    // What the recurrence dialog shows as it opens: the rule's text, "Nie powtarzaj".
+    // What the recurrence dialog shows as it opens: the rule's text, "Don't repeat".
     property string recurrenceText: ""
     property bool recurrenceRemovable: false
     /// The recurrence dialog: "" (the block's rule) | "range" (the rule at from, to) | "apply".
@@ -227,7 +227,7 @@ Item {
         reminderPopup().editWith(at, answer.map.alarm === true, recurrence, context)
     }
     /// The reminder dialog for a reminder elsewhere (a chip's dialogAt || at, alarm, rule,
-    /// context); the result is applied(target, "reminder", at, { alarm, recurrence }) — "Usuń":
+    /// context); the result is applied(target, "reminder", at, { alarm, recurrence }) — "Delete":
     /// applied(target, "remove", 0, 0).
     function editReminderWith(target: string, at: string, alarm: bool, rule: string, context: string): void {
         applyTarget = target
@@ -261,7 +261,7 @@ Item {
         openDateDialog(kind, at)
     }
     /// The date dialog for a page property (PropertyRow): the property's name as the title, a
-    /// date or a date and time (`withTime`), "Wyczyść" for an empty value — applied(target, "set",
+    /// date or a date and time (`withTime`), "Clear" for an empty value — applied(target, "set",
     /// value) / (target, "remove"). `at`: the value now ("YYYY-MM-DD[ HH:mm]"; "" — empty: today in
     /// the calendar).
     function pickPropertyDate(target: string, title: string, at: string, withTime: bool): void {
@@ -330,8 +330,8 @@ Item {
         recurrenceMode = "range"
         openRecurrenceDialog(rule)
     }
-    /// The recurrence dialog for a rule elsewhere: applied(target, action, rule, 0) ("" = "Nie
-    /// powtarzaj").
+    /// The recurrence dialog for a rule elsewhere: applied(target, action, rule, 0) ("" = "Don't
+    /// repeat").
     function pickRecurrenceWith(target: string, rule: string, action: string): void {
         applyTarget = target
         recurrenceMode = "apply"
@@ -573,7 +573,7 @@ Item {
         }
     }
 
-    /// "/Tabela z CSV…": a CSV file as a table in place of the block (PageController.insertCsvFile).
+    /// "/Table from CSV…": a CSV file as a table in place of the block (PageController.insertCsvFile).
     function pickCsvTable(r: int): void {
         if (!controller)
             return
@@ -606,7 +606,7 @@ Item {
         }
     }
 
-    /// The table menu's "Zapisz jako CSV…": the system's save picker (the browser: a download).
+    /// The table menu's "Save as CSV…": the system's save picker (the browser: a download).
     function saveTableCsv(r: int): void {
         if (!controller)
             return
@@ -857,8 +857,9 @@ Item {
                 id: ruleField
                 Layout.fillWidth: true
                 leadingIcon: "repeat"
-                placeholderText: qsTr("e.g. co tydzień w poniedziałek, every month on the 15th")
-                // No sentence: no automatic capital letter from the keyboard ("Co tydzień").
+                placeholderText: qsTr("e.g. every week on Monday, every month on the 15th")
+                // No sentence: no automatic capital letter from the keyboard ("Co tydzień": typed rules
+                // are Polish or English).
                 inputMethodHints: Qt.ImhNoAutoUppercase
                 errorText: Js.trim(ruleField.text) !== "" && !recurrenceDialog.parsedOk ? qsTr("Not a recurrence rule") : ""
                 onAccepted: recurrenceDialog.tryAccept()

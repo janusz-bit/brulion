@@ -5,8 +5,8 @@ import Brulion
 
 // FindBar — find and replace in the open note (docs/UI.md "Find and replace"): at the top of a page
 // or of the journal stream (`stream`: StreamFind over its days — the count, next / previous and
-// Replace all span them, "3 z 12 · 4 dni"; the current match is `find`'s, in the day written in).
-// The query field, "3 z 12", previous and
+// Replace all span them, "3 of 12 · 4 days"; the current match is `find`'s, in the day written in).
+// The query field, "3 of 12", previous and
 // next (Enter, Shift+Enter, F3), what a match must fit (letter case, Polish letters, whole word) and a
 // row for replacing that opens with Ctrl+H or the arrow. Esc closes it (closeRequested(): the owner
 // gives the keyboard back). The logic is NoteFind's; its buttons never take the keyboard from the
@@ -242,7 +242,7 @@ Rectangle {
                         return qsTr("No results")
                     let counted = qsTr("%n result(s)", "", bar.matchCount)
                     if (bar.currentMatch >= 0)
-                        //: Matches in the note: "3 z 12"
+                        //: Matches in the note: "3 of 12"
                         counted = qsTr("%1 of %2").arg(bar.currentMatch + 1).arg(bar.matchCount)
                     // The journal stream: in how many days.
                     return bar.stream && bar.stream.dayCount > 1

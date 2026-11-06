@@ -3,8 +3,8 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// SyncSettings — the "Synchronizacja" section of SettingsView: the state of both ways at a glance
-// (Syncthing, Nextcloud with "Synchronizuj teraz", waiting conflicts), the way to the sync center,
+// SyncSettings — the "Sync" section of SettingsView: the state of both ways at a glance
+// (Syncthing, Nextcloud with "Sync now", waiting conflicts), the way to the sync center,
 // and the Nextcloud account form itself.
 //
 //   SyncSettings { Layout.fillWidth: true }

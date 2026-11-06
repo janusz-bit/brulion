@@ -1,4 +1,4 @@
-// A habit's check in a daily note (docs/SYNTAX.md §5 "Nawyki / Habits"), as the app's Habits view
+// A habit's check in a daily note (docs/SYNTAX.md §5 "Habits"), as the app's Habits view
 // and `brulion-cli habit set` write it: pure content edits (content in → content out) — the rest of
 // the note keeps its bytes (line endings, a BOM, other lines). Part of the notebook module — see
 // notebook/notebook.h.

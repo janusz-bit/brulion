@@ -1,179 +1,183 @@
-# Szablony
+# Templates
 
-Szablon to zwykła strona Markdown w folderze szablonów notatnika (domyślnie `templates/`). Nie ma
-osobnego edytora ani formatu: piszesz go jak każdą inną notatkę, a synchronizuje się razem z
-resztą plików. Składnia w skrócie: [SYNTAX.md](SYNTAX.md#12-templates).
+A template is an ordinary Markdown page in the notebook's templates folder (`templates/` by
+default). There is no separate editor or format: you write it like any other note, and it syncs
+together with the rest of the files. Syntax in brief: [SYNTAX.md](SYNTAX.md#12-templates).
 
-## Nowy szablon
+## New template
 
-1. Na pasku bocznym otwórz menu folderu `templates` i wybierz **Nowa strona tutaj**. Jeśli folderu
-   jeszcze nie ma, utwórz go.
-2. Nazwij stronę tak, jak ma się nazywać szablon, np. `Spotkanie`.
-3. Wpisz treść, opcjonalnie ze [zmiennymi](#zmienne):
+1. In the sidebar, open the menu of the `templates` folder and choose **New page here**. If the
+   folder does not exist yet, create it.
+2. Name the page the way the template should be called, e.g. `Meeting`.
+3. Type the content, optionally with [variables](#variables):
 
    ```markdown
    # {{title}}
 
-   Data: {{date}} ({{weekday}}), {{time}}
+   Date: {{date}} ({{weekday}}), {{time}}
 
-   ## Uczestnicy
+   ## Participants
    -
 
-   ## Ustalenia
+   ## Decisions
    -
    ```
 
-Szablony można układać w podfolderach (`templates/praca/Klient.md`) — też będą na liście.
+Templates can be arranged in subfolders (`templates/work/Client.md`) — they appear in the list
+too.
 
-## Wstawianie szablonu
+## Inserting a template
 
-W edytorze wpisz `/szablon` (po angielsku `/template`), wybierz **Szablon…**, a potem szablon z
-listy. Lista ma wyszukiwarkę i pokazuje wszystkie strony z folderu szablonów, także szablon
-dziennika.
+In the editor type `/template` (the Polish `/szablon` works too), choose **Template…**, and then
+a template from the list. The list has a search field and shows all pages from the templates
+folder, the journal template included.
 
-Gdzie trafia tekst:
+Where the text goes:
 
-* z bloku pustego — zastępuje ten blok;
-* z bloku z treścią — pod nim, za całym blokiem najwyższego poziomu z jego podpunktami.
+* from an empty block — it replaces that block;
+* from a block with content — below it, after the whole top-level block with its children.
 
-Kursor staje na pierwszym wstawionym bloku. Wstawienie cofniesz jak każdą inną zmianę.
+The cursor lands on the first inserted block. You undo the insertion like any other change.
 
-Na razie nie ma tworzenia nowej strony z wybranego szablonu. Utwórz stronę i wstaw szablon do
-pustego bloku.
+There is no way yet to create a new page from a chosen template. Create the page and insert the
+template into an empty block.
 
-## Zmienne
+## Variables
 
-| Zmienna | Co wstawia | Przykład |
+| Variable | What it inserts | Example |
 |---|---|---|
-| `{{date}}` | data | `2026-10-14` |
-| `{{date:FORMAT}}` | data i czas we własnym [formacie](#format-daty-i-godziny) | `{{date:dd.MM.yyyy}}` → `14.10.2026` |
-| `{{time}}` | godzina | `09:05` |
-| `{{time:FORMAT}}` | to samo co `{{date:FORMAT}}` | `{{time:HH:mm:ss}}` → `09:05:00` |
-| `{{title}}` | tytuł strony, do której wstawiasz | `Remont łazienki` |
-| `{{weekday}}` | dzień tygodnia | `środa` |
-| `{{month}}` | nazwa miesiąca w mianowniku | `październik` |
-| `{{week}}` | numer tygodnia ISO | `42` |
-| `{{end}}` | ostatni dzień okresu w [notatce tygodniowej lub miesięcznej](#szablony-notatek-tygodniowych-i-miesięcznych), gdzie indziej to samo co `{{date}}` | `2026-10-18` |
-| `{{end:FORMAT}}` | to samo we własnym formacie | `{{end:d MMMM yyyy}}` → `18 października 2026` |
-| `{{cursor}}` | nic — zobacz niżej | |
+| `{{date}}` | date | `2026-10-14` |
+| `{{date:FORMAT}}` | date and time in your own [format](#date-and-time-format) | `{{date:dd.MM.yyyy}}` → `14.10.2026` |
+| `{{time}}` | time | `09:05` |
+| `{{time:FORMAT}}` | the same as `{{date:FORMAT}}` | `{{time:HH:mm:ss}}` → `09:05:00` |
+| `{{title}}` | title of the page you insert into | `Bathroom renovation` |
+| `{{weekday}}` | day of the week | `Wednesday` (Polish: `środa`) |
+| `{{month}}` | month name (in Polish the nominative form) | `October` (Polish: `październik`) |
+| `{{week}}` | ISO week number | `42` |
+| `{{end}}` | last day of the period in a [weekly or monthly note](#weekly-and-monthly-note-templates), elsewhere the same as `{{date}}` | `2026-10-18` |
+| `{{end:FORMAT}}` | the same in your own format | `{{end:d MMMM yyyy}}` → `18 October 2026` (Polish: `18 października 2026`) |
+| `{{cursor}}` | nothing — see below | |
 
-* Wielkość liter nie ma znaczenia, a w klamrach mogą być spacje: `{{ Title }}` działa jak
+* Case does not matter, and spaces are allowed inside the braces: `{{ Title }}` works like
   `{{title}}`.
-* Nieznana zmienna zostaje w tekście tak, jak ją napisano (`{{projekt}}`).
-* Nazwy dni i miesięcy są w języku aplikacji. W `brulion-cli` wybiera go opcja `--lang`.
-* `{{date}}` i `{{time}}` to chwila wstawienia, także gdy wstawiasz szablon do wczorajszej notatki
-  dziennej. Tylko [szablon dziennika](#szablon-dziennika) wypełnia się datą swojego dnia, a
-  [szablony tygodnia i miesiąca](#szablony-notatek-tygodniowych-i-miesięcznych) — swojego okresu.
-* `{{month}}` to nazwa do nagłówka („październik 2026”). `{{date:MMMM}}` daje dopełniacz
-  („14 października”), dobry w zdaniu z dniem.
+* An unknown variable stays in the text as written (`{{project}}`).
+* Day and month names are in the app's language. In `brulion-cli` the `--lang` option chooses it.
+* `{{date}}` and `{{time}}` are the moment of insertion, also when you insert a template into
+  yesterday's daily note. Only the [journal template](#journal-template) is filled with the date of
+  its own day, and the [weekly and monthly templates](#weekly-and-monthly-note-templates) with
+  their own period.
+* `{{month}}` is the name for a heading ("październik 2026" in Polish). `{{date:MMMM}}` gives the
+  genitive ("14 października"), right in a sentence with a day. In English both are "October".
 
-**`{{cursor}}` na razie nie ustawia kursora.** Zmienna jest usuwana z tekstu, a kursor staje tam,
-gdzie opisano przy [wstawianiu](#wstawianie-szablonu) i przy
-[szablonie dziennika](#szablon-dziennika).
+**`{{cursor}}` does not set the cursor yet.** The variable is removed from the text, and the
+cursor lands where described under [inserting](#inserting-a-template) and under the
+[journal template](#journal-template).
 
-### Format daty i godziny
+### Date and time format
 
-Format to [wzorzec daty Qt](https://doc.qt.io/qt-6/qdatetime.html#toString):
+The format is a [Qt date pattern](https://doc.qt.io/qt-6/qdatetime.html#toString):
 
-| Wzorzec | Znaczenie | Przykład |
+| Pattern | Meaning | Example |
 |---|---|---|
-| `yyyy`, `yy` | rok | `2026`, `26` |
-| `MM`, `M` | numer miesiąca | `03`, `3` |
-| `MMMM`, `MMM` | nazwa miesiąca | `października`, `paź` |
-| `dd`, `d` | dzień miesiąca | `04`, `4` |
-| `dddd`, `ddd` | dzień tygodnia | `środa`, `śr.` |
-| `HH`, `mm`, `ss` | godzina, minuta, sekunda | `09`, `05`, `00` |
-| `'tekst'` | tekst dosłownie | `{{date:yyyy-MM-dd'T'HH:mm}}` → `2026-10-14T09:05` |
+| `yyyy`, `yy` | year | `2026`, `26` |
+| `MM`, `M` | month number | `03`, `3` |
+| `MMMM`, `MMM` | month name | `October`, `Oct` (Polish: `października`, `paź`) |
+| `dd`, `d` | day of the month | `04`, `4` |
+| `dddd`, `ddd` | day of the week | `Wednesday`, `Wed` (Polish: `środa`, `śr.`) |
+| `HH`, `mm`, `ss` | hour, minute, second | `09`, `05`, `00` |
+| `'text'` | literal text | `{{date:yyyy-MM-dd'T'HH:mm}}` → `2026-10-14T09:05` |
 
-`{{date:dddd, d MMMM yyyy}}` daje `środa, 14 października 2026`. Format nie może zawierać znaku `}`.
+`{{date:dddd, d MMMM yyyy}}` gives `Wednesday, 14 October 2026` (Polish: `środa, 14 października
+2026`). The format cannot contain the `}` character.
 
-## Szablon dziennika
+## Journal template
 
-Nowe notatki dzienne zaczynają się od pliku `templates/journal.md`. Wystarczy go utworzyć:
+New daily notes start from the file `templates/journal.md`. Just create it:
 
 ```markdown
 ## {{weekday}}, {{date:dd.MM.yyyy}}
 
-### Na dziś
-- [ ] Przejrzeć zadania
+### Today
+- [ ] Review tasks
 
-### Notatki
+### Notes
 - 
 ```
 
-* **Plik powstaje przy pierwszej zmianie.** Dzień bez notatki tylko pokazuje szablon jako tekst
-  startowy, więc samo oglądanie dnia niczego nie tworzy.
-* **Data to dzień notatki.** `{{date}}` we wczorajszej notatce to wczoraj, a `{{time}}` to godzina
-  jej utworzenia. `{{title}}` to nazwa pliku, np. `2026-10-14`.
-* **Kursor** staje na pierwszym pustym punkcie listy. Gdy takiego nie ma, na końcu powstaje nowy
-  pusty blok.
-* **Pusty punkt na końcu.** Zakończ szablon pustym `- `, jak wyżej. Szybkie dodawanie, udostępnianie,
-  widżety Androida i `brulion-cli journal append` wypełnią ten punkt, zamiast dopisywać nowy pod nim.
-* **Tryb notatki.** Szablon może go ustawić w nagłówku (`brulion: document` albo `outline`,
+* **The file is created on the first change.** A day without a note only shows the template as
+  starting text, so just looking at a day creates nothing.
+* **The date is the note's day.** `{{date}}` in yesterday's note is yesterday, and `{{time}}` is
+  the time it was created. `{{title}}` is the file name, e.g. `2026-10-14`.
+* **The cursor** lands on the first empty list item. When there is none, a new empty block is
+  added at the end.
+* **An empty item at the end.** End the template with an empty `- `, as above. Quick capture,
+  sharing, Android widgets and `brulion-cli journal append` fill that item instead of adding a new
+  one below it.
+* **Note mode.** The template can set it in the header (`brulion: document` or `outline`,
   [SYNTAX.md](SYNTAX.md)).
-* **Brak pliku.** Gdy pliku szablonu nie ma albo pole w ustawieniach jest puste, nowe dni zaczynają
-  się od pustej strony.
+* **No file.** When the template file does not exist or the field in the settings is empty, new
+  days start from an empty page.
 
-## Szablony notatek tygodniowych i miesięcznych
+## Weekly and monthly note templates
 
-Notatki tygodnia (`journals/2026-W45.md`) i miesiąca (`journals/2026-11.md`) zaczynają się od
-plików `templates/weekly.md` i `templates/monthly.md`. Działają jak szablon dziennika: notatka
-powstaje przy pierwszej zmianie, a oglądanie tygodnia czy miesiąca niczego nie tworzy.
+Week notes (`journals/2026-W45.md`) and month notes (`journals/2026-11.md`) start from the files
+`templates/weekly.md` and `templates/monthly.md`. They work like the journal template: the note is
+created on the first change, and looking at a week or month creates nothing.
 
-* **`{{date}}` to pierwszy dzień okresu** — poniedziałek tygodnia albo 1. dzień miesiąca, a
-  **`{{end}}`** ostatni: niedziela albo ostatni dzień miesiąca. `{{title}}` to nazwa pliku
-  (`2026-W45`), `{{week}}` numer tygodnia, `{{month}}` nazwa miesiąca.
-* **Tydzień liczy się według ISO**, od poniedziałku, także gdy w ustawieniach tydzień zaczyna się
-  w niedzielę. Na przełomie roku numer należy do roku tygodnia: 1 stycznia 2027 to tydzień 53 roku
-  2026.
+* **`{{date}}` is the first day of the period** — the Monday of the week or the 1st of the month —
+  and **`{{end}}`** the last one: Sunday or the last day of the month. `{{title}}` is the file name
+  (`2026-W45`), `{{week}}` the week number, `{{month}}` the month name.
+* **Weeks are counted by ISO**, from Monday, even when the settings start the week on Sunday. At
+  the turn of the year the number belongs to the week's year: 1 January 2027 is week 53 of 2026.
 
-Przykład tygodnia:
+A week example:
 
 ```markdown
-# Tydzień {{week}}: {{date:d MMMM}} – {{end:d MMMM yyyy}}
+# Week {{week}}: {{date:d MMMM}} – {{end:d MMMM yyyy}}
 
-## Cele
+## Goals
 - 
 
-## Podsumowanie
+## Summary
 - 
 ```
 
-i miesiąca:
+and a month:
 
 ```markdown
 # {{month}} {{date:yyyy}}
 
-## Najważniejsze
+## Highlights
 - 
 ```
 
-Otworzysz je skrótami **Ctrl+Alt+W** i **Ctrl+Alt+M**, z palety poleceń albo z kalendarza (numer
-tygodnia, nazwa miesiąca w nagłówku). Folder, nazwy plików i szablony zmienisz w
-**Ustawienia → Notatnik** (`weeklyFolder`, `weeklyFileFormat`, `weeklyTemplate`, `monthlyFolder`,
-`monthlyFileFormat`, `monthlyTemplate` w `.brulion/config.json`), szczegóły formatów:
-[SYNTAX.md](SYNTAX.md#weekly-and-monthly-notes--notatki-tygodniowe-i-miesięczne).
+You open them with **Ctrl+Alt+W** and **Ctrl+Alt+M**, from the command palette or from the
+calendar (the week number, the month name in the header). You change the folder, file names and
+templates in **Settings → Notebook** (`weeklyFolder`, `weeklyFileFormat`, `weeklyTemplate`,
+`monthlyFolder`, `monthlyFileFormat`, `monthlyTemplate` in `.brulion/config.json`); format
+details: [SYNTAX.md](SYNTAX.md#weekly-and-monthly-notes).
 
-## Na co uważać
+## Things to watch out for
 
-* **Zadania i przypomnienia z szablonu są widoczne jak każde inne.** Treść szablonu jest indeksowana
-  jak zwykła notatka: `- [ ] Przejrzeć zadania` pojawi się na liście zadań, a
-  `⏰ 2026-11-05 09:00` w przypomnieniach. Zapis `⏰ {{date}} 09:00` nie jest w szablonie
-  przypomnieniem, staje się nim dopiero po wstawieniu. Natomiast `- [ ] Coś 📅 {{date}}` w szablonie
-  jest już zadaniem, tyle że bez terminu.
-* **Wyszukiwanie obejmuje szablony.** Ich tekst, ze zmiennymi, pojawia się w wynikach.
-* **Nagłówek YAML działa tylko na górze strony.** Szablon z `---` na początku wstawiony w środek
-  notatki nie ustawi jej właściwości. Działa na pustej stronie i w szablonie dziennika.
-* **Graf i Sprzątanie.** Graf domyślnie ukrywa szablony (przełącznik **Szablony**), a Sprzątanie
-  nigdy ich nie proponuje do usunięcia — ani notatek tygodniowych i miesięcznych.
+* **Tasks and reminders in a template are visible like any others.** A template's content is
+  indexed like an ordinary note: `- [ ] Review tasks` appears in the task list, and
+  `⏰ 2026-11-05 09:00` in reminders. `⏰ {{date}} 09:00` is not a reminder in the template; it
+  becomes one only after insertion. On the other hand, `- [ ] Something 📅 {{date}}` in a template
+  is already a task, just without a due date.
+* **Search covers templates.** Their text, with the variables, shows up in the results.
+* **The YAML header works only at the top of a page.** A template starting with `---` inserted in
+  the middle of a note does not set its properties. It works on an empty page and in the journal
+  template.
+* **Graph and Clean up.** The graph hides templates by default (the **Templates** toggle), and
+  Clean up never suggests deleting them — nor weekly and monthly notes.
 
-## Inny folder lub plik
+## Another folder or file
 
-W **Ustawienia → Notatnik** są pola **Folder szablonów**, **Szablon dziennika**, **Szablon
-notatki tygodniowej** i **Szablon notatki miesięcznej**. Zapisują się w `.brulion/config.json`
-(`templatesFolder`, `journalTemplate`, `weeklyTemplate`, `monthlyTemplate`), więc działają na
-wszystkich urządzeniach. Gdy przeniesiesz albo przemianujesz folder szablonów lub plik szablonu w
-Brulionie, ustawienia pójdą za nim.
+**Settings → Notebook** has the fields **Templates folder**, **Journal template**, **Weekly note
+template** and **Monthly note template**. They are saved in `.brulion/config.json`
+(`templatesFolder`, `journalTemplate`, `weeklyTemplate`, `monthlyTemplate`), so they apply on all
+devices. When you move or rename the templates folder or a template file in Brulion, the settings
+follow it.
 
-Skarbiec Obsidiana bez `.brulion/config.json` korzysta z ustawień Obsidiana:
-[IMPORT.md](IMPORT.md#folder-obsidiana-bez-importu).
+An Obsidian vault without `.brulion/config.json` uses Obsidian's settings:
+[IMPORT.md](IMPORT.md#obsidian-folder-without-importing).

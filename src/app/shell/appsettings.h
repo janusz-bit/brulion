@@ -48,7 +48,7 @@ class AppSettings : public QObject {
     /// Reduce animations (Theme.reducedMotion).
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged FINAL)
 
-    // ---- Appearance (Ustawienia → Wygląd; Theme inputs, ThemePalette) --------------------
+    // ---- Appearance (Settings → Appearance; Theme inputs, ThemePalette) -------------------
     /// "red" (default) | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (Theme.accentName).
     Q_PROPERTY(QString accentColor READ accentColor WRITE setAccentColor NOTIFY accentChanged FINAL)
     /// The custom accent "#rrggbb" (lower case; "" = none: "custom" then looks like "red").
@@ -69,7 +69,7 @@ class AppSettings : public QObject {
                        sidebarSectionsChanged FINAL)
     /// The phone's bottom navigation: exactly four views of BottomNavViews (the menu comes last).
     Q_PROPERTY(QStringList bottomNavTabs READ bottomNavTabs WRITE setBottomNavTabs NOTIFY bottomNavTabsChanged FINAL)
-    /// Quick capture's "+ Notatka" item on the phone's bottom navigation (before Menu).
+    /// Quick capture's "+ Note" item on the phone's bottom navigation (before Menu).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
 
@@ -90,17 +90,17 @@ class AppSettings : public QObject {
                        editorLineSpacingChanged FINAL)
     /// Show the whole file as Markdown source by default (Ctrl+E switches per page).
     Q_PROPERTY(bool editorSourceMode READ editorSourceMode WRITE setEditorSourceMode NOTIFY editorSourceModeChanged FINAL)
-    /// The page properties panel ("Właściwości") opens expanded (its header's tap switches it;
+    /// The page properties panel ("Properties") opens expanded (its header's tap switches it;
     /// folded by default: the journal stream stays dense).
     Q_PROPERTY(bool propertiesExpanded READ propertiesExpanded WRITE setPropertiesExpanded NOTIFY
                        propertiesExpandedChanged FINAL)
     /// Show pictures from the internet in notes without asking (`![x](https://…)`; off: each
-    /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
+    /// waits for "Show" — a synced or imported note cannot make the device fetch anything).
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
     /// Task status history (docs/SYNTAX.md §5 "Time tracking and status history"; default off):
     /// a status change adds a `State "DONE" from "TODO" [time]` line to the task's `:LOGBOOK:`, and
-    /// "W toku" starts its clock (leaving it stops the clock), as Logseq does. Pushed into the
+    /// "In progress" starts its clock (leaving it stops the clock), as Logseq does. Pushed into the
     /// Workspace (EditorHost::taskStatusHistory()).
     Q_PROPERTY(bool taskStatusHistory READ taskStatusHistory WRITE setTaskStatusHistory NOTIFY taskStatusHistoryChanged
                        FINAL)
@@ -112,7 +112,7 @@ class AppSettings : public QObject {
     /// The personal dictionary: words spell checking takes as right, sorted (a device setting:
     /// every notebook of this device; docs/UI.md "Spell checking" says why not in the notebook).
     Q_PROPERTY(QStringList spellingWords READ spellingWords WRITE setSpellingWords NOTIFY spellingWordsChanged FINAL)
-    /// The word and character count in the corner of a page (wide windows; the page's Więcej menu
+    /// The word and character count in the corner of a page (wide windows; the page's More menu
     /// always has it). Default on.
     Q_PROPERTY(bool wordCountShown READ wordCountShown WRITE setWordCountShown NOTIFY wordCountShownChanged FINAL)
     /// Focus mode (docs/UI.md "Statistics and focus mode"): on a page or in the journal no sidebar,
@@ -199,7 +199,7 @@ public:
 
     /// Ids for sidebarHidden: the navigation entries, then the sections.
     static QStringList sidebarItems();
-    /// The sidebar's page sections in their default order: Ulubione, Ostatnie, Wszystkie strony.
+    /// The sidebar's page sections in their default order: Favorites, Recent, All pages.
     static QStringList sidebarSectionIds();
     /// Views the bottom navigation can offer, and its default four.
     static QStringList bottomNavViews();
@@ -324,8 +324,8 @@ public:
     /// The current notebook has a server folder of its own (chosen, or kept from its last sync).
     bool hasOwnNextcloudFolder() const;
     /// The server folder the settings form shows for the current notebook: its own; for one that
-    /// has none, "Notatki" when no account is set up yet, else the notebook folder's name (without
-    /// characters a server folder cannot have) — and never a folder another notebook on this
+    /// has none, "Notatki" (NewAccountFolder) when no account is set up yet, else the notebook
+    /// folder's name (without characters a server folder cannot have) — and never a folder another notebook on this
     /// device has, holds or is inside ("Praca 2" then), nor the one of 0.3.0 waiting for its
     /// notebook.
     QString proposedNextcloudFolder() const;

@@ -43,7 +43,7 @@ struct Range {
 };
 
 /// The section under the heading `heading` names (markdown::findHeading: also an Obsidian heading
-/// path "Budżet#Październik", the matcher of links too): the blocks after it up to the next
+/// path "Budget#October", the matcher of links too): the blocks after it up to the next
 /// heading of the same or a higher level outside lists; for a Logseq "- # Heading" item its
 /// children.
 std::optional<Range> sectionRange(const markdown::BlockDocument &doc, const QString &heading)
@@ -271,7 +271,7 @@ private:
         else if (t.kind == Transclusion::Kind::Block)
             fragment = u"#^"_s + encoded(t.blockId);
         r.href = u"page:"_s + encoded(linkTarget) + fragment;
-        // A daily note by its date ("wt 13 paź"), like links to it.
+        // A daily note by its date ("Tue, Oct 13"), like links to it.
         const auto dayTitle = markdown::journalLinkTitle(
                 m_model.vaultConfig(), m_model.english() ? dates::UiLocale::English : dates::UiLocale::Polish,
                 m_model.today());

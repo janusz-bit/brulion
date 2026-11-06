@@ -1,6 +1,6 @@
 // Helpers shared by the planning models (calendar, tasks, graph): ISO date strings for QML,
 // UI locale, the renderer palette from QML colours, task/priority names, human date labels,
-// the lines written by "Dodaj zadanie" / "Dodaj przypomnienie" / quick add, and the pure
+// the lines written by "Add task" / "Add reminder" / quick add, and the pure
 // "append a block to a page" edit. GUI-free (QtCore + core modules). Namespace brulion::planning.
 #pragma once
 
@@ -59,16 +59,16 @@ QString priorityName(Priority priority);
 /// Inverse of priorityName(); Priority::None for anything unknown.
 Priority priorityFromName(const QString &name);
 
-/// Human label relative to `today` ("dziś 09:00", "jutro", "pt 17 paź"), see dates::formatHuman.
+/// Human label relative to `today` ("today 09:00", "tomorrow", "Fri, Oct 17"), see dates::formatHuman.
 QString humanDate(const DateSpec &spec, dates::UiLocale locale, QDate today);
 
-/// The task line written by "Dodaj zadanie" / quick add: "- [ ] <text>" plus " 📅 <due>" and
+/// The task line written by "Add task" / quick add: "- [ ] <text>" plus " 📅 <due>" and
 /// " ⏰ <reminder>" (" ⏰! <reminder>" with `alarm`) when given. The text is trimmed and its line
 /// breaks become spaces; a list marker or checkbox typed by the user is not doubled.
 QString taskLine(const QString &text, const std::optional<DateSpec> &due = std::nullopt,
                  const std::optional<DateSpec> &reminder = std::nullopt, bool alarm = false);
 
-/// The reminder line written by "Dodaj przypomnienie": "- <text> ⏰ <at>" (`⏰!` for alarms) and
+/// The reminder line written by "Add reminder": "- <text> ⏰ <at>" (`⏰!` for alarms) and
 /// " 🔁 <recurrence>" when given (canonical English, as BReminderDialog returns it).
 QString reminderLine(const QString &text, const DateSpec &at, bool alarm = false, const QString &recurrence = {});
 
@@ -79,7 +79,8 @@ QString reminderLine(const QString &text, const DateSpec &at, bool alarm = false
 /// dropped. An empty block returns `content` unchanged.
 QString appendBlock(const QString &content, const QString &block);
 
-/// Result of parsing quick-add input ("Zadzwonić do Ani jutro o 9 #praca").
+/// Result of parsing quick-add input ("Zadzwonić do Ani jutro o 9 #praca": "call Ania tomorrow at
+/// 9", Polish and English phrases alike).
 struct QuickAdd {
     QString text;   ///< the task text with the date phrase removed ("Zadzwonić do Ani #praca")
     std::optional<DateSpec> when; ///< the recognised date (and time); unset when none / in the past

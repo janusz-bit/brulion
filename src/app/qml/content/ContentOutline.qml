@@ -6,8 +6,8 @@ import Brulion
 // ContentOutline — the headings of the page in the editor (OutlineModel over the editor's
 // blocks: live while typing), indented by level; the heading the caret is under is marked. A
 // click (or Enter) scrolls the editor to the heading, selects it and flashes it. A right-click
-// (mouse, touchpad, stylus), a long press or the Menu key opens "Kopiuj link do nagłówka" /
-// "Kopiuj osadzenie" (BlockEditor.copyLink: [[Strona#Nagłówek]], ![[Strona#Nagłówek]]).
+// (mouse, touchpad, stylus), a long press or the Menu key opens "Copy link to heading" /
+// "Copy embed" (BlockEditor.copyLink: [[Page#Heading]], ![[Page#Heading]]).
 //
 //   ContentOutline { controller: page; editor: editor }
 Item {

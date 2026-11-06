@@ -1,7 +1,7 @@
 // Helpers shared by the content models (journals, pages, backlinks, tags, search, history):
 // ISO dates for QML, the UI locale, the renderer palette from QML colours, rendering an indexed
 // block as escaped rich text, search-term highlighting positions, the pure "turn a plain mention
-// into a [[link]]" edit, wiki links for "Kopiuj odnośnik", human sizes and times.
+// into a [[link]]" edit, wiki links for "Copy link", human sizes and times.
 // GUI-free (QtCore + core modules). Namespace brulion::content.
 #pragma once
 
@@ -46,7 +46,7 @@ markdown::RenderContext renderContext(const VaultIndex *index, const VaultPath &
 QString renderBlockAt(const QString &content, int line, const markdown::RenderContext &context);
 
 /// Readable one-line text of inline Markdown (lists, accessibility): wiki links and embeds show
-/// their display text or target ("Strona › Nagłówek" for a heading link), Markdown links their
+/// their display text or target ("Page › Heading" for a heading link), Markdown links their
 /// text, block references the referenced text (via `index`, else "((id))"), emphasis and code
 /// markers are dropped, whitespace collapsed. Tags stay ("#praca").
 QString plainText(const QString &markdown, const VaultIndex *index = nullptr);
@@ -92,8 +92,8 @@ QString mentionLink(const VaultIndex *index, const QString &mention, const Vault
 
 /// "512 B", "1,2 kB", "3,4 MB" (Polish decimal comma; "1.2 kB" in English).
 QString humanSize(qint64 bytes, dates::UiLocale locale);
-/// File time (ms since epoch, local) for lists: "dziś 09:12", "wczoraj 18:00", "pt 17 paź",
-/// "17 paź 2025" — dates::formatHuman relative to `today`. "" for 0.
+/// File time (ms since epoch, local) for lists: "today 09:12", "yesterday 18:00", "Fri, Oct 17",
+/// "Oct 17, 2025" — dates::formatHuman relative to `today`. "" for 0.
 QString humanTime(qint64 msecsSinceEpoch, QDate today, dates::UiLocale locale);
 
 /// Canonical tag key: trimmed, without a leading '#' (or "#[[…]]" brackets), NFC, lower case

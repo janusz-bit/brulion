@@ -9,7 +9,7 @@ namespace brulion::platform {
 
 struct WasmShareJs;
 
-/// Shares another tab of this browser hands over (docs/WEB.md "Udostępnianie do Brulionu").
+/// Shares another tab of this browser hands over (docs/WEB.md "Sharing to Brulion").
 ///
 /// The browser version is in the system's share sheet once installed as an app
 /// (wasm/manifest.webmanifest "share_target", GET `./?share-title=…&share-text=…&share-url=…`). A

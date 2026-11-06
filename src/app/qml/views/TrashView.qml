@@ -7,7 +7,7 @@ import Brulion
 // TrashView — route "trash": what was moved to the trash (the vault's .trash/ folder, so another
 // device syncing the folder sees the same), most recently deleted first — a deleted folder is
 // one entry. Each can be restored to where it was (Workspace.restore; links to it work again) or
-// deleted for good after a confirmation; "Opróżnij kosz" deletes everything (confirmed).
+// deleted for good after a confirmation; "Empty trash" deletes everything (confirmed).
 // The list follows Workspace.trashChanged (deletions anywhere, Syncthing).
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
 FocusScope {

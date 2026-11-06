@@ -11,8 +11,8 @@ import Brulion
 // mouse over a part underlines that part only (a pointing hand), over the separator nothing (an
 // I-beam); a click on "Firma" sends the part's route, on "Adam cośtam" the page's, on "/" edits
 // the block (its raw line unchanged); a link with a display text stays one link; a right-click or
-// long press on a folder's part opens LinkMenu with "Pokaż folder" / "Kopiuj ścieżkę folderu"
-// (the clipboard read back), on a page's "Otwórz" / "Kopiuj link"; parts in a table cell, an
+// long press on a folder's part opens LinkMenu with "Show folder" / "Copy folder path"
+// (the clipboard read back), on a page's "Open" / "Copy link"; parts in a table cell, an
 // embed, a query result and a page property; Alt+Enter on the edited raw line (a part, the page,
 // the side panel with Shift, nothing outside a link — no line break typed), also in a table
 // cell's field; with a (simulated) screen reader each link an accessible link item; on a phone

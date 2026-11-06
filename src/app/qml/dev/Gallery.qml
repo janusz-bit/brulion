@@ -11,7 +11,8 @@ import Brulion
 // Light/dark, Polish/English and touch sizes can be switched in the header. With
 // `--section <id>` only that section is shown and its popups open by themselves, which is
 // what scripts/screenshots.sh uses. Sample texts are Polish on purpose: long words
-// ("Przypomnienia", "Synchronizacja", "Powtarzaj co tydzień w poniedziałek") must fit.
+// ("Przypomnienia", "Synchronizacja", "Powtarzaj co tydzień w poniedziałek" — reminders,
+// sync, repeat every week on Monday) must fit.
 ApplicationWindow {
     id: window
 
@@ -116,7 +117,7 @@ ApplicationWindow {
                 currentValue: Theme.mode
                 onActivated: (value) => Theme.mode = value
             }
-            // The appearance settings (Ustawienia → Wygląd): the "Podstawy" contrast checks follow.
+            // The appearance settings (Settings → Appearance): the "Podstawy" (basics) contrast checks follow.
             BSegmented {
                 objectName: "galleryAccent"
                 visible: !Theme.narrow
@@ -904,7 +905,7 @@ ApplicationWindow {
                     width: 280
                     size: "small"
                     placeholderText: "Nazwa właściwości"
-                    // ↓ / ↑ wybierają, Enter albo Tab bierze podpowiedź, Escape zamyka.
+                    // ↓ / ↑ choose, Enter or Tab takes the suggestion, Escape closes.
                     id: keySuggest
                     suggesting: true
                     onSuggestionsRequested: (typed) => keySuggest.suggestions = window.keySuggestions(typed)
@@ -1587,7 +1588,8 @@ ApplicationWindow {
         }
     }
 
-    /// The toast whose "Cofnij" shows "Przywrócono" (the feedback section's live toast).
+    /// The toast whose "Cofnij" (undo) shows "Przywrócono" (restored) — the feedback section's live
+    /// toast, with the gallery's Polish sample texts.
     property int undoToast: -1
     Connections {
         target: toasts

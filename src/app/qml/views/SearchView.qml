@@ -6,8 +6,8 @@ import Brulion
 
 // SearchView — route "search" ({query?, folder?}): full-text search over every note
 // (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of the last word, fuzzy, titles
-// first) with the matched words highlighted in titles and excerpts, filters (Wszystko / Strony /
-// Dzienniki, a folder: the route's — the sidebar's "Szukaj w folderze", any depth — or a top-level
+// first) with the matched words highlighted in titles and excerpts, filters (All / Pages /
+// Journals, a folder: the route's — the sidebar's "Search in folder", any depth — or a top-level
 // one from the menu) and the recent searches when the field is empty. A result opens its page at
 // the matching line. The query and the folder are kept in the route (back from a page returns to
 // the results; a folder renamed or moved is followed).

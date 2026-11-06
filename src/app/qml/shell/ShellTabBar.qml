@@ -9,8 +9,8 @@ import Brulion
 // wheel); the tab of the focused pane is drawn like the view under it with an accent line, the one
 // shown in the other pane of a split view like the view without the line. A click shows a tab, a
 // middle click or its × closes it, a drag along the bar moves it (AppController.moveTab), a
-// right-click (or a long press) opens its menu: Zamknij, Zamknij pozostałe, Pokaż w podziale /
-// Zamknij podział, Przenieś do nowego okna (desktop). The + at the end opens a new tab (Ctrl+T).
+// right-click (or a long press) opens its menu: Close tab, Close other tabs, Show in split view /
+// Close split view, Move to new window (desktop). The + at the end opens a new tab (Ctrl+T).
 Rectangle {
     id: bar
 

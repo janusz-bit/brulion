@@ -9,7 +9,7 @@ import Brulion
 // own format: DrawingCanvas.fileBytes).
 //
 //  * The paper (DrawingCanvas: a stylus works the tool with its pressure, its eraser end erases; a
-//    mouse works it; one finger works it or moves the paper — "Rysuj palcem", on by default until
+//    mouse works it; one finger works it or moves the paper — "Draw with finger", on by default until
 //    a stylus has been seen on this device —, two fingers move and zoom) and the tool bar
 //    (DrawingToolbar: above the paper, at the bottom on phones). Tools: the pen, the highlighter,
 //    the eraser, the selection (a lasso, a rectangle or a tap; its frame's handles resize and turn
@@ -37,29 +37,29 @@ import Brulion
 //    and saved; the canvas's own saves coming back are recognised (isKnownFile). Every save
 //    first reads the file: a change not reported yet is taken in the same way, never written
 //    over. A version Brulion cannot edit (frames, embedded pages) is shown as it is; what was drawn
-//    here and not saved is kept in a new file beside it ("… (to urządzenie).svg", in the file's own
+//    here and not saved is kept in a new file beside it ("… (this device).svg", in the file's own
 //    format and extension).
 //  * A file Brulion cannot edit is shown as the picture it is, with why: an Excalidraw drawing
 //    with frames or embedded web pages ("readonly"; one of Obsidian's Excalidraw plugin says to
 //    change it in Obsidian, one in the plugin's oldest form to open it there once), a picture
 //    without a scene, a scene that cannot be read; a missing file says so. Renames follow the file (the route applied one event-loop turn late, as
 //    in PageView); a deleted file is never written again.
-//  * The paper is light or dark as the drawing chooses ("Tło rysunku": as the app — the default —,
+//  * The paper is light or dark as the drawing chooses ("Drawing background": as the app — the default —,
 //    light, dark; DrawingCanvas.theme, saved in the file, an undo step) and follows the app's
 //    theme at once (DrawingCanvas.appDark: Theme.dark). The previews of the drawing elsewhere
 //    follow it too (Workspace.drawingUrl), the notice's picture below as well.
-//  * A backdrop (DrawingCanvas.setBackdrop; core drawing/backdrop.h): "Podkład z obrazu lub PDF…"
+//  * A backdrop (DrawingCanvas.setBackdrop; core drawing/backdrop.h): "Backdrop from a picture or PDF…"
 //    in the paper's menu picks a picture or a PDF (FilePicker; the browser's picker: pictures),
 //    imports it into the notebook (Workspace.importAttachment: a file of the notebook stays where
 //    it is) and puts it — a PDF's page chosen in DrawingBackdropDialog — under the drawing (a copy
-//    stored for nothing — cancelled, a locked PDF — is removed again: Workspace.discardImport); "Inna
-//    strona PDF…" chooses another page of the same PDF, "Usuń podkład" removes it. Undo takes each
-//    back. "Poprzednia / Następna strona PDF" (PgUp / PgDown) opens the drawing of the neighbouring
+//    stored for nothing — cancelled, a locked PDF — is removed again: Workspace.discardImport); "Another
+//    PDF page…" chooses another page of the same PDF, "Remove backdrop" removes it. Undo takes each
+//    back. "Previous / Next PDF page" (PgUp / PgDown) opens the drawing of the neighbouring
 //    page in the same note, made and embedded beside this one when there is none (stepPage()).
 // route.open (screenshots): "style" (the colours and widths) and "more" on phones, "paper" (the
-// paper's menu) on wide windows, "theme" (the background's menu; on phones "Więcej"), "shape"
+// paper's menu) on wide windows, "theme" (the background's menu; on phones "More"), "shape"
 // (the shapes' menu), "select" (everything selected — or route.ids —: the selection bar),
-// "selectstyle" and "selectmore" (the same with its style panel, its "Więcej"), "backdrop" (the page
+// "selectstyle" and "selectmore" (the same with its style panel, its "More"), "backdrop" (the page
 // picker of the backdrop's PDF; a picture's backdrop: the paper's menu).
 // View contract (ShellRouteView): `title` (the file's name), `editing` (always: the paper is being
 // worked on), `toolbarDocked` and `replacesBottomNav` (phones: the tool bar at the bottom — the
@@ -247,8 +247,8 @@ FocusScope {
         return false
     }
 
-    /// What was drawn here, written beside the drawing as a new file in its format ("Rysunek (to
-    /// urządzenie).svg", "Szkic (to urządzenie).excalidraw.md").
+    /// What was drawn here, written beside the drawing as a new file in its format ("Drawing (this
+    /// device).svg", "Sketch (this device).excalidraw.md").
     function keepCopy(): void {
         const slash = Js.lastIndexOf(root.loadedPath, "/")
         const folder = slash < 0 ? "" : Js.slice(root.loadedPath, 0, slash + 1)
@@ -383,7 +383,7 @@ FocusScope {
         AppSettings.setValue("drawing/finger", root.fingerMode)
     }
 
-    /// "Podkład z obrazu lub PDF…": a picture or a PDF picked and imported into the notebook.
+    /// "Backdrop from a picture or PDF…": a picture or a PDF picked and imported into the notebook.
     function pickBackdrop(): void {
         if (root.status !== "")
             return
@@ -422,7 +422,7 @@ FocusScope {
             Workspace.discardImport(root.backdropImport)
         root.backdropImport = ""
     }
-    /// "Inna strona PDF…": the backdrop's PDF again (renames do not follow it into the drawing).
+    /// "Another PDF page…": the backdrop's PDF again (renames do not follow it into the drawing).
     function otherBackdropPage(): void {
         root.backdropImport = "" // (the file is the drawing's: never discarded)
         root.backdropFor = root.loadedPath
@@ -433,7 +433,7 @@ FocusScope {
         }
         root.openPageDialog(path, canvas.backdropPage)
     }
-    /// Ctrl+V, "Wklej": Excalidraw's elements (excalidraw.com's, another drawing's) or plain text
+    /// Ctrl+V, "Paste": Excalidraw's elements (excalidraw.com's, another drawing's) or plain text
     /// from the clipboard (DrawingCanvas.paste), saying what was left out.
     function paste(): void {
         root._held = canvas.paste()
@@ -443,10 +443,10 @@ FocusScope {
         else if (AppController.routeInt(root._held, "pasted", 0) === 0 && root.status === "")
             AppController.toast(qsTr("The clipboard holds nothing to paste on a drawing."))
     }
-    /// "Poprzednia / Następna strona PDF" (PgUp / PgDown): the drawing of page N ± 1 of the
+    /// "Previous / Next PDF page" (PgUp / PgDown): the drawing of page N ± 1 of the
     /// backdrop's PDF in the note this one belongs to (Workspace.noteOfDrawing: the note it was
     /// opened from, else the first that links to it) — the first that note embeds is opened, else a
-    /// new one is made ("<PDF> s. N.svg") and embedded right before (the previous page) or after
+    /// new one is made ("<PDF> p. N.svg") and embedded right before (the previous page) or after
     /// this one's block (no note: today's journal). It replaces this drawing in the route, so Back
     /// returns to the note.
     function stepPage(step: int): void {
@@ -587,7 +587,7 @@ FocusScope {
         return AppController.routeText(f, key)
     }
 
-    /// Gotowe: written, back to where the drawing was opened from.
+    /// Done: written, back to where the drawing was opened from.
     function done(): void {
         root.save()
         if (AppController.canGoBack)

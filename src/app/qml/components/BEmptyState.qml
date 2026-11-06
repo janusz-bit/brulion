@@ -6,9 +6,9 @@ import Brulion
 // BEmptyState — friendly placeholder for empty lists, no results, first run.
 //
 //   BEmptyState {
-//       iconName: "inbox"; title: qsTr("Brak zadań na dziś")
-//       description: qsTr("Dodaj zadanie w dzienniku: - [ ] …")
-//       actionText: qsTr("Otwórz dziennik"); onActionTriggered: openJournal()
+//       iconName: "inbox"; title: qsTr("No tasks for today")
+//       description: qsTr("Add a task in the journal: - [ ] …")
+//       actionText: qsTr("Open journal"); onActionTriggered: openJournal()
 //   }
 //
 // Centre it in the empty area (anchors.centerIn / Layout.alignment). `compact` for small

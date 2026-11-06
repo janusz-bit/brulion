@@ -29,7 +29,7 @@ FocusScope {
     readonly property bool empty: list.count === 0 || (list.count === 1 && calendar.itemCount === 0
                                                        && calendar.data(calendar.index(0, 0), CalendarModel.HasJournalRole) !== true)
 
-    /// `s` with its first letter upper case ("dziś" → "Dziś").
+    /// `s` with its first letter upper case ("today" → "Today").
     function capitalized(s: string): string {
         return s.length > 0 ? Js.toUpperCase(Js.charAt(s, 0)) + Js.sliceFrom(s, 1) : ""
     }

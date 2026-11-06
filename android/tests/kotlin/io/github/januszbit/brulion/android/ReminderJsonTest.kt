@@ -40,11 +40,11 @@ class ReminderJsonTest {
       alarm.copy(key = "0123456789abcdef", local = "2026-10-25T02:30", task = true, vault = "zeszyt-ąę")
     assertTrue(task.canComplete)
     assertEquals(task, Reminder.fromJson(JSONObject(task.toJson().toString())))
-    // Snoozing keeps the occurrence: "Zrobione" on the snoozed notification completes the same task.
+    // Snoozing keeps the occurrence: "Done" on the snoozed notification completes the same task.
     val snoozed = task.copy(at = task.at + 600_000L, snoozed = true)
     assertEquals("2026-10-25T02:30", snoozed.local)
     assertTrue(snoozed.canComplete)
-    // Not a task, or no occurrence key (an older version's): no "Zrobione".
+    // Not a task, or no occurrence key (an older version's): no "Done".
     assertFalse(task.copy(task = false).canComplete)
     assertFalse(task.copy(key = "").canComplete)
     assertFalse(task.copy(local = "").canComplete)

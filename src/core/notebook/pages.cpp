@@ -123,7 +123,7 @@ QString newPageText(const Vault &vault, const VaultPath &path, std::optional<Not
     if (!mode)
         return content;
     // The mode chosen for the page is written only when the new page would not get it anyway
-    // (docs/SYNTAX.md §4 "Tryb notatki": an empty page takes the notebook's page mode).
+    // (docs/SYNTAX.md §4 "Note mode": an empty page takes the notebook's page mode).
     const VaultConfig config = vault.config();
     return markdown::withNoteModeChoice(content, *mode, markdown::journalDateFromPath(path, config).has_value(),
                                         config);

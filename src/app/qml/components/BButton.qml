@@ -6,8 +6,8 @@ import Brulion
 
 // BButton — text button with optional icon.
 //
-//   BButton { text: qsTr("Zapisz"); variant: "primary"; onClicked: save() }
-//   BButton { text: qsTr("Usuń"); variant: "danger"; iconName: "trash-2"; busy: deleting }
+//   BButton { text: qsTr("Save"); variant: "primary"; onClicked: save() }
+//   BButton { text: qsTr("Delete"); variant: "danger"; iconName: "trash-2"; busy: deleting }
 //
 // variant: "primary" (ink; one per view) | "secondary" (default, outlined) | "ghost"
 //          (toolbar/text button) | "danger" (destructive confirmation)

@@ -4,18 +4,18 @@ import QtQuick.Templates as T
 import Brulion
 
 // SelectionToolbar — the tools of a block selection (docs/UI.md "Selecting and copying"):
-// "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Pojedynczo (docked: taps pick single
-// blocks, BlockEditor.pickMode), Więcej (Kopiuj jako tekst, the block menu's "Kopiuj odnośnik" for a
-// single block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę / w dół — for blocks picked with gaps
-// between them shown disabled, a tap says why —, the task status) and Gotowe (docked, first:
+// "%n block(s) selected", Copy, Cut, Delete, Select all, One by one (docked: taps pick single
+// blocks, BlockEditor.pickMode), More (Copy as plain text, the block menu's "Copy link" for a
+// single block, Indent / Outdent, Move up / down — for blocks picked with gaps
+// between them shown disabled, a tap says why —, the task status) and Done (docked, first:
 // leaves the selection mode) or × (floating, last: clears the selection). Two places:
 //   * docked: the "selection" tool set of MobileEditToolbar on touch UIs — in the editing
 //     toolbar's slot, on the keyboard's place (BlockEditor.toolbarMode);
 //   * floating: desktops, a compact bar at the top of the editor while two or more blocks are
 //     selected (BlockEditor).
 // Blocks selected across several days of the journal stream (BlockEditor.inSpan): the count is the
-// stream's, Kopiuj and Kopiuj jako tekst copy them all; the other tools are shown unavailable and
-// a tap says that only copying works there; Zaznacz wszystko selects the day's own blocks.
+// stream's, Copy and Copy as plain text copy them all; the other tools are shown unavailable and
+// a tap says that only copying works there; Select all selects the day's own blocks.
 // Buttons never take the keyboard: it stays with the selection (the editor's list).
 //
 //   SelectionToolbar { editor: editor; docked: true }
@@ -40,10 +40,10 @@ Row {
                                         && controller.selectedRow === controller.selectionAnchorRow
                                         && !controller.selectionPicked
     /// The selection can be indented (PageController.canIndentSelection: in a document only list
-    /// items), read when "Więcej" opens.
+    /// items), read when "More" opens.
     property bool indentable: true
     /// Why the selection is not indented or moved ("" when it can be: no gaps between its
-    /// blocks), read when "Więcej" opens.
+    /// blocks), read when "More" opens.
     property string unmovable: ""
     /// Indenting and moving from the menu: a selection with gaps says why instead.
     /// `action`: "indent", "outdent", "up", "down".
@@ -79,7 +79,7 @@ Row {
         enabled: bar.count > 0
     }
 
-    // Docked: "Gotowe" first (Android's contextual bars), always on screen however narrow.
+    // Docked: "Done" first (Android's contextual bars), always on screen however narrow.
     Tool {
         objectName: "selectionDone"
         visible: bar.docked
@@ -174,16 +174,16 @@ Row {
         onClicked: bar.editor.leaveSelectionMode()
     }
 
-    // ---- Więcej ---------------------------------------------------------------------------------
+    // ---- More -----------------------------------------------------------------------------------
     /// The menu (made when first opened): above the docked bar, below the floating one.
     property BMenu menu: null
     function openMenu(): void {
         if (!menu)
             menu = menuComponent.createObject(bar) as BMenu
-        // A document's paragraphs and headings have no outline: no Zwiększ / Zmniejsz wcięcie.
+        // A document's paragraphs and headings have no outline: no Indent / Outdent.
         indentable = controller !== null && controller.canIndentSelection()
         unmovable = span ? editor.spanReason : controller !== null && !controller.selectionContiguous ? editor.gapReason : ""
-        // "Kopiuj odnośnik" only for one block (its item in the menu, made for the submenu).
+        // "Copy link" only for one block (its item in the menu, made for the submenu).
         for (let i = 0; i < menu.count; ++i) {
             const entry = menu.itemAt(i) as T.MenuItem
             if (entry && entry.subMenu && entry.subMenu.objectName === "selectionCopyLinkMenu") {

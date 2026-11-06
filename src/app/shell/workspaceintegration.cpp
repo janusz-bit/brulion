@@ -182,7 +182,7 @@ void wireReminders(AppController *app)
 
 void wireBackgroundCheck(AppController *app, notify::Notifier *notifier)
 {
-    // Android's background check (docs/ANDROID.md "Sprawdzanie notatek w tle"): the notebook whose
+    // Android's background check (docs/ANDROID.md "Checking notes in the background"): the notebook whose
     // reminders run is the one it reads while Brulion is closed. Handed over whenever they start
     // and when a setting it uses changes; kept when they stop because the app quits, another
     // notebook is being opened or the documentation is open (Android keeps that notebook's alarms

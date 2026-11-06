@@ -5,21 +5,21 @@ import QtQuick.Templates as T
 import Brulion
 
 // ShellSidebar — the page panel beside the rail of views (ShellRail, docs/UI.md "Sidebar"): the
-// notebook's name with "Nowa strona", then its sections in the order of Ustawienia → Wygląd →
-// Układ (AppSettings.sidebarSections): Ulubione, Ostatnie and Wszystkie strony — the notebook's
-// folder tree. Ulubione and Ostatnie can be hidden (AppSettings.sidebarHidden); the sections
+// notebook's name with "New page", then its sections in the order of Settings → Appearance →
+// Layout (AppSettings.sidebarSections): Favorites, Recent and All pages — the notebook's
+// folder tree. Favorites and Recent can be hidden (AppSettings.sidebarHidden); the sections
 // before the tree are the list's header, the ones after it its footer. The same component is the
 // left pane on wide windows (hidden with the top bar's sidebar button; the rail stays) and, beside
 // the rail, the drawer's content on narrow ones (`navigated()` closes it).
 //
 // The tree (FolderTreeModel): a tap on a folder opens or closes it, on a page opens it; the
 // context menu (right-click, press-and-hold, the Menu key, and on touch screens the row's "⋯"
-// button) has the folder's and the page's actions — Przenieś do…, Pokaż strony folderu, Szukaj w
-// folderze, Eksportuj folder…, Kopiuj link, …; the "Strony" header's "+" a menu with a new page or
-// folder at the root, "Zwiń wszystkie", "Pokaż załączniki" and "Pokazuj otwartą stronę" (reveal:
+// button) has the folder's and the page's actions — Move to…, Show folder pages, Search in
+// folder, Export folder…, Copy link, …; the "Pages" header's "+" a menu with a new page or
+// folder at the root, "Collapse all", "Show attachments" and "Show the open page" (reveal:
 // the open page or daily note is shown and highlighted in the tree on every route change,
-// `ui/sidebar/revealCurrent`, on by default — a collapsed "Strony" section stays collapsed, only
-// "Pokaż w drzewie" opens it). The revealed row is kept fully in the list's visible part — above
+// `ui/sidebar/revealCurrent`, on by default — a collapsed "Pages" section stays collapsed, only
+// "Show in tree" opens it). The revealed row is kept fully in the list's visible part — above
 // the system's navigation bar — until the user scrolls the list: it is placed again whenever the list's
 // geometry changes, since a closed drawer lays itself out only when it opens (its system-bar
 // padding, a keyboard that goes, sections that grew meanwhile), so a row placed while it was
@@ -27,7 +27,7 @@ import Brulion
 // click on it) leaves the list where it is: it never moves under the pointer. With a mouse or
 // touchpad (never a finger: the list flicks and
 // press-and-hold stay as they are) a row is dragged onto a folder (a closed one opens after
-// 600 ms; the list scrolls near its edges) or onto the "Strony" header (the notebook's root) to
+// 600 ms; the list scrolls near its edges) or onto the "Pages" header (the notebook's root) to
 // move it there (`dropMoveRequested()`); the ghost names the target and what the move rewrites
 // (or why it cannot move); Escape cancels the drag. Daily notes are files here like any other:
 // they can be renamed, moved and dragged (a misfiled day can be put right).
@@ -51,14 +51,14 @@ Rectangle {
     property bool favoritesOpen: flag(AppSettings.value("ui/sidebar/favorites", true))
     property bool recentOpen: flag(AppSettings.value("ui/sidebar/recent", true))
     property bool pagesOpen: flag(AppSettings.value("ui/sidebar/pages", true))
-    /// The sections Ulubione and Ostatnie, unless hidden (Ustawienia → Wygląd → Układ).
+    /// The sections Favorites and Recent, unless hidden (Settings → Appearance → Layout).
     readonly property bool favoritesShown: AppSettings.sidebarHidden.indexOf("favorites") < 0
     readonly property bool recentShown: AppSettings.sidebarHidden.indexOf("recent") < 0
     /// The sections above the tree (the list's header) and below it (its footer), in the order of
     /// the settings: "favorites" | "recent".
     readonly property list<string> sectionsBefore: AppSettings.sidebarSections.slice(0, Math.max(0, AppSettings.sidebarSections.indexOf("pages")))
     readonly property list<string> sectionsAfter: AppSettings.sidebarSections.slice(AppSettings.sidebarSections.indexOf("pages") + 1)
-    /// "Ostatnie": up to 5 recent pages, without the one shown (the tree highlights it). Set once
+    /// "Recent": up to 5 recent pages, without the one shown (the tree highlights it). Set once
     /// per change — a route change updates the recent pages and then the current path — and only
     /// when the list differs, so the header above the tree is not rebuilt (and resized) twice while
     /// the tree is placed for the new route.
@@ -118,7 +118,7 @@ Rectangle {
     property var dropImpact: ({})
     property bool dropImpactKnown: false
     readonly property bool dropValid: dropAllowed && !(dropImpactKnown && !AppController.routeFlag(dropImpact, "ok"))
-    /// The pointer is over the "Strony" header (the root).
+    /// The pointer is over the "Pages" header (the root).
     property bool dropOnRoot: false
     property point dragPoint
     /// The pointer's last scene position: the target is found again as the list scrolls under it.
@@ -126,7 +126,7 @@ Rectangle {
     /// dragTo()'s pointer in the list's and the header's coordinates.
     property point _inList
     property point _inHeader
-    /// The "Strony" header in the list's header: the drop target of the notebook's root.
+    /// The "Pages" header in the list's header: the drop target of the notebook's root.
     property Item pagesHeader: null
 
     /// QSettings hands booleans back as strings after a restart.
@@ -161,8 +161,8 @@ Rectangle {
         return depth <= 4 ? depth * step : 4 * step + (depth - 4) * 8
     }
     /// Show `path` in the tree: the folders above it open, the row scrolled into view (and kept
-    /// there: `revealedPath`). A collapsed "Strony" section is opened only when `force` ("Pokaż w
-    /// drzewie", a new folder); the reveal on every route change leaves it collapsed.
+    /// there: `revealedPath`). A collapsed "Pages" section is opened only when `force` ("Show in
+    /// tree", a new folder); the reveal on every route change leaves it collapsed.
     function reveal(path: string, force: bool): void {
         if (path === "")
             return
@@ -232,7 +232,7 @@ Rectangle {
         if (row >= 0)
             list.positionViewAtIndex(row, ListView.Contain)
     }
-    /// "Kopiuj link": the same text as the page menu's and the editor's (PageTools.wikiLink).
+    /// "Copy link": the same text as the page menu's and the editor's (PageTools.wikiLink).
     function copyLink(path: string): void {
         const link = tools.wikiLink(path)
         if (tools.copyText(link))
@@ -491,7 +491,7 @@ Rectangle {
             leftMargin: Theme.space1
             rightMargin: Theme.space1
             keyNavigationEnabled: true
-            // Off while "Strony" is collapsed, which destroys the pooled rows: rows pooled before
+            // Off while "Pages" is collapsed, which destroys the pooled rows: rows pooled before
             // the model went away (a folder moved out, rows scrolled off) were handed back after
             // it returned with their old required properties — the tree showed folders that were
             // gone instead of its rows.
@@ -603,7 +603,7 @@ Rectangle {
                 width: list.width - list.leftMargin - list.rightMargin
                 dense: true
                 leftPadding: (Theme.touchUi ? 14 : 10) + sidebar.indent(depth)
-                // Daily notes by their date ("śr, 14 paź"), not by their file name.
+                // Daily notes by their date ("Wed, Oct 14"), not by their file name.
                 text: journalDate !== "" ? DatesHelper.formatShort(journalDate) : title
                 // An empty folder opens too (folder-open) and says why nothing appears under it.
                 subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
@@ -1052,7 +1052,7 @@ Rectangle {
         }
     }
 
-    // The "Strony" header's "+": new page or folder at the root, and how the tree shows.
+    // The "Pages" header's "+": new page or folder at the root, and how the tree shows.
     BMenu {
         id: pagesMenu
         objectName: "sidebarPagesMenu"

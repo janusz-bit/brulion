@@ -1,4 +1,4 @@
-# log — Brulion's event log ("Rejestr zdarzeń"): the logging categories, a chained Qt message
+# log — Brulion's event log: the logging categories, a chained Qt message
 # handler with a thread-safe ring buffer and a rotating file, redaction of secrets, verbosity.
 # QtCore only. Public headers: log.h (overview), categories.h, entry.h, redact.h, logger.h,
 # slowscope.h. Internal: logfile_p.h (the rotating file sink).

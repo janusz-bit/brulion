@@ -34,10 +34,11 @@
 # versionCode = major*1000000 + minor*1000 + patch, so minor and patch stay below 1000) and
 # nix/package.nix (`version = "...";`), and, when main has fastlane/metadata/android (the store
 # texts of F-Droid and IzzyOnDroid), each locale's changelogs/<versionCode>.txt — the store's
-# "what's new" of the version, at most 500 characters: Polish (pl*) lists the news of
-# .github/release-notes.md, the other locales say where the (Polish) release notes are. They are
-# written from the notes on every release of the version (also its pre-releases, which share the
-# versionCode): change the notes, not the files. Releasing the version that is already recorded (a
+# "what's new" of the version, at most 500 characters: the news of .github/release-notes.md, from
+# its English "What's new in …" section (en-US and every other locale) or its Polish "Nowości w …"
+# one (pl*), with a link to the release notes. They are written from the notes on every release
+# of the version (also its pre-releases, which share the versionCode): change the notes, not the
+# files. Releasing the version that is already recorded (a
 # further pre-release, or the final release after its pre-releases) makes no version commit when
 # the changelogs are written already: release moves to main's last commit (when it is not there
 # already) and the tag goes on that.
@@ -255,15 +256,17 @@ esac
 
 # The notes are published as the release's description: unchanged ones repeat the last release's,
 # which are those of release's commit (named by its tag; the tags v0.3.6 and v0.3.7 sit on merges
-# of main, not on main's "Release v0.3.7" where release starts). Only the news count: the
-# "Nowości w …" section without its "Z wersji …" summary line, so that editing the summary alone
-# does not hide unchanged news (the whole file when it has no section).
+# of main, not on main's "Release v0.3.7" where release starts). Only the news count: the English
+# "What's new in …" and the Polish "Nowości w …" sections without their "From version …" / "Z
+# wersji …" summary lines, so that editing the summaries alone does not hide unchanged news (the
+# whole file when it has no section). A section ends at the next bold line (**…**), heading or
+# HTML line (<details>).
 notes=.github/release-notes.md
 news_of() {
   git show "$1:$notes" 2>/dev/null | awk '
-    /^\*\*Nowości w / { on = 1; seen = 1; next }
-    on && /^\*\*/ { on = 0 }
-    on && !/^Z wersji / { news = news $0 "\n" }
+    /^\*\*(What'\''s new in|Nowości w) / { on = 1; seen = 1; next }
+    on && /^(\*\*|#|<)/ { on = 0 }
+    on && !/^(From version|Z wersji) / { news = news $0 "\n" }
     { all = all $0 "\n" }
     END { printf "%s", seen ? news : all }'
 }
@@ -273,63 +276,76 @@ if [[ $(news_of "$release_head") == "$(news_of "$main_head")" ]]; then
   warn "$notes has not changed since $last (its news; commit \"Update release notes for $tag\" on main first)"
 fi
 # The documentation notebook's list of changes has a section "## X.Y.Z — <date>" per release (a
-# pre-release needs none). grep reads the whole list (no -q): stopping at the section would kill
-# git show with SIGPIPE, which pipefail reports as a missing section.
-changelog='src/app/shell/guide/Lista zmian.md'
-if [[ $new == "$release" ]] && git cat-file -e "$main_head:$changelog" 2>/dev/null &&
-  ! git show "$main_head:$changelog" | grep -E "^## ${release//./\\.}( |$)" >/dev/null; then
-  warn "$changelog has no section \"## $release\" (add the changes of $tag to it on main first)"
-fi
+# pre-release needs none), in each of its places main has (guide/en/Changelog.md and
+# guide/pl/Lista zmian.md, before that guide/Lista zmian.md). grep reads the whole list (no -q): stopping at the section would kill git show
+# with SIGPIPE, which pipefail reports as a missing section.
+for changelog in 'src/app/shell/guide/en/Changelog.md' 'src/app/shell/guide/pl/Lista zmian.md' \
+  'src/app/shell/guide/Lista zmian.md'; do
+  if [[ $new == "$release" ]] && git cat-file -e "$main_head:$changelog" 2>/dev/null &&
+    ! git show "$main_head:$changelog" | grep -E "^## ${release//./\\.}( |$)" >/dev/null; then
+    warn "$changelog has no section \"## $release\" (add the changes of $tag to it on main first)"
+  fi
+done
 
 # The fastlane changelogs of the release's versionCode (see the header), for each locale
 # directory main has: those whose text changes go into the "Release" commit.
 fastlane=fastlane/metadata/android
 releases_url=https://github.com/janusz-bit/brulion/releases/tag/$final
 changelog_of() { # <locale>: the changelog's text (at most 500 bytes, so 500 characters)
-  case $1 in
-    pl | pl-*)
-      # The bullets of the "Nowości w …" section (of the whole file when it has none): a bold
-      # lead's text, else the bullet up to its " — ". Those that do not fit end in "• …".
-      { git show "$main_head:$notes" 2>/dev/null || true; } | LC_ALL=C awk -v version="$release" -v link="$releases_url" '
-        function plain(t,  out) { # [[page|text]], [[page]] and [text](url) give their text
-          gsub(/\[\[[^]|]*\|/, "[[", t)
-          gsub(/\*\*|`|\[\[|\]\]/, "", t)
-          while (match(t, /\[[^]]*\]\([^)]*\)/)) {
-            out = out substr(t, 1, RSTART - 1) substr(t, RSTART + 1, index(substr(t, RSTART), "]") - 2)
-            t = substr(t, RSTART + RLENGTH)
-          }
-          return out t
-        }
-        /^\*\*Nowości w / { on = 1; seen = 1; next }
-        on && /^\*\*/ { on = 0 }
-        /^[*-][[:space:]]+[^[:space:]]/ {
-          item = $0
-          sub(/^[*-][[:space:]]+/, "", item)
-          if (match(item, /^\*\*[^*]+\*\*/)) item = substr(item, 3, RLENGTH - 4)
-          else sub(/[[:space:]]+—[[:space:]].*/, "", item)
-          item = "• " plain(item)
-          if (on) news[++n] = item
-          else if (!seen) all[++m] = item
-        }
-        END {
-          if (!seen) for (i = 1; i <= m; i++) news[++n] = all[i]
-          foot = "Pełny opis: " link "\n"
-          if (!n) { printf "Brulion %s.\n\n%s", version, foot; exit }
-          text = "Nowości w " version ":\n"
-          room = 500 - length(text) - 1 - length(foot)
-          used = 0
-          for (i = 1; i <= n; i++) used += length(news[i]) + 1
-          if (used > room) room -= length("• …") + 1
-          for (i = 1; i <= n && length(news[i]) + 1 <= room; i++) {
-            text = text news[i] "\n"
-            room -= length(news[i]) + 1
-          }
-          if (i <= n) text = text "• …\n"
-          printf "%s\n%s", text, foot
-        }'
-      ;;
-    *) printf "What's new in Brulion %s (in Polish):\n%s\n" "$release" "$releases_url" ;;
-  esac
+  # Polish (pl*) from the "Nowości w …" section, every other locale from the English "What's new
+  # in …" one, each with its own heading and link line. Their bullets: a bold lead's text, else
+  # the bullet up to its " — "; those that do not fit end in "• …". Without the locale's section
+  # the other language's section gives the bullets, without either section the whole file's.
+  local own=en
+  case $1 in pl | pl-*) own=pl ;; esac
+  { git show "$main_head:$notes" 2>/dev/null || true; } | LC_ALL=C awk -v own="$own" -v version="$release" -v link="$releases_url" '
+    function plain(t,  out) { # [[page|text]], [[page]] and [text](url) give their text
+      gsub(/\[\[[^]|]*\|/, "[[", t)
+      gsub(/\*\*|`|\[\[|\]\]/, "", t)
+      while (match(t, /\[[^]]*\]\([^)]*\)/)) {
+        out = out substr(t, 1, RSTART - 1) substr(t, RSTART + 1, index(substr(t, RSTART), "]") - 2)
+        t = substr(t, RSTART + RLENGTH)
+      }
+      return out t
+    }
+    BEGIN {
+      title["en"] = "What'\''s new in"; foot["en"] = "Full release notes: "
+      title["pl"] = "Nowości w"; foot["pl"] = "Pełny opis: "
+      other = own == "pl" ? "en" : "pl"
+    }
+    /^\*\*/ {
+      on = ""
+      for (l in title) if (index($0, "**" title[l] " ") == 1) { on = l; seen[l] = 1; any = 1 }
+      if (on != "") next
+    }
+    /^(#|<)/ { on = "" }
+    /^[*-][[:space:]]+[^[:space:]]/ {
+      item = $0
+      sub(/^[*-][[:space:]]+/, "", item)
+      if (match(item, /^\*\*[^*]+\*\*/)) item = substr(item, 3, RLENGTH - 4)
+      else sub(/[[:space:]]+—[[:space:]].*/, "", item)
+      item = "• " plain(item)
+      if (on != "") list[on, ++count[on]] = item
+      else if (!any) list["all", ++count["all"]] = item
+    }
+    END {
+      from = seen[own] ? own : seen[other] ? other : any ? "" : "all"
+      n = from == "" ? 0 : count[from] + 0
+      for (i = 1; i <= n; i++) news[i] = list[from, i]
+      tail = foot[own] link "\n"
+      if (!n) { printf "Brulion %s.\n\n%s", version, tail; exit }
+      text = title[own] " " version ":\n"
+      room = 500 - length(text) - 1 - length(tail)
+      used = 0
+      for (i = 1; i <= n; i++) used += length(news[i]) + 1
+      if (used > room) room -= length("• …") + 1
+      for (i = 1; i <= n && length(news[i]) + 1 <= room; i++) {
+        text = text news[i] "\n"
+        room -= length(news[i]) + 1
+      }
+      if (i <= n) text = text "• …\n"
+      printf "%s\n%s", text, tail
+    }'
 }
 changelogs=()
 declare -A changelog_text=()

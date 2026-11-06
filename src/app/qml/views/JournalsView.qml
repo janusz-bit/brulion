@@ -9,7 +9,7 @@ import Brulion
 //     the first edit, from the journal template when the vault has one — never just by looking),
 //     then every earlier day that has a journal, newest first, each in its own embedded block
 //     editor (ContentJournalDay; a lazy ListView over JournalListModel: only the days on screen
-//     exist). Above them the missed reminders (ContentMissedBanner) and "Przejdź do dnia" (a
+//     exist). Above them the missed reminders (ContentMissedBanner) and "Go to day" (a
 //     calendar marking the days with journals). route.date scrolls to that day (or the nearest
 //     earlier one).
 //   route "journal" ({date, path?, source?}): one day as a page (PageView: header with the day
@@ -180,7 +180,7 @@ FocusScope {
 
     PageTools { id: tools; workspace: Workspace }
 
-    // The palette's "Przełącz tryb notatki", "Dodaj właściwość strony" and its link commands
+    // The palette's "Toggle note mode", "Add page property" and its link commands
     // ("copyLink:<kind>") in the journal stream: the day being written in (today until another day gets the caret). One day
     // as a page: its PageView does it.
     Connections {

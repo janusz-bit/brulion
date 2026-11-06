@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// TaskDependencyDialog — "Dodaj zależność…" of a task's menu (docs/SYNTAX.md §5 "Dependencies"):
+// TaskDependencyDialog — "Add dependency…" of a task's menu (docs/SYNTAX.md §5 "Dependencies"):
 // a search over the notebook's open tasks; the chosen one gets a `🆔` when it has none, and the
 // task a `⛔ id` (the caller writes them: PageController.addTaskDependency in the editor,
 // PlanningActions.addDependency in Tasks).

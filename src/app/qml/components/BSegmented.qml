@@ -6,8 +6,8 @@ import Brulion
 // BSegmented — a small set of mutually exclusive options with a sliding selection.
 //
 //   BSegmented {
-//       model: [{ value: "light", text: qsTr("Jasny"), icon: "sun" },
-//               { value: "dark", text: qsTr("Ciemny"), icon: "moon" }]
+//       model: [{ value: "light", text: qsTr("Light"), icon: "sun" },
+//               { value: "dark", text: qsTr("Dark"), icon: "moon" }]
 //       currentValue: Theme.mode
 //       onActivated: (value) => Theme.mode = value
 //   }
@@ -216,7 +216,7 @@ T.Control {
 
         height: row.height
         // Filling the width: every segment at least the shared width (_fillWidth), so
-        // the short labels line up evenly and a long one ("Cały notatnik") is not cut;
+        // the short labels line up evenly and a long one ("Whole notebook") is not cut;
         // when they do not fit, each its own width minus an equal share of the excess.
         width: !control.fill || control.items.length === 0 ? implicitWidth
                : control._implicitSum <= 0 ? control.availableWidth / control.items.length

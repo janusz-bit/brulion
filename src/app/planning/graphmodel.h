@@ -71,7 +71,7 @@ class GraphModel : public QObject {
     /// Local graph depth (1–3).
     Q_PROPERTY(int depth READ depth WRITE setDepth NOTIFY settingsChanged FINAL)
     Q_PROPERTY(int seed READ seed WRITE setSeed NOTIFY settingsChanged FINAL)
-    /// "pl" (default) | "en": daily notes are labelled with their date ("wt 13 paź").
+    /// "pl" (default) | "en": daily notes are labelled with their date ("wt 13 paź", "Tue, Oct 13").
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY settingsChanged FINAL)
     Q_PROPERTY(int maxNodes READ maxNodes WRITE setMaxNodes NOTIFY settingsChanged FINAL)
     /// Run the simulation (bind to the view's visibility).

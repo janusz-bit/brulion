@@ -1,4 +1,4 @@
-// Obsidian vault settings as Brulion's defaults (docs/IMPORT.md "Folder Obsidiana bez importu").
+// Obsidian vault settings as Brulion's defaults (docs/IMPORT.md "Obsidian folder without importing").
 //
 //   qtDateFormatFromMoment(moment)                 -> Qt QDate format, or nullopt
 //   adoptObsidianSettings(files, tracked, base)    -> ObsidianAdoption{config, adoptedKeys, warnings}

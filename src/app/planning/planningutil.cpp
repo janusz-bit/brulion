@@ -128,7 +128,7 @@ QString renderInline(const VaultIndex *index, const QString &markdown, const Vau
     ctx.locale = locale;
     ctx.palette = palette;
     ctx.taskCheckbox = false;
-    // [[2026-10-13]] shows as "wt 13 paź" (the note keeps the date as written).
+    // [[2026-10-13]] shows as "Tue, Oct 13" (the note keeps the date as written).
     ctx.linkTitle = markdown::journalLinkTitle(index ? index->config() : VaultConfig(), locale, today);
     return markdown::InlineRenderer(ctx).render(markdown);
 }

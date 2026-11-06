@@ -1,5 +1,5 @@
 // brulion::stats — word and character counts and the reading time of a note or a selection
-// (docs/UI.md "Statistics and focus mode"; the page's footer and its Więcej menu). GUI-free and
+// (docs/UI.md "Statistics and focus mode"; the page's footer and its More menu). GUI-free and
 // pure: text in, numbers out, any thread.
 //
 // What is counted is the text a reader sees (readableText()):

@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// BAccentDialog — a custom accent colour (Ustawienia → Wygląd → Kolor akcentu → „Własny…"):
+// BAccentDialog — a custom accent colour (Settings → Appearance → Accent colour → "Custom…"):
 // a grid of colours (12 hues × 3 shades) and a field for any "#rrggbb", with a live preview of
 // what the app makes of it on the current background — the accent as a mark, as text and as a
 // filled badge. ThemePalette derives readable shades by itself (WCAG 2: text 4.5:1, marks 3:1);

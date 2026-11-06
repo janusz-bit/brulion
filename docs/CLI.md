@@ -1,20 +1,20 @@
 # brulion-cli — the command line for scripts and AI agents
 
-**Po polsku w skrócie.** `brulion-cli` czyta i zmienia notatki Brulionu bez okna aplikacji: dopisuje
-do dziennika, dodaje zadania i przypomnienia, szuka, uruchamia zapytania, przenosi strony tak jak
-aplikacja (linki i tagi idą za stroną). Wynik to JSON (albo tekst z `--format text`), a kod wyjścia
-mówi, co poszło nie tak. Ten sam zestaw poleceń działa jako serwer MCP (`brulion-cli mcp`) dla
-agentów AI, np. Hermesa albo Claude Code. Agent dostaje notatki jako zwykły folder (Syncthing,
-klient Nextcloud). Zmiany agenta trafiają do historii wersji z opisem „Zastąpiona z wiersza poleceń
-(agent)”, polecenia, które coś usuwają lub nadpisują, wymagają `--allow-destructive`, a usunięte
-strony idą do kosza. Gdy w aplikacji włączysz „Pozwól agentom sterować aplikacją” (Ustawienia →
-Aplikacja → Dla programistów) albo uruchomisz ją z `--remote-control`, agent może też sterować
-działającym oknem: sprawdzić, co pokazuje, kliknąć, pisać, nacisnąć skrót i zrobić zrzut ekranu
-(`brulion-cli app …`, niżej „Remote control”). Pomoc, błędy i ostrzeżenia są po polsku, gdy
-system ma polski język (np. `LANG=pl_PL.UTF-8`), inaczej po angielsku; nazwy poleceń i opcji,
-klucze JSON, kody błędów i serwer MCP są zawsze po angielsku (niżej „Language”). Przewodnik dla
-użytkownika: strona „Wiersz poleceń i agenci AI” w dokumentacji w aplikacji. Poniżej —
-dokumentacja techniczna (po angielsku).
+**In short.** `brulion-cli` reads and changes Brulion notes without the app's window: it appends
+to the journal, adds tasks and reminders, searches, runs queries and moves pages the way the app
+does (links and tags follow the page). The output is JSON (or text with `--format text`), and the
+exit code says what went wrong. The same set of commands works as an MCP server (`brulion-cli mcp`)
+for AI agents such as Hermes or Claude Code. The agent gets the notes as a plain folder (Syncthing,
+the Nextcloud client). The agent's changes go into the version history described as "Replaced from
+the command line (agent)", commands that delete or overwrite something need `--allow-destructive`,
+and deleted pages go to the trash. When you turn on "Allow agents to control the app" in the app
+(Settings → Application → For developers) or start it with `--remote-control`, the agent can also
+drive the running window: check what it shows, click, type, press a shortcut and take a screenshot
+(`brulion-cli app …`, "Remote control" below). Help, errors and warnings are in Polish when the
+system's language is Polish (e.g. `LANG=pl_PL.UTF-8`), otherwise in English; command and option
+names, JSON keys, error codes and the MCP server are always in English ("Language" below). User
+guide: the page "Command line and AI agents" in the app's documentation. The technical
+documentation follows below.
 
 ---
 
@@ -205,7 +205,7 @@ Never compute a hash yourself.
 | `capture <text>` | `[--stdin]` | the app's quick capture into today's note: a date makes a task with ⏰ (time) or 📅 | yes |
 | `task list` | `[--status S] [--due E] [--tag T] [--page P] [--blocked] [--limit N] \| --query Q` | tasks (open by default) with refs; a task also has `blocked`, `blocking`, `cycle`, `blockedBy` (the open tasks it waits for), `missingIds` and `subtasks {done, total}` (docs/SYNTAX.md §5); the text form marks a blocked task `⛔` and shows `3/5` | |
 | `task add <text>` | `[--due D] [--scheduled D] [--start D] [--remind D \| --alarm D] [--every R] [--priority P] [--page P \| --date D]` | a task with canonical tokens | yes |
-| `task set <ref> <status>` | todo, doing, done, cancelled, deferred, none (Polish words too); `[--history]` | a recurring task done → its next occurrence; `--history` logs the change in the task's `:LOGBOOK:` (doing starts its clock, leaving doing stops it) as the app's „Historia statusów” setting does | yes |
+| `task set <ref> <status>` | todo, doing, done, cancelled, deferred, none (Polish words too); `[--history]` | a recurring task done → its next occurrence; `--history` logs the change in the task's `:LOGBOOK:` (doing starts its clock, leaving doing stops it) as the app's "Log task status changes" setting does | yes |
 | `task start <ref>` | | start the task's clock: `CLOCK: [2026-11-03 Tue 10:00:00]` in its `:LOGBOOK:` (local time); a clock running elsewhere is stopped first (`stopped`) — one at a time | yes |
 | `task stop [<ref>]` | | stop the task's clock (`--[…] =>  00:25:00`); without a ref every running one | yes |
 | `task time` | `[--by day\|page\|tag\|task] [--from D] [--to D] [--query Q]` | time clocked: `{rows [{key, label, seconds, duration, tasks, path?, ref?}], total, tasks}`; entries crossing midnight are split, overlapping ones of a task count once, a running clock counts up to now | |
@@ -215,8 +215,8 @@ Never compute a hash yourself.
 | `task todo <ref>` | | open again | yes |
 | `task cancel <ref>` | | cancelled | yes |
 | `task defer <ref>` | | deferred (waiting) | yes |
-| `habit list` | `[--date D] [--days N]` | the habits (docs/SYNTAX.md §5 "Nawyki / Habits"): `{name, key, schedule, scheduleText, valid, problem?, path, line, ref, start, today: {date, mark, due}, streak: {current, longest, unit}, done, met, expected, rate, period?: {done, target}, lastDone?, days: [{date, state}]}` (the last N days, 7 by default), `undefined`: names ticked that no habit has | |
-| `habit set <name> <state>` | done, skipped, open (zrobione, pominięte, brak); `[--date D]` | the day's check in its daily note: ticks the existing one, else writes `- [x] Name #nawyk ✅ today` next to the day's other checks (the note created from the journal template); open sets them back to `[ ]` | yes |
+| `habit list` | `[--date D] [--days N]` | the habits (docs/SYNTAX.md §5 "Habits"): `{name, key, schedule, scheduleText, valid, problem?, path, line, ref, start, today: {date, mark, due}, streak: {current, longest, unit}, done, met, expected, rate, period?: {done, target}, lastDone?, days: [{date, state}]}` (the last N days, 7 by default), `undefined`: names ticked that no habit has | |
+| `habit set <name> <state>` | done, skipped, open (zrobione, pominięte, brak); `[--date D]` | the day's check in its daily note: ticks the existing one, else writes `- [x] Name #habit ✅ today` (`#nawyk` with `--lang pl`) next to the day's other checks (the note created from the journal template); open sets them back to `[ ]` | yes |
 | `habit tick <name>` | `[--date D]` | `habit set <name> done` | yes |
 | `habit skip <name>` | `[--date D]` | `habit set <name> skipped`: an excused day (the streak goes on) | yes |
 | `remind add <text>` | `--at D [--alarm] [--every R] [--task] [--page P \| --date D]` | a reminder ⏰ / alarm ⏰! | yes |
@@ -233,7 +233,7 @@ Never compute a hash yourself.
 | `date parse <phrase>` | | how Brulion reads a date phrase: `{date, time, spec, human, past, matched, rest}` | |
 | `calc <expression>` | `[--stdin]` | Brulion's calculator (units, percent, Polish decimal comma) | |
 | `calc page <ref>` | | the results of a page's calc blocks and inline `= …` | |
-| `block link <ref>` | | `{id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink}` — the app's "Kopiuj odnośnik" (the same page name: the shortest unique target, a daily note's file name), adding the id | yes |
+| `block link <ref>` | | `{id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink}` — the app's "Copy link" (the same page name: the shortest unique target, a daily note's file name), adding the id | yes |
 | `history list <ref>` | | versions of a page on this device (also a deleted one) | |
 | `history show <id>` | | a version's text | |
 | `history restore <ref> <id>` | | write a version back (the current text is kept as one) | destructive |
@@ -296,7 +296,7 @@ The command line is meant to run next to the app, Syncthing and Nextcloud:
   rewritten.
 * **History.** The text a write replaces is kept in the device's version history with the reason
   `cli` — `history restore` brings it back, and the app on the same computer shows it as
-  „Zastąpiona z wiersza poleceń (agent)” and can restore it. An agent on another device (the Pi
+  "Replaced from the command line (agent)" and can restore it. An agent on another device (the Pi
   next to a desktop, the folder synced) keeps that history on its own device; the desktop app
   records the change when it arrives as one from sync or another program — restorable there too.
 * **Additive by default.** Destructive commands (page write, rename, move, delete; folder move,
@@ -348,7 +348,7 @@ Claude Code (`.mcp.json`):
 {"mcpServers": {"brulion": {"command": "brulion-cli", "args": ["mcp", "--vault", "/home/ala/Notatki"]}}}
 ```
 
-Hermes on NixOS: see docs/NIXOS.md "Agent AI (Hermes) i wiersz poleceń".
+Hermes on NixOS: see docs/NIXOS.md "AI agent (Hermes) and the command line".
 
 ## The running app
 
@@ -360,7 +360,7 @@ notice and the command a warning). Without a running app: exit 5 with `{"gui": {
 
 The same socket carries a second launch of the app: `brulion --today`, `--capture`, a plain
 `brulion` (`activate`) and `brulion --open <file>…` — files opened with Brulion from a file manager
-("Otwórz za pomocą"), sent as `share` with their absolute paths: the running app offers them in its
+("Open with"), sent as `share` with their absolute paths: the running app offers them in its
 share dialog (copies, the files stay unchanged; a page of the open notebook opens). Each carries the
 launcher's Wayland activation token, so the window comes to the front.
 
@@ -382,8 +382,8 @@ press shortcuts, run palette commands, wait for the UI and take screenshots — 
 user in the app, or to test the UI. Desktop (Linux) only.
 
 **Off by default.** The app listens only while it runs with `--remote-control` or the device
-setting is on: Settings → Application → For developers → „Pozwól agentom sterować aplikacją
-(gniazdo lokalne)” (`devtools/remoteControl` in `Brulion.ini`; switching it takes effect at once — switched off,
+setting is on: Settings → Application → For developers → "Allow agents to control the app
+(local socket)" (`devtools/remoteControl` in `Brulion.ini`; switching it takes effect at once — switched off,
 the socket and its connections close; the settings show the socket while it listens).
 `--remote-control` applies to a new run: a second launch while Brulion runs only brings it to
 the front (and says so on stderr). Without it every command below exits 5:
@@ -405,7 +405,7 @@ it); a screenshot is written only to the path asked for (an absolute `.png` in a
 folder that exists — any such path the user can write to, as the user's own programs can; an
 existing file there is replaced) or, by default, into `$XDG_RUNTIME_DIR/brulion-screenshots/`,
 and the MCP server hands the agent the file only when it is a PNG; every request is
-in the event log ("Rejestr zdarzeń", detailed mode: the method and its parameters — typed and
+in the event log ("Event log", detailed mode: the method and its parameters — typed and
 captured text only by its length).
 
 ```sh
@@ -455,8 +455,8 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
 * `app wait` polls without blocking the app; several conditions must all hold; `--idle` means no
   new frame for 300 ms, no popup opening or closing, no indexing, no input queued and every page
   saved. A page with a **conflict** waiting for the user — changed in the app and by another
-  program or device at once in a way that could not be merged; the banner „Ta strona zmieniła się
-  też w innym miejscu…” — is not saved until the user decides, so it is not idle:
+  program or device at once in a way that could not be merged; the banner "This page was also
+  changed elsewhere…" — is not saved until the user decides, so it is not idle:
   `wait --idle` times out (exit 3) with `details.conflicts: [{page}]`, and `app state` lists
   such pages in `conflicts` (and `editing.conflict` for the edited one). Agents should report it
   to the user rather than click the banner's choices themselves. `syncConflicts` counts the
@@ -509,7 +509,7 @@ Not built there. On Android, debuggable APKs take command-line options through
 `am start … --es applicationArguments '…'` (docs/UI.md, the `--scroll-probe` row), and `adb shell
 input tap|swipe|text` and `adb exec-out screencap -p` drive and capture the app. In the browser,
 drive the page with Playwright or obscura (Chrome DevTools Protocol), as `scripts/wasm-smoke.mjs`
-does with its `?selftest=` checks (docs/WEB.md "Test dymny w przeglądarce bez okna").
+does with its `?selftest=` checks (docs/WEB.md "Headless browser smoke test").
 
 ### Development
 

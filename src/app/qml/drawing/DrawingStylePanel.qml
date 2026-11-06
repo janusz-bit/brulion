@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Templates as T
 import Brulion
 
-// DrawingStylePanel — the style of the selected elements (DrawingSelectionBar's "Styl"; docs/UI.md
+// DrawingStylePanel — the style of the selected elements (DrawingSelectionBar's "Style"; docs/UI.md
 // "Drawing editor"): only what the selection has (DrawingCanvas.selectionStyle): the fill and its
 // pattern, the line's thickness and dashes, corners, arrowheads, the text's size, aligning and
 // distributing several parts (alignSelection, distributeSelection), opacity. Each
@@ -305,7 +305,7 @@ T.Popup {
         }
     }
 
-    /// The alignments of the "Wyrównaj" row.
+    /// The alignments of the "Align" row.
     readonly property list<var> alignments: [
         { value: "left", icon: "align-start-vertical", label: qsTr("Align left"), keys: "Ctrl+Shift+Left" },
         { value: "center", icon: "align-center-vertical", label: qsTr("Centre horizontally"), keys: "" },

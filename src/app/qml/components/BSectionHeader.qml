@@ -3,12 +3,12 @@ import QtQuick
 import QtQuick.Templates as T
 import Brulion
 
-// BSectionHeader — small heading above a group (sidebar "Ulubione", settings sections),
+// BSectionHeader — small heading above a group (sidebar "Favorites", settings sections),
 // optionally collapsible, with a count and an action button.
 //
-//   BSectionHeader { text: qsTr("Ulubione"); count: 4; collapsible: true; expanded: favOpen
+//   BSectionHeader { text: qsTr("Favorites"); count: 4; collapsible: true; expanded: favOpen
 //                    onExpandedToggled: (open) => favOpen = open
-//                    actionIcon: "plus"; actionLabel: qsTr("Dodaj"); onActionClicked: add() }
+//                    actionIcon: "plus"; actionLabel: qsTr("Add"); onActionClicked: add() }
 T.AbstractButton {
     id: control
 

@@ -64,7 +64,7 @@ def task_row(img, y, length, color="widget_text"):
     img.stroke(circle(20, y, 3.5), "widget_faint", 1.5)
     img.line(30, y, 30 + length, y, color, 4)
 
-# Tasks, 3x2: "Mój dzień", the date, +, Zaległe with one task, Dziś with two.
+# Tasks, 3x2: "My day", the date, +, Overdue with one task, Today with two.
 t = Img(180, 110)
 t.fill(rrect(0, 0, 180, 110, 16), "widget_background")
 t.line(16, 18, 74, 18, "widget_text", 7)
@@ -109,7 +109,7 @@ c.line(44, 218, 150, 218, "widget_text", 4)
 c.line(16, 232, 36, 232, "widget_accent", 4)
 c.line(44, 232, 128, 232, "widget_text", 4)
 
-# Notes, 3x2: title, "Dziennik dziś" and "Szybka notatka" pills, favourites.
+# Notes, 3x2: title, "Today's journal" and "Quick note" pills, favourites.
 n = Img(180, 110)
 n.fill(rrect(0, 0, 180, 110, 16), "widget_background")
 n.line(16, 18, 66, 18, "widget_text", 7)

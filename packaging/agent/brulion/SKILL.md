@@ -6,7 +6,7 @@ description: Read and change the user's Brulion notes (a folder of Markdown file
 # Brulion notes (brulion-cli)
 
 Brulion is an offline-first Markdown notes app (Obsidian-style files, Logseq-style journals and
-outlines, Polish first). `brulion-cli` changes the notebook exactly as the app does. Full reference:
+outlines; English and Polish). `brulion-cli` changes the notebook exactly as the app does. Full reference:
 `docs/CLI.md` of the Brulion sources, or `brulion-cli help` and `brulion-cli help --json`.
 
 ## Safety first
@@ -78,7 +78,7 @@ MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brul
   page (`app open`), checking how a page or a view looks (`app screenshot`; MCP returns the
   picture), reproducing or testing a UI problem (find, click, type, key, wait), running a
   palette command. They need the user's Brulion on this desktop with remote control on: Settings →
-  Application → For developers → "Pozwól agentom sterować aplikacją", or the app started with
+  Application → For developers → "Allow agents to control the app", or the app started with
   `--remote-control`. Exit 5 (`remote_control_off`, `app_not_running`) means it is not: tell
   the user how to allow it, never work around it. MCP: `brulion-cli mcp --app-control`.
 - Driving the app: `app state` first (route, focused item, edited block, open popups, toasts);
@@ -107,4 +107,5 @@ MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brul
 - Reminders ring where a Brulion app runs (desktop tray, phone app after it syncs), not on the
   machine running the command line.
 - Notes are plain files synced by Syncthing or Nextcloud; the command line works on the local copy.
-- Polish is the notebook's language by default (`--lang en` for English dates and templates).
+- Dates and templates are written in the app's language — English unless Polish was chosen
+  in the app (`--lang pl|en` overrides it).

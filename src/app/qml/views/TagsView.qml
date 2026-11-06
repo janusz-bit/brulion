@@ -7,8 +7,8 @@ import Brulion
 // TagsView — routes "tags" (every tag with how often it is used: TagListModel; filter, most used
 // or A–Z with nested tags under their parent) and "tag" ({tag}: the tag overview — the pages that
 // carry it and every tagged block, grouped by page and rendered like in the editor
-// (TagBlocksModel), its parent and sub-tags, "Otwórz stronę" / "Utwórz stronę" and "Zadania z tym
-// tagiem" for TasksView).
+// (TagBlocksModel), its parent and sub-tags, "Open page" / "Create page" and "Tasks with this
+// tag" for TasksView).
 // A tag names a page (docs/SYNTAX.md §3): a row of the list opens the tag's page
 // (AppController.openTag), its trailing button the overview; inside the overview the parent and
 // sub-tag chips stay in the overview ({view: "tag", overview: true}).

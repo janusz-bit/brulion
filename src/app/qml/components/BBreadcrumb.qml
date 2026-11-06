@@ -8,7 +8,7 @@ import Brulion
 // buttons, the last part is the current page.
 //
 //   BBreadcrumb {
-//       model: [{ title: qsTr("Dziennik") }, { title: "2026" }, { title: "Październik" }]
+//       model: [{ title: qsTr("Journal") }, { title: "2026" }, { title: "October" }]
 //       onActivated: (index) => navigateTo(index)
 //   }
 //

@@ -3,13 +3,13 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ContentBacklinks — "Odnośniki" of a page: the blocks of other notes that link to it or carry a
+// ContentBacklinks — "Linked references" of a page: the blocks of other notes that link to it or carry a
 // tag naming it (docs/SYNTAX.md §3), grouped by page (journals newest first; a page tagged as a
-// whole is marked "cała strona"), each rendered like in the editor and opening at its line; a
+// whole is marked "whole page"), each rendered like in the editor and opening at its line; a
 // page not written yet (a link's or a tag's) lists what already names it;
-// below, collapsed, "Niepowiązane wzmianki": plain-text mentions of the page's title or aliases,
-// each with "Połącz" turning the mention into a [[link]] in that note (BacklinksModel.linkMention
-// through the Workspace, so open editors reload), plus "Połącz wszystkie".
+// below, collapsed, "Unlinked mentions": plain-text mentions of the page's title or aliases,
+// each with "Link" turning the mention into a [[link]] in that note (BacklinksModel.linkMention
+// through the Workspace, so open editors reload), plus "Link all".
 //
 //   ContentBacklinks { path: page.path; rendererPalette: editor.rendererPalette; width: … }
 //

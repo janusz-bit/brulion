@@ -21,7 +21,7 @@ import android.util.Log
  * The deadline is a one-shot AlarmManager alarm delivered to [RingTimeoutReceiver], so it fires
  * while the app and the alarm screen are closed. It counts elapsed real time: a clock or
  * time-zone change does not move it, and a reboot (which also clears the notification) drops
- * it. Every reaction (tap, "Drzemka 10 min", "OK", the alarm screen's buttons, swiping the
+ * it. Every reaction (tap, "Snooze 10 min", "OK", the alarm screen's buttons, swiping the
  * notification away) goes through [ReminderNotifier.cancel], which cancels it and tells an open
  * alarm screen to close ([stopped]).
  */

@@ -5,10 +5,10 @@ import QtQuick.Templates as T
 import Brulion
 
 // ImportPreview — steps 2 and 3 of an import (ImportController): what was picked and recognised
-// (with "Importuj jako…" to override), where the pages go, what will be written (pages, daily notes
+// (with "Import as…" to override), where the pages go, what will be written (pages, daily notes
 // — appended under "## Import (…)" when the day exists —, attachments, renamed files, warnings and
-// the first files), progress while reading / checking / writing, and the report with "Otwórz
-// zaimportowany folder". Shown once something was picked.
+// the first files), progress while reading / checking / writing, and the report with "Open
+// the imported folder". Shown once something was picked.
 //
 //   ImportPreview { importer: importController; onPickAgain: … }
 ColumnLayout {

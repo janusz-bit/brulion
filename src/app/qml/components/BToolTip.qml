@@ -6,7 +6,7 @@ import Brulion
 // BToolTip — short help text above (or below) a control, with an optional shortcut hint.
 //
 //   BIconButton { ... }            // shows its own tooltip from `label` + `shortcut`
-//   BToolTip { parent: someItem; visible: hover.hovered; text: qsTr("Wklej") }
+//   BToolTip { parent: someItem; visible: hover.hovered; text: qsTr("Paste") }
 //
 // Inverse colours (ink on paper, paper on ink), small radius, fades in after `delay`.
 // `below: true` places it under the parent (for controls at the top edge), `beside: true` to its

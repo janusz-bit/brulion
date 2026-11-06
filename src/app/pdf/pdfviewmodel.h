@@ -167,7 +167,7 @@ private:
     /// also as targetTop: QML's delegates cannot have a property named `top`).
     Q_PROPERTY(QVariantList outline READ outline NOTIFY outlineChanged FINAL)
     /// The first rectangle of the selection (fractions of selectionPage; empty without one): where
-    /// the floating "Kopiuj" goes.
+    /// the floating "Copy" goes.
     Q_PROPERTY(QRectF selectionAnchor READ selectionAnchor NOTIFY selectionChanged FINAL)
     /// pageRect(selectionPage) (empty without a selection).
     Q_PROPERTY(QRectF selectionPageRect READ selectionPageRect NOTIFY selectionPageRectChanged FINAL)

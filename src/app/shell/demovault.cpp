@@ -47,24 +47,29 @@ QString fill(QString text, const QHash<QString, QString> &vars)
     return text;
 }
 
-/// The documentation pages (src/app/shell/guide/*.md, embedded as :/guide/...), written in
-/// Brulion's own Markdown: the notes of the notebook "Dokumentacja Brulionu".
-QList<DemoFile> guideFiles()
+/// The documentation pages in `language` ("en" | "pl": src/app/shell/guide/<language>/*.md,
+/// embedded as :/guide/<language>/...), written in Brulion's own Markdown: the notes of the
+/// notebook "Brulion Documentation" (in Polish "Dokumentacja Brulionu"). Paths are relative to the
+/// language's folder.
+QList<DemoFile> guideFiles(const QString &language)
 {
     QList<DemoFile> out;
-    QDirIterator it(u":/guide"_s, { u"*.md"_s }, QDir::Files, QDirIterator::Subdirectories);
+    const QString root = u":/guide/"_s + language + u'/';
+    QDirIterator it(root, { u"*.md"_s }, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         QFile file(it.next());
         if (!file.open(QIODevice::ReadOnly))
             continue;
-        const QString path = it.filePath().mid(QStringLiteral(":/guide/").size());
+        const QString path = it.filePath().mid(root.size());
         out.append({ path, QString::fromUtf8(file.readAll()) });
     }
     std::sort(out.begin(), out.end(), [](const DemoFile &a, const DemoFile &b) { return a.path < b.path; });
     return out;
 }
 
-// ---- Content ------------------------------------------------------------------------------------
+// ---- Content: Polish ---------------------------------------------------------------------------
+
+namespace pl {
 
 const auto kWelcome = uR"md(---
 tags: [przewodnik]
@@ -223,7 +228,7 @@ const auto kDocsNotebook =
         uR"md(Pełna dokumentacja jest w osobnym notatniku „Dokumentacja Brulionu” (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty). Otworzysz go przyciskiem „Przełącz notatnik” (dwie strzałki) obok nazwy notatnika w pasku bocznym albo skrótem Ctrl+Shift+B — i tak samo wrócisz.)md"_s;
 /// ... and where it is read without one (the browser).
 const auto kDocsOnline =
-        uR"md(Pełna dokumentacja (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty) jest częścią aplikacji na komputer i na Androida, gdzie tworzy osobny notatnik „Dokumentacja Brulionu”. W przeglądarce przeczytasz ją na [stronie projektu](https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide).)md"_s;
+        uR"md(Pełna dokumentacja (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty) jest częścią aplikacji na komputer i na Androida, gdzie tworzy osobny notatnik „Dokumentacja Brulionu”. W przeglądarce przeczytasz ją na [stronie projektu](https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/pl).)md"_s;
 
 const auto kToday = uR"md(- Pierwszy dzień z [[Witaj w Brulionie|Brulionem]] #przewodnik
 - [ ] Przejrzeć [[Remont mieszkania]] i zamówić farbę 📅 {in2}
@@ -407,15 +412,403 @@ const auto kPlanSvg = uR"svg(<svg xmlns="http://www.w3.org/2000/svg" width="480"
 </svg>
 )svg"_s;
 
+} // namespace pl
+
+// ---- Content: English --------------------------------------------------------------------------
+
+namespace en {
+
+const auto kWelcome = uR"md(---
+tags: [guide]
+aliases: [Guide, Start]
+brulion: document
+---
+# Welcome to Brulion
+
+Brulion is a notebook made of plain Markdown files. It works offline — on your computer, on your phone and in the browser. This is the **sample notebook**: everything here is yours to edit, click and break.
+
+> [!tip] Where to start?
+> Open [[{today}|today's journal]] (Ctrl+J) and write down your first thought. Every list item (a line starting with a dash) is a block of its own.
+
+## Documents and outlines
+Every note is in one of two modes. Switch it with the icon next to the page title, in the page menu or with the “Toggle note mode” command (Ctrl+K).
+
+- A **document**, as in Obsidian — like this page. Paragraphs, headings and lists read like ordinary text; click a paragraph to change it.
+- An **outline**, as in Logseq — like the journal and [[Home renovation]]. Every item is a block with a bullet that you can indent, collapse and zoom into.
+
+The mode is stored in the note itself (the property `brulion: document` or `brulion: outline`), so the note looks the same on every device. A new page can start in either mode, and Settings → Notebook sets the default ones.
+
+## Outliner
+- Every list item is a **block**. Click it to edit it.
+  - Tab indents a block together with its children, Shift+Tab outdents it.
+  - Alt+↑ and Alt+↓ move a block up and down.
+    - In an outline, click the bullet of a block to zoom into it.
+- Enter splits the block at the cursor; in a document, Enter on an empty item ends the list.
+- Ctrl+. collapses and expands the children of a block in an outline.
+
+## Links and references
+- A link to a page: [[Home renovation]]. The page does not exist yet? A click creates it: [[Gift ideas]].
+- A link with a label of its own: [[Books 2026|my reading list]].
+- A link to a heading: [[Recipes#Grandma's apple pie]].
+- A reference to a block on another page: ((budget1)) — its text shows up here, and you change it at the source.
+- Every page lists its **backlinks** in the side panel: the pages that link to it.
+
+## Tags
+- Tags start with #: #guide, #idea, #project/home (a nested tag).
+- A tag with spaces: #[[to read]].
+- A tag is a link to a page: click it to open its page, with every block that has the tag below it.
+
+## Tasks
+- [ ] A plain task — click the checkbox or press Ctrl+Enter; a right-click (a long press on a phone) shows every status
+- [ ] A task with a due date 📅 {in2}
+- [ ] A task scheduled for tomorrow ⏳ {tomorrow}
+- [/] A task in progress
+- [x] A finished task ✅ {yesterday}
+- [ ] An important task ⏫ 📅 {in3}
+- [ ] Water the plants 🔁 every week on Saturday 📅 {nextSaturday}
+- When you tick off a recurring task, Brulion adds its next occurrence by itself. Repeat rules are written in plain English: “every week”, “every 2 days”, “every weekday”.
+
+## Reminders and alarms
+- Call Mom ⏰ {tomorrow} 18:00
+- [ ] Return the book to the library 📅 {in3} ⏰ {in2} 09:00
+- Wake up for the train ⏰! {nextMonday} 05:45
+  - With an exclamation mark it is an **alarm**: loud, and it keeps ringing until you turn it off.
+- A reminder without a time ⏰ {in5}
+  - It goes off at the default time from the notebook's settings.
+- Type dates in plain English: “tomorrow at 9”, “friday at 6pm”, “in 2 hours” — the file always keeps `YYYY-MM-DD HH:MM`.
+- On a phone, reminders work even when the app is closed.
+
+## Calculations
+A `calc` block calculates line by line, with units, percentages and variables:
+
+```calc
+price = 12.50
+quantity = 4
+price * quantity
+discount = 15%
+ans - discount
+5 km to mi
+3 h + 20 min
+20% of 150
+```
+
+Monthly bills with labels and a total:
+
+```calc
+Rent: $1800
+Electricity: $90
+Internet: $45
+sum
+```
+
+A calculation inside a sentence works too: a year has `= 52 * 7` days in full weeks.
+
+## Tables with formulas
+A cell that starts with `=` is a formula: `[Column]` is the cell of that column in the same row, `above` — everything above it.
+
+| Item | Price | Qty | Total |
+|---|---:|---:|---:|
+| Paint | 32 | 3 | =[Price]*[Qty] |
+| Roller | 9 | 2 | =[Price]*[Qty] |
+| Tape | 4 | 4 | =[Price]*[Qty] |
+| Sum | | | =sum(above) |
+
+## Queries
+A `query` block gathers tasks and blocks from the whole notebook. Open tasks for the coming week:
+
+```query
+type:tasks status:open due:<=+7d sort:due
+```
+
+## Embeds
+- A section of another page, embedded: ![[Recipes#Grandma's apple pie]]
+- A picture from the attachments folder: ![[floor-plan.svg]]
+- An embedded block: !((budget1))
+
+## Callouts
+> [!note] Note
+> Callouts come in several kinds: note, tip, warning, danger, info, todo, quote.
+
+> [!warning] Saving
+> Changes save themselves — there is no “Save” button. Earlier versions of a page are in its history.
+
+## Templates
+- Templates live in the `templates/` folder. A new journal page is made from the [[templates/journal|journal]] template.
+- Variables: `{{date}}`, `{{time}}`, `{{weekday}}`, `{{title}}`. Insert a template with the `/template` command.
+
+## Calendar and journal
+- Every day has a page of its own in the `journals/` folder — take a look at [[{yesterday}]] and [[{weekAgo}]].
+- The calendar shows due dates 📅, scheduled dates ⏳, reminders ⏰ and the days with journal entries.
+
+## Sync
+- **Syncthing**: a notebook is an ordinary folder. Share it in Syncthing (on Android in Syncthing-Fork) and choose the same folder in Brulion on every device. Brulion helps you merge conflict copies (`*.sync-conflict-*`).
+- **Nextcloud**: Settings → Sync — the server address, your user name and an app password. Changes from several devices are merged, and no text is ever lost.
+- The history of every page is kept on the device: page menu → History.
+
+## Import and export
+- Import from Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam and Bear, and from Markdown, TXT and HTML files.
+- Export to a ZIP archive of Markdown, to HTML pages, JSON, iCalendar (tasks and reminders), OPML and CSV.
+
+## Documentation
+{docs}
+
+## Keyboard shortcuts
+| Shortcut | Action |
+|---|---|
+| Ctrl+K | command palette |
+| Ctrl+O | go to page |
+| Ctrl+J | today's journal |
+| Ctrl+N | new page |
+| Ctrl+Shift+F | search |
+| Alt+← / Alt+→ | back / forward |
+| Ctrl+E | Markdown source mode |
+| Ctrl+Enter | change the task status |
+| Ctrl+Shift+Enter | task status menu |
+| Tab / Shift+Tab | indent / outdent a block |
+
+%%This comment is only visible while you edit.%%
+==Highlights== and ~~strikethrough~~ work too.
+)md"_s;
+
+/// The welcome page's "Documentation" section: where the documentation notebook is ...
+const auto kDocsNotebook =
+        uR"md(The full documentation is in a separate notebook, “Brulion Documentation” (modes, links, tasks, reminders, calculations, queries, sync, shortcuts). Open it with the “Switch notebook” button (the first letter of the notebook's name at the top of the icon bar on the left) or with Ctrl+Shift+B — and come back the same way.)md"_s;
+/// ... and where it is read without one (the browser).
+const auto kDocsOnline =
+        uR"md(The full documentation (modes, links, tasks, reminders, calculations, queries, sync, shortcuts) comes with the desktop and Android apps, where it is a separate notebook, “Brulion Documentation”. In the browser, read it on the [project page](https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/en).)md"_s;
+
+const auto kToday = uR"md(- My first day with [[Welcome to Brulion|Brulion]] #guide
+- [ ] Go through [[Home renovation]] and order the paint 📅 {in2}
+- Meeting with the renovation crew ⏰ {tomorrow} 17:30
+- Read today: 40 pages of “Middlemarch” — [[Books 2026]]
+- Dinner idea: [[Recipes#Pancakes|pancakes]] #idea
+  - or tomato soup, if I get fresh basil
+- Quick notes from the phone (the “+” button) land right here.
+)md"_s;
+
+const auto kYesterday = uR"md(- [x] Buy masking tape ✅ {yesterday}
+- Talked to the neighbor about the noise during the renovation — [[Home renovation]]
+  - We agreed on working hours: 9:00–17:00 only.
+- A walk in the park, 8 km #health
+- Today's expenses:
+
+```calc
+Coffee: $4.50
+Bus ticket: $2.75
+Groceries: $38.20
+sum
+```
+)md"_s;
+
+const auto kWeekAgo = uR"md(- The renovation starts! #project/home
+  - Plan: ![[floor-plan.svg]]
+- [x] Choose the color of the living room walls ✅ {weekAgo}
+- Finished “Frankenstein” — [[Books 2026]]
+- Café, naïve, Zürich, Łódź, żółć — Brulion is at home with any alphabet.
+)md"_s;
+
+const auto kRenovation = uR"md(---
+tags: [project/home]
+status: in progress
+brulion: outline
+---
+# Home renovation
+
+- The total budget: 12,000 dollars — not a cent more! ^budget1
+- The crew starts at 9:00 and finishes at 17:00 (as agreed with the neighbors on [[{yesterday}]]).
+
+## Cost estimate
+| Item | Price | Qty | Total |
+|---|---:|---:|---:|
+| Paint (gallon) | 45 | 6 | =[Price]*[Qty] |
+| Flooring (sq ft) | 4 | 350 | =[Price]*[Qty] |
+| Baseboards (ft) | 2 | 400 | =[Price]*[Qty] |
+| Labor | 4500 | 1 | =[Price]*[Qty] |
+| **Total** | | | =sum(above) |
+
+What is left of the budget:
+
+```calc
+budget = 12000
+paint = 45 * 6
+flooring = 4 * 350
+baseboards = 2 * 400
+labor = 4500
+budget - paint - flooring - baseboards - labor
+```
+
+## Tasks
+- [x] Choose the wall colors ✅ {weekAgo}
+- [ ] Order the paint ⏫ 📅 {in2}
+- [ ] Pull up the old floor ⏳ {in3}
+- [ ] Pick up the baseboards from the store 📅 {in5} ⏰ {in5} 16:00
+- [ ] Pay the crew's monthly installment 🔁 every month on the 10th 📅 {next10th}
+
+## Notes
+- Colors: “Sage green” in the living room, warm white in the kitchen. #idea
+- The query below gathers every open task of the project.
+
+```query
+type:tasks path:Projects status:open sort:due
+```
+)md"_s;
+
+const auto kBooks = uR"md(---
+tags: [reading]
+---
+# Books 2026
+
+| Title | Author | Pages | Rating |
+|---|---|---:|---:|
+| Frankenstein | Mary Shelley | 280 | 4 |
+| Solaris | Stanisław Lem | 204 | 5 |
+| The Left Hand of Darkness | Ursula K. Le Guin | 304 | 5 |
+| Pride and Prejudice | Jane Austen | 432 | 4 |
+| **Total / average** | | =sum(above) | =avg(above) |
+
+## To read
+- [/] Middlemarch — George Eliot #[[to read]]
+  - Reading 40 pages a day.
+- [ ] Dune — Frank Herbert #[[to read]]
+- [ ] The Remains of the Day — Kazuo Ishiguro #[[to read]]
+
+How many days until I finish “Middlemarch”?
+
+```calc
+pages = 880
+finished = 200
+(pages - finished) / 40
+```
+
+> [!quote] Stanisław Lem, Solaris
+> We don't want to conquer the cosmos, we simply want to extend the boundaries of Earth to the frontiers of the cosmos.
+)md"_s;
+
+const auto kRecipes = uR"md(---
+tags: [cooking]
+---
+# Recipes
+
+## Pancakes
+- Ingredients (about 12 pancakes):
+  - 200 g flour, 300 ml milk, 1 egg, 3 tablespoons of melted butter
+  - 1 tablespoon of sugar, 2 teaspoons of baking powder, a pinch of salt
+- Whisk the wet and the dry ingredients separately, then stir them together — a few lumps are fine.
+- Cook on a hot pan until bubbles appear, then flip.
+
+## Grandma's apple pie
+- Apples: tart ones, like Granny Smith, and plenty of cinnamon.
+- Shortcrust pastry: 300 g flour, 200 g butter, 100 g sugar, 3 egg yolks.
+
+> [!tip] For a bigger baking tin
+> Multiply the ingredients by 1.5:
+
+```calc
+flour = 300
+butter = 200
+flour * 1.5
+butter * 1.5
+```
+
+## Tomato soup
+- [ ] Buy fresh basil #shopping ⏰ {nextSaturday} 10:00
+- Ripe tomatoes, an onion, two cloves of garlic, a splash of cream.
+)md"_s;
+
+const auto kJournalTemplate = uR"md(## Plan for the day
+- [ ]
+
+## Notes
+-
+)md"_s;
+
+const auto kMeetingTemplate = uR"md(---
+tags: [meeting]
+---
+# {{title}}
+Date: {{date}} {{time}}
+
+## Attendees
+-
+
+## Decisions
+-
+
+## Action items
+- [ ]
+)md"_s;
+
+const auto kPlanSvg = uR"svg(<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">
+  <rect x="0" y="0" width="480" height="300" fill="#fbf7ee"/>
+  <g fill="none" stroke="#1f2430" stroke-width="4">
+    <rect x="20" y="20" width="440" height="260"/>
+    <line x1="260" y1="20" x2="260" y2="180"/>
+    <line x1="20" y1="180" x2="200" y2="180"/>
+    <line x1="320" y1="180" x2="460" y2="180"/>
+  </g>
+  <g fill="#9fc3e6" opacity="0.35">
+    <rect x="22" y="22" width="236" height="156"/>
+  </g>
+  <g font-family="sans-serif" font-size="18" fill="#1f2430">
+    <text x="80" y="105">Living room</text>
+    <text x="320" y="105">Kitchen</text>
+    <text x="70" y="240">Bedroom</text>
+    <text x="330" y="240">Bathroom</text>
+  </g>
+  <text x="240" y="296" font-family="sans-serif" font-size="12" fill="#e2574c" text-anchor="middle">floor plan — renovation</text>
+</svg>
+)svg"_s;
+} // namespace en
+
 } // namespace
 
-QString demoWelcomePage()
+namespace {
+
+/// The sample notebook's texts and paths in one language.
+struct SampleTexts {
+    QStringView welcome, docsNotebook, docsOnline, today, yesterday, weekAgo;
+    QStringView projectPath, project, booksPath, books, recipesPath, recipes;
+    QStringView journalTemplate, meetingTemplatePath, meetingTemplate, picturePath, picture;
+};
+
+bool isPolish(QStringView language)
 {
-    return u"Witaj w Brulionie.md"_s;
+    return language == u"pl";
 }
 
-QList<DemoFile> demoVaultFiles(const QDateTime &now, bool docsNotebook)
+SampleTexts sampleTexts(QStringView language)
 {
+    if (isPolish(language))
+        return {pl::kWelcome, pl::kDocsNotebook, pl::kDocsOnline, pl::kToday, pl::kYesterday, pl::kWeekAgo,
+                u"Projekty/Remont mieszkania.md", pl::kRemont, u"Książki 2026.md", pl::kBooks, u"Przepisy.md",
+                pl::kRecipes, pl::kJournalTemplate, u"templates/Spotkanie.md", pl::kMeetingTemplate,
+                u"assets/plan-mieszkania.svg", pl::kPlanSvg};
+    return {en::kWelcome, en::kDocsNotebook, en::kDocsOnline, en::kToday, en::kYesterday, en::kWeekAgo,
+            u"Projects/Home renovation.md", en::kRenovation, u"Books 2026.md", en::kBooks, u"Recipes.md",
+            en::kRecipes, en::kJournalTemplate, u"templates/Meeting.md", en::kMeetingTemplate,
+            u"assets/floor-plan.svg", en::kPlanSvg};
+}
+
+QString fillView(QStringView text, const QHash<QString, QString> &vars)
+{
+    return fill(text.toString(), vars);
+}
+
+} // namespace
+
+QString sampleNotebookFolder(QStringView language)
+{
+    return isPolish(language) ? u"Przykładowy brulion"_s : u"Sample notebook"_s;
+}
+
+QString demoWelcomePage(QStringView language)
+{
+    return isPolish(language) ? u"Witaj w Brulionie.md"_s : u"Welcome to Brulion.md"_s;
+}
+
+QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language, bool docsNotebook)
+{
+    const SampleTexts texts = sampleTexts(language);
     const QDate today = now.date();
     const QHash<QString, QString> vars{
             {u"today"_s, iso(today)},
@@ -428,21 +821,21 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now, bool docsNotebook)
             {u"nextMonday"_s, iso(nextWeekday(today, Qt::Monday))},
             {u"nextSaturday"_s, iso(nextWeekday(today, Qt::Saturday))},
             {u"next10th"_s, iso(nextTenth(today))},
-            {u"docs"_s, docsNotebook ? kDocsNotebook : kDocsOnline},
+            {u"docs"_s, (docsNotebook ? texts.docsNotebook : texts.docsOnline).toString()},
     };
     const VaultConfig config;
     const auto journal = [&](QDate d) { return markdown::journalPathForDate(d, config); };
     QList<DemoFile> files = {
-        { demoWelcomePage(), fill(kWelcome, vars) },
-        { journal(today), fill(kToday, vars) },
-        { journal(today.addDays(-1)), fill(kYesterday, vars) },
-        { journal(today.addDays(-7)), fill(kWeekAgo, vars) },
-        { u"Projekty/Remont mieszkania.md"_s, fill(kRemont, vars) },
-        { u"Książki 2026.md"_s, fill(kBooks, vars) },
-        { u"Przepisy.md"_s, fill(kRecipes, vars) },
-        { u"templates/journal.md"_s, kJournalTemplate },
-        { u"templates/Spotkanie.md"_s, kMeetingTemplate },
-        { u"assets/plan-mieszkania.svg"_s, kPlanSvg },
+        { demoWelcomePage(language), fillView(texts.welcome, vars) },
+        { journal(today), fillView(texts.today, vars) },
+        { journal(today.addDays(-1)), fillView(texts.yesterday, vars) },
+        { journal(today.addDays(-7)), fillView(texts.weekAgo, vars) },
+        { texts.projectPath.toString(), fillView(texts.project, vars) },
+        { texts.booksPath.toString(), fillView(texts.books, vars) },
+        { texts.recipesPath.toString(), fillView(texts.recipes, vars) },
+        { config.journalTemplate, texts.journalTemplate.toString() },
+        { texts.meetingTemplatePath.toString(), texts.meetingTemplate.toString() },
+        { texts.picturePath.toString(), texts.picture.toString() },
     };
     return files;
 }
@@ -460,14 +853,14 @@ static int seedFiles(Vault &vault, const QList<DemoFile> &files)
     return written;
 }
 
-QString docsWelcomePage()
+QString docsWelcomePage(QStringView language)
 {
-    return u"Spis treści.md"_s;
+    return isPolish(language) ? u"Spis treści.md"_s : u"Contents.md"_s;
 }
 
-QList<DemoFile> docsVaultFiles()
+QList<DemoFile> docsVaultFiles(QStringView language)
 {
-    return guideFiles();
+    return guideFiles(isPolish(language) ? u"pl"_s : u"en"_s);
 }
 
 namespace {
@@ -549,17 +942,18 @@ QJsonObject legacyRecord(Vault &vault)
     return record;
 }
 
-} // namespace
-
-DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
+/// updateDocsVault(); `legacy`: the pages may have been written by 0.3.0–0.3.5 (the Polish ones).
+DocsUpdate updateDocs(Vault &vault, const QList<DemoFile> &pages, bool legacy)
 {
     DocsUpdate result;
+    if (pages.isEmpty())
+        return result; // a build without this language's pages: nothing to write, nothing dropped
     LocalStore *store = vault.store();
     QJsonObject record; // none: a new notebook, or one emptied to start over
-    if (!vault.markdownFiles().isEmpty()) {
-        record = store->contains(kDocsRecordKey) ? store->get(kDocsRecordKey).toObject()
-                                                 : legacyRecord(vault); // written by 0.3.0–0.3.5
-    }
+    if (!vault.markdownFiles().isEmpty() && store->contains(kDocsRecordKey))
+        record = store->get(kDocsRecordKey).toObject();
+    else if (!vault.markdownFiles().isEmpty() && legacy)
+        record = legacyRecord(vault); // written by 0.3.0–0.3.5
     const auto write = [&](const DemoFile &page) {
         if (vault.writeText(page.path, page.content, ChangeSource::Import))
             return true;
@@ -615,9 +1009,21 @@ DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
     return result;
 }
 
-int seedDemoVault(Vault &vault, const QDateTime &now, bool docsNotebook)
+} // namespace
+
+DocsUpdate updateDocsVault(Vault &vault, QStringView language)
 {
-    return seedFiles(vault, demoVaultFiles(now, docsNotebook));
+    return updateDocs(vault, docsVaultFiles(language), isPolish(language));
+}
+
+DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
+{
+    return updateDocs(vault, pages, true);
+}
+
+int seedDemoVault(Vault &vault, const QDateTime &now, QStringView language, bool docsNotebook)
+{
+    return seedFiles(vault, demoVaultFiles(now, language, docsNotebook));
 }
 
 } // namespace brulion::shell

@@ -1,8 +1,8 @@
 // Workspace — PDFs of the notebook (docs/UI.md "PDF viewer"): the thumbnails of embedded PDFs
-// (EditorHost::pdfThumbnail, cached as PNG files by pdfview::PdfThumbnails), "Otwórz w innej
-// aplikacji" (platform::openFileExternally: the system's viewer, Android's ACTION_VIEW, the
+// (EditorHost::pdfThumbnail, cached as PNG files by pdfview::PdfThumbnails), "Open in another
+// app" (platform::openFileExternally: the system's viewer, Android's ACTION_VIEW, the
 // browser's new tab — also for the other attachments of platform/externalfiles.h's allow-list),
-// "Rysuj na tej stronie" (a drawing on a PDF page, embedded right after the PDF in the note the
+// "Draw on this page" (a drawing on a PDF page, embedded right after the PDF in the note the
 // viewer was opened from: notebook::insertBlockAfterEmbed) and the drawing editor's previous /
 // next PDF page (the neighbouring page's drawing beside the current one's).
 #include "workspace.h"

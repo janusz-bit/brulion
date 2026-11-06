@@ -325,7 +325,7 @@ void checkCalendarEdgeSwipe(QQuickWindow *window, QQuickItem *calendarView, cons
 ///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
 ///     page, the calendar's agenda, its day panel (on phones a bottom sheet, which stays open) and
 ///     a journal day's editor; "No status" removes the checkbox;
-///     "/zrobione" typed into a journal day completes its block. The agenda shows a task written
+///     "/zrobione" (the Polish "/done") typed into a journal day completes its block. The agenda shows a task written
 ///     into another note inside its day, the day panel the status it wrote. The notes are put back
 ///     afterwards.
 void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check &check)
@@ -429,7 +429,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         check(openStatusMenu(box) && choose("none") && waitFor([&] { return total(u"all"_s) == allBefore - 1; }),
               "“Bez statusu” in Tasks removes a task's checkbox");
     }
-    // The keyboard: the Menu key opens a row's menu, the arrows reach "Otwórz" (above the
+    // The keyboard: the Menu key opens a row's menu, the arrows reach "Open" (above the
     // statuses), Enter opens the task's note. First the list catches up with the last change (a
     // row it rebuilds takes its menu along), and the mouse pointer leaves the place where the
     // menu opens (the item under it would take the highlight).
@@ -460,7 +460,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     }
     restore();
 
-    // ---- Tasks: a due date's chip has the date menu (PlanningTokenMenu); "Dzień później" writes it.
+    // ---- Tasks: a due date's chip has the date menu (PlanningTokenMenu); "A day later" writes it.
     app->navigate({{u"view"_s, u"tasks"_s}});
     settle(800);
     QQuickItem *dueChip =
@@ -776,18 +776,18 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     app->goHome();
 }
 
-/// 5c. The event log ("Rejestr zdarzeń") and the details of a sync run, with real taps / clicks:
+/// 5c. The event log ("Event log") and the details of a sync run, with real taps / clicks:
 ///     lines logged anywhere reach the page (a secret never does), the search ignores diacritics,
 ///     an area chip filters, the detailed mode switches the Logger; the sync center's history
 ///     opens a run's details, whose "Show in the event log" opens the page at the run's time.
 /// 3d. Tags name pages (docs/SYNTAX.md §3), with real input: a tap / click on a #tag in a journal
 ///     day opens the page the tag names — one not written yet opens empty, with the tagged blocks
 ///     among its references and, at every width, the tag overview's “#” among the page actions
-///     and “Zadania z tym tagiem” in the page menu (opening Tasks filtered by the tag), no row of
+///     and “Tasks with this tag” in the page menu (opening Tasks filtered by the tag), no row of
 ///     buttons under the title, a tag's sub-tags as chips there; ready to type on a desktop, waiting for a tap on a touch screen — and back returns; in Tasks a click
 ///     on a tag filters the list while a Ctrl+click (desktop) or a long press (--touch) opens the
 ///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview,
-///     whose "Utwórz stronę" opens the page not written yet; the sidebar's rename dialog counts
+///     whose "Create page" opens the page not written yet; the sidebar's rename dialog counts
 ///     the links and tags it rewrites, and a "/" in it moves a page (renamed too: the toast says
 ///     both).
 void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
@@ -822,7 +822,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                          != nullptr;
               }),
               "the page header offers the tag overview (a “#” among the page actions)");
-        // At every width: no row of two buttons under the title — "Zadania z tym tagiem" is in the
+        // At every width: no row of two buttons under the title — "Tasks with this tag" is in the
         // page menu, and opens Tasks filtered by the tag.
         {
             check(!findShown(window->contentItem(),
@@ -910,7 +910,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
             std::fprintf(stderr, "selftest: tag of a task at %.0f,%.0f in \"%s\"\n", taskTag.x(), taskTag.y(),
                          task ? qPrintable(task->property("text").toString().left(200)) : "");
         if (touch) {
-            // A long press: the tag's menu (LinkMenu), "Filtruj po tagu" first; its "Otwórz stronę tagu".
+            // A long press: the tag's menu (LinkMenu), "Filter by tag" first; its "Open tag page".
             touchTap(window, taskTag, 1000);
             check(waitFor([&] { return openMenus(window) == 1; }), "a long press on a tag in Tasks opens its menu");
             const auto menuItem = [window](const QString &name) {
@@ -1291,7 +1291,7 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
     check(waitFor(
                   [&] {
                       return app->inDocsVault() && ready()
-                             && app->currentRoute().value(u"path"_s).toString() == docsWelcomePage();
+                             && app->currentRoute().value(u"path"_s).toString() == docsWelcomePage(app->notebooksLanguage());
                   },
                   10000),
           "one tap on the documentation opens it on its table of contents");
@@ -1756,14 +1756,14 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
 }
 
 /// 3e. Folders, with real input: the page opened is revealed and highlighted in the tree; a row's
-///     menu (the "⋯" button on touch screens, a right-click on desktops) has "Przenieś do…", whose
-///     dialog moves the page into the folder chosen; the "Strony" header's "+" menu creates a root
+///     menu (the "⋯" button on touch screens, a right-click on desktops) has "Move to…", whose
+///     dialog moves the page into the folder chosen; the "Pages" header's "+" menu creates a root
 ///     folder (named in the dialog, typed with real keys) and a deleted empty folder leaves the
 ///     tree; on desktops a page dragged with the mouse onto a folder moves into it, onto the
-///     "Strony" header back to the root, a closed folder hovered over opens and Escape cancels
+///     "Pages" header back to the root, a closed folder hovered over opens and Escape cancels
 ///     the drag, the target follows the rows the list scrolls under a still pointer and the
-///     header scrolled out of the list is none; a collapsed "Strony" stays collapsed when another
-///     page opens, "Pokaż w drzewie" opens it; a "/" typed into the page header's title stays in
+///     header scrolled out of the list is none; a collapsed "Pages" stays collapsed when another
+///     page opens, "Show in tree" opens it; a "/" typed into the page header's title stays in
 ///     the title (the page keeps its folder); All pages lists folders as rows (a tap opens one)
 ///     and the top bar's breadcrumb goes back. The sample notebook is put back afterwards.
 void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
@@ -1919,7 +1919,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return (row = treeRow(remont)) && row->property("selected").toBool(); }),
           "the page opened is revealed and highlighted in the tree");
 
-    // ---- A row's menu: the "⋯" button (touch) or a right-click; "Przenieś do…".
+    // ---- A row's menu: the "⋯" button (touch) or a right-click; "Move to…".
     row = treeRow(recipes);
     QObject *menu = treeMenu();
     check(row && menu, "the tree lists a page and has its menu");
@@ -1967,7 +1967,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     }
     restore();
 
-    // ---- A root folder from the "Strony" header's "+" menu.
+    // ---- A root folder from the "Pages" header's "+" menu.
     openDrawer();
     QQuickItem *header = named(u"sidebarPagesHeader"_s);
     QQuickItem *plus = header ? findShown(header, [](QQuickItem *item) { return isA(item, "BIconButton"); }) : nullptr;
@@ -1990,7 +1990,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         // lays itself out at another height: the keyboard's room on a phone.)
         shortWindow(true);
         if (touch) {
-            // A phone's keyboard still composes the word when "Utwórz" is tapped: preedit text,
+            // A phone's keyboard still composes the word when "Create" is tapped: preedit text,
             // outside the field's text (Android's keyboards compose every word).
             composeWord(window->activeFocusItem(), u"Zażółć"_s);
             const QString create = QCoreApplication::translate("ShellNewPageDialog", "Create");
@@ -2209,7 +2209,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     restore();
 
     // ---- The drop target follows the rows that scroll under a pointer held at the list's edge;
-    //      the "Strony" header scrolled out above the list is no target (desktop drags, driven
+    //      the "Pages" header scrolled out above the list is no target (desktop drags, driven
     //      through the sidebar's own drag functions).
     if (!touch) {
         QQuickItem *sidebar = sidebarItem();
@@ -2279,8 +2279,8 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     }
     restore();
 
-    // ---- A collapsed "Strony" stays collapsed (the setting too) when another page opens;
-    //      "Pokaż w drzewie" opens it and shows the page.
+    // ---- A collapsed "Pages" stays collapsed (the setting too) when another page opens;
+    //      "Show in tree" opens it and shows the page.
     openDrawer();
     if (QQuickItem *sidebar = sidebarItem(); sidebar && (header = named(u"sidebarPagesHeader"_s))) {
         // The header scrolls with the tree, which the drag above may have left scrolled.
@@ -2408,8 +2408,8 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
 ///     input: in [[Projekty/Remont mieszkania]] a click or tap on "Projekty" (a folder of the
 ///     sample notebook without a page of that name) opens the folder's pages (All pages with its
 ///     path, the breadcrumb "Projekty"), on "Remont mieszkania" the page; the part's menu (a
-///     right-click, a long press) offers "Pokaż folder", and on the desktop its "Otwórz w panelu
-///     bocznym" shows the folder in the side panel. The note's text is never changed.
+///     right-click, a long press) offers "Show folder", and on the desktop its "Open in side
+///     panel" shows the folder in the side panel. The note's text is never changed.
 void checkLinkParts(QQuickWindow *window, AppController *app, const Check &check,
                     const std::function<QObject *(const QString &)> &controllerFor)
 {
@@ -2500,7 +2500,7 @@ void checkLinkParts(QQuickWindow *window, AppController *app, const Check &check
 ///     to a block of this page whose block was moved to another page opens that page with the
 ///     block selected; a heading the page lacks is said (followed from the text and as a route),
 ///     its name as plain text in the toast even when written with tags;
-///     the palette's "Kopiuj odwołanie do bloku" copies the edited block's ((id)) — read back from
+///     the palette's "Copy block reference" copies the edited block's ((id)) — read back from
 ///     the clipboard — and says so; on the desktop a right-click on a paragraph's text opens the
 ///     block menu.
 void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &check,
@@ -2584,7 +2584,7 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     page = loaded(oldPage);
     if (!page)
         return;
-    // The palette's "Kopiuj odwołanie do bloku" on the edited block.
+    // The palette's "Copy block reference" on the edited block.
     int row = -1;
     QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(row), 4);
     QMetaObject::invokeMethod(page, "startEditing", row, -1);
@@ -2827,7 +2827,7 @@ void checkLinkPreviews(QQuickWindow *window, AppController *app, const Check &ch
 
 /// 5b. A picture attachment opens as a picture (ContentPictureView): its bytes are not a note and
 /// never reach the editor — the older view read them as text there, mojibake for a binary picture,
-/// and a typed character was saved over it. "Pokaż jako tekst" (a real tap / click) and Ctrl+E
+/// and a typed character was saved over it. "Show as text" (a real tap / click) and Ctrl+E
 /// show the file's text, read-only, and back; the notes that embed the picture are listed under it
 /// and in the side panel; fitting never enlarges a small picture; a file name is never markup; a
 /// format the device cannot decode is named.
@@ -2885,8 +2885,8 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
           "the notes that embed the picture are listed under it");
 
     // The bar fits the window: next to the size toggle (an icon on phones, named for screen
-    // readers and in its tooltip) the file name keeps its room — the toggle's "Pokaż naturalny
-    // rozmiar" left it none on a phone — and nothing runs off the window's edge. The toggle works.
+    // readers and in its tooltip) the file name keeps its room — the toggle's "Zoom to actual
+    // size" left it none on a phone — and nothing runs off the window's edge. The toggle works.
     {
         QQuickItem *name = child(view, "pictureName");
         QQuickItem *size = child(view, "pictureSizeButton");
@@ -2960,7 +2960,7 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
         }
     }
 
-    // "Pokaż jako tekst" in the picture's bar: the file's text, read-only; the editor stays
+    // "Show as text" in the picture's bar: the file's text, read-only; the editor stays
     // unloaded.
     if (QQuickItem *button = child(view, "pictureTextButton")) {
         tapOrClick(window, pointIn(button), touch);
@@ -3162,7 +3162,7 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
     }
 
     // A format this device cannot decode is named (WebP and AVIF need Qt's image plugins); one
-    // it can is loaded (these bytes are no picture: "Nie można wczytać").
+    // it can is loaded (these bytes are no picture: "Cannot load").
     {
         const QString webp = u"assets/łąka.webp"_s;
         check(workspace->vault()->writeBinary(webp, QByteArray("RIFF\x00\x00\x00\x00WEBPVP8 ", 16)),
@@ -3177,8 +3177,8 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
               }) && message->property("text").toString().contains(decodable ? u"łąka.webp"_s : u"WEBP"_s),
               "a picture that cannot be shown says why");
 
-        // Embedded in a note it says so too, with its name (the embed only said "Nie można
-        // wczytać łąka.webp").
+        // Embedded in a note it says so too, with its name (the embed only said "Cannot load
+        // łąka.webp").
         const QString note = u"Łąka wiosną.md"_s;
         check(workspace->writeFile(note, u"Zdjęcie z łąki:\n\n![[łąka.webp]]\n"_s), "a note embeds the WebP picture");
         app->openPage(note);
@@ -3208,24 +3208,24 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 
 /// 5k. PDFs (docs/UI.md "PDF viewer"): a note embedding a lecture written here (QPdfWriter, three
 /// pages) shows its first page's thumbnail on a white page; a tap / click opens the PDF viewer
-/// (route path = the PDF, the block editor holds no controller for it: no bytes loaded), "Strona 1 z
+/// (route path = the PDF, the block editor holds no controller for it: no bytes loaded), "Page 1 of
 /// 3"; Ctrl+G 3 Enter goes to page 3, Home back, PageDown moves; Ctrl++ zooms (the page's picture
 /// asked for larger, sideways panning — the drawer's edge strip yields), Ctrl+0 fits the width again;
 /// a pinch (phone run) or Ctrl+wheel (desktop) zooms, a double tap fits / doubles; Ctrl+F "gesla"
 /// finds "gęślą" once with a highlight; Esc closes the search; a mouse drag over page 1's line (a
-/// long press on its first word on the phone) selects it, tinted with "Kopiuj", Ctrl+C copies it, Esc
+/// long press on its first word on the phone) selects it, tinted with "Copy", Ctrl+C copies it, Esc
 /// clears it; Esc again returns to the note; the
-/// note's link with #page=3 opens the viewer at page 3; "Rysuj na tej stronie" on page 2 opens the
+/// note's link with #page=3 opens the viewer at page 3; "Draw on this page" on page 2 opens the
 /// drawing editor on a drawing whose backdrop is page 2, embedded right after the PDF's block, Back
 /// returns to the viewer on page 2; again on page 2 the existing drawing is offered and opened (no
-/// second file); the More menu's "Otwórz w innej aplikacji" hands the file over (a recording hook);
+/// second file); the More menu's "Open in another app" hands the file over (a recording hook);
 /// the PDF moved to another folder while open reopens on the same page; a locked PDF says why
 /// (BRULION_SELFTEST_PDF_DIR: tests/data/pdf), refuses a wrong password, opens with the right one and
 /// asks again when opened again; spis.pdf's table of contents (poppler) jumps to "Rozdział 3", its
 /// link to page 2 jumps, its web link keeps its address and no script is a link, the menu's two
 /// pages side by side keeps page 2; a ZIP opens read-only, never in the editor nor handed over; a
-/// DOCX opens read-only and "Otwórz w innej aplikacji" hands it over as a Word document. Builds without a renderer:
-/// the chip, its click hands the file over, the viewer's message with its button.
+/// DOCX opens read-only and "Open in another app" hands it over as a Word document. Builds without
+/// a renderer: the chip, its click hands the file over, the viewer's message with its button.
 void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check,
                     const std::function<QObject *(const QString &)> &controllerFor)
 {
@@ -3494,7 +3494,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         check(false, "the note is in the editor");
     }
 
-    // "Rysuj na tej stronie" on page 2.
+    // "Draw on this page" on page 2.
     view = pdfView();
     const auto drawOnPage = [&] {
         QQuickItem *v = pdfView();
@@ -3556,7 +3556,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         check(waitFor([&] { return opened(2); }, 15000), "and Back returns to the viewer");
     }
 
-    // The More menu's "Otwórz w innej aplikacji" (the shell's top bar).
+    // The More menu's "Open in another app" (the shell's top bar).
     {
         const QString more = QCoreApplication::translate("ShellTopBar", "More");
         QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
@@ -3841,7 +3841,7 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
 /// device shows (assigning the picked text once ended that binding: the field kept the old value
 /// and wrote it back with the next edit).
 /// 5i. A drawing (docs/UI.md "Drawing editor"): a tap / click on its embed opens the drawing
-/// editor; a stroke drawn with real input — a finger on the phone run ("Rysuj palcem" is on until a
+/// editor; a stroke drawn with real input — a finger on the phone run ("Draw with finger" is on until a
 /// stylus is seen), the mouse on the desktop — is saved by itself, its undo kept (the save coming
 /// back is the editor's own, not a change to merge); an undo (the bar's button / Ctrl+Z) is saved
 /// too; back on the page, the embed loads the drawing saved again (its URL's version). The embed is
@@ -3937,7 +3937,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
                           && app->currentRoute().value(u"view"_s).toString() == u"drawing",
                   "the drawer closes over the drawing editor, still open");
         }
-        // A phone held upright: every tool, the swatch, "Więcej" and Gotowe on screen (two lines),
+        // A phone held upright: every tool, the swatch, "More" and "Done" on screen (two lines),
         // none behind the bar's edge.
         QStringList hidden;
         const auto allShown = [&] {
@@ -4359,11 +4359,11 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
     return nullptr;
 }
 
-/// "Udostępnij → Brulion" (AppController::receiveShare, ShellShareDialog): shared text opens the
-/// dialog, "Zapisz" (a real tap / click) writes one block at the end of today's journal — no
-/// reminder from "jutro" —, a shared .md file is offered as a new page titled after the file and
+/// "Share → Brulion" (AppController::receiveShare, ShellShareDialog): shared text opens the
+/// dialog, "Save" (a real tap / click) writes one block at the end of today's journal — no
+/// reminder from "jutro" (tomorrow) —, a shared .md file is offered as a new page titled after the file and
 /// saved byte for byte, its copy removed; Escape drops a share and writes nothing.
-/// "Sprzątanie": what nothing refers to is listed with nothing ticked, a tap ticks it, "Open" and
+/// "Clean up": what nothing refers to is listed with nothing ticked, a tap ticks it, "Open" and
 /// Back keep the ticks, only what is shown and ticked goes to the trash, and the toast's Undo still
 /// works after leaving the view.
 /// Find and replace (docs/UI.md "Find and replace"): the bar in a page with real keys and taps, source
@@ -4868,7 +4868,7 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
 
 /// Focus mode (F8 — the command's shortcut —, Esc, the Back key, its corner button), the word count in
 /// the page's corner and typewriter scrolling (desktop), and one command's shortcut changed in
-/// Ustawienia → Skróty klawiszowe with real keys: another command's key is refused with the reason,
+/// Settings → Keyboard shortcuts with real keys: another command's key is refused with the reason,
 /// the new one works and the old one no longer does, the palette shows it, and back to the default.
 void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Check &check)
 {
@@ -4999,7 +4999,7 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
         settings->setTypewriterScrolling(false);
     }
 
-    // ---- A custom shortcut, recorded in Ustawienia → Skróty klawiszowe.
+    // ---- A custom shortcut, recorded in Settings → Keyboard shortcuts.
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"shortcuts"_s}});
     QQuickItem *change = nullptr;
     check(waitFor([&] { return (change = named(u"shortcutChange_journal.today"_s)) != nullptr; }, 5000),
@@ -5072,9 +5072,9 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
     settle(300);
 }
 
-/// A page's icon and cover (docs/UI.md "Page icon and cover"): the page menu's "Dodaj ikonę…"
+/// A page's icon and cover (docs/UI.md "Page icon and cover"): the page menu's "Add icon…"
 /// opens the icon dialog, an emoji picked there is written into the page's properties (that line
-/// only) and shown before the title and in the sidebar's tree; "Dodaj okładkę…" takes a picture of
+/// only) and shown before the title and in the sidebar's tree; "Add cover…" takes a picture of
 /// the notebook for a band at the top of the page; both removed from their dialogs, the file as it
 /// was.
 void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
@@ -5385,8 +5385,8 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
     app->goHome();
 }
 
-/// "Kopie zapasowe": the settings' section with real input: a backup made with its button, the row of
-/// the list, "Przywróć" through the confirmation with its counts, the note back; "Usuń" asks first.
+/// "Backups": the settings' section with real input: a backup made with its button, the row of
+/// the list, "Restore" through the confirmation with its counts, the note back; "Delete" asks first.
 void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -5507,7 +5507,7 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     const QString journal = ws->readFile(today);
     const QString saveText = QCoreApplication::translate("ShellShareDialog", "Save");
     const auto save = [&] {
-        // The dialog's own "Zapisz" (its footer): a view behind it may have a button of that name.
+        // The dialog's own "Save" (its footer): a view behind it may have a button of that name.
         auto *footer = qvariant_cast<QQuickItem *>(dialog->property("footer"));
         QQuickItem *button = !footer ? nullptr : findShown(footer, [&](QQuickItem *item) {
             return isA(item, "BButton") && item->property("text").toString() == saveText;
@@ -5557,8 +5557,8 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     if (page.endsWith(u"Łódź.md"_s))
         ws->deletePage(page);
 
-    // A file opened with Brulion from outside the notebook ("Otwórz za pomocą", --open): the
-    // dialog says a copy is saved and the file stays; "Zapisz" saves the page, the file is left
+    // A file opened with Brulion from outside the notebook ("Open with", --open): the
+    // dialog says a copy is saved and the file stays; "Save" saves the page, the file is left
     // as it was.
     QTemporaryDir outside;
     const QString openedPath = outside.filePath(u"Przepis na pierogi.md"_s);
@@ -5622,7 +5622,7 @@ QList<QQuickWindow *> pageWindows()
 /// Tabs, the split view and pages in windows of their own (docs/UI.md "Tabs, split view and
 /// windows"). Desktops: the shortcuts with real keys (Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1 /
 /// Ctrl+9, Ctrl+W), each tab's own history, a middle click and a Ctrl+click on a page in the
-/// sidebar, a middle click on a link in the editor and the link menu's "Otwórz w nowej karcie", a
+/// sidebar, a middle click on a link in the editor and the link menu's "Open in new tab", a
 /// tab dragged in the bar, a tab keeping where its page was scrolled, only the tabs shown having
 /// an editor, the split view (a click focuses a pane; Ctrl+W on its tab closes it) and a page in a
 /// window of its own that sees the main window's edits. Phones: no bar, the top bar's tab switcher.
@@ -5768,7 +5768,7 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
           "a Ctrl+click on a page in the sidebar opens it in a new tab");
     const int third = app->focusedTab();
 
-    // ---- A link in the editor: a middle click, and the link menu's "Otwórz w nowej karcie".
+    // ---- A link in the editor: a middle click, and the link menu's "Open in new tab".
     app->selectTab(second);
     QObject *page = nullptr;
     QQuickItem *editor = nullptr;
@@ -6088,12 +6088,12 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
 ///     (quick capture) sit above it. Editing with the keyboard hidden by the system: the bottom
 ///     navigation is back and the editing toolbar docks right on it (also with a system
 ///     navigation bar under it), toasts show at the top, away from the line being written, the
-///     navigation's "+ Notatka" stays under the toolbar; the keyboard sliding in leaves the navigation under it until it
+///     navigation's "+ Note" stays under the toolbar; the keyboard sliding in leaves the navigation under it until it
 ///     covers it (the toolbar never drops first), sliding away uncovers it again, the toolbar
 ///     following the keyboard's top down to the navigation; a keyboard shorter than the navigation
 ///     takes its place but leaves the toolbar where it was; a browser's keyboard (the page resized
 ///     for it: no overlap, still settling) takes the navigation away at once; a tap on a navigation
-///     tab while editing opens that view and the editing ends, a tap on "+ Notatka" ends the
+///     tab while editing opens that view and the editing ends, a tap on "+ Note" ends the
 ///     editing and opens quick capture. A settings field that gets the
 ///     focus is scrolled above the keyboard; on a wide touch window a page in the side panel docks
 ///     its toolbar on the keyboard too.
@@ -6133,7 +6133,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                      && near(capture->property("y").toReal() + capture->property("height").toReal(), top);
           }),
           "quick capture's sheet sits on the keyboard");
-    // A word the keyboard is still composing (preedit, outside the field's text) counts: "Dodaj"
+    // A word the keyboard is still composing (preedit, outside the field's text) counts: "Add"
     // is enabled under it and adds it.
     Workspace *ws = app->workspace();
     const QString today = ws->journalPath(app->today(0));
@@ -6155,7 +6155,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
           "“Dodaj” adds the composed word to today's journal");
     if (ws->readFile(today) != journal)
         ws->writeFile(today, journal);
-    // (Its toast with "Otwórz" stays 7 s over the bottom rows of the views checked next.)
+    // (Its toast with "Open" stays 7 s over the bottom rows of the views checked next.)
     if (QQuickItem *toasts = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToastHost"); }))
         QMetaObject::invokeMethod(toasts, "clear");
 
@@ -6169,7 +6169,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     // docks right on it.
     const QString guide = u"Witaj w Brulionie.md"_s;
     QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
-    // Quick capture's item on the bottom navigation ("+ Notatka").
+    // Quick capture's item on the bottom navigation ("+ Note").
     QQuickItem *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
     const auto captureOnNav = [&] {
         return captureButton && captureButton->isVisible()
@@ -6361,7 +6361,7 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                       && captureOnNav(),
               "editing stops: the toolbar goes, the bottom navigation stays with “+ Notatka”");
 
-        // "+ Notatka" while editing without the keyboard: the editing ends (nothing written),
+        // "+ Note" while editing without the keyboard: the editing ends (nothing written),
         // quick capture opens.
         {
             const QString unchanged = app->workspace()->readFile(guide);
@@ -6479,13 +6479,13 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     app->goHome();
 }
 
-/// 5h. Ustawienia → Wygląd (docs/UI.md "Look & feel"): the default look keeps the logo's colours;
+/// 5h. Settings → Appearance (docs/UI.md "Look & feel"): the default look keeps the logo's colours;
 ///     a tap on an accent swatch recolours Theme at once and is saved, a custom colour from the
-///     accent dialog too; an entry unticked under "Pasek boczny" leaves the sidebar (the drawer on
+///     accent dialog too; an entry unticked under "Sidebar" leaves the sidebar (the drawer on
 ///     phones) and stays in the command palette; a bottom navigation slot takes another view from
 ///     its menu (phones: the bar shows it), and the view it already has stays checked there; the
-///     quick note button's switch hides it; "Przywróć domyślny wygląd" brings the logo's colours
-///     back. Edytor → Czcionka → "Inna…" opens the font picker; cancelled, the selection does not
+///     quick note button's switch hides it; "Restore the default look" brings the logo's colours
+///     back. Editor → Font → "Other…" opens the font picker; cancelled, the selection does not
 ///     move; a missing family names the serif or sans-serif font used instead. The settings are
 ///     put back at the end.
 void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
@@ -6526,7 +6526,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     // The rows' shape (docs/UI.md "Look & feel", Settings rows): beside its text a control ends at
     // the row's right edge, centred on the title and description; compact windows stack only what
     // does not fit — under its text a segmented control fills the row. Phones (412 px): the two
-    // background rows beside their text, Motyw and Rozmiar tekstu (three and four options) under
+    // background rows beside their text, Theme and Text size (three and four options) under
     // it; 360 px: each row decides alone, either shape. No option's label is cut, every target
     // is 44 px on touch UIs.
     {
@@ -6605,7 +6605,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     check(waitFor([&] { return settings->accentColor() == u"green" && color("accent") != u"#e2574c"; }),
           "a tap on a swatch changes the accent at once and saves it");
 
-    // A custom colour: the dialog's field, then "Użyj tego koloru".
+    // A custom colour: the dialog's field, then "Use this colour".
     check(activate(shownItem(u"accentSwatch_custom"_s)), "the custom colour swatch exists");
     QQuickItem *field = shownItem(u"accentDialogField"_s);
     if (!field) {
@@ -6653,8 +6653,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
               "a view hidden in the sidebar stays in the command palette");
     }
 
-    // The page sections' order (Układ → Kolejność sekcji): "Strony" moved up twice goes first,
-    // Ulubione (a page starred) then come after the tree, in the list's footer.
+    // The page sections' order (Layout → Order of the sections): "Pages" moved up twice goes first,
+    // Favorites (a page starred) then come after the tree, in the list's footer.
     {
         const QStringList defaults{u"favorites"_s, u"recent"_s, u"pages"_s};
         check(settings->sidebarSections() == defaults, "the sidebar's sections start as Ulubione, Ostatnie, Strony");
@@ -6753,7 +6753,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
             waitFor([palette] { return !palette->property("visible").toBool(); });
     }
 
-    // The bottom navigation's last slot: Graf instead of Zadania.
+    // The bottom navigation's last slot: Graph instead of Tasks.
     check(activate(shownItem(u"bottomNavSlot_3"_s)), "the bottom navigation's slots are listed");
     check(activate(shownItem(u"bottomNavChoice_graph"_s)), "a slot's menu lists the views");
     check(waitFor([&] {
@@ -6796,8 +6796,8 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                                     <= menuTab->mapToScene(QPointF(0, 0)).x() + 1;
               }),
               "switched on again, it is back on the bottom bar, before Menu");
-        // Larger text (Wygląd → Rozmiar tekstu: Większy): the six labels stay whole — a long one
-        // ("Kalendarz") takes room from the short ones; with "+ Notatka" in a fixed slot they were
+        // Larger text (Appearance → Text size: Larger): the six labels stay whole — a long one
+        // ("Calendar") takes room from the short ones; with "+ Note" in a fixed slot they were
         // cut.
         QQuickItem *bar = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
         const qreal scale = settings->fontScale();
@@ -6835,7 +6835,7 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the
     // font used instead.
     app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"editor"_s}});
-    // The text width: Normalna (680 px, about 85 characters) by default.
+    // The text width: Normal (680 px, about 85 characters) by default.
     {
         QQuickItem *width = shownItem(u"editorWidthSetting"_s);
         check(width && settings->editorWidth() == 680 && width->property("currentIndex").toInt() == 1
@@ -6966,17 +6966,17 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     //     tag list), the tag overview stays a tap away.
     checkTagLinks(window, app, check);
     closeMenus(window);
-    // 3e. Folders: reveal, the row menu's "Przenieś do…", a root folder, drag and drop (desktop),
+    // 3e. Folders: reveal, the row menu's "Move to…", a root folder, drag and drop (desktop),
     //     All pages as a folder browser.
     checkFolders(window, app, check);
     closeMenus(window);
-    // 3e'. "Sprzątanie": what nothing refers to, picked with real input, to the trash and back.
+    // 3e'. "Clean up": what nothing refers to, picked with real input, to the trash and back.
     checkCleanup(window, app, check);
     closeMenus(window);
-    // 3e''. "Kopie zapasowe": a backup, a restore through its confirmation and a delete.
+    // 3e''. "Backups": a backup, a restore through its confirmation and a delete.
     checkBackups(window, app, check);
     closeMenus(window);
-    // 3f. "Udostępnij → Brulion": the share dialog, to the journal and to a new page.
+    // 3f. "Share → Brulion": the share dialog, to the journal and to a new page.
     checkShare(window, app, check);
     if (drawer->property("visible").toBool()) {
         QMetaObject::invokeMethod(drawer, "close");
@@ -7010,8 +7010,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 4b. The rows of the palette and the quick switcher (docs/UI.md "Shared components",
     //     BPalette): floating (wide windows) every row is one line high (Theme.listItemHeight), a
     //     subtitle on the title's line after it; full screen (phones) a subtitled row has two lines,
-    //     the subtitle under the title. The query shows subtitled rows ("Nowy folder…" — "W głównym
-    //     folderze notatnika", the page "Remont mieszkania" in Projekty).
+    //     the subtitle under the title. The query shows subtitled rows ("New folder…" — "At the
+    //     notebook root", the page "Remont mieszkania" in Projekty).
     {
         auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
         const auto rowsLaidOut = [theme](QObject *popup, QString *detail) {
@@ -7176,8 +7176,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             // Phones (--touch) tap with a finger, desktops click with the mouse.
             const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
             settle(300);
-            // The guide's first list block ("Konspekt"), scrolled into view (on a phone it is
-            // below the first screen).
+            // The guide's first list block (under "Konspekt", the Polish guide's outline section),
+            // scrolled into view (on a phone it is below the first screen).
             {
                 const QStringList guideLines = app->workspace()->readFile(guide).split(u'\n');
                 const qsizetype blockLine =
@@ -7526,7 +7526,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       "the \"Toggle note mode\" command switches back");
 
                 // The top bar's More menu: its Mode switch shows the note's mode and changes it —
-                // Konspekt (only the mode written), Źródło (the Markdown source), Dokument again.
+                // Outline (only the mode written), Source (the Markdown source), Document again.
                 const QString more = QCoreApplication::translate("ShellTopBar", "More");
                 const auto openMore = [&] {
                     closeMenus(window);
@@ -7589,10 +7589,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             }
 
             // Page properties (docs/UI.md "Page properties"): the guide's tag chip in the header —
-            // a right-click, a long press — "Usuń z tej strony" writes only that property (its last
-            // tag: the `tags:` line goes), undo brings it back; the header's "+" → "Dodaj alias" and
-            // an alias typed in the row's field: `aliases:` gets it; the palette's "Dodaj
-            // właściwość strony" opens the properties panel's add row.
+            // a right-click, a long press — "Remove from this page" writes only that property (its
+            // last tag: the `tags:` line goes), undo brings it back; the header's "+" → "Add alias"
+            // and an alias typed in the row's field: `aliases:` gets it; the palette's "Add page
+            // property" opens the properties panel's add row.
             {
                 const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
                 const auto saveNow = [page] {
@@ -7828,7 +7828,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     checkNotebookSwitcher(window, app, check);
     closeMenus(window);
 
-    // 5h. Ustawienia → Wygląd: accent, sidebar entries, bottom navigation, quick note button.
+    // 5h. Settings → Appearance: accent, sidebar entries, bottom navigation, quick note button.
     checkAppearance(engine, window, app, check);
 
     // 5j. The tray calendar (desktop).
@@ -7837,7 +7837,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         closeMenus(window);
     }
 
-    // 5i. Ustawienia → Aplikacja → "Start when you sign in": Windows only, and disabled in a
+    // 5i. Settings → Application → "Start when you sign in": Windows only, and disabled in a
     // separate profile (the tests' BRULION_PROFILE: a Run entry would start the default one).
     {
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"app"_s}});

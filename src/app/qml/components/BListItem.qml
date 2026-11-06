@@ -5,7 +5,7 @@ import Brulion
 
 // BListItem — row for sidebars, lists and pickers: icon, title, subtitle, trailing content.
 //
-//   BListItem { iconName: "book-open"; text: qsTr("Dziennik"); selected: true; count: 3 }
+//   BListItem { iconName: "book-open"; text: qsTr("Journal"); selected: true; count: 3 }
 //   BListItem { iconName: "file-text"; text: page.title; subtitle: page.folder
 //               trailing: BKbd { sequence: "Ctrl+1" } }
 //

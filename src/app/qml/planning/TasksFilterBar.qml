@@ -15,7 +15,7 @@ ColumnLayout {
     required property TaskListModel tasks
 
     signal queryRequested()
-    /// "Czas pracy": the time summary of the listed tasks (TasksTimeDialog).
+    /// "Time spent": the time summary of the listed tasks (TasksTimeDialog).
     signal timeRequested()
 
     spacing: Theme.space2

@@ -1,860 +1,875 @@
-# Brulion na Androidzie
+# Brulion on Android
 
-Brulion na Androidzie to ta sama aplikacja C++/Qt Quick co na komputerze (Qt 6.11 for Android),
-z natywną częścią w Kotlinie (`android/src/io/github/januszbit/brulion/android/`), która:
+Brulion on Android is the same C++/Qt Quick app as on the desktop (Qt 6.11 for Android), with a
+native part in Kotlin (`android/src/io/github/januszbit/brulion/android/`) that:
 
-* daje dostęp do folderu z notatkami na pamięci współdzielonej („Dostęp do wszystkich plików”),
-* planuje przypomnienia i alarmy w systemie (`AlarmManager`) — działają przy zamkniętej
-  aplikacji i po restarcie telefonu,
-* co 15–60 minut sprawdza w tle notatki (po synchronizacji z Nextcloud, jeśli jest włączona),
-  żeby przypomnienia dodane na innych urządzeniach dzwoniły bez otwierania aplikacji
-  ([Sprawdzanie notatek w tle](#sprawdzanie-notatek-w-tle)),
-* otwiera właściwą notatkę po stuknięciu w powiadomienie,
-* przyjmuje tekst i pliki `.md`/`.txt` z menu **Udostępnij** innych aplikacji
-  ([Udostępnij → Brulion](#udostępnij--brulion)),
-* daje **widżety** na ekran główny: zadania na dziś z szybkim dodawaniem, kalendarz i notatki
-  ([Widżety](#widżety)).
+* gives access to the notes folder on shared storage ("All files access"),
+* schedules reminders and alarms in the system (`AlarmManager`) — they work while the app is
+  closed and after the phone restarts,
+* checks the notes in the background every 15–60 minutes (after a Nextcloud sync, when that is
+  on), so that reminders added on other devices ring without opening the app
+  ([Checking notes in the background](#checking-notes-in-the-background)),
+* opens the right note when a notification is tapped,
+* accepts text and `.md`/`.txt` files from the **Share** menu of other apps
+  ([Share → Brulion](#share--brulion)),
+* provides home-screen **widgets**: today's tasks with quick add, a calendar and notes
+  ([Widgets](#widgets)).
 
-C++ rozmawia z nią przez JNI (`src/platform/android/androidbridge.{h,cpp}`), patrz
-[Most JNI](#most-jni-c--kotlin).
+C++ talks to it over JNI (`src/platform/android/androidbridge.{h,cpp}`), see
+[JNI bridge](#jni-bridge-c--kotlin).
 
-Notatki to zwykłe pliki `.md` w folderze. Na telefonie folder może:
+Notes are plain `.md` files in a folder. On a phone the folder can:
 
-* być **folderem Syncthing** na pamięci współdzielonej (np. `/storage/emulated/0/Brulion`) —
-  wymaga uprawnienia „Dostęp do wszystkich plików”, opis niżej;
-* leżeć w **prywatnym katalogu aplikacji** (bez dodatkowych uprawnień) i być synchronizowany
-  z **Nextcloud** (WebDAV) z poziomu Brulionu — Ustawienia → Synchronizacja (przez HTTPS, patrz
-  [HTTPS i OpenSSL](#https-i-openssl)).
+* be a **Syncthing folder** on shared storage (e.g. `/storage/emulated/0/Brulion`) — this needs
+  the "All files access" permission, described below;
+* live in the **app's private directory** (no extra permissions) and be synced with
+  **Nextcloud** (WebDAV) from within Brulion — Settings → Sync (over HTTPS, see
+  [HTTPS and OpenSSL](#https-and-openssl)).
 
-Wszystko działa offline. Synchronizacja (Syncthing czy Nextcloud) nigdy nie blokuje pisania.
+Everything works offline. Sync (Syncthing or Nextcloud) never blocks writing.
 
-Wymagany **Android 9 (API 28)** lub nowszy — tyle obsługuje Qt 6.11 (cel: API 36, Android 16).
+**Android 9 (API 28)** or newer is required — that is what Qt 6.11 supports (target: API 36,
+Android 16).
 
-## Folder Syncthing na telefonie
+## A Syncthing folder on the phone
 
-1. Zainstaluj **Syncthing-Fork** (np. z F-Droid). Pierwotna aplikacja „Syncthing” na Androida nie
-   jest już rozwijana — fork jest jej kontynuacją.
-2. W Syncthing-Fork dodaj folder udostępniany z komputera (albo utwórz nowy) i ustaw jego ścieżkę
-   na pamięci telefonu, np. `/storage/emulated/0/Brulion` lub `/storage/emulated/0/Syncthing/Notatki`.
-   Typ folderu: „Wysyłanie i odbieranie”.
-3. Otwórz Brulion → wybór notatnika → wskaż ten sam folder.
-4. Gdy Brulion poprosi o **„Dostęp do wszystkich plików”**, otworzy się ekran systemowy —
-   włącz przełącznik dla Brulionu i wróć do aplikacji (sprawdzi uprawnienie sama).
-   Ręcznie: *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Dostęp do wszystkich plików →
-   Brulion* (nazwy menu różnią się między producentami).
+1. Install **Syncthing-Fork** (e.g. from F-Droid). The original "Syncthing" app for Android is no
+   longer developed — the fork is its continuation.
+2. In Syncthing-Fork add the folder shared from the computer (or create a new one) and set its
+   path on the phone's storage, e.g. `/storage/emulated/0/Brulion` or
+   `/storage/emulated/0/Syncthing/Notatki`. Folder type: "Send & Receive".
+3. Open Brulion → notebook choice → pick the same folder.
+4. When Brulion asks for **"All files access"**, a system screen opens — turn on the switch for
+   Brulion and return to the app (it checks the permission by itself).
+   By hand: *Settings → Apps → Special app access → All files access → Brulion* (menu names
+   differ between manufacturers).
 
-Dlaczego to uprawnienie? Folder Syncthing leży na pamięci współdzielonej, a Brulion czyta i zapisuje
-notatki zwykłym systemem plików (szybka lista plików, zapis atomowy, wykrywanie zmian zrobionych
-przez Syncthing). Bez tego uprawnienia Android 11+ widzi tam tylko pliki multimedialne.
-Brulion nie zagląda poza wybrany folder.
+Why this permission? The Syncthing folder lives on shared storage, and Brulion reads and writes
+notes through the plain file system (fast file listing, atomic writes, detecting changes made by
+Syncthing). Without this permission Android 11+ only shows media files there. Brulion does not
+look outside the chosen folder.
 
-Starsze wersje Androida:
+Older Android versions:
 
-* **Android 10** — zamiast „Dostępu do wszystkich plików” wystarcza zwykłe uprawnienie do plików
-  (Brulion korzysta z `requestLegacyExternalStorage`).
-* **Android 9** — Brulion poprosi o uprawnienie „Pamięć” (pliki i multimedia). Jeśli wcześniej
-  wybrano „Nie pytaj ponownie”, otworzą się ustawienia aplikacji.
+* **Android 10** — instead of "All files access" the ordinary file permission is enough (Brulion
+  uses `requestLegacyExternalStorage`).
+* **Android 9** — Brulion asks for the "Storage" permission (files and media). If "Don't ask
+  again" was chosen before, the app's settings open.
 
-Bez folderu na pamięci współdzielonej notatnik powstaje w prywatnym katalogu Brulionu. Do niego
-Syncthing nie ma dostępu — wtedy synchronizuj przez Nextcloud.
+Without a folder on shared storage the notebook is created in Brulion's private directory.
+Syncthing has no access to it — sync through Nextcloud then.
 
-Wskazówki do Syncthing:
+Syncthing tips:
 
-* W folderze warto mieć plik `.stignore` pomijający pliki tymczasowe (Brulion ma gotowy
-  szablon). Dane urządzenia (historia zmian, indeksy — także gotowy indeks notatnika
-  `index-cache.bin`, który przyspiesza kolejne otwarcie i który można bezpiecznie usunąć) Brulion
-  trzyma poza folderem, więc nie powodują konfliktów.
-* Konflikty Syncthing notatek i rysunków (`*.sync-conflict-*.md`, `*.sync-conflict-*.svg`) Brulion
-  wykrywa i proponuje scalenie (rysunki: **Scal rysunki**, linie i elementy obu wersji).
-* Wersjonowanie plików w Syncthing („Proste” lub „Przedziałowe”) jest dobrym, dodatkowym
-  zabezpieczeniem.
+* It is worth having a `.stignore` file in the folder that skips temporary files (Brulion has a
+  ready template). Brulion keeps device data (change history, indexes — including the ready
+  notebook index `index-cache.bin`, which speeds up the next opening and can be deleted safely)
+  outside the folder, so it causes no conflicts.
+* Brulion detects Syncthing conflicts of notes and drawings (`*.sync-conflict-*.md`,
+  `*.sync-conflict-*.svg`) and offers to merge them (drawings: **Merge drawings**, the strokes
+  and elements of both versions).
+* File versioning in Syncthing ("Simple" or "Staggered") is a good extra safeguard.
 
-Agent AI albo skrypt na komputerze (`brulion-cli`, [CLI.md](CLI.md)) pracuje na tym samym
-folderze po jego stronie synchronizacji — wiersza poleceń na Androidzie nie ma. Przypomnienia,
-które dopisze, telefon uzbroi, gdy Brulion zobaczy zmianę: przy uruchomieniu, po zmianach w
-notatkach, a przy zamkniętej aplikacji — przy najbliższym [sprawdzaniu notatek w
-tle](#sprawdzanie-notatek-w-tle).
+An AI agent or a script on the computer (`brulion-cli`, [CLI.md](CLI.md)) works on the same
+folder on its side of the sync — there is no command line on Android. The phone arms the
+reminders it adds once Brulion sees the change: at startup, after changes in the notes, and while
+the app is closed — at the next [background check of the
+notes](#checking-notes-in-the-background).
 
-## Przypomnienia i alarmy
+## Reminders and alarms
 
-Przypomnienie (`⏰ 2026-10-14 09:00` w notatce) staje się powiadomieniem systemowym, które pojawi
-się **także przy zamkniętej aplikacji i po restarcie telefonu**. **Alarm** (`⏰! 2026-10-14 06:30`)
-dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
+A reminder (`⏰ 2026-10-14 09:00` in a note) becomes a system notification that appears **also
+while the app is closed and after the phone restarts**. An **alarm** (`⏰! 2026-10-14 06:30`)
+rings like an alarm clock. Syntax: `docs/SYNTAX.md`.
 
-### Jak to działa
+### How it works
 
-* Gdy Brulion działa (przy uruchomieniu i po zmianach w notatkach), przekazuje systemowi listę
-  nadchodzących przypomnień, zastępując poprzednią. Część natywna zapisuje ją w pamięci aplikacji
-  i nastawia budziki systemowe (`AlarmManager`): alarmy przez `setAlarmClock` (budzi telefon,
-  w pasku stanu widać ikonę budzika), zwykłe przypomnienia przez `setExactAndAllowWhileIdle`.
-  Naraz planowanych jest najwyżej 400 najbliższych przypomnień.
-* **Kanały powiadomień**: „Przypomnienia” (wysoki priorytet, dźwięk powiadomienia), „Alarmy”
-  (dźwięk budzika na strumieniu alarmu, wibracje, dzwoni aż do reakcji, widoczne na ekranie
-  blokady) i „Przegapione alarmy” (ciche). Dźwięk przypomnień i alarmów wybierzesz w samym
-  Brulionie (niżej: [Dźwięki](#dźwięki-przypomnień-i-alarmów)); ustawienia systemowe kanałów
-  są w *Ustawienia → Aplikacje → Brulion → Powiadomienia*.
-* **Alarm bez reakcji** przestaje dzwonić sam po **10 minutach** (aplikacja może ustawić inny
-  czas dla danego alarmu, od 1 do 60 minut) — także przy zamkniętej aplikacji. Zamienia się
-  wtedy w ciche powiadomienie **„Przegapiony alarm”**, a ekran alarmu się zamyka; stuknięcie
-  w powiadomienie nadal otwiera notatkę.
-* **Alarm przy wygaszonym ekranie** otwiera pełnoekranowy ekran alarmu nad ekranem blokady
-  z przyciskami **Drzemka 10 min**, **Zrobione** (przy zadaniu), **OK** i **Otwórz notatkę**.
-* Przyciski w powiadomieniu: **Drzemka 10 min** (przypomnienie wróci za 10 minut — działa także
-  przy zamkniętej aplikacji), **Zrobione** (tylko przypomnienie przy zadaniu) i **OK**.
-  Stuknięcie w powiadomienie otwiera notatkę w miejscu przypomnienia. Przy alarmie każda z tych
-  reakcji wycisza go i zamyka ekran alarmu.
-* **Zrobione** oznacza zadanie jako zrobione (`[x]` z `✅` — jak zmiana stanu w edytorze,
-  zadanie cykliczne dostaje następny termin) bez otwierania notatki. Zmiana trafia do notatki od
-  razu, gdy Brulion jest na ekranie (także pod rozwiniętym panelem powiadomień); gdy działa w tle —
-  po powrocie do niego (Android wstrzymuje wtedy aplikację Qt), a przy zamkniętej aplikacji — przy
-  jej następnym uruchomieniu, gdy notatnik jest już wczytany (komunikat „… — zrobione”); data `✅`
-  to dzień stuknięcia. Do tego czasu inne urządzenia widzą zadanie jako otwarte, a pozostałe przypomnienia
-  tego zadania mogą jeszcze zadzwonić. Stuknięcie czeka w telefonie, aż jego notatnik będzie
-  otwarty i wczytany — także gdy Brulion zamkniesz przed końcem wczytywania albo otworzysz
-  najpierw inny notatnik (np. dokumentację). Gdy przypomnienie albo zadanie zmieniło się
-  w międzyczasie (także na innym urządzeniu), notatka zostaje bez zmian, a Brulion o tym mówi.
-* **Po restarcie** telefonu (po pierwszym odblokowaniu), po aktualizacji aplikacji i po zmianie
-  godziny przypomnienia są nastawiane ponownie. Te, które przypadły, gdy telefon był wyłączony
-  (do 24 godzin wstecz), pojawią się od razu jako „Przegapione”.
-* **Zmiana strefy czasowej**: przypomnienia trzymają się czasu lokalnego — „09:00” zostaje
-  o 09:00 w nowej strefie (drzemki nie są przesuwane).
+* While Brulion runs (at startup and after changes in the notes), it hands the system the list of
+  upcoming reminders, replacing the previous one. The native part stores it in the app's storage
+  and sets system alarms (`AlarmManager`): alarms through `setAlarmClock` (wakes the phone, the
+  status bar shows the alarm clock icon), ordinary reminders through
+  `setExactAndAllowWhileIdle`. At most the 400 nearest reminders are scheduled at once.
+* **Notification channels**: "Reminders" (high priority, notification sound), "Alarms" (alarm
+  sound on the alarm stream, vibration, rings until you react, visible on the lock screen) and
+  "Missed alarms" (silent). You choose the sound of reminders and alarms in Brulion itself
+  (below: [Sounds](#reminder-and-alarm-sounds)); the system settings of the channels are in
+  *Settings → Apps → Brulion → Notifications*.
+* **An alarm nobody reacts to** stops ringing by itself after **10 minutes** (the app can set
+  another time for a given alarm, from 1 to 60 minutes) — also while the app is closed. It then
+  turns into a silent **"Missed alarm"** notification and the alarm screen closes; tapping the
+  notification still opens the note.
+* **An alarm while the screen is off** opens a full-screen alarm screen over the lock screen with
+  the buttons **Snooze 10 min**, **Done** (for a task), **OK** and **Open note**.
+* Buttons in the notification: **Snooze 10 min** (the reminder comes back in 10 minutes — this
+  also works while the app is closed), **Done** (only a reminder on a task) and **OK**. Tapping
+  the notification opens the note at the reminder. For an alarm, each of these reactions silences
+  it and closes the alarm screen.
+* **Done** marks the task done (`[x]` with `✅` — like a status change in the editor; a
+  recurring task gets its next date) without opening the note. The change reaches the note at
+  once while Brulion is on screen (also under the pulled-down notification shade); while it runs
+  in the background — when you return to it (Android pauses the Qt app then), and while the app
+  is closed — at its next start, once the notebook is loaded (message "“…” marked done"); the
+  `✅` date is the day of the tap. Until then other devices see the task as open, and the task's
+  other reminders may still ring. The tap waits on the phone until its notebook is open and
+  loaded — also when you close Brulion before loading ends or first open another notebook (e.g.
+  the documentation). When the reminder or the task changed in the meantime (also on another
+  device), the note stays unchanged and Brulion says so.
+* **After a restart** of the phone (after the first unlock), after an app update and after a
+  change of the clock, reminders are set again. Those that fell due while the phone was off (up
+  to 24 hours back) appear at once as "Missed".
+* **Time zone change**: reminders stick to local time — "09:00" stays at 09:00 in the new zone
+  (snoozes are not moved).
 
-### Dźwięki przypomnień i alarmów
+### Reminder and alarm sounds
 
-*Ustawienia → Przypomnienia → Dźwięk przypomnień* i *Dźwięk alarmów* (osobno dla `⏰` i `⏰!`):
+*Settings → Reminders → Reminder sound* and *Alarm sound* (separately for `⏰` and `⏰!`):
 
-* **Domyślny** — dźwięk powiadomień telefonu (przypomnienia) albo jego dźwięk alarmu (alarmy);
-* **Dzwonek** — **Wybierz dzwonek…** otwiera systemowe okno wyboru dzwonka (dla przypomnień
-  dźwięki powiadomień, dla alarmów dźwięki alarmów; widać też własne dzwonki dodane
-  w telefonie). Wybrany dzwonek Brulion pamięta: po przełączeniu na „Cisza” i z powrotem na
-  „Dzwonek” wraca ten sam;
-* **Wibracja** — tylko wibracje, bez dźwięku;
-* **Cisza** — ani dźwięku, ani wibracji (alarm nadal pokazuje swój ekran nad ekranem blokady).
+* **Default** — the phone's notification sound (reminders) or its alarm sound (alarms);
+* **Ringtone** — **Choose ringtone…** opens the system ringtone picker (notification sounds for
+  reminders, alarm sounds for alarms; your own ringtones added on the phone show too). Brulion
+  remembers the chosen ringtone: after switching to "Silent" and back to "Ringtone" the same one
+  returns;
+* **Vibrate** — vibration only, no sound;
+* **Silent** — neither sound nor vibration (an alarm still shows its screen over the lock
+  screen).
 
-**Odtwórz próbkę** gra wybrany dźwięk przez około 3 sekundy (dźwięk alarmu na strumieniu
-alarmu — z głośnością budzika; „Wibracja” — wibruje). Alarm gra wybrany dźwięk w pętli
-(`FLAG_INSISTENT`) aż do reakcji („OK”, „Drzemka 10 min”, „Zrobione”, stuknięcie) albo do końca czasu
-dzwonienia. Przycisk **Ustawienia powiadomień systemowych** (Przypomnienia / Alarmy) otwiera
-ustawienia kanału w Androidzie — dla wyjątków: tryb „Nie przeszkadzać”, wibracje na zegarku,
-dźwięk zmieniony przez producenta telefonu.
+**Play sample** plays the chosen sound for about 3 seconds (the alarm sound on the alarm stream —
+at the alarm volume; "Vibrate" — vibrates). An alarm plays the chosen sound in a loop
+(`FLAG_INSISTENT`) until you react ("OK", "Snooze 10 min", "Done", a tap) or until the ring time
+ends. The **System notification settings** button (Reminders / Alarms) opens the channel's
+settings in Android — for the exceptions: Do Not Disturb, vibration on a watch, a sound changed
+by the phone's manufacturer.
 
-Jak to działa: dźwięku kanału powiadomień nie da się zmienić po jego utworzeniu (Android
-zapamiętuje ustawienia kanału, także usuniętego i utworzonego ponownie z tym samym id). Dlatego
-każdy nowy dźwięk dostaje **nową wersję kanału**: `reminders` / `alarms` (wersja 0 — kanał
-z poprzednich wersji Brulionu, z domyślnym dźwiękiem i tym, co ustawiono dla niego
-w systemie), potem `reminders-v1`, `alarms-v2`… z dźwiękiem (`AudioAttributes`
-`USAGE_NOTIFICATION_EVENT` dla przypomnień, `USAGE_ALARM` dla alarmów) i wibracjami;
-poprzednia wersja jest usuwana (w ustawieniach systemowych Brulionu widać wtedy liczbę
-„usuniętych kategorii”). Wybór i wersje zapisuje część natywna w `SharedPreferences`
-(`…android.sounds`), bo alarmy dzwonią przy zamkniętej aplikacji: każde powiadomienie
-(zaplanowane, po restarcie, przegapione, po drzemce) trafia do bieżącego kanału — zmiana
-dźwięku i wysłanie powiadomienia idą pod wspólną blokadą, więc powiadomienie nigdy nie trafi do
-kanału, który właśnie usunięto (Android by je odrzucił). Ustawienia
-dźwięku są **lokalne dla urządzenia** (dzwonek z jednego telefonu nie istnieje na innym) —
-nie synchronizują się z notatnikiem. Zmiana dźwięku w czasie, gdy alarm dzwoni, zamyka jego
-powiadomienie (kanał jest usuwany).
+How it works: the sound of a notification channel cannot be changed after the channel is created
+(Android remembers a channel's settings, also of a channel deleted and created again with the
+same id). So each new sound gets a **new channel version**: `reminders` / `alarms` (version 0 —
+the channel from earlier Brulion versions, with the default sound and whatever was set for it in
+the system), then `reminders-v1`, `alarms-v2`… with the sound (`AudioAttributes`
+`USAGE_NOTIFICATION_EVENT` for reminders, `USAGE_ALARM` for alarms) and vibration; the previous
+version is deleted (Brulion's system settings then show a number of "deleted categories"). The
+native part stores the choice and the versions in `SharedPreferences` (`…android.sounds`),
+because alarms ring while the app is closed: every notification (scheduled, after a restart,
+missed, after a snooze) goes to the current channel — changing the sound and posting a
+notification share one lock, so a notification never goes to a channel that was just deleted
+(Android would reject it). Sound settings are **local to the device** (a ringtone from one phone
+does not exist on another) — they are not synced with the notebook. Changing the sound while an
+alarm rings closes its notification (the channel is deleted).
 
-### Sprawdzanie notatek w tle
+### Checking notes in the background
 
-Brulion planuje przypomnienia na podstawie notatek, które przeczytał. Przypomnienie dopisane albo
-zmienione na komputerze (także przez agenta AI z `brulion-cli`) dociera do telefonu razem
-z notatką — przez Syncthing albo Nextcloud. Żeby zadzwoniło także wtedy, gdy Brulion jest
-zamknięty, Android co jakiś czas uruchamia **sprawdzanie notatek w tle**:
+Brulion schedules reminders from the notes it has read. A reminder added or changed on the
+computer (also by an AI agent with `brulion-cli`) reaches the phone together with the note —
+through Syncthing or Nextcloud. So that it rings even while Brulion is closed, Android runs a
+**background check of the notes** every now and then:
 
-* *Ustawienia → Przypomnienia → Sprawdzaj notatki w tle*: **Wyłączone**, **15 min**, **30 min**
-  (domyślnie) albo **1 h**. Pod nazwą ustawienia: kiedy było ostatnie sprawdzenie i ile
-  przypomnień znalazło.
-* Sprawdzany jest notatnik, którego przypomnienia są nastawione (ten otwarty ostatnio;
-  dokumentacja się nie liczy). Gdy notatnik synchronizuje się z **Nextcloud**, najpierw jest jedna
-  synchronizacja (ta sama co w aplikacji, z tym samym stanem), potem odczyt notatek. Przy
-  **Syncthing** pliki ściąga sam Syncthing-Fork, a Brulion tylko je czyta.
-* Nastawione przypomnienia zastępuje to, co jest w notatkach: nowe dochodzą, a usunięte albo
-  przesunięte na komputerze znikają albo się przesuwają. Drzemki z powiadomienia zostają.
-* Gdy notatnika nie da się przeczytać (brak folderu albo pusty folder, np. po odłączeniu karty
-  albo cofnięciu uprawnienia do plików), nastawione przypomnienia zostają bez zmian. Nieudana
-  synchronizacja, np. bez sieci, niczego nie psuje: liczą się notatki, które telefon już ma.
-* Gdy Brulion jest na ekranie, sprawdzanie jest pomijane, bo aplikacja robi to sama. Po jej
-  powrocie na pierwszy plan budziki dostają z powrotem zestaw aplikacji.
+* *Settings → Reminders → Check notes in the background*: **Off**, **15 min**, **30 min**
+  (default) or **1 h**. Under the setting's name: when the last check ran and how many reminders
+  it found.
+* The notebook checked is the one whose reminders are set (the one opened last; the
+  documentation does not count). When the notebook syncs with **Nextcloud**, one sync runs first
+  (the same as in the app, with the same state), then the notes are read. With **Syncthing**,
+  Syncthing-Fork downloads the files itself and Brulion only reads them.
+* What is in the notes replaces the set reminders: new ones are added, and those deleted or moved
+  on the computer disappear or move. Snoozes from a notification stay.
+* When the notebook cannot be read (missing or empty folder, e.g. after a card is removed or the
+  file permission is revoked), the set reminders stay unchanged. A failed sync, e.g. without a
+  network, breaks nothing: the notes the phone already has are what counts.
+* While Brulion is on screen the check is skipped, because the app does this itself. When the app
+  returns to the front, the alarms get the app's set back.
 
-Ograniczenia:
+Limitations:
 
-* Android uruchamia zadania okresowe najwyżej co 15 minut, a w trybie uśpienia (Doze) odkłada je
-  do „okien serwisowych”: przy dłużej nieużywanym telefonie nawet o godzinę lub więcej.
-  Przypomnienie dopisane na komputerze „za 10 minut” może więc nie zdążyć, a to na jutro rano
-  zdąży. Oszczędzanie baterii u części producentów potrafi zadanie wstrzymać całkiem (niżej:
-  [Oszczędzanie baterii](#oszczędzanie-baterii)).
-* Wymuszone zatrzymanie Brulionu kasuje także to zadanie. Wraca przy następnym uruchomieniu
-  aplikacji.
-* Sprawdzanie w tle nie zmienia notatek (poza samą synchronizacją). „Zrobione” stuknięte
-  w powiadomieniu przy zamkniętej aplikacji nadal czeka na jej uruchomienie, a widżety
-  odświeżają się tylko z aplikacji.
+* Android runs periodic jobs at most every 15 minutes, and in Doze it postpones them to
+  "maintenance windows": on a phone unused for a while, even by an hour or more. A reminder added
+  on the computer "in 10 minutes" may therefore not make it, while one for tomorrow morning will.
+  Battery saving on some manufacturers' phones can stop the job entirely (below:
+  [Battery saving](#battery-saving)).
+* Force-stopping Brulion also cancels this job. It returns the next time the app starts.
+* The background check does not change notes (apart from the sync itself). "Done" tapped in a
+  notification while the app is closed still waits for the app to start, and the widgets are
+  refreshed only from the app.
 
-Sprawdzone na emulatorze (Android 16, 2026-11-05): `scripts/android-emulator-test.sh
---background` — 20 sprawdzeń; sprawdzenie notatnika z indeksem w pamięci podręcznej trwa
-kilkadziesiąt milisekund.
+Verified on the emulator (Android 16, 2026-11-05): `scripts/android-emulator-test.sh
+--background` — 20 checks; checking a notebook with a cached index takes a few dozen
+milliseconds.
 
-Jak to działa:
+How it works:
 
-* `BackgroundCheckJob` (zadanie okresowe JobScheduler, zachowywane po restarcie, bez wymagań co do
-  sieci) w głównym procesie aplikacji wiąże `BackgroundCheckService`: usługę Qt (`QtService`)
-  w osobnym procesie `:background`. Qt nie wystartuje drugi raz w procesie aktywności
-  (`QtServiceBase` odmawia), a jej `onDestroy` kończy proces. Dlatego osobny proces żyje tylko na
-  czas jednego sprawdzenia.
-* Qt uruchamia w nim bibliotekę Brulionu z argumentem `--background-check`. `main()` od razu
-  przechodzi do `runBackgroundCheck()` (`src/app/background/backgroundentry.h`): `QCoreApplication`,
-  bez okna, QML i ustawień aplikacji, z osobnym rejestrem zdarzeń w
+* `BackgroundCheckJob` (a periodic JobScheduler job, kept across restarts, with no network
+  requirements) in the app's main process binds `BackgroundCheckService`: a Qt service
+  (`QtService`) in a separate `:background` process. Qt does not start a second time in the
+  activity's process (`QtServiceBase` refuses), and the service's `onDestroy` ends the process.
+  So the separate process lives only for one check.
+* In it, Qt starts Brulion's library with the `--background-check` argument. `main()` goes
+  straight to `runBackgroundCheck()` (`src/app/background/backgroundentry.h`):
+  `QCoreApplication`, no window, QML or app settings, with a separate event log in
   `files/logs/background/brulion.log`.
-* `background::Check` (`src/app/background/backgroundcheck.h`) otwiera notatnik tak jak `brulion-cli`
-  (`notebook::Notebook`, z gotowym indeksem `index-cache.bin`). Przy Nextcloud robi jedną
-  synchronizację tym samym `SyncEngine` i z tym samym stanem z folderu danych urządzenia. Potem
-  liczy przypomnienia funkcją `upcomingFor()`, która daje ten sam zestaw, jaki aplikacja przekazuje
-  Androidowi (horyzont 14 dni, najwyżej 64 przypomnienia, czas dzwonienia, język, id notatnika).
-  Dzięki temu identyfikatory budzików się zgadzają.
-* Wynik (JSON jak w `scheduleReminders`) wraca przez `Messenger` do zadania w głównym procesie,
-  które nastawia budziki przez `AlarmScheduler.replaceAll`. `ReminderStore` (SharedPreferences)
-  ma jednego właściciela: główny proces. Wynik jest odrzucany, gdy sprawdzenie się nie udało, gdy
-  dotyczy innego notatnika niż bieżący cel albo gdy w międzyczasie aplikacja pojawiła się na
-  ekranie lub wystartowała (`BackgroundCheck.verdict`).
-* Co sprawdzać, aplikacja przekazuje przez `AndroidBridge::setBackgroundCheck`:
+* `background::Check` (`src/app/background/backgroundcheck.h`) opens the notebook the way
+  `brulion-cli` does (`notebook::Notebook`, with the ready index `index-cache.bin`). With
+  Nextcloud it runs one sync with the same `SyncEngine` and the same state from the device data
+  folder. Then it computes the reminders with `upcomingFor()`, which gives the same set the app
+  hands to Android (a 14-day horizon, at most 64 reminders, ring time, language, notebook id).
+  This way the alarm ids match.
+* The result (JSON as in `scheduleReminders`) goes back through a `Messenger` to the job in the
+  main process, which sets the alarms with `AlarmScheduler.replaceAll`. `ReminderStore`
+  (SharedPreferences) has one owner: the main process. The result is discarded when the check
+  failed, when it concerns a notebook other than the current target, or when the app came to the
+  screen or started in the meantime (`BackgroundCheck.verdict`).
+* The app passes what to check through `AndroidBridge::setBackgroundCheck`:
   `{root, stateDir, vault, ringMinutes, language, intervalMinutes, nextcloud: {davUrl, user,
-  device}}`. Hasła aplikacji w tym nie ma: proces w tle czyta je z pliku aplikacji
-  `secrets/nextcloud-password`. Aplikacja wysyła cel, gdy startują jej przypomnienia i gdy zmienia
-  się ustawienie, z którego cel korzysta. Zamknięcie aplikacji, otwarcie dokumentacji albo innego
-  notatnika cel zostawiają (alarmy tego notatnika zostają nastawione). Wyłączenie przypomnień,
-  wybór „Wyłączone” albo zamknięcie notatnika (powrót do ekranu powitalnego) kasują go razem
-  z zadaniem.
-* Dwa procesy, jedna synchronizacja: przebieg `SyncEngine` trzyma blokadę `store.json.sync-lock`
-  (QLockFile; blokadę martwego procesu przejmuje następny) i przed startem wczytuje stan od nowa
-  (`LocalStore::reload`). Gdy blokadę trzyma drugi proces, przebieg kończy się kodem
-  `other-process`: w aplikacji komunikat „Sprawdzanie w tle właśnie synchronizuje ten notatnik…”
-  i ponowna próba za 30 s, a sprawdzanie w tle pomija wtedy synchronizację i czyta to, co jest.
-* Po powrocie aplikacji na pierwszy plan C++ przegląda folder i przekazuje swój zestaw
-  przypomnień jeszcze raz, nawet niezmieniony (`ReminderScheduler::resendSoon`). Dzięki temu
-  budziki zawsze kończą na zestawie aplikacji.
+  device}}`. The app password is not in it: the background process reads it from the app's file
+  `secrets/nextcloud-password`. The app sends the target when its reminders start and when a
+  setting the target uses changes. Closing the app, or opening the documentation or another
+  notebook, leaves the target (the alarms of that notebook stay set). Turning reminders off,
+  choosing "Off" or closing the notebook (returning to the welcome screen) clears it together
+  with the job.
+* Two processes, one sync: a `SyncEngine` run holds the lock `store.json.sync-lock` (QLockFile;
+  the next run takes over a dead process's lock) and reloads the state before it starts
+  (`LocalStore::reload`). When the other process holds the lock, the run ends with the code
+  `other-process`: in the app the message "The background check is syncing this notebook right
+  now. Brulion will try again shortly." and another attempt in 30 s, while the background check
+  then skips the sync and reads what is there.
+* When the app returns to the front, C++ scans the folder and hands over its set of reminders
+  once more, even unchanged (`ReminderScheduler::resendSoon`). This way the alarms always end up
+  with the app's set.
 
-### Uprawnienia
+### Permissions
 
-* **Powiadomienia** (Android 13+): Brulion poprosi o zgodę systemowym okienkiem. Gdy system
-  już nie pyta (odmowa „na stałe” albo powiadomienia wyłączone ręcznie), ponowna prośba otwiera
-  ustawienia powiadomień Brulionu.
-* **Alarmy i przypomnienia** (dokładne budziki):
-  * Android 13+ — przyznawane przy instalacji (`USE_EXACT_ALARM`), nic nie trzeba robić;
-  * Android 12 — *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Alarmy i przypomnienia*
-    (Brulion otworzy ten ekran). Po włączeniu przypomnienia są od razu przestawiane na dokładne;
-  * Android 9–11 — nie wymagają zgody;
-  * bez tego uprawnienia przypomnienia przychodzą z opóźnieniem (minuty, w trybie uśpienia dłużej).
-* **Powiadomienia pełnoekranowe** (Android 14+): potrzebne do ekranu alarmu nad ekranem blokady —
-  *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Powiadomienia pełnoekranowe* (Brulion
-  może otworzyć ten ekran; gdy telefon go nie ma — ustawienia powiadomień Brulionu). Bez tego
-  uprawnienia alarm i tak dzwoni, ale pokazuje się jako zwykłe powiadomienie.
-* **Nie przeszkadzać**: alarmy mają kategorię „alarm”. Jeśli w trybie „Nie przeszkadzać” alarmy
-  są wyciszone, zezwól na nie w ustawieniach tego trybu.
+* **Notifications** (Android 13+): Brulion asks for consent with a system dialog. When the system
+  no longer asks (denied "for good" or notifications turned off by hand), asking again opens
+  Brulion's notification settings.
+* **Alarms & reminders** (exact alarms):
+  * Android 13+ — granted at install time (`USE_EXACT_ALARM`), nothing to do;
+  * Android 12 — *Settings → Apps → Special app access → Alarms & reminders* (Brulion opens this
+    screen). Once it is on, reminders are switched to exact ones at once;
+  * Android 9–11 — no consent needed;
+  * without this permission reminders arrive late (minutes; longer in Doze).
+* **Full-screen notifications** (Android 14+): needed for the alarm screen over the lock screen —
+  *Settings → Apps → Special app access → Full screen notifications* (Brulion can open this
+  screen; when the phone does not have it — Brulion's notification settings). Without this
+  permission the alarm still rings, but shows as an ordinary notification.
+* **Do Not Disturb**: alarms have the "alarm" category. If alarms are silenced in Do Not Disturb,
+  allow them in that mode's settings.
 
-### Oszczędzanie baterii
+### Battery saving
 
-Budziki systemowe działają także w trybie uśpienia (Doze), ale część producentów agresywnie
-„ubija” aplikacje w tle, a **wymuszone zatrzymanie kasuje wszystkie budziki aplikacji** aż do jej
-ponownego uruchomienia. Dlatego:
+System alarms work in Doze too, but some manufacturers aggressively "kill" apps in the
+background, and **a force stop cancels all of the app's alarms** until it is started again. So:
 
-* *Ustawienia → Aplikacje → Brulion → Bateria* → **Bez ograniczeń**;
-* **Xiaomi / Redmi / POCO** (MIUI, HyperOS): włącz **Autostart** dla Brulionu i ustaw
-  „Oszczędzanie baterii” na „Bez ograniczeń”;
-* **Samsung**: usuń Brulion z „Aplikacji uśpionych” i „Aplikacji w głębokim uśpieniu”
-  (*Ustawienia → Bateria → Limity użycia w tle*);
-* **Huawei / Honor**: *Uruchamianie aplikacji* → Brulion → zarządzaj ręcznie (wszystkie trzy
-  przełączniki włączone);
-* **OnePlus / OPPO / realme**: zezwól na działanie w tle i autostart.
+* *Settings → Apps → Brulion → Battery* → **Unrestricted**;
+* **Xiaomi / Redmi / POCO** (MIUI, HyperOS): turn on **Autostart** for Brulion and set "Battery
+  saver" to "No restrictions";
+* **Samsung**: remove Brulion from "Sleeping apps" and "Deep sleeping apps" (*Settings → Battery
+  → Background usage limits*);
+* **Huawei / Honor**: *App launch* → Brulion → manage manually (all three switches on);
+* **OnePlus / OPPO / realme**: allow background activity and autostart.
 
-Te same ustawienia pozwalają działać [sprawdzaniu notatek w tle](#sprawdzanie-notatek-w-tle).
-To samo zrób dla **Syncthing-Fork**, żeby synchronizował w tle. Szczegóły dla konkretnych
-telefonów: <https://dontkillmyapp.com>.
+The same settings let the [background check of the notes](#checking-notes-in-the-background)
+run. Do the same for **Syncthing-Fork**, so that it syncs in the background. Details for specific
+phones: <https://dontkillmyapp.com>.
 
-## Import notatek (Obsidian, Logseq, Notion…)
+## Importing notes (Obsidian, Logseq, Notion…)
 
-Gdzie: **Więcej (⋮) → Importuj notatki**, **Menu → Importuj notatki** (szuflada), przycisk
-**Importuj notatki** pod pustym dziennikiem nowego notatnika i karta „Notatki w innej aplikacji?”
-na ekranie powitalnym (otwiera wybrany notatnik od razu na ekranie importu). Na ekranie importu
-wybierz aplikację, z której pochodzą notatki — pod jej opisem są kroki **na telefonie** (gdzie
-leżą pliki, co wybrać) — albo od razu wybierz pliki: Brulion sam rozpozna format.
+Where: **More (⋮) → Import notes**, **Menu → Import notes** (drawer), the **Import notes** button
+under the empty journal of a new notebook, and the "Notes in another app?" card on the welcome
+screen (it opens the chosen notebook straight on the import screen). On the import screen choose
+the app the notes come from — under its description are the steps **on the phone** (where the
+files are, what to pick) — or pick the files right away: Brulion recognises the format itself.
 
-* **Wybierz pliki…** — systemowe okno wyboru plików (Storage Access Framework): ☰ przełącza
-  między Pobranymi, pamięcią telefonu, Dyskiem Google i innymi aplikacjami; **długie
-  przytrzymanie zaznacza kilka plików**. Okno nie filtruje typów plików (dostawcy różnie je
-  nazywają i filtr wyszarzałby np. ZIP z Notion na Dysku albo plik .md w Pobranych) — format
-  rozpoznaje Brulion po zawartości. Działają `.md`, `.txt`, `.html`, `.enex`, `.json`, `.zip`
-  (cały eksport Obsidian / Logseq / Notion / Google Keep / Trilium), `.jex`, `.ics` i inne.
-* **Wybierz folder…** — folder skarbca Obsidian, grafu Logseq albo folder z plikami `.md`:
-  otwórz go w oknie systemowym, stuknij **„Użyj tego folderu”** i zezwól na dostęp (tylko do
-  odczytu, tylko ten folder). Android **nie pozwala** wybrać całego folderu *Pobrane*, katalogu
-  głównego pamięci ani `Android/data` — wybierz folder wewnątrz (np. *Pobrane/Obsidian*) albo
-  wpisz ścieżkę.
-* **Albo wpisz ścieżkę** — plik lub folder w systemie plików, np.
-  `/storage/emulated/0/Download/Obsidian`. Poza prywatnym katalogiem Brulionu wymaga to
-  „Dostępu do wszystkich plików” (karta pokazuje przycisk do ustawień systemowych); wybór przez
-  okno systemowe żadnego uprawnienia nie potrzebuje.
+* **Choose files…** — the system file picker (Storage Access Framework): ☰ switches between
+  Downloads, the phone's storage, Google Drive and other apps; **a long press selects several
+  files**. The picker does not filter file types (providers name them differently, and a filter
+  would grey out e.g. a Notion ZIP on Drive or an .md file in Downloads) — Brulion recognises the
+  format by the content. `.md`, `.txt`, `.html`, `.enex`, `.json`, `.zip` (a whole Obsidian /
+  Logseq / Notion / Google Keep / Trilium export), `.jex`, `.ics` and others work.
+* **Choose a folder…** — an Obsidian vault folder, a Logseq graph or a folder of `.md` files:
+  open it in the system picker, tap **"Use this folder"** and allow access (read only, only this
+  folder). Android **does not allow** picking the whole *Downloads* folder, the storage root or
+  `Android/data` — pick a folder inside (e.g. *Downloads/Obsidian*) or type the path.
+* **Or type a path** — a file or folder in the file system, e.g.
+  `/storage/emulated/0/Download/Obsidian`. Outside Brulion's private directory this needs "All
+  files access" (the card shows a button to the system settings); picking through the system
+  picker needs no permission at all.
 
-Przed zapisem Brulion pokazuje, co zaimportuje (strony, notatki dzienne, załączniki, zmienione
-nazwy, ostrzeżenia), potem postęp i raport z przyciskiem **„Otwórz zaimportowany folder”**
-(domyślnie `Import/<aplikacja>`; notatki dzienne trafiają do dziennika).
+Before writing, Brulion shows what it will import (pages, daily notes, attachments, renamed
+files, warnings), then the progress and a report with the **"Open the imported folder"** button
+(by default `Import/<app>`; daily notes go into the journal).
 
-**Microsoft To Do** działa na telefonie tak samo jak na komputerze: po **„Zaloguj się
-w Microsoft”** Brulion pokazuje kod — stuknij **„Otwórz microsoft.com/devicelogin”** (albo
-otwórz ten adres na innym urządzeniu), wpisz kod (**„Kopiuj kod”** kopiuje go do schowka), zaloguj
-się i wróć do Brulionu; listy pobiorą się same. Identyfikator aplikacji z własnej rejestracji
-w Microsoft Entra wklejasz raz — szczegóły w [IMPORT.md](IMPORT.md#microsoft-to-do).
+**Microsoft To Do** works on the phone just like on the computer: after **"Sign in to
+Microsoft"** Brulion shows a code — tap **"Open microsoft.com/devicelogin"** (or open that address
+on another device), enter the code (**"Copy code"** copies it to the clipboard), sign in and
+return to Brulion; the lists download by themselves. You paste the application ID from your own
+Microsoft Entra registration once — details in [IMPORT.md](IMPORT.md#microsoft-to-do).
 
-Jak to działa: okno systemowe zwraca adresy `content://` — pojedynczy dokument albo **drzewo
-dokumentów** (wybrany folder). Brulion przechodzi drzewo folder po folderze przez
-`DocumentsContract` (`Documents.kt`, jedno zapytanie `ContentResolver` na folder; most JNI
-`documentInfo` / `listDocuments`), a pliki czyta przez `QFile` na adresie `content://` (deskryptor
-pliku z `ContentResolver`). Listowanie i czytanie idą poza wątkiem interfejsu, więc duży folder
-albo wolny dostawca (Dysk Google) nie zawiesza aplikacji. Gdy wywołanie JNI zawiedzie, Brulion
-korzysta z obsługi adresów `content://` w samym Qt (`QDir`/`QFileInfo`; wolniejsze — wiele zapytań
-na każdy plik). Pliki istniejące tylko w sieci (np. dokumenty Google) są pomijane z ostrzeżeniem.
+How it works: the system picker returns `content://` addresses — a single document or a
+**document tree** (the chosen folder). Brulion walks the tree folder by folder through
+`DocumentsContract` (`Documents.kt`, one `ContentResolver` query per folder; JNI bridge
+`documentInfo` / `listDocuments`), and reads the files with `QFile` on the `content://` address
+(a file descriptor from `ContentResolver`). Listing and reading run off the UI thread, so a large
+folder or a slow provider (Google Drive) does not freeze the app. When the JNI call fails, Brulion
+falls back to Qt's own handling of `content://` addresses (`QDir`/`QFileInfo`; slower — many
+queries per file). Files that exist only online (e.g. Google Docs) are skipped with a warning.
 
-## Udostępnij → Brulion
+## Share → Brulion
 
-W menu **Udostępnij** innej aplikacji (przeglądarka, czytnik, menedżer plików, poczta) jest
-**Brulion**. Przyjmuje:
+The **Share** menu of other apps (browser, reader, file manager, mail) has **Brulion**. It
+accepts:
 
-* **tekst i odnośniki** — np. stronę z przeglądarki: tytuł strony i jej adres stają się
-  `[Tytuł](adres)`, a reszta tekstu idzie po „ — ” („Wideo” + „Zobacz to https://yt.be/abc” →
-  `[Wideo](https://yt.be/abc) — Zobacz to`);
-* **pliki tekstowe** `.md`, `.markdown`, `.txt` (i każdy typ `text/*`), także **kilka naraz** —
-  do 2 MB każdy i do 20 w jednym udostępnieniu. Kodowanie rozpoznaje sam: UTF-8 (z BOM i bez),
-  UTF-16 z BOM, a stare pliki z Notatnika — windows-1250/1252, jak przy imporcie.
+* **text and links** — e.g. a page from the browser: the page title and its address become
+  `[Title](address)`, and the rest of the text follows after " — " ("Wideo" + "Zobacz to
+  https://yt.be/abc" → `[Wideo](https://yt.be/abc) — Zobacz to`; Polish for "Video" and "Watch
+  this");
+* **text files** `.md`, `.markdown`, `.txt` (and any `text/*` type), also **several at once** —
+  up to 2 MB each and up to 20 in one share. It recognises the encoding itself: UTF-8 (with and
+  without a BOM), UTF-16 with a BOM, and old Notepad files — windows-1250/1252, as in the import.
 
-Brulion nie zapisuje niczego od razu: otwiera okno **„Zapisz w Brulionie”** z wyborem
-**„Dzisiejszy dziennik”** albo **„Nowa strona”**:
+Brulion writes nothing right away: it opens the **"Save to Brulion"** dialog with a choice of
+**"Today's journal"** or **"New page"**:
 
-* tekst domyślnie idzie do dziennika (jako jeden blok na końcu dzisiejszej notatki) — można go
-  przed zapisaniem poprawić. **Daty nie są rozpoznawane** (jak w szybkiej notatce): „jutro”
-  w tytule artykułu nie tworzy przypomnienia; datę można dopisać ręcznie;
-* jeden plik domyślnie staje się **nową stroną** — tytuł z nazwy pliku („Lista zakupów.md” →
-  „Lista zakupów”, można go zmienić), treść **dokładnie taka jak w pliku** (końce linii też);
-  zajęta nazwa dostaje „ 2”. Strona różniąca się od istniejącej tylko wielkością liter („lista
-  zakupów” obok „Lista zakupów”) **nie nadpisuje** jej: okno mówi, że taka strona już jest,
-  i można zmienić tytuł albo wybrać dziennik;
-* kilka plików domyślnie idzie do dziennika: **każdy plik to jeden blok** — pogrubiony tytuł,
-  a pod nim treść pliku (wcięta, więc lista z pliku zostaje listą zagnieżdżoną; frontmatter
-  pomijany). Jako „Nowe strony” — strona na plik (bliźniak różniący się wielkością liter jest
-  pomijany z komunikatem);
-* nowe strony trafiają do folderu na nowe strony notatnika (ustawienia notatnika);
-* pliki, których nie da się zapisać (obrazek, za duży, nieczytelny, z bajtami zerowymi), są na
-  liście z powodem. Tekst dołączony do plików (np. temat wiadomości) jest pomijany, gdy choć
-  jeden plik da się zapisać; gdy żadnego, zapisywany jest tekst (link udostępniony razem
-  z obrazkiem albo z załącznikiem, którego nie da się odczytać, to nadal ten link). Miniatura
-  podglądu, którą aplikacja dołącza do udostępnianego tekstu tylko w `ClipData` (bez
-  `EXTRA_STREAM`), w ogóle nie trafia na listę.
+* text goes to the journal by default (as one block at the end of today's note) — it can be
+  edited before saving. **Dates are not recognised** (as in the quick note): "tomorrow" in an
+  article title does not create a reminder; a date can be added by hand;
+* a single file becomes a **new page** by default — the title comes from the file name
+  ("Shopping list.md" → "Shopping list", it can be changed), the content is **exactly as in the
+  file** (line endings too); a name already taken gets " 2". A page that differs from an existing
+  one only in letter case ("shopping list" next to "Shopping list") **does not overwrite** it: the
+  dialog says such a page already exists, and you can change the title or pick the journal;
+* several files go to the journal by default: **each file is one block** — a bold title with the
+  file's content under it (indented, so a list from the file stays a nested list; frontmatter is
+  skipped). As "New pages" — one page per file (a twin that differs only in letter case is skipped
+  with a message);
+* new pages go to the notebook's folder for new pages (notebook settings);
+* files that cannot be saved (an image, too large, unreadable, with zero bytes) are on the list
+  with the reason. Text attached to the files (e.g. a message subject) is skipped when at least one
+  file can be saved; when none can, the text is saved (a link shared together with an image or
+  with an attachment that cannot be read is still that link). A preview thumbnail that an app
+  attaches to shared text only in `ClipData` (without `EXTRA_STREAM`) does not make it onto the
+  list at all.
 
-„Anuluj” niczego nie zapisuje. Gdy Brulion dopiero otwiera notatnik, okno pojawia się, gdy
-notatnik będzie gotowy; gdy otwarta jest **dokumentacja**, Brulion najpierw wraca do Twojego
-notatnika (udostępnione notatki nigdy nie trafiają do dokumentacji); bez żadnego notatnika
-prosi o otwarcie albo utworzenie notatnika i pokazuje okno potem.
+"Cancel" saves nothing. When Brulion is still opening a notebook, the dialog appears once the
+notebook is ready; when the **documentation** is open, Brulion first returns to your notebook
+(shared notes never go into the documentation); with no notebook at all it asks you to open or
+create one and shows the dialog afterwards.
 
-To samo okno otwiera się na komputerze — **Otwórz za pomocą → Brulion** na pliku `.md` albo `.txt`
-w menedżerze plików ([docs/WINDOWS.md](WINDOWS.md#otwórz-za-pomocą),
-[docs/NIXOS.md](NIXOS.md#otwórz-za-pomocą)) — i w wersji w przeglądarce zainstalowanej jako
-aplikacja (Chrome lub Edge na Androidzie: tekst i odnośniki, [docs/WEB.md](WEB.md#udostępnianie-do-brulionu)).
+The same dialog opens on the computer — **Open With → Brulion** on an `.md` or `.txt` file in
+the file manager ([docs/WINDOWS.md](WINDOWS.md#open-with),
+[docs/NIXOS.md](NIXOS.md#open-with)) — and in the browser version installed as an app
+(Chrome or Edge on Android: text and links, [docs/WEB.md](WEB.md#sharing-to-brulion)).
 
-Jak to działa: osobna, eksportowana aktywność **`ShareActivity`** (filtry `ACTION_SEND`
-i `ACTION_SEND_MULTIPLE` dla `text/*`; bez własnego interfejsu, poza „Ostatnimi”, z własnym
-zadaniem — system uruchamia ją w zadaniu aplikacji wysyłającej, gdzie druga aktywność Qt żyć nie
-może). W wątku w tle kopiuje udostępnione pliki do `files/share-in/<czas>-<n>/<n>/<nazwa>`
-(uprawnienie do odczytu od nadawcy kończy się razem z tą aktywnością), odczytuje `EXTRA_SUBJECT`,
-`EXTRA_TEXT`, `EXTRA_STREAM` i `ClipData`, a potem przekazuje JSON udostępnienia
-(`{subject, text, dir, files: [{path, name, mime, size, error}]}`) do C++ **wewnątrz procesu**
-(`BrulionAndroid.deliverShare` → natywna `nativeShared` albo `takeShare` przy zimnym starcie —
-jak stuknięcie w powiadomienie) i wyciąga `BrulionActivity` na wierzch. Udostępnienie nie jedzie
-jako dodatek intencji do `BrulionActivity`: ta jest eksportowana (ikona w launcherze) i każda
-aplikacja mogłaby taki dodatek podrobić. Wszystko od nadawcy jest niezaufane: czytane są tylko
-adresy `content://` innych aplikacji (nie `file://` ani dostawca samego Brulionu — inaczej nadawca
-mógłby kazać Brulionowi przeczytać jego prywatne pliki), dodatki odczytywane z obsługą wyjątków,
-nazwy kopii oczyszczone (`/`, `..`, znaki sterujące, długość). C++ (`AppController::receiveShare`,
-`src/app/shell/appshare.cpp`; czyste funkcje w `src/core/notebook/share.h`) czyta kopie od razu,
-po zapisaniu lub anulowaniu usuwa folder kopii — tylko wewnątrz `files/share-in/` — a resztki
-starsze niż doba usuwa `ShareActivity` przy następnym udostępnieniu.
+How it works: a separate, exported activity **`ShareActivity`** (filters `ACTION_SEND` and
+`ACTION_SEND_MULTIPLE` for `text/*`; no UI of its own, kept out of "Recents", with its own task —
+the system starts it in the sending app's task, where a second Qt activity cannot live). On a
+background thread it copies the shared files to `files/share-in/<time>-<n>/<n>/<name>` (the read
+permission from the sender ends together with this activity), reads `EXTRA_SUBJECT`,
+`EXTRA_TEXT`, `EXTRA_STREAM` and `ClipData`, and then passes the share JSON
+(`{subject, text, dir, files: [{path, name, mime, size, error}]}`) to C++ **inside the process**
+(`BrulionAndroid.deliverShare` → native `nativeShared`, or `takeShare` on a cold start — like a
+notification tap) and brings `BrulionActivity` to the front. The share does not travel as an
+intent extra to `BrulionActivity`: that activity is exported (launcher icon), and any app could
+forge such an extra. Everything from the sender is untrusted: only `content://` addresses of other
+apps are read (not `file://` nor Brulion's own provider — otherwise the sender could make Brulion
+read its private files), extras are read with exception handling, copy names are sanitised (`/`,
+`..`, control characters, length). C++ (`AppController::receiveShare`,
+`src/app/shell/appshare.cpp`; pure functions in `src/core/notebook/share.h`) reads the copies at
+once and deletes the copy folder after saving or cancelling — only inside `files/share-in/` —
+and `ShareActivity` deletes leftovers older than a day at the next share.
 
-## Widżety
+## Widgets
 
-Na ekranie głównym (przytrzymaj puste miejsce → **Widżety** → **Brulion**) są trzy widżety:
+On the home screen (long-press an empty spot → **Widgets** → **Brulion**) there are three
+widgets:
 
-* **Zadania — Mój dzień** (domyślnie 3×2, rozmiar dowolny) — dzień tygodnia i data, liczba
-  zaległych, a pod spodem lista: **Zaległe** (termin na czerwono: „wczoraj”, „pn 26 paź”) i
-  **Dziś** (godzina przypomnienia — `⏰ 09:00`, `⏰! 06:30` dla alarmu — albo terminu, 🔁 przy
-  zadaniach cyklicznych, nazwa strony). Widżet powiększony do trzech rzędów pokazuje też
-  **Jutro**. Sekcje i kolejność są takie jak w widoku **Zadania**. Stuknięcie w zadanie otwiera
-  jego notatkę na tym wierszu, stuknięcie w nagłówek — Brulion, a **+** dodaje zadanie (niżej).
-* **Kalendarz** (domyślnie 4×4, do 3×2) — miesiąc z kropkami dni (zaległe i alarmy na
-  czerwono, przypomnienia, terminy, zaplanowane, zrobione, dziennik; najwyżej trzy), dzisiaj
-  w ramce, przyciski ‹ ›, stuknięcie w tytuł wraca do dzisiaj. Pod miesiącem agenda wybranego
-  (stukniętego) dnia i kolejnych: **najpierw wpisy z godziną**, według godziny, potem całodniowe;
-  zrobione przekreślone. Niski widżet (poniżej ok. 270 dp) pokazuje samą agendę od dziś.
-* **Notatki** (domyślnie 3×2) — nazwa notatnika, przyciski **Dziennik dziś** (otwiera dzisiejszą
-  notatkę dzienną, gdy już jest; inaczej Brulion) i **Szybka notatka**, a pod nimi **Ulubione**
-  i **Ostatnie** strony (dzienniki opisane dniem: „wtorek, 27 października”).
+* **Tasks — My day** (3×2 by default, any size) — the weekday and date, the number of overdue
+  tasks, and a list below: **Overdue** (due date in red: "yesterday", "Mon, Oct 26") and
+  **Today** (the reminder time — `⏰ 09:00`, `⏰! 06:30` for an alarm — or the due time, 🔁 on
+  recurring tasks, the page name). The widget enlarged to three rows also shows **Tomorrow**. The
+  sections and the order are the same as in the **Tasks** view. Tapping a task opens its note at
+  that line, tapping the header opens Brulion, and **+** adds a task (below).
+* **Calendar** (4×4 by default, down to 3×2) — the month with day dots (overdue tasks and alarms
+  in red, reminders, due dates, scheduled, done, journal; at most three), today in a frame, the
+  ‹ › buttons, tapping the title goes back to today. Under the month, the agenda of the chosen
+  (tapped) day and the following ones: **entries with a time first**, by time, then all-day ones;
+  done ones struck through. A short widget (below about 270 dp) shows only the agenda from today.
+* **Notes** (3×2 by default) — the notebook name, the buttons **Today's journal** (opens today's
+  daily note when it exists; otherwise Brulion) and **Quick note**, and under them the
+  **Favourites** and **Recent** pages (journals labelled with the day: "Tuesday, October 27").
 
-Widżety mówią językiem aplikacji (Ustawienia → Ogólne), nie telefonu, i mają jasne lub ciemne
-kolory jak system (kolory papieru i łupka z motywu Brulionu).
+The widgets speak the app's language (Settings → General), not the phone's, and have light or dark
+colours like the system (the paper and slate colours of Brulion's theme).
 
-**Skąd biorą dane.** Brulion przy każdej zmianie w notatniku (z opóźnieniem 2 s), po pełnym
-wczytaniu notatnika, o północy i **gdy wychodzisz z aplikacji** zapisuje dla widżetów
-„migawkę”: otwarte zadania zaległe i na najbliższe dwa tygodnie (z datami, najwyżej 200),
-kalendarz od tygodnia wstecz do ośmiu tygodni naprzód, ulubione i ostatnie strony oraz to, gdzie
-szybkie dodawanie ma pisać (ścieżki dziennika na najbliższy tydzień i tekst z szablonu dziennika
-dla każdego z tych dni — także takiego, który ma już notatkę: gdyby ktoś ją usunął, zanim widżet
-coś dopisze, nowa zaczyna się od szablonu, jak w aplikacji) oraz to, czy przypomnienia są włączone. Widżety rysują ją same, **bez uruchamiania Brulionu**:
-pokazują stan z chwili, gdy Brulion był ostatnio otwarty — zmiany przysłane przez Syncthing
-pojawią się po otwarciu aplikacji. Po północy (i po zmianie strefy czasowej albo restarcie
-telefonu) widżety same przekładają zadania na nowy dzień: dzisiejsze z terminem stają się
-zaległe, jutrzejsze — dzisiejszymi, tak jak zrobiłby to widok Zadania. Migawka jest tylko
-tekstem (nigdy HTML-em) i zostaje w prywatnych danych aplikacji; w notatniku dokumentacji nic
-się nie zmienia (widżety dalej pokazują Twój notatnik), a zamknięcie notatnika (powrót do
-ekranu startowego) czyści widżety: „Otwórz Brulion, aby pokazać tu swój notatnik”.
+**Where the data comes from.** On every change in the notebook (with a 2 s delay), after the
+notebook is fully loaded, at midnight and **when you leave the app**, Brulion writes a "snapshot"
+for the widgets: open tasks that are overdue or due in the next two weeks (with dates, at most
+200), the calendar from a week back to eight weeks ahead, the favourite and recent pages, and
+where quick add should write (the journal paths for the next week and the journal template text
+for each of those days — also for a day that already has a note: if someone deleted it before
+the widget appends something, the new one starts from the template, as in the app), and whether
+reminders are on. The widgets draw it themselves, **without starting Brulion**: they show the
+state from when Brulion was last open — changes sent by Syncthing appear after the app is opened.
+After midnight (and after a time zone change or a phone restart) the widgets move the tasks to the
+new day themselves: today's tasks with a due date become overdue, tomorrow's become today's, just
+as the Tasks view would do. The snapshot is only text (never HTML) and stays in the app's private
+data; in the documentation notebook nothing changes (the widgets keep showing your notebook), and
+closing the notebook (returning to the start screen) clears the widgets: "Open Brulion to show
+your notebook here".
 
-### Szybkie dodawanie
+### Quick add
 
-**+** na widżecie zadań lub kalendarza otwiera małe okno **Nowe zadanie** nad ekranem głównym
-(**Szybka notatka** w widżecie notatek — okno na zwykły punkt listy, także w kilku wierszach):
+**+** on the tasks or calendar widget opens a small **New task** window over the home screen
+(**Quick note** on the notes widget — a window for a plain list item, also over several lines):
 
-* tekst, a pod nim dzień: **Dziś** (wybrany), **Jutro**, **Bez terminu**, **Data…** (kalendarz);
-  „Dziś” i „Jutro” liczą się w chwili stuknięcia **Dodaj** (okno otwarte przed północą zapisze
-  po północy już nowy dzień);
-* **Godzina…** dodaje przypomnienie o tej godzinie w wybranym dniu, a **Alarm** zmienia je
-  w alarm;
-* **Dodaj** zapisuje i czyści pole, więc można dodać kilka zadań z rzędu; Wstecz albo
-  stuknięcie obok zamyka okno.
+* the text, and under it the day: **Today** (selected), **Tomorrow**, **No date**, **Date…** (a
+  calendar); "Today" and "Tomorrow" are computed at the moment **Add** is tapped (a window opened
+  before midnight writes the new day after midnight);
+* **Time…** adds a reminder at that time on the chosen day, and **Alarm** turns it into an alarm;
+* **Add** saves and clears the field, so several tasks can be added in a row; Back or a tap
+  outside closes the window.
 
-Zadanie trafia na koniec **dzisiejszego dziennika** dokładnie tak, jak dopisałaby je aplikacja:
-`- [ ] Kupić żółty ser 📅 2026-10-28` (dzień bez godziny — termin), `- [ ] Wizyta u dentysty ⏰
-2026-10-28 09:00` (z godziną — przypomnienie), `⏰!` dla alarmu, samo `- [ ] …` bez terminu.
-**Słowa w tekście nie są datami** — „jutro o 9” zostaje tekstem (inaczej niż w szybkim
-dodawaniu w aplikacji); od daty są przyciski.
+The task goes at the end of **today's journal** exactly as the app would add it:
+`- [ ] Kupić żółty ser 📅 2026-10-28` ("buy yellow cheese"; a day without a time — a due date),
+`- [ ] Wizyta u dentysty ⏰ 2026-10-28 09:00` ("dentist appointment"; with a time — a reminder),
+`⏰!` for an alarm, a bare `- [ ] …` with no date. **Words in the text are not dates** — "jutro o
+9" ("tomorrow at 9") stays text (unlike quick add in the app); the buttons are there for the date.
 
-**Przy zamkniętej aplikacji też od razu.** Okno nie uruchamia Brulionu: dopisuje wiersz do
-pliku dziennika samo (Kotlin, `JournalAppend.kt`) — to jedyne miejsce, w którym część
-androidowa pisze w notatniku. Robi to bezpiecznie: tylko w folderze notatnika z migawki, i tylko gdy ten folder
-istnieje (przeniesionego, usuniętego albo niedostępnego notatnika nie zakłada od nowa — wpis
-czeka wtedy w kolejce; ścieżka sprawdzana po rozwinięciu `..` i dowiązań), tylko w pliku `.md` w UTF-8, przez plik
-tymczasowy `.brulion-tmp-…` w tym samym folderze zamieniany na notatkę jednym ruchem, i tylko
-gdy notatki nikt w tym czasie nie zmienił; zachowuje końce wierszy i BOM notatki, wypełnia pusty
-punkt `- ` z szablonu, a brakujący dziennik zakłada z szablonu dziennika. Nowe zadanie od razu
-widać w widżetach, a zadanie z godziną dostaje od razu systemowe przypomnienie (tymczasowe —
-aplikacja zastępuje je swoim zestawem przy następnym uruchomieniu albo powrocie na pierwszy
-plan; przypomnienie dalej niż 14 dni naprzód aplikacja ustawi, jak każde, gdy się przybliży),
-z **Zrobione** jak każde przypomnienie zadania (aplikacja znajduje zadanie po notatce, godzinie,
-wierszu i treści). Gdy przypomnienia są w Brulionie wyłączone, widżet żadnego nie ustawia.
-Syncthing wyśle zmieniony plik od razu.
+**Immediately, even while the app is closed.** The window does not start Brulion: it appends the
+line to the journal file itself (Kotlin, `JournalAppend.kt`) — the only place where the Android
+part writes in the notebook. It does so safely: only in the notebook folder from the snapshot,
+and only when that folder exists (it does not recreate a moved, deleted or unavailable notebook —
+the entry then waits in the queue; the path is checked after resolving `..` and symlinks), only in
+an `.md` file in UTF-8, through a temporary file `.brulion-tmp-…` in the same folder that replaces
+the note in one move, and only when nobody changed the note in the meantime; it keeps the note's
+line endings and BOM, fills an empty `- ` item from the template, and creates a missing journal
+from the journal template. The new task shows in the widgets at once, and a task with a time gets
+a system reminder at once (a temporary one — the app replaces it with its own set at the next
+start or return to the front; a reminder more than 14 days ahead the app sets, like any other,
+when it comes closer), with **Done** like any task reminder (the app finds the task by note,
+time, line and text). When reminders are off in Brulion, the widget sets none. Syncthing sends
+the changed file right away.
 
-Gdy działa Brulion (w tle), okno też pisze samo, a aplikacja wczytuje notatnik ponownie, gdy
-wraca na pierwszy plan (Qt w tle wstrzymuje swoją pętlę zdarzeń), i oddaje Androidowi swój
-zestaw przypomnień jeszcze raz — tymczasowe przypomnienie ustępuje mu nawet wtedy, gdy zestaw
-się nie zmienił. Gdy wpisu nie da się zapisać
-od razu — Brulion nie był jeszcze otwarty z notatnikiem (brak migawki), migawka jest starsza niż
-tydzień, notatkę ktoś właśnie zmieniał, błąd zapisu — okno mówi „Zapisze się w dzienniku po
-otwarciu Brulionu”: wpis czeka w kolejce i aplikacja dopisze go do dzisiejszego dziennika przy
-następnym uruchomieniu z tym notatnikiem (komunikat „Dodano 1 wpis z widżetu…”). Jeśli i
-aplikacja nie może go dopisać (np. dziennik nie jest tekstem UTF-8 — Brulion nie przepisuje
-takiej notatki, żeby nie zepsuć jej znaków), wpis wraca do kolejki i czeka na kolejną próbę
-(„…wpis czeka na kolejną próbę”); nic, co wpisano, nie ginie.
+While Brulion runs (in the background), the window also writes by itself, and the app reloads the
+notebook when it returns to the front (Qt pauses its event loop in the background) and hands
+Android its set of reminders once more — the temporary reminder gives way to it even when the set
+has not changed. When the entry cannot be written right away — Brulion has not been opened with a
+notebook yet (no snapshot), the snapshot is older than a week, someone was just changing the note,
+a write error — the window says "It will be written to the journal when Brulion opens": the entry
+waits in the queue and the app appends it to today's journal at the next start with that notebook
+(message "1 entry added from the widget…"). If the app cannot append it either (e.g. the journal
+is not UTF-8 text — Brulion does not rewrite such a note, so as not to break its characters), the
+entry goes back to the queue and waits for the next attempt ("…it is kept and tried again
+later"); nothing typed is lost.
 
-Zanim aplikacja po raz pierwszy opublikuje migawkę, widżety i okno mówią językiem, w którym
-aplikacja wystartuje (po angielsku, dopóki w aplikacji nie wybrano polskiego). Na Androidzie
-9–11 wybór widżetów pokazuje ich szkic (`android:previewImage`, wektorowe rysunki z
-`scripts/gen-widget-previews.py`), od Androida 12 — podgląd z układu (`previewLayout`).
+Until the app publishes its first snapshot, the widgets and the window speak the language the app
+will start in (English, until Polish is chosen in the app). On Android 9–11 the widget picker shows
+their sketch (`android:previewImage`, vector drawings from `scripts/gen-widget-previews.py`), from
+Android 12 on — a preview from the layout (`previewLayout`).
 
-**Odhaczanie zadań z widżetu** nie jest możliwe — zadanie zaznaczysz w aplikacji (albo
-**Zrobione** w powiadomieniu przypomnienia).
+**Ticking tasks off from the widget** is not possible — you tick a task in the app (or with
+**Done** in the reminder's notification).
 
-Jak to działa: C++ (`src/app/widgets/`: `widgetsnapshot.h` buduje migawkę z tych samych
-modeli co widoki Zadania i Kalendarz, `widgetpublisher.h` ją publikuje) przekazuje JSON przez
-`AndroidBridge::updateWidgets`; Kotlin (`WidgetStore`, `WidgetUpdater`) trzyma go
-w SharedPreferences i odświeża widżety (`AppWidgetProvider`-y `TasksWidget`, `CalendarWidget`,
-`NotesWidget`, wiersze list przez `WidgetListService`; bez cyklicznych aktualizacji — tylko
-alarm tuż po północy). Szybkie dodawanie to `QuickAddActivity` (zwykła aktywność Androida, bez
-Qt) i `QuickAdd`/`JournalAppend`; kolejka dla aplikacji — `WidgetInbox`, odbierana jak kolejka
-„Zrobione” (`AndroidBridge::takeWidgetActions`). Reguły (wiersz zadania, dopisywanie do
-dziennika, przekładanie zadań na nowy dzień) są w C++ i w Kotlinie sprawdzane tymi samymi
-przypadkami (`tests/data/widgets/`).
+How it works: C++ (`src/app/widgets/`: `widgetsnapshot.h` builds the snapshot from the same
+models as the Tasks and Calendar views, `widgetpublisher.h` publishes it) passes JSON through
+`AndroidBridge::updateWidgets`; Kotlin (`WidgetStore`, `WidgetUpdater`) keeps it in
+SharedPreferences and refreshes the widgets (the `AppWidgetProvider`s `TasksWidget`,
+`CalendarWidget`, `NotesWidget`, list rows through `WidgetListService`; no periodic updates — only
+an alarm just after midnight). Quick add is `QuickAddActivity` (an ordinary Android activity,
+without Qt) and `QuickAdd`/`JournalAppend`; the queue for the app is `WidgetInbox`, taken like the
+"Done" queue (`AndroidBridge::takeWidgetActions`). The rules (the task line, appending to the
+journal, moving tasks to the new day) are checked in C++ and in Kotlin with the same cases
+(`tests/data/widgets/`).
 
-## Eksport: „Zapisz w Pobranych”
+## Export: "Save to Downloads"
 
-Gotowy plik eksportu (ZIP, HTML, iCalendar…) zapiszesz na dwa sposoby:
+You can save a finished export file (ZIP, HTML, iCalendar…) in two ways:
 
-* **Zapisz…** — systemowe okno „Zapisz jako” (dowolne miejsce, także Dysk Google czy karta SD);
-* **Zapisz w Pobranych** — jednym stuknięciem do folderu *Download*. Na Androidzie 10+ idzie to
-  przez `MediaStore` i **nie wymaga żadnego uprawnienia** (także bez „Dostępu do wszystkich
-  plików”); zajęta nazwa dostaje od systemu dopisek „(1)”, a raport podaje nazwę pliku. Na
-  Androidzie 9 plik jest zapisywany bezpośrednio w *Download* (potrzebne uprawnienie do pamięci).
+* **Save…** — the system "Save as" dialog (any place, also Google Drive or an SD card);
+* **Save to Downloads** — with one tap into the *Download* folder. On Android 10+ this goes
+  through `MediaStore` and **needs no permission** (also without "All files access"); a name
+  already taken gets a "(1)" suffix from the system, and the report gives the file name. On
+  Android 9 the file is written straight into *Download* (the storage permission is needed).
 
-**Drukuj…** strony (menu strony, paleta) robi PDF tak jak eksport do PDF-a (papier A4 albo Letter
-według regionu urządzenia), kładzie go w pamięci podręcznej aplikacji (`cache/print/`) i oddaje
-systemowej usłudze drukowania (`AndroidBridge::printPdf`, `PdfPrint.kt`): drukarki, liczba kopii i
-„Zapisz jako PDF” są systemu; po zamknięciu jego okna plik jest usuwany.
+**Print…** of a page (page menu, palette) makes a PDF the same way as the PDF export (A4 or Letter
+paper by the device's region), puts it in the app's cache (`cache/print/`) and hands it to the
+system print service (`AndroidBridge::printPdf`, `PdfPrint.kt`): printers, number of copies and
+"Save as PDF" belong to the system; the file is deleted after its dialog closes.
 
-## Kopie zapasowe
+## Backups
 
-Domyślny folder kopii leży w prywatnych plikach aplikacji (`<dane>/…/backups`): nie wymaga uprawnień,
-ale nie widzi go żaden menedżer plików, a odinstalowanie Brulionu go usuwa. Dlatego przy każdej kopii
-jest **Udostępnij** (arkusz systemowy, `AndroidBridge::shareFile`: dostawca serwuje tylko pliki aplikacji,
-bajty płyną strumieniem, bez wczytywania ZIP-a do pamięci).
+The default backup folder is in the app's private files (`<data>/…/backups`): it needs no
+permissions, but no file manager sees it, and uninstalling Brulion deletes it. That is why every
+backup has **Share** (the system sheet, `AndroidBridge::shareFile`: the provider serves only the
+app's files, the bytes are streamed, without loading the ZIP into memory).
 
-Systemowy wybór folderu daje identyfikator `content://`, a kopia jest pisana zwykłymi plikami. Brulion
-przyjmuje więc tylko dokument nazywający folder (`platform::localPathOfDocument`: pamięć telefonu, karta)
-i sprawdza zapis próbnym plikiem. Bez „Dostępu do wszystkich plików” pokaże, że trzeba je włączyć; dysk
-w chmurze jest odrzucany z komunikatem, zamiast później po cichu zawodzić. Tło: Qt zatrzymuje pętlę
-zdarzeń w tle, więc harmonogram sprawdza też po powrocie aplikacji na pierwszy plan; pozostałość po
-przerwanym zapisie (`….zip.XXXXXX`) usuwa pierwszy zapis po dobie.
+The system folder picker gives a `content://` identifier, while the backup is written with plain
+files. So Brulion accepts only a document that names a folder (`platform::localPathOfDocument`:
+the phone's storage, a card) and checks writing with a test file. Without "All files access" it
+shows that this needs to be turned on; a cloud drive is rejected with a message instead of failing
+silently later. Background: Qt stops the event loop in the background, so the schedule is also
+checked when the app returns to the front; the leftover of an interrupted write (`….zip.XXXXXX`)
+is deleted by the first write after a day.
 
-## Klawiatura ekranowa
+## On-screen keyboard
 
-Pasek narzędzi edycji leży zawsze tuż nad klawiaturą ekranową — w dzienniku i na stronach, także
-gdy się przewija — a dolna nawigacja chowa się, gdy klawiatura jest otwarta (docs/UI.md
-„On-screen keyboard”). Gdy klawiaturę schowa system (Wstecz, klawisz na samej klawiaturze),
-dolna nawigacja wraca, a pasek zostaje tuż nad nią, dopóki pisanie trwa; dotknięcie tekstu
-przywraca klawiaturę, a przycisk nawigacji otwiera swój widok (pisanie się kończy). Wysuwana
-klawiatura (Android 11+, klatka po klatce) najpierw zakrywa nawigację, która chowa się dopiero
-pod nią, a chowana — odsłania ją: pasek nie opada przed wysunięciem klawiatury ani nie skacze po
-jej schowaniu (`KeyboardInsets.slidesOver`). Margines `SafeArea` od Qt bywa na Androidzie
-powiększony o klawiaturę (336 dp przy otwartej i chwilę po jej schowaniu — logi emulatora), więc
-dolna nawigacja i treść liczą pasek nawigacji systemu bez niego: margines wyższy niż 120 dp to
-klawiatura, liczy się ostatni niższy (`AppShell.navigationBar`). Okna wysuwane od dołu, menu
-i komunikaty też zawsze leżą nad klawiaturą, a pole formularza (ustawienia, wybór notatnika,
-okna) przewija się nad nią, gdy dostaje fokus.
+The editing toolbar always sits right above the on-screen keyboard — in the journal and on pages,
+also while scrolling — and the bottom navigation hides while the keyboard is open (docs/UI.md
+"On-screen keyboard"). When the system hides the keyboard (Back, a key on the keyboard itself),
+the bottom navigation returns and the toolbar stays right above it while typing goes on; touching
+the text brings the keyboard back, and a navigation button opens its view (typing ends). A
+sliding keyboard (Android 11+, frame by frame) first covers the navigation, which hides only
+underneath it, and when it slides away it uncovers it: the toolbar neither drops before the
+keyboard slides in nor jumps after it hides (`KeyboardInsets.slidesOver`). The `SafeArea` margin
+from Qt is sometimes enlarged by the keyboard on Android (336 dp while it is open and for a moment
+after it hides — emulator logs), so the bottom navigation and the content count the system
+navigation bar without it: a margin higher than 120 dp is the keyboard, and the last lower one
+counts (`AppShell.navigationBar`). Bottom sheets, menus and messages also always sit above the
+keyboard, and a form field (settings, notebook choice, dialogs) scrolls above it when it gets the
+focus.
 
-Jak to działa:
+How it works:
 
-* `BrulionActivity` ma w manifeście `android:windowSoftInputMode="adjustResize|stateUnchanged"`:
-  okno nigdy nie jest przesuwane („pan”) — bez tego Qt wybierał przesuwanie albo zmianę rozmiaru
-  osobno dla każdego pola, a przesunięte okno odrywało pasek od klawiatury. Pól jednowierszowych
-  nikt więc nie przesuwa do widoku: robi to aplikacja (`BKeyboardFocusKeeper`, docs/UI.md).
-* Na Androidzie 11+ okno jest rysowane pod paskami systemu (edge-to-edge): na 15+ zawsze, na
-  11–14 dzięki `Qt::ExpandedClientAreaHint` ustawianemu przez `src/app/ui/keyboardsources.cpp`.
-  Takie okno nie zmienia rozmiaru przy klawiaturze i dostaje każdą klatkę jej wysuwania; paski
-  aplikacji odsuwają się od pasków systemu o marginesy `SafeArea`, a ikony pasków systemu
-  dopasowują się do koloru okna, czyli do motywu aplikacji (ciemne na jasnym, jasne na ciemnym;
-  `BrulionAndroid.setSystemBarsLight`, ponownie po zmianie konfiguracji, bo Qt ustawia je wtedy
-  według trybu dzień/noc systemu). Tak samo przy tłach z Ustawienia → Wygląd (czarne OLED, białe):
-  liczy się jasność koloru okna. Zanim QML narysuje pierwszą klatkę, przez chwilę widać
-  domyślne tło startowe Qt, nie wybrane tło (krótki błysk przy czarnym). Android 9–10 zostaje
-  przy oknie wewnątrz pasków.
-* `ImeInsets.kt` (instalowany w `onCreate`) dokłada do okna niewidoczny widok 0×0 i z niego
-  obserwuje wstawki klawiatury (`WindowInsets` typu `ime()`), nie ruszając słuchaczy Qt (`SafeArea`)
-  i niczego nie konsumując: `OnApplyWindowInsetsListener` daje wartość końcową,
-  `WindowInsetsAnimation.Callback` (Android 11+) — każdą klatkę wysuwania klawiatury, a słuchacz
-  układu widoku dekoracji — stan na starszych systemach, gdzie wstawki mógł zatrzymać widok Qt.
-  Klawiatura chowana zgłasza się jako niewidoczna (`shown` false) już od pierwszej klatki.
-  Liczy, ile pikseli widoku Qt zakrywa klawiatura **na ekranie**: dół widoku Qt minus górna
-  krawędź klawiatury. Gdy system zmniejszył okno nad klawiaturą (Android 9–10), wychodzi 0; przy
-  oknie edge-to-edge (Android 11+) — cała wysokość klawiatury. Raport idzie przez `BrulionAndroid.imeChanged` → natywne
-  `nativeImeChanged` (wątek główny Androida; C++ tylko kolejkuje sygnał
-  `AndroidBridge::imeChanged` do wątku Qt), tylko gdy coś się zmieniło.
-* C++: `KeyboardInsets` (`src/app/ui/keyboardinsets.h`) przelicza piksele fizyczne na logiczne
-  i od pierwszego raportu ignoruje prostokąt klawiatury Qt (`QInputMethod::keyboardRectangle`,
-  zostaje jako zapas, gdyby obserwator się nie zainstalował). W trakcie wysuwania (Android 11+)
-  pasek idzie za klawiaturą klatka po klatce (bez własnej animacji), a kursor jest przewijany nad
-  pasek dopiero, gdy klawiatura się zatrzyma; na Androidzie 9–10 okno zmienia rozmiar raz.
-* Diagnostyka: szczegółowy rejestr zdarzeń zapisuje ustaloną wartość („On-screen keyboard shown,
-  overlap 336 px (platform)”) i to, gdzie po jej zatrzymaniu kończy się zawartość („Typing: the
+* `BrulionActivity` has `android:windowSoftInputMode="adjustResize|stateUnchanged"` in the
+  manifest: the window is never panned — without this Qt chose panning or resizing separately for
+  each field, and a panned window tore the toolbar off the keyboard. So nobody scrolls single-line
+  fields into view: the app does it (`BKeyboardFocusKeeper`, docs/UI.md).
+* On Android 11+ the window is drawn under the system bars (edge-to-edge): on 15+ always, on
+  11–14 thanks to `Qt::ExpandedClientAreaHint` set by `src/app/ui/keyboardsources.cpp`. Such a
+  window does not resize for the keyboard and gets every frame of its slide; the app's bars keep
+  clear of the system bars by the `SafeArea` margins, and the system bar icons follow the window
+  colour, that is the app's theme (dark on light, light on dark;
+  `BrulionAndroid.setSystemBarsLight`, again after a configuration change, because Qt then sets
+  them by the system's day/night mode). The same with the backgrounds from Settings → Appearance
+  (OLED black, white): the brightness of the window colour is what counts. Before QML draws the
+  first frame, Qt's default startup background shows for a moment, not the chosen background (a
+  short flash with black). Android 9–10 keep the window inside the bars.
+* `ImeInsets.kt` (installed in `onCreate`) adds an invisible 0×0 view to the window and watches
+  the keyboard insets (`WindowInsets` of type `ime()`) from it, without touching Qt's listeners
+  (`SafeArea`) and without consuming anything: `OnApplyWindowInsetsListener` gives the final
+  value, `WindowInsetsAnimation.Callback` (Android 11+) every frame of the keyboard slide, and a
+  layout listener on the decor view the state on older systems, where the Qt view could have
+  stopped the insets. A hiding keyboard reports as not visible (`shown` false) from the first
+  frame. It computes how many pixels of the Qt view the keyboard covers **on screen**: the bottom
+  of the Qt view minus the top edge of the keyboard. When the system shrank the window above the
+  keyboard (Android 9–10), this comes out as 0; with an edge-to-edge window (Android 11+) — the
+  whole keyboard height. The report goes through `BrulionAndroid.imeChanged` → native
+  `nativeImeChanged` (Android's main thread; C++ only queues the signal
+  `AndroidBridge::imeChanged` to the Qt thread), only when something changed.
+* C++: `KeyboardInsets` (`src/app/ui/keyboardinsets.h`) converts physical pixels to logical ones
+  and from the first report on ignores Qt's keyboard rectangle (`QInputMethod::keyboardRectangle`,
+  kept as a fallback in case the observer was not installed). While the keyboard slides (Android
+  11+) the toolbar follows it frame by frame (without an animation of its own), and the cursor is
+  scrolled above the toolbar only once the keyboard stops; on Android 9–10 the window resizes
+  once.
+* Diagnostics: the detailed event log records the settled value ("On-screen keyboard shown,
+  overlap 336 px (platform)") and where the content ends after it stops ("Typing: the
   content ends 84 px above the window's bottom (keyboard 0 px, navigation bar 24 px, bottom
-  navigation 84 px), editing toolbar docked” — po Wstecz: pasek na dolnej nawigacji, 60 dp nad
-  paskiem nawigacji systemu); `adb shell setprop log.tag.BrulionIme DEBUG` (przed startem aplikacji)
-  wypisuje w logcat każdy raport obserwatora, także klatki wysuwania.
+  navigation 84 px), editing toolbar docked" — after Back: the toolbar on the bottom navigation,
+  60 dp above the system navigation bar); `adb shell setprop log.tag.BrulionIme DEBUG` (before the
+  app starts) prints every observer report in logcat, including the slide frames.
 
-Sprawdzone na emulatorze (`scripts/android-emulator-test.sh --keyboard`, niżej; profil Pixel 6,
-1080×2400, gęstość 420, klawiatura Gboard), w dzienniku i na stronie przewodnika:
+Verified on the emulator (`scripts/android-emulator-test.sh --keyboard`, below; Pixel 6 profile,
+1080×2400, density 420, Gboard keyboard), in the journal and on a guide page:
 
-* Android 16 (API 36, nawigacja gestami): górna krawędź klawiatury na 1517 px, widok Qt do
-  2400 px, obserwator zgłasza 883 px, aplikacja 336 dp (= 883 · 160 / 420); wysuwanie przyszło
-  w 8 klatkach; po Wstecz wraca dolna nawigacja (60 dp nad paskiem nawigacji gestami, 24 dp),
-  zawartość kończy się 84 dp nad dołem, a pasek narzędzi leży na nawigacji (UiAutomator: środek
-  paska na 2109 px, przycisku Kalendarz na 2257 px); dotknięcie tekstu przywraca klawiaturę,
-  pasek wraca na nią, a przyciski nawigacji znikają;
-* Android 11 (API 30, nawigacja trzema przyciskami): okno też edge-to-edge (0–2400 px, wcześniej
-  system zmniejszał je nad klawiaturą bez żadnych klatek): górna krawędź klawiatury na 1533 px,
-  obserwator zgłasza 867 px, aplikacja 330 dp; wysuwanie przyszło w 9 klatkach; paski
-  aplikacji leżą pod paskiem stanu i nad paskiem nawigacji, ikony systemu ciemne w jasnym
-  motywie i jasne w ciemnym. Ten przebieg był jeszcze sprzed powrotu dolnej nawigacji po
-  Wstecz (pasek zostawał wtedy 48 dp nad dołem, nad paskiem nawigacji); stanu po Wstecz z dolną
-  nawigacją na Androidzie 11 nie sprawdzano.
+* Android 16 (API 36, gesture navigation): the keyboard's top edge at 1517 px, the Qt view down to
+  2400 px, the observer reports 883 px, the app 336 dp (= 883 · 160 / 420); the slide came in 8
+  frames; after Back the bottom navigation returns (60 dp above the gesture navigation bar, 24
+  dp), the content ends 84 dp above the bottom, and the toolbar sits on the navigation
+  (UiAutomator: the middle of the toolbar at 2109 px, of the Calendar button at 2257 px); touching
+  the text brings the keyboard back, the toolbar returns onto it, and the navigation buttons
+  disappear;
+* Android 11 (API 30, three-button navigation): the window is edge-to-edge too (0–2400 px; before,
+  the system shrank it above the keyboard without any frames): the keyboard's top edge at 1533 px,
+  the observer reports 867 px, the app 330 dp; the slide came in 9 frames; the app's bars sit
+  under the status bar and above the navigation bar, the system icons dark in the light theme and
+  light in the dark one. This run was still from before the bottom navigation returned after Back
+  (the toolbar then stayed 48 dp above the bottom, above the navigation bar); the state after Back
+  with the bottom navigation on Android 11 was not checked.
 
-Na obu pasek leży dokładnie na klawiaturze i zostaje na niej przy przewijaniu dziennika palcem.
-Android 9–10, klawiatura niższa od dolnej nawigacji (sam pasek podpowiedzi przy klawiaturze
-fizycznej — wtedy pasek narzędzi zostaje na miejscu nawigacji, `AppShell.keyboardFloor`),
-klawiatura pływająca i prawdziwe telefony nie były sprawdzane.
+On both the toolbar sits exactly on the keyboard and stays there while the journal is scrolled
+with a finger. Android 9–10, a keyboard lower than the bottom navigation (only the suggestion strip
+with a physical keyboard — then the toolbar stays in the navigation's place,
+`AppShell.keyboardFloor`), a floating keyboard and real phones were not checked.
 
-## Boczne menu gestem
+## Side menu gesture
 
-Szufladę z drzewem stron otwiera — oprócz „Menu” na dolnym pasku — przesunięcie palca
-w prawo od lewej krawędzi ekranu; przesunięcie w lewo na szufladzie albo na przyciemnionym tle ją
-zamyka (docs/UI.md „Window layout”). Przy **nawigacji gestami** (Android 10+) system zabiera
-przesunięcie zaczęte przy samej krawędzi na gest „Wstecz” (pas ~30 dp, szerszy przy wyższej
-czułości gestu „Wstecz” w ustawieniach systemu), więc palec trzeba położyć odrobinę dalej od
-krawędzi: pas aplikacji (24 dp) zaczyna się tuż za strefą systemu. Przy nawigacji przyciskami
-pas leży przy samej krawędzi. Podczas pisania i zaznaczania bloków oraz na siatce tygodnia
-i miesiąca w kalendarzu (tam przesunięcie w prawo od krawędzi pokazuje poprzedni okres) gest nie
-otwiera szuflady (wtedy „Menu”: przy klawiaturze najpierw Wstecz). Pas zależy od trybu interfejsu, nie od wskaźnika: mysz albo touchpad
-w interfejsie dotykowym (np. telefon z myszą) też go dostaje. W przeglądarce na telefonie
-(WebAssembly) nikt nie zgłasza stref systemu: pas leży przy samej krawędzi, gdzie gest „Wstecz”
-systemu albo przeglądarki może przejąć przesunięcie — szufladę otwiera wtedy „Menu”. Górny
-pasek na telefonie nie ma przycisku ☰, bo „Menu” na dolnym pasku otwiera tę samą szufladę; ☰
-wraca tylko w edytorze rysunku, którego pasek narzędzi zastępuje dolną nawigację.
+The drawer with the page tree opens — besides "Menu" on the bottom bar — with a swipe to the right
+from the left edge of the screen; a swipe to the left on the drawer or on the dimmed background
+closes it (docs/UI.md "Window layout"). With **gesture navigation** (Android 10+) the system takes
+a swipe started at the very edge for its "Back" gesture (a strip of ~30 dp, wider with a higher
+sensitivity of the "Back" gesture in the system settings), so the finger has to be put down a
+little further from the edge: the app's strip (24 dp) starts right after the system's zone. With
+button navigation the strip is at the very edge. While typing and selecting blocks, and on the
+week and month grids of the calendar (there a swipe to the right from the edge shows the previous
+period), the gesture does not open the drawer (use "Menu" then: with the keyboard open, Back
+first). The strip depends on the UI mode, not on the pointer: a mouse or touchpad in the touch UI
+(e.g. a phone with a mouse) gets it too. In the browser on a phone (WebAssembly) nobody reports the
+system zones: the strip is at the very edge, where the system's or the browser's "Back" gesture
+may take over the swipe — "Menu" opens the drawer then. The top bar on a phone has no ☰ button,
+because "Menu" on the bottom bar opens the same drawer; ☰ returns only in the drawing editor,
+whose toolbar replaces the bottom navigation.
 
-Jak to działa:
+How it works:
 
-* `ImeInsets.kt` z tych samych wstawek okna czyta też `WindowInsets` typu `systemGestures()` —
-  szerokość stref gestów systemu przy lewej i prawej krawędzi widoku Qt (0 przy przyciskach;
-  przy widoku odsuniętym od krawędzi tylko część strefy, która na niego wchodzi) — i zgłasza je
-  przez `BrulionAndroid.gestureInsetsChanged` → natywne `nativeGestureInsetsChanged` (piksele
-  fizyczne, tylko przy zmianie: obrót, zmiana trybu nawigacji albo czułości).
-* C++: `GestureInsets` (`src/app/ui/gestureinsets.h`, singleton QML) przelicza je na piksele
-  logiczne; `AppShell.qml` ustawia `dragMargin` szuflady na `max(SafeArea.left,
-  GestureInsets.left) + 24` px. Stuknięcia i przewijanie w pionie w tym pasie trafiają do
-  treści; szufladę otwiera tylko przesunięcie głównie poziome dłuższe niż 20 px, którego nie
-  trzyma już coś innego (przewijana tabela). Uchwyty zaznaczenia tekstu to osobne okienka
-  Androida nad aplikacją — pas ich nie dotyczy. Podczas pisania i zaznaczania bloków (klawiatura
-  albo zadokowany pasek edycji, także nad dolną nawigacją po schowaniu klawiatury) pasa nie ma:
-  szuflada przejmowała przeciąganie uchwytu początku zaznaczenia bloków, który leży przy lewej krawędzi;
-  „Menu” nadal ją otwiera (przy klawiaturze po Wstecz). Z tego samego powodu pasa nie ma na widoku, który sam przesuwa w bok od
-  lewej krawędzi (`edgeSwipe` widoku: siatki tygodnia i miesiąca w kalendarzu — przesunięcie od
-  krawędzi należy do nich). Gdy szuflada jest otwarta, przesuwanie siatek jest wyłączone
-  (`covered`), żeby przesunięcie w lewo zamykało szufladę, a nie zmieniało okresu pod nią.
-* Aplikacja nie wyłącza gestu „Wstecz” przy krawędzi (`setSystemGestureExclusionRects`): Android
-  ogranicza takie wyłączenie do 200 dp wysokości, a użytkownik straciłby „Wstecz” w tym miejscu.
+* `ImeInsets.kt` also reads `WindowInsets` of type `systemGestures()` from the same window insets
+  — the width of the system gesture zones at the left and right edge of the Qt view (0 with
+  buttons; with a view set off from the edge only the part of the zone that reaches it) — and
+  reports them through `BrulionAndroid.gestureInsetsChanged` → native
+  `nativeGestureInsetsChanged` (physical pixels, only on a change: rotation, a change of the
+  navigation mode or of the sensitivity).
+* C++: `GestureInsets` (`src/app/ui/gestureinsets.h`, a QML singleton) converts them to logical
+  pixels; `AppShell.qml` sets the drawer's `dragMargin` to `max(SafeArea.left,
+  GestureInsets.left) + 24` px. Taps and vertical scrolling in this strip go to the content; the
+  drawer opens only on a mostly horizontal swipe longer than 20 px that nothing else holds already
+  (a scrolling table). The text selection handles are separate Android windows above the app — the
+  strip does not affect them. While typing and selecting blocks (the keyboard or the docked editing
+  toolbar, also above the bottom navigation after the keyboard hides) there is no strip: the drawer
+  used to take over the drag of the block selection's start handle, which lies at the left edge;
+  "Menu" still opens it (with the keyboard open, after Back). For the same reason there is no strip
+  on a view that itself swipes sideways from the left edge (the view's `edgeSwipe`: the week and
+  month grids of the calendar — a swipe from the edge belongs to them). While the drawer is open,
+  swiping the grids is off (`covered`), so that a swipe to the left closes the drawer instead of
+  changing the period under it.
+* The app does not turn off the "Back" gesture at the edge (`setSystemGestureExclusionRects`):
+  Android limits such an exclusion to 200 dp of height, and the user would lose "Back" in that
+  spot.
 
-Sprawdzone tylko na komputerze (`tst_shell_qml`, dotyk syntetyczny, strefa gestów symulowana
-przez `GestureInsets.simulate`). **Do sprawdzenia na telefonie / emulatorze** (nawigacja gestami
-i przyciskami, Android 10 i 15+, pion i poziom z wycięciem ekranu): czy obserwator zgłasza strefę
-(`adb shell setprop log.tag.BrulionIme DEBUG` → „system gestures left … px” w logcat), czy
-przesunięcie zaczęte tuż za strefą otwiera szufladę, a zaczęte przy krawędzi nadal cofa, i czy
-pas nie przeszkadza w przewijaniu tabel ani zaznaczaniu tekstu (przesuwanie tygodni i miesięcy
-w kalendarzu od lewej krawędzi sprawdza `tst_shell_qml`).
+Verified only on the desktop (`tst_shell_qml`, synthetic touch, the gesture zone simulated
+through `GestureInsets.simulate`). **To be checked on a phone / emulator** (gesture and button
+navigation, Android 10 and 15+, portrait and landscape with a display cutout): whether the observer
+reports the zone (`adb shell setprop log.tag.BrulionIme DEBUG` → "system gestures left … px" in
+logcat), whether a swipe started just past the zone opens the drawer while one started at the edge
+still goes back, and whether the strip gets in the way of scrolling tables or selecting text
+(swiping weeks and months in the calendar from the left edge is checked by `tst_shell_qml`).
 
-## Rejestr zdarzeń: udostępnianie
+## Event log: sharing
 
-Rejestr zdarzeń (*Ustawienia → Aplikacja → Rejestr zdarzeń*, docs/ARCHITECTURE.md „Logging”)
-leży w katalogu plików aplikacji (`/data/user/0/io.github.januszbit.brulion/files/logs/brulion.log`
-i `brulion.log.1`) — niewidoczny dla innych aplikacji. Brulion zapisuje go od razu przy
-ostrzeżeniach i przy przejściu w tło (Android potrafi zatrzymać proces bez zamykania aplikacji;
-następne uruchomienie odnotowuje taką sesję). Wysłać go można:
+The event log (*Settings → Application → Event log*, docs/ARCHITECTURE.md "Logging") lives in the
+app's files directory (`/data/user/0/io.github.januszbit.brulion/files/logs/brulion.log` and
+`brulion.log.1`) — invisible to other apps. Brulion writes it out at once on warnings and when
+going to the background (Android can stop the process without closing the app; the next start
+notes such a session). It can be sent with:
 
-* **Udostępnij** — kopia eksportu trafia do `files/share/` (stara jest usuwana) i idzie przez
-  systemowy arkusz udostępniania (`ACTION_SEND`, `EXTRA_STREAM` z adresem `content://` z
-  FileProvidera `<pakiet>.qtprovider`; odbiorca dostaje jednorazowe prawo odczytu) —
-  `AndroidBridge::shareFile()`, JNI bez kodu Kotlina. Korzenie dostawcy wyznacza nasz
-  `android/res/xml/qtprovider_paths.xml` (zastępuje szablon Qt, który obejmował tylko `files-path`):
-  pliki i pamięć podręczna aplikacji oraz pamięć współdzielona (`external-path`, tam zwykle leży
-  notatnik — „Otwórz w innej aplikacji” przeglądarki PDF); dostawca nie jest eksportowany, a każdy
-  adres dostaje jedna aplikacja, na wyraźne polecenie użytkownika;
-* **Zapisz w Pobranych** (`MediaStore`, jak eksport) albo **Zapisz jako…** (systemowe okno);
-* **Kopiuj** — do schowka (najnowsze 256 KB).
+* **Share** — a copy of the export goes to `files/share/` (the old one is deleted) and through the
+  system share sheet (`ACTION_SEND`, `EXTRA_STREAM` with a `content://` address from the
+  FileProvider `<package>.qtprovider`; the recipient gets a one-time read right) —
+  `AndroidBridge::shareFile()`, JNI without Kotlin code. The provider's roots are set by our
+  `android/res/xml/qtprovider_paths.xml` (it replaces Qt's template, which covered only
+  `files-path`): the app's files and cache, and shared storage (`external-path`, where the
+  notebook usually lives — the PDF viewer's "Open in another app"); the provider is not exported,
+  and each address goes to one app, on the user's explicit command;
+* **Save to Downloads** (`MediaStore`, like the export) or **Save as…** (the system dialog);
+* **Copy** — to the clipboard (the newest 256 KB).
 
-Eksport zaczyna się nagłówkiem (wersja, urządzenie, co zawiera, czego nie zawiera — hasła i
-tokeny są usuwane, ostatnie synchronizacje).
+The export starts with a header (version, device, what it contains, what it does not contain —
+passwords and tokens are removed, the latest syncs).
 
-## HTTPS i OpenSSL
+## HTTPS and OpenSSL
 
-Synchronizacja z Nextcloud (WebDAV) idzie przez HTTPS. Qt for Android nie ma własnego TLS:
-jego wtyczka TLS (`libplugins_tls_qopensslbackend`) przy pierwszym bezpiecznym połączeniu
-wczytuje OpenSSL 3 (`libssl_3.so`, `libcrypto_3.so`), którego Qt nie dostarcza. Dlatego APK
-zawiera **OpenSSL 3.1.8** — gotowe biblioteki z
-[KDAB/android_openssl](https://github.com/KDAB/android_openssl), tak jak zaleca dokumentacja Qt
-(„Adding OpenSSL Support for Android”). Bez nich (do wersji 0.1.1) każde połączenie HTTPS kończyło
-się błędem „TLS initialization failed”, a test połączenia na ekranie Nextcloud zgłaszał
-niezaufany certyfikat także przy poprawnym serwerze.
+Nextcloud sync (WebDAV) goes over HTTPS. Qt for Android has no TLS of its own: its TLS plugin
+(`libplugins_tls_qopensslbackend`) loads OpenSSL 3 (`libssl_3.so`, `libcrypto_3.so`) at the first
+secure connection, and Qt does not ship it. So the APK contains **OpenSSL 3.1.8** — prebuilt
+libraries from [KDAB/android_openssl](https://github.com/KDAB/android_openssl), as the Qt
+documentation recommends ("Adding OpenSSL Support for Android"). Without them (up to version
+0.1.1) every HTTPS connection ended with the error "TLS initialization failed", and the connection
+test on the Nextcloud screen reported an untrusted certificate even with a correct server.
 
-* **Certyfikat serwera jest zawsze sprawdzany**; Brulion nigdy nie wysyła hasła do niezaufanego
-  serwera. Zaufane są urzędy certyfikacji systemu **i te, które zainstalował użytkownik**
-  (Ustawienia → Bezpieczeństwo → Szyfrowanie i dane logowania → Zainstaluj certyfikat → Certyfikat
-  CA; `android/res/xml/network_security_config.xml`). Własny Nextcloud z własnym urzędem
-  certyfikacji działa więc po zainstalowaniu na telefonie certyfikatu tego urzędu — jak na
-  komputerze. Sam certyfikat samopodpisany serwera nie wystarcza: test połączenia pokazuje wtedy
-  „Certyfikat serwera nie jest zaufany: mógł wygasnąć, być samopodpisany albo wystawiony na inną
-  nazwę…” z podpowiedzią, co zrobić.
-* **Skąd biblioteki**: commit KDAB przypięty w `src/app/CMakeLists.txt`
-  (`_brulion_openssl_commit`), każdy z 8 plików (`libssl_3.so`, `libcrypto_3.so` dla arm64-v8a,
-  armeabi-v7a, x86_64 i x86) sprawdzany po SHA-256. CMake pobiera przy konfiguracji tylko pliki
-  budowanych ABI (z `raw.githubusercontent.com` do `<build>/android_openssl/<commit>/`), a
-  `androiddeployqt` dokłada je do `lib/<abi>/` (`QT_ANDROID_EXTRA_LIBS`). Bez sieci:
-  `BRULION_ANDROID_OPENSSL_DIR=<checkout android_openssl na tym commicie>`. Build Nix bierze ten sam
-  commit z `nix/android/openssl.json`. 64-bitowe biblioteki mają segmenty wyrównane do 16 KB.
-  Build ze źródeł (F-Droid) zamiast nich kompiluje OpenSSL 3.5.9 (LTS) NDK-iem —
-  `scripts/android-openssl-from-source.sh`, [Budowanie ze źródeł](#budowanie-ze-źródeł-f-droid).
-* **Aktualizacja** (nowe wydanie OpenSSL u KDAB): nowy commit i sumy SHA-256
-  (`sha256sum ssl_3/*/lib{ssl,crypto}_3.so` w checkoutcie) w `src/app/CMakeLists.txt`, potem
+* **The server certificate is always checked**; Brulion never sends the password to an untrusted
+  server. The system's certificate authorities are trusted **and those the user installed**
+  (Settings → Security → Encryption & credentials → Install a certificate → CA certificate;
+  `android/res/xml/network_security_config.xml`). A self-hosted Nextcloud with its own
+  certificate authority therefore works once that authority's certificate is installed on the
+  phone — as on the computer. A self-signed server certificate alone is not enough: the connection
+  test then shows "The server's certificate is not trusted: it may have expired, be self-signed or
+  be issued for another name than “…”" with a hint on what to do.
+* **Where the libraries come from**: a KDAB commit pinned in `src/app/CMakeLists.txt`
+  (`_brulion_openssl_commit`), each of the 8 files (`libssl_3.so`, `libcrypto_3.so` for arm64-v8a,
+  armeabi-v7a, x86_64 and x86) checked by SHA-256. At configure time CMake downloads only the
+  files of the ABIs being built (from `raw.githubusercontent.com` to
+  `<build>/android_openssl/<commit>/`), and `androiddeployqt` adds them to `lib/<abi>/`
+  (`QT_ANDROID_EXTRA_LIBS`). Without a network:
+  `BRULION_ANDROID_OPENSSL_DIR=<android_openssl checkout at that commit>`. The Nix build takes the
+  same commit from `nix/android/openssl.json`. The 64-bit libraries have segments aligned to 16 KB.
+  The build from source (F-Droid) compiles OpenSSL 3.5.9 (LTS) with the NDK instead of them —
+  `scripts/android-openssl-from-source.sh`, [Building from source](#building-from-source-f-droid).
+* **Updating** (a new OpenSSL release at KDAB): the new commit and SHA-256 sums
+  (`sha256sum ssl_3/*/lib{ssl,crypto}_3.so` in the checkout) in `src/app/CMakeLists.txt`, then
   `nix/android/update-locks.sh --openssl <commit>`.
-* **Sprawdzane przy budowaniu**: `scripts/android-build.sh` i derywacja Nix przerywają build, gdy
-  w APK brakuje `libssl_3.so` albo `libcrypto_3.so` dla któregoś ABI; skrypt wypisuje wersję
-  OpenSSL.
-* Koszt: +4,45 MB w APK arm64 (1,77 MB po kompresji).
-* Sprawdzone 2026-10-18 na emulatorze (Android 16) z APK ze skryptu i z
-  `nix build .#brulion-android-x86_64`, z lokalnym serwerem WebDAV przez HTTPS: OpenSSL 3.1.8
-  wczytany (`QSslSocket::supportsSsl()`), certyfikat samopodpisany i certyfikat nieznanego urzędu
-  zgłaszane jako niezaufane, po zainstalowaniu urzędu jako certyfikatu użytkownika „Połączono”,
-  synchronizacja w obie strony; wcześniej (0.1.1) każde HTTPS: „TLS initialization failed”.
+* **Checked at build time**: `scripts/android-build.sh` and the Nix derivation stop the build when
+  `libssl_3.so` or `libcrypto_3.so` is missing from the APK for some ABI; the script prints the
+  OpenSSL version.
+* Cost: +4.45 MB in the arm64 APK (1.77 MB compressed).
+* Verified 2026-10-18 on the emulator (Android 16) with the APK from the script and from
+  `nix build .#brulion-android-x86_64`, with a local WebDAV server over HTTPS: OpenSSL 3.1.8
+  loaded (`QSslSocket::supportsSsl()`), a self-signed certificate and a certificate from an
+  unknown authority reported as untrusted, after installing the authority as a user certificate
+  "Connected", sync both ways; before (0.1.1) every HTTPS connection: "TLS initialization
+  failed".
 
-**Licencja.** OpenSSL 3 i paczka KDAB są na licencji **Apache License 2.0**, zgodnej z AGPL-3.0
-Brulionu (licencje GPLv3 i AGPLv3 pozwalają łączyć program z kodem na Apache-2.0). Tekst
-licencji jedzie w APK (`assets/licenses/OpenSSL-LICENSE.txt`, z `android/assets/licenses/`) — kto
-rozpowszechnia APK (wydania na GitHubie, F-Droid), przekazuje go razem z nim. Biblioteki nie są
-modyfikowane.
+**Licence.** OpenSSL 3 and the KDAB package are under the **Apache License 2.0**, compatible with
+Brulion's AGPL-3.0 (the GPLv3 and AGPLv3 licences allow combining a program with Apache-2.0 code).
+The licence text ships in the APK (`assets/licenses/OpenSSL-LICENSE.txt`, from
+`android/assets/licenses/`) — whoever distributes the APK (GitHub releases, F-Droid) passes it on
+together with it. The libraries are not modified.
 
-## Obrazy z internetu
+## Pictures from the internet
 
-Zdjęcia spod adresów `http(s)://` w notatkach (docs/SYNTAX.md §2, przewodnik „Linki i odnośniki
-zwrotne”) pobiera sam Brulion (`webpicture::PictureFetcher` przez `QNetworkAccessManager`), nigdy
-silnik QML — tak samo jak na komputerze:
+Pictures from `http(s)://` addresses in notes (docs/SYNTAX.md §2, the guide page
+"Links and backlinks", in Polish "Linki i odnośniki zwrotne") are downloaded by Brulion itself
+(`webpicture::PictureFetcher` through `QNetworkAccessManager`), never by the QML engine — just as
+on the desktop:
 
-* **Uprawnienia**: wystarcza `android.permission.INTERNET` z manifestu; nic nie jest zapisywane
-  poza folderem aplikacji.
-* **HTTPS** idzie przez ten sam OpenSSL co synchronizacja (sekcja wyżej), z tymi samymi
-  urzędami certyfikacji (systemowe i zainstalowane przez użytkownika).
-* **http://**: Qt łączy się własnymi gniazdami, a nie przez `HttpURLConnection` Javy, więc
-  `cleartextTrafficPermitted` z Androida 9+ (domyślnie wyłączone, nie zmieniamy go w
-  `network_security_config.xml`) nie blokuje zdjęć spod `http://` — sprawdzone na emulatorze
-  (niżej): zdjęcie spod `http://10.0.2.2:…` pobrane i pokazane bez zmian w konfiguracji. Zasada
-  Androida dotyczy tylko stosu sieciowego Javy (np. `WebView`, `HttpURLConnection`), którego
-  Brulion do zdjęć nie używa.
-* **Pamięć podręczna** leży w `QStandardPaths::CacheLocation`/`web-pictures`
-  (`/data/data/<pakiet>/cache/web-pictures`), do 200 MB, najdawniej oglądane znikają pierwsze.
-  Android może ją wyczyścić sam (mało miejsca, „Wyczyść pamięć podręczną” w ustawieniach
-  aplikacji) — wtedy zdjęcie czeka na **Pokaż** jak nowe; kopie zapisane w notatniku są
-  załącznikami w folderze notatnika i nie znikają.
-* **Ustawienie** „Pokazuj obrazy z internetu bez pytania” (Ustawienia → Edytor) jest domyślnie
-  wyłączone i dotyczy tylko tego urządzenia.
-* **Dotyk**: stuknięcie pokazanego zdjęcia otwiera je na cały ekran (`WebPictureViewer`, gest
-  **Wstecz** zamyka), przytrzymanie — menu (Powiększ, Zapisz w notatniku, Otwórz w przeglądarce,
-  Kopiuj adres obrazu); „Otwórz w przeglądarce” oddaje adres systemowi (`QDesktopServices`).
-* **Wklejanie**: „Kopiuj adres obrazu” w Chrome i wklejenie przez **Wklej** z menu tekstu
-  Brulionu proponuje „Zapisz w notatniku”; wklejenie z klawiatury systemowej (jej schowek wpisuje
-  tekst jak pisanie) wstawia sam adres bez propozycji.
+* **Permissions**: `android.permission.INTERNET` from the manifest is enough; nothing is written
+  outside the app's folder.
+* **HTTPS** goes through the same OpenSSL as the sync (section above), with the same certificate
+  authorities (the system's and those the user installed).
+* **http://**: Qt connects with its own sockets, not through Java's `HttpURLConnection`, so
+  `cleartextTrafficPermitted` from Android 9+ (off by default; we do not change it in
+  `network_security_config.xml`) does not block pictures from `http://` — verified on the emulator
+  (below): a picture from `http://10.0.2.2:…` downloaded and shown with no change to the
+  configuration. Android's rule applies only to Java's network stack (e.g. `WebView`,
+  `HttpURLConnection`), which Brulion does not use for pictures.
+* **The cache** lives in `QStandardPaths::CacheLocation`/`web-pictures`
+  (`/data/data/<package>/cache/web-pictures`), up to 200 MB, the least recently viewed go first.
+  Android may clear it by itself (low storage, "Clear cache" in the app's settings) — then the
+  picture waits for **Show** like a new one; copies saved to the notebook are attachments in the
+  notebook folder and do not disappear.
+* **The setting** "Show pictures from the internet without asking" (Settings → Editor) is off by
+  default and applies only to this device.
+* **Touch**: tapping a shown picture opens it full screen (`WebPictureViewer`, the **Back** gesture
+  closes it), a long press opens a menu (View picture, Save to notebook, Open in browser, Copy
+  picture address); "Open in browser" hands the address to the system (`QDesktopServices`).
+* **Pasting**: "Copy image address" in Chrome and pasting with **Paste** from Brulion's text menu
+  offers "Save to notebook"; pasting from the system keyboard (its clipboard enters text like
+  typing) inserts the bare address with no offer.
 
-Sprawdzone na emulatorze 2026-10-28 (Android 16, Pixel 6, APK debugowalny x86_64;
-`scripts/android-emulator-test.sh --web-pictures`, 33 sprawdzenia, zrzuty `wp-*.png`): w dzienniku
-notatnika zdjęcie spod `https://` (logo Google) i spod `http://` (PNG z serwera, który skrypt
-uruchamia na hoście — emulator widzi go pod `10.0.2.2`). Oba czekają na **Pokaż**; po stuknięciu
-trafiają do `cache/web-pictures` i są widoczne (serwer dostał `GET`, więc `http://` nie jest
-blokowane). Po ponownym uruchomieniu w trybie samolotowym oba są widoczne z pamięci podręcznej bez
-pytania. Stuknięcie otwiera przeglądarkę zdjęcia (rzeczywisty rozmiar i z powrotem), **Wstecz** ją
-zamyka; przytrzymanie — menu „Obraz z 10.0.2.2” z Powiększ, Zapisz w notatniku, Otwórz
-w przeglądarce, Kopiuj adres obrazu; **Powiększ** i **Zamknij** działają. Po wyczyszczeniu pamięci
-podręcznej bez sieci **Pokaż** kończy się komunikatem „Brak połączenia z www.google.com.”
-i przyciskiem **Spróbuj ponownie**, który po powrocie sieci pobiera zdjęcie. **Zapisz w notatniku**
-zapisuje `assets/gradient.png` i zmienia odnośnik w notatce na `![…](assets/gradient.png)` (drugi
-odnośnik bez zmian). **Otwórz w przeglądarce** otwiera Chrome. Ręcznie potwierdzone też: „Kopiuj
-adres obrazu” kładzie adres do schowka (klawiatura proponuje go do wklejenia).
+Verified on the emulator 2026-10-28 (Android 16, Pixel 6, debuggable x86_64 APK;
+`scripts/android-emulator-test.sh --web-pictures`, 33 checks, screenshots `wp-*.png`): in the
+notebook's journal a picture from `https://` (the Google logo) and from `http://` (a PNG from a
+server the script starts on the host — the emulator sees it at `10.0.2.2`). Both wait for
+**Show**; after a tap they go to `cache/web-pictures` and are visible (the server got a `GET`, so
+`http://` is not blocked). After a restart in airplane mode both are visible from the cache without
+asking. A tap opens the picture viewer (actual size and back), **Back** closes it; a long press
+opens the menu "Picture from 10.0.2.2" with View picture, Save to notebook, Open in browser, Copy
+picture address; **View picture** and **Close** work. After the cache is cleared with no network,
+**Show** ends with the message "No connection to www.google.com." and a **Try again** button,
+which downloads the picture once the network is back. **Save to notebook** writes
+`assets/gradient.png` and changes the link in the note to `![…](assets/gradient.png)` (the second
+link unchanged). **Open in browser** opens Chrome. Also confirmed by hand: "Copy image address"
+puts the address on the clipboard (the keyboard offers it for pasting).
 
-Zostaje do sprawdzenia na prawdziwym telefonie: przesuwanie palcem powiększonego zdjęcia
-i gest **Wstecz** z krawędzi ekranu (emulator dostaje tylko klawisz Wstecz i proste przeciągnięcia),
-wklejenie adresu skopiowanego w Chrome przez **Wklej** z menu tekstu Brulionu, eksport HTML
-z „Dołącz kopie”, prawdziwa sieć komórkowa / Wi-Fi zamiast sieci emulatora.
+Still to be checked on a real phone: panning a zoomed picture with a finger and the **Back**
+gesture from the screen edge (the emulator gets only the Back key and simple drags), pasting an
+address copied in Chrome with **Paste** from Brulion's text menu, the HTML export with "Include
+copies", a real mobile network / Wi-Fi instead of the emulator's network.
 
 ## PDF
 
-PDF-y rysuje systemowy `android.graphics.pdf.PdfRenderer` (bez bibliotek w APK, docs/UI.md
-„PDF viewer”): miniatury PDF-ów osadzonych w notatkach, przeglądarka PDF i strony PDF jako podkład
-rysunku. `PdfPages.kt` trzyma **sesje** — otwarty plik i jego `PdfRenderer` — najwyżej sześć naraz
-(najstarszą zamyka, żeby wyciek po stronie C++ nie zużył deskryptorów plików); każde wywołanie jest
-zsynchronizowane na swojej sesji (PdfRenderer otwiera jedną stronę naraz). Strona albo jej część
-(szczegół powiększonej strony) rysuje się wprost w piksele obrazu C++ (`pdfRenderInto`: bezpośredni
-`ByteBuffer` na pamięci `QImage`, jedna kopia przez `Bitmap.copyPixelsToBuffer`).
+PDFs are drawn by the system's `android.graphics.pdf.PdfRenderer` (no libraries in the APK,
+docs/UI.md "PDF viewer"): thumbnails of PDFs embedded in notes, the PDF viewer, and PDF pages as a
+drawing background. `PdfPages.kt` keeps **sessions** — an open file and its `PdfRenderer` — at
+most six at once (it closes the oldest, so that a leak on the C++ side does not use up file
+descriptors); every call is synchronised on its session (PdfRenderer opens one page at a time). A
+page or a part of it (a detail of a zoomed page) is drawn straight into the pixels of the C++
+image (`pdfRenderInto`: a direct `ByteBuffer` over the `QImage` memory, one copy through
+`Bitmap.copyPixelsToBuffer`).
 
-**Szukanie** działa od **Androida 15** (API 35: `PdfRenderer.Page.getTextContents()` i
-`searchText()`); `pdfTextAvailable()` sprawdza raz, czy system ma te metody (kompilacja OEM bez
-nich — przycisk szukania znika). Własne szukanie PdfRenderera rozróżnia polskie litery, więc
-Brulion szuka po swojemu w tekście strony (bez wielkości liter i polskich znaków,
-`src/platform/pdfsearch.h`), a PdfRenderera prosi tylko o prostokąty każdej znalezionej pisowni.
-Na Androidzie 14 i starszych przycisku szukania nie ma; reszta przeglądarki działa.
+**Search** works from **Android 15** on (API 35: `PdfRenderer.Page.getTextContents()` and
+`searchText()`); `pdfTextAvailable()` checks once whether the system has these methods (an OEM
+build without them — the search button disappears). PdfRenderer's own search distinguishes Polish
+letters, so Brulion searches the page text its own way (ignoring case and Polish diacritics,
+`src/platform/pdfsearch.h`) and asks PdfRenderer only for the rectangles of each spelling found.
+On Android 14 and older there is no search button; the rest of the viewer works.
 
-**Otwórz w innej aplikacji** (`OpenWith.kt`, `AndroidBridge::viewFile`): `ACTION_VIEW` z adresem
-`content://<pakiet>.qtprovider/…` i prawem odczytu tylko tego pliku, bez okna wyboru (system sam
-pyta, gdy nie ma domyślnej aplikacji). Plik spoza korzeni dostawcy (notatnik na karcie pamięci)
-najpierw kopiuje się w tle do `cache/open/` (starsze kopie znikają), potem otwiera się aplikacja.
-Bez aplikacji do PDF-ów Brulion mówi „Na tym urządzeniu nie ma aplikacji do otwierania PDF-ów.”.
+**Open in another app** (`OpenWith.kt`, `AndroidBridge::viewFile`): `ACTION_VIEW` with a
+`content://<package>.qtprovider/…` address and a read right for that file only, without a chooser
+(the system asks by itself when there is no default app). A file outside the provider's roots (a
+notebook on a memory card) is first copied in the background to `cache/open/` (older copies go),
+then the app opens. Without a PDF app Brulion says "No app on this device opens PDF files.".
 
-Na emulatorze (`scripts/android-emulator-test.sh --pdf`, ten sam debugowalny APK): miniatura
-`tests/data/pdf/wyklad.pdf` w dzienniku (nazwa dostępności kafelka z liczbą stron), zamknięty hasłem
-`zaszyfrowany.pdf` z „PDF chroniony hasłem”, dotknięcie otwiera przeglądarkę („Strona 1 z 3”),
-przesunięcie w górę — stronę 2, uszczypnięcie (dwa palce wstrzyknięte przez
-`scripts/android-stylus/BrulionPen.java pinch`) powiększa; na API 36 szukanie „gesla” znajduje
-„gęślą” raz, na obrazie `system-images;android-30;google_apis;x86_64`
-(`BRULION_EMULATOR_IMAGE`) przycisku szukania nie ma; pamięć (`dumpsys meminfo`, TOTAL PSS) po
-powiększeniu do 400 % i przewinięciu wszystkich stron — poniżej 350 MB; „Otwórz w innej aplikacji”
-to `START … act=android.intent.action.VIEW dat=content://io.github.januszbit.brulion.qtprovider/…
-typ=application/pdf` w logcat (albo, bez aplikacji do PDF-ów w obrazie, komunikat aplikacji);
-„Rysuj na tej stronie” otwiera edytor rysunku, plik `assets/wyklad s. 1.svg` (strona, na której
-była przeglądarka) i jego osadzenie zaraz pod linią PDF-a w dzienniku; Wstecz → przeglądarka,
-Wstecz → dziennik. Zrzuty `pdf-*.png`. Test mostu (APK testowy) dodaje wiersz
-`SELFTEST pdf-reader region=1 text=… hits=… rect=… api=…`: część strony narysowana osobno równa się
-wycinkowi całej strony; na API ≥ 35 `find("GESLA")` znajduje jedno trafienie w miejscu tekstu, poniżej
-— żadnego (`text=0`). Wiersz `SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1`: przy 17
-otwartych sesjach (limit `PdfPages.MAX_SESSIONS` to 16) najstarsza zostaje zamknięta, jej czytnik
-zgłasza `lost()` (pula go odrzuca, zamiast użyć ponownie), a najnowszy dalej rysuje.
+On the emulator (`scripts/android-emulator-test.sh --pdf`, the same debuggable APK): a thumbnail of
+`tests/data/pdf/wyklad.pdf` in the journal (the tile's accessible name with the page count), the
+password-locked `zaszyfrowany.pdf` with "PDF protected with a password", a touch opens the viewer
+("Page 1 of 3"), a swipe up — page 2, a pinch (two fingers injected by
+`scripts/android-stylus/BrulionPen.java pinch`) zooms in; on API 36 searching for "gesla" finds
+"gęślą" once, on the image `system-images;android-30;google_apis;x86_64`
+(`BRULION_EMULATOR_IMAGE`) there is no search button; memory (`dumpsys meminfo`, TOTAL PSS) after
+zooming to 400 % and scrolling through all pages — under 350 MB; "Open in another app" is
+`START … act=android.intent.action.VIEW dat=content://io.github.januszbit.brulion.qtprovider/…
+typ=application/pdf` in logcat (or, with no PDF app in the image, the app's message); "Draw on
+this page" opens the drawing editor, the file `assets/wyklad s. 1.svg` (the page the viewer was
+on) and its embed right below the PDF's line in the journal; Back → viewer, Back → journal.
+Screenshots `pdf-*.png`. The bridge test (test APK) adds the line
+`SELFTEST pdf-reader region=1 text=… hits=… rect=… api=…`: a part of a page drawn separately
+equals the cut-out of the whole page; on API ≥ 35 `find("GESLA")` finds one hit at the text's
+place, below that — none (`text=0`). The line
+`SELFTEST pdf-sessions opened=1 oldest-lost=1 newest-draws=1`: with 17 open sessions (the limit `PdfPages.MAX_SESSIONS` is 16) the oldest is
+closed, its reader reports `lost()` (the pool drops it instead of reusing it), and the newest still
+draws.
 
-Zostaje do sprawdzenia na prawdziwym telefonie: płynność szczypania i gest Wstecz z krawędzi,
-szukanie na Androidzie 15+ na prawdziwym urządzeniu, „Otwórz w innej aplikacji” z prawdziwymi
-aplikacjami do PDF-ów, duże skany z wykładów.
+Still to be checked on a real phone: smoothness of pinching and the Back gesture from the edge,
+search on Android 15+ on a real device, "Open in another app" with real PDF apps, large scans of
+lectures.
 
-## Sprawdzanie pisowni
+## Spell checking
 
-Brulion nie dokłada do APK słowników: pyta **systemowe sprawdzanie pisowni** — to samo, którego
-używa klawiatura (Gboard, klawiatura AOSP; `TextServicesManager` / `SpellCheckerSession`,
-docs/UI.md „Spell checking”). `SpellCheck.kt` otwiera po jednej sesji na język (`Locale("pl")`,
-`Locale("en")`, bez ustawień języka systemu: języki wybiera Brulion) na własnym wątku
-(`HandlerThread`; sesja oddaje odpowiedzi na pętli wątku, na którym powstała), a wątek C++ czeka na
-odpowiedź najwyżej 3 s. Sesja, która nie odpowiedziała na czas, jest zamykana (spóźniona odpowiedź
-nie może trafić do następnego pytania) i otwierana od nowa przy kolejnym. Słowa jadą jako JSON,
-całą paczką w jednym wywołaniu (`BrulionAndroid.spellCheck`); słowo jest błędne tylko wtedy, gdy
-sprawdzanie oznaczy je jako literówkę (`RESULT_ATTR_LOOKS_LIKE_TYPO`), więc sprawdzanie, które
-danego języka nie zna, niczego nie podkreśla. Języki: podtypy bieżącego sprawdzania pisowni
-(Android 12+), a bez nich języki urządzenia i angielski. Gdy sprawdzanie pisowni jest wyłączone
-w ustawieniach Androida (Ustawienia → System → Język → Sprawdzanie pisowni), Brulion chowa swoje
-ustawienia pisowni. Podpowiedzi otwiera dotknięcie podkreślonego słowa (przytrzymanie zostaje
-systemowym zaznaczaniem tekstu).
+Brulion adds no dictionaries to the APK: it asks the **system spell checker** — the same one the
+keyboard uses (Gboard, the AOSP keyboard; `TextServicesManager` / `SpellCheckerSession`,
+docs/UI.md "Spell checking"). `SpellCheck.kt` opens one session per language (`Locale("pl")`,
+`Locale("en")`, without the system's language settings: Brulion chooses the languages) on its own
+thread (`HandlerThread`; a session delivers answers on the looper of the thread it was created on),
+and the C++ thread waits at most 3 s for an answer. A session that did not answer in time is closed
+(a late answer must not reach the next question) and opened again at the next one. Words travel as
+JSON, the whole batch in one call (`BrulionAndroid.spellCheck`); a word is wrong only when the
+checker marks it as a typo (`RESULT_ATTR_LOOKS_LIKE_TYPO`), so a checker that does not know a given
+language underlines nothing. Languages: the subtypes of the current spell checker (Android 12+),
+and without them the device's languages and English. When spell checking is off in Android's
+settings (Settings → System → Languages → Spell checker), Brulion hides its spelling settings.
+Touching an underlined word opens the suggestions (a long press stays the system's text
+selection).
 
-Zostaje do sprawdzenia na prawdziwym telefonie: Gboard z polskim i angielskim, podkreślenia
-i podpowiedzi podczas pisania z klawiaturą, która sama poprawia słowa.
+Still to be checked on a real phone: Gboard with Polish and English, underlines and suggestions
+while typing with a keyboard that corrects words by itself.
 
-## Nowa wersja
+## New version
 
-Android nie aktualizuje aplikacji zainstalowanej z pliku APK, więc Brulion mówi o nowej wersji sam:
-pod górnym paskiem pojawia się komunikat „Dostępny jest Brulion X.Y.Z”. **Zobacz na GitHubie**
-otwiera w przeglądarce stronę tego wydania, skąd pobierasz APK; instalacja nowego pliku na starym
-zachowuje dane, bo wydania są podpisane tym samym kluczem. Krzyżyk ukrywa komunikat o tej wersji,
-a kolejne wydanie pokaże go znowu. Bez sieci Brulion działa tak samo: pyta GitHuba przy starcie
-i co najwyżej raz dziennie, a nieudane pytanie zapisuje tylko w rejestrze zdarzeń i powtarza po
-kilku godzinach. Pomija wydania testowe (`-rc`). GitHub widzi adres urządzenia, ale żadnych
-danych o notatkach. Wyłącza to **Ustawienia → Aplikacja → Sprawdzaj nowe wersje**. Kod:
-`src/core/appupdate`, `src/app/shell/appupdates.h`, `qml/shell/ShellUpdateBanner.qml`.
-Build z opcją CMake `BRULION_UPDATE_CHECK=OFF` (dla sklepów, które same aktualizują aplikację —
-[F-Droid i IzzyOnDroid](#f-droid-i-izzyondroid)) nie ma ani komunikatu, ani przełącznika i nigdy
-nie łączy się z GitHubem.
+Android does not update an app installed from an APK file, so Brulion tells you about a new
+version itself: a message "Brulion X.Y.Z is available" appears under the top bar. **View on
+GitHub** opens that release's page in the browser, where you download the APK; installing the new
+file over the old one keeps the data, because releases are signed with the same key. The cross
+hides the message for that version, and the next release shows it again. Without a network
+Brulion works the same: it asks GitHub at startup and at most once a day, and a failed request is
+only recorded in the event log and repeated after a few hours. It skips test releases (`-rc`).
+GitHub sees the device's address, but no data about the notes. **Settings → Application → Check
+for new versions** turns it off. Code: `src/core/appupdate`, `src/app/shell/appupdates.h`,
+`qml/shell/ShellUpdateBanner.qml`. A build with the CMake option `BRULION_UPDATE_CHECK=OFF` (for
+stores that update the app themselves — [F-Droid and IzzyOnDroid](#f-droid-and-izzyondroid)) has
+neither the message nor the switch and never connects to GitHub.
 
-## F-Droid i IzzyOnDroid
+## F-Droid and IzzyOnDroid
 
-Gotowe są dwie części potrzebne obu repozytoriom; przepisu do `fdroiddata` i budowania ze
-źródeł w F-Droid jeszcze nie ma (TODO.md, „Sklepy i repozytoria”).
+The two parts both repositories need are ready; there is no recipe for `fdroiddata` and no build
+from source in F-Droid yet (TODO.md, "Stores and repositories").
 
-**Opisy sklepu** leżą w układzie fastlane, który czytają F-Droid i IzzyOnDroid:
+**Store descriptions** live in the fastlane layout that F-Droid and IzzyOnDroid read:
 
 ```text
 fastlane/metadata/android/
-├── en-US/                      angielski, zapasowy dla innych języków (także obrazy)
-│   ├── title.txt               nazwa (do 50 znaków)
-│   ├── short_description.txt   jedno zdanie (do 80 znaków)
-│   ├── full_description.txt    opis (do 4000 znaków; z packaging/…metainfo.xml)
-│   ├── changelogs/<versionCode>.txt   „co nowego” wersji (do 500 znaków)
-│   └── images/icon.png         ikona 512 × 512 z assets/logo.svg
-│       images/phoneScreenshots/ zrzuty z docs/images/telefon-*.png
-└── pl/                         to samo po polsku, bez obrazów (biorą je z en-US)
+├── en-US/                      English, the fallback for other languages (also images)
+│   ├── title.txt               name (up to 50 characters)
+│   ├── short_description.txt   one sentence (up to 80 characters)
+│   ├── full_description.txt    description (up to 4000 characters; from packaging/…metainfo.xml)
+│   ├── changelogs/<versionCode>.txt   the version's "what's new" (up to 500 characters)
+│   └── images/icon.png         512 × 512 icon from assets/logo.svg
+│       images/phoneScreenshots/ screenshots from docs/images/phone-*.png
+└── pl/                         the same in Polish, with its own Polish phoneScreenshots/
 ```
 
-`versionCode` = major·1000000 + minor·1000 + patch (`8001.txt` dla 0.8.1, jak w
-`src/app/CMakeLists.txt`). Pliki `changelogs/` pisze `scripts/release.sh` przy każdym wydaniu
-(docs/RELEASE.md): polski wymienia nowości z `.github/release-notes.md`, angielski podaje link
-do opisu wydania. Pozostałe pliki zmienia się ręcznie — opisy razem z `metainfo.xml`, zrzuty po
-odświeżeniu `docs/images/telefon-*.png` (`cp` z nazwą z numerem kolejności), ikonę po zmianie
-logo:
+`versionCode` = major·1000000 + minor·1000 + patch (`8001.txt` for 0.8.1, as in
+`src/app/CMakeLists.txt`). The `changelogs/` files are written by `scripts/release.sh` at every
+release (docs/RELEASE.md) from `.github/release-notes.md`: the English one (`en-US`) lists the
+bullets of its "What's new in …" section, the Polish one (`pl`) those of "Nowości w …", each with
+a link to the full release notes. The other files are changed by hand — the descriptions
+together with `metainfo.xml`, the screenshots after `docs/images/phone-*.png` are refreshed
+(`cp` with a name carrying the order number; the Polish ones in `pl/` from the same shots with
+`LOCALE=pl`), the icon after a logo change:
 
 ```sh
 nix shell nixpkgs#librsvg nixpkgs#optipng -c sh -c '
@@ -862,184 +877,187 @@ nix shell nixpkgs#librsvg nixpkgs#optipng -c sh -c '
   optipng -o5 -strip all fastlane/metadata/android/en-US/images/icon.png'
 ```
 
-Limity sprawdza `scripts/check-fastlane-metadata.sh [-v X.Y.Z]` (długości w znakach, oba języki,
-changelog wersji z `CMakeLists.txt`, ikona 512 × 512, obrazy PNG/JPEG); w ctest jako
-`tst_scripts_check_fastlane_metadata`.
+The limits are checked by `scripts/check-fastlane-metadata.sh [-v X.Y.Z]` (lengths in characters,
+both languages, the changelog of the version from `CMakeLists.txt`, a 512 × 512 icon, PNG/JPEG
+images); in ctest as `tst_scripts_check_fastlane_metadata`.
 
-**Bez sprawdzania nowych wersji.** Aplikację z F-Droid albo IzzyOnDroid aktualizuje ich klient,
-więc komunikat o nowej wersji z GitHuba jest tam zbędny, a pytanie GitHuba — połączeniem, którego
-taka instalacja nie potrzebuje. Opcja CMake `BRULION_UPDATE_CHECK=OFF`
-(domyślnie `ON`) wyłącza go w całości: `AppController.updates.supported` jest fałszywe, więc nie
-ma komunikatu ani przełącznika „Sprawdzaj nowe wersje”, a zapytanie do `api.github.com` nie
-powstaje nigdy — nawet z `--update-available`. `scripts/android-build.sh` przekazuje ją ze
-zmiennej środowiskowej:
+**No update check.** An app from F-Droid or IzzyOnDroid is updated by their client, so the
+new-version message from GitHub is pointless there, and asking GitHub is a connection such an
+install does not need. The CMake option `BRULION_UPDATE_CHECK=OFF` (`ON` by default) turns it off
+entirely: `AppController.updates.supported` is false, so there is neither the message nor the
+"Check for new versions" switch, and a request to `api.github.com` is never made — not even with
+`--update-available`. `scripts/android-build.sh` passes it on from an environment variable:
 
 ```sh
 BRULION_UPDATE_CHECK=OFF scripts/android-build.sh
 ```
 
-Test: `tst_shell_appupdates` sprawdza, że `AppUpdates::checkBuiltIn()` idzie za opcją, a w
-buildzie z `OFF` — że aplikacja niczego nie pokazuje i o nic nie pyta.
+Test: `tst_shell_appupdates` checks that `AppUpdates::checkBuiltIn()` follows the option, and in a
+build with `OFF` — that the app shows nothing and asks nothing.
 
-## Własne repozytorium F-Droid
+## Brulion's own F-Droid repository
 
-Pod `https://janusz-bit.github.io/brulion/` (GitHub Pages projektu) jest repozytorium F-Droid
-Brulionu: strona z kodem QR i odciskiem klucza, a w `repo/` samo repozytorium. Dodaje się je
-w F-Droid (albo Droid-ify, Neo Store) przyciskiem **Dodaj do F-Droid** na stronie, kodem QR albo
-ręcznie (Ustawienia → Repozytoria → „+”: adres `https://janusz-bit.github.io/brulion/repo`
-i odcisk ze strony). Potem F-Droid sam proponuje aktualizacje.
+At `https://janusz-bit.github.io/brulion/` (the project's GitHub Pages) there is Brulion's F-Droid
+repository: a page with a QR code and the key fingerprint, and the repository itself in `repo/`.
+You add it in F-Droid (or Droid-ify, Neo Store) with the **Add to F-Droid** button on the page,
+with the QR code, or by hand (Settings → Repositories → "+": the address
+`https://janusz-bit.github.io/brulion/repo` and the fingerprint from the page). After that F-Droid
+offers updates by itself.
 
-* **Te same APK co w wydaniach na GitHubie**, podpisane kluczem wydań — Brulion zainstalowany
-  z GitHuba aktualizuje się z repozytorium bez odinstalowania (i odwrotnie). APK z
-  f-droid.org, gdyby F-Droid podpisywał go sam (wyżej, „Podpis: decyzja dla właściciela”), miałby
-  inny podpis.
-* Trzy ostatnie wydania (bez wydań testowych); APK ma ok. 90 MB, więc razem ok. 270 MB z limitu
-  1 GB strony GitHub Pages. Opis, ikona, zrzuty i „co nowego” każdej wersji pochodzą
-  z `fastlane/metadata/android` (wyżej), kategorie i odnośniki
-  z `packaging/fdroid-repo/io.github.januszbit.brulion.yml`.
-* Komunikat o nowej wersji z GitHuba (wyżej) zostaje — to ten sam APK; zwykle F-Droid
-  zaproponuje aktualizację w tym samym czasie.
+* **The same APKs as in the GitHub releases**, signed with the release key — Brulion installed
+  from GitHub updates from the repository without uninstalling (and the other way round). An APK
+  from f-droid.org, if F-Droid signed it itself (below, "Signing: a decision for the owner"),
+  would have a different signature.
+* The last three releases (no test releases); an APK is about 90 MB, so about 270 MB together out
+  of the 1 GB limit of a GitHub Pages site. The description, icon, screenshots and each version's
+  "what's new" come from `fastlane/metadata/android` (above), the categories and links from
+  `packaging/fdroid-repo/io.github.januszbit.brulion.yml`.
+* The new-version message from GitHub (above) stays — it is the same APK; F-Droid usually offers
+  the update at the same time.
 
-**Jak powstaje.** `.github/workflows/fdroid.yml` uruchamia `scripts/fdroid-repo.sh` z
-fdroidserver 2.4.5 (PyPI): pobiera APK trzech ostatnich opublikowanych wydań (`gh release
-download`), kopiuje metadane (fastlane jako `metadata/<id>/<język>/`, a dla każdego APK wpis
-`Builds:` z jego `versionCode` z nazwy pliku — tylko tak F-Droid łączy z wersją jej
-`changelogs/<versionCode>.txt`; najnowszy to `CurrentVersionCode`), czyta opublikowany
-`repo/index-v2.json` (zachowuje daty dodania wersji, które już tam są), uruchamia `fdroid update`
-(indeks `index-v1.jar`, `index-v2.json` + `entry.jar` podpisane kluczem repozytorium, kod QR
-`repo/index.png`), dokłada stronę `packaging/fdroid-repo/index.html` z adresem i odciskiem,
-a workflow wdraża całość na GitHub Pages. Wydanie (`release.yml`) wywołuje go po publikacji, poza
-wydaniem testowym i APK z kluczem jednorazowym; można go też uruchomić ręcznie
-(`gh workflow run fdroid.yml`). Lokalnie (bez wdrożenia, APK z folderu):
+**How it is made.** `.github/workflows/fdroid.yml` runs `scripts/fdroid-repo.sh` with
+fdroidserver 2.4.5 (PyPI): it downloads the APKs of the last three published releases (`gh release
+download`), copies the metadata (fastlane as `metadata/<id>/<language>/`, and for each APK a
+`Builds:` entry with its `versionCode` from the file name — only this way does F-Droid connect the
+version with its `changelogs/<versionCode>.txt`; the newest is `CurrentVersionCode`), reads the
+published `repo/index-v2.json` (it keeps the dates when versions already there were added), runs
+`fdroid update` (index `index-v1.jar`, `index-v2.json` + `entry.jar` signed with the repository
+key, QR code `repo/index.png`), adds the page `packaging/fdroid-repo/index.html` with the address
+and the fingerprint, and the workflow deploys the whole to GitHub Pages. A release (`release.yml`)
+calls it after publishing, except for a test release and an APK with a throwaway key; it can also
+be run by hand (`gh workflow run fdroid.yml`). Locally (no deployment, APKs from a folder):
 
 ```sh
-read -r -s -p 'Hasło klucza repozytorium: ' FDROID_KEYSTORE_PASS; echo; export FDROID_KEYSTORE_PASS
+read -r -s -p 'Repository key password: ' FDROID_KEYSTORE_PASS; echo; export FDROID_KEYSTORE_PASS
 nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner -c \
   env FDROID_KEYSTORE=~/.local/share/brulion/brulion-fdroid-repo.p12 \
   scripts/fdroid-repo.sh -a dist-android -o dist-fdroid   # dist-fdroid/index.html, dist-fdroid/repo/
 ```
 
-**Klucz repozytorium** (osobny od klucza APK: podpisuje tylko indeks) tworzy
-`scripts/fdroid-new-keystore.sh` — poza repozytorium (domyślnie
-`~/.local/share/brulion/brulion-fdroid-repo.p12`), wypisuje odcisk i polecenia `gh secret set`
-dla sekretów `FDROID_KEYSTORE_BASE64`, `FDROID_KEYSTORE_PASS` i `FDROID_KEY_ALIAS` (domyślnie
-`brulion-fdroid`). **Zrób kopię zapasową klucza i hasła:** F-Droid przyjmuje indeks tylko
-podpisany tym kluczem; nowy klucz oznacza, że każdy musi usunąć repozytorium i dodać je od nowa.
-Jednorazowo trzeba też włączyć GitHub Pages ze źródłem „GitHub Actions” i dopuścić do środowiska
-`github-pages` gałąź `main` i tagi `v*` (docs/RELEASE.md, „Jednorazowa konfiguracja
-repozytorium”).
+**The repository key** (separate from the APK key: it signs only the index) is created by
+`scripts/fdroid-new-keystore.sh` — outside the repository (by default
+`~/.local/share/brulion/brulion-fdroid-repo.p12`); it prints the fingerprint and the
+`gh secret set` commands for the secrets `FDROID_KEYSTORE_BASE64`, `FDROID_KEYSTORE_PASS` and
+`FDROID_KEY_ALIAS` (by default `brulion-fdroid`). **Back up the key and the password:** F-Droid
+accepts the index only signed with this key; a new key means everyone has to remove the
+repository and add it again. Once, GitHub Pages also has to be turned on with the "GitHub Actions"
+source, and the `github-pages` environment has to allow the `main` branch and the `v*` tags
+(docs/RELEASE.md, "One-time repository setup").
 
-Testy: `tests/scripts/tst_fdroid_repo.sh` (ctest `tst_scripts_fdroid_repo`) uruchamia skrypt
-z atrapami `fdroid`, `keytool`, `gh` i `curl` — wybór wydań, konfiguracja fdroid (hasła tylko
-jako `{env: …}`, plik tylko dla właściciela), wpisy `Builds:`, metadane, strona z odciskiem
-i odrzucane dane; prawdziwy `fdroid update` biegnie w `fdroid.yml`.
+Tests: `tests/scripts/tst_fdroid_repo.sh` (ctest `tst_scripts_fdroid_repo`) runs the script with
+stand-ins for `fdroid`, `keytool`, `gh` and `curl` — the choice of releases, the fdroid
+configuration (passwords only as `{env: …}`, the file readable only by its owner), the `Builds:`
+entries, the metadata, the page with the fingerprint and rejected data; the real `fdroid update`
+runs in `fdroid.yml`.
 
-## Budowanie APK
+## Building the APK
 
-Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące
-narzędzia, konfiguruje CMake, buduje bibliotekę `libbrulion_<abi>.so`, pakuje APK przez
-`androiddeployqt` (Gradle), podpisuje i sprawdza wynik. Można go uruchamiać wielokrotnie —
-istniejący katalog budowania jest wykorzystywany ponownie.
+`scripts/android-build.sh` does it all (locally and in GitHub Actions): it installs missing tools,
+configures CMake, builds the `libbrulion_<abi>.so` library, packages the APK with
+`androiddeployqt` (Gradle), signs it and checks the result. It can be run repeatedly — an existing
+build directory is reused.
 
 ```sh
-scripts/android-build.sh            # wynik: dist-android/brulion-<wersja>-arm64-v8a.apk
+scripts/android-build.sh            # result: dist-android/brulion-<version>-arm64-v8a.apk
 adb install -r dist-android/brulion-*.apk
-scripts/android-build.sh --help     # wszystkie zmienne środowiskowe
+scripts/android-build.sh --help     # all environment variables
 ```
 
-Wymaga hosta **Linux x86_64** (NDK i narzędzia Qt są tylko na x86_64) — nie Raspberry Pi.
+It needs a **Linux x86_64** host (the NDK and the Qt tools exist only for x86_64) — not the
+Raspberry Pi.
 
-### Wersje (Qt 6.11.2)
+### Versions (Qt 6.11.2)
 
-| Składnik | Wersja | Skąd |
+| Component | Version | Source |
 |---|---|---|
-| Qt for Android | 6.11.2 `android_arm64_v8a` (opcjonalnie `armv7`, `x86_64`, `x86`) | aqt (`aqtinstall` 3.3.0) → `~/.cache/brulion-qt` |
-| Qt hosta (moc, rcc, qmlcachegen, androiddeployqt…) | 6.11.2 `linux_gcc_64` — ta sama wersja | aqt |
-| Android NDK | r27c (`27.2.12479018`) — wymagany przez Qt 6.11 | `sdkmanager` |
-| Android SDK | platforma `android-36`, build-tools `36.0.0` | `sdkmanager` |
-| CMake + Ninja | 3.31.6 (pakiet SDK `cmake;3.31.6`) | `sdkmanager` |
-| JDK | 21 (Qt 6.11 zaleca 21; działa 17+) | system / nixpkgs `jdk21_headless` |
-| Gradle / Android Gradle Plugin | 9.3.1 / 9.0.0 (szablon Qt 6.11, wbudowana obsługa Kotlina) | wrapper Gradle z Qt |
+| Qt for Android | 6.11.2 `android_arm64_v8a` (optionally `armv7`, `x86_64`, `x86`) | aqt (`aqtinstall` 3.3.0) → `~/.cache/brulion-qt` |
+| Host Qt (moc, rcc, qmlcachegen, androiddeployqt…) | 6.11.2 `linux_gcc_64` — the same version | aqt |
+| Android NDK | r27c (`27.2.12479018`) — required by Qt 6.11 | `sdkmanager` |
+| Android SDK | platform `android-36`, build-tools `36.0.0` | `sdkmanager` |
+| CMake + Ninja | 3.31.6 (SDK package `cmake;3.31.6`) | `sdkmanager` |
+| JDK | 21 (Qt 6.11 recommends 21; 17+ works) | system / nixpkgs `jdk21_headless` |
+| Gradle / Android Gradle Plugin | 9.3.1 / 9.0.0 (Qt 6.11 template, built-in Kotlin support) | Gradle wrapper from Qt |
 | minSdk / targetSdk / compileSdk | 28 / 36 / 36 | `src/app/CMakeLists.txt` |
-| OpenSSL (HTTPS) | 3.1.8, KDAB android_openssl `b71f147` | pobierany przez CMake, sprawdzany po SHA-256 (`src/app/CMakeLists.txt`) |
-| Build ze źródeł (`BRULION_ANDROID_QT=source`, F-Droid) | Qt 6.11.2 (6 modułów) i OpenSSL 3.5.9 ze źródeł | [Budowanie ze źródeł](#budowanie-ze-źródeł-f-droid) |
+| OpenSSL (HTTPS) | 3.1.8, KDAB android_openssl `b71f147` | downloaded by CMake, checked by SHA-256 (`src/app/CMakeLists.txt`) |
+| Build from source (`BRULION_ANDROID_QT=source`, F-Droid) | Qt 6.11.2 (6 modules) and OpenSSL 3.5.9 from source | [Building from source](#building-from-source-f-droid) |
 
-Zmienne (wszystkie opcjonalne): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_ROOT`
-(domyślnie `~/.cache/brulion-android-sdk`; brakujące pakiety instaluje jego `cmdline-tools`),
-`ANDROID_NDK_ROOT`, `JAVA_HOME`, `BRULION_ANDROID_ABIS` (np. `"arm64-v8a x86_64"` — jeden APK
-z kilkoma architekturami), `BRULION_ANDROID_BUILD_DIR` (domyślnie `build-android`),
-`BRULION_ANDROID_BUILD_TYPE` (`Release`), `BRULION_ANDROID_AAB=1` (także `.aab`),
-`BRULION_ANDROID_UNIT_TESTS=1` (testy Kotlina), `BRULION_ANDROID_LINT=1` (Android lint),
-`BRULION_ANDROID_SELFTEST=1` (także APK testowy mostu), `BRULION_ANDROID_VERSION_CODE`,
-`BRULION_ANDROID_CMAKE=system`, `BRULION_ANDROID_OPENSSL_DIR` (OpenSSL z checkoutu
-KDAB/android_openssl zamiast pobierania), `BRULION_ANDROID_QT=source` i
-`BRULION_ANDROID_OPENSSL=source` (Qt i OpenSSL ze źródeł), `BRULION_ANDROID_SIGN=0` (APK bez
-podpisu), `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są
-błędami), `JOBS`, `SOURCE_DATE_EPOCH` (czas plików w zasobach Qt, rcc; domyślnie czas ostatniego
-commita — powtarzalne APK).
+Variables (all optional): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_ROOT`
+(by default `~/.cache/brulion-android-sdk`; its `cmdline-tools` install missing packages),
+`ANDROID_NDK_ROOT`, `JAVA_HOME`, `BRULION_ANDROID_ABIS` (e.g. `"arm64-v8a x86_64"` — one APK
+with several architectures), `BRULION_ANDROID_BUILD_DIR` (by default `build-android`),
+`BRULION_ANDROID_BUILD_TYPE` (`Release`), `BRULION_ANDROID_AAB=1` (also an `.aab`),
+`BRULION_ANDROID_UNIT_TESTS=1` (Kotlin tests), `BRULION_ANDROID_LINT=1` (Android lint),
+`BRULION_ANDROID_SELFTEST=1` (also the bridge's test APK), `BRULION_ANDROID_VERSION_CODE`,
+`BRULION_ANDROID_CMAKE=system`, `BRULION_ANDROID_OPENSSL_DIR` (OpenSSL from a
+KDAB/android_openssl checkout instead of downloading), `BRULION_ANDROID_QT=source` and
+`BRULION_ANDROID_OPENSSL=source` (Qt and OpenSSL from source), `BRULION_ANDROID_SIGN=0` (an
+unsigned APK), `BRULION_WERROR=ON` (warnings in our C++ are errors), `JOBS`, `SOURCE_DATE_EPOCH`
+(the time of files in the Qt resources, rcc; by default the time of the last commit —
+reproducible APKs).
 
-`versionCode` = `major·1000000 + minor·1000 + patch` (0.1.0 → 1000) — ten sam wzór co
-w poprzedniej wersji Brulionu (Tauri), więc nowe APK aktualizują stare (przy tym samym kluczu).
+`versionCode` = `major·1000000 + minor·1000 + patch` (0.1.0 → 1000) — the same formula as in the
+previous version of Brulion (Tauri), so new APKs update old ones (with the same key).
 
-### Podpisywanie
+### Signing
 
-Skrypt podpisuje APK sam (`zipalign -P 16` + `apksigner`; AAB — `jarsigner`) kluczem z tych
-samych zmiennych, które czyta `androiddeployqt`:
+The script signs the APK itself (`zipalign -P 16` + `apksigner`; AAB — `jarsigner`) with the key
+from the same variables `androiddeployqt` reads:
 
-* `QT_ANDROID_KEYSTORE_PATH` (albo `QT_ANDROID_KEYSTORE_BASE64` — plik w base64, sekret CI),
+* `QT_ANDROID_KEYSTORE_PATH` (or `QT_ANDROID_KEYSTORE_BASE64` — the file in base64, a CI secret),
 * `QT_ANDROID_KEYSTORE_ALIAS`, `QT_ANDROID_KEYSTORE_STORE_PASS`,
-  `QT_ANDROID_KEYSTORE_KEY_PASS` (domyślnie hasło magazynu).
+  `QT_ANDROID_KEYSTORE_KEY_PASS` (by default the store password).
 
-Klucz wydań tworzy (poza repozytorium) `scripts/android-new-keystore.sh` — wypisuje też polecenia
-`gh secret set` dla GitHub Actions. **Zrób kopię zapasową klucza i hasła**: każda aktualizacja
-musi być podpisana tym samym kluczem.
+The release key is created (outside the repository) by `scripts/android-new-keystore.sh` — it
+also prints the `gh secret set` commands for GitHub Actions. **Back up the key and the
+password**: every update must be signed with the same key.
 
-**Bez klucza** skrypt głośno ostrzega i podpisuje APK **kluczem jednorazowym**
-(`~/.cache/brulion-android/throwaway.jks`, tworzony raz na maszynę). Taki APK da się zainstalować
-i aktualizować kolejnymi kompilacjami z tej samej maszyny, ale nie zaktualizuje wersji podpisanej
-kluczem wydań (trzeba ją odinstalować, co usuwa prywatne dane aplikacji).
+**Without a key** the script warns loudly and signs the APK with a **throwaway key**
+(`~/.cache/brulion-android/throwaway.jks`, created once per machine). Such an APK can be installed
+and updated by later builds from the same machine, but it will not update a version signed with
+the release key (that one has to be uninstalled, which deletes the app's private data).
 
 ### NixOS
 
-Na NixOS skrypt sam uruchamia się ponownie w `nix shell` (ccache, `jdk21_headless`, unzip).
-Gotowe binaria (NDK, narzędzia Qt z aqt, `aapt2` pobierany przez Gradle, CMake z SDK) wymagają
-**nix-ld** (`programs.nix-ld.enable = true`); narzędzia Qt potrzebują dodatkowo glib, krb5,
-brotli i keyutils — skrypt dopisuje je do `NIX_LD_LIBRARY_PATH` (z `nix build nixpkgs#…`).
-CMake z nixpkgs **nie nadaje się**: jest załatany tak, że nie przeszukuje `/usr` — także
-w sysroocie NDK, więc nie znajduje nagłówków EGL/GLES i Qt6Gui się nie konfiguruje. Dlatego
-domyślnie używany jest CMake z Android SDK (`BRULION_ANDROID_CMAKE=system` wybiera ten z `PATH`).
+On NixOS the script re-runs itself in `nix shell` (ccache, `jdk21_headless`, unzip). The prebuilt
+binaries (the NDK, the Qt tools from aqt, `aapt2` downloaded by Gradle, CMake from the SDK) need
+**nix-ld** (`programs.nix-ld.enable = true`); the Qt tools additionally need glib, krb5, brotli
+and keyutils — the script adds them to `NIX_LD_LIBRARY_PATH` (from `nix build nixpkgs#…`). CMake
+from nixpkgs **is not suitable**: it is patched so that it does not search `/usr` — also in the
+NDK sysroot, so it does not find the EGL/GLES headers and Qt6Gui does not configure. So by default
+CMake from the Android SDK is used (`BRULION_ANDROID_CMAKE=system` picks the one from `PATH`).
 
-### Budowanie na laptopie (z Raspberry Pi)
+### Building on the laptop (from the Raspberry Pi)
 
-Pi (aarch64, 3,7 GB RAM) nie buduje Androida. Kompilacja idzie na laptopie x86_64 przez
-`laptop-run` (kopiuje śledzone pliki repozytorium do `~/work/note-taking` i tam uruchamia
-polecenie; nowe pliki trzeba najpierw oznaczyć `git add -N <ścieżki>`), zawsze pod wspólną blokadą.
-Katalog budowania trzymamy poza `~/work` (jest czyszczony przy każdym `laptop-run`), cache: Qt
-w `~/.cache/brulion-qt`, SDK w `~/.cache/brulion-android-sdk`, ccache w `~/.cache/ccache`,
-Gradle w `~/.gradle`:
+The Pi (aarch64, 3.7 GB RAM) does not build Android. Compilation runs on the x86_64 laptop through
+`laptop-run` (it copies the repository's tracked files to `~/work/note-taking` and runs the command
+there; new files first have to be marked with `git add -N <paths>`), always under the shared lock.
+We keep the build directory outside `~/work` (it is cleaned at every `laptop-run`); caches: Qt in
+`~/.cache/brulion-qt`, the SDK in `~/.cache/brulion-android-sdk`, ccache in `~/.cache/ccache`,
+Gradle in `~/.gradle`:
 
 ```sh
-flock <blokada> laptop-run bash -c '
+flock <lock> laptop-run bash -c '
   export BRULION_ANDROID_BUILD_DIR=$HOME/.cache/brulion-android-build
   scripts/android-build.sh > $HOME/.cache/brulion-android-build.log 2>&1; echo "exit=$?"
   tail -n 60 $HOME/.cache/brulion-android-build.log'
 ```
 
-Pierwsza instalacja narzędzi na laptopie (to samo robi skrypt, gdy czegoś brakuje):
+First installation of the tools on the laptop (the script does the same when something is
+missing):
 
 ```sh
 uvx --from aqtinstall==3.3.0 aqt install-qt all_os android 6.11.2 android_arm64_v8a \
-  -O ~/.cache/brulion-qt --autodesktop      # + linux_gcc_64 (Qt hosta)
+  -O ~/.cache/brulion-qt --autodesktop      # + linux_gcc_64 (host Qt)
 JAVA_HOME=$(nix build --no-link --print-out-paths nixpkgs#jdk21_headless)/lib/openjdk \
   ~/.cache/brulion-android-sdk/cmdline-tools/latest/bin/sdkmanager \
   --sdk_root=$HOME/.cache/brulion-android-sdk --install "ndk;27.2.12479018" "cmake;3.31.6"
 ```
 
-### Wynik (zweryfikowane 2026-10-14 na laptopie x86_64, NixOS)
+### Result (verified 2026-10-14 on the x86_64 laptop, NixOS)
 
 `BRULION_WERROR=ON BRULION_ANDROID_UNIT_TESTS=1 BRULION_ANDROID_LINT=1 scripts/android-build.sh`
-(pierwsze budowanie: pobranie Gradle 9.3.1 + zależności AGP, potem Gradle ~45 s; kolejne
-przebiegi z ccache i cache Gradle — kilkadziesiąt sekund). Koniec logu:
+(first build: downloading Gradle 9.3.1 + the AGP dependencies, then Gradle ~45 s; later runs with
+ccache and the Gradle cache — a few dozen seconds). End of the log:
 
 ```
 ==> Checking dist-android/brulion-0.1.0-arm64-v8a.apk
@@ -1052,7 +1070,7 @@ native-code: 'arm64-v8a'
 permissions: 13 (all required present)
 Kotlin classes in dex: 16
 native libraries: 72 in lib/{arm64-v8a}
-==> Kotlin unit tests (android/tests)          # ReminderJsonTest 5, WallClockTest 4, RingTimeoutTest 3 — 0 błędów
+==> Kotlin unit tests (android/tests)          # ReminderJsonTest 5, WallClockTest 4, RingTimeoutTest 3 — 0 failures
 ==> Android lint
 lint: 0 errors, 2 warnings — in Brulion's files: 1
 AndroidManifest.xml:59: Warning: Attribute enableOnBackInvokedCallback is only used in API level 33 and higher … [UnusedAttribute]
@@ -1060,19 +1078,19 @@ AndroidManifest.xml:59: Warning: Attribute enableOnBackInvokedCallback is only u
 APK: …/dist-android/brulion-0.1.0-arm64-v8a.apk (58M, signing: throwaway)
 ```
 
-Scalony manifest (`aapt2 dump xmltree --file AndroidManifest.xml`) zawiera `BrulionActivity`
-(LAUNCHER, `singleTop`), cztery odbiorniki (nieeksportowane; `BootReceiver` z akcjami
+The merged manifest (`aapt2 dump xmltree --file AndroidManifest.xml`) contains `BrulionActivity`
+(LAUNCHER, `singleTop`), four receivers (not exported; `BootReceiver` with the actions
 BOOT_COMPLETED, QUICKBOOT_POWERON, MY_PACKAGE_REPLACED, TIME_SET, TIMEZONE_CHANGED,
 SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED), `AlarmActivity`, `requestLegacyExternalStorage`,
-ikony `@mipmap/ic_launcher`/`ic_launcher_round` oraz uprawnienia: ACCESS_NETWORK_STATE, INTERNET
-(z Qt Network), MANAGE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE (max 32), WRITE_EXTERNAL_STORAGE
-(max 29), POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM (max 32), USE_EXACT_ALARM,
-RECEIVE_BOOT_COMPLETED, VIBRATE, WAKE_LOCK, USE_FULL_SCREEN_INTENT. Sygnatury metod
-skompilowanej klasy `BrulionAndroid` (`javap -s`) zgadzają się z wywołaniami JNI w C++.
+the icons `@mipmap/ic_launcher`/`ic_launcher_round` and the permissions: ACCESS_NETWORK_STATE,
+INTERNET (from Qt Network), MANAGE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE (max 32),
+WRITE_EXTERNAL_STORAGE (max 29), POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM (max 32),
+USE_EXACT_ALARM, RECEIVE_BOOT_COMPLETED, VIBRATE, WAKE_LOCK, USE_FULL_SCREEN_INTENT. The method
+signatures of the compiled `BrulionAndroid` class (`javap -s`) match the JNI calls in C++.
 
-Test end-to-end na emulatorze (Android 16 / API 36, x86_64, `google_apis`; ten sam dzień):
+End-to-end test on the emulator (Android 16 / API 36, x86_64, `google_apis`; the same day):
 `BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 BRULION_WERROR=ON scripts/android-build.sh`
-i `scripts/android-emulator-test.sh` — wszystkie 14 sprawdzeń przeszło:
+and `scripts/android-emulator-test.sh` — all 14 checks passed:
 
 ```
 ==> App: dist-android/brulion-0.1.0-x86_64.apk
@@ -1098,251 +1116,263 @@ W brulion.selftest: SELFTEST activated path=strony/Łódź.md line=7
 W brulion.selftest: SELFTEST pdf backend=Android PdfRenderer pages=1 width=595 height=842 centre=#ff0000 corner=#ffffff error=
 ```
 
-`dumpsys alarm` pokazał przypomnienie jako dokładny budzik RTC_WAKEUP (`setExactAndAllowWhileIdle`)
-i alarm jako budzik z `showIntent` (`setAlarmClock`), oba z akcją `…android.action.FIRE`
-i `exactAllowReason=policy_permission` (`USE_EXACT_ALARM`).
+`dumpsys alarm` showed the reminder as an exact RTC_WAKEUP alarm (`setExactAndAllowWhileIdle`)
+and the alarm as an alarm with a `showIntent` (`setAlarmClock`), both with the action
+`…android.action.FIRE` and `exactAllowReason=policy_permission` (`USE_EXACT_ALARM`).
 
-### Rozmiar APK
+### APK size
 
-Co buildy wydań (Release, MinSizeRel) pomijają albo zmniejszają — zmierzone 2026-10-18 na APK
-arm64-v8a (`tests/bench/mobile/size-report.py apk`):
+What release builds (Release, MinSizeRel) leave out or shrink — measured 2026-10-18 on the
+arm64-v8a APK (`tests/bench/mobile/size-report.py apk`):
 
-| Zmiana | Gdzie | APK arm64 |
+| Change | Where | arm64 APK |
 |---|---|---|
-| **R8** zmniejsza kod Javy/Kotlina (biblioteka standardowa Kotlina, androidx) | `android/settings.gradle`, reguły `android/proguard-rules.pro` | `classes.dex` 5,12 MB → 0,35 MB |
-| bez wtyczek debugera i profilera QML (`qmltooling`, 12 bibliotek) | `src/app/CMakeLists.txt` (`qt_import_plugins(… EXCLUDE_BY_TYPE qmltooling)`) | −1,0 MB |
-| bez QML deweloperskiego: galerii (`--gallery`), placu zabaw edytora (`--editor`), skryptów i samotestów `--editor-script` | opcja `BRULION_DEV_QML` w `src/app/CMakeLists.txt` (domyślne `AUTO`: wyłączona w Release/MinSizeRel na Androidzie i w przeglądarce, ustalane przy każdym `cmake`), zaślepki `src/app/qml/stubs/` | `libbrulion` −0,77 MB |
-| OpenSSL 3 (HTTPS, wyżej) | `src/app/CMakeLists.txt` | +4,45 MB |
-| strony PDF jako podkład rysunku (2026-10-30) przez systemowy `PdfRenderer` (`PdfPages.kt`, JNI) zamiast Qt PDF — Qt PDF dla Androida to `libQt6Pdf_arm64-v8a.so` 4,53 MB (archiwum 2,09 MB), a w repozytorium Qt jest tylko jako rozszerzenie, którego aqt nie zna | `src/platform/pdfpages_android.cpp`, `android/…/PdfPages.kt` | ok. 0 MB (kilka KB kodu) |
-| tylko styl Basic, bez QtQuick.Dialogs (2026-10-30): okna wyboru plików systemu przez `FilePicker` (wybór plików i folderów, „Zapisz jako” — te same intencje SAF co wcześniej), QML importuje `QtQuick.Controls.Basic` zamiast `QtQuick.Controls`, który przez opcjonalne importy pakował wszystkie style (Material, Universal, Imagine, Fusion, FluentWinUI3) | `src/app/ui/filepicker.h`, strażnik w `src/app/CMakeLists.txt` i `scripts/android-build.sh` (`nix/android.nix`) | −15,63 MB (25 plików mniej; pobranie −4,6 MB) |
+| **R8** shrinks the Java/Kotlin code (the Kotlin standard library, androidx) | `android/settings.gradle`, rules in `android/proguard-rules.pro` | `classes.dex` 5.12 MB → 0.35 MB |
+| no QML debugger and profiler plugins (`qmltooling`, 12 libraries) | `src/app/CMakeLists.txt` (`qt_import_plugins(… EXCLUDE_BY_TYPE qmltooling)`) | −1.0 MB |
+| no developer QML: the gallery (`--gallery`), the editor playground (`--editor`), the `--editor-script` scripts and self-tests | the `BRULION_DEV_QML` option in `src/app/CMakeLists.txt` (default `AUTO`: off in Release/MinSizeRel on Android and in the browser, decided at every `cmake`), stubs in `src/app/qml/stubs/` | `libbrulion` −0.77 MB |
+| OpenSSL 3 (HTTPS, above) | `src/app/CMakeLists.txt` | +4.45 MB |
+| PDF pages as a drawing background (2026-10-30) through the system's `PdfRenderer` (`PdfPages.kt`, JNI) instead of Qt PDF — Qt PDF for Android is `libQt6Pdf_arm64-v8a.so` 4.53 MB (2.09 MB archived), and in the Qt repository it exists only as an extension aqt does not know | `src/platform/pdfpages_android.cpp`, `android/…/PdfPages.kt` | about 0 MB (a few KB of code) |
+| only the Basic style, no QtQuick.Dialogs (2026-10-30): the system's file pickers through `FilePicker` (choosing files and folders, "Save as" — the same SAF intents as before), QML imports `QtQuick.Controls.Basic` instead of `QtQuick.Controls`, which through optional imports packaged all styles (Material, Universal, Imagine, Fusion, FluentWinUI3) | `src/app/ui/filepicker.h`, a guard in `src/app/CMakeLists.txt` and `scripts/android-build.sh` (`nix/android.nix`) | −15.63 MB (25 files fewer; download −4.6 MB) |
 
-Razem 83,15 MB → 81,02 MB (do pobrania, po kompresji: 27,46 → 27,18 MB); bez OpenSSL byłoby
-76,5 MB. Od 2026-10-30 (bez nieużywanych stylów i QtQuick.Dialogs): 96,23 → 80,60 MB, do pobrania
-30,86 → 26,26 MB (docs/PERFORMANCE.md, L9). Zostaje QtTest, QuickTest i Qt.labs.folderlistmodel
-(0,84 MB) z QML deweloperskiego: `androiddeployqt` przegląda cały `src/app`, także pliki, których
-build nie kompiluje. Buildy Debug i RelWithDebInfo (APK pomiarowe) mają `qmltooling` i QML deweloperski.
+In total 83.15 MB → 81.02 MB (download size, compressed: 27.46 → 27.18 MB); without OpenSSL it
+would be 76.5 MB. Since 2026-10-30 (without the unused styles and QtQuick.Dialogs): 96.23 →
+80.60 MB, download 30.86 → 26.26 MB (docs/PERFORMANCE.md, L9). What remains is QtTest, QuickTest
+and Qt.labs.folderlistmodel (0.84 MB) from the developer QML: `androiddeployqt` scans the whole of
+`src/app`, including files the build does not compile. Debug and RelWithDebInfo builds
+(measurement APKs) have `qmltooling` and the developer QML.
 
-**R8** działa w każdym buildzie release Gradle'a (APK i AAB z `CMAKE_BUILD_TYPE` Release,
-RelWithDebInfo, MinSizeRel; Debug — bez R8). `android/settings.gradle` włącza go w projekcie
-Gradle, który `androiddeployqt` składa z szablonu Qt — `build.gradle` z Qt zostaje nietknięty.
-Klasy, które C++ woła przez JNI po nazwie, zostają w całości: Javy Qt (`org.qtproject.qt.**`,
-także szukane przez refleksję) i Kotlina Brulionu (`io.github.januszbit.brulion.android.**`);
-komponenty z manifestu (aktywności, odbiorniki, `FileProvider`) zachowuje sam AGP. C++ Qt woła
-po nazwie także kilka metod androidx, których nie woła żaden kod Javy — reguły zachowują je
-osobno: `FileProvider.getUriForFile` (lokalny plik jako `content://` dla
-`QDesktopServices::openUrl` i przeciągania) oraz `FontRequest` / `FontsContractCompat`
-(pobieranie czcionek ikon dla `QIcon::fromTheme`). Brulion dziś z nich nie korzysta (otwiera
-tylko linki http/https/mailto, ikony ma własne), ale bez tych reguł nowa funkcja działałaby
-w Debug, a w release nie. Nazwy nie są zaciemniane (`-dontobfuscate`: czytelne stosy wywołań
-w logcat). `scripts/android-build.sh` i derywacja Nix sprawdzają po buildzie, że w
-`classes.dex` są klasy Brulionu, `QtNative`, `QtActivityBase`, `QtLoader` i te metody androidx.
+**R8** runs in every Gradle release build (APK and AAB with `CMAKE_BUILD_TYPE` Release,
+RelWithDebInfo, MinSizeRel; Debug — without R8). `android/settings.gradle` turns it on in the
+Gradle project that `androiddeployqt` assembles from Qt's template — Qt's `build.gradle` stays
+untouched. Classes that C++ calls through JNI by name are kept whole: Qt's Java
+(`org.qtproject.qt.**`, also looked up through reflection) and Brulion's Kotlin
+(`io.github.januszbit.brulion.android.**`); AGP itself keeps the components from the manifest
+(activities, receivers, `FileProvider`). Qt's C++ also calls by name a few androidx methods that
+no Java code calls — the rules keep them separately: `FileProvider.getUriForFile` (a local file as
+`content://` for `QDesktopServices::openUrl` and dragging) and `FontRequest` /
+`FontsContractCompat` (downloading icon fonts for `QIcon::fromTheme`). Brulion does not use them
+today (it opens only http/https/mailto links and has its own icons), but without these rules a new
+feature would work in Debug and not in release. Names are not obfuscated (`-dontobfuscate`:
+readable stack traces in logcat). `scripts/android-build.sh` and the Nix derivation check after the
+build that `classes.dex` has Brulion's classes, `QtNative`, `QtActivityBase`, `QtLoader` and these
+androidx methods.
 
-## Budowanie przez Nix (flake)
+## Building with Nix (flake)
 
-APK można też zbudować jako wynik flake'a — czysta derywacja w piaskownicy Nixa (bez sieci;
-wszystko, co pobierane, ma przypięty hash), na hoście **x86_64-linux** (NDK i narzędzia SDK są
-tylko na x86_64; NixOS nie potrzebuje do tego nix-ld):
+The APK can also be built as a flake output — a pure derivation in the Nix sandbox (no network;
+everything downloaded has a pinned hash), on an **x86_64-linux** host (the NDK and the SDK tools
+exist only for x86_64; NixOS does not need nix-ld for this):
 
 ```sh
-nix build .#brulion-android           # arm64-v8a: result/brulion-<wersja>-arm64-v8a-unsigned.apk
-nix build .#brulion-android-x86_64    # dla emulatora
-nix build .#brulion-android-aab       # arm64-v8a: APK + AAB (bundleRelease, ok. 10 s więcej)
-nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulion-<wersja>-arm64-v8a.apk
+nix build .#brulion-android           # arm64-v8a: result/brulion-<version>-arm64-v8a-unsigned.apk
+nix build .#brulion-android-x86_64    # for the emulator
+nix build .#brulion-android-aab       # arm64-v8a: APK + AAB (bundleRelease, about 10 s more)
+nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulion-<version>-arm64-v8a.apk
 ```
 
-Wynik jest **niepodpisany** (wyrównany `zipalign -P 16` dla stron 16 KB), a podpis dokłada
-dopiero `brulion-android-sign` w chwili uruchomienia — klucz i hasło nigdy nie trafiają do
-`/nix/store`. Derywacja sprawdza APK tak jak `scripts/android-build.sh` (pakiet, uprawnienia,
-komponenty manifestu, klasy Kotlina i Javy Qt po R8, `libbrulion_<abi>.so`, OpenSSL, brak
-`qmltooling`, wyrównanie 16 KB).
+The output is **unsigned** (aligned with `zipalign -P 16` for 16 KB pages), and the signature is
+added only by `brulion-android-sign` when it runs — the key and the password never reach
+`/nix/store`. The derivation checks the APK the way `scripts/android-build.sh` does (package,
+permissions, manifest components, Kotlin classes and Qt's Java after R8, `libbrulion_<abi>.so`,
+OpenSSL, no `qmltooling`, 16 KB alignment).
 
-| Składnik | Skąd (`nix/android.nix`) |
+| Component | Source (`nix/android.nix`) |
 |---|---|
-| Qt for Android 6.11.2 (qtbase, qtdeclarative, qtsvg) | archiwa `.7z` z repozytorium Qt (te same, które pobiera aqt), osobno dla modułu i ABI, hashe SHA-256 publikowane przez Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
-| Qt hosta (moc, rcc, qmlcachegen, androiddeployqt, lrelease…) | nixpkgs `qt6` — **ta sama wersja** co Qt for Android (sprawdzane przy ewaluacji) |
-| SDK (platforma 36, build-tools 36.0.0), NDK r27c, CMake 3.31.6 + Ninja | nixpkgs `androidenv` (licencja SDK akceptowana w `flake.nix`) |
-| Gradle / AGP | Gradle 9 z nixpkgs (JDK 21) zamiast wrappera z szablonu Qt; AGP 9.0.0, Kotlin, androidx — z `nix/android/gradle-deps.json` (mitm-cache), wspólne dla wszystkich ABI |
-| aapt2 | z build-tools SDK (`android.aapt2FromMavenOverride`) zamiast binarki z Mavena |
-| OpenSSL 3 (KDAB android_openssl) | przypięty commit w `nix/android/openssl.json` — ten sam co w `src/app/CMakeLists.txt`, podawany jako `BRULION_ANDROID_OPENSSL_DIR` |
+| Qt for Android 6.11.2 (qtbase, qtdeclarative, qtsvg) | `.7z` archives from the Qt repository (the same ones aqt downloads), separately per module and ABI, SHA-256 hashes published by Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
+| Host Qt (moc, rcc, qmlcachegen, androiddeployqt, lrelease…) | nixpkgs `qt6` — **the same version** as Qt for Android (checked at evaluation) |
+| SDK (platform 36, build-tools 36.0.0), NDK r27c, CMake 3.31.6 + Ninja | nixpkgs `androidenv` (the SDK licence accepted in `flake.nix`) |
+| Gradle / AGP | Gradle 9 from nixpkgs (JDK 21) instead of the wrapper from Qt's template; AGP 9.0.0, Kotlin, androidx — from `nix/android/gradle-deps.json` (mitm-cache), shared by all ABIs |
+| aapt2 | from the SDK build-tools (`android.aapt2FromMavenOverride`) instead of the binary from Maven |
+| OpenSSL 3 (KDAB android_openssl) | pinned commit in `nix/android/openssl.json` — the same as in `src/app/CMakeLists.txt`, passed as `BRULION_ANDROID_OPENSSL_DIR` |
 
-Podpisywanie (`nix run .#brulion-android-sign -- PLIK.apk|PLIK.aab [opcje]`, działa też na
-aarch64, np. na Raspberry Pi — apksigner z nixpkgs to Java):
+Signing (`nix run .#brulion-android-sign -- FILE.apk|FILE.aab [options]`, also works on aarch64,
+e.g. on the Raspberry Pi — apksigner from nixpkgs is Java):
 
-* `--keystore` (albo `BRULION_ANDROID_KEYSTORE`), domyślnie
-  `~/.local/share/brulion/brulion-release.jks` — klucz z `scripts/android-new-keystore.sh`;
-* hasło: `--password-file` (albo `BRULION_ANDROID_KEYSTORE_PASSWORD_FILE`), inaczej
-  `QT_ANDROID_KEYSTORE_STORE_PASS`, inaczej plik obok magazynu z końcówką `.password` zamiast
-  `.jks`, inaczej apksigner zapyta;
-* `--alias` (albo `BRULION_ANDROID_KEY_ALIAS` / `QT_ANDROID_KEYSTORE_ALIAS`), domyślnie jedyny
-  klucz w magazynie; `--out` — plik wynikowy (domyślnie bieżący katalog, nazwa bez `-unsigned`).
+* `--keystore` (or `BRULION_ANDROID_KEYSTORE`), by default
+  `~/.local/share/brulion/brulion-release.jks` — the key from `scripts/android-new-keystore.sh`;
+* password: `--password-file` (or `BRULION_ANDROID_KEYSTORE_PASSWORD_FILE`), otherwise
+  `QT_ANDROID_KEYSTORE_STORE_PASS`, otherwise a file next to the keystore with the suffix
+  `.password` instead of `.jks`, otherwise apksigner asks;
+* `--alias` (or `BRULION_ANDROID_KEY_ALIAS` / `QT_ANDROID_KEYSTORE_ALIAS`), by default the only
+  key in the keystore; `--out` — the output file (by default the current directory, the name
+  without `-unsigned`).
 
-Po podpisaniu APK jest sprawdzany (`apksigner verify`, wyrównanie 16 KB); AAB podpisuje
+After signing the APK is checked (`apksigner verify`, 16 KB alignment); an AAB is signed by
 `jarsigner`.
 
-**Aktualizacja locków** — po `nix flake update` (nowe Qt w nixpkgs) albo po zmianie zależności
-Gradle (szablon Qt, `android/`):
+**Updating the locks** — after `nix flake update` (a new Qt in nixpkgs) or after a change of the
+Gradle dependencies (Qt's template, `android/`):
 
 ```sh
-nix/android/update-locks.sh            # Qt for Android dla wersji qt6 z nixpkgs + zależności Gradle
-nix/android/update-locks.sh --qt       # tylko qt-android.json (kilka sekund)
-nix/android/update-locks.sh --gradle   # tylko gradle-deps.json (~3 min: buduje aplikację i nagrywa pobrania Gradle)
-nix/android/update-locks.sh --openssl <commit>   # przypina KDAB android_openssl (hash archiwum)
+nix/android/update-locks.sh            # Qt for Android for the qt6 version in nixpkgs + Gradle dependencies
+nix/android/update-locks.sh --qt       # only qt-android.json (a few seconds)
+nix/android/update-locks.sh --gradle   # only gradle-deps.json (~3 min: builds the app and records Gradle's downloads)
+nix/android/update-locks.sh --openssl <commit>   # pins KDAB android_openssl (archive hash)
 ```
 
-Zależności Gradle nagrywa skrypt aktualizacji z `gradle.fetchDeps` (nixpkgs): buduje
-aplikację poza piaskownicą (w bubblewrap, z dostępem do sieci przez nagrywające proxy) aż do
-`gradle assembleRelease bundleRelease` i zapisuje listę plików z hashami.
+The update script records the Gradle dependencies with `gradle.fetchDeps` (nixpkgs): it builds
+the app outside the sandbox (in bubblewrap, with network access through a recording proxy) up to
+`gradle assembleRelease bundleRelease` and writes the list of files with their hashes.
 
-Jak to działa (szczegóły w komentarzach `nix/android.nix`): CMake z SDK konfiguruje projekt
-z plikiem toolchain Qt for Android; cel `brulion_make_apk` buduje bibliotekę i uruchamia
-`androiddeployqt`, który kopiuje szablon Gradle z Qt i woła `./gradlew`. Derywacja zapisuje
-wcześniej własny `gradlew` (Gradle z nixpkgs z flagami mitm-cache) — `androiddeployqt` nie
-nadpisuje pliku nowszego od szablonu. Qt for Android jest podawane jako drzewo dowiązań
-z zapisywalną kopią `src/` (szablonów), bo `androiddeployqt` edytuje skopiowane z nich pliki
-(np. `res/values/libs.xml`), a kopie plików ze store'u są tylko do odczytu.
+How it works (details in the comments of `nix/android.nix`): CMake from the SDK configures the
+project with Qt for Android's toolchain file; the `brulion_make_apk` target builds the library and
+runs `androiddeployqt`, which copies the Gradle template from Qt and calls `./gradlew`. The
+derivation writes its own `gradlew` beforehand (Gradle from nixpkgs with the mitm-cache flags) —
+`androiddeployqt` does not overwrite a file newer than the template. Qt for Android is provided as
+a tree of symlinks with a writable copy of `src/` (the templates), because `androiddeployqt` edits
+the files copied from them (e.g. `res/values/libs.xml`), and copies of store files are read-only.
 
-Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
+Measured 2026-10-17 on the x86_64 laptop (16 cores):
 
-* od zera (pusty store, 1,3 GiB pobrań, m.in. NDK, SDK, Qt, Gradle, JDK): **250 s**;
-* z gotowymi zależnościami (zmiana w źródłach): **~145 s** (C++ ~95 s, Gradle ~43 s, sprawdzenia);
-* APK jest **powtarzalny bit w bit**: `nix build --rebuild` i budowanie w pustym store dały ten sam plik;
-* to ten sam APK co ze `scripts/android-build.sh`: ten sam kod źródłowy zbudowany skryptem
-  z `SOURCE_DATE_EPOCH=315532800` (stała nixpkgs) różni się tylko 20 bajtami build-id
-  w `libbrulion_<abi>.so` (zależnymi od ścieżki budowania); z innym `SOURCE_DATE_EPOCH` (skrypt
-  domyślnie bierze czas ostatniego commita) jeszcze znacznikami czasu plików w zasobach Qt (rcc).
-  Podpis `brulion-android-sign` daje bajt w bajt to samo co podpis skryptu (apksigner
-  z build-tools 36, schemat v3);
-* APK x86_64 podpisany kluczem jednorazowym działa na emulatorze (Android 16, API 36): przykładowy
-  brulion, edycja bloku, przypomnienie (powiadomienie w tle, otwarcie bloku po dotknięciu),
-  eksport do ZIP, obrót ekranu; w logcat żadnych awarii. Emulator z `-gpu swangle_indirect`
-  rysuje poprawnie (`swiftshader_indirect` zostawia czarne pasy na przyciskach).
+* from scratch (empty store, 1.3 GiB of downloads, among them the NDK, SDK, Qt, Gradle, JDK):
+  **250 s**;
+* with the dependencies ready (a change in the sources): **~145 s** (C++ ~95 s, Gradle ~43 s,
+  checks);
+* the APK is **bit-for-bit reproducible**: `nix build --rebuild` and a build in an empty store gave
+  the same file;
+* it is the same APK as from `scripts/android-build.sh`: the same source built by the script with
+  `SOURCE_DATE_EPOCH=315532800` (the nixpkgs constant) differs only in the 20 bytes of the build ID
+  in `libbrulion_<abi>.so` (which depend on the build path); with another `SOURCE_DATE_EPOCH` (the
+  script takes the time of the last commit by default) also in the file timestamps in the Qt
+  resources (rcc). The `brulion-android-sign` signature gives byte for byte the same as the
+  script's signature (apksigner from build-tools 36, scheme v3);
+* the x86_64 APK signed with a throwaway key works on the emulator (Android 16, API 36): the sample
+  notebook, editing a block, a reminder (a notification in the background, opening the block on a
+  tap), export to ZIP, screen rotation; no crashes in logcat. The emulator with
+  `-gpu swangle_indirect` draws correctly (`swiftshader_indirect` leaves black stripes on
+  buttons).
 
-## Budowanie ze źródeł (F-Droid)
+## Building from source (F-Droid)
 
-F-Droid buduje każdą aplikację sam, **wyłącznie ze źródeł** — gotowe binaria w buildzie są
-niedozwolone. Zwykły build (`scripts/android-build.sh`, Nix) bierze dwie rzeczy gotowe: Qt for
-Android i Qt hosta z archiwów The Qt Company (aqt) oraz OpenSSL 3 z KDAB/android_openssl. Build ze
-źródeł kompiluje obie sam, tym samym NDK r27c:
+F-Droid builds every app itself, **from source only** — prebuilt binaries are not allowed in the
+build. The ordinary build (`scripts/android-build.sh`, Nix) takes two things prebuilt: Qt for
+Android and host Qt from The Qt Company's archives (aqt), and OpenSSL 3 from KDAB/android_openssl.
+The build from source compiles both itself, with the same NDK r27c:
 
 ```sh
-BRULION_ANDROID_QT=source scripts/android-build.sh                       # podpisany (klucz wydań albo jednorazowy)
-BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh # niepodpisany, jak w F-Droid
-# wynik: dist-android/brulion-<wersja>-arm64-v8a[-unsigned].apk
+BRULION_ANDROID_QT=source scripts/android-build.sh                       # signed (release key or throwaway)
+BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh # unsigned, as in F-Droid
+# result: dist-android/brulion-<version>-arm64-v8a[-unsigned].apk
 ```
 
-`BRULION_ANDROID_QT=source` uruchamia po kolei (każdy skrypt można też wołać osobno, `--help`):
+`BRULION_ANDROID_QT=source` runs in turn (each script can also be called on its own, `--help`):
 
-1. **`scripts/android-openssl-from-source.sh`** — OpenSSL **3.5.9** (seria LTS, wsparcie do
-   04.2030; archiwum z wydań GitHuba `openssl/openssl`, SHA-256 przypięty w skrypcie) dla każdego
-   ABI: `libssl_3.so`, `libcrypto_3.so` (nazwy, które wczytuje wtyczka TLS Qt: wariant `_3`
-   jak u KDAB, ale przez własny cel `Configure` zamiast łatki), API 28, segmenty 16 KB dla
-   64-bitowych ABI, `strip`. Układ `ssl_3/<abi>/…` jak w KDAB, więc wynik idzie wprost do
-   `BRULION_ANDROID_OPENSSL_DIR`; do tego `ssl_3/<abi>/include` dla buildu Qt. CMake nie sprawdza
-   wtedy sum KDAB (`-DBRULION_ANDROID_OPENSSL_CHECK_SHA256=OFF`, ustawia skrypt) — sprawdzane są
-   źródła. Skrypt sam weryfikuje SONAME, zależność `libssl_3.so → libcrypto_3.so`, wyrównanie
-   16 KB i wersję w bibliotece. Około 1 min na ABI.
-2. **`scripts/android-qt-from-source.sh`** — Qt **6.11.2** z oficjalnych archiwów źródeł
-   (`download.qt.io/official_releases/qt/6.11/6.11.2/submodules/`, SHA-256 każdego modułu
-   przypięte w skrypcie, zgodne z plikami `.sha256` Qt), w układzie aqt
-   (`$QT_ROOT/6.11.2/gcc_64` i `…/android_arm64_v8a`, domyślnie `QT_ROOT=~/.cache/brulion-qt-source`):
-   * **Qt hosta** (narzędzia, które uruchamia build krzyżowy: moc, rcc, qmlcachegen,
-     qmltyperegistrar, qmlimportscanner, qsb, svgtoqml, androiddeployqt, lrelease, lupdate) oraz
-     tłumaczenia Qt (`qtbase_pl.qm`…, wbudowywane w aplikację): qtbase, qtshadertools, qtsvg,
-     qtdeclarative, qttools (tylko narzędzia Linguista), qttranslations — bez OpenGL, X11,
-     Wayland i TLS;
-   * **Qt for Android**: qtbase, qtshadertools, qtsvg, qtdeclarative — dokładnie moduły, z których
-     korzysta aplikacja (`Core Gui Network Qml Quick QuickControls2 Svg`, `GuiPrivate`;
-     LinguistTools to tylko narzędzie hosta, Qt PDF na Androidzie zastępuje systemowy
-     `PdfRenderer`), z wtyczką TLS OpenSSL ładującą bibliotekę w czasie działania
-     (`-openssl-runtime`, nagłówki z punktu 1) i 16 KB stronami (`ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`).
-   * Wyłączone po obu stronach: SQL, drukowanie, D-Bus, Qt Widgets (UI to Qt Quick — dlatego nie
-     ma też `uic`), zstd (rcc kompresowałby nim zasoby, których Qt for Android nie odczyta),
-     w qtdeclarative style Qt Quick Controls inne niż Basic, QtQuick.Dialogs i pomocniki Qt Design
-     Studio (aplikacja ich nie używa, a skrypt i tak odrzuca APK z innymi stylami — połowa czasu
-     budowania qtdeclarative), biblioteki systemowe (zawsze wbudowane zlib, PCRE2, libpng, libjpeg, FreeType, HarfBuzz —
-     wynik rcc nie zależy od zlib maszyny budującej), ICU, glib, qmlls, qdoc (wymagałby libclang).
-   * Moduł ma znacznik z wersją, źródłami i opcjami (łańcuchowo: nowy qtbase przebudowuje moduły
-     nad nim), więc ponowne uruchomienie nic nie robi. `BRULION_QT_KEEP_BUILD=1` zostawia katalogi
-     budowania (`$QT_ROOT/build`).
+1. **`scripts/android-openssl-from-source.sh`** — OpenSSL **3.5.9** (the LTS series, supported
+   until 04.2030; the archive from the GitHub releases of `openssl/openssl`, SHA-256 pinned in the
+   script) for each ABI: `libssl_3.so`, `libcrypto_3.so` (the names Qt's TLS plugin loads: the
+   `_3` variant as at KDAB, but through its own `Configure` target instead of a patch), API 28,
+   16 KB segments for the 64-bit ABIs, `strip`. The layout `ssl_3/<abi>/…` as at KDAB, so the
+   result goes straight into `BRULION_ANDROID_OPENSSL_DIR`; plus `ssl_3/<abi>/include` for the Qt
+   build. CMake then does not check the KDAB sums (`-DBRULION_ANDROID_OPENSSL_CHECK_SHA256=OFF`,
+   set by the script) — the sources are checked. The script itself verifies the SONAME, the
+   dependency `libssl_3.so → libcrypto_3.so`, the 16 KB alignment and the version in the library.
+   About 1 min per ABI.
+2. **`scripts/android-qt-from-source.sh`** — Qt **6.11.2** from the official source archives
+   (`download.qt.io/official_releases/qt/6.11/6.11.2/submodules/`, the SHA-256 of each module
+   pinned in the script, matching Qt's `.sha256` files), in the aqt layout
+   (`$QT_ROOT/6.11.2/gcc_64` and `…/android_arm64_v8a`, by default
+   `QT_ROOT=~/.cache/brulion-qt-source`):
+   * **Host Qt** (the tools the cross build runs: moc, rcc, qmlcachegen, qmltyperegistrar,
+     qmlimportscanner, qsb, svgtoqml, androiddeployqt, lrelease, lupdate) and Qt's translations
+     (`qtbase_pl.qm`…, built into the app): qtbase, qtshadertools, qtsvg, qtdeclarative, qttools
+     (only the Linguist tools), qttranslations — without OpenGL, X11, Wayland and TLS;
+   * **Qt for Android**: qtbase, qtshadertools, qtsvg, qtdeclarative — exactly the modules the app
+     uses (`Core Gui Network Qml Quick QuickControls2 Svg`, `GuiPrivate`; LinguistTools is only a
+     host tool, Qt PDF on Android is replaced by the system's `PdfRenderer`), with the OpenSSL TLS
+     plugin loading the library at run time (`-openssl-runtime`, headers from step 1) and 16 KB
+     pages (`ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`).
+   * Off on both sides: SQL, printing, D-Bus, Qt Widgets (the UI is Qt Quick — which is also why
+     there is no `uic`), zstd (rcc would compress resources with it that Qt for Android cannot
+     read), in qtdeclarative the Qt Quick Controls styles other than Basic, QtQuick.Dialogs and the
+     Qt Design Studio helpers (the app does not use them, and the script rejects an APK with other
+     styles anyway — half of qtdeclarative's build time), system libraries (always the bundled
+     zlib, PCRE2, libpng, libjpeg, FreeType, HarfBuzz — rcc's output does not depend on the build
+     machine's zlib), ICU, glib, qmlls, qdoc (it would need libclang).
+   * Each module has a stamp with the version, sources and options (chained: a new qtbase rebuilds
+     the modules above it), so running again does nothing. `BRULION_QT_KEEP_BUILD=1` keeps the
+     build directories (`$QT_ROOT/build`).
 
-Skrypt główny sprawdza potem dodatkowo, że `libQt6Core`, `libQt6Quick`, `libssl_3.so`
-i `libcrypto_3.so` w APK mają ten sam ELF build ID co biblioteki zbudowane lokalnie (żadne gotowe
-Qt ani OpenSSL nie trafiły do paczki), i że **wszystkie** 64-bitowe biblioteki mają segmenty
-16 KB (z Qt z aqt tylko ostrzega).
+The main script then also checks that `libQt6Core`, `libQt6Quick`, `libssl_3.so` and
+`libcrypto_3.so` in the APK have the same ELF build ID as the locally built libraries (no prebuilt
+Qt or OpenSSL got into the package), and that **all** 64-bit libraries have 16 KB segments (with
+Qt from aqt it only warns).
 
-Potrzebne: host Linux x86_64, kompilator C++ hosta (`g++`), `make`, `perl`, JDK 17+ (21),
-pakiety SDK `platforms;android-36`, `build-tools;36.0.0`, `cmake;3.31.6` (z Ninja) i NDK r27c —
-na NixOS skrypty same wchodzą w `nix shell` (gcc, JDK 21, ccache, perl, make). Źródła mogą też
-pochodzić z gotowych drzew (`BRULION_QT_SOURCE_DIR` — np. `qt5.git` po `init-repository`,
-`BRULION_OPENSSL_SOURCE_DIR` — checkout taga `openssl-3.5.9`); tak robi F-Droid (srclibs).
+Needed: a Linux x86_64 host, a host C++ compiler (`g++`), `make`, `perl`, JDK 17+ (21), the SDK
+packages `platforms;android-36`, `build-tools;36.0.0`, `cmake;3.31.6` (with Ninja) and NDK r27c —
+on NixOS the scripts enter `nix shell` by themselves (gcc, JDK 21, ccache, perl, make). The
+sources can also come from ready trees (`BRULION_QT_SOURCE_DIR` — e.g. `qt5.git` after
+`init-repository`, `BRULION_OPENSSL_SOURCE_DIR` — a checkout of the `openssl-3.5.9` tag); this is
+what F-Droid does (srclibs).
 
-### Wynik (zweryfikowane 2026-11-04, x86_64, NixOS)
+### Result (verified 2026-11-04, x86_64, NixOS)
 
-`BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh` (SDK, NDK r27c
-i CMake 3.31.6 z nixpkgs `androidenv`, jak w `nix/android.nix`; do porównawczego buildu z aqt
-na maszynie nie było żadnego gotowego Qt):
+`BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh` (SDK, NDK r27c and
+CMake 3.31.6 from nixpkgs `androidenv`, as in `nix/android.nix`; for a comparison build with aqt
+there was no prebuilt Qt on the machine):
 
-* `dist-android/brulion-0.8.1-arm64-v8a-unsigned.apk`, **88,2 MB** (ten sam kod z Qt z aqt
-  i OpenSSL KDAB: 86,3 MB). Ta sama lista plików w APK co z aqt (49 bibliotek natywnych, te same
-  moduły QML: QtQuick, Controls.Basic, Templates, Layouts, Shapes, Effects, Window, QtCore,
-  Qt.labs.folderlistmodel, QtTest); biblioteki Qt różnią się rozmiarem o mniej niż 85 KB. Różnica
-  +1,9 MB to OpenSSL 3.5.9 zamiast 3.1.8 (`libcrypto_3.so` 5,59 MB zamiast 4,03 MB,
-  `libssl_3.so` 1,03 MB zamiast 0,63 MB).
-* Sprawdzenia skryptu: `aapt2 dump badging` (pakiet, `versionCode` 8001, minSdk 28,
-  targetSdk 36, 13 uprawnień), komponenty manifestu, klasy Kotlina i Javy Qt po R8,
-  `zipalign -c -P 16 4`, **wszystkie 49** bibliotek 64-bitowych z segmentami 16 KB,
-  `libssl_3.so`/`libcrypto_3.so` (OpenSSL 3.5.9 29 Sep 2026), build ID `libQt6Core`/`libQt6Quick`
-  i bajty OpenSSL zgodne z lokalnymi buildami, APK bez podpisu.
-* Qt ze źródeł: Qt hosta (qtbase 1239 kroków Ninja, qtdeclarative 2437) i Qt for Android —
-  ok. 30 min z 6 zadaniami na 16-rdzeniowym x86_64 (zmierzone w kontenerze F-Droid, razem z
-  OpenSSL i APK); przy mocno obciążonej maszynie kilka godzin. W trakcie ~13 GB na dysku (katalogi
-  budowania są potem usuwane), zainstalowane ~400 MB. Kolejne uruchomienia: sekundy (znaczniki),
+* `dist-android/brulion-0.8.1-arm64-v8a-unsigned.apk`, **88.2 MB** (the same code with Qt from aqt
+  and KDAB's OpenSSL: 86.3 MB). The same list of files in the APK as with aqt (49 native libraries,
+  the same QML modules: QtQuick, Controls.Basic, Templates, Layouts, Shapes, Effects, Window,
+  QtCore, Qt.labs.folderlistmodel, QtTest); the Qt libraries differ in size by less than 85 KB. The
+  +1.9 MB difference is OpenSSL 3.5.9 instead of 3.1.8 (`libcrypto_3.so` 5.59 MB instead of
+  4.03 MB, `libssl_3.so` 1.03 MB instead of 0.63 MB).
+* The script's checks: `aapt2 dump badging` (package, `versionCode` 8001, minSdk 28, targetSdk 36,
+  13 permissions), manifest components, Kotlin classes and Qt's Java after R8,
+  `zipalign -c -P 16 4`, **all 49** 64-bit libraries with 16 KB segments,
+  `libssl_3.so`/`libcrypto_3.so` (OpenSSL 3.5.9 29 Sep 2026), the build IDs of
+  `libQt6Core`/`libQt6Quick` and the OpenSSL bytes matching the local builds, the APK unsigned.
+* Qt from source: host Qt (qtbase 1239 Ninja steps, qtdeclarative 2437) and Qt for Android —
+  about 30 min with 6 jobs on a 16-core x86_64 (measured in the F-Droid container, together with
+  OpenSSL and the APK); on a heavily loaded machine several hours. ~13 GB on disk meanwhile (the
+  build directories are deleted afterwards), ~400 MB installed. Later runs: seconds (stamps), the
   APK ~5 min.
-* Dwa kolejne buildy APK (ten sam Qt, Gradle od nowa) — **identyczny plik**. Uwaga: ponownie
-  użyty katalog budowania nie przebudowuje zasobów rcc, gdy zmienił się tylko `SOURCE_DATE_EPOCH`
-  (nowy commit) — APK do porównań i wydań zawsze z czystego katalogu (jak w CI i F-Droid).
-* **Nie sprawdzone na urządzeniu ani emulatorze** — wymaga Qt dla x86_64 ze źródeł
-  (`BRULION_ANDROID_ABIS=x86_64`) i `scripts/android-emulator-test.sh`, albo instalacji APK
-  (podpisanego) na telefonie.
+* Two consecutive APK builds (the same Qt, Gradle from scratch) — **an identical file**. Note: a
+  reused build directory does not rebuild the rcc resources when only `SOURCE_DATE_EPOCH` changed
+  (a new commit) — APKs for comparisons and releases always come from a clean directory (as in CI
+  and F-Droid).
+* **Not checked on a device or an emulator** — that needs Qt for x86_64 from source
+  (`BRULION_ANDROID_ABIS=x86_64`) and `scripts/android-emulator-test.sh`, or installing the
+  (signed) APK on a phone.
 
-### Przepis F-Droid
+### The F-Droid recipe
 
-Szkic przepisu dla [fdroiddata](https://gitlab.com/fdroid/fdroiddata):
-`packaging/fdroid/io.github.januszbit.brulion.yml` (sprawdzany przez
-`tests/scripts/tst_fdroid_recipe.sh`, w ctest `tst_scripts_fdroid_recipe`: wersje NDK, pakietów
-SDK, Qt i OpenSSL zgodne ze skryptami, `versionCode` ze wzoru `src/app/CMakeLists.txt`, ścieżka
-APK, ustawiane zmienne). Najważniejsze decyzje:
+A draft recipe for [fdroiddata](https://gitlab.com/fdroid/fdroiddata):
+`packaging/fdroid/io.github.januszbit.brulion.yml` (checked by
+`tests/scripts/tst_fdroid_recipe.sh`, in ctest `tst_scripts_fdroid_recipe`: the versions of the
+NDK, the SDK packages, Qt and OpenSSL match the scripts, the `versionCode` follows the formula in
+`src/app/CMakeLists.txt`, the APK path, the variables set). The main decisions:
 
-* **srclibs zamiast pobierania w `prebuild`** — F-Droid woli źródła z repozytoriów git
-  opisanych w `fdroiddata/srclibs/`: `Qt5@v6.11.2` (super-repozytorium `qt5.git`;
-  `init-repository --module-subset=…` dociąga tylko sześć potrzebnych modułów) i
-  `OpenSSL@openssl-3.5.9`. Oba srclibs już istnieją w fdroiddata; tak samo buduje Qt 6 np.
-  przepis `net.sourceforge.kid3`. Skrypty bez srclibs pobierają archiwa i sprawdzają SHA-256.
-* `sudo`: tylko `g++` i `make` (obraz buildservera to Debian 13 z JDK 21, perl jest);
-  CMake 3.31.6 i Ninja z pakietu SDK (`sdkmanager` w `prebuild`).
-* `build`: `scripts/android-build.sh` z `BRULION_ANDROID_QT=source`, `BRULION_ANDROID_SIGN=0`
-  (F-Droid podpisuje sam) i `BRULION_UPDATE_CHECK=OFF` (bez pytania GitHuba o nowe wersje —
-  aktualizacje daje F-Droid; opcję CMake i jej przekazanie przez skrypt dodaje osobna zmiana),
-  `SOURCE_DATE_EPOCH` = czas commita taga (jak w skrypcie domyślnie).
+* **srclibs instead of downloading in `prebuild`** — F-Droid prefers sources from git repositories
+  described in `fdroiddata/srclibs/`: `Qt5@v6.11.2` (the `qt5.git` super-repository;
+  `init-repository --module-subset=…` fetches only the six modules needed) and
+  `OpenSSL@openssl-3.5.9`. Both srclibs already exist in fdroiddata; the recipe
+  `net.sourceforge.kid3`, for example, builds Qt 6 the same way. Without srclibs the scripts
+  download the archives and check their SHA-256.
+* `sudo`: only `g++` and `make` (the buildserver image is Debian 13 with JDK 21; perl is there);
+  CMake 3.31.6 and Ninja from the SDK package (`sdkmanager` in `prebuild`).
+* `build`: `scripts/android-build.sh` with `BRULION_ANDROID_QT=source`, `BRULION_ANDROID_SIGN=0`
+  (F-Droid signs itself) and `BRULION_UPDATE_CHECK=OFF` (no asking GitHub for new versions —
+  F-Droid provides the updates; the CMake option and passing it through the script come with a
+  separate change), `SOURCE_DATE_EPOCH` = the time of the tag's commit (as the script's default).
 * `output: dist-android/brulion-$$VERSION$$-arm64-v8a-unsigned.apk`, `ndk: r27c`,
-  `timeout: 14400` (Qt dwa razy — host i Android — przekracza domyślne 2 h buildservera przy
-  mniejszej liczbie rdzeni).
-* `scandelete: tests/core/io/fixtures/trilium, tests/data/drawing/lzstring` — archiwa ZIP z testów
-  importu i dane testowe LZ-String, które skaner F-Droid zgłasza jako binaria (sprawdzone
-  w kontenerze); build Androida ich nie używa.
-* Plik jest dokładnie taki, jak go zapisuje `fdroid rewritemeta` (bez komentarzy — opis
-  w `packaging/fdroid/README.md`, kategorie alfabetycznie), `fdroid lint` przechodzi.
-* `AutoUpdateMode: Version`, `UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$` — bot F-Droid
-  sam dopisuje build dla każdego nowego taga `vX.Y.Z` (bez `-rc`).
-* Kategorie: Note, Calendar & Agenda, Task, Writing. Opis, zrzuty i ikonę F-Droid bierze
-  z `fastlane/metadata/android/` w repozytorium.
-* **Pierwszy build to v0.9.1** (`versionCode` 9001, `commit: v0.9.1`) — pierwsze opublikowane
-  wydanie z tymi skryptami (v0.8.1 ich nie ma, v0.9.0 nie zostało opublikowane). Następne wersje
-  dopisuje bot F-Droid (`AutoUpdateMode`); w tym repozytorium przepis zmienia się tylko razem
-  ze sposobem budowania.
+  `timeout: 14400` (Qt twice — host and Android — exceeds the buildserver's default 2 h with fewer
+  cores).
+* `scandelete: tests/core/io/fixtures/trilium, tests/data/drawing/lzstring` — ZIP archives from the
+  import tests and LZ-String test data, which the F-Droid scanner reports as binaries (checked in
+  the container); the Android build does not use them.
+* The file is exactly as `fdroid rewritemeta` writes it (no comments — the description is in
+  `packaging/fdroid/README.md`, categories in alphabetical order); `fdroid lint` passes.
+* `AutoUpdateMode: Version`, `UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$` — the F-Droid bot
+  adds a build for every new `vX.Y.Z` tag itself (without `-rc`).
+* Categories: Note, Calendar & Agenda, Task, Writing. F-Droid takes the description, screenshots
+  and icon from `fastlane/metadata/android/` in the repository.
+* **The first build is v0.9.1** (`versionCode` 9001, `commit: v0.9.1`) — the first published
+  release with these scripts (v0.8.1 does not have them, v0.9.0 was not published). Later versions
+  are added by the F-Droid bot (`AutoUpdateMode`); in this repository the recipe changes only
+  together with the way of building.
 
-Sprawdzenie lokalnie w kontenerze buildservera F-Droid (jak zadanie „fdroid build” w CI
-fdroiddata), podman albo docker:
+Checking locally in the F-Droid buildserver container (like the "fdroid build" job in fdroiddata's
+CI), podman or docker:
 
 ```sh
 mkdir -p ~/fdroid && cd ~/fdroid
@@ -1352,134 +1382,144 @@ cp <brulion>/packaging/fdroid/io.github.januszbit.brulion.yml fdroiddata/metadat
 podman run --rm -it -u root --entrypoint /bin/bash \
   -v "$PWD/fdroiddata:/build:z" -v "$PWD/fdroidserver:/home/vagrant/fdroidserver:Z" \
   registry.gitlab.com/fdroid/fdroidserver:buildserver
-# w kontenerze:
+# in the container:
 source /etc/profile.d/bsenv.sh && apt-get update && apt-get install -y fdroidserver sudo
 cd /build && export PATH=/home/vagrant/fdroidserver:$PATH
-# (fetchsrclibs to wtyczka z examples/ fdroidservera — jak w CI fdroiddata)
+# (fetchsrclibs is a plugin from fdroidserver's examples/ — as in fdroiddata's CI)
 export PYTHONPATH=/home/vagrant/fdroidserver:/home/vagrant/fdroidserver/examples
 fdroid lint io.github.januszbit.brulion && fdroid readmeta
 fdroid fetchsrclibs io.github.januszbit.brulion --verbose
 fdroid build --verbose --test --on-server --no-tarball io.github.januszbit.brulion
 ```
 
-(Zmiana w budowaniu przed jej wydaniem — test na lokalnej gałęzi: w kopii przepisu `Repo:` na
-lokalne repozytorium, `commit:` na hash commita.)
+(A change in the build before it is released — a test on a local branch: in a copy of the recipe,
+`Repo:` pointing to the local repository, `commit:` to the commit hash.)
 
-Zweryfikowane 2026-11-04 dokładnie tak (obraz `registry.gitlab.com/fdroid/fdroidserver:buildserver`
-— Debian 13, JDK 21 — i kroki zadania „fdroid build” z CI fdroiddata: `fetchsrclibs`, potem
-`fdroid build --test --on-server --no-tarball`, z kopią przepisu wskazującą lokalne repozytorium):
-`fdroid lint` i `fdroid readmeta` bez uwag, `fdroid rewritemeta` nic nie zmienia, srclibs
-`Qt5@v6.11.2` (+ `init-repository`, ok. 2 min) i `OpenSSL@openssl-3.5.9` pobrane, skaner F-Droid
-bez błędów (po `scandelete`), build Qt hosta i Qt for Android oraz APK — **„Successfully built
-io.github.januszbit.brulion:8001”**, wynik `tmp/io.github.januszbit.brulion_8001.apk` (88,2 MB,
-te same sprawdzenia `android-build.sh` co lokalnie). Krok `build` (Qt hosta, Qt for Android, OpenSSL,
-APK) z 6 zadaniami: 29–45 min. Pierwsze próby znalazły rzeczy poprawione w skryptach i przepisie:
-dane testowe LZ-String jako „binaria” dla skanera, ścieżka z `..` w `QT_ROOT` (Qt nie znajdował
-wtedy `Qt6LinguistTools` hosta) i różnice bajtów między buildami (niżej).
+Verified 2026-11-04 exactly like this (the image `registry.gitlab.com/fdroid/fdroidserver:buildserver`
+— Debian 13, JDK 21 — and the steps of the "fdroid build" job from fdroiddata's CI: `fetchsrclibs`,
+then `fdroid build --test --on-server --no-tarball`, with a copy of the recipe pointing to the
+local repository): `fdroid lint` and `fdroid readmeta` without remarks, `fdroid rewritemeta`
+changes nothing, the srclibs `Qt5@v6.11.2` (+ `init-repository`, about 2 min) and
+`OpenSSL@openssl-3.5.9` downloaded, the F-Droid scanner without errors (after `scandelete`), the
+build of host Qt and Qt for Android and the APK — **"Successfully built
+io.github.januszbit.brulion:8001"**, output `tmp/io.github.januszbit.brulion_8001.apk` (88.2 MB,
+the same `android-build.sh` checks as locally). The `build` step (host Qt, Qt for Android,
+OpenSSL, APK) with 6 jobs: 29–45 min. The first attempts found things that were fixed in the
+scripts and the recipe: the LZ-String test data as "binaries" for the scanner, a path with `..` in
+`QT_ROOT` (Qt then did not find the host's `Qt6LinguistTools`) and byte differences between builds
+(below).
 
-Ponownie 2026-11-05 na wydaniu **v0.9.1** — przepis z `packaging/fdroid/` bez zmian
-(`commit: v0.9.1` pobierany z GitHuba), fdroidserver i fdroiddata z gałęzi głównej (fdroidserver
-z 27.10.2026): `fdroid lint`, `readmeta` i `rewritemeta` bez uwag, skaner bez błędów (po
-`scandelete`), **„Successfully built io.github.januszbit.brulion:9001 from d497fdb8”**,
-sprawdzenia `android-build.sh` jak wyżej (49 bibliotek, 16 KB, OpenSSL 3.5.9, Qt i OpenSSL ze
-źródeł), APK 91,9 MB, SHA-256 `6a701443aaab7deadb0e209b8d522c7f1a12d774e7e06203139c1c841f25fca4`.
-Całość z pobraniem NDK i srclibs: ok. 25 min na 16 rdzeniach.
+Again on 2026-11-05 on the **v0.9.1** release — the recipe from `packaging/fdroid/` unchanged
+(`commit: v0.9.1` fetched from GitHub), fdroidserver and fdroiddata from the main branch
+(fdroidserver from 27.10.2026): `fdroid lint`, `readmeta` and `rewritemeta` without remarks, the
+scanner without errors (after `scandelete`), **"Successfully built io.github.januszbit.brulion:9001
+from d497fdb8"**, the `android-build.sh` checks as above (49 libraries, 16 KB, OpenSSL 3.5.9, Qt
+and OpenSSL from source), APK 91.9 MB, SHA-256
+`6a701443aaab7deadb0e209b8d522c7f1a12d774e7e06203139c1c841f25fca4`. All of it, including
+downloading the NDK and the srclibs: about 25 min on 16 cores.
 
-Do sprawdzenia przez fdroiddata przy zgłoszeniu: czas buildu na ich buildserverze (mniej rdzeni
-niż tu; `timeout: 14400` = 4 h) i to, czy recenzenci zaakceptują srclib `Qt5` z `init-repository`
-(sieć w `prebuild`; robi tak już `net.sourceforge.kid3`).
+To be checked by fdroiddata at submission: the build time on their buildserver (fewer cores than
+here; `timeout: 14400` = 4 h) and whether the reviewers accept the `Qt5` srclib with
+`init-repository` (network in `prebuild`; `net.sourceforge.kid3` already does this).
 
-### Podpis: decyzja dla właściciela
+### Signing: a decision for the owner
 
-F-Droid może wydawać Brulion na dwa sposoby. **Trzeba wybrać jeden przed zgłoszeniem** (zmiana
-później oznacza dla użytkowników F-Droid odinstalowanie aplikacji):
+F-Droid can publish Brulion in two ways. **One has to be chosen before the submission** (changing
+it later means F-Droid users have to uninstall the app):
 
-**(a) F-Droid podpisuje własnym kluczem** — przepis jak w szkicu, nic więcej.
-* Najprostsze; build F-Droid nie musi być identyczny z APK z GitHuba.
-* APK z F-Droid i APK z wydań GitHuba mają **różne podpisy**: nie da się zaktualizować jednego
-  drugim — przejście wymaga odinstalowania (to usuwa prywatne dane aplikacji; notatki w folderze
-  Syncthing na pamięci współdzielonej zostają, ustawienia i notatnik w katalogu prywatnym nie).
-* Komunikat „Dostępny jest Brulion X.Y.Z” znika w buildzie F-Droid (`BRULION_UPDATE_CHECK=OFF`).
+**(a) F-Droid signs with its own key** — the recipe as in the draft, nothing more.
+* The simplest; the F-Droid build does not have to be identical to the APK from GitHub.
+* The APK from F-Droid and the APK from the GitHub releases have **different signatures**: one
+  cannot be updated with the other — switching requires uninstalling (this deletes the app's
+  private data; notes in the Syncthing folder on shared storage stay, the settings and a notebook
+  in the private directory do not).
+* The message "Brulion X.Y.Z is available" disappears in the F-Droid build
+  (`BRULION_UPDATE_CHECK=OFF`).
 
-**(b) Powtarzalny build i podpis z GitHuba** (`Binaries:` + `AllowedAPKSigningKeys:`) — F-Droid
-buduje APK sam, porównuje go bit w bit z APK z wydania GitHuba (bez podpisu) i gdy są identyczne,
-publikuje **APK z podpisem właściciela**. Jedna aplikacja dla obu źródeł, aktualizacje
-krzyżowe działają. Do przepisu doszłoby:
+**(b) Reproducible build and the GitHub signature** (`Binaries:` + `AllowedAPKSigningKeys:`) —
+F-Droid builds the APK itself, compares it bit for bit with the APK from the GitHub release
+(without the signature) and, when they are identical, publishes **the APK with the owner's
+signature**. One app for both sources; cross-updates work. The recipe would get:
 
 ```yaml
 Binaries: https://github.com/janusz-bit/brulion/releases/download/v%v/brulion-%v-arm64-v8a.apk
-AllowedAPKSigningKeys: <SHA-256 certyfikatu klucza wydań, małe litery, bez dwukropków>
+AllowedAPKSigningKeys: <SHA-256 of the release key's certificate, lower case, no colons>
 ```
 
-ale to wymaga, żeby **wydanie na GitHubie było zbudowane tak samo jak w F-Droid**, czyli też
-z Qt i OpenSSL ze źródeł, i bez sprawdzania aktualizacji (APK musi być identyczny, a F-Droid
-nie przyjmie wbudowanego mechanizmu aktualizacji obok swojego):
+but this requires **the GitHub release to be built the same way as in F-Droid**, that is also
+with Qt and OpenSSL from source, and without the update check (the APK has to be identical, and
+F-Droid will not accept a built-in update mechanism next to its own):
 
-* `.github/workflows/android.yml`: `BRULION_ANDROID_QT=source` i `BRULION_UPDATE_CHECK=OFF`
-  w kroku `build`; zamiast cache'y aqt — `actions/cache` dla `~/.cache/brulion-qt-source/6.11.2`
-  (klucz z hashem `scripts/android-qt-from-source.sh`) i `~/.cache/brulion-openssl`; pierwszy
-  build ~1 h na runnerze (4 rdzenie), potem minuty. `SOURCE_DATE_EPOCH` z commita taga (już
-  domyślne). JDK 21, NDK r27c, build-tools 36.0.0 — te same co na buildserverze (runner ma JDK
-  Temurin, buildserver OpenJDK z Debiana: przy tej samej wersji 21.0.x `javac` daje te same klasy,
-  ale potwierdzi to dopiero pierwsze porównanie F-Droid — można je zrobić wcześniej lokalnie,
-  `fdroid build` w kontenerze z `Binaries:` w przepisie).
-* `release.yml`: bez zmian w krokach; APK podpisuje dalej `android-build.sh` kluczem wydań
-  (apksigner, schemat v2/v3 — F-Droid kopiuje podpis z tego pliku do swojego buildu).
-* Każdy nowy tag: F-Droid buduje i porównuje; różnica choćby jednego bajtu = wersja się
-  nie ukaże (F-Droid pokazuje diff w logu buildu), więc zmiany środowiska (nowy JDK, inny
-  Gradle) trzeba wtedy wyrównać po obu stronach.
-* Użytkownicy aplikacji z GitHuba tracą komunikat o nowej wersji (albo zostaje on tylko
-  w buildzie dla innych sklepów — wtedy APK z GitHuba ≠ APK F-Droid i wracamy do (a)).
+* `.github/workflows/android.yml`: `BRULION_ANDROID_QT=source` and `BRULION_UPDATE_CHECK=OFF` in
+  the `build` step; instead of the aqt caches — `actions/cache` for
+  `~/.cache/brulion-qt-source/6.11.2` (key with the hash of `scripts/android-qt-from-source.sh`)
+  and `~/.cache/brulion-openssl`; the first build ~1 h on the runner (4 cores), then minutes.
+  `SOURCE_DATE_EPOCH` from the tag's commit (already the default). JDK 21, NDK r27c, build-tools
+  36.0.0 — the same as on the buildserver (the runner has the Temurin JDK, the buildserver
+  Debian's OpenJDK: with the same 21.0.x version `javac` produces the same classes, but only the
+  first F-Droid comparison will confirm it — it can be done earlier locally, `fdroid build` in the
+  container with `Binaries:` in the recipe).
+* `release.yml`: no changes to the steps; `android-build.sh` keeps signing the APK with the
+  release key (apksigner, scheme v2/v3 — F-Droid copies the signature from this file onto its
+  build).
+* Every new tag: F-Droid builds and compares; a difference of even one byte = the version does not
+  appear (F-Droid shows the diff in the build log), so environment changes (a new JDK, another
+  Gradle) then have to be matched on both sides.
+* Users of the app from GitHub lose the new-version message (or it stays only in a build for other
+  stores — then the GitHub APK ≠ the F-Droid APK and we are back at (a)).
 
-**Powtarzalność — sprawdzone 2026-11-04:** APK z kontenera buildservera F-Droid (Debian 13,
-OpenJDK 21 z Debiana, NDK r27c pobrany przez `fdroid`, Qt z srclib `Qt5` = `qt5.git`
-+ `init-repository`, OpenSSL z srclib git, ścieżki `/home/vagrant/build/…`) i APK zbudowany
-`BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh` w świeżym klonie
-na NixOS (SDK/NDK z nixpkgs, JDK 21 z nixpkgs, Qt i OpenSSL z archiwów źródeł, inne ścieżki) są
-**identyczne bit w bit**: `brulion-0.8.1-arm64-v8a-unsigned.apk`, SHA-256
-`82bf9d9d563a719e94b76d1ab8ea41c9301efc0c00b71ddf714c2131e9fc5ed7` (commit `3b3c9b5e`). Już sam
-OpenSSL wychodzi identyczny z obu (`libssl_3.so` `88d316f6…`, `libcrypto_3.so` `3b472705…`).
-Po drodze trzeba było usunąć cztery źródła różnic (wszystkie poprawione w skryptach):
+**Reproducibility — verified 2026-11-04:** the APK from the F-Droid buildserver container (Debian
+13, Debian's OpenJDK 21, NDK r27c downloaded by `fdroid`, Qt from the `Qt5` srclib = `qt5.git`
++ `init-repository`, OpenSSL from the git srclib, paths `/home/vagrant/build/…`) and the APK built
+with `BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0 scripts/android-build.sh` in a fresh clone
+on NixOS (SDK/NDK from nixpkgs, JDK 21 from nixpkgs, Qt and OpenSSL from the source archives,
+other paths) are **identical bit for bit**: `brulion-0.8.1-arm64-v8a-unsigned.apk`, SHA-256
+`82bf9d9d563a719e94b76d1ab8ea41c9301efc0c00b71ddf714c2131e9fc5ed7` (commit `3b3c9b5e`). Even
+OpenSSL alone comes out identical from both (`libssl_3.so` `88d316f6…`, `libcrypto_3.so`
+`3b472705…`). On the way, four sources of differences had to be removed (all fixed in the
+scripts):
 
-1. ścieżki źródeł Qt i nagłówków libc++ z NDK w `.rodata` (`__FILE__`) — plik toolchain NDK
-   ignoruje `CFLAGS`/`CXXFLAGS` ze środowiska, więc `-ffile-prefix-map` idzie jako
-   `CMAKE_C(XX)_FLAGS`, każda ścieżka także jako jej ścieżka rzeczywista (dowiązania SDK);
-2. znaczniki czasu plików w zasobach rcc samego Qt (czas checkoutu lub rozpakowania) — Qt for
-   Android budowane ze stałym `SOURCE_DATE_EPOCH=315532800`;
-3. czas w nagłówku gzip bazy MIME w `libQt6Core` — `QT_AVOID_CMAKE_ARCHIVING_API=ON`
-   (`gzip -n`);
-4. build ID `libbrulion` (zależny od informacji debugowania) — ścieżki checkoutu, katalogu
-   budowania, NDK i Qt mapowane w `CMakeLists.txt` (Android).
+1. the paths of the Qt sources and of the NDK's libc++ headers in `.rodata` (`__FILE__`) — the NDK
+   toolchain file ignores `CFLAGS`/`CXXFLAGS` from the environment, so `-ffile-prefix-map` goes in
+   as `CMAKE_C(XX)_FLAGS`, each path also as its real path (SDK symlinks);
+2. the file timestamps in Qt's own rcc resources (the checkout or unpacking time) — Qt for Android
+   built with a fixed `SOURCE_DATE_EPOCH=315532800`;
+3. the time in the gzip header of the MIME database in `libQt6Core` —
+   `QT_AVOID_CMAKE_ARCHIVING_API=ON` (`gzip -n`);
+4. the build ID of `libbrulion` (which depends on the debug information) — the paths of the
+   checkout, the build directory, the NDK and Qt mapped in `CMakeLists.txt` (Android).
 
-Warunki powtarzalności: ten sam commit (i `SOURCE_DATE_EPOCH` = czas tego commita, domyślne),
-**czysty** katalog budowania w domyślnym miejscu (`build-android` w checkoutcie — względne ścieżki
-do nagłówków w plikach moc trafiają do informacji debugowania, więc katalog budowania poza
-checkoutem daje inny build ID), te same wersje: NDK r27c, build-tools 36.0.0, CMake 3.31.6,
-JDK 21 (sprawdzone na 21.0.12 po obu stronach), zależności Gradle z szablonu Qt.
+Conditions for reproducibility: the same commit (and `SOURCE_DATE_EPOCH` = that commit's time, the
+default), a **clean** build directory in the default place (`build-android` in the checkout —
+relative paths to headers in the moc files end up in the debug information, so a build directory
+outside the checkout gives another build ID), the same versions: NDK r27c, build-tools 36.0.0,
+CMake 3.31.6, JDK 21 (checked with 21.0.12 on both sides), the Gradle dependencies from Qt's
+template.
 
-**Rekomendacja.** Technicznie (b) jest gotowe — build jest powtarzalny bit w bit między
-buildserverem F-Droid a innym systemem (wyżej). Wybór zależy od jednego pytania: **czy APK
-z GitHuba może stracić komunikat o nowej wersji?** Jeśli tak — **(b)**: jedna aplikacja, jeden
-podpis, użytkownicy mogą przechodzić między GitHubem, IzzyOnDroid i F-Droid bez odinstalowania;
-koszt to wolniejszy build wydania (Qt ze źródeł, z cache ~minuty) i pilnowanie, żeby środowisko
-CI i F-Droid się nie rozjechało. Jeśli komunikat w APK z GitHuba ma zostać — **(a)**: F-Droid
-podpisuje sam, nic w wydaniach się nie zmienia, a osoby z F-Droid i z GitHuba mają dwie
-„różne” aplikacje (zmiana źródła = odinstalowanie). Decyzję trzeba podjąć **przed pierwszym
-wydaniem w F-Droid**: przejście z (a) na (b) później zmienia podpis wersji w F-Droid i wymusza
-odinstalowanie u jej użytkowników.
+**Recommendation.** Technically (b) is ready — the build is reproducible bit for bit between the
+F-Droid buildserver and another system (above). The choice depends on one question: **may the APK
+from GitHub lose the new-version message?** If yes — **(b)**: one app, one signature, users can
+move between GitHub, IzzyOnDroid and F-Droid without uninstalling; the cost is a slower release
+build (Qt from source, with the cache ~minutes) and keeping the CI and F-Droid environments from
+drifting apart. If the message in the GitHub APK has to stay — **(a)**: F-Droid signs itself,
+nothing changes in the releases, and people on F-Droid and on GitHub have two "different" apps
+(changing the source = uninstalling). The decision has to be made **before the first release in
+F-Droid**: switching from (a) to (b) later changes the signature of the F-Droid version and forces
+its users to uninstall.
 
-### Zgłoszenie (robi właściciel)
+### Submission (done by the owner)
 
-Nic z poniższego nie jest wysłane. Kolejność:
+None of the below has been sent. The order:
 
-1. Gotowe: wydanie z tymi skryptami (v0.9.1) i przepis wskazujący je, zbudowany w kontenerze
-   buildservera (wyżej). Zostaje decyzja o podpisie (wyżej) — przy (b) przepis dostaje
-   `Binaries:` i `AllowedAPKSigningKeys:`, a wydania na GitHubie budowanie ze źródeł.
-2. **Merge request do fdroiddata** (najszybsza droga, bez RFP): fork
-   `gitlab.com/fdroid/fdroiddata`, gałąź `io.github.januszbit.brulion`, plik
-   `metadata/io.github.januszbit.brulion.yml` ze szkicu, `fdroid lint` i `fdroid rewritemeta`
-   lokalnie (formatowanie), MR według szablonu „App inclusion”; CI fdroiddata zbuduje aplikację.
-   Opis MR:
+1. Ready: a release with these scripts (v0.9.1) and a recipe pointing to it, built in the
+   buildserver container (above). What remains is the signing decision (above) — with (b) the
+   recipe gets `Binaries:` and `AllowedAPKSigningKeys:`, and the GitHub releases get the build
+   from source.
+2. **A merge request to fdroiddata** (the fastest way, no RFP): fork
+   `gitlab.com/fdroid/fdroiddata`, branch `io.github.januszbit.brulion`, the file
+   `metadata/io.github.januszbit.brulion.yml` from the draft, `fdroid lint` and
+   `fdroid rewritemeta` locally (formatting), the MR following the "App inclusion" template;
+   fdroiddata's CI builds the app. The MR description:
 
    > **New app: Brulion** (io.github.januszbit.brulion)
    >
@@ -1501,16 +1541,16 @@ Nic z poniższego nie jest wysłane. Kolejność:
    > Google Play Services. The in-app update check is disabled in this build
    > (`BRULION_UPDATE_CHECK=OFF`).
 
-3. Zamiast MR można złożyć **Request For Packaging** (`gitlab.com/fdroid/rfp`, „New issue” →
-   szablon „Request for packaging”) — wolniejsze, przepis pisze wtedy wolontariusz; ten sam tekst
-   co wyżej plus link do szkicu przepisu.
-4. **IzzyOnDroid** (repozytorium z APK z wydań GitHuba, podpis właściciela, szybkie aktualizacje,
-   niezależne od decyzji (a)/(b)): issue w `gitlab.com/IzzyOnDroid/repo` (szablon „App inclusion
-   request”). Wymagania: APK w wydaniach GitHuba (jest: `brulion-<wersja>-arm64-v8a.apk`), metadane
-   fastlane w repozytorium; plik APK ma ~90 MB (v0.9.1: 90,0 MB; biblioteki natywne
-   nieskompresowane, wyrównane do 16 KB), więcej niż domyślny limit rozmiaru IzzyOnDroid —
-   w zgłoszeniu poprosić o wyjątek.
-   Tekst:
+3. Instead of an MR a **Request For Packaging** can be filed (`gitlab.com/fdroid/rfp`, "New issue"
+   → the "Request for packaging" template) — slower, a volunteer then writes the recipe; the same
+   text as above plus a link to the draft recipe.
+4. **IzzyOnDroid** (a repository with the APKs from the GitHub releases, the owner's signature,
+   fast updates, independent of the (a)/(b) decision): an issue in `gitlab.com/IzzyOnDroid/repo`
+   (the "App inclusion request" template). Requirements: an APK in the GitHub releases (there is
+   one: `brulion-<version>-arm64-v8a.apk`), fastlane metadata in the repository; the APK file is
+   ~90 MB (v0.9.1: 90.0 MB; native libraries stored uncompressed, aligned to 16 KB), more than
+   IzzyOnDroid's default size limit — ask for an exception in the request.
+   Text:
 
    > **App inclusion request: Brulion**
    >
@@ -1525,83 +1565,83 @@ Nic z poniższego nie jest wysłane. Kolejność:
    >   please allow an exception to the size limit.
    > * I am the author.
 
-## Dla programistów
+## For developers
 
-Sterowania działającą aplikacją przez agentów AI (`brulion --remote-control`, `brulion-cli app …`,
-docs/CLI.md „Remote control”) na Androidzie nie ma. Aplikację na telefonie albo emulatorze
-prowadzi się narzędziami Androida: APK debuggable przyjmuje opcje wiersza poleceń przez
+Driving the running app by AI agents (`brulion --remote-control`, `brulion-cli app …`,
+docs/CLI.md "Remote control") does not exist on Android. The app on a phone or emulator is driven
+with Android's tools: a debuggable APK accepts command-line options through
 `adb shell am start -n io.github.januszbit.brulion/.android.BrulionActivity --es
-applicationArguments '…'` (docs/UI.md, wiersz `--scroll-probe`), `adb shell input tap|swipe|text`
-klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ekranu.
+applicationArguments '…'` (docs/UI.md, the `--scroll-probe` line), `adb shell input tap|swipe|text`
+taps, swipes and types, and `adb exec-out screencap -p > ekran.png` takes a screenshot.
 
-### Pliki
+### Files
 
-| Ścieżka | Zawartość |
+| Path | Contents |
 |---|---|
-| `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, `ShareActivity` (filtry `ACTION_SEND`/`ACTION_SEND_MULTIPLE` dla `text/*`), ikony |
-| `android/res/` | teksty (`values` — angielski, domyślny; `values-pl`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu; widżety: układy `layout/widget_*.xml` (też podglądy dla wyboru widżetów), `xml/widget_*_info.xml`, kolory `widget_colors.xml` (`values` jasne, `values-night` ciemne), promień rogów (`values-v31`: systemowy), motyw okna szybkiego dodawania |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka) + `StartupRelaunch` (utworzona od nowa przed startem Qt: restart aplikacji), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `DoneQueue` (kolejka „Zrobione” dla C++), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++), widżety: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews i wiersze list), `WidgetSnapshot` (migawka, przekładanie zadań na nowy dzień), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (zapis, odświeżanie, północ, przyciski miesiąca), `WidgetDates` (nazwy dni i miesięcy aplikacji), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (szybkie dodawanie, zapis do dziennika), `WidgetInbox` (kolejka wpisów dla C++), sprawdzanie notatek w tle: `BackgroundCheck` (cel, zadanie, decyzja o wyniku), `BackgroundCheckJob` (zadanie JobScheduler w głównym procesie), `BackgroundCheckService` (`QtService` w procesie `:background`) |
-| `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
-| `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
-| `android/settings.gradle`, `android/proguard-rules.pro` | R8 w buildach release i jego reguły (klasy wołane przez JNI) — [Rozmiar APK](#rozmiar-apk) |
-| `android/res/xml/network_security_config.xml` | zaufane urzędy certyfikacji HTTPS: systemowe i zainstalowane przez użytkownika — [HTTPS i OpenSSL](#https-i-openssl) |
-| `android/assets/licenses/` | teksty licencji dołączanych bibliotek (OpenSSL, Apache-2.0) |
-| `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
-| `src/app/background/` | C++ sprawdzania notatek w tle: `backgroundcheck.{h,cpp}` (cel, przypomnienia, jedno sprawdzenie — budowane wszędzie, testy `tests/app/background`), `backgroundentry_android.cpp` (`main()` procesu `:background`) — [Sprawdzanie notatek w tle](#sprawdzanie-notatek-w-tle) |
-| `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
-| `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | opisy, ikona i zrzuty dla F-Droid i IzzyOnDroid, ich sprawdzanie — [F-Droid i IzzyOnDroid](#f-droid-i-izzyondroid) |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków, części linku do strony w folderze i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie; `--done`: „Zrobione” w powiadomieniu (na ekranie i przy zamkniętej aplikacji); `--background`: sprawdzanie notatek w tle (przypomnienie dopisane i usunięte przy zamkniętej aplikacji, zadanie uruchomione od razu, budzik nowego dzwoni bez otwierania Brulionu); `--drawing`: tekst na rysunku z klawiatury ekranowej; `--stylus`: nacisk rysika, jego gumka i przycisk boczny w edytorze rysunku; `--web-pictures`: obrazy z internetu; `--pickers`: systemowe okna wyboru plików (import plików i folderu, „Zapisz” eksportu); `--pdf`: miniatury PDF-ów, przeglądarka PDF, szczypanie, szukanie od Androida 15, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”, pamięć; `--relaunch`: aktywność utworzona od nowa w trakcie startu (restart zamiast pustego okna); `--web-keyboard dist-wasm`: wersja w przeglądarce w Chrome, Brave i Firefoksie — pasek narzędzi na klawiaturze (docs/WEB.md „Klawiatura ekranowa”) |
-| `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
+| `android/AndroidManifest.xml` | manifest based on the Qt 6.11.2 template (`androiddeployqt` fills in the `%%INSERT_…%%` markers: package, version, name, library and the permissions of the Qt modules): permissions, `BrulionActivity`, receivers, `AlarmActivity`, `ShareActivity` (filters `ACTION_SEND`/`ACTION_SEND_MULTIPLE` for `text/*`), icons |
+| `android/res/` | strings (`values` — English, the default; `values-pl`), the notification icon `ic_stat_brulion`, the app icons (`mipmap-*` from the logo, the adaptive `mipmap-anydpi` with the `#283045` background and a monochrome layer), the alarm screen theme; widgets: layouts `layout/widget_*.xml` (also the previews for the widget picker), `xml/widget_*_info.xml`, colours `widget_colors.xml` (`values` light, `values-night` dark), the corner radius (`values-v31`: the system's), the theme of the quick add window |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (JNI facade), `BrulionActivity` (`QtActivity` + taps/permissions/ringtone choice) + `StartupRelaunch` (recreated before Qt started: restart of the app), `ImeInsets` (on-screen keyboard: how much of the Qt view it covers), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (sounds: `SoundChoice`, channel versions `SoundChannel`, `SoundStore`, sample, ringtone picker), `RingTimeout`, `Receivers` (fire, buttons, boot/time change), `DoneQueue` (the "Done" queue for C++), `AlarmActivity`, `Documents` (chosen documents and document trees for the import), `ShareActivity` + `ShareIntent` ("Share → Brulion": receiving, copies in `files/share-in/`, JSON for C++), widgets: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews and list rows), `WidgetSnapshot` (the snapshot, moving tasks to the new day), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (storing, refreshing, midnight, month buttons), `WidgetDates` (the app's day and month names), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (quick add, writing to the journal), `WidgetInbox` (the queue of entries for C++), background check of the notes: `BackgroundCheck` (target, job, decision on the result), `BackgroundCheckJob` (JobScheduler job in the main process), `BackgroundCheckService` (`QtService` in the `:background` process) |
+| `android/tests/` | Kotlin unit tests (JVM) + a Gradle init script that adds them |
+| `android/lint.xml` | Android lint configuration (exceptions for `res/values/libs.xml` generated by Qt) |
+| `android/settings.gradle`, `android/proguard-rules.pro` | R8 in release builds and its rules (classes called through JNI) — [APK size](#apk-size) |
+| `android/res/xml/network_security_config.xml` | trusted HTTPS certificate authorities: the system's and those the user installed — [HTTPS and OpenSSL](#https-and-openssl) |
+| `android/assets/licenses/` | licence texts of the bundled libraries (OpenSSL, Apache-2.0) |
+| `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (compiled only when `ANDROID`) |
+| `src/app/background/` | C++ of the background check of the notes: `backgroundcheck.{h,cpp}` (target, reminders, one check — built everywhere, tests in `tests/app/background`), `backgroundentry_android.cpp` (`main()` of the `:background` process) — [Checking notes in the background](#checking-notes-in-the-background) |
+| `src/platform/android/selftest/` | `brulion_android_selftest` — an APK that tests the bridge on a device/emulator (only with `-DBRULION_ANDROID_SELFTEST=ON`) |
+| `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | building + signing, the release key |
+| `fastlane/metadata/android/`, `scripts/check-fastlane-metadata.sh` | descriptions, icon and screenshots for F-Droid and IzzyOnDroid, and their check — [F-Droid and IzzyOnDroid](#f-droid-and-izzyondroid) |
+| `scripts/android-emulator-test.sh` | end-to-end test on the emulator (Android 16, x86_64); `--keyboard`: the editing toolbar on the keyboard; `--selection`: selecting and copying with a finger; `--folders`: folders, block links, the parts of a link to a page in a folder, and tags with a finger; `--share`: "Share → Brulion"; `--widgets`: widgets and quick add; `--done`: "Done" in a notification (on screen and while the app is closed); `--background`: background check of the notes (a reminder added and deleted while the app is closed, the job run at once, the new reminder's alarm rings without opening Brulion); `--drawing`: text on a drawing from the on-screen keyboard; `--stylus`: stylus pressure, its eraser and side button in the drawing editor; `--web-pictures`: pictures from the internet; `--pickers`: the system file pickers (importing files and a folder, the export's "Save"); `--pdf`: PDF thumbnails, the PDF viewer, pinching, search from Android 15, "Open in another app", "Draw on this page", memory; `--relaunch`: activity recreated during startup (a restart instead of an empty window); `--web-keyboard dist-wasm`: the browser version in Chrome, Brave and Firefox — the toolbar on the keyboard (docs/WEB.md "On-screen keyboard") |
+| `nix/android.nix`, `nix/android/` | APK from the flake: derivation, Qt for Android (`qt.nix`), signing (`sign.nix`), locks (`*.json`) and `update-locks.sh` |
 
-`android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
-w `<build>/src/app/android-build/`. Nie nadpisujemy `build.gradle` z Qt — szablon 6.11 używa
-AGP 9 z wbudowaną obsługą Kotlina (`kotlin.srcDirs` obejmuje `src/`), więc pliki `.kt` w
-`android/src` kompilują się bez dodatkowej konfiguracji; `androidx.core` (NotificationCompat)
-też jest już w szablonie. Buildy release zmniejsza R8 (`android/settings.gradle`, [Rozmiar
-APK](#rozmiar-apk)): klasy Kotlina wołane z C++ muszą leżeć w pakiecie
-`io.github.januszbit.brulion.android`, który `android/proguard-rules.pro` zachowuje w całości.
+`android/` is `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` copies it over the Qt template in
+`<build>/src/app/android-build/`. We do not override Qt's `build.gradle` — the 6.11 template uses
+AGP 9 with built-in Kotlin support (`kotlin.srcDirs` covers `src/`), so the `.kt` files in
+`android/src` compile without extra configuration; `androidx.core` (NotificationCompat) is already
+in the template too. Release builds are shrunk by R8 (`android/settings.gradle`, [APK
+size](#apk-size)): Kotlin classes called from C++ must live in the package
+`io.github.januszbit.brulion.android`, which `android/proguard-rules.pro` keeps whole.
 
-### Aktywność utworzona od nowa w trakcie startu
+### Activity recreated during startup
 
-Zmiany konfiguracji, których aplikacja nie może obsłużyć sama (`CONFIG_ASSETS_PATHS`: nakładki
-systemu, np. zmiana kolorów motywu systemu albo nakładki, które świeżo uruchomiony emulator
-stosuje przez kilka sekund), Android obsługuje, tworząc aktywność od nowa. `QtActivity` z Qt
-6.11 uruchamia aplikację natywną dopiero przy pierwszym układzie (layout) widoku pierwszej
-aktywności. Gdy ta aktywność zniknie wcześniej, nowa zastaje biblioteki Qt już wczytane
-(`QtLoader.LoadingResult.AlreadyLoaded`) i niczego nie uruchamia: brak układu Qt, puste okno na
-zawsze, w logcat `finishDrawing of relaunch: Window{… BrulionActivity}` i żadnych wpisów
-`brulion.*`. (Utworzoną od nowa po starcie Qt aplikację Qt restartuje sam:
-`QtActivityBase.restartApplication` — z samą intencją launchera, więc dodatki pierwotnej intencji,
-np. notatka z powiadomienia czy argumenty APK debugowalnego, przepadają.)
+Configuration changes the app cannot handle itself (`CONFIG_ASSETS_PATHS`: system overlays, e.g. a
+change of the system theme's colours, or overlays a freshly started emulator applies for a few
+seconds) are handled by Android by recreating the activity. Qt 6.11's `QtActivity` starts the
+native app only at the first layout of the first activity's view. When that activity disappears
+earlier, the new one finds the Qt libraries already loaded
+(`QtLoader.LoadingResult.AlreadyLoaded`) and starts nothing: no Qt layout, an empty window
+forever, `finishDrawing of relaunch: Window{… BrulionActivity}` in logcat and no `brulion.*`
+entries. (When the activity is recreated after Qt has started, Qt restarts the app itself:
+`QtActivityBase.restartApplication` — with the bare launcher intent, so the extras of the original
+intent, e.g. the note from a notification or the arguments of a debuggable APK, are lost.)
 
-`BrulionActivity.onCreate` rozpoznaje ten przypadek po `super.onCreate`: wcześniejsza
-`BrulionActivity` tego procesu doszła już do `onCreate`, ta nie ma żadnego widoku w
-`android.R.id.content` (układ Qt) i nie jest kończona (Qt kończy ją, gdy bibliotek nie dało się
-wczytać). Wtedy — jak Qt — uruchamia aplikację od nowa: tę samą intencję (dodatki: argumenty APK
-debugowalnego) z `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK`, potem `finish()` i koniec
-procesu. Najwyżej dwa razy z rzędu (licznik w dodatku `io.github.januszbit.brulion.STARTUP_RESTARTS`
-intencji), więc przyczyna, która wraca, nie zapętli startu. W logcat: `BrulionActivity: recreated
-before Qt started (…): restart N`.
+`BrulionActivity.onCreate` recognises this case after `super.onCreate`: an earlier
+`BrulionActivity` of this process already reached `onCreate`, this one has no view in
+`android.R.id.content` (the Qt layout) and is not finishing (Qt finishes it when the libraries
+could not be loaded). Then — like Qt — it starts the app again: the same intent (extras: the
+arguments of a debuggable APK) with `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK`, then
+`finish()` and the end of the process. At most twice in a row (a counter in the intent extra
+`io.github.januszbit.brulion.STARTUP_RESTARTS`), so a cause that keeps coming back does not loop
+the startup. In logcat: `BrulionActivity: recreated before Qt started (…): restart N`.
 
-Z procesem ginie to, co trzyma tylko pamięć (`BrulionAndroid.keepForRestart`): notatkę z
-dotkniętego powiadomienia pierwsza aktywność wyjęła już z intencji (`activationFrom` usuwa
-dodatki, żeby stuknięcia nie obsłużyć dwa razy), a Android przekazuje odtwarzanej aktywności ten
-sam, już okrojony obiekt intencji — ścieżka i wiersz wracają więc do intencji restartu (alarm
-jest już wyciszony, `NOTIFICATION_ID` nie wraca). Udostępnienie z innej aplikacji
-(`ShareActivity`, tylko w pamięci — nigdy dodatek intencji, który mogłaby podrobić inna aplikacja)
-trafia do prywatnego pliku `no_backup/startup-restart-share.json`; pierwsza aktywność
-zrestartowanego procesu (licznik > 0) wczytuje je z powrotem, każda inna pierwsza aktywność tylko
-usuwa pozostałość. Decyzja i te kroki to zwykły kod JVM w `StartupRelaunch` (`needsRestart`,
-`carriedNote`, `saveShare`/`takeSavedShare`; test `StartupRelaunchTest`).
+What only memory holds dies with the process (`BrulionAndroid.keepForRestart`): the first activity
+has already taken the note of a tapped notification out of the intent (`activationFrom` removes
+the extras, so that a tap is not handled twice), and Android hands the recreated activity the same,
+already trimmed intent object — so the path and line go back into the restart intent (the alarm is
+already silenced, `NOTIFICATION_ID` does not come back). A share from another app (`ShareActivity`,
+only in memory — never an intent extra another app could forge) goes to the private file
+`no_backup/startup-restart-share.json`; the first activity of the restarted process (counter > 0)
+loads it back, any other first activity only deletes the leftover. The decision and these steps
+are plain JVM code in `StartupRelaunch` (`needsRestart`, `carriedNote`,
+`saveShare`/`takeSavedShare`; test `StartupRelaunchTest`).
 
-### Most JNI (C++ ↔ Kotlin)
+### JNI bridge (C++ ↔ Kotlin)
 
-`AndroidBridge::instance()` (wątek GUI, po utworzeniu `QGuiApplication`) rejestruje metody
-natywne klasy `io.github.januszbit.brulion.android.BrulionAndroid` i woła jej `attach()`.
-Aplikacja powinna to zrobić w `main()` zaraz po utworzeniu `QGuiApplication`, przed
-załadowaniem QML (żeby stuknięcie, które uruchomiło aplikację, trafiło do UI); dopóki nic nie
-wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
+`AndroidBridge::instance()` (GUI thread, after `QGuiApplication` is created) registers the native
+methods of the class `io.github.januszbit.brulion.android.BrulionAndroid` and calls its
+`attach()`. The app should do this in `main()` right after creating `QGuiApplication`, before
+loading QML (so that the tap that started the app reaches the UI); as long as nothing calls
+`AndroidBridge`, the linker leaves it out of `libbrulion_<abi>.so`.
 
 | C++ (`AndroidBridge`) | Kotlin (`BrulionAndroid`, `@JvmStatic`) |
 |---|---|
@@ -1609,411 +1649,419 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `bool notificationPermission()` / `bool requestNotificationPermission()` | `notificationPermission(Context)` / `requestNotificationPermission(Context): Boolean` |
 | `bool canScheduleExact()` / `void requestExactAlarms()` | `canScheduleExact(Context)` / `requestExactAlarms(Context)` |
 | `bool canUseFullScreenIntent()` / `void requestFullScreenIntent()` | `canUseFullScreenIntent(Context)` / `requestFullScreenIntent(Context)` |
-| `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` albo `{"error":…}` |
-| `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` albo `{}` |
-| `QByteArray takeShare()` | `takeShare(Context): String` — JSON udostępnienia (`notebook/share.h`) albo `{}` |
-| `QJsonArray takeDoneRequests(vault)` | `takeDoneRequests(Context, String): String` — kolejka „Zrobione” (`DoneQueue.kt`): `[{key, local, path, line, title, day, vault}, …]` notatnika `vault` (i wpisy bez notatnika), wydane wpisy znikają z kolejki, pozostałe czekają; pusty `vault` — wszystkie |
-| `static DocumentsResult documentInfo(const QString &uri)` | `documentInfo(Context, String): String` — `{uri, name, dir, size, virtual}` albo `{"error":…}` |
-| `static DocumentsResult listDocuments(const QString &folderUri)` | `listDocuments(Context, String): String` — `{"documents":[…]}` albo `{"error":…}` |
-| `QJsonObject setReminderSounds(const QJsonObject &)` | `setReminderSounds(Context, String): String` — `{"reminderChannel", "alarmChannel"}` albo `{"error":…}` |
-| `bool pickSound(int kind, const QJsonObject &current)` | `pickSound(Context, Int, String): Boolean` — otwiera okno wyboru dzwonka (`startActivityForResult`) |
-| `bool previewSound(const QJsonObject &)` | `previewSound(Context, String): Boolean` — próbka ~3 s |
+| `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` or `{"error":…}` |
+| `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` or `{}` |
+| `QByteArray takeShare()` | `takeShare(Context): String` — the share JSON (`notebook/share.h`) or `{}` |
+| `QJsonArray takeDoneRequests(vault)` | `takeDoneRequests(Context, String): String` — the "Done" queue (`DoneQueue.kt`): `[{key, local, path, line, title, day, vault}, …]` of notebook `vault` (and entries without a notebook), entries handed out leave the queue, the rest wait; an empty `vault` — all |
+| `static DocumentsResult documentInfo(const QString &uri)` | `documentInfo(Context, String): String` — `{uri, name, dir, size, virtual}` or `{"error":…}` |
+| `static DocumentsResult listDocuments(const QString &folderUri)` | `listDocuments(Context, String): String` — `{"documents":[…]}` or `{"error":…}` |
+| `QJsonObject setReminderSounds(const QJsonObject &)` | `setReminderSounds(Context, String): String` — `{"reminderChannel", "alarmChannel"}` or `{"error":…}` |
+| `bool pickSound(int kind, const QJsonObject &current)` | `pickSound(Context, Int, String): Boolean` — opens the ringtone picker (`startActivityForResult`) |
+| `bool previewSound(const QJsonObject &)` | `previewSound(Context, String): Boolean` — a ~3 s sample |
 | `void openSoundSettings(int kind)` | `openSoundSettings(Context, Int)` — `ACTION_CHANNEL_NOTIFICATION_SETTINGS` |
-| sygnał `activated(QString path, int line)` | natywna `nativeActivated(String, Int)` |
-| sygnał `shared(QByteArray json)` | natywna `nativeShared(String)` (z `ShareActivity` przez `deliverShare`) |
-| sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
-| sygnał `doneRequestsQueued()` | natywna `nativeDoneQueued()` (z `ReminderActions.done`) + powrót na pierwszy plan + raz po starcie |
-| `QJsonObject setBackgroundCheck(const QJsonObject &)` | `setBackgroundCheck(Context, String): String` — cel sprawdzania w tle (`background::Target`, `{}` = wyłączone) zapisany, zadanie JobScheduler nastawione na jego okres: `{"interval": min}` albo `{"error":…}` |
-| `QJsonObject backgroundCheckStatus()` | `backgroundCheckStatus(Context): String` — ostatnie sprawdzenie `{at, ok, applied, verdict, reminders, sync, error, …}` albo `{}` |
-| `static QJsonObject backgroundCheckTarget()` (proces `:background`) | `backgroundCheckTarget(Context): String` — cel do sprawdzenia albo `{}` |
-| `static void backgroundCheckFinished(const QJsonObject &)` (proces `:background`) | `backgroundCheckFinished(Context, String)` — wynik `background::Check` do zadania w głównym procesie (`BackgroundCheckService` → `Messenger`) |
-| `int updateWidgets(const QJsonObject &)` | `updateWidgets(Context, String): String` — migawka widżetów (`src/app/widgets/widgetsnapshot.h`) zapisana, widżety odświeżone: `{"widgets": n}` (ile postawionych) albo `{"error":…}` (poprzednia migawka zostaje) |
-| `QJsonArray takeWidgetActions(vault)` | `takeWidgetActions(Context, String): String` — kolejka szybkiego dodawania (`WidgetInbox.kt`): `[{id, kind, text, date, time, alarm, vault, added}, …]` notatnika `vault` (i wpisy bez notatnika), wydane znikają |
-| `void requeueWidgetActions(const QJsonArray &)` | `requeueWidgetActions(Context, String)` — wpisy, których aplikacja też nie zapisała, wracają do kolejki (ten sam JSON; bez sygnału) |
-| sygnał `widgetActionsQueued()` | natywna `nativeWidgetQueued()` (z `QuickAdd`) + powrót na pierwszy plan + raz po starcie |
-| sygnał `widgetNoteWritten(QString path)` | natywna `nativeWidgetWrote(String)` — szybkie dodawanie samo dopisało do notatki (ścieżka bezwzględna): aplikacja oddaje zestaw przypomnień jeszcze raz (`WorkspaceReminders::resendUpcoming`), tymczasowe ustępuje; notatnik i tak wczytuje się ponownie po powrocie na pierwszy plan |
-| sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
-| sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
-| sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
-| `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — ikony pasków systemu ciemne nad jasnym oknem (Android 11+, okno pod paskami) |
-| `platform::PdfReader::open(file)` (`src/platform/pdfpages_android.cpp`, nie `AndroidBridge`; każdy wątek) | `pdfOpen(String): String` — `{"session", "pages", "size": [w, h] (pierwsza strona, punkty), "locked", "error"}` (`PdfPages.kt`: sesja systemowego `android.graphics.pdf.PdfRenderer`; `session` 0 — nie otwarto) |
-| `PdfReader::pageSize(page)` (j.w., po 64 strony) | `pdfPageSizes(Int, Int, Int): String` — `[[w, h], …]` |
-| `PdfReader::render(page, full, clip)` (j.w.) | `pdfRenderInto(Int, Int, Int, Int, Int, Int, Int, Int, ByteBuffer): Boolean` — strona przeskalowana do `full`, jej część `clip` na białym tle wprost w piksele RGBA_8888 obrazu C++ |
-| `platform::pdfTextAvailable()` | `pdfTextAvailable(): Boolean` — Android 15+ i metody tekstu PdfRenderera są w systemie |
-| `PdfReader::pageText(page)` / `find(page, query)` | `pdfPageText(Int, Int): String?` / `pdfSearch(Int, Int, Array<String>): String` — `[{"start", "rects": [[l, t, r, b], …]}, …]` każdej podanej pisowni |
+| signal `activated(QString path, int line)` | native `nativeActivated(String, Int)` |
+| signal `shared(QByteArray json)` | native `nativeShared(String)` (from `ShareActivity` through `deliverShare`) |
+| signal `permissionsChanged()` | native `nativePermissionsChanged()` + the app returning to the front |
+| signal `doneRequestsQueued()` | native `nativeDoneQueued()` (from `ReminderActions.done`) + return to the front + once after startup |
+| `QJsonObject setBackgroundCheck(const QJsonObject &)` | `setBackgroundCheck(Context, String): String` — the background check target (`background::Target`, `{}` = off) stored, the JobScheduler job set to its period: `{"interval": min}` or `{"error":…}` |
+| `QJsonObject backgroundCheckStatus()` | `backgroundCheckStatus(Context): String` — the last check `{at, ok, applied, verdict, reminders, sync, error, …}` or `{}` |
+| `static QJsonObject backgroundCheckTarget()` (`:background` process) | `backgroundCheckTarget(Context): String` — the target to check or `{}` |
+| `static void backgroundCheckFinished(const QJsonObject &)` (`:background` process) | `backgroundCheckFinished(Context, String)` — the result of `background::Check` to the job in the main process (`BackgroundCheckService` → `Messenger`) |
+| `int updateWidgets(const QJsonObject &)` | `updateWidgets(Context, String): String` — the widget snapshot (`src/app/widgets/widgetsnapshot.h`) stored, the widgets refreshed: `{"widgets": n}` (how many are placed) or `{"error":…}` (the previous snapshot stays) |
+| `QJsonArray takeWidgetActions(vault)` | `takeWidgetActions(Context, String): String` — the quick add queue (`WidgetInbox.kt`): `[{id, kind, text, date, time, alarm, vault, added}, …]` of notebook `vault` (and entries without a notebook), entries handed out leave the queue |
+| `void requeueWidgetActions(const QJsonArray &)` | `requeueWidgetActions(Context, String)` — entries the app could not write either go back to the queue (the same JSON; no signal) |
+| signal `widgetActionsQueued()` | native `nativeWidgetQueued()` (from `QuickAdd`) + return to the front + once after startup |
+| signal `widgetNoteWritten(QString path)` | native `nativeWidgetWrote(String)` — quick add appended to the note itself (absolute path): the app hands over its set of reminders once more (`WorkspaceReminders::resendUpcoming`), the temporary one gives way; the notebook reloads after the return to the front anyway |
+| signal `soundPicked(int kind, QJsonObject choice)` | native `nativeSoundPicked(Int, String)` (from `BrulionActivity.onActivityResult`) |
+| signal `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | native `nativeImeChanged(Int, Boolean, Boolean)` (from `ImeInsets`, physical pixels, every frame of the slide on Android 11+) / `requestImeState()` — report once more |
+| signal `systemGesturesChanged(int left, int right)` | native `nativeGestureInsetsChanged(Int, Int)` (from `ImeInsets`, physical pixels of the system gesture zones at the edges of the Qt view; reported once more also through `requestImeState()`) |
+| `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — system bar icons dark over a light window (Android 11+, window under the bars) |
+| `platform::PdfReader::open(file)` (`src/platform/pdfpages_android.cpp`, not `AndroidBridge`; any thread) | `pdfOpen(String): String` — `{"session", "pages", "size": [w, h] (first page, points), "locked", "error"}` (`PdfPages.kt`: a session of the system's `android.graphics.pdf.PdfRenderer`; `session` 0 — not opened) |
+| `PdfReader::pageSize(page)` (as above, 64 pages at a time) | `pdfPageSizes(Int, Int, Int): String` — `[[w, h], …]` |
+| `PdfReader::render(page, full, clip)` (as above) | `pdfRenderInto(Int, Int, Int, Int, Int, Int, Int, Int, ByteBuffer): Boolean` — the page scaled to `full`, its part `clip` on a white background straight into the RGBA_8888 pixels of the C++ image |
+| `platform::pdfTextAvailable()` | `pdfTextAvailable(): Boolean` — Android 15+ and PdfRenderer's text methods are in the system |
+| `PdfReader::pageText(page)` / `find(page, query)` | `pdfPageText(Int, Int): String?` / `pdfSearch(Int, Int, Array<String>): String` — `[{"start", "rects": [[l, t, r, b], …]}, …]` of each given spelling |
 | `~PdfReader` | `pdfClose(Int)` |
-| `AndroidBridge::viewFile(path, mime)` (statyczna) | `viewFile(Context, String, String): Int` — `OpenWith.kt`: 0 uruchomiono, 1 brak aplikacji, 2 błąd, 3 kopiowanie (karta pamięci) |
-| `AndroidBridge::printPdf(path, jobName)` (statyczna) | `printPdf(Context, String, String): Boolean` — `PdfPrint.kt`: PDF z pamięci podręcznej w systemowym oknie drukowania (`PrintManager`, `PrintDocumentAdapter` kopiujący plik, bez WebView); plik usuwany po zakończeniu zadania |
+| `AndroidBridge::viewFile(path, mime)` (static) | `viewFile(Context, String, String): Int` — `OpenWith.kt`: 0 started, 1 no app, 2 error, 3 copying (memory card) |
+| `AndroidBridge::printPdf(path, jobName)` (static) | `printPdf(Context, String, String): Boolean` — `PdfPrint.kt`: a PDF from the cache in the system print dialog (`PrintManager`, a `PrintDocumentAdapter` copying the file, no WebView); the file is deleted when the job ends |
 
-* Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
-  ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int,
-  key: id wystąpienia w Brulionie, local: jego czas ścienny "yyyy-MM-ddTHH:mm", task: bool}`.
-  `key` i `local` (niezmienione przez drzemkę, nigdy przeliczane przez UTC) wskazują wystąpienie,
-  które ma zakończyć „Zrobione”; przycisk jest tylko przy `task: true` (przypomnienie przy
-  otwartym zadaniu). Zapisane przez starszą wersję przypomnienia (bez tych pól) go nie mają.
-  `id` musi być stały między wywołaniami (ponowne nastawienie tego samego `id` zastępuje budzik).
-  Wywołanie zastępuje cały zbiór; drzemki z powiadomienia zostają, dopóki aplikacja nie przyśle
-  tego samego `id`. Błędny JSON nie kasuje nastawionych budzików.
-* Dźwięki (`ReminderSounds.kt`, C++: `src/app/notify/androidpayload.h`): `kind` 0 = przypomnienia,
-  1 = alarmy; wybór to `{mode: "default" | "custom" | "vibrate" | "silent", uri, title}`
-  (`uri` — dzwonek z okna wyboru, `content://…`), `setReminderSounds` dostaje
-  `{reminder: {…}, alarm: {…}}` przy starcie aplikacji i po każdej zmianie w ustawieniach.
-  Okno wyboru zwraca przez `nativeSoundPicked` wybór albo `{"error": …}` (brak okna wyboru);
-  anulowanie nie wysyła nic. Pozycja „Domyślny” okna wyboru daje `mode: "default"`.
-* `documentInfo` / `listDocuments` (import): statyczne, wołane z wątku roboczego (JNI dołącza
-  wątek sam), bez instancji mostu. Adres drzewa (`…/tree/<id>`, wynik `ACTION_OPEN_DOCUMENT_TREE`)
-  jest zamieniany na dokument jego korzenia; dzieci folderu dają adresy `…/tree/<id>/document/<id
-  dziecka>`, które otwiera `QFile`. `bridgeFailed` w wyniku (brak metody, wyjątek) = użyj silnika
-  plików Qt.
-* Metody przyjmują `Context` (to, co zwraca `QNativeInterface::QAndroidApplication::context()`,
-  zwykle aktywność); okna dialogowe uprawnień korzystają z bieżącej `BrulionActivity`.
-  Prośby (`request*`) tylko wysyłają okno/ekran ustawień do głównego wątku Androida i wracają od
-  razu — wynik sprawdza się ponownie po `permissionsChanged()`.
-* **Stuknięcie w powiadomienie** — wybrany wariant: wywołanie zwrotne JNI + odbiór przy starcie:
-  * aplikacja działa: `BrulionActivity.onNewIntent` (tryb `singleTop`) → `nativeActivated` →
-    sygnał `activated` w wątku Qt (połączenie kolejkowane);
-  * zimny start z powiadomienia: `BrulionActivity.onCreate` zachowuje cel, bo C++ jeszcze nie
-    słucha; konstruktor `AndroidBridge` po `attach()` odbiera go przez `takeActivation()`
-    i emituje `activated` w pierwszym obrocie pętli zdarzeń (po podłączeniu UI);
-  * zabezpieczenie: przy każdym powrocie aplikacji na pierwszy plan (`ApplicationActive`) most
-    jeszcze raz sprawdza `takeActivation()`. Dostęp do celu chroni blokada po stronie Kotlina,
-    więc żadne stuknięcie nie ginie ani nie jest dostarczone dwa razy; intencje odtworzone
-    z „Ostatnich” są pomijane.
-* **Udostępnienie** z innej aplikacji idzie tą samą drogą: `ShareActivity` woła
-  `BrulionAndroid.deliverShare` (ten sam proces) — gdy C++ słucha, `nativeShared` → sygnał
-  `shared` → `AppController::receiveShareJson`; inaczej JSON czeka na `takeShare()` (konstruktor
-  `AndroidBridge` i każdy powrót na pierwszy plan). Nowsze udostępnienie zastępuje
-  nieodebrane.
-* **„Zrobione”** — przycisk działa w `BroadcastReceiver`, zwykle bez uruchomionego Qt, a Markdown
-  zmienia tylko C++ (jeden parser): `ReminderActions.done` zamyka powiadomienie (jak „OK”), usuwa
-  natywną drzemkę tego przypomnienia i dopisuje `{key, local, path, line, title, day, vault}`
-  (`day` — lokalna data stuknięcia, `vault` — id notatnika, `Vault::id()`, z danych przypomnienia)
-  do kolejki w SharedPreferences (`DoneQueue`, najwyżej 100 wpisów, ponowne stuknięcie tego
-  samego wystąpienia zastępuje wpis, zapis `commit()`), potem woła `nativeDoneQueued`, jeśli C++
-  słucha. Sygnał dochodzi do C++ od razu tylko wtedy, gdy aplikacja jest na pierwszym planie: bez
-  `android.app.background_running` Qt for Android wstrzymuje pętlę zdarzeń, gdy aktywność jest
-  w tle (proces żyje, kolejka czeka), i bierze kolejkę przy powrocie na pierwszy plan
-  (`applicationStateChanged`). Sprawdzone na emulatorze 2026-10-28 (`--done` i test mostu). `AndroidNotifier` odbiera kolejkę (`takeDoneRequests(vault)`) tylko wtedy, gdy notatnik
-  jest gotowy (`Notifier::setDoneTarget` z `WorkspaceReminders::doneTarget()`: od `start()` po
-  pełnym indeksowaniu do zamknięcia notatnika; notatnik z wstrzymanymi przypomnieniami, np.
-  dokumentacja, nie odbiera nic): przy jego gotowości, po sygnale i przy powrocie na pierwszy
-  plan — i tylko wpisy tego notatnika (oraz wpisy bez `vault`, ze starszej wersji); pozostałe
-  zostają w kolejce. Prośby idą jako `Notifier::doneRequested` i są od razu zapisywane: żadna nie
-  wisi tylko w pamięci, więc zakończenie procesu przed wczytaniem notatnika niczego nie gubi.
-  `WorkspaceReminders` odnajduje wystąpienie po `key` i `local` w indeksie, zmienia jego treść
-  (`markdown::setTaskStatus(…, Done, day)`) i zapisuje ją tylko wtedy, gdy plik wciąż ją zawiera
-  (`Vault::writeTextIfUnchanged`); zmianę innego programu, której skan jeszcze nie widział
-  (Syncthing w tle, zapis na miejscu), najpierw przyjmuje i szuka wystąpienia ponownie — numer
-  wiersza z nieaktualnego indeksu nigdy nie trafia w inny wiersz.
-* `nativeActivated` jest wołana w głównym wątku Androida; C++ tylko kolejkuje emisję sygnału.
-  Destruktor `AndroidBridge` woła `detach()` (czeka na blokadę), dopiero potem zeruje wskaźnik.
+* A `scheduleReminders` element: `{id: int, title, body, at: ms since the epoch, alarm: bool,
+  ringMinutes: int (alarms, 1–60, 10 by default), path: the note's path in the notebook, line: int,
+  key: the occurrence's id in Brulion, local: its wall-clock time "yyyy-MM-ddTHH:mm", task: bool}`.
+  `key` and `local` (unchanged by a snooze, never converted through UTC) point to the occurrence
+  that "Done" should complete; the button is there only with `task: true` (a reminder on an open
+  task). Reminders stored by an older version (without these fields) do not have it. `id` must be
+  stable between calls (setting the same `id` again replaces the alarm). A call replaces the whole
+  set; snoozes from a notification stay until the app sends the same `id`. Malformed JSON does not
+  clear the set alarms.
+* Sounds (`ReminderSounds.kt`, C++: `src/app/notify/androidpayload.h`): `kind` 0 = reminders,
+  1 = alarms; a choice is `{mode: "default" | "custom" | "vibrate" | "silent", uri, title}`
+  (`uri` — the ringtone from the picker, `content://…`), `setReminderSounds` gets
+  `{reminder: {…}, alarm: {…}}` at app startup and after every change in the settings. The picker
+  returns the choice through `nativeSoundPicked`, or `{"error": …}` (no picker); cancelling sends
+  nothing. The picker's "Default" entry gives `mode: "default"`.
+* `documentInfo` / `listDocuments` (import): static, called from a worker thread (JNI attaches the
+  thread itself), without a bridge instance. A tree address (`…/tree/<id>`, the result of
+  `ACTION_OPEN_DOCUMENT_TREE`) is turned into the document of its root; the children of a folder
+  give `…/tree/<id>/document/<child id>` addresses, which `QFile` opens. `bridgeFailed` in the
+  result (missing method, exception) = use Qt's file engine.
+* The methods take a `Context` (what `QNativeInterface::QAndroidApplication::context()` returns,
+  usually the activity); the permission dialogs use the current `BrulionActivity`. Requests
+  (`request*`) only post the dialog/settings screen to Android's main thread and return at once —
+  the result is checked again after `permissionsChanged()`.
+* **Tapping a notification** — the chosen approach: a JNI callback + pickup at startup:
+  * the app is running: `BrulionActivity.onNewIntent` (`singleTop` mode) → `nativeActivated` →
+    the `activated` signal on the Qt thread (queued connection);
+  * cold start from a notification: `BrulionActivity.onCreate` keeps the target, because C++ is
+    not listening yet; the `AndroidBridge` constructor picks it up after `attach()` through
+    `takeActivation()` and emits `activated` in the first turn of the event loop (after the UI is
+    connected);
+  * safeguard: every time the app returns to the front (`ApplicationActive`) the bridge checks
+    `takeActivation()` once more. Access to the target is guarded by a lock on the Kotlin side, so
+    no tap is lost or delivered twice; intents replayed from "Recents" are skipped.
+* **A share** from another app takes the same path: `ShareActivity` calls
+  `BrulionAndroid.deliverShare` (the same process) — when C++ is listening, `nativeShared` → the
+  `shared` signal → `AppController::receiveShareJson`; otherwise the JSON waits for `takeShare()`
+  (the `AndroidBridge` constructor and every return to the front). A newer share replaces one not
+  yet picked up.
+* **"Done"** — the button works in a `BroadcastReceiver`, usually without Qt running, while only
+  C++ changes Markdown (one parser): `ReminderActions.done` closes the notification (like "OK"),
+  removes the native snooze of this reminder and appends
+  `{key, local, path, line, title, day, vault}` (`day` — the local date of the tap, `vault` — the notebook id, `Vault::id()`, from the
+  reminder's data) to the queue in SharedPreferences (`DoneQueue`, at most 100 entries, tapping the
+  same occurrence again replaces the entry, written with `commit()`), then calls
+  `nativeDoneQueued` if C++ is listening. The signal reaches C++ at once only when the app is in
+  the foreground: without `android.app.background_running` Qt for Android pauses the event loop
+  while the activity is in the background (the process lives, the queue waits), and takes the
+  queue when it returns to the front (`applicationStateChanged`). Verified on the emulator
+  2026-10-28 (`--done` and the bridge test). `AndroidNotifier` takes the queue
+  (`takeDoneRequests(vault)`) only when the notebook is ready (`Notifier::setDoneTarget` from
+  `WorkspaceReminders::doneTarget()`: from `start()` after full indexing until the notebook is
+  closed; a notebook with paused reminders, e.g. the documentation, takes nothing): when it becomes
+  ready, after the signal and on the return to the front — and only the entries of this notebook
+  (and entries without `vault`, from an older version); the others stay in the queue. The requests
+  go out as `Notifier::doneRequested` and are written at once: none hangs only in memory, so
+  ending the process before the notebook is loaded loses nothing. `WorkspaceReminders` finds the
+  occurrence by `key` and `local` in the index, changes its text
+  (`markdown::setTaskStatus(…, Done, day)`) and writes it only when the file still contains it
+  (`Vault::writeTextIfUnchanged`); a change by another program that the scan has not seen yet
+  (Syncthing in the background, a write in place) it takes in first and looks for the occurrence
+  again — a line number from a stale index never hits another line.
+* `nativeActivated` is called on Android's main thread; C++ only queues the signal emission. The
+  `AndroidBridge` destructor calls `detach()` (waits for the lock), and only then clears the
+  pointer.
 
-### Testy i diagnostyka
+### Tests and diagnostics
 
-* Testy jednostkowe Kotlina (czysta logika: przesuwanie czasu ściennego między strefami, czas
-  dzwonienia, JSON przypomnień, kolejka „Zrobione” (`DoneQueueTest`), dźwięki — wybór z C++, odpowiedź okna wyboru dzwonka, wersje
-  kanałów i usuwanie starych — z polskimi znakami; ile widoku zakrywa klawiatura — okno
-  edge-to-edge, zmniejszone, podzielony ekran, klatki wysuwania — i ile z pasa gestów systemu
-  wchodzi na widok Qt: `ImeInsetsTest`; „Udostępnij → Brulion” — które pliki są tekstem, nazwy
-  kopii z `..`, `/`, polskimi znakami i emoji, wiek folderów `share-in`, pomijane miniatury
-  podglądu, JSON dla C++: `ShareIntentTest`; widżety — migawka z C++ i przekładanie zadań na
-  nowy dzień, wiersze list, siatka miesiąca, daty: `WidgetSnapshotTest`; wiersz szybkiego
-  dodawania, dopisywanie do dziennika, zapis atomowy i ścieżki spoza notatnika (`..`, dowiązanie),
-  plik nie w UTF-8, brakujący folder notatnika: `JournalAppendTest`; kolejka dla C++ i powrót
-  do niej: `WidgetInboxTest`; PDF-y — JSON sesji i trafień, rozmiary rysowane: `PdfJsonTest`;
-  „Otwórz w innej aplikacji” — czy plik leży w korzeniach FileProvidera, nazwa kopii:
-  `OpenWithTest`; sprawdzanie notatek w tle — cel, które wyniki są nastawiane, stan dla ustawień:
-  `BackgroundCheckTest`. Przypadki
-  `tests/data/widgets/*.json` sprawdza też C++ — `tst_widgets` —, więc obie strony piszą
-  i przekładają tak samo; skrypt init podaje ich folder we właściwości `brulion.testData`):
-  `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
-  `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` w wygenerowanym
-  projekcie Gradle).
-* Android lint: `BRULION_ANDROID_LINT=1 scripts/android-build.sh` (`./gradlew lintRelease`,
-  wypisuje uwagi dotyczące plików Brulionu; pełny raport w
+* Kotlin unit tests (pure logic: moving wall-clock time between zones, ring time, the reminders
+  JSON, the "Done" queue (`DoneQueueTest`), sounds — the choice from C++, the ringtone picker's
+  answer, channel versions and deleting old ones — with Polish characters; how much of the view
+  the keyboard covers — edge-to-edge window, shrunk window, split screen, slide frames — and how
+  much of the system gesture strip reaches the Qt view: `ImeInsetsTest`; "Share → Brulion" — which
+  files are text, copy names with `..`, `/`, Polish characters and emoji, the age of the
+  `share-in` folders, skipped preview thumbnails, the JSON for C++: `ShareIntentTest`; widgets —
+  the snapshot from C++ and moving tasks to the new day, list rows, the month grid, dates:
+  `WidgetSnapshotTest`; the quick add line, appending to the journal, the atomic write and paths
+  outside the notebook (`..`, a symlink), a file not in UTF-8, a missing notebook folder:
+  `JournalAppendTest`; the queue for C++ and going back to it: `WidgetInboxTest`; PDFs — the
+  session and hits JSON, drawn sizes: `PdfJsonTest`; "Open in another app" — whether a file lies
+  in the FileProvider's roots, the copy's name: `OpenWithTest`; background check of the notes —
+  the target, which results are applied, the state for the settings: `BackgroundCheckTest`. The
+  cases in `tests/data/widgets/*.json` are also checked by C++ — `tst_widgets` — so both sides
+  write and move tasks the same way; the init script passes their folder in the
+  `brulion.testData` property): `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (runs
+  `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` in the generated
+  Gradle project).
+* Android lint: `BRULION_ANDROID_LINT=1 scripts/android-build.sh` (`./gradlew lintRelease`, prints
+  the remarks about Brulion's files; the full report in
   `<build>/src/app/android-build/build/reports/`).
-* Test end-to-end na emulatorze (wymaga KVM; na NixOS emulator działa przez `steam-run`):
+* End-to-end test on the emulator (needs KVM; on NixOS the emulator runs through `steam-run`):
 
   ```sh
   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
-  scripts/android-emulator-test.sh     # logi i zrzuty ekranu: dist-android/emulator-test/
+  scripts/android-emulator-test.sh     # logs and screenshots: dist-android/emulator-test/
   ```
 
-  Instaluje emulator i obraz `system-images;android-36;google_apis;x86_64` (rysowanie programowe
-  `-gpu swangle_indirect`; `swiftshader_indirect` zostawia czarne pasy na przyciskach), uruchamia APK
-  aplikacji (czy działa, kanały powiadomień), potem APK testowy mostu: uprawnienia przez JNI,
-  dwa razy `scheduleReminders` (przypomnienia przy zadaniach za 45 s i 200 s, alarm za 75 s
-  dzwoniący 1 min, przeszłe — pominięte), budziki w `dumpsys alarm`, powiadomienia na kanałach
-  `reminders` i `alarms`, zamiana alarmu w „Przegapiony alarm” po czasie dzwonienia, stuknięcia
-  (zimny start i działająca aplikacja, ścieżka z polskimi znakami) dochodzące do C++, „Zrobione”
-  w powiadomieniu przypomnienia przy zadaniu: przy aplikacji na ekranie (panel powiadomień nad nią)
-  prośba od razu w C++ z dniem stuknięcia, powiadomienie znika; po zabiciu procesu (`am kill`, nie
-  `force-stop` — budziki zostają) drugie przypomnienie przychodzi do nowego procesu bez Qt, stuknięcie
-  czeka w kolejce (`shared_prefs/…done.xml`, APK debugowalny) i C++ dostaje je przy następnym
-  starcie. Sprawdzone 2026-10-28 (Android 16, Pixel 6; 24 sprawdzenia).
-  APK testowy ma ten sam pakiet co aplikacja (zastępuje ją) — tylko na emulatorze/telefonie
-  testowym. Świeżo uruchomiony emulator przez kilka sekund nakłada jeszcze nakładki systemu
-  (zmiana konfiguracji `CONFIG_ASSETS_PATHS`, której aplikacja nie obsłuży sama): Android tworzy
-  wtedy `BrulionActivity` od nowa, a utworzona od nowa przed startem Qt aplikacja uruchamia się
-  sama jeszcze raz ([Aktywność utworzona od nowa w trakcie
-  startu](#aktywność-utworzona-od-nowa-w-trakcie-startu)); `start_app` pisze wtedy „the app
-  restarted itself” i czeka na nią dłużej. Utworzoną od nowa po starcie Qt aplikację Qt restartuje
-  bez argumentów trybu: gdy w logcat jest `finishDrawing of relaunch` tej aktywności, a nie ma
-  wpisu o restarcie samej aplikacji, `start_app` uruchamia ją drugi raz („…Qt restarted the app
-  without its arguments — started again”).
-* Aktywność utworzona od nowa w trakcie startu (APK debugowalny jak niżej):
+  It installs the emulator and the image `system-images;android-36;google_apis;x86_64` (software
+  rendering `-gpu swangle_indirect`; `swiftshader_indirect` leaves black stripes on buttons), runs
+  the app's APK (whether it works, notification channels), then the bridge's test APK: permissions
+  over JNI, `scheduleReminders` twice (reminders on tasks in 45 s and 200 s, an alarm in 75 s
+  ringing for 1 min, past ones — skipped), the alarms in `dumpsys alarm`, notifications on the
+  `reminders` and `alarms` channels, an alarm turning into "Missed alarm" after its ring time, taps
+  (cold start and a running app, a path with Polish characters) reaching C++, "Done" in the
+  notification of a reminder on a task: with the app on screen (the notification shade over it)
+  the request reaches C++ at once with the day of the tap, the notification disappears; after the
+  process is killed (`am kill`, not `force-stop` — the alarms stay) the second reminder comes to a
+  new process without Qt, the tap waits in the queue (`shared_prefs/…done.xml`, debuggable APK)
+  and C++ gets it at the next start. Verified 2026-10-28 (Android 16, Pixel 6; 24 checks). The
+  test APK has the same package as the app (it replaces it) — only on an emulator/test phone. A
+  freshly started emulator still applies system overlays for a few seconds (a
+  `CONFIG_ASSETS_PATHS` configuration change the app does not handle itself): Android then
+  recreates `BrulionActivity`, and an app recreated before Qt started starts itself once more
+  ([Activity recreated during startup](#activity-recreated-during-startup)); `start_app` then
+  writes "the app restarted itself" and waits longer for it. An app recreated after Qt has started
+  is restarted by Qt without its mode arguments: when logcat has `finishDrawing of relaunch` of
+  this activity but no entry about the app restarting itself, `start_app` starts it a second time
+  ("…Qt restarted the app without its arguments — started again").
+* Activity recreated during startup (a debuggable APK as below):
   ```sh
   scripts/android-emulator-test.sh --relaunch
   ```
-  Uruchamia aplikację jak dotknięte powiadomienie (dodatki `PATH`/`LINE`: pierwsza strona
-  przewodnika). Zaraz po `am start` (w jednym `adb shell`, z opóźnieniami 0–2 s) włącza nakładkę frameworka
-  `com.android.internal.display.cutout.emulation.*` (`cmd overlay`): zmiana `CONFIG_ASSETS_PATHS`,
-  więc Android tworzy aktywność od nowa. Sprawdza, że co najmniej raz stało się to przed startem
-  Qt (`BrulionActivity: recreated before Qt started`) i że po każdej próbie na ekranie jest notatka
-  z powiadomienia (także po restarcie samej aplikacji; po restarcie przez Qt — po angielsku, bez
-  argumentów i notatki — wystarczy dolna nawigacja notatnika albo, gdy żaden notatnik nie był
-  jeszcze otwarty, ekran powitalny), wpisy Qt `brulion.*` w logcat —
-  żadnego pustego okna;
-  wypisuje wynik każdej próby (przed startem Qt / po nim / bez ponownego utworzenia). Zrzuty
-  `rl-*.png`, logcat każdej próby `rl-logcat-<n>.txt`. Sprawdzone 2026-11-01 na GitHub Actions
-  (Android 16): z poprawką 7 prób, 2 razy utworzona od nowa przed startem Qt — za każdym razem
-  restart i dziennik; bez niej (`BrulionActivity` sprzed poprawki) 12 prób, w jednej puste okno
-  bez żadnego wpisu `brulion.*`, w czterech restart przez Qt (dziennik po angielsku). Z notatką z
-  powiadomienia (te same dni, cztery przebiegi): z poprawką 8 restartów przed startem Qt, za
-  każdym razem otwarta notatka; z `BrulionActivity`, która restartowała bez `keepForRestart`, 7
-  takich restartów, w 6 z nich zamiast notatki sam notatnik.
-* Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):
+  It starts the app like a tapped notification (extras `PATH`/`LINE`: the first page of the
+  guide). Right after `am start` (in one `adb shell`, with delays of 0–2 s) it turns on the
+  framework overlay `com.android.internal.display.cutout.emulation.*` (`cmd overlay`): a
+  `CONFIG_ASSETS_PATHS` change, so Android recreates the activity. It checks that at least once
+  this happened before Qt started (`BrulionActivity: recreated before Qt started`) and that after
+  every attempt the note from the notification is on screen (also after the app restarted itself;
+  after a restart by Qt — in English, without arguments and the note — the notebook's bottom
+  navigation is enough or, when no notebook had been opened yet, the welcome screen), with Qt's
+  `brulion.*` entries in logcat — no empty window; it prints the outcome of each attempt (before
+  Qt started / after it / not recreated). Screenshots `rl-*.png`, each attempt's logcat
+  `rl-logcat-<n>.txt`. Verified 2026-11-01 on GitHub Actions (Android 16): with the fix 7
+  attempts, 2 times recreated before Qt started — each time a restart and the journal; without it
+  (`BrulionActivity` from before the fix) 12 attempts, in one an empty window without any
+  `brulion.*` entry, in four a restart by Qt (the journal in English). With a note from a
+  notification (the same days, four runs): with the fix 8 restarts before Qt started, each time
+  the note open; with a `BrulionActivity` that restarted without `keepForRestart`, 7 such
+  restarts, in 6 of them the bare notebook instead of the note.
+* Selecting and copying with a real finger (`adb shell input`, a debuggable APK as below):
   ```sh
   scripts/android-emulator-test.sh --selection
   ```
-  Przytrzymanie tekstu bloku w dzienniku — tryb zaznaczania (klawiatura się nie pokazuje, pasek z
-  bloku, uchwyty, narzędzia zaznaczenia na dole), stuknięcie w kolejny blok rozszerza zaznaczenie,
-  „Kopiuj” (komunikat „Skopiowano 2 bloki”, a Android 13+ pokazuje własny podgląd schowka z
-  Markdownem), Wstecz kończy zaznaczanie. Bloki i przyciski skrypt znajduje po nazwach (jak
-  `--folders` niżej; wcześniej — po ułamkach ekranu, które na Androidzie 11, z niższym paskiem
-  stanu, trafiały w drugi blok, a sprawdzenia i tak przechodziły). Zrzuty `sel-*.png`
-  w `dist-android/emulator-test/`; sprawdzone 2026-10-23 (Android 16 i 11, Pixel 6).
-* Foldery, odnośniki i tagi prawdziwym palcem (ten sam APK debugowalny):
+  A long press on a block's text in the journal — selection mode (the keyboard does not show, the
+  toolbar from the block, handles, the selection tools at the bottom), a tap on the next block
+  extends the selection, "Copy" (the message "Copied 2 blocks", and Android 13+ shows its own
+  clipboard preview with the Markdown), Back ends the selection. The script finds blocks and
+  buttons by name (like `--folders` below; before — by fractions of the screen, which on Android
+  11, with a lower status bar, hit the second block, and the checks passed anyway). Screenshots
+  `sel-*.png` in `dist-android/emulator-test/`; verified 2026-10-23 (Android 16 and 11, Pixel 6).
+* Folders, links and tags with a real finger (the same debuggable APK):
   ```sh
   scripts/android-emulator-test.sh --folders
   ```
-  Elementy aplikacji skrypt znajduje po nazwach dostępności: `uiautomator dump` (usługa
-  UiAutomator włącza dostępność, a Qt oddaje jej drzewo elementów QML; `content-desc` to etykieta
-  przycisku ze skrótem, tekst bloku, komunikat — zwykłe etykiety tekstowe nazwy nie mają;
-  `resource-id` zawiera `objectName`), klawisze klawiatury ekranowej — po ich nazwach w zrzucie
-  wszystkich okien (`uiautomator dump --windows`), pliki notatnika czyta przez `run-as`. Słowa
-  wpisuje stuknięciami w klawisze, nie przez `input text`: Gboard na Androidzie 11 składał
-  wstrzyknięte klawisze — po pierwszym lub dwóch, które trafiały wprost do pola — w słowo
-  w budowie i zatwierdzał je przed nimi („Archiwum” → „rchiwumA”, „archiwum” → „chiwumar”; może to dotyczyć klawiatury sprzętowej
-  z Gboard na Androidzie 11 — niesprawdzone). Kroki: stuknięcie w `#przewodnik` w dzienniku
-  otwiera stronę z tym aliasem (z paskiem tagu), a szuflada otwarta na niej pokazuje wiersz tej
-  strony w drzewie — w widocznej części listy; w `#pomysł` — pustą stronę tagu z odnośnikami do
-  oznaczonych bloków (pliku nie tworzy), Wstecz wraca; „Więcej” paska edycji (przewiniętego
-  palcem) otwiera menu bloku, „Kopiuj odnośnik” → „Odwołanie do bloku” dopisuje id bloku
-  w notatce i kopiuje `((id))` (komunikat „Skopiowano ((id))”; na Androidzie 13+ Ctrl+V —
-  `input keycombination` — wkleja je na końcu innego bloku, co widać w pliku); blok
-  `- Zapytać się [[Projekty/Remont mieszkania]] o plan` dopisany do dzisiejszego dziennika „przez
-  inny program” (`vault_append`, aplikacja czyta go po powrocie na pierwszy plan) ma części ścieżki
-  jako osobne węzły linków `Projekty` i `Remont mieszkania` (UiAutomator włącza dostępność, więc
-  `BLinkTargets` tworzy elementy linków — jak dla TalkBack): stuknięcie w `Projekty` otwiera listę
-  stron folderu, w `Remont mieszkania` — stronę, przytrzymanie `Projekty` — menu z „Pokaż folder”
-  i „Kopiuj ścieżkę folderu”; plik dziennika poza dopisanym wierszem się nie zmienia (zrzuty
-  `fl-lp-*.png`); „+” nagłówka
-  „Strony” w szufladzie → „Nowy folder”: nazwa wpisana na klawiaturze i „Utwórz” stuknięte, gdy
-  klawiatura jeszcze składa słowo, a szuflada pokazuje nowy folder nad stopką synchronizacji;
-  „⋯” strony w drzewie → „Przenieś do…” (arkusz, folder
-  wyszukany, „Zaktualizowane linki: 1 (w 1 notatce)”) przenosi „Remont mieszkania” z `Projekty`
-  do nowego folderu: plik leży w nowym miejscu, filtr `path:Projekty` jego zapytania zmienia się
-  na `path:Archiwum`, komunikat ma „Cofnij”. Wiersze szuflady skrypt najpierw przewija palcem
-  (`drawer_show`/`drawer_tap`), aż cały wiersz leży między wierszem notatnika a stopką
-  synchronizacji: UiAutomator podaje granice elementów nieprzycięte do przewijanej listy, więc
-  wiersz schowany pod stopką też „jest na ekranie”, a stuknięcie w niego trafia w stopkę. Po
-  każdym przeciągnięciu zamyka i otwiera szufladę od nowa — na Androidzie 11 drzewo dostępności
-  nie miało węzłów dla wierszy, które przeciągnięcie wsunęło do listy, a inne zostawiało w starych
-  miejscach, dopóki szuflada nie pokazała się znowu. Zrzuty `fl-*.png`; sprawdzone 2026-10-29
-  (Android 16 i 11, Pixel 6; 38 sprawdzeń na Androidzie 16). W 2026-10-29 test znalazł błąd (poprawiony): wiersz
-  otwartej strony, nowego folderu i „Pokaż w drzewie” lista ustawiała, gdy szuflada była jeszcze
-  zamknięta albo dopiero się otwierała — z wysokością, którą lista miała przy poprzednim
-  rozłożeniu; szuflada dostaje marginesy pasków systemu i traci miejsce klawiatury dopiero przy
-  otwarciu, więc wiersz lądował pod stopką, a stuknięcie w niego otwierało Synchronizację
-  (wcześniej test przechodził przypadkiem: lista była przewinięta o 11 px). Teraz wiersz jest
-  ustawiany od nowa przy każdej zmianie wysokości listy, dopóki użytkownik jej nie przewinie
-  (docs/UI.md „Folders”). Wcześniej test znalazł dwa błędy (poprawione): menu wyższe niż miejsce nad paskiem edycji
-  wchodziło pod pasek stanu, gdzie stuknięcie trafia do systemu — „Odwołanie do bloku”
-  w podmenu było nieosiągalne palcem (`BMenu.topMargin`); a słowo, które klawiatura jeszcze
-  składa (Gboard trzyma każde słowo poza tekstem pola aż do spacji), nie liczyło się jako
-  wpisane — „Utwórz” nowego folderu i „Dodaj” szybkiej notatki z jednym słowem zostawały
-  wyłączone (`typedText`, docs/UI.md „On-screen keyboard”). Zostaje (niepoprawione): gdy menu
-  bloku otwiera się z „Więcej”, klawiatura się chowa (menu bierze fokus), pasek edycji zjeżdża
-  na dół, a menu zostaje tam, gdzie je ustawiono nad klawiaturą — z przerwą nad paskiem.
-* „Udostępnij → Brulion” (ten sam APK debugowalny):
+  The script finds the app's elements by their accessible names: `uiautomator dump` (the
+  UiAutomator service turns accessibility on, and Qt gives it the tree of QML elements;
+  `content-desc` is the button label with its shortcut, a block's text, a message — plain text
+  labels have no name; `resource-id` contains the `objectName`), the on-screen keyboard's keys — by
+  their names in the dump of all windows (`uiautomator dump --windows`), and it reads the notebook
+  files through `run-as`. It types words by tapping keys, not through `input text`: Gboard on
+  Android 11 composed the injected keys — after the first one or two, which went straight into the
+  field — into a word in progress and committed it before them ("Archiwum" → "rchiwumA",
+  "archiwum" → "chiwumar"; this may also affect a hardware keyboard with Gboard on Android 11 —
+  unchecked). Steps: a tap on `#przewodnik` in the journal opens the page with that alias (with the
+  tag strip), and the drawer opened on it shows that page's row in the tree — in the visible part
+  of the list; on `#pomysł` — the empty tag page with links to the tagged blocks (it does not create
+  the file), Back goes back; "More" on the editing toolbar (scrolled with a finger) opens the block
+  menu, "Copy link" → "Block reference ((…))" adds the block id in the note and copies `((id))`
+  (the message "Copied ((id))"; on Android 13+ Ctrl+V — `input keycombination` — pastes it at the
+  end of another block, which shows in the file); the block
+  `- Zapytać się [[Projekty/Remont mieszkania]] o plan` ("ask about the plan for [[Projects/Flat
+  renovation]]") appended to today's journal "by another program" (`vault_append`, the app reads it
+  on the return to the front) has the parts of the path as separate link nodes `Projekty` and
+  `Remont mieszkania` (UiAutomator turns accessibility on, so `BLinkTargets` creates the link
+  elements — as for TalkBack): a tap on `Projekty` opens the folder's list of pages, on
+  `Remont mieszkania` — the page, a long press on `Projekty` — a menu with "Show folder" and "Copy
+  folder path"; the journal file does not change apart from the appended line (screenshots
+  `fl-lp-*.png`); "+" on the "Pages" header in the drawer → "New folder": the name typed on the
+  keyboard and "Create" tapped while the keyboard is still composing the word, and the drawer
+  shows the new folder above the sync footer; "⋯" of a page in the tree → "Move to…" (a sheet, the
+  folder searched for, "Updated links: 1 (in 1 note)") moves "Remont mieszkania" from `Projekty` to
+  the new folder: the file is in the new place, the `path:Projekty` filter of its query changes to
+  `path:Archiwum`, the message has "Undo". The script first scrolls the drawer rows with a finger
+  (`drawer_show`/`drawer_tap`) until the whole row lies between the notebook row and the sync
+  footer: UiAutomator gives element bounds not clipped to the scrolling list, so a row hidden under
+  the footer is also "on screen", and a tap on it hits the footer. After every drag it closes and
+  reopens the drawer — on Android 11 the accessibility tree had no nodes for rows a drag brought
+  into the list, and left others at their old places until the drawer showed again. Screenshots
+  `fl-*.png`; verified 2026-10-29 (Android 16 and 11, Pixel 6; 38 checks on Android 16). On
+  2026-10-29 the test found a bug (fixed): the list positioned the row of the open page, of a new
+  folder and of "Show in tree" while the drawer was still closed or only opening — with the height
+  the list had in the previous layout; the drawer gets the system bar margins and loses the
+  keyboard's space only when it opens, so the row landed under the footer, and a tap on it opened
+  Sync (before, the test passed by chance: the list was scrolled by 11 px). Now the row is
+  positioned again at every change of the list's height until the user scrolls it (docs/UI.md
+  "Folders"). Earlier the test found two bugs (fixed): a menu taller than the space above the
+  editing toolbar went under the status bar, where a tap goes to the system — "Block reference ((…))" in
+  the submenu was out of a finger's reach (`BMenu.topMargin`); and a word the keyboard is still
+  composing (Gboard keeps each word outside the field's text until a space) did not count as typed
+  — "Create" of a new folder and "Add" of a quick note with a single word stayed disabled
+  (`typedText`, docs/UI.md "On-screen keyboard"). Remaining (not fixed): when the block menu opens
+  from "More", the keyboard hides (the menu takes the focus), the editing toolbar slides down, and
+  the menu stays where it was placed above the keyboard — with a gap above the toolbar.
+* "Share → Brulion" (the same debuggable APK):
   ```sh
   scripts/android-emulator-test.sh --share
   ```
-  Przy działającej aplikacji (przykładowy notatnik) `am start` wysyła tekst do `ShareActivity`
-  (`EXTRA_SUBJECT` „Artykuł na jutro”, `EXTRA_TEXT` z polskimi znakami i adresem): okno „Zapisz
-  w Brulionie”, „Zapisz” — blok `[Artykuł na jutro](…) — …` w dzisiejszym dzienniku, bez
-  przypomnienia. Potem plik `Lista zakupów.md` (CRLF) wgrany do `Download`, znaleziony w
-  `MediaStore` i udostępniony jako `content://media/…` po zimnym starcie: okno z plikiem, „Zapisz”
-  — nowa strona bajt w bajt, folder kopii usunięty. Na koniec obrazek: system nie proponuje
-  Brulionu (`cmd package query-activities`), a wysłany wprost nie otwiera okna. Zrzuty
-  `sh-*.png`. Na koniec kilka plików naraz z menedżera plików systemu (`ACTION_SEND_MULTIPLE`, którego
-  `am` nie wyśle): w „Pobranych” zaznaczone `Lista zakupów.md`, `Notatka źdźbło.txt` i obrazek.
-  Zaznaczenie ma wtedy typ `*/*`, który Android dopasowuje do filtra `text/*`, więc arkusz
-  udostępniania proponuje Brulion (na Androidzie 16 tak; gdyby nie zaproponował, test odznacza
-  obrazek); okno wymienia oba pliki tekstowe i obrazek jako „To nie jest plik tekstowy”, „Zapisz”
-  — po jednym bloku na plik tekstowy w dzisiejszym dzienniku (pogrubiony tytuł, wcięte wiersze
-  pliku), obrazek pominięty. Po zimnym starcie z „Udostępnij” aplikacja mówi językiem telefonu
-  (bez `--locale pl`), więc test szuka napisów po polsku i po angielsku. Sprawdzone 2026-10-28
-  (Android 16, Pixel 6). Ręcznie na telefonie (APK z GitHub Actions `android.yml`):
-  1. Chrome → strona → Udostępnij → Brulion: okno z `[Tytuł](adres)`, „Zapisz” → blok w
-     dzisiejszym dzienniku, nic więcej (bez ⏰ nawet przy „jutro” w tytule);
-  2. Pliki → `.md` z polskimi znakami → Udostępnij → Brulion przy zamkniętej aplikacji (zimny
-     start): okno „Nowa strona” z tytułem z nazwy pliku; strona ma treść pliku bez zmian;
-  3. ten sam plik jeszcze raz → strona „… 2”; tytuł zmieniony na tę samą nazwę innymi literami
-     („LISTA …”) → okno mówi, że strona już jest, nic nie nadpisane;
-  4. trzy pliki naraz (zaznaczone w menedżerze plików, w tym obrazek `.jpg`) → obrazek nie dostaje
-     opcji Brulionu albo jest na liście jako „To nie jest plik tekstowy”; „Dzisiejszy dziennik” →
-     po jednym bloku na plik;
-  5. udostępnienie przy otwartej dokumentacji → Brulion wraca do Twojego notatnika i tam
-     pokazuje okno; „Anuluj” → nic nie zapisane, `adb shell run-as io.github.januszbit.brulion
-     ls files/share-in` pusty (debuggable APK).
-* Systemowe okna wyboru plików (`FilePicker`, docs/UI.md „File pickers”; ten sam APK
-  debugowalny):
+  With the app running (the sample notebook) `am start` sends text to `ShareActivity`
+  (`EXTRA_SUBJECT` "Artykuł na jutro" — "an article for tomorrow", `EXTRA_TEXT` with Polish
+  characters and an address): the "Save to Brulion" dialog, "Save" — the block
+  `[Artykuł na jutro](…) — …` in today's journal, no reminder. Then the file `Lista zakupów.md`
+  (CRLF) pushed to `Download`, found in `MediaStore` and shared as `content://media/…` after a cold
+  start: the dialog with the file, "Save" — a new page byte for byte, the copy folder deleted.
+  Then an image: the system does not offer Brulion (`cmd package query-activities`), and sent
+  directly it opens no dialog. Screenshots `sh-*.png`. Finally several files at once from the
+  system file manager (`ACTION_SEND_MULTIPLE`, which `am` cannot send): in "Downloads"
+  `Lista zakupów.md`, `Notatka źdźbło.txt` and an image selected. The selection then has the type
+  `*/*`, which Android matches to the `text/*` filter, so the share sheet offers Brulion (on
+  Android 16 it does; if it did not, the test deselects the image); the dialog lists both text
+  files and the image as "Not a text file", "Save" — one block per text file in today's journal (a
+  bold title, the file's lines indented), the image skipped. After a cold start from "Share" the
+  app speaks the phone's language (without `--locale pl`), so the test looks for labels in Polish
+  and in English. Verified 2026-10-28 (Android 16, Pixel 6). By hand on a phone (APK from GitHub
+  Actions `android.yml`):
+  1. Chrome → a page → Share → Brulion: a dialog with `[Title](address)`, "Save" → a block in
+     today's journal, nothing more (no ⏰ even with "tomorrow" in the title);
+  2. Files → an `.md` with Polish characters → Share → Brulion while the app is closed (cold
+     start): a "New page" dialog with the title from the file name; the page has the file's
+     content unchanged;
+  3. the same file once more → the page "… 2"; the title changed to the same name in other letter
+     case (e.g. "LISTA …") → the dialog says the page already exists, nothing is overwritten;
+  4. three files at once (selected in the file manager, among them a `.jpg` image) → the image
+     does not get Brulion's option, or is on the list as "Not a text file"; "Today's journal" → one
+     block per file;
+  5. a share while the documentation is open → Brulion returns to your notebook and shows the
+     dialog there; "Cancel" → nothing saved, `adb shell run-as io.github.januszbit.brulion
+     ls files/share-in` empty (debuggable APK).
+* The system file pickers (`FilePicker`, docs/UI.md "File pickers"; the same debuggable APK):
   ```sh
   scripts/android-emulator-test.sh --pickers
   ```
-  W `Download` notatka `Zażółć.md` (CRLF) i folder `Notatki z telefonu` z dwiema notatkami.
-  Import → **Wybierz pliki…** (przycisk przewinięty nad dolną nawigację): DocumentsUI na wierzchu
-  (`ACTION_OPEN_DOCUMENT`), notatka wybrana stuknięciem, podgląd importu nosi jej nazwę;
-  **Wybierz folder…** (`ACTION_OPEN_DOCUMENT_TREE`, okno zaczyna od głównego katalogu pamięci):
-  `Download` → `Notatki z telefonu` → „Use this folder” → „Allow”, podgląd z nazwą folderu
-  i „Importuj 2 pliki”; Eksport → **Eksportuj…** → systemowe „Zapisz” (`ACTION_CREATE_DOCUMENT`)
-  z nazwą pliku eksportu w polu nazwy (`EXTRA_TITLE`), „Save” — ZIP (zaczyna się od `PK`) leży
-  w `Download` (w folderze użytym ostatnio). Bez awarii i błędów QML, żadne okno nie odmówiło
-  otwarcia. Zrzuty `pk-*.png`. Sprawdzone 2026-10-30 (Android 16, Pixel 6).
-* „Zrobione” w powiadomieniu przypomnienia samej aplikacji (ten sam APK debugowalny):
+  In `Download` the note `Zażółć.md` (CRLF) and the folder `Notatki z telefonu` ("notes from the
+  phone") with two notes. Import → **Choose files…** (the button scrolled above the bottom
+  navigation): DocumentsUI on top (`ACTION_OPEN_DOCUMENT`), the note picked with a tap, the import
+  preview carries its name; **Choose a folder…** (`ACTION_OPEN_DOCUMENT_TREE`, the picker starts at
+  the storage root): `Download` → `Notatki z telefonu` → "Use this folder" → "Allow", a preview
+  with the folder's name and "Import 2 files"; Export → **Export…** → the system "Save"
+  (`ACTION_CREATE_DOCUMENT`) with the export's file name in the name field (`EXTRA_TITLE`),
+  "Save" — the ZIP (starts with `PK`) is in `Download` (in the folder used last). No crashes or
+  QML errors, no picker refused to open. Screenshots `pk-*.png`. Verified 2026-10-30 (Android 16,
+  Pixel 6).
+* "Done" in a notification of the app's own reminder (the same debuggable APK):
   ```sh
   scripts/android-emulator-test.sh --done
   ```
-  Notatnik w pamięci aplikacji z dwoma zadaniami w dzisiejszym dzienniku, z przypomnieniami za 2
-  i 4 minuty (zegar telefonu): pierwsze „Zrobione” przy aplikacji na ekranie — w notatce od razu
-  `- [x] … ⏰ … ✅ <dzień stuknięcia>`, powiadomienie znika; drugie po zabiciu procesu — notatka
-  bez zmian, stuknięcie w kolejce, następny start zapisuje `[x]` z `✅`, reszta notatki nietknięta.
-  Zrzuty `dn-*.png`. Sprawdzone 2026-10-28 (Android 16, Pixel 6).
-* Tekst na rysunku z klawiatury ekranowej (ten sam APK debugowalny; `node` na hoście):
+  A notebook in the app's storage with two tasks in today's journal, with reminders in 2 and 4
+  minutes (the phone's clock): the first "Done" with the app on screen — in the note at once
+  `- [x] … ⏰ … ✅ <day of the tap>`, the notification disappears; the second after the process is
+  killed — the note unchanged, the tap in the queue, the next start writes `[x]` with `✅`, the rest
+  of the note untouched. Screenshots `dn-*.png`. Verified 2026-10-28 (Android 16, Pixel 6).
+* Text on a drawing from the on-screen keyboard (the same debuggable APK; `node` on the host):
   ```sh
   scripts/android-emulator-test.sh --drawing
   ```
-  Notatnik w pamięci aplikacji, którego dzisiejszy dziennik wstawia rysunek: stuknięcie w rysunek
-  otwiera edytor rysunku; na telefonie trzymanym pionowo pasek ma **Tekst**, kółko koloru,
-  **Więcej** i **Gotowe** na ekranie (dwa wiersze); **Tekst** i stuknięcie w kartkę otwierają pole
-  tekstu i klawiaturę (Gboard); słowa wpisane klawiszami klawiatury z przerwą dłuższą niż zapis po
-  1,2 s — pole i klawiatura zostają; ✓ zapisuje tekst (w pliku rysunku element tekstowy z tym
-  tekstem), klawiatura znika; drugi tekst zaczęty zaraz po pierwszym (gdy zapis po 1,2 s jeszcze
-  czeka) też zostaje otwarty i zapisuje się. Zrzuty `dr-*.png`. Sprawdzone 2026-10-29 (Android 16,
-  Pixel 6, Gboard po angielsku — polskich znaków z klawiatury ekranowej test nie wpisuje).
-* Rysik w edytorze rysunku (ten sam APK debugowalny; `node` na hoście):
+  A notebook in the app's storage whose today's journal embeds a drawing: a tap on the drawing
+  opens the drawing editor; on a phone held upright the toolbar has **Text**, the colour circle,
+  **More** and **Done** on screen (two rows); **Text** and a tap on the sheet open the text field
+  and the keyboard (Gboard); words typed with keyboard keys with a pause longer than the save after
+  1.2 s — the field and the keyboard stay; ✓ saves the text (a text element with that text in the
+  drawing file), the keyboard disappears; a second text started right after the first one (while
+  the save after 1.2 s is still pending) also stays open and is saved. Screenshots `dr-*.png`.
+  Verified 2026-10-29 (Android 16, Pixel 6, Gboard in English — the test does not type Polish
+  characters from the on-screen keyboard).
+* The stylus in the drawing editor (the same debuggable APK; `node` on the host):
   ```sh
   scripts/android-emulator-test.sh --stylus
   ```
-  `adb shell input stylus …` zawsze naciska z siłą 1,0 (linia z jednym naciskiem rysuje się jak
-  myszą), a `sendevent` wymagałby roota i urządzenia dotykowego emulatora z rysikiem. Dlatego
-  skrypt kompiluje `scripts/android-stylus/BrulionPen.java` (`javac` + `d8` z SDK) i uruchamia go
-  przez `app_process` jako użytkownik powłoki (ma `INJECT_EVENTS`, bez roota — jak scrcpy): ukryte
-  `InputManagerGlobal.injectInputEvent` (Android 14+; wcześniej `InputManager`) dostaje zdarzenia
-  `MotionEvent` z typem narzędzia rysika (albo gumki, albo palca), naciskiem i przyciskami.
-  Nowy rysunek (plik 0 bajtów) otwarty przez `--route`: linia rysikiem z naciskiem 0,1 → 0,9
-  zapisuje się z naciskiem w każdym punkcie (`simulatePressure: false`, od pierwszego ≤ 0,15 do
-  ostatniego ≥ 0,85 — podniesienie rysika z naciskiem 0 nie jest naciskiem linii); linia z `adb
-  input stylus` (jeden nacisk) rysuje się bez nacisku; typ narzędzia gumki (`TOOL_TYPE_ERASER`)
-  ściera pierwszą linię, przycisk boczny (`BUTTON_STYLUS_PRIMARY`) drugą; po rysiku palec przesuwa
-  kartkę zamiast rysować. Plik rysunku jest czytany po każdym kroku; zrzuty `st-*.png`.
-  Sprawdzone 2026-10-30 (Android 16, Pixel 6). Test (i testy w przeglądarkach, docs/WEB.md „Rysik
-  (nacisk)”) znalazł błędy, poprawione i sprawdzane w `tst_drawingcanvas`: host powiadomień
-  w warstwie popupów zasłaniał kartkę przed rysikiem w całej aplikacji (rysik rysował jak mysz —
-  bez nacisku — a palec po rysiku dalej rysował; ten tryb z APK sprzed poprawki, 2026-10-30:
-  linia bez nacisku, gumka i przycisk boczny nie ścierały); Qt for Android podaje typ wskaźnika wartościami Qt 5 (pióro 1, gumka 3 — w Qt 6
-  to nie `Eraser`), więc gumka rysowała, a przycisk boczny (`BUTTON_STYLUS_PRIMARY`) podaje jako
-  `Qt::ExtraButton3`; zdarzenie podniesienia ma nacisk 0 i leży o piksel obok ostatniego ruchu
-  (Android próbkuje ruchy na nowo), więc każda linia kończyła się naciskiem 0, a linia z jednym
-  naciskiem liczyła się jak z naciskiem. GitHub Actions ma na `ubuntu-24.04` KVM (reguła udev, jak
-  w `wasm.yml` zadanie `keyboard-android`), więc ten tryb mógłby tam działać; uruchamia się go na
-  laptopie (osobny build APK x86_64 Debug).
-* Obrazy z internetu (ten sam APK debugowalny; potrzebny dostęp emulatora do internetu
-  i `python3` na hoście):
+  `adb shell input stylus …` always presses with a force of 1.0 (a stroke with a single pressure
+  draws like a mouse), and `sendevent` would need root and an emulator touch device with a stylus.
+  So the script compiles `scripts/android-stylus/BrulionPen.java` (`javac` + `d8` from the SDK) and
+  runs it through `app_process` as the shell user (it has `INJECT_EVENTS`, no root — like scrcpy):
+  the hidden `InputManagerGlobal.injectInputEvent` (Android 14+; before, `InputManager`) gets
+  `MotionEvent`s with the tool type of a stylus (or an eraser, or a finger), pressure and buttons.
+  A new drawing (a 0-byte file) opened through `--route`: a stylus stroke with pressure 0.1 → 0.9
+  is saved with the pressure at every point (`simulatePressure: false`, from the first ≤ 0.15 to
+  the last ≥ 0.85 — lifting the stylus with pressure 0 is not the stroke's pressure); a stroke from
+  `adb input stylus` (a single pressure) draws without pressure; the eraser tool type
+  (`TOOL_TYPE_ERASER`) erases the first stroke, the side button (`BUTTON_STYLUS_PRIMARY`) the
+  second; after the stylus a finger pans the sheet instead of drawing. The drawing file is read
+  after every step; screenshots `st-*.png`. Verified 2026-10-30 (Android 16, Pixel 6). The test
+  (and the tests in the browsers, docs/WEB.md "Stylus (pressure)") found bugs, fixed and checked in
+  `tst_drawingcanvas`: the notification host in the popup layer covered the sheet from the stylus
+  in the whole app (the stylus drew like a mouse — without pressure — and a finger after the stylus
+  kept drawing; this mode with the APK from before the fix, 2026-10-30: a stroke without pressure,
+  the eraser and the side button did not erase); Qt for Android gives the pointer type in Qt 5
+  values (pen 1, eraser 3 — in Qt 6 that is not `Eraser`), so the eraser drew, and it gives the side
+  button (`BUTTON_STYLUS_PRIMARY`) as `Qt::ExtraButton3`; the lift event has pressure 0 and lies a
+  pixel next to the last move (Android resamples the moves), so every stroke ended with pressure 0,
+  and a stroke with a single pressure counted as one with pressure. GitHub Actions has KVM on
+  `ubuntu-24.04` (a udev rule, as in `wasm.yml`'s `keyboard-android` job), so this mode could run
+  there; it is run on the laptop (a separate x86_64 Debug APK build).
+* Pictures from the internet (the same debuggable APK; the emulator needs internet access and the
+  host `python3`):
   ```sh
   scripts/android-emulator-test.sh --web-pictures
   ```
-  Opis i wynik — sekcja [Obrazy z internetu](#obrazy-z-internetu). Zrzuty `wp-*.png`.
-* Wersja w przeglądarce w przeglądarkach Androida (bez APK Brulionu: witryna z
-  `scripts/wasm-build.sh`; potrzebny dostęp do internetu przy pierwszym pobraniu przeglądarek
-  i `python3` na hoście):
+  Description and result — the section [Pictures from the internet](#pictures-from-the-internet).
+  Screenshots `wp-*.png`.
+* The browser version in Android's browsers (no Brulion APK: the site from
+  `scripts/wasm-build.sh`; internet access is needed for the first download of the browsers, and
+  `python3` on the host):
   ```sh
   scripts/android-emulator-test.sh --web-keyboard dist-wasm
   ```
-  Chrome z obrazu systemu, Brave 1.97.59 i Firefox 157.0.1 (APK przypięte sumami SHA-256, w
-  `~/.cache/brulion-web-browsers`): pasek narzędzi edycji leży na klawiaturze (w Chrome i Brave
-  na pasku autouzupełniania przeglądarki), słowo wpisane
-  klawiszami trafia do bloku, Enter dzieli blok, Wstecz chowa klawiaturę. Opis — docs/WEB.md
-  „Klawiatura ekranowa”. Zrzuty `wk-*.png`, odczyty `samples-*.jsonl`. Ten sam test uruchamia job
-  `keyboard-android` w `.github/workflows/wasm.yml`.
-* Widżety (ten sam APK debugowalny; obraz `google_apis` z `adb root` — okno szybkiego
-  dodawania i odbiornik widżetów nie są eksportowane):
+  Chrome from the system image, Brave 1.97.59 and Firefox 157.0.1 (APKs pinned by SHA-256 sums, in
+  `~/.cache/brulion-web-browsers`): the editing toolbar sits on the keyboard (in Chrome and Brave
+  on the browser's autofill bar), a word typed with keys goes into the block, Enter splits the
+  block, Back hides the keyboard. Description — docs/WEB.md "On-screen keyboard". Screenshots
+  `wk-*.png`, readings `samples-*.jsonl`. The same test runs in the `keyboard-android` job in
+  `.github/workflows/wasm.yml`.
+* Widgets (the same debuggable APK; a `google_apis` image with `adb root` — the quick add window
+  and the widget receiver are not exported):
   ```sh
   scripts/android-emulator-test.sh --widgets
   ```
-  Przykładowy notatnik publikuje migawkę, gdy aplikacja schodzi z ekranu; trzy widżety stawia
-  wybór widżetów launchera (przytrzymanie ekranu, „Widgets”, Brulion, stuknięcie w podgląd,
-  „Add”); szybkie dodawanie przy zabitej aplikacji („Kupić żółty ser”, **Jutro**) — wiersz od
-  razu w dzienniku, biblioteka Qt nie wczytana; zadanie na dziś od razu w widżecie; **Godzina…**
-  09:00 + **Jutro** + **Alarm** — `⏰!` i tymczasowe przypomnienie systemowe, które aplikacja
-  potem zastępuje swoim; przy przeniesionym folderze notatnika wpis czeka w kolejce, a folder
-  nie powstaje od nowa; bez migawki wpis czeka (okno mówi wtedy językiem telefonu), a aplikacja
-  dopisuje oba przy starcie; przy aplikacji żyjącej w tle szybkie dodawanie pisze samo, a po
-  powrocie na pierwszy plan aplikacja oddaje zestaw przypomnień jeszcze raz i tymczasowe znika;
-  stuknięcie w zadanie widżetu otwiera notatkę (zimny start); › i ‹ kalendarza; widżet zadań
-  powiększony uchwytami launchera pokazuje **Jutro**, kalendarz pomniejszony — samą agendę.
-  Zrzuty `wg-*.png` (jasne i ciemne). Sprawdzone 2026-10-28 (Android 16, Pixel 6).
-* Klawiatura ekranowa na emulatorze (APK debugowalny — tylko takiemu Qt przekazuje argumenty
-  i zmienne środowiska z intencji):
+  The sample notebook publishes the snapshot when the app leaves the screen; the launcher's widget
+  picker places the three widgets (long-pressing the screen, "Widgets", Brulion, a tap on the
+  preview, "Add"); quick add with the app killed ("Kupić żółty ser" — "buy yellow cheese",
+  **Tomorrow**) — the line in the journal at once, the Qt library not loaded; a task for today in
+  the widget at once; **Time…** 09:00 + **Tomorrow** + **Alarm** — `⏰!` and a temporary system
+  reminder that the app later replaces with its own; with the notebook folder moved the entry
+  waits in the queue, and the folder is not recreated; without a snapshot the entry waits (the
+  window then speaks the phone's language), and the app appends both at startup; with the app
+  alive in the background quick add writes by itself, and after the return to the front the app
+  hands over its set of reminders once more and the temporary one disappears; a tap on a widget
+  task opens the note (cold start); › and ‹ of the calendar; the tasks widget enlarged with the
+  launcher's handles shows **Tomorrow**, the calendar shrunk — only the agenda. Screenshots
+  `wg-*.png` (light and dark). Verified 2026-10-28 (Android 16, Pixel 6).
+* The on-screen keyboard on the emulator (a debuggable APK — only to such an APK does Qt pass
+  arguments and environment variables from the intent):
 
   ```sh
   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_BUILD_TYPE=Debug scripts/android-build.sh
   scripts/android-emulator-test.sh --keyboard
   BRULION_EMULATOR_IMAGE="system-images;android-30;google_apis;x86_64" \
-    scripts/android-emulator-test.sh --keyboard     # starszy Android
+    scripts/android-emulator-test.sh --keyboard     # older Android
   ```
 
-  Otwiera przykładowy notatnik (`--demo`), stuka palcem w blok dzisiejszego dziennika, czeka na
-  klawiaturę (`dumpsys input_method`) i porównuje górną krawędź klawiatury (źródło wstawek `ime`
-  w `dumpsys window displays`) z wartością zgłoszoną przez aplikację (±2 dp); na Androidzie 11+
-  sprawdza, że okno nie zmieniło rozmiaru, a wysuwanie przyszło klatka po klatce; przewija
-  dziennik palcem, chowa klawiaturę przyciskiem Wstecz i sprawdza w logu, że wróciła dolna
-  nawigacja, a pasek został tuż na niej (i w drzewie UiAutomatora: pasek nad przyciskiem
-  „Kalendarz”), stuka tekst, żeby klawiatura wróciła (pasek znów na niej, nawigacji nie ma),
-  potem pasek na klawiaturze na stronie przewodnika (otwartej jak ze stuknięcia w
-  powiadomienie), na koniec zrzut w ciemnym motywie (ikony pasków systemu). Zrzuty ekranu
-  (`keyboard-*.png`) i logi w `dist-android/emulator-test/`.
-* Skrypt po zbudowaniu sprawdza: podpis (`apksigner verify`), pakiet i wszystkie wymagane
-  uprawnienia (`aapt2 dump badging`), komponenty w scalonym manifeście (`aapt2 dump xmltree`),
-  klasy Kotlina i Javy Qt (`QtNative`, `QtActivityBase`, `QtLoader`) oraz metody androidx
-  wołane przez Qt (`getUriForFile`, `fetchFonts` — reguły R8) w `classes.dex`,
-  `lib/<abi>/libbrulion_<abi>.so`, OpenSSL (`libssl_3.so`, `libcrypto_3.so` dla każdego ABI),
-  brak wtyczek `qmltooling` w Release, a także zgodność ze
-  **stronami pamięci 16 KB** (Android 15+; telefony z takimi stronami nie wczytają innych
-  bibliotek): `zipalign -c -P 16` i wyrównanie segmentów `LOAD` 64-bitowych bibliotek
-  (`llvm-readelf`) — źle wyrównana `libbrulion_<abi>.so` przerywa build (NDK r27 dostaje
-  `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON`; tak samo OpenSSL), biblioteki Qt są tylko
-  zgłaszane.
-* Logi: `adb logcat -s BrulionAndroid:* brulion.android:* Qt:*`.
-* Nastawione budziki: `adb shell dumpsys alarm | grep -B2 -A6 io.github.januszbit.brulion`.
-* Test ponownego nastawiania bez restartu (odbiornik nie jest eksportowany, więc potrzebny jest
-  `adb root`, np. emulator bez Google Play):
+  It opens the sample notebook (`--demo`), taps a block of today's journal with a finger, waits
+  for the keyboard (`dumpsys input_method`) and compares the keyboard's top edge (the source of the
+  `ime` insets in `dumpsys window displays`) with the value the app reports (±2 dp); on Android
+  11+ it checks that the window did not resize and that the slide came frame by frame; it scrolls
+  the journal with a finger, hides the keyboard with the Back button and checks in the log that the
+  bottom navigation came back and the toolbar stayed right on it (and in UiAutomator's tree: the
+  toolbar above the "Calendar" button), taps the text so that the keyboard comes back (the toolbar
+  on it again, no navigation), then the toolbar on the keyboard on a guide page (opened as if from
+  a tapped notification), finally a screenshot in the dark theme (system bar icons). Screenshots
+  (`keyboard-*.png`) and logs in `dist-android/emulator-test/`.
+* After building, the script checks: the signature (`apksigner verify`), the package and all
+  required permissions (`aapt2 dump badging`), the components in the merged manifest
+  (`aapt2 dump xmltree`), the Kotlin classes and Qt's Java (`QtNative`, `QtActivityBase`,
+  `QtLoader`) and the androidx methods Qt calls (`getUriForFile`, `fetchFonts` — R8 rules) in
+  `classes.dex`, `lib/<abi>/libbrulion_<abi>.so`, OpenSSL (`libssl_3.so`, `libcrypto_3.so` for
+  each ABI), no `qmltooling` plugins in Release, and also compatibility with **16 KB memory
+  pages** (Android 15+; phones with such pages will not load other libraries): `zipalign -c -P 16`
+  and the alignment of the `LOAD` segments of the 64-bit libraries (`llvm-readelf`) — a badly
+  aligned `libbrulion_<abi>.so` stops the build (NDK r27 gets
+  `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON`; OpenSSL likewise), the Qt libraries are only
+  reported.
+* Logs: `adb logcat -s BrulionAndroid:* brulion.android:* Qt:*`.
+* Set alarms: `adb shell dumpsys alarm | grep -B2 -A6 io.github.januszbit.brulion`.
+* Testing re-arming without a restart (the receiver is not exported, so `adb root` is needed, e.g.
+  an emulator without Google Play):
   `adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p io.github.januszbit.brulion`.
 
-### Uwaga o dystrybucji
+### A note on distribution
 
-Google Play ogranicza uprawnienia `MANAGE_EXTERNAL_STORAGE` (dostęp do wszystkich plików)
-i `USE_EXACT_ALARM` do wybranych kategorii aplikacji. Brulion jest przeznaczony do instalacji
-z pliku APK (np. z wydań na GitHubie) lub z F-Droid.
+Google Play restricts the `MANAGE_EXTERNAL_STORAGE` (all files access) and `USE_EXACT_ALARM`
+permissions to selected app categories. Brulion is meant to be installed from an APK file (e.g.
+from the GitHub releases) or from F-Droid.

@@ -17,7 +17,7 @@ class ReminderReceiver : BroadcastReceiver() {
   }
 }
 
-/** Notification buttons: "Drzemka 10 min", "Zrobione" (a task's reminder) and "OK". */
+/** Notification buttons: "Snooze 10 min", "Done" (a task's reminder) and "OK". */
 class ActionReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     val reminder = Reminder.fromIntent(intent) ?: return
@@ -86,7 +86,7 @@ internal object ReminderActions {
   }
 
   /**
-   * "Zrobione": ends the notification (and the ringing) like "OK", drops a natively snoozed copy
+   * "Done": ends the notification (and the ringing) like "OK", drops a natively snoozed copy
    * and queues the completion for C++ ([DoneQueue]: the task is marked done in the note at once
    * while Brulion runs, else at its next start; ✅ [today] — the day of the tap either way).
    */

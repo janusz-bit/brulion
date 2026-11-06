@@ -4,7 +4,7 @@ import Brulion
 
 // BText — themed text with typographic presets, so views do not repeat font settings.
 //
-//   BText { text: qsTr("Synchronizacja"); variant: "title" }
+//   BText { text: qsTr("Sync"); variant: "title" }
 //
 // variant: "body" (default) | "muted" | "faint" | "small" | "caption" | "label" (medium
 // weight) | "title" | "heading" | "display" | "mono". Plain text by default: never set

@@ -4,12 +4,12 @@ import QtQuick.Templates as T
 import Brulion
 
 // PropertiesPanel — the rows of one page-property block (the YAML frontmatter or the leading
-// `key:: value` lines) as typed fields (PropertyRow), then "+ Dodaj właściwość": a field with the
+// `key:: value` lines) as typed fields (PropertyRow), then "+ Add property": a field with the
 // notebook's keys as suggestions (key, its type's icon, how many pages use it); choosing or
 // entering a key writes it at once with an empty value of the key's type in the notebook (`key:`,
 // `key: []` for a list, `key: false` for a checkbox) — one undo step — and the value's editor
 // gets the focus; Escape drops the draft (nothing written). A block Brulion cannot edit safely
-// shows its values read-only with "Edytuj jako tekst". Used by FrontmatterView (expanded) and,
+// shows its values read-only with "Edit as text". Used by FrontmatterView (expanded) and,
 // with `draft`, by the editor's list header for the first property of a page that has none
 // (BlockEditor.addProperty()). Rows stay through edits (a ListModel by key: a row is made only for
 // a new key), the panel's height is a sum of its rows' (docs/UI.md "Scrolling performance").
@@ -39,7 +39,7 @@ Item {
     /// The key above the value when the two columns (icon + key | value) would cut a key or
     /// squeeze the value: the widest key does not fit 40 % of the panel, or the value column
     /// beside it would be narrower than ~168 px (a narrow side panel). Short keys (tags, status,
-    /// termin) keep the two columns on phones too; a long one ("ostatnia aktualizacja") stacks
+    /// due) keep the two columns on phones too; a long one ("last updated") stacks
     /// every row, so no key is ever cut (a touch screen has no tooltip to read it).
     readonly property bool stacked: widestKey + 12 > width * 0.4 || width - iconWidth - keyWidth - Theme.space2 < 168
     readonly property real rowHeight: Theme.touchUi ? 44 : (Theme.dense ? 28 : 32)
@@ -228,7 +228,7 @@ Item {
         return panel.propertyKeys()
     }
     Component.onCompleted: takeFocusRequest()
-    /// BlockEditor.propertyFocus { part: "add" } (Ctrl+; and "Dodaj właściwość"): the add row.
+    /// BlockEditor.propertyFocus { part: "add" } (Ctrl+; and "Add property"): the add row.
     function takeFocusRequest(): void {
         if (!panel.editor || panel.editor.propertyFocus === null || panel.editor.propertyFocus === undefined)
             return

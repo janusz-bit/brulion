@@ -25,13 +25,13 @@ import Brulion
 // the format, like the picture view (ContentPictureView), instead of a load error.
 // A picture from the internet (`web`: `![alt](https://…)`) is shown only from the device's cache
 // (EditorHost::webPicture — QML loads nothing from the network): until it is there its frame
-// names the site with "Pokaż" (asking first is the default, AppSettings.webPicturesShown) and
-// "Zapisz w notatniku", a spinner while it loads, the reason when it failed; a click on the shown
+// names the site with "Show" (asking first is the default, AppSettings.webPicturesShown) and
+// "Save to notebook", a spinner while it loads, the reason when it failed; a click on the shown
 // picture opens it on its own (webOpen: WebPictureViewer, like the picture view of an
 // attachment), a right-click or a long press its menu (webMenu: WebPictureMenu). Its frame grows
 // to fit what it says (a phone's narrow column, a long alt text), and keeps that height while the
 // picture loads, so the row changes once: when the picture is there.
-// A PDF (`pdf`: `![[wykład.pdf]]`, `#page=3`; docs/UI.md "PDF viewer") is its page's thumbnail
+// A PDF (`pdf`: `![[lecture.pdf]]`, `#page=3`; docs/UI.md "PDF viewer") is its page's thumbnail
 // (PdfEmbedTile) where this build draws PDFs (`viewable`), a click emits pdfClicked(path, page):
 // the PDF viewer. Without a renderer (the browser) or a thumbnail cache it is the file's chip with a
 // page icon; its click opens the PDF in a new browser tab / the system's viewer (pdfClicked too:
@@ -45,7 +45,7 @@ Column {
     signal drawingClicked(string path)
     /// A click on a PDF's thumbnail or chip: page `page` of the PDF at vault path `path`.
     signal pdfClicked(string path, int page)
-    /// A picture from the internet: "Pokaż" / "Spróbuj ponownie", "Zapisz w notatniku", its menu.
+    /// A picture from the internet: "Show" / "Try again", "Save to notebook", its menu.
     signal showWeb(string url)
     signal downloadWeb(string url)
     signal webMenu(string url, string host, Item item, real x, real y)
@@ -239,7 +239,7 @@ Column {
                         font.pixelSize: Theme.textSm
                         color: Theme.fgMuted
                     }
-                    // The site: what "Pokaż" would contact, never elided away by a long alt text.
+                    // The site: what "Show" would contact, never elided away by a long alt text.
                     Text {
                         objectName: "webPictureHost"
                         width: parent.width

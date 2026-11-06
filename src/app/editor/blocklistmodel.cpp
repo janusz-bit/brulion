@@ -1209,7 +1209,7 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     ctx.today = m_today;
     ctx.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
     ctx.palette = m_palette;
-    ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today); // [[2026-10-13]]: "wt 13 paź"
+    ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today); // [[2026-10-13]]: "Tue, Oct 13"
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // the delegate shows them in frames (`transclusions`)
     ctx.dateLinks = true;         // date, 🔁 and priority chips have a menu (PageController::dateChip)

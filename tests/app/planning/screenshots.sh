@@ -63,6 +63,13 @@ for shot in "${shots[@]}"; do
   fi
 done
 
+# The sample notebook follows the UI language (src/app/shell/demovault.h).
+if [[ "$locale" == pl ]]; then
+  projects=Projekty project="Projekty/Remont mieszkania.md" new_task="Zadzwonić do Ani jutro o 9 #praca"
+else
+  projects=Projects project="Projects/Home renovation.md" new_task="Call Anna tomorrow at 9 #work"
+fi
+
 # Arguments of a shot (one per line, so routes may contain spaces).
 shot_args() {
   case "$1" in
@@ -72,12 +79,12 @@ shot_args() {
     calendar-day) printf '%s\n' --demo --route '{"view":"calendar","mode":"week","open":"day","date":"2026-10-16"}' ;;
     calendar-add) printf '%s\n' --demo --route '{"view":"calendar","open":"reminder","date":"2026-10-16"}' ;;
     tasks) printf '%s\n' --demo --route tasks ;;
-    tasks-add) printf '%s\n' --demo --route '{"view":"tasks","open":"add:Zadzwonić do Ani jutro o 9 #praca"}' ;;
-    tasks-filtered) printf '%s\n' --demo --route '{"view":"tasks","query":"path:Projekty/ status:open sort:priority"}' ;;
-    tasks-query) printf '%s\n' --demo --route '{"view":"tasks","query":"path:Projekty/ status:open","open":"query"}' ;;
+    tasks-add) printf '%s\n' --demo --route "{\"view\":\"tasks\",\"open\":\"add:$new_task\"}" ;;
+    tasks-filtered) printf '%s\n' --demo --route "{\"view\":\"tasks\",\"query\":\"path:$projects/ status:open sort:priority\"}" ;;
+    tasks-query) printf '%s\n' --demo --route "{\"view\":\"tasks\",\"query\":\"path:$projects/ status:open\",\"open\":\"query\"}" ;;
     graph) printf '%s\n' --demo --route graph ;;
-    graph-local) printf '%s\n' --demo --route '{"view":"graph","path":"Projekty/Remont mieszkania.md","depth":2}' ;;
-    graph-selected) printf '%s\n' --demo --route '{"view":"graph","select":"Projekty/Remont mieszkania.md"}' ;;
+    graph-local) printf '%s\n' --demo --route "{\"view\":\"graph\",\"path\":\"$project\",\"depth\":2}" ;;
+    graph-selected) printf '%s\n' --demo --route "{\"view\":\"graph\",\"select\":\"$project\"}" ;;
     calendar-big) printf '%s\n' --vault "$big_vault" --route calendar ;;
     tasks-big) printf '%s\n' --vault "$big_vault" --route tasks ;;
     graph-big) printf '%s\n' --vault "$big_vault" --route graph ;;

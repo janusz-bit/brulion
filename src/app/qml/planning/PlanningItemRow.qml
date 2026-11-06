@@ -15,7 +15,7 @@ import Brulion
 // Click / Enter opens the note at the entry; the checkbox (Space when focused) toggles the task, a
 // right-click or long press on it opens the status menu (statusRequested()); a right-click or long
 // press elsewhere on the row asks for the menu of the entry's date token (tokenMenuRequested(): the
-// view's PlanningTokenMenu — its date, a reminder's time and alarm, "Zmień całą serię…" on a
+// view's PlanningTokenMenu — its date, a reminder's time and alarm, "Change the whole series…" on a
 // series' other dates).
 T.ItemDelegate {
     id: control

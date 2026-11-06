@@ -27,7 +27,7 @@
 // focus end) are the two ends of a range of visible rows; the selection is that range with the
 // whole subtree of every block in it (folded children too) — a set of uids in the model
 // (BlockListModel::setSelectedUids). Blocks picked one by one (toggleSelected(): Ctrl+click, the
-// touch tools' "Pojedynczo") make a selection with gaps: the picked blocks with their subtrees,
+// touch tools' "One by one") make a selection with gaps: the picked blocks with their subtrees,
 // both ends on the last one picked; a range (Shift) replaces it. All of it is uids: the
 // selection survives edits, undo / redo (the undo steps restore it) and external merges. It is
 // copied (Markdown text/plain plus the host's text/html, or plain text), cut, deleted, indented,
@@ -290,7 +290,7 @@ public:
     QDateTime currentDateTime() const;
 
     // --- Loading and saving ------------------------------------------------------------------------
-    /// The day changed (midnight: DayClock, connected by the constructor): "dziś"/"jutro" chips
+    /// The day changed (midnight: DayClock, connected by the constructor): "today"/"tomorrow" chips
     /// and overdue colours are rendered again for the new date and todayChanged() tells the
     /// ```query results. Nothing happens on the same day.
     Q_INVOKABLE void refreshToday();
@@ -329,7 +329,7 @@ public:
     /// error; "" when ok) }.
     Q_INVOKABLE QVariantMap setPageProperty(const QString &source, const QString &key, const QVariant &value,
                                             const QString &type);
-    /// "Dodaj właściwość": the new property `key` with `value` (empty: the type's empty value) —
+    /// "Add property": the new property `key` with `value` (empty: the type's empty value) —
     /// refused { status: "keyExists" } when the page has the key already (either block, any case),
     /// so adding never overwrites a value. `source` as in setPageProperty().
     Q_INVOKABLE QVariantMap addPageProperty(const QString &source, const QString &key, const QVariant &value,
@@ -338,7 +338,7 @@ public:
     Q_INVOKABLE QVariantMap renamePageProperty(const QString &source, const QString &oldKey, const QString &newKey);
     /// The type menu: the value converted to `type` (markdown::convertPropertyValue); a value that
     /// cannot be kept is cleared and the result says { lost: true } (the panel's toast offers
-    /// "Cofnij").
+    /// "Undo").
     Q_INVOKABLE QVariantMap setPagePropertyType(const QString &source, const QString &key, const QString &type);
     // --- Page icon and cover (docs/UI.md "Page icon and cover", markdown/pagelook.h) -------------
     QVariantMap look() const { return m_look; }
@@ -488,7 +488,7 @@ public:
     Q_INVOKABLE int insertToken(int row, int cursor, const QString &token);
     /// Replace [from, to) of the row's edit text. Returns the new cursor (end of `text`).
     Q_INVOKABLE int replaceRange(int row, int from, int to, const QString &text);
-    /// "Zakreśl" (docs/UI.md "Coloured highlights"): highlight [from, to) of the row's edit text in
+    /// "Highlight" (docs/UI.md "Coloured highlights"): highlight [from, to) of the row's edit text in
     /// `color` (a palette name, markdown::parseHighlightColorName: "default" writes `==…==`,
     /// another `<mark style="background: …;">…</mark>`), recolour the highlight around it, or
     /// with "" remove that highlight (markdown::setHighlight). One undo step. { changed, from, to
@@ -516,7 +516,7 @@ public:
     /// Move the focus end to `row` (Shift+click, a drag, a tap in the touch selection mode): from
     /// the anchor, or from the block being edited, else `row` alone.
     Q_INVOKABLE void extendSelectionTo(int row);
-    /// Ctrl+click (a tap with the touch tools' "Pojedynczo"): `row` with its subtree into the
+    /// Ctrl+click (a tap with the touch tools' "One by one"): `row` with its subtree into the
     /// selection or out of it, the rest stays — the selection may get gaps. A range becomes its
     /// top blocks first; the block being edited joins (editing stops). A row selected only as part
     /// of a selected block's subtree stays (it goes with that block). Both ends move to `row` when
@@ -561,7 +561,7 @@ public:
     Q_INVOKABLE bool indentSelection();
     /// The selection could be indented / outdented at all: not the zoomed block, and in the
     /// document mode only list items (its paragraphs and headings have no outline). The
-    /// selection tools offer "Zwiększ / Zmniejsz wcięcie" only then. (Gaps are not asked about
+    /// selection tools offer "Indent" / "Outdent" only then. (Gaps are not asked about
     /// here: the tools say why such a selection does not move.)
     Q_INVOKABLE bool canIndentSelection() const;
     Q_INVOKABLE bool outdentSelection();
@@ -597,7 +597,7 @@ public:
     Q_INVOKABLE QString clipboardText() const;
     /// In-block Ctrl+V: pasteText() of clipboardText() into [from, to). { row, cursor }, row -1
     /// when the clipboard has no text. Pictures from the internet the paste brought (not this
-    /// app's own copy): the address of one alone (a browser's "Kopiuj adres obrazu":
+    /// app's own copy): the address of one alone (a browser's "Copy image address":
     /// isPictureAddress(), pasted as a bare URL into a block showing pictures) adds
     /// { pictureUrl, pictureFrom, pictureTo } (where it is in the row's edit text, for
     /// urlToPicture()); else `![](https://…)` new on the page (HTML of a web page) add
@@ -754,7 +754,7 @@ public:
     /// A new row at `at` (0 = under the header).
     Q_INVOKABLE void insertTableRow(int row, int at);
     Q_INVOKABLE void moveTableRow(int row, int from, int to);
-    /// A new column at `at`, called "Kolumna N" / "Column N" (a name no other column has).
+    /// A new column at `at`, called "Column N" ("Kolumna N" in Polish; a name no other column has).
     Q_INVOKABLE void insertTableColumn(int row, int at);
     /// Not the only column.
     Q_INVOKABLE void removeTableColumn(int row, int column);
@@ -783,7 +783,7 @@ public:
     Q_INVOKABLE bool saveTableCsv(int row, const QUrl &url);
     /// Browser (WebAssembly): the browser's save picker or a download of the CSV; false elsewhere.
     Q_INVOKABLE bool downloadTableCsv(int row);
-    /// "/Tabela z CSV…": the CSV text `text` as a table block (io::tableFromCsv()) in place of the
+    /// "/Table from CSV…": the CSV text `text` as a table block (io::tableFromCsv()) in place of the
     /// empty block `row` (the command's own), else after it. One undo step. Returns { row, truncated }
     /// (row -1: nothing read — not a CSV with text, or too large).
     Q_INVOKABLE QVariantMap insertCsvTable(int row, const QString &text);
@@ -819,7 +819,7 @@ public:
     /// What the menu of a link (LinkMenu: a right-click or long press on a page:, tag:, block: or
     /// ext: link) needs — `fromPath`: the page the link is written on ("" = this one; query
     /// results and embeds of other pages): { kind ("page" | "tag" | "block" | "ext"), unresolved
-    /// (a page that does not exist yet), path (the page it opens), tag, copyText (what "Kopiuj"
+    /// (a page that does not exist yet), path (the page it opens), tag, copyText (what "Copy"
     /// puts on the clipboard: `[[Page#Heading]]` by the page's shortest link target — it works
     /// pasted on any page —, as written when it does not exist; `#tag` / `#[[tag with spaces]]`;
     /// `((id))`; the address) }; empty for other links. A path part of a link (part:): { kind:
@@ -863,7 +863,7 @@ public:
     /// dropped on a block that is not being edited.
     Q_INVOKABLE QVariantMap insertFilesAfter(int row, const QList<QUrl> &urls);
     /// A new drawing (docs/SYNTAX.md §2 "Drawings"): an empty drawing stored as the attachment
-    /// "Rysunek <yyyy-MM-dd HH.mm>.svg" (a free name: " 2", " 3" …) and embedded like
+    /// "Drawing <yyyy-MM-dd HH.mm>.svg" (a free name: " 2", " 3" …) and embedded like
     /// insertAttachment(). Returns { row, cursor, path } (row -1: it could not be stored).
     Q_INVOKABLE QVariantMap insertDrawing(int row, int from, int to);
     /// Open the drawing editor on the drawing at vault path `path` (route "drawing"); the page is
@@ -875,11 +875,11 @@ public:
     /// handed to another app / a new tab at once (EditorHost::openInOtherApp: this call runs inside
     /// the click, the browser's user gesture).
     Q_INVOKABLE void openPdf(int row, const QString &path, int page = 0, bool newPane = false);
-    /// The file name of a drawing on page `page` of `name` ("Wykład 3 s. 4"), or on a picture
-    /// ("… (rysunek)"): EditorHost::drawingFileNameOn (insertDrawingsOn() and the PDF viewer's
+    /// The file name of a drawing on page `page` of `name` ("Lecture 3 p. 4"), or on a picture
+    /// ("… (drawing)"): EditorHost::drawingFileNameOn (insertDrawingsOn() and the PDF viewer's
     /// Workspace::addDrawingOnPdfPage() name them alike).
     static QString drawingFileNameOn(const QString &name, int page);
-    /// A file picked for drawings on a picture or a PDF ("Rysunek na obrazie lub PDF…", docs/UI.md
+    /// A file picked for drawings on a picture or a PDF ("Drawing on a picture or PDF…", docs/UI.md
     /// "Drawing editor"): its vault path through the host (EditorHost::importAttachment: a file of
     /// the notebook where it is, the same file in the attachments folder reused, else copied
     /// there). "" and attachmentFailed() when it cannot be read or stored.
@@ -892,9 +892,9 @@ public:
     /// New drawings on prepared backdrops (DrawingBackdrops.prepare(): { svg — the drawing's file,
     /// made by the job when asked for —, or bytes, mimeType, width, height; path, page, name,
     /// error }; an item with an error or bad data is attachmentFailed()): each a drawing with that
-    /// backdrop (core drawing/backdrop.h newDrawingOnBackdrop(): on a picture light ("Jasne"), on
-    /// a PDF page as the app ("Jak motyw")), stored as "<name> s. <page>.svg" or "<name>
-    /// (rysunek).svg" (free names: " 2", …). The first is embedded at [from, to) of the row's edit
+    /// backdrop (core drawing/backdrop.h newDrawingOnBackdrop(): on a picture light ("Light"), on
+    /// a PDF page as the app ("Like the app")), stored as "<name> p. <page>.svg" or "<name>
+    /// (drawing).svg" (free names: " 2", …). The first is embedded at [from, to) of the row's edit
     /// text (as insertAttachment()), every further one in a block of its own after it, in order —
     /// one undo step (the files stay, as with insertDrawing()). Returns { row, cursor, paths } (row
     /// -1: none stored).
@@ -918,7 +918,7 @@ public:
     /// (EditorHost::linkTarget), or `[name](path)` percent-encoded when a wiki link cannot hold its
     /// name (a file of the notebook named "C#.pdf").
     Q_INVOKABLE QString linkToFile(const QString &path) const;
-    /// "/Plik…" (docs/UI.md "Pictures and files"): picked files of any type (file:// URLs, Android
+    /// "/File…" (docs/UI.md "The block editor", "Files as links"): picked files of any type (file:// URLs, Android
     /// content:// documents), imported like importBackdropSource() — a file of the notebook where it
     /// is, the same file in the attachments folder reused, else copied there; one that cannot be
     /// read or stored is attachmentFailed() — and linked, separated by spaces, into [from, to) of
@@ -943,7 +943,7 @@ public:
     Q_INVOKABLE QVariantMap insertWebPicture(int row, int from, int to, const QString &url, bool download);
     /// Put a picture's address on the clipboard; false when the platform has none.
     Q_INVOKABLE bool copyWebPictureUrl(const QString &url);
-    /// Show the picture from the internet `url` (as written): the user's "Pokaż" while pictures
+    /// Show the picture from the internet `url` (as written): the user's "Show" while pictures
     /// from the internet are shown only when asked (EditorHost::loadWebPicture).
     Q_INVOKABLE void showWebPicture(const QString &url);
     /// Store pictures from the internet as attachments of the notebook and point the page's
@@ -981,7 +981,7 @@ public:
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
     /// Where the undo history stands — taken right after an edit, it names that edit for a
-    /// toast's "Cofnij" (undoStep()).
+    /// toast's "Undo" (undoStep()).
     Q_INVOKABLE QString undoToken() const;
     /// Undo the edit `token` (undoToken() right after it) while it is still the last step of the
     /// history: false — nothing undone — when other edits came after it, it was undone already,

@@ -8,7 +8,7 @@ import Brulion
 //
 //   BDiffView {
 //       oldText: history.textAt(version); newText: page.text
-//       oldLabel: qsTr("Wersja z 12:40"); newLabel: qsTr("Obecna")
+//       oldLabel: qsTr("Version of 12:40"); newLabel: qsTr("Current")
 //   }
 //
 // mode: "auto" (default: side by side when ≥ 720 px wide, else unified) | "split" | "unified".

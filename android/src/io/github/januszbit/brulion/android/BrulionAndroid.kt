@@ -32,7 +32,7 @@ import java.lang.ref.WeakReference
  * activity or any other context (QNativeInterface::QAndroidApplication::context()); dialogs use
  * the running [BrulionActivity] when there is one.
  *
- * Notification taps reach C++ in two ways (docs/ANDROID.md, "Most JNI (C++ ↔ Kotlin)"):
+ * Notification taps reach C++ in two ways (docs/ANDROID.md, "JNI bridge (C++ ↔ Kotlin)"):
  * * cold start — the tap launched the app: [BrulionActivity] keeps the activation until C++
  *   attaches (Qt's `main()` runs in its own thread), C++ fetches it with [takeActivation]
  *   right after [attach];
@@ -40,7 +40,7 @@ import java.lang.ref.WeakReference
  *   before calling [attach]; it emits `AndroidBridge::activated` on Qt's thread.
  * Shares from other apps ([ShareActivity]) take the same two ways: [takeShare] and [nativeShared].
  *
- * "Zrobione" taps go the same two ways, through a persisted queue ([DoneQueue]): [nativeDoneQueued]
+ * "Done" taps go the same two ways, through a persisted queue ([DoneQueue]): [nativeDoneQueued]
  * while C++ listens, [takeDoneRequests] after its start. So do the entries of the widgets' quick add
  * that Kotlin could not write itself ([WidgetInbox]: [nativeWidgetQueued], [takeWidgetActions]);
  * the widgets' snapshot comes from C++ through [updateWidgets].
@@ -94,7 +94,7 @@ object BrulionAndroid {
   /** A permission dialog was answered: the app should re-check its permissions. */
   @JvmStatic external fun nativePermissionsChanged()
 
-  /** "Zrobione" was tapped ([DoneQueue] holds it): C++ takes the queue with [takeDoneRequests]. */
+  /** "Done" was tapped ([DoneQueue] holds it): C++ takes the queue with [takeDoneRequests]. */
   @JvmStatic external fun nativeDoneQueued()
 
   /** Quick add of a widget queued an entry ([WidgetInbox]): C++ takes it with [takeWidgetActions]. */
@@ -347,7 +347,7 @@ object BrulionAndroid {
   }
 
   /**
-   * The "Zrobione" taps of notebook [vault] not handed over yet ([DoneQueue], also those of while
+   * The "Done" taps of notebook [vault] not handed over yet ([DoneQueue], also those of while
    * Brulion was closed): a JSON array of `{key, local, path, line, title, day, vault}`, `[]` when
    * none. Forgets them (each tap is handed out once); the taps of other notebooks stay queued.
    * Empty [vault]: all of them.
@@ -362,8 +362,8 @@ object BrulionAndroid {
     }
 
   // -----------------------------------------------------------------------------------------
-  // The background check of the notes (BackgroundCheck.kt, docs/ANDROID.md "Sprawdzanie notatek
-  // w tle")
+  // The background check of the notes (BackgroundCheck.kt, docs/ANDROID.md "Checking notes
+  // in the background")
   // -----------------------------------------------------------------------------------------
 
   /**
@@ -409,7 +409,7 @@ object BrulionAndroid {
   }
 
   // -----------------------------------------------------------------------------------------
-  // Home-screen widgets (docs/ANDROID.md "Widgety")
+  // Home-screen widgets (docs/ANDROID.md "Widgets")
   // -----------------------------------------------------------------------------------------
 
   /**
@@ -570,14 +570,14 @@ object BrulionAndroid {
     SpellCheck.suggest(context, language, word, max)
 
   /**
-   * "Otwórz w innej aplikacji": the file at [path] (type [mime]) in the app the system has for it
+   * "Open in another app": the file at [path] (type [mime]) in the app the system has for it
    * (OpenWith.kt): 0 started, 1 no app, 2 failed, 3 being copied first (a memory card).
    */
   @JvmStatic
   fun viewFile(context: Context, path: String, mime: String): Int = OpenWith.view(context, path, mime)
 
   /**
-   * "Drukuj…": the PDF at [path] (in the app's cache) in the system's print dialog as the job
+   * "Print…": the PDF at [path] (in the app's cache) in the system's print dialog as the job
    * [name] (PdfPrint.kt). False when there is no such file; the dialog opens on the main thread
    * (no activity at that moment: nothing happens, logged).
    */
@@ -852,7 +852,7 @@ object BrulionAndroid {
   }
 
   /**
-   * A "Zrobione" tap was queued ([ReminderActions.done], main thread): tells C++ when it listens;
+   * A "Done" tap was queued ([ReminderActions.done], main thread): tells C++ when it listens;
    * otherwise it takes the queue once a notebook is ready after its start.
    */
   internal fun doneQueued() {

@@ -9,7 +9,7 @@ Exec=brulion --open %F
 Icon=io.github.januszbit.brulion
 Terminal=false
 Categories=Office;Utility;
-# "Otwórz za pomocą → Inny program → Brulion" (docs/NIXOS.md): no MimeType on purpose. A desktop
+# "Open with → Other application → Brulion" (docs/NIXOS.md): no MimeType on purpose. A desktop
 # without a default for a type (sway, i3, Hyprland without mimeapps.list; GNOME for text/markdown)
 # takes the first app in mimeinfo.cache, sorted by name: io.github… comes before nvim, org.gnome…,
 # org.kde…, so declaring text/plain made Brulion the default for every text file there.

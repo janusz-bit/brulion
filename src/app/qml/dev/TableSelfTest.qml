@@ -6,17 +6,17 @@ import Brulion
 
 // TableSelfTest — rows and columns of a table with real input, in the editor playground (`brulion
 // --editor --editor-script tabletest`; ctest tst_editor_qml_table, desktop, and
-// tst_editor_qml_table_touch, a phone with --touch): the block menu of a cell has Wiersz and Kolumna
+// tst_editor_qml_table_touch, a phone with --touch): the block menu of a cell has Row and Column
 // (a right-click on the cell, also the one being edited; a tap on the cell and the toolbar's
-// "Więcej"), a block menu not opened from a cell has neither; a new row or column has its cell
+// "More"), a block menu not opened from a cell has neither; a new row or column has its cell
 // edited with the keyboard's focus after the menu is gone, typing reaches the document; with keys
 // Alt+arrows move the cell's row or column with the cell still edited, Ctrl+Enter inserts a row; the
 // header's items that make no sense are disabled; the alignment is ticked, also after choosing the
 // one it already has; deleting a row and a column; the formulas' references follow (=B2*C2, =REF!);
 // each step is undone and the page's text comes back byte for byte. Sorting from the header's menu
 // (the summary row stays, the rows keep their lines, one undo step; rows already in order: nothing
-// written), the filter row (typing "> 40" hides a row, nothing is written, "Wyczyść filtry"), "Kopiuj
-// jako CSV" (formulas as their results) and a ```chart of the table following its cells.
+// written), the filter row (typing "> 40" hides a row, nothing is written, "Clear filters"), "Copy
+// as CSV" (formulas as their results) and a ```chart of the table following its cells.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -112,7 +112,7 @@ QtObject {
         test.window.taskEvents.keyClick(k, modifiers, -1)
     }
     /// Steps: the block menu of cell (r, c): a right-click; on touch UIs a tap on the cell and the
-    /// toolbar's "Więcej".
+    /// toolbar's "More".
     function openOn(r: int, c: int): void {
         if (!window.touchRun) {
             if (test.window.at())

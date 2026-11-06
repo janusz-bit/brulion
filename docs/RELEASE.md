@@ -1,270 +1,287 @@
-# CI i wydania (GitHub Actions)
+# CI and releases (GitHub Actions)
 
-Wszystkie buildy z GitHub Actions da się powtórzyć lokalnie tymi samymi skryptami z `scripts/`
-(na Raspberry Pi tylko przez `laptop-run` — patrz CLAUDE.md).
+Every build in GitHub Actions can be repeated locally with the same scripts from `scripts/`
+(on a Raspberry Pi only through `laptop-run` — see CLAUDE.md).
 
-Testy w GitHub Actions nie startują same przy każdym pushu. Uruchamia się je:
+Tests in GitHub Actions do not start on their own at every push. They run:
 
-* **ręcznie** — Actions → wybrany workflow → *Run workflow*, albo
-  `gh workflow run ci.yml --ref main` (tak samo `android.yml`, `appimage.yml`, `windows.yml`,
+* **by hand** — Actions → the workflow → *Run workflow*, or
+  `gh workflow run ci.yml --ref main` (likewise `android.yml`, `appimage.yml`, `windows.yml`,
   `wasm.yml -f deploy=false`);
-* **znacznikiem `[ci]`** w opisie któregoś z wypychanych commitów na `main` (np.
-  `git commit -m "Poprawka eksportu [ci]"`) — wtedy rusza `ci.yml`, a `android.yml`,
-  `appimage.yml`, `windows.yml` i `wasm.yml`, gdy push zmienia ich ścieżki; push bez znacznika pokazuje się
-  w Actions jako przebieg z pominiętymi zadaniami;
-* **zawsze przy wydaniu** — `release.yml` uruchamia `ci.yml` i wszystkie buildy z ich testami,
-  a wydanie publikuje dopiero, gdy wszystko przejdzie.
+* **with the `[ci]` marker** in the message of one of the commits pushed to `main` (e.g.
+  `git commit -m "Fix the export [ci]"`) — then `ci.yml` starts, and `android.yml`,
+  `appimage.yml`, `windows.yml` and `wasm.yml` when the push changes their paths; a push without
+  the marker shows up in Actions as a run with skipped jobs;
+* **always on a release** — `release.yml` runs `ci.yml` and every build with its tests, and
+  publishes the release only when everything passes.
 
-## Workflowy
+## Workflows
 
-| Plik | Kiedy | Co robi |
+| File | When | What it does |
 |---|---|---|
-| `.github/workflows/ci.yml` | ręcznie, push na `main` ze znacznikiem `[ci]`, z `release.yml` | **nix** (x86_64 i aarch64): `nix flake check` (z całym `ctest` w piaskownicy Nixa: `checks.<system>.tests`) + `nix build .#brulion` (pakiet bez testów — `doCheck = false`; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan przy `-O1` (asercje włączone), ccache między przebiegami (`actions/cache`, zapisywany zaraz po budowaniu), `ctest` (testy GUI obok innych, najdłuższe startują pierwsze — `tests/ctest-costs.txt`; czasy testów jako artefakt `ctest-junit-linux-asan`), `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh` i `tests/scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md); benchmarki mają limit czasu (`bench.sh -T 1500`, kroki własne timeouty, zadanie 80 min), więc wolny runner nie anuluje przebiegu; `release.yml` go pomija (`skip-perf-smoke: true`) — wydanie na niego nie czeka |
-| `.github/workflows/android.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `android/`…), z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
-| `.github/workflows/wasm.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `wasm/`…), z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline; jeden plik HTML z `file://`) → artefakty `brulion-web` (strona) i `brulion-web-html` (jeden plik, docs/WEB.md „Jeden plik HTML”); **browsers**: testy Playwrighta w Chromium i Firefoksie (`scripts/web-test.sh`, `tests/web`: obrazy z internetu — CORS, mixed content, brak preflight, eksport z kopiami —, nacisk i gumka rysika, parametry adresu, jeden plik HTML z dysku; raport i ślady nieudanych testów → artefakt `web-browser-tests`, docs/WEB.md „Testy w przeglądarkach”); **keyboard-android** (bez wydań: `skip-emulator`): klawiatura ekranowa w przeglądarkach na emulatorze Androida. Niczego nie wdraża — wydanie przez wywołanie `wasm.yml` czeka też na `browsers` |
-| `.github/workflows/fdroid.yml` | ręcznie (z `main` albo taga `v*`), z `release.yml` | własne repozytorium F-Droid na GitHub Pages: `scripts/fdroid-repo.sh` (fdroidserver 2.4.5 z PyPI) z APK trzech ostatnich wydań, indeks podpisany kluczem repozytorium (sekrety `FDROID_*`), strona z kodem QR → wdrożenie na Pages (docs/ANDROID.md „Własne repozytorium F-Droid”) |
-| `.github/workflows/appimage.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `tests/`…), z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
-| `.github/workflows/windows.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `tests/`, `packaging/windows/`…), z `release.yml` | `scripts/windows-build.ps1` na `windows-2022` (Qt 6.11.2 MSVC 2022 z aqt, MSVC, Ninja): build Release, testy offscreen, `windeployqt`, przenośny ZIP i instalator Inno Setup, sprawdzenie obu bez Qt w `PATH` (rozpakowany ZIP, cicha instalacja dla użytkownika, autotest powłoki, ciche odinstalowanie) → artefakt `brulion-windows` (wersja testowa, docs/WINDOWS.md) |
-| `.github/workflows/release.yml` | tag `v*` albo ręcznie | sprawdza wersję, tworzy szkic wydania, uruchamia testy (`ci.yml` bez **perf**), cztery powyższe buildy + `git archive`, dołącza pliki i `SHA256SUMS.txt`, publikuje wydanie i przebudowuje repozytorium F-Droid na GitHub Pages z jego APK (`fdroid.yml`; wydanie testowe i APK z kluczem jednorazowym nie) |
+| `.github/workflows/ci.yml` | by hand, a push to `main` with the `[ci]` marker, from `release.yml` | **nix** (x86_64 and aarch64): `nix flake check` (with the whole `ctest` in the Nix sandbox: `checks.<system>.tests`) + `nix build .#brulion` (the package without tests — `doCheck = false`; the VM test `web-vm` needs KVM — a runner without `/dev/kvm` builds the other checks and skips it with a warning); **linux**: CMake + Qt 6.11.2 from aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan at `-O1` (assertions on), ccache between runs (`actions/cache`, saved right after the build), `ctest` (GUI tests alongside the others, the longest start first — `tests/ctest-costs.txt`; test times as the artifact `ctest-junit-linux-asan`), `qmllint` (warnings only); **lint**: actionlint, shellcheck of `scripts/*.sh` and `tests/scripts/*.sh`, clang-format of the changed lines; **perf** (non-blocking): `scripts/perf-check.sh -s` on the benchmark suites in Release — how the time scales with the data size and the index's memory, no absolute times; a regression gives a warning and a summary, the results as the artifact `perf-smoke` (docs/PERFORMANCE.md); the benchmarks have a time limit (`bench.sh -T 1500`, the steps their own timeouts, the job 80 min), so a slow runner does not cancel the run; `release.yml` skips it (`skip-perf-smoke: true`) — a release does not wait for it |
+| `.github/workflows/android.yml` | by hand, a push to `main` with the `[ci]` marker (changes in `src/`, `android/`…), from `release.yml` | `scripts/android-build.sh`: a signed arm64 APK + Kotlin tests + Android lint → the artifact `brulion-android-apk` |
+| `.github/workflows/wasm.yml` | by hand, a push to `main` with the `[ci]` marker (changes in `src/`, `wasm/`…), from `release.yml` | `scripts/wasm-build.sh --setup`, a smoke test in Chrome (`scripts/wasm-smoke.mjs`: start, notes that persist, the index without input, an offline start; the single HTML file from `file://`) → the artifacts `brulion-web` (the site) and `brulion-web-html` (a single file, docs/WEB.md "Single HTML file"); **browsers**: Playwright tests in Chromium and Firefox (`scripts/web-test.sh`, `tests/web`: pictures from the internet — CORS, mixed content, no preflight, export with copies —, stylus pressure and eraser, address parameters, the single HTML file from disk; the report and the traces of failed tests → the artifact `web-browser-tests`, docs/WEB.md "Browser tests"); **keyboard-android** (not for releases: `skip-emulator`): the on-screen keyboard in browsers on an Android emulator. Deploys nothing — a release that calls `wasm.yml` also waits for `browsers` |
+| `.github/workflows/fdroid.yml` | by hand (from `main` or a `v*` tag), from `release.yml` | Brulion's own F-Droid repository on GitHub Pages: `scripts/fdroid-repo.sh` (fdroidserver 2.4.5 from PyPI) with the APKs of the last three releases, the index signed with the repository's key (the `FDROID_*` secrets), a page with the QR code → deployed to Pages (docs/ANDROID.md "Brulion's own F-Droid repository") |
+| `.github/workflows/appimage.yml` | by hand, a push to `main` with the `[ci]` marker (changes in `src/`, `tests/`…), from `release.yml` | `scripts/appimage-build.sh` for x86_64 (an Ubuntu 22.04 container) and aarch64 (Ubuntu 24.04): a Release build, tests, the AppImage, a trial run → the artifacts `brulion-appimage-<arch>` |
+| `.github/workflows/windows.yml` | by hand, a push to `main` with the `[ci]` marker (changes in `src/`, `tests/`, `packaging/windows/`…), from `release.yml` | `scripts/windows-build.ps1` on `windows-2022` (Qt 6.11.2 MSVC 2022 from aqt, MSVC, Ninja): a Release build, offscreen tests, `windeployqt`, the portable ZIP and the Inno Setup installer, both checked without Qt in `PATH` (the unpacked ZIP, a silent per-user install, the shell's self-test, a silent uninstall) → the artifact `brulion-windows` (the test version, docs/WINDOWS.md) |
+| `.github/workflows/release.yml` | a `v*` tag or by hand | checks the version, creates a draft release, runs the tests (`ci.yml` without **perf**), the four builds above + `git archive`, attaches the files and `SHA256SUMS.txt`, publishes the release and rebuilds the F-Droid repository on GitHub Pages with its APK (`fdroid.yml`; not for a pre-release or an APK signed with a throwaway key) |
 
-Wersje narzędzi są przypięte w skryptach (Qt 6.11.2, aqtinstall 3.3.0, NDK r27c, Emscripten
-4.0.7, linuxdeploy z sumami SHA-256); `dependabot.yml` co miesiąc aktualizuje akcje GitHuba
-jednym PR-em. Pobrane Qt, NDK i emsdk są w `actions/cache` (klucze z wersjami — po podbiciu
-wersji pobierają się raz od nowa).
+The tools' versions are pinned in the scripts (Qt 6.11.2, aqtinstall 3.3.0, NDK r27c, Emscripten
+4.0.7, linuxdeploy with SHA-256 sums); `dependabot.yml` updates the GitHub actions once a month in
+one PR. The downloaded Qt, NDK and emsdk are in `actions/cache` (keys with the versions — after a
+version bump they are downloaded afresh once).
 
-### Formatowanie (clang-format)
+### Formatting (clang-format)
 
-Styl kodu opisuje `.clang-format` (clang-format 21 z `nix develop`); `.clang-format-ignore`
-wyłącza kod obcy i pliki z JavaScriptem w `EM_JS`. CI sprawdza **tylko zmienione linie**
-(`git clang-format`) — istniejący kod nie jest przeformatowywany hurtem: przy pushu ze
-znacznikiem `[ci]` linie wypchniętych commitów, przy ręcznym uruchomieniu linie zmienione od
-ostatniego wydania, przy wydaniu — od poprzedniego. Różnica w formatowaniu jest tylko
-ostrzeżeniem. Przed commitem:
+The code style is in `.clang-format` (clang-format 21 from `nix develop`); `.clang-format-ignore`
+leaves out foreign code and the files with JavaScript in `EM_JS`. CI checks **only the changed
+lines** (`git clang-format`) — existing code is not reformatted wholesale: on a push with the
+`[ci]` marker the lines of the pushed commits, on a run by hand the lines changed since the last
+release, on a release those since the previous one. A formatting difference is only a warning.
+Before a commit:
 
 ```sh
-nix develop -c git clang-format          # formatuje linie zmienione względem HEAD
+nix develop -c git clang-format          # formats the lines changed against HEAD
 ```
 
-## Jednorazowa konfiguracja repozytorium
+## One-time repository setup
 
 1. **GitHub Pages:** Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-   Pod `https://janusz-bit.github.io/brulion/` jest repozytorium F-Droid (`fdroid.yml`). Żeby
-   wydanie mogło je wdrożyć: Settings → Environments → `github-pages` → *Deployment branches and
-   tags*: gałąź `main` i tag `v*` (z wiersza poleceń:
+   `https://janusz-bit.github.io/brulion/` holds the F-Droid repository (`fdroid.yml`). For a
+   release to be able to deploy it: Settings → Environments → `github-pages` → *Deployment
+   branches and tags*: the branch `main` and the tag `v*` (from the command line:
    `gh api -X POST repos/janusz-bit/brulion/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag`).
-   Klucz repozytorium F-Droid: `scripts/fdroid-new-keystore.sh` (sekrety
+   The F-Droid repository's key: `scripts/fdroid-new-keystore.sh` (the secrets
    `FDROID_KEYSTORE_BASE64`, `FDROID_KEYSTORE_PASS`, `FDROID_KEY_ALIAS`; docs/ANDROID.md
-   „Własne repozytorium F-Droid”), potem pierwsze wdrożenie: `gh workflow run fdroid.yml`.
-2. **Klucz podpisu Androida:** `scripts/android-new-keystore.sh` tworzy klucz poza
-   repozytorium i wypisuje polecenia `gh secret set` dla sekretów `QT_ANDROID_KEYSTORE_BASE64`,
+   "Brulion's own F-Droid repository"), then the first deployment: `gh workflow run fdroid.yml`.
+2. **The Android signing key:** `scripts/android-new-keystore.sh` creates a key outside the
+   repository and prints the `gh secret set` commands for the secrets `QT_ANDROID_KEYSTORE_BASE64`,
    `QT_ANDROID_KEYSTORE_STORE_PASS`, `QT_ANDROID_KEYSTORE_KEY_PASS`, `QT_ANDROID_KEYSTORE_ALIAS`.
-   Bez nich APK jest podpisany kluczem jednorazowym (ostrzeżenie w podsumowaniu i w opisie
-   wydania). **Kopia zapasowa klucza i hasła jest obowiązkowa** — aktualizacje muszą mieć ten
-   sam podpis.
-3. Runnery `ubuntu-24.04-arm` (build Nix aarch64, AppImage aarch64) są bezpłatne dla
-   repozytoriów publicznych.
+   Without them the APK is signed with a throwaway key (a warning in the summary and in the
+   release notes). **A backup of the key and the password is mandatory** — updates must have the
+   same signature.
+3. The `ubuntu-24.04-arm` runners (the Nix aarch64 build, the aarch64 AppImage) are free for
+   public repositories.
 
-## Wydanie
+## Releasing
 
-Wszystkie commity idą na `main`: rozwój, notatki wydaniowe (`.github/release-notes.md`)
-i commit z wersją „Release vX.Y.Z”. Gałąź `release` ma **wyłącznie commity z main** — żadnego
-własnego commita ani commita scalającego: zawsze jest przodkiem `main` (albo samą `main`) i stoi
-na commicie ostatniego wydania, więc gałęzie różnią się tylko liczbą commitów
-(`git rev-list main..release` jest puste). Wydać znaczy przesunąć `release` do przodu na
-commit „Release vX.Y.Z” z main (fast-forward — rebase, w którym nie ma czego przenosić,
-i scalenie bez commita scalającego) i dać temu commitowi tag `vX.Y.Z`: ten sam commit na obu
-gałęziach. Wydania to tagi: `git tag -l 'v*' --sort=v:refname`, a w historii
-`git log --oneline --decorate release` (tag przy każdym commicie „Release vX.Y.Z”). Robi to
-`scripts/release.sh`:
+Every commit goes on `main`: the development, the release notes (`.github/release-notes.md`) and
+the version commit "Release vX.Y.Z". The `release` branch has **nothing but commits of main** — no
+commit of its own and no merge commit: it is always an ancestor of `main` (or `main` itself) and
+sits at the last release's commit, so the branches differ only in how many commits they have
+(`git rev-list main..release` is empty). Releasing means moving `release` forward to main's
+"Release vX.Y.Z" commit (a fast-forward — a rebase with nothing to move, and a merge without a
+merge commit) and giving that commit the tag `vX.Y.Z`: the same commit on both branches. The
+releases are the tags: `git tag -l 'v*' --sort=v:refname`, and in the history
+`git log --oneline --decorate release` (a tag at every "Release vX.Y.Z" commit). This is what
+`scripts/release.sh` does:
 
 ```sh
 git switch main && git pull --ff-only
-# .github/release-notes.md + sekcja "## X.Y.Z — <data>" w src/app/shell/guide/Lista zmian.md
-#   -> commit "Update release notes for vX.Y.Z" (na main); changelogi fastlane pisze release.sh
-scripts/release.sh --dry-run patch     # podgląd: wersje, commity, ostrzeżenia
-scripts/release.sh patch --push        # wersja na main, release przesunięta na nią + tag, push
+# .github/release-notes.md + a section "## X.Y.Z — <date>" in src/app/shell/guide/en/Changelog.md
+#   and src/app/shell/guide/pl/Lista zmian.md
+#   -> commit "Update release notes for vX.Y.Z" (on main); release.sh writes the fastlane changelogs
+scripts/release.sh --dry-run patch     # preview: versions, commits, warnings
+scripts/release.sh patch --push        # the version on main, release moved onto it + the tag, push
 ```
 
-Notatki wydaniowe to opis wydania na GitHubie (nowości tej wersji); strona „Lista zmian” w
-notatniku z dokumentacją (`src/app/shell/guide/Lista zmian.md`, po polsku, najnowsze na górze)
-zbiera wszystkie zmiany wszystkich wersji — każde wydanie dodaje na jej początku swoją sekcję
-(Nowe / Zmiany / Poprawki / Uwaga). Jej przykłady składni muszą być w kodzie (`⏰ …`, `#tag`,
-`- [ ]`), bo to żywa notatka. `release.sh` ostrzega, gdy notatki się nie zmieniły albo gdy na
-liście brakuje sekcji wydawanej wersji (wydanie testowe jej nie potrzebuje).
+The release notes are the release's description on GitHub (the news of this version). They are in
+English first, with the same text in Polish below in a `<details>` section ("Po polsku"): the
+English part has the sections **What's new in {{VERSION}}** (the news as bullets, then a "From
+version …" paragraph summarising the earlier versions), **Highlights**, the download table,
+**Installation** and the checksums; the Polish part has the same in Polish (**Nowości w
+{{VERSION}}** with its "Z wersji …" paragraph, **Najważniejsze**, the table, **Instalacja**).
+Update both languages. The page "Changelog" in the documentation notebook
+(`src/app/shell/guide/en/Changelog.md`, newest on top; in Polish "Lista zmian",
+`src/app/shell/guide/pl/Lista zmian.md`) collects every change of every version — each release
+adds its section at the top of both pages (New / Changes / Fixes / Note; in Polish Nowe / Zmiany /
+Poprawki / Uwaga). Their syntax examples must be in code (`⏰ …`, `#tag`, `- [ ]`), because they
+are live notes. `release.sh` warns when the notes have not changed or when the Polish list lacks
+the section of the version being released (a pre-release needs none).
 
-Dzięki temu `main` zawsze ma wydaną wersję i jej notatki — z niego budują się
-`nix run github:janusz-bit/brulion` (flake bez taga) i artefakty CI (APK z main nie ma
-niższego `versionCode` niż wydany). Na `release` nie commitować niczego: poprawka do wydania
-to commit na main i kolejne wydanie. Historia: do v0.3.4 wydania powstawały na main, a v0.3.5
-na `release` (jej notatki i commit z wersją trafiły na main przed v0.3.6). v0.3.6 i v0.3.7 były
-commitami scalającymi main do `release` („Merge main into release for vX.Y.Z”, drzewo jak
-w „Release vX.Y.Z” na main) i ich tagi zostały na tych scaleniach — wskazują na nie opublikowane
-wydania. Od 2026-10-23 `release` zaczyna się od nowa na commicie „Release v0.3.7” z main
-i jest już tylko prefiksem main.
+This way `main` always has the released version and its notes — `nix run
+github:janusz-bit/brulion` (the flake without a tag) and the CI artifacts are built from it (an APK
+from main has no lower `versionCode` than the released one). Do not commit anything on `release`:
+a fix for a release is a commit on main and another release. History: up to v0.3.4 releases were
+made on main, and v0.3.5 on `release` (its notes and version commit reached main before v0.3.6).
+v0.3.6 and v0.3.7 were merge commits of main into `release` ("Merge main into release for
+vX.Y.Z", the tree as in main's "Release vX.Y.Z") and their tags stayed on those merges — the published
+releases point to them. Since 2026-10-23 `release` starts afresh at main's "Release v0.3.7" commit
+and is only ever a prefix of main.
 
-Argumenty `scripts/release.sh`:
+The arguments of `scripts/release.sh`:
 
 ```sh
-scripts/release.sh minor --push        # 0.3.7 -> 0.4.0: "Release v0.4.0" na main, release na nim z tagiem v0.4.0, push
-scripts/release.sh 0.4.0-rc.1          # wydanie testowe (pre-release); pliki mają wersję 0.4.0
-scripts/release.sh 0.4.0-rc.2          # wersja już jest w plikach: bez commita z wersją, release na HEAD main + tag
-scripts/release.sh 0.4.0               # main bez zmian od -rc.2: tag v0.4.0 na tym samym commicie
-scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił (z każdej gałęzi)
+scripts/release.sh minor --push        # 0.3.7 -> 0.4.0: "Release v0.4.0" on main, release at it with the tag v0.4.0, push
+scripts/release.sh 0.4.0-rc.1          # a test release (pre-release); the files have version 0.4.0
+scripts/release.sh 0.4.0-rc.2          # the version is in the files already: no version commit, release at main's HEAD + tag
+scripts/release.sh 0.4.0               # main unchanged since -rc.2: the tag v0.4.0 on the same commit
+scripts/release.sh --dry-run patch     # only shows what it would do (from any branch)
 ```
 
-Prawdziwy przebieg działa tylko na `main` (z innej gałęzi umiera od razu) i z czystym drzewem
-roboczym:
+A real run works only on `main` (from another branch it stops at once) and with a clean working
+tree:
 
-1. **Sprawdza.** Pobiera z origin `main` i `release` (`git fetch`, bez tagów) i odmawia, gdy
-   main nie ma commitów z `origin/main` (`git pull --ff-only` — także gdy wydanie zrobiono na
-   innym komputerze: `release` wyprzedza wtedy lokalną main, ale niczego nie trzeba cofać);
-   gdy lokalna `release` i `origin/release` się rozeszły; gdy na `release` (lokalnej albo
-   w origin) jest commit, którego main nie ma (`git rev-list main..release` musi być puste) —
-   własny commit albo scalenie, np. stara `release` ze scaleniem v0.3.7: skrypt wypisuje te
-   commity i podaje, jak cofnąć `release` do ostatniego commita main, który ma
-   (`git branch -f release <commit>`, a gdy to samo jest w origin, także
-   `git push --force-with-lease origin <commit>:refs/heads/release`); zmianę, której main
-   potrzebuje, trzeba najpierw przenieść na main (`git cherry-pick`); gdy `release` jest
-   wybrana w innym worktree, a ma się przesunąć (rozjechałoby to tamten checkout); gdy tag już
-   jest (lokalnie albo w origin); przy `patch`/`minor`/`major`, gdy bieżąca wersja ma tylko
-   wydania testowe (np. po `0.4.0-rc.2` `patch` pominąłby 0.4.0 — trzeba podać wersję wprost).
-   Ostrzega, gdy `.github/release-notes.md` nie zmienił się od ostatniego wydania (porównuje
-   z commitem, na którym stoi `release`; wydanie powtórzyłoby poprzednie notatki), i gdy
-   lokalna `release` wyprzedza `origin/release` z tagiem wcześniejszego wydania bez `--push` —
-   push wyśle jej commity, ale nie jej tag (skrypt podaje `git push origin <tag>`).
-2. **Wersja na main.** Ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
-   biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
-   minor·1000 + patch) i w `nix/package.nix`, pisze changelogi fastlane dla F-Droid
-   i IzzyOnDroid (niżej) i robi na main commit „Release vX.Y.Z” z tymi plikami. Gdy wersja już
-   jest w plikach (kolejne `-rc.N`, wydanie końcowe po `-rc`), a changelogi się nie zmieniają,
-   tego commita nie ma; gdy zmieniły się tylko nowości w notatkach, commit ma same changelogi.
+1. **Checks.** It fetches `main` and `release` from origin (`git fetch`, without tags) and refuses
+   when main lacks commits of `origin/main` (`git pull --ff-only` — also when the release was made
+   on another computer: `release` is then ahead of the local main, but nothing has to be undone);
+   when the local `release` and `origin/release` have diverged; when `release` (the local one or
+   origin's) has a commit that main lacks (`git rev-list main..release` must be empty) — a commit
+   of its own or a merge, e.g. the old `release` with the v0.3.7 merge: the script lists those
+   commits and says how to put `release` back at the last commit of main it has
+   (`git branch -f release <commit>`, and when origin has the same, also
+   `git push --force-with-lease origin <commit>:refs/heads/release`); a change main needs has to
+   go to main first (`git cherry-pick`); when `release` is checked out in another worktree and is
+   to move (that checkout would be left behind); when the tag exists already (locally or on
+   origin); with `patch`/`minor`/`major`, when the current version has only test releases (e.g.
+   after `0.4.0-rc.2` `patch` would skip 0.4.0 — give the version itself). It warns when
+   `.github/release-notes.md` has not changed since the last release (it compares with the commit
+   `release` is at; the release would repeat the previous notes) — only the news count, in either
+   language, not the "From version …" / "Z wersji …" summaries —, and when the local `release` is
+   ahead of `origin/release` with the tag of an earlier release made without `--push` — the push
+   sends its commits, but not its tag (the script gives `git push origin <tag>`).
+2. **The version on main.** It sets the version in `CMakeLists.txt` (`project(... VERSION ...)` —
+   the app's version, the Android `versionName` and `versionCode` = major·1000000 + minor·1000 +
+   patch come from it) and in `nix/package.nix`, writes the fastlane changelogs for F-Droid and
+   IzzyOnDroid (below) and makes the commit "Release vX.Y.Z" with these files on main. When the
+   version is in the files already (a further `-rc.N`, the final release after `-rc`) and the
+   changelogs do not change, there is no such commit; when only the news in the notes changed, the
+   commit has only the changelogs.
 
-   **Changelogi fastlane** (docs/ANDROID.md, „F-Droid i IzzyOnDroid”): dla każdego języka
-   w `fastlane/metadata/android/` plik `<język>/changelogs/<versionCode>.txt` (np. `8001.txt` dla
-   0.8.1), do 500 znaków — „co nowego” w sklepie. Polski (`pl`) to lista nowości z sekcji
-   „Nowości w …” `.github/release-notes.md` (pogrubiony początek punktu albo punkt do „ — ”, bez
-   linii „Z wersji …”; co się nie mieści, kończy „• …”) i link do opisu wydania; angielski
-   (`en-US`, i każdy inny język) to sam link do (polskiego) opisu wydania. Powstają z notatek przy
-   każdym wydaniu tej wersji, także testowym (`-rc` ma ten sam `versionCode`) — poprawia się
-   notatki, nie te pliki. Podgląd tekstu daje `--dry-run`; nieudany przebieg usuwa je razem
-   z resztą. Repozytorium bez `fastlane/metadata/android` (np. w testach) changelogów nie dostaje.
-3. **`release` do przodu.** Przesuwa `release` na nowy HEAD main (commit „Release vX.Y.Z”) —
-   zawsze fast-forward (jak `git merge --ff-only main` na `release`), nigdy commit scalający —
-   i daje temu commitowi tag z adnotacją `vX.Y.Z`: ten sam commit jest na `main` i na
-   `release`. Gałęzi nie przełącza, przesuwa tylko ref — pliki w drzewie roboczym nie zmieniają
-   dat, a build się nie przebudowuje. Brakującą lokalną `release` tworzy z `origin/release`,
-   nieaktualną najpierw przewija do `origin/release`. Gdy main nie wnosi nic nowego (wersja już
-   zapisana, a `release` już na HEAD main, np. `0.4.0` po `0.4.0-rc.2` bez zmian na main),
-   mówi to i tylko taguje ten commit.
-4. **Push.** Z `--push` wysyła atomowo (wszystko albo nic)
-   `git push --atomic origin main release refs/tags/vX.Y.Z`. Bez `--push` wypisuje to
-   polecenie i to, jak cofnąć wydanie przed wysłaniem.
+   **The fastlane changelogs** (docs/ANDROID.md, "F-Droid and IzzyOnDroid"): for each language in
+   `fastlane/metadata/android/`, the file `<language>/changelogs/<versionCode>.txt` (e.g.
+   `8001.txt` for 0.8.1), up to 500 characters — the store's "what's new". English (`en-US`, and
+   every other language except Polish) lists the news of the "What's new in …" section of
+   `.github/release-notes.md` under "What's new in X.Y.Z:", Polish (`pl`) those of the "Nowości w
+   …" section under "Nowości w X.Y.Z:" (a bullet's bold lead, else the bullet up to its " — ";
+   without the "From version …" / "Z wersji …" lines; what does not fit ends in "• …"), each with
+   a link to the release notes ("Full release notes: …" / "Pełny opis: …"). Without its own
+   section a language takes the other language's news, without either section every bullet of the
+   notes. They are written from the notes on every release of the version, also a test one (`-rc`
+   has the same `versionCode`) — fix the notes, not these files. `--dry-run` previews the texts; a
+   failed run removes them with the rest. A repository without `fastlane/metadata/android` (e.g. in
+   the tests) gets no changelogs.
+3. **`release` forward.** It moves `release` to main's new HEAD (the "Release vX.Y.Z" commit) —
+   always a fast-forward (like `git merge --ff-only main` on `release`), never a merge commit —
+   and gives that commit the annotated tag `vX.Y.Z`: the same commit is on `main` and on
+   `release`. It does not switch branches, it only moves the ref — the files in the working tree
+   keep their dates and nothing gets rebuilt. A missing local `release` is created from
+   `origin/release`, an outdated one is fast-forwarded to `origin/release` first. When main brings
+   nothing new (the version recorded already and `release` already at main's HEAD, e.g. `0.4.0`
+   after `0.4.0-rc.2` with no change on main), it says so and only tags that commit.
+4. **Push.** With `--push` it sends atomically (all or nothing)
+   `git push --atomic origin main release refs/tags/vX.Y.Z`. Without `--push` it prints that
+   command and how to undo the release before pushing.
 
-Gdy któryś krok się nie uda (np. hook albo odrzucony push), skrypt cofa wszystko, co zrobił —
-tag, przesunięcie `release`, commit z wersją na main — pisze, co cofnął, i zostawia czysty main;
-wystarczy usunąć przyczynę i uruchomić go ponownie. `--dry-run` niczego nie zmienia (nawet nie
-pobiera z origin, tylko pyta o jego refy) i działa z każdej gałęzi: poza `main` najpierw
-ostrzega, a potem pokazuje, co zrobiłby prawdziwy przebieg na `main` (wersje czyta z lokalnej
-`main`, a bez niej z `origin/main`); to, czego prawdziwy przebieg by odmówił, wypisuje jako
-ostrzeżenia. `--yes` pomija pytanie o potwierdzenie.
+When a step fails (e.g. a hook or a rejected push), the script undoes everything it did — the
+tag, the move of `release`, the version commit on main — says what it undid and leaves a clean
+main; remove the cause and run it again. `--dry-run` changes nothing (it does not even fetch from
+origin, it only asks for its refs) and works from any branch: off `main` it first warns, then shows
+what a real run on `main` would do (it reads the versions from the local `main`, without one from
+`origin/main`); what a real run would refuse, it prints as warnings. `--yes` skips the
+confirmation question.
 
-Push taga uruchamia `release.yml`:
+Pushing the tag starts `release.yml`:
 
-1. **draft** — tag musi się zgadzać z wersją w `CMakeLists.txt` i `nix/package.nix`; powstaje
-   szkic wydania z opisem z `.github/release-notes.md` (po polsku; `{{VERSION}}`,
-   `{{FILE_VERSION}}`, `{{TAG}}`, `{{REPO}}`, `{{PAGES_URL}}` są podstawiane) i automatyczną
-   listą zmian.
-2. Równolegle: **Tests** (`ci.yml`: build Nix x86_64 i aarch64, build z sanitizerami
-   i `ctest`, lint — bez nieblokującego pomiaru wydajności, na który wydanie nie czeka), **Android** (`android.yml`), **Linux**
-   (`appimage.yml`), **Web** (`wasm.yml`: strona i jeden plik HTML) i **źródła**
-   (`git archive`).
-3. **publish** — pliki do wydania:
-   `brulion-<wersja>-arm64-v8a.apk`, `Brulion-<wersja>-x86_64.AppImage`,
-   `Brulion-<wersja>-aarch64.AppImage` (+ `.zsync` do aktualizacji przez AppImageUpdate),
-   `brulion-web-<wersja>.zip`, `brulion-web-<wersja>.html` (jeden plik, otwierany z dysku),
-   `brulion-<wersja>-source.tar.gz`, `SHA256SUMS.txt`; potem
-   szkic staje się wydaniem (tag z sufiksem, np. `-rc.1`, → pre-release). Wcześniej
-   `scripts/appimage-update-check.sh` sprawdza, że każdy AppImage ma swój `.zsync`, który go
-   wskazuje, i że informacja o aktualizacji wbudowana w AppImage
-   (`gh-releases-zsync|janusz-bit|brulion|latest|Brulion-*-<arch>.AppImage.zsync`) pasuje
-   dokładnie do tego pliku — AppImageUpdate, Gear Lever i AppImageLauncher pobierają go
-   z najnowszego wydania. Szkic czeka na wszystkie testy (**Tests**) i buildy.
-4. **fdroid** — po publikacji `fdroid.yml` przebudowuje repozytorium F-Droid na GitHub Pages
-   z APK tego wydania i dwóch poprzednich; wydanie testowe (`-rc.1`), ręczne uruchomienie z
-   gałęzi (nie z taga) i APK podpisany kluczem jednorazowym zostawiają repozytorium bez zmian.
-   Bez sekretów `FDROID_*` to zadanie kończy się błędem (wydanie jest już opublikowane).
+1. **draft** — the tag must match the version in `CMakeLists.txt` and `nix/package.nix`; a draft
+   release is created with the description from `.github/release-notes.md` (English, with the
+   Polish text below; `{{VERSION}}`, `{{FILE_VERSION}}`, `{{TAG}}`, `{{REPO}}`, `{{PAGES_URL}}`
+   are filled in) and the automatic list of changes.
+2. In parallel: **Tests** (`ci.yml`: the Nix build on x86_64 and aarch64, the build with
+   sanitizers and `ctest`, lint — without the non-blocking performance measurement, which a
+   release does not wait for), **Android** (`android.yml`), **Linux** (`appimage.yml`), **Web**
+   (`wasm.yml`: the site and the single HTML file) and the **sources** (`git archive`).
+3. **publish** — the release's files:
+   `brulion-<version>-arm64-v8a.apk`, `Brulion-<version>-x86_64.AppImage`,
+   `Brulion-<version>-aarch64.AppImage` (+ `.zsync` for updates through AppImageUpdate),
+   `brulion-web-<version>.zip`, `brulion-web-<version>.html` (a single file, opened from disk),
+   `brulion-<version>-source.tar.gz`, `SHA256SUMS.txt`; then the draft becomes the release (a tag
+   with a suffix, e.g. `-rc.1`, → a pre-release). Before that,
+   `scripts/appimage-update-check.sh` checks that every AppImage has its `.zsync`, which points to
+   it, and that the update information embedded in the AppImage
+   (`gh-releases-zsync|janusz-bit|brulion|latest|Brulion-*-<arch>.AppImage.zsync`) matches exactly
+   that file — AppImageUpdate, Gear Lever and AppImageLauncher download it from the latest
+   release. The draft waits for all tests (**Tests**) and builds. An APK signed with a throwaway
+   key adds a warning (in English and Polish) to the release notes.
+4. **fdroid** — after publishing, `fdroid.yml` rebuilds the F-Droid repository on GitHub Pages
+   with the APK of this release and the two previous ones; a test release (`-rc.1`), a run by hand
+   from a branch (not from a tag) and an APK signed with a throwaway key leave the repository as
+   it is. Without the `FDROID_*` secrets this job fails (the release is published already).
 
-Aplikacja na Androidzie i Windows pyta raz dziennie o najnowsze wydanie (`releases/latest`) i pokazuje
-komunikat ze stroną jego taga (`shell/appupdates.h`). Liczy się tylko tag `vX.Y.Z`: szkic i wydanie
-testowe nikomu go nie pokażą, a komunikat pojawia się dopiero po publikacji. Buildy z opcją CMake
-`BRULION_UPDATE_CHECK=OFF` (dla F-Droid i IzzyOnDroid, docs/ANDROID.md) nie pytają wcale.
+The app on Android and Windows asks once a day for the latest release (`releases/latest`) and
+shows a notice with its tag's page (`shell/appupdates.h`). Only a `vX.Y.Z` tag counts: a draft and
+a test release show it to no one, and the notice appears only after publishing. Builds with the
+CMake option `BRULION_UPDATE_CHECK=OFF` (for F-Droid and IzzyOnDroid, docs/ANDROID.md) never ask.
 
-Nieudany build: „Re-run failed jobs” w zakładce Actions (szkic wydania jest używany
-ponownie). Ręczne uruchomienie (Actions → Release → Run workflow) dla istniejącego taga trzeba
-uruchomić **z tego taga** („Use workflow from” → Tags); nowy tag powstaje na wybranej gałęzi
-przy publikacji.
+A failed build: "Re-run failed jobs" in the Actions tab (the draft release is reused). A run by
+hand (Actions → Release → Run workflow) for an existing tag has to be started **from that tag**
+("Use workflow from" → Tags); a new tag is created on the selected branch when publishing.
 
-## F-Droid i IzzyOnDroid
+## F-Droid and IzzyOnDroid
 
-Przepis F-Droid (szkic: `packaging/fdroid/io.github.januszbit.brulion.yml`, opis, decyzja
-o podpisie i teksty zgłoszeń: docs/ANDROID.md „Budowanie ze źródeł (F-Droid)”) ma
-`AutoUpdateMode: Version` i `UpdateCheckMode: Tags`: po przyjęciu do fdroiddata bot F-Droid sam
-zauważa każdy nowy tag `vX.Y.Z` (wydania testowe `-rc` pomija), dopisuje build i buduje go ze
-źródeł z tagu — przy wydaniu nie trzeba nic robić. Build F-Droid trwa długo (Qt i OpenSSL ze
-źródeł), a nowa wersja pojawia się w F-Droid zwykle po kilku dniach.
+The F-Droid recipe (the draft: `packaging/fdroid/io.github.januszbit.brulion.yml`; the
+description, the signing decision and the submission texts: docs/ANDROID.md "Building from source (F-Droid)") has `AutoUpdateMode: Version` and `UpdateCheckMode: Tags`: once accepted into
+fdroiddata, F-Droid's bot notices every new tag `vX.Y.Z` by itself (it skips the `-rc` test
+releases), adds the build and builds it from the tag's sources — nothing to do at release time.
+The F-Droid build takes long (Qt and OpenSSL from source), and a new version usually shows up in
+F-Droid after a few days.
 
-Co psuje build F-Droid (sprawdzaj przed tagiem, gdy się zmienia):
+What breaks the F-Droid build (check before tagging when it changes):
 
-* wersje przypięte w skryptach (Qt 6.11.2 i SHA-256 modułów w
-  `scripts/android-qt-from-source.sh`, OpenSSL w `scripts/android-openssl-from-source.sh`, NDK,
-  pakiety SDK w `scripts/android-build.sh`) — przepis w fdroiddata ma je osobno (srclibs
-  `Qt5@v…`, `OpenSSL@openssl-…`, `ndk:`, `sdkmanager …`): po podbiciu trzeba poprawić przepis
-  w fdroiddata (MR), a szkic w repozytorium razem z nim (`tst_scripts_fdroid_recipe` pilnuje,
-  żeby szkic zgadzał się ze skryptami);
-* nowy moduł Qt w aplikacji (musi trafić do `HOST_MODULES`/`ANDROID_MODULES` skryptu Qt
-  i `--module-subset` przepisu);
-* zależność Gradle spoza Maven Central / Google Maven albo nowy plik binarny w repozytorium
-  (skaner F-Droid; archiwa testów są w `scandelete`).
+* the versions pinned in the scripts (Qt 6.11.2 and the SHA-256 of its modules in
+  `scripts/android-qt-from-source.sh`, OpenSSL in `scripts/android-openssl-from-source.sh`, the
+  NDK, the SDK packages in `scripts/android-build.sh`) — the recipe in fdroiddata has them
+  separately (srclibs `Qt5@v…`, `OpenSSL@openssl-…`, `ndk:`, `sdkmanager …`): after a bump the
+  recipe in fdroiddata has to be fixed (an MR), and the draft in this repository with it
+  (`tst_scripts_fdroid_recipe` makes sure the draft matches the scripts);
+* a new Qt module in the app (it has to go into the Qt script's `HOST_MODULES`/`ANDROID_MODULES`
+  and the recipe's `--module-subset`);
+* a Gradle dependency from outside Maven Central / Google Maven, or a new binary file in the
+  repository (F-Droid's scanner; the test archives are in `scandelete`).
 
-Lokalnie to samo co F-Droid: `BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0
-scripts/android-build.sh` (pierwszy raz kilkadziesiąt minut: Qt hosta i Qt for Android ze źródeł).
+The same as F-Droid, locally: `BRULION_ANDROID_QT=source BRULION_ANDROID_SIGN=0
+scripts/android-build.sh` (the first time several tens of minutes: the host Qt and Qt for Android
+from source).
 
-**IzzyOnDroid** (po przyjęciu) bierze APK z wydań GitHuba (`brulion-<wersja>-arm64-v8a.apk`,
-podpis klucza wydań) — nazwa pliku w `release.yml` musi zostać ta sama.
+**IzzyOnDroid** (once accepted) takes the APK from the GitHub releases
+(`brulion-<version>-arm64-v8a.apk`, signed with the release key) — the file name in `release.yml`
+must stay the same.
 
-## AppImage lokalnie
+## AppImage locally
 
-`scripts/appimage-build.sh` buduje na zwykłej dystrybucji z glibc (nie na NixOS — tam
-`nix build .#brulion`). Najprościej w kontenerze, jak w CI:
+`scripts/appimage-build.sh` builds on an ordinary glibc distribution (not on NixOS — there
+`nix build .#brulion`). The simplest is a container, as in CI:
 
 ```sh
 podman run --rm -v "$PWD:/src:Z" -w /src docker.io/library/ubuntu:22.04 \
   bash -c 'scripts/appimage-build.sh --install-deps && scripts/appimage-build.sh'
-# wynik: dist-appimage/Brulion-<wersja>-x86_64.AppImage
-# (z LDAI_UPDATE_INFORMATION, jak w CI, także Brulion-<wersja>-x86_64.AppImage.zsync obok)
+# result: dist-appimage/Brulion-<version>-x86_64.AppImage
+# (with LDAI_UPDATE_INFORMATION, as in CI, also Brulion-<version>-x86_64.AppImage.zsync next to it)
 ```
 
-Na hoście NixOS z `programs.appimage.binfmt` jądro przekazuje każdy AppImage do interpretera,
-którego w kontenerze nie ma („No such file or directory”) — skrypt uruchamia więc linuxdeploy
-i sprawdzany AppImage z kopii z wyzerowanymi bajtami magicznymi AppImage (zwykły plik ELF).
-Zweryfikowane 2026-10-14 na laptopie (podman, `ubuntu:22.04`, g++-12): build, 12/12 testów,
-AppImage x86_64 43 MB z wtyczkami xcb/Wayland/offscreen, start bez ekranu przez 10 s.
+On a NixOS host with `programs.appimage.binfmt` the kernel hands every AppImage to an interpreter
+that the container does not have ("No such file or directory") — so the script runs linuxdeploy
+and the AppImage under test from a copy with the AppImage magic bytes zeroed (a plain ELF file).
+Verified 2026-10-14 on the laptop (podman, `ubuntu:22.04`, g++-12): the build, 12/12 tests, an
+x86_64 AppImage of 43 MB with the xcb/Wayland/offscreen plugins, a start without a display for
+10 s.
 
-AppImage zawiera Qt 6.11.2 (biblioteki, wtyczki xcb/Wayland/offscreen, moduły QML używane
-w `src/app/qml`) i działa na systemach z glibc nie starszym niż system budujący: x86_64
-— Ubuntu 22.04+, Debian 12+, Fedora 36+; aarch64 — glibc ≥ 2.39 (Qt dla arm64 jest budowane
-na Ubuntu 24.04).
+The AppImage contains Qt 6.11.2 (the libraries, the xcb/Wayland/offscreen plugins, the QML modules
+used in `src/app/qml`) and runs on systems with a glibc no older than the building system's:
+x86_64 — Ubuntu 22.04+, Debian 12+, Fedora 36+; aarch64 — glibc ≥ 2.39 (Qt for arm64 is built on
+Ubuntu 24.04).
 
-## Sprawdzanie workflowów lokalnie
+## Checking the workflows locally
 
 ```sh
 nix shell nixpkgs#actionlint nixpkgs#shellcheck -c actionlint
 nix shell nixpkgs#shellcheck -c shellcheck scripts/*.sh tests/scripts/*.sh
-tests/scripts/tst_release.sh                  # release.sh w jednorazowych repozytoriach
-tests/scripts/tst_appimage_update_check.sh    # (wszystkie też w ctest: tst_scripts_*)
-tests/scripts/tst_check_fastlane_metadata.sh  # opisy fastlane: limity i changelog bieżącej wersji
+tests/scripts/tst_release.sh                  # release.sh in throwaway repositories
+tests/scripts/tst_appimage_update_check.sh    # (all of them in ctest too: tst_scripts_*)
+tests/scripts/tst_check_fastlane_metadata.sh  # the fastlane texts: limits and the current version's changelog
 ```
 
-Na Raspberry Pi shellcheck 0.11 potrafi się zawiesić (losowo, 100% CPU) — pomaga przypięcie do
-jednego rdzenia i limit czasu: `taskset -c 1 timeout 60 shellcheck …`; actionlint bez
-shellchecka: `actionlint -shellcheck=`.
+On a Raspberry Pi shellcheck 0.11 can hang (at random, 100% CPU) — pinning it to one core and a
+time limit help: `taskset -c 1 timeout 60 shellcheck …`; actionlint without shellcheck:
+`actionlint -shellcheck=`.

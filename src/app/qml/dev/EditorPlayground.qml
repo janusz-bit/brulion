@@ -32,9 +32,9 @@ import Brulion
 // page properties panel with real input (PropertiesSelfTest.qml) and exits; `spelltest` checks spell
 // checking's marks and menu with real input on word lists (SpellingSelfTest.qml) and exits; `properties` /
 // `properties-phone` show the panel expanded on a page with every type; `copylink` /
-// `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
-// `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `copylink-table` a
-// table's menu from its cell toolbar's "Więcej" (--touch), `link-flash` a
+// `copylink-document` show the block menu's "Copy link" (outline / document),
+// `copylink-toolbar` the menu from the touch toolbar's "More" (--touch), `copylink-table` a
+// table's menu from its cell toolbar's "More" (--touch), `link-flash` a
 // copied block link followed (the block selected and flashing). The in-memory vault runs
 // ```query blocks on the real index (FakeEditorHost). Like the app's shell, the editor ends at
 // the on-screen keyboard (KeyboardInsets.overlap); a simulated one is drawn grey.
@@ -1174,7 +1174,7 @@ ApplicationWindow {
             check(window.dateField !== null && window.dateField.EnterKey.type === Qt.EnterKeyDone
                   && window.timeField !== null && window.timeField.EnterKey.type === Qt.EnterKeyDone,
                   "the fields' keyboard action key is Done (Enter), not Next")
-            // Gboard wrote "Za 2 minuty": a date in words is no sentence, so the keyboard
+            // Gboard wrote "Za 2 minuty" (in 2 minutes): a date in words is no sentence, so the keyboard
             // must not capitalise its first letter (the block editor itself still does).
             check(window.dateField !== null && (window.dateField.inputMethodHints & Qt.ImhNoAutoUppercase) !== 0,
                   "the typed date gets no automatic capital letter")
@@ -1524,9 +1524,9 @@ ApplicationWindow {
                   "a replaced picture is not stretched: frame " + (frame ? frame.width + "×" + frame.height : "-")
                   + ", picture " + (img ? img.implicitWidth + "×" + img.implicitHeight : "-"))
         }
-        // A picture from the internet: nothing loads until "Pokaż"; then it is shown from the
+        // A picture from the internet: nothing loads until "Show"; then it is shown from the
         // cache with its own shape (an SVG by its bytes, the URL has no .svg), a right-click
-        // opens its menu — naming the site, and only that menu —, and "Zapisz w notatniku"
+        // opens its menu — naming the site, and only that menu —, and "Save to notebook"
         // makes it an attachment of the notebook (one undo step).
         if (window.at()) {
             host.setWebPictureText("https://example.com/mapa",
@@ -1660,7 +1660,7 @@ ApplicationWindow {
             window.checkWebPlaceholder(item, true)
             page.deleteBlock(window.farRow)
         }
-        // "/Plik…": the picker of any files, several at once; cancelled, nothing changes.
+        // "/File…": the picker of any files, several at once; cancelled, nothing changes.
         if (window.at()) {
             window.fileLinkBefore = window.info(window.realRow).editText
             window.dialogs().pickFileLink(window.realRow, -1)
@@ -1675,7 +1675,7 @@ ApplicationWindow {
         if (window.at()) window.waitStep(!window.fileLinkBox().visible, "cancelling closes it")
         if (window.at()) check(window.info(window.realRow).editText === window.fileLinkBefore,
                     "cancelling leaves the block as it was")
-        // "/Obraz z internetu…": "Zapisz w notatniku" checked each time it opens (the dialog
+        // "/Picture from the internet…": "Save to notebook" checked each time it opens (the dialog
         // is reused), an address without http:// or https:// refused with both named.
         if (window.at()) window.dialogs().pickWebImage(window.realRow, -1)
         if (window.at()) window.waitStep(window.webImageBox() !== null && window.webImageBox().opened, "“Obraz z internetu…” opens its dialog")
@@ -2034,7 +2034,7 @@ ApplicationWindow {
         if (window.at()) checkClockNumbers(c, "180 px, hours, 13 chosen")
         if (window.at()) { c.mode = "minute" }
         if (window.at()) checkClockNumbers(c, "180 px, minutes")
-        // Larger text (Ustawienia → Rozmiar tekstu → Większy) on the smallest dials: the
+        // Larger text (Settings → Text size → Larger) on the smallest dials: the
         // outer numbers keep the text size, the inner hours stay legible.
         if (window.at()) { window.clockFontScaleBefore = Theme.fontScale; Theme.fontScale = 1.3; c.mode = "hour" }
         if (window.at()) checkClockNumbers(c, "180 px, larger text, hours, 13 chosen")
@@ -2602,7 +2602,7 @@ ApplicationWindow {
         }
         if (window.at()) window.waitStep(editor.taskMenu.opened, "the menu opens again")
         if (window.at()) {
-            // Down until "Oczekujące" is highlighted, then Enter.
+            // Down until "Waiting" is highlighted, then Enter.
             const target = menuIndexOf(editor.taskMenu, "taskStatus_deferred")
             if (editor.taskMenu.currentIndex !== target && window.waits++ < 12) {
                 taskEvents.keyClick(Qt.Key_Down, Qt.NoModifier, -1)
@@ -2682,7 +2682,7 @@ ApplicationWindow {
         }
         if (window.at()) window.waitStep(editor.suggestionsOpen && window.suggestionAt(0, "command") === "task", "“/zrob” offers the statuses (to do first)")
         if (window.at()) {
-            // Down to "Zadanie: zrobione", Enter.
+            // Down to "Task: done", Enter.
             let done = -1
             for (let i = 0; i < window.suggestionModel().count; ++i) {
                 if (window.suggestionAt(i, "command") === "taskDone")
@@ -2824,8 +2824,8 @@ ApplicationWindow {
         }
     }
     // ---- The task menu's timer and dependency (`--editor-script taskclock`, tst_editor_qml_taskclock*,
-    // docs/SYNTAX.md §5): "Uruchom licznik czasu" writes a running CLOCK into the task's :LOGBOOK:
-    // (its chip "⏱ od 10:00"), "Zatrzymaj …" closes it, one undo step each; "Dodaj zależność…"
+    // docs/SYNTAX.md §5): "Start timer" writes a running CLOCK into the task's :LOGBOOK:
+    // (its chip "⏱ from 10:00"), "Stop timer" closes it, one undo step each; "Add dependency…"
     // opens the picker, a search finds the task of the page, choosing it writes 🆔 / ⛔ and the
     // ⛔ chip shows that task's text.
     /// The rendered text of `row` with its no-break spaces as spaces (chips use them).
@@ -2839,7 +2839,7 @@ ApplicationWindow {
     function fileLinkBox(): FilePicker {
         return window.dialogs().fileLinkDialog
     }
-    /// The fields of the "Obraz z internetu…" dialog.
+    /// The fields of the "Picture from the internet…" dialog.
     function webImageSave(): T.AbstractButton {
         return DevTest.objectProperty(window.dialogs().webImageDialog, "saveBox") as T.AbstractButton
     }
@@ -2978,14 +2978,14 @@ ApplicationWindow {
         }
     }
     // ---- Links to blocks and headings (`--editor-script blocklinks`, tst_editor_qml_blocklinks*) --
-    // "Kopiuj odnośnik" with real input: the block menu from a right-click on a heading's text, a
+    // "Copy link" with real input: the block menu from a right-click on a heading's text, a
     // paragraph, a callout and a calc block (desktop) — a finger's long press on text selects the
     // block, no menu (--touch) —, from a bullet (right-click / long press) and from the touch
-    // toolbar's "Więcej" (the menu above the bar); the submenu's items put the link on the
+    // toolbar's "More" (the menu above the bar); the submenu's items put the link on the
     // clipboard (read back by pasting) and say so; Ctrl+Shift+C while editing, on a selected block
     // and with nothing selected, the palette's heading link; a copied link followed by a click or
     // tap scrolls to its block or heading, selects and flashes it — again after scrolling away —, a
-    // missing heading is said; a table: "Więcej" on the cell toolbar, Ctrl+Shift+C in a cell, the
+    // missing heading is said; a table: "More" on the cell toolbar, Ctrl+Shift+C in a cell, the
     // palette after the cell lost the keyboard; (desktop) a right-click on a title drawn above the
     // page's properties.
     final property string lastNotice: ""
@@ -3062,7 +3062,7 @@ ApplicationWindow {
             taskEvents.mouseClick(item, x, y, Qt.RightButton, Qt.NoModifier, -1)
     }
     /// Where the block menu began before the keyboard moved, and its gap above the toolbar's
-    /// "Więcej" then (blocklinks).
+    /// "More" then (blocklinks).
     property real menuTopBefore: 0
     property real menuGapBefore: 0
     /// The y of (x, y) of `item` in the window, in `target`.
@@ -3074,7 +3074,7 @@ ApplicationWindow {
         window.mapped2 = item.mapToItem(target, x, y)
         return window.mapped2.y
     }
-    /// From the block menu's bottom to the top of the toolbar's "Więcej" under it.
+    /// From the block menu's bottom to the top of the toolbar's "More" under it.
     function menuGap(): real {
         const background = editor.blockMenu.background
         return window.windowY(window.findItem(editor, "toolbarMore"), 0, 0) - window.windowY(background, 0, background.height)
@@ -3089,7 +3089,7 @@ ApplicationWindow {
     function menuTop(menu: T.Menu): real {
         return window.windowY(menu.background, 0, 0)
     }
-    /// The block menu's entry of the "Kopiuj odnośnik" submenu, and the submenu.
+    /// The block menu's entry of the "Copy link" submenu, and the submenu.
     function copyEntry(): T.MenuItem {
         const menu = editor.blockMenu
         for (let i = 0; menu && i < menu.count; ++i) {
@@ -3103,7 +3103,7 @@ ApplicationWindow {
         const entry = copyEntry()
         return entry ? entry.subMenu : null
     }
-    /// Steps: open "Kopiuj odnośnik", choose `name` there; the clipboard then holds `expected`
+    /// Steps: open "Copy link", choose `name` there; the clipboard then holds `expected`
     /// (read on each of these steps) and the toast says so.
     function copySteps(name: string, what: string, expected: string): void {
         if (window.at()) {
@@ -3250,7 +3250,7 @@ ApplicationWindow {
             check(Js.endsWith(window.lastNotice, " ((" + window.copiedId + "))"), "and says so: " + window.lastNotice)
             check(editor.activeEditor !== null && editor.activeEditor.activeFocus && page.editingRow === window.targetRow,
                   "the block is still being edited")
-            editor.copyCurrentLink("heading") // the palette's "Kopiuj link do nagłówka"
+            editor.copyCurrentLink("heading") // the palette's "Copy link to heading"
         }
         if (window.at() && !window.waiting(clipboardText() === "[[" + doc + "#Plan]]"))
             window.checkWait("the palette's heading link names the heading of the caret's section: " + clipboardText())
@@ -3324,7 +3324,7 @@ ApplicationWindow {
         }
         if (window.at() && !window.waiting(Js.indexOf(window.lastNotice, "Nieistniejący") >= 0 && window.lastNotice !== ""))
             window.checkWait("a missing heading is said: " + window.lastNotice)
-        // ---- The touch toolbar's "Więcej": the block menu above the bar ----------------------------
+        // ---- The touch toolbar's "More": the block menu above the bar ------------------------------
         if (window.at()) {
             page.selectedRow = -1
             Theme.forceTouch = true
@@ -3413,7 +3413,7 @@ ApplicationWindow {
         if (window.at()) check(DevTest.property(menuItemNamed(editor.blockMenu, "blockMenuZoom"), "shown") === true, "with zoom in an outline")
         if (window.at()) check(page.zoomBlock < 0, "and does not zoom")
         copySteps("copyEmbed", "“Embed” copies !((id))", "!((" + info(window.targetRow).blockId + "))")
-        // ---- A table: "Więcej" on the cell toolbar; the edited cell's table is current -------------
+        // ---- A table: "More" on the cell toolbar; the edited cell's table is current ---------------
         if (window.at()) {
             page.selectedRow = -1
             Theme.forceTouch = true
@@ -3466,7 +3466,7 @@ ApplicationWindow {
         if (window.at()) {
             window.expectedLink = page.linkText(window.targetRow, "blockLink").text
             check(Js.indexOf(window.expectedLink, "#^" + info(window.targetRow).blockId + "]]") > 0, "the table's link: " + window.expectedLink)
-            editor.copyCurrentLink("blockLink") // the palette's "Kopiuj link do bloku"
+            editor.copyCurrentLink("blockLink") // the palette's "Copy link to block"
         }
         if (window.at() && !window.waiting(clipboardText() === window.expectedLink))
             window.checkWait("the palette then copies the table's link: " + clipboardText())
@@ -3929,7 +3929,7 @@ ApplicationWindow {
         }
         }
     }
-    /// "copylink": the "Kopiuj odnośnik" entry opened once the block menu is up (Qt.callLater).
+    /// "copylink": the "Copy link" entry opened once the block menu is up (Qt.callLater).
     Later {
         id: copyEntryLater
         onTriggered: {
@@ -4020,7 +4020,7 @@ ApplicationWindow {
             break
         }
         case "copylink-toolbar": {
-            // Touch: the editing toolbar's "Więcej" — the block menu above the bar (screenshots).
+            // Touch: the editing toolbar's "More" — the block menu above the bar (screenshots).
             const row = rowOf("Kolejność")
             editor.listView.positionViewAtIndex(row, ListView.Center)
             editor.startEditing(row, -1)
@@ -4029,7 +4029,7 @@ ApplicationWindow {
             break
         }
         case "copylink-table": {
-            // Touch: a table cell's toolbar "Więcej" — the cell left, the table's block menu at it
+            // Touch: a table cell's toolbar "More" — the cell left, the table's block menu at it
             // (screenshots).
             const row = viewRow("table")
             editor.listView.positionViewAtIndex(row, ListView.Center)
@@ -4041,7 +4041,7 @@ ApplicationWindow {
         }
         case "copylink":
         case "copylink-document": {
-            // The block menu with "Kopiuj odnośnik" open on a heading (screenshots).
+            // The block menu with "Copy link" open on a heading (screenshots).
             const row = rowOf(name === "copylink" ? "Koszty" : "Plan")
             editor.listView.positionViewAtIndex(row, ListView.Center)
             window.scriptRow = row
@@ -4138,7 +4138,7 @@ ApplicationWindow {
         }
         case "selection-picked": {
             // Blocks picked one by one with gaps between them (desktop: Ctrl+clicks and the
-            // floating tools; --touch: the selection mode with "Pojedynczo" on) — screenshots.
+            // floating tools; --touch: the selection mode with "One by one" on) — screenshots.
             const first = rowOf("Zmierzyć ściany")
             editor.listView.positionViewAtIndex(rowOf("Zadzwonić do hydraulika"), ListView.Center)
             if (Theme.touchUi) {
@@ -4162,7 +4162,7 @@ ApplicationWindow {
             break
         }
         case "selection-menu": {
-            // The block menu of a block in a selection: Kopiuj 3 bloki… (screenshots).
+            // The block menu of a block in a selection: Copy 3 blocks… (screenshots).
             const from = rowOf("Zadzwonić do hydraulika")
             const to = rowOf("Prace")
             page.selectRange(from, to)
@@ -4171,7 +4171,7 @@ ApplicationWindow {
             break
         }
         case "text-menu": {
-            // The edited text's menu (desktop right-click): Wytnij, Kopiuj, Wklej, Zaznacz wszystko.
+            // The edited text's menu (desktop right-click): Cut, Copy, Paste, Select all.
             const row = rowOf("Kupić płytki")
             editor.startEditing(row, -1)
             scriptLater.run(name)
@@ -4222,7 +4222,7 @@ ApplicationWindow {
         }
         case "chart":
         case "chart-filter": {
-            // A ```chart of the sample's table (its Razem column) under it, and a pie of the calc
+            // A ```chart of the sample's table (its "Razem" — total — column) under it, and a pie of the calc
             // block; "chart-filter": the table's filter row with a filter typed.
             const table = viewRow("table")
             const row = page.insertBlockAfter(table, "```chart\ntyp: słupkowy\nwartości: Ilość, Cena\ntytuł: Materiały\n```")

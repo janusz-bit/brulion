@@ -6,15 +6,15 @@ import Brulion
 
 // SyncView — route "sync" ({tab?: "overview" | "syncthing" | "nextcloud" | "conflicts", copy?: a
 // conflict copy to open, run?: a sync run whose details to open}): the sync center.
-//   Przegląd   the two ways explained in plain words (Syncthing: a folder kept the same by
+//   Overview   the two ways explained in plain words (Syncthing: a folder kept the same by
 //              Syncthing on every device; Nextcloud: your own server over WebDAV, also in the
 //              browser), their state, waiting conflicts and the mass-deletion guard
 //   Syncthing  steps, live status, the recommended .stignore, REST access (qml/io/SyncthingPanel)
-//   Nextcloud  status with "Synchronizuj teraz", live progress, the last report, offline / error
+//   Nextcloud  status with "Sync now", live progress, the last report, offline / error
 //              explanations, the deletion guard, the history of runs with their details
 //              (qml/io/SyncHistoryList, SyncRunDetails), the way to the event log, the account
 //              form (qml/io/NextcloudForm)
-//   Konflikty  conflict copies (list) and the resolver (qml/io/SyncConflictResolver): side by side
+//   Conflicts  conflict copies (list) and the resolver (qml/io/SyncConflictResolver): side by side
 //              on wide windows, one after the other on narrow ones
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `title`.

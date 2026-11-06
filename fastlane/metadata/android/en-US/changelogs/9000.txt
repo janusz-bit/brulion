@@ -1,2 +1,17 @@
-What's new in Brulion 0.9.0 (in Polish):
-https://github.com/janusz-bit/brulion/releases/tag/v0.9.0
+What's new in 0.9.0:
+• Tabs and separate windows
+• Spell checking
+• Link preview
+• Weekly and monthly notes
+• Searching the journal across many days
+• Habits
+• Task dependencies and time tracking
+• Tables and charts
+• Printing, PDF and Word without Pandoc
+• PDF viewer
+• Page looks
+• Statistics, focus mode and custom shortcuts
+• Drawings
+• …
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.9.0

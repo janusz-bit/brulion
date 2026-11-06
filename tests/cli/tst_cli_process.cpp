@@ -926,7 +926,7 @@ private Q_SLOTS:
     }
 
     // A page whose title another page has too: the link names it by the shortest folder path that
-    // tells them apart (notebook::pageLinkTarget, the app's "Kopiuj odnośnik" and page menu alike).
+    // tells them apart (notebook::pageLinkTarget, the app's "Copy link" and page menu alike).
     void blockLinkSameNames()
     {
         const QString dir = vault({{u"Dom.md"_s, "- główny\n"},
@@ -1092,6 +1092,41 @@ private Q_SLOTS:
         QCOMPARE(r.result().value(u"language"_s).toString(), u"pl"_s);
         QFile::remove(ini);
         QDir(docs).removeRecursively();
+    }
+
+    // The documentation of either language (an English one, and a Polish one left from before
+    // the UI language changed) is never the user's notebook.
+    void documentationOfEitherLanguageIsNoNotebook()
+    {
+        const QString dir = vault({{u"Dom.md"_s, "- dom\n"}});
+        const QString ini = settingsFile();
+        const QString english = appDataDir() + u"/Brulion Documentation"_s;
+        const QString polish = appDataDir() + u"/Dokumentacja Brulionu"_s;
+        QDir().mkpath(english);
+        QDir().mkpath(polish);
+        {
+            QSettings settings(ini, QSettings::IniFormat);
+            settings.setValue(u"vaults/current"_s, english);
+            settings.setValue(u"vaults/recent"_s,
+                              QVariantList{QVariantMap{{u"path"_s, polish}}, QVariantMap{{u"path"_s, english}},
+                                           QVariantMap{{u"path"_s, dir}}});
+        }
+        Run r = cli({u"info"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.json.value(u"vault"_s).toString(), dir);
+        {
+            QSettings settings(ini, QSettings::IniFormat);
+            settings.setValue(u"vaults/current"_s, QString(polish + u'/'));
+            settings.setValue(u"vaults/recent"_s, QVariantList{QVariantMap{{u"path"_s, english}}});
+        }
+        r = cli({u"capture"_s, u"x"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"no_vault"_s);
+        QVERIFY(!QFileInfo::exists(english + u"/journals"_s));
+        QVERIFY(!QFileInfo::exists(polish + u"/journals"_s));
+        QFile::remove(ini);
+        QDir(english).removeRecursively();
+        QDir(polish).removeRecursively();
     }
 
     // A dry run shows what the real run writes: a daily note that does not exist yet comes from

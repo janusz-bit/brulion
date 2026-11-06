@@ -5,14 +5,14 @@ import QtQuick.Templates as T
 import Brulion
 
 // WebPictureViewer — a picture from the internet (`![alt](https://…)`) on its own, over the whole
-// window: a click on the shown picture in a block (EmbedView.webOpen) or "Powiększ" in its menu.
+// window: a click on the shown picture in a block (EmbedView.webOpen) or "View picture" in its menu.
 // Drawn like an attachment in the picture view (ContentPictureView): fitted into the window with
 // its aspect ratio kept (fitting only shrinks a raster picture; an SVG is drawn to fill), and when
 // the fitted picture differs from its own pixels a click on it — or the size button — shows those
 // pixels, dragged around. No references and no text view: the picture is no file of the notebook.
 // The bar names the site and the file (webpicture::displayName, plain text: a name from anywhere
-// is no markup) and holds the size toggle, "Zapisz w notatniku" (saveRequested), the picture's
-// menu (menuRequested: WebPictureMenu) and "Zamknij"; Escape and Back (Android) close it too.
+// is no markup) and holds the size toggle, "Save to notebook" (saveRequested), the picture's
+// menu (menuRequested: WebPictureMenu) and "Close"; Escape and Back (Android) close it too.
 // The picture is the device's cached copy (the embed's `url`: file:// or a data: URL in the
 // browser) — QML loads nothing from the network; its pixel size comes with the embed (the cached
 // file's header), else from the loaded picture. Decoded at most 2048 px a side, an SVG rendered
@@ -32,7 +32,7 @@ T.Popup {
     /// Fitted into the window ↔ the picture's own pixels (the flickable then).
     property bool actualSize: false
 
-    /// "Zapisz w notatniku" in the bar.
+    /// "Save to notebook" in the bar.
     signal saveRequested()
     /// "⋯" in the bar: the picture's menu at `item`.
     signal menuRequested(Item item)

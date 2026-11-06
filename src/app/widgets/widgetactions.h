@@ -1,4 +1,4 @@
-// Quick add of the Android widgets (docs/ANDROID.md "Widgety"): what an entry added from a widget
+// Quick add of the Android widgets (docs/ANDROID.md "Widgets"): what an entry added from a widget
 // writes into today's daily note. QuickAddActivity.kt usually writes the line itself, at once
 // (JournalAppend.kt ports widgetActionBlock() and notebook::appendBlock(); both are checked
 // against tests/data/widgets/journal-cases.json); an entry it could not write (no snapshot of the
@@ -26,8 +26,8 @@ struct WidgetAction {
     QString id;
     Kind kind = Kind::Task;
     QString text;
-    QDate date;                ///< the chosen day ("Dziś", "Jutro", "Data…"); invalid = no date
-    std::optional<QTime> time; ///< "Godzina…": a reminder on `date`
+    QDate date;                ///< the chosen day ("Today", "Tomorrow", "Date…"); invalid = no date
+    std::optional<QTime> time; ///< "Time…": a reminder on `date`
     bool alarm = false;        ///< the reminder is an alarm (⏰!)
     QString vault;             ///< the notebook's id ("" = any)
     QString added;             ///< when it was added ("YYYY-MM-DDTHH:mm", local), as given

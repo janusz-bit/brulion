@@ -8,8 +8,8 @@ import Brulion
 // in every note, seen first. The query and the replacement, what a match must fit, then the notes
 // that have it (Workspace.replacing: looked through on other threads, a moment after typing stops),
 // each with its hits as "before → after" (from a note, so always plain text), a tick per note and per
-// hit. Everything is ticked at first: the preview is what is reviewed. "Zamień (N)" asks once more and
-// writes in slices; the toast's "Cofnij" (AppShell) restores every file still holding what was written,
+// hit. Everything is ticked at first: the preview is what is reviewed. "Replace (N)" asks once more and
+// writes in slices; the toast's "Undo" (AppShell) restores every file still holding what was written,
 // also from another view. A hit inside a link says so: the link will point elsewhere (renaming a page is
 // what keeps links). A hit opens its note at its line; the route keeps the query for Back.
 FocusScope {

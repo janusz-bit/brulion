@@ -4,22 +4,22 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// SettingsView — route "settings" ({section?}). Sections: Ogólne (language, "Run the intro
-// again": AppController.restartIntro()), Wygląd (theme,
+// SettingsView — route "settings" ({section?}). Sections: General (language, "Run the intro
+// again": AppController.restartIntro()), Appearance (theme,
 // accent colour with presets and BAccentDialog, light and dark backgrounds, text size, interface
-// font, density, reduce motion; Układ: sidebar entries and sections, the bottom navigation's
+// font, density, reduce motion; Layout: sidebar entries and sections, the bottom navigation's
 // four buttons, the quick note button; back to the default look — AppSettings, Theme inputs),
-// Edytor (font — serif, sans or any installed family —, code font, size, line spacing, width,
+// Editor (font — serif, sans or any installed family —, code font, size, line spacing, width,
 // source mode, spell checking — on/off, its languages, the personal dictionary's dialog, shown only
 // where SpellCheck.available —, word count, focus mode, typewriter scrolling; font pickers:
-// BFontPickerDialog, not in the browser), Skróty klawiszowe (qml/shell/ShellShortcutSettings: the
-// commands' shortcuts), Notatnik (the vault's shared settings in
+// BFontPickerDialog, not in the browser), Keyboard shortcuts (qml/shell/ShellShortcutSettings: the
+// commands' shortcuts), Notebook (the vault's shared settings in
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
-// names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
+// names, attachments, templates, default reminder time, first day of the week), Reminders (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
-// length, Android's background check of the notes, test notification), Synchronizacja (qml/io/SyncSettings: status,
-// the sync center, the Nextcloud account), Kopie zapasowe (qml/shell/ShellBackupSettings), Aplikacja (close to tray, the event log and its
-// detailed mode, version, licence, source code; on the desktop "Dla programistów": the switch
+// length, Android's background check of the notes, test notification), Sync (qml/io/SyncSettings: status,
+// the sync center, the Nextcloud account), Backups (qml/shell/ShellBackupSettings), Application (close to tray, the event log and its
+// detailed mode, version, licence, source code; on the desktop "For developers": the switch
 // that lets AI agents drive the running app, AppController.remoteControl).
 //
 // Wide windows: section list on the left, one section on the right. Narrow: all sections in
@@ -1355,8 +1355,8 @@ Item {
                 checked: AppSettings.notifyMissed
                 onToggled: AppSettings.notifyMissed = checked
             }
-            // Android: the periodic background check of the notes (docs/ANDROID.md "Sprawdzanie
-            // notatek w tle") — reminders added on another device ring without opening Brulion.
+            // Android: the periodic background check of the notes (docs/ANDROID.md "Checking notes
+            // in the background") — reminders added on another device ring without opening Brulion.
             ShellSettingRow {
                 id: backgroundCheckRow
                 objectName: "backgroundCheckRow"

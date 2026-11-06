@@ -1,4 +1,4 @@
-// Wzory matematyczne (docs/SYNTAX.md §11 "Math formulas"): where a note writes LaTeX math
+// Math formulas (docs/SYNTAX.md §11 "Math formulas"): where a note writes LaTeX math
 // and how a formula is turned into the Qt rich text of the editor. Part of the markdown module.
 //
 // The dialect (Obsidian-like): inline `$…$`, display `$$…$$` and fenced ```math blocks (the

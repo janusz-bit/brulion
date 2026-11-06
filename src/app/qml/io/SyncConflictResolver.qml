@@ -8,15 +8,15 @@ import Brulion
 // came from, and the ways out:
 //   * the copy is identical / an older version already contained in the note → remove the copy;
 //   * a three-way merge with an ancestor from this device's history merged everything → review
-//     the result (BDiffView "now" → "after merging") and "Scal";
-//   * collisions left (or no ancestor) → BMergeView, hunk by hunk ("Scal" when all are chosen);
-//   * "Porównaj" shows both versions side by side (BDiffView);
+//     the result (BDiffView "now" → "after merging") and "Merge";
+//   * collisions left (or no ancestor) → BMergeView, hunk by hunk ("Merge" when all are chosen);
+//   * "Compare" shows both versions side by side (BDiffView);
 //   * a drawing (never merged line by line): previews of both versions and of their merge
 //     (read-only DrawingCanvas items; a drawing Brulion does not draw as its picture), the
-//     elements of each and "Scal rysunki" — the union of both, written into the drawing; an
+//     elements of each and "Merge drawings" — the union of both, written into the drawing; an
 //     Obsidian plugin file whose notes around the drawing differ keeps its copy after merging,
 //     and then shows how the notes differ (BDiffView) and "remove the copy";
-//   * always: "Zachowaj moją" (the copy goes to the trash) and "Zachowaj kopię" (its content
+//   * always: "Keep mine" (the copy goes to the trash) and "Keep the copy" (its content
 //     replaces the note; the old text stays in the history). Binary files: only these two.
 //
 //   SyncConflictResolver { copy: list.currentCopy; showBack: Theme.narrow; onClosed: … }

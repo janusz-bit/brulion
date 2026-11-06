@@ -1,384 +1,378 @@
-# Import notatek z innych aplikacji
+# Importing notes from other apps
 
-Ekran importu (**Więcej → Importuj notatki**, na telefonie też z szuflady — **Menu** na dolnym pasku) przyjmuje pliki,
-archiwa ZIP i całe foldery. Wybierz aplikację, z której pochodzą notatki — pod jej nazwą są
-kroki eksportu — albo od razu wskaż pliki: Brulion sam rozpozna format. Przed zapisem pokazuje
-podgląd (strony, notatki dzienne, załączniki, zmienione nazwy, ostrzeżenia), a po imporcie raport.
-Strony trafiają do folderu importu (domyślnie `Import/<aplikacja>`), notatki dzienne do dziennika,
-załączniki do `assets/<folder importu>/`. Nic nie jest nadpisywane: gdy nazwa jest zajęta, nowa
-strona dostaje dopisek „ 2”, a linki do niej są poprawiane. Szczegóły dla telefonu:
-[ANDROID.md](ANDROID.md#import-notatek-obsidian-logseq-notion).
+The import screen (**More → Import notes**, on the phone also from the drawer — **Menu** in the
+bottom bar) accepts files, ZIP archives and whole folders. Choose the app the notes come from —
+the export steps are under its name — or point to the files right away: Brulion recognises the
+format itself. Before writing anything it shows a preview (pages, daily notes, attachments, renamed
+files, warnings), and after the import a report. Pages go to the import folder (`Import/<app>` by
+default), daily notes to the journal, attachments to `assets/<import folder>/`. Nothing is
+overwritten: when a name is taken, the new page gets the suffix " 2", and links to it are
+adjusted. Details for the phone:
+[ANDROID.md](ANDROID.md#importing-notes-obsidian-logseq-notion).
 
-Obsługiwane aplikacje i formaty: Obsidian, Logseq, Notion, Evernote, Google Keep,
-**[Microsoft To Do](#microsoft-to-do)** (zadania), Joplin, Simplenote, Roam Research,
-**Trilium Notes**, Bear, pliki Markdown/TXT, HTML i kalendarze iCalendar.
+Supported apps and formats: Obsidian, Logseq, Notion, Evernote, Google Keep,
+**[Microsoft To Do](#microsoft-to-do)** (tasks), Joplin, Simplenote, Roam Research,
+**Trilium Notes**, Bear, Markdown/TXT files, HTML and iCalendar calendars.
 
-Tekst z aplikacji, które nie piszą w Markdownie (HTML, Evernote, Google Keep, bazy Notion,
-Trilium, kalendarze), zostaje tekstem: znaki, które w Brulionie coś znaczą, dostają `\`.
-Dotyczy to też znaku `$` — ale tylko tam, gdzie dwa `$` utworzyłyby wzór („Cena $10,
-Netflix 15$”, „$x$”); pojedyncze ceny („$5 i $10”, „15$”) zostają bez zmian. Kod i adresy
-linków nie są zmieniane.
+Text from apps that do not write Markdown (HTML, Evernote, Google Keep, Notion databases,
+Trilium, calendars) stays text: characters that mean something in Brulion get a `\`. This also
+applies to the `$` character — but only where two `$` would form a formula ("Price $10,
+Netflix 15$", "$x$"); single prices ("$5 and $10", "15$") stay unchanged. Code and link
+addresses are not changed.
 
-## Folder Obsidiana bez importu
+## Obsidian folder without importing
 
-Skarbca Obsidiana nie trzeba importować — także takiego, który już synchronizujesz
-Syncthingiem. Brulion czyta te same pliki `.md`, więc folder skarbca możesz po prostu otworzyć
-jako notatnik (na ekranie startowym albo *Przełącz notatnik → Otwórz inny notatnik…*) na każdym
-urządzeniu, na którym Syncthing go trzyma; na Androidzie Brulion poprosi o „Dostęp do wszystkich
-plików” (szczegóły: [ANDROID.md](ANDROID.md)). Obie aplikacje mogą pracować na tym samym
-folderze na zmianę.
+An Obsidian vault does not need to be imported — including one you already sync with Syncthing.
+Brulion reads the same `.md` files, so you can simply open the vault folder as a notebook (on the
+start screen or via *Switch notebook → Open another notebook…*) on every device where Syncthing
+keeps it; on Android Brulion asks for "All files access" (details: [ANDROID.md](ANDROID.md)). Both
+apps can take turns working on the same folder.
 
-**Polecenie:** zostań przy Syncthingu i otwórz folder. *Nie* włączaj dla tego notatnika
-dodatkowo synchronizacji z Nextcloudem — dwa mechanizmy synchronizacji na jednym folderze
-przesyłają te same zmiany dwiema drogami i mnożą konflikty. Nextcloud ma sens tam, gdzie
-Syncthinga nie ma (przeglądarka, notatki w pamięci aplikacji na telefonie). Import wybierz
-tylko wtedy, gdy chcesz osobnej kopii (np. żeby wypróbować Brulion bez dotykania skarbca):
-zaimportowane notatki trafiają do innego notatnika i nie są już tymi samymi plikami.
+**Recommendation:** stay with Syncthing and open the folder. Do *not* additionally turn on
+Nextcloud sync for this notebook — two sync mechanisms on one folder send the same changes along
+two paths and multiply conflicts. Nextcloud makes sense where there is no Syncthing (the browser,
+notes in the app's own storage on the phone). Choose import only when you want a separate copy
+(e.g. to try Brulion without touching the vault): imported notes go to another notebook and are
+no longer the same files.
 
-**Co działa od razu:** linki `[[Strona]]`, `[[Strona|alias]]`, `[[Strona#Nagłówek]]`,
-`[[Strona#^id]]`, osadzenia `![[…]]` (także obrazów leżących w dowolnym folderze), linki
-Markdownowe, nagłówek YAML (`tags`, `aliases`), tagi, ramki `> [!note]`, `==zakreślenia==`,
-`%%komentarze%%`, wzory `$…$` i zadania w składni wtyczki **Tasks** (`📅 ⏳ 🛫 ✅ 🔁`) — Brulion
-także je tak zapisuje. Notatki z nagłówkami i akapitami otwierają się jako dokumenty, jak
-w Obsidianie. Zmiana nazwy albo przeniesienie strony poprawia linki do niej we wszystkich
-notatkach (jak w Obsidianie). Folder `.obsidian/` (ustawienia, wtyczki, motywy) nie jest
-pokazywany i nigdy nie jest zmieniany (Brulion czyta z niego tylko kilka ustawień, zob. niżej), a kopie konfliktów Syncthinga (`*.sync-conflict-*`) notatek nie są
-pokazywane jako strony, tylko w centrum synchronizacji jako konflikty do scalenia.
+**What works right away:** links `[[Page]]`, `[[Page|alias]]`, `[[Page#Heading]]`,
+`[[Page#^id]]`, embeds `![[…]]` (also of pictures in any folder), Markdown links, the YAML
+header (`tags`, `aliases`), tags, `> [!note]` callouts, `==highlights==`, `%%comments%%`,
+`$…$` formulas and tasks in the syntax of the **Tasks** plugin (`📅 ⏳ 🛫 ✅ 🔁`) — Brulion
+writes them that way too. Notes with headings and paragraphs open as documents, as in Obsidian.
+Renaming or moving a page fixes the links to it in all notes (as in Obsidian). The `.obsidian/`
+folder (settings, plugins, themes) is not shown and never changed (Brulion only reads a few
+settings from it, see below), and Syncthing's conflict copies of notes (`*.sync-conflict-*`) are
+not shown as pages, only in the sync center as conflicts to merge.
 
-**Co Brulion przejmie sam:** dopóki notatnik nie ma `.brulion/config.json`, ustawienia
-dziennika i załączników bierze z ustawień Obsidiana w `.obsidian/` — niczego tam nie zmienia
-i sam niczego nie zapisuje:
+**What Brulion takes over by itself:** as long as the notebook has no `.brulion/config.json`, it
+takes the journal and attachment settings from Obsidian's settings in `.obsidian/` — it changes
+nothing there and writes nothing itself:
 
-* **Folder dziennika** — z `.obsidian/daily-notes.json` (pole `folder`; puste albo `/` to główny
-  folder skarbca). Bez tego pliku (Obsidian zapisuje go dopiero po zmianie ustawień *Daily
-  notes*) Brulion przyjmie domyślny dla Obsidiana główny folder tylko wtedy, gdy leży w nim
-  już jakiś dzień `RRRR-MM-DD.md`, a wtyczka *Daily notes* nie jest wyłączona
+* **Journal folder** — from `.obsidian/daily-notes.json` (the `folder` field; empty or `/` is the
+  vault's top folder). Without this file (Obsidian writes it only after the *Daily notes* settings
+  are changed) Brulion assumes Obsidian's default top folder only when a day `YYYY-MM-DD.md`
+  already lies there and the *Daily notes* plugin is not turned off
   (`.obsidian/core-plugins.json`).
-* **Nazwy plików dziennika** — wzór z pola `format`, przepisany z zapisu Moment (Obsidian) na
-  zapis Qt (Brulion): `YYYY-MM-DD` to `yyyy-MM-dd` (domyślny w obu), `DD.MM.YYYY` to
-  `dd.MM.yyyy`, `[Dzień] YYYY-MM-DD` to `'Dzień' yyyy-MM-dd`, a `/` we wzorze to podfoldery jak
-  w Obsidianie. Wzorów z elementami bez odpowiednika (`Do` — „27th”, numery tygodni `ww`/`WW`,
-  dzień roku `DDD`, godziny) Brulion nie użyje: zostanie przy `yyyy-MM-dd`, a ustawienia pokażą
-  ostrzeżenie — wtedy wpisz nazwy plików sam. Nazwy miesięcy i dni (`MMMM`, `dddd`) Brulion
-  pisze po angielsku, także gdy Obsidian pisze je po polsku (ostrzeżenie w ustawieniach).
-* **Szablon dziennika** — z pola `template`, z dopisaną końcówką `.md` (Obsidian zapisuje
-  ścieżkę bez niej), np. `Szablony/Dzień.md`; bez szablonu w Obsidianie nowe dni zaczynają się
-  pusto. Zmienne `{{date}}`, `{{time}}`, `{{title}}` działają w obu aplikacjach.
-* **Folder szablonów** — z `.obsidian/templates.json` (wtyczka *Templates*, pole `folder`).
-* **Folder załączników** — z `.obsidian/app.json` (*Settings → Files and links → Default
-  location for new attachments*): wybrany folder albo główny folder skarbca. Położenia „obok
-  notatki” (`./`) Brulion nie ma: zostaje przy `assets/` i pokazuje ostrzeżenie. Obrazy już
-  wstawione działają w każdym przypadku.
+* **Journal file names** — the pattern from the `format` field, rewritten from Moment notation
+  (Obsidian) to Qt notation (Brulion): `YYYY-MM-DD` becomes `yyyy-MM-dd` (the default in both),
+  `DD.MM.YYYY` becomes `dd.MM.yyyy`, `[Day] YYYY-MM-DD` becomes `'Day' yyyy-MM-dd`, and `/` in the
+  pattern means subfolders, as in Obsidian. Brulion does not use patterns with elements that have
+  no counterpart (`Do` — "27th", week numbers `ww`/`WW`, day of the year `DDD`, hours): it stays
+  with `yyyy-MM-dd`, and the settings show a warning — then enter the file names yourself. Brulion
+  writes month and day names (`MMMM`, `dddd`) in English, also when Obsidian writes them in Polish
+  (a warning in the settings).
+* **Journal template** — from the `template` field, with the `.md` extension added (Obsidian
+  stores the path without it), e.g. `Templates/Daily.md`; without a template in Obsidian, new
+  days start empty. The variables `{{date}}`, `{{time}}`, `{{title}}` work in both apps.
+* **Templates folder** — from `.obsidian/templates.json` (the *Templates* plugin, the `folder`
+  field).
+* **Attachments folder** — from `.obsidian/app.json` (*Settings → Files and links → Default
+  location for new attachments*): the chosen folder or the vault's top folder. Brulion has no
+  "next to the note" location (`./`): it stays with `assets/` and shows a warning. Pictures already
+  inserted work in every case.
 
-*Ustawienia → Notatnik* mówią, co zostało przejęte. Zmiana któregokolwiek ustawienia notatnika
-zapisuje wszystkie (także przejęte) w `.brulion/config.json`; od tej chwili obowiązuje ten plik,
-a zmiany w ustawieniach Obsidiana już się nie liczą. Zanim to nastąpi, Brulion czyta `.obsidian/`
-przy każdym otwarciu notatnika i przy okresowym sprawdzaniu folderu (co parę minut i po powrocie
-do aplikacji). Przycisk **Zapisz w notatniku** zapisuje przejęte ustawienia od razu — przydaje się,
-gdy ten sam notatnik otwierasz w przeglądarce przez Nextcloud: synchronizacja nie przesyła
-`.obsidian/`, więc bez `config.json` przeglądarka miałaby ustawienia domyślne Brulionu.
+*Settings → Notebook* tells what was taken over. Changing any notebook setting saves all of them
+(the taken-over ones too) in `.brulion/config.json`; from then on that file applies, and changes
+in Obsidian's settings no longer count. Until then, Brulion reads `.obsidian/` every time the
+notebook is opened and during the periodic folder check (every few minutes and on returning to
+the app). The **Save to notebook** button saves the taken-over settings right away — useful when
+you open the same notebook in the browser through Nextcloud: sync does not transfer `.obsidian/`,
+so without `config.json` the browser would have Brulion's default settings.
 
-Folder, którego Brulion już używał z ustawieniami domyślnymi (bez `config.json`), nie zmienia się
-po aktualizacji: dziennika nie przejmie, gdy w `journals/` leży już jakaś notatka, folderu
-załączników — gdy w `assets/` leży jakiś plik, folderu szablonów — gdy w `templates/` leży jakiś
-plik. Nie liczą się przy tym pliki w folderze, który dla tego ustawienia wybrał sam Obsidian (np.
-dni Obsidiana w `journals/` albo `Journals/`): wtedy Brulion przejmie wzór nazw i szablon, a
-swoje dawne dni `RRRR-MM-DD.md` dalej rozpozna. Brulion sprawdza to ponownie, gdy pliki w tych
-folderach się pojawiają albo znikają (np. z synchronizacji na nowym urządzeniu, która przysłała
-`.obsidian/` przed `journals/`). Wartość złego typu w plikach Obsidiana (np. liczba zamiast
-ścieżki) Brulion pomija z ostrzeżeniem i zostaje przy swojej.
+A folder that Brulion already used with default settings (without `config.json`) does not change
+after an update: it does not take over the journal when some note already lies in `journals/`,
+the attachments folder when some file lies in `assets/`, the templates folder when some file lies
+in `templates/`. Files in a folder that Obsidian itself chose for that setting do not count here
+(e.g. Obsidian's days in `journals/` or `Journals/`): then Brulion takes over the name pattern and
+the template, and still recognises its own earlier days `YYYY-MM-DD.md`. Brulion checks this again
+when files in these folders appear or disappear (e.g. from sync on a new device that delivered
+`.obsidian/` before `journals/`). A value of the wrong type in Obsidian's files (e.g. a number
+instead of a path) is skipped with a warning, and Brulion keeps its own.
 
-**Co ustawić raz** (*Ustawienia → Notatnik*):
+**What to set once** (*Settings → Notebook*):
 
-* **Tryb dziennika** — dni są domyślnie konspektem (punkty, jak w Logseq); jeśli piszesz
-  w notatkach dziennych akapitami, wybierz *Dokument*.
+* **Journal mode** — days are outlines by default (bullets, as in Logseq); if you write paragraphs
+  in your daily notes, choose *Document*.
 
-**Co się różni:**
+**What is different:**
 
-* **Tagi** to w Brulionie linki do stron (jak w Logseq): `#projekt` prowadzi do strony
-  „projekt” — zob. „Tagi a strony” niżej. W plikach nic się przez to nie zmienia.
-* **Odwołanie do bloku** `((id))` (*Kopiuj odwołanie do bloku*, `Ctrl+Shift+C`) to składnia
-  Logseq: Obsidian pokaże je jako zwykły tekst. W skarbcu, który otwierasz w obu aplikacjach,
-  używaj *Kopiuj link do bloku* — `[[Strona#^id]]` działa w obu.
-* Przypomnienia `⏰ …`, bloki kodu `calc` i `query` oraz formuły w tabelach to składnia
-  Brulionu — Obsidian pokaże je jako tekst albo blok kodu. W drugą stronę: zapytania Dataview
-  i pliki innych wtyczek Brulion pokaże jako zwykły tekst lub stronę (wyjątek: rysunki
-  Excalidraw, niżej); pliki `.canvas` nie są stronami.
-* **Rysunki** Brulionu (`/Rysunek`) to pliki SVG z wbudowaną sceną Excalidraw: Obsidian pokazuje
-  je jako obrazy, a excalidraw.com otwiera do edycji. Rysunek z Excalidraw zapisany jako SVG
-  z opcją *Embed scene* („Osadź scenę”) Brulion otwiera w edytorze rysunków — pismo odręczne,
-  kształty, strzałki, tekst i obrazy zmienia, a rysunek z ramkami albo osadzonymi stronami
-  internetowymi tylko pokazuje.
-* **Rysunki wtyczki Excalidraw dla Obsidiana** (`Rysunek 2026-10-28 14.32.05.excalidraw.md` —
-  każdy plik `.md` z kluczem `excalidraw-plugin` we frontmatterze) Brulion pokazuje jako rysunki:
-  w notatkach (`![[Rysunek.excalidraw]]`, `![[Rysunek.excalidraw.md]]`, `![[Rysunek]]`), po
-  otwarciu z listy stron (widok obrazu z „Edytuj rysunek”) i w edytorze rysunków. Zapisuje je
-  w tym samym formacie (scena w bloku `## Drawing`: `compressed-json` — LZ-String — albo `json`),
-  zmieniając tylko ten blok i wpisy tekstów zmienionych lub usuniętych w Brulionie; frontmatter,
-  notatki „z tyłu” rysunku, linki elementów i osadzone pliki zostają bajt w bajt — Obsidian
-  otworzy rysunek dalej. Pliki `.excalidraw` też się edytuje. Ograniczenia: obrazy z sekcji
-  „Embedded Files” (wklejone w Obsidianie) widać jako szare prostokąty; link w tekście zmienionym
-  w Brulionie staje się zwykłym tekstem; rysunek z ramkami albo osadzonymi stronami tylko się
-  ogląda (jego podgląd to eksport wtyczki obok, jeśli jest); nowe rysunki Brulion tworzy jako SVG
-  (docs/SYNTAX.md §2 „Drawings”).
-* **Ulubione** (zakładki Obsidiana z `.obsidian/bookmarks.json` nie są czytane) i **zwinięcia
-  bloków** Brulion pamięta na urządzeniu, nie w plikach.
+* **Tags** are links to pages in Brulion (as in Logseq): `#project` leads to the page "project" —
+  see [Tags and pages](#tags-and-pages) below. Nothing changes in the files because of it.
+* **A block reference** `((id))` (*Copy block reference*, `Ctrl+Shift+C`) is Logseq syntax:
+  Obsidian shows it as plain text. In a vault you open in both apps, use *Copy link to block* —
+  `[[Page#^id]]` works in both.
+* Reminders `⏰ …`, `calc` and `query` code blocks and formulas in tables are Brulion syntax —
+  Obsidian shows them as text or a code block. The other way round: Brulion shows Dataview queries
+  and files of other plugins as plain text or a page (exception: Excalidraw drawings, below);
+  `.canvas` files are not pages.
+* Brulion **drawings** (`/Drawing`) are SVG files with an embedded Excalidraw scene: Obsidian
+  shows them as pictures, and excalidraw.com opens them for editing. A drawing from Excalidraw
+  saved as SVG with the *Embed scene* option opens in Brulion's drawing editor — Brulion edits
+  handwriting, shapes, arrows, text and pictures, and only shows a drawing with frames or embedded
+  web pages.
+* **Drawings of the Excalidraw plugin for Obsidian**
+  (`Drawing 2026-10-28 14.32.05.excalidraw.md` — any `.md` file with the `excalidraw-plugin` key in
+  its frontmatter) are shown by Brulion as drawings: in notes (`![[Drawing.excalidraw]]`,
+  `![[Drawing.excalidraw.md]]`, `![[Drawing]]`), when opened from the page list (a picture view
+  with "Edit drawing") and in the drawing editor. Brulion saves them in the same format (the scene
+  in the `## Drawing` block: `compressed-json` — LZ-String — or `json`), changing only that block
+  and the entries of texts changed or deleted in Brulion; the frontmatter, the notes "on the back"
+  of the drawing, element links and embedded files stay byte for byte — Obsidian still opens the
+  drawing. `.excalidraw` files can be edited too. Limitations: pictures from the "Embedded Files"
+  section (pasted in Obsidian) appear as grey rectangles; a link in text changed in Brulion becomes
+  plain text; a drawing with frames or embedded web pages can only be viewed (its preview is the
+  plugin's export next to it, if there is one); Brulion creates new drawings as SVG
+  (docs/SYNTAX.md §2 "Drawings").
+* Brulion keeps **favorites** (Obsidian's bookmarks from `.obsidian/bookmarks.json` are not read)
+  and **folded blocks** on the device, not in the files.
 
-**Co Brulion dopisuje do folderu:** `.brulion/config.json` (dopiero po zmianie ustawień
-notatnika albo po *Zapisz w notatniku*), `.trash/` na usunięte pliki (ten sam folder, którego używa Obsidian przy opcji
-*Move to Obsidian trash*; obie aplikacje go pomijają), nowe dni dziennika (dopiero po
-pierwszym wpisie — samo oglądanie dnia niczego nie tworzy), wklejone obrazy w folderze
-załączników, klucz `brulion: document`/`outline` w nagłówku YAML notatki, której tryb zmienisz
-ręcznie (Obsidian pokaże go jako zwykłą właściwość), i identyfikator ` ^id` na końcu bloku,
-do którego skopiujesz link — w formacie Obsidiana. Na prośbę (*Utwórz .stignore*, zob. niżej)
-także plik `.stignore` dla Syncthinga. Historia wersji, indeks i stan
-synchronizacji leżą poza folderem, więc Syncthing ich nie przesyła.
+**What Brulion adds to the folder:** `.brulion/config.json` (only after the notebook settings are
+changed or after *Save to notebook*), `.trash/` for deleted files (the same folder Obsidian uses
+with the *Move to Obsidian trash* option; both apps skip it), new journal days (only after the
+first entry — just looking at a day creates nothing), pasted pictures in the attachments folder,
+the `brulion: document`/`outline` key in the YAML header of a note whose mode you change by hand
+(Obsidian shows it as an ordinary property), and the ` ^id` identifier at the end of a block whose
+link you copy — in Obsidian's format. On request (*Create .stignore*, see below) also a
+`.stignore` file for Syncthing. Version history, the index and the sync state lie outside the
+folder, so Syncthing does not transfer them.
 
-**Ryzyko konfliktów:** nie edytuj tej samej notatki w tej samej chwili w obu aplikacjach ani na
-dwóch urządzeniach naraz. Brulion przejmuje zmiany z dysku na bieżąco (także w otwartej
-notatce, scalając je z tym, co właśnie piszesz), a poprzednie wersje zostają w *Historii
-wersji*. Gdy Syncthing mimo to zostawi kopię `*.sync-conflict-*`, scal ją w centrum
-synchronizacji. Konflikty w `.obsidian/` (np. `workspace.json`) dotyczą tylko Obsidiana;
-zapobiega im zalecany plik `.stignore`: *Centrum synchronizacji → Syncthing → Utwórz .stignore*
-dodaje reguły pomijające układ okien Obsidiana (`.obsidian/workspace*.json`, każde urządzenie ma
-własny) i folder `.trash`. Syncthing nie przesyła samego `.stignore` — skopiuj go na każde
-urządzenie.
+**Risk of conflicts:** do not edit the same note at the same moment in both apps or on two
+devices at once. Brulion picks up changes from disk as they happen (also in an open note, merging
+them with what you are typing), and earlier versions stay in *Version history*. When Syncthing
+still leaves a `*.sync-conflict-*` copy, merge it in the sync center. Conflicts in `.obsidian/`
+(e.g. `workspace.json`) concern Obsidian only; the recommended `.stignore` file prevents them:
+*Sync center → Syncthing → Create .stignore* adds rules that skip Obsidian's window layout
+(`.obsidian/workspace*.json`, each device has its own) and the `.trash` folder. Syncthing does not
+transfer `.stignore` itself — copy it to every device.
 
-## Tagi a strony
+## Tags and pages
 
-W Brulionie tag nazywa stronę, jak w Logseq: `#praca` prowadzi do strony „praca” (szczegóły:
-[SYNTAX.md](SYNTAX.md) §3). Strony tagów z Logseq (np. `pages/praca.md`) łączą się więc po
-imporcie ze swoimi tagami, a tagi zagnieżdżone `#projekt/dom` — ze stronami przestrzeni nazw,
-które import zapisuje w folderach (`projekt/dom.md`). W Obsidianie tagi i strony są osobne: tag
-`#projekt` obok strony „Projekt” po imporcie zacznie do niej prowadzić, a jej odnośniki pokażą
-bloki z tym tagiem. Przy eksporcie: Obsidian i Markdown dostają tagi bez zmian (Obsidian dalej
-trzyma je osobno), Logseq — `#[[Projekty/Dom]]`, gdy strona ma tam inną nazwę niż tag, a w
-eksporcie HTML tag prowadzi do strony, którą nazywa.
+In Brulion a tag names a page, as in Logseq: `#work` leads to the page "work" (details:
+[SYNTAX.md](SYNTAX.md) §3). Tag pages from Logseq (e.g. `pages/work.md`) therefore join their tags
+after the import, and nested tags `#project/home` join the namespace pages that the import writes
+into folders (`project/home.md`). In Obsidian tags and pages are separate: a tag `#project` next to
+a page "Project" starts leading to it after the import, and the page's backlinks show the blocks
+with that tag. On export: Obsidian and Markdown get the tags unchanged (Obsidian keeps them
+separate as before), Logseq gets `#[[Projects/Home]]` when the page has a different name there
+than the tag, and in the HTML export a tag leads to the page it names.
 
 ## Microsoft To Do
 
-Brulion przenosi listy zadań z Microsoft To Do: każda lista staje się stroną z zadaniami
-w folderze importu (`Import/Microsoft To Do/Zadania.md`, `…/Zakupy.md`). Są dwie drogi:
+Brulion moves task lists from Microsoft To Do: each list becomes a page with tasks in the import
+folder (`Import/Microsoft To Do/Tasks.md`, `…/Groceries.md`). There are two ways:
 
-* **Zaloguj się w Microsoft** (zalecane) — Brulion sam pobiera wszystkie listy razem z krokami,
-  linkami i plikami. Wymaga jednorazowej, bezpłatnej rejestracji własnej aplikacji w Microsoft
-  Entra (opis niżej).
-* **Plik z Graph Explorera** — bez rejestracji, ale bez kroków, linków i plików.
+* **Sign in to Microsoft** (recommended) — Brulion downloads all lists itself, together with
+  steps, links and files. It needs a one-time, free registration of your own app in Microsoft
+  Entra (described below).
+* **A file from Graph Explorer** — no registration, but without steps, links and files.
 
-To jednorazowe przeniesienie, a nie synchronizacja: zmiany zrobione później w To Do nie trafią do
-Brulionu, a w To Do nic się nie zmienia. Ponowny import tworzy strony z dopiskiem „ 2”.
+This is a one-time move, not a sync: changes made later in To Do do not reach Brulion, and
+nothing changes in To Do. Importing again creates pages with the suffix " 2".
 
-### Co się z czym zamienia
+### What becomes what
 
-| W To Do | W Brulionie |
+| In To Do | In Brulion |
 |---|---|
-| lista | strona `<folder importu>/<nazwa listy>.md` z `source: Microsoft To Do` we frontmatterze; lista bez zadań — nic (ostrzeżenie podaje, ile ich było) |
-| zadanie | `- [ ] Tytuł`; znaki, które w Brulionie coś znaczą (`#`, `[[`, `*`, `$`), dostają `\` |
-| w toku / czeka na innych, odroczone | `- [/]` / `- [>]` |
-| ukończone | `- [x] … ✅ 2026-10-25` (dzień ukończenia, jak go zapisał To Do) — pod nieukończonymi, od ostatnio ukończonych |
-| ważne / niska ważność | `⏫` / `🔽` |
-| termin, data rozpoczęcia, utworzenia | `📅 2026-10-27`, `🛫 2026-10-20`, `➕ 2026-10-14` |
-| przypomnienie | `⏰ 2026-10-27 08:00` (tylko w nieukończonych zadaniach) |
-| powtarzanie | `🔁 every day`, `every 2 weeks on Monday, Friday`, `every weekday` (dni robocze), `every month on the 15th`, `every year`. „Drugi wtorek miesiąca” i podobne — bez 🔁, zostaje tylko termin (ostrzeżenie); koniec serii (data albo liczba powtórzeń) jest pomijany (ostrzeżenie) |
-| kategorie | tagi: „Praca domowa” → `#Praca-domowa` |
-| notatka | wiersze pod zadaniem (notatka w HTML — zamieniona na Markdown) |
-| kroki | podpunkty `- [ ]` / `- [x]`; kroki nieodhaczone w ukończonym zadaniu — `- [-]` (anulowane), żeby nie wisiały jako otwarte zadania |
-| linki (np. do wiadomości w Outlooku) | podpunkty `[nazwa](adres)` |
-| pliki | załączniki w `assets/Microsoft To Do/`, osadzone pod zadaniem; większe niż 25 MB są pomijane (ostrzeżenie) |
+| list | page `<import folder>/<list name>.md` with `source: Microsoft To Do` in the frontmatter; a list without tasks — nothing (a warning says how many there were) |
+| task | `- [ ] Title`; characters that mean something in Brulion (`#`, `[[`, `*`, `$`) get a `\` |
+| in progress / waiting on others, deferred | `- [/]` / `- [>]` |
+| completed | `- [x] … ✅ 2026-10-25` (the completion day, as To Do recorded it) — below the uncompleted ones, most recently completed first |
+| important / low importance | `⏫` / `🔽` |
+| due date, start date, creation date | `📅 2026-10-27`, `🛫 2026-10-20`, `➕ 2026-10-14` |
+| reminder | `⏰ 2026-10-27 08:00` (only in uncompleted tasks) |
+| repeat | `🔁 every day`, `every 2 weeks on Monday, Friday`, `every weekday` (working days), `every month on the 15th`, `every year`. "Second Tuesday of the month" and the like — no 🔁, only the due date stays (a warning); the end of a series (a date or a number of repeats) is skipped (a warning) |
+| categories | tags: "Home office" → `#Home-office` |
+| note | lines below the task (a note in HTML — converted to Markdown) |
+| steps | sub-items `- [ ]` / `- [x]`; unchecked steps in a completed task — `- [-]` (cancelled), so that they do not hang around as open tasks |
+| links (e.g. to a message in Outlook) | sub-items `[name](address)` |
+| files | attachments in `assets/Microsoft To Do/`, embedded below the task; files larger than 25 MB are skipped (a warning) |
 
-Daty i godziny Microsoft podaje w UTC — Brulion przelicza je na strefę czasową urządzenia, więc
-termin ustawiony na 27 października zostaje 27 października. Nie przenoszą się: „Mój dzień”,
-ręcznie ułożona kolejność zadań (zadania idą w kolejności, w jakiej poda je Microsoft), grupy
-list, osoby, którym udostępniono listę, i przypisania zadań.
+Microsoft gives dates and times in UTC — Brulion converts them to the device's time zone, so a
+due date set for 27 October stays 27 October. Not carried over: "My Day", the manual order of
+tasks (tasks come in the order Microsoft gives them), list groups, the people a list is shared
+with, and task assignments.
 
-### Logowanie do Microsoft
+### Signing in to Microsoft
 
-Microsoft wpuszcza do zadań tylko aplikację zarejestrowaną w Microsoft Entra. Brulion nie ma
-własnego serwera ani wspólnej rejestracji — rejestrujesz „swoją” aplikację raz, za darmo, i
-podajesz jej identyfikator. Rejestracja wymaga katalogu Microsoft Entra: konto służbowe lub
-szkolne Microsoft 365 już go ma (rejestracje może jednak blokować administrator), a dla konta
-osobistego (outlook.com, hotmail.com, live.com) katalog „Katalog domyślny” powstaje po założeniu
-bezpłatnego konta Azure. Od 2024 r. Microsoft nie pozwala rejestrować aplikacji samym kontem
-osobistym bez katalogu.
+Microsoft lets only an app registered in Microsoft Entra access tasks. Brulion has no server of
+its own and no shared registration — you register "your" app once, for free, and enter its ID.
+Registration needs a Microsoft Entra directory: a Microsoft 365 work or school account already
+has one (an administrator can block registrations, though), and for a personal account
+(outlook.com, hotmail.com, live.com) the directory "Default Directory" is created when you set up
+a free Azure account. Since 2024 Microsoft does not allow registering apps with a personal account
+alone, without a directory.
 
-**Rejestracja aplikacji (raz):**
+**Registering the app (once):**
 
-1. Otwórz [entra.microsoft.com](https://entra.microsoft.com) i zaloguj się.
-2. Wybierz **Aplikacje → Rejestracje aplikacji → Nowa rejestracja** (*Applications → App
-   registrations → New registration*).
-3. Nazwa: np. „Brulion”. **Obsługiwane typy kont** (*Supported account types*):
-   * zadania na koncie osobistym (outlook.com, hotmail.com): **Tylko osobiste konta Microsoft**
-     (*Personal Microsoft accounts only*);
-   * zadania na koncie służbowym: **Konta tylko w tym katalogu organizacyjnym** albo **w dowolnym
-     katalogu organizacyjnym**;
-   * oba rodzaje: **Konta w dowolnym katalogu organizacyjnym i osobiste konta Microsoft**.
-4. **Identyfikator URI przekierowania** (*Redirect URI*) zostaw pusty i kliknij **Zarejestruj**.
-5. **Uwierzytelnianie** (*Authentication*) → **Ustawienia zaawansowane** → **Zezwalaj na przepływy
-   klienta publicznego** (*Allow public client flows*): **Tak**, potem **Zapisz**. Bez tego
-   logowanie kończy się błędem AADSTS7000218.
-6. **Uprawnienia interfejsu API** (*API permissions*) → **Dodaj uprawnienie** → **Microsoft
-   Graph** → **Uprawnienia delegowane** → zaznacz `Tasks.Read` → **Dodaj uprawnienia**.
-   `User.Read`, dodane domyślnie, może zostać.
-7. Na stronie **Przegląd** (*Overview*) skopiuj **Identyfikator aplikacji (klienta)**
-   (*Application (client) ID*), np. `3f2504e0-4f89-41d3-9a0c-0305e82c3301`.
+1. Open [entra.microsoft.com](https://entra.microsoft.com) and sign in.
+2. Choose **Applications → App registrations → New registration**.
+3. Name: e.g. "Brulion". **Supported account types**:
+   * tasks on a personal account (outlook.com, hotmail.com): **Personal Microsoft accounts only**;
+   * tasks on a work account: **Accounts in this organizational directory only** or **Accounts in
+     any organizational directory**;
+   * both kinds: **Accounts in any organizational directory and personal Microsoft accounts**.
+4. Leave the **Redirect URI** empty and click **Register**.
+5. **Authentication** → **Advanced settings** → **Allow public client flows**: **Yes**, then
+   **Save**. Without this, signing in ends with the error AADSTS7000218.
+6. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions** →
+   tick `Tasks.Read` → **Add permissions**. `User.Read`, added by default, can stay.
+7. On the **Overview** page copy the **Application (client) ID**, e.g.
+   `3f2504e0-4f89-41d3-9a0c-0305e82c3301`.
 
-Klucza tajnego (*client secret*) ani certyfikatu nie trzeba — Brulion loguje się jako aplikacja
-publiczna, kodem urządzenia.
+No client secret or certificate is needed — Brulion signs in as a public app, with a device
+code.
 
 **Import:**
 
-1. **Importuj notatki → Microsoft To Do**, wklej identyfikator w pole **Identyfikator aplikacji
-   (klienta)**. Brulion zapamięta go na tym urządzeniu (jedna rejestracja wystarcza dla wszystkich
-   notatników).
-2. Pod **Więcej** jest **urząd** (*authority*): `consumers` (domyślny) dla aplikacji tylko dla
-   kont osobistych, `organizations` albo identyfikator lub domena katalogu
-   (`firma.onmicrosoft.com`) dla kont służbowych, `common`, gdy aplikacja przyjmuje oba rodzaje
-   kont.
-3. Kliknij **Zaloguj się w Microsoft**. Brulion pokaże kod (np. `F7GH2K9QX`). Otwórz
-   [microsoft.com/devicelogin](https://microsoft.com/devicelogin) — na tym samym albo innym
-   urządzeniu, np. w telefonie —, wpisz kod, zaloguj się kontem, na którym są zadania, i zgódź
-   się na odczyt zadań. Kod jest ważny około 15 minut.
-4. Brulion pobiera listy (pasek pokazuje postęp), a potem zwykły podgląd importu. Nic nie jest
-   zapisywane przed zatwierdzeniem. Wybranie w tym czasie pliku albo wpisanie ścieżki przerywa
-   logowanie — importuje się wtedy to, co wskazano.
+1. **Import notes → Microsoft To Do**, paste the ID into the **Application (client) ID** field.
+   Brulion remembers it on this device (one registration is enough for all notebooks).
+2. Under **More** there is the **Authority**: `consumers` (the default) for an app for personal
+   accounts only, `organizations` or the directory's ID or domain (`contoso.onmicrosoft.com`) for
+   work accounts, `common` when the app accepts both kinds of accounts.
+3. Click **Sign in to Microsoft**. Brulion shows a code (e.g. `F7GH2K9QX`). Open
+   [microsoft.com/devicelogin](https://microsoft.com/devicelogin) — on the same or another device,
+   e.g. on your phone — enter the code, sign in with the account that has the tasks, and agree to
+   reading the tasks. The code is valid for about 15 minutes.
+4. Brulion downloads the lists (a bar shows the progress), and then the usual import preview.
+   Nothing is written before you confirm. Choosing a file or entering a path in the meantime
+   cancels the sign-in — what you pointed to is imported instead.
 
-Bezpieczeństwo: Brulion prosi tylko o odczyt zadań (`Tasks.Read`) i łączy się tylko
-z `login.microsoftonline.com` i `graph.microsoft.com`. Token dostępu jest w pamięci tylko na
-czas pobierania — nie trafia do notatnika, ustawień ani rejestru zdarzeń, a Brulion nie prosi
-o token odświeżania, więc każdy import to nowe logowanie. Zapamiętane są tylko identyfikator
-aplikacji i urząd. Zgodę cofniesz na koncie Microsoft (konto osobiste:
-[account.live.com/consent/Manage](https://account.live.com/consent/Manage)) albo usuwając
-rejestrację aplikacji.
+Security: Brulion asks only to read tasks (`Tasks.Read`) and connects only to
+`login.microsoftonline.com` and `graph.microsoft.com`. The access token is in memory only while
+downloading — it does not reach the notebook, the settings or the event log, and Brulion does not
+ask for a refresh token, so every import is a new sign-in. Only the app ID and the authority are
+remembered. You withdraw consent in your Microsoft account (personal account:
+[account.live.com/consent/Manage](https://account.live.com/consent/Manage)) or by deleting the app
+registration.
 
-| Błąd | Co zrobić |
+| Error | What to do |
 |---|---|
-| AADSTS7000218 | w rejestracji aplikacji włącz **Zezwalaj na przepływy klienta publicznego** (krok 5) |
-| AADSTS700016 | sprawdź identyfikator; aplikacja tylko dla kont osobistych wymaga urzędu `consumers` |
-| AADSTS50059, AADSTS9002331, AADSTS50020 | rodzaj konta nie pasuje do rejestracji albo urzędu: konto osobiste — `consumers` i rejestracja dla kont osobistych; konto służbowe — `organizations` albo katalog firmy |
-| AADSTS65001 | brak zgody na `Tasks.Read`: dodaj uprawnienie (krok 6); w firmie zgodę może musieć dać administrator |
-| „Brulion nie może czytać Twoich zadań” | brak uprawnienia `Tasks.Read` w rejestracji — dodaj je i zaloguj się ponownie |
-| „Microsoft To Do jest niedostępny dla tego konta” | konto nie ma skrzynki Exchange Online, w której To Do trzyma zadania |
+| AADSTS7000218 | in the app registration turn on **Allow public client flows** (step 5) |
+| AADSTS700016 | check the ID; an app for personal accounts only needs the authority `consumers` |
+| AADSTS50059, AADSTS9002331, AADSTS50020 | the account kind does not match the registration or the authority: personal account — `consumers` and a registration for personal accounts; work account — `organizations` or the company's directory |
+| AADSTS65001 | no consent to `Tasks.Read`: add the permission (step 6); in a company an administrator may have to give consent |
+| "Brulion may not read your tasks." | the registration lacks the `Tasks.Read` permission — add it and sign in again |
+| "Microsoft To Do is not available for this account" | the account has no Exchange Online mailbox, where To Do keeps the tasks |
 
-### Bez rejestracji: plik z Graph Explorera
+### Without registration: a file from Graph Explorer
 
-[Graph Explorer](https://developer.microsoft.com/graph/graph-explorer) to strona Microsoftu do
-wysyłania zapytań do Microsoft Graph — nie wymaga własnej rejestracji aplikacji.
+[Graph Explorer](https://developer.microsoft.com/graph/graph-explorer) is Microsoft's page for
+sending queries to Microsoft Graph — it needs no app registration of your own.
 
-1. Otwórz Graph Explorera i zaloguj się (**Sign in**) kontem, na którym są zadania.
-2. **Modify permissions** → przy `Tasks.Read` kliknij **Consent** i zgódź się.
-3. Wpisz zapytanie `GET` `https://graph.microsoft.com/v1.0/me/todo/lists?$expand=tasks`
-   i kliknij **Run query**.
-4. Skopiuj całą odpowiedź (**Response preview**) do pliku tekstowego z rozszerzeniem `.json`
-   (np. `To Do.json`, kodowanie UTF-8).
-5. W Brulionie: **Importuj notatki → Microsoft To Do → Wybierz pliki…** i wskaż ten plik.
+1. Open Graph Explorer and sign in (**Sign in**) with the account that has the tasks.
+2. **Modify permissions** → next to `Tasks.Read` click **Consent** and agree.
+3. Enter the `GET` query `https://graph.microsoft.com/v1.0/me/todo/lists?$expand=tasks` and click
+   **Run query**.
+4. Copy the whole response (**Response preview**) into a text file with the `.json` extension
+   (e.g. `To Do.json`, UTF-8 encoding).
+5. In Brulion: **Import notes → Microsoft To Do → Choose files…** and pick that file.
 
-Taki plik nie ma kroków, linków ani plików (Brulion powie, że załączniki zostały w To Do).
-Przy dużych listach Microsoft może oddać tylko część zadań — Brulion ostrzeże, że eksport jest
-niepełny. Wtedy pobierz zadania każdej listy osobno: w odpowiedzi znajdź `id` listy, uruchom
-`GET https://graph.microsoft.com/v1.0/me/todo/lists/<id listy>/tasks`, zapisz odpowiedź jako
-`<nazwa listy>.json` (strona dostanie nazwę pliku) i zaimportuj wszystkie pliki naraz — można też
-spakować je do ZIP-a. Także taka odpowiedź bywa podzielona na części; jeśli Brulion ostrzeże, że
-plik ma tylko pierwsze zadania listy, całość pobierze **Zaloguj się w Microsoft**.
+Such a file has no steps, links or files (Brulion says that the attachments stayed in To Do). For
+large lists Microsoft may return only part of the tasks — Brulion warns that the export is
+incomplete. Then download each list's tasks separately: find the list's `id` in the response, run
+`GET https://graph.microsoft.com/v1.0/me/todo/lists/<list id>/tasks`, save the response as
+`<list name>.json` (the page gets the file's name) and import all files at once — you can also
+pack them into a ZIP. Such a response can be split into parts too; if Brulion warns that the file
+has only the first tasks of the list, **Sign in to Microsoft** downloads all of them.
 
-W wersji w przeglądarce logowanie do Microsoft nie działa (Microsoft nie pozwala stronom WWW
-logować się kodem urządzenia) — tam użyj pliku z Graph Explorera.
+In the browser version signing in to Microsoft does not work (Microsoft does not let web pages
+sign in with a device code) — use a file from Graph Explorer there.
 
 ## Trilium Notes
 
-Działa z eksportem ZIP z Trilium 0.10x (projekt TriliumNext, znów nazywany po prostu Trilium),
-TriliumNext 0.9x i z ostatnich wersji zadam/trilium (0.6x).
+Works with ZIP exports from Trilium 0.10x (the TriliumNext project, again called just Trilium),
+TriliumNext 0.9x and recent versions of zadam/trilium (0.6x).
 
-### Jak wyeksportować notatki
+### How to export the notes
 
-1. W drzewie notatek kliknij prawym przyciskiem notatkę, którą chcesz przenieść razem ze
-   wszystkim, co jest pod nią. Wszystkie notatki naraz: notatka główna (*root*) na samej górze
-   drzewa.
-2. Wybierz **Eksportuj** (*Export*), potem **Ta notatka i wszystkie jej elementy podrzędne**
-   (*This note & all descendants*) i format **HTML** (zalecany — zachowuje całe formatowanie)
-   albo **Markdown**.
-3. W Brulionie wybierz pobrany plik ZIP — nie trzeba go rozpakowywać.
+1. In the note tree, right-click the note you want to move together with everything below it. All
+   notes at once: the *root* note at the very top of the tree.
+2. Choose **Export**, then **This note & all descendants** and the format **HTML** (recommended —
+   keeps all formatting) or **Markdown**.
+3. In Brulion choose the downloaded ZIP file — there is no need to unpack it.
 
-Wskazówki:
+Tips:
 
-* **Notatki chronione** (zaszyfrowane) trafiają do eksportu tylko wtedy, gdy przed eksportem
-  otworzysz sesję chronioną (wpiszesz hasło). Inaczej ZIP zawiera tylko ich miejsce w drzewie —
-  Brulion pominie je i powie, ile ich było.
-* Kilka eksportów importuj **po kolei**, każdy osobno (wybrane razem rozpakowałyby się w to samo
-  miejsce). Brulion ostrzeże, gdy w wyborze są pliki spoza eksportu.
-* Format **„HTML do publikacji w sieci”** to gotowa strona WWW, a nie notatki — Brulion go nie
-  importuje. **OPML** też nie jest obsługiwany. Eksport pojedynczej notatki (bez elementów
-  podrzędnych) daje zwykły plik `.html` albo `.md` — zaimportuj go jako HTML lub Markdown.
-* Eksport HTML jest dokładniejszy niż Markdown: eksport Markdown z Trilium gubi podkreślenia,
-  a w starszych wersjach także stany zadań, zwijane bloki i osadzone notatki.
-* Notatki większe niż 4 MB albo z ponad 5000 elementami list Brulion zapisuje jako pliki w
-  załącznikach (z linkiem na stronie i ostrzeżeniem) — ich zamiana trwałaby zbyt długo.
-* Ponowny import tego samego eksportu niczego nie nadpisuje: strony dostają dopisek „ 2” (a treść
-  notatek dziennych jest dopisywana drugi raz), linki prowadzą do stron z nowego importu.
+* **Protected notes** (encrypted) are included in the export only when you open a protected
+  session (enter the password) before exporting. Otherwise the ZIP holds only their place in the
+  tree — Brulion skips them and says how many there were.
+* Import several exports **one after another**, each separately (chosen together they would unpack
+  into the same place). Brulion warns when the selection contains files from outside the export.
+* The format **"HTML for web publishing"** is a ready-made website, not notes — Brulion does not
+  import it. **OPML** is not supported either. Exporting a single note (without descendants)
+  gives an ordinary `.html` or `.md` file — import it as HTML or Markdown.
+* The HTML export is more accurate than Markdown: Trilium's Markdown export loses underlining, and
+  in older versions also task states, collapsible blocks and included notes.
+* Notes larger than 4 MB or with more than 5000 list items are saved by Brulion as files in the
+  attachments (with a link on the page and a warning) — converting them would take too long.
+* Importing the same export again overwrites nothing: pages get the suffix " 2" (and the content
+  of daily notes is appended a second time), links lead to the pages from the new import.
 
-### Co się z czym zamienia
+### What becomes what
 
-| W Trilium | W Brulionie |
+| In Trilium | In Brulion |
 |---|---|
-| notatka tekstowa | strona `<folder importu>/<ścieżka w drzewie>/<tytuł>.md`; znaki, których nie może mieć nazwa pliku (`/ : ? "` …), wypadają z nazwy, a prawdziwy tytuł trafia do `aliases`. Nazwy zastrzeżone w Windows (`CON`, `NUL` …) dostają `_` (notatnik może się synchronizować z Windows), nazwy folderów pomijanych przez notatnik (`logseq`, `node_modules`) — dopisek „ 2” |
-| notatka z elementami podrzędnymi | strona i folder o tej samej nazwie (`Projekty.md` i `Projekty/`); bez własnej treści — sam folder. Pod treścią strony, po linii `---`, jest lista elementów podrzędnych — jak lista notatek, którą Trilium pokazuje pod notatką (obrazy osadzone, pliki jako linki; z etykietą `#hideChildrenOverview` tylko klony, obrazy i pliki) |
-| prefiks gałęzi (np. „Część I”) | część nazwy: `Część I - Rozdział 1.md`, sam tytuł w `aliases` |
-| notatki o tym samym tytule w jednym miejscu | „Zadania” i „Zadania 2” (wielkość liter się nie liczy) |
-| kolejność w drzewie | Brulion układa strony w folderze alfabetycznie; kolejność z Trilium zostaje na listach elementów podrzędnych |
-| kolekcja (*book*) | strona z listą linków do elementów podrzędnych, w kolejności z Trilium (kolekcja obrazów — obrazy); pusta kolekcja bez elementów — nic |
-| notatka bez treści, ale z etykietami, linkami do niej lub klonami | strona z listą elementów podrzędnych |
-| notatka dnia (`#dateNote`) | notatka dzienna w dzienniku (`journals/2026-10-16.md`, folder i format z ustawień notatnika; dopisywana, gdy taki dzień już jest). Własny dopisek w tytule („24 - Czwartek - Wigilia!”) — nagłówek `# Wigilia!` na początku dnia. Elementy podrzędne dnia są stronami w folderze kalendarza i są linkowane z dnia. Strona z importu nigdy nie zajmuje ścieżki notatki dziennej |
-| kalendarz, rok, kwartał, miesiąc, tydzień | tylko foldery (strona — gdy mają własną treść) |
-| klon (ta sama notatka w kilku miejscach) | importowany raz, w pierwszym miejscu drzewa; w pozostałych miejscach — link na liście elementów podrzędnych rodzica |
-| notatka kodu | strona z blokiem kodu w jej języku (```` ```python ````); notatka typu Markdown — jej treść |
-| diagram Mermaid | blok ```` ```mermaid ```` ze źródłem (Brulion rysuje go sam: docs/SYNTAX.md §11 „Mermaid diagrams”) i link do obrazu SVG wyrenderowanego przez Trilium (taki SVG ma etykiety w HTML i style CSS, których Brulion nie potrafi narysować); obraz, który da się pokazać, jest osadzony nad źródłem |
-| canvas (Excalidraw) | strona z rysunkiem (zob. **Rysunki** wyżej): jeden plik SVG w załącznikach (`assets/<folder importu>/<ścieżka>/<tytuł>.svg`) — obraz narysowany przez Trilium ze sceną Excalidraw w środku. Brulion otwiera go w edytorze rysunków (pismo odręczne, kształty, strzałki, tekst i obrazy; rysunek z ramką albo osadzoną stroną internetową tylko pokazuje), excalidraw.com też, a inne programy pokazują obraz z Trilium. Obrazy wklejone do rysunku w Trilium są w nim (gdy razem są za duże — zdjęcia mieszczą się do ok. 15 MB — zostają obok jako pliki, z ostrzeżeniem; obraz, który pokazuje też inna notatka, zostaje dodatkowo osobnym plikiem). Rysunek, który Brulion tylko pokazuje, ma scenę dokładnie taką, jak w Trilium (z kolejnością elementów). Bez obrazu z Trilium (starsze wersje, pusty rysunek, sam PNG) Brulion rysuje obraz sam. Notatka, której treść nie jest sceną Excalidraw (uszkodzona), i rysunek z osadzoną stroną bez obrazu z Trilium — jak dawniej: obraz i plik `.excalidraw` |
-| mapa myśli | lista zagnieżdżona, link do obrazu (jeśli jest) i plik `.json` |
-| mapa relacji | lista linków do notatek z mapy |
-| strona WWW (*web view*) | link do jej adresu |
-| obraz, plik | załącznik w `assets/<folder importu>/<ścieżka>/`; notatki, które je pokazują, osadzają go |
-| załączniki notatki | `assets/<folder importu>/<ścieżka notatki>/…`, osadzone tam, gdzie były w treści; pozostałe — na końcu strony |
-| zapisane wyszukiwanie, mapa notatek, notatka renderowana, skrót | pomijane — ostrzeżenie wymienia ich tytuły |
-| bardzo głębokie drzewo, bardzo długie tytuły | najgłębsze notatki trafiają do folderu przodka (ścieżka pliku ma limit długości) — ostrzeżenie |
+| text note | page `<import folder>/<path in the tree>/<title>.md`; characters a file name cannot have (`/ : ? "` …) are dropped from the name, and the real title goes to `aliases`. Names reserved in Windows (`CON`, `NUL` …) get a `_` (the notebook may sync with Windows), names of folders the notebook skips (`logseq`, `node_modules`) — the suffix " 2" |
+| note with child notes | a page and a folder with the same name (`Projects.md` and `Projects/`); without content of its own — just the folder. Below the page's content, after a `---` line, there is a list of child notes — like the list of notes Trilium shows below a note (pictures embedded, files as links; with the label `#hideChildrenOverview` only clones, pictures and files) |
+| branch prefix (e.g. "Part I") | part of the name: `Part I - Chapter 1.md`, the title alone in `aliases` |
+| notes with the same title in one place | "Tasks" and "Tasks 2" (case does not count) |
+| order in the tree | Brulion sorts pages in a folder alphabetically; Trilium's order stays in the lists of child notes |
+| collection (*book*) | a page with a list of links to the child notes, in Trilium's order (a collection of pictures — the pictures); an empty collection without child notes — nothing |
+| note without content but with labels, links to it or clones | a page with the list of child notes |
+| day note (`#dateNote`) | a daily note in the journal (`journals/2026-10-16.md`, folder and format from the notebook settings; appended when that day already exists). A suffix of your own in the title ("24 - Thursday - Christmas Eve!") — a heading `# Christmas Eve!` at the start of the day. The day's child notes are pages in the calendar folder and are linked from the day. A page from the import never takes the path of a daily note |
+| calendar, year, quarter, month, week | folders only (a page — when they have content of their own) |
+| clone (the same note in several places) | imported once, in the first place in the tree; in the other places — a link in the parent's list of child notes |
+| code note | a page with a code block in its language (```` ```python ````); a note of type Markdown — its content |
+| Mermaid diagram | a ```` ```mermaid ```` block with the source (Brulion draws it itself: docs/SYNTAX.md §11 "Mermaid diagrams") and a link to the SVG picture rendered by Trilium (such an SVG has HTML labels and CSS styles that Brulion cannot draw); a picture that can be shown is embedded above the source |
+| canvas (Excalidraw) | a page with a drawing (see **drawings** above): one SVG file in the attachments (`assets/<import folder>/<path>/<title>.svg`) — the picture drawn by Trilium with the Excalidraw scene inside. Brulion opens it in the drawing editor (handwriting, shapes, arrows, text and pictures; a drawing with a frame or an embedded web page is only shown), excalidraw.com does too, and other programs show Trilium's picture. Pictures pasted into the drawing in Trilium are inside it (when together they are too large — photos fit up to about 15 MB — they stay next to it as files, with a warning; a picture that another note also shows stays a separate file as well). A drawing that Brulion only shows has the scene exactly as in Trilium (with the order of elements). Without Trilium's picture (older versions, an empty drawing, a PNG alone) Brulion draws the picture itself. A note whose content is not an Excalidraw scene (damaged), and a drawing with an embedded web page without Trilium's picture — as before: a picture and an `.excalidraw` file |
+| mind map | a nested list, a link to the picture (if there is one) and a `.json` file |
+| relation map | a list of links to the notes on the map |
+| web view | a link to its address |
+| picture, file | an attachment in `assets/<import folder>/<path>/`; notes that show it embed it |
+| a note's attachments | `assets/<import folder>/<note path>/…`, embedded where they were in the content; the others — at the end of the page |
+| saved search, note map, render note, launcher | skipped — a warning lists their titles |
+| very deep tree, very long titles | the deepest notes go to an ancestor's folder (a file path has a length limit) — a warning |
 
-Atrybuty:
+Attributes:
 
-| W Trilium | W Brulionie |
+| In Trilium | In Brulion |
 |---|---|
-| etykieta bez wartości `#projekt` | tag (`tags: [projekt]`) |
-| etykieta z wartością `#status=w toku` | właściwość `status: w toku` (kilka etykiet o tej samej nazwie — lista) |
-| relacja `~autor` → notatka | właściwość z linkiem: `autor: "[[Import/Trilium/Osoby/Jan Kowalski\|Jan Kowalski]]"` |
-| `#pageUrl` (strony zapisane z przeglądarki) | właściwość `source` |
-| szablon (`#template`) z definicjami atrybutów (`#label:telefon=…`) | strona z pustymi właściwościami (`telefon: ""`) — przenieś ją do folderu szablonów, jeśli chcesz z niej korzystać |
-| etykiety i relacje samego Trilium (`#iconClass`, `#cssClass`, `#archived`, `#sorted`, `#viewType`, `#bookZoomLevel`, `#calendarRoot`, `~template`, skrypty, udostępnianie…) | pomijane |
-| atrybut dziedziczony | tylko na notatce, która go ma (Brulion nie dziedziczy atrybutów) |
+| label without a value `#project` | tag (`tags: [project]`) |
+| label with a value `#status=in progress` | property `status: in progress` (several labels with the same name — a list) |
+| relation `~author` → note | property with a link: `author: "[[Import/Trilium/People/Jan Kowalski\|Jan Kowalski]]"` |
+| `#pageUrl` (pages saved from the browser) | property `source` |
+| template (`#template`) with attribute definitions (`#label:phone=…`) | a page with empty properties (`phone: ""`) — move it to the templates folder if you want to use it |
+| Trilium's own labels and relations (`#iconClass`, `#cssClass`, `#archived`, `#sorted`, `#viewType`, `#bookZoomLevel`, `#calendarRoot`, `~template`, scripts, sharing…) | skipped |
+| inherited attribute | only on the note that has it (Brulion does not inherit attributes) |
 
-Treść notatek:
+Note content:
 
-| W Trilium | W Brulionie |
+| In Trilium | In Brulion |
 |---|---|
-| lista zadań i ich stany | `- [ ]`, `- [x]`, `- [/]` (w trakcie), `- [-]` (anulowane); „może” i własne stany — `- [ ]`; puste zadania (pusty checkbox z szablonu dnia) są pomijane |
-| element listy z kilkoma blokami (kod, obraz, cytat, kilka akapitów) | bloki zostają w elemencie, z wcięciem pod jego znacznikiem |
-| dwie listy albo dwa cytaty tuż obok siebie | osobne (druga lista ze znacznikiem `*` albo `1)`, żeby Markdown ich nie połączył) |
-| uwaga (*admonition*: notatka, wskazówka, ważne, ostrożnie, ostrzeżenie) | callout `> [!tip]`, `> [!warning]` … |
-| blok zwijany | zwinięty callout `> [!note]- Tytuł` (rozwinięty: `+`) |
-| przypisy (także w notatkach zaimportowanych do Trilium z Markdowna) | `[^1]` w tekście, treść przypisów na końcu strony |
-| wzór w tekście / blokowy | `$E=mc^2$` / blok ```` ```math ```` — Brulion składa wzory, źródło LaTeX zostaje w pliku; `$` z tekstu wokół, który połączyłby się ze wzorem (np. cena w tym samym akapicie), dostaje `\$`; gdy litera czy cyfra tuż za wzorem zmieniłaby, co Brulion uzna za wzór, wzory tej linii zostają kodem `` `$E=mc^2$` `` |
-| `$` w tekście (ceny, `$x$` jako zwykły tekst) | bez zmian, a tam, gdzie dwa `$` utworzyłyby wzór („Cena $10, Netflix 15$”), pierwszy dostaje `\$` — widać go jako `$` |
-| link referencyjny do notatki | `[[Import/Trilium/Projekty/Strona\|Strona]]` (pokazuje tytuł z Trilium) |
-| link z własnym tekstem | `[[Import/Trilium/Projekty/Strona\|tekst]]`; link do notatki dnia — `[[2026-10-16]]` |
-| link do notatki spoza eksportu, wykluczonej albo chronionej | sam tekst linku (ostrzeżenie) |
-| osadzona notatka (*include note*) | `![[Import/Trilium/Projekty/Strona]]` |
-| `#słowo` w tekście (w Trilium to zwykły tekst, nie etykieta) | `\#słowo` — nie staje się tagiem (we wzorze `#` zostaje bez zmian: należy do wzoru) |
-| podgląd linku (*link preview*) | zwykły link `[tytuł](adres)` |
-| obraz w treści | `![[assets/…/obraz.png]]`; obrazy w `data:` — zapisane jako załączniki |
-| nagłówki, pogrubienie, kursywa, przekreślenie, zaznaczenie, kod, cytaty, tabele, linie | Markdown Brulionu (`==zaznaczenie==`, tabele GFM, ```` ```język ````) |
-| podkreślenie, kolor tekstu, indeks górny i dolny, ikony w tekście, podział strony | sam tekst (ikony i podziały wypadają) |
+| to-do list and its states | `- [ ]`, `- [x]`, `- [/]` (in progress), `- [-]` (cancelled); "maybe" and custom states — `- [ ]`; empty tasks (an empty checkbox from the day template) are skipped |
+| list item with several blocks (code, picture, quote, several paragraphs) | the blocks stay in the item, indented below its marker |
+| two lists or two quotes right next to each other | separate (the second list with the marker `*` or `1)`, so that Markdown does not join them) |
+| admonition (note, tip, important, caution, warning) | callout `> [!tip]`, `> [!warning]` … |
+| collapsible block | a folded callout `> [!note]- Title` (unfolded: `+`) |
+| footnotes (also in notes imported into Trilium from Markdown) | `[^1]` in the text, the footnotes' content at the end of the page |
+| inline / block formula | `$E=mc^2$` / a ```` ```math ```` block — Brulion typesets formulas, the LaTeX source stays in the file; a `$` from the surrounding text that would join the formula (e.g. a price in the same paragraph) gets `\$`; when a letter or digit right after a formula would change what Brulion takes as a formula, the formulas of that line stay code `` `$E=mc^2$` `` |
+| `$` in text (prices, `$x$` as plain text) | unchanged, and where two `$` would form a formula ("Price $10, Netflix 15$"), the first one gets `\$` — it shows as `$` |
+| reference link to a note | `[[Import/Trilium/Projects/Page\|Page]]` (shows the title from Trilium) |
+| link with its own text | `[[Import/Trilium/Projects/Page\|text]]`; a link to a day note — `[[2026-10-16]]` |
+| link to a note outside the export, excluded or protected | the link's text alone (a warning) |
+| included note (*include note*) | `![[Import/Trilium/Projects/Page]]` |
+| `#word` in text (in Trilium it is plain text, not a label) | `\#word` — it does not become a tag (in a formula `#` stays unchanged: it belongs to the formula) |
+| link preview | an ordinary link `[title](address)` |
+| picture in the content | `![[assets/…/picture.png]]`; pictures in `data:` — saved as attachments |
+| headings, bold, italic, strikethrough, highlight, code, quotes, tables, lines | Brulion Markdown (`==highlight==`, GFM tables, ```` ```language ````) |
+| underline, text colour, superscript and subscript, inline icons, page break | the text alone (icons and breaks are dropped) |
 
-Linki wskazują strony po ich ścieżce w notatniku, z tytułem jako tekstem linku: w Trilium link
-prowadzi do jednej, konkretnej notatki, a sam tytuł mógłby wskazać inną stronę o tym samym
-tytule (np. z wcześniejszego importu albo własną notatkę „Zadania”). Gdy zmienisz w Brulionie
-nazwę strony albo folderu, linki do nich są poprawiane.
+Links point to pages by their path in the notebook, with the title as the link text: in Trilium a
+link leads to one particular note, and the title alone could point to another page with the same
+title (e.g. from an earlier import or your own note "Tasks"). When you rename a page or folder in
+Brulion, the links to them are fixed.
 
-Bezpieczeństwo: notatki Trilium mogą zawierać skrypty (notatki kodu JS, `#run`, `~renderNote`)
-— Brulion niczego nie uruchamia, kod trafia na strony jako tekst. HTML z notatek przechodzi
-przez konwerter, który usuwa skrypty, ramki i niebezpieczne linki.
+Security: Trilium notes may contain scripts (JS code notes, `#run`, `~renderNote`) — Brulion runs
+nothing, code goes onto pages as text. HTML from notes passes through a converter that removes
+scripts, frames and dangerous links.

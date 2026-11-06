@@ -1,5 +1,5 @@
-// One Markdown table as CSV and back (docs/SYNTAX.md §9 "CSV"): the table menu's "Kopiuj jako CSV" /
-// "Zapisz jako CSV…" and the editor's "/Tabela z CSV…". Part of the io module — see io/io.h.
+// One Markdown table as CSV and back (docs/SYNTAX.md §9 "CSV"): the table menu's "Copy as CSV" /
+// "Save as CSV…" and the editor's "/Table from CSV…". Part of the io module — see io/io.h.
 //
 // Export: RFC 4180 with `,`, CRLF records, the header row first; a formula cell is its result
 // (TableEval), other cells their text as written (Markdown kept, `<br>` a line break, `\|` a

@@ -2,26 +2,26 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// BlockMenu — the menu of one block of the editor (docs/UI.md "The block editor"): Kopiuj, Wytnij,
-// Kopiuj jako tekst, Zaznacz (docs/UI.md "Selecting and copying" — a block that is part of the
-// block selection: the whole selection; else the block with its children), Przybliż,
-// Zwiń / Rozwiń (outline), Kopiuj odnośnik ▸ (Odwołanie do bloku ((…)), Link do bloku [[…#^…]],
-// on headings Link do nagłówka [[…#…]], Osadzenie — what `BlockEditor.copyLink` puts on the
-// clipboard, docs/SYNTAX.md §2 "Copied links"), Wstaw obraz…, Zwiększ / Zmniejsz wcięcie,
-// Przenieś w górę / w dół, Usuń blok. A block that is part of a selection over several days of
-// the journal stream (BlockEditor.inSpan): Kopiuj and Kopiuj jako tekst copy the whole span (its
-// count), Wytnij, indenting, moving and Usuń are shown unavailable — a tap says that only copying
+// BlockMenu — the menu of one block of the editor (docs/UI.md "The block editor"): Copy, Cut,
+// Copy as plain text, Select (docs/UI.md "Selecting and copying" — a block that is part of the
+// block selection: the whole selection; else the block with its children), Zoom in,
+// Collapse / Expand (outline), Copy link ▸ (Block reference ((…)), Link to block [[…#^…]],
+// on headings Link to heading [[…#…]], Embed — what `BlockEditor.copyLink` puts on the
+// clipboard, docs/SYNTAX.md §2 "Copied links"), Insert picture…, Indent / Outdent,
+// Move up / down, Delete block. A block that is part of a selection over several days of
+// the journal stream (BlockEditor.inSpan): Copy and Copy as plain text copy the whole span (its
+// count), Cut, indenting, moving and Delete are shown unavailable — a tap says that only copying
 // works there (docs/UI.md "Across journal days"). One menu per editor, made when first opened
 // (BlockEditor.openBlockMenu): from a block's bullet or number (a right-click, a long press), a
 // right-click anywhere on a block (mouse, touchpad, stylus — never a finger: a long press on text
-// is left for selecting it), the touch toolbar's "Więcej". The block is tracked while the menu is
+// is left for selecting it), the touch toolbar's "More". The block is tracked while the menu is
 // open (sync or undo may move it); an action goes to wherever it is then, nowhere when it is gone.
-// On touch UIs the "Kopiuj odnośnik" submenu opens in place of the menu (BMenu: no cascade).
-// From a table's cell (a right-click on it, the cell toolbar's "Więcej": BlockEditor.openBlockMenu's
-// `cell`) also Wiersz ▸ and Kolumna ▸: insert, move and delete that cell's row or column, the
+// On touch UIs the "Copy link" submenu opens in place of the menu (BMenu: no cascade).
+// From a table's cell (a right-click on it, the cell toolbar's "More": BlockEditor.openBlockMenu's
+// `cell`) also Row ▸ and Column ▸: insert, move and delete that cell's row or column, the
 // column's alignment, sorting the rows by the column and filtering them (docs/SYNTAX.md §9); a new
-// row or column has its cell opened for typing. Any table's menu also has Filtruj wiersze,
-// Kopiuj jako CSV and Zapisz jako CSV….
+// row or column has its cell opened for typing. Any table's menu also has Filter rows,
+// Copy as CSV and Save as CSV….
 //
 //   BlockMenu { editor: editor }    menu.openFor(row, -2, 0, 0, 0, ""); menu.popup(item, x, y)
 BMenu {

@@ -3,11 +3,11 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// IoStep — one numbered step of an explanation ("1  Zainstaluj Syncthing…"), with optional
+// IoStep — one numbered step of an explanation ("1  Install Syncthing…"), with optional
 // content below the text (a path, a button).
 //
-//   IoStep { number: 1; text: qsTr("Zainstaluj Syncthing na komputerze.") }
-//   IoStep { number: 2; text: qsTr("Udostępnij folder:"); done: true; BText { … } }
+//   IoStep { number: 1; text: qsTr("Install Syncthing on the computer.") }
+//   IoStep { number: 2; text: qsTr("Share the folder:"); done: true; BText { … } }
 RowLayout {
     id: step
 

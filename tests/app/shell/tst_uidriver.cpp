@@ -515,7 +515,7 @@ private Q_SLOTS:
         QVERIFY(!ud::scrollIntoView(m_window, beyond));
         QCOMPARE(flick->property("contentX").toReal(), 0.0);
         // A tool far to the right of a row that scrolls sideways (remote control: `app click` on
-        // the phone toolbar's "Więcej" clicked beside the window and said it had clicked).
+        // the phone toolbar's "More" clicked beside the window and said it had clicked).
         QQuickItem *tools = named(u"tools"_s);
         QQuickItem *tool = nullptr;
         for (QQuickItem *item : ud::allItems(tools)) {

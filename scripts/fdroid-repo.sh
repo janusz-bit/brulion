@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Builds Brulion's own F-Droid repository: the site GitHub Pages serves at
-# https://<owner>.github.io/<repo>/ (docs/ANDROID.md, "Własne repozytorium F-Droid"):
+# https://<owner>.github.io/<repo>/ (docs/ANDROID.md, "Brulion's own F-Droid repository"):
 #   OUT/index.html  the landing page (packaging/fdroid-repo/index.html): how to add the repository,
 #                   its QR code and the fingerprint of its key
 #   OUT/repo/       the repository (`fdroid update`): the APKs of the last releases, the signed
@@ -96,8 +96,8 @@ fingerprint=$(keytool -exportcert -keystore "$work/keystore.p12" -storetype PKCS
 repo_url: $repo_url
 repo_name: Brulion
 repo_description: >-
+  Official releases of Brulion (offline Markdown notes) from its author, the same as on GitHub.
   Oficjalne wydania Brulionu (notatki w Markdown offline) prosto od autora, te same co na GitHubie.
-  Official Brulion releases from its author, the same as on GitHub.
 repo_icon: icon.png
 archive_older: 0
 keystore: $work/keystore.p12

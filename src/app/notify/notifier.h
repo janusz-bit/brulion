@@ -64,7 +64,7 @@ public:
     virtual void setDoneTarget(const QString &vault) { (void)vault; }
 
     /// Android's background check of the notes while Brulion is closed (docs/ANDROID.md
-    /// "Sprawdzanie notatek w tle"): what it works on — background::Target as JSON, the notebook
+    /// "Checking notes in the background"): what it works on — background::Target as JSON, the notebook
     /// whose reminders are armed — or an empty object to turn it off. Elsewhere nothing (the
     /// desktop app runs in the tray instead).
     virtual void setBackgroundCheck(const QJsonObject &target) { (void)target; }

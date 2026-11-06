@@ -1,4 +1,4 @@
-// Note modes (docs/SYNTAX.md §4 "Tryb notatki / Note mode"): names, the `brulion` frontmatter key,
+// Note modes (docs/SYNTAX.md §4 "Note mode"): names, the `brulion` frontmatter key,
 // the content heuristic, resolution order and the pure key edit (byte preservation, round trips,
 // malformed frontmatter).
 #include "markdown/frontmatter.h"

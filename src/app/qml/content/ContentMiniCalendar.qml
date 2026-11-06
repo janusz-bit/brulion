@@ -4,9 +4,9 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ContentMiniCalendar — the side panel's "Kalendarz": a month (BDatePicker) with a dot on every
+// ContentMiniCalendar — the side panel's "Calendar": a month (BDatePicker) with a dot on every
 // day that has a journal and on days with dates or reminders; picking a day lists its entries
-// (calendar items: due / scheduled tasks, reminders) and "Otwórz dziennik" opens that day
+// (calendar items: due / scheduled tasks, reminders) and "Open journal" opens that day
 // (created when you write in it). Today and the open page's day are marked by the picker.
 // Also the tray calendar's content (ShellTrayCalendar): `activated()` after an entry or the
 // journal was opened; with a `placeholder` (no notebook open) only the month and that text — no

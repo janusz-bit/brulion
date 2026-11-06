@@ -6,15 +6,15 @@ import Brulion
 
 // ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
 // (a breadcrumb for pages in folders and for All pages in a folder), search, command palette,
-// quick capture, side panel toggle and the "more" menu with page actions (Przenieś do…, Pokaż w
-// drzewie among them). On narrow windows it keeps only what fits a phone: back (with history),
+// quick capture, side panel toggle and the "more" menu with page actions (Move to…, Show in
+// tree among them). On narrow windows it keeps only what fits a phone: back (with history),
 // the title, search and the menu; the drawer button ☰ only where the shell says so
 // (`menuButtonShown`: the bottom navigation's Menu opens the drawer, so ☰ only shows while that
 // bar is not there — a view replaces it, or the on-screen keyboard is up). With no button before
 // it, the title starts on the view's content edge.
 // Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
-// before Szukaj — the tab switcher, a menu of the tabs (one tap shows it) with Nowa karta, Zamknij
-// kartę and Zamknij pozostałe karty (docs/UI.md "Tabs, split view and windows").
+// before Search — the tab switcher, a menu of the tabs (one tap shows it) with New tab, Close
+// tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
 // On a picture attachment (`picture`) the menu's "Markdown source" is the picture bar's "Show as
 // text" / "Show picture" (Ctrl+E there too), and the note mode is not offered (no note to switch).
 // `topInset` extends the bar under the Android status bar (edge-to-edge).
@@ -35,8 +35,8 @@ Rectangle {
     property bool picture: false
     property bool pictureAsText: false
     /// The view shows a PDF in the PDF viewer / another file that is no note, read-only: the
-    /// Markdown, note mode, properties and history items are none of theirs; a PDF offers "Otwórz w
-    /// innej aplikacji" (the browser: "Otwórz w nowej karcie").
+    /// Markdown, note mode, properties and history items are none of theirs; a PDF offers "Open in
+    /// another app" (the browser: "Open in a new tab").
     property bool pdf: false
     property bool fileOnly: false
     /// The note's mode shown, "document" | "outline" ("" for none to switch: ShellRouteView.viewNoteMode).
@@ -373,7 +373,7 @@ Rectangle {
             }
         }
     }
-    /// A small heading over a row of the menu ("Tryb", "Otwórz w").
+    /// A small heading over a row of the menu ("Mode", "Open in").
     component MenuLabel: BText {
         leftPadding: Theme.space2
         topPadding: Theme.space1
@@ -402,8 +402,8 @@ Rectangle {
             AppController.requestUiAction("toggleNoteMode")
     }
 
-    // "Więcej" (docs/UI.md "Top bar"): the page's actions as a row of icons, the note's mode, where
-    // to open the view, a few actions in a list; the notebook's places in a submenu; Ustawienia.
+    // "More" (docs/UI.md "Top bar"): the page's actions as a row of icons, the note's mode, where
+    // to open the view, a few actions in a list; the notebook's places in a submenu; Settings.
     BMenu {
         id: moreMenu
         objectName: "topBarMoreMenu"

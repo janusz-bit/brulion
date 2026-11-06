@@ -280,7 +280,7 @@ class WidgetSnapshotTest {
     assertEquals(LocalDateTime.of(2026, 10, 28, 6, 30).atZone(zone).toInstant().toEpochMilli(), reminder.at)
     assertEquals("journals/2026-10-27.md", reminder.path)
     assertEquals(4, reminder.line)
-    // "Zrobione" as on the app's reminders: the app finds the task by note, time, line and text.
+    // "Done" as on the app's reminders: the app finds the task by note, time, line and text.
     assertTrue(reminder.canComplete)
     assertEquals("widget:id-ż", reminder.key)
     assertEquals("2026-10-28T06:30", reminder.local)

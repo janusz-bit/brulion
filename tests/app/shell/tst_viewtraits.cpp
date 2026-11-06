@@ -1,7 +1,7 @@
 // ViewTraits (src/app/shell/viewtraits.h): what ShellRouteView reads of the view it shows,
 // through the view's meta-object — typed results, the change signals followed, the optional
 // functions called with the arguments their declarations ask for — and folderChoices()
-// (folderchoices.h), the rows of "Przenieś do…".
+// (folderchoices.h), the rows of "Move to…".
 #include "folderchoices.h"
 #include "viewtraits.h"
 

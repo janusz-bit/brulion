@@ -2,11 +2,11 @@
 
 // WebAssembly only (compiled when EMSCRIPTEN is set, see src/platform/CMakeLists.txt).
 //
-// Files from and to the user in the browser, without Qt Widgets (docs/WEB.md "Pliki"): the
+// Files from and to the user in the browser, without Qt Widgets (docs/WEB.md "Files"): the
 // browser's own file picker and its save picker or a download, over Qt's private
 // QWasmLocalFileAccess (what QFileDialog::getOpenFileContent / saveFileContent wrap — those need
 // Qt Widgets in the build; Qt's QPA file dialog for the browser hands out weblocalfile: URLs that
-// need synchronous reads, which the single-threaded build cannot do). Import, "Obraz…", "Plik…", the
+// need synchronous reads, which the single-threaded build cannot do). Import, "/Image…", "/File…", the
 // export and the event log use these.
 
 #include "pickedfiles.h"

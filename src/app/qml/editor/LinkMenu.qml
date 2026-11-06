@@ -36,7 +36,7 @@ BMenu {
 
     signal chosen(string action)
 
-    /// The Tasks query of "tasks" for `tag`: `tag:dom`, `tag:"ważne sprawy"`.
+    /// The Tasks query of "tasks" for `tag`: `tag:home`, `tag:"important matters"`.
     function tasksQuery(tag: string): string {
         return "tag:" + (Js.test(tag, "[\\s,\"]", "") ? "\"" + tag + "\"" : tag)
     }

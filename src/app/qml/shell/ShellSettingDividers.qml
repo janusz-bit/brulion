@@ -7,7 +7,7 @@ import Brulion
 // BSwitch, …), drawn over it rather than as rows of its own, so the rows (and what finds them)
 // stay as they are. Bound to the rows' geometry: a row that appears or disappears (one that
 // follows the theme mode) takes its line with it. Hidden and empty children (a Repeater) are no
-// rows; no line under a row without controls (it titles what follows: "Pasek boczny" over its
+// rows; no line under a row without controls (it titles what follows: "Sidebar" over its
 // check boxes) and none above a plain text (a note on the row above it).
 //
 //   BCard { contentHeight: rows.implicitHeight; ColumnLayout { id: rows; … }

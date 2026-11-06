@@ -1,5 +1,5 @@
 // The app's identity on Windows for notifications and the taskbar (docs/WINDOWS.md
-// "Powiadomienia"): the AppUserModelID JanuszBit.Brulion — the same in the installer's Start menu
+// "Notifications"): the AppUserModelID JanuszBit.Brulion — the same in the installer's Start menu
 // shortcut (packaging/windows/brulion.iss) — registered per user under
 // HKCU\Software\Classes\AppUserModelId\<id> with the name and icon a toast shows. That is how an
 // app without a package shows toasts (WindowsToastBus, src/app/notify/windowstoastbus.h), the

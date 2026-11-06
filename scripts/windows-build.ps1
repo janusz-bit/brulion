@@ -304,7 +304,7 @@ function Assert-AppIdentity([string] $Dir, [string] $Label) {
     Remove-Item -Recurse -Force $AumidKey
 }
 
-# "Otwórz za pomocą → Brulion" (packaging/windows/brulion.iss, docs/WINDOWS.md): the installer's
+# "Open with → Brulion" (packaging/windows/brulion.iss, docs/WINDOWS.md): the installer's
 # ProgID, each type's OpenWithProgids and Applications\brulion.exe; never a type's default.
 $Classes = 'HKCU:\Software\Classes'
 $NoteProgId = 'JanuszBit.Brulion.Note'

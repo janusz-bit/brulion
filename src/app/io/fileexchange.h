@@ -44,7 +44,7 @@ struct GatherLimits {
     int maxFiles = 50000;                        ///< reading stops here (warning)
 };
 
-/// "Eksport Notion.zip" for a file URL, "Mój sejf" for a folder; the display name of an
+/// "Notion export.zip" for a file URL, "My vault" for a folder; the display name of an
 /// Android document (content://…) as far as Qt knows it, else the last path segment.
 QString displayNameOf(const QUrl &url);
 
@@ -56,7 +56,7 @@ QString fileSystemPathOf(const QUrl &url);
 bool isDocumentUrl(const QUrl &url);
 
 /// What the user typed or a route passed: a local path ("/storage/emulated/0/Download/x.zip",
-/// "~/Notatki" is not expanded) or a URL (file://, content://). Empty for blank input.
+/// "~/Notes" is not expanded) or a URL (file://, content://). Empty for blank input.
 QUrl urlFromUserInput(const QString &pathOrUrl);
 
 /// Folders whose content is never imported when a folder is picked.
@@ -115,7 +115,7 @@ public:
     /// "3 files" (also the browser's pick, ImportController::pickInBrowser()).
     static QString sourceNameFor(int count, const QString &single);
     /// The warning for a file above GatherLimits::maxFileBytes, which is skipped:
-    /// "“Eksport.zip” (600 MB) is too large and was skipped."
+    /// "“Export.zip” (600 MB) is too large and was skipped."
     static QString tooLargeWarning(const QString &name, qint64 bytes);
     /// The warning when reading stopped at GatherLimits::maxTotalBytes (`maxTotalBytes`): "Only the
     /// first 1.5 GB were read: the selection is too large to import at once." (also the browser's
@@ -125,8 +125,8 @@ public:
 Q_SIGNALS:
     /// `done` of `total` files read so far (`total` 0: still looking for the files).
     void progress(int done, int total);
-    /// Everything read: the files, warnings (translated), a name for the source ("Eksport.zip",
-    /// "Sejf", "3 files") and the number of bytes.
+    /// Everything read: the files, warnings (translated), a name for the source ("Export.zip",
+    /// "Vault", "3 files") and the number of bytes.
     void finished(const QList<brulion::io::InputFile> &files, const QStringList &warnings, const QString &sourceName,
                   qint64 bytes);
     void cancelled();

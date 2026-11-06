@@ -1,4 +1,4 @@
-// The pen in the web build's drawing editor (docs/WEB.md "Rysik (nacisk)"): pointer events with
+// The pen in the web build's drawing editor (docs/WEB.md "Stylus (pressure)"): pointer events with
 // pointerType "pen" → Qt for WebAssembly → QTabletEvent → DrawingCanvas. The app reports its
 // canvas (?selftest=pen: src/app/diag/webselftest.h) — the freehand lines with their pressures
 // and where they are on screen; the screenshot shows the line growing thicker; the drawing file

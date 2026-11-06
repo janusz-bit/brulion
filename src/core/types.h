@@ -301,7 +301,7 @@ struct ParsedNote {
 // Vault configuration (.brulion/config.json, synced between devices)
 // ---------------------------------------------------------------------------------------------
 
-/// How a note is shown and edited (docs/SYNTAX.md §4 "Tryb notatki / Note mode"): a Logseq-like
+/// How a note is shown and edited (docs/SYNTAX.md §4 "Note mode"): a Logseq-like
 /// outline of blocks or an Obsidian-like continuous document. See markdown/notemode.h.
 enum class NoteMode { Outline, Document };
 

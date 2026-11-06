@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// ContentJournalDay — one day of JournalsView: the date as a heading ("środa, 15 października
-// 2026", a click opens the day as a page), "Otwórz jako stronę", and the day's note in an
+// ContentJournalDay — one day of JournalsView: the date as a heading ("Wednesday, October 15,
+// 2026", a click opens the day as a page), "Open as page", and the day's note in an
 // embedded block editor (its own PageController; the editor's list does not scroll — the
 // journal list does — and is as tall as its blocks). A day without a note yet (today) shows a
 // prompt; the first edit creates the file — from the vault's journal template when there is one.
@@ -194,8 +194,8 @@ FocusScope {
     }
 
     // ---- The date -------------------------------------------------------------------------------
-    // Wide: "środa, 14 października 2026" with a "Dziś" badge. Phones: the weekday (and "Dziś")
-    // as a small line above "14 października 2026", so the date fits on one line.
+    // Wide: "Wednesday, October 14, 2026" with a "Today" badge. Phones: the weekday (and "Today")
+    // as a small line above "October 14, 2026", so the date fits on one line.
     Item {
         id: headerRow
         x: dayEditor.contentX + dayEditor.gutter

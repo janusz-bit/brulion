@@ -1,5 +1,5 @@
-// Android only: main() of the background check's process (docs/ANDROID.md "Sprawdzanie notatek w
-// tle"). BackgroundCheckService.kt (a QtService in the process ":background") starts Brulion's
+// Android only: main() of the background check's process (docs/ANDROID.md "Checking notes in the
+// background"). BackgroundCheckService.kt (a QtService in the process ":background") starts Brulion's
 // library with the argument BackgroundCheckArgument; main() hands over to runBackgroundCheck()
 // before anything of the app exists — a QAndroidService instead of the QGuiApplication, no window,
 // no QML, no AppSettings.

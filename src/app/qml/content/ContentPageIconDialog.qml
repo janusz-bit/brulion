@@ -6,9 +6,9 @@ import Brulion
 
 // ContentPageIconDialog — the page icon (docs/UI.md "Page icon and cover"): an emoji — typed or
 // pasted into the field (any emoji: a phone's emoji keyboard too) or one of the common ones — or
-// one of the app's icons; "Usuń ikonę" removes it. A pick is written at once
+// one of the app's icons; "Remove icon" removes it. A pick is written at once
 // (PageController.setPageIcon: the page's `icon` property — Iconize's `LiBookOpen` for an app
-// icon —, one undo step, "Cofnij" in the toast) and closes the dialog.
+// icon —, one undo step, "Undo" in the toast) and closes the dialog.
 //
 //   ContentPageIconDialog { id: iconDialog; controller: page; editor: editor }   iconDialog.open()
 BDialog {

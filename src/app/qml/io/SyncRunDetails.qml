@@ -3,11 +3,11 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// SyncRunDetails — "Szczegóły" of one sync run (Workspace.sync.runDetails(number)): the result
+// SyncRunDetails — "Details" of one sync run (Workspace.sync.runDetails(number)): the result
 // with its explanation and code, how long each phase took (a bar and a list for screen
 // readers), what was sent, downloaded, merged and deleted, the requests to the server (count,
-// average, the slowest), files that failed and conflicts. "Pokaż w rejestrze" opens the event
-// log at the run's time; "Kopiuj szczegóły" copies all of it as text.
+// average, the slowest), files that failed and conflicts. "Show in the event log" opens the event
+// log at the run's time; "Copy details" copies all of it as text.
 //
 //   SyncRunDetails { number: 42; onClosed: … }   then open()
 BDialog {

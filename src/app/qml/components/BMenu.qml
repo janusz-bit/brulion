@@ -5,12 +5,12 @@ import Brulion
 
 // BMenu — popup menu (context menus, "more" buttons, overflow).
 //
-//   BIconButton { id: more; iconName: "ellipsis"; label: qsTr("Więcej"); onClicked: menu.popup(more, 0, more.height) }
+//   BIconButton { id: more; iconName: "ellipsis"; label: qsTr("More"); onClicked: menu.popup(more, 0, more.height) }
 //   BMenu {
 //       id: menu
-//       BMenuItem { text: qsTr("Zmień nazwę"); iconName: "pencil"; shortcut: "F2" }
+//       BMenuItem { text: qsTr("Rename"); iconName: "pencil"; shortcut: "F2" }
 //       BMenuSeparator {}
-//       BMenuItem { text: qsTr("Przenieś do kosza"); iconName: "trash-2"; danger: true }
+//       BMenuItem { text: qsTr("Move to trash"); iconName: "trash-2"; danger: true }
 //   }
 //
 // Keyboard: Up/Down (wrapping), Enter/Space activate, Right opens a submenu, Left/Escape
@@ -21,7 +21,7 @@ import Brulion
 // tap there goes to the status bar — a menu taller than the room left scrolls instead).
 // A submenu is a BMenu inside the menu (its `title` and `iconName` make its item); it opens beside
 // the menu with a mouse, in place of it on touch UIs (one menu at a time on a phone's width).
-//   BMenu { BMenu { title: qsTr("Kopiuj odnośnik"); iconName: "link"; BMenuItem { … } } }
+//   BMenu { BMenu { title: qsTr("Copy link"); iconName: "link"; BMenuItem { … } } }
 // `touched`: something in the open menu was pressed or scrolled — whoever moves a menu out of the
 // way of something else (the editor's, when the keyboard goes) leaves it where it is from then on.
 T.Menu {

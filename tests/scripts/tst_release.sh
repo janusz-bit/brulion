@@ -616,20 +616,30 @@ expect "after v0.3.6: unchanged since v0.3.6 (release's commit, on main too)" ha
 
 echo "--- with a news section only its news count, not the summary line under it"
 fixture news
-news_notes() { # <clone> <news line> <summary line>: rewrites the notes with a news section
-  printf '%s\n' '**Brulion {{VERSION}}** — notatki' '' '**Nowości w {{VERSION}}**' '' "$2" '' "$3" '' \
-    '**Najważniejsze**' '' '* Konspekty i dziennik' >"$1/.github/release-notes.md"
+news_notes() { # <clone> <English news> <English summary> <Polish news> <Polish summary>
+  # Rewrites the notes with an English news section and a Polish one (in <details>, as the real
+  # notes have it).
+  printf '%s\n' '**Brulion {{VERSION}}** — notes' '' "**What's new in {{VERSION}}**" '' "$2" '' "$3" '' \
+    '**Highlights**' '' '* Outlines and a journal' '' '<details>' '<summary>Po polsku</summary>' '' \
+    '**Nowości w {{VERSION}}**' '' "$4" '' "$5" '' '**Najważniejsze**' '' '* Konspekty i dziennik' '' \
+    '</details>' >"$1/.github/release-notes.md"
   git -C "$1" commit -q -am "Update release notes"
 }
-news_notes "$work" '* Zegar (0.3.6)' 'Z wersji 0.3.5: obrazy.'
+news_notes "$work" '* Clock (0.3.6)' 'From version 0.3.5: pictures.' '* Zegar (0.3.6)' 'Z wersji 0.3.5: obrazy.'
 rel "$work" patch --yes --push
-expect "a release with a news section" test "$status" = 0
-news_notes "$work" '* Zegar (0.3.6)' 'Z wersji 0.3.6: zegar. Z wersji 0.3.5: obrazy.'
+expect "a release with news sections" test "$status" = 0
+news_notes "$work" '* Clock (0.3.6)' 'From version 0.3.6: a clock. From version 0.3.5: pictures.' \
+  '* Zegar (0.3.6)' 'Z wersji 0.3.6: zegar. Z wersji 0.3.5: obrazy.'
 rel "$work" --dry-run patch
-expect "only the summary changed: still unchanged news" has ".github/release-notes.md has not changed since v0.3.6"
-news_notes "$work" '* Statusy zadań (0.3.7)' 'Z wersji 0.3.6: zegar. Z wersji 0.3.5: obrazy.'
+expect "only the summaries changed: still unchanged news" has ".github/release-notes.md has not changed since v0.3.6"
+news_notes "$work" '* Clock (0.3.6)' 'From version 0.3.6: a clock. From version 0.3.5: pictures.' \
+  '* Statusy zadań (0.3.7)' 'Z wersji 0.3.6: zegar. Z wersji 0.3.5: obrazy.'
 rel "$work" --dry-run patch
-expect "new news: no warning" lacks "has not changed"
+expect "new Polish news: no warning" lacks "has not changed"
+news_notes "$work" '* Task statuses (0.3.7)' 'From version 0.3.6: a clock. From version 0.3.5: pictures.' \
+  '* Zegar (0.3.6)' 'Z wersji 0.3.6: zegar. Z wersji 0.3.5: obrazy.'
+rel "$work" --dry-run patch
+expect "new English news: no warning" lacks "has not changed"
 
 echo "--- the documentation's list of changes needs a section for the release"
 fixture changelog
@@ -649,6 +659,23 @@ rel "$work" --dry-run patch
 expect "a section above a long list: no warning" lacks 'has no section'
 rel "$work" --dry-run 0.4.0-rc.1
 expect "a pre-release needs no section" lacks 'has no section'
+# The Polish guide in its own folder (guide/pl/): checked there too.
+mkdir -p "$work/src/app/shell/guide/pl"
+git -C "$work" mv 'src/app/shell/guide/Lista zmian.md' 'src/app/shell/guide/pl/Lista zmian.md'
+git -C "$work" commit -q -m "The Polish guide in guide/pl"
+rel "$work" --dry-run 0.3.7
+expect "guide/pl: no section for 0.3.7, pointed out" has 'src/app/shell/guide/pl/Lista zmian.md has no section "## 0.3.7"'
+rel "$work" --dry-run patch
+expect "... a section for 0.3.6 there: no warning" lacks 'has no section'
+# The English guide's changelog (guide/en/Changelog.md) next to it: checked as well.
+mkdir -p "$work/src/app/shell/guide/en"
+commit "$work" 'src/app/shell/guide/en/Changelog.md' '## 0.3.5 — October 21, 2026' "The English changelog"
+rel "$work" --dry-run patch
+expect "guide/en: no section for 0.3.6, pointed out" has 'src/app/shell/guide/en/Changelog.md has no section "## 0.3.6"'
+expect "... the Polish one has it" lacks 'Lista zmian.md has no section'
+commit "$work" 'src/app/shell/guide/en/Changelog.md' '## 0.3.6 — October 22, 2026' "List the changes of 0.3.6 in English"
+rel "$work" --dry-run patch
+expect "... both have it: no warning" lacks 'has no section'
 
 echo "--- a dirty working tree, an unreachable origin"
 fixture misc
@@ -682,7 +709,31 @@ for locale in en-US pl; do
   mkdir -p "$work/fastlane/metadata/android/$locale"
   printf 'Brulion\n' >"$work/fastlane/metadata/android/$locale/title.txt"
 done
-cat >"$work/.github/release-notes.md" <<'EOF'
+english_news() { # the English part of the notes below, up to the Polish <details>
+  cat <<'EOF'
+**Brulion {{VERSION}}** — notes
+
+**What's new in {{VERSION}}**
+
+* **A clock with `⏰`** — reminders ring.
+* Faster [[Search|searching]] in the [[Journal]] and [links](https://example.invalid/a) — diacritics optional.
+- **Tables** that sort
+  * an indented bullet does not count
+
+From version 0.3.5: a clock.
+
+**Highlights**
+
+* A journal page for every day
+
+<details>
+<summary>Po polsku</summary>
+
+EOF
+}
+{
+  english_news
+  cat <<'EOF'
 **Brulion {{VERSION}}** — notatki
 
 **Nowości w {{VERSION}}**
@@ -697,7 +748,10 @@ Z wersji 0.3.5: zegar.
 **Najważniejsze**
 
 * Dziennik na każdy dzień
+
+</details>
 EOF
+} >"$work/.github/release-notes.md"
 git -C "$work" add -A
 git -C "$work" commit -q -m "Update release notes for v0.3.6, fastlane texts"
 pl=fastlane/metadata/android/pl/changelogs/3006.txt en=fastlane/metadata/android/en-US/changelogs/3006.txt
@@ -705,7 +759,8 @@ before=$(snapshot "$work")
 rel "$work" --dry-run patch
 expect "a dry run names both changelogs of versionCode 3006" has "fastlane: $pl:"
 expect "... the English one too" has "fastlane: $en:"
-expect "... with the text it writes" has "| • Zegar z ⏰"
+expect "... with the texts it writes" has "| • Zegar z ⏰"
+expect "... in both languages" has "| • A clock with ⏰"
 expect "... saying the commit has them" has "updates CMakeLists.txt nix/package.nix to 0.3.6, writes the fastlane changelogs and commits \"Release v0.3.6\""
 expect "... and changes nothing" test "$(snapshot "$work")" = "$before"
 rel "$work" patch --yes
@@ -718,25 +773,34 @@ expected_pl='Nowości w 0.3.6:
 
 Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.3.6'
 expect "... the Polish one lists the news' leads" test "$(git -C "$work" show "main:$pl")" = "$expected_pl"
-expect "... the English one points to the release notes" test "$(git -C "$work" show "main:$en")" = "What's new in Brulion 0.3.6 (in Polish):
-https://github.com/janusz-bit/brulion/releases/tag/v0.3.6"
+expected_en="What's new in 0.3.6:
+• A clock with ⏰
+• Faster searching in the Journal and links
+• Tables
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.3.6"
+expect "... the English one lists the English news' leads" test "$(git -C "$work" show "main:$en")" = "$expected_en"
+expect "... the Polish one has no English news" test "$(git -C "$work" show "main:$pl" | grep -c clock)" = 0
+expect "... nor the English one Polish news" test "$(git -C "$work" show "main:$en" | grep -c Zegar)" = 0
 expect "... on a clean main" on_main_clean "$work"
 
 rel "$work" 0.4.0-rc.1 --yes
 pl=fastlane/metadata/android/pl/changelogs/4000.txt en=fastlane/metadata/android/en-US/changelogs/4000.txt
 expect "a pre-release writes its version's changelogs (versionCode 4000)" test "$(git -C "$work" show --format= --name-only main | grep -c changelogs/4000.txt)" = 2
-expect "... pointing to the final release" has "| https://github.com/janusz-bit/brulion/releases/tag/v0.4.0"
+expect "... pointing to the final release" has "| Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.4.0"
 main0=$(sha "$work" main)
 commit "$work" fix.txt 'poprawka do rc' "Fix for rc.2"
 rel "$work" 0.4.0-rc.2 --yes
 expect "the next pre-release with the same notes makes no commit" test "$(subject "$work" main)/$(sha "$work" main~1)" = "Fix for rc.2/$main0"
 expect "... as it says" has "CMakeLists.txt already has 0.4.0: no version commit"
 expect "... and tags the fix" same "$work" v0.4.0-rc.2 "$work" main
-# Longer news: what does not fit in 500 characters ends in "• …"; a failed run puts the
-# changelog back as it was.
+# Longer Polish news (the English ones unchanged): what does not fit in 500 characters ends in
+# "• …"; a failed run puts the changelog back as it was.
 {
+  english_news
   printf '%s\n' '**Nowości w {{VERSION}}**' ''
   for i in $(seq 1 40); do printf '* **Nowość numer %d z polskimi znakami: ąćęłńóśźż** — opis\n' "$i"; done
+  printf '\n%s\n' '</details>'
 } >"$work/.github/release-notes.md"
 git -C "$work" commit -q -am "Update release notes for v0.4.0"
 before=$(snapshot "$work")
@@ -788,6 +852,27 @@ git -C "$work" commit -q -am "Notes without bullets"
 rel "$work" --dry-run patch
 expect "notes without bullets give the version" has "| Brulion 0.4.1."
 expect "... and the link" has "| Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.4.1"
+expect "... in English too" has "| Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.4.1"
+# Only an English section, with longer news: English truncated like Polish; the Polish changelog
+# lists the English news under its own heading.
+{
+  printf '%s\n' "**What's new in {{VERSION}}**" ''
+  for i in $(seq 1 40); do printf '* **News number %d, written in English** — a description\n' "$i"; done
+} >"$work/.github/release-notes.md"
+git -C "$work" commit -q -am "Only English notes"
+rel "$work" patch --yes
+pl=fastlane/metadata/android/pl/changelogs/4001.txt en=fastlane/metadata/android/en-US/changelogs/4001.txt
+expect "English news: the release succeeds" test "$status/$(subject "$work" main)" = "0/Release v0.4.1"
+expect "... the English changelog at most 500 bytes" test "$(wc -c <"$work/$en")" -le 500
+expect "... but close to it" test "$(wc -c <"$work/$en")" -gt 400
+expect "... its heading" test "$(head -n 1 "$work/$en")" = "What's new in 0.4.1:"
+expect "... the first news" grep -qx '• News number 1, written in English' "$work/$en"
+expect "... the news that do not fit end in \"• …\"" grep -qx '• …' "$work/$en"
+expect "... not the last" test "$(grep -c 'number 40' "$work/$en")" = 0
+expect "... and the link" test "$(tail -n 1 "$work/$en")" = "Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.4.1"
+expect "without a Polish section the Polish changelog has the English news" grep -qx '• News number 1, written in English' "$work/$pl"
+expect "... under its Polish heading and link" test "$(head -n 1 "$work/$pl")/$(tail -n 1 "$work/$pl")" = "Nowości w 0.4.1:/Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.4.1"
+expect "... at most 500 bytes" test "$(wc -c <"$work/$pl")" -le 500
 
 echo
 if ((failed)); then

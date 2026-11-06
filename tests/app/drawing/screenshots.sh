@@ -4,14 +4,14 @@
 # embeds it, its picture view, a diagram of shapes, arrows, text and pictures (`shapes`), it all
 # selected with the selection's bar (`selection`), the shapes' menu (`shapemenu`), every shape
 # (`allshapes`), one turned and filled with its frame's handles (`handles`), the style panel of
-# all selected (`stylepanel`), the selection's "Więcej" (`selectionmore`), an Excalidraw
-# drawing with a frame (read-only), a new empty drawing and the menus (the colours, "Więcej", the
+# all selected (`stylepanel`), the selection's "More" (`selectionmore`), an Excalidraw
+# drawing with a frame (read-only), a new empty drawing and the menus (the colours, "More", the
 # paper, the background: light or dark), a drawing of Obsidian's Excalidraw plugin in the editor
 # (`obsidian`), opened as a page (`obsidianpage`: its picture view) and one with a frame
 # (`obsidianframe`: read-only), handwriting on a lecture's slide (`backdrop`: a backdrop, shown
 # "document dark" in the dark), its PDF's page picker (`backdroppages`) — × {desktop 1280×800,
 # phone 412×915 --touch} × {light, dark} into tests/screenshots/drawing-<shot>-<size>-<theme>.png.
-# The drawings follow the app's theme ("Jak motyw"): the dark shots show them on dark paper.
+# The drawings follow the app's theme ("Like the app"): the dark shots show them on dark paper.
 #
 # Every run gets a fresh, temporary XDG home and notebook and the fixed clock --now.
 #
@@ -127,8 +127,8 @@ for shot in "${shots[@]}"; do
       *) echo "screenshots: unknown size $size" >&2; exit 2 ;;
     esac
     for theme in "${themes[@]}"; do
-      # The colours behind one swatch and "Więcej" exist on phones, the paper's and the background's
-      # buttons on wide windows (on phones the background is in "Więcej").
+      # The colours behind one swatch and "More" exist on phones, the paper's and the background's
+      # buttons on wide windows (on phones the background is in "More").
       [[ ( "$shot" == style || "$shot" == more ) && "$size" == desktop ]] && continue
       [[ ( "$shot" == paper || "$shot" == theme ) && "$size" != desktop ]] && continue
       file="$out/drawing-${shot}-${size}-${theme}${suffix}.png"

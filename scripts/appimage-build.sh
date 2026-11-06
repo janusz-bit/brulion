@@ -92,7 +92,7 @@ install_deps() {
     libxcb-keysyms1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-shape0 libxcb-shm0
     libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xkb1 libxkbcommon0 libxkbcommon-x11-0
     libsm6 libice6 libwayland-client0 libwayland-cursor0 libwayland-egl1 libegl1 libgl1
-    # printing (Qt's CUPS print support plugin: "Drukuj…" lists the system's printers)
+    # printing (Qt's CUPS print support plugin: "Print…" lists the system's printers)
     libcups2
     # spell checking: Hunspell (bundled by linuxdeploy; CMake finds it through pkg-config, which
     # minimal containers lack) and the dictionaries copied into the AppDir
@@ -420,7 +420,7 @@ done
 for f in pl_PL.aff pl_PL.dic en_US.aff en_US.dic; do
   [[ -s $check_dir/squashfs-root/usr/share/hunspell/$f ]] || die "usr/share/hunspell/$f missing from the AppImage (spell checking)"
 done
-# "Otwórz za pomocą → Inny program → Brulion": the desktop entry AppImage integration tools (Gear
+# "Open with → Other application → Brulion": the desktop entry AppImage integration tools (Gear
 # Lever, AppImageLauncher, appimaged) install keeps --open %F, declares no file types (a desktop
 # without a default program would make Brulion the default for every text file: docs/NIXOS.md) and
 # has StartupNotify (the launcher's activation token: the running Brulion comes to the front).

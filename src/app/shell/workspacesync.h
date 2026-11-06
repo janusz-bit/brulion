@@ -21,7 +21,7 @@
 //
 // QML values (all plain data):
 //   state        "disabled" | "idle" | "syncing" | "error" | "offline" (not set up: "disabled")
-//   statusText   one translated line for the status bar ("Zsynchronizowano o 10:32", …)
+//   statusText   one translated line for the status bar ("Synced today 10:32", …)
 //   lastReport   { uploaded, downloaded, merged, deletedLocal, deletedRemote, foldersCreated,
 //                  foldersDeleted, foldersMoved, foldersMovedHere, filesMoved, filesMovedHere,
 //                  conflicts, conflictPaths,
@@ -47,7 +47,7 @@
 //                [{ number, started, startedText, durationMs, durationText, trigger, triggerText,
 //                   outcome, outcomeText, tone ("success" | "warning" | "danger" | "info"),
 //                   summary, errorCode, errorText, needsUser, repeats, quiet }]
-//   runDetails(n) one run for the "Szczegóły" dialog (phases, requests, errors, conflicts,
+//   runDetails(n) one run for the "Details" dialog (phases, requests, errors, conflicts,
 //                counts with the folders created, deleted and moved)
 #pragma once
 
@@ -144,7 +144,7 @@ class WorkspaceSync : public QObject {
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusChanged FINAL)
     /// Finish of the last successful sync, "YYYY-MM-DDTHH:mm:ss" ("" before the first).
     Q_PROPERTY(QString lastSync READ lastSync NOTIFY statusChanged FINAL)
-    /// Human form of lastSync ("dziś 10:32").
+    /// Human form of lastSync ("today 10:32").
     Q_PROPERTY(QString lastSyncText READ lastSyncText NOTIFY statusChanged FINAL)
     /// Translated reason of the last failure ("" after a clean run) and its code ("auth", …).
     Q_PROPERTY(QString lastError READ lastError NOTIFY statusChanged FINAL)
@@ -259,7 +259,7 @@ public:
     bool retrying() const;
     sync::SyncHistory *syncHistory() const { return m_history.get(); }
     /// The newest `max` runs as one line each for the exported log's header
-    /// ("#43 2026-10-18 14:03 · zaplanowana · bez zmian · 1,1 s").
+    /// ("#43 2026-10-18 14:03 · scheduled · No changes · 1.1 s").
     QStringList historyLines(int max = 5) const;
     /// Translated texts (also used by the tests): a trigger, a phase, a per-file error code.
     QString triggerText(const QString &trigger) const;
@@ -310,13 +310,13 @@ public:
     /// [{ path, title, code, text (translated), message (technical) }], conflicts [{ path,
     /// title }], fromMs / toMs (the run's time window for the event log); {} when unknown.
     Q_INVOKABLE QVariantMap runDetails(int number) const;
-    /// The same as plain text ("Kopiuj szczegóły"): translated labels, technical values.
+    /// The same as plain text ("Copy details"): translated labels, technical values.
     Q_INVOKABLE QString runDetailsText(int number) const;
-    /// "Foldery: 2 nowe, 1 usunięty, 1 przeniesiony na serwerze, 1 przeniesiony tutaj" (the
+    /// "Folders: 2 new, 1 deleted, 1 moved on the server, 1 moved here" (the
     /// counts > 0 only; "" when none). `moved`: renamed here, moved on the server; `movedHere`:
     /// renamed on the server (or another device), renamed here too.
     Q_INVOKABLE QString folderCountsText(int created, int deleted, int moved, int movedHere = 0) const;
-    /// "Pliki: 1 przeniesiony na serwerze, 2 przeniesione tutaj" — the pages and files renamed or
+    /// "Files: 1 moved on the server, 2 moved here" — the pages and files renamed or
     /// moved (the counts > 0 only; "" when none).
     Q_INVOKABLE QString fileMovesText(int moved, int movedHere) const;
     /// Forget the kept runs.

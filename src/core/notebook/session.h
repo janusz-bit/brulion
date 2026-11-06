@@ -40,6 +40,14 @@ namespace brulion::notebook {
 /// "<appDataDir>/vaults/<Vault::idForPath(vaultRoot)>" — shared by the app and brulion-cli.
 QString deviceStatePath(const QString &appDataDir, const QString &vaultRoot);
 
+/// The folder name (in the app's data folder) of the documentation notebook the app writes in
+/// `language`: "Dokumentacja Brulionu" for "pl", "Brulion Documentation" for anything else.
+QString docsNotebookFolder(QStringView language);
+/// The language ("en" | "pl") of the documentation notebook at `path` — either language's folder
+/// in `appDataDir`, whatever the UI language is now —, "" when `path` is not one of them. The app
+/// never starts in it, quick capture never writes to it (brulion-cli neither).
+QString docsNotebookLanguage(const QString &appDataDir, const QString &path);
+
 /// FNV-1a 64 of a file's bytes as 16 hex digits: the `hash` of `page read`, `--expect-hash`.
 QString contentHash(const QByteArray &bytes);
 /// Text of a note's bytes as the vault reads it (UTF-8, a leading BOM dropped).

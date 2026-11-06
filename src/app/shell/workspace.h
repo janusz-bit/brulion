@@ -32,7 +32,7 @@
 //   journals                           journalPath(date), ensureJournal(date) (creates the daily
 //                                      note from the journal template), setHabitCheck(name, date,
 //                                      state) / addHabit (habits), quickCapture(text)
-//                                      ("Kupić mleko jutro o 18" -> a task with ⏰ in today's
+//                                      ("Buy milk tomorrow at 6pm" -> a task with ⏰ in today's
 //                                      journal, notebook/capture.h), captureToJournal(text)
 //   device-local state                 favorites, recentPages, foldState(path) (LocalStore)
 //
@@ -135,7 +135,7 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged FINAL)
     /// Number of Markdown pages.
     Q_PROPERTY(int pageCount READ pageCount NOTIFY revisionChanged FINAL)
-    /// Pages without the daily notes and conflict copies (the sidebar's "Strony" count).
+    /// Pages without the daily notes and conflict copies (the sidebar's "Pages" count).
     Q_PROPERTY(int pagesWithoutJournals READ pagesWithoutJournals NOTIFY indexChanged FINAL)
     /// Vault configuration (see vaultConfig()).
     Q_PROPERTY(QVariantMap config READ vaultConfig NOTIFY configChanged FINAL)
@@ -144,10 +144,10 @@ class Workspace : public EditorHost, public QueryHost {
     /// [{ path, title }] recently opened pages, newest first (at most 20).
     Q_PROPERTY(QVariantList recentPages READ recentPages NOTIFY recentPagesChanged FINAL)
     /// Pictures from the internet in notes are shown without asking (AppSettings'
-    /// webPicturesShown; workspacepictures.cpp). Off: each waits for "Pokaż".
+    /// webPicturesShown; workspacepictures.cpp). Off: each waits for "Show".
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
-    /// Task status changes are logged in the task's `:LOGBOOK:` and "W toku" starts / stops its
+    /// Task status changes are logged in the task's `:LOGBOOK:` and "In progress" starts / stops its
     /// clock (AppSettings' taskStatusHistory; docs/SYNTAX.md §5). Off by default.
     Q_PROPERTY(bool taskStatusHistory READ taskStatusHistory WRITE setTaskStatusHistory NOTIFY taskStatusHistoryChanged
                        FINAL)
@@ -292,7 +292,7 @@ public:
     const VaultIndex *taskIndex() const override;
     bool taskStatusHistory() const override { return m_taskStatusHistory; }
     void setTaskStatusHistory(bool on);
-    /// Stop every running task clock (the palette's "Zatrzymaj licznik czasu"); how many stopped.
+    /// Stop every running task clock (the palette's "Stop task timer"); how many stopped.
     Q_INVOKABLE int stopTaskClocks();
     /// The cache's folder (tests: a temporary one; "" — the default).
     void setWebPictureCacheDir(const QString &dir);
@@ -344,8 +344,8 @@ public:
     Q_INVOKABLE bool openInOtherApp(const QString &path) override;
     /// openInOtherApp() would hand this file over (the read-only view's and the top bar's button).
     Q_INVOKABLE bool canOpenInOtherApp(const QString &path) const;
-    /// "Rysuj na tej stronie": the drawing DrawingBackdrops prepared (`prepared`: {svg, path, page,
-    /// name, error}) stored as "<name> s. <page>.svg" (EditorHost::drawingFileNameOn; a free name)
+    /// "Draw on this page": the drawing DrawingBackdrops prepared (`prepared`: {svg, path, page,
+    /// name, error}) stored as "<name> p. <page>.svg" (EditorHost::drawingFileNameOn; a free name)
     /// and embedded (`![[<link target>]]`) right after the block of `fromNote` that embeds the PDF
     /// (around line `fromLine`; notebook::insertBlockAfterEmbed, written with writeIfUnchanged, three
     /// tries), or — no `fromNote`, or it is gone — as a block of today's journal (captureToJournal).
@@ -355,9 +355,9 @@ public:
                                                 const QString &fromNote, int fromLine);
     /// The drawings `note` embeds whose backdrop is page `page` of `pdfPath` (core
     /// drawing::backdropSource of each embedded drawing file, at most 50 read): [{path, name}] —
-    /// "Rysuj na tej stronie" offers to open one instead of making a second.
+    /// "Draw on this page" offers to open one instead of making a second.
     Q_INVOKABLE QVariantList drawingsOnPdfPage(const QString &pdfPath, int page, const QString &note) const;
-    /// The note a drawing belongs to (the drawing editor's "Poprzednia / Następna strona PDF",
+    /// The note a drawing belongs to (the drawing editor's "Previous / Next PDF page",
     /// docs/UI.md "Drawing editor" → Backdrop): `fromNote` (the note it was opened from) when that
     /// links to `drawingPath`, else the first note that does (backlinks(): journals newest first,
     /// then by path); "" none.
@@ -588,7 +588,7 @@ public:
     /// nothing was written).
     QString appendJournalBlocks(const QString &blocks);
     /// Quick capture: like captureToJournal(), but a date in the first line makes it a task with
-    /// a reminder (with a time: "Kupić mleko jutro o 18" -> "- [ ] Kupić mleko ⏰ 2026-10-15
+    /// a reminder (with a time: "Buy milk tomorrow at 6pm" -> "- [ ] Buy milk ⏰ 2026-10-15
     /// 18:00") or a due date (without one: "📅 2026-10-16"); see notebook/capture.h.
     /// Returns the journal's path ("" when nothing was written).
     Q_INVOKABLE QString quickCapture(const QString &text);
@@ -596,7 +596,7 @@ public:
     /// the date), date ("YYYY-MM-DD" or ""), time ("HH:mm" or ""), when (human: "jutro 18:00"),
     /// line (the first line written) } — for a live preview in the capture dialog.
     Q_INVOKABLE QVariantMap quickCapturePreview(const QString &text) const;
-    /// A habit's day (docs/SYNTAX.md §5 "Nawyki / Habits", notebook::setHabitCheck()): habit
+    /// A habit's day (docs/SYNTAX.md §5 "Habits", notebook::setHabitCheck()): habit
     /// `name` in the daily note of `date` ("YYYY-MM-DD") set to `state` ("done" | "skipped" |
     /// "open"): the day's check ticked, or a new line "- [x] Name #nawyk ✅ today" next to the
     /// day's other checks; the note is created from the journal template only when something is
@@ -606,8 +606,8 @@ public:
     Q_INVOKABLE QVariantMap setHabitCheck(const QString &name, const QString &date, const QString &state,
                                           bool pageLink = false);
     /// A new habit: "- Name\n  habit:: schedule" appended to `page` (a path; "" = the page
-    /// "Nawyki" / "Habits" where new pages go, created when missing). Returns the page's path ("" on
-    /// failure: an empty name, a write error).
+    /// "Habits" (Polish notes: "Nawyki") where new pages go, created when missing). Returns the
+    /// page's path ("" on failure: an empty name, a write error).
     Q_INVOKABLE QString addHabit(const QString &name, const QString &schedule, const QString &page = QString());
     /// Daily notes, newest first: [{ date, path, title }] from `offset`, at most `limit`.
     Q_INVOKABLE QVariantList journals(int offset = 0, int limit = 50) const;
@@ -620,13 +620,14 @@ public:
     /// "month", `date` any day of it, "YYYY-MM-DD"): { period, start, end ("YYYY-MM-DD"), week (the
     /// ISO week; 0 for a month), path (its existing file, else where it will be created — never
     /// written here: the editor creates it with its first change, from `template`), exists, label
-    /// ("Tydzień 45 (2–8 listopada 2026)", "Listopad 2026"), template (the period's template when
+    /// ("Week 45 (Nov 2–8, 2026)", "November 2026"), template (the period's template when
     /// the file is there, else "") }; {} for an unknown period or a bad date.
     Q_INVOKABLE QVariantMap periodicNote(const QString &period, const QString &date) const;
     /// periodicNote() of the note at `path` when it is a weekly or monthly note, else {}.
     Q_INVOKABLE QVariantMap periodicNoteOf(const QString &path) const;
-    /// The start "YYYY-MM-DD" of the week / month a typed phrase names ("ten tydzień", "2026-W45",
-    /// "listopad", "w przyszłym miesiącu": periodic::parsePeriodPhrase), "" when it names none.
+    /// The start "YYYY-MM-DD" of the week / month a typed phrase names ("this week", "2026-W45",
+    /// "November", "next month", or Polish "ten tydzień", "listopad", "w przyszłym miesiącu":
+    /// periodic::parsePeriodPhrase), "" when it names none.
     Q_INVOKABLE QString parsePeriod(const QString &period, const QString &text) const;
     /// The starts "YYYY-MM-DD" of the weeks / months overlapping [from, to] that have a note
     /// (the calendar's marks on week numbers and the month's title).

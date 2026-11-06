@@ -1,4 +1,4 @@
-// Block references grouped by page — the backlinks of a page (PageView's "Odnośniki", the side
+// Block references grouped by page — the backlinks of a page (PageView's "Backlinks", the side
 // panel: links, block references and tags naming the page) and the blocks carrying a tag
 // (TagsView's tag detail).
 //
@@ -14,7 +14,7 @@
 //   ref rows   path, line (first line of the block, for opening it there), html (the block's own
 //              text rendered by the core InlineRenderer — escaped, links page:/tag:/block:/ext:,
 //              the task checkbox as task:toggle), text (plain, one line), blockId, breadcrumb
-//              ("Projekt › Zadania": the parent blocks), taskStatus, depth (0)
+//              ("Project › Tasks": the parent blocks), taskStatus, depth (0)
 // Groups listed in `collapsedPaths` keep their header (with the count) and hide their refs.
 // Unlinked references (mode "unlinked") are plain-text mentions: html is the escaped excerpt
 // with the mention highlighted; linkMention(row) turns it into a [[link]] in that file (through
@@ -44,7 +44,7 @@ class GroupedRefsModel : public WorkspaceListModel {
     Q_PROPERTY(QVariantMap palette READ palette WRITE setPalette NOTIFY paletteChanged FINAL)
     /// "pl" (default) | "en": dates in chips.
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
-    /// "YYYY-MM-DD" for "dziś"/"jutro" and overdue chips; "" = the workspace clock.
+    /// "YYYY-MM-DD" for "today"/"tomorrow" and overdue chips; "" = the workspace clock.
     Q_PROPERTY(QString today READ today WRITE setToday NOTIFY todayChanged FINAL)
     /// Paths of the groups shown collapsed (header only).
     Q_PROPERTY(QStringList collapsedPaths READ collapsedPaths WRITE setCollapsedPaths NOTIFY collapsedPathsChanged FINAL)

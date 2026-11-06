@@ -35,7 +35,7 @@ EM_JS(int, brulion_open_blob, (const char *data, int size, const char *mime, con
     return 1;
 });
 
-// "Drukuj…" (ExportController::print): the HTML document export in a hidden frame and its print().
+// "Print…" (ExportController::print): the HTML document export in a hidden frame and its print().
 // The frame is sandboxed without scripts (the document has none; same origin only so that this
 // page may call its print()); the previous one is removed first.
 EM_JS(void, brulion_print_html, (const char *data, int size), {

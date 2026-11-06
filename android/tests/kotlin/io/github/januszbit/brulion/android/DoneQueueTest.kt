@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 
-/** The queue of "Zrobione" taps C++ takes (DoneQueue.kt; parsed by androidDoneRequests in C++). */
+/** The queue of "Done" taps C++ takes (DoneQueue.kt; parsed by androidDoneRequests in C++). */
 class DoneQueueTest {
   private val reminder =
     Reminder(

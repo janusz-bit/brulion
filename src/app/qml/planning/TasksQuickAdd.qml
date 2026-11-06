@@ -3,8 +3,8 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// TasksQuickAdd — the "add a task" field of TasksView with natural-language dates: "Zadzwonić do
-// Ani jutro o 9 #praca" becomes "- [ ] Zadzwonić do Ani #praca ⏰ 2026-10-16 09:00" (a time gives a
+// TasksQuickAdd — the "add a task" field of TasksView with natural-language dates: "Call Ann
+// tomorrow at 9 #work" becomes "- [ ] Call Ann #work ⏰ 2026-10-16 09:00" (a time gives a
 // reminder, a day without one a 📅 due date — like quick capture). A live preview below the
 // field shows what will be written and where (today's journal). Enter adds; Escape clears.
 //

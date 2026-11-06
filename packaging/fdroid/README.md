@@ -14,4 +14,4 @@ the modules the app uses) and OpenSSL 3.5 (srclib `OpenSSL`) are compiled with t
 (KDAB). Summary, description, icon and screenshots come from `fastlane/metadata/android/`.
 
 Details, local verification in F-Droid's build server container, the signing decision and the
-texts for the submission: [docs/ANDROID.md](../../docs/ANDROID.md), "Budowanie ze źródeł (F-Droid)".
+texts for the submission: [docs/ANDROID.md](../../docs/ANDROID.md), "Building from source (F-Droid)".

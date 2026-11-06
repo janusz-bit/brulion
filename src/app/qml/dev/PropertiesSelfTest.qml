@@ -7,23 +7,23 @@ import Brulion
 // PropertiesSelfTest — the page properties panel with real input, in the editor playground
 // (`brulion --editor --editor-script propstest`; ctest tst_editor_qml_properties, desktop, and
 // tst_editor_qml_properties_touch, a phone with --touch): the folded panel's preview, its header
-// tapped open (and staying open through edits: the delegate is not made again); a text value
-// typed with real keys ("Zażółć gęślą jaźń") — only that line of the file changes, its comment
-// kept —; a number typed "3,5" (written 3.5), "abc" refused with the field's error and the file
-// untouched, Ctrl+Z; the checkbox toggled; a date from the dialog's natural language ("jutro");
-// a list item added with Enter and taken away with Backspace in the empty field, a chip's × (on a
-// phone the chip's menu — a tap on a plain item, a press and hold, never the row's menu —; the
-// "+" never alone at the start of a line, the list's width swept px by px);
-// renaming through the row's menu (an existing name refused); a type changed in the menu's "Typ"
-// (text → list); a removal undone from the toast's "Cofnij"; a property added from the key
+// tapped open (and staying open through edits: the delegate is not made again); a text value typed
+// with real keys ("Zażółć gęślą jaźń", the Polish pangram) — only that line of the file changes,
+// its comment kept —; a number typed "3,5" (written 3.5), "abc" refused with the field's error and
+// the file untouched, Ctrl+Z; the checkbox toggled; a date from the dialog's natural language
+// ("jutro", tomorrow); a list item added with Enter and taken away with Backspace in the empty
+// field, a chip's × (on a phone the chip's menu — a tap on a plain item, a press and hold, never
+// the row's menu —; the "+" never alone at the start of a line, the list's width swept px by px);
+// renaming through the row's menu (an existing name refused); a type changed in the menu's "Type"
+// (text → list); a removal undone from the toast's "Undo"; a property added from the key
 // suggestions (another page's key) with its value typed at once — a key the page has is refused,
 // its value kept —; a field keeps what is typed while the notebook changes, and writes it before
-// another page is shown; on a page without properties "Dodaj właściwość" (Ctrl+;) — the draft
-// above the blocks writes the frontmatter, also when only a hidden note-mode frontmatter and
-// `key::` lines are there; values opened and left unchanged keep their form (`|` text, `1.50`);
-// a Logseq text becomes a list of links; an alias no link can use is refused under the field and
-// in a toast; a map's row menu offers "Edytuj jako tekst". The key stays beside the value (phones
-// too) — a narrow window, or a key too long for its column ("ostatnia aktualizacja" on a phone),
+// another page is shown; on a page without properties "Add property" (Ctrl+;) — the draft above the
+// blocks writes the frontmatter, also when only a hidden note-mode frontmatter and `key::` lines
+// are there; values opened and left unchanged keep their form (`|` text, `1.50`); a Logseq text
+// becomes a list of links; an alias no link can use is refused under the field and in a toast; a
+// map's row menu offers "Edit as text". The key stays beside the value (phones too) — a narrow
+// window, or a key too long for its column ("ostatnia aktualizacja", last update, on a phone),
 // stacks it over the value, so no key is cut —, its whole cell a tap area, and on a phone every
 // control and tap area is a 44 px target.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
@@ -105,7 +105,7 @@ QtObject {
     }
     function typeMenuOf(m: PropertyMenu): T.Menu { return m.typeMenu }
     function menuItemIn(m: T.Menu, name: string): T.MenuItem { return window.menuItemNamed(m, name) }
-    /// The "Typ" item of the row menu `m`.
+    /// The "Type" item of the row menu `m`.
     function typeItem(m: T.Menu): T.MenuItem {
         for (let i = 0; i < m.count; ++i) {
             const it = m.itemAt(i) as T.MenuItem
@@ -475,8 +475,8 @@ QtObject {
         if (window.at()) window.waitStep(Js.indexOf(text(), "autorzy:\n  - \"[[Jan Kowalski]]\"\n  - Anna\n---") > 0, "Backspace in the empty field removes the last item")
         if (window.touchRun) {
             // Touch UIs: no ×; a tap on a chip that opens nothing opens its menu, a press and
-            // hold on any chip too — not the row's menu —, and "Usuń" there removes it (a toast
-            // with "Cofnij").
+            // hold on any chip too — not the row's menu —, and "Remove" there removes it (a toast
+            // with "Undo").
             if (window.at()) {
                 key(inRow("autorzy", "propertyListField"), Qt.Key_Escape, 0)
                 window.tapItem(inRow("autorzy", "propertyChip_1"))
@@ -554,7 +554,7 @@ QtObject {
         if (window.at() && !window.waiting(Js.indexOf(text(), "status: # wybrany\n  - Zażółć gęślą jaźń\n") > 0))
             window.checkWait("the text becomes a list: " + splitText(text(), "---")[1])
         if (window.at()) page.undo()
-        // ---- remove, "Cofnij" in the toast ----------------------------------------------------------------
+        // ---- remove, "Undo" in the toast -----------------------------------------------------------------
         openMenu("gotowe")
         choose("propertyRemove")
         if (window.at()) window.waitStep(line("gotowe:") === "", "“Usuń” removes the property")

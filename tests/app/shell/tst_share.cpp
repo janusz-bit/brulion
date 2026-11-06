@@ -1,4 +1,4 @@
-// "Udostępnij → Brulion" on AppController (src/app/shell/appshare.cpp, docs/ANDROID.md): what the
+// "Share → Brulion" on AppController (src/app/shell/appshare.cpp, docs/ANDROID.md): what the
 // share dialog shows (pendingShare), saving text to today's journal without date parsing or to a
 // new page, files to new pages byte for byte ("Lista zakupów 2" when taken, never over a page
 // whose name differs only in letter case) or one journal block each, refused files listed, the

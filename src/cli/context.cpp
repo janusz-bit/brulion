@@ -7,6 +7,7 @@
 #include "markdown/journal.h"
 #include "notebook/journals.h"
 #include "notebook/pages.h"
+#include "notebook/session.h"
 #include "profile.h" // the app's settings file (BRULION_PROFILE)
 #include "text/text.h"
 #include "util/paths.h"
@@ -105,15 +106,17 @@ std::optional<Error> Context::resolveVault()
     } else {
         path = settingsValue(u"vaults/current"_s);
         m_source = u"settings"_s;
-        // The app's documentation ("Dokumentacja Brulionu") is for reading, never where quick
-        // capture, the journal or reminders go: while it is open, or the app was quit in it, the
-        // user's notebook is the last other one — where the app itself starts (AppController).
-        const QString docs = QDir::cleanPath(appDataDir() + u"/Dokumentacja Brulionu"_s);
-        if (!path.trimmed().isEmpty() && QDir::cleanPath(path.trimmed()) == docs) {
+        // The app's documentation ("Brulion Documentation", in Polish "Dokumentacja Brulionu") is
+        // for reading, never where quick capture, the journal or reminders go: while it is open, or
+        // the app was quit in it, the user's notebook is the last other one — where the app itself
+        // starts (AppController).
+        const QString data = appDataDir();
+        const auto isDocs = [&data](const QString &p) { return !notebook::docsNotebookLanguage(data, p).isEmpty(); };
+        if (isDocs(path)) {
             path.clear();
             for (const QVariant &recent : appSettingsValue(u"vaults/recent"_s).toList()) {
                 const QString candidate = recent.toMap().value(u"path"_s).toString();
-                if (!candidate.trimmed().isEmpty() && QDir::cleanPath(candidate.trimmed()) != docs) {
+                if (!candidate.trimmed().isEmpty() && !isDocs(candidate)) {
                     path = candidate;
                     break;
                 }

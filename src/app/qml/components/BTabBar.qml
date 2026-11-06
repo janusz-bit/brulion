@@ -7,8 +7,8 @@ import Brulion
 //
 //   BTabBar {
 //       id: tabs
-//       BTabButton { text: qsTr("Odnośniki") }
-//       BTabButton { text: qsTr("Spis treści") }
+//       BTabButton { text: qsTr("Backlinks") }
+//       BTabButton { text: qsTr("Contents") }
 //   }
 //   StackLayout { currentIndex: tabs.currentIndex; ... }
 //

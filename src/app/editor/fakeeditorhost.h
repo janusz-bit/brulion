@@ -104,7 +104,7 @@ public:
     /// The real index (task dependencies and clocks, as the shell's Workspace).
     const VaultIndex *taskIndex() const override { return &currentIndex(); }
     bool taskStatusHistory() const override { return m_taskStatusHistory; }
-    /// Tests and the playground: the "Historia statusów" setting.
+    /// Tests and the playground: the "Log task status changes" setting.
     Q_INVOKABLE void setTaskStatusHistory(bool on) { m_taskStatusHistory = on; }
     void navigate(const QVariantMap &route, bool newPane = false) override;
     void openUrl(const QUrl &url) override;

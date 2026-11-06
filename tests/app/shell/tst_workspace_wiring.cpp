@@ -980,7 +980,7 @@ private Q_SLOTS:
 
     void completeAWidgetsProvisionalReminder()
     {
-        // "Zrobione" on the reminder the widget's quick add armed while Brulion was closed: it has
+        // "Done" on the reminder the widget's quick add armed while Brulion was closed: it has
         // no occurrence id of the app's, so the occurrence is found by its place in the note.
         QFETCH(QString, note);
         QFETCH(int, line);

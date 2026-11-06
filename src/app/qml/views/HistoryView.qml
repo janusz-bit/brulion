@@ -8,7 +8,7 @@ import Brulion
 // device (HistoryModel: the text before each change, newest first, grouped by day, with what
 // replaced it — your edit, another program, sync, an import — and the size) and, for the chosen
 // version, a diff against the page as it is now (BDiffView: side by side on wide windows) with
-// "Przywróć tę wersję" (confirmed; the current text becomes a version itself, so a restore can be
+// "Restore this version" (confirmed; the current text becomes a version itself, so a restore can be
 // undone the same way). Wide windows show the list and the diff next to each other, phones one
 // after the other (back returns to the list). A deleted page still has its versions: restoring
 // one brings the page back.
@@ -28,7 +28,7 @@ FocusScope {
     property int selected: -1
     /// Phones: the diff is shown instead of the list.
     property bool showingDiff: false
-    /// When the version shown was saved ("dziś 09:12"; "" for none).
+    /// When the version shown was saved ("today 09:12"; "" for none).
     readonly property string versionWhen: selected >= 0 && history.count > selected
                                           ? AppController.routeText(history.get(selected), "when") : ""
     readonly property string versionText: selected >= 0 && history.count > selected ? history.textAt(selected) : ""

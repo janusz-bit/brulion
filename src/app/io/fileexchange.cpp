@@ -40,7 +40,7 @@ QString safeSegment(QString name)
 }
 
 /// `relative` itself, or "<name> 2.<ext>", "<name> 3.<ext>"… when a picked file of that name
-/// (in any letter case) came already: two picked "Notatka.md" from different folders stay two.
+/// (in any letter case) came already: two picked "Note.md" from different folders stay two.
 QString uniqueRelative(QSet<QString> &used, const QString &relative)
 {
     if (!used.contains(relative.toCaseFolded())) {
@@ -240,7 +240,7 @@ QUrl urlFromUserInput(const QString &pathOrUrl)
 namespace {
 
 /// The name a content URI carries in itself: the end of its last decoded segment
-/// ("primary:Download/Notatki" -> "Notatki"). Opaque ids give their number ("msf:1000012345" ->
+/// ("primary:Download/Notes" -> "Notes"). Opaque ids give their number ("msf:1000012345" ->
 /// "1000012345") — a placeholder until the provider names the document.
 QString nameInUri(const QUrl &url)
 {
@@ -372,7 +372,7 @@ FileGatherer::Listing FileGatherer::list(const QList<QUrl> &urls, const GatherLi
     for (Pending &p : out.pending)
         p.relative = uniqueRelative(used, p.relative);
     if (urls.size() == 1 && isDocumentUrl(urls.first()) && !out.pending.isEmpty()) {
-        // The document's display name ("Eksport Notion.zip"), not the id in its URI.
+        // The document's display name ("Notion export.zip"), not the id in its URI.
         const QString &first = out.pending.first().relative;
         out.sourceName = out.pending.size() == 1 ? first : first.section(u'/', 0, 0);
     }
@@ -398,7 +398,7 @@ void FileGatherer::collectLocal(const QUrl &url, const GatherLimits &limits, Lis
         QString relative;
     };
     // A symlinked file is read only when it stays inside the picked folder: a downloaded "vault"
-    // with "Notatka.md -> ~/.ssh/id_rsa" must not copy the key into the notebook (and on to the
+    // with "Note.md -> ~/.ssh/id_rsa" must not copy the key into the notebook (and on to the
     // sync server).
     const QString canonicalRoot = rootInfo.canonicalFilePath();
     const auto insideRoot = [&canonicalRoot](const QFileInfo &entry) {

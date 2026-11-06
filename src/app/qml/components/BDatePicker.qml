@@ -13,10 +13,10 @@ import Brulion
 //       onPicked: (value) => console.log(value)          // "2026-10-15 09:00"
 //   }
 //
-// * Natural-language field (showNaturalInput): "jutro o 9", "w piątek 18:00", "next monday"
-//   (Polish + English via DatesHelper.parseNatural) with a live preview "→ czw, 15 paź
-//   09:00"; Enter (the keyboard's action key: Done) applies it, and with applyTypedOnFocusLoss
-//   also leaving the field or hiding the touch keyboard.
+// * Natural-language field (showNaturalInput): "jutro o 9", "w piątek 18:00" (Polish: tomorrow
+//   at 9, on Friday 18:00), "next monday" (Polish + English via DatesHelper.parseNatural) with
+//   a live preview "→ Thu, Oct 15 09:00"; Enter (the keyboard's action key: Done) applies it,
+//   and with applyTypedOnFocusLoss also leaving the field or hiding the touch keyboard.
 // * Month grid: names from DatesHelper (UI locale), week starts on `weekStart` (default
 //   DatesHelper.weekStart, Monday), today marked with a red ring, selected day filled,
 //   days of other months faint, `marks` (date -> kinds) as coloured dots: due, overdue,
@@ -229,7 +229,7 @@ T.Control {
                 clearable: true
                 placeholderText: qsTr("Type a date, e.g. tomorrow 9:00")
                 accessibleName: qsTr("Date in your own words")
-                // No sentence: Gboard would capitalise its first letter ("Za 2 minuty").
+                // No sentence: Gboard would capitalise its first letter ("Za 2 minuty", in 2 minutes).
                 inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                 onAccepted: control.applyNatural()
                 // Leaving the field (editingFinished without focus: not Enter, which accepted()
@@ -255,7 +255,7 @@ T.Control {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - (naturalResult.map.ok ? 0 : 20) - (enterHint.visible ? enterHint.width + 6 : 0)
-                        // "→ czw, 15 paź 09:00 · jutro" (relative word only for yesterday…tomorrow)
+                        // "→ Thu, Oct 15 09:00 · tomorrow" (relative word only for yesterday…tomorrow)
                         text: naturalResult.map.ok ? "→ " + naturalResult.map.display
                                                    + (naturalResult.map.relative ? "  ·  " + naturalResult.map.relativeWord : "")
                                                  : qsTr("No date recognised")

@@ -9,7 +9,7 @@ import Brulion
 // "/" in it stays in the folder ("TCP/IP" -> "TCP IP"). renamed(path) follows a successful rename.
 //
 //   ContentRenameDialog { id: renameDialog; onRenamed: (path) => … }
-//   renameDialog.openFor(page.path, "Nowy tytuł", Workspace.renameImpact(page.path, "Nowy tytuł", false))
+//   renameDialog.openFor(page.path, "New title", Workspace.renameImpact(page.path, "New title", false))
 BDialog {
     id: dialog
 

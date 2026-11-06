@@ -1,13 +1,13 @@
 // Sync settings forms (the Nextcloud and Syncthing parts of SyncView and of the settings'
-// "Synchronizacja" section). Both edit drafts and write AppSettings only on save(), so typing a
+// "Sync" section). Both edit drafts and write AppSettings only on save(), so typing a
 // server address never starts syncs halfway; the shell's integration (workspaceintegration.cpp)
 // applies saved settings to Workspace.sync.
 //
 // NextcloudSetup (QML: `NextcloudSetup { settings: AppSettings }`)
 //   drafts      enabled, url, user, password ("" keeps the stored app password), folder (the
-//               notebook's; for one without: "Notatki" for a new account, else the notebook's
-//               name — AppSettings::proposedNextcloudFolder()), interval (minutes, 0 = after
-//               changes only), deviceName (names conflict copies)
+//               notebook's; for one without: "Notatki" (AppSettings::NewAccountFolder) for a new
+//               account, else the notebook's name — AppSettings::proposedNextcloudFolder()),
+//               interval (minutes, 0 = after changes only), deviceName (names conflict copies)
 //   validation  urlError / userError / passwordError / folderError (shown once `showErrors`;
 //               a folder another notebook on this device syncs with at once, and saving is
 //               refused while sync is on), urlWarning (plain http), davUrl (the WebDAV address the

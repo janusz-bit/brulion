@@ -44,7 +44,7 @@ class ChartView : public QQuickPaintedItem {
     Q_PROPERTY(QString message READ message NOTIFY resultChanged FINAL)
     /// The text alternative ("" when nothing is drawn).
     Q_PROPERTY(QString description READ description NOTIFY resultChanged FINAL)
-    /// The chart's type in words ("Wykres słupkowy").
+    /// The chart's type in words ("Bar chart").
     Q_PROPERTY(QString typeName READ typeName NOTIFY resultChanged FINAL)
 
 public:

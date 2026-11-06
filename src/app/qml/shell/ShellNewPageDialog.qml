@@ -4,10 +4,10 @@ import QtQuick.Layouts
 import Brulion
 
 // ShellNewPageDialog — name a new page (or folder) and open it. `folder` = where: a page goes
-// into the folder chosen — shown as a removable chip "W folderze: Projekty ×" with "Zmień…" (the
+// into the folder chosen — shown as a removable chip "In folder: Projects ×" with "Change…" (the
 // folder picker of ShellMoveDialog) —, else into the notebook's folder for new pages; a "/" in the
-// title creates folders ("Projekty/Dom"). AppShell.openNewPage() prefills the folder of the page
-// shown (Ctrl+N, the top bar, the sidebar's pencil) — the root too ("W głównym folderze notatnika"). A page gets its note mode here
+// title creates folders ("Projects/Home"). AppShell.openNewPage() prefills the folder of the page
+// shown (Ctrl+N, the top bar, the sidebar's pencil) — the root too ("In the notebook root"). A page gets its note mode here
 // (ContentNoteModeChoice: document like Obsidian / outline like Logseq, preselected from the last
 // choice or the notebook's default; Workspace.createPage writes the `brulion:` key only when
 // needed). A folder's name is sanitised and a hidden one refused (Workspace.createFolder says why);
@@ -69,7 +69,7 @@ BDialog {
         onAccepted: dialog.tryAccept()
     }
     // Where the page goes: a chip to remove (the notebook's folder for new pages then) and
-    // "Zmień…" for another folder.
+    // "Change…" for another folder.
     Flow {
         visible: !dialog.folderMode
         Layout.fillWidth: true

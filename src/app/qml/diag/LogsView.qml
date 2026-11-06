@@ -4,9 +4,9 @@ import QtQuick.Layouts
 import Brulion
 
 // LogsView — route "logs" ({group?, level?, search?, fromMs?, toMs?, run?}): the event log
-// ("Rejestr zdarzeń") — what the app and especially the sync did, newest at the bottom. Filter
+// ("Event log") — what the app and especially the sync did, newest at the bottom. Filter
 // by area (chips) and level, search (diacritics ignored), follow new entries while at the end
-// ("Nowe wpisy (n)" otherwise). Copy (what is shown), share (Android), save (Downloads / Save
+// ("New entries (n)" otherwise). Copy (what is shown), share (Android), save (Downloads / Save
 // as / browser download), clear; the detailed mode (one line per request to the server). The
 // log stays on the device and never holds passwords or tokens (log/redact.h).
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `title`.

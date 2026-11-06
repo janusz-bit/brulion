@@ -1,4 +1,4 @@
-// The rows of "Przenieś do…" (ShellMoveDialog.qml, docs/UI.md "Folders"): the notebook's root,
+// The rows of "Move to…" (ShellMoveDialog.qml, docs/UI.md "Folders"): the notebook's root,
 // the folders matching a query (TextHelper.fuzzyRank of their names, then paths; at most 100) and
 // a new folder of the typed name. Pure; AppController::folderChoices() gives it the notebook's
 // folders.

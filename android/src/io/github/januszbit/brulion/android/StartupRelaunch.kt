@@ -7,8 +7,8 @@ import java.io.File
 import java.io.IOException
 
 /**
- * Android recreated [BrulionActivity] before Qt had started (docs/ANDROID.md, "Aktywność
- * utworzona od nowa w trakcie startu"): a configuration change no app can handle itself
+ * Android recreated [BrulionActivity] before Qt had started (docs/ANDROID.md, "Activity
+ * recreated during startup"): a configuration change no app can handle itself
  * (`CONFIG_ASSETS_PATHS`, e.g. the overlays an emulator applies right after booting, or the
  * system's theme colours changing at that moment) relaunches the activity, and Qt 6.11's QtActivity starts the native app only from the first
  * activity's first layout. When that activity is gone before its first layout, the new one finds

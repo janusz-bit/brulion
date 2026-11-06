@@ -402,7 +402,7 @@ bool SyncRun::lockStore()
 {
     // Another process of this device may sync the same notebook through the same store (Android:
     // the background check runs in a process of its own while the app may live on, docs/ANDROID.md
-    // "Sprawdzanie notatek w tle"): one run at a time, and every run starts from what the last
+    // "Checking notes in the background"): one run at a time, and every run starts from what the last
     // one left in the store, whichever process made it. QLockFile takes over the lock of a
     // process that died; a store in memory only has nobody to share with.
     if (!store()->isPersistent())

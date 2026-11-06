@@ -5,7 +5,7 @@ import Brulion
 
 // TableBlockView — a GFM table as a grid (docs/SYNTAX.md §9 "Table formulas"). Cells show their
 // Markdown rendered like block text (bold, links, tags, date chips — the core InlineRenderer, so
-// note text is never interpreted as HTML); formula cells (`=sum(above)`, `=[Cena]*[Ilość]`) show
+// note text is never interpreted as HTML); formula cells (`=sum(above)`, `=[Price]*[Quantity]`) show
 // the result (errors as #ERR with the message as tooltip, cycles as #CYCLE). Links in cells work
 // like links in blocks (a click elsewhere edits the cell); a right-click or long press on a date,
 // reminder, 🔁 or priority chip of a cell opens its menu (DateChipMenu: the cell's text changes, one
@@ -15,22 +15,22 @@ import Brulion
 // the app is suspended or closed is saved like any text. Rows and columns are added with
 // the buttons below the grid: always shown on touch screens; with a mouse while the table is
 // selected or a cell is edited (Enter in the last row and Tab in the last cell add a row too).
-// A right-click on a cell, also the one being edited, opens the block menu with the cell's Wiersz
-// and Kolumna submenus (BlockMenu: insert, move, delete, align; on touch UIs through the toolbar's
-// "Więcej"); in a cell Ctrl+Enter inserts a row below and Alt+arrows move its row or column, the
+// A right-click on a cell, also the one being edited, opens the block menu with the cell's Row
+// and Column submenus (BlockMenu: insert, move, delete, align; on touch UIs through the toolbar's
+// "More"); in a cell Ctrl+Enter inserts a row below and Alt+arrows move its row or column, the
 // cell moving with it. The formulas' references follow their cells (calc/table.h).
 // While a cell is edited the editor knows (BlockEditor.editingTable): on touch UIs its toolbar,
-// docked on the keyboard, offers undo, redo, the next cell, "Więcej" (the table's block menu,
+// docked on the keyboard, offers undo, redo, the next cell, "More" (the table's block menu,
 // BlockEditor.openTableBlockMenu) and "hide keyboard" (nextCell(), undoInCell(), redoInCell(),
 // closeCell(): the cell stays edited after undo and redo), and the cell is kept above it. The
 // table is the current block meanwhile (Ctrl+Shift+C, the palette's link commands); a cell left
 // for the palette or the side panel leaves the table selected (stayCurrent()).
-// Sorting and filters (docs/SYNTAX.md §9): the Kolumna submenu sorts the rows by the cell's column
-// (PageController.sortTable: the file's rows rewritten, one undo step) and "Filtruj wiersze" shows a
-// row of filter fields under the header (one per column: "> 100", "!tekst", "zolw"); rows that do
+// Sorting and filters (docs/SYNTAX.md §9): the Column submenu sorts the rows by the cell's column
+// (PageController.sortTable: the file's rows rewritten, one undo step) and "Filter rows" shows a
+// row of filter fields under the header (one per column: "> 100", "!text", "zolw"); rows that do
 // not match are hidden — nothing is written, the filters last while the page is open
 // (BlockListModel.setTableFilter) — and the line under the grid says how many rows show, with
-// "Wyczyść filtry". A row being edited stays shown until it is left. The block menu also copies the
+// "Clear filters". A row being edited stays shown until it is left. The block menu also copies the
 // table as CSV or saves it to a file (EditorDialogs.saveTableCsv).
 Item {
     id: root
@@ -45,7 +45,7 @@ Item {
     readonly property list<string> aligns: root.block.rowData.tableData.aligns
     readonly property list<var> rows: root.block.rowData.tableData.rows
     readonly property int columns: header.length
-    /// The filter row is shown (the block menu's "Filtruj wiersze"); its texts by column.
+    /// The filter row is shown (the block menu's "Filter rows"); its texts by column.
     readonly property bool filtering: root.block.rowData.tableData.filtering === true
     readonly property list<string> filters: root.block.rowData.tableData.filters
     /// How many rows pass the filters.
@@ -266,7 +266,7 @@ Item {
     }
     /// A cell left because the keyboard focus went elsewhere (the command palette, the side
     /// panel): the table stays the current block — selected, as Esc leaves it — for the palette's
-    /// "Kopiuj odwołanie do bloku" (BlockEditor.currentRow). Not when another block or cell took
+    /// "Copy block reference" (BlockEditor.currentRow). Not when another block or cell took
     /// over meanwhile.
     property int stayRow: -1
     function stayCurrent(): void {

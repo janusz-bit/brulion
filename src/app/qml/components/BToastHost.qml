@@ -9,8 +9,8 @@ import Brulion
 // Put one in the main window, above everything (also above dialogs):
 //   BToastHost { id: toasts; parent: T.Overlay.overlay; anchors.fill: parent; z: 1000 }
 // and call:
-//   toasts.showToast(qsTr("Zsynchronizowano 12 plików"), "success", "", -1)
-//   undoToast = toasts.showToast(qsTr("Przeniesiono do kosza"), "info", qsTr("Cofnij"), -1)
+//   toasts.showToast(qsTr("Synced 12 files"), "success", "", -1)
+//   undoToast = toasts.showToast(qsTr("Moved to trash"), "info", qsTr("Undo"), -1)
 //   Connections { target: toasts; function onActionTriggered(toastId: int) { if (toastId === undoToast) undo() } }
 //
 // showToast(text, kind, actionText, timeout) -> id. kind: "info" (also "") | "success" | "warning" |

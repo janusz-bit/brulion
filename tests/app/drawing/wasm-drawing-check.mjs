@@ -4,7 +4,7 @@
 // notebook from IDBFS. Chromium (headless, over the DevTools protocol — the minimal client of
 // svg-theme-check.mjs; Node >= 22) gets a notebook written into IndexedDB as the app's IDBFS mount
 // stores it (as scripts/wasm-smoke.mjs --copy does): today's journal embedding `Rysunek.svg` (the
-// golden drawing of tst_drawing, "Jak motyw": an ink stroke and a highlighter stroke on lined
+// golden drawing of tst_drawing, "Like the app": an ink stroke and a highlighter stroke on lined
 // paper), and settings.ini with the app's theme (`ui/themeMode`) light, then dark. Once the app is
 // up, a screenshot is decoded in a page of its own (Qt's WebGL canvas cannot be read back): the
 // drawing's paper — #ffffff / #121212, the area where most of its pixels are — must hold the ink

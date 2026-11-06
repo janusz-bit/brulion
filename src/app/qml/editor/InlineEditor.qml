@@ -14,8 +14,8 @@ import Brulion
 // The text is read with EditorInput.plainText(), not `text`: TextEdit.text turns no-break spaces
 // and U+2028 into spaces / line feeds, and the block must keep every character it had (so do
 // Ctrl+C / Ctrl+X: BlockEditor.copyEditSelection). The selection stays shown while a menu or a
-// dialog has the keyboard; a right-click (mouse, touchpad, stylus) opens Wytnij / Kopiuj / Wklej /
-// Zaznacz wszystko (BlockEditor.openTextMenu), with the spelling's corrections at its top on a word
+// dialog has the keyboard; a right-click (mouse, touchpad, stylus) opens Cut / Copy / Paste /
+// Select all (BlockEditor.openTextMenu), with the spelling's corrections at its top on a word
 // marked as misspelled; on touch UIs a tap on such a word opens only those (docs/UI.md "Spell
 // checking"). Spell checking (SpellCheck) runs in the edited prose of text blocks, headings and
 // quotes — not in code, calculations or queries ("code" highlighting).

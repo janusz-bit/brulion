@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- "Zadania — Mój dzień" (TasksWidget.kt): 3×2 by default, resizable both ways. No periodic
+<!-- "Tasks — My day" (TasksWidget.kt): 3×2 by default, resizable both ways. No periodic
      updates: the app redraws it with each snapshot, WidgetUpdater after midnight. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/brulion_widget_tasks_description"

@@ -48,7 +48,7 @@ private Q_SLOTS:
         QVERIFY(host.file(u"Dom.md"_s).endsWith(u"- nowa linia\n"_s));
     }
 
-    // The timer (one at a time, across files), "Dodaj zależność…" (🆔 written to the other task)
+    // The timer (one at a time, across files), "Add dependency…" (🆔 written to the other task)
     // and the status history setting of the host.
     void clockDependencyAndHistory()
     {
@@ -88,7 +88,7 @@ private Q_SLOTS:
         // Not on itself.
         QVERIFY(!actions.addDependency(u"A.md"_s, 1, u"Drugie"_s, u"A.md"_s, 1));
 
-        // The status history: logged, "W toku" starts the clock.
+        // The status history: logged, "In progress" starts the clock.
         host.setFile(u"C.md"_s, u"- [ ] Historia\n"_s);
         host.setTaskStatusHistory(true);
         actions.setNow(u"2026-10-15 11:00"_s);
@@ -359,7 +359,7 @@ private Q_SLOTS:
     void snoozeFindsTheReminderAgain()
     {
         // The calendar's menu on another date of "Lek" keeps line 3; whatever the file holds by the
-        // time "Godzinę później" is chosen, only that reminder is snoozed.
+        // time "An hour later" is chosen, only that reminder is snoozed.
         QFETCH(QString, page);
         QFETCH(QString, expected);
         FakeEditorHost host;

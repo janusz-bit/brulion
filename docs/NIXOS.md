@@ -1,28 +1,28 @@
-# Brulion na NixOS
+# Brulion on NixOS
 
-Repozytorium jest flake'iem Nixa. Daje:
+The repository is a Nix flake. It provides:
 
-| Wyjście | Co to jest |
+| Output | What it is |
 |---|---|
-| `packages.<system>.brulion` (= `default`) | aplikacja na komputer (C++/Qt 6.11 z nixpkgs): `bin/brulion`, wpis w menu, ikony, metadane AppStream |
-| `nixosModules.default` | moduł NixOS: `programs.brulion` (aplikacja, autostart w zasobniku) i `services.brulion-web` (wersja przeglądarkowa przez nginx) |
-| `overlays.default` | dodaje `pkgs.brulion` (zbudowany z nixpkgs tego, kto używa nakładki) |
-| `devShells.<system>.default` | środowisko programisty (Qt 6.11, CMake, Ninja, ccache, clang-tools, gdb…) |
-| `checks.<system>.*` | pakiet z testami, moduł NixOS, formatowanie plików `.nix`, test w maszynie wirtualnej |
-| `formatter.<system>` | `nix fmt` (nixfmt dla wszystkich plików `.nix`) |
+| `packages.<system>.brulion` (= `default`) | the desktop app (C++/Qt 6.11 from nixpkgs): `bin/brulion`, menu entry, icons, AppStream metadata |
+| `nixosModules.default` | NixOS module: `programs.brulion` (the app, autostart in the tray) and `services.brulion-web` (the browser version through nginx) |
+| `overlays.default` | adds `pkgs.brulion` (built with the nixpkgs of whoever uses the overlay) |
+| `devShells.<system>.default` | developer environment (Qt 6.11, CMake, Ninja, ccache, clang-tools, gdb…) |
+| `checks.<system>.*` | package with tests, NixOS module, formatting of `.nix` files, test in a virtual machine |
+| `formatter.<system>` | `nix fmt` (nixfmt for all `.nix` files) |
 
-Systemy: `x86_64-linux` i `aarch64-linux` (np. Raspberry Pi). nixpkgs jest przypięty w
-`flake.lock` do tej samej wersji co system dewelopera — nie aktualizujemy go przy okazji.
-Brulion nie ma (jeszcze) własnego binarnego cache'u: pierwszy build kompiluje aplikację
-lokalnie (kilka minut; na Raspberry Pi 4 dłużej), Qt i reszta zależności przychodzą gotowe
-z cache.nixos.org.
+Systems: `x86_64-linux` and `aarch64-linux` (e.g. Raspberry Pi). nixpkgs is pinned in
+`flake.lock` to the same version as the developer's system — we do not update it in passing.
+Brulion does not have its own binary cache (yet): the first build compiles the app
+locally (a few minutes; longer on a Raspberry Pi 4), Qt and the other dependencies come prebuilt
+from cache.nixos.org.
 
-## Instalacja na NixOS
+## Installing on NixOS
 
-### Flake systemu (`/etc/nixos`)
+### System flake (`/etc/nixos`)
 
-W `flake.nix` konfiguracji systemu (u autora: `github:janusz-bit/nixos`, katalog `/etc/nixos`)
-dopisz wejście `brulion` i moduł:
+In the system configuration's `flake.nix` (the author's: `github:janusz-bit/nixos`, directory `/etc/nixos`)
+add the `brulion` input and the module:
 
 ```nix
 {
@@ -30,9 +30,9 @@ dopisz wejście `brulion` i moduł:
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     brulion = {
       url = "github:janusz-bit/brulion";
-      # Zbuduj Brulion z tym samym nixpkgs co system: Qt jest wtedy ten sam co w reszcie
-      # systemu (wtyczki motywów Qt pasują, nic nie pobiera się drugi raz). Bez tej linii
-      # Brulion używa nixpkgs z własnego flake.lock — wersji, z którą jest testowany.
+      # Build Brulion with the same nixpkgs as the system: Qt is then the same as in the rest of the
+      # system (Qt theme plugins match, nothing is downloaded twice). Without this line
+      # Brulion uses the nixpkgs from its own flake.lock — the version it is tested with.
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -45,7 +45,7 @@ dopisz wejście `brulion` i moduł:
         {
           programs.brulion = {
             enable = true;
-            # Start z sesją graficzną, schowany w zasobniku — przypomnienia działają cały czas.
+            # Start with the graphical session, hidden in the tray — reminders work all the time.
             autostart = true;
           };
         }
@@ -55,27 +55,27 @@ dopisz wejście `brulion` i moduł:
 }
 ```
 
-Potem jak zwykle:
+Then as usual:
 
 ```sh
 sudo nixos-rebuild switch --flake /etc/nixos#moj-komputer
 ```
 
-Brulion pojawi się w menu aplikacji (kategorie „Biuro” i „Narzędzia”), z terminala: `brulion`.
-Aktualizacja do najnowszej wersji z GitHuba: `nix flake update brulion` w `/etc/nixos`, potem
-znów `nixos-rebuild switch`. Przypięcie do wydania: `url = "github:janusz-bit/brulion/v0.1.0";`.
+Brulion appears in the application menu (categories "Office" and "Utility"), from a terminal: `brulion`.
+Updating to the latest version from GitHub: `nix flake update brulion` in `/etc/nixos`, then
+`nixos-rebuild switch` again. Pinning to a release: `url = "github:janusz-bit/brulion/v0.1.0";`.
 
-### Opcje `programs.brulion`
+### `programs.brulion` options
 
-| Opcja | Domyślnie | Opis |
+| Option | Default | Description |
 |---|---|---|
-| `enable` | `false` | instaluje Brulion (`environment.systemPackages`: program, wpis w menu, ikony) |
-| `package` | pakiet z tego flake'a | inny pakiet, np. `pkgs.brulion` z nakładki albo własny build |
-| `autostart` | `false` | wpis `/etc/xdg/autostart/io.github.januszbit.brulion.desktop` uruchamiający `brulion --hidden` przy logowaniu: aplikacja startuje schowana w zasobniku systemowym |
+| `enable` | `false` | installs Brulion (`environment.systemPackages`: program, menu entry, icons) |
+| `package` | the package from this flake | another package, e.g. `pkgs.brulion` from the overlay or your own build |
+| `autostart` | `false` | an entry `/etc/xdg/autostart/io.github.januszbit.brulion.desktop` that runs `brulion --hidden` at login: the app starts hidden in the system tray |
 
-### Bez modułu
+### Without the module
 
-Sam pakiet (wejście flake'a przekazane do modułów przez `specialArgs = { inherit brulion; };`):
+The package alone (the flake input passed to the modules through `specialArgs = { inherit brulion; };`):
 
 ```nix
 { pkgs, brulion, ... }:
@@ -84,157 +84,157 @@ Sam pakiet (wejście flake'a przekazane do modułów przez `specialArgs = { inhe
 }
 ```
 
-albo nakładka: `nixpkgs.overlays = [ brulion.overlays.default ];` i `pkgs.brulion`.
-Wypróbowanie bez instalowania:
+or the overlay: `nixpkgs.overlays = [ brulion.overlays.default ];` and `pkgs.brulion`.
+Trying it out without installing:
 
 ```sh
 nix run github:janusz-bit/brulion
 ```
 
-### Zasobnik, autostart, powiadomienia
+### Tray, autostart, notifications
 
-* Przypomnienia i alarmy pokazuje działający Brulion (powiadomienia freedesktop przez D-Bus).
-  Zamknięcie okna chowa go do **zasobnika systemowego**; z `autostart = true` jest tam od
-  zalogowania. Każdy użytkownik może wyłączyć autostart u siebie w ustawieniach autostartu
-  pulpitu (KDE: Ustawienia systemowe → Autostart; GNOME: Dostrajanie → Programy startowe) —
-  to tworzy wpis z `Hidden=true` w `~/.config/autostart/`.
-* **Kalendarz z zasobnika**: menu ikony → **Kalendarz** otwiera małe okienko z miesiącem,
-  zadaniami i przypomnieniami wybranego dnia, **Otwórz Brulion** i **Szybka notatka…**.
-  *Ustawienia → Aplikacja → Kliknięcie ikony w zasobniku → Kalendarz* otwiera je samym
-  kliknięciem ikony (domyślnie na Linuksie kliknięcie pokazuje okno). Pod X11 okienko pojawia się
-  przy kursorze i znika po kliknięciu obok; pod Waylandem kompozytor kładzie je, gdzie chce, i może
-  nie oddać mu aktywności — wtedy zamkniesz je przyciskiem **×** albo ponownym kliknięciem ikony.
-  Szczegóły: docs/WINDOWS.md, „Kalendarz z zasobnika”.
-* KDE Plasma, XFCE, Cinnamon, Budgie, waybar/swaybar: zasobnik działa od razu. **GNOME** nie
-  ma zasobnika — potrzebne jest rozszerzenie AppIndicator:
+* Reminders and alarms are shown by the running Brulion (freedesktop notifications over D-Bus).
+  Closing the window hides it in the **system tray**; with `autostart = true` it is there from
+  login. Each user can turn autostart off for themselves in the desktop's autostart settings
+  (KDE: System Settings → Autostart; GNOME: Tweaks → Startup Applications) —
+  this creates an entry with `Hidden=true` in `~/.config/autostart/`.
+* **Tray calendar**: icon menu → **Calendar** opens a small window with the month,
+  the tasks and reminders of the selected day, **Open Brulion** and **Quick capture…**.
+  *Settings → Application → Click on the tray icon → Calendar* opens it with a plain
+  click on the icon (by default on Linux a click shows the window). Under X11 the window appears
+  at the cursor and disappears after a click beside it; under Wayland the compositor places it where it wants, and may
+  not give it focus — then you close it with the **×** button or by clicking the icon again.
+  Details: docs/WINDOWS.md, "Tray calendar".
+* KDE Plasma, XFCE, Cinnamon, Budgie, waybar/swaybar: the tray works out of the box. **GNOME** has
+  no tray — it needs the AppIndicator extension:
 
   ```nix
   environment.systemPackages = [ pkgs.gnomeExtensions.appindicator ];
   services.udev.packages = [ pkgs.gnome-settings-daemon ];
   ```
 
-  i włączenie go w aplikacji „Rozszerzenia”.
-* Powiadomienia pokazuje demon powiadomień pulpitu (w środowiskach graficznych jest zawsze; przy
-  samym menedżerze okien np. `mako` albo `dunst`).
-* **Dźwięki** (*Ustawienia → Przypomnienia → Dźwięk przypomnień / Dźwięk alarmów*): „Domyślny”
-  (przypomnienia — jak inne powiadomienia pulpitu, alarmy — `alarm-clock-elapsed`), „Dzwonek”
-  (**Wybierz dzwonek…**: dźwięk z motywu dźwiękowego — `message-new-instant`, `bell`,
-  `complete`, `alarm-clock-elapsed`, `phone-incoming-call` — albo własny plik `.oga`/`.ogg`/`.wav`)
-  i „Cisza”. Brulion przekazuje je w powiadomieniu jako podpowiedzi `sound-name`, `sound-file`
-  albo `suppress-sound`; dźwięk odtwarza demon powiadomień (GNOME Shell, KDE Plasma — z pakietem
-  motywu dźwięków, np. `sound-theme-freedesktop`). Demony bez dźwięków (`mako`, `dunst`) je
-  pomijają. **Odtwórz próbkę** wysyła krótkie powiadomienie próbne z wybranym dźwiękiem.
-* Pliki integracji z pulpitem: `share/applications/io.github.januszbit.brulion.desktop`,
-  `share/metainfo/io.github.januszbit.brulion.metainfo.xml`, ikona
+  and turning it on in the "Extensions" app.
+* Notifications are shown by the desktop's notification daemon (graphical desktop environments always have one; with
+  a bare window manager e.g. `mako` or `dunst`).
+* **Sounds** (*Settings → Reminders → Reminder sound / Alarm sound*): "Default"
+  (reminders — like other desktop notifications, alarms — `alarm-clock-elapsed`), "Ringtone"
+  (**Choose ringtone…**: a sound from the sound theme — `message-new-instant`, `bell`,
+  `complete`, `alarm-clock-elapsed`, `phone-incoming-call` — or your own `.oga`/`.ogg`/`.wav` file)
+  and "Silent". Brulion passes them in the notification as the `sound-name`, `sound-file`
+  or `suppress-sound` hints; the sound is played by the notification daemon (GNOME Shell, KDE Plasma — with a sound
+  theme package, e.g. `sound-theme-freedesktop`). Daemons without sounds (`mako`, `dunst`)
+  ignore them. **Play sample** sends a short test notification with the chosen sound.
+* Desktop integration files: `share/applications/io.github.januszbit.brulion.desktop`,
+  `share/metainfo/io.github.januszbit.brulion.metainfo.xml`, icon
   `share/icons/hicolor/{scalable,256x256}/apps/io.github.januszbit.brulion.{svg,png}`.
 
-### Okna wyboru plików
+### File dialogs
 
-Import, eksport („Zapisz…”), „Obraz…”, „Plik…”, „Plik dźwiękowy…” i wybór folderu notatnika otwierają
-okno wyboru plików pulpitu, jeśli motyw platformy Qt je ma: GNOME (motyw `gtk3`, który Qt wybiera
-tam sam) — okno GTK, KDE Plasma (`plasma-integration`) — okno KDE. Na innych pulpitach (sway,
-Hyprland, i3…) Qt nie ma takiego motywu i Brulion pokazuje własne okno plików Qt (w kolorach
-Brulionu: tło, tekst i akcent jak w aplikacji, także ciemne — niezależnie od stylu Qt pulpitu). Okno pulpitu przez **xdg-desktop-portal** dostaniesz, ustawiając
+Import, export ("Save…"), "Image…", "File…", "Sound file…" and choosing a notebook folder open
+the desktop's file dialog if the Qt platform theme has one: GNOME (the `gtk3` theme, which Qt picks
+there by itself) — a GTK dialog, KDE Plasma (`plasma-integration`) — a KDE dialog. On other desktops (sway,
+Hyprland, i3…) Qt has no such theme and Brulion shows Qt's own file dialog (in Brulion's
+colours: background, text and accent as in the app, dark too — regardless of the desktop's Qt style). You get the desktop's dialog through **xdg-desktop-portal** by setting
 
 ```sh
 QT_QPA_PLATFORMTHEME=xdgdesktopportal brulion
 ```
 
-(na stałe np. `environment.sessionVariables.QT_QPA_PLATFORMTHEME = "xdgdesktopportal";` — działa
-z każdym backendem portalu: `xdg-desktop-portal-gtk`, `-gnome`, `-kde`, `-hyprland`, `-wlr` z
-`-gtk` do plików). **AppImage** robi to sam, gdy zmienna nie jest ustawiona; bez działającego
-portalu wraca do okna Qt. Pakiet z Nixa niczego tu nie ustawia: zostaje motyw Qt, który wybrał
-pulpit (zmienna globalna zmienia też inne programy Qt).
+(permanently e.g. `environment.sessionVariables.QT_QPA_PLATFORMTHEME = "xdgdesktopportal";` — works
+with any portal backend: `xdg-desktop-portal-gtk`, `-gnome`, `-kde`, `-hyprland`, `-wlr` with
+`-gtk` for files). **The AppImage** does this by itself when the variable is not set; without a working
+portal it falls back to the Qt dialog. The Nix package sets nothing here: the Qt theme chosen by the
+desktop stays (a global variable also changes other Qt programs).
 
-### PDF-y: podgląd i podkład rysunku
+### PDFs: viewer and drawing backdrop
 
-Pakiet z Nixa rysuje PDF-y (miniatury PDF-ów w notatkach, przeglądarka PDF z szukaniem, podkład
-rysunku, „Rysunek na obrazie lub PDF…”) przez
-**poppler-qt6** (`kdePackages.poppler`, licencja GPL-2.0-or-later, zgodna z AGPL-3.0-or-later
-Brulionu): nixpkgs ma Qt PDF tylko wewnątrz QtWebEngine, który powiększyłby zamknięcie pakietu
-o ok. 615 MiB, a poppler o ok. 26 MiB (poppler-qt6, poppler-data, nss, nspr, openjpeg, lcms2;
-z cache.nixos.org dla x86_64 i aarch64). CMake znajduje go przez pkg-config
-(`src/platform/CMakeLists.txt`), środowisko programisty (`nix develop`) dostaje go z pakietu, więc
-testy `tst_pdfpages` sprawdzają tam backend popplera. Zbudowanie bez PDF-ów:
+The Nix package draws PDFs (PDF thumbnails in notes, the PDF viewer with search, the drawing
+backdrop, "Drawing on a picture or PDF…") through
+**poppler-qt6** (`kdePackages.poppler`, licence GPL-2.0-or-later, compatible with Brulion's
+AGPL-3.0-or-later): nixpkgs has Qt PDF only inside QtWebEngine, which would grow the package's closure
+by about 615 MiB, and poppler by about 26 MiB (poppler-qt6, poppler-data, nss, nspr, openjpeg, lcms2;
+from cache.nixos.org for x86_64 and aarch64). CMake finds it through pkg-config
+(`src/platform/CMakeLists.txt`), the developer environment (`nix develop`) gets it from the package, so
+the `tst_pdfpages` tests check the poppler backend there. Building without PDFs:
 `-DBRULION_PDF_BACKEND=none`.
 
-### Sprawdzanie pisowni
+### Spell checking
 
-Pakiet z Nixa sprawdza pisownię Hunspellem z nixpkgs (`hunspell`) i słownikami
-`hunspellDicts.pl_PL` i `hunspellDicts.en_US`: ich ścieżki w `/nix/store` są wkompilowane
-w program (`BRULION_SPELL_DICTIONARY_DIRS`, `nix/package.nix`, `passthru.spellDictionaries`), więc
-nic nie trzeba instalować obok. Brulion patrzy też w `DICPATH`, w `share/hunspell` folderów
-`XDG_DATA_DIRS` (np. słowniki z `environment.systemPackages`) i w `/usr/share/hunspell`.
-`nix develop` ustawia `DICPATH` na te same słowniki dla `./build`. Bez Hunspella:
-`-DBRULION_SPELL_BACKEND=none` (ustawienia pisowni znikają). docs/UI.md „Spell checking”.
+The Nix package checks spelling with Hunspell from nixpkgs (`hunspell`) and the dictionaries
+`hunspellDicts.pl_PL` and `hunspellDicts.en_US`: their paths in `/nix/store` are compiled
+into the program (`BRULION_SPELL_DICTIONARY_DIRS`, `nix/package.nix`, `passthru.spellDictionaries`), so
+nothing needs to be installed alongside. Brulion also looks in `DICPATH`, in `share/hunspell` of the
+`XDG_DATA_DIRS` folders (e.g. dictionaries from `environment.systemPackages`) and in `/usr/share/hunspell`.
+`nix develop` sets `DICPATH` to the same dictionaries for `./build`. Without Hunspell:
+`-DBRULION_SPELL_BACKEND=none` (the spelling settings disappear). docs/UI.md "Spell checking".
 
-### Otwórz za pomocą
+### Open with
 
-Wpis pulpitu z pakietu (`Exec=brulion --open %F`, `StartupNotify=true`) pozwala otworzyć plik
-`.md` albo `.txt` w Brulionie z menedżera plików: **Otwórz za pomocą → Inny program → Brulion**
-(GNOME Pliki: **Otwórz za pomocą…** → „Wyświetl wszystkie aplikacje”; Dolphin, Thunar, Nemo:
-**Otwórz za pomocą → Inny program…**). Otwiera się okno **Zapisz w Brulionie**, to samo co „Udostępnij → Brulion”
-na Androidzie: plik trafia do dzisiejszego dziennika albo jako nowa strona, przy czym Brulion
-zapisuje **kopię**, a sam plik zostaje na miejscu bez zmian. Plik, który już jest stroną otwartego
-notatnika (także w folderze dowiązanym do notatnika z innego miejsca albo w folderze z kropką na
-początku nazwy), po prostu się otwiera. Kilka plików naraz trafia do jednego okna; gdy Brulion już
-działa, dostaje je działająca kopia i wychodzi na wierzch — pod Waylandem z tokenem aktywacji,
-który menedżer plików daje dzięki `StartupNotify=true` (program uruchamiający bez tokenu sprawi, że
-GNOME pokaże tylko „Brulion jest gotowy”); pod X11 drugie uruchomienie samo kończy powiadomienie
-o starcie, więc kursor nie kręci się dalej.
+The package's desktop entry (`Exec=brulion --open %F`, `StartupNotify=true`) lets you open a
+`.md` or `.txt` file in Brulion from the file manager: **Open With → Other Application → Brulion**
+(GNOME Files: **Open With…** → "View All Apps"; Dolphin, Thunar, Nemo:
+**Open With → Other Application…**). The **Save to Brulion** dialog opens, the same as "Share → Brulion"
+on Android: the file goes into today's journal or becomes a new page, and Brulion
+saves a **copy**, while the file itself stays where it is, unchanged. A file that already is a page of the open
+notebook (also in a folder linked into the notebook from elsewhere, or in a folder whose name starts
+with a dot) simply opens. Several files at once go into one dialog; when Brulion is already
+running, the running instance gets them and comes to the front — under Wayland with an activation token,
+which the file manager provides thanks to `StartupNotify=true` (a launcher without a token makes
+GNOME show only "Brulion is ready"); under X11 the second start ends the startup notification
+itself, so the cursor does not keep spinning.
 
-**Programu domyślnego Brulion nie zmienia.** Dlatego wpis nie deklaruje żadnych typów plików
-(`MimeType`): pulpit bez programu domyślnego dla jakiegoś typu (sway, i3 albo Hyprland bez
-`mimeapps.list`; GNOME dla `text/markdown`) bierze pierwszy program, który go deklaruje, według
-nazwy — a `io.github.januszbit.brulion` jest przed `nvim`, `org.gnome.TextEditor` czy
-`org.kde.kate`, więc Brulion otwierałby wtedy po cichu każdy plik tekstowy. Jeśli chcesz, żeby to
-Brulion otwierał pliki Markdown dwuklikiem:
+**Brulion does not change the default program.** That is why the entry declares no file types
+(`MimeType`): a desktop without a default program for some type (sway, i3 or Hyprland without
+`mimeapps.list`; GNOME for `text/markdown`) takes the first program that declares it, by
+name — and `io.github.januszbit.brulion` comes before `nvim`, `org.gnome.TextEditor` or
+`org.kde.kate`, so Brulion would then silently open every text file. If you want
+Brulion to open Markdown files on double-click:
 
 ```sh
 xdg-mime default io.github.januszbit.brulion.desktop text/markdown
 ```
 
-Z wiersza poleceń: `brulion --open notatka.md …` (wszystko po `--open` to pliki; `brulion --open`
-bez plików uruchamia Brulion jak zwykle). **AppImage** ma ten sam wpis w środku: narzędzia, które
-integrują AppImage z menu (Gear Lever, AppImageLauncher, appimaged), instalują go, więc „Otwórz za
-pomocą” działa też z AppImage.
+From the command line: `brulion --open notatka.md …` (everything after `--open` is files; `brulion --open`
+without files starts Brulion as usual). **The AppImage** has the same entry inside: tools that
+integrate AppImages with the menu (Gear Lever, AppImageLauncher, appimaged) install it, so "Open
+with" works with the AppImage too.
 
-### Notatki i Syncthing
+### Notes and Syncthing
 
-Notatki to zwykłe pliki `.md` w wybranym folderze. Synchronizacja z telefonem i innymi
-komputerami przez Syncthing z NixOS:
+Notes are plain `.md` files in a chosen folder. Sync with a phone and other
+computers through Syncthing on NixOS:
 
 ```nix
 services.syncthing = {
   enable = true;
-  user = "janusz";              # Twój użytkownik
+  user = "janusz";              # your user
   dataDir = "/home/janusz";
   openDefaultPorts = true;
 };
 ```
 
-Folder notatek dodajesz w panelu Syncthing (<http://127.0.0.1:8384>). Alternatywnie Nextcloud
-(WebDAV) w ustawieniach synchronizacji Brulionu — aplikacja na komputer nie potrzebuje do tego
-żadnej konfiguracji systemu.
+You add the notes folder in the Syncthing panel (<http://127.0.0.1:8384>). Alternatively Nextcloud
+(WebDAV) in Brulion's sync settings — the desktop app needs no system
+configuration for that.
 
-### Agent AI (Hermes) i wiersz poleceń
+### AI agent (Hermes) and the command line
 
-Pakiet ma też `brulion-cli` — wiersz poleceń dla skryptów i agentów AI ([CLI.md](CLI.md)): czyta
-i zmienia notatki tym samym kodem co aplikacja, a `brulion-cli mcp` udostępnia polecenia jako
-narzędzia MCP. Na komputer bez pulpitu (np. Raspberry Pi z agentem) wystarczy lekki pakiet
-**`brulion-cli`** z tego flake'a — sam Qt Core, bez Qt Quick, QML, SVG i Waylanda, więc buduje się
-szybko i zajmuje mało miejsca:
+The package also has `brulion-cli` — the command line for scripts and AI agents ([CLI.md](CLI.md)): it reads
+and changes notes with the same code as the app, and `brulion-cli mcp` offers the commands as
+MCP tools. For a computer without a desktop (e.g. a Raspberry Pi with an agent) the light
+**`brulion-cli`** package from this flake is enough — Qt Core only, without Qt Quick, QML, SVG and Wayland, so it builds
+quickly and takes little space:
 
 ```nix
 environment.systemPackages = [ brulion.packages.${pkgs.stdenv.hostPlatform.system}.brulion-cli ];
 ```
 
-albo bez instalowania: `nix run github:janusz-bit/brulion#brulion-cli -- --vault ~/Notatki task list`.
+or without installing: `nix run github:janusz-bit/brulion#brulion-cli -- --vault ~/Notatki task list`.
 
-Agent na innym komputerze niż aplikacja dostaje notatki jako **folder synchronizowany** —
-Syncthingiem (polecane) albo klientem Nextcloud — i pracuje na jego lokalnej kopii. Przykład:
-Hermes jako użytkownik `hermes` na Raspberry Pi, folder `/var/lib/hermes/Brulion` udostępniony
-z komputera Syncthingiem, który na Pi działa jako ten sam użytkownik:
+An agent on a different computer than the app gets the notes as a **synced folder** —
+through Syncthing (recommended) or the Nextcloud client — and works on its local copy. Example:
+Hermes as the user `hermes` on a Raspberry Pi, the folder `/var/lib/hermes/Brulion` shared
+from the computer through Syncthing, which on the Pi runs as the same user:
 
 ```nix
 { pkgs, lib, brulion, ... }:
@@ -244,66 +244,66 @@ in
 {
   services.syncthing = {
     enable = true;
-    user = "hermes";                       # pliki należą do agenta
+    user = "hermes";                       # the files belong to the agent
     dataDir = "/var/lib/hermes";
     configDir = "/var/lib/hermes/.config/syncthing";
   };
 
   services.hermes-agent.mcpServers.brulion = {
     command = lib.getExe brulionCli;
-    args = [ "mcp" "--vault" "/var/lib/hermes/Brulion" ];   # + "--read-only": tylko czytanie
-    connect_timeout = 60;                  # pierwsze uruchomienie indeksuje notatnik
+    args = [ "mcp" "--vault" "/var/lib/hermes/Brulion" ];   # + "--read-only": read only
+    connect_timeout = 60;                  # the first run indexes the notebook
     timeout = 120;
   };
 }
 ```
 
-Folder `Brulion` dodajesz w panelu Syncthinga na obu komputerach (na Pi np. przez
-`ssh -L 8384:127.0.0.1:8384 pi`). Agent dostaje narzędzia `brulion_capture`, `brulion_task_add`,
-`brulion_task_list`, `brulion_search`, `brulion_query`, `brulion_journal_append` i inne; polecenia
-niszczące (zmiana całej strony, przenoszenie, usuwanie) pojawiają się dopiero z
-`--allow-destructive`. Każda zmiana agenta trafia do historii wersji z opisem „Zastąpiona z
-wiersza poleceń (agent)” — na urządzeniu, na którym działa `brulion-cli` (stan urządzenia w
-`~/.local/share/Brulion/Brulion/vaults/<id>` użytkownika agenta). Poradnik dla agenta (format
-agentskills) leży w pakiecie: `share/brulion/agent-skills/brulion/SKILL.md`.
+You add the `Brulion` folder in the Syncthing panel on both computers (on the Pi e.g. through
+`ssh -L 8384:127.0.0.1:8384 pi`). The agent gets the tools `brulion_capture`, `brulion_task_add`,
+`brulion_task_list`, `brulion_search`, `brulion_query`, `brulion_journal_append` and others; destructive
+commands (replacing a whole page, moving, deleting) appear only with
+`--allow-destructive`. Every change by the agent goes into the version history with the description
+"Replaced from the command line (agent)" — on the device where `brulion-cli` runs (device state in the
+agent user's `~/.local/share/Brulion/Brulion/vaults/<id>`). A guide for the agent (agentskills
+format) is in the package: `share/brulion/agent-skills/brulion/SKILL.md`.
 
-**Przypomnienia** dodane przez agenta dzwonią tam, gdzie działa aplikacja: na komputerze (w
-zasobniku, `autostart = true`) i na telefonie, gdy aplikacja zobaczy zmianę. Sam `brulion-cli`
-nigdy nie uruchamia przypomnień ani synchronizacji i nie zmienia ustawień aplikacji.
+**Reminders** added by the agent ring where the app runs: on the computer (in the
+tray, `autostart = true`) and on the phone, once the app sees the change. `brulion-cli` itself
+never starts reminders or sync and does not change the app's settings.
 
-## Wersja przeglądarkowa na własnym serwerze (`services.brulion-web`)
+## The browser version on your own server (`services.brulion-web`)
 
-Moduł serwuje wersję WebAssembly (PWA, działa offline) przez nginx: poprawny typ MIME
-`application/wasm` (kompilacja strumieniowa), pliki skompresowane z góry (gzip i brotli,
-`brulion.wasm` ok. 3× mniejszy), nagłówki cache dobrane do service workera i opcjonalnie
-pośrednik do WebDAV Nextclouda (bez problemów z CORS). Szczegóły samej wersji przeglądarkowej:
+The module serves the WebAssembly version (a PWA, works offline) through nginx: the correct MIME type
+`application/wasm` (streaming compilation), precompressed files (gzip and brotli,
+`brulion.wasm` about 3× smaller), cache headers suited to the service worker and optionally
+a proxy to Nextcloud's WebDAV (no CORS problems). Details of the browser version itself:
 [WEB.md](WEB.md).
 
-### Skąd wziąć pliki
+### Where to get the files
 
-nixpkgs nie ma Qt dla WebAssembly, więc Nix nie buduje wersji przeglądarkowej sam. Są dwie
-drogi:
+nixpkgs has no Qt for WebAssembly, so Nix does not build the browser version itself. There are two
+ways:
 
-1. **Wydanie z GitHuba** (zalecane): do każdego wydania dołączony jest
-   `brulion-web-<wersja>.zip`. Moduł pobiera go sam:
+1. **A release from GitHub** (recommended): every release comes with
+   `brulion-web-<version>.zip`. The module downloads it by itself:
 
    ```nix
    services.brulion-web.release = {
      version = "0.1.0";
-     hash = "";   # pierwszy build się nie uda i wypisze właściwy hash: "got: sha256-…"
+     hash = "";   # the first build fails and prints the right hash: "got: sha256-…"
    };
    ```
 
-   Wydania testowe (tag z sufiksem) — `release.tag = "v0.2.0-rc.1";` (pliki mają wersję
+   Test releases (tag with a suffix) — `release.tag = "v0.2.0-rc.1";` (the files have version
    `0.2.0`).
-2. **Własny build** z `scripts/wasm-build.sh` (katalog `dist-wasm/`, patrz WEB.md):
-   * `services.brulion-web.package = ./dist-wasm;` — kopia trafia do Nix store (we flake'u
-     katalog musi być dodany do gita), z plikami skompresowanymi z góry;
-   * albo ścieżka poza store jako napis, np. `package = "/srv/brulion-web";` — nginx serwuje
-     katalog wprost (kompresja w locie, gzip), a podmiana plików (`rsync`) nie wymaga
-     `nixos-rebuild`. Katalog musi być czytelny dla użytkownika `nginx`.
+2. **Your own build** with `scripts/wasm-build.sh` (directory `dist-wasm/`, see WEB.md):
+   * `services.brulion-web.package = ./dist-wasm;` — a copy goes into the Nix store (in a flake the
+     directory must be added to git), with precompressed files;
+   * or a path outside the store as a string, e.g. `package = "/srv/brulion-web";` — nginx serves the
+     directory directly (on-the-fly compression, gzip), and replacing the files (`rsync`) does not need
+     `nixos-rebuild`. The directory must be readable by the `nginx` user.
 
-### Przykład
+### Example
 
 ```nix
 {
@@ -311,11 +311,11 @@ drogi:
     enable = true;
     release = { version = "0.1.0"; hash = "sha256-…"; };
     hostName = "notatki.example.com";
-    nextcloudUrl = "https://cloud.example.com";   # opcjonalnie, niżej
+    nextcloudUrl = "https://cloud.example.com";   # optional, below
     openFirewall = true;
   };
 
-  # TLS i pozostałe ustawienia hosta — bezpośrednio w nginx:
+  # TLS and the other host settings — directly in nginx:
   services.nginx.virtualHosts."notatki.example.com" = {
     enableACME = true;
     forceSSL = true;
@@ -327,117 +327,117 @@ drogi:
 }
 ```
 
-Przeglądarki pozwalają na service workera (praca offline, „Zainstaluj aplikację”),
-powiadomienia i trwałe IndexedDB tylko przez **HTTPS** albo na `localhost` — na serwerze
-włącz TLS.
+Browsers allow the service worker (offline work, "Install app"),
+notifications and persistent IndexedDB only over **HTTPS** or on `localhost` — on a server,
+turn on TLS.
 
-### Opcje `services.brulion-web`
+### `services.brulion-web` options
 
-| Opcja | Domyślnie | Opis |
+| Option | Default | Description |
 |---|---|---|
-| `enable` | `false` | serwuje Brulion przez nginx |
-| `package` | `null` | katalog z wersją przeglądarkową (`index.html`, `brulion.wasm`, `brulion.js`, `qtloader.js`, `sw.js`…): ścieżka/pakiet w store albo napis ze ścieżką poza store; ma pierwszeństwo przed `release` |
-| `release` | `null` | `{ version; hash; tag ? null; }` — wersja przeglądarkowa z wydania na GitHubie |
-| `hostName` | `"localhost"` | nazwa hosta wirtualnego nginx; TLS, ACME, adresy i porty ustawiasz w `services.nginx.virtualHosts.<hostName>` |
-| `basePath` | `"/"` | ścieżka URL aplikacji, np. `"/notatki/"` (zaczyna się i kończy `/`); adresy w buildzie są względne, więc działa bez przebudowy; `/notatki` przekierowuje na `/notatki/` |
-| `nextcloudUrl` | `null` | adres Nextclouda, do którego nginx przekazuje WebDAV (niżej) |
-| `maxUploadSize` | `"512M"` | największy plik wysyłany przez pośrednika WebDAV |
-| `precompress` | `true` | pliki `.gz`/`.br` obok oryginałów, liczone raz przy budowaniu (tylko dla plików w store) |
-| `brotli` | `true` | serwuje też brotli (moduł `ngx_brotli`, jak `services.nginx.recommendedBrotliSettings`) |
-| `contentSecurityPolicy` | `null` | nagłówek `Content-Security-Policy`; przed włączeniem sprawdź politykę w konsoli przeglądarki (powłoka HTML ma skrypt w treści strony, kod Emscriptena może wymagać `'unsafe-eval'`) |
-| `openFirewall` | `false` | otwiera porty hosta (80, z TLS także 443) |
+| `enable` | `false` | serves Brulion through nginx |
+| `package` | `null` | directory with the browser version (`index.html`, `brulion.wasm`, `brulion.js`, `qtloader.js`, `sw.js`…): a path/package in the store or a string with a path outside the store; takes precedence over `release` |
+| `release` | `null` | `{ version; hash; tag ? null; }` — the browser version from a GitHub release |
+| `hostName` | `"localhost"` | name of the nginx virtual host; TLS, ACME, addresses and ports are set in `services.nginx.virtualHosts.<hostName>` |
+| `basePath` | `"/"` | the app's URL path, e.g. `"/notatki/"` (starts and ends with `/`); the addresses in the build are relative, so it works without a rebuild; `/notatki` redirects to `/notatki/` |
+| `nextcloudUrl` | `null` | address of the Nextcloud to which nginx forwards WebDAV (below) |
+| `maxUploadSize` | `"512M"` | the largest file uploaded through the WebDAV proxy |
+| `precompress` | `true` | `.gz`/`.br` files next to the originals, computed once at build time (only for files in the store) |
+| `brotli` | `true` | also serves brotli (the `ngx_brotli` module, like `services.nginx.recommendedBrotliSettings`) |
+| `contentSecurityPolicy` | `null` | the `Content-Security-Policy` header; before turning it on, check the policy in the browser console (the HTML shell has an inline script, Emscripten's code may need `'unsafe-eval'`) |
+| `openFirewall` | `false` | opens the host's ports (80, with TLS also 443) |
 
-Nagłówki: `brulion.js`, `brulion.wasm` i `qtloader.js` są pobierane z `?v=<hash treści>` —
-takie adresy mają `Cache-Control: public, max-age=31536000, immutable`; wszystko inne
-(`index.html`, `sw.js`, manifest, ikony) `no-cache`, czyli sprawdzenie przy każdym użyciu
-(odpowiedź `304`, gdy nic się nie zmieniło — ETag nginx z nixpkgs bierze się z hasha ścieżki
-w store, więc nowa wersja zawsze ma nowy ETag). Do tego `X-Content-Type-Options: nosniff` i
+Headers: `brulion.js`, `brulion.wasm` and `qtloader.js` are fetched with `?v=<content hash>` —
+such addresses have `Cache-Control: public, max-age=31536000, immutable`; everything else
+(`index.html`, `sw.js`, the manifest, icons) `no-cache`, i.e. revalidated on every use
+(a `304` response when nothing changed — the ETag of nginx from nixpkgs comes from the hash of the store
+path, so a new version always has a new ETag). In addition `X-Content-Type-Options: nosniff` and
 `Referrer-Policy: no-referrer`.
 
-### Nextcloud bez problemów z CORS
+### Nextcloud without CORS problems
 
-Wersja przeglądarkowa łączy się z WebDAV z poziomu strony, a przeglądarka blokuje zapytania do
-innego serwera, jeśli ten nie zezwala na CORS — Nextcloud nie zezwala. Z `nextcloudUrl` nginx
-przekazuje ścieżkę `<ścieżka Nextclouda>/remote.php/dav/` hosta Brulionu do Nextclouda pod tę
-samą ścieżkę (odpowiedzi WebDAV z adresami `/…/remote.php/dav/files/…` pasują wtedy do
-adresów, o które pytała aplikacja).
+The browser version connects to WebDAV from the page, and the browser blocks requests to
+another server unless that server allows CORS — Nextcloud does not. With `nextcloudUrl` nginx
+forwards the path `<Nextcloud path>/remote.php/dav/` of Brulion's host to Nextcloud under the same
+path (WebDAV responses with `/…/remote.php/dav/files/…` addresses then match the
+addresses the app asked for).
 
-W Brulionie (ustawienia synchronizacji → Nextcloud) jako adres serwera podaj wtedy **adres
-Brulionu** zamiast adresu Nextclouda, np. `https://notatki.example.com` zamiast
-`https://cloud.example.com`. Jeśli Nextcloud działa pod podścieżką
-(`nextcloudUrl = "https://example.com/nextcloud"`), dopisz ją:
-`https://notatki.example.com/nextcloud`. Logowanie: nazwa użytkownika i **hasło aplikacji**
-(Nextcloud → Ustawienia → Bezpieczeństwo). Ciasteczka Nextclouda nie są przekazywane —
-Brulion uwierzytelnia każde zapytanie. Certyfikat HTTPS Nextclouda jest sprawdzany (systemowe
-CA).
+In Brulion (sync settings → Nextcloud) enter **Brulion's address** as the server address
+instead of Nextcloud's, e.g. `https://notatki.example.com` instead of
+`https://cloud.example.com`. If Nextcloud runs under a subpath
+(`nextcloudUrl = "https://example.com/nextcloud"`), append it:
+`https://notatki.example.com/nextcloud`. Login: user name and an **app password**
+(Nextcloud → Settings → Security). Nextcloud's cookies are not forwarded —
+Brulion authenticates every request. Nextcloud's HTTPS certificate is verified (system
+CAs).
 
-* nginx rozwiązuje nazwę Nextclouda przy starcie; jeśli DNS bywa wtedy niedostępny, ustaw
-  `services.nginx.proxyResolveWhileRunning = true;` i `services.nginx.resolver.addresses`.
-* Nextcloud na **tym samym serwerze**: zamiast pośrednika podaj jako `hostName` host
-  Nextclouda i podścieżkę, np.
+* nginx resolves Nextcloud's name at startup; if DNS is sometimes unavailable then, set
+  `services.nginx.proxyResolveWhileRunning = true;` and `services.nginx.resolver.addresses`.
+* Nextcloud on **the same server**: instead of the proxy, give Nextcloud's host as `hostName`
+  and a subpath, e.g.
   `services.brulion-web = { hostName = config.services.nextcloud.hostName; basePath = "/brulion/"; };`
-  — aplikacja i Nextcloud mają wtedy ten sam origin, `nextcloudUrl` jest niepotrzebny, a w
-  Brulionie podajesz zwykły adres Nextclouda.
-* Aplikacje na komputer i na Androida nie podlegają CORS — tam zawsze zwykły adres Nextclouda.
+  — the app and Nextcloud then have the same origin, `nextcloudUrl` is not needed, and in
+  Brulion you enter Nextcloud's usual address.
+* The desktop and Android apps are not subject to CORS — there it is always Nextcloud's usual address.
 
-## Praca nad kodem
+## Working on the code
 
 ```sh
 nix develop                    # Qt 6.11, cmake, ninja, ccache, clang-tools, gdb, nixfmt
-scripts/dev-build.sh           # konfiguracja + build w ./build (Debug, -Werror, z blokadą)
-scripts/dev-build.sh -t tst_dates tst_dates   # tylko jeden test (cel + regex)
-./build/src/app/brulion        # uruchomienie; bez ekranu: QT_QPA_PLATFORM=offscreen
+scripts/dev-build.sh           # configure + build in ./build (Debug, -Werror, with a lock)
+scripts/dev-build.sh -t tst_dates tst_dates   # just one test (target + regex)
+./build/src/app/brulion        # run; without a screen: QT_QPA_PLATFORM=offscreen
 ```
 
-`nix develop` ustawia `QT_PLUGIN_PATH` i `QML_IMPORT_PATH`, więc niezawinięty program z
-`./build` znajduje wtyczki Qt i moduły QML. Szczegóły i zasady: `CLAUDE.md`,
+`nix develop` sets `QT_PLUGIN_PATH` and `QML_IMPORT_PATH`, so the unwrapped program from
+`./build` finds the Qt plugins and QML modules. Details and rules: `CLAUDE.md`,
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Polecenia Nixa:
+Nix commands:
 
 ```sh
-nix build .#brulion -L         # pakiet -> ./result (bez testów; walidacja .desktop/AppStream)
-nix build .#brulion-cli -L     # sam wiersz poleceń (BRULION_BUILD_APP=OFF, bez Qt Quick)
-nix flake check -L             # pakiet, wszystkie testy, moduł NixOS, formatowanie, test VM (x86_64)
-nix build .#checks.x86_64-linux.tests -L   # same testy (ctest w piaskownicy Nixa)
-nix fmt                        # formatowanie plików .nix (nixfmt)
+nix build .#brulion -L         # package -> ./result (no tests; .desktop/AppStream validation)
+nix build .#brulion-cli -L     # the command line alone (BRULION_BUILD_APP=OFF, no Qt Quick)
+nix flake check -L             # package, all tests, NixOS module, formatting, VM test (x86_64)
+nix build .#checks.x86_64-linux.tests -L   # tests only (ctest in the Nix sandbox)
+nix fmt                        # formatting of .nix files (nixfmt)
 ```
 
-Co sprawdza `nix flake check`:
+What `nix flake check` checks:
 
-| Check | Co robi |
+| Check | What it does |
 |---|---|
-| `brulion` | build pakietu, `desktop-file-validate` i `appstreamcli validate-tree` na zainstalowanych plikach, `brulion-cli version` i zapis szybkiej notatki w próbnym notatniku |
-| `brulion-cli` | sam wiersz poleceń (bez Qt Quick): ten sam test zapisu |
-| `tests` | pakiet z `doCheck = true`: cały `ctest` — testy jednostkowe, samotesty QML i testy skryptów. Poza nim zostają testy, które potrzebują przeglądarek (`tests/web`), emulatora Androida, internetu albo prawdziwych urządzeń, oraz benchmarki |
-| `nixos-module` | minimalny system NixOS z `programs.brulion` (+ autostart) i `services.brulion-web` (+ pośrednik Nextcloud) się ewaluuje (`toplevel.drvPath`, bez budowania systemu); konfiguracja nginx przechodzi `gixy`, wpis autostartu `desktop-file-validate`; wariant z `release` i `basePath`; asercja przy braku pakietu |
-| `nixfmt` | wszystkie pliki `.nix` są sformatowane (`nix fmt`) |
-| `web-vm` (tylko x86_64, wymaga KVM) | maszyna wirtualna z modułem: typy MIME, gzip/brotli, nagłówki cache i ETag, przekierowanie `basePath`, pośrednik WebDAV (fałszywy Nextcloud: ścieżki z polskimi znakami, ciasteczka, duży `PUT`), wpis autostartu i start aplikacji bez ekranu |
+| `brulion` | package build, `desktop-file-validate` and `appstreamcli validate-tree` on the installed files, `brulion-cli version` and saving a quick capture in a scratch notebook |
+| `brulion-cli` | the command line alone (without Qt Quick): the same save test |
+| `tests` | the package with `doCheck = true`: the whole `ctest` — unit tests, QML self-tests and script tests. Left out are the tests that need browsers (`tests/web`), the Android emulator, the internet or real devices, and the benchmarks |
+| `nixos-module` | a minimal NixOS system with `programs.brulion` (+ autostart) and `services.brulion-web` (+ Nextcloud proxy) evaluates (`toplevel.drvPath`, without building the system); the nginx configuration passes `gixy`, the autostart entry `desktop-file-validate`; a variant with `release` and `basePath`; an assertion when the package is missing |
+| `nixfmt` | all `.nix` files are formatted (`nix fmt`) |
+| `web-vm` (x86_64 only, needs KVM) | a virtual machine with the module: MIME types, gzip/brotli, cache headers and ETag, the `basePath` redirect, the WebDAV proxy (a fake Nextcloud: paths with Polish characters, cookies, a large `PUT`), the autostart entry and a headless app start |
 
-**Raspberry Pi (maszyna deweloperska) nie robi ciężkich buildów** — `nix flake check` i
-`nix build` uruchamiaj na laptopie (x86_64) przez `laptop-run`, zawsze pod wspólną blokadą
-(nowe pliki najpierw `git add -N`, bo `laptop-run` kopiuje tylko pliki śledzone przez gita):
+**The Raspberry Pi (dev machine) does not do heavy builds** — run `nix flake check` and
+`nix build` on the laptop (x86_64) through `laptop-run`, always under the shared lock
+(new files first `git add -N`, because `laptop-run` copies only files tracked by git):
 
 ```sh
-git add -N <nowe pliki>
+git add -N <new files>
 flock <lock> laptop-run bash -c 'nix flake check -L && nix build .#brulion -L'
 ```
 
-### Pliki
+### Files
 
-| Ścieżka | Zawartość |
+| Path | Contents |
 |---|---|
-| `flake.nix`, `flake.lock` | wyjścia flake'a, przypięty nixpkgs |
-| `nix/package.nix` | pakiet (`version` zmienia `scripts/release.sh` razem z `CMakeLists.txt`) |
-| `nix/cli.nix` | sam `brulion-cli` (`packages.<system>.brulion-cli`, `apps.brulion-cli`) |
-| `nix/module.nix` | moduł NixOS (`programs.brulion`, `services.brulion-web`) |
-| `nix/web-release.nix` | pobieranie `brulion-web-<wersja>.zip` z wydania |
-| `nix/web-site.nix` | kopia wersji przeglądarkowej z plikami `.gz`/`.br` |
-| `nix/tests/` | `module-eval.nix`, `web-vm.nix`, `fake-web-build.nix` (zastępcza „wersja przeglądarkowa” do testów) |
-| `cmake/BrulionInstall.cmake` | reguły `cmake --install` dla plików pulpitu (Linux) |
-| `packaging/` | `io.github.januszbit.brulion.desktop`, `.metainfo.xml`, ikona PNG 256 px, `agent/brulion/SKILL.md` (poradnik dla agentów AI) |
+| `flake.nix`, `flake.lock` | flake outputs, pinned nixpkgs |
+| `nix/package.nix` | the package (`version` is changed by `scripts/release.sh` together with `CMakeLists.txt`) |
+| `nix/cli.nix` | `brulion-cli` alone (`packages.<system>.brulion-cli`, `apps.brulion-cli`) |
+| `nix/module.nix` | NixOS module (`programs.brulion`, `services.brulion-web`) |
+| `nix/web-release.nix` | downloading `brulion-web-<version>.zip` from a release |
+| `nix/web-site.nix` | a copy of the browser version with `.gz`/`.br` files |
+| `nix/tests/` | `module-eval.nix`, `web-vm.nix`, `fake-web-build.nix` (a stand-in "browser version" for tests) |
+| `cmake/BrulionInstall.cmake` | `cmake --install` rules for the desktop files (Linux) |
+| `packaging/` | `io.github.januszbit.brulion.desktop`, `.metainfo.xml`, 256 px PNG icon, `agent/brulion/SKILL.md` (a guide for AI agents) |
 
-Ikona PNG jest wygenerowana z `assets/logo.svg`; po zmianie logo:
+The PNG icon is generated from `assets/logo.svg`; after a logo change:
 
 ```sh
 nix shell nixpkgs#librsvg nixpkgs#optipng -c sh -c '
@@ -446,7 +446,7 @@ nix shell nixpkgs#librsvg nixpkgs#optipng -c sh -c '
   optipng -o5 -strip all packaging/icons/hicolor/256x256/apps/io.github.januszbit.brulion.png'
 ```
 
-Pliki pulpitu sprawdzisz lokalnie bez budowania:
+You can check the desktop files locally without building:
 
 ```sh
 nix shell nixpkgs#desktop-file-utils nixpkgs#appstream -c sh -c '
@@ -454,15 +454,15 @@ nix shell nixpkgs#desktop-file-utils nixpkgs#appstream -c sh -c '
   appstreamcli validate --no-net packaging/io.github.januszbit.brulion.metainfo.xml'
 ```
 
-## Gdy coś nie działa
+## Troubleshooting
 
-* **Brak ikony w zasobniku** — patrz „Zasobnik” (GNOME potrzebuje rozszerzenia AppIndicator).
-* **Okno bez motywu / ostrzeżenia o wtyczkach Qt** — Brulion zbudowany z innym nixpkgs niż
-  system ładuje systemowe wtyczki Qt innej wersji. Dodaj `inputs.nixpkgs.follows = "nixpkgs"`
-  (wyżej).
-* **Uruchamiaj `brulion`, nie `bin/.brulion-wrapped`** — wrapper ustawia ścieżki wtyczek Qt i
-  modułów QML.
-* **Wersja przeglądarkowa: `hash mismatch` przy `release`** — nowa wersja ma nowy plik zip:
-  wpisz hash z komunikatu (`got: sha256-…`).
-* **nginx nie startuje: `host not found in upstream`** — DNS niedostępny przy starcie, patrz
-  `proxyResolveWhileRunning` wyżej.
+* **No icon in the tray** — see "Tray, autostart, notifications" (GNOME needs the AppIndicator extension).
+* **Window without a theme / warnings about Qt plugins** — Brulion built with a different nixpkgs than the
+  system loads the system's Qt plugins of another version. Add `inputs.nixpkgs.follows = "nixpkgs"`
+  (above).
+* **Run `brulion`, not `bin/.brulion-wrapped`** — the wrapper sets the paths of the Qt plugins and
+  QML modules.
+* **Browser version: `hash mismatch` with `release`** — a new version has a new zip file:
+  enter the hash from the message (`got: sha256-…`).
+* **nginx does not start: `host not found in upstream`** — DNS unavailable at startup, see
+  `proxyResolveWhileRunning` above.

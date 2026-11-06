@@ -23,7 +23,7 @@ if [[ "${VAULT:-demo}" == big ]]; then
 else
   vault="$home/Przykładowy brulion"
 fi
-"${wrap[@]}" "$bin" --no-single-instance --demo --vault "$vault" --size 800x600 --now "$now" --delay 1500 \
+"${wrap[@]}" "$bin" --no-single-instance --demo --vault "$vault" --size 800x600 --now "$now" --locale pl --delay 1500 \
   --screenshot "$home/prep.png" >/dev/null 2>&1 || true
 cp "tests/app/shell/notemode/Wyprawa w Bieszczady.md" "$vault/"
 "${wrap[@]}" perf record -F "${FREQ:-1000}" -g --call-graph "${CALLGRAPH:-dwarf,32768}" -o "$out" -- \

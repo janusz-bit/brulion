@@ -76,7 +76,7 @@ class WorkspaceBackups : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY stateChanged FINAL)
     /// What status means, translated; "" when there is nothing to say.
     Q_PROPERTY(QString statusText READ statusText NOTIFY stateChanged FINAL)
-    /// "dziś 14:30 · 12,3 MB" of the last backup; "" before the first.
+    /// "today 14:30 · 12.3 MB" of the last backup; "" before the first.
     Q_PROPERTY(QString lastBackupText READ lastBackupText NOTIFY stateChanged FINAL)
     /// A restore did not finish (closed, killed): statusText says what to do; dismissInterrupted().
     Q_PROPERTY(bool interrupted READ interrupted NOTIFY stateChanged FINAL)

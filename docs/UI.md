@@ -12,37 +12,37 @@ components — no Material/Fusion look, so all targets look identical.
   destructive), amber `#f2b33d` (reminders, alarms), grid blue `#9fc3e6` (links lighter tint,
   focus). Text contrast ≥ WCAG AA. `Theme.dark` follows `Qt.styleHints.colorScheme` unless the
   user overrides it in the settings.
-* **Appearance settings** (Settings → **Wygląd**, device-local in `AppSettings`; a phone and a
-  desktop want different looks): the theme mode; the **accent colour** — presets Czerwony (the
-  margin red, default), Niebieski, Zielony, Morski, Fioletowy, Grafitowy, or **Własny…** (any
+* **Appearance settings** (Settings → **Appearance**, device-local in `AppSettings`; a phone and a
+  desktop want different looks): the theme mode; the **accent colour** — presets Red (the
+  margin red, default), Blue, Green, Teal, Purple, Graphite, or **Custom…** (any
   `#rrggbb` from `BAccentDialog`: a 12 × 3 colour grid, a hex field, a live preview);
   `ThemePalette` (C++) derives readable shades by itself — the accent as a mark ≥ 3:1, as text
   ≥ 4.5:1 on every surface and on its own tint, the solid fill ≥ 4.5:1 under white text. The
   accent marks things (today, the current tab, the selected row's bar, drop targets); it never
   means "destructive": danger callouts, danger cards, deleting stay red. The **light
-  background** Papier (default) | Białe (neutral white, grey wells) and the **dark background**
-  Granatowe (default) | Czarne (OLED: true black, barely lifted cards); both rows show while
+  background** Paper (default) | White (neutral white, grey wells) and the **dark background**
+  Blue-grey (default) | Black (OLED: true black, barely lifted cards); both rows show while
   the mode is "System". **Text size** (UI factor), the **interface font** (any installed family,
-  `BFontPickerDialog`; "" = the system's), **density** Wygodna | Zwarta (desktop only: 24/30/36
+  `BFontPickerDialog`; "" = the system's), **density** Comfortable | Compact (desktop only: 24/30/36
   px controls, 28 px rows, 26 px sidebar rows, a 248 px sidebar, a smaller paragraph gap; touch
-  UIs keep 44 px targets and never show the row), reduce motion. **Układ**: the sidebar's
-  entries (Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj) and its sections
-  Ulubione and Ostatnie can be unticked (the "Strony" tree stays; hidden views stay in the
-  command palette and their shortcuts; ticked, Ulubione shows once a page is starred and
-  Ostatnie once another page was opened); the phone's **bottom navigation**: four buttons, each
-  from a menu of Dziennik, Kalendarz, Szukaj, Zadania, Strony, Tagi, Graf (a view already in
-  another slot swaps places with it), Menu always last; the bottom bar's **+ Notatka** (the
+  UIs keep 44 px targets and never show the row), reduce motion. **Layout**: the sidebar's
+  entries (Journal, Calendar, Tasks, All pages, Tags, Graph, Search) and its sections
+  Favorites and Recent can be unticked (the "Pages" tree stays; hidden views stay in the
+  command palette and their shortcuts; ticked, Favorites shows once a page is starred and
+  Recent once another page was opened); the phone's **bottom navigation**: four buttons, each
+  from a menu of Journal, Calendar, Search, Tasks, Pages, Tags, Graph (a view already in
+  another slot swaps places with it), Menu always last; the bottom bar's **+ Note** (the
   quick note button) on or off;
-  "Przywróć domyślny wygląd" (colours, fonts, sizes, density, line spacing — the visibility of
+  "Restore the default look" (colours, fonts, sizes, density, line spacing — the visibility of
   elements stays). A family chosen on another device or since uninstalled falls back to the
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
 * Typography: system sans for UI (or a chosen family); the editor font is serif, sans or any
-  installed family (Settings → Edytor → Czcionka → **Inna…**), the code font any monospaced
+  installed family (Settings → Editor → Font → **Other…**), the code font any monospaced
   family (code blocks, source mode, formulas; inline `code` in rendered text keeps Qt's own fixed
   font); calculations are note text: the editor font at the editor's size, results with tabular
-  figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Ciasny 1.45 | Normalny 1.65 | Luźny 1.9; configurable max
-  text width — Wąska 600, **Normalna 680** (the default, `Theme.measure`: about 85 characters of
-  16-px serif, Obsidian's comfortable measure), Szeroka 960, Pełna; the presets before 0.6.0
+  figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Tight 1.45 | Normal 1.65 | Relaxed 1.9; configurable max
+  text width — Narrow 600, **Normal 680** (the default, `Theme.measure`: about 85 characters of
+  16-px serif, Obsidian's comfortable measure), Wide 960, Full; the presets before 0.6.0
   (640, 760) read as 600 and 680, other stored widths stay (the calendar's Agenda keeps 760,
   `Theme.measureList`: its rows hold a time, a title and a page) — and text size. One type scale: note text quoted outside the editor (linked
   references, tagged blocks under a page and in the side panel, `ContentRefRow`) is in the
@@ -70,7 +70,7 @@ components — no Material/Fusion look, so all targets look identical.
   heading or paragraph ends the zoom) — in outline mode; in document mode a note reads like an
   Obsidian page (see "Note modes" below), its nested lists with the same guide lines.
 * Touch (Android, `--touch`): targets ≥ 44 px (the dense rows of navigation lists — the
-  sidebar and drawer's navigation, Ulubione, Ostatnie, the page tree — are exactly 44 px, the
+  sidebar and drawer's navigation, Favorites, Recent, the page tree — are exactly 44 px, the
   iOS list minimum, other rows 48), bottom navigation, drawer, an editing toolbar
   docked on the on-screen keyboard (the bottom navigation makes way while the keyboard is up;
   when it goes, the navigation comes back and a toolbar that stays docks right on it), dialogs as
@@ -80,10 +80,10 @@ components — no Material/Fusion look, so all targets look identical.
 
 * **A newer version** (`ShellUpdateBanner`, `AppController.updates`, `shell/appupdates.h`): on
   Android and Windows, where nothing updates the app by itself, a card between the top bar and the
-  view, at every width and in every view, hidden while the on-screen keyboard is up: "Dostępny jest
-  Brulion X.Y.Z", **Zobacz na GitHubie** (the release's page in the browser; the card stays until
+  view, at every width and in every view, hidden while the on-screen keyboard is up: "Brulion X.Y.Z
+  is available", **View on GitHub** (the release's page in the browser; the card stays until
   the app is updated) and a cross (no more message about this version; a later release shows it
-  again). Settings → Aplikacja → "Sprawdzaj nowe wersje" (on by default, this device's setting)
+  again). Settings → Application → "Check for new versions" (on by default, this device's setting)
   turns it off; GitHub is asked once a day and only while it is on. Builds with the CMake option
   `BRULION_UPDATE_CHECK=OFF` (store builds: F-Droid, IzzyOnDroid; docs/ANDROID.md) have neither
   the card nor the switch (`updates.supported` is false, also with `--update-available`).
@@ -95,50 +95,50 @@ components — no Material/Fusion look, so all targets look identical.
   and while dragging); the sidebar and the side panel draw no edge of their own there (the drawer
   keeps its edge), the rail its own line.
   * Rail (`ShellRail`, also the drawer's left column on phones): at the top the notebook — its
-    first letter on the accent; a click opens the **Przełącz notatnik** menu (the recent notebooks
-    — the current one checked, one click switches — then „Dokumentacja Brulionu” and „Otwórz inny
-    notatnik…” (the start screen); a recent notebook whose folder is gone is not recreated: a
+    first letter on the accent; a click opens the **Switch notebook** menu (the recent notebooks
+    — the current one checked, one click switches — then "Brulion Documentation" and "Open another
+    notebook…" (the start screen); a recent notebook whose folder is gone is not recreated: a
     warning, and it leaves the list); then the views as icon buttons, their names and shortcuts
-    in tooltips to the right: Dziennik, Kalendarz, Zadania, Nawyki, Wszystkie strony, Tagi, Graf,
-    Szukaj (the selected one tinted, the accent's bar at the rail's edge; the entries hidden in
-    Settings → Wygląd → Układ left out; in the drawer also Importuj notatki; they scroll when the
+    in tooltips to the right: Journal, Calendar, Tasks, Habits, All pages, Tags, Graph,
+    Search (the selected one tinted, the accent's bar at the rail's edge; the entries hidden in
+    Settings → Appearance → Layout left out; in the drawer also Import notes; they scroll when the
     window is too low); at the bottom the sync status (`ShellSyncFooter` with `compact`: the icon,
-    its text in the tooltip; a click opens the sync center) and Ustawienia. The top bar's sidebar
+    its text in the tooltip; a click opens the sync center) and Settings. The top bar's sidebar
     button hides only the page panel: the rail stays (not in focus mode).
   * Sidebar (`ShellSidebar`, the page panel): the notebook's name and a new-page button, then
-    its sections in the order chosen in Settings → Wygląd → Układ → „Kolejność sekcji”
-    (`AppSettings.sidebarSections`, `ui/sidebar/sections`; Ulubione, Ostatnie, Strony by default;
-    the ones before the tree are the list's header, the ones after it its footer): Ulubione (shown
-    once a page is starred — the page header's ☆, the Więcej menu, a tree row's „Dodaj do
-    ulubionych”, the palette); Ostatnie (up to 5 pages opened lately, without the one shown — the
-    tree highlights that one —; hidden while there are none); Strony (the folder tree — see
-    "Folders" below). Ulubione and Ostatnie can be hidden there too.
+    its sections in the order chosen in Settings → Appearance → Layout → "Order of the sections"
+    (`AppSettings.sidebarSections`, `ui/sidebar/sections`; Favorites, Recent, Pages by default;
+    the ones before the tree are the list's header, the ones after it its footer): Favorites (shown
+    once a page is starred — the page header's ☆, the More menu, a tree row's "Add to
+    favorites", the palette); Recent (up to 5 pages opened lately, without the one shown — the
+    tree highlights that one —; hidden while there are none); Pages (the folder tree — see
+    "Folders" below). Favorites and Recent can be hidden there too.
   * Top bar (`ShellTopBar`): sidebar toggle, back / forward, the title (a breadcrumb for pages
-    in folders), the **search field** „Szukaj lub wpisz polecenie…” (the page switcher's key in
-    it, Ctrl+O by default: it opens the switcher, `BQuickSwitcher` — pages by name, „Utwórz
-    stronę…”, and last „Szukaj „…” w notatkach” (the search view with the query); a query starting
-    with „>” turns to the command palette with the rest typed), Szybka notatka, side panel toggle
-    and **Więcej** (⋯; ⋮ on phones). Więcej: a row of the page's actions as icons with short
-    names (Ulubione — the star tinted when the page is one —, Nazwa, Przenieś, Historia; a daily
-    note has no Nazwa nor Przenieś); **Tryb**, a segmented switch Dokument | Konspekt | Źródło
-    (the note's mode, `ShellRouteView.viewNoteMode`, and its source mode; a picture has „Pokaż
-    jako tekst” / „Pokaż obraz” instead, a PDF or another file neither); **Otwórz w** — Nowa
-    karta, Okno, Panel boczny, Podziel (phones: „Otwórz w nowej karcie”); then Dodaj właściwość,
-    Znajdź w notatce, Pokaż w drzewie, Otwórz w innej aplikacji (a PDF, an attachment), Przenieś
-    do kosza; on phones Paleta poleceń; the **Notatnik** submenu (Nowa strona, Centrum
-    synchronizacji, Importuj notatki, Import i eksport, Zamień w notatniku, Sprzątanie, Kosz, O
-    Brulionie) and Ustawienia.
+    in folders), the **search field** "Search or type a command…" (the page switcher's key in
+    it, Ctrl+O by default: it opens the switcher, `BQuickSwitcher` — pages by name, "Create
+    page “…”", and last "Search the notes for “…”" (the search view with the query); a query starting
+    with ">" turns to the command palette with the rest typed), Quick capture, side panel toggle
+    and **More** (⋯; ⋮ on phones). More: a row of the page's actions as icons with short
+    names (Favorite — the star tinted when the page is one —, Rename, Move, History; a daily
+    note has no Rename nor Move); **Mode**, a segmented switch Document | Outline | Source
+    (the note's mode, `ShellRouteView.viewNoteMode`, and its source mode; a picture has "Show
+    as text" / "Show picture" instead, a PDF or another file neither); **Open in** — New
+    tab, Window, Side panel, Split (phones: "Open in a new tab"); then Add property,
+    Find in note, Show in tree, Open in another app (a PDF, an attachment), Move
+    to trash; on phones Command palette; the **Notebook** submenu (New page, Sync
+    center, Import notes, Import and export, Replace in notebook, Clean up, Trash, About
+    Brulion) and Settings.
     Under it, with two tabs or more, the **tab bar** (`ShellTabBar`), and the view: one pane or two
     side by side (the split view) — "Tabs, split view and windows".
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
-    context — for pages and journals the tabs **Linki** (linked references and unlinked
-    mentions), **Konspekt** (headings: a click scrolls to one, a right-click / long press copies
-    its link `[[Strona#Nagłówek]]` or its embed), **Kalendarz** (month with journal days). While
-    the panel shows a page's **Linki** (`ContentSidePanel.currentTab`, copied into
+    context — for pages and journals the tabs **Links** (linked references and unlinked
+    mentions), **Outline** (headings: a click scrolls to one, a right-click / long press copies
+    its link `[[Page#Heading]]` or its embed), **Calendar** (month with journal days). While
+    the panel shows a page's **Links** (`ContentSidePanel.currentTab`, copied into
     `PageView.sidePanelTab`), the page does not draw its own references section under the blocks
     (`PageView.refsInSidePanel`; the same linked references and unlinked mentions are on screen
     in the panel, as the header's chips hide while the open properties panel shows them); closing
-    the panel, pinning a page there or switching to Konspekt / Kalendarz brings the section back
+    the panel, pinning a page there or switching to Outline / Calendar brings the section back
     at once. Narrow windows have no side panel and always show the section.
 * **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the bottom bar's **Menu**, or a
   swipe to the right from the left edge; the top bar's ☰ whenever the bottom navigation is not
@@ -172,106 +172,109 @@ components — no Material/Fusion look, so all targets look identical.
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps back (when there is
-  history), title, Szukaj and Więcej — no ☰ while the bottom navigation is shown, whose Menu
+  history), title, Search and More — no ☰ while the bottom navigation is shown, whose Menu
   opens the same drawer (`ShellTopBar.menuButtonShown: !AppShell.bottomNavShown`); ☰ comes back
   whenever that bar is away: a view replaces it (`viewReplacesBottomNav`: the drawing editor) or
   the on-screen keyboard is up (it takes the bar's place, and there is no edge strip while
   typing — without ☰ the drawer was out of reach until Back hid the keyboard; the title moves
   over for it then); with no button before it the title starts on the views' content edge
   (`Theme.space3` below 600 px, the editor's compact padding, `Theme.space4` up to 900 px);
-  a **bottom navigation** bar: Dziennik, Kalendarz, Szukaj, Zadania by default — four views
-  chosen in Settings → Wygląd → Układ —, then **+ Notatka** (quick capture, its accessible name
-  "Szybka notatka" holding the label: WCAG 2.5.3; its "+" sits in a small ringed pill, the old
+  a **bottom navigation** bar: Journal, Calendar, Search, Tasks by default — four views
+  chosen in Settings → Appearance → Layout —, then **+ Note** (quick capture, its accessible name
+  "Quick capture" holding the label: WCAG 2.5.3; its "+" sits in a small ringed pill, the old
   floating button's popup surface scaled down, so it reads as an action and never as the
   current view; off in the settings, capture stays in the palette and under Ctrl+Shift+N) and
   Menu → drawer, always last. Every item is one `NavTab` (icon pill, label) of at least 48 px;
   they share the width by their labels (`ShellBottomNav.widths`): evenly while every label fits
-  an even share, else a long label ("Kalendarz") gets what it needs (its semibold width and
+  an even share, else a long label ("Calendar") gets what it needs (its semibold width and
   4 px on each side, then 2 px) and the short ones ("Menu") share the rest, so at the larger text
-  sizes (Duży, Większy) and on 320-dp phones the names stay whole; only beyond that are the
+  sizes (Large, Larger) and on 320-dp phones the names stay whole; only beyond that are the
   widths scaled and the longest labels elide. Nothing floats over a phone's content; capture is wherever the bar is, settings, sync
   and the graph included. The navigation makes way while the on-screen
   keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
   editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
-  ends as when leaving the page, and + Notatka ends the editing (the view's `endEditing()`, as
-  the toolbar's "Ukryj klawiaturę") before quick capture opens —, and for the drawing editor's
+  ends as when leaving the page, and + Note ends the editing (the view's `endEditing()`, as
+  the toolbar's "Hide keyboard") before quick capture opens —, and for the drawing editor's
   tool bar, which takes its place ("On-screen keyboard"). The Android back key /
   gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
-  **Importuj notatki** as the navigation's last entry (the import tab of `ImportExportView`), in
+  **Import notes** as the navigation's last entry (the import tab of `ImportExportView`), in
   the same rhythm as the entries above it.
-* **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
-  ulubionych, Zmień nazwę… (F2) and Przenieś do… (on a page route — a daily note opened as a page
-  too —, not in the journal views by date: "Folders" below), Pokaż w drzewie (the
-  sidebar, the drawer on phones), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
-  tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment
-  Źródło Markdown is the picture bar's Pokaż jako tekst / Pokaż obraz and the note mode is not
-  offered (nor in the palette: a picture is no note); always — Otwórz w nowej karcie, Otwórz w
-  nowym oknie (desktop, wide), Podziel widok / Zamknij podział (wide), Nowa strona (Ctrl+N), Paleta
-  poleceń (Ctrl+K), **Centrum synchronizacji, Importuj notatki (the import tab), Import i eksport,
-  Kosz (n), Sprzątanie, Ustawienia (Ctrl+,), O Brulionie**. These destinations have no button of their own: on
+* **More menu** (top bar ⋮): on a page or daily note — Add to favorites / Remove from
+  favorites, Rename… (F2) and Move to… (on a page route — a daily note opened as a page
+  too —, not in the journal views by date: "Folders" below), Show in tree (the
+  sidebar, the drawer on phones), Page history, Markdown source (Ctrl+E), Toggle
+  note mode, Open in side panel (wide only), Move to trash — on a picture attachment
+  Markdown source is the picture bar's Show as text / Show picture and the note mode is not
+  offered (nor in the palette: a picture is no note); always — Open in new tab, Open in
+  new window (desktop, wide), Split view / Close split view (wide), New page (Ctrl+N), Command
+  palette (Ctrl+K), **Sync center, Import notes (the import tab), Import and export,
+  Trash (n), Clean up, Settings (Ctrl+,), About Brulion**. These destinations have no button of their own: on
   phones this menu (and the command palette) is the way to them. A new notebook (at most one
-  note) also offers **Importuj notatki** under the empty journal's hint, and onboarding has an
-  "Importuj notatki" card that opens the chosen notebook on its import tab
+  note) also offers **Import notes** under the empty journal's hint, and onboarding has an
+  "Import notes" card that opens the chosen notebook on its import tab
   (`AppController.openVaultAt`); outside the browser its text first says that an Obsidian vault
   (also one synced with Syncthing) needs no import: its folder opens as the notebook
-  (docs/IMPORT.md "Folder Obsidiana bez importu").
-* **The documentation notebook** „Dokumentacja Brulionu” (desktop and Android; the browser has
-  one notebook, so its sample welcome page links to the guide online): Brulion notes written
-  from `src/app/shell/guide/*.md` into `<AppData>/Dokumentacja Brulionu` and brought up to date
-  on every open (pages the user changed or deleted stay so). It opens on its table of contents
-  from the switcher, the palette („Dokumentacja Brulionu” / „Wróć do mojego notatnika”) or
-  Ctrl+Shift+B, and is for reading: it is never a recent or start notebook (a restart opens the
+  (docs/IMPORT.md "Obsidian folder without importing").
+* **The documentation notebook** "Brulion Documentation" (desktop and Android; the browser has
+  one notebook, so its sample welcome page links to the guide online): Brulion notes in the UI
+  language written from `src/app/shell/guide/<language>/*.md` (`en`, `pl`) into
+  `<AppData>/Brulion Documentation` — with the Polish UI `<AppData>/Dokumentacja Brulionu`
+  (`notebook::docsNotebookFolder()`) — and brought up to date on every open (pages the user
+  changed or deleted stay so). Each folder keeps its own language; both count as the
+  documentation notebook (`notebook::docsNotebookLanguage()`, also for brulion-cli). It opens
+  on its table of contents from the switcher, the palette ("Brulion Documentation" / "Back to my
+  notebook") or Ctrl+Shift+B, and is for reading: it is never a recent or start notebook (a restart opens the
   user's last notebook; the start drops it from the recent notebooks where 0.3.0–0.3.5 listed
   it), arms no reminders (the user's notebook keeps its armed alarms), quick
   capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
   is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
-  new page, Nowy folder…, Przenieś do…, Pokaż w drzewie, Zmień nazwę strony… (F2), capture, theme,
-  language, sync, panels, focus mode and typewriter scrolling, settings, Skróty klawiszowe, about; the editor's commands —
-  Markdown source, note mode, "Kopiuj link do strony", "Kopiuj odwołanie do bloku", "Kopiuj link
-  do bloku", "Kopiuj link do nagłówka": the current block is the one being edited (a table whose
+  new page, New folder…, Move to…, Show in tree, Rename page… (F2), capture, theme,
+  language, sync, panels, focus mode and typewriter scrolling, settings, Keyboard shortcuts, about; the editor's commands —
+  Markdown source, note mode, "Copy link to page", "Copy block reference", "Copy link
+  to block", "Copy link to heading": the current block is the one being edited (a table whose
   cell is edited too; a cell left for the palette leaves its table selected), else the selected
-  one, the heading that of its section; nothing current: a toast "Najpierw zaznacz blok lub umieść
-  w nim kursor"; in Markdown source the three block and heading commands are disabled — the
+  one, the heading that of its section; nothing current: a toast "First select a block or put the caret
+  in it"; in Markdown source the three block and heading commands are disabled — the
   page's views report it as `sourceMode`, AppShell binds `AppController.sourceModeShown`), quick switcher (`BQuickSwitcher`, fuzzy page search), quick capture (one
   line → today's journal; dates in the text become ⏰ / 📅; Android's home-screen widgets have a
   quick add of their own, outside the QML UI — date chips instead of words, docs/ANDROID.md
-  "Widżety"), the share dialog
-  (`ShellShareDialog`, "Zapisz w Brulionie": text or `.md`/`.txt` files another app shared —
-  Android's share sheet, docs/ANDROID.md "Udostępnij → Brulion", the browser version's share
-  target (docs/WEB.md "Udostępnianie do Brulionu": `--share-query`, or handed over by another tab
-  through `WasmShare` to `AppController.receiveShareQuery`), a desktop's "Otwórz za pomocą →
+  "Widgets"), the share dialog
+  (`ShellShareDialog`, "Save to Brulion": text or `.md`/`.txt` files another app shared —
+  Android's share sheet, docs/ANDROID.md "Share → Brulion", the browser version's share
+  target (docs/WEB.md "Sharing to Brulion": `--share-query`, or handed over by another tab
+  through `WasmShare` to `AppController.receiveShareQuery`), a desktop's "Open with →
   Brulion" (`--open <file>…`, a second launch's `share` message: `pendingShare.source` "open" —
-  the subtitle says "%n plik(i) do zapisania w notatniku" and the hint `shareCopyHint` that a copy
+  the subtitle says "%n file(s) to save in the notebook" and the hint `shareCopyHint` that a copy
   is saved and the file stays unchanged; a file that already is a page of the open notebook — also
   in a folder linked into it, a page that is a link, in a folder starting with "." — opens as that
   page instead, the dialog lists only the others; opened files arriving while the dialog waits are
   added to it, a file opened again is read again, any other share replaces it), or `--share` — go
   to today's journal or to new pages; `AppController.pendingShare` / `saveShare` / `dismissShare`; a
-  segmented "Dzisiejszy dziennik" / "Nowa strona" (text: the journal by default, one file: a new
+  segmented "Today's journal" / "New page" (text: the journal by default, one file: a new
   page titled after the file, several: one journal block each), the page title field for a single
   page, the text editable before saving — never through quick capture's date parsing —, files
   listed by name with their first lines or the reason they cannot be saved, all as plain text; a
   refused save (a page whose name differs only in letter case exists) keeps the dialog open with
-  the reason; "Anuluj" drops the share and its copies; `requestUiAction("share")` opens it once
+  the reason; "Cancel" drops the share and its copies; `requestUiAction("share")` opens it once
   a user notebook is ready), new page / folder, rename, move
   (`ShellMoveDialog`), delete confirmation, about; toasts. Views reach the shell's dialogs for a
   page or folder through `AppController.requestItemAction(action, path)` (`move`, `rename`,
   `delete`, `newPage`, `newFolder`, `reveal`).
-* **The tray calendar** (`ShellTrayCalendar`, desktop; docs/WINDOWS.md "Kalendarz z zasobnika"):
+* **The tray calendar** (`ShellTrayCalendar`, desktop; docs/WINDOWS.md "Tray calendar"):
   a window of its own (Qt.Tool, frameless, always on top, no transient parent — owned by a
   hidden main window it would hide with it on Windows), created on first use by Main.qml's
   `Loader`, about 336 × 500 px with a 1 px frame: today's long date and a close button,
-  `ContentMiniCalendar` (the month with its dots, the picked day's tasks and reminders, "Otwórz
-  dziennik"; reset to today's month on every open; without a notebook only the month and
-  „Otwórz notatnik, aby zobaczyć zadania i przypomnienia.”), "Otwórz Brulion" and "Szybka
-  notatka…". An entry or "Otwórz dziennik" navigates and calls `AppController.showWindow()`,
+  `ContentMiniCalendar` (the month with its dots, the picked day's tasks and reminders, "Open
+  journal"; reset to today's month on every open; without a notebook only the month and
+  "Open a notebook to see its tasks and reminders."), "Open Brulion" and "Quick
+  capture…". An entry or "Open journal" navigates and calls `AppController.showWindow()`,
   which hides the calendar (Main.qml hides it on every `showWindowRequested`, on "toggleWindow"
   and before the main window closes, so a shown calendar never keeps a really closed app
-  running). It opens from the tray (`DesktopTray`): the menu's „Kalendarz” (`uiActionRequested
-  ("trayCalendar")`) and, with Ustawienia → Aplikacja → „Kliknięcie ikony w zasobniku” =
-  Kalendarz (`AppSettings.trayClick`, `app/trayClick`: "calendar" by default on Windows, "window"
+  running). It opens from the tray (`DesktopTray`): the menu's "Calendar" (`uiActionRequested
+  ("trayCalendar")`) and, with Settings → Application → "Click on the tray icon" =
+  Calendar (`AppSettings.trayClick`, `app/trayClick`: "calendar" by default on Windows, "window"
   elsewhere), a single left click ("toggleTrayCalendar": an open calendar closes); a double click
   always shows the window. Placement: `AppController.trayPopupPosition(w, h)` →
   `traypopup.h` — against the work area's edge nearest to the tray icon
@@ -287,7 +290,7 @@ components — no Material/Fusion look, so all targets look identical.
   the cursor on the icon or within 8 px of the click's (Windows hides it on the press, Trigger
   comes on the release — a held button).
 
-## Folders (the sidebar's tree, "Przenieś do…")
+## Folders (the sidebar's tree, "Move to…")
 
 Folders are namespaces of pages (docs/SYNTAX.md §1); moving never breaks a link (§2 "Rewriting on
 rename and move"). In a link to a page in a folder (`[[Projekty/Dom]]`) each path part is a link
@@ -298,8 +301,8 @@ in rendered text" below).
 * **The tree** (`FolderTreeModel` in `ShellSidebar`): lazy (rows only under open folders);
   folders first, then pages, in Polish order with numbers by value (`text::compareNames`, the
   same in All pages and on every platform); the journals folder first, with a calendar icon,
-  its days by readable dates ("śr, 14 paź"), newest first, closed by default; attachments hidden
-  unless "Pokaż załączniki". Indent guides as in the outline: a row at depth *d* draws a 1-px
+  its days by readable dates ("Wed, Oct 14"), newest first, closed by default; attachments hidden
+  unless "Show attachments". Indent guides as in the outline: a row at depth *d* draws a 1-px
   line under each ancestor's chevron (x = 14 / 10 px + `indent(level)` + half an icon), over its
   full height, so the lines run on from row to row, below the row's background (the selected
   row's pill covers them), in `Theme.guideOnSunken` (`borderStrong` in the light, `border` in the
@@ -308,10 +311,10 @@ in rendered text" below).
   remembered per notebook (device-local), follow renamed and moved folders and are forgotten
   with deleted ones. A tap opens or closes a folder and opens a page; the open page or daily
   note is revealed (its folders opened, scrolled into view) and highlighted on every route
-  change — the "+" menu's "Pokazuj otwartą stronę" (`ui/sidebar/revealCurrent`, on by default)
-  turns that off; a collapsed "Strony" stays collapsed (revealed when opened again), only "Pokaż
-  w drzewie" opens it. "Strony" counts pages without the daily notes. The revealed row (also a
-  new folder's, "Pokaż w drzewie"'s) stays wholly in the list's visible part, above the system's
+  change — the "+" menu's "Show the open page" (`ui/sidebar/revealCurrent`, on by default)
+  turns that off; a collapsed "Pages" stays collapsed (revealed when opened again), only "Show
+  in tree" opens it. "Pages" counts pages without the daily notes. The revealed row (also a
+  new folder's, "Show in tree"'s) stays wholly in the list's visible part, above the system's
   navigation bar: `ShellSidebar.revealedPath` is placed again (`placeList()`: the top unless the list
   is kept scrolled away, then the row with the least scrolling) whenever the list's or its
   header's height changes or the sidebar shows, until the user scrolls the list (a flick, the
@@ -328,47 +331,47 @@ in rendered text" below).
   it was hidden would leave the navigation scrolled out above the list.
 * **Menus**: right-click, press-and-hold, the Menu key, and on touch screens a "⋯" button on
   every row (44 px; press-and-hold stays), drawn faint (`fgFaint`, like the rows' icons; `fg`
-  while pressed) so the column of buttons stays quieter than the page titles. A folder: Nowa strona tutaj, Nowy folder…, Pokaż
-  strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
-  folder… (the export tab, folder scope), Zmień nazwę…, Przenieś do kosza (the confirmation
-  counts its pages and warns for the notebook's special folders). A page: Otwórz w panelu
-  bocznym (wide), ulubione, Przenieś do…, Kopiuj link (`PageTools.wikiLink`: the page part of every
-  copied link, `notebook::pageLinkTarget` — the shortest target, a daily note by its file name), Zmień nazwę…, Historia strony, Przenieś do kosza. A daily note is a
+  while pressed) so the column of buttons stays quieter than the page titles. A folder: New page here, New folder…, Show
+  folder pages (All pages in it), Search in folder (search in it), Move to…, Export
+  folder… (the export tab, folder scope), Rename…, Move to trash (the confirmation
+  counts its pages and warns for the notebook's special folders). A page: Open in side
+  panel (wide), favorites, Move to…, Copy link (`PageTools.wikiLink`: the page part of every
+  copied link, `notebook::pageLinkTarget` — the shortest target, a daily note by its file name), Rename…, Page history, Move to trash. A daily note is a
   file here like any other — renamed, moved and dragged (a misfiled day can be put right) — also
-  in All pages, F2 and the Więcej menu of a daily note opened as a page; only the journal view
-  (by date) and the page's own menu there offer neither. The "Strony" header's "+": Nowa strona,
-  Nowy folder (at the root), Zwiń wszystkie, Pokaż załączniki, Pokazuj otwartą stronę.
+  in All pages, F2 and the More menu of a daily note opened as a page; only the journal view
+  (by date) and the page's own menu there offer neither. The "Pages" header's "+": New page,
+  New folder (at the root), Collapse all, Show attachments, Show the open page.
 * **Drag and drop** (mouse and touchpad only — a finger keeps the list's flick, press-and-hold
   and the drawer's edge swipe): a row dragged onto a folder (a closed one opens after 600 ms; the
   list scrolls near its edges, the target following the rows that pass under the pointer) or a
-  page (its folder), or onto the "Strony" header while it shows (the root), is moved there by
+  page (its folder), or onto the "Pages" header while it shows (the root), is moved there by
   `Workspace.movePath`; the ghost names the target and, a moment later (150 ms on one target),
-  what the move rewrites ("Zaktualizowane linki: 3 (w 2 notatkach)", the settings that follow) or
+  what the move rewrites ("Updated links: 3 (in 2 notes)", the settings that follow) or
   why it cannot move there — `Workspace.requestMoveImpact()`, planned a few milliseconds per frame
   (`RelocationPlanner`) and dropped when the target changes, so a big folder never stalls the
   drag; impacts are kept per target until the notebook changes. The target is outlined, Escape
   cancels. The toast has Undo (moving it back).
-* **"Przenieś do…"** (`ShellMoveDialog`; a bottom sheet on phones): a search over the folders
-  (fuzzy: names, then paths), "Główny folder notatnika" first, the current folder shown but
-  disabled, a folder's own subtree left out, and "Nowy folder „…”" for the name typed (created,
+* **"Move to…"** (`ShellMoveDialog`; a bottom sheet on phones): a search over the folders
+  (fuzzy: names, then paths), "Notebook root" first, the current folder shown but
+  disabled, a folder's own subtree left out, and "New folder “…”" for the name typed (created,
   then moved into). A chosen folder shows what the move rewrites (`Workspace.moveImpact`:
-  "Zaktualizowane linki: 3 (w 2 notatkach)", the special-folder settings that follow, or why it
-  cannot move) before "Przenieś tutaj". From the tree, the Więcej menu, the page's menu, All
+  "Updated links: 3 (in 2 notes)", the special-folder settings that follow, or why it
+  cannot move) before "Move here". From the tree, the More menu, the page's menu, All
   pages' rows and the palette. Its pick mode is the new-page dialog's folder picker.
 * **Rename** (`ShellRenameDialog`): a "/" moves — a path from the notebook root ("Archiwum/Dom"),
-  with a live "Nowe miejsce: …", and its toast names the new name too when the move renames
-  ("Przeniesiono do „Archiwum” jako „Dom 2”"); for any name typed it counts exactly what is rewritten
+  with a live "New place: …", and its toast names the new name too when the move renames
+  ("Moved to “Archiwum” as “Dom 2”"); for any name typed it counts exactly what is rewritten
   (`Workspace.renameImpact`: also links a new name would otherwise take over), hidden folder
   names are refused. The page header's title edit renames in place: a "/" there is part of the
   title ("TCP/IP" -> "TCP IP.md"), and its confirmation counts the same way.
 * **New page** (Ctrl+N, the top bar, the sidebar's pencil): in the folder of the page shown, as a
-  removable chip "W folderze: Projekty ×" (a page at the root: "W głównym folderze notatnika ×")
-  with "Zmień…"; without it the notebook's folder for new pages. Pages created from `[[links]]`
+  removable chip "In folder: Projekty ×" (a page at the root: "In the notebook root ×")
+  with "Change…"; without it the notebook's folder for new pages. Pages created from `[[links]]`
   keep `newPagesFolder`. A new folder is shown in the tree.
 * **All pages** with a folder: its subfolders as rows above its pages (at the root the top-level
-  folders; a tap opens one, back returns), "Z podfolderami" (pages of subfolders too, on by
+  folders; a tap opens one, back returns), "With subfolders" (pages of subfolders too, on by
   default, remembered per device: `allPages/subfolders`), and the top bar's breadcrumb
-  ("Wszystkie strony › Projekty › …").
+  ("All pages › Projekty › …").
 * **Sync**: Nextcloud carries folders faithfully — new empty folders, deletions (only of folders
   that hold nothing unsynced), and moves: a folder or page renamed or moved here is moved on the
   server with one WebDAV MOVE, and one renamed or moved on another device or in the Nextcloud web
@@ -395,12 +398,12 @@ everything near the bottom, the same way on Android, in the browser and with a s
   (`android/src/…/ImeInsets.kt`, every frame of the slide on Android 11+, where the window is drawn
   behind the system bars and keeps its size — Qt's expanded client area, set on Android 11–14 by
   `keyboardsources.cpp`, always so on 15+; Android 9–10 resize the window once, no frames;
-  docs/ANDROID.md "Klawiatura ekranowa"), the browser's viewports (`setViewportSample`, computed
+  docs/ANDROID.md "On-screen keyboard"), the browser's viewports (`setViewportSample`, computed
   by `ViewportKeyboard`: the part of Qt's container the visual viewport leaves out; the page asks
   for `interactive-widget=resizes-content`, so the browser shrinks the page and Qt's window itself
   — overlap 0 — and `shown` comes from that shrink on a touch screen while Qt's keyboard field has
   the focus (held through a focus pass until the readings settle; one tallest page height per
-  width); `animating` until the readings settle; docs/WEB.md "Klawiatura ekranowa") — and, as
+  width); `animating` until the readings settle; docs/WEB.md "On-screen keyboard") — and, as
   the fallback,
   Qt's `QInputMethod::keyboardRectangle` mapped by `keyboardOverlap()` (native pixels on Android,
   the window's place on a split screen, clamped; malformed values give 0). `ui/keyboardsources.cpp`
@@ -447,11 +450,11 @@ everything near the bottom, the same way on Android, in the browser and with a s
   platform reports the slide (Android 11+; elsewhere — the browser too, where the window itself
   shrinks — it moves once; no animation of its own), and
   stays docked when the system hides the keyboard while editing goes on — on phones right on the
-  bottom navigation, which comes back; "Ukryj klawiaturę" ends the editing and takes it away. Its tools follow
-  `BlockEditor.toolbarMode`: `block`, `cell` (a table cell — Cofnij, Ponów, Następna komórka,
-  Ukryj klawiaturę; `BlockEditor.editingTable`; after Cofnij / Ponów the same cell goes on being
+  bottom navigation, which comes back; "Hide keyboard" ends the editing and takes it away. Its tools follow
+  `BlockEditor.toolbarMode`: `block`, `cell` (a table cell — Undo, Redo, Next cell,
+  Hide keyboard; `BlockEditor.editingTable`; after Undo / Redo the same cell goes on being
   edited, and every cell tool first commits the word the keyboard is still composing),
-  `source` (source mode — `[[`, `#`, `/`, the source's own Cofnij / Ponów, Ukryj klawiaturę),
+  `source` (source mode — `[[`, `#`, `/`, the source's own Undo / Redo, Hide keyboard),
   `selection` (the touch selection mode: `SelectionToolbar`, "Selecting and copying" — no keyboard,
   the tools at the bottom, on phones right on the bottom navigation).
   Taps beside the buttons stay on the bar. The slot is one Loader per editor (`editToolbarSlot`,
@@ -465,8 +468,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   when it gets the focus, when the keyboard has settled, when the window or the caret moves.
   Onboarding ends at the keyboard like the shell's content. A word the keyboard is still
   composing (Android's keyboards keep every word as preedit text, outside `text`, until a space)
-  counts as typed: dialogs enable their accept button by `typedText` (quick capture's "Dodaj",
-  "Utwórz" of a new page or folder, rename), and the word becomes text when the field loses the
+  counts as typed: dialogs enable their accept button by `typedText` (quick capture's "Add",
+  "Create" of a new page or folder, rename), and the word becomes text when the field loses the
   focus (`EditorInput.commitPreedit`) or the dialog is accepted (`BDialog.tryAccept`) — a single
   word typed into an empty field used to leave the button disabled.
 * **What is being edited stays above the toolbar**: the caret or the table cell
@@ -479,17 +482,17 @@ everything near the bottom, the same way on Android, in the browser and with a s
   toolbar, and below the status bar of an edge-to-edge window (`BMenu.topMargin`, the window's
   safe area: on Android a finger's tap there reaches the status bar, so a block menu opened
   above the toolbar used to leave its first items untappable; one taller than the room left
-  scrolls). A menu opened right above the toolbar (its Więcej, its task button held down) takes
+  scrolls). A menu opened right above the toolbar (its More, its task button held down) takes
   the keys, so the system hides the keyboard and the toolbar drops onto the bottom navigation
   (to the bottom on a wide window): the menu
   follows it (`BlockEditor.followToolbarWith`), with the room the keyboard left — every item
-  shown, "Usuń blok" no longer scrolled away — until something in it is pressed or scrolled
+  shown, "Delete block" no longer scrolled away — until something in it is pressed or scrolled
   (`BMenu.touched`): it never moves away from a finger aiming at it. Autocomplete is placed above
   the toolbar (`BlockEditor.visibleBottom()`); toasts above the keyboard, the bottom navigation
   and the toolbar (`AppShell.toastClearance`), except while text is typed — the keyboard up, or a toolbar
   docked while a view edits text (`AppShell.toastsAtTop`): then they show at the window's top,
   one at a time (`BToastHost.atTop`), since the caret's line is kept right above the keyboard and
-  its toolbar, where they covered it ("Scalono…" while typing on a phone); the command palette
+  its toolbar, where they covered it ("Merged…" while typing on a phone); the command palette
   ends at it.
 * **Tests**: `--keyboard <px>` simulates a keyboard, drawn as a grey `BKeyboardPlaceholder`:
   `tst_editor_qml_keyboard_touch` (the playground's `keyboard` script: a block in an outline and
@@ -499,24 +502,24 @@ everything near the bottom, the same way on Android, in the browser and with a s
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
   `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast; editing with the
   keyboard hidden: the bottom navigation shown and the docked toolbar right on it, also over a
-  system navigation bar — the shell's `SafeArea.additionalMargins` —, + Notatka on the
+  system navigation bar — the shell's `SafeArea.additionalMargins` —, + Note on the
   navigation under it, a tap on it ending the editing and opening quick capture;
   the keyboard sliding in frame by frame leaving the navigation under it until covered, sliding
   away uncovering it, a keyboard shorter than the navigation leaving the toolbar where it was,
   a browser's keyboard — viewport samples, the page resized — taking it at
-  once; a tap on Kalendarz while editing ending the editing; a toast while typing at the top,
+  once; a tap on Calendar while editing ending the editing; a toast while typing at the top,
   away from the caret's line, a settings field scrolled above the keyboard, a page in the side
   panel of a wide touch window; the drawing editor's tool bar keeping the navigation away),
   `tst_keyboardinsets` (`slidesOver` per source, a simulated slide down),
   `tst_editor_qml_blocklinks*` (the block menu from the
-  toolbar's Więcej following the toolbar down when the keyboard goes, every item shown, and
+  toolbar's More following the toolbar down when the keyboard goes, every item shown, and
   staying put once touched),
   `tst_appio_import_qml` (onboarding's folder field); screenshots
   `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard` (and `page-editing`:
   the keyboard hidden, the toolbar on the bottom navigation); on Android
   `scripts/android-emulator-test.sh --keyboard` (Back: the navigation's tabs below the toolbar,
   a tap on the text: the keyboard back, the toolbar on it, the tabs gone; and `--folders`: the
-  toolbar's "Więcej" and the block menu with a real finger), in the browser
+  toolbar's "More" and the block menu with a real finger), in the browser
   `scripts/wasm-smoke.mjs --keyboard` and `--keyboard-phone` (the keyboard hidden: the toolbar
   on the bottom navigation, `bottomNavTop` in the self-test's report) and
   `scripts/android-emulator-test.sh --web-keyboard`.
@@ -566,21 +569,21 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | Delete at the end | merge the next block into this one | delete the blocks |
 | Tab / Shift+Tab | indent / outdent with children (Tab in a multi-line block: a tab character) | indent / outdent (a range all or nothing) |
 | Alt+↑ / Alt+↓ | move the block with its children | move (a run of sibling blocks) |
-| Alt+Enter | follow the link at the caret (in `[[Folder/Page]]` the path part under it: `PageController.linkAtCursor`; also in a table cell's field, `linkInText`); no link there: the toast "Kursor nie stoi na linku"; never a line break | — |
+| Alt+Enter | follow the link at the caret (in `[[Folder/Page]]` the path part under it: `PageController.linkAtCursor`; also in a table cell's field, `linkInText`); no link there: the toast "There is no link at the cursor"; never a line break | — |
 | Alt+Shift+Enter | the same in the side panel (wide windows; narrow: as Alt+Enter) | — |
 | ↑ / ↓ | on the first / last line: to the previous / next block | select the previous / next block alone |
 | Ctrl+Enter | cycle the task status (none → todo → doing → done → none) | same (every block gets the next status of the first one) |
 | Ctrl+Shift+Enter | the task status menu at the caret (any status, or none; list items and paragraphs only) | the same menu under the block |
 | Ctrl+. | fold / unfold | same |
-| Ctrl+Shift+C | copy the block reference `((id))` (an id is added when missing; the browser may keep the keys for its own tools: the palette's "Kopiuj odwołanie do bloku" then) | same (the focus end); nothing selected: a toast says what to do |
+| Ctrl+Shift+C | copy the block reference `((id))` (an id is added when missing; the browser may keep the keys for its own tools: the palette's "Copy block reference" then) | same (the focus end); nothing selected: a toast says what to do |
 | Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (per page) | same (undoing a deletion selects the blocks again) |
 | Esc | close the suggestions, else stop editing and select the block | deselect (also Android's Back in the touch selection mode) |
 
 ## Habits
 
-`qml/views/HabitsView.qml` (route `habits`; the sidebar's **Nawyki** under Zadania, a bottom-bar
-tab to choose, the palette's "Nawyki" `go.habits`, the tab icon `flame`): recurring points of the
-day recorded in the journal (docs/SYNTAX.md §5 "Nawyki / Habits"). A view of its own rather than a
+`qml/views/HabitsView.qml` (route `habits`; the sidebar's **Habits** under Tasks, a bottom-bar
+tab to choose, the palette's "Habits" `go.habits`, the tab icon `flame`): recurring points of the
+day recorded in the journal (docs/SYNTAX.md §5 "Habits"). A view of its own rather than a
 section of Tasks or the Calendar: habits are not tasks with dates (one line a day, not one task),
 and their month grids need the width.
 
@@ -589,26 +592,26 @@ and their month grids need the width.
   or definition changed are computed again — `dataChanged` for those rows, a reset when habits are
   added, removed or reordered). One row per definition, in the notebook's order (by path, then as
   written). The model's `month` moves every grid at once (the header's arrows, ←/→ or PgUp/PgDn;
-  "Ten miesiąc" when another is shown).
+  "This month" when another is shown).
 * **Card** (`qml/planning/HabitCard.qml`, laid out with bindings: its final height at creation):
   today's round check (a click ticks it, again opens it; a right-click or long press: done /
-  skipped / no check), the name, the schedule in the UI language and, for "N razy w tygodniu", the
-  period's progress ("2 z 3 w tym tygodniu"); a flame with "Seria: 5 dni · najdłuższa: 12 dni ·
-  wykonano: 80%"; the month grid (weekday heads from `weekStartsOn`): done days in the success
+  skipped / no check), the name, the schedule in the UI language and, for "N times a week", the
+  period's progress ("2 of 3 this week"); a flame with "Streak: 5 days · longest: 12 days ·
+  completed: 80%"; the month grid (weekday heads from `weekStartsOn`): done days in the success
   tint, missed due days in the danger tint, skipped ones muted and struck out, today with an accent
   ring, a due day with a thin one; a click on a past day ticks it or opens it again, a right-click
   or long press offers done / skipped (no streak lost) / no check / the day's journal. The "⋯"
-  menu: Zrobione dziś, Pomiń dziś, Bez odhaczenia dziś, Otwórz definicję (the page at its line),
-  Otwórz dzisiejszy dziennik. A definition not understood or given twice shows its problem
+  menu: Done today, Skip today, No check today, Open its definition (the page at its line),
+  Open today's journal. A definition not understood or given twice shows its problem
   (`warningText`) and no statistics.
 * **Writing**: `Workspace.setHabitCheck(name, date, state, pageLink)` → `notebook::setHabitCheck`
   on the daily note (created from the journal template only when something is written); the toast
-  has Cofnij (the previous state written back). A tick in the journal editor counts the same: the
+  has Undo (the previous state written back). A tick in the journal editor counts the same: the
   view follows the index.
-* **Dodaj nawyk** (N; `HabitAddDialog`): name and schedule, previewed in words
-  (`HabitListModel.describeSchedule`; "Nie rozumiem — spróbuj …" otherwise), refused for a name in
+* **Add habit** (N; `HabitAddDialog`): name and schedule, previewed in words
+  (`HabitListModel.describeSchedule`; "Not understood — try …" otherwise), refused for a name in
   use; `Workspace.addHabit` appends `- Name` + `  habit:: schedule` to the page of the first
-  definition, else to a new `Nawyki` page where new pages go. The empty state explains the syntax.
+  definition, else to a new `Habits` page (`Nawyki` in Polish notes) where new pages go. The empty state explains the syntax.
 
 ## Statistics and focus mode
 
@@ -624,8 +627,8 @@ emoji alone none; a no-break space separates words except between digits) — th
 `textstats.h` has the rules, `tst_stats` the cases. Shown:
 
 * in the bottom-right corner of PageView (`pageStatsFooter`, wide windows, not in the side panel,
-  not over a docked touch toolbar; Ustawienia → Edytor → "Liczba słów", `AppSettings.wordCountShown`,
-  on by default): "123 słowa · 820 znaków · 1 min czytania", "Zaznaczenie: …" while something is
+  not over a docked touch toolbar; Settings → Editor → "Word count", `AppSettings.wordCountShown`,
+  on by default): "123 words · 820 characters · 1 min read", "Selection: …" while something is
   selected, the characters without spaces in its tooltip and accessible name;
 * at the top of the page's menu (`pageMenuStats`, disabled item, every width) — counted when the
   menu opens.
@@ -636,7 +639,7 @@ selection 150 ms after it changed; with the footer hidden nothing is counted unt
 The journal stream shows no count (a day opened as a page does).
 
 **Focus mode** (`AppSettings.focusMode`, `ui/focusMode`, a device setting kept across restarts;
-palette `view.focus`, F8; Ustawienia → Edytor): where an editor shows a page or the journal
+palette `view.focus`, F8; Settings → Editor): where an editor shows a page or the journal
 (routes page, journal, journals) the shell hides the sidebar (and the drawer's edge swipe), the
 top bar, the update banner, the side panel and the bottom navigation; the view fills the window
 and the editor centres its text column (`BlockEditor.contentX`). The content keeps clear of the
@@ -656,8 +659,8 @@ as the content goes (the first lines of a page stay where they are).
 
 `ShortcutMap` (`shell/shortcutmap.h`, QML singleton): the actions are the palette itself
 (`palette`, Ctrl+K) and every command of `CommandModel` with its default shortcut
-(`CommandModel::shortcutActions()`; commands without one can get one: "Synchronizuj teraz",
-"Zadania"…). Custom shortcuts are a device setting (AppSettings group `shortcuts`: id = portable
+(`CommandModel::shortcutActions()`; commands without one can get one: "Sync now",
+"Tasks"…). Custom shortcuts are a device setting (AppSettings group `shortcuts`: id = portable
 text, "" = none) — one key chord with Ctrl, Alt or Meta, or a function key. `check(id, sequence)`
 refuses, with a message in the UI language: not one chord ("invalid"), a key that types or moves
 in text ("typing"), the keys of editing text and blocks, the drawing editor, the PDF viewer, switching tabs (Ctrl+1…9, Ctrl+PgUp, Ctrl+PgDown) and
@@ -677,13 +680,13 @@ Ctrl+Shift+C are handled by it only while they are those commands' shortcuts
 window Shortcut). The palette shows the shortcut each command has now, and so do the top bar's
 and menus' hints (BIconButton / BMenuItem `shortcut`).
 
-Ustawienia → **Skróty klawiszowe** (`ShellShortcutSettings`, also the palette's
-`settings.shortcuts`): every action with its key caps ("Brak skrótu" for none), a search over
-titles, ids and keys (case and diacritics ignored), **Zmień** — the row waits for the next key
+Settings → **Keyboard shortcuts** (`ShellShortcutSettings`, also the palette's
+`settings.shortcuts`): every action with its key caps ("No shortcut" for none), a search over
+titles, ids and keys (case and diacritics ignored), **Change** — the row waits for the next key
 (an invisible recorder takes the keyboard and every ShortcutOverride, so no window shortcut fires;
 a modifier alone waits; Esc or Back cancel; focus leaving ends it) —, the refusal or the conflict
-under the row with **Przypisz tutaj**, ✕ (no shortcut), ↺ (the default, shown as "Domyślnie: …"
-for a custom one) and **Przywróć wszystkie** with a confirmation. Vim mode is not there (TODO.md).
+under the row with **Assign here**, ✕ (no shortcut), ↺ (the default, shown as "Default: …"
+for a custom one) and **Restore all** with a confirmation. Vim mode is not there (TODO.md).
 
 ## Navigation
 
@@ -694,27 +697,28 @@ tab's in its pane (`ShellTabPane`), and the side panel's route.
 
 | Route `view` | View | Parameters |
 |---|---|---|
-| `journals` (home) | `JournalsView` — the stream of daily notes, "Przejdź do dnia…", missed reminders banner (`ContentMissedBanner`: Otwórz, Drzemka, Zrobione — a task's reminder only: `reminders.complete(id)` marks the task done in the note like the status menu, the shell's toast "„…” — zrobione" confirms it; no undo step in an open editor, as with the snooze — and dismiss) | `date?` |
-| `journal` | `JournalsView`, one day (opened "jako strona") | `date`, `path?` |
-| `page` | `PageView` — page header (tags and aliases as chips, edited there: "Page properties"; note mode toggle — on a wide header; a small one, phones and the side panel, leaves it to the page menu "⋯", the top bar's Więcej and the palette —, favourite, page menu with "Dodaj właściwość"; the page actions end the title row, and a page without one — it starts with its own "# Title" — puts them at the end of its chips' first line, the chips wrapping short of them, or on a row of their own when it has no chips; for a page named by a tag in use — with a rename at once, at every width — Widok tagu is a "#" button among the page actions before the note mode toggle, Zadania z tym tagiem is in the page menu "⋯" (also in Widok tagu and every `#tag`'s menu), and its sub-tags are chips under the title; no row of buttons comes between the title and the properties), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions (that section is not drawn while the side panel shows them on its Linki tab: "Window layout"). A weekly or monthly note (docs/SYNTAX.md §1 "Weekly and monthly notes"; `Workspace.periodicNoteOf`) has its period under the title (`periodicNav`: "Tydzień 45 (2–8 listopada 2026)", also the top bar's title, with the previous / next period's arrows and "Ten tydzień" / "Ten miesiąc" when it is another one), and one not written yet starts from its period's template (`weeklyTemplate` / `monthlyTemplate`, `{{date}}` the period's first day) as a day without a note does. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Zacznij pisać" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it. A picture attachment opens in the picture view, a PDF in the PDF viewer ("PDF viewer": `pdfPage`, `from`, `fromLine`), any other file that is no note read-only as text | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?`, `pdfPage?`, `from?`, `fromLine?`, `pdfScale?` |
-| `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog. In the month and week grids today is a red disc on its number (`accentSolid`) and the selected day a dark one (`Theme.primary` with `primaryFg`, as in `BDatePicker`; ≥ 3:1, WCAG 1.4.11 — today selected shows only the red one); no cell or header fills: the month's cells are one surface, days of other months have faint numbers (`fgFaint`, normal weight); an alarm's pill in the month is in the reminder's tint with its alarm clock. Done entries read as in Tasks and the editor: the "done" chip's fill and muted text with a small check, not struck out; cancelled ones are struck out with an x (the week grid's pills and the day panel's rows follow the same rule). In a month cell and in the day panel's "Plan dnia", open entries come first (a stable partition, times keep their order), so "+N więcej" hides finished ones first and a click on a pill opens the entry shown there. The day panel's actions (Otwórz dziennik / Pisz w dzienniku, Dodaj zadanie, Dodaj przypomnienie) are one even list of full-width rows (icon and label, buttons for accessibility; 30 px with a mouse, 44 px on touch) under the date, the icons in line with it. The day panel's empty "Plan dnia" is a short note in line with its header, without a picture. Weekly and monthly notes (docs/SYNTAX.md §1): the month grid has a column of ISO week numbers on its left (`CalendarWeekNumber`: the ISO week of each row's middle day, also when weeks start on a Sunday; faint, a week with a note semi-bold in `accentText`; a tap / click opens the week's note through `AppController.openPeriodicNote`), the week grid has its number in the corner above the hours ("TYDZ." over it), the header's title opens the month's note (month view) or the week's (week view; a small book after the title when it has one, underlined on hover), and W / M open the selected day's week / month note | `date?`, `mode?` |
-| `tasks` | `TasksView` — quick add, filters, sections (Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione), "Pokaż jako zapytanie"; subtasks under their task (`TaskListModel.nestSubtasks`, docs/SYNTAX.md §5 "Subtasks": indented by their depth in the note's order, done ones too; one more urgent than its task's section — an overdue step of a task for later, an open step of a done task — is listed in its own section; the filters apply to them, the home screen widget lists every task on its own); a task with subtasks under it folds them with its progress chip, a chevron before "3/5" (or "2 podzadania" when none counts), and with Left / Right on its row (`TaskListModel.toggleSubtasks`: view state kept while Tasks is open, nothing written; the fold follows its task when an edit moves it in its note, the section counts keep the folded ones); a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filtruj po tagu, Otwórz stronę tagu, Widok tagu, Otwórz w panelu bocznym, Kopiuj tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
-| `habits` | `HabitsView` — the habits (docs/SYNTAX.md §5 "Nawyki / Habits"), each a card: today's check, schedule, streaks, completion rate, the month grid ("Habits" below) | `month?` ("YYYY-MM"), `open?` (`add`: the add dialog) |
+| `journals` (home) | `JournalsView` — the stream of daily notes, "Go to day…", missed reminders banner (`ContentMissedBanner`: Open, Snooze, Done — a task's reminder only: `reminders.complete(id)` marks the task done in the note like the status menu, the shell's toast "“…” marked done" confirms it; no undo step in an open editor, as with the snooze — and dismiss) | `date?` |
+| `journal` | `JournalsView`, one day (opened "as a page") | `date`, `path?` |
+| `page` | `PageView` — page header (tags and aliases as chips, edited there: "Page properties"; note mode toggle — on a wide header; a small one, phones and the side panel, leaves it to the page menu "⋯", the top bar's More and the palette —, favourite, page menu with "Add property"; the page actions end the title row, and a page without one — it starts with its own "# Title" — puts them at the end of its chips' first line, the chips wrapping short of them, or on a row of their own when it has no chips; for a page named by a tag in use — with a rename at once, at every width — Tag overview is a "#" button among the page actions before the note mode toggle, Tasks with this tag is in the page menu "⋯" (also in Tag overview and every `#tag`'s menu), and its sub-tags are chips under the title; no row of buttons comes between the title and the properties), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "whole page" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions (that section is not drawn while the side panel shows them on its Links tab: "Window layout"). A weekly or monthly note (docs/SYNTAX.md §1 "Weekly and monthly notes"; `Workspace.periodicNoteOf`) has its period under the title (`periodicNav`: "Week 45 (Nov 2–8, 2026)", also the top bar's title, with the previous / next period's arrows and "This week" / "This month" when it is another one), and one not written yet starts from its period's template (`weeklyTemplate` / `monthlyTemplate`, `{{date}}` the period's first day) as a day without a note does. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Start writing" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it. A picture attachment opens in the picture view, a PDF in the PDF viewer ("PDF viewer": `pdfPage`, `from`, `fromLine`), any other file that is no note read-only as text | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?`, `pdfPage?`, `from?`, `fromLine?`, `pdfScale?` |
+| `calendar` | `CalendarView` — Month / Week / Agenda, the day panel, add dialog. In the month and week grids today is a red disc on its number (`accentSolid`) and the selected day a dark one (`Theme.primary` with `primaryFg`, as in `BDatePicker`; ≥ 3:1, WCAG 1.4.11 — today selected shows only the red one); no cell or header fills: the month's cells are one surface, days of other months have faint numbers (`fgFaint`, normal weight); an alarm's pill in the month is in the reminder's tint with its alarm clock. Done entries read as in Tasks and the editor: the "done" chip's fill and muted text with a small check, not struck out; cancelled ones are struck out with an x (the week grid's pills and the day panel's rows follow the same rule). In a month cell and in the day panel's "Plan of the day", open entries come first (a stable partition, times keep their order), so "+N more" hides finished ones first and a click on a pill opens the entry shown there. The day panel's actions (Open journal / Write in journal, Add task, Add reminder) are one even list of full-width rows (icon and label, buttons for accessibility; 30 px with a mouse, 44 px on touch) under the date, the icons in line with it. The day panel's empty "Plan of the day" is a short note in line with its header, without a picture. Weekly and monthly notes (docs/SYNTAX.md §1): the month grid has a column of ISO week numbers on its left (`CalendarWeekNumber`: the ISO week of each row's middle day, also when weeks start on a Sunday; faint, a week with a note semi-bold in `accentText`; a tap / click opens the week's note through `AppController.openPeriodicNote`), the week grid has its number in the corner above the hours ("Wk" over it), the header's title opens the month's note (month view) or the week's (week view; a small book after the title when it has one, underlined on hover), and W / M open the selected day's week / month note | `date?`, `mode?` |
+| `tasks` | `TasksView` — quick add, filters, sections (Overdue, Today, Tomorrow, This week, Later, No date, Done), "Show as query"; subtasks under their task (`TaskListModel.nestSubtasks`, docs/SYNTAX.md §5 "Subtasks": indented by their depth in the note's order, done ones too; one more urgent than its task's section — an overdue step of a task for later, an open step of a done task — is listed in its own section; the filters apply to them, the home screen widget lists every task on its own); a task with subtasks under it folds them with its progress chip, a chevron before "3/5" (or "2 subtasks" when none counts), and with Left / Right on its row (`TaskListModel.toggleSubtasks`: view state kept while Tasks is open, nothing written; the fold follows its task when an edit moves it in its note, the section counts keep the folded ones); a click on a task's `#tag` filters the list, Ctrl+click opens the tag's page, a long press or right-click its menu (Filter by tag, Open tag page, Tag overview, Open in side panel, Copy tag); a right-click or long press on a chip: its token's menu ("Token and link menus") | `query?` |
+| `habits` | `HabitsView` — the habits (docs/SYNTAX.md §5 "Habits"), each a card: today's check, schedule, streaks, completion rate, the month grid ("Habits" below) | `month?` ("YYYY-MM"), `open?` (`add`: the add dialog) |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates. The layout is computed on a worker thread (in slices between frames in the browser) and unfolds over about a second at the display's frame rate (phones 60 fps): pan, zoom, select and drag work from the first frame, a dragged node follows the finger at once. Reduced motion: the layout is computed without animation and shown once; a fresh one shows a spinner (`graphModel.settling`) instead of a spiral that jumps — also when a filter, the local graph or the index changes before it is shown. Drawn through the scene graph (GPU) | `path?`, `depth?`, `select?` |
-| `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Szukaj w folderze"; the route follows its renames and moves) | `query?`, `folder?` |
+| `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Search in folder"; the route follows its renames and moves) | `query?`, `folder?` |
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves; a path part of a link naming a folder opens it (below) | `path?` (folder), `sort?` |
-| `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Otwórz stronę" or "Utwórz stronę", "Zadania z tym tagiem"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
-| `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge; drawings element by element) | `tab?`, `copy?`, `run?` (open a run's details) |
-| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles (also PDF and Word: "Exporting and printing a page"), what to export (notebook / folder / page; several notes in a PDF or DOCX: each on its own page), for the HTML, PDF, Word and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
-| `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
+| `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Open page" or "Create page", "Tasks with this tag"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
+| `sync` | `SyncView` — Overview, Syncthing, Nextcloud (live progress, history of runs), Conflicts (merge; drawings element by element) | `tab?`, `copy?`, `run?` (open a run's details) |
+| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "More" (both remembered on the device), **Sign in to Microsoft**; then a well with the device code in large monospace, **Copy code**, the address as text and an **Open microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Cancel**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles (also PDF and Word: "Exporting and printing a page"), what to export (notebook / folder / page; several notes in a PDF or DOCX: each on its own page), for the HTML, PDF, Word and Pandoc formats **Pictures from the internet**: Keep addresses / Include copies (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Fetching pictures from the internet (1 of 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Export…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
+| `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Replaced from the command line (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
 | `cleanup` | `CleanupView` — notes and attachments nothing refers to ("Cleaning up" below) | `kind?`, `selected?` (written when a row opens a file, so Back returns to the same choice) |
-| `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Kopie zapasowe (`backups`, "Backups" below), Aplikacja (on Android and Windows "Sprawdzaj nowe wersje" — `AppController.updates.enabled`, "Window layout"; on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
-| `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
+| `settings` | `SettingsView` — General, Appearance (`appearance`), Editor, Notebook, Reminders, Sync, Backups (`backups`, "Backups" below), Application (on Android and Windows "Check for new versions" — `AppController.updates.enabled`, "Window layout"; on the desktop "Keep running in the system tray" and "Click on the tray icon" Window | Calendar — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Start when you sign in" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "For developers": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Reminders → sounds: on Windows the "Ringtone" menu lists Windows' notification sounds (Notification, Alarm 1–10, Call 1–10…) and "Sound file…" is disabled. Each group is a heading, a note and its rows divided by hairlines: in a card from 600 px up; below 600 px the card is flat (`BCard.flat`: no surface, border or padding), so heading, note and rows share the page's 16-px edge and the headings and the 32-px gap set the groups apart (the sync section's status rows too). The custom accent's empty "+" swatch is `bgElevated2` in the dark (`bgSunken` in the light) | `section?` |
+| `logs` | `LogsView` — "Event log" (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 | `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing file ("Drawing editor" below); title: the file's name without `.svg`, `.excalidraw`, `.excalidraw.md` | `path`, `open?` (screenshots: `style`, `more`, `paper`, `theme`, `shape`, `select`, `backdrop` — the page picker of the backdrop's PDF) |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
-notebook "Przykładowy brulion").
+notebook "Sample notebook" — "Przykładowy brulion" with the Polish UI: its notes are in the UI
+language, English by default).
 
 **The intro** (`IntroView`, `qml/views`): on the first start, the status "onboarding" shows four
 steps before `OnboardingView` (`AppController.introPending`: `AppSettings.introDone` was never
@@ -722,7 +726,7 @@ set on this device — a device that opened a notebook before, an update, never 
 `--intro`; `--onboarding` skips it). Each step changes its settings at once, all of them stay in
 Settings:
 
-1. **Language** — English (the default) or Polski as two cards named in their own language; the
+1. **Language** — English (the default) or Polski (Polish) as two cards named in their own language; the
    UI switches at once (`AppSettings.language`).
 2. **Look** — the theme as four previews drawn in their own colours (`ThemePalette.colors`):
    Black (the default: dark with the black background), Dark (blue-grey), Light, System; the
@@ -741,11 +745,11 @@ Settings:
    (`AppController::applyIntroNotebookConfig`); dropped after the first notebook of the user's
    either way (the sample notebook and the documentation do not count).
 
-A progress row (the steps as dots, "Krok 2 z 4", **Pomiń**: the defaults) above, **Wstecz** and
-**Dalej** (the last step: **Wybierz notatnik**, `AppController.finishIntro()`) in a footer above
+A progress row (the steps as dots, "Step 2 of 4", **Skip**: the defaults) above, **Back** and
+**Continue** (the last step: **Choose a notebook**, `AppController.finishIntro()`) in a footer above
 the keyboard and the gesture bar. Back also with Android's back gesture (`Main.qml` asks
-`IntroView.backStep()` first) and Alt+←, Dalej with Ctrl+Enter. Settings → Ogólne → **Uruchom
-wprowadzenie ponownie** (`AppController.restartIntro()`) closes the notebook and starts it again.
+`IntroView.backStep()` first) and Alt+←, Continue with Ctrl+Enter. Settings → General → **Run
+the intro again** (`AppController.restartIntro()`) closes the notebook and starts it again.
 The journey (`--journey`) walks it: Polish, the run's theme, a journal mode clicked
 (`Journey::intro`, screenshots `intro-*`).
 
@@ -769,11 +773,11 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   when it is activated: `mainWindowActivated()`). A pane follows its tab through
   `tabRoute(id)` / `tabRouteChanged(id)`.
 * **Opening a tab:** Ctrl+T or the bar's **+** (a new tab at home), a **middle click** or a
-  **Ctrl+click** on a page in the sidebar (tree, Ulubione, Ostatnie), All pages, search results,
+  **Ctrl+click** on a page in the sidebar (tree, Favorites, Recent), All pages, search results,
   linked references and a link preview's header or links; a **middle click** on a page, tag or
   block link in the editor (Ctrl+click there picks blocks: "Selecting and copying"); the link menu's
-  and the sidebar's / All pages' row menus' **Otwórz w nowej karcie**; the top bar's Więcej and the
-  palette's **Otwórz w nowej karcie** (a copy of the view shown) and **Nowa karta**. A new tab goes
+  and the sidebar's / All pages' row menus' **Open in new tab**; the top bar's More and the
+  palette's **Open in new tab** (a copy of the view shown) and **New tab**. A new tab goes
   right after the focused one, is shown and has no history (Back does nothing there; its first
   route is the page). These go through `OpenIn` (`qml/components/OpenIn.qml`): the shell sets
   `OpenIn.tabs`, a click brackets its own navigation (the editor's `activateLink`, a row's
@@ -788,24 +792,24 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   2-px accent line on top, the other pane's tab of a split view like the view without the line. A
   click shows a tab (in the focused pane; a tab already shown in the other pane focuses that pane),
   a middle click or × closes it, a drag along the bar moves it (`moveTab`), a right-click or long
-  press opens its menu: Zamknij kartę, Zamknij pozostałe karty, Pokaż w podziale / Zamknij podział,
-  Przenieś do nowego okna (desktop). Closing the shown tab shows its neighbour (the next one, else
+  press opens its menu: Close tab, Close other tabs, Show in split view / Close split view,
+  Move to new window (desktop). Closing the shown tab shows its neighbour (the next one, else
   the previous one); closing the last one leaves a fresh tab at home.
 * **Split view** (wide windows): the main area holds two panes side by side (`SplitView` with
-  `BSplitHandle`): **Podziel widok** (the top bar's Więcej, the palette, a tab's menu Pokaż w
-  podziale — that tab beside the main one) opens a copy of the focused tab in the right pane,
+  `BSplitHandle`): **Split view** (the top bar's More, the palette, a tab's menu Show in
+  split view — that tab beside the main one) opens a copy of the focused tab in the right pane,
   focused. A click (any button) or the keyboard focus in a pane focuses it; the top bar, the side
   panel's context, the palette's page commands, the window's shortcuts (Ctrl+E, Ctrl+F, Ctrl+;)
   and the bar's accent line follow the focused pane (the other pane's views get `paneActive:
   false`: their window-wide shortcuts are off — two would be ambiguous —, a PDF there writes no
-  page into the route). Closing the split pane's tab, or **Zamknij podział**, leaves one pane (its
+  page into the route). Closing the split pane's tab, or **Close split view**, leaves one pane (its
   tab stays in the bar unless closed). Only vertical splits, two panes: the side panel stays the
   place for a third page. A narrow window shows only the focused tab.
 * **A page in its own window** (desktop only; Android and the browser have one window):
-  **Otwórz w nowym oknie** (the link menu, the sidebar's row menu, the top bar's Więcej, the
-  palette) or a tab's **Przenieś do nowego okna** (`detachTab`). `ShellPageWindow` — an
+  **Open in new window** (the link menu, the sidebar's row menu, the top bar's More, the
+  palette) or a tab's **Move to new window** (`detachTab`). `ShellPageWindow` — an
   `ApplicationWindow` without a transient parent, 760 × 720 — has its own bar: back / forward (the
-  tab's history), the title, **Przenieś do okna głównego** (`attachTab`: a tab of the bar again);
+  tab's history), the title, **Move to main window** (`attachTab`: a tab of the bar again);
   Alt+← / Alt+→, Ctrl+W (closes it) and its view's own shortcuts work in it. It shares the
   Workspace: its editor and the main window's are two editors of the same notes, and each one's
   saves reach the other (`EditorHost::fileChanged`), as with the side panel. Toasts and the shell's
@@ -819,10 +823,10 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   notebook keeps its tabs too (it still opens on its table of contents). `--route` (screenshots,
   tests) starts with one tab showing that route and leaves the saved tabs alone.
 * **Phones and narrow windows:** no tab bar and no split; the tabs are kept (a wide window may
-  have opened them; the link menu's Otwórz w nowej karcie opens more) and **collapse into a tab
+  have opened them; the link menu's Open in new tab opens more) and **collapse into a tab
   switcher**: with two tabs or more the top bar shows a small square with their number before
-  Szukaj (`topBarTabs`); it opens a menu of the tabs (the shown one checked; a tap shows a tab), Nowa
-  karta, Zamknij kartę, Zamknij pozostałe karty. The Android back key walks the shown tab's history.
+  Search (`topBarTabs`); it opens a menu of the tabs (the shown one checked; a tap shows a tab), New
+  tab, Close tab, Close other tabs. The Android back key walks the shown tab's history.
 * **Performance:** only the tabs shown — at most the two panes and the windows — have views (an
   editor, a PDF viewer…); every other tab is a route, its history and a view state. A pane that
   shows another tab of the same view keeps its view (as a new route does) and switches the page;
@@ -830,35 +834,35 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
 
 ## Exporting and printing a page (`qml/content/ContentExportDialog.qml`)
 
-The page's menu has **Eksportuj stronę…** and **Drukuj…** (Ctrl+P; also the palette's "Eksportuj
-stronę…" / "Drukuj stronę…", uiActions `exportPage` / `printPage`, handled by the PageView on
-screen; a picture, a PDF or another file has no "Drukuj…"). Both open `ContentExportDialog` —
-"Drukuj…" starts printing right away — without going through Import and export:
+The page's menu has **Export page…** and **Print…** (Ctrl+P; also the palette's "Export
+page…" / "Print page…", uiActions `exportPage` / `printPage`, handled by the PageView on
+screen; a picture, a PDF or another file has no "Print…"). Both open `ContentExportDialog` —
+"Print…" starts printing right away — without going through Import and export:
 
 * **Format** tiles (three columns, two on phones): Markdown (the page's file as it is,
-  `ExportController` format `markdown-file`, page scope only), Markdown z załącznikami
+  `ExportController` format `markdown-file`, page scope only), Markdown with attachments
   (`markdown-zip`: the page and the pictures and files it links to), HTML (`html-single`, the
   pictures inside), PDF, Word (DOCX) and Pandoc Markdown; the chosen one explained below.
-  **Obrazy z internetu** (Zostaw adresy / Dołącz kopie, `AppSettings.exportWebPictures`) for the
+  **Pictures from the internet** (Keep addresses / Include copies, `AppSettings.exportWebPictures`) for the
   HTML, PDF, Word and Pandoc formats.
-* **Zapisz jako plik…** (the browser: **Pobierz**) makes the file in the background (a progress
-  bar and **Anuluj** under the tiles), then the system's save dialog (`FilePicker`, Android: the
-  system's "Save as") or the browser's save picker / a download; **Zapisz w Pobranych** on
-  Android (MediaStore); **Kopiuj do schowka** for Markdown and HTML (`PageTools.copyExport`);
-  **Więcej opcji eksportu…** opens Import and export with the page and the format chosen.
-* **Drukuj…** (`ExportController.print()`): desktop — the system's print dialog (`QPrintDialog`,
+* **Save as file…** (the browser: **Download**) makes the file in the background (a progress
+  bar and **Cancel** under the tiles), then the system's save dialog (`FilePicker`, Android: the
+  system's "Save as") or the browser's save picker / a download; **Save to Downloads** on
+  Android (MediaStore); **Copy to clipboard** for Markdown and HTML (`PageTools.copyExport`);
+  **More export options…** opens Import and export with the page and the format chosen.
+* **Print…** (`ExportController.print()`): desktop — the system's print dialog (`QPrintDialog`,
   Qt Print Support, linked on the desktop only), the pages painted on the printer
   (`io::printNotes`: the PDF's look, its page size and margins from the dialog, a page number
   at the bottom); Android — the PDF export handed to the system's print service
   (`AndroidBridge::printPdf`: PrintManager with a WebView-free PrintDocumentAdapter copying the
-  file, `PdfPrint.kt`; its printers and "Zapisz jako PDF"); the browser — the HTML document in
+  file, `PdfPrint.kt`; its printers and "Save as PDF"); the browser — the HTML document in
   its print dialog (a hidden frame sandboxed without scripts, `platform/wasm/wasmopen.h`).
 
 PDF and DOCX are Brulion's own (`io/paper.h`, no Pandoc or LaTeX, also on the phone): the HTML
 document export laid out for paper — headings, lists with the tasks' checkboxes, tables with
 borders (a table above 1500 rows or 10 000 cells keeps its first rows), code, math as the HTML
 shows it, pictures scaled to the page, Mermaid diagrams (and other SVG) as pictures, dates and
-reminders in words ("termin: 2026-11-20"; colour emoji fonts do not print); links to the web stay
+reminders in words ("due: 2026-11-20"; colour emoji fonts do not print); links to the web stay
 links, links inside the notebook are text. The PDF embeds its fonts (Polish letters as written);
 the paper is A4, Letter where the system's locale uses it (`io::paperSizeFor`). The DOCX has
 Word's styles (heading 1…6, Source Code, Quote, Hyperlink), real list numbering, hyperlinks,
@@ -868,7 +872,7 @@ into a PDF read back), the import self-test's step 8 (the dialog, the save dialo
 
 ## Cleaning up (`qml/views/CleanupView.qml`)
 
-**Sprzątanie** (Więcej menu and the palette, `go.cleanup`) lists the notes and attachments nothing
+**Clean up** (More menu and the palette, `go.cleanup`) lists the notes and attachments nothing
 refers to, `notebook::unreferencedFiles` (`notebook/cleanup.h`), computed from the index after it
 settles; it waits for a notebook that is still being indexed, when links are not known yet.
 
@@ -882,15 +886,15 @@ settles; it waits for a notebook that is still being indexed, when links are not
   offered. Plain-text mentions of a note's title do not count. Links inside native SVG drawings and
   Obsidian's `.canvas` files are not read, as the index reads them nowhere: a note reached only from
   one of them is offered. A PDF or picture a drawing lies on is offered when no note links to it: the drawing keeps
-  its raster (docs/SYNTAX.md "Backdrop") and only "Inna strona PDF" needs the file.
+  its raster (docs/SYNTAX.md "Backdrop") and only "Another PDF page…" needs the file.
 * **Never offered:** daily notes, the templates folder and the journal template, favourites (nobody
   links to them on purpose), hidden files and folders (a sync client's `.sync_….db`, `.gitignore`).
 * **Choosing:** nothing is ticked at first. A `BSegmented` shows everything, the notes or the
-  attachments; a tap on a row (or its check box) ticks it, "Zaznacz wszystko" ticks what is shown; the row's
+  attachments; a tap on a row (or its check box) ticks it, "Select all" ticks what is shown; the row's
   button opens the file. A row says what deleting it would take away (open tasks, reminders).
-* **Removing:** "Przenieś do kosza" takes what is **ticked and shown** (a ticked note stays when
+* **Removing:** "Move to trash" takes what is **ticked and shown** (a ticked note stays when
   only attachments are shown) after a confirmation, which counts the files holding open tasks or
-  reminders; "Cofnij" in the toast restores all of them, also after leaving the view
+  reminders; "Undo" in the toast restores all of them, also after leaving the view
   (`Workspace.deletePages`, `restoreAll`). Nothing is deleted for good here: that is the trash's
   business. The list follows the index, so a picture left without links by a removed note appears next.
 
@@ -900,29 +904,29 @@ confirmation, Undo from another view), `tst_content_qml` (the route without QML 
 
 ## Backups (`qml/shell/ShellBackupSettings.qml`)
 
-**Kopie zapasowe** is a section of the settings (`section: "backups"`; the palette: `backup.open`, and
-`backup.now` for "Utwórz kopię teraz"), on `Workspace.backups` (`shell/workspacebackups.h`). User's
-guide: the page "Kopie zapasowe" of the documentation notebook.
+**Backups** is a section of the settings (`section: "backups"`; the palette: `backup.open`, and
+`backup.now` for "Create a backup now"), on `Workspace.backups` (`shell/workspacebackups.h`). User's
+guide: the page "Backups" of the documentation notebook.
 
-* **Status:** the last backup's time and size with "Utwórz kopię teraz"; a problem under it in full
+* **Status:** the last backup's time and size with "Create a backup now"; a problem under it in full
   (`statusText`: red for a failed run, plain for files left out). While something runs: what, a
-  progress line and "Zatrzymaj". A failed scheduled run also gives one warning toast per kind of
+  progress line and "Stop". A failed scheduled run also gives one warning toast per kind of
   failure per session, and a line in the event log; older backups are never touched.
 * **Schedule:** the switch (`backupsEnabled`), Every day / Every week, how many to keep (`keepChoices`:
   3, 5, 7, 14, 30; the browser 1, 2, 3). All per notebook on this device.
-* **Folder** (not in the browser): the path, "Wybierz…" (`FilePicker.OpenFolder`; `chooseFolder`:
+* **Folder** (not in the browser): the path, "Choose…" (`FilePicker.OpenFolder`; `chooseFolder`:
   a local URL or an Android document that names a file; refused with a message inside the notebook,
-  for a cloud document, for a folder that takes no file), "Użyj domyślnego", on a desktop "Otwórz".
+  for a cloud document, for a folder that takes no file), "Use the default", on a desktop "Open".
 * **The list:** `backupsList`, newest first, one `BListItem` per backup with icon buttons fitting a
-  narrow phone: Przywróć (`backupRestore`), Pobierz in the browser or Udostępnij for Android's private
-  folder (`backupExport`), Usuń (`backupDelete`, confirmed; never to the trash, it is no note). The subtitle
-  says "nie z tego notatnika" (a foreign copy: Przywróć and Usuń ask specifically first,
-  `backupsForeignRestoreConfirm`) or "niekompletna".
+  narrow phone: Restore (`backupRestore`), Download in the browser or Share for Android's private
+  folder (`backupExport`), Delete (`backupDelete`, confirmed; never to the trash, it is no note). The subtitle
+  says "not from this notebook" (a foreign copy: Restore and Delete ask specifically first,
+  `backupsForeignRestoreConfirm`) or "incomplete".
 * **Restore:** `prepareRestore` checks the backup off the GUI thread; `restorePlanReady` opens
   `backupsRestoreConfirm` with the counts (replaced, back, to the trash, too large); nothing to do is a
   toast. `confirmRestore` saves open editors, waits for a running sync (phase `sync`), makes the safety
   backup and applies the plan; the outcome is a toast. A restore interrupted by closing the notebook or a kill: a
-  toast, and on the next open the status names the safety backup, with "Już się tym zająłem"
+  toast, and on the next open the status names the safety backup, with "I have dealt with it"
   (`backupsDismissInterrupted`).
 * The documentation notebook has none (`available` false, a note instead; the palette's commands off).
 
@@ -932,18 +936,18 @@ taps through a backup, a restore's confirmation, a delete), `tst_content_qml` (t
 ## Find and replace
 
 **In the open note** (`qml/editor/FindBar.qml`, `src/app/editor/notefind.h`). Ctrl+F, the page menu's
-"Znajdź i zamień…" (so phones reach it), Więcej's "Znajdź w notatce", the palette's `page.find`, route
+"Find and replace…" (so phones reach it), More's "Find in note", the palette's `page.find`, route
 `open: "find"`; Ctrl+H opens the replace row as well. In the main pane only: a page in the side panel
 has none, the PDF viewer and the graph keep their own Ctrl+F. Enter / Shift+Enter (F3 / Shift+F3)
 go through the matches, Esc closes it and gives the keyboard back; Back on Android closes it first.
 Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (case), "ąa" (diacritics),
-"Słowo" (whole word), all off at first (`text/find.h`: "zolw" finds "ŻÓŁW", a no-break space equals a space).
+"Word" (whole word), all off at first (`text/find.h`: "zolw" finds "ŻÓŁW", a no-break space equals a space).
 
 * **What is searched:** the note's actual Markdown (`PageController::text()`; in source mode
   `sourceText`), so markup, link targets, hidden task markers and frontmatter count. Queries are
   literal and one line. `NoteFind` recounts 120 ms after a change (400 ms over 200 KB) and leaves the
   caret alone; only next, previous and the replaces move anything. A new query goes to the nearest
-  match from where the bar was opened. An edit leaves no current match ("12 wyników"): the next one
+  match from where the bar was opened. An edit leaves no current match ("12 results"): the next one
   counts from its place.
 * **Showing a match in block mode:** delegates are virtual and rendered text is not the raw text, so
   the current match is shown in the block's inline editor (`BlockEditor.showFindTarget`): the
@@ -954,7 +958,7 @@ Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (ca
   offset to a row and edit-text range: a file line ends with the same line of the block's body.
 * **Limits:** a match in a list marker, a task marker, a fence line or a table (cells have their own
   editors) cannot be selected: its block is selected and flashed, and the replace works all the same.
-  Source mode shows every one of them. A match in the frontmatter opens the block's "Edytuj jako tekst"
+  Source mode shows every one of them. A match in the frontmatter opens the block's "Edit as text"
   editor rather than a field of the properties panel.
 * **All matches:** tinted in rendered blocks (`InlineRenderer::withFindHighlight`: shown text only,
   entities whole, escaped output untouched; such a row becomes a tinted `TextEdit`, see `RichTextPills`) and
@@ -962,8 +966,8 @@ Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (ca
   (`**`, a link's target) is not tinted in rendered text, though counted. Text that tables, query
   results and embeds draw themselves is not tinted either.
 * **Replacing:** `PageController::replaceTextRanges` applies the change to the whole text through
-  `applyText`: one undo step ("Zamień wszystko" too, with Cofnij in its toast), other blocks' bytes
-  untouched, the usual debounced save and merge. "Zamień" only replaces the match on show: with none,
+  `applyText`: one undo step ("Replace all" too, with Undo in its toast), other blocks' bytes
+  untouched, the usual debounced save and merge. "Replace" only replaces the match on show: with none,
   or with a recount pending (an edit, an option just changed), it shows one and replaces nothing; the
   same text as the match's moves on. With the replace row open the bar counts the matches inside links
   (`text::isInsideLink`, as the notebook-wide preview) and in the YAML frontmatter: Logseq's leading
@@ -971,8 +975,8 @@ Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (ca
   undo: `EditorInput.replaceRanges` is one edit block. `NoteFind` maps text offsets to TextEdit
   positions there, as the TextEdit shows a CRLF as one line break.
 * **The journal stream** searches **every day** of the stream (`src/app/editor/streamfind.h`,
-  `StreamFind` beside the bar's `NoteFind`): the field says "Znajdź w dzienniku", the count is over
-  all days ("3 z 12 · 4 dni"; the current match counted from the top), and every day on screen
+  `StreamFind` beside the bar's `NoteFind`): the field says "Find in the journal", the count is over
+  all days ("3 of 12 · 4 days"; the current match counted from the top), and every day on screen
   tints its matches. The current match is the bar's `NoteFind`'s, in the day being written in
   (`activeDay`; a tap in another day moves the search there): with `wrap` off, next / previous at
   that day's end — also a new query or a replace with nothing after it there — go on to the nearest
@@ -981,17 +985,17 @@ Its buttons never take focus, so the field keeps the keyboard. Options: "Aa" (ca
   stream; a day alone with matches goes round itself. Days on screen or in the list's cache are
   attached (`attach()` from `ContentJournalDay`): their live text counts; the others are read from
   their files (`EditorHost::read`, cached until `fileChanged`), recounted 150 ms after a change.
-  Bound: the first `dayLimit` days (1000) and 32 MB of text; past that the bar says "Przeszukano
-  ostatnie N dni" and "W całym notatniku…" finds the rest. **Replace all** covers every day
+  Bound: the first `dayLimit` days (1000) and 32 MB of text; past that the bar says "Searched the
+  latest N days" and "In the whole notebook…" finds the rest. **Replace all** covers every day
   searched: the day written in through `NoteFind` (its undo step), the other attached days through
   their controllers (a step each), the rest written through `EditorHost::writeIfUnchanged` after the
   open editors saved — a file that changed meanwhile is left alone and counted in the toast; the
-  toast's Cofnij (`StreamFind.undo(token)`) puts every day back while it still holds what was
+  toast's Undo (`StreamFind.undo(token)`) puts every day back while it still holds what was
   written. Days are created and destroyed as they scroll, each with its own controller and undo
   history.
 
 **In the whole notebook** (`qml/views/ReplaceView.qml`, route `replace {query?, replacement?}`, palette
-`go.replace`, Więcej, SearchView's "Zamień…", the bar's "W całym notatniku…"; not in the documentation
+`go.replace`, More, SearchView's "Replace…", the bar's "In the whole notebook…"; not in the documentation
 notebook). Core: `notebook/replace.h`; the app: `src/app/shell/replacesession.h`, `Workspace.replacing`.
 
 * **Plan:** 350 ms after typing stops (Enter: at once), editors save (`EditorHost::saveEditorsRequested`)
@@ -1010,7 +1014,7 @@ notebook). Core: `notebook/replace.h`; the app: `src/app/shell/replacesession.h`
   from the plan are refused and named in a toast. The hits are found again in that same text, then
   `Vault::writeTextIfUnchanged` writes with the History reason `replace`, which the 5-minute throttle
   never drops. BOM, line endings and all other bytes stay. Open editors follow through `fileChanged`.
-* **Undo:** the toast's Cofnij (`ReplaceSession.undo(token)`, kept by the session, so it works from
+* **Undo:** the toast's Undo (`ReplaceSession.undo(token)`, kept by the session, so it works from
   another view; the old text is held in memory until the next replace or notebook) restores only files
   still holding what was written, judged on the disk; others stay and are named, a deleted note is not
   brought back. A rescan running is stopped first. Replacing with the same text writes and tells nothing.
@@ -1023,7 +1027,7 @@ Tests: `tst_text_find`, `tst_notebook_replace`, `tst_markdown_render`, `tst_edit
 
 Misspelled words of the block being edited are underlined in red (`Theme.danger`), in Polish and
 English — both at once by default — with corrections in the edited text's menu. User guide: the
-page "Sprawdzanie pisowni" of the documentation notebook.
+page "Spell checking" of the documentation notebook.
 
 * **Where:** the prose of the edited block only (`InlineEditor` of text blocks, headings, quotes,
   callouts: `spellChecked`); rendered blocks, code, `calc`, `query`, table cells, the properties
@@ -1047,22 +1051,22 @@ page "Sprawdzanie pisowni" of the documentation notebook.
   only the lines waiting for it are highlighted again when the answer comes (`checked(changed)`).
   Verdicts are cached (20 000 words), so retyping asks nothing.
 * **Menu:** a right-click on a marked word (`BlockEditor.openTextMenu`, `InlineEditor.misspelledAt`)
-  puts its corrections (up to 6, asked from the worker: "Szukam podpowiedzi…" until they come, "Brak
-  podpowiedzi") at the top of Wytnij / Kopiuj / Wklej, then **Dodaj „…” do słownika** and **Ignoruj**.
+  puts its corrections (up to 6, asked from the worker: "Looking for corrections…" until they come, "No
+  corrections") at the top of Cut / Copy / Paste, then **Add “…” to dictionary** and **Ignore**.
   A correction replaces the word through `PageController.replaceRange` (one undo step, the caret
   after it). On touch UIs a tap on a marked word opens only those items (`openSpellingMenu`; the tap
   places the caret as usual — a long press stays the system's selection). Adding or ignoring asks
   again only about the words marked wrong, which stay marked until the answer (no flicker); taking a
   word out of the dictionary or changing languages forgets every verdict (`invalidated()`).
-* **Settings** (Ustawienia → Edytor, shown only where `SpellCheck.available`): "Sprawdzaj pisownię"
-  (`AppSettings.spellCheck`, default on), "Języki pisowni" (`spellLanguages`: Automatycznie — the UI
-  language, the system's and English, `spell::resolveLanguages`; Polski, Angielski, Oba — of the
-  languages this device has) and "Słownik użytkownika" (a dialog listing `SpellCheck.personalWords`:
+* **Settings** (Settings → Editor, shown only where `SpellCheck.available`): "Check spelling"
+  (`AppSettings.spellCheck`, default on), "Spelling languages" (`spellLanguages`: Automatic — the UI
+  language, the system's and English, `spell::resolveLanguages`; Polish, English, Both — of the
+  languages this device has) and "Personal dictionary" (a dialog listing `SpellCheck.personalWords`:
   add, remove). main.cpp binds `SpellCheck` to these settings and to the UI language.
 * **The personal dictionary is a device setting** (`spelling/words`, every notebook of this device),
   not a notebook file: Nextcloud sync carries only `.brulion/config.json` of the `.brulion/` folder,
   and in that file a key-wise merge would drop the words one of two devices added at the same time.
-  "Ignoruj" lasts until the app quits. Matching follows Hunspell's letter case: "Kraków" also
+  "Ignore" lasts until the app quits. Matching follows Hunspell's letter case: "Kraków" also
   accepts "KRAKÓW", "kot" also "Kot", never "kraków" for "Kraków".
 * **Backends** (`src/platform/spellbackends.h`, one per build): **Hunspell** on the desktop — the
   `.aff`/`.dic` pairs found by `spelldictionaries.h` (DICPATH, `<exe>\dictionaries` on Windows,
@@ -1183,7 +1187,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
     on the title creates it, as any link to a missing page), a missing section or block says so,
     an empty page "Nothing here yet."; links to attachments (pictures, PDFs — by the target's
     extension, found or not) and drawings have none. **Touch UIs have no previews** (no hover;
-    `Theme.touchUi`): a long press stays the link's menu, whose "Otwórz w panelu bocznym" shows
+    `Theme.touchUi`): a long press stays the link's menu, whose "Open in side panel" shows
     the page beside the note on wide screens. Tests: `tst_editor_linkpreview` (pages, sections,
     blocks, missing ones, links without a preview, escaping, malformed URLs, the routes followed),
     `--selftest-shell` (`checkLinkPreviews`: real mouse moves and clicks).
@@ -1197,7 +1201,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   a changed block keeps its row (`dataChanged`: its delegate, fold and a tracked handle survive —
   `undoKeepsChangedRowsInPlace`; an inline editor open on it gets the step's text; a table cell
   being edited is closed before the step — its field would keep the old text and write it back —
-  and the cell toolbar's Cofnij / Ponów open it again), only blocks the step adds or removes
+  and the cell toolbar's Undo / Redo open it again), only blocks the step adds or removes
   come and go, never a reset; undo costs about what the command cost (`largePageTouchesOneRow`
   compares their medians). Typing merges into one step per block (`BlockDocument::composed`); a
   keystroke that also changed blocks far away — typing at the top of a page renumbers a loose
@@ -1234,7 +1238,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`externalReloadKeepsUidsOfKeptBlocks`).
 * Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
   exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
-  are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and
+  are a block id line (`^id`, written by "Copy block reference" and `((` completion) and
   `key:: value` properties after the closing fence. A ```` ``` ```` line typed inside a closed
   code block stays code: the hidden fences are widened when needed (so a fenced example can be
   written about or pasted without breaking the page). A fence that is not closed (a file written
@@ -1273,67 +1277,67 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   block is not saved while nothing follows it, and goes when the caret leaves the block (part
   of the undo step that wrote it; `PageController::rememberEditorSpace`).
 * Slash commands (`/`, Polish and English names, diacritic-insensitive filter): the task
-  statuses Zadanie: do zrobienia / w toku / zrobione / oczekujące / anulowane / bez statusu
-  ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,
-  anulowane, cancel, bez statusu…), Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś,
-  Jutro, Data…, Tabela, Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór
-  matematyczny, Szablon…, Plik… (any files as links), Obraz…, Rysunek (a new drawing, opened in the drawing editor), Rysunek na
-  obrazie lub PDF… (drawings on a picture or a PDF's pages: "Drawing editor" → Backdrop), Osadź,
-  Odwołanie do bloku, Priorytet wysoki / niski, Linia
-  pozioma, Aktualna godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ]
-  zadanie", "blok ```calc"). A status command sets the status of the block being edited
+  statuses Task: to do / in progress / done / waiting / cancelled / no status
+  (in Polish "Zadanie: do zrobienia" … "Zadanie: bez statusu"; also found as todo, doing, done,
+  czeka, odłożone, waiting, anulowane, cancel, bez statusu…), Reminder…, Alarm…, Due date…,
+  Scheduled…, Repeat…, Today, Tomorrow, Date…, Table, Calculation, Query, Heading 1–3, Quote,
+  Callout, Code block, Math formula, Template…, File… (any files as links), Image…, Drawing (a new
+  drawing, opened in the drawing editor), Drawing on a picture or PDF… (drawings on a picture or a
+  PDF's pages: "Drawing editor" → Backdrop), Embed, Block reference, High / Low priority, Divider,
+  Current time. Under each name: the syntax it writes ("⏰ date time", "- [ ]
+  task", "```calc block"). A status command sets the status of the block being edited
   (`PageController.applySlashCommand` → `setTaskStatus`) in the same undo step that removes the
   "/command": a block that is no task becomes one (a paragraph a list item), Logseq keywords keep
-  their workflow (TODO → DOING, LATER → NOW), "bez statusu" removes the checkbox and its ✅ / ❌
+  their workflow (TODO → DOING, LATER → NOW), "no status" removes the checkbox and its ✅ / ❌
   date, and the caret stays in the words around the command.
 * **Block menu** (`BlockMenu`, `qml/editor`; one per editor, made when first opened, the block
-  tracked while it is open): **Kopiuj**, **Wytnij**, **Kopiuj jako tekst** (the block with its
+  tracked while it is open): **Copy**, **Cut**, **Copy as plain text** (the block with its
   children, which becomes the selection — or, for a block that is part of a selection of several,
-  "Kopiuj 3 bloki", "Wytnij 3 bloki": the whole selection; indenting, moving and "Usuń 3 bloki"
+  "Copy 3 blocks", "Cut 3 blocks": the whole selection; indenting, moving and "Delete 3 blocks"
   then act on all of it too — a selection with gaps is not indented or moved: those items are
-  shown disabled, a tap says why), **Zaznacz** (the block becomes the selection; on touch UIs the
-  selection mode), Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
-  Odwołanie do bloku `((…))` (Ctrl+Shift+C), Link do bloku `[[…#^…]]`, on headings Link do
-  nagłówka `[[…#…]]`, Osadzenie (`!((…))`, a heading's section `![[…#…]]`); what each writes:
-  docs/SYNTAX.md §2 "Headings and blocks in links" —, Wstaw obraz…, Wstaw rysunek, Zwiększ / Zmniejsz wcięcie
-  (outline, list items in a document), Przenieś w górę / w dół, Usuń blok. It opens for every
+  shown disabled, a tap says why), **Select** (the block becomes the selection; on touch UIs the
+  selection mode), Zoom in and Collapse / Expand (outline), **Copy link** ▸ —
+  Block reference `((…))` (Ctrl+Shift+C), Link to block `[[…#^…]]`, on headings Link to
+  heading `[[…#…]]`, Embed (`!((…))`, a heading's section `![[…#…]]`); what each writes:
+  docs/SYNTAX.md §2 "Headings and blocks in links" —, Insert picture…, Insert drawing, Indent / Outdent
+  (outline, list items in a document), Move up / Move down, Delete block. It opens for every
   block in both note modes: a right-click anywhere on a block — text, heading, a code, calc, table,
   query or callout frame, an embed — with a mouse, touchpad or stylus, never a finger (one
   `TapHandler` on the editor's list, not one per block, picking the block drawn under the pointer
   — `BlockEditor.rowAt`, also the page title drawn above its properties —; the page properties
   have none), the bullet or an ordered item's number (a right-click — their press is theirs, the
   list's handler does not open it twice — or a long press), and on touch UIs the editing
-  toolbar's **Więcej** (the menu right above the bar; in a table cell the cell tools' Więcej ends
+  toolbar's **More** (the menu right above the bar; in a table cell the cell tools' More ends
   the cell's editing, selects the table and opens its menu at it). A right-click on a token (a date,
   a reminder, 🔁, a priority, a link to a day) or a link opens its own menu instead (below, "Token
   and link menus"). A long press on text opens no block menu: it selects the block (on a token or
   a link: its menu) (the touch selection mode, "Selecting and copying"). The submenu opens beside the menu with a mouse, in place of it on touch UIs (`BMenu`:
-  `cascade` off). Every copy says "Skopiowano …", or why nothing was copied — no clipboard (the
+  `cascade` off). Every copy says "Copied …", or why nothing was copied — no clipboard (the
   text read back differs: never "copied" then), a block that cannot carry an id (the page
   properties), Markdown source mode, the documentation notebook (no new block ids there:
   `PageController.allowNewBlockIds`, so its pages keep being updated).
-* **Following a link** to a block or a heading (`((id))`, `[[Strona#^id]]`, `[[Strona#Nagłówek]]`,
+* **Following a link** to a block or a heading (`((id))`, `[[Page#^id]]`, `[[Page#Heading]]`,
   Obsidian heading paths, also on the page already shown and on every click —
   `PageController.activateLink` scrolls there itself instead of asking for an unchanged route):
   `BlockEditor.revealRow` unfolds and leaves a zoom as needed, scrolls the block to the middle (a
   day of the journal stream: the stream scrolls it into view — `scroller.ensureVisible`, the day's
   own list never scrolls), selects it and flashes it (`BlockDelegate.flash()`: `Theme.mark` over the selection and under
   the text, ~1.2 s, created only while it shows, no height change); a heading or block that is
-  nowhere is said ("Nagłówka „…” nie ma na tej stronie"; also from a query result). Toasts show
+  nowhere is said ("Heading “…” is not on this page"; also from a query result). Toasts show
   their message as plain text (`BToast`): they quote note text — a copied link, a heading —, which
   must never be rendered as markup.
-* **Task status menu** (`TaskStatusMenu`, `qml/editor`): Do zrobienia, W toku, Zrobione,
-  Oczekujące, Anulowane, Bez statusu, the current one checked. It opens with a right-click (mouse,
+* **Task status menu** (`TaskStatusMenu`, `qml/editor`): To do, In progress, Done,
+  Waiting, Cancelled, No status, the current one checked. It opens with a right-click (mouse,
   touchpad, stylus) or a long press on any task checkbox (`TaskBox`) — in the editor, query
   results, embedded pages and blocks, linked references and tag pages, the calendar's day panel
-  and agenda, Tasks (whose row menu adds "Otwórz") —, with Ctrl+Shift+Enter in the editor and by
-  holding the touch toolbar's Zadanie button. A click or tap on the checkbox still toggles (a long
+  and agenda, Tasks (whose row menu adds "Open") —, with Ctrl+Shift+Enter in the editor and by
+  holding the touch toolbar's Task button. A click or tap on the checkbox still toggles (a long
   press never does). The editor's menu (`BlockEditor.openTaskStatusMenu`) follows its block while
   open and gives the keyboard back to the edited block; elsewhere the choice goes through the
   view's model to the task's own file (`QueryResultModel.setTaskStatus`,
   `PageController.setTaskStatusAt`, `GroupedRefsModel.setTaskStatus`,
   `PlanningActions.setTaskStatus`; "" = no status, `markdown::removeTaskMarker`); Tasks and the
-  calendar show "Zmieniono status" with Undo (the dates, reminders, rules and priorities of those
+  calendar show "Status changed" with Undo (the dates, reminders, rules and priorities of those
   rows have menus of their own: "Token and link menus"). While the menu is open on a query result or an
   embedded task, their rows wait: results that change meanwhile (a sync, an edit in another note,
   the index catching up) would replace the rows and take the menu away with its checkbox. A
@@ -1352,14 +1356,14 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`TaskListModel`) update their rows in place (inserts, removals, moves by `path:line`), so a
   row's menu stays open unless its own task moves to another line.
 * **Tasks: dependencies, subtasks and time** (docs/SYNTAX.md §5). The task status menu of the
-  editor and of Tasks (`showTaskTools`) ends with **Uruchom licznik czasu** / **Zatrzymaj licznik
-  czasu** and **Dodaj zależność…**; the palette has "Licznik czasu zadania" (`task.clock`, the task
-  at the cursor), "Dodaj zależność zadania…" (`task.addDependency`) and "Zatrzymaj licznik czasu"
+  editor and of Tasks (`showTaskTools`) ends with **Start timer** / **Stop
+  timer** and **Add dependency…**; the palette has "Start or stop task timer" (`task.clock`, the task
+  at the cursor), "Add task dependency…" (`task.addDependency`) and "Stop task timer"
   (`task.stopClocks`, enabled while one runs, its subtitle the running task). Starting a timer
   stops the running one, wherever it is (`stopTaskClocksElsewhere()`, `taskhelpers.h`: other
   files written through the host, the editor's own page in the same undo step —
   `PageController.toggleTaskClock`; Tasks: `PlanningActions.toggleClock` with Undo in the toast).
-  "Dodaj zależność…" opens `TaskDependencyDialog` (`qml/editor`): a search over the notebook's
+  "Add dependency…" opens `TaskDependencyDialog` (`qml/editor`): a search over the notebook's
   open tasks (`notebook::dependencyCandidates`, diacritics ignored, the ones it already waits for
   left out); the chosen task gets a `🆔` when it has none and this one a `⛔ id`
   (`PageController.addTaskDependency`, `PlanningActions.addDependency`). The renderer
@@ -1368,38 +1372,38 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   for a missing id — and a click on it (`taskdep:<id>`) opens that task (`activateLink`; Tasks:
   `PlanningActions.openLink`). After a task's text the editor and query results show
   `markdown::taskChipsHtml()`: its subtask progress "3/5" (a parent row is rendered again when
-  its subtasks change: `RowState::htmlProgress`) and its time "⏱ 1 h 05 min + od 10:00" (static:
-  a running clock names its start). Tasks rows have chips of their own: "Czeka na: …" (a click
-  opens the blocking task), "Cykl zależności" / "Brak zależności", "Blokuje n zadań", "3/5" and
-  the time. "Czas pracy" in Tasks' filter bar opens `TasksTimeDialog`: the listed tasks' time
+  its subtasks change: `RowState::htmlProgress`) and its time "⏱ 1 h 05 min + from 10:00" (static:
+  a running clock names its start). Tasks rows have chips of their own: "Waiting for: …" (a click
+  opens the blocking task), "Dependency cycle" / "Missing dependency", "Blocks n tasks", "3/5" and
+  the time. "Time spent" in Tasks' filter bar opens `TasksTimeDialog`: the listed tasks' time
   (the filters apply) today / this week / this month / everything, per day, page, tag or task
   (`TaskListModel.timeSummary`, `index/tasktime.h`); a task row opens the task. Settings →
-  Edytor: **Zapisuj zmiany statusu zadań** (`AppSettings.taskStatusHistory`, default off, pushed
+  Editor: **Log task status changes** (`AppSettings.taskStatusHistory`, default off, pushed
   into the Workspace: `EditorHost::taskStatusHistory()`) logs every status change in the task's
-  `:LOGBOOK:` and makes "W toku" start and stop its timer, in the editor (`logTaskStatus`, the
+  `:LOGBOOK:` and makes "In progress" start and stop its timer, in the editor (`logTaskStatus`, the
   same undo step), Tasks, the calendar and query results.
 * A day without a note (journal stream or a single day) starts from the journal template; the
   note is created by the first change (`PageController.startNewPage`), never by looking at it.
 * Special block delegates: code (monospace), `calc` (input lines with right-aligned results, in
   the note's font and size — results with tabular figures — on the sunken well with its
-  "Obliczenia" caption; the 1-px frame shows only while editing),
+  "Calculation" caption; the 1-px frame shows only while editing),
   table (grid editor with formula results; edits rewrite the Markdown table; a cell's block menu —
-  a right-click on it, also while it is edited, or the cell toolbar's Więcej — has **Wiersz** and
-  **Kolumna**: insert (the new cell or header opens for typing), move, delete, the column's
+  a right-click on it, also while it is edited, or the cell toolbar's More — has **Row** and
+  **Column**: insert (the new cell or header opens for typing), move, delete, the column's
   alignment, each one undo step, the only column and the header row not deletable; in a cell
   Ctrl+Enter inserts a row below and Alt+arrows move its row or column, the cell moving with it;
   formulas keep naming the same cells, docs/SYNTAX.md "Table formulas"; a block menu not opened
-  from a cell does not have them; **Kolumna** also has Sortuj rosnąco / malejąco —
+  from a cell does not have them; **Column** also has Sort ascending / descending —
   `PageController.sortTable`, one undo step, the rows rewritten in the file line by line, summary
-  rows in place, a toast when the rows are in that order already — and "Filtruj według tej
-  kolumny…"; any table's block menu has **Filtruj wiersze** / **Ukryj filtry**, **Kopiuj jako
-  CSV** and **Zapisz jako CSV…** (`EditorDialogs.saveTableCsv`: the save `FilePicker`, the browser's
+  rows in place, a toast when the rows are in that order already — and "Filter by this
+  column…"; any table's block menu has **Filter rows** / **Hide filters**, **Copy as
+  CSV** and **Save as CSV…** (`EditorDialogs.saveTableCsv`: the save `FilePicker`, the browser's
   download), docs/SYNTAX.md "Sorting and filtering tables", "CSV". Filtering shows a row of
   `BTextField`s under the header — one per column, the menu's column focused, Escape in an empty
   field closes the row — and hides the rows that do not match (`BlockListModel.setTableFilter`:
   view state of the block, nothing written, kept while the page is open; the edited row stays
   shown); a filtered column's header has a funnel, the line under the grid counts the rows shown
-  next to "Wyczyść filtry". `/Tabela z CSV…` picks a file (`EditorDialogs.pickCsvTable`, the
+  next to "Clear filters". `/Table from CSV…` picks a file (`EditorDialogs.pickCsvTable`, the
   browser's picker: `PageController.pickCsvInBrowser`) and makes it a table in place of the empty
   block, a toast when rows or columns were left out), `query` (live
   results with checkable tasks), math (`math`/`latex`/`tex` fences, the formula rendered from
@@ -1430,49 +1434,49 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   with MermaidView's painter in Theme's colours, light and dark; its `description` — the type,
   title and every value — is the accessible description; editing as for Mermaid, the chart under
   the source following every keystroke; a chart that cannot be drawn shows the source with the
-  reason in `dangerText`; `/Wykres` inserts `typ: słupkowy` / `tabela: powyżej`), callout, embeds/transclusions
+  reason in `dangerText`; `/Chart` inserts `type: bar` / `table: above` (in Polish notes `typ: słupkowy` / `tabela: powyżej`)), callout, embeds/transclusions
   (`![[…]]`, `!((…))`), images, headings, horizontal rule, properties / frontmatter
-  ("Właściwości" panel: typed fields, "Page properties" below).
+  ("Properties" panel: typed fields, "Page properties" below).
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
-  bell for alarms), 🔁 recurrence in Polish words. Clicking a ⏰ chip opens the reminder dialog
+  bell for alarms), 🔁 recurrence in words of the UI language. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete); a click on another date chip, a 🔁 chip or a priority edits the text
-  (an I-beam cursor). "dziś"/"jutro" and overdue colours of open pages move on at midnight
-  (`DayClock`). Links to daily notes read as dates (`[[2026-10-13]]` → "wt 13 paź").
+  (an I-beam cursor). "today"/"tomorrow" and overdue colours of open pages move on at midnight
+  (`DayClock`). Links to daily notes read as dates (`[[2026-10-13]]` → "Tue, Oct 13").
 * **Token and link menus.** A right-click (mouse, touchpad, stylus) or a long press (a finger,
   outside the selection mode) on a token or a link of rendered text opens its menu instead of the
   block menu (BlockText's own handlers: the token's menu, else the link's, else the block menu as
   the list's handler opens it, `BlockEditor.openBlockMenuAt`; a long press elsewhere selects the
   block). `DateChipMenu` (`qml/editor`) by the token's kind:
-  * 📅 ⏳ 🛫 ➕ ✅ ❌: Zmień datę… (the date dialog on that token, `EditorDialogs.pickDateAt`), Dziś,
-    Jutro, Dzień później, Tydzień później, Usuń datę;
-  * ⏰ / 🔔: Zmień datę i godzinę… (the reminder dialog), Godzinę później, Jutro o tej porze,
-    Tydzień później, Alarm (checkable), the submenus **Powtarzanie** (Zmień regułę…, the quick rules
-    of the recurrence dialog — Codziennie, W dni robocze, Co tydzień, Co 2 tygodnie, Co miesiąc,
-    Co roku —, Nie powtarzaj: the block's 🔁, which makes the reminder recur, SYNTAX §6) and, on a
-    task, **Priorytet** (Najwyższy … Najniższy, Bez priorytetu: the task's priority, added to its
-    first line when it has none), Usuń przypomnienie;
-  * 🔁: Zmień regułę… (the recurrence dialog on that rule, `EditorDialogs.pickRecurrenceAt`), the
-    quick rules (the current one checked), Od daty wykonania (`when done`, checkable), Nie powtarzaj
+  * 📅 ⏳ 🛫 ➕ ✅ ❌: Change date… (the date dialog on that token, `EditorDialogs.pickDateAt`), Today,
+    Tomorrow, A day later, A week later, Remove date;
+  * ⏰ / 🔔: Change date and time… (the reminder dialog), An hour later, Tomorrow at this time,
+    A week later, Alarm (checkable), the submenus **Repeat** (Change rule…, the quick rules
+    of the recurrence dialog — Daily, Weekdays, Weekly, Every 2 weeks, Monthly,
+    Yearly —, Don't repeat: the block's 🔁, which makes the reminder recur, SYNTAX §6) and, on a
+    task, **Priority** (Highest … Lowest, No priority: the task's priority, added to its
+    first line when it has none), Delete reminder;
+  * 🔁: Change rule… (the recurrence dialog on that rule, `EditorDialogs.pickRecurrenceAt`), the
+    quick rules (the current one checked), From the completion date (`when done`, checkable), Don't repeat
     — the rule is written canonical, text after it ("🔁 co tydzień kupić mleko") stays;
   * a priority (🔺 ⏫ 🔼 🔽 ⏬; Logseq `[#A]` `[#B]` `[#C]` with three levels, written as Logseq):
-    Najwyższy … Najniższy, the current one checked, Bez priorytetu;
-  * a link to a day of the journal (`[[2026-10-20]]`, also `[[20.10.2026|wtorek]]`): Otwórz dzień,
-    Otwórz w panelu bocznym (not on narrow windows), Kopiuj link, Zmień datę… (a date without a
-    time), Dziś, Jutro, Dzień później, Tydzień później — only the date part of the target changes,
+    Highest … Lowest, the current one checked, No priority;
+  * a link to a day of the journal (`[[2026-10-20]]`, also `[[20.10.2026|wtorek]]`): Open day,
+    Open in side panel (not on narrow windows), Copy link, Change date… (a date without a
+    time), Today, Tomorrow, A day later, A week later — only the date part of the target changes,
     in the format it was written in (an alias, a folder, ".md" stay).
 
-  `LinkMenu` (`qml/editor`) on a `[[page]]` (also a Markdown link to a note): Otwórz ("Utwórz
-  stronę" for one not written yet — created by its first content, as a click does), Otwórz w
-  panelu bocznym, Kopiuj link (`[[Strona#Nagłówek]]` by the page's shortest link target — it works
+  `LinkMenu` (`qml/editor`) on a `[[page]]` (also a Markdown link to a note): Open ("Create
+  page" for one not written yet — created by its first content, as a click does), Open in
+  side panel, Copy link (`[[Page#Heading]]` by the page's shortest link target — it works
   pasted on any page —, as written for a page that does not exist; `PageController.linkMenu`, in Tasks and the calendar
   `PlanningActions.linkText` / `linkMissing`); on a path part of `[[Folder/Page]]` (a `part:`
-  link): Otwórz (its page), **Pokaż folder** (a folder: its All pages) or Utwórz stronę (nothing
-  there yet), Otwórz w panelu bocznym, Kopiuj link (`[[Strona]]`) or **Kopiuj ścieżkę folderu**
+  link): Open (its page), **Show folder** (a folder: its All pages) or Create page (nothing
+  there yet), Open in side panel, Copy link (`[[Page]]`) or **Copy folder path**
   (`Projekty/Dom/`, what a `path:` filter takes — quoted when not one token,
   `"Zażółć gęślą/"`; `LinkMenu.folder`, `PlanningActions.linkPartTarget`); on a
-  `#tag`: Otwórz stronę tagu, Otwórz w panelu bocznym, Widok tagu, Zadania z tym tagiem, Kopiuj tag
-  (`#tag`, `#[[tag ze spacjami]]`); on a `((block))`: Otwórz, Otwórz w panelu bocznym, Kopiuj link;
-  on a web address: Otwórz w przeglądarce, Kopiuj adres. Every copy says "Skopiowano …" or that the
+  `#tag`: Open tag page, Open in side panel, Tag overview, Tasks with this tag, Copy tag
+  (`#tag`, `#[[tag with spaces]]`); on a `((block))`: Open, Open in side panel, Copy link;
+  on a web address: Open in browser, Copy address. Every copy says "Copied …" or that the
   clipboard is not available (WebAssembly may refuse).
 
   Where they open: the editor's blocks (`PageController.dateChip`, `applyTokenAction`: one undo
@@ -1484,21 +1488,21 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   block with that text on the item's line, else the nearest one with it — the index may be a moment
   behind, the line may hold another block with an equal date by now —, none: nothing is written;
   on this page an undo step of the editor, in another file a hand edit written only when the file did not change
-  meanwhile — `EditorHost::writeIfUnchanged` — with a toast "Zmieniono datę" / "Zmieniono
-  powtarzanie" / "Zmieniono priorytet" and **Cofnij**, `undoTokenEdit`, which puts the file back
-  only while it still holds that edit; a token that is not there any more: "Notatka zmieniła się w
-  międzyczasie"), **Tasks** (the chips of a row: due, scheduled, start, the reminder, the rule, the
+  meanwhile — `EditorHost::writeIfUnchanged` — with a toast "Date changed" / "Repeat
+  changed" / "Priority changed" and **Undo**, `undoTokenEdit`, which puts the file back
+  only while it still holds that edit; a token that is not there any more: "The note changed in
+  the meantime; nothing was changed."), **Tasks** (the chips of a row: due, scheduled, start, the reminder, the rule, the
   priority) and **the calendar** (an entry of the day panel, the agenda, the overdue list, the
   week grid) — `PlanningTokenMenu` (`qml/planning`) with `PlanningActions.editToken` (the task by
-  its text near the index's line, like the status menus) and the views' "Cofnij" toasts
+  its text near the index's line, like the status menus) and the views' "Undo" toasts
   (`PlanningActions.undo`); `PlanningActions.tokenMenu` reads the block's rule and priority from
   the file (the rule at the start of a 🔁 token with words after it, a Logseq `[#A]`) and opens no
   menu for a value that is no token there (a Logseq `SCHEDULED:` / `DEADLINE:` line, a `.+1w`
   repeater). A calendar entry that is another date of a recurring series (`CalendarModel` entry
-  `occurrence`; `spec` is the token as written) offers "Zmień całą serię…" instead of moving one
-  date, and a reminder's time that has rung offers Godzinę później / Jutro o tej porze, a snooze of
+  `occurrence`; `spec` is the token as written) offers "Change the whole series…" instead of moving one
+  date, and a reminder's time that has rung offers An hour later / Tomorrow at this time, a snooze of
   that one time (`PlanningActions.snoozeReminder`: a one-off child reminder, as the notification's
-  "Drzemka"); a time still to come offers no snooze (it would ring as well). The 🔁 rule changes only
+  "Snooze"); a time still to come offers no snooze (it would ring as well). The 🔁 rule changes only
   in its own text (`markdown::setBlockRecurrence`: words after it stay; the same rule in another
   phrasing — the reminder dialog with only the time changed — stays as written). The tokens are named across the copies of a block by
   `markdown::TokenRef` (kind, value, which of the equal ones; markdown/tokenedit.h); the edit is
@@ -1508,7 +1512,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   editor's own blocks only: `day:FROM-TO` for links to days, opened as their `page:` link; ranges
   in the block's body, `reminder:` always). Closed tasks keep their menus (a finished task's dates
   can be corrected).
-* Source mode (Ctrl+E, Więcej → Źródło Markdown): one text area with the whole file and
+* Source mode (Ctrl+E, More → Markdown source): one text area with the whole file and
   highlighting — also where any characters across several blocks are selected (the block editor
   selects whole blocks: "Selecting and copying"). A mouse selects by dragging; on touch UIs a
   finger scrolls it (a TextEdit that selects by dragging keeps the finger: the source could not be
@@ -1522,17 +1526,17 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `path`, `EditorHost::isDrawing`, the size of a scene's preview `EditorHost::drawingSize`): shown
   at their own size (one scene unit a pixel, never enlarged as other SVGs are) with a pen in the
   corner; a click opens the drawing editor
-  (`PageController.openDrawing`: the page is saved, route `drawing`), so does "Edytuj rysunek" in
-  the picture view's bar. "/Rysunek", the touch toolbar's Rysunek and the block menu's "Wstaw
-  rysunek" (`BlockEditor.insertDrawing` → `PageController.insertDrawing`: an empty drawing stored as
-  `Rysunek <yyyy-MM-dd HH.mm>.svg`, embedded at the caret, one undo step) open the editor on a new
+  (`PageController.openDrawing`: the page is saved, route `drawing`), so does "Edit drawing" in
+  the picture view's bar. "/Drawing", the touch toolbar's Drawing and the block menu's "Insert
+  drawing" (`BlockEditor.insertDrawing` → `PageController.insertDrawing`: an empty drawing stored as
+  `Drawing <yyyy-MM-dd HH.mm>.svg` — `Rysunek …` in a Polish UI —, embedded at the caret, one undo step) open the editor on a new
   one. Its picture is Brulion's own rendering in the app's theme (the image provider `drawing`,
   "Drawing editor" → Previews: the embed's `url` light, `darkUrl` dark, `EditorHost::drawingUrl`),
-  so a drawing on "Jak motyw" turns dark with the app at once. A drawing saved again is shown again
+  so a drawing on "Like the app" turns dark with the app at once. A drawing saved again is shown again
   at once: its URL carries its version (`Workspace::drawingUrl` / `assetUrl` add
   `v=<mtime>-<size>`; Qt's pixmap cache keys by the URL) and the embeds of the page follow the
   file's change (`PageController` on `fileChanged` → `BlockListModel::attachmentChanged`).
-* Files as links: "/Plik…" (`fileLink`, "File…") opens the file picker (several files, any type,
+* Files as links: "/File…" (`fileLink`, "Plik…" in Polish) opens the file picker (several files, any type,
   the browser's too) and writes a link for each at the caret (`PageController::insertFileLinks`):
   `[[raport.docx]]` by the shortest target (`EditorHost::linkTarget`), `[C#.pdf](assets/C%23.pdf)`
   when a wiki link cannot hold the name. A file of the notebook stays where it is; another one
@@ -1540,20 +1544,20 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`EditorHost::importAttachment`). A click opens it as any link to that file: a note, a picture,
   the PDF viewer, otherwise read-only as text.
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
-  stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
+  stored in the attachments folder and embedded, "/Image…" and the toolbar pick files (the
   pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
   a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
   `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
   raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the
-  view —; when the fitted picture differs from its own pixels, a click on it or the "Pokaż
-  naturalny rozmiar" button (in a view narrower than 600 px — a phone, or on the desktop between
+  view —; when the fitted picture differs from its own pixels, a click on it or the "Zoom to
+  actual size" button (in a view narrower than 600 px — a phone, or on the desktop between
   the sidebar and the side panel — a magnifier icon, its name in the tooltip, on touch that of a
   long press, and for screen readers: as text it left the file name no room) shows those pixels (then
   draggable), the button goes back. Under the
   fitted picture (it moves to the top then) the notes that embed or link it (`ContentBacklinks`);
-  the side panel's Linki tab lists them too. The bar shows the file name as plain text. Its
-  "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E (the palette's "Markdown source", the top bar's
-  Więcej → Pokaż jako tekst / Pokaż obraz) switch between the picture and the file read as text —
+  the side panel's Links tab lists them too. The bar shows the file name as plain text. Its
+  "Show as text" / "Show picture" and Ctrl+E (the palette's "Markdown source", the top bar's
+  More → Show as text / Show picture) switch between the picture and the file read as text —
   read-only, for text-like assets such as SVG (a binary picture is mojibake), at most its first
   200 KB (`Workspace.readTextStart` reads no more of the file — a photo is not read whole for
   it — and leaves out whole a character the limit would cut; a note above the text says how much
@@ -1563,16 +1567,16 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`page.path` stays ""): its bytes are not a note, and a character typed into them used to be
   saved over the picture. A format the device has no decoder for (`Workspace.canDecodePicture`,
   QImageReader's formats: WebP and AVIF need Qt's image plugins, missing on Android, in the
-  browser and in the Nix package) says so ("Obrazów w formacie WEBP nie można wyświetlić na tym
-  urządzeniu") instead of a load error — in its view and embedded in a note (`EmbedView`: the
+  browser and in the Nix package) says so ("Pictures in the WEBP format cannot be shown on this
+  device.") instead of a load error — in its view and embedded in a note (`EmbedView`: the
   file's name and the same sentence in the picture's frame, nothing loaded; the embeds'
   `decodable` and `format` from `EditorHost::canDecodePicture`, one helper with the picture
   view: `canDecodePictureFormat`, picturesize.h). `route.open` on a picture: `text`, `links` | `outline` |
   `calendar`.
 * PDFs (`![[wykład.pdf]]`, `![[wykład.pdf#page=3]]`): the page's thumbnail (`PdfEmbedTile`), a
   click opens the PDF viewer — "PDF viewer" below; without a renderer the file's chip, whose click
-  opens a new browser tab / the system's viewer. Screen readers hear "PDF wykład.pdf, strona 1 z 3",
-  or for a tile that cannot show its page the reason ("PDF sejf.pdf: PDF chroniony hasłem").
+  opens a new browser tab / the system's viewer. Screen readers hear "PDF wykład.pdf, page 1 of 3",
+  or for a tile that cannot show its page the reason ("PDF sejf.pdf: PDF protected with a password").
 * Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2): the embeds' entry has
   `web`, `state` ("ask" | "loading" | "ready" | "failed"), `host`, `error` and, once ready, the
   cached file's `url`, `format` (the cached picture's as the host tells it, "PNG", "SVG" — not
@@ -1580,9 +1584,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `workspacepictures.cpp`: fetched into the device's cache, never by QML; an SVG is known by
   that `format`, its URL need not end with `.svg`). `EmbedView` gives a picture not shown yet its
   frame (320 × 180, higher when its text and buttons need it — a phone's narrow column, a nested
-  block —, and as high while it loads) with the alt text (at most 2 lines), "Obraz z <host>" on a
-  line of its own (never elided away by the alt text), **Pokaż** (`PageController.showWebPicture`;
-  **Spróbuj ponownie** with the reason after a failure) and **Zapisz w notatniku** side by side,
+  block —, and as high while it loads) with the alt text (at most 2 lines), "Picture from <host>" on a
+  line of its own (never elided away by the alt text), **Show** (`PageController.showWebPicture`;
+  **Try again** with the reason after a failure) and **Save to notebook** side by side,
   one under the other when they do not fit, centred; a spinner while it loads. A picture fetched
   for the first time has no size until it is there: its row changes height when the fetch ends
   (with the setting below on, also while the journal only scrolls — "Scrolling performance",
@@ -1590,70 +1594,70 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   picture opens it on its own in `WebPictureViewer` (`EmbedView.webOpen` →
   `BlockEditor.openWebPictureViewer`), as a click on an attachment opens the picture view: a
   modal popup over the whole window with a bar — "<host> › <file>" (plain text), the size toggle
-  (fitted ↔ its own pixels, dragged around; a click on the picture toggles too), **Zapisz w
-  notatniku**, **⋯** (the menu below, without "Powiększ") and **Zamknij**; Escape and Back
+  (fitted ↔ its own pixels, dragged around; a click on the picture toggles too), **Save to
+  notebook**, **⋯** (the menu below, without "View picture") and **Close**; Escape and Back
   (Android) close it. It draws the cached copy as the picture view draws an attachment (fitting
   only shrinks a raster picture, an SVG fills; decoded at most 2048 px a side) — no references,
   no text view. A right-click (its own `WithinBounds` handler: the block menu does not open as
-  well) or long press opens `WebPictureMenu` — its first, disabled line "Obraz z <host>" (BMenu
-  shows no title), then Powiększ (the viewer), Zapisz w notatniku, Otwórz w przeglądarce (the
-  platform's handler), Kopiuj adres obrazu. "Zapisz w notatniku"
+  well) or long press opens `WebPictureMenu` — its first, disabled line "Picture from <host>" (BMenu
+  shows no title), then View picture (the viewer), Save to notebook, Open in browser (the
+  platform's handler), Copy picture address. "Save to notebook"
   (`PageController.downloadWebPictures`) fetches it when not cached — also while pictures are not
   shown —, stores the attachment and points every picture of that URL on the page at it, one undo
   step; a toast says how many were saved or which failed (a picture edited away meanwhile, or whose
   fetch ends while the page is shown as source, counts as failed, nothing is stored). Pictures in
-  blocks that show no embeds (code, formulas, tables, HTML) are text: never fetched or rewritten. The palette's "Zapisz obrazy z internetu w notatniku" (uiAction
+  blocks that show no embeds (code, formulas, tables, HTML) are text: never fetched or rewritten. The palette's "Save pictures from the internet to notebook" (uiAction
   `saveWebPictures`; the page, or in the journal stream the day being written in — today until
-  another day gets the caret, as the stream's other page commands) does that for all of them. "/Obraz z
-  internetu…" (`EditorDialogs.pickWebImage`) asks for the address (Wstaw only for an http(s) URL;
-  otherwise "Wpisz adres zaczynający się od http:// lub https://") with "Zapisz w notatniku"
+  another day gets the caret, as the stream's other page commands) does that for all of them. "/Picture from
+  the internet…" (`EditorDialogs.pickWebImage`) asks for the address (Insert only for an http(s) URL;
+  otherwise "Enter an address starting with http:// or https://") with "Save to notebook"
   checked, every time it opens: `PageController.insertWebPicture` writes `![](url)` (between
   `<…>` when it has blanks or parentheses) at the caret, or as a block of its own after a block that
-  is not text. Settings → Edytor → "Pokazuj obrazy z internetu bez pytania"
+  is not text. Settings → Editor → "Show pictures from the internet without asking"
   (`AppSettings.webPicturesShown`, device-local, off) → `Workspace.webPicturesShown` (not for
   private hosts — those keep "ask" —, once a session per picture; turned off, the fetches it
-  queued are cancelled and their rows ask again, "Pokaż" / "Zapisz w notatniku" go on).
-  Pasting (`PageController.pasteClipboard`, Ctrl+V and the text menu's Wklej): a picture's address
-  alone (a browser's "Kopiuj adres obrazu": an http(s) URL without blanks whose path ends with a
+  queued are cancelled and their rows ask again, "Show" / "Save to notebook" go on).
+  Pasting (`PageController.pasteClipboard`, Ctrl+V and the text menu's Paste): a picture's address
+  alone (a browser's "Copy image address": an http(s) URL without blanks whose path ends with a
   picture extension, `PageController.isPictureAddress` — by its form, nothing is fetched) goes in
-  as the bare address it is, and a toast "Wklejono adres obrazu" offers **Zapisz w notatniku**:
+  as the bare address it is, and a toast "Picture address pasted" offers **Save to notebook**:
   `PageController.urlToPicture` turns exactly that text into `![](url)` (only while it is still
-  there — else "Nie zmieniono: adres zmieniono w międzyczasie") and stores the picture
+  there — else "Not changed: the address was edited since") and stores the picture
   (`insertWebPicture` with `download`; in a quote or callout it is replaced where it is too).
   Offered only where the text reads it as a bare address of its own (a `LinkKind::Url` link of
   exactly the pasted range): pasted into a link (`![](…)`, `[x](…)`), an autolink `<…>`, inline
   code, a formula, a comment, a code block or a block that shows no pictures, nothing is offered. HTML of a web page (`htmlToMarkdown`) brings
   its pictures as `![alt](https://…)`; the ones new on the page (not this app's own copy, not
-  `data:` pictures) are named in the result (`webPictures`), and a toast "Wklejono %n obraz(y) z
-  internetu" offers **Zapisz w notatniku** for them (`downloadWebPictures` each; the result toast
+  `data:` pictures) are named in the result (`webPictures`), and a toast "Pasted %n picture(s) from
+  the internet" offers **Save to notebook** for them (`downloadWebPictures` each; the result toast
   as usual). The same over selected blocks (`pasteOverSelection`). Nothing is fetched before the
   user asks. A paste that only the system's keyboard or the browser's own paste delivers
   (the text arrives as typed text) offers nothing.
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
-  scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
+  scrolls sideways): for a block Outdent / Indent, Move up / Move down, Task (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
-  do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Rysunek, Cofnij, Ponów,
-  Zaznacz (the edited block becomes the selection: the touch selection mode), Więcej (the block
-  menu of the edited block, above the toolbar: copying links to it, …), Ukryj
-  klawiaturę; for a table cell Cofnij, Ponów, Następna komórka, Więcej (the table's block menu: the
-  cell's editing ends, the table is selected), Ukryj klawiaturę; in source
-  mode Link do strony, Tag, Polecenia, Cofnij, Ponów, Ukryj klawiaturę; in the touch selection
+  to page (`[[`), Tag (`#`), Commands (`/`), Due date, Reminder, Insert picture, Drawing, Undo, Redo,
+  Select (the edited block becomes the selection: the touch selection mode), More (the block
+  menu of the edited block, above the toolbar: copying links to it, …), Hide
+  keyboard; for a table cell Undo, Redo, Next cell, More (the table's block menu: the
+  cell's editing ends, the table is selected), Hide keyboard; in source
+  mode Link to page, Tag, Commands, Undo, Redo, Hide keyboard; in the touch selection
   mode the selection's tools (`SelectionToolbar`, "Selecting and copying").
 
 ### Coloured highlights
 
-Next to `==zakreślenie==` a highlight can have a colour (docs/SYNTAX.md §11 "Kolorowe
-zakreślenia": Highlightr's `<mark style="background: #FF5582A6;">`, read by Obsidian, GitHub,
+Next to `==highlight==` a highlight can have a colour (docs/SYNTAX.md §11 "Coloured
+highlights": Highlightr's `<mark style="background: #FF5582A6;">`, read by Obsidian, GitHub,
 Pandoc). Rendered text shows it as a tinted box like `==…==` (`RichTextPills`), in one of nine
 translucent palette colours that read on light and dark paper — never a colour or style of the
 note's own; the edited text tints the highlighted words and shows the tags faint.
 
-**"Zakreśl"**: the edited text's right-click menu ("Zakreśl…") and the touch toolbar's highlighter
-button open the colours (`BlockEditor.openHighlightMenu`, `highlightMenu`): Domyślny (`==…==`),
-Czerwony, Pomarańczowy, Żółty, Zielony, Turkusowy, Niebieski, Fioletowy, Różowy, Szary — each with
-its swatch — and "Usuń zakreślenie". A colour highlights the selection (blanks at its ends left out;
+**"Highlight"**: the edited text's right-click menu ("Highlight…") and the touch toolbar's highlighter
+button open the colours (`BlockEditor.openHighlightMenu`, `highlightMenu`): Default (`==…==`),
+Red, Orange, Yellow, Green, Cyan, Blue, Purple, Pink, Grey — each with
+its swatch — and "Remove highlight". A colour highlights the selection (blanks at its ends left out;
 highlights inside it merged into the new one), or recolours the highlight the caret or selection is
-in; "Usuń zakreślenie" takes the highlight around the caret away (`PageController.setHighlight`,
+in; "Remove highlight" takes the highlight around the caret away (`PageController.setHighlight`,
 `markdown::setHighlight`; one undo step, the highlighted text stays selected). A selection over
 several lines, or one cutting a highlight's marker, is refused with a toast. Tests:
 `tst_markdown_highlight`, `tst_editor_look` (the controller's edit and undo).
@@ -1665,15 +1669,15 @@ crosses blocks is a **block selection** (Logseq / Notion): whole blocks, each wi
 folded children too —, the same in both note modes (a document's paragraphs, headings and list
 items), one run of blocks or blocks picked one by one with gaps between them (bullets 1, 3 and
 5). Any characters across blocks — part of one paragraph to part of the next — are selected in
-the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
+the Markdown source (Ctrl+E, More → Markdown source).
 
 * **Model** (`PageController`, docs/ARCHITECTURE.md): two uids, the anchor (`selectionAnchorRow`)
   and the focus end (`selectedRow`); the selection is the visible rows between them with every
   subtree — a set of uids in `BlockListModel` (`isSelected`, `selectionEdge`: `single` | `first` |
   `middle` | `last` over the visible rows, so a selection with gaps is a band for each run). Blocks
-  picked one by one (`toggleSelected(row)`: Ctrl+click, "Pojedynczo") are a list of uids instead,
+  picked one by one (`toggleSelected(row)`: Ctrl+click, "One by one") are a list of uids instead,
   none inside another's subtree (a picked parent takes in its picked children; a child of a picked
-  block cannot leave alone: "Ten blok jest zaznaczony razem z blokiem, do którego należy"), both
+  block cannot leave alone: "This block is selected with the block it belongs to"), both
   ends on the one picked last; a range picked into becomes its top blocks first, the block being
   edited joins (as Shift+click starts from it), one left is a range of one again, and a range
   (Shift+click, Shift+↑/↓, a drag, Ctrl+A, ↑/↓) replaces them, from the one picked last.
@@ -1683,7 +1687,7 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   its blocks again — and stops the editing of another block meanwhile: the keys go to the
   selection) and changes from other devices; a zoom ends it; editing ends it; the page's
   properties are never part of a range nor picked. `selectionCount` counts the visible rows
-  (folded children come along unseen). A command on the selection (Delete, Wytnij, a paste over it) goes from it to
+  (folded children come along unseen). A command on the selection (Delete, Cut, a paste over it) goes from it to
   the next one without an empty selection between (the touch selection mode stays).
 * **Ways in**: Esc in an edited block; Shift+↑ / Shift+↓ (from an edited block once its text
   selection reaches its start / end); Ctrl+A twice (Notion); Shift+click on any block — its text,
@@ -1693,17 +1697,17 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   with a mouse, touchpad or stylus from one block into another (`BlockEditor`'s tracker — a
   passive `PointHandler` over the list, the state in the editor because delegates may be destroyed
   meanwhile — scrolls near the view's edges; a left drag no longer scrolls the list on non-touch
-  UIs, the wheel and the touchpad do — also in the journal stream); the block menu's "Zaznacz".
+  UIs, the wheel and the touchpad do — also in the journal stream); the block menu's "Select".
   Touch UIs: a **long press on a block** — its text, a code or calculation frame, a table cell, a
   query, beside an embed (not the block being edited: there the system's word selection and
   handles stay) — enters the **selection mode** — the keyboard goes, the selection's
   tools dock where the editing toolbar is; moving the finger without lifting it extends the
   selection (the list holds still, scrolls at its edges); taps on blocks move the selection's end
   there instead of editing; two round **grips** (44 px) at the band's start and end move its
-  ends (a selection without gaps); the tools' **"Pojedynczo"** (a toggle, `BlockEditor.pickMode`)
+  ends (a selection without gaps); the tools' **"One by one"** (a toggle, `BlockEditor.pickMode`)
   makes taps — and long presses — pick single blocks into the selection or out of it instead (no
-  grips meanwhile; off again, a tap moves the end from the block picked last); "Gotowe" and Back
-  leave it (and "Pojedynczo" with it). The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
+  grips meanwhile; off again, a tap moves the end from the block picked last); "Done" and Back
+  leave it (and "One by one" with it). The editing toolbar's "Select" and the bullet menu's "Select"
   enter it too, and so does a hardware keyboard's Esc or Shift+↑/↓ on a touch UI (the same tools
   whichever way the selection was made).
 * **Across journal days**: the journal stream selects blocks of several days at once
@@ -1716,25 +1720,25 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   runs from the anchor block to the focus block: the anchor's day from the anchor to its end (the
   focus below) or from its start to the anchor (above), the focus day symmetric, the days between
   whole — never page properties; each attached day selects its part (its own band), `count` and
-  "Zaznaczono %n" are the stream's. It is paths and rows, not controllers: a day scrolled far away
+  "%n selected" are the stream's. It is paths and rows, not controllers: a day scrolled far away
   is destroyed and gets its part again when it comes back (`attach()` once loaded); meanwhile a
   copy reads it from its file. While dragging, the stream scrolls past the pressed day only as far
   as that day stays in the list's cache (half of it: `journals.selectionReach`) — longer spans:
-  the wheel and Shift+click. **Copy only**: Kopiuj / Ctrl+C / Ctrl+Insert and Więcej → Kopiuj
-  jako tekst take every day's blocks (`StreamSelection.copy()`), each day's after its link on a
+  the wheel and Shift+click. **Copy only**: Copy / Ctrl+C / Ctrl+Insert and More → Copy
+  as plain text take every day's blocks (`StreamSelection.copy()`), each day's after its link on a
   line of its own and a blank line (`[[2026-10-27]]`; plain text: the day's long date,
-  "wtorek, 27 października 2026"), a blank line between days, one HTML flavour rendered on
-  request, the same 800 KB rule; the toast says "Skopiowano %n bloków z kilku dni". Wytnij, Usuń,
-  Pojedynczo, the indents, moves and task statuses are shown unavailable (`BIconButton` /
-  `BMenuItem.unavailable`, the reason as tooltip / description) — so are Wytnij, Usuń, the
-  indents and moves of the block menu of a block in the span, whose Kopiuj / Kopiuj jako tekst
+  "Tuesday, October 27, 2026"), a blank line between days, one HTML flavour rendered on
+  request, the same 800 KB rule; the toast says "Copied %n block(s) from several days". Cut, Delete,
+  One by one, the indents, moves and task statuses are shown unavailable (`BIconButton` /
+  `BMenuItem.unavailable`, the reason as tooltip / description) — so are Cut, Delete, the
+  indents and moves of the block menu of a block in the span, whose Copy / Copy as plain text
   copy the whole span (its count in the label) —, and they, Delete, Ctrl+X, Ctrl+V, Tab, Alt+↑/↓ and
-  Ctrl+Enter say "Na kilku dniach naraz działa tylko kopiowanie"; Zaznacz wszystko / Ctrl+A select
+  Ctrl+Enter say "Only copying works across several days"; Select all / Ctrl+A select
   the day's own blocks. The tools show on one day only — the focus day's (`toolsController`; the
   anchor day's while the focus day is away), which becomes the active day; the grips are hidden.
   Using one day on its own ends the span and clears the other days: a click or tap that edits,
   Ctrl+click, a selection made in that day alone, folding (any selection change the stream did not
-  make), and a day leaving the list with an end of the span; Esc, Gotowe, × and Back clear every
+  make), and a day leaving the list with an end of the span; Esc, Done, × and Back clear every
   day. Shift+↑/↓ with the focus day scrolled away scrolls there first (`revealRequested`). With
   every day of the span scrolled away (no tools shown: `toolsController` null) a tap edits as
   usual, which ends the span — no tap grows a span the user cannot see.
@@ -1742,13 +1746,13 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   outline: from its own level, framed), rounded at its ends, a line down its left edge — blocks
   picked with gaps between them: a band for each run; made only for selected blocks (a `Loader`:
   "Scrolling performance").
-* **Tools**: `SelectionToolbar` — "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko,
-  Pojedynczo (docked only), Więcej (Kopiuj jako tekst, "Kopiuj odnośnik" for one block, Zwiększ /
-  Zmniejsz wcięcie, Przenieś w górę / w dół, Status zadania; the indents only where
+* **Tools**: `SelectionToolbar` — "%n selected", Copy, Cut, Delete, Select all,
+  One by one (docked only), More (Copy as plain text, "Copy link" for one block, Indent /
+  Outdent, Move up / Move down, Task status; the indents only where
   they can happen — `canIndentSelection()`: a document's paragraphs and headings have none; with
   gaps the indents and moves are shown disabled — `BMenuItem.unavailable`, the reason in a tooltip
-  — and a tap says why in a toast: "Wcięcia i przenoszenie działają tylko dla bloków zaznaczonych
-  bez przerw"), Gotowe. Docked in the editing toolbar's slot on touch
+  — and a tap says why in a toast: "Only blocks selected without gaps can be indented
+  or moved"), Done. Docked in the editing toolbar's slot on touch
   UIs (the `selection` mode of `BlockEditor.toolbarMode`; on phones right on the bottom
   navigation, no keyboard), a
   compact bar floating at the top of the view on desktops while two or more blocks are selected
@@ -1770,27 +1774,27 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   clipboard manager reads every flavour during shutdown). Android, the browser and Windows take
   the data inside `setMimeData()` (`clipboardReadsAtOnce()`; Windows: `OleSetClipboard` enumerates
   the formats and Qt offers CF_HTML only for a non-empty `html()`): rendered at once there, kept
-  only while both flavours fit 800 KB. On Linux also the primary selection. "Kopiuj jako tekst": plain text ("• ",
+  only while both flavours fit 800 KB. On Linux also the primary selection. "Copy as plain text": plain text ("• ",
   numbers, ☐ / ☑ / ☒, emphasis marks in pairs gone, code spans verbatim, `((id))` as its block's
-  text). A copy is read back (never "Skopiowano" for a clipboard that did not take it — except in
-  the browser, docs/WEB.md "Schowek") and refuses more than 800 KB (Android's clipboard takes
+  text). A copy is read back (never "Copied" for a clipboard that did not take it — except in
+  the browser, docs/WEB.md "Clipboard") and refuses more than 800 KB (Android's clipboard takes
   about 1 MB per transaction) with a toast — never cut short. Cut = copy, then delete as one undo
-  step. The toasts "Wycięto %n bloków" and "Usunięto %n bloków" (two or more blocks) have
-  "Cofnij": the editor's `message(text, kind, action)` carries an `EditorToastAction` (`text`,
+  step. The toasts "Cut %n block(s)" and "Deleted %n block(s)" (two or more blocks) have
+  "Undo": the editor's `message(text, kind, action)` carries an `EditorToastAction` (`text`,
   `run()`; `BlockEditor.undoAction()`), the page views pass it to `AppController.toastAction` (which
   keeps the function; Main.qml shows the toast by id — `toastWithActionRequested`, the closure-free
   `toastWithAction` / `toastActionTriggered` and `toastRestore` of compiled QML go the same way)
   and the shell's toast shows the button; it runs `PageController.undoStep(token)`, which undoes that edit
   only while it is still the page's last step (`undoToken()` taken right after it names the
   history, the position and the step there) — after other edits (one made in its place after
-  Ctrl+Z too), on another page or once undone it says "Nie cofnięto: strona zmieniła się od tego
-  czasu".
+  Ctrl+Z too), on another page or once undone it says "Not undone: the page has changed
+  since".
   A toast's button takes no focus when pressed: the editor keeps the keys.
 * **Acting on it**: Tab / Shift+Tab, Alt+↑/↓, Ctrl+Enter, Ctrl+Shift+Enter (the status menu) and
-  the toolbar's Status zadania act on the range from one end to the other — on the picked blocks
+  the toolbar's Task status act on the range from one end to the other — on the picked blocks
   of a selection with gaps (Ctrl+Enter and the statuses; Tab and Alt+↑/↓ only without gaps, else a
   toast says why); a block selected alone keeps the block's own keys — Ctrl+Enter changes it, not
-  the children it brings along (they are copied, cut, moved and deleted with it). Delete, Wytnij
+  the children it brings along (they are copied, cut, moved and deleted with it). Delete, Cut
   and a paste over the selection take all of it, gaps too (one undo step; a paste goes where the
   first selected block was).
 * **Pasting**: Ctrl+V in an edited block splits Markdown into blocks (`pasteText`, relative nesting
@@ -1810,12 +1814,12 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
 * **Inside an edited block**: Ctrl+C / Ctrl+X and the text menu copy the exact characters
   (`PageController.copyEditText`; TextEdit's own copy turns no-break spaces into spaces), the
   selection stays shown while a menu or dialog has the keyboard (`persistentSelection`), and a
-  right-click opens Wytnij, Kopiuj, Wklej, Zakreśl…, Zaznacz wszystko and Blok… (desktops; touch UIs
-  have the system's handles and popup, and the toolbar's "Zakreśl" — "Coloured highlights" below).
+  right-click opens Cut, Copy, Paste, Highlight…, Select all and Block… (desktops; touch UIs
+  have the system's handles and popup, and the toolbar's "Highlight" — "Coloured highlights" below).
 * **Part of several blocks** (the end of one paragraph and the start of the next): select the
   whole blocks and copy them, or select exactly those characters in the Markdown source (Ctrl+E,
-  Więcej → Źródło Markdown) and copy them there.
-* **Browser**: docs/WEB.md "Schowek".
+  More → Markdown source) and copy them there.
+* **Browser**: docs/WEB.md "Clipboard".
 * **Tests**: core `tst_markdown_blockclipboard`, `tst_markdown_blockdoc` (ranges), `tst_io_html`;
   controller `tst_editor_selection` (the real clipboard read back; the HTML rendered only when
   asked for, once; blocks picked one by one, their copy, cut, delete, paste, undo, statuses, no
@@ -1824,7 +1828,7 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   links); the journal stream's `journals-span-selftest` with real input (`tst_content_journals_span_qml`
   on a desktop, `_touch` on a phone); the playground's `selectiontest`
   with real keys, mouse and touch (`tst_editor_qml_selection` — Ctrl+clicks —, `_touch` —
-  "Pojedynczo"); the journal stream's self-test; `scripts/android-emulator-test.sh --selection`.
+  "One by one"); the journal stream's self-test; `scripts/android-emulator-test.sh --selection`.
 
 ## Drawing editor (`qml/drawing`, `src/app/drawing`)
 
@@ -1843,18 +1847,18 @@ and diagrams (shapes, arrows, text), on every platform.
   `DrawingCanvas.embeddedFiles` lists them, DrawingView resolves each link as the file's own links
   (`Workspace.resolveLink`) and hands the bytes to `provideEmbeddedFile` (kept across merges, never
   written into the file); the previews get them through the URL (below). New drawings are SVGs. A plugin file opened as a page (from the page list, a link,
-  search) is shown as its drawing: `PageView.drawingPage` → the picture view, its "Edytuj rysunek"
-  opens this editor, "Pokaż jako tekst" the plugin's Markdown read-only — never the block editor.
+  search) is shown as its drawing: `PageView.drawingPage` → the picture view, its "Edit drawing"
+  opens this editor, "Show as text" the plugin's Markdown read-only — never the block editor.
 
 * **The paper** (`DrawingCanvas`, a `QQuickPaintedItem`): the file's paper
   (`appState.viewBackgroundColor`, white), plain, lined (32 px) or squared (24 px), endless in every
   direction; the picture written covers the elements plus a margin. Opened: the elements from their
   top left at 100 %, zoomed out to the view's width when they are wider (a phone); a zoom other
   than 100 % is shown in the corner (`#535a6a` on light paper, `#9ba1af` on dark: 6.9 / 7.2:1).
-* **Light or dark paper** ("Tło rysunku", per drawing: `DrawingCanvas.theme`, saved in the file as
-  `appState.brulionTheme`, an undo step that marks it modified): **Jak motyw** (`auto`, the
+* **Light or dark paper** ("Drawing background", per drawing: `DrawingCanvas.theme`, saved in the file as
+  `appState.brulionTheme`, an undo step that marks it modified): **Like the app** (`auto`, the
   default: follows the app's theme — `appDark: Theme.dark` —, at once, also while a stroke is being
-  drawn; the app's theme is no edit), **Jasne**, **Ciemne**. The stored colours never change: the
+  drawn; the app's theme is no edit), **Light**, **Dark**. The stored colours never change: the
   dark paper (`#121212`) shows the strokes in Excalidraw's dark-mode colours (`drawing/palette.h`:
   the ink `#1f2430` as `#caced8`, every pen colour ≥ 4.2:1 on the paper; the lines and the grid
   `#323a45`), highlighter strokes in their own colour at 1.25 × the opacity (≥ 3.2:1 on the paper,
@@ -1862,17 +1866,17 @@ and diagrams (shapes, arrows, text), on every platform.
   tool bar's swatches show the colours as the paper shows them (`displayColor`, as text
   `displayColorName`); what is chosen
   and remembered is the colour as drawn. The file's picture follows the choice (docs/SYNTAX.md §2:
-  dark attributes for Ciemne; for Jak motyw an `@media (prefers-color-scheme: dark)` style sheet,
+  dark attributes for Dark; for Like the app an `@media (prefers-color-scheme: dark)` style sheet,
   so browsers show it dark when their viewer prefers dark, Obsidian in its dark theme). A merge
   with another device's version keeps the theme chosen here only when it was changed here since
   the last load or save (as the paper's pattern). No keyboard shortcut (Excalidraw's Alt+Shift+D
   switches its app's theme; this one is per drawing).
-* **The paper's colour** ("Tło rysunku" → **Kolor tła…**; on phones in Więcej; `DrawingPaperDialog`,
+* **The paper's colour** ("Drawing background" → **Background colour…**; on phones in More; `DrawingPaperDialog`,
   `DrawingCanvas.paper`, saved as `appState.viewBackgroundColor`, an undo step; on Excalidraw's and
   Obsidian's drawings too): a grid of papers (neutrals, two rows of pastels, a dark row; white goes
   back to the default), a field for any `#rrggbb` and a preview with the default ink. The colour is
   stored as drawn, like everything else: on dark paper the grid and the preview show it mapped, a
-  note says so and points to Jasne for the exact colour; a second note appears when the default
+  note says so and points to Light for the exact colour; a second note appears when the default
   ink has less than 3:1 on it (ink colours never change by themselves). The lines and the grid
   follow the paper (`displayRule`), the eraser's ring and the zoom's label its shade
   (`DrawingCanvas.paperIsDark`). A merge keeps the colour chosen here only when it was changed here
@@ -1902,13 +1906,13 @@ and diagrams (shapes, arrows, text), on every platform.
     button — or the left one with
     Space held — moves the paper; the wheel scrolls it (Shift: sideways), Ctrl+wheel and a
     touchpad's pinch zoom at the pointer (10 %–1000 %);
-  * **fingers:** with "Rysuj palcem" one finger works the tool (draws, erases, draws the lasso or a
+  * **fingers:** with "Draw with finger" one finger works the tool (draws, erases, draws the lasso or a
     shape, moves the selection, taps text), else it only moves the paper — a palm resting on a
     selection never drags it; two fingers move and zoom — a second finger that lands while a
     stroke has just begun makes it the gesture (the stroke is dropped; a lasso or a shape being
-    dragged too). A long press does nothing special. "Rysuj palcem" is on by default until a stylus
+    dragged too). A long press does nothing special. "Draw with finger" is on by default until a stylus
     has touched the paper on this device (AppSettings `drawing/stylusSeen`): from then on a palm
-    or a finger never draws; the toggle (the tool bar on wide touch screens, Więcej on phones)
+    or a finger never draws; the toggle (the tool bar on wide touch screens, More on phones)
     makes it the user's choice (`drawing/finger`: `auto` | `on` | `off`);
   * **palm rejection:** while the pen is down every touch is ignored — it neither draws, moves
     the paper, nor ends, cuts or erases the pen's stroke —, and so is a hand that stays after the
@@ -1917,27 +1921,27 @@ and diagrams (shapes, arrows, text), on every platform.
 * **Tools** (`DrawingToolbar`; above the paper on wide windows, at the bottom on phones — in
   the bottom navigation's place, `toolbarDocked` and `replacesBottomNav` —; when one row cannot
   hold them all — a phone held upright, `twoRows` — the tools and the swatch take a line of their
-  own, centred, above Cofnij, Ponów, Więcej and Gotowe, so nothing hides past the bar's edge; a row
-  that still does not fit scrolls sideways): Cofnij,
-  Ponów, **Pióro** (P), **Zakreślacz** (H: wide, translucent, an even width — constant pressure,
-  as Excalidraw draws it alike), **Gumka** (E: removes every element it touches — a shape with its
+  own, centred, above Undo, Redo, More and Done, so nothing hides past the bar's edge; a row
+  that still does not fit scrolls sideways): Undo,
+  Redo, **Pen** (P), **Highlighter** (H: wide, translucent, an even width — constant pressure,
+  as Excalidraw draws it alike), **Eraser** (E: removes every element it touches — a shape with its
   label, never a locked one nor a locked shape's label —, one undo step per gesture, a ring
   follows the pointer),
-  **Zaznacz** (V, a lasso or a dashed square icon; clicked again while it is the tool it opens
-  **Lassem** / **Prostokątem**, `DrawingCanvas.selectMode`, remembered in `drawing/selectMode`;
-  below), **Kształty** (one button showing the last shape — R Prostokąt, O Elipsa, D Romb, L Linia,
-  A Strzałka and, after a separator and without keys, the polygons Trójkąt, Trójkąt prostokątny,
-  Równoległobok, Trapez, Pięciokąt, Sześciokąt, Gwiazda, Strzałka blokowa, Dymek, Serce, Chmurka,
+  **Select** (V, a lasso or a dashed square icon; clicked again while it is the tool it opens
+  **Lasso** / **Rectangle selection**, `DrawingCanvas.selectMode`, remembered in `drawing/selectMode`;
+  below), **Shapes** (one button showing the last shape — R Rectangle, O Ellipse, D Diamond, L Line,
+  A Arrow and, after a separator and without keys, the polygons Triangle, Right triangle,
+  Parallelogram, Trapezoid, Pentagon, Hexagon, Star, Block arrow, Speech bubble, Heart, Cloud,
   remembered in `drawing/shape` —; clicked again while a shape is the tool it opens their menu),
-  **Tekst** (T; below), the current tool's colours
-  (pen, shapes and text: atrament, niebieski, czerwony, zielony, pomarańczowy, fioletowy;
-  highlighter: żółty, zielony, różowy, niebieski, pomarańczowy) and widths (cienka / średnia /
-  gruba; wąska / średnia / szeroka; text: its sizes Mały / Średni / Duży / Bardzo duży, 16 / 20 /
+  **Text** (T; below), the current tool's colours
+  (pen, shapes and text: ink, blue, red, green, orange, purple;
+  highlighter: yellow, green, pink, blue, orange) and widths (fine / medium /
+  thick; narrow / medium / wide; text: its sizes Small / Medium / Large / Extra large, 16 / 20 /
   28 / 36 — an "A" at four sizes, `drawing/fontSize`) — on phones behind one swatch, a popup above
-  the bar —, Papier (gładki, w linie, w kratkę: an undo step; and the backdrop's entries, below),
-  **Tło rysunku** (a sun-and-moon, sun or moon icon: Jak motyw / Jasne / Ciemne; on phones in
-  Więcej: "Tło jak motyw", "Jasne tło", "Ciemne tło"), Rysuj palcem (touch screens), Pokaż cały
-  rysunek (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Gotowe**
+  the bar —, Paper (plain, lines, grid: an undo step; and the backdrop's entries, below),
+  **Drawing background** (a sun-and-moon, sun or moon icon: Like the app / Light / Dark; on phones in
+  More: "Background like the app", "Light background", "Dark background"), Draw with finger (touch screens), Show the whole
+  drawing (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Done**
   (saved, back). Colours and widths are remembered on the device (`drawing/…`). Undo: Ctrl+Z,
   Ctrl+Shift+Z / Ctrl+Y; every gesture and action is one step (a generic diff of the elements,
   `drawing::ElementDiff`, at most 500 steps); the history is the session's (a reload clears it).
@@ -1947,7 +1951,7 @@ and diagrams (shapes, arrows, text), on every platform.
   dragged out, shown while dragged; the colour is the pen's, the stroke twice the pen's width
   (1 / 2 / 4, Excalidraw's thin, bold, extra bold); Shift: a square, a circle, a polygon in a square
   box, a line at 15° steps; a click (under 3 px) makes none. Rectangles get Excalidraw's rounded
-  corners, other shapes sharp; no fill (Styl adds it). The tool stays (several shapes in a row) and
+  corners, other shapes sharp; no fill (Style adds it). The tool stays (several shapes in a row) and
   the new shape is not selected. New arrows are never bound to shapes. A polygon always stands
   upright in the box dragged, whichever way it was dragged, and is Excalidraw's closed line
   (docs/SYNTAX.md §2 "Elements"): it has no kind in the file. It holds a label as a shape does (the
@@ -1955,7 +1959,7 @@ and diagrams (shapes, arrows, text), on every platform.
   excalidraw.com shows it too (docs/SYNTAX.md §2 "Labels in polygons"): wrapped to its widest band
   across the middle (`drawing::labelMaxWidth`, `labelCenter`: a triangle's lower half, a callout's
   body), the polygon stretched from its top left when the label needs the room.
-* **Selection** (Zaznacz, V): a lasso — or, with **Prostokątem**, a rectangle dragged out — (dashed,
+* **Selection** (Select, V): a lasso — or, with **Rectangle selection**, a rectangle dragged out — (dashed,
   in `Theme.info`, a 10 % fill) takes every element at
   least half inside it (its points; a box's corners, edge middles and centre), a tap the topmost
   element under it (8 px, 14 px for a finger or a pen; an unfilled shape only near its outline) —
@@ -1965,12 +1969,12 @@ and diagrams (shapes, arrows, text), on every platform.
   follow, labels go along). **DrawingSelectionBar** floats centred above the frame (below it when
   there is no room, always inside the view), touch-sized on touch screens, while nothing is being
   drawn, moved or written: the pen's colours (recolour; on narrow windows one swatch opening them
-  — a highlighter stays one), **Styl** (below), **Duplikuj** (Ctrl+D: copies 10 units right and
-  down, selected), **Na wierzch** (Ctrl+Shift+]), **Na spód** (Ctrl+Shift+[: above a locked
-  backdrop; both in Więcej on narrow windows), **Więcej** (**Kopiuj**, Ctrl+C, **Wytnij**, Ctrl+X —
-  as Excalidraw's clipboard, below —, **Obróć o 90°**, **Odbij w poziomie**,
-  Shift+H, **Odbij w pionie**, Shift+V, **Grupuj**, Ctrl+G, **Rozgrupuj**, Ctrl+Shift+G: one outermost
-  group added or taken away), **Usuń** (Delete / Backspace). Keys: Ctrl+A (everything), Escape (a lasso or a shape in progress dropped,
+  — a highlighter stays one), **Style** (below), **Duplicate** (Ctrl+D: copies 10 units right and
+  down, selected), **Bring to front** (Ctrl+Shift+]), **Send to back** (Ctrl+Shift+[: above a locked
+  backdrop; both in More on narrow windows), **More** (**Copy**, Ctrl+C, **Cut**, Ctrl+X —
+  as Excalidraw's clipboard, below —, **Rotate by 90°**, **Flip horizontally**,
+  Shift+H, **Flip vertically**, Shift+V, **Group**, Ctrl+G, **Ungroup**, Ctrl+Shift+G: one outermost
+  group added or taken away), **Delete** (Delete / Backspace). Keys: Ctrl+A (everything), Escape (a lasso or a shape in progress dropped,
   else the selection cleared), the arrows (move it 1 unit, with Shift 10), Ctrl+] / Ctrl+[ (one
   step up / down), Ctrl+Shift+← / → / ↑ / ↓ (align left, right, top, bottom), Alt+H / Alt+V
   (distribute across, down — Excalidraw's keys). Another tool clears the selection; undo, redo and a merge keep the selected
@@ -1996,42 +2000,42 @@ and diagrams (shapes, arrows, text), on every platform.
   leave `CoordinateLimit` is not made. Elbow arrows are moved, never turned. The selection bar stays
   clear of the handles (`selectionOuterRect`). A mouse over the frame gets the matching pointer
   (`updateSelectCursor`).
-* **Styl** (`DrawingStylePanel`, a popup from the selection bar, `DrawingCanvas.selectionStyle` and
-  `styleSelection`, core `drawing::styleElements`): only the rows the selection has — **Wypełnienie**
-  (none or six light colours, Excalidraw's; shapes and polygons) and **Wzór wypełnienia** (pełne,
-  kreskowane, w kratkę; with a fill), **Grubość linii** (shapes 1 / 2 / 4, the pen's 0.5 / 1 / 2, the
-  highlighter's 3 / 5 / 8), **Rodzaj linii**, **Rogi** (rectangles Excalidraw's adaptive roundness,
+* **Style** (`DrawingStylePanel`, a popup from the selection bar, `DrawingCanvas.selectionStyle` and
+  `styleSelection`, core `drawing::styleElements`): only the rows the selection has — **Fill**
+  (none or six light colours, Excalidraw's; shapes and polygons) and **Fill pattern** (solid,
+  hatched, cross-hatched; with a fill), **Line thickness** (shapes 1 / 2 / 4, the pen's 0.5 / 1 / 2, the
+  highlighter's 3 / 5 / 8), **Line style**, **Corners** (rectangles Excalidraw's adaptive roundness,
   diamonds, lines and arrows its proportional one; a line or an arrow then curves, a polygon too;
-  not elbow arrows), **Początek linii** / **Koniec linii** (lines and arrows), **Rozmiar tekstu**
-  (the four sizes; laid out again, so a label's shape may grow), **Wyrównaj** (two parts or more —
+  not elbow arrows), **Line start** / **Line end** (lines and arrows), **Text size**
+  (the four sizes; laid out again, so a label's shape may grow), **Align** (two parts or more —
   an outermost group, a shape or an arrow with its label, any other element, each moved as a whole
   by the box it covers, a rotated element by its turned outline: `DrawingCanvas.alignSelection`, core
   `drawing::alignElements` —: icons for left, the middle across, right, top, the middle down, bottom;
-  with three parts or more also **Rozłóż w poziomie** / **w pionie**, `distributeSelection`,
+  with three parts or more also **Distribute horizontally** / **vertically**, `distributeSelection`,
   `drawing::distributeElements`: the outermost parts stay, the others get equal gaps between their
   boxes, sorted by their middles — equal steps between their middles when they overlap too much, as
-  Excalidraw distributes; bound arrows and labels follow as when moved), **Krycie** (100 / 75 / 50 /
+  Excalidraw distributes; bound arrows and labels follow as when moved), **Opacity** (100 / 75 / 50 /
   25 %; everything). Each row shows the first element that has it. One undo step a choice, the panel stays
   open, inside the view and scrolling when it does not fit; a choice that changes nothing is no edit.
-* **Text** (Tekst, T): a tap on the paper writes a new text there (its first line's middle at the
+* **Text** (Text, T): a tap on the paper writes a new text there (its first line's middle at the
   tap), a tap on a text edits it, a tap inside a shape or a polygon writes its label; with the select tool a
   double tap does the same. **DrawingTextEditor** opens on the paper in the text's font, size
   (× zoom), colour (as the paper shows it) and alignment — as wide as the text, a label as wide as
   it wraps in its shape (Excalidraw's getBoundTextMaxWidth: a rectangle's width, the widest
   rectangle inside an ellipse — width / 2 · √2 — or a diamond — width / 2 —, less 2 × 5), centred
   —; Enter starts a new line; Escape, Ctrl+Enter, a press on the paper beside it or (touch
-  screens) its "Gotowe" button write it — one undo step; an emptied text is deleted; a label grows
+  screens) its "Done" button write it — one undo step; an emptied text is deleted; a label grows
   its shape when it needs the room (as Excalidraw grows it, from its top left). A text closed as it
   was is no edit: nothing is stamped, wrapped again in Brulion's fonts, saved or added to the undo
   history. A locked shape's label is not edited (the text tool writes a new text there). On a phone the paper
   moves so the text stays above the keyboard (`DrawingCanvas.ensureVisible`, `KeyboardInsets`).
   New text: Excalidraw's Helvetica (sans in both apps) in the app's UI font, line height 1.15.
   While text is written the canvas takes no other input and the view's keys rest.
-* **Backdrop** (Podkład — notes on slides and PDF pages; docs/SYNTAX.md §2 "Backdrop", core
+* **Backdrop** (notes on slides and PDF pages; docs/SYNTAX.md §2 "Backdrop", core
   `drawing/backdrop.h`): a picture, an exported slide or a PDF page under the ink. **In a note:**
-  the slash command **"/Rysunek na obrazie lub PDF…"** (`drawingOn`: also "slajd", "slajdy", "pdf",
-  "podkład", "wykład", "tło", "slide", "annotate", "backdrop") and the block menu's **"Wstaw rysunek
-  na obrazie lub PDF…"** open the file picker ("Obrazy i PDF"; `FilePicker` — the browser: its own
+  the slash command **"/Drawing on a picture or PDF…"** (`drawingOn`: also found as "slajd", "slajdy",
+  "pdf", "podkład", "wykład", "tło", "slide", "annotate", "backdrop", "lecture") and the block menu's
+  **"Insert a drawing on a picture or PDF…"** open the file picker ("Pictures and PDF"; `FilePicker` — the browser: its own
   picker, pictures only, `DrawingBackdrops.pickInBrowser`); the file is taken into the notebook
   (`EditorHost::importAttachment`, `Workspace::importAttachment`: a file of the notebook stays
   where it is — on Android also when the system's picker names it by a `content://` URI of the
@@ -2041,53 +2045,53 @@ and diagrams (shapes, arrows, text), on every platform.
   locked or unreadable PDF, a picture this device cannot decode) the copy made for it is deleted
   again (`PageController.discardBackdropSource` / `Workspace.discardImport`: only a copy that pick
   stored, never a file of the notebook or one reused). A picture becomes one drawing ("slajd
-  (rysunek).svg", light — **Jasne**) and opens in the editor; a PDF opens
-  **DrawingBackdropDialog** (a centred card, a bottom sheet on phones): the file's name, "N stron",
+  (drawing).svg", light — **Light**) and opens in the editor; a PDF opens
+  **DrawingBackdropDialog** (a centred card, a bottom sheet on phones): the file's name, "N pages",
   the pages as thumbnails (the image provider `pdfpage`, `PdfPageImageProvider`:
   `image://pdfpage/<file>?page=N&v=…`, drawn as they scroll into view; every cell the first page's
   shape — `DrawingBackdrops.pdfInfo` `width`/`height` —, wider cells for landscape slides), a tap
   chooses or drops a page — with the keyboard Tab reaches the pages, the arrows move (a focus
   ring), Space or Enter chooses; in the one-page dialog the arrows choose at once —,
-  **Wszystkie** / **Żadna**, the field **Strony** ("1-3, 7", "wszystkie"; in step with the
-  thumbnails), at most 60 pages ("Najwyżej 60 stron naraz."), **"Wstaw rysunki (N)"**: one drawing
-  per page ("wykład 3 s. 4.svg", as the app — **Jak motyw**), the first at the caret, every
+  **All** / **None**, the field **Pages** ("1-3, 7", "all" — also "wszystkie"; in step with the
+  thumbnails), at most 60 pages ("At most 60 pages at once."), **"Insert drawings (N)"**: one drawing
+  per page ("wykład 3 p. 4.svg", as the app — **Like the app**), the first at the caret, every
   further one in a block of its own after it, in order — one undo step
-  (`PageController.insertDrawingsOn`; the files stay, as with "/Rysunek"); one drawing opens in the
-  editor, several stay in the note with a toast ("Wstawiono N rysunków"); when another page was
+  (`PageController.insertDrawingsOn`; the files stay, as with "/Drawing"); one drawing opens in the
+  editor, several stay in the note with a toast ("Inserted N drawings"); when another page was
   opened in that editor while a picture was prepared, nothing is inserted (a toast; the imported
   copy goes). The pages are prepared
   in the background (`DrawingBackdrops.prepare`: Qt's thread pool, the browser one per event-loop
-  turn) with a progress bar ("Strona 3 z 12…") and **Anuluj** — inserted drawings' files made
+  turn) with a progress bar ("Page 3 of 12…") and **Cancel** — inserted drawings' files made
   there too (`prepare(…, drawings)`: core `newDrawingOnBackdrop` written — the raster's two base64
   copies and the scene's deflate), so the GUI thread only stores them and 60 slides freeze no
-  window; a PDF with a password ("Ten PDF
-  jest chroniony hasłem — Brulion go nie otworzy."), one that cannot be read and a picture this
-  device cannot decode say so. **In the editor:** the paper's menu (on phones Więcej) has
-  **"Podkład z obrazu lub PDF…"** (set or replace: a PDF's page in the same dialog, one page,
-  **"Ustaw podkład"**), **"Inna strona PDF…"** (when the backdrop is a PDF's page and PDFs can be
-  drawn here; the file renamed or gone: "Pliku … nie ma już w notatniku" — renames do not follow
-  into drawings) and **"Usuń podkład"** — each one undo step (`DrawingCanvas.setBackdrop`,
-  `removeBackdrop`; `hasBackdrop`, `backdropPath`, `backdropPage`), and on a PDF's page **"Poprzednia
-  strona PDF"** / **"Następna strona PDF"** (PgUp / PgDown; `DrawingView.stepPage`): the drawing of
+  window; a PDF with a password ("This PDF
+  is protected with a password: Brulion cannot open it."), one that cannot be read and a picture this
+  device cannot decode say so. **In the editor:** the paper's menu (on phones More) has
+  **"Backdrop from a picture or PDF…"** (set or replace: a PDF's page in the same dialog, one page,
+  **"Set backdrop"**), **"Another PDF page…"** (when the backdrop is a PDF's page and PDFs can be
+  drawn here; the file renamed or gone: "The file … is not in the notebook any more." — renames do not follow
+  into drawings) and **"Remove backdrop"** — each one undo step (`DrawingCanvas.setBackdrop`,
+  `removeBackdrop`; `hasBackdrop`, `backdropPath`, `backdropPage`), and on a PDF's page **"Previous
+  PDF page"** / **"Next PDF page"** (PgUp / PgDown; `DrawingView.stepPage`): the drawing of
   page N − 1 / N + 1 of the same PDF in the note this drawing belongs to — the note it was opened
   from (the route's `from`: PageController::openDrawing sets it) when that embeds it, else the first
   note linking to it (`Workspace.noteOfDrawing`) —: the first drawing that note embeds on that page
-  opens (`Workspace.drawingsOnPdfPage`); none — a new one is made as "Rysuj na tej stronie" makes it
-  ("<PDF> s. N.svg", Jak motyw, the page prepared with the progress line) and embedded in that note
+  opens (`Workspace.drawingsOnPdfPage`); none — a new one is made as "Draw on this page" makes it
+  ("<PDF> p. N.svg", Like the app, the page prepared with the progress line) and embedded in that note
   in a block of its own right **before** (the previous page) or **after** (the next) the block that
   embeds this drawing (`Workspace.addDrawingBeside`: `notebook::insertBlockBeforeEmbed` /
   `insertBlockAfterEmbed`, compare and swap; no note: today's journal, with a toast). This drawing is
   saved first; the other one replaces it in the route (Back returns to the note). Page 1 has no
-  previous page, the last page no next one ("To pierwsza / ostatnia strona PDF-a."); a PDF that is
+  previous page, the last page no next one ("This is the first / last page of the PDF."); a PDF that is
   gone or unreadable says so. Where PDFs cannot be drawn (the browser) the entries are not there, as
-  "Inna strona PDF…". A thin progress line runs
+  "Another PDF page…". A thin progress line runs
   over the paper while a picture is prepared; one ready during a stroke, a shape or a text is set
   when that ends, one for a drawing closed meanwhile is dropped (its imported copy too), and one
   that would make the file unreadable is refused with a toast ("tooLarge"). The backdrop is locked: the
-  eraser, the lasso, a tap and Ctrl+A never take it, "Na spód" stops above it. In the dark it is
+  eraser, the lasso, a tap and Ctrl+A never take it, "Send to back" stops above it. In the dark it is
   shown **"document dark"** (Excalidraw's dark filter per pixel, `darkImage`, decoded once per
-  backdrop: a white slide `#121212`), so the ink mapped light stays readable; a Ciemne drawing's
-  file gets that dark raster in its picture (encoded once, `drawing::SvgOptions`), a Jak motyw one
+  backdrop: a white slide `#121212`), so the ink mapped light stays readable; a Dark drawing's
+  file gets that dark raster in its picture (encoded once, `drawing::SvgOptions`), a Like the app one
   no dark style sheet. The raster: the picture's own bytes when it is a PNG or a JPEG within 2400 px
   and 4 MB that needs no EXIF turning, else decoded (EXIF turned, the first frame of a GIF, an SVG
   — a drawing too — drawn 2400 px on its long side) and stored as the smaller of PNG and JPEG
@@ -2100,18 +2104,18 @@ and diagrams (shapes, arrows, text), on every platform.
   Linux build — Qt PDF (pdfium; aqt's `qtpdf`); the Nix package — poppler-qt6 (nixpkgs has Qt PDF
   only inside QtWebEngine); the browser — none (Qt has no Qt PDF for WebAssembly): there pictures
   only, while drawings on PDF pages made elsewhere show and edit normally (their pixels are in the
-  file). Sizes: docs/PERFORMANCE.md "Rozmiar".
+  file). Sizes: docs/PERFORMANCE.md "Size".
 * **Clipboard** (`DrawingCanvas.copySelection`, `cutSelection`, `paste`; core `drawing/clipboard.h`,
-  docs/SYNTAX.md §2 "Clipboard"): Ctrl+C / Ctrl+X and the selection bar's Więcej put the selection on
+  docs/SYNTAX.md §2 "Clipboard"): Ctrl+C / Ctrl+X and the selection bar's More put the selection on
   the system clipboard as Excalidraw's clipboard (`{"type":"excalidraw/clipboard",…}` as text), so
-  excalidraw.com — and another drawing in Brulion — pastes it; Ctrl+V and **Wklej** (the paper's
-  menu; on phones Więcej) paste Excalidraw's elements (copied in excalidraw.com, a `.excalidraw`
+  excalidraw.com — and another drawing in Brulion — pastes it; Ctrl+V and **Paste** (the paper's
+  menu; on phones More) paste Excalidraw's elements (copied in excalidraw.com, a `.excalidraw`
   file's text, Brulion's own) with new ids, their middle at the mouse pointer over the paper, else
   in the middle of the view — selected, the select tool chosen, one undo step —, or plain text as a
   new text there. Elements Brulion does not draw (frames, embedded pages) are left out with a toast
-  ("Pominięto N wklejonych elementów…"); a clipboard with nothing for a drawing says so.
+  ("N pasted elements Brulion does not draw (frames, embedded pages) left out."); a clipboard with nothing for a drawing says so.
 * **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
-  (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
+  (Back, Done, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
   atomic, the replaced version kept in History as for notes). A text being written goes in first
   on those saves; the 1.2 s timer never commits it — it waits until the text's editor closes (a
   commit mid-word would close the editor and hand the next keys to the tools' shortcuts). A failed write is said by the
@@ -2124,25 +2128,25 @@ and diagrams (shapes, arrows, text), on every platform.
   version in its order, plus the elements drawn here since — on top —, the ones changed here
   replacing theirs, minus the ones erased here; what was deleted there stays deleted; the paper's
   pattern and its light or dark theirs unless changed here — the same rule as the sync center's
-  "Scal rysunki", which has no common version: a union, see "Sync visibility" → "Conflict copies
+  "Merge drawings", which has no common version: a union, see "Sync visibility" → "Conflict copies
   of drawings"; Nextcloud's sync merges against the version both devices had last)
   and saved, with a toast. A gesture in progress goes on and ends on the new version. A version
   Brulion cannot edit any more (a frame or an embedded page added in excalidraw.com) is
-  shown as it is; what was drawn here and not saved is written to a new file beside it ("… (to
-  urządzenie).svg" — or `.excalidraw`, `.excalidraw.md`: the file's own format —,
+  shown as it is; what was drawn here and not saved is written to a new file beside it ("… (this
+  device).svg" — or `.excalidraw`, `.excalidraw.md`: the file's own format —,
   `Workspace.createAttachment`), with a toast naming it. A plugin file's Markdown is theirs then
   (their back of the card, their text entries), the merged scene in it. The canvas's own saves
   coming back are recognised (`isKnownFile`). A rename follows the file (the route is applied one
-  event-loop turn late, as in PageView); a file deleted while open is never written again ("Rysunku
-  … nie ma w notatniku").
-* **Files Brulion does not edit** are shown as the picture they are, with why and "Otwórz jako
-  obraz" (the picture view): an Excalidraw drawing with frames or embedded web pages (or an
-  element of a kind Brulion does not know: it would lose them — "ma ramki lub osadzone strony
-  internetowe z Excalidraw"), an SVG without a scene, a scene that cannot be read, and elements
+  event-loop turn late, as in PageView); a file deleted while open is never written again ("The
+  drawing … is not in the notebook.").
+* **Files Brulion does not edit** are shown as the picture they are, with why and "Open as a
+  picture" (the picture view): an Excalidraw drawing with frames or embedded web pages (or an
+  element of a kind Brulion does not know: it would lose them — "has frames or embedded web pages
+  from Excalidraw"), an SVG without a scene, a scene that cannot be read, and elements
   farther than 10⁶ units from the origin (`drawing::CoordinateLimit`: the paper's lines and the
   file's size stay bounded; the editor's own elements stay within it). Nothing is written for
   them. A drawing of Obsidian's Excalidraw plugin with frames or embedded pages says to change it
-  in Obsidian ("ma ramki albo osadzone strony, których Brulion jeszcze nie edytuje"), one in the
+  in Obsidian ("has frames or embedded pages, which Brulion does not edit yet"), one in the
   plugin's oldest form (the scene on one line, no code block: `DrawingCanvas.legacy`) to open it
   there once. Excalidraw drawings with shapes, arrows, text and pictures are edited (docs/SYNTAX.md §2
   "Elements": drawn clean — the hand-drawn look is kept in the file, not drawn —, text in the
@@ -2175,7 +2179,7 @@ and diagrams (shapes, arrows, text), on every platform.
   picture through Qt SVG, turned dark in a dark app colour by colour as Excalidraw's dark mode does
   (`drawing::darkSvg`: the colours of its attributes and style sheets; pasted pictures and colour
   emoji keep theirs; the per-pixel filter `darkImage` only for a file that mapping cannot read) —
-  unless it is dark already (its edge darker than mid grey: a "Ciemne" drawing whose scene cannot
+  unless it is dark already (its edge darker than mid grey: a "Dark" drawing whose scene cannot
   be read keeps its dark picture). A `.excalidraw` scene or a plugin file has no picture of its
   own: one Brulion draws is rendered so in the frame of its `pictureRect` (the size
   `editor::localDrawingSize` gives the embeds and the picture view, on the GUI thread, once per
@@ -2295,7 +2299,7 @@ browser has none — see "In the browser" below).
 theme: a page is paper), sized from the page's shape (A4 portrait 297 × 420, a 16:9 slide 480 × 270,
 at most 420 high and the column's width; known from the start once cached, so the block does not
 jump), under it a caption row: the page icon, the file's name (plain text, elided in the middle),
-"3 strony", "s. 3" for a page > 1. A spinner while it is drawn; a lock and "PDF chroniony hasłem" or
+"3 pages", "p. 3" for a page > 1. A spinner while it is drawn; a lock and "PDF protected with a password" or
 a triangle and the reason on the white page for one that cannot be shown. A tap / click (the tile;
 the space beside it still edits the block) emits `EmbedView.pdfClicked(path, page)` →
 `PageController.openPdf(row, path, page)`: the page is saved, route `{view: "page", path, pdfPage
@@ -2315,18 +2319,18 @@ kept in memory only and tried again after a restart; a remembered thumbnail whos
 drawn again; a new mtime is a new key; 64 MiB, 32 MiB on Android, the oldest
 pruned 2 s after a store; the long side 420 px × the primary screen's ratio, rounded up to 512 / 768
 / 1024 / 1280 / 1536). A build without a renderer, the browser: the file's chip with the page icon
-("Otwórz w nowej karcie" / "Otwórz w innej aplikacji" in its tooltip); its click opens the PDF in a
+("Open in new tab" / "Open in another app" in its tooltip); its click opens the PDF in a
 new browser tab / the system's viewer, inside the click. A thumbnail folder that cannot be written
-(a renderer is there): the same chip, its tooltip "Otwórz w przeglądarce PDF" and its click the
+(a renderer is there): the same chip, its tooltip "Open in the PDF viewer" and its click the
 viewer.
 
 **The viewer.** A bar like the picture view's: the page icon and the file's name, then — at 600 px
-and wider — "Strona 3 z 12" (a click: the page jump), Pomniejsz, the zoom "85 %" (its menu: Dopasuj
-do szerokości, 50–400 %, Dwie strony obok siebie, Okładka osobno), Powiększ, Szukaj (only where the
-renderer extracts text), Spis treści (only when the PDF has one), **Rysuj na tej stronie** and ⋯
-(Otwórz w innej aplikacji); narrower (phones, the side panel): "3/12", Szukaj, Spis treści, ⋯
-(Powiększ, Pomniejsz, Dopasuj do szerokości, Dwie strony obok siebie, Okładka osobno, Rysuj na tej
-stronie, Otwórz w innej aplikacji). The
+and wider — "Page 3 of 12" (a click: the page jump), Zoom out, the zoom "85 %" (its menu: Fit
+width, 50–400 %, Two pages side by side, Cover page alone), Zoom in, Search (only where the
+renderer extracts text), Contents (only when the PDF has one), **Draw on this page** and ⋯
+(Open in another app); narrower (phones, the side panel): "3/12", Search, Contents, ⋯
+(Zoom in, Zoom out, Fit width, Two pages side by side, Cover page alone, Draw on this
+page, Open in another app). The
 pages one under another on `bgSunken`, each white with a hairline frame, laid out exactly by
 `PdfPageLayout` (every page its own size; fit width by the widest page, at most 1000 px on wide
 windows — readable lines —, the full width on phones; zoom shown as the real size, 96 dpi = 100 %,
@@ -2338,7 +2342,7 @@ provider `pdfview` (`image://pdfview/<file>?page=N&v=<mtime-size>&w=…&h=…[&c
 (docs/PERFORMANCE.md "PDF viewer"): a page's base picture has at most a screenful of pixels;
 zoomed in, the visible part comes at full resolution as a detail picture once the view stops moving
 (150 ms). Under the last page the notes that embed or link the PDF (`ContentBacklinks`; not while
-the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyond that many.
+the wide window's side panel lists them), "Showing the first 20 000 pages." beyond that many.
 
 * **Zoom**: pinch (the pages scaled on the GPU while the fingers move, drawn again once at the end,
   around the fingers), double tap (fit width ↔ twice that, around the tap), Ctrl+wheel (the same
@@ -2351,14 +2355,14 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   the first / last page, ↑ ↓ 48 px, Esc clears the selection, else closes the search, else goes back
   (Back on Android and Alt+← through the shell).
 * **Page jump** (`pdfJump`): a dialog — a bottom sheet on phones — with the page number (digits,
-  1…N) and "Przejdź"; Enter jumps.
+  1…N) and "Go"; Enter jumps.
 * **Search** (`pdfSearchBar`, where `Workspace.pdfSearchable`: Qt PDF, poppler, Android 15+): typed
   250 ms later the pages are searched on `PdfRenderPool` at the lowest priority from the current
   page, wrapping (`PdfReader::find`, `src/platform/pdfsearch.h`: case and Polish letters ignored —
   "gesla" finds "gęślą" —, a line break of the PDF equal to a space, soft hyphens ignored); hits come
   in batches, the first one at or after the current page is shown at once, highlighted in the
-  accent (the current one stronger, framed). "3 z 12" ("+" while searching or past 5000 hits),
-  "Szukam… strona 4 z 12", "Brak wyników", "Ten PDF nie ma tekstu do przeszukania (to pewnie skan).";
+  accent (the current one stronger, framed). "3 of 12" ("+" while searching or past 5000 hits),
+  "Searching… page 4 of 12", "No results", "This PDF has no text to search (it may be a scan).";
   Enter / F3 next, Shift+Enter / Shift+F3 previous, Esc (Back on Android while typing) closes it and
   clears the highlights. A new text cancels the search between pages.
 * **Selecting text** (where `PdfViewModel.selectionAvailable`: Qt PDF and poppler; not Android's
@@ -2372,13 +2376,13 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   around it, then `pdfWordAt` of the page's text — letters, digits, marks, an apostrophe or a hyphen
   inside a word), and moving the finger without lifting it selects on to it (the pages stop
   scrolling meanwhile; a `PointHandler` follows the finger); a tap elsewhere ends it. The selection
-  is tinted one blue on the white page in both themes; a small **Kopiuj** over its first line, Ctrl+C,
-  and the right-click menu (Kopiuj, Zaznacz całą stronę, Spis treści) copy it (`copySelection`:
+  is tinted one blue on the white page in both themes; a small **Copy** over its first line, Ctrl+C,
+  and the right-click menu (Copy, Select the whole page, Contents) copy it (`copySelection`:
   `pdfCopyText` — CR LF as LF, soft hyphens and pdfium's U+0002 dropped, trailing white space
-  trimmed) with the toast "Skopiowano do schowka"; Ctrl+A selects the current page's text; Esc
+  trimmed) with the toast "Copied to the clipboard"; Ctrl+A selects the current page's text; Esc
   clears the selection first. Each request runs on `PdfRenderPool` (priority Selection) and a newer
   one makes the older moot, so a fast drag never queues work.
-* **Spis treści** (the PDF's outline, read once it opens: `PdfReader::outline()` — poppler only, so
+* **Contents** (the PDF's outline, read once it opens: `PdfReader::outline()` — poppler only, so
   the Nix package and other poppler builds; Qt PDF's `QPdfBookmarkModel` follows a looping outline
   until the stack overflows — a hostile PDF would crash the app — so the Qt PDF builds (Windows, the
   AppImage) read none, and Android's PdfRenderer has none: the button is not there): `pdfOutline`, a dialog (a bottom sheet on phones) with the entries indented by level, each
@@ -2394,89 +2398,89 @@ the wide window's side panel lists them), "Pokazano pierwsze 20 000 stron" beyon
   action or a script) opens through `Workspace.openUrl`, the same check as a note's links, its
   address in a tooltip on hover. The pointer is a hand over a link; a link is a press target above
   the text selection.
-* **Dwie strony obok siebie** (the zoom menu, ⋯ on phones; `PdfViewModel.twoPages`,
+* **Two pages side by side** (the zoom menu, ⋯ on phones; `PdfViewModel.twoPages`,
   `PdfPageLayout::setSpread`): pages 1–2, 3–4, … in rows, at the top of their row, fit width by the
-  widest row; **Okładka osobno** (`coverAlone`) puts the first page alone (1, 2–3, 4–5 — as a book
-  opens). The current page stays in view and stays the current one; "Strona N z M" then names the
+  widest row; **Cover page alone** (`coverAlone`) puts the first page alone (1, 2–3, 4–5 — as a book
+  opens). The current page stays in view and stays the current one; "Page N of M" then names the
   row's first page as it scrolls. Both remembered on the device (`AppSettings` keys `pdf/twoPages`,
   `pdf/coverAlone`).
 * **Annotations** a PDF has (highlights, notes, stamps, shapes) are drawn with the page where the
   renderer draws them: Qt PDF (`RenderFlag::Annotations`) and poppler (`tst_pdfpages`
   `annotationDrawn`: a square with its own appearance); Android's PdfRenderer draws what its display
-  mode draws (not checked on a device yet: TODO.md). Making new ones is for another app (Otwórz w
-  innej aplikacji).
-* **Otwórz w innej aplikacji** (⋯ and the top bar's Więcej): `Workspace.openInOtherApp` →
+  mode draws (not checked on a device yet: TODO.md). Making new ones is for another app (Open in
+  another app).
+* **Open in another app** (⋯ and the top bar's More): `Workspace.openInOtherApp` →
   `platform::openFileExternally` — the desktop's default app, Android's ACTION_VIEW (a content:// URI
   of Brulion's FileProvider with a read grant; a file outside its roots, a memory card, copied into
   the cache first), the browser's new tab (a blob: URL typed `application/pdf`; a blocked tab: the
   file downloaded, a notice says so). Only a PDF of the notebook named `.pdf` whose first 1024 bytes
-  hold `%PDF-` (a renamed program is never handed to xdg-open / ShellExecute). Messages: "„x” nie
-  jest plikiem PDF.", "Na tym urządzeniu nie ma aplikacji do otwierania PDF-ów.", "Nie udało się
-  otworzyć „x” w innej aplikacji.".
-* **Rysuj na tej stronie**: a drawing whose backdrop is the current page ("Drawing editor" →
-  Backdrop: `DrawingBackdrops.prepare(pdf, [page], true)`, the button says "Przygotowuję stronę 3…"
-  meanwhile), stored as "<name> s. 3.svg" (`EditorHost::drawingFileNameOn`, as "Rysunek na obrazie
-  lub PDF…" names them) and embedded right after the block that embeds the PDF in the note it was
+  hold `%PDF-` (a renamed program is never handed to xdg-open / ShellExecute). Messages: "“x” is not
+  a PDF file.", "No app on this device opens PDF files.", "Could not open
+  “x” in another app."
+* **Draw on this page**: a drawing whose backdrop is the current page ("Drawing editor" →
+  Backdrop: `DrawingBackdrops.prepare(pdf, [page], true)`, the button says "Preparing page 3…"
+  meanwhile), stored as "<name> p. 3.svg" (`EditorHost::drawingFileNameOn`, as "Drawing on a picture
+  or PDF…" names them) and embedded right after the block that embeds the PDF in the note it was
   opened from (`route.from` / `fromLine`; `Workspace.addDrawingOnPdfPage` →
   `notebook::insertBlockAfterEmbed`: that block, else the nearest one embedding it, else the end;
   a list item at the same depth or a paragraph; compare-and-swap writes) — opened from the tree, the
-  quick switcher, or the note gone: today's journal ("Rysunek dodano do dzisiejszego dziennika.").
+  quick switcher, or the note gone: today's journal ("The drawing was added to today's journal.").
   Then the drawing editor opens; Back returns to the viewer on that page (it writes `pdfPage` into
   the route), Back again to the note with the drawing right under the PDF. When the note embeds a
   drawing of this page already (`Workspace.drawingsOnPdfPage`: the drawings' backdrop markers), a
-  menu offers "Otwórz rysunek „…”" (up to three) and "Nowy rysunek na tej stronie".
+  menu offers "Open the drawing “…”" (up to three) and "New drawing on this page".
 * **A password**: where the renderer opens protected PDFs (`PdfViewModel.passwordAvailable`: Qt
   PDF and poppler — tried as the owner's and the user's password, in UTF-8 for AES-256 and in
-  Latin-1 for older encryption), a protected PDF says "Ten PDF jest chroniony hasłem." with a lock, a
-  password field (`pdfPasswordField`, focused on a desktop), **Otwórz PDF** (`pdfUnlock`; Enter too)
-  and "Brulion nie zapamiętuje hasła: trzeba je wpisać przy każdym otwarciu PDF-a."; a wrong one
-  says "Nieprawidłowe hasło. Spróbuj jeszcze raz." under the field (`passwordRejected`). The password
+  Latin-1 for older encryption), a protected PDF says "This PDF is protected with a password." with a lock, a
+  password field (`pdfPasswordField`, focused on a desktop), **Open the PDF** (`pdfUnlock`; Enter too)
+  and "Brulion does not remember the password: it is asked for each time the PDF is opened."; a wrong one
+  says "Wrong password. Try again." under the field (`passwordRejected`). The password
   is never stored: it lives in the model and, while the PDF is open, in `PdfReaderPool`'s memory
   (`holdPassword` / `releasePassword`, counted per file) for the image provider's pages; the field is
   emptied at once; another file, the viewer's end or a wrong password forgets it (and closes the
   readers opened with it). It is never in the route, a setting or a log line. The embeds' thumbnails
-  of a protected PDF stay a lock (their PNG cache never holds its pages), and "Rysuj na tej stronie"
+  of a protected PDF stay a lock (their PNG cache never holds its pages), and "Draw on this page"
   is not offered for it (the drawing's backdrop would need the password too). Android's PdfRenderer
   opens none (API 35's `LoadParams` is not wired yet): there the old message stays.
 * **States**: a spinner while it opens; a PDF that cannot be shown — the password above, or where the
-  renderer opens no protected PDF "Ten PDF jest chroniony hasłem — Brulion go nie otworzy." (a lock),
-  "Nie można odczytać tego PDF-a.", "Ten PDF nie ma stron.", "Tego pliku nie ma już w notatniku." —
-  under the file's name and size, with **Otwórz w innej aplikacji** (another app may know the
+  renderer opens no protected PDF "This PDF is protected with a password: Brulion cannot open it." (a lock),
+  "This PDF cannot be read.", "This PDF has no pages.", "The file is no longer in the notebook." —
+  under the file's name and size, with **Open in another app** (another app may know the
   password or repair it) and the notes that embed or link it below (as in every state without pages;
   not while the side panel lists them);
-  a page that fails alone says "Nie można pokazać strony
-  N." on its white page. The file changed on disk (sync, another program): opened again at the same
+  a page that fails alone says "Page N cannot
+  be shown." on its white page. The file changed on disk (sync, another program): opened again at the same
   page and zoom; renamed or moved: the shell's route follows it and the viewer reopens on the
   route's page.
 * **Route**: `pdfPage` (the page shown; the viewer writes it half a second after it settles, in the
   main pane only, and jumps to it when the route's page changes from outside — never for its own
   writes), `from`, `fromLine`, `open` (screenshots and tests: `search` with `search` typed, `jump`,
-  `draw`), `pdfScale` (a zoom in percent, on its own too: once per path and value). Ctrl+E does nothing on a PDF; the top bar's Więcej has no
+  `draw`), `pdfScale` (a zoom in percent, on its own too: once per path and value). Ctrl+E does nothing on a PDF; the top bar's More has no
   Markdown source, note mode, properties or history there.
 * **In the browser** (no renderer): the embed is the file's chip; a click opens the PDF in a **new
   browser tab** (`wasm/wasmopen.cpp`: the bytes from IndexedDB as a blob: URL typed
   `application/pdf`, `window.open` inside the click — browsers open tabs only on a user's gesture —,
   the opener cut, the last three blob URLs kept for the tab's reload and "Save"); a blocked tab
   downloads the file with a notice. A route to a PDF (the tree, the quick switcher, history) shows
-  "Brulion w przeglądarce nie rysuje PDF-ów: ten plik otworzy się w nowej karcie, we wbudowanej
-  przeglądarce PDF (przewijanie, powiększanie, szukanie)." with **Otwórz w nowej karcie** (a real click). A desktop
-  build without a renderer says "Ta wersja Brulionu nie ma modułu PDF — otwórz plik w innej
-  aplikacji." with that button.
+  "Brulion here does not draw PDFs: the browser's own viewer opens it in a new tab (scrolling,
+  zoom, search)." with **Open in new tab** (a real click). A desktop
+  build without a renderer says "This version of Brulion has no PDF renderer: open it in another
+  app." with that button.
 
 **Other attachments.** Any other file that is no note, no picture and no PDF (DOCX, ZIP, MP3…)
 opens read-only as text (`PageView.fileRoute` → `ContentPictureView` with `textOnly`: the bar names
-the file and says "Tylko do odczytu", at most its first 200 KB) — never in the block editor. A kind
+the file and says "Read-only", at most its first 200 KB) — never in the block editor. A kind
 on the allow-list (`platform/externalfiles.h`: DOCX, XLSX, PPTX, ODT, ODS, ODP, EPUB, DOC, XLS, PPT,
 RTF, MP3, M4A, OGG, OPUS, WAV, FLAC, MP4, MOV, WEBM, MKV, TXT, CSV, TSV — by its extension AND its
 first 64 KiB: a zip with Word's / Excel's / PowerPoint's parts, an OpenDocument or EPUB zip naming
 its own type first, OLE2, `{\rtf`, the audio and video signatures, text without NUL bytes in
-valid UTF-8) has **Otwórz w innej aplikacji** in that bar (`pictureOpenElsewhere`; "Otwórz gdzie
-indziej" when narrow) and in the top bar's Więcej (`Workspace.canOpenInOtherApp`): the system's app
+valid UTF-8) has **Open in another app** in that bar (`pictureOpenElsewhere`; "Open
+elsewhere" when narrow) and in the top bar's More (`Workspace.canOpenInOtherApp`): the system's app
 for it with the list's MIME type (Android's ACTION_VIEW; the browser's new tab, which usually
 downloads it). A program, a script, a shortcut, an HTML page, an archive, a macro-enabled document
-(`.docm`) — or any of them renamed to a listed name — is never handed over: "Brulion nie przekazuje
-„x” innym aplikacjom: tylko dokumenty, arkusze, prezentacje, e-booki, dźwięk, wideo i pliki
-tekstowe." A ZIP keeps its read-only text and nothing else.
+(`.docm`) — or any of them renamed to a listed name — is never handed over: "Brulion does not hand
+“x” to other apps: only documents, spreadsheets, presentations, e-books, audio, video and text
+files go out." A ZIP keeps its read-only text and nothing else.
 
 C++: `src/app/pdf` (library `brulion_pdfview`): `PdfRenderPool` (at most two threads; priorities:
 a visible page, a detail picture, a thumbnail, page sizes, search), `PdfReaderPool` (open readers
@@ -2704,7 +2708,7 @@ geometry comes from `RowScroll` (library `brulion_ui_scroll`, Qt Quick's public 
 * **Dragging** inverts it: the row for t is put at the view's top edge (`positionViewAtIndex`,
   then the fraction through `contentY`; twice, with the visible row count at the new place), at
   most once a frame (`RowScroll.ScrollIntervalMs`): dragging over a year of the journal creates
-  the days on the way like "Przejdź do dnia" does, not at every mouse move. While the bar is held
+  the days on the way like "Go to day" does, not at every mouse move. While the bar is held
   its position is not pushed back; on the release it settles where the list is.
 * Recomputed once a frame after the list's polish (`QQuickWindow::afterAnimating`; a 0 ms timer
   without frames): a few `indexAt` / `itemAtIndex` calls. Without a row at an edge (an empty list,
@@ -2735,7 +2739,7 @@ journal days (`make-vault.py`); before = v0.1.1 with the probe added.
 * x86 laptop (Xvfb, llvmpipe, RelWithDebInfo, two runs each): big journal, desktop touchpad —
   longest frame 2.9 / 2.7 s → 82 / 60 ms, p99 1025 / 882 → 16 ms, layout shifts 9 / 10 frames
   (2933 / 4640 px, single jumps up to 1566 px) → none; phone flick — frames over 100 ms 10 → 0,
-  longest 144 → 63 ms; guide page "Witaj w Brulionie", desktop touchpad — longest 574 / 311 → 82 /
+  longest 144 → 63 ms; guide page "Welcome to Brulion", desktop touchpad — longest 574 / 311 → 82 /
   84 ms, p99 420 / 104 → 15 ms.
 * Raspberry Pi 4 (Cortex-A72, offscreen, Debug): big journal phone flick — longest frame 5.5 s →
   0.29 s, p99 739 → 57 ms; startup of a 2-year journal: first frame 2.0 → 1.3 s. Final tree:
@@ -2761,7 +2765,7 @@ journal days (`make-vault.py`); before = v0.1.1 with the probe added.
   more). See "a day of the journal stream is created whole" above for why it is not spread over
   frames.
 * **A picture from the internet fetched for the first time** has no known size: with
-  "Pokazuj obrazy z internetu bez pytania" on, its frame (320 × 180, or its placeholder's height)
+  "Show pictures from the internet without asking" on, its frame (320 × 180, or its placeholder's height)
   takes the picture's size when the fetch ends, so a row can change height while the journal only
   scrolls (an exception to rule 2). Later visits get the size from the cached file's header like
   an attachment; keeping the placeholder until the picture is scrolled to, or anchoring the view
@@ -2780,9 +2784,9 @@ journal days (`make-vault.py`); before = v0.1.1 with the probe added.
 
 The page's properties — the YAML frontmatter and the leading `key:: value` lines (docs/SYNTAX.md
 §4 "Editing page properties") — are edited as typed fields in the editor's **properties panel**
-(*Właściwości*) and, for tags and aliases, in the page header; nobody has to touch the raw text
-(it stays one menu item away: "Edytuj jako tekst"). Each change is one undo step of the page
-(Ctrl+Z, a toast's "Cofnij") and rewrites only the lines of that property — comments, order,
+(*Properties*) and, for tags and aliases, in the page header; nobody has to touch the raw text
+(it stays one menu item away: "Edit as text"). Each change is one undo step of the page
+(Ctrl+Z, a toast's "Undo") and rewrites only the lines of that property — comments, order,
 quoting and line endings of the rest stay as they were (`markdown/pageprops.h`, every YAML edit
 verified by parsing the result). The page's properties are the YAML block and the first block of
 `key::` lines, as the index sees them: more `key::` blocks after a blank line are shown as property
@@ -2794,8 +2798,8 @@ note mode switch or an inserted template), so it never runs on over the page.
 `PropertyListValue.qml`, `PropertyMenu.qml`, all for the leading frontmatter row's delegate; a
 chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one):
 
-* Folded (the default: the journal stream stays dense): "Właściwości", the count and a one-line
-  preview of the values ("status: w toku · koszt: 1200 · termin: czw, 29 paź" — a date or a date
+* Folded (the default: the journal stream stays dense): "Properties", the count and a one-line
+  preview of the values ("status: in progress · cost: 1200 · due: Thu, Oct 29" — a date or a date
   and time as the open panel's date button shows it, `DatesHelper.formatShort`). On a page, whose
   header shows the tags and aliases as chips while the panel is folded
   (`BlockEditor.headerShowsListChips`, set by `PageView`), the preview leaves those properties out:
@@ -2805,8 +2809,8 @@ chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one
   it is open is a device setting (`AppSettings.propertiesExpanded`, key
   `editor/propertiesExpanded`; `BlockEditor.propertiesExpanded` bound by `PageView` and the
   journal days, `propertiesExpandedToggled` writes it), so a page stays open while it is edited,
-  undone or synced. Expanded, the header has "+" (add, Ctrl+;) and "⋯" ("Edytuj jako tekst": the
-  raw text in the block's inline editor, "Zwiń").
+  undone or synced. Expanded, the header has "+" (add, Ctrl+;) and "⋯" ("Edit as text": the
+  raw text in the block's inline editor, "Collapse").
 * A row: the type icon (Text `type`, Number `sigma`, Checkbox `square-check-big`, Date `calendar`,
   Date and time `calendar-clock`, List `list`, Tags `tags`, Aliases `bookmark`, other `code`), the
   key and the value's editor by type. Text is shown rendered (`[[links]]`, `#tags`, URLs work —
@@ -2815,10 +2819,10 @@ chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one
   pages); a text of several lines gets a text area (Ctrl+Enter or leaving it commits). Numbers
   take "3,5" and "1 200" (an invalid one: the field's error, nothing written). A checkbox writes
   each toggle. Dates open the editor's date dialog (`EditorDialogs.pickPropertyDate`: the key as
-  title, natural language "jutro", the clock for a date and time, "Wyczyść"). Lists, tags and
+  title, natural language "tomorrow" or "jutro", the clock for a date and time, "Clear"). Lists, tags and
   aliases are chips (a `[[Page]]` item and a tag open their page; × removes — on touch UIs the
   chip's menu, as the page header's chips: a press and hold on any chip, a tap on one that opens
-  nothing, with its page or tag page, "Kopiuj" and "Usuń" and "Cofnij" in the toast; the chip has
+  nothing, with its page or tag page, "Copy" and "Remove" and "Undo" in the toast; the chip has
   no × there, its 44-px target made each chip 44 px wider; Delete on a focused chip everywhere) with "+": a field
   where Enter or "," adds (a pasted "a, b, c" adds three) and stays open, Backspace in the empty
   field takes the last chip, Ctrl+Z there undoes; what cannot be added (an alias with `|`, a tag
@@ -2831,14 +2835,14 @@ chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one
   `ilosc:: 1.50`).
 * The row's menu (its type icon, a right-click or a long press on the row — not on a chip, which
   has its own menu —, the Menu key /
-  Shift+F10): "Typ" (Tekst, Liczba, Pole wyboru, Data, Data i godzina, Lista; tags and aliases keep
-  theirs — a value that cannot be converted is cleared with "Cofnij" in the toast; an empty value's
+  Shift+F10): "Type" (Text, Number, Checkbox, Date, Date and time, List; tags and aliases keep
+  theirs — a value that cannot be converted is cleared with "Undo" in the toast; an empty value's
   type is remembered for the session, `BlockEditor.propertyTypeOverride`, a list is written `[]`),
-  "Zmień nazwę" (the key becomes a field with key suggestions; an existing name, `brulion` and a
-  key a `key::` line cannot hold are refused with a sentence under the field), "Kopiuj wartość",
-  "Usuń" ("Cofnij" in the toast); a row the fields cannot edit (a map, a nested list, a block
-  Brulion cannot edit safely) offers "Edytuj jako tekst" instead.
-* "+ Dodaj właściwość": a field with the notebook's keys (key, its type's icon, "12 stron";
+  "Rename" (the key becomes a field with key suggestions; an existing name, `brulion` and a
+  key a `key::` line cannot hold are refused with a sentence under the field), "Copy value",
+  "Delete" ("Undo" in the toast); a row the fields cannot edit (a map, a nested list, a block
+  Brulion cannot edit safely) offers "Edit as text" instead.
+* "+ Add property": a field with the notebook's keys (key, its type's icon, "12 pages";
   `PageController.suggestPropertyKeys`, without the page's own keys and `brulion`). Choosing or
   entering a key writes it at once with an empty value of its type in the notebook (`key:`,
   `key: []`, `key: false`; `PageController.addPageProperty`) and puts the keyboard on its value;
@@ -2847,8 +2851,8 @@ chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one
   The type of an empty value is the key's most common type in the notebook
   (`PageController.notebookPropertyType`, from `VaultIndex::propertyKeys()`).
 * A block Brulion cannot edit safely (an indented mapping, plain text between `---` lines) shows
-  its values read-only: "Tych właściwości nie da się bezpiecznie zmieniać w polach." with
-  "Edytuj jako tekst".
+  its values read-only: "These properties cannot be changed safely in fields." with
+  "Edit as text".
 * Layout: the type icon and the key in a column (as wide as the widest key, at least 96 px; keys
   and values at the UI text size, so a value opened for editing keeps its size; list
   items are filled chips, a page link marked by its page icon; on touch UIs a chip is at least
@@ -2876,8 +2880,8 @@ chip's menu is `PropertyChipMenu.qml`, the page header's chips have the same one
   with the keyboard ends block editing and is kept above the on-screen keyboard
   (`BlockEditor.editingProperty` in `ensureEditVisible()`); the touch toolbar stays away.
 
-**Adding the first property** (`BlockEditor.addProperty()`: the page menu's "Dodaj właściwość",
-Ctrl+;, the palette's "Dodaj właściwość strony" — uiAction `addProperty`, handled by `PageView` and
+**Adding the first property** (`BlockEditor.addProperty()`: the page menu's "Add property",
+Ctrl+;, the palette's "Add page property" — uiAction `addProperty`, handled by `PageView` and
 for the journal stream's active day by `JournalsView` —, the phone menu): zoomed in, the page is
 zoomed out first; when the block new properties go to is shown (`pageProperties.addRow`), that
 panel opens at its add row (`propertyFocus` { part: "add", source }); otherwise — a page without
@@ -2890,11 +2894,11 @@ line on a page that has only those) and the real panel takes over, its value foc
 **The page header** (`ContentPageHeader`): the aliases and tags come from
 `PageController.pageProperties` once the page is loaded (an edit shows at once), else from the
 index's summary. A right-click or a long press on a chip from a property opens its menu — a tag:
-"Otwórz stronę tagu", "Usuń z tej strony"; an alias (also a tap): "Kopiuj", "Usuń alias"
+"Open tag page", "Remove from this page"; an alias (also a tap): "Copy", "Remove alias"
 (`removePageListItem`: from every property holding it; the last one takes the property away;
-"Cofnij" in the toast). The row ends with "+" (when properties can be added): "Dodaj tag", "Dodaj
+"Undo" in the toast). The row ends with "+" (when properties can be added): "Add tag", "Add
 alias" (a field at the end of the row — tags suggested —, Enter adds and stays open, Escape
-closes; leaving it adds what it holds, a refusal said in a toast) and "Dodaj właściwość…". The
+closes; leaving it adds what it holds, a refusal said in a toast) and "Add property…". The
 header is the editor list's header, so in source mode (Ctrl+E: the list is hidden) neither the
 chips nor "+" are shown — the source text is edited directly there. While this page's properties
 panel is shown and open (`BlockEditor.propertiesExpanded`, `pageProperties.visibleRow` ≥ 0) the
@@ -2928,32 +2932,32 @@ refusals, suggestions, the roles), QML `tst_editor_qml_properties` / `_touch` (r
 ## Page icon and cover
 
 A page can have an **icon** — an emoji or one of the app's icons — and a **cover** picture, both
-page properties (docs/SYNTAX.md §4 "Ikona i okładka strony": `icon`, `banner`, `banner_y`, the keys
+page properties (docs/SYNTAX.md §4 "Page icon and cover": `icon`, `banner`, `banner_y`, the keys
 Obsidian's Iconize and Banners plugins and Logseq read), so they go with the file to other devices
 and apps. `PageController.look` ({ icon, cover }) follows the page's text as it is edited (in source
 mode its own edits, and what was typed there once the source is left); the lists follow the index (`Workspace.pageIconOf(path)`, `Workspace.revision`).
 
-* **Setting them**: the page menu ⋯ — "Dodaj ikonę…" / "Zmień ikonę…", "Dodaj okładkę…" / "Zmień
-  okładkę…" —, a click on the icon in the header, the cover's "Zmień okładkę". Each change is one
-  undo step with "Cofnij" in its toast (`PageController.setPageIcon`, `setPageCover`,
+* **Setting them**: the page menu ⋯ — "Add icon…" / "Change icon…", "Add cover…" / "Change
+  cover…" —, a click on the icon in the header, the cover's "Change cover". Each change is one
+  undo step with "Undo" in its toast (`PageController.setPageIcon`, `setPageCover`,
   `setPageCoverPosition`: single-property edits, the rest of the file byte for byte).
 * **The icon dialog** (`qml/content/ContentPageIconDialog.qml`): a field to type or paste any emoji
-  (a phone's emoji keyboard too; Enter or "Użyj"), a grid of common emoji (all drawn by the app's
+  (a phone's emoji keyboard too; Enter or "Use"), a grid of common emoji (all drawn by the app's
   emoji font where the system has none — the browser), a grid of the app's icons (Lucide, written
-  `LiBookOpen`), "Usuń ikonę".
+  `LiBookOpen`), "Remove icon".
 * **The cover dialog** (`qml/content/ContentPageCoverDialog.qml`): the notebook's pictures as
-  thumbnails with a search by name (`Workspace.pictureAttachments`), "Z pliku…" (stored in the
+  thumbnails with a search by name (`Workspace.pictureAttachments`), "From file…" (stored in the
   attachments folder like an inserted picture: `Workspace.importAttachment`), an address of a
-  picture from the internet ("Użyj adresu"), "Usuń okładkę".
+  picture from the internet ("Use address"), "Remove cover".
 * **In the header** (`ContentPageHeader`): the icon before the title, at the title's size (a page
   starting with its own "# Title" has it on a row of its own above the chips); the cover as a band
   above everything (180 px, 112 on phones and in the side panel), the picture filling its width,
   `banner_y` choosing the part shown. Its buttons (on hover with a mouse, always on touch UIs):
-  "Przesuń" — then a drag moves the picture up or down, "Zapisz położenie" writes `banner_y`,
-  "Anuluj" — and "Zmień okładkę". A cover from the internet goes the web-picture way (docs/SYNTAX.md
-  §2): "Okładka z <site>" and "Pokaż" until the user allows it (or the device setting does), a
-  spinner, the reason it failed with "Spróbuj ponownie"; QML never loads it from the network. A file
-  that is not in the notebook is named ("Nie ma obrazu „…” w notatniku").
+  "Reposition" — then a drag moves the picture up or down, "Save position" writes `banner_y`,
+  "Cancel" — and "Change cover". A cover from the internet goes the web-picture way (docs/SYNTAX.md
+  §2): "Cover from <site>" and "Show" until the user allows it (or the device setting does), a
+  spinner, the reason it failed with "Try again"; QML never loads it from the network. A file
+  that is not in the notebook is named ("No picture “…” in the notebook").
 * **In lists**: the sidebar's tree (in place of the file icon), favourites (of the star), recent
   pages (of the clock), All pages, the quick switcher (`Workspace.switcherPages`: `icon` / `emoji`),
   as `BPageIcon` / `BListItem.iconEmoji`.
@@ -2967,17 +2971,17 @@ mode its own edits, and what was typed there once the source is left); the lists
 
 ## Note modes: outline and document
 
-Every page and daily note has a mode — docs/SYNTAX.md §4 "Tryb notatki": the frontmatter key
+Every page and daily note has a mode — docs/SYNTAX.md §4 "Note mode": the frontmatter key
 `brulion: document | outline`, else the notebook's journal / page default and a content
 heuristic (`markdown::resolveNoteMode`). Both modes edit the same `BlockDocument` with the same
 inline editor; only the layout and a few keys differ. It is switched by the page header's toggle
-on a wide header (its icon shows the mode), the page menu "⋯" ("Przełącz na konspekt / dokument"
-— on phones and in the side panel the only place in the header), the top bar's Więcej and the
-palette ("Przełącz tryb notatki").
+on a wide header (its icon shows the mode), the page menu "⋯" ("Switch to outline / document"
+— on phones and in the side panel the only place in the header), the top bar's More and the
+palette ("Toggle note mode").
 
-* **Konspekt** (outline, like Logseq) — the block editor above: a bullet for every block, guide
+* **Outline** (like Logseq) — the block editor above: a bullet for every block, guide
   lines, folding, zoom into a bullet, Tab indents.
-* **Dokument** (document, like Obsidian's live preview) — the note reads as one continuous
+* **Document** (like Obsidian's live preview) — the note reads as one continuous
   formatted document: no bullets or guide lines for paragraphs and headings; headings large with
   document spacing (`BlockEditor.headingGapAbove`: 1.8 / 1.5 / 1.25 / 1.05 em above an H1 / H2 /
   H3 / smaller heading, `headingGapBelow` 0.6 em under every one — clearly closer to what follows,
@@ -3005,7 +3009,7 @@ Keys in document mode (the rest as in the block editor table):
 Source mode (Ctrl+E) is the same in both modes. A click below the last block adds an empty
 paragraph (outline: a list item); typing `- `, `1. ` or `- [ ] ` at the start of a paragraph
 makes it a list item, as in Markdown. On touch UIs the editing toolbar leads with the writing
-tools — a list button (paragraph ↔ list item), Zadanie, Link do strony, Tag, Polecenia — and
+tools — a list button (paragraph ↔ list item), Task, Link to page, Tag, Commands — and
 puts indent / outdent (list items only) and moving after them.
 
 How it is built: `PageController.mode` ("outline" | "document", with `modeSource`
@@ -3029,32 +3033,32 @@ Rendered text and the inline editor have the same line boxes (the rendered heigh
 whole fixed-height lines), so starting to edit moves nothing. A frontmatter that
 holds nothing but the mode key — one `brulion: …` line, blank lines aside (`noteModeOnly`) — is
 not shown: the header's toggle stands for it. A comment or any other text in it keeps the block
-visible. The "Właściwości" panel never lists the key.
+visible. The "Properties" panel never lists the key.
 
 Choosing and switching the mode:
 
-* **New page dialog** (`ShellNewPageDialog`, Ctrl+N, and `ContentNewPageDialog` in "Wszystkie
-  strony", both with `ContentNoteModeChoice`): "Dokument (jak Obsidian)" / "Konspekt (jak
+* **New page dialog** (`ShellNewPageDialog`, Ctrl+N, and `ContentNewPageDialog` in "All
+  pages", both with `ContentNoteModeChoice`): "Document (like Obsidian)" / "Outline (like
   Logseq)", preselected from the last choice on this device (as long as the notebook's
   `pageMode` is still the one it was made under), else from `pageMode`. The key is written only when the choice differs from
   what the resolution gives for the initial content (`markdown::withNoteModeChoice`). Pages
   created from unresolved `[[links]]` and by the quick switcher's "create" take the default
   without asking.
 * **Switching**: a compact toggle in the page header next to the star (its icon shows the current
-  mode; tooltip "Tryb dokumentu" / "Tryb konspektu"), the page menu item "Przełącz na dokument" /
-  "Przełącz na konspekt" and the command palette's "Przełącz tryb notatki" (in the journal stream:
+  mode; tooltip "Document mode" / "Outline mode"), the page menu item "Switch to document" /
+  "Switch to outline" and the command palette's "Toggle note mode" (in the journal stream:
   the day being written in). A switch always writes the key (`markdown::setNoteModeKey`) and
   changes nothing else in the file; frontmatter that cannot be edited safely is left alone and a
   toast says so.
-* **Settings → Notatnik**: "Domyślny tryb nowych stron" and "Tryb dziennika" (both: Dokument |
-  Konspekt; defaults dokument and konspekt) — `pageMode` / `journalMode` in
+* **Settings → Notebook**: "Default mode of new pages" and "Journal mode" (both: Document |
+  Outline; defaults document and outline) — `pageMode` / `journalMode` in
   `.brulion/config.json`, synced.
-* **Settings → Notatnik, "Ustawienia z Obsidiana"** (only while the notebook has no
+* **Settings → Notebook, "Settings from Obsidian"** (only while the notebook has no
   `.brulion/config.json` and settings were taken from `.obsidian/`, `Vault::configAdoptedFromObsidian`
-  → `Workspace.configFromObsidian()`): the row above "Folder dziennika" lists the settings taken
-  (their row titles: Folder dziennika, Nazwy plików dziennika, Szablon dziennika, Folder szablonów,
-  Folder załączników) and says that changing any setting saves them to `.brulion/config.json`;
-  **Zapisz w notatniku** (`Workspace.saveAdoptedConfig()`) writes them at once (for the browser
+  → `Workspace.configFromObsidian()`): the row above "Journal folder" lists the settings taken
+  (their row titles: Journal folder, Journal file names, Journal template, Templates folder,
+  Attachments folder) and says that changing any setting saves them to `.brulion/config.json`;
+  **Save to notebook** (`Workspace.saveAdoptedConfig()`) writes them at once (for the browser
   with Nextcloud, which never sees `.obsidian/`). Problems with Obsidian's files (a date format
   without a Qt equivalent, attachments "next to the note") show in the warnings card at the end
   of the section, like those of config.json.
@@ -3069,112 +3073,111 @@ The user must always be able to tell what the sync is doing, whether something f
 why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 
 * **The Nextcloud account and the notebooks** (`qml/io/NextcloudForm.qml` over
-  `NextcloudSetup`, in the sync center and Settings → Synchronizacja): the server, the user and
+  `NextcloudSetup`, in the sync center and Settings → Sync): the server, the user and
   the app password are shared, the switch and the server folder belong to the open notebook (no
-  notebook open: nothing syncs). A notebook without a folder of its own is offered "Notatki"
+  notebook open: nothing syncs). A notebook without a folder of its own is offered "Notatki" (Notes)
   for the first account on the device, else its own name ("Praca", "Praca 2" when taken —
   never a folder another notebook has, holds or is inside); one synced before keeps the folder
   its sync bookkeeping names. A folder another notebook on the device syncs with (its folder
-  exists, its switch is on) is an error under the field at once ("Notatnik „Dom” synchronizuje
-  się już z tym folderem…") and is not saved while sync is on. Two notebooks that 0.3.1–0.3.5
+  exists, its switch is on) is an error under the field at once ("The notebook “Dom” already
+  syncs with this folder…") and is not saved while sync is on. Two notebooks that 0.3.1–0.3.5
   left on one folder (or one inside the other) sync nothing while that lasts — no automatic
-  sync and no "Synchronizuj teraz" (it only says why: one click would mix the two notebooks for
-  good, and choosing another folder is one step away): the status ("Synchronizacja wstrzymana:
-  notatnik „Dom” na tym urządzeniu synchronizuje się z tym samym folderem…") stays in the sync
+  sync and no "Sync now" (it only says why: one click would mix the two notebooks for
+  good, and choosing another folder is one step away): the status ("Not syncing: the notebook
+  “Dom” on this device syncs with the same server folder…") stays in the sync
   footer and the sync center (red, error code `folder-shared`), the event log says it once per
-  notebook opened and folder, a toast too, and the overview's Nextcloud card offers „Wybierz
-  inny folder” (the Nextcloud tab, whose form shows the error under the folder). "Wyloguj"
+  notebook opened and folder, a toast too, and the overview's Nextcloud card offers "Choose
+  another folder" (the Nextcloud tab, whose form shows the error under the folder). "Sign out"
   switches sync off in every notebook (the dialog says so), saving another server or user in all
   the others. The switch and folder of 0.3.0 and older go to the notebook they belong to
   (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
-  no timer while idle): the phase in words ("Sprawdzanie plików na serwerze…", "Wysyłanie i
-  pobieranie zmian"), "folder 12 z ok. 40" / "sprawdzono 120 z 3125 plików · zmiany: 3", a bar
-  (indeterminate until the files are known), "Trwa 1 min 20 s · 1,4 MB · po zmianie notatki ·
-  #42", the files in flight ("Teraz: …") and "Zatrzymaj". When nothing arrives for 20 s an amber
-  box says "Serwer nie odpowiada od 25 s…" with what Brulion waits for; after 180 s the run is
+  no timer while idle): the phase in words ("Checking files on the server…", "Sending and
+  downloading changes"), "folder 12 of about 40" / "120 of 3125 files checked · changes: 3", a bar
+  (indeterminate until the files are known), "Running for 1 min 20 s · 1.4 MB · after an edit ·
+  #42", the files in flight ("Now: …") and "Stop". When nothing arrives for 20 s an amber
+  box says "The server has not answered for 25 s…" with what Brulion waits for; after 180 s the run is
   stopped and retried — the panel never says "syncing" forever. `Workspace.sync.statusText`
   (sidebar footer, settings) follows the phases at the same pace.
 * **Conflict copies of drawings** (`SyncConflictResolver.qml` over `ConflictResolver`, list
   entries `drawing`: the copy or the original is a drawing — an SVG with an Excalidraw scene,
   `*.excalidraw.md`, `.excalidraw` —, a pen icon in the list): never the text merge (a line merge
-  would cut the scene's payload). A card "Dwie wersje rysunku" with read-only previews
+  would cut the scene's payload). A card "Two versions of a drawing" with read-only previews
   (`DrawingCanvas { interactive: false }`: the whole drawing in view, centred both ways, no
   input, the app's theme;
   a drawing Brulion does not draw as its picture, `Workspace.drawingUrl`) of this device's
-  version, the copy and — when both are drawings Brulion edits, of one format — "Po scaleniu",
-  the elements of each ("3 elementy") and "wspólne: 2, tylko tutaj: 1, tylko w kopii: 1"; on
-  phones two previews in a row and the merge below, in a scrolling area. **Scal rysunki**
+  version, the copy and — when both are drawings Brulion edits, of one format — "After merging",
+  the elements of each ("3 elements") and "2 in both, 1 only here, 1 only in the copy"; on
+  phones two previews in a row and the merge below, in a scrolling area. **Merge drawings**
   writes the union (core `drawing::merge` with no common version: Syncthing keeps none — the
   original's elements, order, paper and Markdown around the scene, plus the copy's other
   elements on top; for an element both have the higher version, a tie the original's) into the
   drawing (`WorkspaceSync.resolveConflictBytes`: its previous version in History, unthrottled)
   and moves the copy to the trash. Elements erased on one device only come back (the card says
-  so). Same elements (another program wrote the picture) → "Kopia ma ten sam rysunek"; the copy
-  contained in the drawing → "Wszystko z kopii jest już w rysunku" ("Usuń kopię"). A drawing
-  Brulion cannot merge (a frame, a picture without a scene, a broken one) gets only "Zachowaj
-  moją" / "Zachowaj kopię" (the copy's exact bytes, the replaced version in History). An
+  so). Same elements (another program wrote the picture) → "The copy has the same drawing"; the copy
+  contained in the drawing → "Everything in the copy is already in the drawing" ("Remove the copy"). A drawing
+  Brulion cannot merge (a frame, a picture without a scene, a broken one) gets only "Keep
+  mine" / "Keep the copy" (the copy's exact bytes, the replaced version in History). An
   Obsidian plugin file (`*.excalidraw.md`) is a note too: its Markdown around the scene
   (frontmatter, the back of the card, element links, embedded files, text entries) counts
   (`drawing::keepsMarkdownOf`: the copy's must survive in the original's — text entries follow
-  their elements). When the copy's notes would be lost, nothing is "the same" or "older": "Scal
-  rysunki" (the card says so) merges the elements into the drawing and **keeps the copy**
+  their elements). When the copy's notes would be lost, nothing is "the same" or "older": "Merge
+  drawings" (the card says so) merges the elements into the drawing and **keeps the copy**
   (`ConflictResolver.updated`, a toast, the resolver stays open); then — or when the copy adds
   nothing to the drawing at all, a merge would leave it as it is (the copy's own paper, an element
-  edited by hand: never taken) — a card "Różnią się tylko notatki wokół rysunku" with a
+  edited by hand: never taken) — a card "Only the notes around the drawing differ" with a
   `BDiffView` of both files' Markdown (the scene's block left empty, `oursNotes`/`theirsNotes`)
-  and "Usuń kopię" once the user carried over what they need in Obsidian. The replaced version
+  and "Remove the copy" once the user carried over what they need in Obsidian. The replaced version
   goes to History whatever its size (`writeBytesKeepingHistory` records it from the disk: the
   vault snapshots only the content it holds in memory, up to 16 MB; nothing is written when it
   cannot be recorded). A decision made on versions that changed meanwhile is refused and shown
-  again. Desktop: "Otwórz rysunek" in the header. Tests: `tst_appio_conflicts`;
+  again. Desktop: "Open the drawing" in the header. Tests: `tst_appio_conflicts`;
   `tests/app/io/syncthing-conflict.sh` (no ctest, needs `syncthing`: two Syncthing instances on
   127.0.0.1 change an SVG and an Obsidian drawing while paused, their own conflict copies merged by
   `realSyncthingConflicts` on both devices' folders). Nextcloud's own sync merges a drawing changed on both devices by itself, against
   the version both had last (`drawing::mergeDrawingFiles`); only drawings it cannot merge so
   become such copies.
-* **Retry and decisions:** a failed run shows "Kolejna próba za 25 s" (a countdown) with
-  "Spróbuj teraz"; held-back deletions and conflicts are "Czeka na Twoją decyzję" / "Konflikt w
-  … — scal wersje" (the deletion guard and the conflict list stay as before). Moving or renaming
+* **Retry and decisions:** a failed run shows "Next attempt in 25 s" (a countdown) with
+  "Try now"; held-back deletions and conflicts are "Waiting for your decision" / "Conflict in
+  … — merge the versions" (the deletion guard and the conflict list stay as before). Moving or renaming
   folders and pages never asks: content that arrives under a new path in the same run is a move,
   not a deletion (`SyncEngine`, docs/ARCHITECTURE.md "Sync guards").
 * **Folders** (Nextcloud): empty folders travel both ways, an emptied folder deleted on one side
   goes on the other, a folder or page renamed in the app is moved on the server (one MOVE), and
   one renamed on the server is renamed here too. The status card, the history row ("1
-  przeniesiony folder", "2 przeniesione pliki", "2 nowe foldery") and the run's details
-  ("Foldery: 2 nowe, 1 usunięty, 1 przeniesiony na serwerze, 1 przeniesiony tutaj";
-  `WorkspaceSync.folderCountsText`, and "Pliki: 3 przeniesione na serwerze, 1 przeniesiony
-  tutaj"; `WorkspaceSync.fileMovesText`) name them; folders a run created or removed here reach the
+  folder moved", "2 files moved", "2 new folders") and the run's details
+  ("Folders: 2 new, 1 deleted, 1 moved on the server, 1 moved here";
+  `WorkspaceSync.folderCountsText`, and "Files: 3 moved on the server, 1 moved
+  here"; `WorkspaceSync.fileMovesText`) name them; folders a run created or removed here reach the
   tree at once (`WorkspaceSync.foldersChanged` -> `Workspace.notifyFolderChange`: folders make no
   Vault change of their own), a folder the run renamed here as the server had renamed it follows
   in the tree and the routes (`WorkspaceSync.folderMovedHere` -> `Workspace.folderRenamed`), and
   a folder the user creates, deletes or renames starts a sync after the debounce like an edit
   (`WorkspaceSync.notifyLocalChange`).
-* **History** (`SyncHistoryList.qml`, card "Historia synchronizacji"): the last runs (20 kept,
-  5 shown, "Pokaż wszystkie"), quiet ones folded ("Bez zmian ×3, 09:25–09:55"); each row: the
-  result in words with a coloured icon (never colour alone), when, why ("ręcznie", "po zmianie
-  notatki", "ponowna próba", …), what moved and how long. "Ostatnio: … · Szczegóły" under the
+* **History** (`SyncHistoryList.qml`, card "Sync history"): the last runs (20 kept,
+  5 shown, "Show all"), quiet ones folded ("No changes ×3, 09:25–09:55"); each row: the
+  result in words with a coloured icon (never colour alone), when, why ("by hand", "after an
+  edit", "retry", …), what moved and how long. "Last run: … · Details" under the
   status. A row opens **`SyncRunDetails.qml`** (a dialog; bottom sheet on phones): the result
-  with its explanation, code and technical message, "Na co poszedł czas" (a bar of the phases
+  with its explanation, code and technical message, "Where the time went" (a bar of the phases
   plus a list for screen readers), the changes, the requests to the server (count, average,
   bytes, protocol, timeouts, the slowest), the files that failed with a Polish explanation per
-  code, conflicts ("Scal"), "Pokaż w rejestrze" (the log at the run's time) and "Kopiuj
-  szczegóły".
-* **Rejestr zdarzeń** (`qml/diag/LogsView.qml`, route `logs`; from Settings → Aplikacja (with a
-  warning count) and Synchronizacja, the sync center, the palette — "rejestr", "logi",
-  "diagnostyka"): a search field (case and diacritics ignored), area chips (Wszystko,
-  Synchronizacja, Sieć, Notatnik, Indeks, Przypomnienia, Import i eksport, Aplikacja, System),
-  the level (Wszystkie / Ostrzeżenia i błędy / Tylko błędy), chips for a run's time window and
+  code, conflicts ("Merge"), "Show in the event log" (the log at the run's time) and "Copy
+  details".
+* **Event log** (`qml/diag/LogsView.qml`, route `logs`; from Settings → Application (with a
+  warning count) and Sync, the sync center, the palette — also found by "event", "logs",
+  "diagnostics"): a search field (case and diacritics ignored), area chips (All, Sync, Network, Notebook, Index, Reminders, Import and export,
+  Application, System), the level (All / Warnings and errors / Errors), chips for a run's time window and
   for the detailed mode; the list (`LogRow`: time, level icon + letter, area, the message as
   plain text, "×37" for repeats; warnings and errors tinted; day headers; earlier runs of the
-  app included, "Ukryj wcześniejsze uruchomienia") follows new entries at the end, otherwise a
-  "Nowe wpisy (n)" button appears; long press / right click copies a line. Actions: Kopiuj
-  (what is shown, with the header; ≤ 256 KB), Udostępnij (Android share sheet), Zapisz w
-  Pobranych (Android), Zapisz jako… (desktop, Android SAF), Pobierz (browser), Otwórz folder
-  (desktop), Szczegółowy rejestr, Wyczyść… (confirmed). The footer: the detailed switch and what
+  app included, "Hide earlier runs of the app") follows new entries at the end, otherwise a
+  "New entries (n)" button appears; long press / right click copies a line. Actions: Copy
+  (what is shown, with the header; ≤ 256 KB), Share (Android share sheet), Save to
+  Downloads (Android), Save as… (desktop, Android SAF), Download (browser), Open folder
+  (desktop), Detailed log, Clear… (confirmed). The footer: the detailed switch and what
   the log contains (no passwords or tokens; note names and the server may appear; it never
-  leaves the device unless shared). Phones: the meta data above each message, Kopiuj in the
+  leaves the device unless shared). Phones: the meta data above each message, Copy in the
   menu.
 * An export starts with a translated header: version, device, Qt, time and detail level, what
   it contains and what it never contains, and the last five sync runs.
@@ -3204,12 +3207,12 @@ inner ring's twelve hours sit closer together, so they are sized first and the o
 room left between the rings — so none overlap, down to the dialog's 180 px dial and with larger
 text; the outer numbers keep the small text size, the inner ones get a smaller font only where two
 digits would not fit), `BReminderDialog` (date/time, alarm switch, recurrence picker,
-quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00),
+quick picks: in 10 min, in an hour, today 19:00, tomorrow 8:00, Monday 9:00),
 `BColorSwatch` (a round colour button: selection ring and check mark, tooltip),
 `BAccentDialog` (a custom accent: colour grid, `#rrggbb` field, live preview of what
 `ThemePalette` makes of it), `BFontPickerDialog` (installed font families with fuzzy search, each
 row in its own font, the default first), `BDiffView`,
-`BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BRichText` (rendered note text
+`BMergeView` (per-conflict choice: Mine / Theirs / Both / Manual), `BRichText` (rendered note text
 outside the editor's blocks: rounded tags, cut after `maximumLineCount` lines with "…"),
 `BLinkPreview` with the singleton `LinkPreviews` (the hover preview of links, "The block editor"), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher` (floating on wide windows: one-line rows, a subtitle such as a page's folder after
@@ -3282,8 +3285,8 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   (`ShellSettingRow.stacked`: the title, a gap and the controls' natural widths —
   `naturalWidth` of `BSegmented` and `BButton`, which `fill` never changes — wider than the row,
   the text left under 40 % of it, or a wrapping group such as the accent swatches, or a text
-  field); each row decides alone (at 412 px Jasne tło, Ciemne tło and Czcionka interfejsu stay
-  beside their text, Motyw, Rozmiar tekstu and the swatches go under it; at 360 px Ciemne tło
+  field); each row decides alone (at 412 px Light background, Dark background and Interface font stay
+  beside their text, Theme, Text size and the swatches go under it; at 360 px Dark background
   goes under too; a long translation stacks by itself). Under its text a control fills the row:
   a segmented control (its segments as even as their labels allow: the narrow ones share one
   width, none is cut) and a lone framed button (one beside a badge or another button, and a text
@@ -3359,7 +3362,7 @@ FilePicker {
     fileMode: FilePicker.SaveFile          // OpenFile, OpenFiles, OpenFolder, SaveFile
     title: qsTr("Save the export")
     nameFilters: [qsTr("ZIP archives (*.zip)"), qsTr("All files (*)")]
-    defaultSuffix: "zip"                   // SaveFile: "Notatka" → "Notatka.zip"
+    defaultSuffix: "zip"                   // SaveFile: "Note" → "Note.zip"
     currentFolder: exporter.defaultSaveFolder
     dark: Theme.dark                       // the fallback dialog's colours:
     colors: Theme.colors                   //   the mode and Brulion's palette
@@ -3659,15 +3662,16 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, `mermaid` (a drawn flowchart and an unsupported type), `mermaid-editing`, `chart` (a bar chart of the sample's table and a pie of its calc block), `chart-filter` (the table's filter row with `> 40` typed), …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs, a block put at the start of a page by a real Enter or Alt+Up, undone with real Ctrl+Z and redone with Ctrl+Shift+Z, Enter at the end of a zoomed paragraph ending the zoom with the new block edited and in view, Ctrl+Z zooming back in, Ctrl+Shift+Z out again, the breadcrumb's arrow clicked while a child of a folded zoom root is edited), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar; a table cell's too), a finger's long press on text selecting the block (no menu), each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "Więcej" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox (the result's and the embed's menu staying open while their note changes elsewhere, the status written on the task's line now), Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `taskclock` — the task menu's timer (Uruchom / Zatrzymaj licznik czasu: the `:LOGBOOK:` CLOCK line written and closed, the "⏱ od 10:00" chip, undo) and "Dodaj zależność…" (the picker, a search without diacritics, 🆔 / ⛔ written, the ⛔ chip showing the task waited for) with real right-clicks / long presses (ctest `tst_editor_qml_taskclock`, `_touch`), `selectiontest` — selecting and copying blocks with real input (`qml/dev/SelectionSelfTest.qml`): Esc and Shift+↓ then Ctrl+C, Shift+↑ / Shift+↓ from an edited block, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, the toast's Cofnij (clicked; one whose deletion was undone already undoes nothing), Alt+↓ and Tab on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu (its Kopiuj; its "Zakreśl…" — Czerwony highlighting the selection as `<mark style="background: #FF5582A6;">`, the text still selected, one undo step), the block menu of a selected and another block, the floating tools, a mouse drag over a document's paragraphs (no scrolling) and to the view's edge (autoscroll), the band after scrolling away, the floating tools' Więcej (no indents for a document's paragraphs); with `--touch` a long press, taps, the end grip, Usuń and a tap on the toast's Cofnij, a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz" — the clipboard read back (ctest `tst_editor_qml_selection`, `_touch`), `tabletest` — a table's rows and columns with real input (`qml/dev/TableSelfTest.qml`): the cell's Wiersz and Kolumna from a right-click, also on the cell being edited, and the toolbar's Więcej (none in a block menu not from a cell), a new cell edited with the keys once the menu is gone, Alt+arrows and Ctrl+Enter in a cell (not the app's Back and Forward), the header's disabled items, the alignment's tick, deleting, formulas following, `REF!`, sorting from the header (the summary row staying, the rows' lines kept, rows already in order writing nothing), the filter row (`> 40` typed hides a row, nothing written, "Wyczyść filtry"), "Kopiuj jako CSV" read back from the clipboard, a ```` ```chart ```` of the table following a changed cell, undo back to the same bytes (ctest `tst_editor_qml_table`, `_touch`), states `date-menu`, `date-menu-reminder` (a 📅 / ⏰ chip's menu), `recurrence-menu` (a 🔁 rule's), `link-menu` (a #tag's), `datechips` — the token menus with real input (`qml/dev/DateChipSelfTest.qml`): a right-click / long press on a 📅 and a ⏰ chip (no block menu, nothing selected or toggled), Dzień później, Dziś, Zmień datę… (the dialog on the chip's date, a date and time written), Usuń datę, Godzinę później, Alarm, the reminder dialog, each undone; a plain click / tap on the chip still edits; a priority set lower, a 🔁 rule set to Codziennie, the reminder's Priorytet submenu, a `[[day]]` link a day later (each undone), the link menus of a `#tag` and a `[[link]]` (Kopiuj read back from the clipboard) (ctest `tst_editor_qml_datechips`, `_touch`), `linkpartstest` — the path parts of `[[Firma/Adam cośtam]]` with real input (`qml/dev/LinkPartsSelfTest.qml`): the mouse over a part underlining it alone, over the separator nothing; clicks on a part (its route), the page and the separator (editing, the raw line unchanged); a display-text link staying one; the menus of a folder's part (Pokaż folder, Kopiuj ścieżkę folderu read back) and a page's part (Kopiuj link `[[Firma]]`); parts in a table cell, a property, an embed and a query result; Alt+Enter (a part, the page, Alt+Shift+Enter, nothing outside a link, a table cell's field); a simulated screen reader's link items (named, over their links, the press action, the focus ring); with `--touch` the press underline and a flick opening nothing (ctest `tst_editor_qml_linkparts`, `_touch`), states `linkparts` (a part hovered: underlined) and `linkparts-menu` (a folder part's menu), `propstest` — the page properties panel with real input (`qml/dev/PropertiesSelfTest.qml`; "Page properties"; the key suggestions following their field when it moves) (ctest `tst_editor_qml_properties`, `_touch`), states `properties`, `properties-phone` (the panel expanded on a page with every type), `refreshtest` — views following what they depend on (`qml/dev/RefreshSelfTest.qml`): a query's results replaced by as many rows of another height, an embedded section changed in its own note, a date picker's today marker after midnight, the reminder dialog's weekday names, rule and date picker after a language change, a calculation's results after the window narrowed until the text wraps again (the width depends on the fonts), the view staying down the page when the page's header changes its height (ctest `tst_editor_qml_refresh`, `_touch`); states `selection` (a range; desktop: the floating tools, `--touch`: the docked tools and grips), `selection-document`, `selection-menu` (the block menu of a selected block), `text-menu` (the edited text's menu), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
-| `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding (without the intro) |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, `mermaid` (a drawn flowchart and an unsupported type), `mermaid-editing`, `chart` (a bar chart of the sample's table and a pie of its calc block), `chart-filter` (the table's filter row with `> 40` typed), …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs, a block put at the start of a page by a real Enter or Alt+Up, undone with real Ctrl+Z and redone with Ctrl+Shift+Z, Enter at the end of a zoomed paragraph ending the zoom with the new block edited and in view, Ctrl+Z zooming back in, Ctrl+Shift+Z out again, the breadcrumb's arrow clicked while a child of a folded zoom root is edited), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "More" (above the bar; a table cell's too), a finger's long press on text selecting the block (no menu), each "Copy link" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "More" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox (the result's and the embed's menu staying open while their note changes elsewhere, the status written on the task's line now), Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `taskclock` — the task menu's timer (Start timer / Stop timer: the `:LOGBOOK:` CLOCK line written and closed, the "⏱ from 10:00" chip, undo) and "Add dependency…" (the picker, a search without diacritics, 🆔 / ⛔ written, the ⛔ chip showing the task waited for) with real right-clicks / long presses (ctest `tst_editor_qml_taskclock`, `_touch`), `selectiontest` — selecting and copying blocks with real input (`qml/dev/SelectionSelfTest.qml`): Esc and Shift+↓ then Ctrl+C, Shift+↑ / Shift+↓ from an edited block, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, the toast's Undo (clicked; one whose deletion was undone already undoes nothing), Alt+↓ and Tab on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu (its Copy; its "Highlight…" — Red highlighting the selection as `<mark style="background: #FF5582A6;">`, the text still selected, one undo step), the block menu of a selected and another block, the floating tools, a mouse drag over a document's paragraphs (no scrolling) and to the view's edge (autoscroll), the band after scrolling away, the floating tools' More (no indents for a document's paragraphs); with `--touch` a long press, taps, the end grip, Delete and a tap on the toast's Undo, a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Select" — the clipboard read back (ctest `tst_editor_qml_selection`, `_touch`), `tabletest` — a table's rows and columns with real input (`qml/dev/TableSelfTest.qml`): the cell's Row and Column from a right-click, also on the cell being edited, and the toolbar's More (none in a block menu not from a cell), a new cell edited with the keys once the menu is gone, Alt+arrows and Ctrl+Enter in a cell (not the app's Back and Forward), the header's disabled items, the alignment's tick, deleting, formulas following, `REF!`, sorting from the header (the summary row staying, the rows' lines kept, rows already in order writing nothing), the filter row (`> 40` typed hides a row, nothing written, "Clear filters"), "Copy as CSV" read back from the clipboard, a ```` ```chart ```` of the table following a changed cell, undo back to the same bytes (ctest `tst_editor_qml_table`, `_touch`), states `date-menu`, `date-menu-reminder` (a 📅 / ⏰ chip's menu), `recurrence-menu` (a 🔁 rule's), `link-menu` (a #tag's), `datechips` — the token menus with real input (`qml/dev/DateChipSelfTest.qml`): a right-click / long press on a 📅 and a ⏰ chip (no block menu, nothing selected or toggled), A day later, Today, Change date… (the dialog on the chip's date, a date and time written), Remove date, An hour later, Alarm, the reminder dialog, each undone; a plain click / tap on the chip still edits; a priority set lower, a 🔁 rule set to Daily, the reminder's Priority submenu, a `[[day]]` link a day later (each undone), the link menus of a `#tag` and a `[[link]]` (Copy read back from the clipboard) (ctest `tst_editor_qml_datechips`, `_touch`), `linkpartstest` — the path parts of `[[Firma/Adam cośtam]]` with real input (`qml/dev/LinkPartsSelfTest.qml`): the mouse over a part underlining it alone, over the separator nothing; clicks on a part (its route), the page and the separator (editing, the raw line unchanged); a display-text link staying one; the menus of a folder's part (Show folder, Copy folder path read back) and a page's part (Copy link `[[Firma]]`); parts in a table cell, a property, an embed and a query result; Alt+Enter (a part, the page, Alt+Shift+Enter, nothing outside a link, a table cell's field); a simulated screen reader's link items (named, over their links, the press action, the focus ring); with `--touch` the press underline and a flick opening nothing (ctest `tst_editor_qml_linkparts`, `_touch`), states `linkparts` (a part hovered: underlined) and `linkparts-menu` (a folder part's menu), `propstest` — the page properties panel with real input (`qml/dev/PropertiesSelfTest.qml`; "Page properties"; the key suggestions following their field when it moves) (ctest `tst_editor_qml_properties`, `_touch`), states `properties`, `properties-phone` (the panel expanded on a page with every type), `refreshtest` — views following what they depend on (`qml/dev/RefreshSelfTest.qml`): a query's results replaced by as many rows of another height, an embedded section changed in its own note, a date picker's today marker after midnight, the reminder dialog's weekday names, rule and date picker after a language change, a calculation's results after the window narrowed until the text wraps again (the width depends on the fonts), the view staying down the page when the page's header changes its height (ctest `tst_editor_qml_refresh`, `_touch`); states `selection` (a range; desktop: the floating tools, `--touch`: the docked tools and grips), `selection-document`, `selection-menu` (the block menu of a selected block), `text-menu` (the edited text's menu), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
+| `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook of the UI language (in `--vault`, else "Sample notebook", with the Polish UI "Przykładowy brulion") / open this folder / start on onboarding (without the intro) |
+| `--sample-language pl\|en` | the language of the sample and documentation notebooks for this run (default: the UI language, `--locale` included) — e.g. the English UI with the Polish sample notes a self-test is written against (`tst_shell_qml_capture`) |
 | `--intro` | start on the intro (`IntroView`), also on a device that finished it |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--share <json>` | receive a share as Android's `ShareActivity` hands it over — `{"subject", "text", "url", "files": [{"path", "name", "mime"}]}` (`src/core/notebook/share.h`) — and open the share dialog once the notebook is ready (`AppController::receiveShare`; screenshots, manual checks, ctest `tst_shell_share`) |
 | `--share-query <query>` | the browser version's share target: `share-title=…&share-text=…&share-url=…` as `wasm/index.html` passes a share launch's parameters (`notebook::sharedContentFromQuery`, `AppController::receiveShareQuery`); works on every platform (ctest `tst_shell_share`) |
-| `--open <file>…` | the files to offer in the share dialog ("Otwórz za pomocą": the desktop entry's `Exec=brulion --open %F`, the Windows installer's `"…\brulion.exe" --open "%1"`): every argument after it is a file — paths relative to the working folder or `file://` URLs —, never an option, the options are the arguments before it (`notebook::splitOpenArguments`); a file of the open notebook opens as its page; copies are saved, the files are never changed; without files a plain start. A second launch sends them to the running Brulion (`share`, ipc/appmessage.h) |
+| `--open <file>…` | the files to offer in the share dialog ("Open with": the desktop entry's `Exec=brulion --open %F`, the Windows installer's `"…\brulion.exe" --open "%1"`): every argument after it is a file — paths relative to the working folder or `file://` URLs —, never an option, the options are the arguments before it (`notebook::splitOpenArguments`); a file of the open notebook opens as its page; copies are saved, the files are never changed; without files a plain start. A second launch sends them to the running Brulion (`share`, ipc/appmessage.h) |
 | `--update-available <version>` | show the message about a new version as if `<version>` were the latest release, on any platform, without asking GitHub; for this run only (the `update` screenshot) |
-| `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher` (the query as if typed, the caret after it), `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer`, `more` (the top bar's “Więcej” menu) |
+| `--popup <name[:query]>` | open a shell popup once the notebook is open and indexed (at most 3 s later without one): `palette`, `switcher` (the query as if typed, the caret after it), `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer`, `more` (the top bar's "More" menu) |
 | `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, `properties` — the page's properties panel expanded, nothing focused, the view at the top: the `ui` benchmark's screen —, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit; with `--popup` also once that popup has opened — its enter transition over, so a shot never catches it half faded in (`DevTools.holdScreenshot`; at most 5 s longer, then with a warning) |
 | `--dump-layout <file>` | with `--screenshot`: write what the window shows (texts with colours and fonts, targets, boxes, theme tokens) as JSON for the UI benchmark (`src/app/ui/layoutdump.h`), from the same frame |
@@ -3675,13 +3679,13 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--accent <name\|#rrggbb>`, `--surface paper\|white\|slate\|black`, `--density compact\|comfortable` | the appearance settings for this run (screenshots; the settings themselves stay): accent preset or custom colour, light or dark background, density |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, the command palette's and quick switcher's rows (one line high while floating, a subtitle beside the title; two lines on a phone), and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag overview's "#" in its header — the page menu's "Zadania z tym tagiem" opening Tasks filtered by the tag, no row of buttons under the title, a tag's sub-tags as chips there —, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); PDFs ("PDF viewer": a note's thumbnail drawn on a white page, a tap / click opens the viewer without loading the PDF into the editor, "Strona 1 z 3", Ctrl+G 3 Enter, Home, PageDown, Ctrl++ zooming with sideways panning, Ctrl+0, a pinch — `--touch` — or Ctrl+wheel, a double tap both ways, Ctrl+F "gesla" finding "gęślą" with a highlight, Esc closing the search and then the viewer, the note's link with `#page=3`, "Rysuj na tej stronie" on page 2 — the drawing's backdrop is page 2, embedded right after the PDF's block, Back returns to the viewer on page 2, the second time the drawing is offered and opened, no second file —, Więcej → "Otwórz w innej aplikacji" through a recording hook, a locked PDF from `tests/data/pdf` — `BRULION_SELFTEST_PDF_DIR` —, a ZIP read-only; a build without a renderer: the chip, its click hands the file over, the viewer's message); a drawing (a tap / click on its embed opens the drawing editor, a stroke drawn with a finger — `--touch` — or the mouse is saved by itself with its undo kept, Cofnij / Ctrl+Z is saved too, the page's embed shows the drawing saved again; a text being written low on the paper stays on it when the window shrinks — a browser's keyboard); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Wygląd (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Przywróć domyślny wygląd"; Edytor → Czcionka → "Inna…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead); the share dialog ("Udostępnij → Brulion": shared text saved to today's journal by a real tap / click on "Zapisz" without a reminder, a shared `.md` saved as a new page titled after it byte for byte and its copy removed, a file opened with Brulion from outside the notebook — the "to save in the notebook" subtitle and the copy hint, saved as a page byte for byte, the file itself left unchanged —, Escape dropping a share); tabs ("Tabs, split view and windows": Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1 / Ctrl+9 and Ctrl+W with real keys, each tab's own history, a middle click and a Ctrl+click on a sidebar page, a middle click on a link and the link menu's "Otwórz w nowej karcie", a tab dragged in the bar, a tab back where its page was scrolled, no editor for a tab not shown, the split view — a click focuses a pane, Ctrl+W closes it —, a page window seeing the main window's edit; `--touch`: no bar, the top bar's tab switcher, the back key in a tab); find over the journal stream's days (the count over every day with "· 2 dni", Enter going on to another day with a match — scrolled to and written in, the keyboard kept in the field —, Shift+Enter back, nothing written); weekly and monthly notes (this week's note opened by `AppController.openPeriodicNote` without writing it, its period under the title, the next week's arrow, a week number of the calendar's month grid and the month's title opening those notes); a page's icon and cover (the page menu's "Dodaj ikonę…", an emoji picked in the icon dialog written as `icon` — that line only — and shown before the title and, on a desktop, in the sidebar's tree; "Dodaj okładkę…" taking a picture of the notebook, written as `banner` and shown as the band at the top; both removed from their dialogs, the file as it was) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
-| `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, the command palette's and quick switcher's rows (one line high while floating, a subtitle beside the title; two lines on a phone), and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Open", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Copy block reference" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag overview's "#" in its header — the page menu's "Tasks with this tag" opening Tasks filtered by the tag, no row of buttons under the title, a tag's sub-tags as chips there —, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filter by tag", its "Open tag page" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "A day later" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's More menu there, the same picture embedded in a note); PDFs ("PDF viewer": a note's thumbnail drawn on a white page, a tap / click opens the viewer without loading the PDF into the editor, "Page 1 of 3", Ctrl+G 3 Enter, Home, PageDown, Ctrl++ zooming with sideways panning, Ctrl+0, a pinch — `--touch` — or Ctrl+wheel, a double tap both ways, Ctrl+F "gesla" finding "gęślą" with a highlight, Esc closing the search and then the viewer, the note's link with `#page=3`, "Draw on this page" on page 2 — the drawing's backdrop is page 2, embedded right after the PDF's block, Back returns to the viewer on page 2, the second time the drawing is offered and opened, no second file —, More → "Open in another app" through a recording hook, a locked PDF from `tests/data/pdf` — `BRULION_SELFTEST_PDF_DIR` —, a ZIP read-only; a build without a renderer: the chip, its click hands the file over, the viewer's message); a drawing (a tap / click on its embed opens the drawing editor, a stroke drawn with a finger — `--touch` — or the mouse is saved by itself with its undo kept, Undo / Ctrl+Z is saved too, the page's embed shows the drawing saved again; a text being written low on the paper stays on it when the window shrinks — a browser's keyboard); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Show in the event log"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Move to…" moving a page with the dialog, a root folder from the "Pages" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Appearance (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Restore the default look"; Editor → Font → "Other…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead); the share dialog ("Share → Brulion": shared text saved to today's journal by a real tap / click on "Save" without a reminder, a shared `.md` saved as a new page titled after it byte for byte and its copy removed, a file opened with Brulion from outside the notebook — the "to save in the notebook" subtitle and the copy hint, saved as a page byte for byte, the file itself left unchanged —, Escape dropping a share); tabs ("Tabs, split view and windows": Ctrl+T, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1 / Ctrl+9 and Ctrl+W with real keys, each tab's own history, a middle click and a Ctrl+click on a sidebar page, a middle click on a link and the link menu's "Open in new tab", a tab dragged in the bar, a tab back where its page was scrolled, no editor for a tab not shown, the split view — a click focuses a pane, Ctrl+W closes it —, a page window seeing the main window's edit; `--touch`: no bar, the top bar's tab switcher, the back key in a tab); find over the journal stream's days (the count over every day with "· 2 days", Enter going on to another day with a match — scrolled to and written in, the keyboard kept in the field —, Shift+Enter back, nothing written); weekly and monthly notes (this week's note opened by `AppController.openPeriodicNote` without writing it, its period under the title, the next week's arrow, a week number of the calendar's month grid and the month's title opening those notes); a page's icon and cover (the page menu's "Add icon…", an emoji picked in the icon dialog written as `icon` — that line only — and shown before the title and, on a desktop, in the sidebar's tree; "Add cover…" taking a picture of the notebook, written as `banner` and shown as the band at the top; both removed from their dialogs, the file as it was) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, More) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-row-bar`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — or the thumb of the view's `BRowScrollBar` jumps (against the content, or while it stands still) — with `--probe-row-bar` also when the view has no such bar over it —, ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
 | `--hidden`, `--capture`, `--today`, `--no-single-instance` | start in the tray (Windows' start at sign-in; a second launch with it shows nothing) / open quick capture / today's journal (a second launch asks the running instance — over a socket only in the user's private runtime folder: without one every launch is an instance of its own and the event log says why, docs/CLI.md "The running app") / allow a second instance |
 | `cli …` (the first argument) | the command line instead of the app (`brulion cli capture "…"`, also `Brulion.AppImage cli …`): `brulion-cli`, before anything of the app — no window, log file or single-instance claim; see docs/CLI.md. A running app also takes `brulion-cli app open <ref>` / `app today` / `app capture` (the `open {json}` message of `src/ipc/appmessage.h`, `AppController::openRoute`) |
-| `--remote-control` | AI agents and scripts drive the running app for this run (as the device setting Settings → Application → "Dla programistów" → "Pozwól agentom sterować aplikacją" does; off by default): a request/response socket of its own next to the single-instance one, owner-only — `brulion-cli app state \| navigate \| open \| find \| click \| long-press \| double-click \| drag \| scroll \| type \| key \| command \| capture \| wait \| screenshot \| quit` and the MCP tools of `brulion-cli mcp --app-control` (docs/CLI.md "Remote control"; `src/app/shell/remotecontrol.h`, desktop builds). Input is played on the event loop with the UI driver of the self-test and the journey (`src/app/shell/uidriver.h`), one gesture at a time, answered once the window settled; ctest `tst_remote_control_qml` drives the real app offscreen through it |
+| `--remote-control` | AI agents and scripts drive the running app for this run (as the device setting Settings → Application → "For developers" → "Allow agents to control the app (local socket)" does; off by default): a request/response socket of its own next to the single-instance one, owner-only — `brulion-cli app state \| navigate \| open \| find \| click \| long-press \| double-click \| drag \| scroll \| type \| key \| command \| capture \| wait \| screenshot \| quit` and the MCP tools of `brulion-cli mcp --app-control` (docs/CLI.md "Remote control"; `src/app/shell/remotecontrol.h`, desktop builds). Input is played on the event loop with the UI driver of the self-test and the journey (`src/app/shell/uidriver.h`), one gesture at a time, answered once the window settled; ctest `tst_remote_control_qml` drives the real app offscreen through it |
 
 Scripts (inside `nix develop`; one GUI instance at a time via a lock; a fixed clock `NOW`;
 the app scripts give every run a fresh temporary XDG home, so the user's own Brulion is never
@@ -3709,7 +3713,7 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   journal stream (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
 * `tests/app/drawing/screenshots.sh` — the drawing editor (`editor`: a page of handwritten notes on
   lined paper, written by `tst_drawingcanvas handwritingSample`), the page embedding it (`page`), its
-  picture view with "Edytuj rysunek" (`picture`), an Excalidraw drawing with text (`readonly`),
+  picture view with "Edit drawing" (`picture`), an Excalidraw drawing with text (`readonly`),
   a new drawing (`new`) and drawings of Obsidian's Excalidraw plugin (`obsidian` in the editor,
   `obsidianpage` opened as a page, `obsidianframe` with a frame: read-only).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
@@ -3780,7 +3784,7 @@ vault settings, the Calendar plugin's hashes).
 | Version | the working tree (git revision in the manifest) | the official 1.14.4 AppImage, sha256 checked (`appimage-run -w` on NixOS, `--appimage-extract` elsewhere) |
 | Notebook | a fresh copy of `vault-brulion` per shot | a copy without `.brulion/`, with `.obsidian/` (daily notes in `journals/`, the Calendar plugin 1.5.10) |
 | Sizes | desktop 1280×800 at 1×, phone 412×915 at 2× (`--size`, `--scale`, `--touch`) | the same viewport and scale through `Emulation.setDeviceMetricsOverride`; phone: `EmulateMobile` (the mobile layout, `body.is-phone`) |
-| Themes | `--theme light\|dark` | the setting "Schemat kolorów" set to Jasny / Ciemny (`app.vault.setConfig('theme')` + `app.updateTheme`; a "Use light/dark mode" command when the version has one, never the toggle) |
+| Themes | `--theme light\|dark` | the setting "Base color scheme" set to Light / Dark (`app.vault.setConfig('theme')` + `app.updateTheme`; a "Use light/dark mode" command when the version has one, never the toggle) |
 | Language | `--locale pl` | Polish (`localStorage.language`, else the setting and a restart; English is flagged) |
 | Clock | `--now "2026-10-14 10:00"`, `TZ=Europe/Warsaw` | a running `Date` shifted to that instant (`Page.addScriptToEvaluateOnNewDocument`) and the zone override |
 | Fonts | `FONTCONFIG_FILE=<out>/env/fonts.conf`: Noto Sans / Serif / Sans Mono, Noto Color Emoji, DejaVu (nixpkgs), grayscale antialiasing, slight hinting | the same file, `--disable-lcd-text` |
@@ -3922,21 +3926,26 @@ fixed them but one: a parent's bullet beside its fold arrow on phones (28 × 44 
 `screens.json` with node and is skipped where there is none (the AppImage build containers;
 GitHub's Ubuntu runners of `ci.yml` have it, the flake's dev shell does not bring it).
 
-**README pictures** (`docs/images/`, Polish locale, the sample notebook) come from these scripts
-— `SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` — and are optimised with
+**README pictures** (`docs/images/`, English locale, the English sample notebook) come from these
+scripts — `LOCALE=en SIZES=<size> THEMES=<theme> tests/app/<area>/screenshots.sh <shot>` (the
+files get a `-en` suffix; the scripts' default locale is still Polish) — and are optimised with
 `pngquant --quality 70-90 --strip` then `oxipng -o 4` (`nix shell nixpkgs#pngquant
 nixpkgs#oxipng`; keep each under 150 KB):
 
 | Image | Area, shot | Size, theme |
 |---|---|---|
-| `dziennik.png` | content `journals` | desktop, light |
-| `strona-odnosniki.png` | content `side-links` | desktop, light |
-| `kalendarz.png` | planning `calendar` | desktop, light |
-| `zadania-ciemny.png` | planning `tasks` | desktop, dark |
-| `przypomnienie.png` | shell `page-reminder` | desktop, light |
-| `graf-ciemny.png` | planning `graph` | desktop, dark |
-| `synchronizacja.png` | io `sync-conflict-merge`, run without the Nextcloud account of `io_nextcloud_home` (so the sidebar footer shows no connection error) | desktop, light |
-| `telefon-dziennik.png` | content `journals` | phone, light |
-| `telefon-edycja-ciemny.png` | shell `page-editing-keyboard` | phone, dark |
-| `foldery-przenoszenie.png` | shell `move` | desktop, light |
-| `telefon-zaznaczenie.png` | shell `page-selection` | phone, light |
+| `journal.png` | content `journals` | desktop, light |
+| `page-links.png` | content `side-links` | desktop, light |
+| `calendar.png` | planning `calendar` | desktop, light |
+| `tasks-dark.png` | planning `tasks` | desktop, dark |
+| `reminder.png` | shell `page-reminder` | desktop, light |
+| `graph-dark.png` | planning `graph` | desktop, dark |
+| `sync.png` | io `sync-conflict-merge`, run without the Nextcloud account of `io_nextcloud_home` (so the sidebar footer shows no connection error) | desktop, light |
+| `phone-journal.png` | content `journals` | phone, light |
+| `phone-editing-dark.png` | shell `page-editing-keyboard` | phone, dark |
+| `folders-move.png` | shell `move` | desktop, light |
+| `phone-selection.png` | shell `page-selection` | phone, light |
+
+The phone pictures are also the store screenshots (`fastlane/metadata/android/en-US/images/
+phoneScreenshots/`, docs/ANDROID.md); the Polish store listing has its own Polish ones in
+`fastlane/metadata/android/pl/images/phoneScreenshots/` (the same shots run with `LOCALE=pl`).

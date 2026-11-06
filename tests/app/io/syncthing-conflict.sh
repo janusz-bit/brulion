@@ -2,7 +2,7 @@
 # (The checks run through wait_for, which shellcheck cannot follow.)
 # shellcheck disable=SC2329
 #
-# A real Syncthing conflict of drawings, merged by the sync center ("Scal rysunki", docs/UI.md
+# A real Syncthing conflict of drawings, merged by the sync center ("Merge drawings", docs/UI.md
 # "Conflict copies of drawings"). Two Syncthing instances on this machine share one folder over
 # 127.0.0.1 (no discovery, no relays): a Brulion drawing (tests/data/drawing/conflict_*.svg) and an
 # Obsidian Excalidraw plugin file (obsidian_json.excalidraw.md with a line added on each side)

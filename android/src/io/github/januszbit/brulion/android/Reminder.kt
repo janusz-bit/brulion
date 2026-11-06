@@ -34,7 +34,7 @@ internal object Actions {
   const val SNOOZE = "io.github.januszbit.brulion.android.action.SNOOZE"
   const val DISMISS = "io.github.januszbit.brulion.android.action.DISMISS"
 
-  /** "Zrobione": the reminder's task is marked done in the note ([DoneQueue]). */
+  /** "Done": the reminder's task is marked done in the note ([DoneQueue]). */
   const val DONE = "io.github.januszbit.brulion.android.action.DONE"
 
   /** The ring time of an alarm is over (see [RingTimeout]). */
@@ -48,9 +48,9 @@ internal object Actions {
  *
  * [at] is epoch ms. [ringMinutes] (alarms only) is how long the alarm rings before it turns into
  * a silent "Przegapiony alarm", already resolved by [RingTimeout.minutes]. [snoozed] marks a
- * reminder re-armed natively by "Drzemka 10 min": the app does not know about it, so it
+ * reminder re-armed natively by "Snooze 10 min": the app does not know about it, so it
  * survives `scheduleReminders` replacing the set. [key] is the occurrence's id in Brulion and
- * [local] its wall-clock time (`yyyy-MM-ddTHH:mm`, unchanged by a snooze): with them "Zrobione"
+ * [local] its wall-clock time (`yyyy-MM-ddTHH:mm`, unchanged by a snooze): with them "Done"
  * names the occurrence whose [task] (the reminder is on an open task) is to be completed in the
  * notebook [vault] (its id in Brulion; empty when armed by an older version). [provisional] marks a
  * reminder a widget's quick add armed with the app closed ([QuickAdd]; a negative id): the app's
@@ -72,7 +72,7 @@ internal data class Reminder(
   val vault: String = "",
   val provisional: Boolean = false
 ) {
-  /** The notification and the alarm screen offer "Zrobione". */
+  /** The notification and the alarm screen offer "Done". */
   val canComplete: Boolean
     get() = task && key.isNotEmpty() && local.isNotEmpty() && path.isNotEmpty()
 
@@ -113,7 +113,7 @@ internal data class Reminder(
           snoozed = json.optBoolean("snoozed", false),
           // Absent (older stored reminders, plain reminders from C++): the default.
           ringMinutes = RingTimeout.minutes((json.opt("ringMinutes") as? Number)?.toLong()),
-          // Absent (stored by an older version): no "Zrobione".
+          // Absent (stored by an older version): no "Done".
           key = json.optString("key", ""),
           local = json.optString("local", ""),
           task = json.optBoolean("task", false),
@@ -196,7 +196,7 @@ internal class ReminderStore(context: Context) {
   }
 
   /**
-   * Forgets a natively snoozed copy of reminder [id] ("Zrobione" on it: it must not come back).
+   * Forgets a natively snoozed copy of reminder [id] ("Done" on it: it must not come back).
    * Returns whether there was one; its alarm is the caller's to cancel.
    */
   fun removeSnoozed(id: Int): Boolean =

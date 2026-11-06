@@ -572,15 +572,112 @@ private Q_SLOTS:
         QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Przypomnienia.md"_s);
     }
 
+    void demoVaultOpensTheGuide_data()
+    {
+        QTest::addColumn<QStringList>("args");
+        QTest::addColumn<QString>("language"); // the setting
+        QTest::addColumn<QString>("folder");
+        QTest::addColumn<QString>("welcome");
+        QTest::addColumn<QString>("project");
+        // English first; Polish when the setting or this run's --locale says so.
+        QTest::newRow("default") << QStringList{u"--demo"_s} << QString() << u"Sample notebook"_s
+                                 << u"Welcome to Brulion.md"_s << u"Projects/Home renovation.md"_s;
+        QTest::newRow("setting pl") << QStringList{u"--demo"_s} << u"pl"_s << u"Przykładowy brulion"_s
+                                    << u"Witaj w Brulionie.md"_s << u"Projekty/Remont mieszkania.md"_s;
+        QTest::newRow("--locale pl") << QStringList{u"--demo"_s, u"--locale"_s, u"pl"_s} << QString()
+                                     << u"Przykładowy brulion"_s << u"Witaj w Brulionie.md"_s
+                                     << u"Projekty/Remont mieszkania.md"_s;
+        QTest::newRow("--sample-language pl") << QStringList{u"--demo"_s, u"--locale"_s, u"en"_s,
+                                                             u"--sample-language"_s, u"pl"_s}
+                                              << QString() << u"Przykładowy brulion"_s
+                                              << u"Witaj w Brulionie.md"_s << u"Projekty/Remont mieszkania.md"_s;
+    }
+
     void demoVaultOpensTheGuide()
     {
-        auto app = makeApp({ u"--demo"_s });
+        QFETCH(QStringList, args);
+        QFETCH(QString, language);
+        QFETCH(QString, folder);
+        QFETCH(QString, welcome);
+        QFETCH(QString, project);
+        auto app = makeApp(args);
+        if (!language.isEmpty())
+            app->settings()->setLanguage(language);
         app->start();
         QTRY_COMPARE(app->status(), u"ready"_s);
         QCOMPARE(app->workspace()->rootPath(), app->demoVaultPath());
-        QCOMPARE(app->currentRoute(), page(u"Witaj w Brulionie.md"_s));
+        QCOMPARE(QFileInfo(app->demoVaultPath()).fileName(), folder);
+        QCOMPARE(app->currentRoute(), page(welcome));
         QVERIFY(app->workspace()->exists(u"journals/2026-10-14.md"_s));
-        QVERIFY(app->workspace()->exists(u"Projekty/Remont mieszkania.md"_s));
+        QVERIFY(app->workspace()->exists(project));
+    }
+
+    void notebooksFollowTheLanguage()
+    {
+        // The sample and documentation notebooks of the language chosen now, each in its own
+        // folder: the Polish ones stay Polish (and still the documentation) after a switch to
+        // English, and the other way round.
+        auto app = makeApp({u"--locale"_s, u"en"_s});
+        QCOMPARE(app->notebooksLanguage(), u"en"_s); // --locale of this run
+        // The setting changed: it counts from now on, as for the translation.
+        app->settings()->setLanguage(u"pl"_s);
+        QCOMPARE(app->notebooksLanguage(), u"pl"_s);
+        app->start();
+        app->openVault(m_tmp.filePath(u"moje-jezyki"_s));
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        const QString mine = app->workspace()->rootPath();
+        const QString data = app->dataDir();
+        QCOMPARE(app->docsVaultPath(), QDir::cleanPath(data + u"/Dokumentacja Brulionu"_s));
+        QCOMPARE(app->demoVaultPath(), QDir::cleanPath(data + u"/Przykładowy brulion"_s));
+        app->openDocsVault();
+        QTRY_VERIFY(app->inDocsVault() && app->status() == u"ready");
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), docsWelcomePage(u"pl"));
+        const QString polishDocs = app->workspace()->rootPath();
+
+        // Switched to English while reading the Polish documentation: the paths follow, the open
+        // notebook is still the documentation.
+        QSignalSpy paths(app.get(), &AppController::notebookPathsChanged);
+        app->settings()->setLanguage(u"en"_s);
+        QCOMPARE(paths.size(), 1);
+        QCOMPARE(app->notebooksLanguage(), u"en"_s);
+        QCOMPARE(app->docsVaultPath(), QDir::cleanPath(data + u"/Brulion Documentation"_s));
+        QCOMPARE(app->demoVaultPath(), QDir::cleanPath(data + u"/Sample notebook"_s));
+        QVERIFY(app->inDocsVault());
+        QCOMPARE(app->lastUserVault(), mine);
+
+        // Back to the user's notebook, then the English documentation: its own folder and pages.
+        app->toggleDocsVault();
+        QTRY_VERIFY(!app->inDocsVault() && app->status() == u"ready");
+        QCOMPARE(app->workspace()->rootPath(), mine);
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault() && app->status() == u"ready");
+        QCOMPARE(app->workspace()->rootPath(), QDir(app->docsVaultPath()).absolutePath());
+        QVERIFY(app->workspace()->rootPath() != polishDocs);
+        for (const DemoFile &f : docsVaultFiles(u"en"))
+            QVERIFY2(app->workspace()->exists(f.path), qPrintable(f.path));
+        if (!docsVaultFiles(u"en").isEmpty())
+            QCOMPARE(app->currentRoute().value(u"path"_s).toString(), docsWelcomePage(u"en"));
+        // Opening the Polish one again (e.g. the app was quit in it) updates it with Polish pages.
+        app->openVault(polishDocs);
+        QTRY_VERIFY(app->inDocsVault() && app->status() == u"ready" && app->workspace()->rootPath() == polishDocs);
+        for (const DemoFile &f : docsVaultFiles(u"pl"))
+            QCOMPARE(app->workspace()->readFile(f.path), f.content);
+        // Neither is ever a recent notebook.
+        for (const QVariant &v : app->settings()->recentVaults())
+            QCOMPARE(v.toMap().value(u"path"_s).toString(), mine);
+        app->toggleDocsVault();
+        QTRY_VERIFY(!app->inDocsVault() && app->status() == u"ready");
+
+        // The sample notebook: English now, the Polish folder's notes untouched.
+        app->openDemoVault();
+        QTRY_VERIFY(app->status() == u"ready" && app->workspace()->rootPath() == app->demoVaultPath());
+        QCOMPARE(app->currentRoute(), page(u"Welcome to Brulion.md"_s));
+        app->settings()->setLanguage(u"pl"_s);
+        app->openDemoVault();
+        QTRY_VERIFY(app->status() == u"ready" && app->workspace()->rootPath() == app->demoVaultPath());
+        QCOMPARE(QFileInfo(app->workspace()->rootPath()).fileName(), u"Przykładowy brulion"_s);
+        QCOMPARE(app->currentRoute(), page(u"Witaj w Brulionie.md"_s));
+        QVERIFY(!app->workspace()->exists(u"Welcome to Brulion.md"_s));
     }
 
     void closeVault()
@@ -670,7 +767,7 @@ private Q_SLOTS:
         });
         app->start();
         QTRY_COMPARE(app->status(), u"ready"_s);
-        QCOMPARE(routeWhenReady, page(u"Witaj w Brulionie.md"_s));
+        QCOMPARE(routeWhenReady, page(u"Welcome to Brulion.md"_s));
     }
 
     void testNotificationHandler()
@@ -796,14 +893,37 @@ private Q_SLOTS:
 
     // ---- commands ---------------------------------------------------------------------------
 
+    void documentationNotebook_data()
+    {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("folder");
+        QTest::newRow("en") << u"en"_s << u"/Brulion Documentation"_s;
+        QTest::newRow("pl") << u"pl"_s << u"/Dokumentacja Brulionu"_s;
+    }
+
     void documentationNotebook()
     {
-        // "Dokumentacja Brulionu": opened from the switcher / Ctrl+Shift+B, seeded on first
-        // use, starts on its table of contents, and the toggle goes back to the user's notebook.
-        auto app = openApp(u"moje notatki"_s);
+        // The documentation ("Brulion Documentation", in Polish "Dokumentacja Brulionu"): opened
+        // from the switcher / Ctrl+Shift+B, seeded on first use, starts on its table of contents,
+        // and the toggle goes back to the user's notebook.
+        QFETCH(QString, language);
+        QFETCH(QString, folder);
+        const QList<DemoFile> pages = docsVaultFiles(language);
+        if (pages.size() < 3)
+            QSKIP("this build has no documentation in this language");
+        // Two pages besides the table of contents: one the user changes, one the user deletes.
+        const QString contents = docsWelcomePage(language);
+        QStringList others;
+        for (const DemoFile &f : pages) {
+            if (f.path != contents)
+                others.append(f.path);
+        }
+        const QString changed = others.at(0);
+        const QString deleted = others.at(1);
+        auto app = openApp(u"moje notatki"_s, {u"--locale"_s, language});
         const QString mine = QDir::cleanPath(m_tmp.filePath(u"moje notatki"_s));
         const QString docs = app->docsVaultPath();
-        QVERIFY(docs.endsWith(u"/Dokumentacja Brulionu"_s));
+        QVERIFY(docs.endsWith(folder));
         QVERIFY(!app->inDocsVault());
 
         CommandModel *model = app->commands();
@@ -823,21 +943,21 @@ private Q_SLOTS:
         QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
         QVERIFY(app->inDocsVault());
         QCOMPARE(app->currentView(), u"page"_s);
-        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Spis treści.md"_s);
-        QVERIFY(app->workspace()->exists(u"Zadania.md"_s));
-        QVERIFY(app->workspace()->exists(u"Format plików.md"_s));
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), contents);
+        for (const DemoFile &f : pages)
+            QVERIFY2(app->workspace()->exists(f.path), qPrintable(f.path));
         QVERIFY(title() != toDocs); // "Back to my notebook"
         QCOMPARE(app->settings()->recentVaults().size(), 1); // the documentation is not a recent notebook
         // It is the user's copy: edits and deletions are theirs.
-        QVERIFY(app->workspace()->write(u"Zadania.md"_s, u"- [ ] moja wersja zadań\n"_s));
-        QVERIFY(!app->workspace()->deletePage(u"Obliczenia.md"_s).isEmpty());
+        QVERIFY(app->workspace()->write(changed, u"- [ ] moja wersja zadań\n"_s));
+        QVERIFY(!app->workspace()->deletePage(deleted).isEmpty());
 
         // Back: the notebook used before, on its usual home route.
         app->toggleDocsVault();
         QTRY_COMPARE(app->workspace()->rootPath(), QDir(mine).absolutePath());
         QTRY_COMPARE(app->status(), u"ready"_s);
         QVERIFY(!app->inDocsVault());
-        QVERIFY(!app->workspace()->exists(u"Spis treści.md"_s));
+        QVERIFY(!app->workspace()->exists(contents));
         QCOMPARE(title(), toDocs);
 
         // The second visit brings the documentation up to date, but never over the user's edits
@@ -845,9 +965,9 @@ private Q_SLOTS:
         app->toggleDocsVault();
         QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
         QTRY_COMPARE(app->status(), u"ready"_s);
-        QVERIFY(app->workspace()->exists(u"Spis treści.md"_s));
-        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), u"- [ ] moja wersja zadań\n"_s);
-        QVERIFY(!app->workspace()->exists(u"Obliczenia.md"_s));
+        QVERIFY(app->workspace()->exists(contents));
+        QCOMPARE(app->workspace()->readFile(changed), u"- [ ] moja wersja zadań\n"_s);
+        QVERIFY(!app->workspace()->exists(deleted));
     }
 
     void documentationNotebookFromAnOlderVersion()
@@ -856,16 +976,18 @@ private Q_SLOTS:
         // table of contents and changed "Zadania"): the new page arrives, the unchanged table of
         // contents is replaced by this version's, the changed page stays.
         auto app = openApp(u"aktualizacja"_s);
+        app->settings()->setLanguage(u"pl"_s); // the documentation of that time was Polish
         const QString docs = app->docsVaultPath();
-        QVERIFY(writeFile(QDir(docs).filePath(docsWelcomePage()), olddocs::kTableOfContents030.toUtf8()));
+        QVERIFY(docs.endsWith(u"/Dokumentacja Brulionu"_s));
+        QVERIFY(writeFile(QDir(docs).filePath(docsWelcomePage(u"pl")), olddocs::kTableOfContents030.toUtf8()));
         QVERIFY(writeFile(QDir(docs).filePath(u"Zadania.md"_s), "- [ ] moje zadania\n"));
         app->openDocsVault();
         QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
         QTRY_COMPARE(app->status(), u"ready"_s);
         QVERIFY(app->workspace()->exists(u"Wzory matematyczne.md"_s));
-        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), docsWelcomePage());
-        for (const DemoFile &f : docsVaultFiles()) {
-            if (f.path == docsWelcomePage())
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), docsWelcomePage(u"pl"));
+        for (const DemoFile &f : docsVaultFiles(u"pl")) {
+            if (f.path == docsWelcomePage(u"pl"))
                 QCOMPARE(app->workspace()->readFile(f.path), f.content);
         }
         QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), u"- [ ] moje zadania\n"_s);
@@ -1143,21 +1265,21 @@ private Q_SLOTS:
 
     void reminderTapOnAPageTheDocumentationAlsoHas()
     {
-        // The user's own "Zadania.md" (the documentation has a page of that name too): a tap
+        // The user's own "Tasks.md" (the English documentation has a page of that name too): a tap
         // while reading the documentation opens the user's page, never the documentation's.
         auto app = openApp(u"moje zadania"_s);
         const QString mine = QDir(m_tmp.filePath(u"moje zadania"_s)).absolutePath();
         const QString text = u"- [ ] Oddać książkę do biblioteki ⏰ 2026-10-15 09:00\n"_s;
-        QVERIFY(app->workspace()->write(u"Zadania.md"_s, text));
+        QVERIFY(app->workspace()->write(u"Tasks.md"_s, text));
         app->toggleDocsVault();
         QTRY_VERIFY(app->inDocsVault());
         QTRY_COMPARE(app->status(), u"ready"_s);
-        QVERIFY(app->workspace()->exists(u"Zadania.md"_s)); // the documentation's page
-        app->openNotification(u"Zadania.md"_s, 0);
+        QVERIFY(app->workspace()->exists(u"Tasks.md"_s)); // the documentation's page
+        app->openNotification(u"Tasks.md"_s, 0);
         QTRY_COMPARE(app->workspace()->rootPath(), mine);
-        QTRY_COMPARE(app->currentRoute().value(u"path"_s).toString(), u"Zadania.md"_s);
+        QTRY_COMPARE(app->currentRoute().value(u"path"_s).toString(), u"Tasks.md"_s);
         QVERIFY(!app->inDocsVault());
-        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), text);
+        QCOMPARE(app->workspace()->readFile(u"Tasks.md"_s), text);
 
         // No notebook of the user to go back to: the documentation's page never opens instead.
         auto alone = makeApp();
@@ -1167,13 +1289,13 @@ private Q_SLOTS:
         QTRY_COMPARE(alone->status(), u"ready"_s);
         QSignalSpy toasts(alone.get(), &AppController::toastRequested);
         const QVariantMap before = alone->currentRoute();
-        alone->openNotification(u"Zadania.md"_s, 3);
+        alone->openNotification(u"Tasks.md"_s, 3);
         QCOMPARE(alone->currentRoute(), before);
         QCOMPARE(toasts.size(), 1);
         QVERIFY(alone->inDocsVault());
     }
 
-    // The editor's toasts with a button ("Cofnij" after deleting blocks): AppController keeps the
+    // The editor's toasts with a button ("Undo" after deleting blocks): AppController keeps the
     // function and has the shell's toast host (Main.qml) show the toast by id; the host's button
     // runs it once. toastWithAction() (compiled QML) reports the button by id, toastRestore()
     // brings pages back from the trash.
@@ -1682,7 +1804,7 @@ private Q_SLOTS:
             QVERIFY(app->back());
         }
         // Tasks (docs/SYNTAX.md §5): the timer and a dependency of the task at the cursor go to the
-        // editor; "Zatrzymaj licznik czasu" only while a timer runs.
+        // editor; "Stop task timer" only while a timer runs.
         for (const auto &[command, action] :
              {std::pair{u"task.clock"_s, u"taskClock"_s}, std::pair{u"task.addDependency"_s, u"taskDependency"_s}}) {
             QVERIFY(model->run(command));

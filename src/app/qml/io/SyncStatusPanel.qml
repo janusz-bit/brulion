@@ -5,8 +5,8 @@ import Brulion
 
 // SyncStatusPanel — the Nextcloud sync state (Workspace.sync): what is happening now
 // (SyncLiveProgress: phase, n of N, files in flight, elapsed time, a stalled server), offline and
-// error explanations, a retry countdown with "Spróbuj teraz", "Synchronizuj teraz", when it last /
-// next runs, the last run's result with "Szczegóły" and what it did (sent, downloaded, merged,
+// error explanations, a retry countdown with "Try now", "Sync now", when it last /
+// next runs, the last run's result with "Details" and what it did (sent, downloaded, merged,
 // conflicts, errors — failed files listed with their explanation).
 //
 //   SyncStatusPanel { onShowConflicts: tabs.currentIndex = 3 }

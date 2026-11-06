@@ -61,7 +61,7 @@ struct ViewportSample {
 /// (interactive-widget=resizes-content) gives 0 at once, also while innerHeight is stale.
 qreal viewportOverlap(const ViewportSample &sample, qreal windowHeight);
 
-/// The browser's keyboard from successive viewport samples (docs/WEB.md "Klawiatura ekranowa").
+/// The browser's keyboard from successive viewport samples (docs/WEB.md "On-screen keyboard (phone)").
 /// `overlap`: viewportOverlap(). `shown`: an overlap, or — the browser shrank the page itself
 /// (interactive-widget=resizes-content) — on a touch screen with Qt's keyboard <input> focused, a
 /// visual viewport at least MinKeyboard lower than the tallest one seen at this width (one tallest

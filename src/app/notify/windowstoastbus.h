@@ -1,6 +1,6 @@
 // WindowsToastBus — NotificationBus over Windows toast notifications (WinRT
 // Windows.UI.Notifications through C++/WinRT, Windows 10 1809 or newer; docs/WINDOWS.md
-// "Powiadomienia"). Windows builds only (BRULION_NOTIFY_HAVE_WINTOAST); DesktopNotifier does the
+// "Notifications"). Windows builds only (BRULION_NOTIFY_HAVE_WINTOAST); DesktopNotifier does the
 // rest as on Linux: the message, replacing a reminder's notification, actions → snooze / open,
 // ringing alarms, the sound samples, the tray when toasts are turned off.
 //

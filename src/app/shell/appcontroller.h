@@ -25,7 +25,8 @@
 // come back when it opens again.
 //
 // Vault lifecycle: start() opens the last vault (or shows onboarding); openVault(path)
-// (created when missing), openDemoVault() ("Przykładowy brulion", seeded with the sample notes),
+// (created when missing), openDemoVault() (the sample notebook of the UI language, seeded with
+// its sample notes: notebooksLanguage(), demovault.h),
 // closeVault(); openRecentVault(path) for a known notebook (never recreates a missing folder).
 // The documentation notebook (openDocsVault(), toggleDocsVault()) is for reading:
 // it never becomes the start notebook or a recent one, arms no reminders (the user's notebook
@@ -38,6 +39,8 @@
 // Developer / screenshot options (parsed from Options::arguments; see also ui/devtools.h):
 //   --vault <path>         open this vault at start (created when missing)
 //   --demo                 seed the sample notes (into --vault, else the demo vault) and open it
+//   --sample-language pl|en  the language of the sample and documentation notebooks of this run
+//                          (default: the UI language, --locale included)
 //   --onboarding           start on the onboarding screen
 //   --route <view|json>    initial route, e.g. "settings" or '{"view":"page","path":"a.md"}'
 //   --popup <name[:query]> open a shell popup after start: palette, switcher, capture,
@@ -55,7 +58,7 @@
 //                          failed checks (desktop; main.cpp, shellselftest.h; ctest tst_shell_qml)
 // and for launchers (desktop entry actions): --capture opens quick capture, --today today's
 // journal, once the vault is open (a second launch asks the running instance instead, main.cpp);
-// `--open <file>…` (the desktop entry's `Exec=brulion --open %F`, Windows' "Otwórz za pomocą":
+// `--open <file>…` (the desktop entry's `Exec=brulion --open %F`, Windows' "Open with":
 // every argument after it is a file — Options::openFiles) offers the files in the share dialog, a
 // file of the open notebook opens as its page.
 #pragma once
@@ -176,10 +179,13 @@ class AppController : public QObject {
     Q_PROPERTY(QString defaultVaultPath READ defaultVaultPath CONSTANT FINAL)
     /// Private app storage (Android without "All files access"; no Syncthing there).
     Q_PROPERTY(QString appStorageVaultPath READ appStorageVaultPath CONSTANT FINAL)
-    /// Where "Przykładowy brulion" lives.
-    Q_PROPERTY(QString demoVaultPath READ demoVaultPath CONSTANT FINAL)
-    /// The notebook with the documentation ("Dokumentacja Brulionu"; empty in the browser).
-    Q_PROPERTY(QString docsVaultPath READ docsVaultPath CONSTANT FINAL)
+    /// Where the sample notebook of the UI language lives ("Sample notebook", in Polish
+    /// "Przykładowy brulion"; demovault.h).
+    Q_PROPERTY(QString demoVaultPath READ demoVaultPath NOTIFY notebookPathsChanged FINAL)
+    /// The documentation notebook of the UI language ("Brulion Documentation", in Polish
+    /// "Dokumentacja Brulionu"; empty in the browser). The other language's folder, when there is
+    /// one, is still the documentation (inDocsVault) and keeps its own language's pages.
+    Q_PROPERTY(QString docsVaultPath READ docsVaultPath NOTIFY notebookPathsChanged FINAL)
     /// Vault waiting for the storage permission (Android), "" otherwise.
     Q_PROPERTY(QString pendingVaultPath READ pendingVaultPath NOTIFY pendingVaultPathChanged FINAL)
     /// The vault that could not be opened (status "error"; retryOpenVault()), "" otherwise.
@@ -246,7 +252,7 @@ public:
     Workspace *workspace() const { return m_workspace.get(); }
     AppUpdates *updates() const { return m_updates.get(); }
     CommandModel *commands() const { return m_commands.get(); }
-    /// The commands' keyboard shortcuts, custom ones included (Settings → Skróty klawiszowe).
+    /// The commands' keyboard shortcuts, custom ones included (Settings → Keyboard shortcuts).
     ShortcutMap *shortcuts() const { return m_shortcuts.get(); }
 
     /// Boot: open the last vault (or the one from --vault), else show onboarding. Call once,
@@ -384,6 +390,10 @@ public:
     QString appStorageVaultPath() const;
     QString demoVaultPath() const;
     QString docsVaultPath() const;
+    /// The language of the sample and documentation notebooks opened from now on ("en" | "pl"):
+    /// the UI language — --locale of this run until the setting changes, else the setting —, or
+    /// --sample-language (tests written against one language's sample notes).
+    QString notebooksLanguage() const;
     QString pendingVaultPath() const { return m_pendingVault; }
     QString failedVaultPath() const { return m_failedPath; }
     /// Device-local state folder of a vault (History, LocalStore): <dataDir>/vaults/<id>.
@@ -400,7 +410,7 @@ public:
     /// openVault(), then show `route` instead of the home view (onboarding's "Import notes":
     /// the import screen of the new notebook). Kept while Android asks for "All files access".
     Q_INVOKABLE void openVaultAt(const QString &path, const QVariantMap &route);
-    /// Create (first time) and open "Przykładowy brulion" with the sample notes.
+    /// Create (first time) and open the sample notebook of the UI language with its notes.
     Q_INVOKABLE void openDemoVault();
     /// Opens the documentation notebook, writing it on first use and updating the pages nobody
     /// changed to this version (updateDocsVault(); no-op in the browser).
@@ -490,7 +500,7 @@ public:
     Q_INVOKABLE void hiddenToTray();
     /// Show a toast: kind "info" | "success" | "warning" | "error".
     Q_INVOKABLE void toast(const QString &text, const QString &kind = QStringLiteral("info"));
-    /// Show a toast with a button (the editor's "Cofnij"): `onAction`, a function, runs when it is
+    /// Show a toast with a button (the editor's "Undo"): `onAction`, a function, runs when it is
     /// pressed (Main.qml shows it as toastWithAction()'s).
     Q_INVOKABLE void toastAction(const QString &text, const QString &kind, const QString &actionText,
                                  const QJSValue &onAction);
@@ -500,11 +510,11 @@ public:
     /// (showTrayCalendar()).
     Q_INVOKABLE void requestUiAction(const QString &action);
     /// Ask the shell to act on a page or folder of the tree from any view (its dialogs live in
-    /// the shell): "move" (Przenieś do…), "rename", "delete" (the confirmation), "newPage" /
+    /// the shell): "move" (Move to…), "rename", "delete" (the confirmation), "newPage" /
     /// "newFolder" (in that folder), "reveal" (show it in the sidebar's tree).
     Q_INVOKABLE void requestItemAction(const QString &action, const QString &path);
 
-    // ---- Shares from other apps (appshare.cpp; docs/ANDROID.md "Udostępnij → Brulion") ------
+    // ---- Shares from other apps (appshare.cpp; docs/ANDROID.md "Share → Brulion") ------------
     /// Text or .md/.txt files shared from another app (Android's ShareActivity through
     /// AndroidBridge::shared, the --share option, the browser's share target: receiveShareQuery())
     /// or opened with Brulion on a desktop (--open, a second launch's `share` message; source
@@ -601,12 +611,12 @@ public:
     /// and y cannot be read by compiled QML).
     Q_INVOKABLE void placeTrayPopup(QWindow *popup) const;
     /// The recent pages ([{ path, title }], Workspace::recentPages) without `path`, at most
-    /// `limit` of them: the sidebar's "Ostatnie".
+    /// `limit` of them: the sidebar's "Recent".
     Q_INVOKABLE QVariantList recentPagesExcept(const QString &path, int limit) const;
     /// `object`'s property `name` (invalid when it has none): a property a QML type adds that its
     /// base type, all compiled QML knows of it, lacks (a list delegate's required property).
     Q_INVOKABLE QVariant propertyOf(QObject *object, const QString &name) const;
-    /// "Przenieś do…"'s rows for `query` over the notebook's folders (folderchoices.h): the root
+    /// "Move to…"'s rows for `query` over the notebook's folders (folderchoices.h): the root
     /// (`rootName`), the folders matching it without `ownFolder` and its subfolders, a new folder
     /// (`newFolderText`'s %1, subtitle `createText`); `moving`: `currentFolder`'s row disabled.
     Q_INVOKABLE QVariantList folderChoices(const QString &query, const QString &ownFolder, const QString &currentFolder,
@@ -636,6 +646,8 @@ Q_SIGNALS:
     void startAtLoginChanged();
     void pendingVaultPathChanged();
     void inDocsVaultChanged();
+    /// demoVaultPath and docsVaultPath changed (the UI language did).
+    void notebookPathsChanged();
     void permissionsChanged();
     void syncStatusChanged();
     void remoteControlChanged();
@@ -702,8 +714,10 @@ private:
     /// be read, is still that link.
     bool shareSavesFiles() const;
     QVariantMap initialRoute() const;
-    /// `path` is the documentation notebook's folder.
+    /// `path` is the folder of a documentation notebook (either language's).
     bool isDocsPath(const QString &path) const;
+    /// The language of the documentation notebook at `path` ("en" | "pl"), "" for any other folder.
+    QString docsLanguage(const QString &path) const;
     /// The notice for openRoute()'s route of another notebook than the open one.
     void refuseOtherNotebookRoute(const QString &vault);
 
@@ -762,6 +776,8 @@ private:
     // Dev options.
     QString m_devVault;
     bool m_devDemo = false;
+    QString m_localeOverride; ///< --locale pl|en (until the language setting changes)
+    QString m_sampleLanguage; ///< --sample-language pl|en
     bool m_devOnboarding = false;
     bool m_devIntro = false; ///< --intro: the intro also on a device that finished it
     QVariantMap m_devRoute;

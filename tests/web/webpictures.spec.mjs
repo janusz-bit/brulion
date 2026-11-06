@@ -1,6 +1,6 @@
-// Pictures from the internet in the web build, in Chromium and Firefox (docs/WEB.md "Obrazy
-// z internetu", "Testy w przeglądarkach"): the real editor fetches them (the notebook's setting
-// "show without asking" is on), the app reports what it got (?selftest=webpictures:
+// Pictures from the internet in the web build, in Chromium and Firefox (docs/WEB.md "Pictures from
+// the internet", "Browser tests (Playwright)"): the real editor fetches them (the notebook's
+// setting "show without asking" is on), the app reports what it got (?selftest=webpictures:
 // src/app/diag/webselftest.h) and exports the notebook with copies; the picture servers log what
 // the browser really sent.
 //

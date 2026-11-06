@@ -3,14 +3,14 @@ import QtQuick
 import Brulion
 
 // PropertyChipMenu — the menu of a chip of the page's properties: a tag, an alias or an item of a
-// list. One menu for the page header's chips (ContentPageHeader) and the Właściwości panel's
-// (PropertyListValue), so both read alike (docs/UI.md "Page properties"): "Otwórz stronę tagu"
-// (a tag) or "Otwórz" (a list item that is a [[Page]]), "Kopiuj" (aliases and list items),
-// "Usuń z tej strony" / "Usuń alias" / "Usuń „…”" (not on a value that cannot be edited). The
+// list. One menu for the page header's chips (ContentPageHeader) and the Properties panel's
+// (PropertyListValue), so both read alike (docs/UI.md "Page properties"): "Open tag page"
+// (a tag) or "Open" (a list item that is a [[Page]]), "Copy" (aliases and list items),
+// "Remove from this page" / "Remove alias" / "Remove “…”" (not on a value that cannot be edited). The
 // owner acts on the signals; removedText() is the toast's text after a removal (the owner adds
-// "Cofnij"), also for a removal without the menu (a key on a chip).
+// "Undo"), also for a removal without the menu (a key on a chip).
 //
-//   PropertyChipMenu { kind: "tags"; item: "dom"; onRemoveRequested: … }
+//   PropertyChipMenu { kind: "tags"; item: "home"; onRemoveRequested: … }
 BMenu {
     id: menu
 
@@ -18,7 +18,7 @@ BMenu {
     property string kind
     /// The chip's item: a tag without "#", an alias, a list item's text.
     property string item
-    /// What the chip shows for the item (a [[Page]] its page's name), for "Usuń „…”".
+    /// What the chip shows for the item (a [[Page]] its page's name), for "Remove “…”".
     property string display: item
     /// A list item that opens something (a [[Page]]).
     property bool opensItem: false

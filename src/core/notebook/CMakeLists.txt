@@ -2,7 +2,7 @@
 # quick capture, journals (template, appending), pages and folders (create, rename and move with
 # every link and tag kept, delete), the links Brulion copies, item references, JSON of the model,
 # what is shared to Brulion from another app, a block placed after the block embedding an attachment
-# (embeds.h: "Rysuj na tej stronie" of the PDF viewer), the files nothing refers to (cleanup.h),
+# (embeds.h: "Draw on this page" of the PDF viewer), the files nothing refers to (cleanup.h),
 # and Notebook (a vault opened headless: lazy index, lock, compare-and-swap edits with History);
 # loading the index on worker threads (IndexLoader) and keeping its cache on the device
 # (IndexCacheKeeper); text replaced in the whole notebook with a preview (replace.h); task

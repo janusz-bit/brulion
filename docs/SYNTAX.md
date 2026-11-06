@@ -37,10 +37,10 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
 * **Folders** are created with their names sanitised like page titles (`a:b?` → `a b`, per
   segment) and as the vault spells existing ones (`projekty/Nowy` goes into `Projekty/`); a name
   the vault would hide — a leading `.` or one of the ignored folders below (`logseq`,
-  `node_modules`, …), also once sanitised (`logseq?`) — is refused ("Folder o nazwie „…” byłby
-  ukryty"). Nothing is ever moved into an ignored folder.
+  `node_modules`, …), also once sanitised (`logseq?`) — is refused ("A folder named “…” would be
+  hidden"). Nothing is ever moved into an ignored folder.
 * **Moving and renaming** (pages — daily notes too: they are files —, attachments, folders —
-  "Przenieś do…", drag and drop, a `/` in
+  "Move to…", drag and drop, a `/` in
   a name typed in the Rename dialog is a path from the vault root; in a page title edited in place
   it is sanitised like the other characters a file name cannot have, `TCP/IP` → `TCP IP.md`):
   refused onto a name that exists (also in another letter case) and into the item itself, and a
@@ -85,15 +85,14 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
 ```
 `journalFileFormat` uses Qt `QDate` format strings (`yyyy-MM-dd`, `dd.MM.yyyy`, …).
 `journalMode` / `pageMode` (`"outline"` | `"document"`) are the note modes of daily notes and of
-pages the content does not decide (§4 "Tryb notatki"). Missing keys and invalid values fall back
+pages the content does not decide (§4 "Note mode"). Missing keys and invalid values fall back
 to these defaults; unknown keys are kept when Brulion saves the file. When the file is missing
 and the folder is an Obsidian vault (`.obsidian/`), `journalsFolder`, `journalFileFormat`
 (converted from moment.js), `journalTemplate`, `templatesFolder` and `attachmentsFolder` default
-to Obsidian's settings (`daily-notes.json`, `templates.json`, `app.json`; docs/IMPORT.md "Folder
-Obsidiana bez importu") — in memory, until the settings are saved. `weeklyFolder` /
+to Obsidian's settings (`daily-notes.json`, `templates.json`, `app.json`; docs/IMPORT.md "Obsidian folder without importing") — in memory, until the settings are saved. `weeklyFolder` /
 `monthlyFolder` missing from the file follow `journalsFolder` (also one taken from Obsidian).
 
-### Weekly and monthly notes / Notatki tygodniowe i miesięczne
+### Weekly and monthly notes
 
 Periodic pages next to the daily ones (`src/core/periodic/periodic.h`, creating them:
 `notebook/periodicnotes.h`): one note per **ISO week** and one per **month**, each with its own
@@ -157,7 +156,7 @@ match (case-insensitive, Unicode NFC); if several, the one with the shortest pat
 alphabetical; 4) frontmatter `aliases`. Unresolved links point to a page that will be
 created on click (in `newPagesFolder`).
 
-**Path parts / Części ścieżki** (rendering only; the Markdown and the file never change). Folders
+**Path parts** (rendering only; the Markdown and the file never change). Folders
 act as namespaces, as in Logseq: in rendered text a wiki link without display text whose target
 is a path — `[[Firma/Adam Nowak]]`, `[[Projekty/Dom/Kuchnia]]` — shows each path part as a link of
 its own, the parts separated by the `/` as written (spaces kept) in a muted colour; the separator
@@ -184,7 +183,7 @@ a target starting with `/`, `./` or `../`, with a `.` / `..` or an empty or blan
 `[[Firma/Adam.md]]` split), more than 16 parts, a link shown by another name (a day of the
 journal by its date), embeds, Markdown links and tags (`#Projekty/Dom` keeps its sub-tags).
 Exports (HTML, Pandoc, the clipboard's HTML) and `brulion-cli` keep one link. In the app a parent
-part is a `part:<k>:<target>` URL (`markdown::linkPartUrl()`); copying it ("Kopiuj link") gives
+part is a `part:<k>:<target>` URL (`markdown::linkPartUrl()`); copying it ("Copy link") gives
 `[[Page]]` by its shortest target, a folder's path with a trailing `/` (what a `path:` query
 filter takes: quoted when it is not one token — a space, a comma, a quote —, `"Projekty/Zażółć
 gęślą/"`, `«…»` when it holds a `"`) or `[[prefix]]` of a page not written yet.
@@ -256,12 +255,12 @@ the third page's; `#height=400` (Obsidian's embed height) and other `key=value` 
 (`markdown::pdfFragmentPage`). A click on it, or a link `[[wykład.pdf]]` / `[[wykład.pdf#page=3]]`,
 opens the PDF viewer at that page (docs/UI.md "PDF viewer"); where no PDF renderer is built in (the
 browser) the PDF opens in a new browser tab. PDFs are ordinary attachments otherwise: moves and
-renames rewrite their links like any other file's. A drawing made on a page of a PDF ("Rysuj na tej
-stronie") is embedded as a block of its own right after the block embedding the PDF.
+renames rewrite their links like any other file's. A drawing made on a page of a PDF ("Draw on this
+page") is embedded as a block of its own right after the block embedding the PDF.
 
-**Drawings / Rysunki:** a drawing is an ordinary SVG attachment, embedded like any picture
-(`![[Rysunek 2026-10-27 14.32.svg]]`; "/Rysunek" creates `Rysunek <yyyy-MM-dd HH.mm>.svg` in
-`attachmentsFolder`, a free name `… 2.svg` when taken), that carries its editable data inside: an
+**Drawings:** a drawing is an ordinary SVG attachment, embedded like any picture
+(`![[Drawing 2026-10-27 14.32.svg]]`; "/Drawing" creates `Drawing <yyyy-MM-dd HH.mm>.svg` — in a
+Polish UI `Rysunek <yyyy-MM-dd HH.mm>.svg` — in `attachmentsFolder`, a free name `… 2.svg` when taken), that carries its editable data inside: an
 **Excalidraw scene embedded the way excalidraw.com's "Export → SVG → Embed scene" writes it** (core
 module `drawing`, `drawing/excalidraw.h`):
 
@@ -312,7 +311,7 @@ first (Excalidraw's own condition for a polygon), and curved outlines are many s
 program that reads Excalidraw shows and edits them as drawn. A closed line with roundness curves
 through each corner once.
 
-*Labels in polygons (Napisy w wielokątach; `excalidraw.h` polygonLabelGroup, `edit.h` holdsLabel):*
+*Labels in polygons (`excalidraw.h` polygonLabelGroup, `edit.h` holdsLabel):*
 Excalidraw binds text only to rectangles, ellipses, diamonds and arrows — a text whose `containerId`
 names a line, or a line listing a text in its `boundElements`, is turned into that line's bound text
 there, which it cannot lay out. So a polygon's label (a closed line of three corners or more) is
@@ -329,7 +328,7 @@ stored as a **free text grouped with its polygon**: `containerId: null`, `custom
 
 excalidraw.com shows the text where Brulion put it and moves, copies and deletes it with the
 polygon (a group); Brulion reads such a pair — a marked text and one closed line, alone in their
-innermost group — as the polygon and its label (the group is no group in the editor: "Rozgrupuj"
+innermost group — as the polygon and its label (the group is no group in the editor: "Ungroup"
 does not see it) and writes it back so; a copy made in excalidraw.com (new ids, a new group) is
 recognised too and its group renamed to `brulion-label-<id>`. A marked text in a group of more
 elements, or ungrouped, is a free text (the mark is dropped when Brulion next writes it). The label
@@ -386,7 +385,7 @@ merged element by element, by the element's `id` (one without an id by its conte
 or save when another device's version arrives, the merge base Nextcloud's sync keeps — elements
 new on either side are kept (this device's on top), changed ones take the changed side, erased
 ones go; with no common version — a conflict copy Syncthing or Nextcloud left, merged in the sync
-center ("Scal rysunki") — a union: every element of both, the higher `version` of one both have,
+center ("Merge drawings") — a union: every element of both, the higher `version` of one both have,
 the original's order, paper, pattern and theme (elements erased on one device only come back);
 an Obsidian plugin file there keeps the original's Markdown around the scene, so a copy whose
 notes (frontmatter, the back of the card, links, embedded files, a text entry edited by hand)
@@ -395,13 +394,13 @@ Nextcloud keeps both versions (a conflict copy) of a drawing it cannot merge: an
 does not edit, a scene that cannot be read, no common version (two drawings made apart under one
 name), an element whose content changed with the same `version` (an edit by hand).
 
-*The paper's colour (Kolor tła…):* any `appState.viewBackgroundColor`; Brulion writes the chosen one
+*The paper's colour (Background colour…):* any `appState.viewBackgroundColor`; Brulion writes the chosen one
 as `#rrggbb`, in light-theme terms. On it the lines and the grid are `#c9d3e0` multiplied into the
 colour, channel by channel (`c × rule / 255`; white paper keeps `#c9d3e0`), on a dark colour the
 mirror image (`255 − (255 − c) × rule / 255`). A merge treats it as it treats the pattern and the
 theme: ours when the base is known and ours changed it, else theirs.
 
-*Light and dark (Jasne i ciemne tło):* colours are stored as drawn, in light-theme terms, whatever
+*Light and dark (Light background / Dark background):* colours are stored as drawn, in light-theme terms, whatever
 the paper (as Excalidraw does). The dark paper shows them through **Excalidraw's dark mode
 mapping** (`drawing/palette.h`, a port of `applyDarkModeFilter`: the CSS filter `invert(93%)
 hue-rotate(180deg)` applied to each colour, channels rounded as JavaScript's `Math.round`, the
@@ -422,7 +421,7 @@ numbers of Brulion's own formatting go into the CSS, never text from a scene; Qt
 ignores such a style sheet (it applies media rules only for a medium it is given and drops a style
 sheet with a media feature query), so it draws the light picture.
 
-*Clipboard (Schowek; `drawing/clipboard.h`):* the drawing editor copies elements as Excalidraw does
+*Clipboard (`drawing/clipboard.h`):* the drawing editor copies elements as Excalidraw does
 — text on the clipboard, the JSON `{"type":"excalidraw/clipboard","elements":[…],"files":{…}}` (the
 elements as a scene stores them, bindings to elements not copied dropped, a polygon's label as
 above; `files` the pictures they show) —, so excalidraw.com pastes a selection copied in Brulion and
@@ -434,7 +433,7 @@ does not draw (frames, embedded pages, unknown kinds, beyond the coordinate limi
 out — the editor says how many —, as deleted ones; 20 000 elements at most. Plain text is pasted as
 a new text (at most 20 000 characters). A clipboard's JSON is read within the scene's limits.
 
-*Backdrop (Podkład; `drawing/backdrop.h`):* a drawing may lie on a picture, an exported slide or a
+*Backdrop (`drawing/backdrop.h`):* a drawing may lie on a picture, an exported slide or a
 PDF page — lecture notes on slides. The backdrop is an ordinary Excalidraw **`image` element at
 index 0, `locked: true`**, marked by `customData.brulionBackdrop`, with its raster in `files`:
 
@@ -446,8 +445,8 @@ files: {"<sha1>": {"mimeType":"image/png","id":"<sha1>","dataURL":"data:image/pn
 ```
 
 `path` is the source file's vault path (relative, `/`; one that is absolute or leaves the vault
-reads as none) and `page` its PDF page (1-based; `0` a picture) — provenance and "Inna strona
-PDF…", never needed to show the drawing: the raster travels in the file (`fileId` the SHA-1 of its
+reads as none) and `page` its PDF page (1-based; `0` a picture) — provenance and "Another PDF
+page…", never needed to show the drawing: the raster travels in the file (`fileId` the SHA-1 of its
 bytes, as Excalidraw's own), so every device and every other program shows the slide, also where
 no PDF renderer exists. It is a PNG or a JPEG (the smaller; PNG when see-through) of at most
 2400 px a side (2 px a scene unit) and 4 MB, its long side 1200 scene units, at (0, 0). Only the
@@ -470,7 +469,7 @@ light would lose it on the light slide); `dark` — the dark raster the app made
 `brulion-cli`) writes the light picture, the scene still says `dark`, and Brulion's next save
 writes it dark. A drawing made on a picture starts `light`, one on a PDF page as the app.
 
-*Other drawing files (Inne pliki rysunków; `drawing/drawingfile.h`):* Brulion's drawing editor
+*Other drawing files (`drawing/drawingfile.h`):* Brulion's drawing editor
 also edits **`.excalidraw` scene files** (excalidraw.com's "Save to disk", the Obsidian plugin's
 compatibility mode, Logseq's Excalidraw plugin: the scene's JSON, `{` first, `"excalidraw"` within
 its first 4 KB) — written back as Excalidraw's serializeAsJSON writes them, JSON with two spaces,
@@ -538,7 +537,7 @@ make the drawing read-only, as in any scene (its preview: the plugin's export be
 with a dashed grey box for each of those). A `.md` file is such a drawing only by the key (a note
 quoting a `## Drawing` block is a note). The index keeps such a file a page (its text entries
 searchable, the tag `excalidraw` lists the drawings); opened as a page it shows its drawing (the
-picture view: "Edytuj rysunek", "Pokaż jako tekst"), never the block editor. Brulion creates new
+picture view: "Edit drawing", "Show as text"), never the block editor. Brulion creates new
 drawings as SVG only. Sync (Nextcloud) never merges such a file line by line: changed on both
 devices, it is merged element by element as any drawing ("Two versions" above) — the Markdown
 around the scene (frontmatter, the back of the card, text entries) the server's, or this device's
@@ -559,13 +558,13 @@ with a host — `![alt](https://example.com/kot.jpg)`, `![](<https://example.com
 also the embed `![[https://example.com/kot.jpg]]` (`webpicture::isWebUrl`) — is a picture whatever
 its URL ends with (`![…](…)` says so). Other schemes (`![x](ftp://…)`, `data:`) stay text. The file
 keeps the URL; nothing is written for showing it. The editor shows such a picture only from the
-device's cache, fetched when the user allows it — "Pokaż" on that picture, or the device setting
-"show pictures from the internet without asking" (off by default: opening a synced or imported
+device's cache, fetched when the user allows it — "Show" on that picture, or the device setting
+"Show pictures from the internet without asking" (off by default: opening a synced or imported
 note contacts no server). Without asking, a picture is fetched only from a host of the internet:
 loopback, private-use, shared (100.64.0.0/10: carrier NAT, Tailscale), link-local, site-local and
 unspecified IP addresses, and the names of a home network by their form — one label (`localhost`,
 `nas`) or a suffix such as `.local`, `.lan`, `.home.arpa`, `.internal`, `.fritz.box`
-(`webpicture::isPrivateHost`; other names are not resolved) — wait for "Pokaż", as does a picture fetched
+(`webpicture::isPrivateHost`; other names are not resolved) — wait for "Show", as does a picture fetched
 so already this session and dropped from the cache since; turning the setting off cancels the
 fetches it started. The fetch: http(s) only, every redirect checked (`webpicture::redirectAllowed`:
 never https → http, never from a host of the internet to a private one), no cookies, a generic
@@ -577,7 +576,7 @@ bytes must be a picture by their signature (PNG, JPEG, GIF, WebP, BMP, ICO, AVIF
 (a file shown is marked used by its modification time, at most once an hour). In the browser the
 cache is in the tab's memory: up to 50 MB, gone with the tab (docs/WEB.md). Its format is the one
 found in the bytes (an SVG served from a URL without `.svg` is drawn as one).
-**"Zapisz w notatniku"** stores the picture as an attachment (`attachmentsFolder`, named after the URL's last path segment with the extension of its real
+**"Save to notebook"** stores the picture as an attachment (`attachmentsFolder`, named after the URL's last path segment with the extension of its real
 format: `kot.png` for a PNG served as `kot.jpg`) and points every picture of that URL on the page
 at it (`retargetWebPicture`, one undo step): `![alt](assets/kot.png)` — exactly the destination the
 parser read is replaced (`markdown::markdownDestination`; one written with backslash escapes as a
@@ -588,9 +587,9 @@ when a note changed (nothing is left in the attachments folder otherwise). Links
 `[x](https://…)`, bare URLs, code and blocks that show no pictures (code fences, formulas, tables,
 HTML) are never fetched or touched. A pasted picture address alone (`https://…/kot.jpg`, by its
 form: an http(s) URL whose path ends with a picture extension) stays the bare URL it is until the
-user chooses "Zapisz w notatniku" (docs/UI.md). Exports: the HTML (`html-site`, `html-single`) and
+user chooses "Save to notebook" (docs/UI.md). Exports: the HTML (`html-site`, `html-single`) and
 Pandoc ones show every such picture — `![alt](url)` and `![[url|alt]]` alike — as `<img>` /
-`![alt](url)` with the URL as written ("Zostaw adresy", the default) or, with "Dołącz kopie", a copy
+`![alt](url)` with the URL as written ("Keep addresses", the default) or, with "Include copies", a copy
 the app takes from the device's cache, fetching the missing ones first: `assets/web/<name>` in the
 site's and Pandoc's ZIP (a free name: `kot 2.jpg`), a `data:` URI in the single HTML file; a picture
 that cannot be fetched keeps its URL (named in the export's warnings), and so does one of this
@@ -607,7 +606,7 @@ page may have the same one), else, moved away, the block the link now leads to (
 itself while the block is unknown. Both show the block's current text, in table cells too: an edit
 of a block on the same page shows at once.
 
-### Headings and blocks in links / Linki do nagłówków i bloków
+### Headings and blocks in links
 
 **Heading fragments** (`markdown::headingFragment`, `src/core/markdown/linkformat.h`): what
 `[[Page#…]]` names a heading by — its line as shown: inline markup removed (`**`, `*`, `~~`,
@@ -640,20 +639,20 @@ the page opens at its top and the editor says so. "Nowhere" is decided on the co
 (right after opening a notebook it is still being built: it is completed first). The HTML export
 finds headings by the same matcher (sections of `![[Page#Heading]]`, anchors of links).
 
-**Copied links** — the block menu's "Kopiuj odnośnik", the command palette, Ctrl+Shift+C,
+**Copied links** — the block menu's "Copy link", the command palette, Ctrl+Shift+C,
 the side panel's outline (docs/UI.md "The block editor"; `PageController::copyLink`,
 `markdown::formatReference`):
 
 | Command | Writes |
 |---|---|
-| Odwołanie do bloku (Ctrl+Shift+C) | `((id))` |
-| Link do bloku | `[[Page#^id]]` |
-| Link do nagłówka | `[[Page#Heading]]`; a heading name the page has twice: the shortest unique heading path `[[Page#Parent#Heading]]`, else `[[Page#^id]]` |
-| Osadzenie | `!((id))`; on a heading its section `![[Page#Heading]]` (same fallbacks, `![[Page#^id]]`) |
-| Kopiuj link do strony | `[[Page]]` |
+| Block reference (Ctrl+Shift+C) | `((id))` |
+| Link to block | `[[Page#^id]]` |
+| Link to heading | `[[Page#Heading]]`; a heading name the page has twice: the shortest unique heading path `[[Page#Parent#Heading]]`, else `[[Page#^id]]` |
+| Embed | `!((id))`; on a heading its section `![[Page#Heading]]` (same fallbacks, `![[Page#^id]]`) |
+| Copy link to page | `[[Page]]` |
 
 * `Page` is the same in every copied link — the editor's, the page menu's and the folder tree's
-  "Kopiuj link", `brulion-cli block link` (`notebook::pageLinkTarget`): the page's title, or, when
+  "Copy link", `brulion-cli block link` (`notebook::pageLinkTarget`): the page's title, or, when
   the title leads to another page (the same name in another folder), the shortest unique path
   `VaultIndex::linkTarget()` gives (`[[Projekty/Dom]]`, not `[[Archiwum/2025/Projekty/Dom]]`; what
   `[[` completion and moves write too); a daily note is named by its file name
@@ -675,7 +674,7 @@ formulas (§11), URLs or link targets. A heading `# Title` is not a tag. Frontma
 `tags: [a, b]` or `tags: a, b` also tags the page. Tags compare case-insensitively; display
 keeps the first-seen casing.
 
-### Tagi jako linki do stron / Tags as page links
+### Tags as page links
 
 A tag names a page, as in Logseq: `#praca` is a link to the page "praca" and every tag feature
 keeps working (counts, the tag list and overview, `tag:` queries with sub-tags, colours). This
@@ -695,10 +694,10 @@ frontmatter's `tags:`.
   its first content, where a link's would be (`newPagesFolder`; `#praca/raporty` →
   `praca/raporty.md`, a folder; a date-like tag `#2026-10-13` opens that day's journal), named as
   the tag was first written. The tag overview (the pages and blocks carrying the tag, sub-tags,
-  "Zadania z tym tagiem") stays one tap away. In Tasks a click on a tag filters the list;
-  Ctrl+click opens the page; a long press or right-click opens the tag's menu (Filtruj po tagu,
-  Otwórz stronę tagu, Widok tagu, Otwórz w panelu bocznym, Kopiuj tag — `#tag`, or `#[[tag ze
-  spacjami]]`), as in the editor, where the tag's menu has "Zadania z tym tagiem" instead.
+  "Tasks with this tag") stays one tap away. In Tasks a click on a tag filters the list;
+  Ctrl+click opens the page; a long press or right-click opens the tag's menu (Filter by tag,
+  Open tag page, Tag overview, Open in side panel, Copy tag — `#tag`, or `#[[tag with
+  spaces]]`), as in the editor, where the tag's menu has "Tasks with this tag" instead.
 * **Nested tags** (rendering only; the Markdown never changes) — every path part of a nested tag
   is a link of its own inside one chip: in `#praca/raporty` a click on `#praca` opens the tag
   `praca` (as a tag written `#praca` would, also in Tasks' filter and the tag's menu), on `raporty`
@@ -706,9 +705,9 @@ frontmatter's `tags:`.
   click on it edits the block). A tag splits by the rules of a link's path parts (§2 "Path parts":
   `#[[Projekty/Dom/plan.png]]` or a blank part stay one link); Alt+Enter on the edited text
   follows the part under the caret.
-* **References** — a page's "Odnośniki" list the blocks that link to it *and* the blocks tagged
+* **References** — a page's "Linked references" list the blocks that link to it *and* the blocks tagged
   with a tag naming it (one row per block), and pages tagged as a whole (frontmatter `tags:`,
-  leading `tags::`) as a group marked "cała strona"; self-references are excluded. Exactly the
+  leading `tags::`) as a group marked "whole page"; self-references are excluded. Exactly the
   tag: sub-tags (`#praca/raporty` under "praca") are pages of their own (chips in the page
   header). A page that exists only as a tag still lists them, and the unresolved `[[links]]` with
   its name.
@@ -756,7 +755,7 @@ frontmatter's `tags:`.
 * **Page properties**: YAML frontmatter at the very start (`---` … `---`), or `key:: value`
   lines at the very top of the file before any other block (Logseq style).
 
-### Editing page properties / Edycja właściwości strony
+### Editing page properties
 
 The properties panel and the page header edit page properties as typed fields
 (`markdown/pageprops.h`); every edit changes only the lines of the one property and is one undo
@@ -820,7 +819,7 @@ stay as written (`[[A]]`, `#b`), any other item becomes `[[item]]` (a text `a, b
 properties go; removing one takes it out of every property holding it and removes a property
 whose list becomes empty.
 
-### Ikona i okładka strony / Page icon and cover
+### Page icon and cover
 
 A page's icon and cover are page properties (`markdown/pagelook.h`), in the keys that Obsidian's
 Iconize and Banners plugins and Logseq read, so they travel with the file and show in those apps:
@@ -852,7 +851,7 @@ or in Logseq style `icon:: 🚀`, `banner:: ![[assets/góry.jpg]]`.
   item. Other schemes (`javascript:`, `data:`, `file:`), several links, text around the picture or a
   line break are no cover. **`banner_y`**: a number 0 … 1 (also text, a decimal comma allowed) — the
   part of the picture shown when it is taller than the cover's band; anything else is ½.
-* **Writing** (the page menu's "Ikona strony…" / "Okładka…", the header): through the page-property
+* **Writing** (the page menu's "Add icon…" / "Change icon…" and "Add cover…" / "Change cover…", the header): through the page-property
   edits above, so only the edited key's line changes (a new key goes where new properties go: the
   frontmatter, or the `key::` lines of a Logseq page). An emoji is written as it is, an app icon as
   `LiBookOpen`; a cover as `"![[link]]"` (YAML quotes it: a `!` would start a tag) with the shortest
@@ -866,7 +865,7 @@ or in Logseq style `icon:: 🚀`, `banner:: ![[assets/góry.jpg]]`.
   not show it); the cover as a band at the top of the page. Block properties `icon::` are no page
   icon.
 
-### Tryb notatki / Note mode
+### Note mode
 
 Every note is shown in one of two modes; the Markdown is the same in both:
 
@@ -953,7 +952,7 @@ Logseq planning lines inside the block are understood too:
 above the completed one (dates shifted by the rule), exactly like Obsidian Tasks, and the
 completed line gets `✅ <today>`.
 
-### Nawyki / Habits
+### Habits
 
 Recurring points of the day (`src/core/habits`, writing a check: `notebook/habitchecks.h`), kept as
 plain Markdown that Obsidian and Logseq read as ordinary blocks and tasks: a habit is **defined**
@@ -962,7 +961,7 @@ note, and a tick in the journal itself counts.
 
 **Definition** — a block (list item or paragraph) with the property `habit::` (or `nawyk::`); its
 text is the habit's name. A page whose page properties (YAML frontmatter or leading `key:: value`
-lines) have `habit` is a habit named by its title. Anywhere in the notebook; Brulion's "Dodaj nawyk"
+lines) have `habit` is a habit named by its title. Anywhere in the notebook; Brulion's "Add habit"
 appends to the page holding the first habit, else creates `Nawyki.md` (`Habits.md` in English)
 where new pages go.
 
@@ -1049,8 +1048,8 @@ nothing; at most the last 3660 days):
 * A task is **blocking** while it has a `🆔`, is not done or cancelled, and a task that is not done
   or cancelled waits for it.
 * An id no task carries does not block; it is flagged (the `⛔` chip shows `⛔ id?`, the Tasks view
-  "Brak zależności"). A **cycle** (`A ⛔ b`, `B ⛔ a`, or longer, through tasks that are not done or
-  cancelled) is flagged too ("Cykl zależności"); both tasks stay blocked until one of them is
+  "Missing dependency"). A **cycle** (`A ⛔ b`, `B ⛔ a`, or longer, through tasks that are not done or
+  cancelled) is flagged too ("Dependency cycle"); both tasks stay blocked until one of them is
   done or cancelled. Only direct dependencies decide blocking, so a cycle never loops.
 * An id stops at the first other character: `🆔 zadanie-ąę` is the id `zadanie-` followed by text.
 * Brulion writes them in Obsidian Tasks' order: description, `🆔`, `⛔`, priority, `🔁`, dates — a
@@ -1100,14 +1099,14 @@ and written exactly as Logseq does:
   go back). A line that does not read (bad date, end before start without `=>`) is ignored;
   only the last clock without an end runs.
 * Totals: overlapping entries of one task count once; a running clock counts up to now in views
-  that show live totals (the summaries), and its chip names its start ("⏱ 25 min + od 10:00").
+  that show live totals (the summaries), and its chip names its start ("⏱ 25 min + from 10:00").
   Summaries split entries at local midnight (a day of 23 or 25 hours on a daylight-saving change).
 * One clock runs at a time: starting one (the task menu, the palette, `brulion-cli task start`)
   stops the running one first. The clock is in the file, so it survives a restart and syncs.
 * A new drawer goes after the task's first line and the planning / `key:: value` lines right after
   it, indented like its continuation lines (Logseq: a tab outline keeps its tab). Drawer lines are
   not part of the block's text (they are hidden when rendered).
-* **Status history** (the setting "Zapisuj zmiany statusu zadań", default off; `brulion-cli task
+* **Status history** (the setting "Log task status changes", default off; `brulion-cli task
   set --history`): every status change of a task adds `State "NEW" from "OLD" [YYYY-MM-DD Ddd
   HH:mm]` (org mode's padding, Logseq keywords — `TODO`, `DOING`, `DONE`, `CANCELED`, `WAITING`,
   `LATER`/`NOW` kept) to its `:LOGBOOK:`, and — as Logseq does — becoming doing starts its clock,
@@ -1251,7 +1250,7 @@ references need no rewriting. Editing the file by hand rewrites nothing.
 ### Sorting and filtering tables
 
 A table is sorted by a column from the menu of one of its cells (docs/UI.md "The block editor":
-Kolumna ▸ Sortuj rosnąco / malejąco). Sorting rewrites the table's rows in the file — one undo step,
+Column ▸ Sort ascending / Sort descending). Sorting rewrites the table's rows in the file — one undo step,
 nothing else on the page changes:
 * A column compares by what all its non-empty cells are: **numbers** as people write them
   (`12,50 zł`, `23%`, `1 200`; `12.50` in English), else **dates** in the forms Brulion reads
@@ -1273,9 +1272,9 @@ nothing else on the page changes:
 
 **Filters** only hide rows in the editor — nothing is written, and they last while the page is
 open (they are view state, like a fold, and not synced: a filter that hid rows on one device only
-would be confusing in a shared file). The menu's "Filtruj wiersze" shows a field under each column
+would be confusing in a shared file). The menu's "Filter rows" shows a field under each column
 header; a row shows when every non-empty field matches its cell (as shown — a formula's result):
-* `tekst` — contains it, case- and diacritic-insensitive (`zolw` finds `Żółw`); `!tekst` — does not;
+* `text` — contains it, case- and diacritic-insensitive (`zolw` finds `Żółw`); `!text` — does not;
 * `> 100`, `>= 2026-01-01`, `< 5`, `<=`, `=`, `!=` (also `<>`, `≥`, `≤`, `≠`) — numbers and dates
   compare by value (both the cell and the value must be one), `=` / `!=` compare text
   case- and diacritic-insensitively, `<` / `>` text alphabetically;
@@ -1284,7 +1283,7 @@ Summary rows (above) always show. A row being edited stays shown until it is lef
 
 ### CSV
 
-One table as CSV: the block menu's "Kopiuj jako CSV" and "Zapisz jako CSV…" (the browser:
+One table as CSV: the block menu's "Copy as CSV" and "Save as CSV…" (the browser:
 a download). RFC 4180 with `,`, CRLF line ends, the header first, a UTF-8 BOM in a saved file (the
 clipboard has none) so that spreadsheets read Polish letters; formula cells are their results,
 other cells their text as written (`<br>` a line break, `\|` a pipe); a value a spreadsheet would
@@ -1366,8 +1365,8 @@ off right there). Without `limit:` it shows at most 500 items (the total is stil
 
 ````
 ```query
-# Praca na najbliższy tydzień
-type:tasks status:open tag:praca due:<=+7d   // otwarte zadania #praca
+# Work for the coming week
+type:tasks status:open tag:praca due:<=+7d   // open tasks tagged #praca
 sort:due,-priority limit:20
 ```
 ````
@@ -1438,20 +1437,20 @@ More examples:
 
 ````
 ```query
-// Przypomnienia na ten tydzień (type:reminders, po kolei)
+// This week's reminders (type:reminders, in order)
 remind:this-week
 ```
 ```query
-type:pages tag:projekt sort:page        // strony projektów
+type:pages tag:projekt sort:page        // project pages
 ```
 ```query
-ref:this                                // bloki, które linkują do tej strony (albo mają jej tag)
+ref:this                                // blocks linking to this page (or carrying its tag)
 ```
 ```query
 type:tasks ref:this status:open group:page
 ```
 ```query
-status:open -is:blocked sort:due        // co można zrobić już teraz
+status:open -is:blocked sort:due        // what can be done right now
 ```
 ````
 
@@ -1463,7 +1462,7 @@ lists, strikethrough, autolinks, math formulas and Mermaid diagrams (below). Raw
 rendered as escaped text (never executed) — apart from the `<mark>` tags of coloured highlights,
 which are read, never passed on.
 
-### Kolorowe zakreślenia / Coloured highlights
+### Coloured highlights
 
 Obsidian has no syntax of its own for a coloured highlight; its Highlightr plugin writes HTML that
 Obsidian, GitHub, Pandoc and browsers show without any plugin. Brulion reads and writes that
@@ -1492,7 +1491,7 @@ To jest ==zwykłe zakreślenie==, a to <mark style="background: #FF5582A6;">czer
   passed on — the renderer, the editor's syntax colours and the exports show only palette colours
   (`InlineRenderer`: a span tinted with the palette's translucent colour, readable on light and
   dark paper).
-* **Writing** (the editor's "Zakreśl", docs/UI.md "Coloured highlights";
+* **Writing** (the editor's "Highlight", docs/UI.md "Coloured highlights";
   `markdown::setHighlight`) — the default colour as `==text==` (or `<mark>text</mark>` where `==`
   could not pair, "a==(b)==c"), the others as `<mark style="background: #FF5582A6;">text</mark>`.
   A selection inside a highlight (or covering one exactly, markers included) recolours or removes
@@ -1531,7 +1530,7 @@ Unknown commands stay as written; a part nested deeper than 48 levels (braces, a
 environments) is shown as its source. Spaces between atoms are ignored as in LaTeX (`\ `,
 `\,`, `\quad` are explicit spaces); lowercase Greek is italic, uppercase upright. The HTML
 export shows the formula (display formulas are centred), also a ```` ```math ```` block that is a
-list item of its own (what `/Wzór matematyczny` writes in an outline or a journal); other fenced
+list item of its own (what `/Math formula` writes in an outline or a journal); other fenced
 list items are exported as code blocks.
 
 Where a formula is (in a block's inline text, after code spans and comments are masked):
@@ -1669,7 +1668,7 @@ diagram's source.
 
 ## 12. Templates
 
-User guide (Polish): [TEMPLATES.md](TEMPLATES.md).
+User guide: [TEMPLATES.md](TEMPLATES.md).
 
 Files in `templatesFolder`. Variables: `{{date}}` (yyyy-MM-dd), `{{date:FORMAT}}` and
 `{{time:FORMAT}}` (Qt date-time format), `{{time}}` (HH:mm), `{{title}}`, `{{weekday}}` (localised),

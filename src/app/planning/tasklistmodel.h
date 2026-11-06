@@ -1,12 +1,12 @@
 // TaskListModel — the vault's tasks for TasksView.qml, in sections:
 //
-//   overdue   Zaległe       open (not done/cancelled) with a due date before today
-//   today     Dziś          due or scheduled today, or scheduled in the past (rolled over)
-//   tomorrow  Jutro         due / scheduled tomorrow
-//   thisWeek  Ten tydzień   until the end of today's week (per weekStart)
-//   later     Później       after this week (a start date 🛫 in the future counts too)
-//   noDate    Bez terminu   no due / scheduled date
-//   done      Zrobione      done and cancelled tasks, most recently finished first (collapsed
+//   overdue   Overdue       open (not done/cancelled) with a due date before today
+//   today     Today         due or scheduled today, or scheduled in the past (rolled over)
+//   tomorrow  Tomorrow      due / scheduled tomorrow
+//   thisWeek  This week     until the end of today's week (per weekStart)
+//   later     Later         after this week (a start date 🛫 in the future counts too)
+//   noDate    No date       no due / scheduled date
+//   done      Done          done and cancelled tasks, most recently finished first (collapsed
 //                           by default)
 //
 // The section date of an open task is the earlier of its due and scheduled dates; a task with
@@ -18,7 +18,7 @@
 // folderFilter (path prefix), priorityFilter ("" | "highest" … "lowest" | "none"),
 // statusFilter ("all" | "open" | "todo" | "doing" | "deferred" | "done" | "cancelled"),
 // textFilter (words, case- and diacritic-insensitive). They are evaluated by the query engine
-// (index/query.h) from the text in `queryText` — so "Pokaż jako zapytanie" shows exactly what
+// (index/query.h) from the text in `queryText` — so "Show as query" shows exactly what
 // the list shows (docs/SYNTAX.md §10). sortKey: "due" (default) | "priority" | "page" |
 // "created" orders tasks inside each section.
 //
@@ -46,7 +46,7 @@
 // subtaskCount: the subtasks listed under it (any depth, also folded ones); folded: they are hidden.
 // Task roles (also on headers, empty): key ("path:line"), text (plain), html (escaped rich
 // text: links and tags clickable — page:/tag: URLs), status, path, line, pageTitle, folder,
-// isJournal, due ("YYYY-MM-DD[ HH:mm]"), dueLabel ("jutro", "pt 17 paź"), overdue, scheduled,
+// isJournal, due ("YYYY-MM-DD[ HH:mm]"), dueLabel ("tomorrow", "Fri, Oct 17"), overdue, scheduled,
 // scheduledLabel, start, startLabel, recurrence (canonical), recurrenceLabel (UI language),
 // priority (0 = none … 5 = highest), priorityName, tags, reminderLabel (next reminder in the
 // block, "jutro 09:00"), reminderAlarm, reminderSpec (that reminder as the index reads it, "YYYY-MM-DD
@@ -57,7 +57,7 @@
 // od 10:00", "" without), clockRunning.
 //
 // timeSummary(group, range): the time clocked on the listed tasks (the filters apply) per day,
-// page, tag or task (index/tasktime.h) — the view's "Czas pracy".
+// page, tag or task (index/tasktime.h) — the view's "Time spent".
 #pragma once
 
 #include "index/notecache.h"
@@ -91,7 +91,7 @@ class TaskListModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(QObject *vaultIndex READ vaultIndexObject WRITE setVaultIndexObject NOTIFY vaultIndexChanged FINAL)
     /// Today ("YYYY-MM-DD"); "" = the system clock.
     Q_PROPERTY(QString today READ today WRITE setToday NOTIFY todayChanged FINAL)
-    /// First weekday for "Ten tydzień" (1 = Monday … 7 = Sunday); 0 = the vault's setting.
+    /// First weekday for "This week" (1 = Monday … 7 = Sunday); 0 = the vault's setting.
     Q_PROPERTY(int weekStart READ weekStart WRITE setWeekStart NOTIFY weekStartChanged FINAL)
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
     /// Renderer colours (see BlockEditor.rendererPalette).

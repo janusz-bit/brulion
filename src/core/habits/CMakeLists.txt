@@ -1,5 +1,5 @@
 # habits — recurring daily items with a streak and a month view, recorded in the journal
-# (docs/SYNTAX.md §5 "Nawyki / Habits"): schedules (dates' recurrence parser where it fits), the
+# (docs/SYNTAX.md §5 "Habits"): schedules (dates' recurrence parser where it fits), the
 # definitions (`habit::` blocks, a page's property) and checks (#nawyk tasks of daily notes) of a
 # note, streaks, completion rates and the month grid, and HabitCache over the index (per note,
 # incremental). Public headers: habits.h (overview), habitcache.h.

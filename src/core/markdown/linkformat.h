@@ -1,7 +1,7 @@
 // Links to pages, headings and blocks as Brulion writes them (docs/SYNTAX.md §2 "Copied links"):
 // the fragment that names a heading in `[[Page#Heading]]`, the one matcher of such fragments
 // (link navigation, `![[Page#Heading]]` embeds and copying all use findHeading()), and the text
-// of each kind of reference. Pure functions, GUI-free — the editor's "Kopiuj odnośnik", the
+// of each kind of reference. Pure functions, GUI-free — the editor's "Copy link", the
 // command palette and future command-line tools share them. Part of the markdown module — see
 // markdown/markdown.h for the module overview.
 #pragma once

@@ -42,7 +42,7 @@
 //   frontmatter.h  findFrontmatter / parseFrontmatter(content), parseYaml(yaml) (subset, no
 //                  deps), stringifyYaml / stringifyFrontmatter(data, keyOrder),
 //                  setFrontmatterValue / removeFrontmatterValue(content, key[, value])
-//   pageprops.h    page properties as typed fields (the "Właściwości" panel): PropertyType
+//   pageprops.h    page properties as typed fields (the "Properties" panel): PropertyType
 //                  (text, number, checkbox, date, datetime, list, tags, aliases, unsupported),
 //                  inferPropertyType(key, value, source), readPageProperties(content) ->
 //                  PageProperties{items: PageProperty{key, source yaml | logseq, type, value,
@@ -113,7 +113,7 @@
 //                  #FF5582A6;">`, `<mark class="hltr-red">`, `<mark>`): HighlightColor (a fixed
 //                  palette; any CSS colour mapped to its nearest), markTagAt, findMarkPairs,
 //                  findHighlights, setHighlight(text, from, to, color | nullopt) (the editor's
-//                  "Zakreśl": wrap, recolour, remove)
+//                  "Highlight…": wrap, recolour, remove)
 //   pagelook.h     a page's icon and cover (`icon` / `banner_icon`, `banner`, `banner_y`):
 //                  parsePageIcon (emoji, Iconize's `LiBookOpen`), parsePageCover (`![[file]]`,
 //                  a path, an http(s) URL), pageLook(properties), the values Brulion writes

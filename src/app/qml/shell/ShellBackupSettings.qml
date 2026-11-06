@@ -4,11 +4,11 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ShellBackupSettings — the "Kopie zapasowe" section of SettingsView (docs/UI.md "Backups"; C++:
+// ShellBackupSettings — the "Backups" section of SettingsView (docs/UI.md "Backups"; C++:
 // Workspace.backups, shell/workspacebackups.h): when the last backup was made and any problem with
 // it, the schedule, how many are kept, the folder (the browser has none: its copies live in its own
-// storage, and it says so), "Utwórz kopię teraz", and the backups in the folder, each with Przywróć,
-// Usuń and — per platform — Pobierz (the browser) or Udostępnij (Android's private folder). A restore
+// storage, and it says so), "Create a backup now", and the backups in the folder, each with Restore,
+// Delete and — per platform — Download (the browser) or Share (Android's private folder). A restore
 // shows what it would do as counts first (Workspace.backups.prepareRestore → restorePlanReady).
 ColumnLayout {
     id: section

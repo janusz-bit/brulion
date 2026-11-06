@@ -314,7 +314,7 @@ void addToolCommands(QList<Command> &out)
                  calcPage, {positional(u"ref"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The page"))}));
     c = make(u"block.link"_s,
              QT_TRANSLATE_NOOP("brulion::cli",
-                               "The links to a block, adding its id when it has none (as the app's Kopiuj odnośnik)"),
+                               "The links to a block, adding its id when it has none (as the app's Copy link)"),
              blockLink,
              {positional(u"ref"_s, ArgType::Ref,
                          QT_TRANSLATE_NOOP("brulion::cli",

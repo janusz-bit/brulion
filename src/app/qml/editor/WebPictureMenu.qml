@@ -14,7 +14,7 @@ BMenu {
 
     /// The picture's host, shown on the menu's first line.
     property string host
-    /// Offer "Powiększ" (not from the viewer itself).
+    /// Offer "View picture" (not from the viewer itself).
     property bool canView: true
 
     signal chosen(string action)

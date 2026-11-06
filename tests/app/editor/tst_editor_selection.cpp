@@ -425,7 +425,7 @@ private Q_SLOTS:
         QCOMPARE(f.text(), u"- b\n\t- b1\n- c\n- d\n"_s);
     }
 
-    // The toasts' "Cofnij" after deleting or cutting blocks (BlockEditor.undoAction): undoStep()
+    // The toasts' "Undo" after deleting or cutting blocks (BlockEditor.undoAction): undoStep()
     // undoes exactly the edit its token names, only while that is the last step of the history.
     void toastUndoNamesItsEdit()
     {
@@ -602,7 +602,7 @@ private Q_SLOTS:
         QCOMPARE(f.text().count(u"[/]"_s), 5);
     }
 
-    // Ctrl+click / the touch tools' "Pojedynczo": single blocks picked into or out of the
+    // Ctrl+click / the touch tools' "One by one": single blocks picked into or out of the
     // selection, gaps allowed (bullets 1, 3 and 5).
     void blocksPickedOneByOne()
     {
@@ -1071,7 +1071,7 @@ private Q_SLOTS:
         QCOMPARE(f.page.pasteClipboard(0, 0, 0).value(u"row"_s).toInt(), -1);
     }
 
-    // A browser's "Kopiuj adres obrazu": the address alone, by its form (no network).
+    // A browser's "Copy image address": the address alone, by its form (no network).
     void pastePictureAddress_data()
     {
         QTest::addColumn<QString>("pasted");
@@ -1108,7 +1108,7 @@ private Q_SLOTS:
         QCOMPARE(f.page.blocks()->editTextAt(0).mid(from, to - from), url);
         const QString pastedText = f.text();
         QVERIFY(pastedText.contains(url) && !pastedText.contains(u"]("_s));
-        // "Zapisz w notatniku": the picture `![](url)`, one undo step (stored once fetched).
+        // "Save to notebook": the picture `![](url)`, one undo step (stored once fetched).
         const QVariantMap done = f.page.urlToPicture(0, from, to, url, false);
         QCOMPARE(done.value(u"row"_s).toInt(), 0);
         QVERIFY2(f.text().startsWith(u"- Zdjęcie: "_s) && f.text().contains(u"![]("_s + url + u")"_s)
@@ -1166,7 +1166,7 @@ private Q_SLOTS:
         QGuiApplication::clipboard()->clear();
     }
 
-    // A quote and a callout show pictures: "Zapisz w notatniku" turns the pasted address into the
+    // A quote and a callout show pictures: "Save to notebook" turns the pasted address into the
     // picture where it is, not a copy in a new block below.
     void pastePictureAddressIntoAQuote_data()
     {
@@ -1246,7 +1246,7 @@ private Q_SLOTS:
     }
 
     // HTML of a web page with pictures: they come as `![alt](https://…)`; the paste names the new
-    // ones (not data: pictures, not those on the page already) for "Zapisz w notatniku".
+    // ones (not data: pictures, not those on the page already) for "Save to notebook".
     void pastedHtmlNamesItsWebPictures()
     {
         Fixture f(u"- Już jest ![](https://example.com/stary.png)\n- \n"_s);

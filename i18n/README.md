@@ -1,44 +1,45 @@
-# Tłumaczenia Brulionu
+# Brulion translations
 
-Teksty interfejsu są po angielsku w kodzie (`qsTr()` w QML, `tr()` / `QCoreApplication::translate()`
-w C++). Angielski jest domyślnym językiem aplikacji (także w przeglądarce i w polskim systemie);
-`brulion_pl.ts` to tłumaczenie polskie, wybierane w pierwszym kroku wprowadzenia albo w ustawieniach. `brulion_en.ts` zawiera
-tylko angielskie formy liczby mnogiej tekstów z `%n`. Te same pliki tłumaczą też wiersz poleceń
-`brulion-cli` (kontekst `brulion::cli`, zobacz [docs/CLI.md](../docs/CLI.md#language)): nazwy
-poleceń, opcji i wartości (`task add`, `--due`, `todo`, `today`) zostają w tłumaczeniu bez zmian.
+Interface texts are in English in the code (`qsTr()` in QML, `tr()` / `QCoreApplication::translate()`
+in C++). English is the app's default language (also in the browser and on a Polish system);
+`brulion_pl.ts` is the Polish translation, chosen in the first step of the introduction or in the
+settings. `brulion_en.ts` holds only the English plural forms of texts with `%n`. The same files
+also translate the `brulion-cli` command line (context `brulion::cli`, see
+[docs/CLI.md](../docs/CLI.md#language)): the names of commands, options and values (`task add`,
+`--due`, `todo`, `today`) stay unchanged in the translation.
 
-## Odświeżanie
+## Refreshing
 
 ```sh
-scripts/remote-build.sh -n i18n update_translations   # lupdate: nowe teksty trafiają do obu plików .ts
-rsync -a laptop:work/brulion-i18n/src/i18n/ i18n/      # pliki .ts wracają z laptopa
+scripts/remote-build.sh -n i18n update_translations   # lupdate: new texts go into both .ts files
+rsync -a laptop:work/brulion-i18n/src/i18n/ i18n/      # the .ts files come back from the laptop
 ```
 
-Nowe wpisy mają `type="unfinished"` — przetłumacz je (Qt Linguist albo edytor tekstu). Kompilację
-`.qm` robi zwykłe budowanie (`lrelease` w celu `brulion`, drugi raz dla `brulion-cli`); jego
-wynik pokazuje liczbę nieprzetłumaczonych tekstów.
+New entries have `type="unfinished"` — translate them (Qt Linguist or a text editor). The `.qm`
+files are compiled by the normal build (`lrelease` in the `brulion` target, a second time for
+`brulion-cli`); its output shows the number of untranslated texts.
 
-## Zasady
+## Rules
 
-* Liczba mnoga zawsze przez `%n`: `qsTr("%n note(s)", "", n)`. Polski ma trzy formy:
-  1 (`notatka`), 2–4, 22–24 … (`notatki`), 0, 5–21, 25–31 … (`notatek`); angielski dwie.
-* Całe zdania w jednym tekście — nie skleja się zdań z kawałków (szyk i odmiana w polskim
-  zależą od całości). Tekst przekazywany jako `%1` nie powinien wymagać odmiany; gdy wymaga,
-  użyj osobnych tekstów dla wariantów albo dwukropka („Wersja: %1”).
-* Ten sam angielski tekst w jednym kontekście o dwóch znaczeniach dostaje komentarz
-  rozróżniający: `qsTr("Normal", "text width")` (normalna szerokość ≠ normalny rozmiar).
-* Przyciski: czasownik w trybie rozkazującym („Zapisz”, „Anuluj”, „Usuń”, „Przywróć”).
-  Pytania w oknach potwierdzenia: bezokolicznik („Usunąć na zawsze?”).
-* Typografia: cudzysłowy „…”, wielokropek …, półpauza – lub pauza — jak w źródle,
-  twarde spacje (`&#xa0;`) zachowane.
-* Bez rodzaju gramatycznego tam, gdzie nie znamy podmiotu (tytuł strony, folder):
+* Plurals always through `%n`: `qsTr("%n note(s)", "", n)`. Polish has three forms:
+  1 (`notatka`), 2–4, 22–24 … (`notatki`), 0, 5–21, 25–31 … (`notatek`); English has two.
+* Whole sentences in one text — do not glue sentences together from pieces (word order and
+  inflection in Polish depend on the whole). A text passed as `%1` should not need inflecting;
+  when it does, use separate texts for the variants or a colon („Wersja: %1”).
+* The same English text with two meanings in one context gets a disambiguating comment:
+  `qsTr("Normal", "text width")` (normal width ≠ normal size).
+* Buttons: a verb in the imperative mood („Zapisz”, „Anuluj”, „Usuń”, „Przywróć”).
+  Questions in confirmation dialogs: the infinitive („Usunąć na zawsze?”).
+* Typography: quotation marks „…”, ellipsis …, en dash – or em dash — as in the source,
+  non-breaking spaces (`&#xa0;`) kept.
+* No grammatical gender where the subject is unknown (a page title, a folder):
   „Element „%1” trafi do kosza”, „Przywrócono „%1””.
 
-## Słownik
+## Glossary
 
-| angielski | polski |
+| English | Polish |
 |---|---|
-| notebook, vault (nasz) | notatnik |
+| notebook, vault (ours) | notatnik |
 | vault (Obsidian) | skarbiec |
 | note / page | notatka / strona |
 | journal, daily note | dziennik, notatka dzienna |
@@ -52,10 +53,10 @@ wynik pokazuje liczbę nieprzetłumaczonych tekstów.
 | due / scheduled / start | termin / zaplanowane / początek |
 | overdue | zaległe |
 | priority highest … lowest | priorytet najwyższy, wysoki, średni, niski, najniższy |
-| reminder, alarm, snooze | przypomnienie, alarm, drzemka (przycisk „Drzemka 10 min”) |
+| reminder, alarm, snooze | przypomnienie, alarm, drzemka (button „Drzemka 10 min”) |
 | query | zapytanie |
 | sync, sync center | synchronizacja, centrum synchronizacji |
-| event log, log, detailed log | rejestr zdarzeń (nie „dziennik” — to dziennik notatek), logi, szczegółowy rejestr |
+| event log, log, detailed log | rejestr zdarzeń (not „dziennik” — that is the notes' journal), logi, szczegółowy rejestr |
 | sync run, history of runs | synchronizacja (#42), historia synchronizacji |
 | conflict, conflict copy, merge | konflikt, kopia konfliktu, scal |
 | keep mine / the other version | zachowaj moją / druga wersja |

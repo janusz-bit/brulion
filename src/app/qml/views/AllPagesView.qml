@@ -8,11 +8,11 @@ import Brulion
 // (PageListModel: built from the index, fast with thousands of pages) as a sortable list —
 // title, folder, last change, backlinks, tags. Wide windows show columns (click a column to sort
 // by it, again to reverse); phones show two-line rows and a sort menu. The filter finds titles,
-// aliases and folders without Polish letters ("lodz" → "Łódź"); "Dzienniki" adds the daily
-// notes. route.path lists one folder (the top bar's breadcrumb and the sidebar's "Pokaż strony
-// folderu" lead here): its pages, with those of its subfolders unless "Z podfolderami" is off
+// aliases and folders without Polish letters ("lodz" → "Łódź"); "Journals" adds the daily
+// notes. route.path lists one folder (the top bar's breadcrumb and the sidebar's "Show folder
+// pages" lead here): its pages, with those of its subfolders unless "With subfolders" is off
 // (remembered per device), and its subfolders as rows above them (at the root: the top-level
-// folders) — a phone's folder browser; the top bar's breadcrumb goes back up. "Nowa strona"
+// folders) — a phone's folder browser; the top bar's breadcrumb goes back up. "New page"
 // creates a page (in that folder). The rows' menus move and rename pages and folders through the
 // shell (AppController.requestItemAction).
 //

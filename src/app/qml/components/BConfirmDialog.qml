@@ -7,15 +7,15 @@ import Brulion
 //
 //   BConfirmDialog {
 //       id: confirmDelete
-//       title: qsTr("Usunąć stronę?")
-//       message: qsTr("„Plan podróży” trafi do kosza. Możesz ją przywrócić przez 30 dni.")
-//       confirmText: qsTr("Przenieś do kosza")
+//       title: qsTr("Delete page?")
+//       message: qsTr("“Trip plan” goes to the trash. You can restore it for 30 days.")
+//       confirmText: qsTr("Move to trash")
 //       destructive: true
 //       onAccepted: vault.trash(path)
 //   }
 //   confirmDelete.open()
 //
-// `checkText` adds a check box (e.g. "Nie pytaj ponownie"), read it from `checked`.
+// `checkText` adds a check box (e.g. "Don't ask again"), read it from `checked`.
 // Destructive dialogs focus the safe (cancel) button first.
 BDialog {
     id: control

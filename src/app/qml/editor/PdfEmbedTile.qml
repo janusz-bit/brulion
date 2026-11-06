@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// PdfEmbedTile — a PDF embedded in a block (`![[wykład.pdf]]`, `![[wykład.pdf#page=3]]`; docs/UI.md
+// PdfEmbedTile — a PDF embedded in a block (`![[lecture.pdf]]`, `![[lecture.pdf#page=3]]`; docs/UI.md
 // "PDF viewer"): the thumbnail of its page on a white page with a hairline frame (white in the dark
 // theme too: a page is paper), and a caption row — a page icon, the file's name, its page count, the
 // embedded page. Sized from the page's shape (A4 portrait 297 × 420, a 16:9 slide 480 × 270, at most
@@ -59,7 +59,7 @@ Item {
     // A tile that cannot show its page says why (its sentence is inside the button, which screen
     // readers and UiAutomator do not read).
     Accessible.name: tile.state_ === "failed"
-                     //: A PDF embedded in a note that cannot be shown, for screen readers: its name, why ("PDF chroniony hasłem")
+                     //: A PDF embedded in a note that cannot be shown, for screen readers: its name, why ("PDF protected with a password")
                      ? qsTr("PDF %1: %2").arg(tile.name).arg(tile.error)
                      //: A PDF embedded in a note, for screen readers: its name, the page shown, the page count
                      : qsTr("PDF %1, page %2 of %3").arg(tile.name).arg(tile.page).arg(tile.pages > 0 ? "" + tile.pages : "?")

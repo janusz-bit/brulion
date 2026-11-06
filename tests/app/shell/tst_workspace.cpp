@@ -632,7 +632,7 @@ private Q_SLOTS:
 
     void habits()
     {
-        // A habit's day (docs/SYNTAX.md §5 "Nawyki / Habits"): the daily note created from the
+        // A habit's day (docs/SYNTAX.md §5 "Habits"): the daily note created from the
         // template only when something is written, the line next to the day's other checks, undo
         // by writing the previous state back; a new habit on its page.
         auto ws = open({{u"templates/journal.md"_s, u"# Dzień\n- \n"_s},
@@ -1814,7 +1814,7 @@ private Q_SLOTS:
         QCOMPARE(ws->subfolders(u"Projekty"_s).size(), 1);
         QCOMPARE(ws->pageCount(), 10);
         QCOMPARE(ws->pagesWithoutJournals(), 8);
-        // The shortest [[target]] for completion and "Kopiuj link".
+        // The shortest [[target]] for completion and "Copy link".
         QCOMPARE(ws->linkTarget(u"Projekty/Dom/Kuchnia.md"_s), u"Kuchnia"_s);
         QCOMPARE(ws->linkTarget(u"Brak.md"_s), QString());
     }

@@ -1,8 +1,8 @@
 // What a block selection copies (markdown/blockclipboard.h, docs/UI.md "Selecting and copying"):
 // the top rows of a selection, the exact Markdown of the blocks re-based to column 0 (tabs,
 // spaces, mixed indentation, ranges rising through levels, CRLF, BOM, frontmatter, code fences,
-// tables, formulas, ids, Polish text with no-break spaces), the plain text of "Kopiuj jako
-// tekst", inline markup stripped, and block ids a paste must not duplicate — also on malformed
+// tables, formulas, ids, Polish text with no-break spaces), the plain text of "Copy as
+// plain text", inline markup stripped, and block ids a paste must not duplicate — also on malformed
 // input.
 #include "markdown/blockclipboard.h"
 #include "markdown/blockdocument.h"

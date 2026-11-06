@@ -16,7 +16,7 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 
 /**
- * "Otwórz w innej aplikacji" of the PDF viewer ([BrulionAndroid.viewFile],
+ * "Open in another app" of the PDF viewer ([BrulionAndroid.viewFile],
  * `src/platform/openexternal_android.cpp`): the file handed to the app the system has for its type —
  * ACTION_VIEW of a content:// URI of Brulion's FileProvider (`<package>.qtprovider`, non-exported,
  * a read grant for this one URI), no chooser (the system asks itself when there is no default app).
@@ -102,7 +102,7 @@ internal object OpenWith {
   /**
    * The name of a copy in `cache/open/`: the file's own (Polish letters kept: the viewing app shows
    * it), without path separators or control characters, at most 120 characters keeping the
-   * extension; "plik.pdf" for nothing usable. Pure (OpenWithTest).
+   * extension; "plik.pdf" ("file.pdf") for nothing usable. Pure (OpenWithTest).
    */
   fun copyName(name: String): String {
     var clean = name.filter { it != '/' && it != '\\' && it >= ' ' && it != '\u007f' }.trim().trimStart('.')

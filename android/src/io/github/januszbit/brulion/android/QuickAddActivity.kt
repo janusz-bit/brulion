@@ -29,8 +29,8 @@ import java.util.UUID
 
 /**
  * Quick add of the widgets ("+"): a small dialog over the home screen — the text, and for a task
- * the day chips **Dziś** (picked), **Jutro**, **Bez terminu**, **Data…**, the time **Godzina…** and
- * **Alarm** (no date words are read from the text: "jutro o 9" stays text). **Dodaj** writes the
+ * the day chips **Today** (picked), **Tomorrow**, **No date**, **Date…**, the time **Time…** and
+ * **Alarm** (no date words are read from the text: "jutro o 9" (tomorrow at 9) stays text). **Add** writes the
  * entry into today's journal at once ([QuickAdd]) and empties the field for the next one; back or
  * a tap outside closes it. A plain Android activity: it never starts Qt. In the app's language.
  */

@@ -84,7 +84,7 @@ class ConflictResolver : public QObject {
     Q_PROPERTY(bool text READ isText NOTIFY changed FINAL)
     /// The copy or the original is a drawing: shown as drawings.
     Q_PROPERTY(bool drawing READ isDrawing NOTIFY changed FINAL)
-    /// Both are drawings Brulion edits, of one format: "Scal rysunki".
+    /// Both are drawings Brulion edits, of one format: "Merge drawings".
     Q_PROPERTY(bool canMergeDrawings READ canMergeDrawings NOTIFY changed FINAL)
     Q_PROPERTY(QByteArray oursBytes READ oursBytes NOTIFY changed FINAL)
     Q_PROPERTY(QByteArray theirsBytes READ theirsBytes NOTIFY changed FINAL)

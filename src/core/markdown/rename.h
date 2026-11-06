@@ -32,8 +32,8 @@ using TagFilter = std::function<bool(const QString &key)>;
 QString renameLinks(const QString &content, const QString &oldName, const QString &newName,
                     const VaultPath &oldPath = {}, const VaultPath &newPath = {});
 
-/// Rewrite the tags that name a renamed page (content in → content out; SYNTAX §3 "Tagi jako
-/// linki do stron"), the companion of renameLinks() (run both; a `[[link]]` in a tag list is the
+/// Rewrite the tags that name a renamed page (content in → content out; SYNTAX §3 "Tags as
+/// page links"), the companion of renameLinks() (run both; a `[[link]]` in a tag list is the
 /// links' part). Rewritten are exactly the occurrences of findNoteTags():
 ///   * `#old` (any letter case) -> tagSyntax(newName): `#Nowa`, or `#[[Nowa nazwa]]` when the
 ///     name is no simple tag; `#[[old]]` keeps the bracket form (`#[[Nowa]]`);

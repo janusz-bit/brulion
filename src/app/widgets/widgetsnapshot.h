@@ -1,4 +1,4 @@
-// The snapshot the Android home-screen widgets show (docs/ANDROID.md "Widgety"): the app computes,
+// The snapshot the Android home-screen widgets show (docs/ANDROID.md "Widgets"): the app computes,
 // Kotlin renders. Built on every platform (pure, unit-tested in tests/app/widgets); only the
 // Android publisher (widgetpublisher.h) hands it to the widgets through AndroidBridge.
 //
@@ -6,7 +6,7 @@
 //
 //   { "version": 1, "built": "2026-10-27T14:05" (local wall clock), "today": "2026-10-27",
 //     "weekStart": 1 (Monday … 7 Sunday), "locale": "pl" | "en",
-//     "vault": { "id", "name", "root" (absolute folder) } | null (no notebook: "Otwórz Brulion"),
+//     "vault": { "id", "name", "root" (absolute folder) } | null (no notebook: "Open Brulion…"),
 //     "tasks": [ { "key": "path:line", "text", "status", "priority" (0 none … 5 highest), "path",
 //                  "line" (0-based), "page" (title), "due", "scheduled", "start", "reminder"
 //                  ("YYYY-MM-DD[ HH:mm]" or ""; the block's reminder that counts today), "alarm",

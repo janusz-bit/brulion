@@ -9,9 +9,9 @@ import Brulion
 // "PDF viewer"): its pages one under another (PdfViewModel lays them out exactly and keeps only those
 // near the view; their pictures come from the image provider "pdfview", drawn off the GUI thread at
 // the screen's ratio with a memory cap — a page's detail picture when zoomed in), zoom (pinch, double
-// tap, Ctrl+wheel, Ctrl+± and the bar's buttons, fit width), "Strona 3 z 12" with a jump to a page,
+// tap, Ctrl+wheel, Ctrl+± and the bar's buttons, fit width), "Page 3 of 12" with a jump to a page,
 // search with highlights where the renderer extracts text (Workspace.pdfSearchable: hidden
-// otherwise), "Otwórz w innej aplikacji", "Rysuj na tej stronie" (a drawing whose backdrop is the
+// otherwise), "Open in another app", "Draw on this page" (a drawing whose backdrop is the
 // current page: DrawingBackdrops.prepare → Workspace.addDrawingOnPdfPage, embedded after the PDF in
 // the note the viewer was opened from — route.from / fromLine — or in today's journal; a drawing of
 // that page already there is offered first), and the notes that embed or link the PDF after the last
@@ -22,13 +22,13 @@ import Brulion
 // when the PDF is ready and whenever the route's page changes from outside (a link to another page
 // of the same PDF) — never for its own writes.
 // Where the renderer has them (PdfViewModel): text selected by dragging the mouse over a page or, on
-// a touch screen, by a long press (a word) and moving the finger on — Ctrl+C, the floating "Kopiuj",
-// the right-click menu, Ctrl+A for the current page —; the PDF's table of contents ("Spis treści": a
+// a touch screen, by a long press (a word) and moving the finger on — Ctrl+C, the floating "Copy",
+// the right-click menu, Ctrl+A for the current page —; the PDF's table of contents ("Contents": a
 // list that jumps); its links (a page of the PDF, or an http(s) / mailto address through
 // Workspace.openUrl); a password asked for a protected PDF (never kept); two pages side by side
 // (remembered on the device: AppSettings "pdf/twoPages", "pdf/coverAlone").
 // Where no renderer is built in (the browser, a desktop build without one) it shows the file's name
-// and size, explains that and offers "Otwórz w nowej karcie" / "Otwórz w innej aplikacji" (a real
+// and size, explains that and offers "Open in new tab" / "Open in another app" (a real
 // click: the gesture the browser wants); a PDF that cannot be shown (a broken file, a password where
 // the renderer opens none) says why, with the same button; the notes that embed or link it follow in
 // both cases.
@@ -61,7 +61,7 @@ Item {
     readonly property bool browser: Qt.platform.os === "wasm"
     readonly property string openElsewhereText: root.browser ? qsTr("Open in a new tab") : qsTr("Open in another app")
     property bool searchOpen: false
-    /// "Rysuj na tej stronie" being prepared (DrawingBackdrops' job) and its page.
+    /// "Draw on this page" being prepared (DrawingBackdrops' job) and its page.
     property int drawJob: 0
     property int drawPage: 0
     /// The drawings of the current page the note embeds already (the draw menu offers them).
@@ -617,7 +617,7 @@ Item {
                 visible: root.ready
                 size: "small"
                 variant: "ghost"
-                //: The PDF viewer's page indicator ("Strona 3 z 12"); a click jumps to a page
+                //: The PDF viewer's page indicator ("Page 3 of 12"); a click jumps to a page
                 text: root.wide ? qsTr("Page %1 of %2").arg(Math.max(1, pdf.currentPage)).arg(pdf.pageCount)
                                 : "%1/%2".arg(Math.max(1, pdf.currentPage)).arg(pdf.pageCount)
                 Accessible.name: qsTr("Page %1 of %2").arg(Math.max(1, pdf.currentPage)).arg(pdf.pageCount)
@@ -796,7 +796,7 @@ Item {
         }
     }
 
-    // "Rysuj na tej stronie" when the note has drawings of this page already: open one, or a new one.
+    // "Draw on this page" when the note has drawings of this page already: open one, or a new one.
     BMenu {
         id: drawMenu
         objectName: "pdfDrawMenu"
@@ -804,7 +804,7 @@ Item {
             objectName: "pdfDrawExisting"
             visible: root.existingDrawings.length > 0
             height: visible ? implicitHeight : 0
-            //: "Rysuj na tej stronie": a drawing of this page already in the note
+            //: "Draw on this page": a drawing of this page already in the note
             text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(0)) : ""
             iconName: "pen-tool"
             onTriggered: root.openExisting(0)
@@ -911,7 +911,7 @@ Item {
                     if (Js.trim(pdf.searchText) === "")
                         return ""
                     if (pdf.hitCount > 0)
-                        //: Search hits in the PDF viewer: "3 z 12" (+ while still searching or capped)
+                        //: Search hits in the PDF viewer: "3 of 12" (+ while still searching or capped)
                         return qsTr("%1 of %2").arg(pdf.currentHit + 1).arg(pdf.hitCount)
                                + (pdf.hitsCapped || pdf.searching ? "+" : "")
                     if (pdf.searching)
@@ -977,7 +977,7 @@ Item {
         onContentYChanged: pdf.setViewport(flick.contentX, flick.contentY)
         onMovementEnded: pdf.settle()
         Accessible.role: Accessible.Pane
-        //: The PDF viewer's pages for screen readers: the zoom ("Powiększenie 85 %")
+        //: The PDF viewer's pages for screen readers: the zoom ("Zoom 85 %")
         Accessible.name: qsTr("Zoom %1 %").arg(pdf.zoomPercent)
 
         Item {
@@ -1234,7 +1234,7 @@ Item {
             }
 
             BButton {
-                // The selection's "Kopiuj", over its first line (scrolls with the page).
+                // The selection's "Copy", over its first line (scrolls with the page).
                 id: copyButton
                 objectName: "pdfCopyButton"
                 // (The selection's first rectangle, fractions of its page.)
@@ -1292,7 +1292,7 @@ Item {
     }
     /// The wide window's side panel lists the references (PageView sets it).
     property bool refsInSidePanel: false
-    /// The page a right click was on (the selection menu's "Zaznacz całą stronę").
+    /// The page a right click was on (the selection menu's "Select the whole page").
     property int contextPage: 0
 
     BMenu {

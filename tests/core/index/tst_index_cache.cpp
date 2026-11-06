@@ -33,14 +33,18 @@ namespace {
 /// SearchIndex::FormatVersion for the search part) and record the new digest.
 constexpr const char *kCacheDigest = "acc68c0ff240c069f248905787eeb248";
 
+/// The documentation pages of every language (guide/<language>/*.md), as "<language>/<name>".
 QList<std::pair<VaultPath, QString>> guideNotes()
 {
     QList<std::pair<VaultPath, QString>> out;
-    const QDir dir(QStringLiteral(BRULION_GUIDE_DIR));
-    for (const QString &name : dir.entryList({u"*.md"_s}, QDir::Files, QDir::Name)) {
-        QFile f(dir.filePath(name));
-        if (f.open(QIODevice::ReadOnly))
-            out.append({name, QString::fromUtf8(f.readAll())});
+    const QDir root(QStringLiteral(BRULION_GUIDE_DIR));
+    for (const QString &language : root.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QDir dir(root.filePath(language));
+        for (const QString &name : dir.entryList({u"*.md"_s}, QDir::Files, QDir::Name)) {
+            QFile f(dir.filePath(name));
+            if (f.open(QIODevice::ReadOnly))
+                out.append({language + u'/' + name, QString::fromUtf8(f.readAll())});
+        }
     }
     return out;
 }

@@ -173,7 +173,7 @@ markdown::RenderContext renderContext(const VaultIndex *index, const VaultPath &
     ctx.locale = locale;
     ctx.palette = palette;
     ctx.taskCheckbox = true;
-    // [[2026-10-13]] shows as "wt 13 paź" (the note keeps the date as written).
+    // [[2026-10-13]] shows as "Tue, Oct 13" (the note keeps the date as written).
     ctx.linkTitle = markdown::journalLinkTitle(index ? index->config() : VaultConfig(), locale, today);
     return ctx;
 }

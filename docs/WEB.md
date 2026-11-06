@@ -1,436 +1,437 @@
-# Brulion w przeglądarce (WebAssembly)
+# Brulion in the browser (WebAssembly)
 
-Wersja przeglądarkowa to ta sama aplikacja C++/QML co na NixOS i Androidzie, skompilowana
-przez **Qt for WebAssembly** (jednowątkowo). Po pierwszym wczytaniu działa **offline** jako
-PWA (można ją „zainstalować” z menu przeglądarki), a notatki trzyma w **IndexedDB**
-przeglądarki.
+The browser version is the same C++/QML app as on NixOS and Android, compiled with
+**Qt for WebAssembly** (single-threaded). After the first load it works **offline** as a
+PWA (it can be "installed" from the browser menu), and it keeps notes in the browser's
+**IndexedDB**.
 
-* Dwie postacie, obie w każdym wydaniu: **jeden plik HTML** `brulion-web-<wersja>.html`,
-  otwierany z dysku bez serwera (niżej, „Jeden plik HTML”), i **strona** `brulion-web-<wersja>.zip`
-  na dowolny serwer plików statycznych, pod dowolną ścieżką — wszystkie adresy są względne (na
-  NixOS moduł `services.brulion-web`). Publicznej wersji w sieci nie ma: GitHub Pages projektu
-  (`https://janusz-bit.github.io/brulion/`) to repozytorium F-Droid (docs/ANDROID.md, „Własne
-  repozytorium F-Droid”).
-* Ograniczenia wobec aplikacji natywnych: przypomnienia tylko gdy karta/PWA jest otwarta,
-  brak dostępu do folderów na dysku (import/eksport plików zamiast tego), synchronizacja z
-  Nextcloud wymaga CORS (niżej), Syncthing niedostępny. Qt for WebAssembly nie ma bazy stref
-  czasowych: przy imporcie kalendarza (`.ics`) godziny ze strefą (`TZID`) są brane jako czas
-  lokalny (godziny w UTC przelicza się normalnie). Przeglądarka ma jeden notatnik, więc nie ma
-  w niej notatnika „Dokumentacja Brulionu”: strona powitalna przykładowego brulionu odsyła do
-  dokumentacji w repozytorium (`src/app/shell/guide/`).
+* Two forms, both in every release: **a single HTML file** `brulion-web-<version>.html`,
+  opened from disk without a server (below, "Single HTML file"), and **a site** `brulion-web-<version>.zip`
+  for any static file server, under any path — all addresses are relative (on
+  NixOS the `services.brulion-web` module). There is no public hosted version: the project's GitHub Pages
+  (`https://janusz-bit.github.io/brulion/`) is the F-Droid repository (docs/ANDROID.md "Brulion's own F-Droid repository").
+* Limitations compared with the native apps: reminders only while the tab/PWA is open,
+  no access to folders on disk (file import/export instead), Nextcloud sync
+  needs CORS (below), no Syncthing. Qt for WebAssembly has no time zone
+  database: when importing a calendar (`.ics`), times with a zone (`TZID`) are taken as local
+  time (UTC times are converted normally). The browser has a single notebook, so it has no
+  documentation notebook ("Brulion Documentation", with the Polish UI "Dokumentacja
+  Brulionu"): the welcome page of the sample notebook points to the documentation in the
+  repository (`src/app/shell/guide/en`, with the Polish UI `src/app/shell/guide/pl`).
 
-## Wersje narzędzi
+## Tool versions
 
-| Składnik | Wersja | Skąd |
+| Component | Version | Source |
 |---|---|---|
 | Qt for WebAssembly | 6.11.2 `wasm_singlethread` | `aqt install-qt all_os wasm 6.11.2 wasm_singlethread` (aqtinstall 3.3.0) |
-| Qt hosta (moc, rcc, qmlcachegen, lrelease…) | 6.11.2 `linux_gcc_64` | `aqt install-qt linux desktop 6.11.2 linux_gcc_64` |
+| Host Qt (moc, rcc, qmlcachegen, lrelease…) | 6.11.2 `linux_gcc_64` | `aqt install-qt linux desktop 6.11.2 linux_gcc_64` |
 | Emscripten | **4.0.7** | `emsdk install 4.0.7 && emsdk activate 4.0.7` |
 
-Qt 6.11 wymaga **dokładnie** Emscriptena 4.0.7 (dokumentacja
-[doc.qt.io/qt-6.11/wasm.html](https://doc.qt.io/qt-6.11/wasm.html): „The supported version of
-Emscripten for 6.11.2 is Emscripten 4.0.7”; to samo w `QT_EMCC_RECOMMENDED_VERSION` w
-`lib/cmake/Qt6/QtPublicWasmToolchainHelpers.cmake`). Emscripten nie gwarantuje zgodności ABI
-między wersjami, więc inny emsdk (np. `emscripten` z nixpkgs, obecnie 6.0.x) się nie nadaje.
-Skrypt budujący sprawdza wersję `emcc` i przerywa przy niezgodności. Przy podbiciu Qt zmień
-razem `QT_VERSION` i `EMSDK_VERSION` w `scripts/wasm-build.sh`.
+Qt 6.11 requires **exactly** Emscripten 4.0.7 (documentation
+[doc.qt.io/qt-6.11/wasm.html](https://doc.qt.io/qt-6.11/wasm.html): "The supported version of
+Emscripten for 6.11.2 is Emscripten 4.0.7"; the same in `QT_EMCC_RECOMMENDED_VERSION` in
+`lib/cmake/Qt6/QtPublicWasmToolchainHelpers.cmake`). Emscripten does not guarantee ABI compatibility
+between versions, so another emsdk (e.g. `emscripten` from nixpkgs, currently 6.0.x) will not do.
+The build script checks the `emcc` version and stops on a mismatch. When bumping Qt, change
+`QT_VERSION` and `EMSDK_VERSION` in `scripts/wasm-build.sh` together.
 
-Paczka `all_os/wasm` z aqt jest budowana na Windows: jej skrypty `bin/qt-cmake` nie są
-wykonywalne i wskazują na `C:/…`. Dlatego budujemy zwykłym `cmake` z plikiem
-`lib/cmake/Qt6/qt.toolchain.cmake`, który znajduje Emscripten przez zmienną `EMSDK`.
+The `all_os/wasm` package from aqt is built on Windows: its `bin/qt-cmake` scripts are not
+executable and point to `C:/…`. That is why we build with plain `cmake` and the
+`lib/cmake/Qt6/qt.toolchain.cmake` file, which finds Emscripten through the `EMSDK` variable.
 
-## Budowanie
+## Building
 
 ```sh
-scripts/wasm-build.sh --setup   # pierwszy raz: emsdk 4.0.7 + Qt 6.11.2 (wasm + host) do ~/.cache
-scripts/wasm-build.sh           # konfiguracja + build + złożenie strony w dist-wasm/
-scripts/wasm-build.sh --clean   # od zera
-scripts/wasm-build.sh --assemble  # tylko ponowne złożenie dist-wasm/ z istniejącego buildu
+scripts/wasm-build.sh --setup   # first time: emsdk 4.0.7 + Qt 6.11.2 (wasm + host) into ~/.cache
+scripts/wasm-build.sh           # configure + build + assemble the site in dist-wasm/
+scripts/wasm-build.sh --clean   # from scratch
+scripts/wasm-build.sh --assemble  # only reassemble dist-wasm/ from an existing build
 ```
 
-Skrypt jest idempotentny (ponowne uruchomienie przebudowuje tylko zmiany, `ccache` jeśli jest)
-i konfigurowalny zmiennymi środowiska:
+The script is idempotent (running it again rebuilds only what changed, with `ccache` if present)
+and configurable through environment variables:
 
-| Zmienna | Domyślnie |
+| Variable | Default |
 |---|---|
 | `BRULION_CACHE` | `${XDG_CACHE_HOME:-~/.cache}` |
 | `EMSDK` | `$BRULION_CACHE/brulion-emsdk/emsdk` |
-| `QT_ROOT` | `$BRULION_CACHE/brulion-qt` (wspólne z buildem Androida) |
+| `QT_ROOT` | `$BRULION_CACHE/brulion-qt` (shared with the Android build) |
 | `QT_WASM` / `QT_HOST` | `$QT_ROOT/6.11.2/wasm_singlethread` / `$QT_ROOT/6.11.2/gcc_64` |
 | `BUILD_DIR` / `DIST_DIR` | `build-wasm` / `dist-wasm` |
-| `BUILD_TYPE` | `MinSizeRel` (najmniejszy `.wasm`) |
+| `BUILD_TYPE` | `MinSizeRel` (smallest `.wasm`) |
 | `JOBS` | `nproc` |
 
-Na NixOS skrypt sam wchodzi do `nix shell` (cmake, ninja, ccache, python3) i dokłada do
-`NIX_LD_LIBRARY_PATH` biblioteki potrzebne prekompilowanym narzędziom Qt z aqt (glib, krb5,
-brotli) — wymaga `programs.nix-ld`. Na innych systemach potrzebne są: cmake ≥ 3.24, ninja,
-python3, git, a do `--setup` także `uvx` (uv) albo `aqt`.
+On NixOS the script enters `nix shell` by itself (cmake, ninja, ccache, python3) and adds to
+`NIX_LD_LIBRARY_PATH` the libraries that the prebuilt Qt tools from aqt need (glib, krb5,
+brotli) — this requires `programs.nix-ld`. Other systems need cmake ≥ 3.24, ninja,
+python3, git, and for `--setup` also `uvx` (uv) or `aqt`.
 
-**Raspberry Pi (maszyna deweloperska) nie buduje WebAssembly** — linkowanie aplikacji Qt
-(wasm-ld + wasm-opt) potrzebuje kilku GB RAM; skrypt odmawia przy < 6 GB RAM
-(`BRULION_FORCE_LOCAL=1` wymusza). Buduj na laptopie (nowe pliki najpierw `git add -N`):
+**The Raspberry Pi (dev machine) does not build WebAssembly** — linking a Qt app
+(wasm-ld + wasm-opt) needs several GB of RAM; the script refuses with < 6 GB RAM
+(`BRULION_FORCE_LOCAL=1` forces it). Build on the laptop (new files first `git add -N`):
 
 ```sh
 flock <lock> laptop-run bash -c 'BUILD_DIR=~/.cache/brulion-wasm-build scripts/wasm-build.sh'
 ```
 
-(katalog roboczy na laptopie jest czyszczony przy każdym `laptop-run`, dlatego katalog buildu
-leży w `~/.cache`).
+(the working directory on the laptop is cleaned on every `laptop-run`, which is why the build
+directory lives in `~/.cache`).
 
-### Co powstaje w `dist-wasm/`
+### What ends up in `dist-wasm/`
 
-| Plik | Opis |
+| File | Description |
 |---|---|
-| `index.html` | nasza powłoka (z `wasm/index.html`, na bazie `wasm_shell.html` Qt): ekran ładowania z logo i postępem pobierania, „Loading Brulion…”, ekrany błędów, rejestracja service workera. Czarny jak domyślny motyw aplikacji; po angielsku, dopóki w aplikacji nie wybrano polskiego (aplikacja zapamiętuje język w `localStorage` „brulion.language”: `rememberShellLanguage()`, `src/platform/wasm/wasmshell.h`) |
-| `brulion.js`, `brulion.wasm` | aplikacja (glue Emscriptena + moduł WebAssembly) |
-| `qtloader.js` | loader Qt (`qtLoad()`) |
-| `sw.js` | service worker (z `wasm/sw.js`): offline, kliknięcia w powiadomienia |
-| `manifest.webmanifest` | manifest PWA (z `wasm/`) |
-| `icons/` | ikony PWA (z `wasm/icons/` + `assets/logo.svg`) |
-| `.nojekyll` | GitHub Pages (gdyby ktoś wdrażał tam stronę) bez przetwarzania przez Jekyll |
+| `index.html` | our shell (from `wasm/index.html`, based on Qt's `wasm_shell.html`): loading screen with the logo and download progress, "Loading Brulion…", error screens, service worker registration. Black like the app's default theme; in English unless Polish was chosen in the app (the app remembers the language in `localStorage` "brulion.language": `rememberShellLanguage()`, `src/platform/wasm/wasmshell.h`) |
+| `brulion.js`, `brulion.wasm` | the app (Emscripten glue + WebAssembly module) |
+| `qtloader.js` | Qt loader (`qtLoad()`) |
+| `sw.js` | service worker (from `wasm/sw.js`): offline, notification clicks |
+| `manifest.webmanifest` | PWA manifest (from `wasm/`) |
+| `icons/` | PWA icons (from `wasm/icons/` + `assets/logo.svg`) |
+| `.nojekyll` | GitHub Pages (should anyone deploy the site there) without Jekyll processing |
 
-Skrypt wstawia do `index.html` rozmiar `.wasm` (pasek postępu) i hash plików aplikacji
-(`?v=<hash>` w adresach — przeglądarka nigdy nie złoży `brulion.js` i `brulion.wasm` z dwóch
-różnych wydań), a do `sw.js` wersję cache (hash całej strony) i listę plików do zapamiętania.
+The script writes into `index.html` the size of the `.wasm` (progress bar) and the hash of the app files
+(`?v=<hash>` in the addresses — the browser never combines `brulion.js` and `brulion.wasm` from two
+different releases), and into `sw.js` the cache version (hash of the whole site) and the list of files to cache.
 
-Obok powstaje `dist-wasm-single/brulion.html` (zmienna `SINGLE_FILE`): ta sama strona w jednym
-pliku, otwierana z dysku (niżej, „Jeden plik HTML”); `--assemble` składa oba od nowa.
+Next to it, `dist-wasm-single/brulion.html` is produced (variable `SINGLE_FILE`): the same site in a single
+file, opened from disk (below, "Single HTML file"); `--assemble` rebuilds both.
 
-Wygenerowany przez Qt `build-wasm/src/app/brulion.html` to tylko domyślna strona Qt (bez PWA)
-— do szybkich prób wystarczy, do publikacji służą `dist-wasm/` i `dist-wasm-single/`.
+The `build-wasm/src/app/brulion.html` generated by Qt is only Qt's default page (no PWA)
+— good enough for quick tries; `dist-wasm/` and `dist-wasm-single/` are for publishing.
 
-## Uruchamianie lokalnie
+## Running locally
 
-Strony z `dist-wasm/` nie da się otworzyć z `file://` — potrzebny serwer HTTP (z dysku otwiera
-się tylko jeden plik `dist-wasm-single/brulion.html`, niżej):
+The site in `dist-wasm/` cannot be opened from `file://` — it needs an HTTP server (only the single
+file `dist-wasm-single/brulion.html` opens from disk, below):
 
 ```sh
 python3 -m http.server 8000 --bind 127.0.0.1 --directory dist-wasm
 # http://127.0.0.1:8000/
 ```
 
-Service worker (offline) działa tylko na `https://` oraz na `localhost`/`127.0.0.1`.
-Parametry adresu (do debugowania):
+The service worker (offline) works only on `https://` and on `localhost`/`127.0.0.1`.
+URL parameters (for debugging):
 
-* `?nosw` — nie rejestruj service workera.
+* `?nosw` — do not register the service worker.
 * `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=keyboard`,
-  `?selftest=share`, `?selftest=storage,notify` — testy (niżej).
-* Tylko w karcie oznaczonej do testów: `?selftest=webpictures`, `?selftest=pen` (testy na
-  otwartym notatniku: „Testy w przeglądarkach (Playwright)”), `?selftest=pickfiles,savefile`
-  (okno wyboru plików i pobieranie przy kolejnych kliknięciach: `scripts/wasm-smoke.mjs
-  --pick-files`) i razem z nimi `?route=<widok>` albo
-  `?route=<trasa JSON>` — pierwszy widok po otwarciu notatnika (jak `--route`, np.
-  `{"view":"drawing","path":"Rysunki/a.svg"}`), `?now=2026-10-14 10:00` — stały zegar (jak
-  `--now`: znany dzień dziennika). Znacznik karty to `sessionStorage` `brulion-selftest` = `1`:
-  `tests/web` ustawia go, zanim strona się wczyta; ręcznie — w konsoli przeglądarki
-  `sessionStorage.setItem('brulion-selftest', '1')`, potem przeładowanie (znacznik znika
-  z zamknięciem karty). Link go nie ustawi, więc link wysłany komuś nie uruchomi testu na jego
-  notatniku (pobieranie zdjęć z internetu, eksport) ani nie przestawi mu zegara czy widoku —
-  bez znacznika te parametry są pomijane. Trasa i zegar idą do aplikacji jako jeden argument
-  (`--route=…`, `--now=…`), więc wartość nigdy nie staje się osobną opcją (`?route=--vault=…` to
-  tylko nieznany widok). Sprawdza to `tests/web/shell.spec.mjs`.
-* `?keyboard=visual` — klawiatura ekranowa zmniejsza tylko widoczny obszar, nie stronę
-  (domyślne zachowanie przeglądarek, `interactive-widget=resizes-visual`; niżej, „Klawiatura
-  ekranowa”) — do testów i diagnozy.
-* `?report=/__report/<nazwa>` — wyniki testów (`?selftest=…`) idą też żądaniem POST pod tę
-  ścieżkę tej samej witryny (`{name, json, t}`, bez ciasteczek; serwer testowy
-  `scripts/web-test-server.py`) — dla przeglądarek bez DevTools, np. na emulatorze Androida.
-  Inne ścieżki i adresy, które parser adresów zamienia na inną witrynę (np. `/%09/host`: tabulator
-  i znaki nowej linii parser usuwa, zostaje `//host`), są pomijane — sprawdza to
-  `scripts/wasm-smoke.mjs --keyboard`. Wynik `?selftest=keyboard` zawiera początek tekstu
-  edytowanego pola (`focusText`), nigdy pola hasła.
+  `?selftest=share`, `?selftest=storage,notify` — tests (below).
+* Only in a tab marked for tests: `?selftest=webpictures`, `?selftest=pen` (tests on the
+  open notebook: "Browser tests (Playwright)"), `?selftest=pickfiles,savefile`
+  (file picker and download on successive clicks: `scripts/wasm-smoke.mjs
+  --pick-files`) and together with them `?route=<view>` or
+  `?route=<JSON route>` — the first view after the notebook opens (like `--route`, e.g.
+  `{"view":"drawing","path":"Rysunki/a.svg"}`), `?now=2026-10-14 10:00` — a fixed clock (like
+  `--now`: a known journal day). The tab marker is `sessionStorage` `brulion-selftest` = `1`:
+  `tests/web` sets it before the page loads; by hand — in the browser console
+  `sessionStorage.setItem('brulion-selftest', '1')`, then reload (the marker disappears
+  when the tab is closed). A link cannot set it, so a link sent to someone will not run a test on their
+  notebook (downloading pictures from the internet, export) nor change their clock or view —
+  without the marker these parameters are ignored. The route and the clock reach the app as a single argument
+  (`--route=…`, `--now=…`), so the value never becomes a separate option (`?route=--vault=…` is
+  just an unknown view). `tests/web/shell.spec.mjs` checks this.
+* `?keyboard=visual` — the on-screen keyboard shrinks only the visual viewport, not the page
+  (the browsers' default behaviour, `interactive-widget=resizes-visual`; below, "On-screen
+  keyboard") — for tests and diagnosis.
+* `?report=/__report/<name>` — test results (`?selftest=…`) are also sent as a POST request to this
+  path on the same site (`{name, json, t}`, without cookies; test server
+  `scripts/web-test-server.py`) — for browsers without DevTools, e.g. on the Android emulator.
+  Other paths, and addresses that the URL parser turns into another site (e.g. `/%09/host`: the parser
+  strips tabs and newlines, leaving `//host`), are ignored — checked by
+  `scripts/wasm-smoke.mjs --keyboard`. The `?selftest=keyboard` result contains the start of the text of the
+  edited field (`focusText`), never of a password field.
 
-Stronę pod ścieżką (np. `/brulion/` na własnym serwerze) da się sprawdzić lokalnie, kopiując
-`dist-wasm/` do `site/brulion/` i serwując `site/` (`http://127.0.0.1:8000/brulion/`).
+A site under a path (e.g. `/brulion/` on your own server) can be checked locally by copying
+`dist-wasm/` to `site/brulion/` and serving `site/` (`http://127.0.0.1:8000/brulion/`).
 
-## Test dymny w przeglądarce bez okna
+## Headless browser smoke test
 
-`scripts/wasm-smoke.mjs` (Node ≥ 22, bez zależności) steruje Chromium przez DevTools
-Protocol: otwiera stronę, czeka aż aplikacja zastąpi ekran ładowania, robi zrzut ekranu,
-sprawdza service workera. Z `--selftest` uruchamia `?selftest=storage`: aplikacja zwiększa
-licznik w ukrytym pliku `.brulion-selftest` w każdym zamontowanym katalogu, czeka na
-automatyczny zapis do IndexedDB i publikuje wynik (`window.brulionSelfTest`). Kolejne
-wczytania muszą widzieć licznik +1.
+`scripts/wasm-smoke.mjs` (Node ≥ 22, no dependencies) drives Chromium through the DevTools
+Protocol: it opens the page, waits until the app replaces the loading screen, takes a screenshot,
+checks the service worker. With `--selftest` it runs `?selftest=storage`: the app increments a
+counter in a hidden file `.brulion-selftest` in every mounted directory, waits for the
+automatic save to IndexedDB and publishes the result (`window.brulionSelfTest`). Each following
+load must see the counter +1.
 
 ```sh
 python3 -m http.server 8123 --bind 127.0.0.1 --directory site &
 node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof \
-  --loads 2 --selftest --expect-first 1 --screenshot online.png    # zapis + przeładowanie
+  --loads 2 --selftest --expect-first 1 --screenshot online.png    # save + reload
 node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof-index \
-  --loads 2 --index-notes 3000                                     # indeks bez wejścia
-kill %1                                                            # serwer wyłączony
+  --loads 2 --index-notes 3000                                     # index without input
+kill %1                                                            # server stopped
 node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof \
-  --loads 1 --selftest --expect-first 3 --screenshot offline.png   # offline z cache SW
+  --loads 1 --selftest --expect-first 3 --screenshot offline.png   # offline from the SW cache
 node scripts/wasm-smoke.mjs --url "file://$PWD/dist-wasm-single/brulion.html" \
-  --profile /tmp/prof-single --loads 2 --selftest --expect-first 1  # jeden plik HTML z dysku
+  --profile /tmp/prof-single --loads 2 --selftest --expect-first 1  # single HTML file from disk
 ```
 
-Drugie uruchomienie (nowy proces Chromium, ten sam profil, serwer wyłączony) dowodzi, że
-dane przetrwały restart przeglądarki, a aplikacja startuje offline z cache service workera.
-Adres `file://` (jeden plik HTML) nie ma service workera — skrypt go wtedy nie sprawdza.
+The second run (a new Chromium process, the same profile, the server stopped) proves that the
+data survived a browser restart and that the app starts offline from the service worker cache.
+A `file://` address (single HTML file) has no service worker — the script does not check it then.
 
-Pozostałe opcje:
+Other options:
 
-* `--notify` — nadaje stronie zgodę na powiadomienia, aplikacja (`?selftest=notify`) pokazuje
-  powiadomienie testowe, skrypt je „klika” i sprawdza, że kliknięcie (id, ścieżka, linia)
-  dotarło do C++ (`WasmNotifier::activated`).
-* `--glyphs` — `?selftest=glyphs`: aplikacja sprawdza, czy zapasowe czcionki (niżej,
-  „Czcionki: emoji i symbole”) są zainstalowane i rysują wszystkie emoji i symbole Brulionu
-  bez pustych kwadratów (`window.brulionGlyphSelfTest`: dla każdej czcionki znaki rysowane jako
-  kwadraty przed i po instalacji). CI uruchamia go przy pierwszym teście.
-* `--keyboard` — podstawia stronie własny `window.visualViewport` (przed jej skryptami) i
-  uruchamia `?selftest=keyboard`: aplikacja przy każdej zmianie publikuje
+* `--notify` — grants the page notification permission, the app (`?selftest=notify`) shows
+  a test notification, the script "clicks" it and checks that the click (id, path, line)
+  reached C++ (`WasmNotifier::activated`).
+* `--glyphs` — `?selftest=glyphs`: the app checks that the fallback fonts (below,
+  "Fonts: emoji and symbols") are installed and draw all of Brulion's emoji and symbols
+  without empty boxes (`window.brulionGlyphSelfTest`: for each font, the characters drawn as
+  boxes before and after installation). CI runs it with the first test.
+* `--keyboard` — injects its own `window.visualViewport` into the page (before the page's scripts) and
+  runs `?selftest=keyboard`: on every change the app publishes
   `window.brulionKeyboardSelfTest` (`{overlap, shown, animating, source, mode, sample, …}`),
-  a skrypt „otwiera” klawiaturę 300 px, 250 px przy stronie przewiniętej o 20 px (jak robi iOS),
-  podaje wartość błędną (NaN → 0), powiększa stronę gestem (`scale` 2: to nie klawiatura, 0),
-  przewija stronę o 40 px (aplikacja musi ją przewinąć z powrotem na górę) i chowa klawiaturę —
-  za każdym razem aplikacja musi zgłosić właściwą wysokość (niżej, „Klawiatura ekranowa”).
-  Wcześniej sprawdza samą powłokę (skrypty aplikacji wstrzymane, więc magazyn i liczniki testu
-  zostają nietknięte): z `?report=/__report/smoke` wynik idzie POST-em tylko pod ten adres tej
-  samej witryny, a z `/%09/`, `/%0A/`, `/%0D/`, `//`, `/\`, pełnym adresem innej witryny
-  i innymi ścieżkami — nigdzie. Ze `--screenshot` dochodzi zrzut `…-keyboard.png`. CI uruchamia go
-  przy pierwszym teście.
-* `--keyboard-phone` — to samo na udawanym telefonie (412×915 pikseli CSS, gęstość 2,625, ekran
-  dotykowy) z dzisiejszym dziennikiem zapisanym do IndexedDB (jak `--copy`) i blokiem edytowanym
-  stuknięciem nisko na ekranie: strona prosi o `interactive-widget=resizes-content` (a z
-  `?keyboard=visual` o `resizes-visual`), ukryte pole klawiatury Qt zostaje w lewym górnym rogu
-  okna, klawiatura zmniejszająca tylko widoczny obszar (300 px; 180 px przy widoku przesuniętym
-  o 120 px) podnosi pasek narzędzi dokładnie na swoją górną krawędź, a strona zmniejszona przez
-  przeglądarkę (ekran udawanego telefonu niższy o 300 px) daje zero zakrycia, klawiatura liczy się
-  jako widoczna, a pasek kończy się na dole okna — także przy nieaktualnym `innerHeight` (stary
-  wzór liczyłby klawiaturę drugi raz); kontenery Qt nie zostają przewinięte. Położenie paska
-  i treści aplikacja podaje w `brulionKeyboardSelfTest` (`windowHeight`, `contentBottom`,
-  `toolbarBottom`, `bottomNavTop`); gdy strona znów urośnie (klawiatura schowana Wstecz), wraca
-  dolna nawigacja, a pasek leży tuż na niej. Ze `--screenshot` dochodzą zrzuty `…-edit.png`, `…-visual.png`,
-  `…-content.png`. CI uruchamia go przy pierwszym teście.
-* `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
-  karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
-* `--share` — cel udostępniania (niżej, „Udostępnianie do Brulionu”): manifest odczytany przez
-  Chrome (`Page.getAppManifest`) ma `share_target` GET `./` z `share-title`, `share-text`,
-  `share-url` i żadnych błędów; start z udostępnionym tytułem i tekstem (`?selftest=share`:
-  aplikacja publikuje dane okna, `window.brulionShareSelfTest`, z `dialog` — czy okno miało się
-  otworzyć; przed startem w IndexedDB notatnik z dzisiejszym dziennikiem, jak przy `--copy`)
-  otwiera okno **Zapisz w Brulionie** z „[Przepis na żurek](https://kuchnia.pl/żurek) — Zobacz
-  to”, a pasek adresu traci parametry udostępnienia; druga karta z udostępnieniem przy otwartej
-  pierwszej przekazuje je (sama nie wczytuje aplikacji, pokazuje komunikat i prosi o zamknięcie),
-  a pierwsza pokazuje okno z „Zażółć gęślą jaźń”. Ze `--screenshot` dochodzi zrzut
-  `…-share.png`. CI uruchamia go osobno (profil `profile-share`).
-* `--pick-files` — wybór plików i pobieranie bez Qt Widgets (`platform/wasm/wasmfiles.h`): karta
-  oznaczona do testów (sessionStorage `brulion-selftest`), bez `showOpenFilePicker` /
-  `showSaveFilePicker` (Qt bierze wtedy `<input type=file>` i zwykłe pobranie, które ma każda
-  przeglądarka), `?selftest=pickfiles,savefile`. Prawdziwe kliknięcie otwiera okno wyboru, które
-  musi przyjmować kilka plików (DevTools je przechwytuje), i dostaje siedem: „Zażółć gęślą
-  jaźń.md” (UTF-8, wiersze CRLF), pusty `pusty.md`, `duży.md` 2 MiB ponad testowy limit 1 MiB na
-  plik, `notatka.txt`, „pół — ą.md” równo 1 MiB, „drugie pół.md” 600 KiB, które przekroczyłoby
-  testowy limit 1,5 MiB łącznie, i mały „po limicie.txt”; aplikacja
-  (`window.brulionPickSelfTest`) musi podać je po kolei z rozmiarami i SHA-256 — duży
-  nieprzeczytany, a od pliku ponad sumę żaden (jak `FileGatherer` na komputerze). Następne
-  kliknięcie pobiera „Zażółć.md” z bajtami „ąę\n”
-  (`Browser.setDownloadBehavior`). CI uruchamia go osobno (profil `profile-pick`).
-* `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
-  zrzut ekranu ładowania (pasek postępu).
-* `--lang pl-PL` (domyślnie) — język przeglądarki.
-* `--index-notes N` — przed pierwszym wczytaniem zapisuje do IndexedDB skarbiec z N
-  wygenerowanymi notatkami (tak jak przechowuje je montaż IDBFS, z `settings.ini` wskazującym
-  go jako bieżący); każde wczytanie musi potem zgłosić kompletny indeks
-  (`brulionShell.indexed()`, czas w `brulionShell.indexedAt`) **bez żadnego wejścia** (myszy,
-  klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). Od 200
-  notatek pierwsze wczytanie musi też zapisać gotowy indeks (`brulionShell.indexCacheSavedAt`),
-  a każde kolejne wziąć z niego prawie wszystkie notatki (`brulionShell.indexStats()`:
-  `indexedFromCache` ≥ N − 1). CI uruchamia go z 3000 notatek.
-* `--copy` — kopiowanie bloków prawdziwym wejściem: przed wczytaniem zapisuje do IndexedDB (jak
-  `--index-notes`) notatnik z dzisiejszym dziennikiem (trzy bloki, drugi z dzieckiem, polskie
-  znaki, pogrubienie, link), potem klika tekst pierwszego bloku, wciska Escape (blok zaznaczony),
-  Shift+↓ (następny z dzieckiem) i Ctrl+C, a strona (z nadaną zgodą na schowek) czyta schowek
-  przeglądarki: `navigator.clipboard.readText()` musi dać dokładnie Markdown tych bloków,
-  a `navigator.clipboard.read()` — HTML Brulionu (`text/html` ze znacznikiem `generator`). Ze
-  `--screenshot` dochodzi zrzut `…-copy.png`. Wynik i miejsce kliknięcia zależą od układu strony
-  1280×800 (pierwszy wiersz dnia ok. 153 px od góry; skrypt próbuje kilku wysokości).
+  and the script "opens" a 300 px keyboard, 250 px with the page scrolled by 20 px (as iOS does),
+  gives an invalid value (NaN → 0), zooms the page with a gesture (`scale` 2: not a keyboard, 0),
+  scrolls the page by 40 px (the app must scroll it back to the top) and hides the keyboard —
+  each time the app must report the right height (below, "On-screen keyboard").
+  Before that it checks the shell alone (the app's scripts held back, so the storage and test counters
+  stay untouched): with `?report=/__report/smoke` the result is POSTed only to that address on the
+  same site, and with `/%09/`, `/%0A/`, `/%0D/`, `//`, `/\`, a full address of another site
+  and other paths — nowhere. With `--screenshot` a `…-keyboard.png` screenshot is added. CI runs it
+  with the first test.
+* `--keyboard-phone` — the same on an emulated phone (412×915 CSS pixels, density 2.625, touch
+  screen) with today's journal written to IndexedDB (like `--copy`) and a block edited by
+  a tap low on the screen: the page asks for `interactive-widget=resizes-content` (and with
+  `?keyboard=visual` for `resizes-visual`), Qt's hidden keyboard input field stays in the top-left corner
+  of the window, a keyboard that shrinks only the visual viewport (300 px; 180 px with the view shifted
+  by 120 px) lifts the toolbar exactly to its top edge, and a page shrunk by the
+  browser (the emulated phone's screen 300 px shorter) gives zero overlap, the keyboard counts
+  as shown, and the toolbar ends at the bottom of the window — also with a stale `innerHeight` (the old
+  formula would count the keyboard twice); Qt's containers are not scrolled. The app reports the position of the toolbar
+  and content in `brulionKeyboardSelfTest` (`windowHeight`, `contentBottom`,
+  `toolbarBottom`, `bottomNavTop`); when the page grows again (keyboard hidden with Back), the bottom
+  navigation comes back and the toolbar sits right on it. With `--screenshot`, screenshots `…-edit.png`, `…-visual.png`,
+  `…-content.png` are added. CI runs it with the first test.
+* `--two-tabs` — opens a second tab: it must wait with the message "Brulion is open in another
+  tab…", and take over the data once the app in the first tab is left.
+* `--share` — share target (below, "Sharing to Brulion"): the manifest as read by
+  Chrome (`Page.getAppManifest`) has a GET `share_target` `./` with `share-title`, `share-text`,
+  `share-url` and no errors; a start with a shared title and text (`?selftest=share`:
+  the app publishes the dialog's data, `window.brulionShareSelfTest`, with `dialog` — whether the dialog was meant to
+  open; before the start, IndexedDB holds a notebook with today's journal, as with `--copy`)
+  opens the **Save to Brulion** dialog with "[Przepis na żurek](https://kuchnia.pl/żurek) — Zobacz
+  to" (Polish sample share: "Recipe for żurek — Check this out"), and the address bar loses the share parameters; a second tab with a share while the
+  first is open hands it over (it does not load the app itself, shows a message and asks to be closed),
+  and the first shows the dialog with "Zażółć gęślą jaźń" (Polish pangram). With `--screenshot` a
+  `…-share.png` screenshot is added. CI runs it separately (profile `profile-share`).
+* `--pick-files` — file picking and downloading without Qt Widgets (`platform/wasm/wasmfiles.h`): a tab
+  marked for tests (sessionStorage `brulion-selftest`), without `showOpenFilePicker` /
+  `showSaveFilePicker` (Qt then uses `<input type=file>` and a plain download, which every
+  browser has), `?selftest=pickfiles,savefile`. A real click opens the file picker, which
+  must accept several files (DevTools intercepts it), and gets seven: "Zażółć gęślą
+  jaźń.md" (UTF-8, CRLF lines), an empty `pusty.md`, `duży.md` 2 MiB over the test limit of 1 MiB per
+  file, `notatka.txt`, "pół — ą.md" exactly 1 MiB, "drugie pół.md" 600 KiB, which would exceed the
+  test limit of 1.5 MiB in total, and a small "po limicie.txt"; the app
+  (`window.brulionPickSelfTest`) must report them in order with sizes and SHA-256 — the large one
+  unread, and from the file over the total onwards none (like `FileGatherer` on the desktop). The next
+  click downloads "Zażółć.md" with the bytes "ąę\n"
+  (`Browser.setDownloadBehavior`). CI runs it separately (profile `profile-pick`).
+* `--loader-screenshot file.png` — on the first load throttles the network to ~3 MiB/s and takes
+  a screenshot of the loading screen (progress bar).
+* `--lang pl-PL` (default) — the browser language.
+* `--index-notes N` — before the first load writes to IndexedDB a vault with N
+  generated notes (the way the IDBFS mount stores them, with `settings.ini` pointing to
+  it as the current one); every load must then report a complete index
+  (`brulionShell.indexed()`, time in `brulionShell.indexedAt`) **without any input** (mouse,
+  keyboard) — a regression test for stalled timers (below, "Technical limitations"). From 200
+  notes on, the first load must also save the ready index (`brulionShell.indexCacheSavedAt`),
+  and each following one take almost all notes from it (`brulionShell.indexStats()`:
+  `indexedFromCache` ≥ N − 1). CI runs it with 3000 notes.
+* `--copy` — copying blocks with real input: before loading writes to IndexedDB (like
+  `--index-notes`) a notebook with today's journal (three blocks, the second with a child, Polish
+  characters, bold, a link), then clicks the text of the first block, presses Escape (block selected),
+  Shift+↓ (the next one with its child) and Ctrl+C, and the page (with clipboard permission granted) reads the browser
+  clipboard: `navigator.clipboard.readText()` must give exactly the Markdown of these blocks,
+  and `navigator.clipboard.read()` — Brulion's HTML (`text/html` with the `generator` marker). With
+  `--screenshot` a `…-copy.png` screenshot is added. The result and the click position depend on the page layout
+  1280×800 (the first line of the day about 153 px from the top; the script tries several heights).
 
-Rysunki w motywie aplikacji sprawdza osobny skrypt `tests/app/drawing/wasm-drawing-check.mjs`
-(ten sam minimalny klient DevTools, bez zmian w `wasm-smoke.mjs`): zapisuje do IndexedDB
-notatnik z dzisiejszym dziennikiem osadzającym `Rysunek.svg` (złoty plik testów,
-`tests/data/drawing/auto_theme.svg`, „Jak motyw”) i `settings.ini` z motywem `ui/themeMode`
-jasnym, a potem ciemnym; po starcie aplikacji zrzut ekranu dekoduje w osobnej karcie (płótna
-WebGL Qt nie da się odczytać) i sprawdza, że papier rysunku ma kolor motywu (#ffffff / #121212)
-z tuszem w jego kolorze (#1f2430 / #caced8). To dowód, że dostawca obrazów `drawing` działa
-w wątku GUI przeglądarki i czyta pliki z IDBFS (2026-10-28, laptop; CI go nie uruchamia).
-Z `--text` skrypt potem klika rysunek (otwiera się edytor rysunku), naciska T (narzędzie tekstu),
-klika w kartkę, wpisuje klawisz po klawiszu „Zażółć gęślą jaźń” i naciska Esc; plik rysunku
-w IndexedDB musi potem mieć element tekstowy z tym tekstem — wpisywanie tekstu na rysunku działa
-w przeglądarce (2026-10-29, laptop: oba motywy).
-
-```sh
-node tests/app/drawing/wasm-drawing-check.mjs --url http://127.0.0.1:8123/brulion/ [--shots katalog] [--text]
-```
-
-Sterowania działającą aplikacją przez agentów AI (`brulion --remote-control`, `brulion-cli app …`,
-docs/CLI.md „Remote control”) w przeglądarce nie ma: stronę prowadzi się przez Chrome DevTools
-Protocol — Playwrightem, obscurą albo jak ten skrypt — z jej `?selftest=…`.
-
-Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez SwiftShader.
-`BRULION_CHROME_NO_SANDBOX=1` (lub `CI=true`) wyłącza sandbox, gdy nie może wystartować
-(kontenery, GitHub Actions na Ubuntu 24.04).
-
-## Testy w przeglądarkach (Playwright)
-
-`tests/web/` (osobny projekt npm: `@playwright/test` 1.64.1 i `pngjs` 7.0.0; CMake go pomija)
-sprawdza zbudowaną stronę w **Chromium i Firefoksie** — obrazy z internetu (niżej, „Obrazy
-z internetu”), rysik w edytorze rysunków („Rysik (nacisk)”), PDF-y („PDF w przeglądarce”) i części
-linku do strony w folderze (`linkparts.spec.mjs`, niżej). GitHub Actions uruchamia go w
-`wasm.yml` (zadanie `browsers`, po `build`; wydanie na nie czeka — wywołuje `wasm.yml`); raport HTML, zrzuty i ślady nieudanych testów są w artefakcie `web-browser-tests`
-(7 dni). W CI nieudany test powtarza się raz (`retries: 1`; udany za drugim razem raport oznacza
-jako „flaky”). Lokalnie, po `scripts/wasm-build.sh`:
+Drawings in the app's theme are checked by a separate script, `tests/app/drawing/wasm-drawing-check.mjs`
+(the same minimal DevTools client, no changes to `wasm-smoke.mjs`): it writes to IndexedDB
+a notebook with today's journal embedding `Rysunek.svg` (the golden test file,
+`tests/data/drawing/auto_theme.svg`, "Like the app") and `settings.ini` with the `ui/themeMode` theme
+light, then dark; after the app starts it decodes the screenshot in a separate tab (Qt's WebGL
+canvas cannot be read back) and checks that the drawing's paper has the theme's colour (#ffffff / #121212)
+with ink in its colour (#1f2430 / #caced8). This proves that the `drawing` image provider works
+on the browser's GUI thread and reads files from IDBFS (2026-10-28, laptop; CI does not run it).
+With `--text` the script then clicks the drawing (the drawing editor opens), presses T (text tool),
+clicks on the sheet, types "Zażółć gęślą jaźń" key by key and presses Esc; the drawing file
+in IndexedDB must then have a text element with that text — typing text on a drawing works
+in the browser (2026-10-29, laptop: both themes).
 
 ```sh
-scripts/web-test.sh --install                     # npm ci + Chromium i Firefox Playwrighta
-scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # argumenty dla `playwright test`
-scripts/web-test.sh --single-file plik.html -- singlefile.spec.mjs   # inny jeden plik HTML
-(cd tests/web && npx playwright show-report)     # raport HTML (playwright-report/)
+node tests/app/drawing/wasm-drawing-check.mjs --url http://127.0.0.1:8123/brulion/ [--shots directory] [--text]
 ```
 
-* **Serwery** (`tests/web/lib/servers.mjs`, w procesie testu, porty wybiera system): strona pod
-  `https://brulion.test:<p>/brulion/` i `http://brulion.test:<p>/brulion/` (niezabezpieczony
-  kontekst), zdjęcia pod `https://img-cors.brulion.test` (`Access-Control-Allow-Origin: *`),
-  `https://img-nocors.brulion.test` (bez nagłówków CORS) i `http://img-http.brulion.test`. Nazwy
-  `*.test` przeglądarki same kierują na 127.0.0.1 (Chromium `--host-resolver-rules`, Firefox
-  `network.dns.forceResolve`) — bez `/etc/hosts`, i nie adresy IP: `127.0.0.1` jest dla
-  przeglądarek „zaufany” (bez blokady mixed content), a dla Brulionu siecią prywatną (eksport by go
-  pominął). Certyfikat z podpisem własnym robi `openssl` przy każdym przebiegu
-  (`lib/cert.mjs`, przeglądarki go przyjmują: `ignoreHTTPSErrors`). Każdy serwer zapisuje
-  zapytania (metoda, ścieżka, nagłówki), więc test widzi, co przeglądarka naprawdę wysłała.
-* **Notatnik** test zapisuje wprost do IndexedDB (`lib/idbfs.mjs`, format jak niżej w „Dane
-  w przeglądarce” i w `scripts/wasm-smoke.mjs`) i otwiera aplikację z `?nosw` (service worker
-  mógłby odrzucić stronę z takim certyfikatem; i tak nie dotyka zapytań do innych witryn),
-  `?now=2026-10-14 10:00` i `?route=…` w karcie oznaczonej do testów (`markTestTab` w
-  `tests/web/lib/brulion.mjs`; „Uruchamianie lokalnie” wyżej).
-* **Strona wokół aplikacji** (`shell.spec.mjs`; bez aplikacji: atrapa `qtloader.js` zapisuje jej
-  argumenty): bez znacznika karty link nie uruchamia testów na notatniku i nie przekazuje trasy
-  ani zegara; w karcie testowej każdy z nich jest jednym argumentem (`--route=--vault=…` nie
-  otwiera innego notatnika); każde opóźnienie `setTimeout` > 0 ms dostaje 2 ms zapasu, 0 ms
-  zostaje. Z prawdziwą aplikacją w przeglądarce, która uruchamia każdy `setTimeout` 1 ms za
-  wcześnie, edytor rysunków i tak zapisuje linię po 1,2 s bez żadnego wejścia (niżej,
-  „Ograniczenia techniczne”: zegary Qt).
-* **Wyniki aplikacji** (`src/app/diag/webselftest.h`, biblioteka `brulion_webselftest`, w aplikacji
-  tylko w wersji webowej; bez `?selftest=webpictures`/`pen`/`linkparts` w karcie testowej nic nie robi) są
-  globalami JavaScriptu:
+Driving a running app by AI agents (`brulion --remote-control`, `brulion-cli app …`,
+docs/CLI.md "Remote control") does not exist in the browser: the page is driven through the Chrome DevTools
+Protocol — with Playwright, obscura or like this script — with its `?selftest=…`.
+
+Chromium: `$CHROME` or `chromium`/`google-chrome` from `PATH`; WebGL 2 through SwiftShader.
+`BRULION_CHROME_NO_SANDBOX=1` (or `CI=true`) turns off the sandbox when it cannot start
+(containers, GitHub Actions on Ubuntu 24.04).
+
+## Browser tests (Playwright)
+
+`tests/web/` (a separate npm project: `@playwright/test` 1.64.1 and `pngjs` 7.0.0; CMake skips it)
+checks the built site in **Chromium and Firefox** — pictures from the internet (below, "Pictures
+from the internet"), the stylus in the drawing editor ("Stylus (pressure)"), PDFs ("PDFs in the browser") and parts
+of a link to a page in a folder (`linkparts.spec.mjs`, below). GitHub Actions runs it in
+`wasm.yml` (job `browsers`, after `build`; the release waits for it — it calls `wasm.yml`); the HTML report, screenshots and traces of failed tests are in the `web-browser-tests` artifact
+(7 days). In CI a failed test is retried once (`retries: 1`; one that passes the second time is marked
+"flaky" in the report). Locally, after `scripts/wasm-build.sh`:
+
+```sh
+scripts/web-test.sh --install                     # npm ci + Playwright's Chromium and Firefox
+scripts/web-test.sh -- --project=firefox stylus.spec.mjs   # arguments for `playwright test`
+scripts/web-test.sh --single-file file.html -- singlefile.spec.mjs   # another single HTML file
+(cd tests/web && npx playwright show-report)     # HTML report (playwright-report/)
+```
+
+* **Servers** (`tests/web/lib/servers.mjs`, in the test process, ports chosen by the system): the site at
+  `https://brulion.test:<p>/brulion/` and `http://brulion.test:<p>/brulion/` (insecure
+  context), pictures at `https://img-cors.brulion.test` (`Access-Control-Allow-Origin: *`),
+  `https://img-nocors.brulion.test` (no CORS headers) and `http://img-http.brulion.test`. The browsers
+  themselves resolve the `*.test` names to 127.0.0.1 (Chromium `--host-resolver-rules`, Firefox
+  `network.dns.forceResolve`) — no `/etc/hosts`, and no IP addresses: `127.0.0.1` is
+  "trustworthy" for browsers (no mixed content blocking), and a private network for Brulion (export would
+  skip it). A self-signed certificate is made by `openssl` on every run
+  (`lib/cert.mjs`, the browsers accept it: `ignoreHTTPSErrors`). Every server records
+  requests (method, path, headers), so the test sees what the browser really sent.
+* **The notebook** is written by the test directly to IndexedDB (`lib/idbfs.mjs`, format as below in "Data
+  in the browser" and in `scripts/wasm-smoke.mjs`), and the test opens the app with `?nosw` (the service worker
+  could reject a page with such a certificate; it does not touch requests to other sites anyway),
+  `?now=2026-10-14 10:00` and `?route=…` in a tab marked for tests (`markTestTab` in
+  `tests/web/lib/brulion.mjs`; "Running locally" above).
+* **The page around the app** (`shell.spec.mjs`; without the app: a stub `qtloader.js` records its
+  arguments): without the tab marker a link does not run tests on the notebook and does not pass on the route
+  or the clock; in a test tab each of them is a single argument (`--route=--vault=…` does not
+  open another notebook); every `setTimeout` delay > 0 ms gets a 2 ms margin, 0 ms
+  stays. With the real app in a browser that fires every `setTimeout` 1 ms too
+  early, the drawing editor still saves a line after 1.2 s without any input (below,
+  "Technical limitations": Qt timers).
+* **App results** (`src/app/diag/webselftest.h`, library `brulion_webselftest`, in the app
+  only in the web version; without `?selftest=webpictures`/`pen`/`linkparts` in a test tab it does nothing) are
+  JavaScript globals:
   * `?selftest=webpictures` → `brulionWebPictureSelfTest` `{page, pageScheme, done, refused,
     timedOut, elapsedMs, pictures: [{url, state, error, format, width, height, uiFetched}],
-    shownTexts}` — zdjęcia dzisiejszego dziennika tak, jak pobrał je edytor (`uiFetched`: sam,
-    z ustawieniem „pokazuj bez pytania”), i komunikaty widoczne w edytorze; test sam o żadne
-    zdjęcie nie prosi (zdjęcie z sieci lokalnej zostaje w stanie `ask`); potem eksport całego
-    notatnika do jednego pliku HTML z „Dołącz kopie” (`ExportController`) i `saveInBrowser()` →
+    shownTexts}` — the pictures of today's journal as the editor fetched them (`uiFetched`: by itself,
+    with the "Show pictures from the internet without asking" setting), and the messages visible in the editor; the test itself does not ask for any
+    picture (a picture from the local network stays in the `ask` state); then an export of the whole
+    notebook to a single HTML file with "Include copies" (`ExportController`) and `saveInBrowser()` →
     `brulionExportSelfTest` `{state, errorText, format, scope, fileName, bytes, dataPictures,
-    warnings, saved}`. Gdy urządzenie pyta przed pokazaniem zdjęć z internetu (ustawienie
-    wyłączone), test od razu kończy się z `{page, done: true, refused: true, error, pictures:
-    []}` — bez pobierania i bez eksportu (testy włączają to ustawienie w `settings.ini`);
+    warnings, saved}`. When the device asks before showing pictures from the internet (setting
+    off), the test ends at once with `{page, done: true, refused: true, error, pictures:
+    []}` — without fetching and without export (the tests turn this setting on in `settings.ini`);
   * `?selftest=pen` → `brulionPenSelfTest` `{found, editable, modified, stylusSeen, zoom,
     strokeCount, elements, changes, canvas: {x, y, width, height}, strokes: [{tool,
     simulatePressure, points, pressureMin, pressureMax, pressureFirst, pressureLast, width,
-    bounds}]}` — płótno edytora rysunków (`modified`: zmiany jeszcze niezapisane do pliku;
-    `strokeCount` liczy linie odręczne, `elements` wszystkie elementy) i jego linie odręczne
-    (współrzędne okna, by porównać z miejscem rysowania), po każdej zmianie;
+    bounds}]}` — the drawing editor's canvas (`modified`: changes not yet saved to the file;
+    `strokeCount` counts freehand lines, `elements` all elements) and its freehand lines
+    (window coordinates, to compare with where the drawing happened), after every change;
   * `?selftest=pdf` → `brulionPdfSelfTest` `{route: {view, path}, chip: {x, y, w, h, icon, text},
-    link: {x, y, w, h}, message, button}` — gdzie na ekranie jest kafelek PDF-a i odnośnik do niego
-    (test klika w nie prawdziwą myszą), trasa aplikacji, komunikat i przycisk panelu PDF-a; po każdej
-    zmianie przez dwie minuty. `?selftest=pdfauto` dodatkowo po 2 s sam otwiera `assets/wykład.pdf`
-    poza jakimkolwiek kliknięciem → `brulionPdfOpenSelfTest` `{path, opened, notices, errors}`
-    (przeglądarka może zablokować kartę — wtedy plik się pobiera, a aplikacja to mówi).
+    link: {x, y, w, h}, message, button}` — where on screen the PDF tile and the link to it are
+    (the test clicks them with a real mouse), the app's route, the message and the button of the PDF panel; after every
+    change for two minutes. `?selftest=pdfauto` additionally opens `assets/wykład.pdf` by itself after 2 s,
+    outside any click → `brulionPdfOpenSelfTest` `{path, opened, notices, errors}`
+    (the browser may block the tab — then the file is downloaded, and the app says so).
   * `?selftest=linkparts` → `brulionLinkPartsSelfTest` `{ready, parts: [{href, x, y, width,
-    height}], route: {view, path}}` — linki tekstu, w którym jest część ścieżki linku
-    (`part:…`, docs/SYNTAX.md §2 „Path parts”), z ich miejscem w oknie (próbki `linkAt` co 2 px),
-    i pokazana trasa; publikowane przy każdej zmianie. `linkparts.spec.mjs` zapisuje w
-    dzisiejszym dzienniku `- Zapytać się [[Projekty/Remont mieszkania]] o plan` (i stronę
-    `Projekty/Remont mieszkania.md`), klika prawdziwą myszą przeglądarki w środek „Projekty” →
-    trasa `{view: allPages, path: Projekty}`, po Alt+← w „Remont mieszkania” → strona; to samo
-    stuknięciem w Chromium z dotykiem (412×915, `isMobile`); plik dziennika się nie zmienia.
-* **Jeden plik HTML** (`singlefile.spec.mjs`; plik z `--single-file`, domyślnie
-  `dist-wasm-single/brulion.html`): otwarty z `file://` startuje bez żadnego zapytania poza sobą
-  samym, nie rejestruje service workera, zwalnia tekst base64 i po przeładowaniu widzi swoje
-  notatki (liczniki `?selftest=storage` o 1 większe).
-* **Plik z eksportu**: w Chromium na `https://` Qt zapisuje przez File System Access
-  (`showSaveFilePicker`), który wymaga gestu użytkownika — test podmienia go na stronie testowej
-  na rejestrator; w Firefoksie i na stronie `http://` przychodzi zwykłe pobranie pliku.
-* **Firefox** rysuje WebGL 2 (którego wymaga Qt) tylko z ekranem X: skrypt uruchamia testy pod
-  `xvfb-run` (Firefox z oknem), gdy nie ma `$DISPLAY`; brak WebGL 2 jest błędem testu, nie
-  pominięciem. Na NixOS `scripts/web-test.sh` bierze Node, `openssl` i `xvfb-run` z nixpkgs,
-  a przeglądarki Playwrighta (gotowe binaria) uruchamia przez nix-ld z ich bibliotekami
+    height}], route: {view, path}}` — the links of a text that contains a part of a link's path
+    (`part:…`, docs/SYNTAX.md §2 "Path parts"), with their place in the window (`linkAt` samples every 2 px),
+    and the route shown; published on every change. `linkparts.spec.mjs` writes into
+    today's journal `- Zapytać się [[Projekty/Remont mieszkania]] o plan` ("ask [[Projects/Flat renovation]]
+    about the plan"; and the page
+    `Projekty/Remont mieszkania.md`), clicks with the browser's real mouse in the middle of "Projekty" →
+    route `{view: allPages, path: Projekty}`, after Alt+← on "Remont mieszkania" → the page; the same
+    with a tap in Chromium with touch (412×915, `isMobile`); the journal file does not change.
+* **Single HTML file** (`singlefile.spec.mjs`; the file from `--single-file`, by default
+  `dist-wasm-single/brulion.html`): opened from `file://` it starts without any request other than to itself,
+  does not register a service worker, releases the base64 text and after a reload sees its own
+  notes (the `?selftest=storage` counters 1 higher).
+* **The exported file**: in Chromium on `https://` Qt saves through File System Access
+  (`showSaveFilePicker`), which needs a user gesture — the test replaces it on the test page
+  with a recorder; in Firefox and on the `http://` page a plain file download arrives.
+* **Firefox** draws WebGL 2 (which Qt requires) only with an X display: the script runs the tests under
+  `xvfb-run` (Firefox with a window) when there is no `$DISPLAY`; missing WebGL 2 is a test failure, not
+  a skip. On NixOS `scripts/web-test.sh` takes Node, `openssl` and `xvfb-run` from nixpkgs,
+  and runs Playwright's browsers (prebuilt binaries) through nix-ld with their libraries
   (`NIX_LD_LIBRARY_PATH`).
-* Wyniki z 2026-10-30 (laptop i GitHub Actions; Chromium 156 — Chrome for Testing
-  156.0.8078.4 — i Firefox 157 z Playwrighta 1.64.1): wszystkie testy przechodzą w obu
-  przeglądarkach (test rysika z DevTools tylko w Chromium — Playwright nie ma pióra dla
-  Firefoksa).
+* Results from 2026-10-30 (laptop and GitHub Actions; Chromium 156 — Chrome for Testing
+  156.0.8078.4 — and Firefox 157 from Playwright 1.64.1): all tests pass in both
+  browsers (the stylus test with DevTools only in Chromium — Playwright has no pen for
+  Firefox).
 
-## Publikacja
+## Publishing
 
-### W CI
+### In CI
 
-Robi to `.github/workflows/wasm.yml` (opis: `docs/RELEASE.md`): buduje stronę i jeden plik
-`scripts/wasm-build.sh --setup` i uruchamia test dymny w Chrome — strona pod ścieżką `/brulion/`
-(start, trwałość po przeładowaniu i restarcie przeglądarki, pełny indeks 3000 notatek bez żadnego
-wejścia, start offline z service workera) i jeden plik z `file://` (start, emoji, trwałość po
-przeładowaniu i restarcie przeglądarki) — a potem testy Playwrighta (wyżej). Sam z siebie nie
-startuje przy każdym pushu: uruchamia się go ręcznie albo pushem na `main` ze znacznikiem `[ci]`
-w opisie commita (i zmianami w `src/`, `wasm/`…). Niczego nie wdraża; wywołany z `release.yml`
-daje do wydania `brulion-web-<wersja>.zip` (artefakt `brulion-web`) i
-`brulion-web-<wersja>.html` (artefakt `brulion-web-html`).
+`.github/workflows/wasm.yml` does it (description: `docs/RELEASE.md`): it builds the site and the single file
+with `scripts/wasm-build.sh --setup` and runs the smoke test in Chrome — the site under the `/brulion/` path
+(start, persistence across reload and browser restart, full index of 3000 notes without any
+input, offline start from the service worker) and the single file from `file://` (start, emoji, persistence across
+reload and browser restart) — and then the Playwright tests (above). It does not
+start on every push by itself: it runs manually or on a push to `main` with the `[ci]` marker
+in the commit message (and changes in `src/`, `wasm/`…). It deploys nothing; called from `release.yml`
+it gives the release `brulion-web-<version>.zip` (artifact `brulion-web`) and
+`brulion-web-<version>.html` (artifact `brulion-web-html`).
 
-### Jeden plik HTML
+### Single HTML file
 
-`brulion-web-<wersja>.html` z wydania (ok. 20 MB) to cała wersja przeglądarkowa w jednym pliku:
-otwierasz go z dysku (dwuklik, „Otwórz plik…” w przeglądarce albo przeciągnięcie do jej okna),
-bez serwera i bez internetu. Lokalnie robi go `scripts/wasm-build.sh`
+`brulion-web-<version>.html` from a release (about 20 MB) is the whole browser version in a single file:
+you open it from disk (double-click, "Open file…" in the browser, or drag it into its window),
+without a server and without the internet. Locally `scripts/wasm-build.sh` makes it
 (`dist-wasm-single/brulion.html`).
 
-* **Notatki** leżą w IndexedDB przeglądarki, tak jak na stronie. Chromium i Firefox mają jedną
-  pamięć dla wszystkich plików otwartych z dysku (origin `file://`): plik można przenieść, zmienić
-  mu nazwę albo zastąpić wersją z nowszego wydania — notatki zostają (sprawdzone w Chromium 156
-  i Firefoksie z Playwrighta 1.64.1). Inna przeglądarka albo inny profil ma własne notatki.
-* **Ta sama pamięć należy do każdego pliku HTML otwartego z dysku** w tej przeglądarce: inny
-  plik `.html` z dysku mógłby odczytać notatki. Otwieraj w niej z dysku tylko pliki, którym
-  ufasz (albo trzymaj Brulion w osobnym profilu przeglądarki).
-* Nie ma: instalacji jako aplikacja (PWA) i service workera (`file://` ich nie obsługuje),
-  **Udostępnij → Brulion** (wymaga zainstalowanej aplikacji) ani powiadomień przy zamkniętej
-  karcie; przypomnienia działają, gdy karta jest otwarta i przeglądarka pozwala na powiadomienia
-  stronom z dysku.
-* **Nextcloud:** strona z dysku ma origin `null`, a CORS dla `null` otwierałby WebDAV każdemu
-  plikowi z dysku — do synchronizacji służą aplikacje albo strona na własnym serwerze (niżej,
-  „Nextcloud (WebDAV) a CORS”). **Zdjęcia z internetu** pokażą się tylko z serwerów, które
-  pozwalają na to wszystkim stronom (`Access-Control-Allow-Origin: *`).
-* Przeglądarka musi mieć `DecompressionStream` (Chrome i Edge 80+, Firefox 113+, Safari 16.4+).
+* **Notes** live in the browser's IndexedDB, just as on the site. Chromium and Firefox have one
+  storage for all files opened from disk (origin `file://`): the file can be moved, renamed
+  or replaced with a version from a newer release — the notes stay (checked in Chromium 156
+  and Firefox from Playwright 1.64.1). Another browser or another profile has its own notes.
+* **The same storage belongs to every HTML file opened from disk** in that browser: another
+  `.html` file from disk could read the notes. Open only files you trust from disk in that browser
+  (or keep Brulion in a separate browser profile).
+* Missing: installing as an app (PWA) and the service worker (`file://` does not support them),
+  **Share → Brulion** (needs the installed app) and notifications with the tab
+  closed; reminders work while the tab is open and the browser allows notifications for
+  pages from disk.
+* **Nextcloud:** a page from disk has the origin `null`, and CORS for `null` would open WebDAV to every
+  file on disk — for sync use the apps or the site on your own server (below,
+  "Nextcloud (WebDAV) and CORS"). **Pictures from the internet** show only from servers that
+  allow it for all sites (`Access-Control-Allow-Origin: *`).
+* The browser must have `DecompressionStream` (Chrome and Edge 80+, Firefox 113+, Safari 16.4+).
 
-Jak to działa: `scripts/wasm-single-file.py` bierze złożoną stronę z `dist-wasm/`. `brulion.wasm`
-kompresuje gzipem (poziom 9, bez daty: ten sam build daje ten sam plik) i wstawia w base64 do
-elementu `<script id="brulion-wasm" type="application/octet-stream">`; `qtloader.js` i
-`brulion.js` wstawia jako skrypty strony przed jej własnym (w miejsce komentarza
-`brulion-single-file` z `wasm/index.html`; `</script` zapisuje w nich jako `<\/script`, a
-`<!--` odrzuca), ikony zamienia na adresy `data:`, a link do manifestu usuwa. Odwołanie do
-jakiegokolwiek innego pliku strony przerywa skrypt — w pliku nie zostaje nic do pobrania.
-`wasm/index.html`, gdy znajdzie `#brulion-wasm`, niczego nie pobiera: dekoduje base64,
-rozpakowuje strumieniowo (`DecompressionStream('gzip')`) prosto do
-`WebAssembly.compileStreaming` (pasek postępu liczy rozpakowane bajty, „Rozpakowywanie
-aplikacji…”), zwalnia tekst base64 i nie rejestruje service workera. Testy:
-`tests/scripts/tst_wasm_single_file.sh` (ctest `tst_scripts_wasm_single_file`: prawdziwa
-`wasm/index.html` z atrapami aplikacji, `brulion.wasm` bajt w bajt, kolejność skryptów,
-`</script`, żadnych odwołań, powtarzalność, odrzucane buildy), test dymny w `wasm.yml` i
-`tests/web/singlefile.spec.mjs` (wyżej).
+How it works: `scripts/wasm-single-file.py` takes the assembled site from `dist-wasm/`. It compresses
+`brulion.wasm` with gzip (level 9, no timestamp: the same build gives the same file) and inserts it as base64 into
+a `<script id="brulion-wasm" type="application/octet-stream">` element; it inserts `qtloader.js` and
+`brulion.js` as page scripts before the page's own (in place of the
+`brulion-single-file` comment from `wasm/index.html`; it writes `</script` in them as `<\/script`, and
+rejects `<!--`), turns the icons into `data:` addresses, and removes the manifest link. A reference to
+any other file of the site stops the script — nothing is left in the file to download.
+`wasm/index.html`, when it finds `#brulion-wasm`, downloads nothing: it decodes the base64,
+decompresses it as a stream (`DecompressionStream('gzip')`) straight into
+`WebAssembly.compileStreaming` (the progress bar counts decompressed bytes, "Unpacking
+the app…"), releases the base64 text and does not register a service worker. Tests:
+`tests/scripts/tst_wasm_single_file.sh` (ctest `tst_scripts_wasm_single_file`: the real
+`wasm/index.html` with stub apps, `brulion.wasm` byte for byte, script order,
+`</script`, no references, reproducibility, rejected builds), the smoke test in `wasm.yml` and
+`tests/web/singlefile.spec.mjs` (above).
 
-### Własny serwer
+### Self-hosting
 
-Na NixOS: moduł `services.brulion-web` (`docs/NIXOS.md`) — nginx z poprawnymi typami MIME,
-plikami skompresowanymi z góry (gzip/brotli), nagłówkami cache i opcjonalnym proxy do
-Nextcloud. Gdzie indziej wystarczy skopiować `dist-wasm/` (dowolna ścieżka). Zalecenia:
+On NixOS: the `services.brulion-web` module (`docs/NIXOS.md`) — nginx with correct MIME types,
+precompressed files (gzip/brotli), cache headers and an optional proxy to
+Nextcloud. Elsewhere it is enough to copy `dist-wasm/` (any path). Recommendations:
 
-* typ MIME `application/wasm` dla `.wasm` (wymagany do kompilacji strumieniowej),
-* kompresja gzip/brotli (`.wasm` kompresuje się ok. 3×, patrz rozmiary niżej),
-* długi cache tylko dla adresów z `?v=<hash>` (`brulion.js`, `brulion.wasm`, `qtloader.js` —
-  ich adresy zmieniają się z każdym wydaniem); `index.html`, `sw.js`, manifest i ikony bez
-  długiego cache (`Cache-Control: no-cache`),
-* HTTPS (service worker, powiadomienia i trwałe IndexedDB wymagają bezpiecznego kontekstu).
+* MIME type `application/wasm` for `.wasm` (required for streaming compilation),
+* gzip/brotli compression (`.wasm` compresses about 3×, see the sizes below),
+* long caching only for addresses with `?v=<hash>` (`brulion.js`, `brulion.wasm`, `qtloader.js` —
+  their addresses change with every release); `index.html`, `sw.js`, the manifest and icons without
+  long caching (`Cache-Control: no-cache`),
+* HTTPS (the service worker, notifications and persistent IndexedDB need a secure context).
 
-Przykład nginx (w bloku `http` standardowe `include mime.types;`). Uwaga: blok `types { … }`
-wewnątrz `location` **zastępuje** całą mapę typów MIME — dlatego typy `.wasm` i
-`.webmanifest` są tu ustawione osobnymi `location` z pustym `types {}` i `default_type`:
+An nginx example (with the standard `include mime.types;` in the `http` block). Note: a `types { … }` block
+inside `location` **replaces** the whole MIME type map — which is why the types of `.wasm` and
+`.webmanifest` are set here in separate `location`s with an empty `types {}` and `default_type`:
 
 ```nginx
 map $arg_v $brulion_cache {
@@ -450,589 +451,589 @@ server {
 }
 ```
 
-## Dane w przeglądarce
+## Data in the browser
 
-System plików Emscriptena żyje w pamięci. `WasmStorage` (`src/platform/wasm/wasmstorage.h`)
-montuje na nim IDBFS (lustro w IndexedDB) w trzech katalogach:
+Emscripten's file system lives in memory. `WasmStorage` (`src/platform/wasm/wasmstorage.h`)
+mounts IDBFS (a mirror in IndexedDB) on it in three directories:
 
-* `/home/web_user/Brulion` — skarbiec (vault) wersji przeglądarkowej,
-* katalog danych aplikacji (`QStandardPaths::AppDataLocation`,
-  `/home/web_user/.local/share/Brulion/Brulion`) — historia wersji, stan synchronizacji,
-  lokalne ustawienia,
-* katalog pamięci podręcznej (`WasmStorage::indexCacheRoot()`, `QStandardPaths::CacheLocation`
-  + `/index`, czyli `/home/web_user/.cache/Brulion/Brulion/index`) — gotowy indeks notatnika
-  (`<id notatnika>/index-cache.bin`, docs/PERFORMANCE.md L2): przy kolejnej wizycie notatki,
-  których tekst się nie zmienił, nie są parsowane od nowa (pliki są nadal czytane z pamięci).
+* `/home/web_user/Brulion` — the vault of the browser version,
+* the app data directory (`QStandardPaths::AppDataLocation`,
+  `/home/web_user/.local/share/Brulion/Brulion`) — version history, sync state,
+  local settings,
+* the cache directory (`WasmStorage::indexCacheRoot()`, `QStandardPaths::CacheLocation`
+  + `/index`, i.e. `/home/web_user/.cache/Brulion/Brulion/index`) — the notebook's ready index
+  (`<notebook id>/index-cache.bin`, docs/PERFORMANCE.md L2): on the next visit, notes
+  whose text has not changed are not parsed again (the files are still read from memory).
 
-Indeks w przeglądarce buduje się jednowątkowo (`wasm_singlethread`: `IndexLoader` bez puli
-wątków, po kawałku w wątku GUI, jak wcześniej); przy pierwszej wizycie indeks pełnotekstowy
-dobudowuje się po kawałku już po „gotowym” indeksie, przy kolejnych przychodzi z pamięci
-podręcznej. Zapis pamięci podręcznej (kodowanie po 8 ms, ok. 5 s po gotowym indeksie) jest
-**montażem pamięci podręcznej** (*cache mount*): osobną bazą IndexedDB zapisywaną we własnej
-transakcji. IDBFS zapisuje każdy montaż jedną transakcją, a `QuotaExceededError` przerywa całą
-transakcję — gdyby indeks leżał w danych aplikacji, plik, którego limit miejsca nie mieści,
-zatrzymałby zapis historii wersji, stanu synchronizacji i ustawień przy każdej kolejnej próbie.
-Teraz nieudany zapis montażu pamięci podręcznej:
+In the browser the index is built single-threaded (`wasm_singlethread`: `IndexLoader` without a thread
+pool, piece by piece on the GUI thread, as before); on the first visit the full-text index
+is completed piece by piece after the "ready" index, on later visits it comes from the
+cache. Saving the cache (encoding in 8 ms slices, about 5 s after the index is ready) is
+a **cache mount**: a separate IndexedDB database saved in its own
+transaction. IDBFS saves each mount in one transaction, and `QuotaExceededError` aborts the whole
+transaction — if the index lived in the app data, a file that does not fit the storage quota
+would stop saving the version history, sync state and settings on every following attempt.
+Now a failed save of the cache mount:
 
-* nie jest błędem zapisu (bez komunikatu „Saving to the browser's storage failed”, nic nie
-  zostaje „niezapisane”, `beforeunload` nie pyta), tylko zwiększa `brulionStorage.cacheFailures`,
-* usuwa pliki tego montażu z pamięci (następny zapis usuwa też ich stare kopie z IndexedDB,
-  zwalniając miejsce) — `WasmStorage::cacheNotSaved()`,
-* zatrzymuje zapisywanie indeksu do końca pracy z notatnikiem (`Workspace::stopIndexCache()`,
-  w rejestrze zdarzeń jedna linia „Index cache not saved”).
+* is not a save error (no "Saving to the browser's storage failed" message, nothing
+  stays "unsaved", `beforeunload` does not ask), it only increments `brulionStorage.cacheFailures`,
+* removes the files of that mount from memory (the next save also removes their old copies from IndexedDB,
+  freeing space) — `WasmStorage::cacheNotSaved()`,
+* stops saving the index until the end of work with the notebook (`Workspace::stopIndexCache()`,
+  one line "Index cache not saved" in the event log).
 
-Do tego indeks nie zajmie więcej niż połowę wolnego miejsca: `navigator.storage.estimate()`
-z chwili wczytywania (`WasmStorage::estimate()`) wyznacza `IndexCacheKeeper::Policy::maxBytes`
-(`notebook::indexCacheBudget()`: rozmiar poprzedniego pliku + połowa wolnego miejsca, najwyżej
-256 MB); większy indeks nie jest zapisywany. Wczytanie, którego montaż pamięci podręcznej się
-nie powiedzie, nie blokuje startu (ten montaż zostaje pusty).
-`scripts/wasm-smoke.mjs --index-notes N` sprawdza, że indeks leży tylko w swojej bazie, a
-`--cache-quota` (zmniejszony limit przez DevTools, `Storage.overrideQuotaForOrigin`) — że jego
-nieudany zapis niczego poza nim nie zatrzymuje.
+On top of that the index never takes more than half of the free space: `navigator.storage.estimate()`
+at load time (`WasmStorage::estimate()`) determines `IndexCacheKeeper::Policy::maxBytes`
+(`notebook::indexCacheBudget()`: size of the previous file + half of the free space, at most
+256 MB); a larger index is not saved. A load whose cache mount fails
+does not block the start (that mount stays empty).
+`scripts/wasm-smoke.mjs --index-notes N` checks that the index lies only in its own database, and
+`--cache-quota` (a reduced quota through DevTools, `Storage.overrideQuotaForOrigin`) — that its
+failed save stops nothing else.
 
-Każdy montaż to osobna baza IndexedDB nazwana ścieżką. Przebieg:
+Each mount is a separate IndexedDB database named after its path. The flow:
 
-1. Start: montowanie i wczytanie z IndexedDB (`syncfs` IDBFS każdego montażu osobno — tak jak
-   robi to `FS.syncfs`, ale z własnym zakończeniem, żeby montaż pamięci podręcznej mógł zawieść
-   sam —, asynchronicznie). Dopiero
-   po sygnale `ready()` aplikacja otwiera skarbiec (`main.cpp`); ekran ładowania pokazuje
-   wtedy „Wczytywanie notatek…”.
-2. Każda zmiana w tych katalogach (zamknięcie zapisywanego pliku, zmiana nazwy, usunięcie,
-   mkdir, utime…) jest wychwytywana na poziomie API `FS` Emscriptena i planuje zapis do
-   IndexedDB po 400 ms ciszy, najpóźniej 3 s od pierwszej niezapisanej zmiany. Rdzeń nie
-   musi o niczym wiedzieć; `scheduleFlush()`/`flushNow()` są dostępne do ręcznego sterowania.
-3. Przy ukryciu/zamknięciu karty (`visibilitychange`, `pagehide`) zaległe zmiany zapisują się
-   od razu; `beforeunload` pyta o pozostanie na stronie, jeśli zapis jeszcze trwa.
-4. Zapis nigdy nie rusza przed udanym wczytaniem — pusty stan w pamięci skasowałby notatki.
-   Gdy IndexedDB jest niedostępne (niektóre tryby prywatne, zablokowane dane witryn),
-   aplikacja działa tylko w pamięci, `isBackedByIndexedDb()` = false, sygnał `error()`
-   pozwala UI ostrzec użytkownika.
-5. Po awarii modułu WebAssembly powłoka HTML i tak zapisuje stan z pamięci (część JS żyje).
-6. **Jedna karta naraz.** Każda karta ma własną kopię plików w pamięci, a zapis usuwa z
-   IndexedDB to, czego karta nie ma — dwie karty skasowałyby sobie nawzajem nowe notatki.
-   Dlatego strona trzyma przez cały czas życia blokadę Web Locks; druga karta czeka na
-   ekranie ładowania („Brulion jest otwarty w innej karcie. Zamknij ją, aby kontynuować
-   tutaj.”) i rusza sama, gdy pierwsza zostanie zamknięta. Strona przechodząca do pamięci
-   wstecz/dalej (bfcache) zapisuje zmiany, oddaje blokadę i przy powrocie przeładowuje się.
-   Bez Web Locks (bardzo stare przeglądarki) ochrony nie ma.
+1. Start: mounting and loading from IndexedDB (IDBFS `syncfs` for each mount separately — the way
+   `FS.syncfs` does it, but with our own completion, so that the cache mount can fail
+   on its own —, asynchronously). Only
+   after the `ready()` signal does the app open the vault (`main.cpp`); the loading screen then shows
+   "Loading notes…".
+2. Every change in these directories (closing a file being written, rename, delete,
+   mkdir, utime…) is caught at the level of Emscripten's `FS` API and schedules a save to
+   IndexedDB after 400 ms of quiet, at most 3 s after the first unsaved change. The core does not
+   need to know anything; `scheduleFlush()`/`flushNow()` are available for manual control.
+3. When the tab is hidden/closed (`visibilitychange`, `pagehide`) pending changes are saved
+   at once; `beforeunload` asks to stay on the page if a save is still running.
+4. A save never starts before a successful load — an empty state in memory would delete the notes.
+   When IndexedDB is unavailable (some private modes, blocked site data),
+   the app works in memory only, `isBackedByIndexedDb()` = false, and the `error()` signal
+   lets the UI warn the user.
+5. After a crash of the WebAssembly module the HTML shell still saves the state from memory (the JS part lives on).
+6. **One tab at a time.** Each tab has its own copy of the files in memory, and a save removes from
+   IndexedDB whatever the tab does not have — two tabs would delete each other's new notes.
+   That is why the page holds a Web Locks lock for its whole lifetime; a second tab waits on the
+   loading screen ("Brulion is open in another tab. Close it to continue
+   here.") and starts by itself when the first one is closed. A page going into the
+   back/forward cache (bfcache) saves its changes, releases the lock and reloads on return.
+   Without Web Locks (very old browsers) there is no protection.
 
-Uwagi:
+Notes:
 
-* **Pliki zapisane przed `ready()` giną** (wczytany stan je zastępuje).
-* **Eksmisja danych:** przeglądarka może usunąć dane witryny przy braku miejsca, a Safari
-  usuwa je po 7 dniach bez wizyty, jeśli strona nie jest dodana do ekranu początkowego.
-  `WasmStorage::requestPersistentStorage()` prosi o `navigator.storage.persist()` (Firefox
-  pyta użytkownika — wywoływać z akcji użytkownika). Regularny eksport/synchronizacja to
-  jedyna pełna kopia zapasowa.
-* **Jedno źródło (origin):** wszystkie strony jednego originu dzielą IndexedDB — np. na GitHub
-  Pages wszystkie projekty `<użytkownik>.github.io/*`, a z dysku wszystkie pliki `file://`
-  (wyżej, „Jeden plik HTML”). Inna strona tego originu mogłaby odczytać notatki — dla prywatnych
-  danych Brulion najlepiej hostować pod własną domeną (albo subdomeną).
-* Ustawienia przez `QSettings` (format natywny) Qt na WebAssembly trzyma w `localStorage`.
-* **Obrazy z internetu** (docs/SYNTAX.md §2): pamięć podręczna
-  (`QStandardPaths::CacheLocation`/web-pictures) nie jest montażem IDBFS — leży w pamięci
-  karty (MEMFS) i znika razem z nią; pobrane zdjęcie po ponownym otwarciu karty trzeba
-  pokazać jeszcze raz (albo zapisać w notatniku, wtedy jest załącznikiem w IndexedDB). Limit
-  to 50 MB zamiast 200 MB, a adresy `data:` zdjęć wyrzuconych z pamięci podręcznej znikają z
-  pamięci razem z plikami.
-  * **CORS**: zapytanie o zdjęcie wysyła przeglądarka (Qt for WebAssembly: `emscripten_fetch`),
-    a odpowiedź dostaje strona Brulionu tylko wtedy, gdy serwer zdjęcia na to pozwala
-    (`Access-Control-Allow-Origin`; np. `upload.wikimedia.org` wysyła `*`, większość stron nie).
-    Przeglądarka nie mówi stronie, dlaczego zapytanie się nie udało, więc nieudane połączenie
-    jest opisane jako „%1 nie pozwala innym stronom pobierać swoich obrazów (CORS) albo nie ma
-    połączenia…” z radą, by zapisać zdjęcie w notatniku w aplikacji na komputerze lub telefonie
-    (`Workspace::setWebPageScheme`, ustawiane z `location.protocol` — `platform::pageScheme()`).
-  * **Mixed content**: Brulion otwarty przez `https://` nie pobierze niczego spod `http://`
-    (przeglądarka blokuje takie zapytanie) — komunikat mówi to wprost.
-  * **Proste zapytania**: w przeglądarce `PictureFetcher::setSimpleRequests` nie ustawia
-    `User-Agent` ani `Accept-Language` (przeglądarka wysyła własne; inny nagłówek wymagałby
-    zapytania wstępnego OPTIONS, na które serwery zdjęć zwykle nie odpowiadają), zostaje tylko
-    `Accept: image/…` (nagłówek „bezpieczny” dla CORS). Qt i tak odrzuca nagłówki zabronione
-    (`Cookie`, `Referer`…); ciasteczka nie są wysyłane (`withCredentials` wyłączone).
-  * **Przekierowania** wykonuje sama przeglądarka: Qt for WebAssembly nie wysyła sygnału
-    `redirected`, więc ręczne sprawdzanie przekierowań (`webpicture::redirectAllowed`) działa
-    tylko w aplikacji. Przeglądarka i tak nie przejdzie z `https://` na `http://` (mixed
-    content), a Chrome ogranicza zapytania stron z internetu do adresów sieci prywatnej
+* **Files written before `ready()` are lost** (the loaded state replaces them).
+* **Data eviction:** the browser may delete a site's data when space runs out, and Safari
+  deletes it after 7 days without a visit unless the page is added to the home screen.
+  `WasmStorage::requestPersistentStorage()` asks for `navigator.storage.persist()` (Firefox
+  asks the user — call it from a user action). Regular export/sync is the
+  only full backup.
+* **One origin:** all pages of one origin share IndexedDB — e.g. on GitHub
+  Pages all projects `<user>.github.io/*`, and from disk all `file://` files
+  (above, "Single HTML file"). Another page of that origin could read the notes — for private
+  data it is best to host Brulion on your own domain (or subdomain).
+* Qt on WebAssembly keeps settings via `QSettings` (native format) in `localStorage`.
+* **Pictures from the internet** (docs/SYNTAX.md §2): the cache
+  (`QStandardPaths::CacheLocation`/web-pictures) is not an IDBFS mount — it lives in the tab's
+  memory (MEMFS) and disappears with it; a fetched picture has to be shown again after the tab is
+  reopened (or saved in the notebook, then it is an attachment in IndexedDB). The limit
+  is 50 MB instead of 200 MB, and the `data:` addresses of pictures evicted from the cache disappear from
+  memory together with the files.
+  * **CORS**: the request for a picture is sent by the browser (Qt for WebAssembly: `emscripten_fetch`),
+    and the Brulion page gets the response only when the picture's server allows it
+    (`Access-Control-Allow-Origin`; e.g. `upload.wikimedia.org` sends `*`, most sites do not).
+    The browser does not tell the page why a request failed, so a failed connection
+    is described as "%1 does not let other websites load its pictures (CORS), or there is no
+    connection…" with the advice to save the picture in the notebook in the app on a computer or phone
+    (`Workspace::setWebPageScheme`, set from `location.protocol` — `platform::pageScheme()`).
+  * **Mixed content**: Brulion opened over `https://` will not fetch anything from `http://`
+    (the browser blocks such a request) — the message says so plainly.
+  * **Simple requests**: in the browser `PictureFetcher::setSimpleRequests` does not set
+    `User-Agent` or `Accept-Language` (the browser sends its own; another header would need
+    an OPTIONS preflight request, which picture servers usually do not answer), only
+    `Accept: image/…` stays (a CORS-"safelisted" header). Qt rejects forbidden headers anyway
+    (`Cookie`, `Referer`…); cookies are not sent (`withCredentials` off).
+  * **Redirects** are followed by the browser itself: Qt for WebAssembly does not emit the
+    `redirected` signal, so the manual redirect check (`webpicture::redirectAllowed`) works
+    only in the app. The browser will not go from `https://` to `http://` anyway (mixed
+    content), and Chrome restricts requests from internet pages to private network addresses
     (Private Network Access).
-  * **Eksport** z „Dołącz kopie” pobiera brakujące zdjęcia tak samo — z tymi samymi
-    ograniczeniami CORS; zdjęcie, którego nie da się pobrać, zostaje w eksporcie adresem. Kopii
-    jest najwyżej 256 MB łącznie (pamięć karty przeglądarki; jeden plik HTML trzyma je jeszcze
-    jako tekst `data:`), dalsze zostają adresami.
-  * **Sprawdzone automatycznie** w Chromium 156 i Firefoksie 157 (`tests/web/webpictures.spec.mjs`,
-    GitHub Actions, 2026-10-30; „Testy w przeglądarkach” wyżej): zdjęcie z serwera z CORS
-    (z polskimi znakami w adresie) edytor pobiera sam i rysuje; bez CORS — komunikat nazywa CORS
-    i serwer; `http://` na stronie `https://` — komunikat o http/https, a zapytanie **nie wychodzi
-    z przeglądarki** (serwer `http://` nie dostaje żadnego, także po przekierowaniu z `https://`,
-    którego przeglądarka nie wyjaśnia stronie: komunikat mówi wtedy o CORS); 404 i strona HTML
-    zamiast obrazu — własne komunikaty; **żadnego zapytania wstępnego (OPTIONS)** w żadnej z
-    przeglądarek, a GET ma `Origin` strony, tylko `Accept: image/avif,…` od Brulionu (bez
-    `Accept-Language: *` i `User-Agent: Mozilla/5.0`) i bez ciasteczek; eksport HTML (jeden
-    plik) z „Dołącz kopie” zawiera zdjęcie z pamięci podręcznej i zdjęcie, które pobrał sam
-    (z innej strony notatnika), pozostałe zostają adresami z ostrzeżeniem dla każdego, a plik
-    dociera do przeglądarki (Chromium: File System Access, Firefox: pobranie). Na stronie
-    `http://` (niezabezpieczony kontekst: bez Web Locks i File System Access — aplikacja i tak
-    startuje) zdjęcie `http://` się wczytuje, a eksport przychodzi jako pobranie. Na prawdziwym
-    telefonie zostaje to, co w docs/ANDROID.md „Obrazy z internetu”.
+  * **Export** with "Include copies" fetches missing pictures the same way — with the same
+    CORS limits; a picture that cannot be fetched stays an address in the export. Copies
+    are at most 256 MB in total (the browser tab's memory; a single HTML file also holds them
+    as `data:` text), further ones stay addresses.
+  * **Checked automatically** in Chromium 156 and Firefox 157 (`tests/web/webpictures.spec.mjs`,
+    GitHub Actions, 2026-10-30; "Browser tests" above): a picture from a server with CORS
+    (with Polish characters in the address) is fetched by the editor by itself and drawn; without CORS — the message names CORS
+    and the server; `http://` on an `https://` page — a message about http/https, and the request **never leaves
+    the browser** (the `http://` server gets none, also after a redirect from `https://`,
+    which the browser does not explain to the page: the message then talks about CORS); 404 and an HTML page
+    instead of a picture — their own messages; **no preflight request (OPTIONS)** in either
+    browser, and the GET has the page's `Origin`, only `Accept: image/avif,…` from Brulion (without
+    `Accept-Language: *` and `User-Agent: Mozilla/5.0`) and no cookies; the HTML export (single
+    file) with "Include copies" contains the picture from the cache and a picture it fetched itself
+    (from another page of the notebook), the rest stay addresses with a warning for each, and the file
+    reaches the browser (Chromium: File System Access, Firefox: download). On an
+    `http://` page (insecure context: no Web Locks and no File System Access — the app still
+    starts) an `http://` picture loads, and the export arrives as a download. On a real
+    phone, what remains is what docs/ANDROID.md "Pictures from the internet" describes.
 
-### Kopie zapasowe w przeglądarce
+### Backups in the browser
 
-Kopie (`WorkspaceBackups`, docs/ARCHITECTURE.md „Data safety”) leżą w czwartym montażu,
-`WasmStorage::backupsRoot()` (`<CacheLocation>/backups`, podfolder na notatnik). Jest to montaż jak
-pamięć podręczna indeksu — osobna baza, osobna transakcja, więc `QuotaExceededError` nie dotyka notatek,
-historii ani ustawień — z trzema różnicami, bo te pliki należą do użytkownika:
+Backups (`WorkspaceBackups`, docs/ARCHITECTURE.md "Data safety") live in a fourth mount,
+`WasmStorage::backupsRoot()` (`<CacheLocation>/backups`, a subfolder per notebook). It is a mount like
+the index cache — a separate database, a separate transaction, so `QuotaExceededError` does not touch notes,
+history or settings — with three differences, because these files belong to the user:
 
-* nieudany zapis niczego nie kasuje z pamięci hurtowo: `backupsNotSaved()` usuwa tylko nową kopię
-  (nieudana transakcja zostawia starsze kopie w IndexedDB), a status i komunikat mówią, że się nie zmieściła;
-* usuwanie najstarszych kopii i przywracanie po kopii bezpieczeństwa czekają na zapis nowej kopii do
-  IndexedDB (`flushed(true)` bez oczekujących zmian → `WorkspaceBackups::storageFlushed()`), żeby
-  nieudany zapis nie kosztował starszych kopii; bez odpowiedzi przez 60 s przywracanie się przerywa;
-* montaż, którego nie udało się wczytać, nie jest zapisywany do końca sesji (`brulionStorage.unloaded`):
-  jego pusty stan skasowałby to, co jest w IndexedDB. Zapis takiego montażu niczego by nie dał, więc
-  kopie i przywracanie są wtedy wyłączone, a ustawienia mówią to na stałe
-  (`WasmStorage::backupsLoadError()` → `WorkspaceBackups::setStorageUnavailable()`; zdarzenie przychodzi
-  przed utworzeniem kontrolera, dlatego main.cpp pyta o nie przy starcie).
+* a failed save does not delete anything from memory wholesale: `backupsNotSaved()` removes only the new backup
+  (the failed transaction leaves older backups in IndexedDB), and the status and message say it did not fit;
+* removing the oldest backups and restoring after a safety backup wait until the new backup is saved to
+  IndexedDB (`flushed(true)` with no pending changes → `WorkspaceBackups::storageFlushed()`), so that
+  a failed save does not cost the older backups; with no answer within 60 s the restore is aborted;
+* a mount that failed to load is not saved until the end of the session (`brulionStorage.unloaded`):
+  its empty state would delete what is in IndexedDB. Saving such a mount would achieve nothing, so
+  backups and restore are then off, and the settings say so permanently
+  (`WasmStorage::backupsLoadError()` → `WorkspaceBackups::setStorageUnavailable()`; the event arrives
+  before the controller is created, which is why main.cpp asks for it at startup).
 
-Plik tymczasowy powstaje w `/tmp` (MEMFS poza montażami): śledzenie zmian zapisywałoby rosnący plik
-raz po raz. Na końcu jest kopiowany do montażu, więc przez chwilę archiwum jest w pamięci dwa razy.
-Największe archiwum: połowa wolnego miejsca z `estimate()`, najwyżej 512 MB. Zapis idzie po kawałku
-w wątku GUI: najmniejszym kawałkiem jest plik, a plik ponad 4 MB jest zapisywany bez kompresji, żeby
-kawałek nie trwał długo.
+The temporary file is created in `/tmp` (MEMFS outside the mounts): change tracking would save a growing file
+over and over. At the end it is copied into the mount, so for a moment the archive is in memory twice.
+The largest archive: half of the free space from `estimate()`, at most 512 MB. Writing proceeds piece by piece
+on the GUI thread: the smallest piece is a file, and a file over 4 MB is stored without compression so that
+a piece does not take long.
 
-Wszystkie pliki IDBFS są przy starcie wczytywane do pamięci karty, kopie też — dlatego kopie
-automatyczne są tu **domyślnie wyłączone**, domyślny limit to 2, a do wyboru są 1–3. Kopie chronią tu
-przed pomyłką, nie przed wyczyszczeniem danych przeglądarki; ustawienia mówią to wprost, a „Pobierz”
-oddaje kopię przez `wasmfiles.h`.
+All IDBFS files are loaded into the tab's memory at startup, backups too — which is why automatic
+backups are **off by default** here, the default limit is 2, and 1–3 can be chosen. Here backups protect
+against a mistake, not against clearing the browser's data; the settings say so plainly, and "Download"
+hands out a backup through `wasmfiles.h`.
 
-## Udostępnianie do Brulionu
+## Sharing to Brulion
 
-Wersja w przeglądarce **zainstalowana jako aplikacja** jest w systemowym menu **Udostępnij**:
-w Chrome, Edge albo Samsung Internet na Androidzie (menu przeglądarki → **Zainstaluj aplikację**
-albo **Dodaj do ekranu głównego**) i na ChromeOS. Stronę z przeglądarki (jej tytuł i adres) albo
-zaznaczony tekst z innej aplikacji wysyłasz przez **Udostępnij → Brulion**; otwiera się to samo
-okno **Zapisz w Brulionie** co w aplikacji na Androida (docs/ANDROID.md „Udostępnij → Brulion”):
-tekst do poprawienia, **Dzisiejszy dziennik** albo **Nowa strona**, nic nie zapisuje się przed
-**Zapisz**. Daty w udostępnionym tekście nie tworzą przypomnień.
+The browser version **installed as an app** appears in the system **Share** menu:
+in Chrome, Edge or Samsung Internet on Android (browser menu → **Install app**
+or **Add to Home screen**) and on ChromeOS. You send a page from the browser (its title and address) or
+selected text from another app through **Share → Brulion**; it opens the same
+**Save to Brulion** dialog as the Android app (docs/ANDROID.md "Share → Brulion"):
+text to edit, **Today's journal** or **New page**, nothing is saved before
+**Save**. Dates in the shared text do not create reminders.
 
-* Tylko tekst i odnośniki. Pliki (`.md`, `.txt`) udostępnisz aplikacji na Androida; wersja
-  w przeglądarce ich nie przyjmuje (cel udostępniania z plikami wymaga wysłania ich do serwera
-  albo do service workera, którego statyczny serwer nie zastąpi).
-* Brulion jest już otwarty w innej karcie: udostępnienie trafia do tamtej karty (tam otwiera się
-  okno), a nowa karta nie wczytuje aplikacji, tylko mówi „Przekazano do Brulionu otwartego
-  w innej karcie.” i zamyka się, gdy przeglądarka na to pozwala. Gdy tamta karta nie odpowie
-  w 4 s (zamrożona, starsza wersja Brulionu), nowa karta startuje jak zwykle i czeka, aż tamta
-  zostanie zamknięta („Brulion jest otwarty w innej karcie…”), a potem pokazuje okno.
-* Na Androidzie zainstalowana aplikacja zwykle otwiera udostępnienie w swoim jedynym oknie:
-  otwarty Brulion wczytuje się od nowa z udostępnionym tekstem (zapisane notatki są bezpieczne;
-  przy zmianie, która jeszcze się zapisuje, przeglądarka może zapytać, czy opuścić stronę).
-* Bez notatnika (pierwsze uruchomienie) Brulion najpierw prosi o otwarcie albo utworzenie
-  notatnika — udostępnienie czeka.
-* Firefox, Safari (także na iPhonie) i przeglądarki bez instalacji jako WebAPK (np. Brave)
-  celów udostępniania nie obsługują — Brulionu w ich menu **Udostępnij** nie będzie.
+* Text and links only. Files (`.md`, `.txt`) can be shared with the Android app; the browser
+  version does not accept them (a share target with files requires sending them to a server
+  or to a service worker, which a static server cannot replace).
+* Brulion is already open in another tab: the share goes to that tab (the dialog opens
+  there), and the new tab does not load the app, it only says "Sent to Brulion open
+  in another tab." and closes itself when the browser allows it. When that tab does not answer
+  within 4 s (frozen, an older version of Brulion), the new tab starts as usual and waits until the other
+  is closed ("Brulion is open in another tab…"), then shows the dialog.
+* On Android the installed app usually opens the share in its single window:
+  an open Brulion reloads with the shared text (saved notes are safe;
+  with a change that is still being saved, the browser may ask whether to leave the page).
+* Without a notebook (first start) Brulion first asks to open or create a
+  notebook — the share waits.
+* Firefox, Safari (also on the iPhone) and browsers without installing as a WebAPK (e.g. Brave)
+  do not support share targets — Brulion will not appear in their **Share** menu.
 
-Technicznie: `wasm/manifest.webmanifest` ma `share_target` metodą GET z akcją `./` (sama
-aplikacja: działa bez service workera — statyczny serwer (np. nginx) podaje dla niej `index.html` — i offline
-z jego pamięci) i parametrami `share-title`, `share-text`, `share-url`. `index.html` zabiera je
-z paska adresu (`history.replaceState`: przeładowanie nie udostępnia drugi raz; inne parametry
-zostają) i przekazuje aplikacji jako `--share-query` (zakodowane jak formularz); zapytanie
-czyta rdzeń (`notebook::sharedContentFromQuery`, `src/core/notebook/share.h`: `+` to spacja,
-`%XX` to bajty UTF-8, błędne sekwencje → U+FFFD, nieznane klucze pomijane, tekst do 1 000 000
-znaków), a `AppController::receiveShareQuery` otwiera okno. Gdy inna karta trzyma blokadę magazynu
-(Web Lock `brulion-storage:…`, niżej „Dane w przeglądarce”), `index.html` wysyła
-`{type: "share", id, query}` kanałem `BroadcastChannel` „`brulion-share:<ścieżka strony>`”;
-odpowiada tylko karta z blokadą (`WasmShare`, `src/platform/wasm/wasmshare.h`, nasłuchuje od
-startu, zanim poprosi o blokadę) — `{type: "taken", id}` — i przekazuje zapytanie do
-`receiveShareQuery`. Bez `launch_handler`: Chrome z `focus-existing` gubi dane udostępnienia.
-Test: `scripts/wasm-smoke.mjs --share` (wyżej); ręcznie na telefonie — TODO.md.
+Technically: `wasm/manifest.webmanifest` has a `share_target` with method GET and action `./` (the
+app itself: works without a service worker — a static server (e.g. nginx) serves `index.html` for it — and offline
+from its cache) and parameters `share-title`, `share-text`, `share-url`. `index.html` takes them
+from the address bar (`history.replaceState`: a reload does not share a second time; other parameters
+stay) and passes them to the app as `--share-query` (form-encoded); the query
+is read by the core (`notebook::sharedContentFromQuery`, `src/core/notebook/share.h`: `+` is a space,
+`%XX` are UTF-8 bytes, invalid sequences → U+FFFD, unknown keys ignored, text up to 1,000,000
+characters), and `AppController::receiveShareQuery` opens the dialog. When another tab holds the storage lock
+(Web Lock `brulion-storage:…`, below "Data in the browser"), `index.html` sends
+`{type: "share", id, query}` over the `BroadcastChannel` "`brulion-share:<page path>`";
+only the tab holding the lock answers (`WasmShare`, `src/platform/wasm/wasmshare.h`, listens from
+startup, before it asks for the lock) — `{type: "taken", id}` — and passes the query to
+`receiveShareQuery`. No `launch_handler`: Chrome with `focus-existing` loses the share data.
+Test: `scripts/wasm-smoke.mjs --share` (above); manually on a phone — TODO.md.
 
-## Powiadomienia (przypomnienia)
+## Notifications (reminders)
 
-`WasmNotifier` (`src/platform/wasm/wasmnotifier.h`) używa Notification API:
+`WasmNotifier` (`src/platform/wasm/wasmnotifier.h`) uses the Notification API:
 
-* `permission()`, `requestPermission()` — przeglądarki pokazują pytanie o zgodę tylko w
-  odpowiedzi na działanie użytkownika (kliknięcie przycisku w UI),
-* `showNow(id, tytuł, treść, ścieżka, linia, alarm, cicho)` — alarmy zostają na ekranie do
-  zamknięcia (`requireInteraction`) i wibrują, gdzie to możliwe; `cicho` — opcja `silent`
-  (bez dźwięku i wibracji); ten sam `id` zastępuje poprzednie powiadomienie,
-* `playTone(alarm)` — sygnał w samej stronie (Web Audio): alarm z dźwiękiem „Domyślny” pika
-  przez kilka sekund. Dźwięk powiadomienia wybiera przeglądarka/system, więc w przeglądarce
-  *Ustawienia → Przypomnienia* oferują tylko „Domyślny” i „Cisza”. Ograniczenia: tylko przy
-  otwartej karcie i dopiero po pierwszej interakcji użytkownika ze stroną (zasady autoodtwarzania
-  przeglądarek) — inaczej sygnału nie słychać,
-* `activated(id, ścieżka, linia)` po kliknięciu (strona dostaje fokus),
-* `firesWhenClosed()` = false: przeglądarka nie powiadomi o niczym przy zamkniętej karcie —
-  terminy odmierza rdzeń (`ReminderScheduler`) w otwartej aplikacji.
+* `permission()`, `requestPermission()` — browsers show the permission prompt only in
+  response to a user action (a button click in the UI),
+* `showNow(id, title, body, path, line, alarm, silent)` — alarms stay on screen until
+  dismissed (`requireInteraction`) and vibrate where possible; `silent` — the `silent` option
+  (no sound or vibration); the same `id` replaces the previous notification,
+* `playTone(alarm)` — a tone in the page itself (Web Audio): an alarm with the "Default" sound beeps
+  for a few seconds. The notification sound is chosen by the browser/system, so in the browser
+  *Settings → Reminders* offers only "Default" and "Silent". Limitations: only with the tab
+  open and only after the user's first interaction with the page (the browsers' autoplay
+  policies) — otherwise the tone is not heard,
+* `activated(id, path, line)` after a click (the page gets focus),
+* `firesWhenClosed()` = false: the browser notifies of nothing with the tab closed —
+  the times are tracked by the core (`ReminderScheduler`) in the open app.
 
-Chrome na Androidzie nie pozwala stronie tworzyć powiadomień (`new Notification` →
-„Illegal constructor”); wtedy powiadomienie idzie przez rejestrację service workera, a
-`sw.js` przekazuje kliknięcie do otwartej karty (`postMessage`) albo otwiera aplikację z
+Chrome on Android does not let a page create notifications (`new Notification` →
+"Illegal constructor"); then the notification goes through the service worker registration, and
+`sw.js` passes the click to the open tab (`postMessage`) or opens the app with
 `?brulion-id=…&brulion-note=…&brulion-line=…` (`WasmNotifier::takeLaunchActivation()`).
 
-## Nextcloud (WebDAV) a CORS
+## Nextcloud (WebDAV) and CORS
 
-Przeglądarka pozwala stronie Brulionu (np. `https://notatki.example.com`) łączyć się z
-`https://chmura.example.com/remote.php/dav/…` tylko wtedy, gdy serwer odpowie nagłówkami
-**CORS** (także na zapytania wstępne `OPTIONS` dla `PROPFIND`, `PUT`, `MKCOL`, `DELETE` z
-nagłówkami `Authorization`, `Depth`, `If-Match`). Nextcloud domyślnie ich nie wysyła dla
-WebDAV, więc synchronizacja z wersji przeglądarkowej „po prostu” nie zadziała. Możliwości:
+The browser lets the Brulion page (e.g. `https://notatki.example.com`) connect to
+`https://chmura.example.com/remote.php/dav/…` only when the server answers with
+**CORS** headers (also to `OPTIONS` preflight requests for `PROPFIND`, `PUT`, `MKCOL`, `DELETE` with
+the `Authorization`, `Depth`, `If-Match` headers). Nextcloud does not send them for
+WebDAV by default, so sync from the browser version will not "just work". Options:
 
-1. **Ten sam origin (zalecane):** hostuj `dist-wasm/` na tym samym serwerze co Nextcloud,
-   np. `https://chmura.example.com/brulion/` (reverse proxy / dodatkowy `location` w nginx
-   jak wyżej). Zapytania są wtedy same-origin, CORS niepotrzebny, a dane w IndexedDB są
-   oddzielone od innych stron.
-2. **Nagłówki CORS na reverse proxy przed Nextcloud** — tylko dla konkretnego originu
-   (`Access-Control-Allow-Origin: https://notatki.example.com`, nigdy `*` z
-   uwierzytelnianiem), `Access-Control-Allow-Methods: GET, PUT, DELETE, PROPFIND, MKCOL,
+1. **The same origin (recommended):** host `dist-wasm/` on the same server as Nextcloud,
+   e.g. `https://chmura.example.com/brulion/` (reverse proxy / an extra `location` in nginx
+   as above). Requests are then same-origin, CORS is not needed, and the data in IndexedDB is
+   separated from other sites.
+2. **CORS headers on a reverse proxy in front of Nextcloud** — only for a specific origin
+   (`Access-Control-Allow-Origin: https://notatki.example.com`, never `*` with
+   authentication), `Access-Control-Allow-Methods: GET, PUT, DELETE, PROPFIND, MKCOL,
    MOVE, COPY, OPTIONS`, `Access-Control-Allow-Headers: Authorization, Content-Type, Depth,
    Destination, If-Match, If-None-Match, Overwrite`, `Access-Control-Expose-Headers: ETag,
-   OC-ETag, DAV`, odpowiedź `204` na `OPTIONS` bez wymagania logowania. Uwaga: to otwiera
-   WebDAV dla skryptów z tego originu (na wspólnym originie, np. GitHub Pages — z każdego projektu
-   użytkownika).
-   Istnieją też aplikacje Nextcloud dodające CORS dla WebDAV (np. WebAppPassword) —
-   sprawdź ich aktualny stan i zakres przed użyciem.
-3. **Aplikacje natywne:** wersje NixOS i Android nie podlegają CORS i synchronizują się
-   z Nextcloud bez zmian po stronie serwera (a Syncthing tylko tam jest dostępny).
+   OC-ETag, DAV`, a `204` response to `OPTIONS` without requiring login. Note: this opens
+   WebDAV to scripts from that origin (on a shared origin, e.g. GitHub Pages — from every project
+   of the user).
+   There are also Nextcloud apps that add CORS for WebDAV (e.g. WebAppPassword) —
+   check their current state and scope before using them.
+3. **Native apps:** the NixOS and Android versions are not subject to CORS and sync
+   with Nextcloud without any changes on the server side (and Syncthing is available only there).
 
-Używaj hasła aplikacji Nextcloud (Ustawienia → Bezpieczeństwo), nie głównego hasła.
+Use a Nextcloud app password (Settings → Security), not your main password.
 
-## Czcionki: emoji i symbole
+## Fonts: emoji and symbols
 
-Qt for WebAssembly nie widzi czcionek systemu. Ma tylko dwie własne, DejaVu Sans i DejaVu
-Sans Mono (dlatego w przeglądarce Ustawienia → Wygląd i Edytor nie mają wyboru czcionki
-interfejsu, notatek ani kodu; kolor akcentu, tła i gęstość działają jak wszędzie;
-wkompilowane w `brulion.wasm`; czcionki komputera dałoby się wczytać jedynie przez
-Local Font Access API, tylko w Chromium i po zgodzie użytkownika, o którą Qt domyślnie nie
-prosi). DejaVu nie ma żadnego emoji, którego używa Brulion: przypomnienia ⏰, alarmy 🔔,
-znaczniki zadań 📅 ⏳ 🛫 ✅ ❌ 🔁 🔺 ⏫ 🔼 🔽 ⏬ ➕, a także ⧉ osadzonych bloków — wszystkie były
-**pustymi kwadratami** (białymi w ciemnym motywie), w notatkach, edytorze, ustawieniach i
-podpowiedziach. Ikony Lucide (`BIcon`, SVG) działały poprawnie.
+Qt for WebAssembly does not see the system's fonts. It has only two of its own, DejaVu Sans and DejaVu
+Sans Mono (which is why in the browser Settings → Appearance and Editor have no choice of the
+interface, note or code font; accent colour, background and density work as everywhere;
+compiled into `brulion.wasm`; the computer's fonts could be loaded only through the
+Local Font Access API, only in Chromium and after the user's consent, which Qt does not ask for
+by default). DejaVu has none of the emoji Brulion uses: reminders ⏰, alarms 🔔,
+task markers 📅 ⏳ 🛫 ✅ ❌ 🔁 🔺 ⏫ 🔼 🔽 ⏬ ➕, and ⧉ of embedded blocks — they were all
+**empty boxes** (white in the dark theme), in notes, the editor, settings and
+suggestions. Lucide icons (`BIcon`, SVG) worked correctly.
 
-Dlatego aplikacja zawiera dwie małe czcionki zapasowe z `assets/fonts/` (fragmenty Noto Emoji
-i Noto Sans Math, licencja SIL OFL 1.1, robione przez `scripts/fallback-fonts.py`) i w
-przeglądarce zawsze instaluje je przy starcie jako czcionki zapasowe: tekst zostaje w DejaVu, a
-tylko brakujące znaki biorą się z nich. Emoji są jednokolorowe, w kolorze tekstu. Szczegóły,
-zasady na innych platformach i lista znaków: docs/UI.md, „Emoji and symbol fonts”. Test:
+That is why the app contains two small fallback fonts from `assets/fonts/` (subsets of Noto Emoji
+and Noto Sans Math, SIL OFL 1.1 licence, made by `scripts/fallback-fonts.py`) and in the
+browser always installs them at startup as fallback fonts: text stays in DejaVu, and
+only the missing characters come from them. Emoji are monochrome, in the text colour. Details,
+rules on other platforms and the list of characters: docs/UI.md, "Emoji and symbol fonts". Test:
 `scripts/wasm-smoke.mjs --glyphs`.
 
-## PDF w przeglądarce
+## PDFs in the browser
 
-Przeglądarka nie ma modułu PDF Qt (Qt PDF nie ma wersji dla WebAssembly), a pdf.js byłby kilka MB
-więcej; za to każda przeglądarka ma własną przeglądarkę PDF. Dlatego PDF osadzony w notatce
-(`![[wykład.pdf]]`) jest kafelkiem pliku z ikoną strony, a kliknięcie go — albo odnośnika
-`[[wykład.pdf]]` — otwiera PDF w **nowej karcie** (docs/UI.md „PDF viewer”): bajty pliku z IndexedDB
-jako adres `blob:` typu `application/pdf` (`src/platform/wasm/wasmopen.cpp`; typ podany wprost,
-więc plik, który w środku jest HTML-em, nigdy nie stanie się stroną z pochodzenia Brulionu),
-`window.open` w obsłudze kliknięcia (przeglądarki otwierają karty tylko na gest użytkownika; Qt
-obsługuje zdarzenia wejścia w procedurze obsługi przeglądarki), `opener` odcięty. Przewijanie,
-powiększanie, szukanie i „Zapisz” daje przeglądarka (Chrome, Firefox — pdf.js —, Safari). Trzy
-ostatnie adresy `blob:` zostają (przeładowanie karty z PDF-em i jej „Zapisz” ich potrzebują),
-starsze są zwalniane; giną z kartą Brulionu. Trasa aplikacji się nie zmienia.
+The browser has no Qt PDF module (Qt PDF has no WebAssembly version), and pdf.js would be several MB
+more; on the other hand every browser has its own PDF viewer. That is why a PDF embedded in a note
+(`![[wykład.pdf]]`) is a file tile with a page icon, and clicking it — or a link
+`[[wykład.pdf]]` — opens the PDF in a **new tab** (docs/UI.md "PDF viewer"): the file's bytes from IndexedDB
+as a `blob:` address of type `application/pdf` (`src/platform/wasm/wasmopen.cpp`; the type is given explicitly,
+so a file that is HTML inside never becomes a page with Brulion's origin),
+`window.open` in the click handler (browsers open tabs only on a user gesture; Qt
+handles input events in the browser's handler), `opener` cut off. Scrolling,
+zooming, searching and "Save" are provided by the browser (Chrome, Firefox — pdf.js —, Safari). The last three
+`blob:` addresses are kept (reloading the tab with the PDF and its "Save" need them),
+older ones are released; they disappear with Brulion's tab. The app's route does not change.
 
-* **Zablokowana karta** (Safari bywa surowszy, blokery wyskakujących okien): PDF się pobiera
-  (`saveFile`), a aplikacja mówi „Przeglądarka zablokowała nową kartę — PDF został pobrany.”.
-* **Trasa do PDF-a** (drzewo, szybkie przełączanie, historia): panel „Brulion w przeglądarce nie
-  rysuje PDF-ów: ten plik otworzy się w nowej karcie, we wbudowanej przeglądarce PDF (przewijanie,
-  powiększanie, szukanie).” z przyciskiem **Otwórz w nowej karcie** (prawdziwe kliknięcie: późniejsze Wstecz nie
-  otwiera kart samo).
-* Plik większy niż limit załącznika (200 MB) — odmowa z komunikatem (pamięć: bajty i blob).
-* Brulion nigdy nie robi adresu `data:` z PDF-a (wcześniej robił go dla każdego osadzonego pliku).
+* **Blocked tab** (Safari can be stricter, pop-up blockers): the PDF is downloaded
+  (`saveFile`), and the app says "The browser blocked the new tab: the PDF was downloaded instead.".
+* **A route to a PDF** (tree, quick switcher, history): the panel "Brulion here does not draw PDFs:
+  the browser's own viewer opens it in a new tab (scrolling, zoom, search)." with the
+  **Open in a new tab** button (a real click: a later Back does not
+  open tabs by itself).
+* A file larger than the attachment limit (200 MB) — refused with a message (memory: bytes and blob).
+* Brulion never makes a `data:` address from a PDF (it used to do so for every embedded file).
 
-Testy: `tests/web/pdf.spec.mjs` (Chromium i Firefox; `?selftest=pdf`, wyżej): klik w kafelek i
-w odnośnik otwiera kartę z adresem `blob:` tej witryny, `content-type` `application/pdf`, bajty jak
-w `tests/data/pdf/wyklad.pdf` (zaczynają się od `%PDF-`), `window.opener` pusty, trasa aplikacji
-wciąż dziennik; trasa do PDF-a pokazuje panel z „Otwórz w nowej karcie”; otwarcie bez kliknięcia
-(`?selftest=pdfauto`) kończy się kartą albo pobraniem z komunikatem — wynik dla każdej przeglądarki
-w adnotacji raportu. Firefox Playwrighta ma w profilu testowym wyłączone pdf.js, więc tam nowa karta
-zamienia się w pobranie tego samego adresu `blob:` i się zamyka: test sprawdza wtedy pobrany plik
-(adres, bajty, nazwa `wykład.pdf`) zamiast dokumentu karty. Lokalnie: `scripts/web-test.sh
-pdf.spec.mjs`. Ręcznie zostaje Safari na iOS i Firefox z włączonym pdf.js.
+Tests: `tests/web/pdf.spec.mjs` (Chromium and Firefox; `?selftest=pdf`, above): a click on the tile and
+on the link opens a tab with a `blob:` address of this site, `content-type` `application/pdf`, bytes as
+in `tests/data/pdf/wyklad.pdf` (they start with `%PDF-`), `window.opener` empty, the app's route
+still the journal; a route to a PDF shows the panel with "Open in a new tab"; opening without a click
+(`?selftest=pdfauto`) ends with a tab or a download with a message — the result for each browser
+in a report annotation. Playwright's Firefox has pdf.js turned off in the test profile, so there the new tab
+turns into a download of the same `blob:` address and closes: the test then checks the downloaded file
+(address, bytes, name `wykład.pdf`) instead of the tab's document. Locally: `scripts/web-test.sh
+pdf.spec.mjs`. Left for manual testing: Safari on iOS and Firefox with pdf.js turned on.
 
-## Rozmiar
+## Size
 
-Build `MinSizeRel` (Qt 6.11.2, emsdk 4.0.7), pełna aplikacja:
+`MinSizeRel` build (Qt 6.11.2, emsdk 4.0.7), full app:
 
-| Plik | Surowy | gzip -9 | brotli -q 11 |
+| File | Raw | gzip -9 | brotli -q 11 |
 |---|---|---|---|
-| `brulion.wasm` | 40 259 601 B (38,39 MiB) | 13 670 465 B (13,04 MiB) | 9 403 485 B (8,97 MiB) |
-| `brulion.js` | 275 745 B (0,26 MiB) | 64 196 B | |
+| `brulion.wasm` | 40 259 601 B (38.39 MiB) | 13 670 465 B (13.04 MiB) | 9 403 485 B (8.97 MiB) |
+| `brulion.js` | 275 745 B (0.26 MiB) | 64 196 B | |
 
-Z tego ok. 26,2 MB to kod, 13,8 MB dane (skompilowany QML, zasoby Qt: czcionki, tabele
-Unicode). Wynik pomiaru z 18.10.2026; `scripts/wasm-build.sh` wypisuje aktualne wartości po
-każdym buildzie. Pierwsze wejście pobiera więc ok. 9–13 MB (zależnie od kompresji serwera),
-kolejne starty idą z cache service workera (lokalnie < 1 s).
+Of this, about 26.2 MB is code, 13.8 MB data (compiled QML, Qt resources: fonts, Unicode
+tables). Measured on 2026-10-18; `scripts/wasm-build.sh` prints the current values after
+every build. The first visit therefore downloads about 9–13 MB (depending on the server's compression),
+later starts come from the service worker cache (locally < 1 s).
 
-Czcionki zapasowe emoji i symboli (wyżej, „Czcionki: emoji i symbole”) dokładają
-+190 272 B surowego `brulion.wasm` (+118 111 B po gzip -9, +103 429 B po brotli; pomiar z
-22.10.2026, ten sam toolchain przed i po).
+The emoji and symbol fallback fonts (above, "Fonts: emoji and symbols") add
++190 272 B of raw `brulion.wasm` (+118 111 B after gzip -9, +103 429 B after brotli; measured on
+2026-10-22, the same toolchain before and after).
 
-Build dla przeglądarki nie zawiera QML deweloperskiego (galerii, placu zabaw edytora, skryptów
-i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 014 B surowego
-`brulion.wasm` (−160 008 B po gzip -9, −104 716 B po brotli).
+The browser build contains no developer QML (the gallery, the editor playground, the
+`--editor-script` scripts and self-tests; option `BRULION_DEV_QML`, docs/UI.md): −597 014 B of raw
+`brulion.wasm` (−160 008 B after gzip -9, −104 716 B after brotli).
 
-Bez nieużywanych stylów Qt Quick Controls, QtQuick.Dialogs i Qt Widgets (2026-10-30: QML importuje
-`QtQuick.Controls.Basic`, wybór plików i pobieranie przez `wasmfiles.h`; docs/PERFORMANCE.md, L9):
-`brulion.wasm` 47 225 371 → 41 909 609 B surowego (−5,07 MiB), 15 803 378 → 13 498 551 B po gzip -9
-(−2,20 MiB), 10 841 274 → 9 231 654 B po brotli (−1,54 MiB); pierwsza wizyta przy 20 Mbit/s (gzip)
-rysuje pierwszą klatkę po 7,3–7,4 zamiast 8,4–8,5 s. `scripts/wasm-build.sh` przerywa build, gdy
-lista modułów QML aplikacji znów zawiera inny styl albo QtQuick.Dialogs.
+Without the unused Qt Quick Controls styles, QtQuick.Dialogs and Qt Widgets (2026-10-30: QML imports
+`QtQuick.Controls.Basic`, file picking and downloading through `wasmfiles.h`; docs/PERFORMANCE.md, L9):
+`brulion.wasm` 47 225 371 → 41 909 609 B raw (−5.07 MiB), 15 803 378 → 13 498 551 B after gzip -9
+(−2.20 MiB), 10 841 274 → 9 231 654 B after brotli (−1.54 MiB); the first visit at 20 Mbit/s (gzip)
+draws the first frame after 7.3–7.4 instead of 8.4–8.5 s. `scripts/wasm-build.sh` stops the build when
+the app's list of QML modules again contains another style or QtQuick.Dialogs.
 
-## Klawiatura ekranowa (telefon)
+## On-screen keyboard (phone)
 
-Pasek narzędzi edycji ma leżeć dokładnie na klawiaturze ekranowej. Strona prosi przeglądarkę
-o `interactive-widget=resizes-content` (`wasm/index.html`): otwarta klawiatura zmniejsza całą
-stronę, a z nią ekran Qt (`#screen`) i okno aplikacji, więc pasek przy dolnej krawędzi okna leży
-na klawiaturze, a aplikacja niczego nie podnosi (zakrycie 0). Domyślne zachowanie przeglądarek
-(`resizes-visual`: strona zostaje, zmniejsza się tylko widoczny obszar, `window.visualViewport`)
-nie działa w Brave: Brave na Androidzie chowa przy klawiaturze swój dolny pasek, ale
-`visualViewport.height` dalej go odejmuje
-([brave-browser#60074](https://github.com/brave/brave-browser/issues/60074); na Pixelu
-412×915: widoczne 433,9 px, `visualViewport.height` 385,9 px) — aplikacja podnosiła pasek o ok.
-48 px za wysoko i między nim a klawiaturą zostawał pusty pas. Żadne API strony nie pokazuje
-prawdziwej wartości; rozmiar strony, który przeglądarka ustala sama, jest dobry. Kosztem jest
-przeliczenie układu okna przy otwarciu i zamknięciu klawiatury (na emulatorze: jedna zmiana
-wysokości okna Qt w każdą stronę; w Chrome i Brave jeszcze jedna, gdy przed klawiaturą pojawia się
-pasek autouzupełniania przeglądarki, niżej). `resizes-content`
-obsługują Chrome ≥ 108, Brave, Edge, Samsung Internet i Firefox ≥ 132; iOS Safari i starsze
-przeglądarki je pomijają.
+The editing toolbar should sit exactly on the on-screen keyboard. The page asks the browser
+for `interactive-widget=resizes-content` (`wasm/index.html`): an open keyboard shrinks the whole
+page, and with it the Qt screen (`#screen`) and the app window, so the toolbar at the bottom edge of the window sits
+on the keyboard, and the app lifts nothing (overlap 0). The browsers' default behaviour
+(`resizes-visual`: the page stays, only the visual viewport shrinks, `window.visualViewport`)
+does not work in Brave: Brave on Android hides its bottom bar when the keyboard opens, but
+`visualViewport.height` still subtracts it
+([brave-browser#60074](https://github.com/brave/brave-browser/issues/60074); on a Pixel
+412×915: visible 433.9 px, `visualViewport.height` 385.9 px) — the app lifted the toolbar about
+48 px too high and an empty strip remained between it and the keyboard. No page API shows the
+real value; the page size that the browser determines itself is right. The cost is
+a relayout of the window when the keyboard opens and closes (on the emulator: one change of the
+Qt window's height each way; in Chrome and Brave one more when the browser's autofill bar
+appears before the keyboard, below). `resizes-content`
+is supported by Chrome ≥ 108, Brave, Edge, Samsung Internet and Firefox ≥ 132; iOS Safari and older
+browsers ignore it.
 
-Gdzie przeglądarka zmniejsza tylko widoczny obszar (iOS Safari, starsze przeglądarki,
-`?keyboard=visual`), aplikacja podnosi treść o część ekranu Qt, której widoczny obszar nie
-obejmuje: wysokość kontenera `#screen` − (`visualViewport.offsetTop` + `visualViewport.height`).
-Liczy się względem kontenera Qt, nie `innerHeight` (Chromium w trakcie zmiany rozmiaru strony podaje
-nieaktualne `innerHeight`: stary wzór `innerHeight − height − offsetTop` liczył wtedy klawiaturę
-drugi raz). Strona powiększona gestem (`visualViewport.scale` > 1,01, np. touchpad na komputerze),
-wartości błędne (NaN, wysokość 0 po obrocie) i różnice poniżej 2 px (zaokrąglenia) to nie klawiatura.
+Where the browser shrinks only the visual viewport (iOS Safari, older browsers,
+`?keyboard=visual`), the app lifts the content by the part of the Qt screen that the visual viewport does not
+cover: height of the `#screen` container − (`visualViewport.offsetTop` + `visualViewport.height`).
+It is computed relative to the Qt container, not `innerHeight` (Chromium reports a stale
+`innerHeight` while the page is being resized: the old formula `innerHeight − height − offsetTop` then counted the keyboard
+twice). A page zoomed with a gesture (`visualViewport.scale` > 1.01, e.g. a touchpad on a computer),
+invalid values (NaN, height 0 after rotation) and differences below 2 px (rounding) are not a keyboard.
 
-Powłoka (`watchVisualViewport` w `src/platform/wasm/wasmshell.cpp`) przy zdarzeniach
-`visualViewport` (`resize`, `scroll`), `resize` okna, zmianie fokusu i zmianie rozmiaru
-kontenera Qt (`ResizeObserver`) przekazuje surowe odczyty (`innerHeight`, `visualViewport`,
-wysokość kontenera, ekran dotykowy, fokus w polu klawiatury Qt) co klatkę animacji, aż wartości
-przez 6 klatek się nie zmienią (ostatni odczyt: „ustalony”); liczy C++ (`ViewportKeyboard`
-w `src/app/ui/keyboardinsets.h`, testy `tst_keyboardinsets` z sekwencjami nagranymi
-w przeglądarkach). Klawiatura liczy się jako widoczna (`shown`: dolna nawigacja chowa się od
-razu — strona zmienia rozmiar w jednym kroku, więc nawigacja nie czeka pod wysuwaną klawiaturą
-jak na Androidzie, `KeyboardInsets.slidesOver` jest tu fałszywe —, komunikaty idą na górę;
-schowana klawiatura przywraca nawigację, a pasek edycji, gdy pisanie trwa, leży na niej) przy
-zakryciu albo — gdy przeglądarka zmniejszyła stronę — na ekranie
-dotykowym z fokusem w polu Qt, gdy widoczny obszar jest co najmniej 120 px niższy niż najwyższy
-widziany przy tej szerokości (obrót telefonu zaczyna od nowa; pasek adresu przeglądarki, 56 px, to
-nie klawiatura). Fokus przechodzący między elementami Qt (Enter: następny blok) nie chowa jej, dopóki
-odczyty się nie ustalą; ustalony odczyt bez fokusu w polu Qt chowa ją (edycja skończona — na
-podzielonym ekranie strona zostaje niższa bez klawiatury). Telefon obrócony przy otwartej
-klawiaturze (sprawdzone na emulatorze): Chrome i Brave chowają klawiaturę, a blok zostaje
-edytowany — pierwsza wysokość w poziomie jest pełna; Firefox zostawia klawiaturę, ale najpierw
-podaje stronę w poziomie bez niej (301 px), potem z nią (62 px). W obu przypadkach najwyższa
-wysokość przy nowej szerokości to strona bez klawiatury. `animating` trwa, dopóki odczyty się nie
-ustalą: kursor przewija się w widok dopiero potem. `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o zakrycie widok, pasek
-narzędzi edycji, okna wysuwane od dołu, menu i komunikaty — tak samo jak na Androidzie. Bez
-`visualViewport` (stare przeglądarki) nic nie jest zgłaszane, a Qt nie zna klawiatury
-(`keyboardRectangle` w przeglądarce jest pusty).
+The shell (`watchVisualViewport` in `src/platform/wasm/wasmshell.cpp`), on `visualViewport`
+events (`resize`, `scroll`), window `resize`, focus changes and size changes of the
+Qt container (`ResizeObserver`), passes on raw readings (`innerHeight`, `visualViewport`,
+container height, touch screen, focus in Qt's keyboard field) every animation frame until the values
+have not changed for 6 frames (the last reading: "settled"); C++ does the maths (`ViewportKeyboard`
+in `src/app/ui/keyboardinsets.h`, tests `tst_keyboardinsets` with sequences recorded
+in browsers). The keyboard counts as shown (`shown`: the bottom navigation hides at
+once — the page changes size in a single step, so the navigation does not wait under the sliding keyboard
+as on Android, `KeyboardInsets.slidesOver` is false here —, messages go to the top;
+a hidden keyboard brings the navigation back, and the editing toolbar, while typing goes on, sits on it) when there is
+overlap or — when the browser shrank the page — on a touch
+screen with focus in a Qt field, when the visual viewport is at least 120 px lower than the highest
+seen at this width (rotating the phone starts over; the browser's address bar, 56 px, is
+not a keyboard). Focus moving between Qt elements (Enter: the next block) does not hide it until
+the readings settle; a settled reading without focus in a Qt field hides it (editing finished — on
+a split screen the page stays lower without a keyboard). A phone rotated with the keyboard
+open (checked on the emulator): Chrome and Brave hide the keyboard, and the block stays
+being edited — the first height in landscape is the full one; Firefox keeps the keyboard, but first
+reports the landscape page without it (301 px), then with it (62 px). In both cases the highest
+height at the new width is the page without the keyboard. `animating` lasts until the readings
+settle: the cursor is scrolled into view only after that. `KeyboardInsets` (docs/UI.md "On-screen keyboard") lifts by the overlap the view, the editing
+toolbar, bottom sheets, menus and messages — just as on Android. Without
+`visualViewport` (old browsers) nothing is reported, and Qt does not know about the keyboard
+(`keyboardRectangle` in the browser is empty).
 
-Ukryte pole tekstowe, przez które Qt odbiera pisanie (`.qt-window-input-element`), Qt stawia
-w lewym górnym rogu edytowanego tekstu; po stuknięciu bloku nisko na ekranie przeglądarka
-przesuwała do niego widok (Chrome: górny pasek aplikacji uciekał z ekranu, iOS przewijał stronę),
-a pod oknem zmniejszonym przez klawiaturę przewijała kontenery Qt. Na ekranach dotykowych powłoka
-przypina je w lewym górnym rogu okna (styl w otwartym shadow root `#qt-shadow-container`), a
-przewinięte kontenery Qt wraca na 0; stronę przewiniętą przez iOS przewija z powrotem na górę.
-Okna kandydatów klawiatur CJK pojawiają się przez to w rogu okna.
+The hidden text field through which Qt receives typing (`.qt-window-input-element`) is placed by Qt
+in the top-left corner of the edited text; after tapping a block low on the screen the browser
+scrolled the view to it (Chrome: the app's top bar escaped off screen, iOS scrolled the page),
+and under a window shrunk by the keyboard it scrolled Qt's containers. On touch screens the shell
+pins it in the top-left corner of the window (a style in the open shadow root `#qt-shadow-container`), and
+resets scrolled Qt containers to 0; a page scrolled by iOS is scrolled back to the top.
+Candidate windows of CJK keyboards therefore appear in the corner of the window.
 
-Chrome i Brave nad klawiaturą każdego pola tekstowego stawiają własny pasek autouzupełniania
-(hasła, karty, adresy; 48 px w Chrome, 64 px w Brave — pas z trzema ikonami po prawej): pasek
-narzędzi Brulionu leży wtedy na nim, a ten na klawiaturze. To część przeglądarki, nie strony
-(`visualViewport` i rozmiar strony go nie obejmują). Na emulatorze sprawdzone: `autocomplete="off"`,
-nazwy i etykiety pola go nie chowają; chowa go tylko pole wyszukiwania (`type="search"`), ale
-w nim klawiatura zaczynała od wielkiej litery pierwsze słowo wpisane w środku zdania — więc pole Qt
-zostaje polem tekstowym.
+Chrome and Brave put their own autofill bar above the keyboard of every text field
+(passwords, cards, addresses; 48 px in Chrome, 64 px in Brave — a strip with three icons on the right): Brulion's
+toolbar then sits on it, and it sits on the keyboard. It is part of the browser, not of the page
+(`visualViewport` and the page size do not include it). Checked on the emulator: `autocomplete="off"`,
+the field's name and labels do not hide it; only a search field (`type="search"`) hides it, but
+in it the keyboard started a word typed in the middle of a sentence with a capital letter — so Qt's field
+stays a text field.
 
-Znane ograniczenia: przeglądarka, która pomija `interactive-widget`, a ma błąd Brave, dalej
-zostawi pas (nie da się go wykryć). Przeglądarka, która po obrocie telefonu od razu poda stronę
-z klawiaturą (żadna z trzech sprawdzonych), zapamięta ją jako najwyższą przy tej szerokości:
-klawiatura liczy się wtedy jako schowana, dopóki raz nie zejdzie (pasek narzędzi i tak zostaje na
-dole okna, czyli na klawiaturze). Nowa karta w Brave dostaje na chwilę widok jak przy schowanym
-pasku ([brave-browser#59940](https://github.com/brave/brave-browser/issues/59940)) — to błąd
-Brave. iOS Safari — tylko „best effort”, bez automatycznego testu na iOS: ścieżka
-`visualViewport` z przypiętym polem, sprawdzana przez `scripts/wasm-smoke.mjs --keyboard`
-i `--keyboard-phone` (wyżej).
+Known limitations: a browser that ignores `interactive-widget` and has Brave's bug will still
+leave the strip (it cannot be detected). A browser that, after the phone is rotated, at once reports the page
+with the keyboard (none of the three checked) will remember it as the highest at that width:
+the keyboard then counts as hidden until it is dismissed once (the toolbar still stays at the
+bottom of the window, i.e. on the keyboard). A new tab in Brave briefly gets a view as if the
+bar were hidden ([brave-browser#59940](https://github.com/brave/brave-browser/issues/59940)) — that is a Brave
+bug. iOS Safari — "best effort" only, without an automated test on iOS: the
+`visualViewport` path with the pinned field, checked by `scripts/wasm-smoke.mjs --keyboard`
+and `--keyboard-phone` (above).
 
-Test w prawdziwych przeglądarkach: `scripts/android-emulator-test.sh --web-keyboard dist-wasm`
-(emulator Androida 16 z KVM, Pixel 6; job `keyboard-android` w `.github/workflows/wasm.yml`).
-Serwuje witrynę pod `/brulion/` (`scripts/web-test-server.py`; w emulatorze `http://10.0.2.2`,
-które przeglądarki traktują jak bezpieczny kontekst: Chrome i Brave przez
-`--unsafely-treat-insecure-origin-as-secure`, Firefox przez `dom.securecontext.allowlist`),
-w Chrome z obrazu systemu, Brave 1.97.59 (wersja z #60074) i Firefoksie 157.0.1 (przypięte APK
-z sumami SHA-256) zapisuje dziennik 40 polskich bloków, otwiera
-`?selftest=keyboard&report=…` (oraz z `&keyboard=visual`), stuka blok i czeka na klawiaturę.
-Aplikacja w tym teście maluje miejsce klawiatury na purpurowo, a pasek narzędzi na
-turkusowo (`KeyboardInsets.marked`): na zrzucie ekranu nad górną krawędzią klawiatury (ramka
-IME z `dumpsys window`) nie może być purpurowych wierszy (pasa; dopuszczalne 3 px), tylko ≥ 20
-wierszy paska — co najwyżej nad paskiem autouzupełniania przeglądarki (≤ 72 dp) — a według
-aplikacji pasek kończy się na dole okna Qt, które wypełnia stronę. Słowo wpisane klawiszami
-klawiatury trafia do bloku, a klawisz akcji klawiatury to Enter, który dzieli blok
-(`focusText` w wyniku testu). Potem telefon obraca się w poziom przy otwartej klawiaturze: gdy
-klawiatura zostaje (Firefox), liczy się jako widoczna, a pasek kończy się na dole okna; gdy
-przeglądarka ją chowa (Chrome, Brave), wraca dolna nawigacja i pasek leży tuż na niej; po obrocie
-z powrotem klawiatura znów się liczy (Chrome i Brave: po stuknięciu bloku). Po „Wstecz” (klawiatura
-schowana) nie zostaje nic purpurowego, wraca dolna nawigacja, a pasek leży tuż na niej (`toolbarBottom` =
-`bottomNavTop` w wyniku testu). Z `?keyboard=visual` wynik tylko się
-zapisuje (Brave pokazuje pas z #60074).
-Skrypt zapisuje odczyty (`samples-<przeglądarka>-<tryb>.jsonl`), wypisuje je jako wiersze testu
-`tst_keyboardinsets` i liczy, ile razy okno Qt zmieniło wysokość przy otwarciu klawiatury.
+Test in real browsers: `scripts/android-emulator-test.sh --web-keyboard dist-wasm`
+(Android 16 emulator with KVM, Pixel 6; job `keyboard-android` in `.github/workflows/wasm.yml`).
+It serves the site under `/brulion/` (`scripts/web-test-server.py`; in the emulator `http://10.0.2.2`,
+which the browsers treat as a secure context: Chrome and Brave through
+`--unsafely-treat-insecure-origin-as-secure`, Firefox through `dom.securecontext.allowlist`),
+in Chrome from the system image, Brave 1.97.59 (the version with #60074) and Firefox 157.0.1 (pinned APKs
+with SHA-256 sums) it writes a journal of 40 Polish blocks, opens
+`?selftest=keyboard&report=…` (and with `&keyboard=visual`), taps a block and waits for the keyboard.
+In this test the app paints the keyboard's area purple and the toolbar
+turquoise (`KeyboardInsets.marked`): in the screenshot, above the keyboard's top edge (the IME frame
+from `dumpsys window`) there must be no purple rows (a strip; 3 px allowed), only ≥ 20
+rows of the toolbar — at most above the browser's autofill bar (≤ 72 dp) — and according to the
+app the toolbar ends at the bottom of the Qt window, which fills the page. A word typed with the
+keyboard's keys reaches the block, and the keyboard's action key is Enter, which splits the block
+(`focusText` in the test result). Then the phone is rotated to landscape with the keyboard open: when the
+keyboard stays (Firefox), it counts as shown, and the toolbar ends at the bottom of the window; when
+the browser hides it (Chrome, Brave), the bottom navigation comes back and the toolbar sits right on it; after rotating
+back the keyboard counts again (Chrome and Brave: after tapping a block). After "Back" (keyboard
+hidden) nothing purple remains, the bottom navigation comes back, and the toolbar sits right on it (`toolbarBottom` =
+`bottomNavTop` in the test result). With `?keyboard=visual` the result is only
+recorded (Brave shows the strip from #60074).
+The script records the readings (`samples-<browser>-<mode>.jsonl`), prints them as rows for the
+`tst_keyboardinsets` test and counts how many times the Qt window changed height when the keyboard opened.
 
-Wynik z 28.10.2026 (Android 16, Pixel 6, 1080×2400, gęstość 420): w Chrome 133, Brave 1.97.59
-i Firefoksie 157.0.1 pasek narzędzi leży na klawiaturze (Firefox: 0 px; Chrome i Brave: na ich
-pasku autouzupełniania, 126 i 168 px, bez ani jednego piksela strony między nimi), okno Qt
-zmniejsza się raz przy otwarciu i raz przy zamknięciu; z `?keyboard=visual` Brave pokazuje pas
-124 px (#60074: zgłasza zakrycie 376 px przy 328 px rzeczywistego), Chrome i Firefox nie. Obrót
-(29.10.2026): Chrome i Brave chowają klawiaturę (strona w poziomie 866×308 i 865×307 px), Firefox ją
-zostawia (najpierw strona 871×301 px bez niej, po chwili 871×62 px z nią); pasek leży na dole okna
-w Firefoksie, a w Chrome i Brave na dolnej nawigacji, która wraca po schowaniu klawiatury (60 px
-nad dołem okna). Znaki spoza ASCII wpisane klawiaturą (à, ß, ç, ñ — przytrzymanie klawisza w angielskim
-układzie Gboard; polskiego układu obraz emulatora nie ma, a jego pobranie wymaga ustawień Gboard)
-trafiają do bloku bez zmian we wszystkich trzech (sprawdzone ręcznie skryptem, nie w teście).
+Result from 2026-10-28 (Android 16, Pixel 6, 1080×2400, density 420): in Chrome 133, Brave 1.97.59
+and Firefox 157.0.1 the toolbar sits on the keyboard (Firefox: 0 px; Chrome and Brave: on their
+autofill bar, 126 and 168 px, without a single pixel of the page between them), the Qt window
+shrinks once on opening and once on closing; with `?keyboard=visual` Brave shows a strip of
+124 px (#60074: it reports an overlap of 376 px with 328 px actual), Chrome and Firefox do not. Rotation
+(2026-10-29): Chrome and Brave hide the keyboard (landscape page 866×308 and 865×307 px), Firefox
+keeps it (first a 871×301 px page without it, after a moment 871×62 px with it); the toolbar sits at the bottom of the window
+in Firefox, and in Chrome and Brave on the bottom navigation, which comes back after the keyboard is hidden (60 px
+above the bottom of the window). Non-ASCII characters typed on the keyboard (à, ß, ç, ñ — long-press in Gboard's English
+layout; the emulator image has no Polish layout, and downloading it requires Gboard settings)
+reach the block unchanged in all three (checked manually with a script, not in the test).
 
-## Rysik (nacisk)
+## Stylus (pressure)
 
-Rysik w przeglądarce dochodzi do edytora rysunków tak: zdarzenia wskaźnika (`pointerType: "pen"`,
-`pressure`, `tiltX/Y`, `buttons`) na elemencie okna Qt → Qt for WebAssembly
-(`QWindowSystemInterface::handleTabletEvent`, jedno urządzenie typu pióro; przy podniesieniu
-nacisk 0) → `QTabletEvent` → `DrawingCanvas` (src/app/drawing/drawingcanvas.h). **Drugi koniec
-rysika (gumka)** przeglądarka zgłasza jako przycisk 5 (`buttons & 32`), który Qt przekazuje jako
-`Qt::ExtraButton3` — płótno traktuje go jak gumkę (wcześniej rysował jak pióro); przycisk boczny
-(`buttons & 2`) to `Qt::RightButton`, też gumka.
+The stylus reaches the drawing editor in the browser like this: pointer events (`pointerType: "pen"`,
+`pressure`, `tiltX/Y`, `buttons`) on the Qt window element → Qt for WebAssembly
+(`QWindowSystemInterface::handleTabletEvent`, a single pen-type device; pressure 0 on
+lift) → `QTabletEvent` → `DrawingCanvas` (src/app/drawing/drawingcanvas.h). **The other end of the
+stylus (eraser)** is reported by the browser as button 5 (`buttons & 32`), which Qt passes on as
+`Qt::ExtraButton3` — the canvas treats it as an eraser (it used to draw like the pen); the barrel button
+(`buttons & 2`) is `Qt::RightButton`, also an eraser.
 
-Sprawdzone automatycznie (`tests/web/stylus.spec.mjs`, „Testy w przeglądarkach” wyżej):
+Checked automatically (`tests/web/stylus.spec.mjs`, "Browser tests" above):
 
-* Chromium — prawdziwe zdarzenia pióra z DevTools (`Input.dispatchMouseEvent`, `pointerType:
-  "pen"`, `force`): pióro w zawieszeniu nie rysuje; linia z naciskiem 0,1 → 0,9 zachowuje nacisk
-  (`simulatePressure: false`, od ≤ 0,15 do ≥ 0,85) i na zrzucie ekranu grubieje (przy 85 %
-  długości co najmniej 1,3 raza grubsza niż przy 15 %: 4 → 8 px); stały nacisk to brak nacisku
-  (linia jak myszą); linia myszą nie ma nacisku; przycisk boczny ściera; zapisany plik ma nacisk
-  w każdym punkcie.
-* Chromium i Firefox — zdarzenia pióra tworzone przez stronę (Playwright nie ma pióra dla
-  Firefoksa; `setPointerCapture` zmyślonego wskaźnika strona testowa przepuszcza): nacisk
-  0,2 → 1,0, nacisk spoza zakresu (1,7 i −0,3) przycięty do 0…1, gumka (przycisk 5) ściera linię,
-  na pustej kartce nie rysuje, mysz rysuje bez nacisku.
+* Chromium — real pen events from DevTools (`Input.dispatchMouseEvent`, `pointerType:
+  "pen"`, `force`): a hovering pen does not draw; a line with pressure 0.1 → 0.9 keeps its pressure
+  (`simulatePressure: false`, from ≤ 0.15 to ≥ 0.85) and gets thicker in the screenshot (at 85 %
+  of the length at least 1.3 times thicker than at 15 %: 4 → 8 px); constant pressure means no pressure
+  (a line as with a mouse); a mouse line has no pressure; the barrel button erases; the saved file has pressure
+  at every point.
+* Chromium and Firefox — pen events created by the page (Playwright has no pen for
+  Firefox; the test page lets `setPointerCapture` of the made-up pointer through): pressure
+  0.2 → 1.0, out-of-range pressure (1.7 and −0.3) clamped to 0…1, the eraser (button 5) erases a line,
+  does not draw on an empty sheet, the mouse draws without pressure.
 
-Test znalazł też błąd całej aplikacji (nie tylko w przeglądarce): host powiadomień (toastów)
-powłoki leży w warstwie popupów Qt Quick Controls na całym oknie, a ta jest widoczna, gdy
-istnieje szuflada (Drawer) — płótno brało go za element nad sobą i zostawiało zdarzenia rysika,
-więc rysik rysował tylko przez zdarzenia myszy, które Qt z nich robi (bez nacisku; na Androidzie
-Qt ich nie robi). Teraz zasłania tylko popup i to, co w tej warstwie przyjmuje wejście (toast).
+The test also found a bug in the whole app (not only in the browser): the shell's notification (toast) host
+lies in the Qt Quick Controls popup layer over the whole window, and that layer is visible when
+a Drawer exists — the canvas took it for an item above itself and left the stylus events to it,
+so the stylus drew only through the mouse events that Qt makes from them (without pressure; on Android
+Qt does not make them). Now only a popup, and whatever in that layer accepts input (a toast), covers it.
 
-Zostaje ręcznie: prawdziwy rysik w prawdziwej przeglądarce (tablet z Androidem, Natalia) —
-czy przeglądarka przekazuje nacisk i drugi koniec rysika.
+Left for manual testing: a real stylus in a real browser (an Android tablet, Natalia) —
+whether the browser passes on pressure and the other end of the stylus.
 
-## Ograniczenia techniczne
+## Technical limitations
 
-* Wiersz poleceń (`brulion-cli`, docs/CLI.md) i odbieranie poleceń od niego (`app open`) są tylko
-  na komputerze z Linuksem; notatki z przeglądarki agent czyta przez Nextcloud.
-* Jednowątkowy Qt bez asyncify/JSPI: brak zagnieżdżonych pętli zdarzeń (`QDialog::exec()`,
-  `QEventLoop::exec()`); dialogi i operacje muszą być asynchroniczne (sygnały, `open()`).
-* Pliki od/do użytkownika: własny wybór plików przeglądarki (`platform/wasm/wasmfiles.h` nad
-  prywatnym `QWasmLocalFileAccess` z Qt; `showOpenFilePicker`, a gdzie go nie ma — `<input
-  type=file>`): kilka plików naraz przy imporcie, „Obraz…” i „Plik…”, pliki ponad limit (jak na
-  komputerze: 512 MB importu, 200 MB obrazu) pominięte bez czytania, a czytanie kończy się na
-  pliku, z którym wybrane przekroczyłyby sumę (import: 1,5 GB jak na komputerze, obrazy: 512 MB
-  — przeglądarka trzyma wszystkie wczytane pliki w pamięci, zanim trafią do notatnika;
-  `PickCollector`, `platform/pickedfiles.h`, sprawdzany na każdej platformie); zapis — okno zapisu
-  przeglądarki (`showSaveFilePicker`, Chromium na https) albo zwykłe pobranie. Bez Qt Widgets
-  (`QFileDialog::getOpenFileContent()` ich wymaga), a własne okno plików Qt dla przeglądarki
-  daje adresy `weblocalfile:`, których jednowątkowy build nie przeczyta (potrzebny JSPI albo
-  asyncify). Anulowanie `<input>` bez zdarzenia `cancel` (starsze przeglądarki) po prostu nic
-  nie zmienia.
-* **Bez PDF-ów jako podkładu rysunku** (docs/UI.md „Drawing editor”, „Backdrop”): Qt nie ma Qt PDF
-  dla WebAssembly (repozytorium Qt 6.11.2 nie ma `qtpdf` dla `wasm_singlethread`), a pdf.js
-  dodałby ponad 2 MB i most do JavaScriptu — więc „Rysunek na obrazie lub PDF…” i „Podkład z obrazu
-  lub PDF…” biorą tu tylko obrazy (własny wybór plików przeglądarki,
-  `DrawingBackdrops.pickInBrowser`), a backend `src/platform/pdfpages_none.cpp` mówi, że PDF-ów nie
-  ma. Rysunki na stronach PDF zrobione na innym urządzeniu wyglądają i edytują się normalnie: obraz
-  strony jest w pliku rysunku.
-* **Bez sprawdzania pisowni** (docs/UI.md „Spell checking”): Hunspell ze słownikami dodałby kilka MB
-  do pobrania, a sprawdzanie pisowni przeglądarki nie sięga do pól tekstowych rysowanych przez Qt
-  na kanwie — backend `src/platform/spell_none.cpp` nie ma języków, więc ustawienia pisowni są ukryte.
-* Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
-* Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
-* Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.
-* **Schowek.** „Kopiuj odnośnik” (menu bloku, paleta poleceń, Ctrl+Shift+C; docs/UI.md „The
-  block editor”) pisze przez `QClipboard`, który w Qt dla WebAssembly korzysta z asynchronicznego
-  Clipboard API przeglądarki: wymaga bezpiecznego kontekstu (https albo `localhost`) i gestu
-  użytkownika (kliknięcie pozycji menu nim jest). Odmowy przeglądarki Qt nie zgłasza — Brulion
-  mówi „Skopiowano …” tylko wtedy, gdy tekst wraca ze schowka Qt, więc odmowy samej przeglądarki
-  nie wykryje (nie sprawdzone jeszcze ręcznie w Firefoksie i Safari). Ctrl+Shift+C w Chromium i
-  Firefoksie otwiera narzędzia deweloperskie, zanim strona dostanie klawisze — wtedy zostaje
-  menu bloku albo paleta poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”).
-  Tak samo kopiowanie zaznaczonych bloków (docs/UI.md „Selecting and copying”: Ctrl+C / Ctrl+X,
-  „Kopiuj” w pasku zaznaczenia i w menu bloku): `QClipboard` dostaje Markdown
-  jako text/plain i — gdy przeglądarka przyjmie (Clipboard API z `ClipboardItem`; Firefox i Safari
-  różnie) — HTML jako text/html, tworzony od razu (na Linuksie dopiero na prośbę innej aplikacji:
-  przeglądarka bierze dane przy samym kopiowaniu, `clipboardReadsAtOnce()`); kopiowanie odbywa
-  się w obsłudze klawisza albo kliknięcia, więc liczy się jako gest użytkownika. Odczyt kontrolny po kopiowaniu (na pulpicie i Androidzie
-  chroni przed „Skopiowano” bez kopii) w przeglądarce niczego nie gwarantuje: Qt zapisuje do
-  schowka przeglądarki asynchronicznie i zwraca własną kopię danych, a odmowę (brak gestu, http,
-  Safari, Firefox bez `ClipboardItem` z HTML) tylko loguje — toast „Skopiowano” może wtedy być
-  nieprawdziwy. Schowka „primary selection” (X11) w przeglądarce nie ma.
-  Wklejanie: Ctrl+V przychodzi do strony jako zdarzenie `paste`, z którego Qt bierze tekst i HTML
-  schowka (HTML z innych aplikacji Brulion zamienia na Markdown); menu edytowanego tekstu nie ma w
-  przeglądarce „Wklej” — strona nie może sama odczytać schowka bez zgody. Kopiowanie zaznaczonych
-  bloków (Ctrl+C) sprawdza w Chromium bez okna `scripts/wasm-smoke.mjs --copy` (2026-10-23,
-  Chromium 155: Markdown jako text/plain i HTML Brulionu jako text/html w schowku przeglądarki);
-  wklejanie i inne przeglądarki (Firefox, Safari) nie były sprawdzane ręcznie.
-* **Żadnych powtarzanych timerów 0 ms.** Dyspozytor zdarzeń Qt 6.11.2 dla WebAssembly
-  (`QEventDispatcherWasm::sendTimerEvents()`) ustawia kolejny `setTimeout` przeglądarki tylko
-  wtedy, gdy `QTimerInfoList::activateTimers()` zwróci > 0, a ta funkcja nie liczy timerów o
-  interwale 0. Powtarzany `QTimer` z interwałem 0 odpala więc raz i wstrzymuje **wszystkie**
-  timery Qt, dopóki inny timer nie zostanie uruchomiony/zatrzymany albo nie przyjdzie wejście
-  (ruch myszy, klawisz). Tak indeks skarbca w przeglądarce stawał w połowie (370–570 z 1000
-  notatek niezaindeksowanych po 60 s bez dotykania karty — w Chromium i Firefoksie; dziennik
-  pokazywał „Wczytywanie notatnika…”, wyszukiwanie, odnośniki, zadania i przypomnienia były
-  niepełne), a dopiero ruch myszy popychał go o kilka porcji. Dlatego `Workspace` indeksuje
-  w przeglądarce timerem 1 ms (przeglądarka i tak czeka między kolejnymi `setTimeout` ≥ 4 ms).
-  Bezpieczne są: interwał ≥ 1 ms, timery jednorazowe (zatrzymanie timera ponownie ustawia
-  `setTimeout`), `QTimer::singleShot(0, …)` i wywołania kolejkowane (idą przez zdarzenia, nie
-  timery). Test: `scripts/wasm-smoke.mjs --index-notes` (wyżej).
-  Minimalny przypadek: `QCoreApplication` z jednym powtarzanym `QTimer` 0 ms — licznik
-  wywołań zatrzymuje się na 1 (z interwałem 1 ms: ~230 wywołań/s); dodatkowy timer 250 ms
-  nie odpala wtedy ani razu (obok timera 1 ms: 4 razy na sekundę).
-* **Zegary Qt a `setTimeout` uruchomiony za wcześnie.** Dyspozytor zdarzeń Qt 6.11.2
-  (`QEventDispatcherWasm::updateNativeTimer()`) ustawia jeden `setTimeout` przeglądarki na
-  najbliższy timer Qt z czasem oczekiwania obciętym do pełnych milisekund, a następny ustawia
-  dopiero wtedy, gdy któryś timer odpalił (`sendTimerEvents()`). Gdy `setTimeout` przyjdzie
-  przed terminem timera (Firefox trzyma `setTimeout` co do milisekundy, a zegar
-  `performance.now()`, z którego Qt liczy czas, ma zgrubną rozdzielczość), nie odpala żaden
-  timer i żaden nowy `setTimeout` nie powstaje: **wszystkie** timery Qt stoją, dopóki inny timer
-  nie zostanie uruchomiony/zatrzymany — wejście (ruch myszy) ich nie budzi. Tak w Firefoksie
-  (2026-10-30, laptop: 2 z 30 i 1 z 15 przebiegów testu rysika) edytor rysunków nie zapisywał
-  ostatniej linii (zapis 1,2 s po zmianie), choć płótno ją miało. Dlatego `index.html` dodaje
-  każdemu `setTimeout` strony z opóźnieniem > 0 ms 2 ms zapasu (`TIMEOUT_MARGIN_MS`; 0 ms —
-  przebudzenia Qt — zostaje): po tej zmianie 0 z 60 przebiegów. Test:
-  `tests/web/shell.spec.mjs` (przeglądarka z każdym `setTimeout` 1 ms za wcześnie — bez zapasu
-  zapis w Chromium nie przychodzi nigdy; Firefox uruchamia tu swoje `setTimeout` dość późno, by
-  i tak zdążyć). 2 ms wystarczą na obcięcie (< 1 ms) i zgrubny zegar (< 1 ms), a timer 1 ms
-  indeksowania nie zwalnia: przeglądarka i tak odkłada zagnieżdżone `setTimeout` o ≥ 4 ms.
-* Kod skompilowany: `index.html` podaje `WebAssembly.compileStreaming()` oryginalną odpowiedź
-  `fetch` (postęp pobierania czyta z jej kopii, `response.clone()`), bo tylko odpowiedź z
-  adresem URL może trafić do pamięci podręcznej skompilowanego kodu przeglądarki. Chrome
-  zapisuje wtedy skompilowany moduł przy pierwszych wizytach (przy odpowiedzi z service workera
-  obok niej w Cache Storage) i od trzeciej wizyty nie kompiluje funkcji od nowa: pierwsza
-  klatka 0,85 → 0,63 s, praca głównego wątku 1,78 → 1,28 s (laptop, 1000 notatek); przy
-  4× wolniejszym CPU (jak telefon) 2,47 → 1,77 s i 6,7 → 5,4 s. Gdy serwer wysyła inny typ
-  niż `application/wasm`, powłoka tworzy odpowiedź z tym typem (wymaga go
-  `compileStreaming`) — wtedy bez tej pamięci.
+* The command line (`brulion-cli`, docs/CLI.md) and receiving commands from it (`app open`) exist only
+  on a Linux computer; an agent reads notes from the browser through Nextcloud.
+* Single-threaded Qt without asyncify/JSPI: no nested event loops (`QDialog::exec()`,
+  `QEventLoop::exec()`); dialogs and operations must be asynchronous (signals, `open()`).
+* Files from/to the user: our own browser file picking (`platform/wasm/wasmfiles.h` over
+  Qt's private `QWasmLocalFileAccess`; `showOpenFilePicker`, and where it is missing, `<input
+  type=file>`): several files at once for import, "Image…" and "File…", files over the limit (as on the
+  desktop: 512 MB for import, 200 MB for a picture) skipped without reading, and reading stops at the
+  file with which the selection would exceed the total (import: 1.5 GB as on the desktop, pictures: 512 MB
+  — the browser holds all read files in memory before they reach the notebook;
+  `PickCollector`, `platform/pickedfiles.h`, checked on every platform); saving — the browser's save
+  dialog (`showSaveFilePicker`, Chromium on https) or a plain download. No Qt Widgets
+  (`QFileDialog::getOpenFileContent()` needs them), and Qt's own file dialog for the browser
+  gives `weblocalfile:` addresses, which the single-threaded build cannot read (it needs JSPI or
+  asyncify). Cancelling an `<input>` without a `cancel` event (older browsers) simply changes
+  nothing.
+* **No PDFs as a drawing backdrop** (docs/UI.md "Drawing editor", "Backdrop"): Qt has no Qt PDF
+  for WebAssembly (the Qt 6.11.2 repository has no `qtpdf` for `wasm_singlethread`), and pdf.js
+  would add more than 2 MB and a bridge to JavaScript — so "Drawing on a picture or PDF…" and "Backdrop from a picture
+  or PDF…" accept only pictures here (our own browser file picking,
+  `DrawingBackdrops.pickInBrowser`), and the backend `src/platform/pdfpages_none.cpp` says there are no
+  PDFs. Drawings on PDF pages made on another device look and edit normally: the picture of the
+  page is in the drawing file.
+* **No spell checking** (docs/UI.md "Spell checking"): Hunspell with dictionaries would add several MB
+  to the download, and the browser's spell checking does not reach text fields drawn by Qt
+  on the canvas — the backend `src/platform/spell_none.cpp` has no languages, so the spelling settings are hidden.
+* WebGL 2 required (the shell warns when it is missing and lets you try anyway).
+* Memory: 50 MB at start, growing up to 4 GB (Qt defaults).
+* Network only through `QNetworkAccessManager` (the browser's fetch) and under CORS rules.
+* **Clipboard.** "Copy link" (block menu, command palette, Ctrl+Shift+C; docs/UI.md "The
+  block editor") writes through `QClipboard`, which in Qt for WebAssembly uses the browser's asynchronous
+  Clipboard API: it needs a secure context (https or `localhost`) and a user
+  gesture (clicking a menu item is one). Qt does not report the browser's refusals — Brulion
+  says "Copied …" only when the text comes back from Qt's clipboard, so it will not detect a refusal
+  by the browser itself (not yet checked manually in Firefox and Safari). Ctrl+Shift+C in Chromium and
+  Firefox opens the developer tools before the page gets the keys — then the block menu
+  or the command palette remain (Ctrl+K → "Copy block reference").
+  The same goes for copying selected blocks (docs/UI.md "Selecting and copying": Ctrl+C / Ctrl+X,
+  "Copy" in the selection bar and in the block menu): `QClipboard` gets Markdown
+  as text/plain and — when the browser accepts it (Clipboard API with `ClipboardItem`; Firefox and Safari
+  vary) — HTML as text/html, created at once (on Linux only when another app asks for it:
+  the browser takes the data at the moment of copying, `clipboardReadsAtOnce()`); copying happens
+  in a key or click handler, so it counts as a user gesture. The check read after copying (on the desktop and Android
+  it guards against "Copied" without a copy) guarantees nothing in the browser: Qt writes to the
+  browser's clipboard asynchronously and returns its own copy of the data, and a refusal (no gesture, http,
+  Safari, Firefox without `ClipboardItem` with HTML) is only logged — the "Copied" toast may then be
+  untrue. There is no "primary selection" clipboard (X11) in the browser.
+  Pasting: Ctrl+V reaches the page as a `paste` event, from which Qt takes the clipboard's text and HTML
+  (Brulion turns HTML from other apps into Markdown); the edited text's menu has no
+  "Paste" in the browser — the page cannot read the clipboard by itself without permission. Copying selected
+  blocks (Ctrl+C) is checked headless in Chromium by `scripts/wasm-smoke.mjs --copy` (2026-10-23,
+  Chromium 155: Markdown as text/plain and Brulion's HTML as text/html in the browser clipboard);
+  pasting and other browsers (Firefox, Safari) have not been checked manually.
+* **No repeating 0 ms timers.** The Qt 6.11.2 event dispatcher for WebAssembly
+  (`QEventDispatcherWasm::sendTimerEvents()`) sets the browser's next `setTimeout` only
+  when `QTimerInfoList::activateTimers()` returns > 0, and that function does not count timers with an
+  interval of 0. A repeating `QTimer` with interval 0 therefore fires once and stalls **all**
+  Qt timers until another timer is started/stopped or input arrives
+  (mouse movement, a key). That is how the vault index in the browser stopped halfway (370–570 of 1000
+  notes not indexed after 60 s without touching the tab — in Chromium and Firefox; the journal
+  showed "Reading the notebook…", search, links, tasks and reminders were
+  incomplete), and only mouse movement pushed it on by a few batches. That is why `Workspace` indexes
+  in the browser with a 1 ms timer (the browser waits ≥ 4 ms between successive `setTimeout`s anyway).
+  Safe are: an interval ≥ 1 ms, single-shot timers (stopping a timer sets
+  `setTimeout` again), `QTimer::singleShot(0, …)` and queued calls (they go through events, not
+  timers). Test: `scripts/wasm-smoke.mjs --index-notes` (above).
+  Minimal case: a `QCoreApplication` with a single repeating 0 ms `QTimer` — the call
+  counter stops at 1 (with a 1 ms interval: ~230 calls/s); an extra 250 ms timer
+  then does not fire even once (next to a 1 ms timer: 4 times per second).
+* **Qt timers and a `setTimeout` fired too early.** The Qt 6.11.2 event dispatcher
+  (`QEventDispatcherWasm::updateNativeTimer()`) sets one browser `setTimeout` for
+  the nearest Qt timer with the wait truncated to whole milliseconds, and sets the next one
+  only when some timer has fired (`sendTimerEvents()`). When the `setTimeout` arrives
+  before the timer's deadline (Firefox keeps `setTimeout` to the millisecond, and the
+  `performance.now()` clock, from which Qt computes time, has a coarse resolution), no
+  timer fires and no new `setTimeout` is created: **all** Qt timers stall until another timer
+  is started/stopped — input (mouse movement) does not wake them. That is how in Firefox
+  (2026-10-30, laptop: 2 of 30 and 1 of 15 runs of the stylus test) the drawing editor did not save
+  the last line (saved 1.2 s after a change), even though the canvas had it. That is why `index.html` adds
+  a 2 ms margin to every page `setTimeout` with a delay > 0 ms (`TIMEOUT_MARGIN_MS`; 0 ms —
+  Qt's wake-ups — stays): after this change 0 of 60 runs. Test:
+  `tests/web/shell.spec.mjs` (a browser with every `setTimeout` 1 ms early — without the margin the
+  save in Chromium never arrives; Firefox fires its `setTimeout`s late enough here to
+  make it anyway). 2 ms cover the truncation (< 1 ms) and the coarse clock (< 1 ms), and the 1 ms
+  indexing timer is not slowed down: the browser defers nested `setTimeout`s by ≥ 4 ms anyway.
+* Compiled code: `index.html` gives `WebAssembly.compileStreaming()` the original `fetch`
+  response (it reads download progress from a copy, `response.clone()`), because only a response with
+  a URL can go into the browser's compiled code cache. Chrome
+  then stores the compiled module on the first visits (with a response from the service worker
+  next to it in Cache Storage) and from the third visit on does not compile functions again: the first
+  frame 0.85 → 0.63 s, main-thread work 1.78 → 1.28 s (laptop, 1000 notes); with a
+  4× slower CPU (like a phone) 2.47 → 1.77 s and 6.7 → 5.4 s. When the server sends a type other
+  than `application/wasm`, the shell creates a response with that type (required by
+  `compileStreaming`) — then without this cache.
 
-## Pliki
+## Files
 
-| Ścieżka | Zawartość |
+| Path | Contents |
 |---|---|
-| `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
-| `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
-| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (udostępnienia przekazane przez inną kartę), most do ekranu ładowania i odczyty `visualViewport` (klawiatura ekranowa; `wasmshell.h`), wybór plików i pobieranie (`wasmfiles.h`, bez Qt Widgets), nowa karta z plikiem i drukowanie strony (`wasmopen.h`: „Drukuj…” — dokument HTML eksportu w ukrytej ramce bez skryptów i okno drukowania przeglądarki), testy trwałości i wyboru plików (`wasmselftest.h`) |
-| `src/app/diag/webselftest.h` | testy aplikacji dla przeglądarek: `?selftest=webpictures` (obrazy z internetu, eksport z kopiami), `?selftest=pen` (płótno pod rysikiem); testy na komputerze: `tests/app/diag/tst_webselftest.cpp` |
-| `tests/web/`, `scripts/web-test.sh` | testy Playwright w Chromium i Firefoksie (obrazy z internetu, rysik) i ich uruchamianie (CI: `wasm.yml`, zadanie `browsers`) |
-| `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
-| `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
-| `scripts/wasm-single-file.py`, `tests/scripts/tst_wasm_single_file.sh`, `tests/web/singlefile.spec.mjs` | jeden plik HTML z `dist-wasm/` i jego testy |
-| `tests/app/drawing/wasm-drawing-check.mjs` | rysunek w notatce w jasnym i ciemnym motywie, w Chromium; z `--text` tekst wpisany na rysunku |
+| `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | HTML shell, service worker, manifest |
+| `wasm/icons/` | PWA icons; PNGs generated from `assets/logo.svg` and `wasm/icons/maskable.svg` (safe zone for maskable icons) and `badge.svg` (monochrome notification badge) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, `WasmShare` (shares handed over by another tab), the bridge to the loading screen and `visualViewport` readings (on-screen keyboard; `wasmshell.h`), file picking and downloading (`wasmfiles.h`, without Qt Widgets), a new tab with a file and page printing (`wasmopen.h`: "Print…" — the export's HTML document in a hidden frame without scripts and the browser's print dialog), persistence and file-picking tests (`wasmselftest.h`) |
+| `src/app/diag/webselftest.h` | app tests for browsers: `?selftest=webpictures` (pictures from the internet, export with copies), `?selftest=pen` (the canvas under the stylus); tests on the desktop: `tests/app/diag/tst_webselftest.cpp` |
+| `tests/web/`, `scripts/web-test.sh` | Playwright tests in Chromium and Firefox (pictures from the internet, stylus) and running them (CI: `wasm.yml`, job `browsers`) |
+| `assets/fonts/`, `src/app/ui/fallbackfonts.h` | emoji and symbol fallback fonts (without them: empty boxes), `scripts/fallback-fonts.py` regenerates them |
+| `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + site assembly, test in Chromium |
+| `scripts/wasm-single-file.py`, `tests/scripts/tst_wasm_single_file.sh`, `tests/web/singlefile.spec.mjs` | single HTML file from `dist-wasm/` and its tests |
+| `tests/app/drawing/wasm-drawing-check.mjs` | a drawing in a note in the light and dark theme, in Chromium; with `--text` text typed on the drawing |
 
-Ikony po zmianie logo:
+Icons after a logo change:
 
 ```sh
 cd wasm/icons

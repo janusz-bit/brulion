@@ -476,7 +476,7 @@ void TestDrawingBackdrop::parsePageRanges()
     QCOMPARE(brulion::drawing::parsePageRanges(text, count), expected);
     // Written back and read again: the same pages.
     QCOMPARE(brulion::drawing::parsePageRanges(brulion::drawing::formatPageRanges(expected), count), expected);
-    // One more than the cap (the dialog's "Najwyżej 60 stron naraz"), or a smaller cap.
+    // One more than the cap (the dialog's "At most 60 pages at once."), or a smaller cap.
     const QList<int> more = brulion::drawing::parsePageRanges(text, count, MaxPagesPerInsert + 1);
     QCOMPARE(more.mid(0, MaxPagesPerInsert), expected);
     QVERIFY(more.size() <= MaxPagesPerInsert + 1);

@@ -148,7 +148,7 @@ internal object WidgetRows {
     )
 }
 
-/** "Zaległe · 2" … then the tasks, for [today]; tomorrow's only on a [tall] widget. */
+/** "Overdue · 2" … then the tasks, for [today]; tomorrow's only on a [tall] widget. */
 internal fun taskRows(text: Context, snapshot: WidgetSnapshot, today: LocalDate, tall: Boolean): List<WidgetRow> =
   taskRows(snapshot, today, tall) { WidgetRows.sectionLabel(text, it) }
 
@@ -190,7 +190,7 @@ internal fun taskDetail(task: WidgetTask, section: String, today: LocalDate, loc
   return parts.joinToString(" · ")
 }
 
-/** The calendar's agenda from [from]: each day with entries ("Dziś · wt 27 paź"), its entries. */
+/** The calendar's agenda from [from]: each day with entries ("Today · Tue, Oct 27"), its entries. */
 internal fun agendaRows(snapshot: WidgetSnapshot, from: LocalDate, today: LocalDate): List<WidgetRow> {
   val out = ArrayList<WidgetRow>()
   for ((date, day) in snapshot.agenda(from, 14)) {
@@ -208,7 +208,7 @@ internal fun agendaRows(snapshot: WidgetSnapshot, from: LocalDate, today: LocalD
   return out
 }
 
-/** "Ulubione" and "Ostatnie" (without the favourites again). */
+/** "Favourites" and "Recent" (without the favourites again). */
 internal fun pageRows(text: Context, snapshot: WidgetSnapshot): List<WidgetRow> =
   pageRows(snapshot, text.getString(R.string.brulion_widget_favorites), text.getString(R.string.brulion_widget_recent))
 
@@ -227,7 +227,7 @@ internal fun pageRows(snapshot: WidgetSnapshot, favorites: String, recent: Strin
   return out
 }
 
-/** A page's name in the list: a daily note by its day ("wtorek, 27 października"), else its title. */
+/** A page's name in the list: a daily note by its day ("Tuesday, October 27"), else its title. */
 internal fun pageLabel(page: PageRef, locale: String): String =
   JournalAppend.parseDate(page.title)?.let { WidgetDates.long(it, locale) } ?: page.title
 

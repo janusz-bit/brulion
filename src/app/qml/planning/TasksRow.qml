@@ -14,17 +14,17 @@ import Brulion
 // A TaskListModel task row's delegate: its roles are required properties (`text` is the task's
 // plain text).
 //
-// Click / Enter opens the note at the task's line; Space toggles; the context menu — "Otwórz" and
-// the statuses (TaskStatusMenu; "Bez statusu" makes it a plain list item) — opens with a right
+// Click / Enter opens the note at the task's line; Space toggles; the context menu — "Open" and
+// the statuses (TaskStatusMenu; "No status" makes it a plain list item) — opens with a right
 // click or long press on the row or its checkbox, or the Menu key. A right-click or long press on a
 // date, reminder, 🔁 or priority chip asks for that token's menu instead (tokenMenuRequested: the
 // view's PlanningTokenMenu), on a #tag or a link of the text for the link's menu
-// (linkMenuRequested: "Filtruj po tagu" first, "Otwórz stronę tagu", …). A click on a #tag is a
+// (linkMenuRequested: "Filter by tag" first, "Open tag page", …). A click on a #tag is a
 // link (TasksView filters by it); Ctrl+click (mouse) on it asks for the tag's page instead
 // (tagPageRequested, docs/SYNTAX.md §3). The text's #tags and chips are rounded shapes and it ends
 // with "…" after 4 lines (BRichText); the mouse pointer resting on a [[page]] or ((block)) link
 // shows its preview (LinkPreviews, docs/UI.md "Link previews"). Task dependencies and time
-// (docs/SYNTAX.md §5): "Czeka na: …" when it is blocked (a click opens the task it waits for: a
+// (docs/SYNTAX.md §5): "Waits for: …" when it is blocked (a click opens the task it waits for: a
 // taskdep: link), a missing id or a cycle, how many tasks wait for it, its subtasks "3/5" and its
 // clocked time; the menu starts or stops its timer and adds a dependency. A subtask (depth > 0:
 // listed under the task it belongs to, TaskListModel nestSubtasks) is indented by its depth, the
@@ -83,7 +83,7 @@ T.ItemDelegate {
     /// Ctrl+click on the #tag `tag`: open the page it names.
     signal tagPageRequested(string tag)
     signal statusRequested(string status)
-    /// The menu's "Uruchom / Zatrzymaj licznik czasu" and "Dodaj zależność…" (docs/SYNTAX.md §5).
+    /// The menu's "Start timer" / "Stop timer" and "Add dependency…" (docs/SYNTAX.md §5).
     signal clockRequested()
     signal dependencyRequested()
     /// A right-click or long press on a chip: the menu of its token `kind` ("due" | "scheduled" |
@@ -260,7 +260,7 @@ T.ItemDelegate {
             status: control.statusOrTodo
             Accessible.name: qsTr("Done: %1").arg(control.text)
             onToggled: control.taskToggled()
-            ownMenu: false // the row's menu, "Otwórz" first
+            ownMenu: false // the row's menu, "Open" first
             onMenuRequested: control.openMenuFrom(box, 0, box.height)
         }
 

@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import Brulion
 
 // ContentNoteModeChoice — the note mode of a new page (docs/UI.md "Note modes"): two options,
-// "Dokument (jak Obsidian)" and "Konspekt (jak Logseq)", one under the other with a line saying
+// "Document (like Obsidian)" and "Outline (like Logseq)", one under the other with a line saying
 // what each is. One tab stop like a radio group: arrow keys and Space choose; a tap or click
 // chooses an option.
 //

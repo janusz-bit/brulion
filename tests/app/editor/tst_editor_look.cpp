@@ -1,7 +1,7 @@
 // The page's look and coloured highlights in the block editor (docs/UI.md "Page icon and cover",
 // "Coloured highlights"): PageController.look following the text (also source mode), the icon and
 // cover edits (one undo step each, only their lines change, refusals), a cover's file and a cover
-// from the internet (nothing fetched before it is allowed), and "Zakreśl" (setHighlight) on the
+// from the internet (nothing fetched before it is allowed), and "Highlight" (setHighlight) on the
 // edited text with its undo.
 #include "blocklistmodel.h"
 #include "fakeeditorhost.h"

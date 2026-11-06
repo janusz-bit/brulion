@@ -145,7 +145,7 @@ void QueryResultModel::setController(PageController *controller)
         connect(m_controller, &PageController::hostChanged, this, &QueryResultModel::connectHost);
         connect(m_controller, &PageController::pathChanged, this, &QueryResultModel::schedule);
         connect(m_controller, &PageController::nowChanged, this, &QueryResultModel::schedule);
-        // Midnight: `today` / `overdue` filters, "dziś"/"jutro" chips and overdue marks move on.
+        // Midnight: `today` / `overdue` filters, "today"/"tomorrow" chips and overdue marks move on.
         connect(m_controller, &PageController::todayChanged, this, &QueryResultModel::schedule);
         connect(m_controller, &PageController::todayChanged, this, &QueryResultModel::invalidateHtml);
         connect(m_controller, &PageController::paletteChanged, this, &QueryResultModel::invalidateHtml);

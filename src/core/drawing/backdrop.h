@@ -1,4 +1,4 @@
-// A drawing's backdrop ("podkład", docs/SYNTAX.md §2 "Drawings", docs/UI.md "Drawing editor"): a
+// A drawing's backdrop (docs/SYNTAX.md §2 "Drawings", docs/UI.md "Drawing editor"): a
 // picture, a slide exported as a picture or a PDF page under the ink and the shapes — lecture notes
 // on slides. It is an ordinary Excalidraw image element at index 0, `locked`, marked by
 // `customData.brulionBackdrop = {"path": "<vault path>", "page": <1-based; 0 a picture>}`, its
@@ -90,8 +90,8 @@ bool validBackdropImage(const BackdropImage &image);
 bool setBackdrop(Drawing &d, const BackdropImage &image, const BackdropSource &source, const EditStamp &stamp);
 /// Remove the backdrop (its file entry stays: undo brings it back). False when there is none.
 bool removeBackdrop(Drawing &d);
-/// A new drawing on `image`: the backdrop set (setBackdrop()) and its background — "Jasne" (Light)
-/// on a picture, which keeps its colours, "Jak motyw" (Auto) on a PDF page, which turns dark with
+/// A new drawing on `image`: the backdrop set (setBackdrop()) and its background — "Light" on a
+/// picture, which keeps its colours, "Like the app" on a PDF page, which turns dark with
 /// the app ("document dark"). nullopt for an invalid image.
 std::optional<Drawing> newDrawingOnBackdrop(const BackdropImage &image, const BackdropSource &source,
                                             const EditStamp &stamp);

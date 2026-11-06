@@ -1,4 +1,4 @@
-// Habits (docs/SYNTAX.md §5 "Nawyki / Habits"): habit list, habit set (+ tick, skip).
+// Habits (docs/SYNTAX.md §5 "Habits"): habit list, habit set (+ tick, skip).
 #include "commands_p.h"
 
 #include "habits/habitcache.h"

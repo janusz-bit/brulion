@@ -100,8 +100,8 @@ int main(int argc, char *argv[])
         return brulion::cli::run(argc - 1, argv + 1);
 #endif
 #ifdef Q_OS_ANDROID
-    // The background check's own process (BackgroundCheckService.kt, docs/ANDROID.md "Sprawdzanie
-    // notatek w tle"): no window, no QML, no settings of the app — before anything of the app.
+    // The background check's own process (BackgroundCheckService.kt, docs/ANDROID.md "Checking
+    // notes in the background"): no window, no QML, no settings of the app — before anything of the app.
     if (argc > 1 && qstrcmp(argv[1], brulion::background::BackgroundCheckArgument) == 0)
         return brulion::background::runBackgroundCheck(argc, argv);
 #endif
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
     auto *androidBridge = brulion::platform::AndroidBridge::instance();
 #endif
 
-    // `--open <file>…` (the desktop entry's `Exec=brulion --open %F`, Windows' "Otwórz za pomocą"):
+    // `--open <file>…` (the desktop entry's `Exec=brulion --open %F`, Windows' "Open with"):
     // every argument after it is a file to offer in the share dialog, never an option — the
     // options are the arguments before it (notebook/share.h).
     const brulion::notebook::OpenArguments launch =
@@ -219,7 +219,7 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    // The event log ("Rejestr zdarzeń", src/core/log) — after the single-instance check, so a second
+    // The event log ("Event log", src/core/log) — after the single-instance check, so a second
     // launch never writes into the running one's log: every Qt message from here on, redacted,
     // in memory and in brulion.log (desktop: ~/.local/state/Brulion/Brulion/logs; Android: the
     // app's files dir; browser: memory only). stderr / logcat keep their output.
@@ -455,7 +455,7 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_ANDROID
         QObject::connect(androidBridge, &brulion::platform::AndroidBridge::activated, controller.get(),
                          &AppController::openNotification);
-        // "Udostępnij → Brulion" (ShareActivity.kt): the share dialog once a notebook is ready.
+        // "Share → Brulion" (ShareActivity.kt): the share dialog once a notebook is ready.
         QObject::connect(androidBridge, &brulion::platform::AndroidBridge::shared, controller.get(),
                          [ctl = controller.get()](const QByteArray &json) { ctl->receiveShareJson(json); });
         // The home-screen widgets' snapshot and the entries their quick add queued (docs/ANDROID.md).

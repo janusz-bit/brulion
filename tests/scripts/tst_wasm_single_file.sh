@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Tests scripts/wasm-single-file.py (the browser version in one HTML file, docs/WEB.md "Jeden plik
-# HTML") on stand-in builds: the page wasm/index.html as scripts/wasm-build.sh fills it in, its real
+# Tests scripts/wasm-single-file.py (the browser version in one HTML file, docs/WEB.md "Single HTML
+# file") on stand-in builds: the page wasm/index.html as scripts/wasm-build.sh fills it in, its real
 # icons, and small stand-ins for brulion.wasm, brulion.js and qtloader.js. The file must carry
 # everything (brulion.wasm gzip + base64, byte for byte; the scripts inline before the page's own
 # script; the pictures as data: URIs; no manifest, no other reference to a file of the site), be

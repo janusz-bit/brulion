@@ -139,8 +139,8 @@ struct TokenEditContext {
 ///   "remove"          the token goes (with one adjacent space)
 ///   "recurrence"      a 🔁 rule becomes a (setRecurrenceAt(); "" removes it)
 ///   "priority"        a priority becomes a (a priority name, "" removes it)
-///   "blockRecurrence" the block's 🔁 rule becomes a (the reminder menu's "Powtarzanie")
-///   "blockPriority"   the block's priority becomes a (the reminder menu's "Priorytet")
+///   "blockRecurrence" the block's 🔁 rule becomes a (the reminder menu's "Repeat")
+///   "blockPriority"   the block's priority becomes a (the reminder menu's "Priority")
 ///
 /// Unknown actions, invalid arguments or a range that holds no such token: `body` unchanged.
 QString applyTokenAction(const QString &body, qsizetype from, qsizetype to, const QString &action, const QVariant &a,

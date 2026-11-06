@@ -4,8 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// BFontPickerDialog — choose an installed font family (Ustawienia → Wygląd: the interface font;
-// Edytor: the font of notes, of code). A search field over DeviceInfo.fontFamilies() (no emoji,
+// BFontPickerDialog — choose an installed font family (Settings → Appearance: the interface font;
+// Editor: the font of notes, of code). A search field over DeviceInfo.fontFamilies() (no emoji,
 // symbol or private families; TextHelper.fuzzyRank: "zrodlo" finds "Źródło Serif"); every row
 // is drawn in its own font; the first row is the default (`defaultLabel`, "" as the family). A
 // tap chooses at once (`chosen(family)`). A bottom sheet on phones. Not offered in the browser

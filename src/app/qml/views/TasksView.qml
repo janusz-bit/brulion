@@ -5,8 +5,8 @@ import QtQml.Models
 import Brulion
 
 // TasksView — route "tasks" ({query?}): every task of the vault (TaskListModel over
-// PlanningContext.vaultIndex) in sections Zaległe / Dziś / Jutro / Ten tydzień / Później / Bez
-// terminu / Zrobione (collapsed): tick them off inline (undo in the toast), see their dates,
+// PlanningContext.vaultIndex) in sections Overdue / Today / Tomorrow / This week / Later / No
+// date / Done (collapsed): tick them off inline (undo in the toast), see their dates,
 // reminders, recurrence and priority as chips (a right-click or long press on one: its menu,
 // PlanningTokenMenu — the change goes to the task's file, undo in the toast), open them at their
 // line, set any status from the context menu. Filters (status, tag, page, folder, priority, text) and the sort order sit in
@@ -16,7 +16,7 @@ import Brulion
 // Keys: Up/Down move through the tasks, Space toggles, Enter opens, Ctrl+N… stays with the shell;
 // "/" focuses the filter field, "n" the quick-add field.
 //
-// Route parameters: query (filters, e.g. "tag:praca status:open"), open ("query" = the query
+// Route parameters: query (filters, e.g. "tag:work status:open"), open ("query" = the query
 // dialog, "add:<text>" = the quick-add field filled — screenshots).
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
@@ -74,7 +74,7 @@ FocusScope {
         if (planningActions.toggleClock(path, line, text))
             undoToast(running ? qsTr("Timer stopped") : qsTr("Timer started"), "success")
     }
-    /// "Dodaj zależność…": the picker of the task it will wait for.
+    /// "Add dependency…": the picker of the task it will wait for.
     function openDependencyPicker(path: string, line: int, text: string): void {
         dependencyDialog.hasTask = true
         dependencyDialog.taskPath = path
@@ -301,7 +301,7 @@ FocusScope {
                     onTokenMenuRequested: (kind, item, x, y) =>
                         root.openTokenMenu(taskRow.path, taskRow.line, taskRow.text, kind, taskRow.tokenValue(kind),
                                            taskRow.reminderAlarm, taskRow.recurrence, taskRow.priorityName, item, x, y)
-                    // "Filtruj po tagu" first: PlanningTokenMenu.filterRequested.
+                    // "Filter by tag" first: PlanningTokenMenu.filterRequested.
                     onLinkMenuRequested: (url, item, x, y) => tokenMenu.openLink(url, taskRow.path, item, x, y, true)
                 }
             }

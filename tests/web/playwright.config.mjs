@@ -1,4 +1,4 @@
-// Browser tests of the web build (docs/WEB.md "Testy w przeglądarkach"): the site from
+// Browser tests of the web build (docs/WEB.md "Browser tests (Playwright)"): the site from
 // $BRULION_DIST (default ../../dist-wasm, scripts/wasm-build.sh) on local https and http servers
 // (lib/servers.mjs), in Chromium and Firefox. Run through scripts/web-test.sh (Firefox draws
 // WebGL 2 only with an X display: the script provides one with xvfb-run).

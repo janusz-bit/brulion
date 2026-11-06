@@ -13,7 +13,7 @@ import Brulion
 // Removing an item (one undo step): with a mouse the chip's ×; on touch UIs the chip's menu (no ×:
 // its target made a chip 44 px wider), as the page header's chips — a press and hold on any chip,
 // a tap on one that opens nothing (a plain item, an alias): a tag's page or a [[Page]] opened,
-// "Kopiuj", "Usuń" ("Cofnij" in the toast). Delete on a focused chip removes it everywhere.
+// "Copy", "Remove" ("Undo" in the toast). Delete on a focused chip removes it everywhere.
 // The items are placed here, as a Flow places them, but the "+" never starts a line alone: the
 // last chip goes down with it. Heights and places by bindings, as TasksRow's chips (docs/UI.md
 // "Scrolling performance"): a row created expanded has its final height at once.
@@ -108,7 +108,7 @@ Item {
     function encoded(prefix: string, text: string): string {
         return prefix + Js.encodeURIComponent(text)
     }
-    /// Remove item `i` from its menu: out of sight of an ×, so a toast says it, with "Cofnij".
+    /// Remove item `i` from its menu: out of sight of an ×, so a toast says it, with "Undo".
     function removeFromMenu(i: int): void {
         if (i < 0 || i >= root.items.length || readOnly)
             return

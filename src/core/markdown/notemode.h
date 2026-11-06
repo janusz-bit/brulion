@@ -1,4 +1,4 @@
-// Note mode (docs/SYNTAX.md §4 "Tryb notatki / Note mode"): whether a note is shown as a
+// Note mode (docs/SYNTAX.md §4 "Note mode"): whether a note is shown as a
 // Logseq-like outline (a bullet per block) or as an Obsidian-like continuous document. Part of
 // the markdown module — see markdown/markdown.h for the module overview.
 //

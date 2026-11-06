@@ -1,7 +1,7 @@
 // Two versions of a drawing merged element by element (docs/UI.md "Drawing editor"): the version
 // another device wrote (Syncthing, Nextcloud) taken in while the drawing is open here, with what
 // was changed here since the last load or save (DrawingCanvas::takeExternal); the sync center's
-// "Scal rysunki" of a conflict copy, with no known common ancestor (known = false: a union —
+// "Merge drawings" of a conflict copy, with no known common ancestor (known = false: a union —
 // ConflictResolver); and Nextcloud's sync of a drawing changed on two devices, against the version
 // both had last (mergeDrawingFiles(): SyncRun::mergeText — never a line merge of a drawing).
 //
@@ -89,7 +89,7 @@ bool containsDrawing(const Drawing &outer, const Drawing &inner);
 /// and a `.excalidraw` scene have nothing around it). For showing how two versions' notes differ.
 QByteArray markdownAroundScene(const DrawingFile &file);
 /// Writing a merge of `other`'s drawing into `into`'s file (writeDrawingFile(into, …): the sync
-/// center's "Scal rysunki" — `into` the original) keeps everything of `other`'s Markdown around its
+/// center's "Merge drawings" — `into` the original) keeps everything of `other`'s Markdown around its
 /// scene: the frontmatter, the back of the card, element links, embedded files and `%%` are the
 /// same byte for byte, and each "## Text Elements" entry of `other` is `into`'s as well — or
 /// follows its element (an element only `other` has: its text is in the scene's `rawText`; one

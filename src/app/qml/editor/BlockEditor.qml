@@ -11,7 +11,7 @@ import Brulion
 // editing. Document keys: Enter on an empty list item / Backspace at its start leave the list,
 // Tab / Shift+Tab only in list items.
 //
-//   PageController { id: page; host: Workspace; path: "Projekty/Dom.md" }
+//   PageController { id: page; host: Workspace; path: "Projects/Home.md" }
 //   BlockEditor { anchors.fill: parent; controller: page; header: Component { PageTitle {} } }
 //
 // A ListView over controller.blocks (BlockListModel): unfocused blocks show rendered rich text
@@ -26,9 +26,9 @@ import Brulion
 // block reference ((id)) · Esc stop editing (select block) · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
 // undo/redo · Ctrl+E source mode. Selected block (after Esc): Up/Down select, Enter edit, Delete
 // remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter, Ctrl+Shift+Enter, Ctrl+., Ctrl+Shift+C, Esc clear.
-// The block menu (BlockMenu: zoom, fold, "Kopiuj odnośnik" — links to the block or heading —,
+// The block menu (BlockMenu: zoom, fold, "Copy link" — links to the block or heading —,
 // picture, indent, move, delete) opens with a right-click anywhere on a block (mouse, touchpad,
-// stylus), from a bullet or number (also a long press) and from the touch toolbar's "Więcej".
+// stylus), from a bullet or number (also a long press) and from the touch toolbar's "More".
 // copyLink() / copyCurrentLink() copy links and say so (notice); a link to a block or heading of
 // the page scrolls there, selects it and flashes it (revealRow()); a missing one is said.
 // Autocomplete (`[[`, `((`, `#`, `/`, dates after ⏰/📅/@) in SuggestionPopup; slash commands
@@ -37,27 +37,27 @@ import Brulion
 // keyboard's top (KeyboardInsets) — for a block, a table cell or the source (toolbarMode).
 // Pictures: Ctrl+V pastes a copied picture (or copied files) as an attachment `![[…]]`, files
 // dropped on the page are stored and embedded (in the block being edited at the caret, else in
-// a new block after the one under the drop), "/Obraz…" and the toolbar pick files ("/Plik…" links them instead).
+// a new block after the one under the drop), "/Image…" and the toolbar pick files ("/File…" links them instead).
 // A leading "# Title" repeating the page title is shown above the page properties
 // (PageController.titleRow, see BlockDelegate); Up/Down follow that on-screen order.
 // `message(text, kind, action)` (emitted by notice()) tells what the host should show as a toast;
 // `action` — an EditorToastAction (`text`, run()) or null — is its button (deleting or cutting
-// blocks: "Cofnij").
+// blocks: "Undo").
 // Block selection (docs/UI.md "Selecting and copying"; PageController keeps it as two uids):
 // Shift+↑/↓ (also from the first / last line of an edited block), Ctrl+A twice, Shift+click, a
 // mouse drag from one block into another (the list no longer scrolls with a left drag on non-touch
-// UIs; it scrolls near its edges while selecting), the block menu's "Zaznacz"; Ctrl+click picks
+// UIs; it scrolls near its edges while selecting), the block menu's "Select"; Ctrl+click picks
 // single blocks into or out of it (gaps allowed); on touch UIs a long press on a block's text — the
-// selection mode: taps extend or shrink (with the tools' "Pojedynczo" on: pick single blocks), two
-// grips adjust the ends, the selection tools are docked where the editing toolbar is ("Gotowe" and
+// selection mode: taps extend or shrink (with the tools' "One by one" on: pick single blocks), two
+// grips adjust the ends, the selection tools are docked where the editing toolbar is ("Done" and
 // Back leave). Ctrl+C / Ctrl+X / Ctrl+V / Delete / Ctrl+Enter act on the whole selection, Tab and
 // Alt+↑/↓ on one without gaps (else a toast says why not); desktops show a
 // compact SelectionToolbar at the top when two or more blocks are selected. A day of the journal
 // stream (`stream`, StreamSelection) selects across days too: Shift+click, Shift+↑/↓ past its edge,
 // a drag into another day, a tap in the touch selection mode; such a selection is only copied
 // (spanRefuses() tells so for the other tools). In an edited block
-// Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Wytnij / Kopiuj / Wklej / Zaznacz
-// wszystko.
+// Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Cut / Copy / Paste / Select
+// all.
 // Input methods: a word still being composed (preedit — Android keyboards compose every word)
 // counts for completions and is committed before Enter/Backspace/Tab/… are handled, before
 // toolbar actions and when the app is left. Keys typed while the edited block's delegate is
@@ -74,7 +74,7 @@ FocusScope {
     /// Extra space below the last block (click there to add a block).
     property real bottomSpace: Theme.space16 * 2
     /// Document mode: the size of the largest heading (0: no limit). The journal stream sets the
-    /// size of its days' dates, so a "## Praca" inside a day never outranks the day itself.
+    /// size of its days' dates, so a "## Work" inside a day never outranks the day itself.
     property int headingCap: 0
     /// The editor is as tall as its blocks and something around it scrolls (a day of the journal
     /// stream): all blocks are created at once — with the editor itself when its controller is set
@@ -177,7 +177,7 @@ FocusScope {
 
     /// Something to tell the user (a toast): kind "error" | "info" | "success"; `action` — an
     /// EditorToastAction (`text`, run()) or null — a button on the toast (after deleting or cutting
-    /// blocks: "Cofnij", undoAction()).
+    /// blocks: "Undo", undoAction()).
     signal message(string text, string kind, EditorToastAction action)
     /// Say `text` (message()); `action` (null: none) is the toast's button (EditorToastAction:
     /// `text` and `run()`, which the host calls), e.g. undoAction()'s.
@@ -188,7 +188,7 @@ FocusScope {
     function noticeUndoable(text: string, kind: string, before: string): void {
         notice(text, kind, undoAction(before))
     }
-    /// The "Cofnij" of a toast about the edit just made (`before`: controller.undoToken() before
+    /// The "Undo" of a toast about the edit just made (`before`: controller.undoToken() before
     /// it; null when it changed nothing): undoes that edit while it is still the last step of this
     /// page's history (PageController.undoStep) — after other edits, on another page or once undone
     /// it says so instead.
@@ -206,7 +206,7 @@ FocusScope {
         return action
     }
     /// A toast's action (EditorToastAction: `kind` and its values), the editor's child.
-    /// The "Cofnij" of a replace over days of the journal stream (FindBar): StreamFind.undo(token).
+    /// The "Undo" of a replace over days of the journal stream (FindBar): StreamFind.undo(token).
     function streamUndoAction(stream: StreamFind, token: int): EditorToastAction {
         const action = toastAction("streamUndo", qsTr("Undo"))
         action.stream = stream
@@ -243,12 +243,12 @@ FocusScope {
     }
 
     // ---- Block selection (docs/UI.md "Selecting and copying") -----------------------------------
-    /// Touch UIs: the selection mode (a long press on a block's text, "Zaznacz" in the block menu or
+    /// Touch UIs: the selection mode (a long press on a block's text, "Select" in the block menu or
     /// the editing toolbar): taps extend or shrink the selection instead of editing, grips at the
     /// band's ends adjust it, the selection tools are docked like the editing toolbar ("selection"
-    /// toolbarMode); "Gotowe" and Back leave it. Ends with the selection or when editing starts.
+    /// toolbarMode); "Done" and Back leave it. Ends with the selection or when editing starts.
     property bool selectionMode: false
-    /// The selection mode's "Pojedynczo" (one by one): taps pick single blocks into or out of the
+    /// The selection mode's "One by one": taps pick single blocks into or out of the
     /// selection (PageController.toggleSelected) instead of moving its end. Off again when the
     /// selection mode ends.
     property bool pickMode: false
@@ -294,7 +294,7 @@ FocusScope {
     }
 
     // ---- Page properties (docs/UI.md "Page properties") ----------------------------------------------
-    /// The properties panel ("Właściwości") is expanded: a device setting in the app (PageView and
+    /// The properties panel ("Properties") is expanded: a device setting in the app (PageView and
     /// the journal days bind it to AppSettings.propertiesExpanded and store it when it is
     /// switched: propertiesExpandedToggled()), folded by default.
     property bool propertiesExpanded: false
@@ -322,7 +322,7 @@ FocusScope {
     function setPropertyTypeOverride(key: string, type: string): void {
         propertyTypeOverride = Js.withKey(propertyTypeOverride, key, type)
     }
-    /// "Dodaj właściwość" (Ctrl+;, the page menu, the palette): the add row of the shown block new
+    /// "Add property" (Ctrl+;, the page menu, the palette): the add row of the shown block new
     /// properties go to (zoomed out first), or — that block is not shown (a page without
     /// properties, a frontmatter holding only the note mode, also above shown `key::` lines) —
     /// the draft above the blocks.
@@ -495,7 +495,7 @@ FocusScope {
     Binding { target: editor.controller; property: "palette"; value: editor.rendererPalette; when: editor.controller !== null }
     Binding { target: editor.controller; property: "locale"; value: DatesHelper.locale; when: editor.controller !== null }
     // The fixed clock of screenshots and tests. Midnight itself: PageController follows the
-    // DayClock ("jutro 17:30" becomes "dziś 17:30", overdue dates turn red).
+    // DayClock ("tomorrow 17:30" becomes "today 17:30", overdue dates turn red).
     Binding { target: editor.controller; property: "now"; value: DatesHelper.fixedNow; when: editor.controller !== null }
 
     Accessible.role: Accessible.Pane
@@ -757,7 +757,7 @@ FocusScope {
     // ---- Copying links (docs/SYNTAX.md §2 "Copied links") -----------------------------------------
 
     /// Copy a link to `row` — kind "blockRef" ((id)), "blockLink" [[Page#^id]], "heading"
-    /// [[Page#Heading]], "embed", "page" [[Page]] (PageController.copyLink) — and say so: "Skopiowano
+    /// [[Page#Heading]], "embed", "page" [[Page]] (PageController.copyLink) — and say so: "Copied
     /// …", or why nothing was copied. True when copied.
     function copyLink(row: int, kind: string): bool {
         if (!controller)
@@ -875,7 +875,7 @@ FocusScope {
     /// embed, a rule, a bullet or number): Shift+click (`modifiers`, else the event's own:
     /// EditorInput.keyboardModifiers()) selects from the edited or selected block to it, Ctrl+click
     /// picks it into or out of the selection; in the touch selection mode a tap moves the
-    /// selection's end there (with "Pojedynczo": picks it). True when it was taken.
+    /// selection's end there (with "One by one": picks it). True when it was taken.
     function blockTapped(row: int): bool {
         return blockTappedWith(row, EditorInput.keyboardModifiers())
     }
@@ -909,7 +909,7 @@ FocusScope {
             controller.extendSelectionTo(row)
         return true
     }
-    /// Ctrl+click on `row` (a tap with "Pojedynczo"): that block with its children into the
+    /// Ctrl+click on `row` (a tap with "One by one"): that block with its children into the
     /// selection or out of it, the rest stays (gaps allowed); the block being edited joins it.
     function toggleBlock(row: int): void {
         if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.viewAt(row) === "frontmatter")
@@ -1057,9 +1057,9 @@ FocusScope {
         return true
     }
     /// Pictures from the internet a paste brought (PageController.pasteClipboard): a picture's
-    /// address alone (a browser's "Kopiuj adres obrazu") — "Zapisz w notatniku" makes it the
+    /// address alone (a browser's "Copy image address") — "Save to notebook" makes it the
     /// picture and stores it in the notebook (urlToPicture); pictures of pasted HTML — stored
-    /// on "Zapisz w notatniku" (downloadWebPictures). Offered on a toast; nothing is fetched before.
+    /// on "Save to notebook" (downloadWebPictures). Offered on a toast; nothing is fetched before.
     function offerPastedPictures(r: var): void {
         const ctl = controller
         if (!ctl || !r)
@@ -1265,13 +1265,13 @@ FocusScope {
             table.startCell(r, c)
     }
 
-    /// The toast after "/Tabela z CSV…" made a table (`truncated`: rows, columns or text left out).
+    /// The toast after "/Table from CSV…" made a table (`truncated`: rows, columns or text left out).
     function csvInserted(truncated: bool): void {
         if (truncated)
             notice(qsTr("The CSV was too large: the table holds its first rows and columns."), "info", null)
     }
     /// Show the filter row of the table in `row` with the keys in column `c`'s field (the block
-    /// menu's "Filtruj wiersze" / "Filtruj według tej kolumny…": once `menu` is gone).
+    /// menu's "Filter rows" / "Filter by this column…": once `menu` is gone).
     function openTableFilter(row: int, c: int, menu: T.Popup): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
@@ -1397,7 +1397,7 @@ FocusScope {
     }
 
     /// A new drawing at the caret `cursor` of `row` (-1: a block of its own after it), opened in the
-    /// drawing editor (Rysunek: the slash command, the touch toolbar, the block menu).
+    /// drawing editor (Drawing: the slash command, the touch toolbar, the block menu).
     function insertDrawing(row: int, cursor: int): void {
         if (!controller)
             return
@@ -2571,7 +2571,7 @@ FocusScope {
         if (!touch || !controller || row < 0 || controller.blocks.viewAt(row) === "frontmatter")
             return
         if (selectionMode && pickMode && controller.selectionCount > 0) {
-            // "Pojedynczo": a long press picks like a tap (its release is no tap).
+            // "One by one": a long press picks like a tap (its release is no tap).
             toggleBlock(row)
             drag.selected = true
             return
@@ -2736,14 +2736,14 @@ FocusScope {
 
     // ---- The block menu --------------------------------------------------------------------------
     /// BlockMenu for a block (made when first opened, one per editor; tests read it): a bullet's or
-    /// number's right-click / long press, a right-click on a block, the touch toolbar's "Więcej".
+    /// number's right-click / long press, a right-click on a block, the touch toolbar's "More".
     property BlockMenu blockMenu: null
     function openBlockMenu(row: int, item: Item, x: real, y: real): void {
         openCellBlockMenu(row, item, x, y, -2, 0, 0, 0, "")
     }
     /// openBlockMenu() from table cell (cellRow, cellColumn) — the header's: cellRow -1; -2: no
     /// cell — of a table of cellRows × cellColumns, the column aligned cellAlign: for the menu's
-    /// Wiersz and Kolumna submenus.
+    /// Row and Column submenus.
     function openCellBlockMenu(row: int, item: Item, x: real, y: real, cellRow: int, cellColumn: int, cellRows: int,
                                cellColumns: int, cellAlign: string): void {
         if (!controller || row < 0 || row >= controller.blocks.count)
@@ -2783,7 +2783,7 @@ FocusScope {
         mapPoint(null, list, sceneX, sceneY)
         openCellBlockMenu(row, list, mapped.x, mapped.y, cellRow, cellColumn, cellRows, cellColumns, cellAlign)
     }
-    /// The touch toolbar's "Więcej": the menu of the block being edited, right above the button.
+    /// The touch toolbar's "More": the menu of the block being edited, right above the button.
     /// The keyboard goes (the menu takes the keys, which hides it on Android anyway): the menu
     /// follows the toolbar down into the room it leaves (followToolbarWith), every item shown.
     function openBlockMenuAbove(row: int, item: Item): void {
@@ -2797,7 +2797,7 @@ FocusScope {
         followToolbarWith(blockMenu, item, y)
         DeviceInfo.hideInputMethod()
     }
-    /// The cell toolbar's "Więcej": the block menu of the table whose cell is being edited. A cell
+    /// The cell toolbar's "More": the block menu of the table whose cell is being edited. A cell
     /// is no block editor that could go on under the menu: its editing ends (its text kept, the
     /// keyboard hidden), the table is selected — the block the menu acts on, the current block of
     /// the palette's commands afterwards — and the menu opens at the table.
@@ -2860,7 +2860,7 @@ FocusScope {
         webPictureMenu.popup(item, x, y)
     }
     /// WebPictureViewer: a shown picture from the internet on its own (EmbedView: a click on it;
-    /// "Powiększ" in its menu). `picture` is its embed. Created when first opened.
+    /// "View picture" in its menu). `picture` is its embed. Created when first opened.
     property WebPictureViewer webPictureViewer: null
     property int webPictureViewerRow: -1
     function openWebPictureViewer(row: int, picture: var): void {
@@ -2963,7 +2963,7 @@ FocusScope {
     property string dateMenuRaw
     property int dateMenuTableRow: -1
     property int dateMenuColumn: -1
-    /// The mode a dialog opened from the menu ("Zmień…") applies its result in (tokenRun()).
+    /// The mode a dialog opened from the menu ("Change…") applies its result in (tokenRun()).
     property string tokenRunMode: ""
     /// The chip the menu is for (PageController.dateChip / tokenChipIn / tableCellChip).
     MapHolder {
@@ -3187,7 +3187,7 @@ FocusScope {
 
     // ---- The menu of a link: [[page]], #tag, ((block)), web address (LinkMenu) ------------------
     /// LinkMenu for a page:, tag:, block: or ext: link of rendered text — `fromPath`: the page the
-    /// link is written on ("" = this one) —; its Otwórz items do what a click does (in the side
+    /// link is written on ("" = this one) —; its Open items do what a click does (in the side
     /// panel with newPane): on the link in block `row` (requester null), else what `requester`
     /// does on linkMenuOpenRequested(requester, link, newPane) (a query result, an embed). Created
     /// when first opened. False when `link` is no such link.
@@ -3195,7 +3195,7 @@ FocusScope {
     property int linkMenuRow: -1
     property Item linkMenuRequester: null
     property string linkMenuLink
-    /// The menu is open for a link (its Otwórz items open it once).
+    /// The menu is open for a link (its Open items open it once).
     property bool linkMenuArmed: false
     signal linkMenuOpenRequested(Item requester, string link, bool newPane)
     /// What the menu is about (PageController.linkMenu).
@@ -3282,7 +3282,7 @@ FocusScope {
             break
         }
     }
-    /// Copy `text` and say so ("Skopiowano …", or that the clipboard is not available).
+    /// Copy `text` and say so ("Copied …", or that the clipboard is not available).
     function copyText(text: string): bool {
         if (!controller || text === "")
             return false
@@ -3331,7 +3331,7 @@ FocusScope {
                         && activeEditor.activeFocus
         taskMenuReturn = editing ? "edit" : list.activeFocus ? "list" : ""
         taskMenu.status = taskStatusOf(row)
-        // The timer and "Dodaj zależność…" for a task (docs/SYNTAX.md §5).
+        // The timer and "Add dependency…" for a task (docs/SYNTAX.md §5).
         taskMenu.showTaskTools = taskMenu.status !== ""
         if (taskMenu.showTaskTools) {
             taskInfo.map = controller.taskInfo(row)
@@ -3388,7 +3388,7 @@ FocusScope {
     }
 
     // ---- Menus above the docked toolbar ---------------------------------------------------------
-    /// A menu opened right above the docked toolbar (its Więcej, its task button held down), the
+    /// A menu opened right above the docked toolbar (its More, its task button held down), the
     /// toolbar's button it is above and its place there. Such a menu takes the keys, so the system
     /// hides the on-screen keyboard and the toolbar drops to the bottom (it stays docked while the
     /// editing goes on): the menu follows it — and gets the room the keyboard leaves, every item
@@ -3471,7 +3471,7 @@ FocusScope {
         const row = currentRow()
         return row >= 0 && taskStatusOf(row) !== "" ? row : -1
     }
-    /// The palette's "Licznik czasu zadania": the current task's timer.
+    /// The palette's "Start or stop task timer": the current task's timer.
     function toggleCurrentTaskClock(): void {
         const row = currentTaskRow()
         if (row < 0) {
@@ -3480,7 +3480,7 @@ FocusScope {
         }
         toggleTaskClock(row)
     }
-    /// "Dodaj zależność…": the picker for the task at `row`.
+    /// "Add dependency…": the picker for the task at `row`.
     property TaskDependencyDialog dependencyDialog: null
     property int dependencyBlock: -1
     function openDependencyPicker(row: int): void {
@@ -3611,10 +3611,10 @@ FocusScope {
     }
 
     // ---- The edited text's menu (desktop right-click) -------------------------------------------------
-    /// Wytnij, Kopiuj, Wklej, Zaznacz wszystko for the text of the block being edited: a right-click
+    /// Cut, Copy, Paste, Select all for the text of the block being edited: a right-click
     /// in it with a mouse, touchpad or stylus (a bare TextEdit has no menu of its own; touch UIs have
     /// the system's selection handles and popup). On a word marked as misspelled (SpellCheck,
-    /// docs/UI.md "Spell checking") its corrections come first, then Dodaj do słownika and Ignoruj;
+    /// docs/UI.md "Spell checking") its corrections come first, then Add to dictionary and Ignore;
     /// on touch UIs a tap on such a word opens only those (openSpellingMenu). Made when first opened.
     property BMenu textMenu: null
     property InlineEditor textMenuEdit: null
@@ -3827,14 +3827,14 @@ FocusScope {
     }
 
     // ---- Coloured highlights (docs/UI.md "Coloured highlights") ---------------------------------
-    /// The colours of "Zakreśl": the edited text's menu ("Zakreśl…"), the touch toolbar's button.
+    /// The colours of "Highlight": the edited text's menu ("Highlight…"), the touch toolbar's button.
     /// A colour highlights the selection (or recolours the highlight around it; `==…==` for the
-    /// default colour, Highlightr's `<mark style="background: …;">` for the others), "Usuń
-    /// zakreślenie" removes the highlight around the caret — PageController.setHighlight, one undo
+    /// default colour, Highlightr's `<mark style="background: …;">` for the others), "Remove
+    /// highlight" removes the highlight around the caret — PageController.setHighlight, one undo
     /// step; the highlighted text stays selected. Made when first opened.
     property BMenu highlightMenu: null
     property InlineEditor highlightMenuEdit: null
-    /// The text menu's "Zakreśl…" and "Blok…" open their menus once it is closed: at the caret of
+    /// The text menu's "Highlight…" and "Block…" open their menus once it is closed: at the caret of
     /// `edit` (`highlight`: the colours, else the block menu).
     Later {
         id: menuLater
@@ -3914,7 +3914,7 @@ FocusScope {
         highlightMenu.bottomMargin = menuBottomMargin()
         highlightMenu.popup(item, x, y)
     }
-    /// The touch toolbar's "Zakreśl": the colours above the bar.
+    /// The touch toolbar's "Highlight": the colours above the bar.
     function openHighlightMenuAbove(edit: InlineEditor, item: Item): void {
         if (!edit || !controller)
             return

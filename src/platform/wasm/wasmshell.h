@@ -55,7 +55,8 @@ struct BrowserViewport {
 /// put (the last call: `settled`). The page asks the browser to shrink itself for the on-screen
 /// keyboard (interactive-widget=resizes-content, wasm/index.html); browsers that ignore it (iOS
 /// Safari, older ones) shrink only the visual viewport, and a page iOS scrolled is put back at the
-/// top. Without visualViewport (old browsers) nothing is reported. docs/WEB.md "Klawiatura ekranowa".
+/// top. Without visualViewport (old browsers) nothing is reported. docs/WEB.md "On-screen keyboard
+/// (phone)".
 void watchVisualViewport(std::function<void(const BrowserViewport &viewport)> callback);
 
 /// Remembers the UI language ("en" or "pl") in the page's localStorage ("brulion.language"), so

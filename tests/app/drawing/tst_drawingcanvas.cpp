@@ -3910,7 +3910,7 @@ private Q_SLOTS:
 
     void replacedBackdropsAreNotKept()
     {
-        // "Inna strona PDF…" eight times on a dark tablet: only the shown backdrop's raster and its
+        // "Another PDF page…" eight times on a dark tablet: only the shown backdrop's raster and its
         // dark twin stay decoded (each 2400 × 1350 one is ≈ 13 MB); undo decodes the old one again.
         canvas->setTheme(u"dark"_s);
         const QList<QColor> colors{QColor(u"#ff0000"_s), QColor(u"#2f6fdd"_s), QColor(u"#2b8a3e"_s),

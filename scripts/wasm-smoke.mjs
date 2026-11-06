@@ -35,7 +35,7 @@
 // scrolled.
 // --two-tabs opens a second tab,
 // which must wait ("open in another tab") until the first one leaves the app. --share checks the
-// share target (docs/WEB.md "Udostępnianie do Brulionu"): the manifest offers it (GET ./ with
+// share target (docs/WEB.md "Sharing to Brulion"): the manifest offers it (GET ./ with
 // share-title, share-text and share-url, no errors), a launch with a shared title and text
 // (?selftest=share: the app publishes the share dialog's data; a notebook with today's journal
 // written into IndexedDB as for --copy) opens the share dialog with
@@ -67,8 +67,9 @@
 // IndexedDB the same way and copies blocks with real input: a click on the first block's text,
 // Escape (the block selected), Shift+Down (the next one with its child), Ctrl+C — the browser's
 // clipboard (navigator.clipboard, permission granted) must then hold their Markdown as text/plain
-// and Brulion's HTML as text/html (docs/WEB.md "Schowek"). --loader-screenshot throttles the
-// first download and captures the loading screen. Exit code 0 = all checks passed.
+// and Brulion's HTML as text/html (docs/WEB.md "Technical limitations", "Clipboard").
+// --loader-screenshot throttles the first download and captures the loading screen. Exit code 0 =
+// all checks passed.
 //
 // Chromium: $CHROME or chromium/chromium-browser/google-chrome on PATH. WebGL 2 comes from
 // SwiftShader (software). Set BRULION_CHROME_NO_SANDBOX=1 (or CI=true) where the sandbox
@@ -704,9 +705,10 @@ async function main() {
   }
 
   if (args.keyboardPhone) {
-    // The phone's keyboard (docs/WEB.md "Klawiatura ekranowa"): the stubbed visualViewport for a
-    // keyboard that only shrinks the visual viewport (resizes-visual: iOS Safari, ?keyboard=visual),
-    // the emulated screen made lower for a page the browser shrank itself (resizes-content).
+    // The phone's keyboard (docs/WEB.md "On-screen keyboard (phone)"): the stubbed visualViewport
+    // for a keyboard that only shrinks the visual viewport (resizes-visual: iOS Safari,
+    // ?keyboard=visual), the emulated screen made lower for a page the browser shrank itself
+    // (resizes-content).
     const keyboardState = () => evaluate('window.brulionKeyboardSelfTest ?? null');
     const waitKeyboard = async (pred, seconds = 15) => {
       let k;

@@ -7,6 +7,6 @@ Brulion keeps your notes as plain Markdown files in a folder you choose. Write t
 • Drawings in notes, with pressure-sensitive stylus support
 • Sync through Syncthing (a plain folder) or Nextcloud (WebDAV)
 • Home screen widgets and "Share → Brulion"
-• Interface in Polish and English
+• Interface in English and Polish
 
 A Syncthing folder on the shared storage needs the "All files access" permission; a notebook in the app's private folder synced with Nextcloud needs none.

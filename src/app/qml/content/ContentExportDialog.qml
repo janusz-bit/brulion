@@ -4,16 +4,16 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ContentExportDialog — "Eksportuj stronę" (the page's menu, the palette's "Eksportuj stronę…" and
-// "Drukuj stronę…"): one page in a format that makes sense for one page — Markdown (the file as
+// ContentExportDialog — "Export page" (the page's menu, the palette's "Export page…" and
+// "Print page…"): one page in a format that makes sense for one page — Markdown (the file as
 // it is), Markdown with its attachments (ZIP), one HTML file with the pictures inside, PDF, Word
 // (DOCX: both made by Brulion itself, also on the phone) or Pandoc Markdown — copied to the
 // clipboard (Markdown, HTML), saved (desktop and Android: the system's save dialog; Android also
-// "Zapisz w Pobranych"; the browser: its save picker or a download) or printed (desktop: the
+// "Save to Downloads"; the browser: its save picker or a download) or printed (desktop: the
 // system's print dialog; Android: the system's print service; the browser: its print dialog).
 // The file is made by an ExportController of the page (scope "page": the attachments it links
 // to come along) in the background; folders, the whole notebook and the other formats are in
-// Import and export ("Więcej opcji eksportu…").
+// Import and export ("More export options…").
 //
 //   ContentExportDialog { id: exportDialog; tools: tools }
 //   exportDialog.openFor(page.path)          // the formats
@@ -31,7 +31,7 @@ BDialog {
         { value: "link", text: qsTr("Keep addresses"), icon: Theme.compact ? "" : "link" },
         { value: "include", text: qsTr("Include copies"), icon: Theme.compact ? "" : "image" }
     ]
-    /// The route "Więcej opcji eksportu…" opens.
+    /// The route "More export options…" opens.
     property var _preset: ({})
 
     readonly property list<var> formats: [

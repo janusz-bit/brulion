@@ -2,7 +2,7 @@
 // mount in an IndexedDB database named by its path (version 21, object store FILE_DATA keyed by
 // the absolute path, index "timestamp"; files {timestamp, mode: 33188, contents: Uint8Array},
 // folders {timestamp, mode: 16877}) — the same format as scripts/wasm-smoke.mjs (seedVaultScript)
-// and docs/WEB.md "Dane w przeglądarce". Written from a page of the site's origin before the app
+// and docs/WEB.md "Data in the browser". Written from a page of the site's origin before the app
 // starts there (src/platform/wasm/wasmstorage.h: the notebook and the app's data are mounts).
 
 export const VAULT = '/home/web_user/Brulion';

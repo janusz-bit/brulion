@@ -1,379 +1,380 @@
-# Brulion na Windows (wersja testowa)
+# Brulion on Windows (test version)
 
-Od wersji 0.4.5 Brulion ma **testową** wersję na Windows 10 i 11 (x86_64): ten sam program co na
-Linuksie (C++20 + Qt 6.11.2, Qt Quick), zbudowany kompilatorem MSVC 2022. Jest w każdym wydaniu
-w dwóch postaciach:
+Since version 0.4.5 Brulion has a **test version** for Windows 10 and 11 (x86_64): the same program as on
+Linux (C++20 + Qt 6.11.2, Qt Quick), built with the MSVC 2022 compiler. It is in every release
+in two forms:
 
-| Plik | Co to jest |
+| File | What it is |
 |---|---|
-| `Brulion-<wersja>-windows-x86_64-setup.exe` | instalator (Inno Setup) — instalacja dla bieżącego użytkownika, bez uprawnień administratora |
-| `brulion-<wersja>-windows-x86_64.zip` | wersja przenośna — folder `Brulion` z `brulion.exe`, `brulion-cli.exe`, bibliotekami Qt i środowiskiem MSVC |
+| `Brulion-<version>-windows-x86_64-setup.exe` | installer (Inno Setup) — installs for the current user, without administrator rights |
+| `brulion-<version>-windows-x86_64.zip` | portable version — a `Brulion` folder with `brulion.exe`, `brulion-cli.exe`, the Qt libraries and the MSVC runtime |
 
-„Testowa” znaczy: buduje się i przechodzi testy w CI, ale nie była jeszcze długo używana na co dzień,
-pliki nie są podpisane i ma ograniczenia opisane niżej. Od wersji 0.5.0 przypomnienia i alarmy są
-natywnymi powiadomieniami Windows z przyciskami, a Brulion może się uruchamiać po zalogowaniu. Błędy zgłaszaj w
-[issues](https://github.com/janusz-bit/brulion/issues) (z rejestrem zdarzeń — README, „Gdy coś nie
-działa”).
+"Test version" means: it builds and passes the tests in CI, but it has not yet been used day to day for long,
+the files are not signed, and it has the limitations described below. Since version 0.5.0 reminders and alarms are
+native Windows notifications with buttons, and Brulion can start when you sign in. Report bugs in the
+[issues](https://github.com/janusz-bit/brulion/issues) with the event log (*Settings → Application →
+Event log*; how to send it: the README's Polish section
+["Gdy coś nie działa"](../README.md#gdy-coś-nie-działa--rejestr-zdarzeń), "Troubleshooting").
 
-## Instalacja
+## Installation
 
-* **Instalator:** uruchom `Brulion-<wersja>-windows-x86_64-setup.exe`. Program trafia do
-  `%LOCALAPPDATA%\Programs\Brulion`, skrót do menu Start, ikona na pulpicie na życzenie (zadanie
-  „Utwórz ikonę na pulpicie”) i — tylko przy pierwszej instalacji, zaznaczone — „Uruchamiaj Brulion
-  po zalogowaniu” (niżej, „Autostart”). Brulion pojawia się też w **Otwórz za pomocą** dla plików
-  `.md`, `.markdown` i `.txt`, bez zmiany programu domyślnego (niżej, „Otwórz za pomocą”). Język
-  instalatora: polski albo angielski (według systemu).
-  Nowa wersja instaluje się na poprzednią (ten sam `AppId`); uruchomiony Brulion zostanie poproszony
-  o zamknięcie.
-* **SmartScreen:** pliki nie są podpisane certyfikatem, więc Windows ostrzega przy pierwszym
-  uruchomieniu: „System Windows ochronił ten komputer” → **Więcej informacji** → **Uruchom mimo to**.
-  Sumy SHA-256 są w `SHA256SUMS.txt` wydania.
-* **Wersja przenośna:** rozpakuj ZIP w dowolnym miejscu i uruchom `Brulion\brulion.exe`. Nic się
-  nie instaluje; notatki i ustawienia są w tych samych miejscach co przy instalatorze (niżej), nie
-  w folderze programu.
-* **Odinstalowanie:** Ustawienia → Aplikacje → Brulion → Odinstaluj (albo `unins000.exe` w folderze
-  programu). Usuwa tylko pliki programu, skróty, wpis autostartu tej instalacji, rejestrację
-  powiadomień i „Otwórz za pomocą” — **notatki, ustawienia i rejestr zdarzeń zostają**.
-* Instalacja bez okien (np. skrypt): `Brulion-<wersja>-windows-x86_64-setup.exe /VERYSILENT
-  /SUPPRESSMSGBOXES /CURRENTUSER` (z autostartem: `/TASKS=autostart`, bez: `/TASKS=""`),
-  odinstalowanie: `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES`. Administrator może zainstalować dla
-  wszystkich (`/ALLUSERS`, do `C:\Program Files\Brulion`; „Otwórz za pomocą” wtedy dla wszystkich);
-  autostart i rejestracja powiadomień są wtedy i tak wpisami użytkownika, który instaluje (każdy
-  inny włącza autostart w ustawieniach).
+* **Installer:** run `Brulion-<version>-windows-x86_64-setup.exe`. The program goes to
+  `%LOCALAPPDATA%\Programs\Brulion`, a shortcut to the Start menu, a desktop icon on request (the
+  "Create a desktop shortcut" task) and — only on the first install, checked — "Start Brulion
+  when I sign in" (below, "Autostart"). Brulion also appears in **Open with** for
+  `.md`, `.markdown` and `.txt` files, without changing the default program (below, "Open with"). The installer's
+  language: Polish or English (according to the system).
+  A new version installs over the previous one (the same `AppId`); a running Brulion is asked
+  to close.
+* **SmartScreen:** the files are not signed with a certificate, so Windows warns on the first
+  run: "Windows protected your PC" → **More info** → **Run anyway**.
+  The SHA-256 sums are in the release's `SHA256SUMS.txt`.
+* **Portable version:** unpack the ZIP anywhere and run `Brulion\brulion.exe`. Nothing
+  is installed; notes and settings are in the same places as with the installer (below), not
+  in the program folder.
+* **Uninstalling:** Settings → Apps → Brulion → Uninstall (or `unins000.exe` in the program
+  folder). It removes only the program files, the shortcuts, this installation's autostart entry, the notification
+  registration and "Open with" — **notes, settings and the event log stay**.
+* Installing without windows (e.g. a script): `Brulion-<version>-windows-x86_64-setup.exe /VERYSILENT
+  /SUPPRESSMSGBOXES /CURRENTUSER` (with autostart: `/TASKS=autostart`, without: `/TASKS=""`),
+  uninstalling: `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES`. An administrator can install for
+  everyone (`/ALLUSERS`, to `C:\Program Files\Brulion`; "Open with" then for everyone);
+  autostart and the notification registration are still entries of the user who installs (every
+  other user turns autostart on in the settings).
 
-## Gdzie są dane
+## Where the data lives
 
-Ścieżki z `QStandardPaths` i `QSettings` (organizacja i aplikacja „Brulion”):
+Paths from `QStandardPaths` and `QSettings` (organization and application "Brulion"):
 
-| Co | Gdzie |
+| What | Where |
 |---|---|
-| Notatki (domyślny nowy notatnik) | `Dokumenty\Brulion` — albo dowolny wybrany folder (np. folder Syncthing) |
-| Ustawienia (lista notatników, język, motyw…) | `%APPDATA%\Brulion\Brulion.ini` |
-| Dane aplikacji: przykładowy notatnik, „Dokumentacja Brulionu”, historia wersji i stan urządzenia notatników, hasła Nextcloud | `%APPDATA%\Brulion\Brulion\` |
-| Rejestr zdarzeń (`brulion.log`) | `%LOCALAPPDATA%\Brulion\Brulion\State\logs\` |
-| Pamięć podręczna (obrazy z internetu) | `%LOCALAPPDATA%\Brulion\Brulion\cache\` |
-| Program (instalator) | `%LOCALAPPDATA%\Programs\Brulion\` |
-| Jedna kopia programu (single instance) | potok nazwany `\\.\pipe\<%TEMP%>/brulion-<skrót>` i plik blokady `%TEMP%\brulion-<skrót>.lock` |
-| Rejestracja powiadomień (nazwa i ikona toastów) | rejestr: `HKCU\Software\Classes\AppUserModelId\JanuszBit.Brulion` (`DisplayName`, `IconUri` → `brulion.ico` obok programu) |
-| Autostart | rejestr: wartość `Brulion` w `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; wyłączenie w Menedżerze zadań: `…\Explorer\StartupApproved\Run\Brulion` |
-| „Otwórz za pomocą” (instalator) | rejestr: `HKCU\Software\Classes\JanuszBit.Brulion.Note`, wartości `JanuszBit.Brulion.Note` w `…\Classes\.md`, `.markdown`, `.txt` `\OpenWithProgids`, `…\Classes\Applications\brulion.exe` (niżej, „Otwórz za pomocą”) |
+| Notes (the default new notebook) | `Documents\Brulion` — or any chosen folder (e.g. a Syncthing folder) |
+| Settings (list of notebooks, language, theme…) | `%APPDATA%\Brulion\Brulion.ini` |
+| App data: the sample notebook ("Sample notebook" / "Przykładowy brulion" — the folder name follows the language), the documentation ("Brulion Documentation" / "Dokumentacja Brulionu"), version history and the notebooks' device state, Nextcloud passwords | `%APPDATA%\Brulion\Brulion\` |
+| Event log (`brulion.log`) | `%LOCALAPPDATA%\Brulion\Brulion\State\logs\` |
+| Cache (pictures from the internet) | `%LOCALAPPDATA%\Brulion\Brulion\cache\` |
+| Program (installer) | `%LOCALAPPDATA%\Programs\Brulion\` |
+| Single instance | named pipe `\\.\pipe\<%TEMP%>/brulion-<hash>` and lock file `%TEMP%\brulion-<hash>.lock` |
+| Notification registration (toast name and icon) | registry: `HKCU\Software\Classes\AppUserModelId\JanuszBit.Brulion` (`DisplayName`, `IconUri` → `brulion.ico` next to the program) |
+| Autostart | registry: value `Brulion` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; disabled in Task Manager: `…\Explorer\StartupApproved\Run\Brulion` |
+| "Open with" (installer) | registry: `HKCU\Software\Classes\JanuszBit.Brulion.Note`, `JanuszBit.Brulion.Note` values in `…\Classes\.md`, `.markdown`, `.txt` `\OpenWithProgids`, `…\Classes\Applications\brulion.exe` (below, "Open with") |
 
-`%APPDATA%` to zwykle `C:\Users\<użytkownik>\AppData\Roaming`, `%LOCALAPPDATA%` —
+`%APPDATA%` is usually `C:\Users\<user>\AppData\Roaming`, `%LOCALAPPDATA%` —
 `…\AppData\Local`, `%TEMP%` — `…\AppData\Local\Temp`.
 
-**Osobny profil:** zmienna środowiskowa `BRULION_PROFILE=<nazwa>` (litery, cyfry, `-`, `_`, do 32
-znaków) zamienia organizację „Brulion” na „Brulion-<nazwa>” — ustawienia, dane, rejestr i gniazdo
-jednej kopii są wtedy osobne (`%APPDATA%\Brulion-<nazwa>\…`). Tak samo dla `brulion.exe`
-i `brulion-cli.exe`. Służy testom (na Windows zmienne `XDG_*` z testów linuksowych nic nie
-zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa też na Linuksie.
+**Separate profile:** the environment variable `BRULION_PROFILE=<name>` (letters, digits, `-`, `_`, up to 32
+characters) replaces the organization "Brulion" with "Brulion-<name>" — settings, data, the log and the
+single-instance socket are then separate (`%APPDATA%\Brulion-<name>\…`). The same for `brulion.exe`
+and `brulion-cli.exe`. It is meant for tests (on Windows the `XDG_*` variables from the Linux tests change
+nothing) and for trying something out without touching your own profile; it also works on Linux.
 
-## Otwórz za pomocą
+## Open with
 
-Instalator dodaje Brulion do **Otwórz za pomocą** dla plików `.md`, `.markdown` i `.txt`: prawy
-przycisk na pliku w Eksploratorze → **Otwórz za pomocą** → **Brulion** (albo **Wybierz inną
-aplikację**, jeśli go tam jeszcze nie ma). Otwiera się okno **Zapisz w Brulionie** — to samo co
-„Udostępnij → Brulion” na Androidzie: plik trafia do **dzisiejszego dziennika** (jako blok) albo
-jako **nowa strona** (tytuł z nazwy pliku, treść bez zmian). Brulion zapisuje **kopię** w otwartym
-notatniku, a sam plik zostaje na miejscu, nietknięty; **Anuluj** niczego nie zapisuje. Plik, który
-już jest stroną otwartego notatnika, po prostu się otwiera. Kilka zaznaczonych plików trafia do
-jednego okna (Windows uruchamia Brulion osobno dla każdego pliku, a działająca kopia je zbiera).
+The installer adds Brulion to **Open with** for `.md`, `.markdown` and `.txt` files: right-click
+a file in Explorer → **Open with** → **Brulion** (or **Choose another
+app** if it is not there yet). The **Save to Brulion** dialog opens — the same as
+"Share → Brulion" on Android: the file goes into **today's journal** (as a block) or
+as a **new page** (title from the file name, content unchanged). Brulion saves a **copy** in the open
+notebook, and the file itself stays where it is, untouched; **Cancel** saves nothing. A file that
+already is a page of the open notebook simply opens. Several selected files go into
+one dialog (Windows starts Brulion separately for each file, and the running instance collects them).
 
-* **Program domyślny się nie zmienia.** Instalator tylko proponuje Brulion: nie zapisuje
-  domyślnego programu typu ani wyboru użytkownika (`UserChoice`). Po instalacji Windows może raz
-  zapytać, jak otwierać pliki `.txt` — wybierz dotychczasowy program (np. **Notatnik**), a wszystko
-  zostanie jak było. Brulion jako domyślny ustawisz sam: **Otwórz za pomocą → Wybierz inną
-  aplikację → Brulion → Zawsze**.
-* **Wersja przenośna (ZIP)** niczego nie rejestruje: tam zostaje **Wybierz inną aplikację →
-  Wybierz aplikację na tym komputerze** i `brulion.exe` (Windows wywoła go wtedy bez `--open`, więc
-  Brulion tylko się otworzy) — albo instalator.
-* Bez otwartego notatnika (pierwsze uruchomienie) Brulion najpierw prosi o otwarcie albo
-  utworzenie notatnika; plik czeka.
+* **The default program does not change.** The installer only offers Brulion: it does not write
+  the type's default program or the user's choice (`UserChoice`). After installation Windows may ask once
+  how to open `.txt` files — pick the program you used so far (e.g. **Notepad**), and everything
+  stays as it was. You make Brulion the default yourself: **Open with → Choose another
+  app → Brulion → Always**.
+* **The portable version (ZIP)** registers nothing: there you have **Choose another app →
+  Choose an app on your PC** and `brulion.exe` (Windows then runs it without `--open`, so
+  Brulion only opens) — or the installer.
+* Without an open notebook (first start) Brulion first asks to open or
+  create a notebook; the file waits.
 
-Co zapisuje instalator (dla bieżącego użytkownika w `HKCU\Software\Classes`, z `/ALLUSERS`
-w `HKLM\Software\Classes`; odinstalowanie usuwa dokładnie to):
+What the installer writes (for the current user in `HKCU\Software\Classes`, with `/ALLUSERS`
+in `HKLM\Software\Classes`; uninstalling removes exactly this):
 
-| Klucz | Zawartość |
+| Key | Contents |
 |---|---|
-| `JanuszBit.Brulion.Note` | typ „Notatka (Brulion)”: ikona i polecenie `"…\brulion.exe" --open "%1"` |
-| `.md\OpenWithProgids`, `.markdown\OpenWithProgids`, `.txt\OpenWithProgids` | wartość `JanuszBit.Brulion.Note` (pusta) — Brulion na liście „Otwórz za pomocą” |
-| `Applications\brulion.exe` | `FriendlyAppName` „Brulion”, `SupportedTypes` (`.md`, `.markdown`, `.txt`), to samo polecenie |
+| `JanuszBit.Brulion.Note` | type "Note (Brulion)": icon and the command `"…\brulion.exe" --open "%1"` |
+| `.md\OpenWithProgids`, `.markdown\OpenWithProgids`, `.txt\OpenWithProgids` | value `JanuszBit.Brulion.Note` (empty) — Brulion in the "Open with" list |
+| `Applications\brulion.exe` | `FriendlyAppName` "Brulion", `SupportedTypes` (`.md`, `.markdown`, `.txt`), the same command |
 
-`--open` w wierszu poleceń: `brulion.exe --open "C:\ścieżka\notatka.md" …` — wszystko po `--open`
-to pliki (także nazwa zaczynająca się od `-`); ścieżki względne liczą się od bieżącego folderu.
+`--open` on the command line: `brulion.exe --open "C:\ścieżka\notatka.md" …` — everything after `--open`
+is files (also a name starting with `-`); relative paths are resolved from the current folder.
 
-## Powiadomienia
+## Notifications
 
-Przypomnienia ⏰ i alarmy ⏰! są powiadomieniami Windows (toastami; `src/app/notify/windowstoastbus.h`,
-C++/WinRT, Windows 10 1809 lub nowszy):
+Reminders ⏰ and alarms ⏰! are Windows notifications (toasts; `src/app/notify/windowstoastbus.h`,
+C++/WinRT, Windows 10 1809 or newer):
 
-* **Przypomnienie** pokazuje tekst przypomnienia, pod nim stronę i termin, z przyciskami
-  **„Drzemka 10 min”** (długość z Ustawień → Przypomnienia), przy zadaniu **„Zrobione”** (zadanie
-  oznaczone jako zrobione, `[x]` z `✅`, bez otwierania notatki) i **„OK”**. Kliknięcie w powiadomienie
-  otwiera notatkę na tej linii i wyciąga okno Brulionu na wierzch. Na ekranie zostaje ok. 25 s,
-  potem czeka w Centrum akcji (tam też działa, dopóki Brulion jest uruchomiony).
-* **Alarm** (scenariusz „alarm” Windows) zostaje na ekranie, aż odpowiesz, a jego dźwięk się
-  powtarza przez czas dzwonienia alarmu (domyślnie 10 min); potem powiadomienie zostaje, już
-  ciche — jak na Linuksie. Zapętlony dźwięk (Alarm 1–10, Połączenie 1–10, domyślny dźwięk alarmu)
-  gra samo powiadomienie; krótki dźwięk (np. Poczta) Brulion odtwarza ponownie co 30 s, pokazując
-  powiadomienie jeszcze raz.
-* **Dźwięki** (Ustawienia → Przypomnienia): „Domyślny” to dźwięk powiadomień Windows (alarm:
-  zapętlony dźwięk alarmu Windows), „Dzwonek” — jeden z dźwięków powiadomień Windows (Powiadomienie,
-  Wiadomość błyskawiczna, Poczta, Przypomnienie, SMS, Alarm 1–10, Połączenie 1–10), „Cisza” — bez
-  dźwięku. Własnych plików dźwiękowych powiadomienia programu bez pakietu MSIX odtwarzać nie mogą
-  (pozycja „Plik dźwiękowy…” jest wyłączona; plik wybrany na Linuksie gra jako dźwięk domyślny).
-  „Odtwórz próbkę” pokazuje krótkie powiadomienie z wybranym dźwiękiem.
-* Nazwę i ikonę powiadomień daje rejestracja `JanuszBit.Brulion` (AppUserModelID), którą Brulion
-  zapisuje przy każdym starcie (`src/platform/appidentity.h`) — także wersja przenośna, bez skrótu
-  w menu Start; skrót instalatora ma ten sam identyfikator (grupowanie na pasku zadań).
-* Przy „Zakończ” Brulion usuwa swoje powiadomienia z Centrum akcji: kliknięcie w nie nie miałoby już
-  dokąd trafić. Przypomnienia, które minęły przy zamkniętym programie, czekają w dzienniku
-  (i wracają przy następnym starcie).
-* **Wyłączone powiadomienia:** gdy w Ustawieniach Windows → System → Powiadomienia Brulion (albo
-  wszystkie powiadomienia) jest wyłączony, przypomnienia pokazuje dymek ikony w zasobniku, jak
-  wcześniej — bez przycisków. Tak samo, gdy identyfikator `JanuszBit.Brulion` nie jest
-  zarejestrowany (wtedy Windows przyjąłby powiadomienie i go nie pokazał). Zanim Brulion pokaże
-  pierwsze powiadomienie, Windows nie zna jeszcze jego ustawienia — liczy się to jako włączone. **„Nie przeszkadzać” / Asystent skupienia** chowa powiadomienia od
-  razu do Centrum akcji bez dźwięku; alarmy przebiją się tylko wtedy, gdy Brulion jest na liście
-  priorytetowej.
-* Przypomnienia odlicza uruchomiony Brulion — zamknięcie okna zostawia go w zasobniku (ustawienie
-  „Działaj dalej w zasobniku systemowym”, domyślnie włączone; „Zakończ” w menu ikony go zamyka).
+* **A reminder** shows the reminder text, below it the page and the time, with the buttons
+  **"Snooze 10 min"** (length from Settings → Reminders), for a task **"Done"** (the task
+  marked as done, `[x]` with `✅`, without opening the note) and **"OK"**. Clicking the notification
+  opens the note at that line and brings the Brulion window to the front. It stays on screen for about 25 s,
+  then waits in the Action Center (where it also works as long as Brulion is running).
+* **An alarm** (the Windows "alarm" scenario) stays on screen until you respond, and its sound
+  repeats for the alarm's ringing time (10 min by default); then the notification stays, now
+  silent — as on Linux. A looping sound (Alarm 1–10, Call 1–10, the default alarm sound)
+  is played by the notification itself; a short sound (e.g. Mail) Brulion plays again every 30 s by showing
+  the notification once more.
+* **Sounds** (Settings → Reminders): "Default" is the Windows notification sound (alarm:
+  the looping Windows alarm sound), "Ringtone" — one of the Windows notification sounds (Notification,
+  Instant message, Mail, Reminder, Text message, Alarm 1–10, Call 1–10), "Silent" — no
+  sound. Notifications of a program without an MSIX package cannot play their own sound files
+  (the "Sound file…" item is disabled; a file chosen on Linux plays as the default sound).
+  "Play sample" shows a short notification with the chosen sound.
+* The notifications' name and icon come from the `JanuszBit.Brulion` registration (AppUserModelID), which Brulion
+  writes on every start (`src/platform/appidentity.h`) — the portable version too, without a shortcut
+  in the Start menu; the installer's shortcut has the same identifier (grouping on the taskbar).
+* On "Quit" Brulion removes its notifications from the Action Center: clicking them would have
+  nowhere to go any more. Reminders that passed while the program was closed wait in the journal
+  (and come back on the next start).
+* **Notifications turned off:** when Brulion (or all notifications) is turned off in Windows Settings → System → Notifications,
+  reminders are shown by a balloon of the tray icon, as
+  before — without buttons. The same when the identifier `JanuszBit.Brulion` is not
+  registered (then Windows would accept the notification and not show it). Before Brulion shows
+  its first notification, Windows does not know its setting yet — this counts as on. **"Do not disturb" / Focus assist** sends notifications
+  straight to the Action Center without sound; alarms break through only when Brulion is on the priority
+  list.
+* Reminders are counted down by the running Brulion — closing the window leaves it in the tray (the
+  "Keep running in the system tray" setting, on by default; "Quit" in the icon's menu closes it).
 
 ## Autostart
 
-**Ustawienia → Aplikacja → „Uruchamiaj po zalogowaniu”** (albo zadanie instalatora): Windows
-uruchamia Brulion po zalogowaniu ukryty w zasobniku (`brulion.exe --hidden`), więc przypomnienia
-dzwonią od początku sesji. To wartość `Brulion` klucza
+**Settings → Application → "Start when you sign in"** (or the installer task): Windows
+starts Brulion after sign-in hidden in the tray (`brulion.exe --hidden`), so reminders
+ring from the start of the session. It is the `Brulion` value of the key
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (`src/platform/autostart.h`):
 
-* Widać ją w **Menedżerze zadań → Aplikacje autostartu**; wyłączona tam pokazuje się w Brulionie
-  jako wyłączona, a włączona ponownie w Brulionie znosi wyłączenie z Menedżera zadań.
-* Gdy Brulion już działa, uruchomienie z `--hidden` nie pokazuje okna (druga kopia tylko się kończy).
-* **Wersja przenośna:** wpis wskazuje ten `brulion.exe`, z którego go włączono. Gdy folder
-  przeniesiesz, przy następnym ręcznym starcie wpis sam wskaże nowe miejsce (o ile pod starą
-  ścieżką nie ma już programu — wpisu innej, istniejącej kopii Brulion nie rusza).
-* Z osobnym profilem (`BRULION_PROFILE`) przełącznik jest wyłączony: wpis autostartu nie ustawi
-  zmiennej środowiskowej, więc uruchomiłby profil domyślny.
-* Zadanie instalatora jest tylko przy pierwszej instalacji: aktualizacja zostawia autostart taki,
-  jak go ustawiono w Brulionie albo w Menedżerze zadań.
-* Odinstalowanie usuwa wpis, gdy wskazuje tę instalację.
+* It is visible in **Task Manager → Startup apps**; disabled there, it shows in Brulion
+  as off, and turned on again in Brulion it lifts the Task Manager's disabling.
+* When Brulion is already running, starting it with `--hidden` does not show a window (the second instance just exits).
+* **Portable version:** the entry points to the `brulion.exe` from which it was turned on. If you move the folder,
+  on the next manual start the entry points to the new place by itself (provided there is no program at the old
+  path any more — Brulion does not touch the entry of another, existing copy).
+* With a separate profile (`BRULION_PROFILE`) the switch is disabled: the autostart entry cannot set
+  the environment variable, so it would start the default profile.
+* The installer task exists only on the first install: an update leaves autostart as
+  it was set in Brulion or in Task Manager.
+* Uninstalling removes the entry when it points to this installation.
 
-## Kalendarz z zasobnika
+## Tray calendar
 
-Kliknięcie ikony Brulionu w zasobniku systemowym (obok zegara) otwiera **kalendarz**, podobny do
-tego, który Windows 7 i 10 pokazują po kliknięciu zegara (`ShellTrayCalendar.qml`):
+Clicking Brulion's icon in the system tray (next to the clock) opens a **calendar**, similar to
+the one Windows 7 and 10 show when you click the clock (`ShellTrayCalendar.qml`):
 
-* małe okno tuż nad ikoną (przy pasku zadań u góry albo z boku — przy tej krawędzi), zawsze na
-  wierzchu, bez przycisku na pasku zadań: dzisiejsza data, miesiąc z kropkami w dniach z wpisami
-  w dzienniku, terminami 📅, zaplanowanymi ⏳ i przypomnieniami ⏰ oraz lista zadań i przypomnień
-  wybranego dnia;
-* kliknięcie zadania albo „Otwórz dziennik” chowa kalendarz i pokazuje ten dzień w oknie Brulionu;
-  na dole **„Otwórz Brulion”** i **„Szybka notatka…”**;
-* kalendarz znika po kliknięciu gdziekolwiek indziej, po Escape, po ponownym kliknięciu ikony
-  i po Alt+F4 — Brulion działa dalej w zasobniku;
-* bez otwartego notatnika pokazuje sam miesiąc i prośbę o otwarcie notatnika.
+* a small window right above the icon (with the taskbar at the top or at a side — at that edge), always on
+  top, without a taskbar button: today's date, the month with dots on days with entries
+  in the journal, due dates 📅, scheduled dates ⏳ and reminders ⏰, and the list of tasks and reminders of
+  the selected day;
+* clicking a task or "Open journal" hides the calendar and shows that day in the Brulion window;
+  at the bottom **"Open Brulion"** and **"Quick capture…"**;
+* the calendar disappears after a click anywhere else, after Escape, after clicking the icon again
+  and after Alt+F4 — Brulion keeps running in the tray;
+* without an open notebook it shows only the month and a request to open a notebook.
 
-**Ustawienia → Aplikacja → „Kliknięcie ikony w zasobniku”**: **Kalendarz** (domyślnie na Windows)
-albo **Okno** (pokazuje lub chowa okno Brulionu, jak przed wersją z kalendarzem). Podwójne kliknięcie
-zawsze pokazuje okno, a kalendarz jest też w menu ikony (prawy przycisk → **Kalendarz**).
+**Settings → Application → "Click on the tray icon"**: **Calendar** (the default on Windows)
+or **Window** (shows or hides the Brulion window, as before the calendar version). A double click
+always shows the window, and the calendar is also in the icon's menu (right-click → **Calendar**).
 
-**Kalendarza zegara Windows Brulion nie zastępuje — i nie da się tego zrobić porządnie.** Okienko
-zegara należy do powłoki systemu (Eksplorator, w Windows 10 `ShellExperienceHost`, w Windows 11
-centrum powiadomień): nie ma publicznego API, które pozwalałoby je podmienić, rozszerzyć albo
-dopisać do niego wpisy. Windows 10 pokazuje w nim tylko wydarzenia kont aplikacji Kalendarz
-(Outlook, Google…) — program bez pakietu MSIX nie może się tam dopisać — a Windows 11 tej listy
-już nie ma. Przełącznik w rejestrze, który przywracał kalendarz z Windows 7
-(`UseWin32TrayClockExperience`), przestał działać we wczesnych wersjach Windows 10. Programy, które
-zmieniają zegar (ExplorerPatcher, mody Windhawk, ElevenClock, T-Clock), wstrzykują kod do
-Eksploratora albo przykrywają go własnym oknem: psują się po aktualizacjach Windows, antywirusy je
-zgłaszają, a niepodpisany program tym bardziej nie powinien tego robić.
+**Brulion does not replace the Windows clock calendar — and it cannot be done properly.** The clock
+flyout belongs to the system shell (Explorer, in Windows 10 `ShellExperienceHost`, in Windows 11 the
+notification center): there is no public API to replace it, extend it or
+add entries to it. Windows 10 shows in it only events from the Calendar app's accounts
+(Outlook, Google…) — a program without an MSIX package cannot add itself there — and Windows 11 no longer
+has that list. The registry switch that brought back the Windows 7 calendar
+(`UseWin32TrayClockExperience`) stopped working in early versions of Windows 10. Programs that
+change the clock (ExplorerPatcher, Windhawk mods, ElevenClock, T-Clock) inject code into
+Explorer or cover it with their own window: they break after Windows updates, antivirus software
+flags them, and an unsigned program all the more should not do that.
 
-Można za to używać kalendarza Brulionu zamiast systemowego:
+You can, however, use Brulion's calendar instead of the system one:
 
-1. Ukryj zegar systemowy — Windows 10: Ustawienia → Personalizacja → Pasek zadań → „Włącz lub
-   wyłącz ikony systemowe” → Zegar; Windows 11: Ustawienia → Czas i język → Data i godzina →
-   „Pokaż godzinę i datę w zasobniku systemowym” (nowsze wydania).
-2. Przypnij ikonę Brulionu na stałe w zasobniku — Ustawienia paska zadań → „Inne ikony zasobnika
-   systemowego” (Windows 11) albo „Wybierz ikony wyświetlane na pasku zadań” (Windows 10) → Brulion
-   włączony.
-3. Włącz „Uruchamiaj po zalogowaniu” (wyżej), żeby ikona była od początku sesji.
+1. Hide the system clock — Windows 10: Settings → Personalization → Taskbar → "Turn system
+   icons on or off" → Clock; Windows 11: Settings → Time & language → Date & time →
+   "Show time and date in the System tray" (newer releases).
+2. Pin Brulion's icon permanently in the tray — Taskbar settings → "Other system tray
+   icons" (Windows 11) or "Select which icons appear on the taskbar" (Windows 10) → Brulion
+   on.
+3. Turn on "Start when you sign in" (above), so that the icon is there from the start of the session.
 
-Na Linuksie kalendarz działa tak samo (menu ikony → **Kalendarz**; kliknięcie ikony domyślnie
-pokazuje okno, ustawienie jak wyżej). Pod X11 okienko pojawia się przy kursorze; pod Waylandem
-okna nie da się ustawić samemu — kompozytor kładzie je, gdzie chce (zwykle na środku), i może nie
-oddać mu aktywności: wtedy nie znika po kliknięciu obok i nie dostaje klawiatury (Escape do niego
-nie trafia) — zamkniesz je przyciskiem **×** w jego rogu, wybierając wpis albo **Otwórz Brulion**,
-albo ponownym kliknięciem ikony.
+On Linux the calendar works the same way (icon menu → **Calendar**; clicking the icon by default
+shows the window, setting as above). Under X11 the window appears at the cursor; under Wayland
+a window cannot position itself — the compositor places it where it wants (usually in the centre), and may not
+give it focus: then it does not disappear after a click beside it and gets no keyboard input (Escape does not
+reach it) — you close it with the **×** button in its corner, by choosing an entry or **Open Brulion**,
+or by clicking the icon again.
 
-## Nowa wersja
+## New version
 
-Pod górnym paskiem pojawia się komunikat o nowszym wydaniu z przyciskiem **Zobacz na GitHubie**,
-tak samo jak na Androidzie ([docs/ANDROID.md](ANDROID.md#nowa-wersja)). Wyłącza go **Ustawienia →
-Aplikacja → Sprawdzaj nowe wersje**.
+Below the top bar a message about a newer release appears with a **View on GitHub** button,
+just as on Android ([docs/ANDROID.md](ANDROID.md#new-version)). **Settings →
+Application → Check for new versions** turns it off.
 
-## Ograniczenia wersji testowej
+## Limitations of the test version
 
-* **Niepodpisane pliki** (SmartScreen, wyżej) i **brak automatycznych aktualizacji** — nową wersję
-  instaluje się instalatorem na poprzednią.
-* **Powiadomienia działają, dopóki Brulion jest uruchomiony** (bez aktywatora COM): kliknięcie
-  w powiadomienie po zamknięciu programu nic by nie zrobiło, dlatego „Zakończ” je usuwa (wyżej).
-* **Wiersz poleceń:** `brulion-cli.exe` (obok `brulion.exe`) działa jak na Linuksie
-  (docs/CLI.md). `brulion.exe cli …` też działa, ale `brulion.exe` jest programem okienkowym —
-  w konsoli nie widać jego wyjścia; w skryptach i dla agentów AI używaj `brulion-cli.exe`.
-  Zdalne sterowanie aplikacją (`--remote-control`, `brulion-cli app …`) działa przez potok
-  nazwany, ale jego test end-to-end jest tylko linuksowy (niżej).
-* **Nazw folderów notatnika nie zmienia się w Eksploratorze, gdy Brulion jest uruchomiony.**
-  Brulion obserwuje foldery notatnika (`QFileSystemWatcher` trzyma otwarty uchwyt każdego z nich),
-  a Windows nie przenosi folderu, w którym coś jest otwarte — Eksplorator zgłasza, że folder jest
-  używany. Tak samo Syncthing, gdy przenosi folder przemianowany na innym urządzeniu: zgłosi błąd
-  i spróbuje ponownie. W Brulionie (pasek boczny, „Zmień nazwę”, „Przenieś do…”) działa normalnie;
-  usuwanie folderów i wszystko, co inne programy robią z plikami (Syncthing, edytory), też.
-  Folder przemianowany na innym urządzeniu albo w Nextcloudzie synchronizacja Nextcloud
-  przemianowuje tu sama; gdy inny program trzyma otwarty plik z tego folderu, Windows na to nie
-  pozwala i notatki są przenoszone pojedynczo, a ta otwarta jest pobierana pod nową nazwą (stara
-  trafi do kosza, gdy program ją zwolni) — nic nie ginie.
-* **Nazwy, których Windows nie dopuszcza:** notatka z innego urządzenia o nazwie ze znakiem
-  `< > : " \ | ? *` (albo `CON`, `NUL`, `AUX`… czy kropką na końcu) nie zapisze się na Windows —
-  synchronizacja zgłasza ją jako błąd przy każdym przebiegu, aż nazwa zostanie zmieniona na innym
-  urządzeniu.
-* **Notatki otwartej w innym programie bez współdzielenia** (np. zablokowanej przez Worda) Brulion
-  nie zapisze, dopóki ten program ją trzyma: Windows nie podmienia pliku otwartego bez
-  `FILE_SHARE_DELETE`, a Brulion zapisuje atomowo (nowy plik w miejsce starego). Zamknij ją tam,
-  zanim zmienisz ją w Brulionie; synchronizacja ponawia taki plik przy następnym przebiegu.
-* **Sprawdzanie pisowni** (docs/UI.md „Spell checking”): Hunspell jest wkompilowany w program
-  (`scripts/windows-build.ps1` pobiera jego wydanie 1.7.2 i słowniki polski i angielski
-  z repozytorium słowników LibreOffice, ze sprawdzonymi sumami SHA-256), słowniki leżą w folderze
-  `dictionaries\` obok `brulion.exe` (z ich licencjami). Nie sprawdzone jeszcze na prawdziwym
-  Windows: folder programu z polskimi znakami w ścieżce.
-* Dowiązania symboliczne i punkty połączenia (junction) w notatniku nie są testowane na Windows.
-* Tylko x86_64 (bez Windows na ARM) i tylko Windows 10/11.
-* Kalendarz z zasobnika nie zastępuje kalendarza zegara Windows (wyżej, „Kalendarz z zasobnika”).
-  Jego położenie przy ikonie (pasek zadań z każdej strony, kilka monitorów) i znikanie po kliknięciu
-  obok czekają na sprawdzenie na prawdziwym Windows.
+* **Unsigned files** (SmartScreen, above) and **no automatic updates** — a new version
+  is installed with the installer over the previous one.
+* **Notifications work as long as Brulion is running** (no COM activator): a click
+  on a notification after the program has closed would do nothing, which is why "Quit" removes them (above).
+* **Command line:** `brulion-cli.exe` (next to `brulion.exe`) works as on Linux
+  (docs/CLI.md). `brulion.exe cli …` works too, but `brulion.exe` is a GUI program —
+  its output is not visible in the console; in scripts and for AI agents use `brulion-cli.exe`.
+  Remote control of the app (`--remote-control`, `brulion-cli app …`) works through a named
+  pipe, but its end-to-end test is Linux-only (below).
+* **Notebook folders cannot be renamed in Explorer while Brulion is running.**
+  Brulion watches the notebook's folders (`QFileSystemWatcher` keeps an open handle to each of them),
+  and Windows does not move a folder in which something is open — Explorer reports that the folder is
+  in use. The same for Syncthing when it moves a folder renamed on another device: it reports an error
+  and tries again. In Brulion (sidebar, "Rename", "Move to…") it works normally;
+  deleting folders and everything other programs do with files (Syncthing, editors) work too.
+  A folder renamed on another device or in Nextcloud is renamed here by Nextcloud sync
+  itself; when another program keeps a file from that folder open, Windows does not
+  allow it and the notes are moved one by one, while the open one is downloaded under the new name (the old one
+  goes to the trash once the program releases it) — nothing is lost.
+* **Names Windows does not allow:** a note from another device whose name has a
+  `< > : " \ | ? *` character (or `CON`, `NUL`, `AUX`… or a trailing dot) cannot be saved on Windows —
+  sync reports it as an error on every run until the name is changed on the other
+  device.
+* **A note open in another program without sharing** (e.g. locked by Word) cannot be saved by Brulion
+  as long as that program holds it: Windows does not replace a file opened without
+  `FILE_SHARE_DELETE`, and Brulion saves atomically (a new file in place of the old one). Close it there
+  before you change it in Brulion; sync retries such a file on the next run.
+* **Spell checking** (docs/UI.md "Spell checking"): Hunspell is compiled into the program
+  (`scripts/windows-build.ps1` downloads its 1.7.2 release and the Polish and English dictionaries
+  from the LibreOffice dictionaries repository, with verified SHA-256 sums), the dictionaries live in the
+  `dictionaries\` folder next to `brulion.exe` (with their licences). Not yet checked on real
+  Windows: a program folder with Polish characters in its path.
+* Symbolic links and junctions in a notebook are not tested on Windows.
+* x86_64 only (no Windows on ARM) and only Windows 10/11.
+* The tray calendar does not replace the Windows clock calendar (above, "Tray calendar").
+  Its position next to the icon (taskbar on any side, several monitors) and disappearing after a click
+  beside it still need checking on real Windows.
 
-## Budowanie
+## Building
 
-### W CI
+### In CI
 
-`.github/workflows/windows.yml` (runner `windows-2022`): Qt 6.11.2 `win64_msvc2022_64` z aqt
-(`jurplel/install-qt-action`, w cache; aqtinstall z przypiętego commita gałęzi master, bo wydanie
-3.3.0 nie zna układu repozytorium Qt 6.11 dla Windows) razem z modułem **Qt PDF** (`modules:
-qtpdf`, rozszerzenie repozytorium Qt: miniatury PDF-ów, przeglądarka PDF z szukaniem i strony PDF
-jako podkład rysunku, `src/platform/pdfpages_qtpdf.cpp`; `windeployqt` dokłada `Qt6Pdf.dll`, ok.
-5 MB — moduł QML `QtQuick.Pdf` nie jest używany), MSVC z `ilammy/msvc-dev-cmd`, ccache
-z Chocolatey (pamięć podręczna kompilacji w cache Actions, zapisywana zaraz po budowaniu), CMake +
-Ninja, Release, potem `scripts/windows-build.ps1` krok po kroku: build, testy, paczki, sprawdzenie
-paczek → artefakt `brulion-windows` (ZIP + instalator). Uruchamia się jak `appimage.yml`: ręcznie
-(`gh workflow run windows.yml --ref main`), przy pushu na `main` ze znacznikiem `[ci]` (gdy zmienia
-`src/`, `tests/`, `packaging/windows/`…) i z `release.yml`, który dołącza oba pliki do wydania
-(i do `SHA256SUMS.txt`) — wydanie publikuje się tylko, gdy przejdzie także Windows.
+`.github/workflows/windows.yml` (runner `windows-2022`): Qt 6.11.2 `win64_msvc2022_64` from aqt
+(`jurplel/install-qt-action`, cached; aqtinstall from a pinned commit of the master branch, because release
+3.3.0 does not know the Qt 6.11 repository layout for Windows) together with the **Qt PDF** module (`modules:
+qtpdf`, a Qt repository extension: PDF thumbnails, the PDF viewer with search, and PDF pages
+as a drawing backdrop, `src/platform/pdfpages_qtpdf.cpp`; `windeployqt` adds `Qt6Pdf.dll`, about
+5 MB — the `QtQuick.Pdf` QML module is not used), MSVC from `ilammy/msvc-dev-cmd`, ccache
+from Chocolatey (compilation cache in the Actions cache, saved right after the build), CMake +
+Ninja, Release, then `scripts/windows-build.ps1` step by step: build, tests, packages, package
+check → artifact `brulion-windows` (ZIP + installer). It runs like `appimage.yml`: manually
+(`gh workflow run windows.yml --ref main`), on a push to `main` with the `[ci]` marker (when it changes
+`src/`, `tests/`, `packaging/windows/`…) and from `release.yml`, which attaches both files to the release
+(and to `SHA256SUMS.txt`) — the release is published only when Windows passes too.
 
-### Lokalnie
+### Locally
 
-Potrzebne: Visual Studio 2022 z obciążeniem „Programowanie aplikacji klasycznych w C++” (ma CMake
-i Ninja), Qt 6.11.2 dla MSVC (instalator Qt albo aqt nowszy niż 3.3.0:
-`aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt -m qtpdf`; bez `qtpdf` Brulion
-buduje się bez PDF-ów: bez miniatur, przeglądarki PDF i podkładu z PDF-a — PDF otwiera się wtedy
-w domyślnej aplikacji systemu), Inno Setup 6 (`winget install JRSoftware.InnoSetup`). Klon z Git for Windows
-zostawia końce linii LF dzięki `.gitattributes` (`* -text`) — testy porównują bajty. W PowerShellu
-w katalogu repozytorium:
+Needed: Visual Studio 2022 with the "Desktop development with C++" workload (it has CMake
+and Ninja), Qt 6.11.2 for MSVC (the Qt installer or aqt newer than 3.3.0:
+`aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt -m qtpdf`; without `qtpdf` Brulion
+builds without PDFs: no thumbnails, PDF viewer or PDF backdrop — a PDF then opens
+in the system's default app), Inno Setup 6 (`winget install JRSoftware.InnoSetup`). A clone with Git for Windows
+keeps LF line endings thanks to `.gitattributes` (`* -text`) — the tests compare bytes. In PowerShell
+in the repository directory:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\windows-build.ps1 -QtDir C:\Qt\6.11.2\msvc2022_64
-# tylko wybrane kroki:
+# only selected steps:
 scripts\windows-build.ps1 -QtDir C:\Qt\6.11.2\msvc2022_64 -Steps build,test
 ```
 
-Bez środowiska MSVC (brak `cl.exe` w `PATH`) skrypt sam je wczytuje (`vswhere` + `vcvars64.bat`);
-`ccache` w `PATH` (4.6 lub nowszy) jest używany sam.
-Kroki:
+Without an MSVC environment (no `cl.exe` in `PATH`) the script loads it by itself (`vswhere` + `vcvars64.bat`);
+`ccache` in `PATH` (4.6 or newer) is used automatically.
+Steps:
 
-1. **build** — `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release` w `build-windows`. MSVC dostaje
-   `/utf-8` (polskie napisy w kodzie), `/permissive-`, `/Zc:__cplusplus`, `/bigobj` i ostrzeżenia
-   `/W4` bez `/WX` (CMakeLists.txt, `cmake/BrulionWarnings.cmake`); `brulion.exe`
-   i `brulion-cli.exe` mają ikonę `packaging/windows/brulion.ico` i wersję w zasobach
-   (`packaging/windows/brulion.rc.in`, `cmake/BrulionWindows.cmake`). Powiadomienia używają
-   nagłówków C++/WinRT z Windows SDK (`<winrt/Windows.UI.Notifications.h>`, folder `cppwinrt`, który
-   środowisko MSVC ma w `INCLUDE`) i `WindowsApp.lib`; nic dodatkowego się nie instaluje.
-2. **test** — `ctest` offscreen (`QT_QPA_PLATFORM=offscreen`) z Qt w `PATH`.
-3. **package** — do `build-windows\package\Brulion`: `brulion.exe`, `brulion-cli.exe`,
-   `windeployqt --release --qmldir src\app\qml --no-translations --no-opengl-sw` (biblioteki Qt,
-   wtyczki — platformy, formaty obrazów z SVG, TLS przez Schannel bez OpenSSL — i moduły QML), do
-   tego `platforms\qoffscreen.dll` (uruchomienia bez ekranu: sprawdzenie paczek, zrzuty) oraz
-   biblioteki MSVC (`Microsoft.VC143.CRT`, obok programu — bez instalowania Visual C++
-   Redistributable). Z tego folderu: `dist-windows\brulion-<wersja>-windows-x86_64.zip` i
-   instalator z `packaging/windows/brulion.iss` →
-   `dist-windows\Brulion-<wersja>-windows-x86_64-setup.exe`.
-4. **check** — bez Qt w `PATH` i bez zmiennych Qt: ZIP rozpakowany do nowego folderu, potem
-   instalator zainstalowany po cichu dla bieżącego użytkownika z zadaniem `autostart` (wartość
-   `Run\Brulion` musi uruchamiać zainstalowany `brulion.exe --hidden`); z obu `brulion-cli.exe
-   --version` i autotest powłoki prawdziwej aplikacji (`brulion.exe --demo --route journals
-   --selftest-shell --no-single-instance …`, offscreen, profil `BRULION_PROFILE=package-check`) —
-   brak biblioteki albo modułu QML go oblewa; każde uruchomienie musi zarejestrować identyfikator
-   powiadomień profilu (`AppUserModelId\JanuszBit.Brulion.package-check`, ikona obok programu),
-   a wersja przenośna w osobnym profilu nie może dopisać autostartu; potem ten sam instalator
-   jeszcze raz po cichu jako aktualizacja, po wyłączeniu autostartu — nie może go włączyć z powrotem;
-   na koniec ciche odinstalowanie, po którym ustawienia profilu muszą zostać, a wpisu autostartu ma
-   nie być.
+1. **build** — `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release` in `build-windows`. MSVC gets
+   `/utf-8` (Polish strings in the code), `/permissive-`, `/Zc:__cplusplus`, `/bigobj` and
+   `/W4` warnings without `/WX` (CMakeLists.txt, `cmake/BrulionWarnings.cmake`); `brulion.exe`
+   and `brulion-cli.exe` have the `packaging/windows/brulion.ico` icon and a version in their resources
+   (`packaging/windows/brulion.rc.in`, `cmake/BrulionWindows.cmake`). Notifications use
+   the C++/WinRT headers from the Windows SDK (`<winrt/Windows.UI.Notifications.h>`, the `cppwinrt` folder, which
+   the MSVC environment has in `INCLUDE`) and `WindowsApp.lib`; nothing extra is installed.
+2. **test** — `ctest` offscreen (`QT_QPA_PLATFORM=offscreen`) with Qt in `PATH`.
+3. **package** — into `build-windows\package\Brulion`: `brulion.exe`, `brulion-cli.exe`,
+   `windeployqt --release --qmldir src\app\qml --no-translations --no-opengl-sw` (Qt libraries,
+   plugins — platforms, image formats with SVG, TLS through Schannel without OpenSSL — and QML modules), plus
+   `platforms\qoffscreen.dll` (runs without a screen: package check, screenshots) and
+   the MSVC libraries (`Microsoft.VC143.CRT`, next to the program — without installing the Visual C++
+   Redistributable). From this folder: `dist-windows\brulion-<version>-windows-x86_64.zip` and
+   the installer from `packaging/windows/brulion.iss` →
+   `dist-windows\Brulion-<version>-windows-x86_64-setup.exe`.
+4. **check** — without Qt in `PATH` and without Qt variables: the ZIP unpacked into a new folder, then
+   the installer installed silently for the current user with the `autostart` task (the value
+   `Run\Brulion` must start the installed `brulion.exe --hidden`); from both, `brulion-cli.exe
+   --version` and the shell self-test of the real app (`brulion.exe --demo --route journals
+   --selftest-shell --no-single-instance …`, offscreen, profile `BRULION_PROFILE=package-check`) —
+   a missing library or QML module fails it; every run must register the profile's notification
+   identifier (`AppUserModelId\JanuszBit.Brulion.package-check`, icon next to the program),
+   and the portable version in a separate profile must not add autostart; then the same installer
+   once more, silently, as an update, after autostart was turned off — it must not turn it back on;
+   finally a silent uninstall, after which the profile's settings must remain and the autostart entry must
+   be gone.
 
-`AppId` instalatora (`{5E3B8C1A-7F42-4D6B-9A0E-2C8D4B6F1E37}`) jest stały — po nim Windows poznaje
-zainstalowanego Brulionu; nie zmieniać.
+The installer's `AppId` (`{5E3B8C1A-7F42-4D6B-9A0E-2C8D4B6F1E37}`) is fixed — Windows recognizes
+the installed Brulion by it; do not change it.
 
-### Testy na Windows
+### Tests on Windows
 
-Te same testy co na Linuksie (`QTEST`, testy QML prawdziwej aplikacji, `brulion-cli` jako proces),
-z wyjątkami:
+The same tests as on Linux (`QTEST`, QML tests of the real app, `brulion-cli` as a process),
+with exceptions:
 
-* nie są budowane/uruchamiane: testy skryptów bash (`tests/scripts`, `qml-smoke.sh` w
-  `tst_content_qml`, `tst_planning_qml`, `tst_appio_qml`, `scroll-jumps.sh` w
-  `tst_scroll_jumps_qml`) i `tst_remote_control_qml` (jego prywatny katalog domowy to foldery
-  `XDG_*`, gniazda w katalogu uruchomieniowym i uprawnienia uniksowe);
-* pomijane (`QSKIP` z powodem): w `tst_ipc_singleinstance` i `tst_ipc_control` przypadki
-  uprawnień folderów, dowiązań symbolicznych i porzuconego pliku gniazda — na Windows gniazdo to
-  potok nazwany z listą dostępu użytkownika, bez pliku;
-* pomijane według możliwości systemu plików (`tests/common/filesystemtraits.h`): przypadki
-  z **dowiązaniami symbolicznymi** (`QFile::link()` robi na Windows skrót `.lnk`) — w `tst_vault`,
-  `tst_vault_edge`, `tst_vault_safety`, `tst_shell_settings`, `tst_shell_nextcloud`; z
-  **uprawnieniami uniksowymi** (folder bez prawa odczytu, plik tylko dla właściciela; Windows ma
-  tylko atrybut „tylko do odczytu”, a resztę załatwiają listy dostępu profilu) — w
-  `tst_vault_safety`, `tst_sync_engine`, `tst_sync_folders` (`renameHereRefusedFallsBack`: folder
-  tylko do odczytu, którego synchronizacja nie może przemianować), `tst_log_logger`,
-  `tst_shell_settings`; z **dwoma
-  plikami różniącymi się tylko wielkością liter** (NTFS ich nie odróżnia) — w `tst_vault`,
-  `tst_notebook_journals`, `tst_shell_workspace`, `tst_sync_folders` (tam na takim systemie plików
-  test sprawdza zamiast tego, że folder, któremu inne urządzenie zmieniło wielkość liter, dostaje
-  tu tę samą nazwę bez przesyłania i bez kosza);
-* w `tst_vault_watch`: `watcherDetectsFolderRenames` (inny program nie zmieni na Windows nazwy
-  obserwowanego folderu) i koniec `inPlaceRewriteOfAnOpenFileIsReportedAtOnce` (zapis notatki,
-  którą inny program trzyma otwartą) — oba opisane wyżej w „Ograniczeniach”;
-* tylko na Windows: `tst_windowstoastbus` — prawdziwe powiadomienia pod testowym identyfikatorem
-  (pokazane, zastąpione, zamknięte, wyczyszczone); gdy powiadomienia są na danym komputerze
-  wyłączone (np. runner CI), te przypadki są pomijane;
-* autotesty QML (`tst_shell_qml*`, `tst_shell_journey*`, `tst_notify_sounds_qml*`,
-  `tst_appio_import_qml*`, `tst_content_journals_qml`) dostają osobny profil
-  `BRULION_PROFILE=test-<nazwa>` (`brulion_test_profile()` w `tests/CMakeLists.txt`), który ich
-  fixture usuwa przed uruchomieniem — zamiast folderów `XDG_*`. W takim profilu przełącznik
-  autostartu jest wyłączony, więc żaden test nie pisze do klucza `Run`; każdy profil rejestruje
-  własny identyfikator powiadomień (`JanuszBit.Brulion.test-<nazwa>`). Testy C++ w procesie
-  (np. `tst_shell_navigation`) nie ustawiają nazw Brulionu i dostają identyfikator
-  `JanuszBit.Brulion.unnamed`, którego nikt nie rejestruje: ich powiadomienia idą do zasobnika,
-  a sprzątanie nie usuwa powiadomień prawdziwego Brulionu.
+* not built/run: the bash script tests (`tests/scripts`, `qml-smoke.sh` in
+  `tst_content_qml`, `tst_planning_qml`, `tst_appio_qml`, `scroll-jumps.sh` in
+  `tst_scroll_jumps_qml`) and `tst_remote_control_qml` (its private home directory is
+  `XDG_*` folders, sockets in the runtime directory and Unix permissions);
+* skipped (`QSKIP` with a reason): in `tst_ipc_singleinstance` and `tst_ipc_control` the cases of
+  folder permissions, symbolic links and an abandoned socket file — on Windows the socket is
+  a named pipe with the user's access list, without a file;
+* skipped depending on the file system's capabilities (`tests/common/filesystemtraits.h`): cases
+  with **symbolic links** (`QFile::link()` makes a `.lnk` shortcut on Windows) — in `tst_vault`,
+  `tst_vault_edge`, `tst_vault_safety`, `tst_shell_settings`, `tst_shell_nextcloud`; with
+  **Unix permissions** (a folder without read permission, a file for the owner only; Windows has
+  only the "read-only" attribute, and the rest is handled by the profile's access lists) — in
+  `tst_vault_safety`, `tst_sync_engine`, `tst_sync_folders` (`renameHereRefusedFallsBack`: a
+  read-only folder that sync cannot rename), `tst_log_logger`,
+  `tst_shell_settings`; with **two
+  files differing only in letter case** (NTFS does not tell them apart) — in `tst_vault`,
+  `tst_notebook_journals`, `tst_shell_workspace`, `tst_sync_folders` (there, on such a file system,
+  the test instead checks that a folder whose letter case was changed by another device gets
+  the same name here without a transfer and without the trash);
+* in `tst_vault_watch`: `watcherDetectsFolderRenames` (another program cannot rename a watched
+  folder on Windows) and the end of `inPlaceRewriteOfAnOpenFileIsReportedAtOnce` (saving a note
+  that another program keeps open) — both described above in "Limitations";
+* Windows only: `tst_windowstoastbus` — real notifications under a test identifier
+  (shown, replaced, closed, cleared); when notifications are turned off on the given computer
+  (e.g. a CI runner), these cases are skipped;
+* the QML self-tests (`tst_shell_qml*`, `tst_shell_journey*`, `tst_notify_sounds_qml*`,
+  `tst_appio_import_qml*`, `tst_content_journals_qml`) get a separate profile
+  `BRULION_PROFILE=test-<name>` (`brulion_test_profile()` in `tests/CMakeLists.txt`), which their
+  fixture removes before running — instead of `XDG_*` folders. In such a profile the autostart
+  switch is disabled, so no test writes to the `Run` key; each profile registers
+  its own notification identifier (`JanuszBit.Brulion.test-<name>`). In-process C++ tests
+  (e.g. `tst_shell_navigation`) do not set Brulion's names and get the identifier
+  `JanuszBit.Brulion.unnamed`, which nobody registers: their notifications go to the tray,
+  and the cleanup does not remove the real Brulion's notifications.
 
-## Jedna kopia programu i zdalne sterowanie
+## Single instance and remote control
 
-`QLocalServer` na Windows to potok nazwany. Klucz jednej kopii leży w folderze tymczasowym
-użytkownika (`%TEMP%`, w profilu użytkownika; `RuntimeLocation` z Qt byłby samym katalogiem
-domowym) — tam jest też plik blokady, a nazwa potoku zawiera tę ścieżkę. `UserAccessOption` daje
-potokowi listę dostępu tylko dla tego użytkownika (odpowiednik `0600` gniazda na Linuksie). Nazwy
-potoków są wspólne dla całego komputera, więc jak `SO_PEERCRED` na Linuksie obie strony sprawdzają
-proces po drugiej stronie (`GetNamedPipeClientProcessId`/`GetNamedPipeServerProcessId`) i SID jego
-użytkownika (`src/ipc/controlprotocol.cpp`, `peerUid()`): potoku, który inny użytkownik założył
-pierwszy pod tą nazwą, Brulion nie używa.
+`QLocalServer` on Windows is a named pipe. The single-instance key lives in the user's temporary
+folder (`%TEMP%`, in the user profile; Qt's `RuntimeLocation` would be just the home
+directory) — the lock file is there too, and the pipe name contains that path. `UserAccessOption` gives
+the pipe an access list for this user only (the equivalent of the socket's `0600` on Linux). Pipe
+names are shared by the whole computer, so, like `SO_PEERCRED` on Linux, both sides check
+the process on the other side (`GetNamedPipeClientProcessId`/`GetNamedPipeServerProcessId`) and its user's
+SID (`src/ipc/controlprotocol.cpp`, `peerUid()`): Brulion does not use a pipe that another user created
+first under that name.
 
-Drugie uruchomienie z plikami (`brulion.exe --open "%1"` z „Otwórz za pomocą”) zamienia ich ścieżki
-na bezwzględne (od swojego bieżącego folderu) i wysyła działającej kopii komunikat `share`
-(`src/ipc/appmessage.h`), a przed wysłaniem pozwala jej wyjść na pierwszy plan
-(`AllowSetForegroundWindow`, `platform::allowForegroundActivation()`): okno Brulionu przychodzi
-na wierzch, a nie tylko miga na pasku zadań. Kilka plików zaznaczonych naraz to kilka uruchomień —
-pierwsze, gdy Brulion nie działa, staje się główną kopią, pozostałe czekają, aż zacznie słuchać,
-a pliki trafiają do jednego okna. Brulion starszy niż 0.6.0, gdy jeszcze działa, komunikatu
-`share` nie zna i go pomija — wtedy pomaga zamknięcie go i ponowne „Otwórz za pomocą”.
+A second start with files (`brulion.exe --open "%1"` from "Open with") turns their paths
+into absolute ones (from its current folder) and sends the running instance a `share` message
+(`src/ipc/appmessage.h`), and before sending allows it to come to the foreground
+(`AllowSetForegroundWindow`, `platform::allowForegroundActivation()`): the Brulion window comes
+to the front instead of only flashing on the taskbar. Several files selected at once means several starts —
+the first one, when Brulion is not running, becomes the main instance, the others wait until it starts listening,
+and the files go into one dialog. A Brulion older than 0.6.0, while still running, does not know the
+`share` message and ignores it — then closing it and using "Open with" again helps.

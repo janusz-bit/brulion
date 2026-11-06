@@ -2,7 +2,7 @@
 # reminder (actions, hints, escaping, the sound hints of every choice), DesktopNotifier against a
 # fake notification bus (actions, snooze, done, open, ringing alarms with the chosen sound, sound
 # samples, the tray fallback), the JSON handed to Android's alarm scheduler and sound channels and
-# its "Zrobione" requests,
+# its "Done" requests,
 # and the platform factory. No session bus or device needed.
 brulion_add_test(tst_notify SOURCES tst_notify.cpp LIBS brulion_notify)
 # The sound settings of reminders and alarms (ReminderSounds): stored choices read back (a map and

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // BrulionPen — a stylus with pressure for the Android emulator (scripts/android-emulator-test.sh
-// --stylus; docs/ANDROID.md "Rysik"). `adb shell input stylus …` always presses with 1.0, so a
+// --stylus; docs/ANDROID.md "Tests and diagnostics"). `adb shell input stylus …` always presses with 1.0, so a
 // line drawn with it has one pressure (Brulion then draws it as a mouse line); this injects
 // MotionEvents with the pressures asked for, a stylus's tool type (or the eraser end's, or a
 // finger's) and its buttons — through the hidden InputManager(Global).injectInputEvent, from the

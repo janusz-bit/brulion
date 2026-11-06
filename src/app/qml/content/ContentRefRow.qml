@@ -6,7 +6,7 @@ import Brulion
 // ContentRefRow — one block that refers to something (a backlink, a tagged block, an unlinked
 // mention): its parents as a small breadcrumb, then the block's text as rendered by the core
 // InlineRenderer (escaped rich text; links, tags and chips are clickable), optionally an action
-// button on the right ("Połącz").
+// button on the right ("Link").
 //
 //   ContentRefRow {
 //       html: model.html; plain: model.text; breadcrumb: model.breadcrumb

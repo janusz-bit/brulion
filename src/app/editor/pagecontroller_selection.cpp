@@ -946,7 +946,7 @@ QVariantMap PageController::pasteClipboard(int row, int from, int to)
     const int pastedRow = out.value(u"row"_s).toInt();
     if (pastedRow < 0)
         return out;
-    // A browser's "Kopiuj adres obrazu": the address alone, as a bare URL in the text. The editor
+    // A browser's "Copy image address": the address alone, as a bare URL in the text. The editor
     // offers it as a picture (urlToPicture()); the address stays what was pasted until then.
     const QString address = text.trimmed();
     QString markdown = text;

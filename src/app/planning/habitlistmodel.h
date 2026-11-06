@@ -1,5 +1,5 @@
 // HabitListModel — the habits of the vault for HabitsView.qml (docs/UI.md "Habits"), one row per
-// definition (docs/SYNTAX.md §5 "Nawyki / Habits"): its schedule, today's check, streaks, the
+// definition (docs/SYNTAX.md §5 "Habits"): its schedule, today's check, streaks, the
 // completion rate, the period's progress and the month grid of `month`.
 //
 //   HabitListModel { vaultIndex: PlanningContext.vaultIndex; today: DatesHelper.today; month: "2026-11" }
@@ -58,7 +58,7 @@ class HabitListModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(int dueCount READ dueCount NOTIFY countsChanged FINAL)
     Q_PROPERTY(int doneTodayCount READ doneTodayCount NOTIFY countsChanged FINAL)
     Q_PROPERTY(int problemCount READ problemCount NOTIFY countsChanged FINAL)
-    /// The note holding the first definition ("" when none): where "Dodaj nawyk" appends.
+    /// The note holding the first definition ("" when none): where "Add habit" appends.
     Q_PROPERTY(QString habitsPage READ habitsPage NOTIFY countsChanged FINAL)
     /// Names of checks no definition has (their days are kept; a definition picks them up).
     Q_PROPERTY(QStringList undefinedNames READ undefinedNames NOTIFY countsChanged FINAL)

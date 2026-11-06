@@ -4,7 +4,7 @@ import Brulion
 
 // BSearchField — BTextField with a search icon, a clear button and a debounced search signal.
 //
-//   BSearchField { placeholderText: qsTr("Szukaj w notatkach…"); shortcut: "Ctrl+Shift+F"
+//   BSearchField { placeholderText: qsTr("Search notes…"); shortcut: "Ctrl+Shift+F"
 //                  onSearch: (query) => model.query = query }
 //
 // search(query) fires `debounce` ms after typing stops (0 = immediately) and at once on

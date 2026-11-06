@@ -331,7 +331,7 @@ private Q_SLOTS:
         QCOMPARE(m.totalCount(), count);
         QCOMPARE(m.vaultTaskCount(), 15);
         QCOMPARE(m.queryText(), query);
-        // The query engine agrees with the list ("Pokaż jako zapytanie" shows the truth).
+        // The query engine agrees with the list ("Show as query" shows the truth).
         const auto parsed = brulion::parseQuery(m.queryText());
         QVERIFY(std::holds_alternative<brulion::Query>(parsed));
         const auto result = brulion::runQuery(std::get<brulion::Query>(parsed), *index, QDate(2026, 10, 15));

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Tests scripts/fdroid-repo.sh (Brulion's own F-Droid repository, docs/ANDROID.md "Własne
-# repozytorium F-Droid") with stand-ins for fdroid, keytool, gh and curl on PATH — what the script
+# Tests scripts/fdroid-repo.sh (Brulion's own F-Droid repository, docs/ANDROID.md "Brulion's
+# own F-Droid repository") with stand-ins for fdroid, keytool, gh and curl on PATH — what the script
 # itself decides: the APKs of the last releases, fdroid's config (the site's address, the
 # passwords only as {env: …}, readable by its owner only), a build entry per APK so each version
 # gets its changelog (sorted, the newest current), the texts and icon from fastlane, the landing

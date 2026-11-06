@@ -398,7 +398,7 @@ private Q_SLOTS:
         QVERIFY2(out.contains(u"{.missing}"_s), qPrintable(out));
     }
 
-    // "Obrazy z internetu: dołącz kopie": the copies are files of the archive, linked relatively;
+    // "Pictures from the internet: Include copies": the copies are files of the archive, linked relatively;
     // pictures without a copy keep their URL.
     void webPictureCopies()
     {

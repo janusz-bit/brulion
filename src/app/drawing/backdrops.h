@@ -1,7 +1,7 @@
-// DrawingBackdrops — QML's way to backdrops (docs/UI.md "Drawing editor": "Rysunek na obrazie lub
-// PDF…" in a note, "Podkład…" in the drawing editor): whether PDF pages can be drawn here, a PDF's
-// pages, their thumbnails (PdfPageImageProvider) and backdrops prepared from vault files in the
-// background (backdropimage.h).
+// DrawingBackdrops — QML's way to backdrops (docs/UI.md "Drawing editor": "Drawing on a picture or
+// PDF…" in a note, "Backdrop from a picture or PDF…" in the drawing editor): whether PDF pages can
+// be drawn here, a PDF's pages, their thumbnails (PdfPageImageProvider) and backdrops prepared from
+// vault files in the background (backdropimage.h).
 //
 //   const info = DrawingBackdrops.pdfInfo(path)          // { pages, error ("" | message), locked,
 //                                                        //   width, height (page 1, points) }
@@ -72,7 +72,7 @@ public:
     Q_INVOKABLE void cancel(int job);
     /// The sentence for a prepared item's error code (backdropimage.h backdroperror).
     Q_INVOKABLE QString errorText(const QString &code) const;
-    /// The pages a user typed ("1-3, 7", "wszystkie"; drawing::parsePageRanges — one more than
+    /// The pages a user typed ("1-3, 7", "all" / "wszystkie"; drawing::parsePageRanges — one more than
     /// MaxPagesPerInsert at most, so the dialog can say the text named too many) and back
     /// (drawing::formatPageRanges).
     Q_INVOKABLE QList<int> parsePages(const QString &text, int count) const;

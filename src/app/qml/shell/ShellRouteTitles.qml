@@ -6,7 +6,7 @@ import Brulion
 // the side panel's header, a page window's title) and of a page. No state: every file that needs
 // it has one. (The texts keep AppShell's translation context: qsTranslate.)
 QtObject {
-    /// A page's title as people read it: daily notes by their date ("środa, 14 października
+    /// A page's title as people read it: daily notes by their date ("Wednesday, October 14,
     /// 2026"), not by their file name ("2026-10-14").
     function pageLabel(path: string): string {
         const day = path !== "" ? dayOf(path) : ""

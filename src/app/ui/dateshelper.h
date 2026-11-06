@@ -59,7 +59,8 @@ public:
     ///   matched, start, length }. ok = false when nothing is found.
     Q_INVOKABLE QVariantMap parseNatural(const QString &text) const;
 
-    /// "dziś 09:00", "pt 17 paź", "17 paź 2027" ("today 09:00", "Fri, Oct 17"). Empty if invalid.
+    /// "today 09:00", "Fri, Oct 17", "Oct 17, 2027" (Polish "dziś 09:00", "pt 17 paź"). Empty if
+    /// invalid.
     Q_INVOKABLE QString formatHuman(const QString &spec) const;
     /// Always with weekday, no relative words: "czw, 15 paź 09:00" / "Thu, Oct 15 09:00"
     /// (year added when not the current year).

@@ -6,7 +6,7 @@
 # page embedding them and the picture view of a drawing; drawings of Obsidian's Excalidraw plugin
 # (`*.excalidraw.md`: an editable one, one with a frame and one in the plugin's oldest form —
 # read-only —, a plugin file without the suffix embedded as a page and edited, its pasted picture
-# from "## Embedded Files" shown; a plugin file opened as a page shows its drawing), a drawing on a slide (a backdrop, "Podkład": the drawing, its PDF's page
+# from "## Embedded Files" shown; a plugin file opened as a page shows its drawing), a drawing on a slide (a backdrop: the drawing, its PDF's page
 # picker, the paper's menu, its embed), a PDF embedded as its thumbnail and the PDF viewer (with
 # its search and page jump opened), in the real app at desktop and phone sizes in
 # the light and the dark theme, headless; fails when the app does not start or QML reports a

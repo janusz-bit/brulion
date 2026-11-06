@@ -12,7 +12,7 @@ import Brulion
 // fitted picture, like a page's references (the picture then sits at the top, not centred): the
 // notes that embed or link it (ContentBacklinks).
 // The bar holds the file's name (plain text: a name from anywhere is no markup), the size toggle
-// and "Pokaż jako tekst" ⇄ "Pokaż obraz": the file read as text, read-only — a binary picture's
+// and "Show as text" ⇄ "Show picture": the file read as text, read-only — a binary picture's
 // bytes are mojibake there, and a typed character would have been saved over the picture; the
 // view is for text-like assets such as SVG (`asText`, PageView switches it, Ctrl+E too).
 // In a narrow view (a phone; on the desktop between the sidebar and the side panel) the size
@@ -21,13 +21,13 @@ import Brulion
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
 // A drawing (Workspace.isDrawing: an SVG with a scene, a `.excalidraw` scene, an Obsidian
-// Excalidraw plugin file opened as a page — PageView.drawingPage) has "Edytuj rysunek" in the bar
+// Excalidraw plugin file opened as a page — PageView.drawingPage) has "Edit drawing" in the bar
 // (the drawing editor, route "drawing"); the picture follows the file when it is saved again, and
 // the app's theme (light or dark paper, as the drawing chooses: Workspace.drawingUrl, the drawing
 // image provider).
 // `textOnly` (PageView's safety net for attachments that are no note, no picture and no PDF —
-// DOCX, ZIP, MP3…): the bar names the file and says "Tylko do odczytu", the view is the file read
-// as text, nothing else — no file's bytes ever reach the block editor; "Otwórz w innej aplikacji"
+// DOCX, ZIP, MP3…): the bar names the file and says "Read-only", the view is the file read
+// as text, nothing else — no file's bytes ever reach the block editor; "Open in another app"
 // for a kind on the allow-list (Workspace.canOpenInOtherApp: DOCX, XLSX, ODT, MP3… by name and
 // first bytes; never a program, a script, a page or an archive).
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
@@ -58,7 +58,7 @@ Item {
     property bool textOnly: false
     /// Renderer colours for the references (BlockEditor.rendererPalette).
     property var rendererPalette: ({})
-    /// The bar's "Pokaż jako tekst" / "Pokaż obraz" (PageView switches `asText`).
+    /// The bar's "Show as text" / "Show picture" (PageView switches `asText`).
     signal textToggleRequested()
 
     /// Fitted into the view ↔ the picture's own pixels (the flickable then).
@@ -75,7 +75,7 @@ Item {
     readonly property bool scalable: !root.textOnly && (root.drawing || Js.test(root.fileName, "\\.svg$", "i"))
     /// This device can decode the picture's format (see above); a drawing's preview always.
     readonly property bool decodable: !root.textOnly && (root.drawing || (root.path !== "" && Workspace.canDecodePicture(root.path)))
-    /// "WEBP" for assets/łąka.webp (the message for a format this device cannot show).
+    /// "WEBP" for assets/meadow.webp (the message for a format this device cannot show).
     readonly property string formatName: {
         const i = Js.lastIndexOf(root.fileName, ".")
         return i < 0 ? "" : Js.toUpperCase(Js.sliceFrom(root.fileName, i + 1))

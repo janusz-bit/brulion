@@ -5,8 +5,8 @@ import QtQuick.Templates as T
 import Brulion
 
 // ContentSidePanel — the side panel's context for the open page (wide windows, ShellSidePanel
-// loads a view's `sidePanel`): tabs Odnośniki (the page's linked references, compact), Konspekt
-// (its headings, live while typing; a click scrolls the editor there) and Kalendarz (a month
+// loads a view's `sidePanel`): tabs Links (the page's linked references, compact), Outline
+// (its headings, live while typing; a click scrolls the editor there) and Calendar (a month
 // with the days that have a journal; a click opens that day, the day's dates and reminders are
 // listed under it). The chosen tab is remembered.
 //
@@ -69,7 +69,7 @@ Item {
             Layout.fillHeight: true
             currentIndex: tabBar.currentIndex
 
-            // ---- Odnośniki --------------------------------------------------------------------------
+            // ---- Links ------------------------------------------------------------------------------
             Flickable {
                 id: linksFlick
                 TouchFlick.enabled: true
@@ -91,13 +91,13 @@ Item {
                 }
             }
 
-            // ---- Konspekt ---------------------------------------------------------------------------
+            // ---- Outline ----------------------------------------------------------------------------
             ContentOutline {
                 controller: panel.controller
                 editor: panel.editor
             }
 
-            // ---- Kalendarz --------------------------------------------------------------------------
+            // ---- Calendar ---------------------------------------------------------------------------
             ContentMiniCalendar {
                 selectedDate: panel.journalDate !== "" ? panel.journalDate : DatesHelper.today
             }

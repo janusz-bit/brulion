@@ -1,6 +1,6 @@
 // PageTools — page-level helpers for PageView's header and menu: what a rename will touch, the
 // properties summary (aliases, page tags, other page properties, folder breadcrumb), the page's
-// wiki link for "Kopiuj odnośnik", title validation, and exporting one page (Markdown or a
+// wiki link for "Copy link", title validation, and exporting one page (Markdown or a
 // self-contained HTML document) to the clipboard or a file.
 //
 //   PageTools { id: tools; workspace: Workspace }
@@ -80,7 +80,7 @@ public:
     ///   names this page (docs/SYNTAX.md §3), also for a page not written yet (the one in use that
     ///   names it most exactly: #praca/raporty for praca/raporty.md); key "" for an attachment }.
     Q_INVOKABLE QVariantMap summary(const QString &path) const;
-    /// The page menu's and the folder tree's "Kopiuj link": "[[Dom]]", "[[Projekty/Dom]]" when the
+    /// The page menu's and the folder tree's "Copy link": "[[Dom]]", "[[Projekty/Dom]]" when the
     /// title alone names another page (the shortest path that tells them apart), a daily note by
     /// its file name — notebook::pageLinkTarget(), the page part of every copied link; an
     /// attachment by the shortest name that reaches it ("[[plan.png]]").

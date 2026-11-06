@@ -39,7 +39,7 @@ struct PlainTextOptions {
     std::function<QString(const QString &id)> blockText;
 };
 
-/// The blocks `tops` with their subtrees as plain text ("Kopiuj jako tekst"): one group of lines
+/// The blocks `tops` with their subtrees as plain text ("Copy as plain text"): one group of lines
 /// per block, two spaces per level below its top item; list items with "• " (numbered ones with
 /// their number as written), tasks with ☐ (☑ done, ☒ cancelled); headings and quotes without
 /// their markers, a callout's title without its `[!type]`, code without its fences (the code

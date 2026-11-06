@@ -1,4 +1,4 @@
-# brulion_widgets — the C++ side of the Android home-screen widgets (docs/ANDROID.md "Widgety"):
+# brulion_widgets — the C++ side of the Android home-screen widgets (docs/ANDROID.md "Widgets"):
 # the snapshot they show (widgetsnapshot.h: TasksView's tasks, the calendar's agenda, favourite and
 # recent pages, where quick add writes) and the entries quick add queued for the app
 # (widgetactions.h). Pure and built on every platform, so tests/app/widgets covers it on the

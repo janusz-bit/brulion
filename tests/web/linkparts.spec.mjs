@@ -1,5 +1,5 @@
 // The path parts of a link to a page in a folder in the web build (docs/SYNTAX.md §2 "Path parts",
-// docs/WEB.md "Testy w przeglądarkach"), in Chromium and Firefox: [[Projekty/Remont mieszkania]]
+// docs/WEB.md "Browser tests (Playwright)"), in Chromium and Firefox: [[Projekty/Remont mieszkania]]
 // in today's journal is drawn as two links; the app reports where they are on screen and the route
 // shown (?selftest=linkparts: src/app/diag/webselftest.h); the real browser mouse — and, in a
 // phone-sized Chromium with touch, a real tap — on "Projekty" opens the folder's pages (All pages

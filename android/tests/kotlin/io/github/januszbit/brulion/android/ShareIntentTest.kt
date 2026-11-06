@@ -9,7 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** "Udostępnij → Brulion": the pure part of ShareActivity (filter, copy names, inbox, JSON). */
+/** "Share → Brulion": the pure part of ShareActivity (filter, copy names, inbox, JSON). */
 class ShareIntentTest {
   @Test
   fun textFilesByExtensionOrType() {

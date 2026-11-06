@@ -97,7 +97,7 @@ public:
     /// Move the bar tab at `from` to `to` (drag and drop in the bar).
     bool move(int from, int to);
     /// Show bar tab `id` in the split pane, focused (it may not be the main pane's); id 0: a new
-    /// tab with the focused tab's route (Podziel widok). False when nothing changed.
+    /// tab with the focused tab's route (Split view). False when nothing changed.
     bool split(int id = 0);
     /// The split pane goes (its tab stays in the bar); the main pane is focused.
     bool closeSplit();

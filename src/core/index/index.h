@@ -51,7 +51,7 @@
 //                  page properties: propertyKeys() -> PropertyKeyInfo{key, count, type} (keys
 //                           of all notes' page properties, most used first),
 //                           propertyValues(key, prefix, limit) -> PropertyValueCount{value, count}
-//                           (the values written for a key; the "Właściwości" panel's suggestions)
+//                           (the values written for a key; the "Properties" panel's suggestions)
 //                  graph:   graph(includeTags, includeMissing) -> GraphData{nodes{id, title, degree,
 //                           isTag, isMissing}, edges{source, target}} (a tag naming a note is an
 //                           edge to it; "#tag" nodes only for the others)

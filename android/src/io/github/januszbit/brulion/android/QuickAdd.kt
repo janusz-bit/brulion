@@ -24,12 +24,12 @@ internal object QuickAdd {
 
   enum class Outcome { WRITTEN, QUEUED, EMPTY }
 
-  /** The day chip of the dialog: Dziś, Jutro, Bez terminu, Data… (a fixed [customDate]). */
+  /** The day chip of the dialog: Today, Tomorrow, No date, Date… (a fixed [customDate]). */
   enum class DayChoice { TODAY, TOMORROW, NONE, DATE }
 
   /**
    * The date of [choice] when the entry is added on [today] — not when the dialog opened: one
-   * left open past midnight writes the new day's "Dziś".
+   * left open past midnight writes the new day's "Today".
    */
   fun resolveDay(choice: DayChoice, customDate: LocalDate?, today: LocalDate): LocalDate? =
     when (choice) {
@@ -120,7 +120,7 @@ internal object QuickAdd {
   /**
    * A native reminder for a task with a time ahead of [now] (null otherwise): the app's next
    * `scheduleReminders` replaces it with its own for the line (provisional ones are not kept).
-   * A negative id: the app's ids are positive. It offers "Zrobione" like the app's: its key
+   * A negative id: the app's ids are positive. It offers "Done" like the app's: its key
    * ([PROVISIONAL_KEY] + the entry's id) has no occurrence id of the app's, so the app finds the
    * task by its note, time, line and text (WorkspaceReminders::current()).
    */

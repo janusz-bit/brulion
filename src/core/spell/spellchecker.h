@@ -88,7 +88,7 @@ public:
 
     /// The personal word list (replaces the previous one).
     void setPersonalWords(const QStringList &words);
-    /// Words ignored until the app quits ("Ignoruj").
+    /// Words ignored until the app quits ("Ignore").
     void setIgnoredWords(const QStringList &words);
 
     /// Whether `word` is spelled right (the rules above). `word` as checkedText() gives it.

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The tasks widget ("Mój dzień", TasksWidget.kt): header with the day and the "+" of quick add,
+<!-- The tasks widget ("My day", TasksWidget.kt): header with the day and the "+" of quick add,
      the list of overdue and today's tasks (and tomorrow's on a tall widget). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"

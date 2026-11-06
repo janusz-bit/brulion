@@ -10,7 +10,7 @@ import Brulion
 // stored in the settings): the edited block's misspelled word is marked, a right-click on it
 // (a tap with a finger) opens the text menu with its corrections at the top — on touch UIs only
 // the spelling's items —; a correction replaces the word (one undo step, Ctrl+Z brings it back),
-// "Dodaj do słownika" and "Ignoruj" take the mark away; words in code, links and tags are never
+// "Add to dictionary" and "Ignore" take the mark away; words in code, links and tags are never
 // marked; spell checking switched off marks nothing.
 // Steps run on the playground's step runner (EditorPlayground.runSteps(), steps()).
 QtObject {

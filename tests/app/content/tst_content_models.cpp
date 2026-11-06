@@ -176,7 +176,7 @@ private Q_SLOTS:
     void journalsMidnightRollover()
     {
         // The app runs over midnight (JournalsView binds today: DatesHelper.today, which changes
-        // at 00:00): yesterday's row must stop saying "today" (the "Dziś" badge, the heading's
+        // at 00:00): yesterday's row must stop saying "today" (the "Today" badge, the heading's
         // relative day, daysAgo), the new day comes first without rebuilding the kept rows (a day
         // being edited keeps its delegate and editor).
         auto ws = open({ { u"journals/2026-10-14.md"_s, u"- piszę o północy: zażółć\n"_s },

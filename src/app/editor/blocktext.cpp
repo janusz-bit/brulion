@@ -625,7 +625,7 @@ QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
     default: t = markdown::stripTokens(s.editText); break;
     }
     // Heading markers, quote markers; links, emphasis and code marks (markdown::stripInlineMarkup,
-    // shared with "Kopiuj jako tekst"); property lines.
+    // shared with "Copy as plain text"); property lines.
     static const QRegularExpression heading(u"^\\s{0,3}#{1,6}\\s+"_s);
     static const QRegularExpression quote(u"(^|\\n)\\s*>\\s?(\\[![^\\]]*\\][+-]?\\s*)?"_s);
     static const QRegularExpression props(u"(^|\\n)[A-Za-z0-9_-]+::[^\\n]*"_s);

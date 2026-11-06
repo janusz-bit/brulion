@@ -1,5 +1,5 @@
 // Self-tests of the browser build that need the running app (tests/web, the Playwright harness;
-// docs/WEB.md "Testy w przeglądarkach"): `?selftest=webpictures`, `?selftest=pen`, `?selftest=pdf`,
+// docs/WEB.md "Browser tests (Playwright)"): `?selftest=webpictures`, `?selftest=pen`, `?selftest=pdf`,
 // `?selftest=pdfauto` and `?selftest=linkparts` (wasm/index.html → --selftest-webpictures /
 // --selftest-pen / --selftest-pdf / --selftest-pdfauto / --selftest-linkparts; main.cpp starts them
 // once the notebook is open).
@@ -172,7 +172,7 @@ private:
     int m_changes = 0;
 };
 
-/// PDFs in the browser build (docs/WEB.md "PDF w przeglądarce"): every 250 ms for two minutes,
+/// PDFs in the browser build (docs/WEB.md "PDFs in the browser"): every 250 ms for two minutes,
 /// when it changed, publishes "brulionPdfSelfTest" — {route: {view, path} (routeSource()), chip:
 /// {x, y, w, h, icon, text} (the first PDF chip on screen, "pdfEmbedChip", window coordinates) or
 /// null, link: {x, y, w, h} (the first rendered text on screen whose rich text links "<a href" a

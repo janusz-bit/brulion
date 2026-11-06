@@ -2,18 +2,18 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// TaskStatusMenu — the menu that gives a task its status (docs/SYNTAX.md §5): Do zrobienia `[ ]`,
-// W toku `[/]`, Zrobione `[x]`, Oczekujące `[>]`, Anulowane `[-]` and Bez statusu (the checkbox or
+// TaskStatusMenu — the menu that gives a task its status (docs/SYNTAX.md §5): To do `[ ]`,
+// In progress `[/]`, Done `[x]`, Waiting `[>]`, Cancelled `[-]` and No status (the checkbox or
 // Logseq keyword goes, the text stays), the current status checked. One menu everywhere a task
 // checkbox is shown: a right-click or long press on a TaskBox (the editor, query results,
 // embeds, backlinks and tags, the calendar, Tasks), the editor's Ctrl+Shift+Enter and the touch
-// toolbar's task button held down; Tasks rows put "Otwórz" first (`showOpen`).
+// toolbar's task button held down; Tasks rows put "Open" first (`showOpen`).
 //
 //   TaskStatusMenu { id: menu; status: task.status; onStatusChosen: (status) => setStatus(status) }
 //   menu.popup(box, 0, box.height)
 //
 // Status names as in the models: "todo" | "doing" | "done" | "deferred" | "cancelled"; "" is no
-// status (a block that is no task: nothing checked but "Bez statusu"). statusChosen() comes with
+// status (a block that is no task: nothing checked but "No status"). statusChosen() comes with
 // the choice also when it is the current status; callers write only changes. React to it with
 // the last statement of the handler: writing the status may destroy the checkbox that owns the
 // menu (no status, a query result that leaves the query).
@@ -26,12 +26,12 @@ BMenu {
 
     /// The task's current status ("" = none).
     property string status
-    /// "Otwórz" (openRequested()) above the statuses.
+    /// "Open" (openRequested()) above the statuses.
     property bool showOpen: false
 
     /// The timer and dependency items below the statuses.
     property bool showTaskTools: false
-    /// The task's timer runs ("Zatrzymaj licznik czasu" instead of "Uruchom …").
+    /// The task's timer runs ("Stop timer" instead of "Start timer").
     property bool clockRunning: false
 
     signal statusChosen(string status)

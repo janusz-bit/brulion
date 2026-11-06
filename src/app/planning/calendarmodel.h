@@ -16,9 +16,9 @@
 // Day roles: date ("YYYY-MM-DD"), day, month, year, dayOfWeek (1 = Monday), inMonth, isToday,
 // isPast, isWeekend, isSelected, weekNumber (ISO), journalPath ("" = none), hasJournal, items
 // (list of entry maps, journals excluded, see below), itemCount, timedCount, kinds (distinct
-// mark kinds for dots: due, overdue, scheduled, reminder, alarm, done), label ("czw, 15 paź"),
-// longLabel ("czwartek, 15 października"); for the grids: orderedItems (openEntriesFirst()),
-// allDay (allDayEntries()), timed (timedLanes()).
+// mark kinds for dots: due, overdue, scheduled, reminder, alarm, done), label ("Thu, Oct 15"),
+// longLabel ("Thursday, October 15"; Polish "czwartek, 15 października"); for the grids:
+// orderedItems (openEntriesFirst()), allDay (allDayEntries()), timed (timedLanes()).
 //
 // Entry maps: { key, kind ("due" | "scheduled" | "start" | "reminder" | "done"), variant (chip:
 // "due" | "overdue" | "scheduled" | "reminder" | "alarm" | "done" | "neutral"), icon, time
@@ -81,7 +81,7 @@ private:
 };
 
 /// `items` (entry maps) with the open ones first, a stable partition: times keep their order (the
-/// month's pills and "+N więcej" hide finished entries first).
+/// month's pills and "+N more" hide finished entries first).
 QVariantList openEntriesFirst(const QVariantList &items);
 /// The entries of `items` without a time (minutes < 0), in order (the week's all-day strip).
 QVariantList allDayEntries(const QVariantList &items);
@@ -113,9 +113,10 @@ class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
 
     Q_PROPERTY(QString rangeStart READ rangeStart NOTIFY rangeChanged FINAL)
     Q_PROPERTY(QString rangeEnd READ rangeEnd NOTIFY rangeChanged FINAL)
-    /// Header: "Październik 2026" / "12–18 października 2026" / "15 października – 11 listopada 2026".
+    /// Header: "October 2026" / "October 12–18, 2026" / "October 15 – November 11, 2026" (Polish
+    /// with genitive month names: "12–18 października 2026").
     Q_PROPERTY(QString title READ title NOTIFY rangeChanged FINAL)
-    /// The same for narrow headers: "Październik 2026" / "12–18 paź" / "28 wrz – 4 paź" (the year
+    /// The same for narrow headers: "October 2026" / "Oct 12–18" / "Sep 28 – Oct 4" (the year
     /// only when the range is not in today's year).
     Q_PROPERTY(QString shortTitle READ shortTitle NOTIFY rangeChanged FINAL)
     /// Month shown by the month grid (also the anchor's month in other modes).
@@ -228,7 +229,7 @@ public:
     /// title }), then the entries as in `items`.
     Q_INVOKABLE QVariantList dayItems(const QString &date) const;
     /// dayItems() without the journal, the open entries first (stable: times keep their order) —
-    /// CalendarDayPanel's "Plan dnia".
+    /// CalendarDayPanel's "Plan of the day".
     Q_INVOKABLE QVariantList dayEntries(const QString &date) const;
     /// The day has a daily note.
     Q_INVOKABLE bool dayHasJournal(const QString &date) const;

@@ -3,12 +3,12 @@ import QtQuick
 import QtQuick.Templates as T
 import Brulion
 
-// BColorSwatch — a round colour button (the accent presets in Ustawienia → Wygląd, the custom
+// BColorSwatch — a round colour button (the accent presets in Settings → Appearance, the custom
 // colour grid of BAccentDialog). `selected` draws a ring around it and a check mark inside (in
 // black or white, whichever reads on the colour); `label` is the tooltip and accessible name;
-// `iconName` replaces the check (e.g. "plus" for "Własny…" without a colour yet).
+// `iconName` replaces the check (e.g. "plus" for "Custom…" without a colour yet).
 //
-//   BColorSwatch { color: "#3b7dd8"; label: qsTr("Niebieski"); selected: true; onClicked: … }
+//   BColorSwatch { color: "#3b7dd8"; label: qsTr("Blue"); selected: true; onClicked: … }
 T.AbstractButton {
     id: control
 

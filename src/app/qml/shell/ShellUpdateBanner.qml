@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ShellUpdateBanner — a newer Brulion is released (AppController.updates): "Zobacz na GitHubie"
+// ShellUpdateBanner — a newer Brulion is released (AppController.updates): "View on GitHub"
 // opens the release's page, the cross dismisses this version. Under the top bar, in every view.
 BCard {
     id: banner

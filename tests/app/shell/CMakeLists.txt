@@ -7,9 +7,9 @@ brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_sh
 brulion_add_test(tst_shell_tabs SOURCES tst_tabs.cpp LIBS brulion_shell)
 # ViewTraits (viewtraits.h): what ShellRouteView reads of its view — typed, following changes, the
 # optional functions called (typed and untyped QML views); folderChoices (folderchoices.h): the
-# rows of "Przenieś do…".
+# rows of "Move to…".
 brulion_add_test(tst_shell_viewtraits SOURCES tst_viewtraits.cpp LIBS brulion_shell Qt6::Qml)
-# "Udostępnij → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
+# "Share → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
 # data, saving to the journal or to new pages, waiting for the notebook, the copies removed; files
 # opened with Brulion (--open, a second launch's `share` message: copies, the files untouched, a
 # page of the notebook opened), the browser's share target (--share-query).
@@ -41,8 +41,8 @@ brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIB
 # saved again and shown again (their versioned URL).
 brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp ../minihttpserver.h
     LIBS brulion_shell brulion_editor brulion_core_drawing Qt6::Network)
-# PDFs on the real Workspace (workspacepdf.cpp): "Otwórz w innej aplikacji" through a recording hook
-# (what is refused and why), "Rysuj na tej stronie" (the drawing embedded after the PDF's block, or
+# PDFs on the real Workspace (workspacepdf.cpp): "Open in another app" through a recording hook
+# (what is refused and why), "Draw on this page" (the drawing embedded after the PDF's block, or
 # in today's journal), the drawings of a page, the thumbnails with this build's renderer.
 brulion_add_test(tst_shell_workspace_pdf SOURCES tst_workspace_pdf.cpp
     LIBS brulion_shell brulion_platform brulion_pdfview brulion_core_drawing)
@@ -54,11 +54,11 @@ brulion_add_test(tst_shell_workspace_pdf SOURCES tst_workspace_pdf.cpp
 # edge swipe (also beyond a simulated gesture-navigation zone), All
 # pages, tasks, editor bullets; the desktop run: left and right clicks), folders (the open page
 # revealed in the tree — wholly in the list's visible part, also when the window got shorter while
-# the drawer was closed; the new folder and "Pokaż w drzewie" too —; a click on a row in view
+# the drawer was closed; the new folder and "Show in tree" too —; a click on a row in view
 # leaves the tree where it was; touchpad, wheel and arrow-key scrolling stays across a resize;
-# the desktop sidebar shown again after its header grew starts at the top), "Przenieś do…" from
+# the desktop sidebar shown again after its header grew starts at the top), "Move to…" from
 # a row's "⋯" / right-click menu, a root folder from the
-# "Strony" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
+# "Pages" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
 # breadcrumb), the block editor inside the shell (real keys, source mode, a link to a missing
 # page), PDFs (the thumbnail, the viewer's keys, zoom, search, page jump, a drawing on a page, a
 # locked PDF from tests/data/pdf: BRULION_SELFTEST_PDF_DIR), tabs (shortcuts, middle and Ctrl+clicks,
@@ -81,10 +81,11 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     add_test(NAME tst_shell_qml
         COMMAND brulion --demo --route journals --selftest-shell --no-single-instance
             --size 412x915 --touch --now "2026-10-14 10:00" --locale pl)
-    # Started from the "Quick capture" launcher action: a popup open from the first moment.
+    # Started from the "Quick capture" launcher action: a popup open from the first moment. The
+    # English UI with the Polish sample notes the self-test is written against (--sample-language).
     add_test(NAME tst_shell_qml_capture
         COMMAND brulion --demo --route journals --capture --selftest-shell --no-single-instance
-            --size 1280x800 --now "2026-10-14 10:00" --locale en)
+            --size 1280x800 --now "2026-10-14 10:00" --locale en --sample-language pl)
     # Next to other tests (two cores each): every wait of the self-test follows the state it waits
     # for (shellselftest.cpp), so a loaded machine only makes it slower.
     # (150, then +30 for the PDF viewer's steps — selection, password, table of contents, links,

@@ -7,14 +7,14 @@ import Brulion
 // ExportPanel — the "Export" tab of ImportExportView (ExportController): format (Markdown ZIP,
 // Obsidian, Logseq, HTML website, one HTML file, PDF, Word, Pandoc Markdown, JSON, iCalendar, OPML,
 // tasks CSV), what to export (the whole notebook / a folder / a page, with the attachments they use),
-// then "Eksportuj…": the file is produced in the background and saved where the user says.
+// then "Export…": the file is produced in the background and saved where the user says.
 //
-// Pictures from the internet (`![](https://…)`): the HTML, PDF, Word and Pandoc formats offer "Zostaw
-// adresy" (the export shows them only online) or "Dołącz kopie" (copies from the device's cache,
+// Pictures from the internet (`![](https://…)`): the HTML, PDF, Word and Pandoc formats offer "Keep
+// addresses" (the export shows them only online) or "Include copies" (copies from the device's cache,
 // the missing ones fetched first); the choice is remembered on the device (AppSettings).
 //
 // Saving: desktop and Android — the system's file picker in save mode (FilePicker; Android: the
-// system's "Save as" document picker; "Zapisz w Pobranych" writes into the Download folder
+// system's "Save as" document picker; "Save to Downloads" writes into the Download folder
 // instead); browser — the browser's save picker or a download (platform/wasm/wasmfiles.h).
 // `preset` (route parameters): { format, scope, folder, path (the page) }.
 ColumnLayout {
@@ -22,7 +22,7 @@ ColumnLayout {
 
     property var preset: ({})
     readonly property alias exporter: exporterObject
-    // Phones: no icons, so "Cały notatnik" fits.
+    // Phones: no icons, so "Whole notebook" ("Cały notatnik" in Polish) fits.
     readonly property list<var> scopes: [
         { value: "vault", text: qsTr("Whole notebook"), icon: Theme.compact ? "" : "notebook-pen" },
         { value: "folder", text: qsTr("Folder"), icon: Theme.compact ? "" : "folder" },
@@ -197,7 +197,7 @@ ColumnLayout {
         fill: Theme.compact
         enabled: !exporterObject.busy
         accessibleName: qsTr("What to export")
-        // Phones: no icons, so "Cały notatnik" fits.
+        // Phones: no icons, so "Whole notebook" ("Cały notatnik" in Polish) fits.
         model: panel.scopes
         currentValue: exporterObject.scope
         onActivated: (value) => exporterObject.scope = value

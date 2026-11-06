@@ -533,7 +533,7 @@ private Q_SLOTS:
 
     void idsForCopiedLinks()
     {
-        // "Kopiuj odwołanie do bloku" on every kind of block (docs/SYNTAX.md §2 "Copied links").
+        // "Copy block reference" on every kind of block (docs/SYNTAX.md §2 "Copied links").
         const auto tagged = ensureBlockId(u"## Plan #praca\n\nTekst"_s, 0);
         QCOMPARE(tagged.content, u"## Plan #praca ^"_s + tagged.id + u"\n\nTekst"_s);
         QVERIFY(resolves(tagged.content, tagged.id, 0));

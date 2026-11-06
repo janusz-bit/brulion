@@ -19,11 +19,11 @@ import Brulion
 // Narrow: the sidebar is a Drawer (the bottom navigation's Menu, or a swipe from the left edge — on
 // touch UIs from a strip beyond the zone Android's gesture navigation keeps for "back"; the top
 // bar's ☰ only on a view that replaces the bottom navigation, the drawing editor) and a bottom
-// navigation bar with quick capture ("+ Notatka") before Menu; the Android back key walks back through
+// navigation bar with quick capture ("+ Note") before Menu; the Android back key walks back through
 // AppController's history and only lets the app close from the home view.
 //
 // Owns the shell's popups (command palette, quick switcher, quick capture, new page or folder,
-// rename, "Przenieś do…", delete confirmation, about) and the global shortcuts (ShortcutMap's,
+// rename, "Move to…", delete confirmation, about) and the global shortcuts (ShortcutMap's,
 // custom ones too; docs/UI.md "Custom shortcuts") and focus mode (no bars around a page or the
 // journal: AppSettings.focusMode, "Statistics and focus mode"); bars, the sidebar
 // and views call the open*() functions (views through AppController.requestItemAction(action,
@@ -34,7 +34,7 @@ import Brulion
 // toolbar a view docks on its bottom edge sits on the keyboard, in the side panel too. While the
 // keyboard is up the bottom navigation makes way; when it goes (Back, the keyboard's own key)
 // the navigation comes back and a toolbar that stays — the editing goes on — docks right above
-// it (its "+ Notatka" then ends that editing before quick capture opens); a bar a view has at
+// it (its "+ Note" then ends that editing before quick capture opens); a bar a view has at
 // the bottom instead of the navigation (the drawing's tools) takes its place.
 FocusScope {
     id: shell
@@ -130,8 +130,8 @@ FocusScope {
                                     : routeTitles.routeTitle(shell.currentView, shell.routePath,
                                                              routeTitles.field(AppController.currentRoute, "date"),
                                                              routeTitles.field(AppController.currentRoute, "tag"))
-    /// Folders above the current page, or above the folder All pages shows (with "Wszystkie
-    /// strony" first): their titles (`crumbs`) and paths (`crumbPaths`; "" the notebook's root) —
+    /// Folders above the current page, or above the folder All pages shows (with "All
+    /// pages" first): their titles (`crumbs`) and paths (`crumbPaths`; "" the notebook's root) —
     /// a crumb opens All pages in that folder.
     readonly property string crumbFolder: currentView === "allPages" ? Js.slice(routePath, 0, Math.max(0, Js.lastIndexOf(routePath, "/")))
                                         : currentView === "page" && routePath !== "" ? Workspace.folderOf(routePath) : ""
@@ -199,7 +199,7 @@ FocusScope {
 
     // Titles of routes and pages (also the tab bar's, the tab switcher's, a page window's).
     ShellRouteTitles { id: routeTitles }
-    /// A page's title as people read it: daily notes by their date ("środa, 14 października
+    /// A page's title as people read it: daily notes by their date ("Wednesday, October 14,
     /// 2026"), not by their file name ("2026-10-14").
     function pageLabel(path: string): string {
         return routeTitles.pageLabel(path)
@@ -224,7 +224,7 @@ FocusScope {
             capture.open()
     }
     /// The share dialog for what another app shared (AppController.pendingShare; Android's
-    /// "Udostępnij → Brulion", the --share option).
+    /// "Share → Brulion", the --share option).
     function openShare(): void {
         if (AppController.routeText(AppController.pendingShare, "kind") === "")
             return
@@ -246,7 +246,7 @@ FocusScope {
     }
     function openNewFolder(parentFolder: string): void { newPage.openFor(parentFolder, true, false) }
     function openRename(path: string, isDir: bool): void { rename.openFor(path, isDir) }
-    /// "Przenieś do…" for a page, an attachment or a folder.
+    /// "Move to…" for a page, an attachment or a folder.
     function openMove(path: string, isDir: bool): void {
         if (path !== "")
             moveDialog.openFor(path, isDir)
@@ -290,7 +290,7 @@ FocusScope {
     function intValue(value: int): int {
         return value
     }
-    /// "Pokaż w drzewie": the sidebar (the drawer on phones) shows `path`, its "Strony" section
+    /// "Show in tree": the sidebar (the drawer on phones) shows `path`, its "Pages" section
     /// opened if it was collapsed.
     function revealInTree(path: string): void {
         if (path === "")
@@ -520,7 +520,7 @@ FocusScope {
                 Layout.fillWidth: true
                 bottomInset: shell.navigationBar
                 onMenuClicked: drawer.open()
-                // "+ Notatka": a block still edited with the keyboard hidden (its toolbar docked on
+                // "+ Note": a block still edited with the keyboard hidden (its toolbar docked on
                 // the bar) is ended first, as a tab's view change ends it.
                 onCaptureClicked: {
                     shell.routeView.endEditing()

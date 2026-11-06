@@ -482,7 +482,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     void midnightRefreshesAnOpenPage()
     {
         // The real clock (no fixed `now`): a page rendered yesterday follows the DayClock —
-        // "jutro" becomes "dziś", a task due yesterday turns red, query results run again.
+        // "jutro" (tomorrow) becomes "dziś" (today), a task due yesterday turns red, query results run again.
         const QDate today = QDate::currentDate();
         const QString due = today.toString(Qt::ISODate);
         const QString past = today.addDays(-1).toString(Qt::ISODate);
@@ -2608,7 +2608,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
 
     void recurrenceDialogKeepsTheWordsAfterTheRule()
     {
-        // The block menu's "Powtarzaj" and the reminder menu's "Powtarzanie > Zmień regułę…": only the
+        // The block menu's "Repeat…" and the reminder menu's "Repeat > Change rule…": only the
         // rule's text changes; the same rule in another phrasing stays as written.
         Fixture f(u"- Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy\n"_s);
         QCOMPARE(f.page.blockDates(0).value(u"recurrence"_s).toString(), u"every week"_s);
@@ -2851,7 +2851,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
 
     // `brulion-cli block link` (notebook::blockLinks) gives the links the editor copies, row by row,
     // and both name the page alike (notebook::pageLinkTarget on the real index — the page menu's
-    // "Kopiuj link" too): also next to pages of the same name in other folders.
+    // "Copy link" too): also next to pages of the same name in other folders.
     void copiedLinksMatchTheCommandLine_data()
     {
         QTest::addColumn<QString>("content");
@@ -4570,7 +4570,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.host.setWebPicture(pies, png);
         f.host.setWebPicture(brak, QByteArray("<html>404</html>"));
         QCOMPARE(f.page.webPictureUrls(), (QStringList{kot, pies, brak}));
-        // Nothing is fetched by showing the page: each picture waits for "Pokaż".
+        // Nothing is fetched by showing the page: each picture waits for "Show".
         QVariantMap e = f.role(0, "embeds").toList().value(0).toMap();
         QCOMPARE(e.value(u"web"_s).toBool(), true);
         QCOMPARE(e.value(u"state"_s).toString(), u"ask"_s);
@@ -4580,7 +4580,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(e.value(u"url"_s).toUrl().isEmpty());
         QCOMPARE(f.role(0, "onlyEmbeds").toBool(), true);
         QCOMPARE(f.host.webFetches(), 0);
-        // "Pokaż": loading, then the cached file.
+        // "Show": loading, then the cached file.
         QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
         f.page.showWebPicture(kot);
         QCOMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"loading"_s);
@@ -5025,7 +5025,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.linkToFile(u"assets/nowy.bin"_s), u"[[assets/nowy.bin]]"_s);
     }
 
-    /// The browser's pick for "/Plik…": as pictureReceiver(), linked, with the same file reused.
+    /// The browser's pick for "/File…": as pictureReceiver(), linked, with the same file reused.
     void fileLinkReceiver()
     {
         Fixture f(u"- Pierwszy\n- Drugi\n"_s);
@@ -5093,7 +5093,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     {
         // A picture whose format this device has no decoder for (WebP, AVIF without Qt's image
         // plugins: EditorHost::canDecodePicture) is not loaded: the embed names its format
-        // (EmbedView) instead of "Nie można wczytać".
+        // (EmbedView) instead of "Cannot load".
         FakeEditorHost host;
         host.setUndecodablePictureFormats({u"webp"_s});
         QByteArray png;
@@ -5339,7 +5339,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                  (QStringList{u"assets/wykład p. 1.svg"_s, u"assets/wykład p. 2.svg"_s, u"assets/wykład p. 3.svg"_s}));
         QCOMPARE(f.text(),
                  u"- Wykład 3: ![[wykład p. 1.svg]]\n- ![[wykład p. 2.svg]]\n- ![[wykład p. 3.svg]]\n- dalej\n"_s);
-        // Each a drawing with the page as its backdrop, as the app shows it ("Jak motyw").
+        // Each a drawing with the page as its backdrop, as the app shows it ("Like the app").
         for (int i = 0; i < 3; ++i) {
             QFile file(f.host.assetUrl(paths.at(i)).toLocalFile());
             QVERIFY(file.open(QIODevice::ReadOnly));

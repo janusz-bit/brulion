@@ -4,7 +4,7 @@
 // stops), the preview as a list model (a row per file, then its hits, then how many more; capped by
 // notebook::ReplaceLimits, the count stays exact), what is ticked (everything at first; kept while a
 // hit is opened: keepTicks()), applying in
-// slices and undoing. The session outlives the view: a toast's "Cofnij" works from any view, and
+// slices and undoing. The session outlives the view: a toast's "Undo" works from any view, and
 // only for the replace it told about (undo(token)).
 #pragma once
 

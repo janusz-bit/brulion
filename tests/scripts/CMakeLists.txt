@@ -47,13 +47,13 @@ if(BRULION_BASH)
 endif()
 
 # The draft F-Droid recipe (packaging/fdroid) against the Android build scripts it calls and the
-# project version (docs/ANDROID.md, "F-Droid").
+# project version (docs/ANDROID.md, "The F-Droid recipe").
 if(BRULION_BASH)
     add_test(NAME tst_scripts_fdroid_recipe
              COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_fdroid_recipe.sh ${PROJECT_SOURCE_DIR})
 endif()
 
-# Brulion's own F-Droid repository (docs/ANDROID.md, "Własne repozytorium F-Droid"):
+# Brulion's own F-Droid repository (docs/ANDROID.md, "Brulion's own F-Droid repository"):
 # scripts/fdroid-repo.sh with stand-ins for fdroid, keytool, gh and curl.
 if(BRULION_BASH)
     add_test(NAME tst_scripts_fdroid_repo
@@ -61,7 +61,7 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/scripts/fdroid-repo.sh)
 endif()
 
-# The browser version in one HTML file (docs/WEB.md, "Jeden plik HTML"): scripts/wasm-single-file.py
+# The browser version in one HTML file (docs/WEB.md, "Single HTML file"): scripts/wasm-single-file.py
 # on stand-in builds with the real wasm/index.html; needs python3 (skipped without it).
 if(BRULION_BASH)
     add_test(NAME tst_scripts_wasm_single_file

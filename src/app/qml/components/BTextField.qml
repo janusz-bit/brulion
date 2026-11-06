@@ -5,8 +5,8 @@ import Brulion
 
 // BTextField — single-line text input.
 //
-//   BTextField { placeholderText: qsTr("Nazwa strony"); leadingIcon: "file-text"; clearable: true }
-//   BTextField { text: url; errorText: valid ? "" : qsTr("Nieprawidłowy adres") }
+//   BTextField { placeholderText: qsTr("Page name"); leadingIcon: "file-text"; clearable: true }
+//   BTextField { text: url; errorText: valid ? "" : qsTr("Invalid address") }
 //
 // leadingIcon:  Lucide icon inside the field on the left
 // clearable:    shows an × button while there is text; Escape clears too (signal cleared())

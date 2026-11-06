@@ -1,228 +1,231 @@
-# Do zrobienia
+# To do
 
-Lista pomysłów i znanych braków, podzielona na kategorie. Kolejność niczego nie przesądza. Punkt,
-który zostanie zrobiony w repozytorium, po prostu znika z listy.
+A list of ideas and known gaps, split into categories. The order means nothing. An item that gets
+done in the repository simply disappears from the list.
 
-## Funkcje
+## Features
 
-* **Wsparcie dla AI** — zakres do ustalenia (dziś agenci AI korzystają z `brulion-cli`, serwera
-  MCP i sterowania aplikacją: docs/CLI.md). U konkurencji: asystent w edytorze z własnym kluczem
-  API (AFFiNE), asystent pisania (SiYuan); do rozważenia też pytania do notatek i wyszukiwanie
-  semantyczne na lokalnym modelu.
-* **Rozszerzalność jak w Emacsie i TiddlyWiki** — użytkownik zmienia i rozszerza Brulion z poziomu
-  notatnika (własne polecenia, widoki, makra, zachowania); zakres i bezpieczeństwo do ustalenia
-  (notatki przychodzą z synchronizacji i importu).
-* **Mały język do układu interfejsu (w stylu Typst)** — plik tekstowy opisujący, co i w jakiej
-  kolejności pokazują pasek ikon, panel stron, menu „Więcej”, karty i dolna nawigacja (ikony,
-  podpisy, grupy). Dziś ustawia się to tylko w Ustawienia → Wygląd → Układ (ukryte pozycje,
-  kolejność sekcji panelu, przyciski dolnej nawigacji).
-* **Ustawienia notatnika w notatkach** — ustawienia notatnika zapisane jako notatka (strona
-  w notatniku, edytowalna jak każda inna i synchronizowana razem z nim) zamiast
-  `.brulion/config.json`; do ustalenia format, przeniesienie istniejących ustawień i co zostaje
-  ustawieniem urządzenia.
-* **Zdjęcia z internetu — sprawdzić na prawdziwym telefonie.** Emulator Androida
-  (`scripts/android-emulator-test.sh --web-pictures`) i przeglądarki Chromium i Firefox
-  (`tests/web`, GitHub Actions) sprawdzają to automatycznie; zostaje prawdziwy telefon
-  (docs/ANDROID.md „Obrazy z internetu”): przesuwanie powiększonego zdjęcia palcem i gest Wstecz
-  z krawędzi, wklejenie adresu skopiowanego w Chrome przez „Wklej” z menu tekstu, eksport
-  z „Dołącz kopie”.
-* **Rysunki — dalsze pomysły i sprawdzenie na urządzeniach.** Edytor rysunków (`/Rysunek`,
-  docs/UI.md „Drawing editor”) ma pismo odręczne, zakreślacz, gumkę, papier, kształty, strzałki,
-  tekst, zaznaczanie lassem i prostokątem, uchwyty rozmiaru i obrotu, styl zaznaczenia, odbicia, grupy,
-  podkłady (obraz, slajd, strona PDF) z przechodzeniem do sąsiednich stron PDF, ciemne tło i własny
-  kolor tła, wyrównywanie i rozkładanie, napisy w wielokątach, schowek zgodny z excalidraw.com,
-  obrazy z „Embedded Files” rysunków z Obsidiana i ich eksport jako obrazów. Zostaje:
-  * sprawdzić ręcznie „Scal rysunki” na prawdziwych urządzeniach: rysunek zmieniony bez sieci na
-    telefonie i na laptopie, Syncthing zostawia kopię `*.sync-conflict-….svg` (albo
-    `*.excalidraw.sync-conflict-….md` rysunku z Obsidiana) → „Scal rysunki” w centrum
-    synchronizacji na jednym z nich; to samo z prawdziwym Nextcloudem (rysunek zmieniony na dwóch
-    urządzeniach scala się sam, bez kopii). Kopie od prawdziwego Syncthinga (dwie instancje na
-    jednym komputerze) scala `tests/app/io/syncthing-conflict.sh`, Nextcloud sprawdzono tylko na
-    udawanym serwerze WebDAV (`tst_sync_devices`);
-  * na prawdziwym tablecie z rysikiem (Android, Natalia — w aplikacji i w przeglądarce) i
-    telefonie: czy linia grubieje przy mocniejszym nacisku, czy drugi koniec rysika i przycisk
-    boczny ścierają, zaznaczanie lassem rysikiem, polskie znaki z klawiatury ekranowej w tekście na
-    rysunku; wstawić strony PDF-a z wykładu („/Rysunek na obrazie lub PDF”; PDF wskazany w
-    systemowym oknie wyboru z folderu notatnika ma zostać na miejscu, bez kopii w załącznikach),
-    pisać rysikiem po slajdzie, sprawdzić ciemny podkład i czy obrócona strona PDF wygląda dobrze
-    (automatycznie sprawdzone: Chromium i Firefox — `tests/web`, emulator Androida — `--stylus`,
-    `--drawing`, strona PDF przez PdfRenderer — samotest mostka, zgodność z excalidraw.com w obie
-    strony — `tests/app/drawing/excalidraw-roundtrip.sh`, wymaga internetu);
-  * sprawdzić ręcznie uchwyty rozmiaru i obrotu oraz panel „Styl” rysikiem i palcem na prawdziwym
-    tablecie i telefonie;
-  * sprawdzić ręcznie w prawdziwym excalidraw.com (wymaga internetu): wklejenie elementów
-    skopiowanych w Brulionie (`Ctrl+C`) i odwrotnie, oraz napis w trójkącie czy gwieździe zapisany
-    przez Brulion (tekst zgrupowany z kształtem) — czy stoi w tym samym miejscu i przesuwa się razem
-    z kształtem; w Obsidianie: obraz z „Embedded Files” po edycji rysunku w Brulionie dalej się
-    wczytuje;
-  * sprawdzić ręcznie rysunki z Obsidiana na prawdziwym skarbcu (testy opierają się na plikach
-    napisanych według kodu wtyczki; 22 pliki z publicznych skarbców Brulion czyta i zapisuje
-    poprawnie, ale nie otwierano ich potem w Obsidianie): otworzyć `*.excalidraw.md` w Brulionie,
-    dorysować coś i przesunąć tekst z linkiem `[[…]]`, otworzyć go w Obsidianie (rysunek się
-    wczytuje, link w tekście działa, notatki z tyłu nietknięte); zetrzeć kreskę w Brulionie, gdy
-    Obsidian ma ten rysunek otwarty (powinna zniknąć i tam); otworzyć w Obsidianie rysunek na
-    slajdzie (podkład widać pod pismem).
-* **Udostępnianie poza Androidem — sprawdzić na prawdziwych urządzeniach.** Automatycznie sprawdzone
-  (testy, CI): odczyt udostępnienia, okno, przekazanie do działającej kopii, wpis `.desktop`,
-  rejestr Windows (instalacja, aktualizacja, odinstalowanie), wersja webowa w Chromium bez okna
-  (`wasm-smoke.mjs --share`). Zostało ręcznie: Chrome lub Edge na Androidzie (wersja webowa
-  zainstalowana jako aplikacja → Udostępnij → Brulion ze strony i z zaznaczonego tekstu, przy
-  zamkniętym i otwartym Brulionie); Eksplorator Windows („Otwórz za pomocą → Brulion” na `.md` i
-  `.txt`, kilka plików naraz, okno na wierzchu, program domyślny bez zmian); menedżer plików na
-  Linuksie (GNOME Pliki, Dolphin: „Otwórz za pomocą → Inny program”, okno wychodzi na wierzch pod
-  Waylandem, dwuklik na `.md` otwiera dalej dotychczasowy program; Cinnamon/Xfce pod X11: kursor nie
-  kręci się po otwarciu pliku w działającym Brulionie); AppImage zintegrowany przez Gear Lever albo
-  AppImageLauncher.
-* **Przeglądarka PDF — sprawdzić na urządzeniach i dalsze pomysły.** Miniatury PDF-ów w notatkach
-  i przeglądarka PDF (docs/UI.md „PDF viewer”) są sprawdzone automatycznie: testy z Qt PDF i
-  popplerem, samotest powłoki (`tst_shell_qml`), emulator Androida (`--pdf`: szczypanie, szukanie
-  na API 36, brak szukania na API 30, „Otwórz w innej aplikacji”, „Rysuj na tej stronie”,
-  pamięć), Chromium i Firefox (`tests/web/pdf.spec.mjs`: nowa karta; Firefox Playwrighta ma
-  wyłączone pdf.js, więc tam sprawdzane jest pobranie). Zostaje:
-  * ręcznie na prawdziwym telefonie i tablecie: płynność szczypania i przewijania, gest Wstecz
-    z krawędzi, szukanie na Androidzie 15+, „Otwórz w innej aplikacji” z prawdziwymi aplikacjami
-    do PDF-ów (Android, domyślna aplikacja Windows, GNOME i KDE), Safari na iOS (nowa karta albo
-    pobranie), zwykły Firefox z pdf.js (nowa karta), duże skany z wykładów (100+ MB) — pamięć na
-    telefonie (docs/PERFORMANCE.md, L19);
-  * ręcznie na prawdziwym telefonie, tablecie i komputerze: zaznaczanie tekstu (przeciąganie myszą,
-    przytrzymanie palcem i przesuwanie), spis treści, linki, wpisywanie hasła, dwie strony obok
-    siebie, adnotacje z prawdziwych PDF-ów (zakreślenia, notatki), „Otwórz w innej aplikacji” dla
-    DOCX / XLSX / MP3 z prawdziwymi aplikacjami;
-  * na Androidzie 15+ (API 35) podłączyć do PdfRenderer zaznaczanie tekstu (`selectContent`), linki
-    (`getLinkContents`, `getGotoLinks`) i otwieranie PDF-ów z hasłem (`LoadParams.setPassword`) —
-    wymaga sprawdzenia na emulatorze lub telefonie; spisu treści PdfRenderer nie podaje wcale;
-  * spis treści PDF-a w wersjach z Qt PDF (Windows, AppImage): `QPdfBookmarkModel` nie broni się
-    przed zapętlonym spisem (rekurencja do przepełnienia stosu — `tst_pdfpages` `loopingOutline`),
-    więc dziś spis treści jest tylko z popplerem; potrzebny własny, bezpieczny odczyt zakładek;
-  * tworzenie własnych adnotacji (zakreślenia, notatki) zapisywanych w PDF-ie — dziś istniejące są
-    tylko pokazywane, nowe robi się w innej aplikacji.
-* **Sprawdzanie pisowni — sprawdzić na urządzeniach i dalsze pomysły.** Podkreślanie błędów
-  w edytowanym bloku, podpowiedzi, słownik użytkownika i „Ignoruj” (docs/UI.md „Spell checking”)
-  są sprawdzone automatycznie na komputerze (Hunspell, testy i samotest edytora). Zostaje:
-  * na prawdziwym telefonie z Androidem: systemowe sprawdzanie pisowni (Gboard, polski
-    i angielski) — podkreślenia, dotknięcie słowa i podpowiedzi, wyłączone sprawdzanie w ustawieniach
-    Androida (ustawienia pisowni Brulionu znikają); kod Kotlin/JNI (`SpellCheck.kt`) nie był
-    uruchomiony na urządzeniu;
-  * AppImage i Windows: zbudować w CI i sprawdzić, że słowniki z pakietu się wczytują (Windows:
-    folder programu z polskimi znakami w ścieżce);
-  * słownik użytkownika synchronizowany między urządzeniami (dziś ustawienie urządzenia — Nextcloud
-    przenosi z `.brulion/` tylko `config.json`, a scalanie po kluczach gubiłoby słowa);
-  * podkreślenia także poza edytowanym blokiem i w trybie źródła Markdown.
-* **Tryb Vim** — opcjonalne poruszanie się i edycja klawiszami Vima w edytorze bloków i w trybie
-  źródła (Obsidian); skróty poleceń zmienia się już w Ustawienia → Skróty klawiszowe.
+* **AI support** — scope to be decided (today AI agents use `brulion-cli`, the MCP server and app
+  remote control: docs/CLI.md). In other apps: an assistant in the editor with your own API key
+  (AFFiNE), a writing assistant (SiYuan); also worth considering: questions to the notes and
+  semantic search on a local model.
+* **Extensibility as in Emacs and TiddlyWiki** — the user changes and extends Brulion from within
+  the notebook (custom commands, views, macros, behaviours); scope and security to be decided
+  (notes arrive from sync and import).
+* **A small language for the interface layout (in the style of Typst)** — a text file describing
+  what the icon bar, the pages panel, the "More" menu, tabs and the bottom navigation show and in
+  what order (icons, labels, groups). Today this is set only in Settings → Appearance → Layout
+  (hidden items, order of the panel's sections, bottom navigation buttons).
+* **Notebook settings in notes** — the notebook settings stored as a note (a page in the notebook,
+  editable like any other and synced together with it) instead of `.brulion/config.json`; to be
+  decided: the format, moving the existing settings, and what stays a device setting.
+* **Pictures from the internet — check on a real phone.** The Android emulator
+  (`scripts/android-emulator-test.sh --web-pictures`) and the Chromium and Firefox browsers
+  (`tests/web`, GitHub Actions) check this automatically; a real phone remains
+  (docs/ANDROID.md "Pictures from the internet"): panning a zoomed picture with a finger and the Back
+  gesture from the edge, pasting an address copied in Chrome via "Paste" from the text menu, export
+  with "Include copies".
+* **Drawings — further ideas and checks on devices.** The drawing editor (`/Drawing`, docs/UI.md
+  "Drawing editor") has handwriting, a highlighter, an eraser, paper, shapes, arrows, text, lasso
+  and rectangle selection, resize and rotation handles, selection style, flips, groups, backdrops
+  (picture, slide, PDF page) with moving to neighbouring PDF pages, a dark background and a custom
+  background colour, alignment and distribution, labels in polygons, a clipboard compatible with
+  excalidraw.com, pictures from "Embedded Files" of Obsidian drawings and their export as pictures.
+  What remains:
+  * check "Merge drawings" by hand on real devices: a drawing changed offline on the phone and on
+    the laptop, Syncthing leaves a `*.sync-conflict-….svg` copy (or `*.excalidraw.sync-conflict-….md`
+    for an Obsidian drawing) → "Merge drawings" in the sync center on one of them; the same with a
+    real Nextcloud (a drawing changed on two devices merges by itself, without a copy). Copies
+    from a real Syncthing (two instances on one computer) are merged by
+    `tests/app/io/syncthing-conflict.sh`; Nextcloud was checked only on a fake WebDAV server
+    (`tst_sync_devices`);
+  * on a real tablet with a stylus (Android, Natalia — in the app and in the browser) and a phone:
+    whether the line gets thicker with stronger pressure, whether the other end of the stylus and
+    the side button erase, lasso selection with the stylus, Polish characters from the on-screen
+    keyboard in text on a drawing; insert pages of a lecture PDF ("/Drawing on a picture or PDF…";
+    a PDF picked in the system file chooser from the notebook folder should stay where it is,
+    without a copy in the attachments), write with the stylus on a slide, check the dark backdrop
+    and whether a rotated PDF page looks right (checked automatically: Chromium and Firefox —
+    `tests/web`, the Android emulator — `--stylus`, `--drawing`, a PDF page through PdfRenderer —
+    the bridge self-test, compatibility with excalidraw.com both ways —
+    `tests/app/drawing/excalidraw-roundtrip.sh`, needs the internet);
+  * check by hand the resize and rotation handles and the "Style" panel with a stylus and a finger
+    on a real tablet and phone;
+  * check by hand in the real excalidraw.com (needs the internet): pasting elements copied in
+    Brulion (`Ctrl+C`) and the other way round, and a label in a triangle or a star saved by Brulion
+    (text grouped with the shape) — whether it stands in the same place and moves together with the
+    shape; in Obsidian: a picture from "Embedded Files" still loads after the drawing was edited in
+    Brulion;
+  * check by hand Obsidian drawings on a real vault (the tests rely on files written according to
+    the plugin's code; Brulion reads and writes 22 files from public vaults correctly, but they
+    were not opened in Obsidian afterwards): open a `*.excalidraw.md` in Brulion, draw something
+    and move a text with a `[[…]]` link, open it in Obsidian (the drawing loads, the link in the
+    text works, the notes on the back are untouched); erase a stroke in Brulion while Obsidian has
+    that drawing open (it should disappear there too); open in Obsidian a drawing on a slide (the
+    backdrop is visible under the writing).
+* **Sharing outside Android — check on real devices.** Checked automatically (tests, CI): reading
+  a share, the window, handing over to a running instance, the `.desktop` entry, the Windows
+  registry (installation, update, uninstallation), the web version in headless Chromium
+  (`wasm-smoke.mjs --share`). Left to do by hand: Chrome or Edge on Android (the web version
+  installed as an app → Share → Brulion from a page and from selected text, with Brulion closed
+  and open); Windows Explorer ("Open with → Brulion" on `.md` and `.txt`, several files at once,
+  the window on top, the default program unchanged); the file manager on Linux (GNOME Files,
+  Dolphin: "Open With → Other Application", the window comes to the front under Wayland,
+  double-clicking a `.md` still opens the previous program; Cinnamon/Xfce under X11: the cursor
+  does not keep spinning after opening a file in a running Brulion); an AppImage integrated through
+  Gear Lever or AppImageLauncher.
+* **PDF viewer — check on devices and further ideas.** PDF thumbnails in notes and the PDF viewer
+  (docs/UI.md "PDF viewer") are checked automatically: tests with Qt PDF and poppler, the shell
+  self-test (`tst_shell_qml`), the Android emulator (`--pdf`: pinching, searching on API 36, no
+  search on API 30, "Open in another app", "Draw on this page", memory), Chromium and Firefox
+  (`tests/web/pdf.spec.mjs`: a new tab; Playwright's Firefox has pdf.js turned off, so the
+  download is checked there). What remains:
+  * by hand on a real phone and tablet: smoothness of pinching and scrolling, the Back gesture from
+    the edge, search on Android 15+, "Open in another app" with real PDF apps (Android, the Windows
+    default app, GNOME and KDE), Safari on iOS (a new tab or a download), ordinary Firefox with
+    pdf.js (a new tab), large lecture scans (100+ MB) — memory on the phone (docs/PERFORMANCE.md,
+    L19);
+  * by hand on a real phone, tablet and computer: text selection (dragging with the mouse, holding
+    a finger and moving), the table of contents, links, entering a password, two pages side by
+    side, annotations from real PDFs (highlights, notes), "Open in another app" for DOCX / XLSX /
+    MP3 with real apps;
+  * on Android 15+ (API 35) connect text selection (`selectContent`), links (`getLinkContents`,
+    `getGotoLinks`) and opening password-protected PDFs (`LoadParams.setPassword`) to
+    PdfRenderer — needs checking on an emulator or a phone; PdfRenderer does not give the table of
+    contents at all;
+  * the PDF table of contents in the builds with Qt PDF (Windows, AppImage): `QPdfBookmarkModel`
+    does not guard against a looping outline (recursion until stack overflow — `tst_pdfpages`
+    `loopingOutline`), so today the table of contents comes only with poppler; a safe bookmark
+    reader of our own is needed;
+  * creating your own annotations (highlights, notes) saved in the PDF — today existing ones are
+    only shown, new ones are made in another app.
+* **Spell checking — check on devices and further ideas.** Underlining errors in the edited
+  block, suggestions, the user dictionary and "Ignore" (docs/UI.md "Spell checking") are checked
+  automatically on a computer (Hunspell, tests and the editor self-test). What remains:
+  * on a real Android phone: the system spell checker (Gboard, Polish and English) — underlines,
+    tapping a word and suggestions, spell checking turned off in Android's settings (Brulion's
+    spelling settings disappear); the Kotlin/JNI code (`SpellCheck.kt`) has not run on a device;
+  * AppImage and Windows: build in CI and check that the dictionaries from the package load
+    (Windows: a program folder with Polish characters in its path);
+  * a user dictionary synced between devices (today a device setting — Nextcloud carries only
+    `config.json` from `.brulion/`, and merging by keys would lose words);
+  * underlines also outside the edited block and in the Markdown source mode.
+* **Vim mode** — optional movement and editing with Vim keys in the block editor and in source
+  mode (Obsidian); command shortcuts can already be changed in Settings → Keyboard shortcuts.
 
-## Widoki i dane
+## Views and data
 
-* **Widoki baz danych z właściwości** — blok albo plik pokazujący strony jako edytowalną tabelę,
-  tablicę kanban (także zadania według statusu), galerię, kalendarz; filtry, grupy, kolumny,
-  formuły. Obsidian ma Bases (tabela, lista, mapa, kanban), Logseq tabelę i galerię, Anytype i
-  AFFiNE tablice i galerie. Bloki `query` pokazują dziś tylko listę i nie filtrują po właściwościach
-  stron (`status:: w toku`, `koszt > 100`).
-* **Zgodność z Obsidianem: `.base`, `.canvas`, Dataview** — pliki `.base` i `.canvas` ze wspólnego
-  skarbca oraz bloki `dataview` są dziś w Brulionie plikiem albo zwykłym tekstem
-  (docs/IMPORT.md); do ustalenia, co czytać, a co też edytować.
-* **Tablica (nieskończone płótno)** — notatki, obrazy, PDF-y i rysunki rozłożone na płótnie, z
-  połączeniami; najlepiej w formacie JSON Canvas (Obsidian Canvas, AFFiNE). Edytor rysunków
-  pokrywa szkice, ale nie osadza w nich notatek.
-* **Fiszki z powtórkami** — karty z bloków (`pytanie :: odpowiedź`, ukrywane fragmenty), powtórki
-  w odstępach (np. FSRS), karty do powtórki na dziś, stan zapisany w plikach i scalany przez
-  synchronizację (Logseq, SiYuan).
+* **Database views from properties** — a block or a file showing pages as an editable table, a
+  kanban board (also tasks by status), a gallery, a calendar; filters, groups, columns, formulas.
+  Obsidian has Bases (table, list, map, kanban), Logseq a table and a gallery, Anytype and AFFiNE
+  boards and galleries. `query` blocks today show only a list and do not filter by page properties
+  (`status:: in progress`, `cost > 100`).
+* **Obsidian compatibility: `.base`, `.canvas`, Dataview** — `.base` and `.canvas` files from a
+  shared vault and `dataview` blocks are today a file or plain text in Brulion (docs/IMPORT.md);
+  to be decided what to read and what to edit as well.
+* **Whiteboard (infinite canvas)** — notes, pictures, PDFs and drawings laid out on a canvas, with
+  connections; preferably in the JSON Canvas format (Obsidian Canvas, AFFiNE). The drawing editor
+  covers sketches, but does not embed notes in them.
+* **Flashcards with spaced repetition** — cards from blocks (`question :: answer`, hidden parts),
+  spaced repetition (e.g. FSRS), cards due for review today, state saved in files and merged by
+  sync (Logseq, SiYuan).
 
-## Zadania i kalendarz
+## Tasks and calendar
 
-* **Kalendarze CalDAV** — dwukierunkowa synchronizacja zadań i wydarzeń (Nextcloud, Google,
-  Thunderbird, DAVx⁵) i subskrypcja kalendarzy ICS tylko do podglądu w widoku kalendarza. Dziś
-  jest jednorazowy import i eksport iCalendar.
-* **Czas zadań przy imporcie z Logseqa** — import grafu Logseqa wciąż pomija szufladki
-  `:LOGBOOK:`, choć Brulion je teraz czyta i zapisuje (licznik czasu, historia statusów); powinny
-  zostać przy zadaniach.
+* **CalDAV calendars** — two-way sync of tasks and events (Nextcloud, Google, Thunderbird, DAVx⁵)
+  and read-only subscription to ICS calendars in the calendar view. Today there is a one-time
+  iCalendar import and export.
+* **Task time when importing from Logseq** — importing a Logseq graph still drops the `:LOGBOOK:`
+  drawers, although Brulion now reads and writes them (time tracker, status history); they should
+  stay with the tasks.
 
-## Przechwytywanie
+## Capture
 
-* **Web Clipper** — rozszerzenie Chrome i Firefoksa zapisujące artykuł, zaznaczenie albo zrzut
-  jako Markdown z obrazami, z wyborem miejsca i szablonem (Obsidian, Joplin). Dziś: „Udostępnij”
-  z tytułem i adresem, bez treści artykułu.
-* **Notatki głosowe** — nagranie w aplikacji jako załącznik i transkrypcja na urządzeniu, także
-  po polsku, bez wysyłania dźwięku do chmury (Joplin, Obsidian dla iOS w przygotowaniu).
-* **Dźwięk i wideo w notatkach** — odtwarzacz dla `![[nagranie.mp3]]` i `![[film.mp4]]`; dziś takie
-  pliki otwierają się tylko do odczytu jako tekst.
-* **Zdjęcie i skan z aparatu** — `/Zdjęcie` na telefonie, prostowanie i przycinanie dokumentu,
-  skan do PDF-a.
-* **Automatyzacja na urządzeniu** — adresy `brulion://` (otwórz stronę, dopisz pod nagłówkiem),
-  intencje dla Taskera na Androidzie, kafelek szybkich ustawień (Obsidian: URI, Siri i Skróty).
-* **Więcej źródeł importu** — Apple Notes, OneNote (Obsidian Importer), Todoist, Airtable i CSV
-  jako strony z właściwościami (Obsidian).
+* **Web Clipper** — a Chrome and Firefox extension saving an article, a selection or a screenshot
+  as Markdown with pictures, with a choice of place and a template (Obsidian, Joplin). Today:
+  "Share" with the title and address, without the article's content.
+* **Voice notes** — a recording in the app as an attachment and on-device transcription, also in
+  Polish, without sending audio to the cloud (Joplin, Obsidian for iOS in preparation).
+* **Audio and video in notes** — a player for `![[recording.mp3]]` and `![[video.mp4]]`; today such
+  files open only read-only as text.
+* **Photo and scan from the camera** — `/Photo` on the phone, straightening and cropping a
+  document, scanning to PDF.
+* **On-device automation** — `brulion://` addresses (open a page, append under a heading), intents
+  for Tasker on Android, a quick settings tile (Obsidian: URI, Siri and Shortcuts).
+* **More import sources** — Apple Notes, OneNote (Obsidian Importer), Todoist, Airtable and CSV as
+  pages with properties (Obsidian).
 
-## Wyszukiwanie
+## Search
 
-* **Szukanie w załącznikach i OCR** — tekst PDF-ów i obrazów w wyszukiwarce całego notatnika, w
-  tle i bez sieci, z przejściem do trafienia na stronie (Joplin, SiYuan). Dziś PDF przeszukuje się
-  tylko po jego otwarciu.
+* **Searching attachments and OCR** — text of PDFs and pictures in the whole-notebook search, in
+  the background and offline, with a jump to the hit on the page (Joplin, SiYuan). Today a PDF is
+  searched only after it is opened.
 
-## Prywatność i bezpieczeństwo
+## Privacy and security
 
-* **Szyfrowanie end-to-end synchronizacji** — pliki na serwerze Nextcloud lub WebDAV nieczytelne
-  bez hasła użytkownika (Joplin, SiYuan, Logseq, Anytype, Obsidian Sync); do ustalenia zgodność z
-  założeniem „zwykłe pliki”, klucz na urządzeniach, odzyskiwanie i scalanie konfliktów.
-* **Blokada aplikacji** — PIN albo biometria na telefonie, ukrycie treści na ekranie ostatnich
-  aplikacji i w widżetach.
-* **Zaszyfrowane notatki** — pojedyncze strony albo fragmenty pod hasłem, zgodne z synchronizacją
-  (Trilium: notatki chronione).
-* **Kopie zapasowe: dalsze kroki** — przywracanie ZIP-a spoza listy i plików ponad 1 GB (Vault
-  trzyma zapisywany plik w pamięci), folder Androida wskazany przez dokument w chmurze, w przeglądarce
-  dzielenie kompresji dużego pliku na kawałki (dziś plik ponad 4 MB jest zapisywany bez kompresji).
+* **End-to-end encryption of sync** — files on the Nextcloud or WebDAV server unreadable without
+  the user's password (Joplin, SiYuan, Logseq, Anytype, Obsidian Sync); to be decided: fitting the
+  "plain files" principle, the key on devices, recovery and merging conflicts.
+* **App lock** — PIN or biometrics on the phone, hiding the content on the recent apps screen and
+  in widgets.
+* **Encrypted notes** — single pages or fragments behind a password, compatible with sync
+  (Trilium: protected notes).
+* **Backups: next steps** — restoring a ZIP that is not on the list and files over 1 GB (Vault
+  keeps the file being written in memory), an Android folder chosen through a cloud document,
+  splitting the compression of a large file into chunks in the browser (today a file over 4 MB is
+  saved uncompressed).
 
-## Udostępnianie i współpraca
+## Sharing and collaboration
 
-* **Publikowanie** — strona lub zaznaczone notatki pod adresem, opcjonalnie z hasłem, jednym
-  poleceniem: GitHub Pages, własny serwer albo publiczny link Nextclouda (Obsidian Publish, Logseq
-  Publish, Joplin). Dziś jest eksport statycznego HTML, który publikuje się ręcznie.
-* **Współdzielone notatniki** — notatnik wspólny z inną osobą: kto co zmienił, komentarze; do
-  ustalenia, czy wystarczy Nextcloud, czy edycja na żywo (Logseq RTC, AFFiNE, Obsidian:
-  „Multiplayer” w planach).
+* **Publishing** — a page or selected notes at an address, optionally with a password, with a
+  single command: GitHub Pages, your own server or a public Nextcloud link (Obsidian Publish,
+  Logseq Publish, Joplin). Today there is a static HTML export, which is published by hand.
+* **Shared notebooks** — a notebook shared with another person: who changed what, comments; to be
+  decided whether Nextcloud is enough or live editing is needed (Logseq RTC, AFFiNE, Obsidian:
+  "Multiplayer" planned).
 
-## Platformy i dystrybucja
+## Platforms and distribution
 
-* **iOS, iPadOS i macOS** — dziś tylko wersja w przeglądarce; Obsidian, Joplin, Anytype i inni mają
-  tam aplikacje. Na iOS trzeba by rozwiązać alarmy, dostęp do folderu notatnika i Syncthing.
-* **Sklepy i repozytoria** — Flathub, winget, AUR, Homebrew. Google Play ogranicza dostęp
-  do wszystkich plików, którego wymaga folder Syncthinga (docs/ANDROID.md).
-* **Więcej języków interfejsu** — tłumaczenia poza polskim i angielskim, a z nimi daty w języku
-  naturalnym, kalkulator i wprowadzenie (Obsidian: wiele języków, także na start).
-* **Motywy** — pliki motywów wymieniane między użytkownikami (kolory, czcionki, odstępy), poza
-  ustawieniami wyglądu (Obsidian, Joplin); bez kodu z notatek.
+* **iOS, iPadOS and macOS** — today only the browser version; Obsidian, Joplin, Anytype and others
+  have apps there. On iOS alarms, access to the notebook folder and Syncthing would need solving.
+* **Stores and repositories** — Flathub, winget, AUR, Homebrew. Google Play restricts all files
+  access, which the Syncthing folder needs (docs/ANDROID.md).
+* **More interface languages** — translations beyond Polish and English, and with them natural
+  language dates, the calculator and the introduction (Obsidian: many languages, also at the
+  start).
+* **Themes** — theme files exchanged between users (colours, fonts, spacing), beyond the appearance
+  settings (Obsidian, Joplin); no code from notes.
 
 ## Windows
 
-* **Podpisane pliki** — instalator i programy podpisane certyfikatem, bez ostrzeżenia SmartScreen;
-  potem zdjąć „(wersja testowa)” (docs/WINDOWS.md).
-* **Opinie o wersji desktopowej** — zebrać je od testera (obejrzy ją później).
+* **Signed files** — the installer and programs signed with a certificate, without the SmartScreen
+  warning; then remove the "(test version)" label (docs/WINDOWS.md).
+* **Feedback on the desktop version** — collect it from the tester (who will look at it later).
 
-## Wydajność
+## Performance
 
-Szczegóły w docs/PERFORMANCE.md, „Next steps”:
-* szybsze łączenie gotowych notatek w indeks w wątku interfejsu, mniej odświeżania widoku w trakcie
-  wczytywania (w przeglądarce pierwsze wczytanie bez gotowego indeksu jest o 11–16 % dłuższe niż
-  przed falą 5) i pomiar indeksowania na Raspberry Pi i telefonie (L1b);
-* pomiar odświeżania list po zapisie (zadania, kalendarz, przypomnienia, zapytania) na Raspberry Pi
-  (przed zmianą 0,95 s, cel < 0,2 s) i obniżenie jego wiersza bazowego w
+Details in docs/PERFORMANCE.md, "Next steps":
+* faster merging of ready notes into the index on the UI thread, less view refreshing during
+  loading (in the browser the first load without a ready index takes 11–16 % longer than before
+  wave 5) and measuring indexing on a Raspberry Pi and a phone (L1b);
+* measuring the refresh of lists after saving (tasks, calendar, reminders, queries) on a Raspberry
+  Pi (before the change 0.95 s, target < 0.2 s) and lowering its baseline row in
   tests/bench/baselines/pi.csv (L3b);
-* pomiar szybszego cofania na Raspberry Pi (przed zmianą 214 ms, cel < 50 ms) i zapis jego wiersza
-  bazowego w tests/bench/baselines/pi.csv — do tego czasu sprawdzanie wydajności na Pi go pomija
-  (L5b);
-* QML deweloperski i samotesty (`qml/dev`, `qml/content/*SelfTest.qml`) poza `src/app`, żeby
-  wydania nie pakowały QtTest, QuickTest i Qt.labs.folderlistmodel (L9b: APK −0,84 MB, wersja
-  webowa −0,27 MB przed wasm-opt);
-* **Okna wyboru plików — sprawdzić ręcznie**: Windows (Otwórz/Zapisz w imporcie, eksporcie,
-  „Obraz…” i dzienniku zdarzeń), AppImage w prawdziwej sesji GNOME i KDE (okno portalu; bez sesji
-  pulpitu sprawdzone tylko z xdg-desktop-portal-gtk pod Xvfb), Android z Dyskiem Google
-  (import i „Zapisz…”), przeglądarka na telefonie (kilka plików naraz);
-* **Graf — sprawdzić ręcznie i zmierzyć na telefonie** (układ na wątku roboczym i rysowanie przez
-  kartę graficzną zrobione, L16b): na prawdziwym telefonie z dużym notatnikiem przesuwanie,
-  powiększanie i przeciąganie stron w trakcie układania; Windows z kartą graficzną (Direct3D 11)
-  i przeglądarka na telefonie; pomiar na Raspberry Pi (rysowanie programowe) i w emulatorze
-  Androida.
-* **Widoki, które Loader powłoki odłączył, zostają w pamięci** — po przejściu do innego widoku
-  stary `PageView` (z edytorem, kontrolerem strony i jego plikiem) nie jest niszczony: w
-  `tst_shell_qml` jest ich w jednej chwili 26, przed kompilacją QML do C++ tak samo. Sprawdzić, co je
-  trzyma (ShellRouteView, karty, stan widoku), i zwolnić je.
+* measuring the faster undo on a Raspberry Pi (before the change 214 ms, target < 50 ms) and
+  recording its baseline row in tests/bench/baselines/pi.csv — until then the performance check
+  on the Pi skips it (L5b);
+* developer QML and self-tests (`qml/dev`, `qml/content/*SelfTest.qml`) outside `src/app`, so that
+  releases do not package QtTest, QuickTest and Qt.labs.folderlistmodel (L9b: APK −0.84 MB, web
+  version −0.27 MB before wasm-opt);
+* **File dialogs — check by hand**: Windows (Open/Save in import, export, "Image…" and the event
+  log), AppImage in a real GNOME and KDE session (the portal dialog; without a desktop session
+  checked only with xdg-desktop-portal-gtk under Xvfb), Android with Google Drive (import and
+  "Save…"), the browser on a phone (several files at once);
+* **Graph — check by hand and measure on a phone** (layout on a worker thread and drawing through
+  the graphics card done, L16b): on a real phone with a large notebook panning, zooming and
+  dragging pages while the layout runs; Windows with a graphics card (Direct3D 11) and the browser
+  on a phone; measuring on a Raspberry Pi (software rendering) and in the Android emulator.
+* **Views that the shell's Loader detached stay in memory** — after switching to another view the
+  old `PageView` (with the editor, the page controller and its file) is not destroyed: in
+  `tst_shell_qml` there are 26 of them at one moment, the same before QML was compiled to C++.
+  Check what holds them (ShellRouteView, tabs, view state) and release them.

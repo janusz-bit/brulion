@@ -11,8 +11,8 @@ import Brulion
 //
 //   BDialog {
 //       id: rename
-//       title: qsTr("Zmień nazwę strony")
-//       acceptText: qsTr("Zmień nazwę")
+//       title: qsTr("Rename page")
+//       acceptText: qsTr("Rename")
 //       acceptEnabled: nameField.text.trim() !== ""
 //       initialFocusItem: nameField
 //       onAccepted: pages.rename(nameField.text)
@@ -21,7 +21,7 @@ import Brulion
 //
 // Children go into a scrolling ColumnLayout (use Layout.fillWidth). The footer has the
 // reject (ghost) and accept buttons; `footerLeading` adds items on its left (e.g. a
-// "Usuń" button). Escape, a click on the scrim, the × button, dragging the sheet down
+// "Delete" button). Escape, a click on the scrim, the × button, dragging the sheet down
 // and Android back all reject. Ctrl+Enter accepts. Focus moves to `initialFocusItem` (or
 // the dialog) on open and returns to the previously focused item on close.
 // acceptRequested() comes first when the accept button or Ctrl+Enter asks to accept: apply

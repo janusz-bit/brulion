@@ -1,12 +1,15 @@
-// The sample vault "Przykładowy brulion": every note parses into what it demonstrates (tasks,
-// reminders and alarms, calc blocks, tables with formulas, queries, callouts, embeds, block
-// references), dates are relative to "now", links resolve (except the one meant to be created
-// by a click), and seeding writes into a real vault without overwriting anything.
+// The sample vault in both languages ("Sample notebook", in Polish "Przykładowy brulion"): every
+// note parses into what it demonstrates (tasks, reminders and alarms, calc blocks, tables with
+// formulas, queries, callouts, embeds, block references), dates are relative to "now", links
+// resolve (except the one meant to be created by a click), and seeding writes into a real vault
+// without overwriting anything. The documentation notebook of each language: every example
+// works, and it is kept up to date without touching what the user changed.
 #include "demovault.h"
 #include "olddocs.h"
 
 #include "calc/calc.h"
 #include "chart/chart.h"
+#include "dates/natural.h"
 #include "dates/recurrence.h"
 #include "diagram/diagram.h"
 #include "index/query.h"
@@ -39,12 +42,50 @@ bool writeRaw(const QString &file, const QByteArray &bytes)
     return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
 }
 
-QHash<QString, QString> filesByPath(const QDateTime &now)
+QHash<QString, QString> filesByPath(const QDateTime &now, const QString &language)
 {
     QHash<QString, QString> out;
-    for (const DemoFile &f : shell::demoVaultFiles(now))
+    for (const DemoFile &f : shell::demoVaultFiles(now, language))
         out.insert(f.path, f.content);
     return out;
+}
+
+/// What the sample notes of one language are called and say.
+struct Sample {
+    QString folder, project, books, recipes, picture, meetingTemplate;
+    QString title, alias, guideTag, toReadTag, blockId, formula, pie, toCreate, toggleCommand;
+    QString docsNotebook, switchButton, meetingDate;
+    QStringList headings;
+};
+
+Sample sample(const QString &language)
+{
+    if (language == u"pl")
+        return {u"Przykładowy brulion"_s, u"Projekty/Remont mieszkania.md"_s, u"Książki 2026.md"_s, u"Przepisy.md"_s,
+                u"assets/plan-mieszkania.svg"_s, u"templates/Spotkanie.md"_s, u"Witaj w Brulionie"_s,
+                u"Przewodnik"_s, u"przewodnik"_s, u"do przeczytania"_s, u"budzet1"_s, u"=[Cena]*[Ilość]"_s,
+                u"Szarlotka babci"_s, u"Pomysły na prezenty"_s, u"Przełącz tryb notatki"_s,
+                u"„Dokumentacja Brulionu”"_s, u"„Przełącz notatnik”"_s, u"Data: 2026-10-14 10:00"_s,
+                {u"Dokument i konspekt"_s, u"Konspekt"_s, u"Linki i odwołania"_s, u"Tagi"_s, u"Zadania"_s,
+                 u"Przypomnienia i alarmy"_s, u"Obliczenia"_s, u"Tabele z formułami"_s, u"Zapytania"_s,
+                 u"Osadzenia"_s, u"Ramki (callouty)"_s, u"Szablony"_s, u"Kalendarz i dziennik"_s,
+                 u"Synchronizacja"_s, u"Import i eksport"_s, u"Dokumentacja"_s, u"Skróty klawiszowe"_s}};
+    return {u"Sample notebook"_s, u"Projects/Home renovation.md"_s, u"Books 2026.md"_s, u"Recipes.md"_s,
+            u"assets/floor-plan.svg"_s, u"templates/Meeting.md"_s, u"Welcome to Brulion"_s,
+            u"Guide"_s, u"guide"_s, u"to read"_s, u"budget1"_s, u"=[Price]*[Qty]"_s,
+            u"Grandma's apple pie"_s, u"Gift ideas"_s, u"Toggle note mode"_s,
+            u"“Brulion Documentation”"_s, u"“Switch notebook”"_s, u"Date: 2026-10-14 10:00"_s,
+            {u"Documents and outlines"_s, u"Outliner"_s, u"Links and references"_s, u"Tags"_s, u"Tasks"_s,
+             u"Reminders and alarms"_s, u"Calculations"_s, u"Tables with formulas"_s, u"Queries"_s,
+             u"Embeds"_s, u"Callouts"_s, u"Templates"_s, u"Calendar and journal"_s, u"Sync"_s,
+             u"Import and export"_s, u"Documentation"_s, u"Keyboard shortcuts"_s}};
+}
+
+void addLanguages()
+{
+    QTest::addColumn<QString>("language");
+    QTest::newRow("en") << u"en"_s;
+    QTest::newRow("pl") << u"pl"_s;
 }
 
 int countBlocks(const ParsedNote &note, BlockKind kind, const QString &lang = {})
@@ -63,33 +104,94 @@ class TestDemoVault : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+    void files_data() { addLanguages(); }
     void files()
     {
-        const auto files = filesByPath(kNow);
-        QVERIFY(files.contains(shell::demoWelcomePage()));
+        QFETCH(QString, language);
+        const Sample names = sample(language);
+        const auto files = filesByPath(kNow, language);
+        QCOMPARE(shell::demoWelcomePage(language), names.title + u".md"_s);
+        QCOMPARE(shell::sampleNotebookFolder(language), names.folder);
+        QVERIFY(files.contains(shell::demoWelcomePage(language)));
         QVERIFY(files.contains(u"journals/2026-10-14.md"_s));
         QVERIFY(files.contains(u"journals/2026-10-13.md"_s));
         QVERIFY(files.contains(u"journals/2026-10-07.md"_s));
-        QVERIFY(files.contains(u"Projekty/Remont mieszkania.md"_s));
-        QVERIFY(files.contains(u"Książki 2026.md"_s));
-        QVERIFY(files.contains(u"Przepisy.md"_s));
+        QVERIFY(files.contains(names.project));
+        QVERIFY(files.contains(names.books));
+        QVERIFY(files.contains(names.recipes));
         QVERIFY(files.contains(u"templates/journal.md"_s));
-        QVERIFY(files.contains(u"assets/plan-mieszkania.svg"_s));
+        QVERIFY(files.contains(names.meetingTemplate));
+        QVERIFY(files.contains(names.picture));
+        QCOMPARE(files.size(), 10);
         for (auto it = files.cbegin(); it != files.cend(); ++it) {
             QVERIFY2(!it.value().contains(u"{today}"_s) && !it.value().contains(u"{in2}"_s), qPrintable(it.key()));
             QVERIFY2(it.value().endsWith(u'\n'), qPrintable(it.key()));
         }
     }
 
+    void languages()
+    {
+        // English unless Polish: any other language gets the English notes.
+        QCOMPARE(shell::sampleNotebookFolder(u"de"), u"Sample notebook"_s);
+        QCOMPARE(shell::demoWelcomePage(QString()), u"Welcome to Brulion.md"_s);
+        QCOMPARE(shell::docsWelcomePage(u"en"), u"Contents.md"_s);
+        QCOMPARE(shell::docsWelcomePage(u"pl"), u"Spis treści.md"_s);
+        const auto english = filesByPath(kNow, u"en"_s);
+        const auto polish = filesByPath(kNow, u"pl"_s);
+        QCOMPARE(filesByPath(kNow, u"fr"_s), english);
+        // The two samples are written in their own language (only the journal's template file
+        // and the daily notes share their paths).
+        QVERIFY(!english.value(u"journals/2026-10-14.md"_s).contains(u"Remont"_s));
+        QVERIFY(!polish.value(u"journals/2026-10-14.md"_s).contains(u"renovation"_s));
+        // English examples are written the English way: decimal points, "of", dollars.
+        const QString welcome = english.value(u"Welcome to Brulion.md"_s);
+        QVERIFY(welcome.contains(u"price = 12.50"_s) && welcome.contains(u"20% of 150"_s));
+        QVERIFY(!welcome.contains(u"zł"_s));
+    }
+
+    void dateExamples_data()
+    {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("phrase");
+        QTest::addColumn<QString>("expected");
+        // The phrases the guide pages tell readers to type (kNow is Wednesday, 2026-10-14 10:00).
+        QTest::newRow("en tomorrow") << u"en"_s << u"tomorrow at 9"_s << u"2026-10-15 09:00"_s;
+        QTest::newRow("en friday") << u"en"_s << u"friday at 6pm"_s << u"2026-10-16 18:00"_s;
+        QTest::newRow("en hours") << u"en"_s << u"in 2 hours"_s << u"2026-10-14 12:00"_s;
+        QTest::newRow("pl jutro") << u"pl"_s << u"jutro o 9"_s << u"2026-10-15 09:00"_s;
+        QTest::newRow("pl piątek") << u"pl"_s << u"w piątek 18:00"_s << u"2026-10-16 18:00"_s;
+        QTest::newRow("pl godziny") << u"pl"_s << u"za 2 godziny"_s << u"2026-10-14 12:00"_s;
+    }
+
+    void dateExamples()
+    {
+        QFETCH(QString, language);
+        QFETCH(QString, phrase);
+        QFETCH(QString, expected);
+        const QString welcome = filesByPath(kNow, language).value(shell::demoWelcomePage(language));
+        QVERIFY2(welcome.contains(phrase), qPrintable(phrase));
+        const auto locale = language == u"pl" ? dates::UiLocale::Polish : dates::UiLocale::English;
+        const auto parsed = dates::parseNaturalDate(phrase, kNow, Qt::Monday, locale);
+        QVERIFY2(parsed.has_value(), qPrintable(phrase));
+        QCOMPARE(parsed->spec.toString(), expected);
+        // The whole phrase, nothing left over.
+        QCOMPARE(parsed->start, 0);
+        QCOMPARE(parsed->length, phrase.size());
+    }
+
+    void guidePage_data() { addLanguages(); }
     void guidePage()
     {
-        const auto files = filesByPath(kNow);
-        const ParsedNote note = markdown::parseNote(shell::demoWelcomePage(), files.value(shell::demoWelcomePage()));
-        QCOMPARE(note.title, u"Witaj w Brulionie"_s);
-        QVERIFY(note.aliases.contains(u"Przewodnik"_s));
-        QVERIFY(note.tags.contains(u"przewodnik"_s));
-        QVERIFY(note.tags.contains(u"projekt/dom"_s));
-        QVERIFY(note.tags.contains(u"do przeczytania"_s));
+        QFETCH(QString, language);
+        const Sample names = sample(language);
+        const auto files = filesByPath(kNow, language);
+        const QString welcome = shell::demoWelcomePage(language);
+        const ParsedNote note = markdown::parseNote(welcome, files.value(welcome));
+        QCOMPARE(note.title, names.title);
+        QVERIFY(note.aliases.contains(names.alias));
+        QVERIFY(note.tags.contains(names.guideTag));
+        QVERIFY(note.tags.contains(language == u"pl" ? u"projekt/dom"_s : u"project/home"_s));
+        QVERIFY(note.tags.contains(names.toReadTag));
 
         // Tasks in every state, with dates, priority and recurrence.
         QList<TaskStatus> statuses;
@@ -130,32 +232,31 @@ private Q_SLOTS:
         QCOMPARE(countBlocks(note, BlockKind::Code, u"query"_s), 1);
         QVERIFY(countBlocks(note, BlockKind::Table) >= 2);
         QVERIFY(countBlocks(note, BlockKind::Callout) >= 3);
-        QVERIFY(files.value(shell::demoWelcomePage()).contains(u"=sum(above)"_s));
-        // Every section of the guide.
+        QVERIFY(files.value(welcome).contains(u"=sum(above)"_s));
+        // Every section of the guide, in this order.
         QStringList headings;
-        for (const Heading &h : note.headings)
-            headings.append(h.text);
-        for (const QString &section :
-             {u"Dokument i konspekt"_s, u"Konspekt"_s, u"Linki i odwołania"_s, u"Tagi"_s, u"Zadania"_s,
-              u"Przypomnienia i alarmy"_s, u"Obliczenia"_s, u"Tabele z formułami"_s, u"Zapytania"_s, u"Osadzenia"_s,
-              u"Ramki (callouty)"_s, u"Szablony"_s, u"Kalendarz i dziennik"_s, u"Synchronizacja"_s,
-              u"Import i eksport"_s, u"Skróty klawiszowe"_s})
-            QVERIFY2(headings.contains(section), qPrintable(section));
+        for (const Heading &h : note.headings) {
+            if (h.level == 2)
+                headings.append(h.text);
+        }
+        QCOMPARE(headings, names.headings);
     }
 
+    void journalsAndProjects_data() { addLanguages(); }
     void journalsAndProjects()
     {
-        const auto files = filesByPath(kNow);
+        QFETCH(QString, language);
+        const Sample names = sample(language);
+        const auto files = filesByPath(kNow, language);
         const ParsedNote today = markdown::parseNote(u"journals/2026-10-14.md"_s, files.value(u"journals/2026-10-14.md"_s));
         QCOMPARE(today.journalDate, QDate(2026, 10, 14));
         QVERIFY(!today.links.isEmpty());
         const ParsedNote weekAgo = markdown::parseNote(u"journals/2026-10-07.md"_s, files.value(u"journals/2026-10-07.md"_s));
         QCOMPARE(weekAgo.journalDate, QDate(2026, 10, 7));
 
-        const ParsedNote remont = markdown::parseNote(u"Projekty/Remont mieszkania.md"_s,
-                                                      files.value(u"Projekty/Remont mieszkania.md"_s));
-        QVERIFY(remont.blockIds.contains(u"budzet1"_s));
-        QVERIFY(remont.tags.contains(u"projekt/dom"_s));
+        const ParsedNote remont = markdown::parseNote(names.project, files.value(names.project));
+        QVERIFY(remont.blockIds.contains(names.blockId));
+        QVERIFY(remont.tags.contains(language == u"pl" ? u"projekt/dom"_s : u"project/home"_s));
         QCOMPARE(countBlocks(remont, BlockKind::Table), 1);
         QCOMPARE(countBlocks(remont, BlockKind::Code, u"calc"_s), 1);
         QVERIFY(countBlocks(remont, BlockKind::Code, u"query"_s) == 1);
@@ -167,52 +268,61 @@ private Q_SLOTS:
             }
         }
         QVERIFY(monthly);
-        QVERIFY(files.value(u"Projekty/Remont mieszkania.md"_s).contains(u"=[Cena]*[Ilość]"_s));
+        QVERIFY(files.value(names.project).contains(names.formula));
 
-        const ParsedNote books = markdown::parseNote(u"Książki 2026.md"_s, files.value(u"Książki 2026.md"_s));
-        QVERIFY(files.value(u"Książki 2026.md"_s).contains(u"=avg(above)"_s));
+        const ParsedNote books = markdown::parseNote(names.books, files.value(names.books));
+        QVERIFY(files.value(names.books).contains(u"=avg(above)"_s));
         QCOMPARE(books.tasks.size(), 3);
-        const ParsedNote recipes = markdown::parseNote(u"Przepisy.md"_s, files.value(u"Przepisy.md"_s));
+        const ParsedNote recipes = markdown::parseNote(names.recipes, files.value(names.recipes));
         QCOMPARE(recipes.reminders.size(), 1);
         QCOMPARE(recipes.reminders.first().at.date, QDate(2026, 10, 17)); // next Saturday
         QStringList recipeHeadings;
         for (const Heading &h : recipes.headings)
             recipeHeadings.append(h.text);
-        QVERIFY(recipeHeadings.contains(u"Szarlotka babci"_s));
+        QVERIFY(recipeHeadings.contains(names.pie));
     }
 
+    void welcomePageFindsTheDocumentation_data() { addLanguages(); }
     void welcomePageFindsTheDocumentation()
     {
         // Desktop and Android: the documentation notebook, through the switcher or Ctrl+Shift+B.
-        // The browser has none: the documentation online. The rest of the sample is the same.
-        const auto withNotebook = shell::demoVaultFiles(kNow, true);
-        const auto browser = shell::demoVaultFiles(kNow, false);
+        // The browser has none: the documentation online, in the same language. The rest of the
+        // sample is the same.
+        QFETCH(QString, language);
+        const Sample names = sample(language);
+        const QString welcome = shell::demoWelcomePage(language);
+        const auto withNotebook = shell::demoVaultFiles(kNow, language, true);
+        const auto browser = shell::demoVaultFiles(kNow, language, false);
         QCOMPARE(withNotebook.size(), browser.size());
         for (qsizetype i = 0; i < browser.size(); ++i) {
             QCOMPARE(browser.at(i).path, withNotebook.at(i).path);
-            if (browser.at(i).path != shell::demoWelcomePage())
+            if (browser.at(i).path != welcome)
                 QCOMPARE(browser.at(i).content, withNotebook.at(i).content);
         }
-        const QString local = filesByPath(kNow).value(shell::demoWelcomePage());
+        const QString local = filesByPath(kNow, language).value(welcome);
         QCOMPARE(local, withNotebook.first().content);
-        QVERIFY(local.contains(u"„Dokumentacja Brulionu”"_s));
-        QVERIFY(local.contains(u"„Przełącz notatnik”"_s) && local.contains(u"Ctrl+Shift+B"_s));
+        QVERIFY(local.contains(names.docsNotebook));
+        QVERIFY(local.contains(names.switchButton) && local.contains(u"Ctrl+Shift+B"_s));
         const QString web = browser.first().content;
-        QCOMPARE(browser.first().path, shell::demoWelcomePage());
-        QVERIFY(!web.contains(u"Przełącz notatnik"_s) && !web.contains(u"Ctrl+Shift+B"_s));
+        QCOMPARE(browser.first().path, welcome);
+        QVERIFY(!web.contains(names.switchButton) && !web.contains(u"Ctrl+Shift+B"_s));
         QVERIFY(!web.contains(u"{docs}"_s) && !local.contains(u"{docs}"_s));
-        const ParsedNote note = markdown::parseNote(shell::demoWelcomePage(), web);
+        const ParsedNote note = markdown::parseNote(welcome, web);
         bool online = false;
         for (const Link &l : note.links)
-            online |= l.target.startsWith(u"https://github.com/janusz-bit/brulion/"_s);
+            online |= l.target == u"https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/"_s + language;
         QVERIFY(online);
     }
 
+    void showsBothNoteModes_data() { addLanguages(); }
     void showsBothNoteModes()
     {
         // The guide reads as a document, the renovation project and the journal as outlines
-        // (docs/SYNTAX.md §4 "Tryb notatki"), whatever the notebook's defaults.
-        const auto files = filesByPath(kNow);
+        // (docs/SYNTAX.md §4 "Note mode"), whatever the notebook's defaults.
+        QFETCH(QString, language);
+        const Sample names = sample(language);
+        const QString welcome = shell::demoWelcomePage(language);
+        const auto files = filesByPath(kNow, language);
         VaultConfig swapped; // the other defaults
         swapped.pageMode = NoteMode::Outline;
         swapped.journalMode = NoteMode::Document;
@@ -221,75 +331,98 @@ private Q_SLOTS:
                 return markdown::resolveNoteMode(files.value(path),
                                                  markdown::journalDateFromPath(path, config).has_value(), config);
             };
-            QCOMPARE(mode(shell::demoWelcomePage()).mode, NoteMode::Document);
-            QVERIFY(mode(shell::demoWelcomePage()).isExplicit());
-            QCOMPARE(mode(u"Projekty/Remont mieszkania.md"_s).mode, NoteMode::Outline);
-            QVERIFY(mode(u"Projekty/Remont mieszkania.md"_s).isExplicit());
+            QCOMPARE(mode(welcome).mode, NoteMode::Document);
+            QVERIFY(mode(welcome).isExplicit());
+            QCOMPARE(mode(names.project).mode, NoteMode::Outline);
+            QVERIFY(mode(names.project).isExplicit());
         }
         // The journal follows the notebook's journal mode (outline by default).
         QCOMPARE(markdown::resolveNoteMode(files.value(u"journals/2026-10-14.md"_s), true, VaultConfig()).mode,
                  NoteMode::Outline);
         // The guide explains the modes and the key that stores them.
-        const QString guide = files.value(shell::demoWelcomePage());
+        const QString guide = files.value(welcome);
         QVERIFY(guide.contains(u"brulion: document"_s) && guide.contains(u"`brulion: outline`"_s));
-        QVERIFY(guide.contains(u"Przełącz tryb notatki"_s));
+        QVERIFY(guide.contains(names.toggleCommand));
     }
 
+    void datesFollowNow_data() { addLanguages(); }
     void datesFollowNow()
     {
         // On a Saturday the "next Saturday" is a week later; after the 10th the next month's.
+        QFETCH(QString, language);
+        const Sample names = sample(language);
         const QDateTime saturday(QDate(2027, 2, 13), QTime(8, 0));
-        const auto files = filesByPath(saturday);
+        const auto files = filesByPath(saturday, language);
         QVERIFY(files.contains(u"journals/2027-02-13.md"_s));
         QVERIFY(files.contains(u"journals/2027-02-06.md"_s));
-        QVERIFY(files.value(u"Przepisy.md"_s).contains(u"⏰ 2027-02-20 10:00"_s));
-        QVERIFY(files.value(u"Projekty/Remont mieszkania.md"_s).contains(u"📅 2027-03-10"_s));
-        const auto early = filesByPath(QDateTime(QDate(2026, 12, 3), QTime(8, 0)));
-        QVERIFY(early.value(u"Projekty/Remont mieszkania.md"_s).contains(u"📅 2026-12-10"_s));
-        QVERIFY(early.value(shell::demoWelcomePage()).contains(u"⏰! 2026-12-07 05:45"_s)); // next Monday
+        QVERIFY(files.value(names.recipes).contains(u"⏰ 2027-02-20 10:00"_s));
+        QVERIFY(files.value(names.project).contains(u"📅 2027-03-10"_s));
+        const auto early = filesByPath(QDateTime(QDate(2026, 12, 3), QTime(8, 0)), language);
+        QVERIFY(early.value(names.project).contains(u"📅 2026-12-10"_s));
+        QVERIFY(early.value(shell::demoWelcomePage(language)).contains(u"⏰! 2026-12-07 05:45"_s)); // next Monday
     }
 
+    void seedAndResolve_data() { addLanguages(); }
     void seedAndResolve()
     {
+        QFETCH(QString, language);
+        const Sample names = sample(language);
         QTemporaryDir dir;
-        Vault vault(dir.filePath(u"Przykładowy brulion"_s));
+        Vault vault(dir.filePath(names.folder));
         QVERIFY(vault.open());
-        const int written = shell::seedDemoVault(vault, kNow);
-        QCOMPARE(written, int(shell::demoVaultFiles(kNow).size()));
-        QCOMPARE(shell::seedDemoVault(vault, kNow), 0); // nothing overwritten
+        const int written = shell::seedDemoVault(vault, kNow, language);
+        QCOMPARE(written, int(shell::demoVaultFiles(kNow, language).size()));
+        QCOMPARE(shell::seedDemoVault(vault, kNow, language), 0); // nothing overwritten
 
         // Changed files are kept.
-        QVERIFY(vault.writeText(u"Przepisy.md"_s, u"- moje\n"_s));
-        QCOMPARE(shell::seedDemoVault(vault, kNow), 0);
-        QCOMPARE(vault.readText(u"Przepisy.md"_s), u"- moje\n"_s);
-        QVERIFY(vault.remove(u"Przepisy.md"_s));
+        QVERIFY(vault.writeText(names.recipes, u"- moje\n"_s));
+        QCOMPARE(shell::seedDemoVault(vault, kNow, language), 0);
+        QCOMPARE(vault.readText(names.recipes), u"- moje\n"_s);
+        QVERIFY(vault.remove(names.recipes));
 
         // Every link resolves, except the page a click is meant to create.
         VaultIndex index(vault.config());
         for (const FileStat &f : vault.files())
             index.update(f.path, paths::isMarkdown(f.path) ? vault.readText(f.path) : QString());
-        QVERIFY(vault.writeText(u"Przepisy.md"_s, filesByPath(kNow).value(u"Przepisy.md"_s)));
-        index.update(u"Przepisy.md"_s, vault.readText(u"Przepisy.md"_s));
+        QVERIFY(vault.writeText(names.recipes, filesByPath(kNow, language).value(names.recipes)));
+        index.update(names.recipes, vault.readText(names.recipes));
         QStringList missing;
         for (const MissingPage &m : index.missingPages())
             missing.append(m.name);
-        QCOMPARE(missing, QStringList{ u"Pomysły na prezenty"_s });
-        QVERIFY(index.blockById(u"budzet1"_s).has_value());
-        QCOMPARE(index.resolveLink(u"plan-mieszkania.svg"_s).value_or(QString()), u"assets/plan-mieszkania.svg"_s);
+        QCOMPARE(missing, QStringList{ names.toCreate });
+        QVERIFY(index.blockById(names.blockId).has_value());
+        const QString picture = names.picture.mid(names.picture.indexOf(u'/') + 1);
+        QCOMPARE(index.resolveLink(picture).value_or(QString()), names.picture);
         QCOMPARE(index.journals().size(), 3);
-        QVERIFY(index.backlinks(u"Projekty/Remont mieszkania.md"_s).size() >= 3);
+        QVERIFY(index.backlinks(names.project).size() >= 3);
+        // Every heading a link or an embed points at is on its page.
+        int headingLinks = 0;
+        for (const FileStat &f : vault.markdownFiles()) {
+            for (const Link &link : index.note(f.path)->links) {
+                if ((link.kind != LinkKind::Wiki && link.kind != LinkKind::Embed) || link.heading.isEmpty())
+                    continue;
+                const ParsedNote *target = index.note(index.resolveLink(link.target, f.path).value_or(QString()));
+                QVERIFY2(target, qPrintable(f.path + u": "_s + link.target));
+                QVERIFY2(markdown::findHeading(target->headings, link.heading) >= 0,
+                         qPrintable(f.path + u": "_s + link.target + u'#' + link.heading));
+                ++headingLinks;
+            }
+        }
+        QVERIFY(headingLinks >= 3);
     }
 
+    void everyExampleWorks_data() { addLanguages(); }
     void everyExampleWorks()
     {
         // The guide shows live examples: every calc line gives a result, every table formula a
         // value, every query parses and finds something, every recurrence rule is understood.
-        const auto files = filesByPath(kNow);
+        QFETCH(QString, language);
+        const auto files = filesByPath(kNow, language);
         int calcLines = 0, formulas = 0, queries = 0, rules = 0;
         QTemporaryDir dir;
-        Vault vault(dir.filePath(u"Przykładowy brulion"_s));
+        Vault vault(dir.filePath(sample(language).folder));
         QVERIFY(vault.open());
-        QVERIFY(shell::seedDemoVault(vault, kNow) > 0);
+        QVERIFY(shell::seedDemoVault(vault, kNow, language) > 0);
         VaultIndex index(vault.config());
         for (const FileStat &f : vault.files())
             index.update(f.path, paths::isMarkdown(f.path) ? vault.readText(f.path) : QString());
@@ -353,23 +486,43 @@ private Q_SLOTS:
         QVERIFY(rules >= 2);
     }
 
+    void documentationNotebook_data()
+    {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("folder");
+        QTest::addColumn<QString>("toCreate");
+        QTest::newRow("en") << u"en"_s << u"Brulion Documentation"_s << u"Note to create"_s;
+        QTest::newRow("pl") << u"pl"_s << u"Dokumentacja Brulionu"_s << u"Notatka do utworzenia"_s;
+    }
+
     void documentationNotebook()
     {
-        // "Dokumentacja Brulionu": its own notebook, every example works, every link resolves
-        // (except the one meant to be created by a click), the demo notebook has none of it.
-        QVERIFY(!filesByPath(kNow).keys().join(u'\n').contains(u"Dokumentacja"_s));
+        // "Brulion Documentation" ("Dokumentacja Brulionu" in Polish): its own notebook, every
+        // example works, every link resolves (except the one meant to be created by a click), the
+        // demo notebook has none of it.
+        QFETCH(QString, language);
+        QFETCH(QString, folder);
+        QFETCH(QString, toCreate);
+        QVERIFY(!filesByPath(kNow, language).keys().join(u'\n').contains(u"Dokumentacja"_s));
+        QVERIFY(!filesByPath(kNow, language).keys().join(u'\n').contains(u"Documentation"_s));
         QTemporaryDir dir;
-        Vault vault(dir.filePath(u"Dokumentacja Brulionu"_s));
+        Vault vault(dir.filePath(folder));
         QVERIFY(vault.open());
-        const auto docs = shell::docsVaultFiles();
+        const auto docs = shell::docsVaultFiles(language);
         QVERIFY(docs.size() >= 14);
-        const shell::DocsUpdate first = shell::updateDocsVault(vault);
+        const shell::DocsUpdate first = shell::updateDocsVault(vault, language);
         QVERIFY(first.ok);
         QCOMPARE(first.added, int(docs.size()));
-        const shell::DocsUpdate second = shell::updateDocsVault(vault);
+        const shell::DocsUpdate second = shell::updateDocsVault(vault, language);
         QVERIFY(second.ok);
         QCOMPARE(second.added + second.updated + second.removed + second.kept, 0);
-        QVERIFY(vault.exists(shell::docsWelcomePage()));
+        QVERIFY(vault.exists(shell::docsWelcomePage(language)));
+        // The other language's pages are not among them.
+        QStringList paths;
+        for (const DemoFile &f : docs)
+            paths.append(f.path);
+        for (const DemoFile &f : shell::docsVaultFiles(language == u"pl" ? u"en" : u"pl"))
+            QVERIFY2(paths.contains(f.path) || !vault.exists(f.path), qPrintable(f.path));
 
         VaultIndex index(vault.config());
         for (const FileStat &f : vault.files())
@@ -377,7 +530,7 @@ private Q_SLOTS:
         QStringList missing;
         for (const MissingPage &m : index.missingPages())
             missing.append(m.name);
-        QCOMPARE(missing, QStringList{ u"Notatka do utworzenia"_s });
+        QVERIFY2(missing == QStringList{toCreate}, qPrintable(missing.join(u", "_s)));
         // Every [[Page#Heading]] of the guide leads to a heading of its page (markdown::findHeading,
         // the matcher of links and embeds), and every [[Page#^id]] to a block id there.
         int headingLinks = 0;
@@ -466,13 +619,25 @@ private Q_SLOTS:
         QVERIFY(charts >= 2);
     }
 
+    void listOfChangesHasNoLiveSyntax_data()
+    {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<QString>("tag");
+        QTest::newRow("en") << u"en"_s << u"Changelog.md"_s << u"documentation"_s;
+        QTest::newRow("pl") << u"pl"_s << u"Lista zmian.md"_s << u"dokumentacja"_s;
+    }
+
     void listOfChangesHasNoLiveSyntax()
     {
-        // "Lista zmian" only describes syntax, in code: an example written as text would act in
-        // the documentation notebook — a task, a reminder, a tag, a property or a formula.
+        // The list of changes only describes syntax, in code: an example written as text would
+        // act in the documentation notebook — a task, a reminder, a tag, a property or a formula.
+        QFETCH(QString, language);
+        QFETCH(QString, page);
+        QFETCH(QString, tag);
         QString content;
-        for (const DemoFile &f : shell::docsVaultFiles()) {
-            if (f.path == u"Lista zmian.md")
+        for (const DemoFile &f : shell::docsVaultFiles(language)) {
+            if (f.path == page)
                 content = f.content;
         }
         QVERIFY(!content.isEmpty());
@@ -481,10 +646,10 @@ private Q_SLOTS:
                                                   QRegularExpression::MultilineOption);
         const QRegularExpressionMatch split = splitList.match(content);
         QVERIFY2(!split.hasMatch(), qPrintable(split.captured(0).left(200)));
-        const ParsedNote note = markdown::parseNote(u"Lista zmian.md"_s, content);
+        const ParsedNote note = markdown::parseNote(page, content);
         QVERIFY(note.tasks.isEmpty());
         QVERIFY(note.reminders.isEmpty());
-        QCOMPARE(note.tags, QStringList{u"dokumentacja"_s});
+        QCOMPARE(note.tags, QStringList{tag});
         QVERIFY(note.blockIds.isEmpty());
         static const QRegularExpression codeSpan(u"(`+)(?!`)(.+?)(?<!`)\\1(?!`)"_s);
         for (const Block &b : note.blocks) {
@@ -586,7 +751,7 @@ private Q_SLOTS:
         QTemporaryDir dir;
         Vault vault(dir.filePath(u"Dokumentacja Brulionu"_s), dir.filePath(u"stan"_s));
         QVERIFY(vault.open());
-        const auto docs = shell::docsVaultFiles();
+        const auto docs = shell::docsVaultFiles(u"pl");
         for (const DemoFile &f : docs) {
             if (f.path == u"Wzory matematyczne.md" || f.path == u"Obliczenia.md")
                 continue; // not written / deleted by the user
@@ -599,7 +764,7 @@ private Q_SLOTS:
         }
         QVERIFY(vault.open()); // rescan
 
-        const shell::DocsUpdate update = shell::updateDocsVault(vault);
+        const shell::DocsUpdate update = shell::updateDocsVault(vault, u"pl");
         QVERIFY(update.ok);
         const auto current = [&](const QString &path) {
             for (const DemoFile &f : docs) {
@@ -617,9 +782,35 @@ private Q_SLOTS:
         QCOMPARE(update.kept, 1);
     }
 
+    void englishDocumentationIgnoresOldPolishPages()
+    {
+        // The 0.3.0–0.3.5 hashes are those of Polish pages: an English documentation notebook
+        // without a record never takes Polish pages for its own (nothing of them is trashed).
+        QTemporaryDir dir;
+        Vault vault(dir.filePath(u"Brulion Documentation"_s), dir.filePath(u"state"_s));
+        QVERIFY(vault.open());
+        QVERIFY(writeRaw(vault.absolutePath(u"Spis treści.md"_s), olddocs::kTableOfContents030.toUtf8()));
+        QVERIFY(vault.open()); // rescan
+        const shell::DocsUpdate update = shell::updateDocsVault(vault, u"en");
+        QVERIFY(update.ok);
+        QCOMPARE(update.removed, 0);
+        QCOMPARE(update.updated, 0);
+        QCOMPARE(vault.readText(u"Spis treści.md"_s), olddocs::kTableOfContents030);
+        QCOMPARE(update.added, int(shell::docsVaultFiles(u"en").size()));
+        // And a Polish one keeps its pages when the English ones are written elsewhere.
+        Vault polish(dir.filePath(u"Dokumentacja Brulionu"_s), dir.filePath(u"stan"_s));
+        QVERIFY(polish.open());
+        QCOMPARE(shell::updateDocsVault(polish, u"pl").added, int(shell::docsVaultFiles(u"pl").size()));
+        QCOMPARE(shell::updateDocsVault(polish, u"pl").added, 0);
+        QVERIFY(polish.exists(u"Spis treści.md"_s));
+    }
+
+    void journalTemplate_data() { addLanguages(); }
     void journalTemplate()
     {
-        const auto files = filesByPath(kNow);
+        QFETCH(QString, language);
+        const Sample names = sample(language);
+        const auto files = filesByPath(kNow, language);
         markdown::TemplateVars vars;
         vars.now = kNow;
         vars.title = u"2026-10-15"_s;
@@ -627,8 +818,8 @@ private Q_SLOTS:
         const ParsedNote note = markdown::parseNote(u"journals/2026-10-15.md"_s, text);
         QCOMPARE(note.headings.size(), 2);
         QCOMPARE(note.tasks.size(), 1);
-        const QString meeting = markdown::applyTemplate(files.value(u"templates/Spotkanie.md"_s), vars).text;
-        QVERIFY(meeting.contains(u"# 2026-10-15\nData: 2026-10-14 10:00"_s));
+        const QString meeting = markdown::applyTemplate(files.value(names.meetingTemplate), vars).text;
+        QVERIFY(meeting.contains(u"# 2026-10-15\n"_s + names.meetingDate));
     }
 };
 

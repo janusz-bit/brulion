@@ -97,9 +97,10 @@ props_text() { # props_text <n>
 home="$work/home"
 vault="$home/Przykładowy brulion"
 export XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
-# A first start seeds the sample notebook (and indexes it), like a user's first run.
+# A first start seeds the sample notebook (and indexes it), like a user's first run — the Polish
+# one (the sample notes follow the UI language), as the runs below show the Polish UI.
 if ! timeout -k 10 "$run_timeout" "$bin" --demo --vault "$vault" --size 800x600 --now "$now" \
-  --no-single-instance --delay 1500 \
+  --locale pl --no-single-instance --delay 1500 \
   --screenshot "$work/prep.png" > "$work/prep.log" 2>&1; then
   echo "FAIL: the app did not start"
   cat "$work/prep.log"

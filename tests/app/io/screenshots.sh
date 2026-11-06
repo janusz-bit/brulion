@@ -41,22 +41,31 @@ read -r -a themes <<< "${THEMES:-light dark}"
 graph="$(mktemp -d)/Graf Logseq"
 io_logseq_graph "$graph"
 template="$(mktemp -d)/template"
+# The sample notebook follows the UI language (src/app/shell/demovault.h).
+# So do the conflict copies of io_conflict_vault.
+if [[ "$locale" == pl ]]; then
+  sample="Przykładowy brulion" projects=Projekty
+  trip="Plan podróży.conflict-Telefon-Łucji" shopping=Zakupy receipt=paragon sketch=Szkic garden="Szkic ogrodu"
+else
+  sample="Sample notebook" projects=Projects
+  trip="Trip plan.conflict-Lucys-phone" shopping=Shopping receipt=receipt sketch=Sketch garden="Garden sketch"
+fi
 
 declare -A shot_routes=(
   [sync]='sync'
   [sync-syncthing]='{"view":"sync","tab":"syncthing"}'
   [sync-nextcloud]='{"view":"sync","tab":"nextcloud"}'
-  [sync-conflicts]='{"view":"sync","copy":"Plan podróży.conflict-Telefon-Łucji-20261014-091500.md"}'
-  [sync-conflict-merge]='{"view":"sync","copy":"Zakupy.sync-conflict-20261013-184500-LAPTOP7.md"}'
-  [sync-conflict-binary]='{"view":"sync","copy":"assets/paragon.sync-conflict-20261013-184500-LAPTOP7.png"}'
-  [sync-conflict-drawing]='{"view":"sync","copy":"assets/Szkic.sync-conflict-20261013-184500-LAPTOP7.svg"}'
-  [sync-conflict-drawing-notes]='{"view":"sync","copy":"Excalidraw/Szkic ogrodu.excalidraw.sync-conflict-20261013-184500-LAPTOP7.md"}'
+  [sync-conflicts]="{\"view\":\"sync\",\"copy\":\"$trip-20261014-091500.md\"}"
+  [sync-conflict-merge]="{\"view\":\"sync\",\"copy\":\"$shopping.sync-conflict-20261013-184500-LAPTOP7.md\"}"
+  [sync-conflict-binary]="{\"view\":\"sync\",\"copy\":\"assets/$receipt.sync-conflict-20261013-184500-LAPTOP7.png\"}"
+  [sync-conflict-drawing]="{\"view\":\"sync\",\"copy\":\"assets/$sketch.sync-conflict-20261013-184500-LAPTOP7.svg\"}"
+  [sync-conflict-drawing-notes]="{\"view\":\"sync\",\"copy\":\"Excalidraw/$garden.excalidraw.sync-conflict-20261013-184500-LAPTOP7.md\"}"
   [sync-conflict-list]='{"view":"sync","tab":"conflicts"}'
   [import]='importExport'
   [import-notion]='{"view":"importExport","importer":"notion"}'
   [import-mstodo]='{"view":"importExport","importer":"mstodo"}'
   [import-preview]="{\"view\":\"importExport\",\"files\":\"$graph\"}"
-  [export]='{"view":"importExport","tab":"export","scope":"folder","folder":"Projekty"}'
+  [export]="{\"view\":\"importExport\",\"tab\":\"export\",\"scope\":\"folder\",\"folder\":\"$projects\"}"
   [settings-sync]='{"view":"settings","section":"sync"}'
   [sync-details]='{"view":"sync","run":40}'
   [sync-details-failed]='{"view":"sync","run":39}'
@@ -75,7 +84,7 @@ if [[ ! -x "$bin" ]]; then
   exit 1
 fi
 mkdir -p "$out"
-io_seeded_vault "$bin" "$template" "$now"
+io_seeded_vault "$bin" "$template" "$now" "$locale"
 
 suffix=""
 [[ "$locale" != "pl" ]] && suffix+="-$locale"
@@ -96,10 +105,10 @@ for shot in "${shots[@]}"; do
     for theme in "${themes[@]}"; do
       file="$out/io-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"
-      io_nextcloud_home "$home" "$home/Przykładowy brulion"
-      cp -a "$template" "$home/Przykładowy brulion"
-      io_history_base "$home" "$home/Przykładowy brulion"
-      io_sync_history "$home" "$home/Przykładowy brulion"
+      io_nextcloud_home "$home" "$home/$sample"
+      cp -a "$template" "$home/$sample"
+      io_history_base "$home" "$home/$sample" "$locale"
+      io_sync_history "$home" "$home/$sample"
       io_event_log "$home"
       shot_delay="$delay"
       stall_pid=""
@@ -124,7 +133,7 @@ while True:
       fi
       if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-        "$bin" --demo --vault "$home/Przykładowy brulion" --route "${shot_routes[$shot]}" --no-single-instance \
+        "$bin" --demo --vault "$home/$sample" --route "${shot_routes[$shot]}" --no-single-instance \
         --size "$geometry" --theme "$theme" --locale "$locale" --now "$now" \
         --delay "$shot_delay" "${extra[@]}" --screenshot "$file" 2> >(grep -v "^brulion: screenshot" >&2); then
         echo "$file"

@@ -4,8 +4,8 @@ import Brulion
 
 // CalendarMonthGrid — the month view: 6 weeks × 7 days of a CalendarModel (weekday names from
 // DatesHelper, starting on the model's first weekday). Wide cells list the day's entries as
-// coloured pills ("09:00 Spotkanie", "+3 więcej"; an alarm in the reminder's tint with its
-// alarm clock, not a solid amber pill; open entries first, so "+N więcej" hides finished ones; a
+// coloured pills ("09:00 Meeting", "+3 more"; an alarm in the reminder's tint with its
+// alarm clock, not a solid amber pill; open entries first, so "+N more" hides finished ones; a
 // done entry is muted with a check, not struck out — as in Tasks —, a cancelled one struck out
 // with an x); narrow cells (phones) show coloured dots per kind. The
 // cells are one surface (no weekend or other-month tint): today has a red disc on its number, the
@@ -192,7 +192,7 @@ FocusScope {
                     required property bool isSelected
                     required property bool hasJournal
                     /// The day's entries, open ones first (a stable partition: times keep their
-                    /// order), so "+N więcej" hides finished ones first; the pills and a click
+                    /// order), so "+N more" hides finished ones first; the pills and a click
                     /// on one read this order.
                     required property list<var> orderedItems
                     required property int itemCount

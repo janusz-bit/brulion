@@ -225,7 +225,7 @@ static QList<Command> buildCommands(const AppController *app)
              {},
              ready},
             {u"vault.docs"_s,
-             app->inDocsVault() ? CommandModel::tr("Back to my notebook") : CommandModel::tr("Brulion documentation"),
+             app->inDocsVault() ? CommandModel::tr("Back to my notebook") : CommandModel::tr("Brulion Documentation"),
              CommandModel::tr("Switch notebook"), u"book-open"_s, u"Ctrl+Shift+B"_s, !app->docsVaultPath().isEmpty()},
             {u"vault.switch"_s, CommandModel::tr("Open another notebook…"), {}, u"folder-open"_s, {}, ready},
             {u"about"_s, CommandModel::tr("About Brulion"), {}, u"info"_s, {}, true},
@@ -247,7 +247,7 @@ static QList<Command> backupCommands(const AppController *app)
     };
 }
 
-// ---- Folders (Przenieś do…, Nowy folder…, Pokaż w drzewie) -----------------------------------
+// ---- Folders (Move to…, New folder…, Show in tree) -----------------------------------------
 // One block: the commands, where they go in the list, and what they do.
 
 /// The folder commands, after "New page": a new folder at the root, moving the page shown, showing
@@ -470,7 +470,7 @@ static QList<Command> allCommands(const AppController *app)
                       u"download"_s,
                       {},
                       inEditor && !app->sourceModeShown()});
-    // The event log ("Rejestr zdarzeń") right after the sync center; also found as logs, diagnostics.
+    // The event log ("Event log") right after the sync center; also found as logs, diagnostics.
     const auto sync = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"go.sync"; });
     out.insert(sync == out.cend() ? out.size() : std::distance(out.cbegin(), sync) + 1,
                {u"go.logs"_s,
@@ -514,7 +514,7 @@ QList<ShortcutMap::Action> CommandModel::shortcutActions() const
         if (c.id == u"page.favorite")
             title = tr("Add to or remove from favorites");
         else if (c.id == u"vault.docs")
-            title = tr("Brulion documentation or back to my notebook");
+            title = tr("Brulion Documentation or back to my notebook");
         else if (c.id == u"view.focus")
             title = tr("Focus mode");
         else if (c.id == u"view.typewriter")

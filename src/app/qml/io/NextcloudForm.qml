@@ -5,9 +5,9 @@ import Brulion
 
 // NextcloudForm — the Nextcloud account (NextcloudSetup over AppSettings): on/off, server address,
 // user, app password (how to create one, a button to Nextcloud's security page), server folder
-// (the notebook's own; proposed: "Notatki" for a new account, else the notebook's name; one that
-// another notebook syncs with is refused), how often to sync, this device's name; "Testuj
-// połączenie" explains what went wrong (and offers to create a missing folder), "Zapisz" applies
+// (the notebook's own; proposed: "Notatki" (notes) for a new account, else the notebook's name; one that
+// another notebook syncs with is refused), how often to sync, this device's name; "Test
+// connection" explains what went wrong (and offers to create a missing folder), "Save" applies
 // everything at once. Used by SyncView and the settings' sync section.
 //
 //   NextcloudForm { Layout.fillWidth: true }

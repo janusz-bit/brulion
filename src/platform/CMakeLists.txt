@@ -32,7 +32,7 @@ target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
 brulion_set_warnings(brulion_platform)
 
-# PDF pages as pictures (pdfpages.h; sizes and the choice: docs/PERFORMANCE.md "Rozmiar"):
+# PDF pages as pictures (pdfpages.h; sizes and the choice: docs/PERFORMANCE.md "Size"):
 # Android — the system's PdfRenderer through JNI (no library); the browser — none (Qt has no Qt PDF
 # for WebAssembly); elsewhere Qt PDF when Qt has the module (aqt's `qtpdf`: Windows, the AppImage,
 # CI), else poppler-qt6 (the Nix build: nixpkgs has Qt PDF only inside QtWebEngine), else none.

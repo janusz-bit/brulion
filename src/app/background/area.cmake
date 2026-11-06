@@ -1,4 +1,4 @@
-# The background check of the notes (Android, docs/ANDROID.md "Sprawdzanie notatek w tle"; included
+# The background check of the notes (Android, docs/ANDROID.md "Checking notes in the background"; included
 # by src/app/CMakeLists.txt in its scope, so relative paths are relative to src/app):
 #
 #   all builds   the static library brulion_background — Target (what to check, its JSON for the

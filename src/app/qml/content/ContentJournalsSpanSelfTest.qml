@@ -9,13 +9,13 @@ import Brulion
 // mouse, touch and key events (QtTest's TestEvent, EditorInput):
 //   * desktop: Shift+click from a block of one day into the next day; the floating tools on that
 //     day only; Ctrl+C copies both days' blocks after their [[date]] links; Delete and Tab change
-//     nothing (only copying works), and so does the block menu's Przenieś w górę, shown unavailable
-//     (its Kopiuj counts the whole span), as are the floating Wytnij's tooltip;
+//     nothing (only copying works), and so does the block menu's Move up, shown unavailable
+//     (its Copy counts the whole span), as are the floating Cut's tooltip;
 //     Shift+↓ past a day's end into the next day and Shift+↑ back;
 //     Esc clears every day; a mouse drag from one day into the next; a plain click edits and ends
 //     the span;
 //   * phone: a long press (the selection mode), a tap in the next day extends the selection
-//     there; one docked toolbar with the stream's count; its Wytnij changes nothing, Kopiuj copies;
+//     there; one docked toolbar with the stream's count; its Cut changes nothing, Copy copies;
 //     a tap two days further; Back clears every day; with every day of a span scrolled away a tap
 //     edits and ends it;
 //   * both: the anchor day scrolled far away (destroyed) and back gets its part again; copying

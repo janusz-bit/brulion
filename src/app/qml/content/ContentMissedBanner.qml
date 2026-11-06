@@ -4,10 +4,10 @@ import QtQuick.Layouts
 import Brulion
 
 // ContentMissedBanner — reminders that came due while Brulion was closed or the device was off
-// (Workspace.reminders.missed), on top of the journals: each with its time, "Otwórz" (the note
-// at the reminder's line), "Drzemka" (snooze: the new time is written into the note),
-// "Zrobione" (a task's reminder: the task is marked done in the note, ✅ today — the shell's
-// toast confirms it) and dismiss; "Odrzuć wszystkie". Hidden when nothing was missed.
+// (Workspace.reminders.missed), on top of the journals: each with its time, "Open" (the note
+// at the reminder's line), "Snooze" (snooze: the new time is written into the note),
+// "Done" (a task's reminder: the task is marked done in the note, ✅ today — the shell's
+// toast confirms it) and dismiss; "Dismiss all". Hidden when nothing was missed.
 //
 //   ContentMissedBanner { Layout.fillWidth: true }
 BCard {

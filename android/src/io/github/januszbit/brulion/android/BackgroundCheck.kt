@@ -11,7 +11,7 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * The background check of the notes (docs/ANDROID.md "Sprawdzanie notatek w tle"): while Brulion is
+ * The background check of the notes (docs/ANDROID.md "Checking notes in the background"): while Brulion is
  * closed a periodic system job ([BackgroundCheckJob], JobScheduler) starts Brulion's C++ in a process
  * of its own ([BackgroundCheckService]), which reads the notebook whose reminders are armed — after a
  * Nextcloud sync, when that is set up — and answers with the reminders the app would arm. The job,
@@ -21,7 +21,7 @@ import org.json.JSONObject
  * The app hands over what to check whenever its reminders start ([configure], from C++:
  * `src/app/background/backgroundcheck.h`, `Target`): `{root, stateDir, vault, ringMinutes, language,
  * intervalMinutes, nextcloud?}`; `{}` turns the check off (reminders off, the notebook closed on
- * purpose, the setting "Wyłączone").
+ * purpose, the setting "Off").
  */
 internal object BackgroundCheck {
   const val TAG = "BrulionBackground"

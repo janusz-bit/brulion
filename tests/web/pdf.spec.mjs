@@ -1,10 +1,10 @@
-// PDFs in the web build, in Chromium and Firefox (docs/WEB.md "PDF w przeglądarce"): no PDF renderer
+// PDFs in the web build, in Chromium and Firefox (docs/WEB.md "PDFs in the browser"): no PDF renderer
 // in the browser, so a PDF embedded in a note is the file's chip with a page icon, and a click on
 // it — or on a link to the PDF — opens the PDF in a new browser tab (a blob: URL of the bytes,
 // typed application/pdf) where the browser's own viewer scrolls, zooms and searches; the app's
 // route stays the note (no page shows the PDF's bytes). The app reports where the chip and the
 // link are on screen (?selftest=pdf: src/app/diag/webselftest.h), the test clicks them with the
-// real mouse. A route to the PDF shows the fallback panel with "Otwórz w nowej karcie". A tab
+// real mouse. A route to the PDF shows the fallback panel with "Open in a new tab". A tab
 // opened outside any click (?selftest=pdfauto) is either opened or blocked — then the PDF is
 // downloaded and the app says so; the outcome per browser is recorded. Firefox under Playwright
 // has its PDF viewer (pdf.js) turned off in the test profile, so there the new tab turns into a

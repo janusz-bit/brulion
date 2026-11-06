@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// DrawingPaperDialog — the drawing's own background colour ("Tło rysunku" → "Kolor tła…";
+// DrawingPaperDialog — the drawing's own background colour ("Drawing background" → "Background colour…";
 // docs/UI.md "Drawing editor"): a grid of papers (neutrals, two rows of pastels, a dark row), a
 // field for any "#rrggbb" and a preview with the default ink on it. Everything shows as the paper
 // will (on dark paper the colours mapped, DrawingCanvas.displayColor); what is chosen and saved is

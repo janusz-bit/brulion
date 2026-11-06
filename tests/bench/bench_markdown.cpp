@@ -236,7 +236,7 @@ private Q_SLOTS:
 
     // Selecting every block of an outline and copying it (PageController::selectAll() and
     // copySelection(), docs/UI.md "Selecting and copying"): the top rows of the range and the
-    // clipboard's Markdown, or its plain text ("Kopiuj jako tekst"); the HTML flavour is
+    // clipboard's Markdown, or its plain text ("Copy as plain text"); the HTML flavour is
     // bench_io clipboardHtml.
     void selectAllCopy_data()
     {

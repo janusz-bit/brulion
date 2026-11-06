@@ -470,7 +470,7 @@ private Q_SLOTS:
         QVERIFY(r.value(u"y"_s).toReal() > 0.05 && r.value(u"y"_s).toReal() < 0.16);
         QCOMPARE(r.value(u"box"_s).toRectF(), QRectF(r.value(u"x"_s).toReal(), r.value(u"y"_s).toReal(),
                                                      r.value(u"width"_s).toReal(), r.value(u"height"_s).toReal()));
-        // The floating "Kopiuj" goes over the first rectangle, on the selection's page.
+        // The floating "Copy" goes over the first rectangle, on the selection's page.
         QCOMPARE(model->selectionAnchor(), r.value(u"box"_s).toRectF());
         QCOMPARE(model->selectionPageRect(), model->pageRect(1));
         QVERIFY(model->selectionRects(2).isEmpty());

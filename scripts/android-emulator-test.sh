@@ -7,14 +7,14 @@
 #   1. the app APK starts and keeps running (no crash), notification channels exist;
 #   2. the bridge self-test APK (src/platform/android/selftest): JNI calls work, reminders are
 #      armed in AlarmManager (the past one skipped), the reminder and the alarm notification
-#      fire on their channels, the alarm turns into "Przegapiony alarm" after its ring time,
-#      notification taps reach C++ (cold start and while running, Polish path), "Zrobione" in a
+#      fire on their channels, the alarm turns into "Missed alarm" after its ring time,
+#      notification taps reach C++ (cold start and while running, Polish path), "Done" in a
 #      task reminder's notification removes it and reaches C++ with the day of the tap — at once
 #      with the app on screen, at the next start when the app's process was gone (queued).
 # Needs an x86_64 Linux host with KVM. Build both APKs first:
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
 # With --keyboard instead: the editing toolbar on the on-screen keyboard (docs/ANDROID.md,
-# "Klawiatura ekranowa") — the sample notebook's journal stream and a page, a block edited with a
+# "On-screen keyboard") — the sample notebook's journal stream and a page, a block edited with a
 # finger, the system's keyboard up: the toolbar sits right on its top edge (the IME window's frame
 # from dumpsys against the app's KeyboardInsets log and the screenshot), follows its slide frame
 # by frame on Android 11+ (the window keeps its size), stays there while the journal scrolls; when
@@ -27,31 +27,31 @@
 # With --selection instead: selecting and copying blocks with a real finger (docs/UI.md "Selecting
 # and copying") — a long press on a block's text in the journal (the selection mode: the keyboard
 # stays down, the band, the grips, the selection tools docked at the bottom), a tap extending it,
-# Kopiuj ("Skopiowano 2 bloki"), Back.
+# "Copy" ("Copied 2 blocks"), Back.
 # Screenshots of each step (sel-*.png); the same debuggable APK.
 # With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
 # journal opens its page (not created by looking at it; the drawer opened on it shows the page's
 # row in the tree, within the list's view) and Back returns; the path parts of a link
 # [[Projekty/Remont mieszkania]] appended to today's journal are link nodes of their own — a tap
 # on "Projekty" opens the folder's pages, on "Remont mieszkania" the page, a long press on
-# "Projekty" its menu ("Pokaż folder", "Kopiuj ścieżkę folderu"); the editing toolbar's "Więcej" opens
-# the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written into the
+# "Projekty" its menu ("Show folder", "Copy folder path"); the editing toolbar's "More" opens
+# the block menu, "Copy link" copies a reference to the block (its id written into the
 # note, the copy pasted back into another block with Ctrl+V on Android 13+); the drawer's
-# "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped while the
+# "Pages" header "+" makes a folder (its name typed on the keyboard, "Create" tapped while the
 # keyboard still composes the word; the drawer shows it above its sync footer); a page's "⋯" in
-# the folder tree → "Przenieś do…" (the bottom sheet, the folder searched for, what the move
+# the folder tree → "Move to…" (the bottom sheet, the folder searched for, what the move
 # rewrites) moves it there, and the files say so: the page in its new folder, the query filter
 # naming its old folder rewritten. Rows of the drawer are dragged into its view before a tap
 # (drawer_tap).
 # Screenshots of each step (fl-*.png); the same debuggable APK.
-# With --share instead: "Udostępnij → Brulion" (docs/ANDROID.md) — text shared to ShareActivity
-# while the app runs (the share dialog, "Zapisz": a block of today's journal, no date parsing), a
+# With --share instead: "Share → Brulion" (docs/ANDROID.md) — text shared to ShareActivity
+# while the app runs (the share dialog, "Save": a block of today's journal, no date parsing), a
 # .md file on shared storage shared through MediaStore after a cold start (a new page, its bytes
 # kept, CRLF too), a picture refused (no dialog: ShareActivity accepts text/* only), several files
 # selected in the system's file manager and shared (two text files and a picture: the picture
 # listed as not a text file, or left out when the share sheet does not offer Brulion for it; a
 # block per text file in today's journal), and the copies in files/share-in removed. Screenshots of each step (sh-*.png); the same debuggable APK.
-# With --widgets instead: the home-screen widgets (docs/ANDROID.md "Widgety") — the sample
+# With --widgets instead: the home-screen widgets (docs/ANDROID.md "Widgets") — the sample
 # notebook publishes their snapshot when the app leaves the front; the three widgets are placed
 # through the launcher's widget picker (tap a preview, "Add"); quick add with the app killed writes
 # into today's journal at once (Qt not even loaded), a task for today shows in the tasks widget,
@@ -63,40 +63,42 @@
 # tasks widget made taller (tomorrow's tasks) and the calendar lower (the agenda only) with the
 # launcher's resize handles (wg-*.png). Needs a google_apis image (adb root: quick add and the
 # widgets' receiver are not exported) and the same debuggable APK.
-# With --web-pictures instead: pictures from the internet (docs/ANDROID.md "Obrazy z internetu") — a
-# notebook whose journal has a picture over https (a public site, BRULION_WEBPICTURE_HTTPS) and one
-# over http from a server this script starts on the host (the emulator reaches it at 10.0.2.2;
-# cleartextTrafficPermitted is false): "Pokaż" fetches each into the cache; after a restart in
-# airplane mode both show from the cache; a tap opens the viewer (actual size and back, Back closes
-# it), a long press the menu (Powiększ, Zapisz w notatniku, Otwórz w przeglądarce, Kopiuj adres
-# obrazu); with the cache cleared and no network "Pokaż" says why ("Brak połączenia z …") and
-# "Spróbuj ponownie" works once the network is back; "Zapisz w notatniku" writes the picture into
-# assets/ and the note's link to it; "Otwórz w przeglądarce" hands the address to a browser.
+# With --web-pictures instead: pictures from the internet (docs/ANDROID.md "Pictures from the
+# internet") — a notebook whose journal has a picture over https (a public site,
+# BRULION_WEBPICTURE_HTTPS) and one over http from a server this script starts on the host (the
+# emulator reaches it at 10.0.2.2; cleartextTrafficPermitted is false): "Show" fetches each into the
+# cache; after a restart in airplane mode both show from the cache; a tap opens the viewer (actual
+# size and back, Back closes it), a long press the menu ("View picture", "Save to notebook", "Open
+# in browser", "Copy picture address"); with the cache cleared and no network "Show" says why ("No
+# connection to …") and "Try again" works once the network is back; "Save to notebook" writes the
+# picture into assets/ and the note's link to it; "Open in browser" hands the address to a browser.
 # Screenshots of each step (wp-*.png); the same debuggable APK.
-# With --done instead: "Zrobione" in a task reminder's notification of the app itself (docs/ANDROID.md
-# "Przypomnienia") — a notebook whose journal has two tasks with reminders a few minutes ahead: the
-# first one's "Zrobione" tapped with the app on screen marks the task done in the note at once
-# (`[x]` and `✅ <the day of the tap>`); the second one's tapped with the app's process gone leaves
-# the note as it is until the next start, which writes it. Screenshots (dn-*.png); the same
+# With --done instead: "Done" in a task reminder's notification of the app itself (docs/ANDROID.md
+# "Reminders and alarms") — a notebook whose journal has two tasks with reminders a few minutes
+# ahead: the first one's "Done" tapped with the app on screen marks the task done in the note at
+# once (`[x]` and `✅ <the day of the tap>`); the second one's tapped with the app's process gone
+# leaves the note as it is until the next start, which writes it. Screenshots (dn-*.png); the same
 # debuggable APK.
-# With --background instead: the background check of the notes (docs/ANDROID.md "Sprawdzanie notatek
-# w tle") — a notebook with a reminder three hours ahead, opened in the app (its reminder armed, the
-# check's target kept), the app's process gone (am kill); then, as Syncthing would, that reminder is
-# deleted from the journal and a note "Z komputera.md" with a reminder three minutes ahead appears;
-# the system's job run at once (cmd jobscheduler run -f): the check's own process (":background")
-# reads the notebook and ends, the armed set is the new one (the old reminder gone), its status is
-# kept, and the new reminder rings while Brulion is still closed; with the app on screen the job
-# leaves the reminders to it. Logs (bg-*.txt, the check's own log); the same debuggable APK.
+# With --background instead: the background check of the notes (docs/ANDROID.md "Checking notes in
+# the background") — a notebook with a reminder three hours ahead, opened in the app (its reminder
+# armed, the check's target kept), the app's process gone (am kill); then, as Syncthing would, that
+# reminder is deleted from the journal and a note "Z komputera.md" ("From the computer") with a
+# reminder three minutes ahead appears; the system's job run at once (cmd jobscheduler run -f): the
+# check's own process (":background") reads the notebook and ends, the armed set is the new one (the
+# old reminder gone), its status is kept, and the new reminder rings while Brulion is still closed;
+# with the app on screen the job leaves the reminders to it. Logs (bg-*.txt, the check's own log);
+# the same debuggable APK.
 # With --drawing instead: text on a drawing with the on-screen keyboard (docs/UI.md "Drawing
 # editor") — a notebook whose journal embeds a drawing (tests/data/drawing/auto_theme.svg): a tap
-# on the embed opens the drawing editor, the bar at the bottom has "Tekst" on screen (a phone held
+# on the embed opens the drawing editor, the bar at the bottom has "Text" on screen (a phone held
 # upright: two lines), a tap on the paper opens the text's editor and the keyboard, words typed on
 # the keyboard's keys with a pause longer than the 1.2 s save timer between them (the editor and
 # the keyboard stay), the editor's ✓ writes the text — the drawing's file then holds it as a text
 # element — and the keyboard goes; a second text started at once after the first one is written
 # (while the save timer runs) stays open as well and is written too. Screenshots (dr-*.png); the
 # same debuggable APK.
-# With --stylus instead: a stylus's pressure reaches the drawing editor (docs/ANDROID.md "Rysik") —
+# With --stylus instead: a stylus's pressure reaches the drawing editor (docs/ANDROID.md "Tests and
+# diagnostics", the stylus) —
 # `adb shell input stylus` presses with 1.0 only, so scripts/android-stylus/BrulionPen.java (built
 # here with the SDK's android.jar and d8, run by app_process as the shell user: no root) injects
 # stylus MotionEvents with the pressures asked for. A new drawing (0 bytes) opened with --route:
@@ -109,11 +111,11 @@
 # With --pdf instead: PDFs (docs/UI.md "PDF viewer", docs/ANDROID.md "PDF") — tests/data/pdf/wyklad.pdf
 # and zaszyfrowany.pdf in a notebook whose journal embeds both: the thumbnail is drawn (its tile's
 # accessible name has the page count), the locked one names the password; a tap opens the viewer
-# ("Strona 1 z 3"), a swipe up reaches page 2, a pinch (two fingers injected by BrulionPen) zooms in;
+# ("Page 1 of 3"), a swipe up reaches page 2, a pinch (two fingers injected by BrulionPen) zooms in;
 # on Android 15+ (API 35) the search button is there and "gesla" finds "gęślą" once, below it there
 # is none; TOTAL PSS after zooming in and scrolling through every page stays under 350 MB;
-# "Otwórz w innej aplikacji" starts ACTION_VIEW of the FileProvider's content:// URI (or, with no
-# PDF app in the image, the app's message); "Rysuj na tej stronie" opens the drawing editor, its file
+# "Open in another app" starts ACTION_VIEW of the FileProvider's content:// URI (or, with no
+# PDF app in the image, the app's message); "Draw on this page" opens the drawing editor, its file
 # in assets/ and its embed right after the PDF's line of the journal; Back → the viewer, Back → the
 # journal. Screenshots pdf-*.png; the same debuggable APK
 # (BRULION_EMULATOR_IMAGE="system-images;android-30;google_apis;x86_64": the search hidden).
@@ -131,7 +133,7 @@
 # comes back, nothing magenta. Each browser runs again with
 # ?keyboard=visual (the browser's default), for the record (Brave's brave-browser#60074: a gap).
 # The app's readings are kept (samples-<browser>-<mode>.jsonl) and printed as rows of
-# tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "Klawiatura ekranowa".
+# tests/app/tst_keyboardinsets.cpp; screenshots wk-*.png. docs/WEB.md "On-screen keyboard (phone)".
 # With --relaunch instead: Android recreates the activity while the app starts (a configuration
 # change no app can handle itself, CONFIG_ASSETS_PATHS: a display cutout overlay of the framework
 # toggled at once after `am start`, at a few delays; started as by a tapped notification) — before
@@ -140,16 +142,19 @@
 # and Qt logs (brulion.*); every attempt's outcome is listed (relaunched before Qt started / after /
 # not at all). Screenshots rl-*.png; the same debuggable APK.
 # With --pickers instead: the system's file pickers that FilePicker shows (docs/UI.md "File pickers";
-# no QtQuick.Dialogs since L9) — files in the shared Download folder: Import → "Wybierz pliki…" brings
+# no QtQuick.Dialogs since L9) — files in the shared Download folder: Import → "Choose files…" brings
 # DocumentsUI to the front (ACTION_OPEN_DOCUMENT), a note tapped there comes back to the import's
-# preview under its name; "Wybierz folder…" (ACTION_OPEN_DOCUMENT_TREE) → a folder of notes → "Use
-# this folder" → "Allow": the preview of its notes; Export → "Eksportuj…" opens the system's "Save"
+# preview under its name; "Choose a folder…" (ACTION_OPEN_DOCUMENT_TREE) → a folder of notes → "Use
+# this folder" → "Allow": the preview of its notes; Export → "Export…" opens the system's "Save"
 # (ACTION_CREATE_DOCUMENT) with the export's file name filled in (EXTRA_TITLE), "Save" writes the
 # ZIP into Download (DocumentsUI opens in the folder used last: the one picked before). Checked on
 # Android 16 (API 36). Screenshots pk-*.png; the same debuggable APK.
 # --selection, --folders, --share, --widgets, --web-pictures, --done and --pickers find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
+# They run the app in Polish (--locale pl) and the sample notebook in Polish, so they look for the
+# Polish labels: the comments name a label by its English source text, the Polish one the script
+# matches in parentheses where it helps (e.g. "More" ("Więcej")).
 #
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
 #        scripts/android-emulator-test.sh --keyboard [DEBUG_APP_APK]
@@ -552,10 +557,11 @@ ui_tap() { # <ERE> [first|last] [pause]: a tap on the item named so (the topmost
   sleep "${3:-2}"
 }
 # The drawer's list on screen, "top bottom" (in the last dump): below the notebook's row (its
-# "Przełącz notatnik"), above the sync footer ("Synchronizacja: …"); nothing when the drawer is
-# closed. Its rows (and the "Strony" header above them) scroll inside it and keep their nodes
-# outside it: a row under the footer is on screen for ui_find_all, and a tap on it lands on the
-# footer — the sync center opened instead of the folder the tap was for (sweep2, 2026-10-29).
+# "Switch notebook" ("Przełącz notatnik")), above the sync footer ("Sync: …" ("Synchronizacja: …"));
+# nothing when the drawer is closed. Its rows (and the "Pages" header above them) scroll inside it
+# and keep their nodes outside it: a row under the footer is on screen for ui_find_all, and a tap on
+# it lands on the footer — the sync center opened instead of the folder the tap was for (sweep2,
+# 2026-10-29).
 drawer_view() {
   local top bottom
   top=$(ui_nodes 'Przełącz notatnik' | head -n 1 | cut -d ' ' -f 4)
@@ -739,7 +745,7 @@ if ((KEYBOARD)); then
   adb shell setprop log.tag.BrulionIme DEBUG
   adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
   # The journal stream: today's first block tapped with a finger (the sample notebook on a
-  # Pixel 6: "Pierwszy dzień z Brulionem" a quarter down the screen).
+  # Pixel 6: "Pierwszy dzień z Brulionem" (first day with Brulion) a quarter down the screen).
   start_app '--demo --locale pl --route journals'
   check "the app is running" running
   app_shot keyboard-journal-start
@@ -796,7 +802,7 @@ if ((KEYBOARD)); then
   # A page: the guide (opened as by a tapped notification), its first paragraph tapped.
   start_app '--demo --locale pl' --es "$EXTRA.PATH" "'Witaj w Brulionie.md'" --ei "$EXTRA.LINE" 0
   app_shot keyboard-page-start
-  # Its first paragraph, found by its text (the page's tag chips, "Widok tagu" and the properties
+  # Its first paragraph, found by its text (the page's tag chips, "Tag overview" and the properties
   # above it move it down — a blind tap opened the tag's tasks); else a few heights 25–45 % down
   # the screen (the system bars differ between versions).
   paragraph_xy=$(ui_find_all 'Brulion to notatnik w zwykłych plikach Markdown[^"]*' | head -n 1)
@@ -911,7 +917,7 @@ if ((FOLDERS)); then
   app_shot fl-2-tag-alias
   check "a tap on #przewodnik opens the page with that alias" ui_has 'Witaj w Brulionie'
   check "with the tag's strip (Widok tagu)" ui_has 'Widok tagu.*'
-  # The drawer opened on that page shows its row in the tree ("Pokazuj otwartą stronę": revealed
+  # The drawer opened on that page shows its row in the tree ("Show the open page": revealed
   # while the drawer was closed, placed as it opens) in the list's view, not under its footer.
   check "☰ opens the drawer" ui_tap 'Menu' first
   check "the drawer shows the page's row in its view" wait_for 6 drawer_in_view 'Więcej: Witaj w Brulionie'
@@ -927,23 +933,24 @@ if ((FOLDERS)); then
   check "the page is not created by looking at it" vault_lacks pomysł.md
   check "Back returns to the journal" back_to "$first_block"
 
-  # The editing toolbar's "Więcej": the block menu of the block being edited; "Kopiuj odnośnik" →
-  # "Odwołanie do bloku" writes the block's id into the note and copies ((id)).
+  # The editing toolbar's "More" ("Więcej"): the block menu of the block being edited; "Copy link"
+  # ("Kopiuj odnośnik") → "Block reference" ("Odwołanie do bloku") writes the block's id into the
+  # note and copies ((id)).
   adb shell input tap $((SCREEN_W * 24 / 100)) "$(ui_y "$first_block")"
   check "a tap on today's first block brings up the keyboard" wait_for 15 ime_shown
   sleep 2
-  # The toolbar scrolls sideways: "Więcej" is near its end (a finger swipes the row there).
+  # The toolbar scrolls sideways: "More" is near its end (a finger swipes the row there).
   bar_y=$(ui_y 'Narzędzia edycji')
   [[ -n $bar_y ]] && adb shell input swipe $((SCREEN_W * 85 / 100)) "$bar_y" $((SCREEN_W * 10 / 100)) "$bar_y" 300
   sleep 2
   # A swipe that fell short (a slow emulator takes it for a tap or a short drag) leaves the
-  # toolbar's "Więcej" out of view (only the top bar's is there): the chevron at the row's right
+  # toolbar's "More" out of view (only the top bar's is there): the chevron at the row's right
   # edge scrolls to its end.
   if (($(ui_find_all 'Więcej' | wc -l) < 2)) && ui_has 'Więcej narzędzi edycji'; then
     ui_tap 'Więcej narzędzi edycji' last 2
   fi
   app_shot fl-4-toolbar-end
-  # (The top bar has a "Więcej" too: the toolbar's is the lower one.)
+  # (The top bar has a "More" too: the toolbar's is the lower one.)
   check "the toolbar's Więcej opens the block menu" ui_tap 'Więcej' last
   app_shot fl-5-block-menu
   check "the block menu offers Kopiuj odnośnik" ui_tap 'Kopiuj odnośnik'
@@ -1031,14 +1038,15 @@ if ((FOLDERS)); then
   check "the journal is unchanged apart from the appended line" journal_unchanged
   check "with the line as written" vault_grep "$today_journal" '^- Zapytać się \[\[Projekty/Remont mieszkania\]\] o plan$'
 
-  # A new folder from the drawer's "Strony" header: its "+" → "Nowy folder", the name typed.
+  # A new folder from the drawer's "Pages" ("Strony") header: its "+" → "New folder" ("Nowy
+  # folder"), the name typed.
   # Whatever is tapped in the drawer's list is first brought into its view (drawer_tap).
   check "☰ opens the drawer" ui_tap 'Menu' first
   check "the drawer shows the Strony section" wait_for 10 ui_has 'Strony.*'
   app_shot fl-9-drawer
   check "the Strony header's + opens its menu" drawer_tap 'Nowa strona lub folder'
   check "its Nowy folder opens the dialog" ui_tap 'Nowy folder'
-  # The name typed on the keyboard, "Utwórz" tapped while it still composes the word.
+  # The name typed on the keyboard, "Create" ("Utwórz") tapped while it still composes the word.
   type_on_keyboard Archiwum
   sleep 1
   app_shot fl-10-new-folder
@@ -1053,7 +1061,8 @@ if ((FOLDERS)); then
   check "and shows in the tree, in the drawer's view" wait_for 6 drawer_in_view "$folder(, folder .*)?"
   app_shot fl-11-folder-made
 
-  # "⋯" on a page of the tree → "Przenieś do…": "Remont mieszkania" from Projekty into Archiwum.
+  # "⋯" on a page of the tree → "Move to…" ("Przenieś do…"): "Remont mieszkania" from Projekty
+  # into Archiwum.
   check "the folder Projekty is brought into the drawer's view" drawer_show 'Projekty, folder .*'
   if ui_has 'Projekty, folder zwinięty'; then
     check "a tap opens it" ui_tap 'Projekty, folder zwinięty'
@@ -1066,7 +1075,7 @@ if ((FOLDERS)); then
   sleep 1
   adb shell input keyevent 66 # Enter: the first folder found
   sleep 2
-  # (Its "Zaktualizowane linki: 1 (w 1 notatce)" is plain text: the screenshot shows it.)
+  # (Its "Updated links: 1 (in 1 note)" is plain text: the screenshot shows it.)
   app_shot fl-13-move-sheet
   check "Przenieś tutaj moves it" ui_tap 'Przenieś tutaj' last
   # Two links: the query's path:Projekty filter and the path link [[Projekty/Remont mieszkania]]
@@ -1123,7 +1132,7 @@ if ((PICKERS)); then
   downloads_zip() { adb shell find /sdcard/Download -name "'*.zip'" 2>/dev/null | tr -d '\r' | head -n 1; }
   zip_saved() { [[ -n $(downloads_zip) ]]; }
   # A finger drags the view up until the item so named lies wholly above the bottom navigation —
-  # its top, read from its Dziennik tab, as toolbar_above_tabs does (a node under the navigation is
+  # its top, read from its Journals tab, as toolbar_above_tabs does (a node under the navigation is
   # "on screen" for UiAutomator, and a tap there switches the view) — and below the top bar.
   pk_show() { # <ERE>
     local item nav _ y1 y2
@@ -1230,7 +1239,7 @@ if ((PICKERS)); then
   exit 0
 fi
 
-# --- "Udostępnij → Brulion" (--share) -----------------------------------------------------------
+# --- "Share → Brulion" (--share) -----------------------------------------------------------------
 
 SHARE_ACTIVITY=$PKG/$PKG.android.ShareActivity
 # No copy left in the share inbox (files/share-in/<stamp>/…) once a share is saved.
@@ -1435,8 +1444,8 @@ resize_widget() { # <ERE of a text in the widget> <dy>
   sleep 3
 }
 refresh_widgets() { adb shell am broadcast -a "$PKG.android.action.WIDGETS_MIDNIGHT" -n "$WIDGET_RECEIVER" >/dev/null; sleep 3; }
-quick_add() { # <text> [chips to tap…]: QuickAddActivity with the text, the chips, "Dodaj"
-  # ("Add": the dialog speaks the phone's language until the app published a snapshot)
+quick_add() { # <text> [chips to tap…]: QuickAddActivity with the text, the chips, "Add"
+  # (or "Dodaj": the dialog speaks the phone's language until the app published a snapshot)
   local chip
   adb shell am start -n "$QUICK_ADD" --es android.intent.extra.TEXT "'$1'" >/dev/null
   wait_for 15 ui_has 'Dodaj|Add|ADD' || return 1
@@ -1741,7 +1750,7 @@ if ((PDF)); then
   echo "    memory at $(zoom) % after scrolling every page: TOTAL PSS ${pss:-?} KB (budget 350 MB)"
   check "memory stays under 350 MB" bash -c "((${pss:-999999} < 350 * 1024))"
   app_shot pdf-5-zoomed
-  # "Otwórz w innej aplikacji": ACTION_VIEW of the FileProvider's content:// URI, or — no PDF app in
+  # "Open in another app": ACTION_VIEW of the FileProvider's content:// URI, or — no PDF app in
   # the image — the app's message.
   adb logcat -c
   check "the viewer's ⋯ opens its menu" ui_tap 'Więcej' last 2
@@ -1756,7 +1765,7 @@ if ((PDF)); then
   else
     check "no PDF app in this image: the app says so" wait_for 5 ui_has '.*Na tym urządzeniu nie ma aplikacji do otwierania PDF-ów.*'
   fi
-  # "Rysuj na tej stronie": the drawing editor; the drawing embedded after the PDF's line.
+  # "Draw on this page": the drawing editor; the drawing embedded after the PDF's line.
   check "the viewer's ⋯ again" ui_tap 'Więcej' last 2
   check "… 'Rysuj na tej stronie'" ui_tap 'Rysuj na tej stronie' first 6
   check "the drawing editor opens" wait_for 20 ui_has 'Gotowe'
@@ -1884,7 +1893,7 @@ if ((STYLUS)); then
   exit 0
 fi
 
-# --- "Zrobione" in the app's own reminders (--done) -----------------------------------------------
+# --- "Done" in the app's own reminders (--done) ---------------------------------------------------
 
 if ((DONE)); then
   info "Done from a notification: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
@@ -1906,7 +1915,7 @@ if ((DONE)); then
   dn_cat() { adb shell run-as "$PKG" cat "$dn_journal" 2>/dev/null | tr -d '\r'; }
   dn_line() { dn_cat | grep -qxF -- "$1"; } # <the whole line>
   notified() { adb shell dumpsys notification --noredact | grep -q "$1"; } # <title>
-  shade_done() { # "Zrobione" in the notification <title> (the only one in the shade)
+  shade_done() { # "Done" in the notification <title> (the only one in the shade)
     adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
     sleep 2
     app_shot "dn-shade-$2"
@@ -2090,13 +2099,13 @@ PY
   wp_start() { start_app "--vault /data/user/0/$PKG/$WP_VAULT --locale pl --route journals"; }
   wp_cat() { adb shell run-as "$PKG" cat "$wp_journal" 2>/dev/null | tr -d '\r'; }
   in_front() { adb shell dumpsys activity activities | grep -m 1 topResumedActivity | grep -qE "$1"; } # <ERE>
-  asking() { [[ $(ui_find_all 'Pokaż' | sort -u | wc -l) -eq $1 ]]; } # <n>: pictures waiting for Pokaż
+  asking() { [[ $(ui_find_all 'Pokaż' | sort -u | wc -l) -eq $1 ]]; } # <n>: pictures waiting for "Show"
 
   wp_start
   check "the app is running" running
   check "both pictures wait for Pokaż (asking first is the default)" asking 2
   app_shot wp-1-asking
-  # 1. Pokaż: the https picture and the http one (Qt's own sockets: cleartextTrafficPermitted is
+  # 1. "Show": the https picture and the http one (Qt's own sockets: cleartextTrafficPermitted is
   # Java's policy and does not apply).
   check "Pokaż fetches the https picture" ui_tap 'Pokaż' first 1
   check "… into the cache" wait_for 20 cached 1
@@ -2133,7 +2142,7 @@ PY
   check "Powiększ opens the viewer" ui_tap 'Powiększ'
   check "… Zamknij closes it" ui_tap 'Zamknij'
   check "… closed" wait_for 10 ui_lacks 'Zamknij'
-  # 5. Cache cleared, no network: Pokaż says why; Spróbuj ponownie once the network is back.
+  # 5. Cache cleared, no network: "Show" says why; "Try again" once the network is back.
   adb shell run-as "$PKG" rm -rf cache/web-pictures
   wp_start
   check "the cleared cache asks again" asking 2
@@ -2151,7 +2160,7 @@ PY
   check "… the note links to the copy" bash -c "grep -q '!\[Gradient przez http\](assets/gradient.png)' <<<\"\$1\"" _ "$(wp_cat)"
   check "… the https picture's link untouched" bash -c "grep -qF '![Logo przez https]($https_url)' <<<\"\$1\"" _ "$(wp_cat)"
   app_shot wp-7-saved
-  # 7. Otwórz w przeglądarce hands the address to a browser.
+  # 7. "Open in browser" hands the address to a browser.
   long_press "$(ui_find_all 'Logo przez https' | tail -n 1)"
   sleep 2
   check "Otwórz w przeglądarce (the https picture)" ui_tap 'Otwórz w przeglądarce' first 4
@@ -2651,7 +2660,7 @@ print(last)' "$OUT/report.jsonl" "$1"
       echo "    the old formula (innerHeight - height - offsetTop) gives $legacy px"
       # Typing reaches the edited block (the word committed by the space after it), the keyboard's
       # action key is Enter, not Search (Qt's field stays a plain text field, wasm/index.html;
-      # docs/WEB.md "Klawiatura ekranowa"), and it splits the block at the caret: the block
+      # docs/WEB.md "On-screen keyboard (phone)"), and it splits the block at the caret: the block
       # edited next has the text after the caret, without the word.
       local key
       type_on_keyboard " hello " || true
@@ -2664,8 +2673,8 @@ print(last)' "$OUT/report.jsonl" "$1"
         check "$run: Enter on the keyboard splits the block" wait_for 15 wk_focus_lacks "$run" hello
       fi
       app_shot "wk-$run-2-typed"
-      # The phone turned with the keyboard up, and back: a width never seen whose first heights
-      # have the keyboard in them (docs/WEB.md "Klawiatura ekranowa"). Where the keyboard stays
+      # The phone turned with the keyboard up, and back: a width never seen whose first heights have
+      # the keyboard in them (docs/WEB.md "On-screen keyboard (phone)"). Where the keyboard stays
       # up, the app counts it as up and the toolbar ends at the window's bottom; where the browser
       # hides it on the turn (Chrome, Brave), the bottom navigation comes back under the toolbar.
       wk_turn 1 || true
@@ -2803,13 +2812,13 @@ check "tap while running delivered to C++ (Polish path)" wait_for 10 log_has "SE
 adb shell dumpsys alarm >"$OUT/dumpsys-alarm.txt"
 check "AlarmManager holds Brulion's alarms" bash -c "grep -q '$PKG' '$OUT/dumpsys-alarm.txt'"
 check "reminder 101 fired on channel 'reminders'" wait_for $((60 - (SECONDS - started))) notification_on 101 reminders
-# "Zrobione" in the notification of the task reminder 101 with the app on screen (the shade pulled
+# "Done" in the notification of the task reminder 101 with the app on screen (the shade pulled
 # over it: Qt's event loop runs): the tap is queued natively and taken by C++ at once, the
 # notification goes. (With the app in the background Qt's event loop is paused — no
 # android.app.background_running — and C++ takes the queue when the app is back in front; with
 # the process gone, at its next start: reminder 104 below.)
 today=$(adb shell date +%Y-%m-%d | tr -d '\r')
-tap_done() { # <reminder id>: "Zrobione" in its notification in the shade
+tap_done() { # <reminder id>: "Done" in its notification in the shade
   adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
   sleep 2
   app_shot "shade-$1"
@@ -2828,7 +2837,7 @@ adb exec-out screencap -p >"$OUT/alarm.png" || true
 check "alarm 102 became 'missed-alarms' after its ring time (1 min)" wait_for $((170 - (SECONDS - started))) notification_on 102 missed-alarms
 adb shell dumpsys notification --noredact >"$OUT/dumpsys-notification.txt"
 adb logcat -d >"$OUT/selftest-logcat.txt"
-# "Zrobione" with the app closed: the process killed (not force-stopped: its alarms stay), the task
+# "Done" with the app closed: the process killed (not force-stopped: its alarms stay), the task
 # reminder 104 fires into a new process without Qt, the tap waits in the queue, and C++ takes it
 # at the next start. The shade cleared first: next to the missed alarm 104 would be grouped
 # (collapsed, without its buttons).

@@ -72,7 +72,7 @@
         <!-- QtActivity + notification taps (path/line extras) forwarded to C++ (AndroidBridge).
              adjustResize: the window is never panned for the keyboard (Qt would pick pan or
              resize per text field); the keyboard's insets reach ImeInsets, and the shell keeps
-             the editing toolbar on the keyboard (docs/ANDROID.md, "Klawiatura ekranowa"). -->
+             the editing toolbar on the keyboard (docs/ANDROID.md, "On-screen keyboard"). -->
         <activity
             android:name="io.github.januszbit.brulion.android.BrulionActivity"
             android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
@@ -98,7 +98,7 @@
             android:name="io.github.januszbit.brulion.android.ReminderReceiver"
             android:exported="false" />
 
-        <!-- Notification buttons "Drzemka 10 min" and "OK". -->
+        <!-- Notification buttons "Snooze 10 min" and "OK". -->
         <receiver
             android:name="io.github.januszbit.brulion.android.ActionReceiver"
             android:exported="false" />
@@ -132,7 +132,7 @@
             android:taskAffinity=""
             android:theme="@style/Theme.BrulionAlarm" />
 
-        <!-- "Udostępnij → Brulion": text and .md/.txt files from other apps (text/* only). No UI
+        <!-- "Share → Brulion": text and .md/.txt files from other apps (text/* only). No UI
              of its own: it copies the files and hands them to BrulionActivity (docs/ANDROID.md).
              Its own task (the system starts it in the sender's task), not in Recents. -->
         <activity
@@ -155,7 +155,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Home-screen widgets (docs/ANDROID.md "Widgety"): they draw the snapshot the app
+        <!-- Home-screen widgets (docs/ANDROID.md "Widgets"): they draw the snapshot the app
              publishes, without starting Qt. The system's APPWIDGET_UPDATE reaches the
              non-exported providers; other apps cannot. -->
         <receiver
@@ -197,7 +197,7 @@
             android:name="io.github.januszbit.brulion.android.WidgetReceiver"
             android:exported="false" />
 
-        <!-- The background check of the notes (docs/ANDROID.md "Sprawdzanie notatek w tle"): the
+        <!-- The background check of the notes (docs/ANDROID.md "Checking notes in the background"): the
              periodic job (main process: it arms the reminders) and the Qt service it binds, which
              runs Brulion's C++ without any UI in a process of its own (Qt cannot start a second
              time next to the activity; the process ends when the job unbinds). -->

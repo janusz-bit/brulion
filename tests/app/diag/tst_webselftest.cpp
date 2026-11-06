@@ -425,10 +425,10 @@ private Q_SLOTS:
         QTest::qWait(300);
         QCOMPARE(server.requests, QList<QByteArray>());
         QCOMPARE(published.names().size(), 1);
-        QCOMPARE(ws->webPicture(picture).value(u"state"_s).toString(), u"ask"_s); // still waits for "Pokaż"
+        QCOMPARE(ws->webPicture(picture).value(u"state"_s).toString(), u"ask"_s); // still waits for "Show"
     }
 
-    // A picture from the local network waits for "Pokaż" even with the setting on: the test
+    // A picture from the local network waits for "Show" even with the setting on: the test
     // reports it as "ask" (settled, not timed out) and never asks for it.
     void webPicturesNeverAskForTheLocalNetwork()
     {

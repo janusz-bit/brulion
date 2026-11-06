@@ -22,7 +22,7 @@
 //                VaultIndex::linkTarget(): the one page part of every copied link) and
 //                blockLinks(content, line, page, isTaken) -> {id, ref ((id)), wikiLink
 //                [[Page#^id]], embed, headingLink} — the links the editor copies;
-//                copiedLink(url, from, …) -> {text, path}: a link menu's "Kopiuj link"
+//                copiedLink(url, from, …) -> {text, path}: a link menu's "Copy link"
 //   embeds.h     insertBlockAfterEmbed(content, lineHint, embedsIt, body) -> {content, line,
 //                afterEmbed}: a block right after the block embedding an attachment (the PDF
 //                viewer's drawing under its PDF), else appended — pure, untouched bytes kept
@@ -54,7 +54,7 @@
 //                indexStats(), lock() (the device's writers),
 //                edit(path, intent, {expectHash, dryRun, mayCreate, initialText}) — compare-and-swap writes
 //                with retries and History; deviceStatePath(appData, root), contentHash()
-//   share.h      what another app shares ("Udostępnij → Brulion", the web share target, files
+//   share.h      what another app shares ("Share → Brulion", the web share target, files
 //                opened with Brulion on a desktop): sharedContentFromJson / sharedContentToJson (the
 //                platform's JSON), sharedContentFromQuery (the share target's query),
 //                splitOpenArguments / openedFilesShare / mergeOpenedShares (`--open` files),

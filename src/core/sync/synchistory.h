@@ -1,5 +1,5 @@
-// SyncHistory — the last runs of the sync engine for the UI ("Historia synchronizacji",
-// "Szczegóły") and the exported log. Device-local, never synced; kept in a small LocalStore of
+// SyncHistory — the last runs of the sync engine for the UI ("Sync history",
+// "Details") and the exported log. Device-local, never synced; kept in a small LocalStore of
 // its own (the app: <vault device state>/sync-history.json) — not in the sync bookkeeping store,
 // whose flush rewrites every merge base.
 #pragma once

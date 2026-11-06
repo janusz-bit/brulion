@@ -5,8 +5,8 @@
 //
 //   HistoryModel { workspace: Workspace; path: route.path }
 //
-// Roles: id, time ("YYYY-MM-DDTHH:mm:ss"), when ("dziś 09:12"), clock ("09:12"), day (section
-// label: "Dziś", "Wczoraj", "pt 17 paź", "17 paź 2025"), size (bytes), sizeLabel ("1,2 kB"),
+// Roles: id, time ("YYYY-MM-DDTHH:mm:ss"), when ("today 09:12"), clock ("09:12"), day (section
+// label: "Today", "Yesterday", "Fri, Oct 17", "Oct 17, 2025"), size (bytes), sizeLabel ("1.2 kB"),
 // reason ("user" | "external" | "sync" | "import" | "system" | "cli" | other), reasonLabel
 // (translated), reasonIcon (Lucide name), newest (the first row).
 // currentText / exists: the page as it is now (a deleted page has versions but no file).
@@ -23,7 +23,7 @@ class HistoryModel : public WorkspaceListModel {
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged FINAL)
     /// "pl" (default) | "en": labels of times and sizes.
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
-    /// "YYYY-MM-DD" for "dziś"/"wczoraj"; "" = the workspace clock.
+    /// "YYYY-MM-DD" for "today"/"yesterday"; "" = the workspace clock.
     Q_PROPERTY(QString today READ today WRITE setToday NOTIFY todayChanged FINAL)
     Q_PROPERTY(QString currentText READ currentText NOTIFY currentChanged FINAL)
     Q_PROPERTY(bool exists READ exists NOTIFY currentChanged FINAL)

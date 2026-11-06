@@ -4,7 +4,7 @@
 // scripts/android-emulator-test.sh — not part of the app. Writes "SELFTEST ..." lines to
 // logcat: the permission state, two rounds of scheduleReminders() (a reminder in 45 s, an alarm
 // in 75 s ringing 1 minute, one in the past that must be skipped), two files saved to Downloads
-// (saveToDownloads: MediaStore), every activated() tap and every "Zrobione" tap (reminders 101 and
+// (saveToDownloads: MediaStore), every activated() tap and every "Done" tap (reminders 101 and
 // 104 are on tasks: their notifications have the button; takeDoneRequests()). 104 comes due in
 // 200 s, after the script killed the process: its tap waits in the queue for the next start. A PDF
 // page through Android's PdfRenderer (pdfpages.h: a 1-page PDF written here with a red square, its
@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
     logPermissions("start", bridge);
 
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    // 101 and 104 are tasks' reminders ("Zrobione" in their notifications).
+    // 101 and 104 are tasks' reminders ("Done" in their notifications).
     const auto task = [now](int id, const QString &title, qint64 in, const QString &path, int line) {
         QJsonObject item = reminder(id, title, now + in, false, path, line);
         item.insert(u"key"_s, u"selftest-%1"_s.arg(id));

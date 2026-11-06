@@ -10,7 +10,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * "Zrobione" tapped for the reminder occurrence [key] at [local] (`yyyy-MM-ddTHH:mm`) of the note
+ * "Done" tapped for the reminder occurrence [key] at [local] (`yyyy-MM-ddTHH:mm`) of the note
  * [path] (reminder on [line], titled [title]) on [day] (`yyyy-MM-dd`, the phone's local date of
  * the tap: the ✅ date written) in the notebook [vault] (empty: not known — armed by an older
  * version).
@@ -64,7 +64,7 @@ internal data class DoneRequest(
 }
 
 /**
- * The "Zrobione" taps C++ has not taken yet. A notification button runs in a BroadcastReceiver,
+ * The "Done" taps C++ has not taken yet. A notification button runs in a BroadcastReceiver,
  * usually while Qt is not running, and the Markdown is edited by C++ only (one parser): the tap is
  * persisted here and handed over through `BrulionAndroid.takeDoneRequests` — at once when the app
  * runs with the tap's notebook ready ([BrulionAndroid.doneQueued]), else once it is (the next

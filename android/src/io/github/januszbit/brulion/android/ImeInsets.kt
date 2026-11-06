@@ -18,7 +18,7 @@ import java.lang.ref.WeakReference
 /**
  * How much of Qt's view the on-screen keyboard (IME) covers, for C++'s `KeyboardInsets`
  * (src/app/ui/keyboardinsets.h): the shell keeps the editing toolbar, bottom sheets and toasts on
- * the keyboard's top edge with it (docs/ANDROID.md, "Klawiatura ekranowa").
+ * the keyboard's top edge with it (docs/ANDROID.md, "On-screen keyboard").
  *
  * [BrulionActivity] runs with `adjustResize` (AndroidManifest.xml: Qt never pans the window).
  * Whether the system then resizes the window (Android 9–10, a window inside the system bars) or

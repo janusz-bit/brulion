@@ -20,7 +20,7 @@
          own size is right in every browser. Qt's screen (#screen) shrinks with it and the app
          lifts nothing. iOS Safari ignores it: there the app lifts its content by the part of
          #screen the visual viewport leaves out (src/platform/wasm/wasmshell.cpp,
-         src/app/ui/keyboardinsets.h; docs/WEB.md "Klawiatura ekranowa"). -->
+         src/app/ui/keyboardinsets.h; docs/WEB.md "On-screen keyboard (phone)"). -->
     <meta name="viewport" id="brulion-viewport"
           content="width=device-width, initial-scale=1, user-scalable=0, interactive-widget=resizes-content">
     <script>
@@ -159,7 +159,7 @@
         // fires none and arms none: every Qt timer stops until another one is started or stopped
         // (input does not wake them), e.g. the drawing editor's save 1.2 s after the last line.
         // So every timeout of the page with a wait gets TIMEOUT_MARGIN_MS more; 0 ms (Qt's
-        // wake-ups) stays. docs/WEB.md "Ograniczenia techniczne"; tests/web/shell.spec.mjs.
+        // wake-ups) stays. docs/WEB.md "Technical limitations"; tests/web/shell.spec.mjs.
         var TIMEOUT_MARGIN_MS = 2;
         var nativeSetTimeout = window.setTimeout;
         window.setTimeout = function (handler, delay) {
@@ -177,7 +177,7 @@
         // brulion-web-<version>.html, opened from disk): qtloader.js and brulion.js are scripts of
         // the page before this one, brulion.wasm is gzip-compressed in base64 in the script
         // element #brulion-wasm. There is no server to fetch from, and file:// has no service
-        // worker and no installable web app (docs/WEB.md "Jeden plik HTML").
+        // worker and no installable web app (docs/WEB.md "Single HTML file").
         var embeddedWasm = document.getElementById('brulion-wasm');
         var singleFile = !!embeddedWasm;
 
@@ -332,7 +332,8 @@
         // (#qt-shadow-container, qwasmscreen.cpp), which a style of this document cannot reach.
         // (Chrome and Brave put their autofill bar over the keyboard for every text field; only a
         // search field avoids it, but there the keyboard capitalized the first word typed in the
-        // middle of a sentence: the field stays as Qt makes it. docs/WEB.md "Klawiatura ekranowa".)
+        // middle of a sentence: the field stays as Qt makes it. docs/WEB.md "On-screen keyboard
+        // (phone)".)
         function touchScreen() {
           return !!window.matchMedia && (matchMedia('(pointer: coarse)').matches
             || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches));
@@ -457,7 +458,7 @@
           });
         }
 
-        // "Udostępnij → Brulion" in the browser version installed as an app (docs/WEB.md): the share
+        // "Share → Brulion" in the browser version installed as an app (docs/WEB.md): the share
         // target's launch (manifest.webmanifest "share_target": GET ./?share-title=…&share-text=…
         // &share-url=…). Its parameters with a value, re-encoded ('' when none); the app reads them
         // (--share-query, src/core/notebook/share.h). They leave the address bar at once, so a

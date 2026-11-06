@@ -22,6 +22,23 @@ QString deviceStatePath(const QString &appDataDir, const QString &vaultRoot)
     return QDir::cleanPath(appDataDir + u"/vaults/"_s + Vault::idForPath(vaultRoot));
 }
 
+QString docsNotebookFolder(QStringView language)
+{
+    return language == u"pl" ? u"Dokumentacja Brulionu"_s : u"Brulion Documentation"_s;
+}
+
+QString docsNotebookLanguage(const QString &appDataDir, const QString &path)
+{
+    if (appDataDir.isEmpty() || path.trimmed().isEmpty())
+        return {};
+    const QString clean = QDir::cleanPath(path.trimmed());
+    for (const QString &language : {u"en"_s, u"pl"_s}) {
+        if (clean == QDir::cleanPath(appDataDir + u'/' + docsNotebookFolder(language)))
+            return language;
+    }
+    return {};
+}
+
 QString contentHash(const QByteArray &bytes)
 {
     return text::fnv1a64Hex(bytes);

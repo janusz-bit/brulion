@@ -6,8 +6,8 @@ import Brulion
 // BSwitch — on/off setting with a label, optional icon and description. The track sits at
 // the right edge (settings-row style), so a full-width switch reads label … [switch].
 //
-//   BSwitch { text: qsTr("Alarm (głośny, do wyłączenia)"); iconName: "alarm-clock"
-//             description: qsTr("Dzwoni, dopóki go nie wyłączysz") }
+//   BSwitch { text: qsTr("Alarm (loud, until turned off)"); iconName: "alarm-clock"
+//             description: qsTr("Rings until you turn it off") }
 //
 // Keyboard: Space toggles. The whole row is the hit area (≥ 44 px high on touch UIs).
 // The track: on, the link colour; off, solid borderControl (≥ 3:1 on bg, bgElevated and bgSunken,

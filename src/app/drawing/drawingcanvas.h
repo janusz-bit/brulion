@@ -179,7 +179,7 @@ class DrawingCanvas : public QQuickPaintedItem {
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged FINAL)
     /// The paper's colour as shown (the drawing's, in the theme in force).
     Q_PROPERTY(QColor paperColor READ paperColor NOTIFY renderChanged FINAL)
-    /// The paper's colour as drawn, in light-theme terms ("Kolor tła…", appState
+    /// The paper's colour as drawn, in light-theme terms ("Background colour…", appState
     /// `viewBackgroundColor`; set: "#rrggbb", an undo step, anything else ignored).
     Q_PROPERTY(QString paper READ paper WRITE setPaper NOTIFY paperChanged FINAL)
     /// Light marks show better on the paper as shown (a custom paper may be dark in the light theme).

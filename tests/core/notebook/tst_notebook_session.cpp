@@ -315,6 +315,23 @@ private Q_SLOTS:
                  u"/home/ala/.local/share/Brulion/Brulion/vaults/"_s + Vault::idForPath(dir));
         QCOMPARE(decodeText("\xEF\xBB\xBFżółw"), u"żółw"_s);
     }
+
+    void documentationNotebookFolders()
+    {
+        // Each language's documentation has its own folder; both are recognised whatever the UI
+        // language is now (a Polish notebook stays the documentation after a switch to English).
+        const QString data = u"/home/ala/.local/share/Brulion/Brulion"_s;
+        QCOMPARE(docsNotebookFolder(u"pl"), u"Dokumentacja Brulionu"_s);
+        QCOMPARE(docsNotebookFolder(u"en"), u"Brulion Documentation"_s);
+        QCOMPARE(docsNotebookFolder(u"de"), u"Brulion Documentation"_s);
+        QCOMPARE(docsNotebookLanguage(data, data + u"/Dokumentacja Brulionu"_s), u"pl"_s);
+        QCOMPARE(docsNotebookLanguage(data, data + u"/Brulion Documentation/"_s), u"en"_s);
+        QCOMPARE(docsNotebookLanguage(data, data + u"/./Brulion Documentation"_s), u"en"_s);
+        QCOMPARE(docsNotebookLanguage(data, data + u"/Przykładowy brulion"_s), QString());
+        QCOMPARE(docsNotebookLanguage(data, u"/home/ala/Dokumentacja Brulionu"_s), QString());
+        QCOMPARE(docsNotebookLanguage(data, QString()), QString());
+        QCOMPARE(docsNotebookLanguage(QString(), u"/Dokumentacja Brulionu"_s), QString());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestNotebookSession)

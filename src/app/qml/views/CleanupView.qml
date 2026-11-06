@@ -7,7 +7,7 @@ import Brulion
 // CleanupView — route "cleanup" (docs/UI.md "Cleaning up"): the notes and attachments nothing refers
 // to (Workspace.unreferencedFiles). Nothing is ticked at first: the user picks what goes, by kind
 // (BSegmented), one by one or all shown, and only what is ticked and shown goes to the trash after
-// a confirmation, with Cofnij in the toast. Removing a note can leave its picture without links:
+// a confirmation, with Undo in the toast. Removing a note can leave its picture without links:
 // the list follows the index, so that picture appears here next.
 // A file is opened with the row's button; the kind and the ticks stay in the route for Back.
 FocusScope {
@@ -49,7 +49,7 @@ FocusScope {
         lastTrashed = Workspace.deletePages(selection.shownTicked)
         if (lastTrashed.length > 0) {
             // Restored by the controller, not by this view: the toast outlives the view when the
-            // user goes elsewhere before pressing Cofnij.
+            // user goes elsewhere before pressing Undo.
             AppController.toastRestore(qsTr("%n file(s) moved to the trash", "", lastTrashed.length), qsTr("Undo"),
                                        lastTrashed)
         }

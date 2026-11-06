@@ -6,9 +6,9 @@ import Brulion
 // DrawingSelectionBar — what can be done with the selected elements of a drawing (DrawingView;
 // docs/UI.md "Drawing editor"): a floating bar centred above the selection (below it when there is
 // no room, always inside the view) with the pen's colours (recolour; on narrow windows one swatch
-// opening them), "Styl" (DrawingStylePanel: fill, lines, opacity, corners, arrowheads, text size),
-// "Duplikuj", "Na wierzch", "Na spód" (in "Więcej" on narrow windows), "Więcej" (copy, cut — as
-// Excalidraw's clipboard —, turn by 90°, mirror, group, ungroup) and "Usuń". Shown while something is
+// opening them), "Style" (DrawingStylePanel: fill, lines, opacity, corners, arrowheads, text size),
+// "Duplicate", "Bring to front", "Send to back" (in "More" on narrow windows), "More" (copy, cut — as
+// Excalidraw's clipboard —, turn by 90°, mirror, group, ungroup) and "Delete". Shown while something is
 // selected and nothing is being drawn, moved or written; touch-sized on touch screens. Its parent
 // is the paper's area: the bar takes the presses on it, everything else goes to the paper.
 // The buttons take no keyboard focus (the view's keys go on working).
@@ -30,7 +30,7 @@ Item {
 
     visible: shown
 
-    /// The style panel, "Więcej" (route.open, screenshots).
+    /// The style panel, "More" (route.open, screenshots).
     function openStyle(): void { stylePanel.open() }
     function openMore(): void { moreMenu.popup(moreButton, 0, moreButton.height) }
 

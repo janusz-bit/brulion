@@ -3,13 +3,13 @@ import QtQuick
 import Brulion
 
 // FrontmatterView — page properties (YAML frontmatter or Logseq `key:: value` lines at the top)
-// as the "Właściwości" panel (docs/UI.md "Page properties"). Folded: a header with the number of
-// properties and a one-line preview of their values ("status: w toku · termin: śr, 28 paź"; on a
+// as the "Properties" panel (docs/UI.md "Page properties"). Folded: a header with the number of
+// properties and a one-line preview of their values ("status: in progress · due: Wed, Oct 28"; on a
 // page, without the tags and aliases its header shows as chips).
 // Expanded (a device setting, BlockEditor.propertiesExpanded — the header's tap switches it, so
 // a page that is edited or synced keeps it open): the properties as typed fields
-// (PropertiesPanel), with "+" (add a property) and "⋯" ("Edytuj jako tekst": the raw text in the
-// block's inline editor, "Zwiń") in the header. The panel's height is a binding (docs/UI.md
+// (PropertiesPanel), with "+" (add a property) and "⋯" ("Edit as text": the raw text in the
+// block's inline editor, "Collapse") in the header. The panel's height is a binding (docs/UI.md
 // "Scrolling performance"): a block created expanded has its final height at once.
 Rectangle {
     id: root
@@ -37,7 +37,7 @@ Rectangle {
         return BlockViews.headerListKeys(root.editor.controller.pageProperties)
     }
     /// The folded header's preview of the values: without the tags and aliases the page header
-    /// shows right above (never twice), dates as the open panel shows them ("czw, 29 paź").
+    /// shows right above (never twice), dates as the open panel shows them ("Thu, Oct 29").
     readonly property string preview: {
         // (Each list read fresh: a call in the loop could change one held in a local.)
         let out = ""

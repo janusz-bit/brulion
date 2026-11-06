@@ -593,7 +593,7 @@ void ExportController::webCacheStep()
         finishWebPictures();
         return;
     }
-    // The user asked for copies: the missing ones fetched like "Zapisz w notatniku".
+    // The user asked for copies: the missing ones fetched like "Save to notebook".
     const QStringList missing = std::exchange(m_webMissing, {});
     m_webPending = QSet<QString>(missing.cbegin(), missing.cend());
     m_webTotal = m_webPending.size();

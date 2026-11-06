@@ -7,23 +7,27 @@ import Brulion
 // The page view loads it next to its editor:
 //   Loader { active: DevTools.editorScript !== "" && !DevTools.editor
 //            sourceComponent: PageScript { editor: editor; controller: page } }
-// States (blocks are found by their text on the sample notebook's guide page, else the first):
+// States (blocks are found by their text on the sample notebook's guide page, else the first; the
+// texts of the English guide, or of the Polish one when the UI is Polish — the sample notebook
+// follows the UI language — written below as English / Polish):
 //   editing   edit a block with bold text (raw Markdown + highlighting, caret at the end)
-//   editing-toast  the same, then a toast ("Scalono…": on phones at the top while typing)
-//   toolbar-menu   (touch UIs) the same, the toolbar's "Więcej" — the block menu above it —, then
+//   editing-toast  the same, then a toast ("Merged changes…": on phones at the top while typing)
+//   toolbar-menu   (touch UIs) the same, the toolbar's "More" — the block menu above it —, then
 //             the system hides the keyboard (KeyboardInsets.simulated 0): the menu follows the
 //             toolbar down, every item shown
-//   suggest   a new block, "Zobacz też [[Prze" typed: page suggestions
-//   tags      a new block, "Kupić farbę #pro" typed: tag suggestions
-//   slash     a new block, "Kupić bilety /przy" typed: slash commands
-//   date      a new block, "Odebrać paczkę ⏰ jutro o 9" typed: date suggestions
-//   reminder  the reminder dialog for a new block "Kupić bilety na pociąg"
+//   suggest   a new block, "See also [[Rec" / "Zobacz też [[Prze" typed: page suggestions
+//   tags      a new block, "Buy paint #pro" / "Kupić farbę #pro" typed: tag suggestions
+//   slash     a new block, "Buy tickets /remi" / "Kupić bilety /przy" typed: slash commands
+//   date      a new block, "Pick up the parcel ⏰ tomorrow at 9" / "Odebrać paczkę ⏰ jutro o 9"
+//             typed: date suggestions
+//   reminder  the reminder dialog for a new block "Buy train tickets" / "Kupić bilety na pociąg"
 //   source    source mode (Ctrl+E)
-//   sidepanel "Przepisy" opened in the side panel next to this page (wide windows)
-//   empty     an existing but empty page ("Pusta strona.md" is written empty and opened)
+//   sidepanel "Recipes" / "Przepisy" opened in the side panel next to this page (wide windows)
+//   empty     an existing but empty page ("Empty page.md" / "Pusta strona.md" is written empty and
+//             opened)
 //   doc-paragraph / doc-list / doc-heading   the guide is a document (Obsidian-like): editing its
-//             first paragraph (caret in the middle), a list item of "Dokument i konspekt", that
-//             section's heading
+//             first paragraph (caret in the middle), a list item of "Documents and outlines" /
+//             "Dokument i konspekt", that section's heading
 //   doc-outline  the guide switched to an outline (the header's toggle), nothing else changed
 //   edit:<text>[@<caret>]  any page (--route): edit the block whose text starts with <text>
 //             (one word: the screenshot scripts split arguments at spaces), caret at the end or
@@ -47,6 +51,12 @@ Item {
     function findItem(item: Item, name: string): Item {
         return DevTest.findItem(item, name)
     }
+
+    /// `en`, or `pl` when the UI (and so the sample notebook) is Polish.
+    function say(en: string, pl: string): string {
+        return DevTools.language === "pl" ? pl : en
+    }
+    readonly property string emptyPage: script.say("Empty page.md", "Pusta strona.md")
 
     /// The fields of a block (BlockListModel.get()).
     property DevBlock block: DevBlock {}
@@ -136,55 +146,60 @@ Item {
         onTriggered: {
             switch (script.scenario) {
             case "editing":
-                script.editor.startEditing(script.rowOf("Każdy punkt listy"), -1)
+                script.editor.startEditing(script.rowOf(script.say("Every list item", "Każdy punkt listy")), -1)
                 break
             case "editing-toast":
-                script.editor.startEditing(script.rowOf("Każdy punkt listy"), -1)
+                script.editor.startEditing(script.rowOf(script.say("Every list item", "Każdy punkt listy")), -1)
                 later.run(1)
                 break
             case "toolbar-menu": {
-                script.scenarioRow = script.rowOf("Każdy punkt listy")
+                script.scenarioRow = script.rowOf(script.say("Every list item", "Każdy punkt listy"))
                 script.editor.startEditing(script.scenarioRow, -1)
                 later.run(1)
                 break
             }
             case "suggest":
-                script.typeAfter("Link do strony", "Zobacz też [[Prze")
+                script.typeAfter(script.say("A link to a page", "Link do strony"),
+                                 script.say("See also [[Rec", "Zobacz też [[Prze"))
                 break
             case "tags":
-                script.typeAfter("Tagi zaczynają się", "Kupić farbę #pro")
+                script.typeAfter(script.say("Tags start with", "Tagi zaczynają się"),
+                                 script.say("Buy paint #pro", "Kupić farbę #pro"))
                 break
             case "slash":
-                script.typeAfter("Zadzwonić do mamy", "Kupić bilety /przy")
+                script.typeAfter(script.say("Call Mom", "Zadzwonić do mamy"),
+                                 script.say("Buy tickets /remi", "Kupić bilety /przy"))
                 break
             case "date":
-                script.typeAfter("Zadzwonić do mamy", "Odebrać paczkę ⏰ jutro o 9")
+                script.typeAfter(script.say("Call Mom", "Zadzwonić do mamy"),
+                                 script.say("Pick up the parcel ⏰ tomorrow at 9", "Odebrać paczkę ⏰ jutro o 9"))
                 break
             case "reminder":
-                script.reminderFor(script.controller.insertBlockAfter(script.rowOf("Zadzwonić do mamy"), "Kupić bilety na pociąg"))
+                script.reminderFor(script.controller.insertBlockAfter(script.rowOf(script.say("Call Mom", "Zadzwonić do mamy")),
+                                                                      script.say("Buy train tickets", "Kupić bilety na pociąg")))
                 break
             case "source":
                 script.editor.toggleSourceMode()
                 break
             case "sidepanel":
-                AppController.openPage("Przepisy.md", -1, true)
+                AppController.openPage(script.say("Recipes.md", "Przepisy.md"), -1, true)
                 break
             case "doc-paragraph":
-                script.editor.startEditing(script.rowOf("Brulion to notatnik"), 58)
+                script.editor.startEditing(script.rowOf(script.say("Brulion is a notebook", "Brulion to notatnik")), 58)
                 break
             case "doc-list":
-                script.editor.startEditing(script.rowOf("Dokument, jak w Obsidianie"), -1)
+                script.editor.startEditing(script.rowOf(script.say("A document, as in Obsidian", "Dokument, jak w Obsidianie")), -1)
                 break
             case "doc-heading":
-                script.editor.startEditing(script.rowOf("Dokument i konspekt"), -1)
+                script.editor.startEditing(script.rowOf(script.say("Documents and outlines", "Dokument i konspekt")), -1)
                 break
             case "doc-outline":
                 script.controller.setMode("outline")
                 break
             case "empty":
-                if (script.controller.path !== "Pusta strona.md") {
-                    Workspace.writeFile("Pusta strona.md", "")
-                    AppController.openPage("Pusta strona.md", -1, false)
+                if (script.controller.path !== script.emptyPage) {
+                    Workspace.writeFile(script.emptyPage, "")
+                    AppController.openPage(script.emptyPage, -1, false)
                 }
                 break
             case "properties":

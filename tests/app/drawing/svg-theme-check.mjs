@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The browser check of a drawing set to "Jak motyw" (docs/SYNTAX.md §2 "Drawings", "Light and
+// The browser check of a drawing set to "Like the app" (docs/SYNTAX.md §2 "Drawings", "Light and
 // dark"): its SVG holds the light picture in attributes and the dark colours in one
 // `@media (prefers-color-scheme: dark)` block, so a browser (Obsidian, GitHub) shows it dark when
 // its viewer prefers dark. Chromium (headless, over the DevTools protocol — the minimal client of

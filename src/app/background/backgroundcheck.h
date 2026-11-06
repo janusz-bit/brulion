@@ -1,4 +1,4 @@
-// The background check of the notes (Android, docs/ANDROID.md "Sprawdzanie notatek w tle"): while
+// The background check of the notes (Android, docs/ANDROID.md "Checking notes in the background"): while
 // Brulion is closed, the system runs a periodic job (JobScheduler, BackgroundCheckJob.kt) that
 // starts Brulion's library in a process of its own without any UI (BackgroundCheckService.kt, a
 // QtService; main() → runBackgroundCheck()). There one Check:

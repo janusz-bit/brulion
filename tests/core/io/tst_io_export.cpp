@@ -633,7 +633,7 @@ private Q_SLOTS:
         QVERIFY(!copied.contains(u"<svg"_s));
     }
 
-    // `/Wzór matematyczny` in an outline or a journal writes a ```math block inside a list item:
+    // `/Math formula` in an outline or a journal writes a ```math block inside a list item:
     // the export shows the formula there too, and other fenced items as code blocks.
     void htmlFencesInListItems()
     {
@@ -840,7 +840,7 @@ private Q_SLOTS:
         QVERIFY2(!html.contains(u"<img"_s), qPrintable(html));
     }
 
-    // "Obrazy z internetu: dołącz kopie": copies from the device's cache instead of the URLs.
+    // "Pictures from the internet: Include copies": copies from the device's cache instead of the URLs.
     void htmlWebPictureCopies_data()
     {
         QTest::addColumn<QString>("format");

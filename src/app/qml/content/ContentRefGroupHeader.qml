@@ -5,7 +5,7 @@ import Brulion
 
 // ContentRefGroupHeader — the page heading of a group of references (ContentBacklinks, TagsView):
 // a fold arrow (GroupedRefsModel.toggleCollapsed), the page's title — journals by their date —
-// that opens the page, its folder, "cała strona" when the page itself carries the tag
+// that opens the page, its folder, "whole page" when the page itself carries the tag
 // (`pageLevel`) and the number of references.
 //
 //   ContentRefGroupHeader { refs: backlinks; path: …; title: …; folder: …; journalDate: …;

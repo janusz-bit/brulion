@@ -1,6 +1,6 @@
-// What the app does with text and files shared to Brulion from another app ("Udostępnij →
+// What the app does with text and files shared to Brulion from another app ("Share →
 // Brulion" on Android, docs/ANDROID.md; the browser version's share target, docs/WEB.md; files
-// opened with Brulion on a desktop — "Otwórz za pomocą", `--open` —, docs/WINDOWS.md and
+// opened with Brulion on a desktop — "Open with", `--open` —, docs/WINDOWS.md and
 // docs/NIXOS.md; the `--share` developer option): the shared content as the platform hands it over
 // (JSON, the share target's query, the files of a launch), one capture text from a shared title,
 // text and link, the title and the content of a new page made from a shared file, the journal
@@ -46,7 +46,7 @@ struct SharedContent {
     QString url;     ///< a separate link (the developer option; Android puts links into `text`)
     QString dir;     ///< folder of the local copies, removed once the share is saved or dismissed
     QList<SharedFile> files;
-    /// Where it came from: "open" — files opened with Brulion on a desktop ("Otwórz za pomocą", a
+    /// Where it came from: "open" — files opened with Brulion on a desktop ("Open with", a
     /// launcher: `--open`); "" — another app's share (Android, the web share target, `--share`).
     QString source;
 
@@ -92,7 +92,7 @@ OpenArguments splitOpenArguments(const QStringList &arguments);
 SharedContent openedFilesShare(const QStringList &arguments, const QString &workingDirectory);
 
 /// A newer "open" share joined to one still waiting in the share dialog (Windows starts Brulion once
-/// per selected file; two "Otwórz za pomocą" in a row): the waiting files, then the newer ones not
+/// per selected file; two "Open with" in a row): the waiting files, then the newer ones not
 /// listed yet (the same path; an entry without a path: the same name and error), the caps applied
 /// again as in sharedContentFromJson. Subject, text and url from `newer` when it has any, else from
 /// `waiting`. Source "open", no dir.

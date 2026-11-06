@@ -14,14 +14,14 @@
 //                                       its menu shows (none for Logseq planning lines)
 //   snoozeReminder(path, line, text, value, at)   one occurrence of a recurring reminder later (a one-off
 //                                       child bullet, the series untouched: reminders/snooze.h)
-//   linkText(url, fromPath) / copyText(text)   the link menu's "Kopiuj"
+//   linkText(url, fromPath) / copyText(text)   the link menu's "Copy"
 //   toggleClock(path, line, text)       the task's timer (:LOGBOOK: CLOCK lines; one at a time)
-//   dependencyCandidates / addDependency   "Dodaj zależność…" (🆔 / ⛔, docs/SYNTAX.md §5)
+//   dependencyCandidates / addDependency   "Add dependency…" (🆔 / ⛔, docs/SYNTAX.md §5)
 //   undo()                              puts the file back as it was before the last change made
 //                                       here — only while nobody changed it since (canUndo)
 //   appendBlock(path, block)            a new block at the end of a page (a trailing empty
 //                                       template bullet is filled), e.g. the day's journal
-//                                       ("Dodaj zadanie" / "Dodaj przypomnienie" in the calendar)
+//                                       ("Add task" / "Add reminder" in the calendar)
 //   taskLine / reminderLine / parseQuickAdd   the Markdown lines those write
 //
 // Before changing a task the file is read again and the task is looked up at `line`; when the
@@ -119,10 +119,10 @@ public:
                                const QString &value, const QString &action, const QVariant &a = {},
                                const QVariant &b = {});
     /// What the token menu of such a token shows besides the models' values: { rule (the block's
-    /// 🔁 rule as the menu edits it — "every week" of "🔁 co tydzień kupić mleko" —, or the 🔁
-    /// token's own), priority (its name, "" = none), logseq (a Logseq `[#A]` priority) }; empty
-    /// when the value is not written as such a token there (a Logseq `SCHEDULED:` line or `.+1w`
-    /// repeater, a task changed meanwhile): no menu then.
+    /// 🔁 rule as the menu edits it — "every week" of "🔁 co tydzień kupić mleko" (Polish: "every
+    /// week buy milk") —, or the 🔁 token's own), priority (its name, "" = none), logseq (a Logseq
+    /// `[#A]` priority) }; empty when the value is not written as such a token there (a Logseq
+    /// `SCHEDULED:` line or `.+1w` repeater, a task changed meanwhile): no menu then.
     Q_INVOKABLE QVariantMap tokenMenu(const QString &path, int line, const QString &text, const QString &kind,
                                       const QString &value) const;
     /// Snooze the reminder `value` ("YYYY-MM-DD HH:mm" as the models give it) of the block on
@@ -138,13 +138,13 @@ public:
     /// host's navigation (`newPane`: in the side panel). False for unknown schemes and a
     /// malformed part:.
     Q_INVOKABLE bool openLink(const QString &url, const QString &fromPath = QString(), bool newPane = false);
-    /// What a link menu's "Kopiuj" copies for `url` written in `fromPath`: `[[Page#Heading]]` by the
+    /// What a link menu's "Copy" copies for `url` written in `fromPath`: `[[Page#Heading]]` by the
     /// page's shortest link target (as written when the page does not exist), `#tag` /
     /// `#[[tag with spaces]]`, `((id))`, the address; for a path part of a link `[[Page]]`, the
     /// folder's path ("Projekty/") or `[[prefix]]` of a new page; "" for other URLs.
     Q_INVOKABLE QString linkText(const QString &url, const QString &fromPath = QString()) const;
     /// A page: link written in `fromPath` that leads to no page, or a path part of a link that
-    /// opens a new page (its menu offers "Utwórz stronę", as in the editor); false for other
+    /// opens a new page (its menu offers "Create page", as in the editor); false for other
     /// links.
     Q_INVOKABLE bool linkMissing(const QString &url, const QString &fromPath = QString()) const;
     /// What a path part of a link (part:) written in `fromPath` opens: "page", "folder" or "new"

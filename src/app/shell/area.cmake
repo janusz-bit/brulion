@@ -7,7 +7,7 @@
 # editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, folders and
 # moves, quick capture — the last three through the core module notebook, shared with brulion-cli —,
 # the clipboard's HTML of copied blocks and pasted HTML (core io), PDFs (workspacepdf.cpp: thumbnails,
-# "Otwórz w innej aplikacji", a drawing on a PDF page), reminders — WorkspaceReminders
+# "Open in another app", a drawing on a PDF page), reminders — WorkspaceReminders
 # over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
 # workspaceintegration), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
@@ -73,9 +73,10 @@ qt_add_library(brulion_shell STATIC
     # The views' C++ (qml/views/*.qml)
     ${_brulion_shell_dir}/cleanupselection.h ${_brulion_shell_dir}/cleanupselection.cpp
 )
-# The documentation (guide/*.md, Brulion notes about Brulion) as :/guide/<name>.md;
-# demovault.cpp (updateDocsVault) writes them at the root of the separate notebook
-# "Dokumentacja Brulionu" and keeps them up to date.
+# The documentation (guide/<language>/*.md, Brulion notes about Brulion: en English, pl Polish) as
+# :/guide/<language>/<name>.md; demovault.cpp (updateDocsVault) writes one language's pages at the
+# root of the separate notebook "Brulion Documentation" (Polish: "Dokumentacja Brulionu") and keeps
+# them up to date.
 file(GLOB_RECURSE _brulion_guide_files CONFIGURE_DEPENDS ${_brulion_shell_dir}/guide/*.md)
 qt_add_resources(brulion_shell brulion_guide
     PREFIX /guide

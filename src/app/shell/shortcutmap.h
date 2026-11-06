@@ -1,5 +1,5 @@
 // ShortcutMap — the keyboard shortcuts of the commands (QML singleton `ShortcutMap`; docs/UI.md
-// "Custom shortcuts"; Ustawienia → Skróty klawiszowe, qml/shell/ShellShortcutSettings.qml).
+// "Custom shortcuts"; Settings → Keyboard shortcuts, qml/shell/ShellShortcutSettings.qml).
 //
 // The actions are CommandModel's commands (its shortcutActions(): id, title, default shortcut)
 // plus "palette" (the command palette itself). Every action may get a custom shortcut instead of

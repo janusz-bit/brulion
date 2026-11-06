@@ -30,6 +30,18 @@ delay="${DELAY:-1800}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
+# The sample notebook follows the UI language (src/app/shell/demovault.h): its folder, pages and
+# tags in English, or in Polish for LOCALE=pl.
+if [[ "$locale" == pl ]]; then
+  sample="Przykładowy brulion" guide="Witaj w Brulionie" project="Projekty/Remont mieszkania"
+  books="Książki 2026" missing="Pomysły na prezenty" idea="pomysł" home_tag="projekt/dom" word="remont"
+  agent_lines=("Dopisane przez agenta: kupić mleko" "I jeszcze: zadzwonić do Łukasza")
+else
+  sample="Sample notebook" guide="Welcome to Brulion" project="Projects/Home renovation"
+  books="Books 2026" missing="Gift ideas" idea="idea" home_tag="project/home" word="renovation"
+  agent_lines=("Added by an agent: buy milk" "And one more: call Łukasz")
+fi
+
 declare -A shot_route=(
   [journals]='journals'
   [journals-day]='{"view":"journals","date":"2026-10-07"}'
@@ -38,21 +50,21 @@ declare -A shot_route=(
   [journals-write]='{"view":"journals","open":"write"}'
   [journal]='{"view":"journal","date":"2026-10-13"}'
   [journal-new]='{"view":"journal","date":"2026-10-15"}'
-  [page]='{"view":"page","path":"Projekty/Remont mieszkania.md"}'
-  [page-refs]='{"view":"page","path":"Książki 2026.md","open":"unlinked"}'
-  [page-rename]='{"view":"page","path":"Projekty/Remont mieszkania.md","open":"rename"}'
-  [page-export]='{"view":"page","path":"Projekty/Remont mieszkania.md","open":"export"}'
-  [side-links]='{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'
-  [side-outline]='{"view":"page","path":"Witaj w Brulionie.md","open":"outline"}'
+  [page]="{\"view\":\"page\",\"path\":\"$project.md\"}"
+  [page-refs]="{\"view\":\"page\",\"path\":\"$books.md\",\"open\":\"unlinked\"}"
+  [page-rename]="{\"view\":\"page\",\"path\":\"$project.md\",\"open\":\"rename\"}"
+  [page-export]="{\"view\":\"page\",\"path\":\"$project.md\",\"open\":\"export\"}"
+  [side-links]="{\"view\":\"page\",\"path\":\"$project.md\",\"open\":\"links\"}"
+  [side-outline]="{\"view\":\"page\",\"path\":\"$guide.md\",\"open\":\"outline\"}"
   [side-calendar]='{"view":"journal","date":"2026-10-13","open":"calendar"}'
-  [page-missing]='{"view":"page","path":"Pomysły na prezenty.md"}'
-  [page-tag]='{"view":"page","path":"pomysł.md"}'
-  [page-tag-nested]='{"view":"page","path":"projekt/dom.md"}'
+  [page-missing]="{\"view\":\"page\",\"path\":\"$missing.md\"}"
+  [page-tag]="{\"view\":\"page\",\"path\":\"$idea.md\"}"
+  [page-tag-nested]="{\"view\":\"page\",\"path\":\"$home_tag.md\"}"
   [allpages]='allPages'
   [allpages-modified]='{"view":"allPages","sort":"modified"}'
   [tags]='tags'
-  [tag]='{"view":"tag","tag":"pomysł"}'
-  [search]='{"view":"search","query":"remont"}'
+  [tag]="{\"view\":\"tag\",\"tag\":\"$idea\"}"
+  [search]="{\"view\":\"search\",\"query\":\"$word\"}"
   [search-empty]='search'
   [trash]='trash'
   [trash-full]='trash'
@@ -60,8 +72,8 @@ declare -A shot_route=(
   [empty-allpages]='allPages'
   [empty-tags]='tags'
   [empty-search]='{"view":"search","query":"żółw"}'
-  [history]='{"view":"history","path":"Witaj w Brulionie.md"}'
-  [history-cli]='{"view":"history","path":"Witaj w Brulionie.md"}'
+  [history]="{\"view\":\"history\",\"path\":\"$guide.md\"}"
+  [history-cli]="{\"view\":\"history\",\"path\":\"$guide.md\"}"
 )
 # A first run in the same home before the shot (the history needs an edit to show versions:
 # PageScript "suggest" types into the guide page, which saves it).
@@ -101,11 +113,11 @@ cli="${BRULION_CLI:-$(dirname "$bin")/../cli/brulion-cli}"
 prep_cli() { # <shot> <home>
   case "$1" in
     history-cli)
-      local vault="$2/data/Brulion/Brulion/Przykładowy brulion"
+      local vault="$2/data/Brulion/Brulion/$sample"
       local run=(env XDG_CONFIG_HOME="$2/config" XDG_DATA_HOME="$2/data" XDG_STATE_HOME="$2/state" "$cli"
         --vault "$vault" --now "$now")
-      "${run[@]}" page append "Witaj w Brulionie" "Dopisane przez agenta: kupić mleko" >/dev/null
-      "${run[@]}" page append "Witaj w Brulionie" "I jeszcze: zadzwonić do Łukasza" >/dev/null ;;
+      "${run[@]}" page append "$guide" "${agent_lines[0]}" >/dev/null
+      "${run[@]}" page append "$guide" "${agent_lines[1]}" >/dev/null ;;
   esac
 }
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi

@@ -3,11 +3,11 @@ import QtQuick
 import Brulion
 
 // PropertyMenu — the menu of one property in the properties panel (PropertyRow: its type icon, a
-// right-click or a long press on the row, the Menu key / Shift+F10): "Typ" (text, number,
+// right-click or a long press on the row, the Menu key / Shift+F10): "Type" (text, number,
 // checkbox, date, date and time, list — the value converted; one that cannot be kept is cleared
-// with "Cofnij" in the toast; tags and aliases keep theirs), "Zmień nazwę" (F2), "Kopiuj wartość",
-// "Usuń" (Ctrl+Backspace; "Cofnij" in the toast); a row the fields cannot edit (a map, a nested
-// list, a block Brulion cannot edit safely) offers "Edytuj jako tekst" (the block's raw text in
+// with "Undo" in the toast; tags and aliases keep theirs), "Rename" (F2), "Copy value",
+// "Remove" (Ctrl+Backspace; "Undo" in the toast); a row the fields cannot edit (a map, a nested
+// list, a block Brulion cannot edit safely) offers "Edit as text" (the block's raw text in
 // its inline editor). One menu per panel, created when first needed.
 BMenu {
     id: menu
@@ -25,7 +25,7 @@ BMenu {
         ++menu.checkRevision
     }
 
-    /// The "Typ" submenu.
+    /// The "Type" submenu.
     readonly property alias typeMenu: typeSubMenu
 
     BMenu {

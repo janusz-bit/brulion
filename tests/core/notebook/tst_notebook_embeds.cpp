@@ -1,5 +1,5 @@
 // A block placed right after the block that embeds an attachment (notebook::insertBlockAfterEmbed):
-// the PDF viewer's "Rysuj na tej stronie" puts the new drawing under the PDF it was drawn on, in a
+// the PDF viewer's "Draw on this page" puts the new drawing under the PDF it was drawn on, in a
 // note no editor has open. Outlines (nested, spaces, other markers, ordered lists), document-mode
 // paragraphs, CRLF, a missing final newline, frontmatter, stale line hints, two embeds, fragments
 // and percent-encoded destinations, and embeds that do not count (code, frontmatter, links,

@@ -7,11 +7,11 @@ import Brulion
 // calendar entry (PlanningItemRow, the week grid) opens DateChipMenu for that token; on a #tag or
 // a [[link]] of a task's text LinkMenu. The change is written to the task's file like a hand edit
 // (PlanningActions.editToken: only the token's bytes) and undone with PlanningActions.undo() —
-// changed() lets the view show a toast with "Cofnij". "Zmień…" opens the editor's dialogs
+// changed() lets the view show a toast with "Undo". "Change…" opens the editor's dialogs
 // (EditorDialogs, without an editor). On a date of a recurring series (the calendar's other
-// dates than the written one) the date moves only as a whole series ("Zmień całą serię…"), and a
-// reminder's "Godzinę później" / "Jutro o tej porze" snooze that one time once it has rung (a
-// one-off child reminder, like the notification's "Drzemka": PlanningActions.snoozeReminder) — a
+// dates than the written one) the date moves only as a whole series ("Change the whole series…"), and a
+// reminder's "An hour later" / "Tomorrow at this time" snooze that one time once it has rung (a
+// one-off child reminder, like the notification's "Snooze": PlanningActions.snoozeReminder) — a
 // time still to come offers no snooze, it would ring as well. A value that is no token of the
 // file (a Logseq SCHEDULED: line) opens no menu (PlanningActions.tokenMenu()).
 //
@@ -19,7 +19,7 @@ import Brulion
 //                       onChanged: (text) => …a toast with "Undo": planningActions.undo()
 //                       onFilterRequested: (tag) => taskModel.tagFilter = tag }
 //   tokenMenu.openToken({ path, line, text, kind, value, alarm, rule, priority, isTask, occurrence, date, time }, item, x, y)
-//   tokenMenu.openLink(url, fromPath, item, x, y, filterable)   // filterable: "Filtruj po tagu" first
+//   tokenMenu.openLink(url, fromPath, item, x, y, filterable)   // filterable: "Filter by tag" first
 Item {
     id: root
 
@@ -28,7 +28,7 @@ Item {
     signal changed(string text)
     /// Something to say without an undo (a copied link, why nothing changed).
     signal message(string text, string kind)
-    /// "Filtruj po tagu" of a link menu opened with `filterable`: filter the view by `tag`.
+    /// "Filter by tag" of a link menu opened with `filterable`: filter the view by `tag`.
     signal filterRequested(string tag)
 
     // The token whose menu is open (see openToken()).
@@ -118,7 +118,7 @@ Item {
     }
 
     /// The link menu of `url` (a tag:, page:, part: — a path part of a link —, block: or ext: link
-    /// of a task's text written on `fromPath`); `filter(tag)`, when given, makes "Filtruj po tagu"
+    /// of a task's text written on `fromPath`); `filter(tag)`, when given, makes "Filter by tag"
     /// its first item.
     function openLink(url: string, fromPath: string, item: Item, x: real, y: real, filterable: bool): bool {
         if (!actions)
@@ -139,8 +139,8 @@ Item {
         if (!linkMenu)
             linkMenu = linkMenuComponent.createObject(root) as LinkMenu
         linkMenu.kind = kind
-        // A [[link]] to a page that does not exist offers "Utwórz stronę", as in the editor; a
-        // path part naming a folder "Pokaż folder".
+        // A [[link]] to a page that does not exist offers "Create page", as in the editor; a
+        // path part naming a folder "Show folder".
         linkMenu.unresolved = kind === "page" && actions.linkMissing(url, fromPath)
         linkMenu.folder = partFolder
         linkMenu.filterFirst = kind === "tag" && filterable
@@ -214,7 +214,7 @@ Item {
         case "copy": root.copyLink(actions.linkText(linkUrl, linkFromPath)); break
         }
     }
-    /// Copy a link's text (its menu's "Kopiuj link").
+    /// Copy a link's text (its menu's "Copy link").
     function copyLink(text: string): void {
         if (actions.copyText(text))
             message(qsTr("Copied %1").arg(text), "success")

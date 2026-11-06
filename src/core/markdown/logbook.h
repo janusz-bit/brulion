@@ -105,7 +105,7 @@ QString stopTaskClock(const QString &content, int line, const QDateTime &now);
 /// Append a status change line (Logseq keywords: keywordFor()) to the task's drawer.
 QString logStatusChange(const QString &content, int line, TaskStatus from, TaskStatus to, const QDateTime &now);
 
-/// How status changes are written (the app's "Historia statusów" setting).
+/// How status changes are written (the app's "Log task status changes" setting).
 struct StatusLogOptions {
     bool history = false; ///< write the history and Logseq's clock (below)
     QDateTime now;        ///< local time of the change; its date is setTaskStatus()'s today

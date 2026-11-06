@@ -5,7 +5,7 @@ import Brulion
 
 // BCheckBox — check box with label and optional description (box on the left).
 //
-//   BCheckBox { text: qsTr("Pokaż ukończone"); checked: settings.showDone }
+//   BCheckBox { text: qsTr("Show completed"); checked: settings.showDone }
 //   BCheckBox { tristate: true; checkState: Qt.PartiallyChecked }   // "some selected"
 //
 // Keyboard: Space toggles; visible focus ring around the box.

@@ -7,10 +7,10 @@ import Brulion
 // ShellRail — the sidebar's narrow column of views (docs/UI.md "Sidebar"). At the top the
 // notebook: its first letter, a click opens the notebook switcher (the recent notebooks, the
 // documentation, another folder). Then the views as icon buttons, their names in tooltips:
-// Dziennik, Kalendarz, Zadania, Nawyki, Wszystkie strony, Tagi, Graf, Szukaj (without the ones
-// hidden in Ustawienia → Wygląd → Układ; on phones also Importuj notatki). They scroll when the
+// Journal, Calendar, Tasks, Habits, All pages, Tags, Graph, Search (without the ones
+// hidden in Settings → Appearance → Layout; on phones also Import notes). They scroll when the
 // window is too low for all. At the bottom the sync status (ShellSyncFooter, compact) and
-// Ustawienia. On wide windows the rail stays at the window's left edge when the page panel
+// Settings. On wide windows the rail stays at the window's left edge when the page panel
 // (ShellSidebar) is hidden; on phones it is the drawer's left column (`navigated()` closes it).
 Rectangle {
     id: rail
@@ -228,7 +228,7 @@ Rectangle {
             objectName: "notebookMenuDocs"
             visible: notebookMenu.docsPath !== ""
             height: visible ? implicitHeight : 0
-            text: qsTr("Brulion documentation")
+            text: qsTr("Brulion Documentation")
             iconName: "book-open"
             id: docsItem
             readonly property bool isCurrent: notebookMenu.docsPath === notebookMenu.current

@@ -2,14 +2,14 @@
 <!--
   The landing page of Brulion's own F-Droid repository (GitHub Pages, https://<owner>.github.io/brulion/).
   scripts/fdroid-repo.sh fills in the @…@ placeholders; repo/index.png is the QR code `fdroid update`
-  makes (the repository's address with the fingerprint). docs/ANDROID.md, "Własne repozytorium F-Droid".
+  makes (the repository's address with the fingerprint). docs/ANDROID.md, "Brulion's own F-Droid repository".
 -->
-<html lang="pl">
+<html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Brulion — repozytorium F-Droid</title>
-    <meta name="description" content="Brulion — notatki offline w Markdown. Repozytorium F-Droid z oficjalnymi wydaniami na Androida.">
+    <title>Brulion — F-Droid repository</title>
+    <meta name="description" content="Brulion — offline Markdown notes. The F-Droid repository with the official Android releases.">
     <meta name="color-scheme" content="light dark">
     <link rel="icon" href="logo.svg" type="image/svg+xml">
     <style>
@@ -89,7 +89,7 @@
         user-select: all;
       }
       .muted { color: var(--muted); font-size: 0.94rem; }
-      [lang="en"] { margin-top: 28px; }
+      [lang="pl"] { margin-top: 28px; }
     </style>
   </head>
   <body>
@@ -98,48 +98,48 @@
         <img src="logo.svg" alt="" width="72" height="72">
         <div>
           <h1>Brulion</h1>
-          <p>Notatki w Markdown, które działają offline — repozytorium F-Droid z oficjalnymi wydaniami na Androida.</p>
+          <p>Markdown notes that work offline — the F-Droid repository with the official Android releases.</p>
         </div>
       </header>
 
       <section>
-        <h2>Dodaj repozytorium</h2>
+        <h2>Add the repository</h2>
         <div class="add">
-          <img src="repo/index.png" alt="Kod QR repozytorium" width="168" height="168">
+          <img src="repo/index.png" alt="QR code of the repository" width="168" height="168">
           <div>
-            <p>Na telefonie z <a href="https://f-droid.org/">F-Droid</a> (albo Droid-ify, Neo Store):</p>
-            <a class="button" href="@ADD_URL@">Dodaj do F-Droid</a>
-            <p class="muted">Na komputerze zeskanuj kod QR telefonem. Ręcznie: F-Droid → Ustawienia →
-              Repozytoria → „+”, adres i odcisk klucza poniżej.</p>
+            <p>On a phone with <a href="https://f-droid.org/">F-Droid</a> (or Droid-ify, Neo Store):</p>
+            <a class="button" href="@ADD_URL@">Add to F-Droid</a>
+            <p class="muted">On a computer, scan the QR code with your phone. By hand: F-Droid → Settings →
+              Repositories → “+”, with the address and the key fingerprint below.</p>
           </div>
         </div>
-        <p>Adres repozytorium</p>
+        <p>Repository address</p>
         <code class="value">@REPO_URL@</code>
-        <p>Odcisk klucza (SHA-256)</p>
+        <p>Key fingerprint (SHA-256)</p>
         <code class="value">@FINGERPRINT@</code>
-        <p class="muted">Klient F-Droid sprawdza ten odcisk: aktualizacje przyjmie tylko z indeksu
-          podpisanego tym kluczem.</p>
+        <p class="muted">The F-Droid client checks this fingerprint: it accepts updates only from an index
+          signed with this key.</p>
       </section>
 
       <section>
-        <h2>Co tu jest</h2>
+        <h2>What is here</h2>
         <ol>
-          <li>Te same pliki APK co w <a href="@SOURCE_URL@/releases">wydaniach na GitHubie</a>, z tym samym
-            podpisem — Brulion zainstalowany z GitHuba zaktualizuje się stąd bez odinstalowania.</li>
-          <li>Trzy ostatnie wydania, nowe pojawiają się tu zaraz po opublikowaniu.</li>
-          <li>Linux, Windows i wersja w przeglądarce (jeden plik HTML, który otwierasz z dysku) są
-            w <a href="@SOURCE_URL@/releases/latest">ostatnim wydaniu</a>.</li>
+          <li>The same APK files as in the <a href="@SOURCE_URL@/releases">releases on GitHub</a>, with the
+            same signature — Brulion installed from GitHub updates from here without uninstalling.</li>
+          <li>The last three releases; new ones appear here right after they are published.</li>
+          <li>Linux, Windows and the browser version (a single HTML file you open from disk) are in the
+            <a href="@SOURCE_URL@/releases/latest">latest release</a>.</li>
         </ol>
-        <p class="muted">Kod źródłowy (AGPL-3.0): <a href="@SOURCE_URL@">@SOURCE_URL@</a></p>
+        <p class="muted">Source code (AGPL-3.0): <a href="@SOURCE_URL@">@SOURCE_URL@</a></p>
       </section>
 
-      <section lang="en">
-        <h2>English</h2>
-        <p>Brulion's own F-Droid repository: the official Android releases, the same APKs (and signature)
-          as on GitHub. On your phone tap <a href="@ADD_URL@">Add to F-Droid</a> or scan the QR code;
-          or add the address and fingerprint above by hand (F-Droid → Settings → Repositories → “+”).
-          Linux, Windows and the browser version (a single HTML file you open from disk) are in the
-          <a href="@SOURCE_URL@/releases/latest">latest release</a>.</p>
+      <section lang="pl">
+        <h2>Po polsku</h2>
+        <p>Własne repozytorium F-Droid Brulionu: oficjalne wydania na Androida, te same pliki APK (z tym
+          samym podpisem) co na GitHubie. Na telefonie stuknij <a href="@ADD_URL@">Dodaj do F-Droid</a>
+          albo zeskanuj kod QR; możesz też dodać adres i odcisk klucza ręcznie (F-Droid → Ustawienia →
+          Repozytoria → „+”). Linux, Windows i wersja w przeglądarce (jeden plik HTML, który otwierasz
+          z dysku) są w <a href="@SOURCE_URL@/releases/latest">ostatnim wydaniu</a>.</p>
       </section>
     </main>
   </body>

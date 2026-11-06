@@ -1,142 +1,141 @@
-# Wydajność Brulionu
+# Brulion performance
 
-Stan na 2026-10-18: obecny kod (gałąź `main` z pakietem optymalizacji z października 2026)
-porównany z wydaniem **v0.1.1** (`f61a2a4`) i z **d1141c0** (ostatni commit przed
-optymalizacjami). Wszystkie trzy wersje zmierzono w tych samych warunkach i tymi samymi
-benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsku, niżej). Uzupełnione
-2026-10-29 o falę 5: pamięć indeksu, indeksowanie na kilku rdzeniach i gotowy indeks zapisany na
-urządzeniu (porównanie z `82d0357`), a 2026-10-30 o szybsze cofanie (L5, porównanie z `b3d9a3d`),
-mniejsze pakiety (L9, porównanie z `ef90077`), szybsze odświeżanie list po zapisie (L3,
-porównanie z `ef90077`) i płynny graf (L16, porównanie z `64d0380` na serwerze GitHub Actions).
+As of 2026-10-18: the current code (branch `main` with the October 2026 optimisation package)
+compared with release **v0.1.1** (`f61a2a4`) and with **d1141c0** (the last commit before the
+optimisations). All three versions were measured under the same conditions and with the same
+benchmarks; how to run them is in the contributors' part below. Updated on
+2026-10-29 with wave 5: index memory, indexing on several cores and a ready index saved on the
+device (compared with `82d0357`), and on 2026-10-30 with faster undo (L5, compared with `b3d9a3d`),
+smaller packages (L9, compared with `ef90077`), faster refreshing of lists after a save (L3,
+compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a GitHub Actions server).
 
-## Podsumowanie dla użytkowników
+## Summary for users
 
-### Co się poprawiło
+### What got better
 
-* **Płynny graf** (2026-10-30). Widok **Graf** układa się w osobnym wątku, a rysuje go karta
-  graficzna: od pierwszej chwili można go przesuwać, powiększać i przeciągać strony, a interfejs
-  nie czeka na obliczenia układu. Przy notatniku z 10 000 notatek (graf 4000 stron) pierwsza
-  klatka grafu jest po ok. 0,13 s zamiast ok. 1,1 s, najdłuższe zacięcie w trakcie układania
-  trwa ok. 0,2 zamiast 1 s, a przesuwanie i powiększanie odpowiada 2–3 razy szybciej — i to na
-  serwerze bez karty graficznej, który rysuje na procesorze; z kartą graficzną klatka kosztuje
-  ułamek milisekundy. Na telefonie graf animuje się 60 razy na sekundę zamiast 30 (pomiar na
-  telefonie jeszcze przed nami).
-* **Mniejsza aplikacja** (2026-10-30). APK na Androida ma 76,9 zamiast 91,8 MiB (do pobrania
-  26,3 zamiast 30,9 MB), a wersja przeglądarkowa pobiera przy pierwszej wizycie 13,5 zamiast
-  15,8 MB — przy łączu 20 Mbit/s pierwsza klatka jest o ok. 1,1 s wcześniej (7,4 zamiast 8,5 s).
-  Pakiety nie zawierają już pięciu nieużywanych stylów kontrolek Qt i zastępczego okna plików Qt
-  Quick: okna wyboru plików są systemowe. Wersja na Windows: ZIP 42,8 zamiast 49,5 MB,
-  instalator 29,5 zamiast 32,6 MB; AppImage 53 zamiast 58 MiB.
-* **Odświeżanie po zapisie w dużych notatnikach** (2026-10-30). Po każdym zapisie Zadania,
-  Kalendarz, przypomnienia, bloki zapytań i widżety przeliczają tylko zmienioną notatkę zamiast
-  całego notatnika. W notatniku z 10 000 notatek cała ta praca trwa na komputerze ok. 6 ms zamiast
-  ok. 112 ms (prawie 19 razy krócej), więc pisanie przy otwartej liście zadań albo kalendarzu nie
-  zacina się przy zapisie. Wyniki są dokładnie takie jak wcześniej (sprawdzają to testy z losowymi
-  zmianami). Zapytania są przy okazji o połowę szybsze także wtedy, gdy liczą się od nowa, a
-  Kalendarz i Agenda otwierają się o kilka milisekund szybciej. Na telefonie jeszcze tego nie
-  zmierzyliśmy (przedtem ok. 1 s).
-* **Cofanie i ponawianie na długich stronach** (2026-10-30). Ctrl+Z i Ctrl+Shift+Z nie wczytują
-  już całej strony od nowa, tylko zmieniają bloki, których dotyczy krok. Na stronie z 5000 bloków
-  na komputerze cofnięcie widać po ok. 13 ms zamiast ok. 33 ms — tyle co po Enterze — a sama jego
-  obsługa trwa 3–4 ms zamiast ok. 25 ms. Zwinięte bloki, przybliżenie i otwarty edytor zostają po
-  cofnięciu na miejscu, także gdy cofnięcie zmienia ich tekst. Przy okazji pisanie na takiej
-  stronie jest odrobinę szybsze (obsługa znaku 4,1–4,2 zamiast 4,7–5,0 ms).
-* **Duże notatniki otwierają się dwa razy szybciej i zajmują o jedną trzecią mniej pamięci**
-  (2026-10-29). Notatki indeksują się na kilku rdzeniach naraz, a gotowy indeks zostaje zapisany
-  na urządzeniu, więc przy kolejnym otwarciu Brulion analizuje od nowa tylko notatki zmienione
-  od ostatniego razu (pliki nadal czyta, żeby to sprawdzić). Notatnik z 10 000 notatek na
-  komputerze jest w pełni zaindeksowany po 0,96 s przy pierwszym otwarciu i po 0,83 s przy
-  kolejnych (wcześniej ok. 1,8–1,9 s), a sam indeks zajmuje 60 % mniej pamięci (cała aplikacja
-  z tym notatnikiem: 340 zamiast 510 MB).
-  Na komputerze i telefonie wyszukiwanie jest kompletne od razu, gdy indeks jest gotowy — nie
-  dobudowuje się już w tle z krótką przerwą w działaniu interfejsu; w przeglądarce tak jest przy
-  kolejnych wizytach (z zapisanego indeksu), a przy pierwszej dobudowuje się po kawałku jak dotąd.
-  W przeglądarce pierwsze wczytanie bez zapisanego indeksu trwa nieco dłużej niż wcześniej (1000
-  notatek: 1,3 zamiast 1,1 s — dziennik wczytuje się jako pierwszy, a widok odświeża się w
-  trakcie), kolejne
-  tyle co dawniej, ale już z kompletnym wyszukiwaniem.
-* **Duże notatki nie zamrażają już aplikacji.** Po starcie i po każdym autozapisie bardzo dużej
-  notatki (od ok. 200 KB, np. długi dziennik w jednym pliku albo zaimportowana książka) Brulion
-  przestawał reagować: na komputerze na 0,9–1,6 s, na słabszym telefonie nawet na 13–20 s.
-  Teraz najdłuższa przerwa to ok. 0,09 s na komputerze i 0,2 s na telefonie.
-* **Szybszy start.** Okno pojawia się wcześniej (notatnik z 10 000 notatek: na komputerze
-  0,45 → 0,21 s, na telefonie 2,3 → 0,5 s), treść dziennika z dużym notatnikiem też (komputer
-  0,51 → 0,40 s, telefon 2,4 → 1,6 s). Zamrożenie zaraz po wczytaniu dużego notatnika
-  (komputer 1,6 s, telefon do 19 s) zniknęło.
-* **Pisanie na bardzo długich stronach** (tysiące bloków): na telefonie znak pojawia się po
-  ok. 30–40 ms zamiast 70–90 ms (Enter 80 → 38 ms), na komputerze obsługa klawisza kosztuje
-  o jedną trzecią mniej.
-* **Widoki:** Zadania otwierają się dwa razy szybciej (komputer 0,26 → 0,13 s, telefon 1,1 →
-  0,7 s), Kalendarz i Agenda o 10–30 % szybciej. **Graf na telefonie** układa się w 2,6 s
-  zamiast 44 s (pomiar sprzed układania grafu w osobnym wątku, wyżej).
-* **Import** długich list z HTML (np. eksport Evernote/Notion) — 20 000 punktów w 0,2 s zamiast
-  13 s. Podpowiedzi bloków `((` są dwa razy szybsze, podpowiedzi stron `[[` o ok. jedną trzecią.
-* **Android:** synchronizacja z Nextcloud przez HTTPS wreszcie działa (wcześniej każde połączenie
-  HTTPS kończyło się błędem „TLS initialization failed”). APK jest mniejszy mimo dołączonego
-  OpenSSL: 87,1 → 84,9 MB (do pobrania ok. 28,5 MB).
-* **Przeglądarka:** notatnik dokańcza indeksowanie bez ruszania myszą (wcześniej stał, dopóki
-  nie było żadnego zdarzenia), powroty na stronę są szybsze (przeglądarka zachowuje
-  skompilowany kod), plik aplikacji jest o 0,5 MB mniejszy.
-* **Przenoszenie i zmiana nazwy** (2026-10-23): plan, które linki, tagi i zapytania trzeba
-  poprawić, liczy się 4–12 razy szybciej (folder 500 stron w notatniku 5000 notatek: przeniesienie
-  0,12 → 0,03 s, zmiana nazwy 0,49 → 0,11 s; strona z setkami linków do niej 0,11 → 0,01 s).
-  Przeciąganie strony lub folderu w drzewie już nie przycina się nad kolejnymi folderami:
-  podpowiedź „Zaktualizowane linki: …” liczy się po kawałku, w tle między klatkami.
-  Otwarcie strony, którą nazywa popularny tag, jest do 2 razy szybsze.
-* **Kopiowanie bloków na komputerze z Linuksem** (2026-10-27): Ctrl+C na całej stronie z 5000 bloków
-  zajmuje ok. 4 ms zamiast ok. 40 ms (do odświeżenia ekranu 13–15 zamiast 46–50 ms). Wersja
-  sformatowana dla poczty i edytorów dokumentów powstaje dopiero przy wklejeniu do nich.
+* **Smooth graph** (2026-10-30). The **Graph** view is laid out on a separate thread and drawn by
+  the graphics card: from the very first moment you can pan it, zoom it and drag pages, and the
+  interface does not wait for the layout computation. With a notebook of 10,000 notes (a graph of
+  4000 pages) the graph's first frame comes after about 0.13 s instead of about 1.1 s, the longest
+  stall during layout lasts about 0.2 instead of 1 s, and panning and zooming respond 2–3 times
+  faster — and that on a server without a graphics card, which draws on the CPU; with a graphics
+  card a frame costs a fraction of a millisecond. On a phone the graph animates at 60 frames per
+  second instead of 30 (the measurement on a phone is still to come).
+* **Smaller app** (2026-10-30). The Android APK is 76.9 instead of 91.8 MiB (download size
+  26.3 instead of 30.9 MB), and the browser version downloads 13.5 instead of 15.8 MB on the first
+  visit — on a 20 Mbit/s connection the first frame comes about 1.1 s earlier (7.4 instead of 8.5 s).
+  The packages no longer contain five unused Qt control styles and Qt Quick's fallback file
+  dialog: the file dialogs are the system's. The Windows version: ZIP 42.8 instead of 49.5 MB,
+  installer 29.5 instead of 32.6 MB; AppImage 53 instead of 58 MiB.
+* **Refreshing after a save in large notebooks** (2026-10-30). After every save, Tasks,
+  Calendar, reminders, query blocks and widgets recompute only the changed note instead of the
+  whole notebook. In a notebook of 10,000 notes all this work takes about 6 ms on a computer
+  instead of about 112 ms (almost 19 times less), so typing with the task list or the calendar
+  open does not stall on a save. The results are exactly the same as before (tests with random
+  changes check this). Queries are also twice as fast when they are computed from scratch, and
+  Calendar and Agenda open a few milliseconds faster. Not measured on a phone yet (before: about
+  1 s).
+* **Undo and redo on long pages** (2026-10-30). Ctrl+Z and Ctrl+Shift+Z no longer reload the
+  whole page, they only change the blocks the step concerns. On a page of 5000 blocks on a
+  computer an undo shows after about 13 ms instead of about 33 ms — as fast as after Enter — and
+  handling it takes 3–4 ms instead of about 25 ms. Collapsed blocks, zoom-in and the open editor
+  stay in place after an undo, also when the undo changes their text. Typing on such a page also
+  got a little faster (handling a character takes 4.1–4.2 instead of 4.7–5.0 ms).
+* **Large notebooks open twice as fast and take a third less memory**
+  (2026-10-29). Notes are indexed on several cores at once, and the ready index is saved on the
+  device, so on the next open Brulion re-parses only the notes changed since the last time (it
+  still reads the files to check that). A notebook of 10,000 notes on a computer is fully indexed
+  after 0.96 s on the first open and after 0.83 s on later ones (before: about 1.8–1.9 s), and the
+  index itself takes 60 % less memory (the whole app with this notebook: 340 instead of 510 MB).
+  On a computer and a phone search is complete as soon as the index is ready — it is no longer
+  completed in the background with a short pause of the interface; in the browser this holds on
+  later visits (from the saved index), while on the first one it is completed piece by piece as
+  before. In the browser the first load without a saved index takes a little longer than before
+  (1000 notes: 1.3 instead of 1.1 s — the journal is loaded first and the view refreshes
+  meanwhile), later ones take as long as they used to, but now with complete search.
+* **Large notes no longer freeze the app.** After the start and after every autosave of a very
+  large note (from about 200 KB, e.g. a long journal in one file or an imported book) Brulion
+  stopped responding: for 0.9–1.6 s on a computer, for as long as 13–20 s on a slower phone.
+  Now the longest pause is about 0.09 s on a computer and 0.2 s on a phone.
+* **Faster start.** The window appears sooner (a notebook of 10,000 notes: on a computer
+  0.45 → 0.21 s, on a phone 2.3 → 0.5 s), and so does the journal's content with a large notebook
+  (computer 0.51 → 0.40 s, phone 2.4 → 1.6 s). The freeze right after loading a large notebook
+  (computer 1.6 s, phone up to 19 s) is gone.
+* **Typing on very long pages** (thousands of blocks): on a phone a character appears after
+  about 30–40 ms instead of 70–90 ms (Enter 80 → 38 ms), on a computer handling a key costs a
+  third less.
+* **Views:** Tasks open twice as fast (computer 0.26 → 0.13 s, phone 1.1 →
+  0.7 s), Calendar and Agenda 10–30 % faster. **The graph on a phone** is laid out in 2.6 s
+  instead of 44 s (measured before the graph was laid out on a separate thread, see above).
+* **Import** of long lists from HTML (e.g. an Evernote/Notion export) — 20,000 items in 0.2 s
+  instead of 13 s. Block suggestions `((` are twice as fast, page suggestions `[[` about a third
+  faster.
+* **Android:** sync with Nextcloud over HTTPS finally works (before, every HTTPS connection
+  ended with the error "TLS initialization failed"). The APK is smaller despite the bundled
+  OpenSSL: 87.1 → 84.9 MB (download about 28.5 MB).
+* **Browser:** a notebook finishes indexing without moving the mouse (before, it stalled until
+  some event came), returning to the page is faster (the browser keeps the compiled code), the
+  app's file is 0.5 MB smaller.
+* **Moving and renaming** (2026-10-23): the plan of which links, tags and queries need fixing
+  is computed 4–12 times faster (a folder of 500 pages in a notebook of 5000 notes: move
+  0.12 → 0.03 s, rename 0.49 → 0.11 s; a page with hundreds of links to it 0.11 → 0.01 s).
+  Dragging a page or folder in the tree no longer stutters over other folders: the hint
+  "Updated links: …" is computed piece by piece, in the background between frames.
+  Opening a page named by a popular tag is up to 2 times faster.
+* **Copying blocks on a Linux computer** (2026-10-27): Ctrl+C on a whole page of 5000 blocks
+  takes about 4 ms instead of about 40 ms (until the screen refreshes 13–15 instead of 46–50 ms).
+  The formatted version for mail and document editors is produced only when pasting into them.
 
-### Jak jest teraz
+### How it is now
 
-**Na komputerze** (laptop z 2023 r., notatnik 10 000 notatek): okno po 0,2 s, treść po 0,4 s,
-cały notatnik zaindeksowany po ok. 1 s, przy kolejnym otwarciu po 0,8 s (w tym czasie można już
-czytać i pisać). Strona z 5000
-bloków otwiera się w ok. 0,1 s, wyszukiwanie zwraca wyniki w kilka–kilkanaście milisekund,
-Zadania/Kalendarz/Agenda otwierają się w 0,13–0,17 s, graf z 4000 stron pokazuje się po ok.
-0,13 s i od razu da się go przesuwać (układa się w tle). Bezczynny Brulion zużywa ok. 0,1 %
-procesora i nie rysuje klatek.
+**On a computer** (a 2023 laptop, a notebook of 10,000 notes): the window after 0.2 s, content
+after 0.4 s, the whole notebook indexed after about 1 s, on later opens after 0.8 s (meanwhile
+you can already read and write). A page of 5000 blocks opens in about 0.1 s, search returns
+results in a few to a dozen or so milliseconds, Tasks/Calendar/Agenda open in 0.13–0.17 s, a
+graph of 4000 pages shows after about 0.13 s and can be panned at once (it is laid out in the
+background). An idle Brulion uses about 0.1 % of the CPU and draws no frames.
 
-**Na telefonie** (mierzone na Raspberry Pi 4, który odpowiada słabszemu telefonowi, i na
-emulatorze Androida): zwykłe notatniki działają płynnie — start z przykładowym notatnikiem ok.
-1,3 s, pisanie na zwykłej stronie bez opóźnień. Duży notatnik (10 000 notatek) pokazuje treść po
-ok. 1,6 s, ale indeksował się ok. 15 s; od fali 5 robi to na kilku rdzeniach, a przy kolejnym
-otwarciu bierze gotowy indeks z urządzenia (nowego czasu na Raspberry Pi i telefonie jeszcze nie
-zmierzyliśmy).
+**On a phone** (measured on a Raspberry Pi 4, which matches a slower phone, and on the Android
+emulator): ordinary notebooks run smoothly — start with the sample notebook about 1.3 s, typing
+on an ordinary page without delays. A large notebook (10,000 notes) shows content after about
+1.6 s, but took about 15 s to index; since wave 5 it does this on several cores, and on later
+opens it takes the ready index from the device (the new time on the Raspberry Pi and on a phone
+is not measured yet).
 
-**W przeglądarce**: pierwsza wizyta pobiera ok. 13,5 MB (później strona działa z pamięci
-podręcznej i offline), powrót do strony z 1000 notatek rysuje pierwszą klatkę po ok. 0,6 s.
+**In the browser**: the first visit downloads about 13.5 MB (afterwards the page runs from the
+cache and offline), returning to the page with 1000 notes draws the first frame after about
+0.6 s.
 
-**PDF-y**: miniatura PDF-a w notatce rysuje się raz i zostaje w pamięci podręcznej urządzenia
-(najwyżej 64 MB, na telefonie 32 MB), więc dziennik przewija się bez rysowania jej od nowa.
-Przeglądarka PDF trzyma najwyżej ok. czterech ekranów obrazu (telefon ok. 41 MB, monitor
-2560 × 1440 ok. 59 MB), bez względu na to, jak duży jest PDF i jak bardzo go powiększysz; PDF
-z 300 stron otwiera się od razu. Wersja w przeglądarce pobiera ok. 0,14 MB więcej, APK jest
-o ok. 0,3 MB większy.
+**PDFs**: a PDF's thumbnail in a note is drawn once and stays in the device's cache (at most
+64 MB, 32 MB on a phone), so the journal scrolls without redrawing it. The PDF viewer keeps at
+most about four screens of image (phone about 41 MB, a 2560 × 1440 monitor about 59 MB), no
+matter how large the PDF is and how far you zoom in; a PDF of 300 pages opens at once. The
+browser version downloads about 0.14 MB more, the APK is about 0.3 MB larger.
 
-### Znane wolne miejsca
+### Known slow spots
 
-* **Indeksowanie dużych notatników na telefonie** — było ok. 15 s dla 10 000 notatek; teraz
-  notatki parsują się na kilku rdzeniach, a łączenie ich w indeks (w wątku interfejsu, po
-  kawałku) zostało najdłuższą częścią — nowego czasu na telefonie jeszcze nie zmierzyliśmy.
-  Pierwsze otwarcie po aktualizacji Brulionu jest zawsze „na zimno” (gotowy indeks z poprzedniej
-  wersji nie jest używany).
-* **Pamięć** — notatnik 10 000 notatek zajmuje na komputerze ok. 340 MB (wcześniej ok.
-  500 MB). Na telefonach z 3–4 GB RAM system może zamykać Brulion w tle (notatki są zawsze
-  zapisane na dysku).
-* **Kalendarz i Agenda** otwierają się na telefonie przy dużym notatniku po 1–1,3 s.
-  (Cofanie na bardzo długiej stronie trwało na telefonie ok. 0,2 s; od 2026-10-30 kosztuje tyle co
-  Enter — na komputerze zmierzone, na telefonie jeszcze nie.)
-* **Pierwszy start na komputerze z małym notatnikiem** (świeży profil) pokazuje treść ok.
-  0,09 s później niż d1141c0 (okno za to 0,1 s wcześniej); przy kolejnych startach treść jest
-  tak szybko jak wcześniej (szczegóły niżej).
-* **Rozmiar** — APK ma ok. 81 MB (pobranie ok. 26 MB), wersja przeglądarkowa pobiera przy
-  pierwszej wizycie ok. 13,5 MB (pierwsza klatka przy łączu 20 Mbit/s po ok. 7,4 s). Strony PDF
-  jako podkład rysunku nie powiększyły APK (Android rysuje je sam), pakiet z Nixa urósł o ok.
-  26 MiB (poppler), AppImage o ok. 2,4 MB, a instalator na Windows o ok. 1,8 MB (biblioteka Qt PDF).
+* **Indexing large notebooks on a phone** — it was about 15 s for 10,000 notes; now the notes
+  are parsed on several cores, and merging them into the index (on the interface thread, piece
+  by piece) has become the longest part — the new time on a phone is not measured yet.
+  The first open after a Brulion update is always "cold" (the ready index of the previous
+  version is not used).
+* **Memory** — a notebook of 10,000 notes takes about 340 MB on a computer (before: about
+  500 MB). On phones with 3–4 GB of RAM the system may close Brulion in the background (notes are
+  always saved to disk).
+* **Calendar and Agenda** open after 1–1.3 s on a phone with a large notebook.
+  (Undo on a very long page took about 0.2 s on a phone; since 2026-10-30 it costs as much as
+  Enter — measured on a computer, not yet on a phone.)
+* **The first start on a computer with a small notebook** (a fresh profile) shows content about
+  0.09 s later than d1141c0 (the window, on the other hand, 0.1 s earlier); on later starts the
+  content is as fast as before (details below).
+* **Size** — the APK is about 81 MB (download about 26 MB), the browser version downloads about
+  13.5 MB on the first visit (the first frame on a 20 Mbit/s connection after about 7.4 s). PDF
+  pages as a drawing's background did not make the APK larger (Android renders them itself), the
+  Nix package grew by about 26 MiB (poppler), the AppImage by about 2.4 MB and the Windows
+  installer by about 1.8 MB (the Qt PDF library).
 
-**Bateria:** w tle na Androidzie Brulion nie zużywa procesora i nie wybudza telefonu; alarmy są
-ustawiane tylko dla przypomnień (do 64 na najbliższe 14 dni).
+**Battery:** in the background on Android Brulion uses no CPU and does not wake the phone; alarms
+are set only for reminders (up to 64 for the next 14 days).
 
 ---
 
@@ -805,8 +804,8 @@ drawings on many PDF pages makes their files where the pages are prepared, on Qt
 (`DrawingBackdrops.prepare(…, drawings)`): 60 slides × ≈ 70–130 ms of `toSvg` on a phone no longer
 run on the GUI thread after the progress bar (an Android "not responding" dialog), which only
 stores the files and embeds them. Memory: the editor keeps the decoded backdrop (2400 × 1350:
-13 MB) and, once shown dark, its dark twin — only of the backdrop shown: one replaced ("Inna
-strona PDF…") is dropped and decoded again on undo; the previews decode it at the size they show
+13 MB) and, once shown dark, its dark twin — only of the backdrop shown: one replaced ("Another
+PDF page…") is dropped and decoded again on undo; the previews decode it at the size they show
 it. poppler draws a page at the resolution of the size asked for (`pdfRenderDpi`; it had a floor of
 18 dpi, so a hostile 20000-pt MediaBox became a 5000 × 5000 px picture for a 230 px thumbnail).
 

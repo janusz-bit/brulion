@@ -30,7 +30,7 @@ import java.util.Date
  *
  * The screen also closes when the alarm stops some other way: its ring time is over
  * ([RingTimeout]: at the deadline while it is shown, or when the AlarmManager deadline fires
- * first), a reaction in the notification ("OK", "Drzemka 10 min", "Zrobione", a tap — all through
+ * first), a reaction in the notification ("OK", "Snooze 10 min", "Done", a tap — all through
  * [ReminderNotifier.cancel]), and when it comes back to the front with its alarm no longer
  * ringing.
  */
@@ -50,7 +50,7 @@ class AlarmActivity : Activity() {
     }
   }
 
-  // Not after a button press: "Otwórz notatkę" stays open until the keyguard is dismissed.
+  // Not after a button press: "Open note" stays open until the keyguard is dismissed.
   private val onAlarmStopped: (Int) -> Unit = { id ->
     if (!handled && id == reminder?.id) finish()
   }

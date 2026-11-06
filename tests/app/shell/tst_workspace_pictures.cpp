@@ -1,6 +1,6 @@
 // Pictures from the internet on the real Workspace (workspacepictures.cpp) with the block editor:
-// nothing is fetched until allowed, "Pokaż" and the "always" setting fetch into the device's
-// cache, failures are told, "Pobierz do notatnika" stores an attachment in the vault and points
+// nothing is fetched until allowed, "Show" and the "always" setting fetch into the device's
+// cache, failures are told, "Save to notebook" stores an attachment in the vault and points
 // the page at it; without asking: no private hosts, cancelled when turned off, once a session;
 // the browser's data: URLs follow the cache — against a tiny HTTP server on 127.0.0.1.
 #include "pagecontroller.h"
@@ -125,7 +125,7 @@ private Q_SLOTS:
         QTest::qWait(100);
         QVERIFY(server.requests.isEmpty());
 
-        // "Pokaż" on one picture: fetched into the cache, a file: URL.
+        // "Show" on one picture: fetched into the cache, a file: URL.
         page.showWebPicture(kot);
         QTRY_COMPARE(embedOf(page, 0).value(u"state"_s).toString(), u"ready"_s);
         const QUrl cached = embedOf(page, 0).value(u"url"_s).toUrl();
@@ -393,7 +393,7 @@ void TestWorkspacePictures::automaticFetchesLimits()
     QTRY_COMPARE(embedOf(page, 1).value(u"state"_s).toString(), u"ready"_s);
     QCOMPARE(server.requests.count("/a.png"), 1);
 
-    // Turned off while fetching: what it started stops, "Pokaż" goes on.
+    // Turned off while fetching: what it started stops, "Show" goes on.
     for (int row = 2; row < 7; ++row)
         QCOMPARE(embedOf(page, row).value(u"state"_s).toString(), u"loading"_s);
     QCOMPARE(embedOf(page, 7).value(u"state"_s).toString(), u"loading"_s); // queued behind them
@@ -407,7 +407,7 @@ void TestWorkspacePictures::automaticFetchesLimits()
     QVERIFY(!server.requests.contains("/wolny-4.png")); // the queued one never sent
     QCOMPARE(server.requests.size(), 1 + 4 + 1);
 
-    // Fetched without asking and dropped by the cache since: waits for "Pokaż" (no new request
+    // Fetched without asking and dropped by the cache since: waits for "Show" (no new request
     // on every repaint).
     const QString cached = embedOf(page, 0).value(u"url"_s).toUrl().toLocalFile();
     QVERIFY(QFile::remove(cached));

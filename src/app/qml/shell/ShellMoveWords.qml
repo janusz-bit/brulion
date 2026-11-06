@@ -6,9 +6,9 @@ import Brulion
 // tree's drag and drop and the shell's toasts (one translation each).
 //
 //   ShellMoveWords { id: words }
-//   words.impactText(3, 0, 2, [])                          // "Zaktualizowane linki: 3 (w 2 notatkach)"
-//   words.movedText("", 3, false, "")                      // "Przeniesiono do głównego folderu …"
-//   words.movedText("Archiwum", 0, false, "Dom 2")         // "Przeniesiono do „Archiwum” jako „Dom 2”"
+//   words.impactText(3, 0, 2, [])                          // "Updated links: 3 (in 2 notes)"
+//   words.movedText("", 3, false, "")                      // "Moved to the notebook root, …"
+//   words.movedText("Archive", 0, false, "Home 2")          // "Moved to “Archive” as “Home 2”"
 QtObject {
     /// What a move or rename rewrites (Workspace.moveImpact() / renameImpact() that is ok: its
     /// `links`, `tags`, `notes` and `specials`, read by the caller — a `var` map cannot be read more
@@ -51,7 +51,7 @@ QtObject {
     }
     /// The toast after moving into `folder` ("" = the notebook's root), `n` links and tags
     /// rewritten (`tags`: some of them tags); `name`: the new name when the move renamed it too (a
-    /// "/" in the rename dialog: "Przeniesiono do „Archiwum” jako „Dom 2”"), else "".
+    /// "/" in the rename dialog: "Moved to “Archive” as “Home 2”"), else "".
     function movedText(folder: string, n: int, tags: bool, name: string): string {
         if (name !== "")
             return movedRenamedText(folder, n, tags, name)

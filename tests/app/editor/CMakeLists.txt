@@ -182,7 +182,7 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
         endforeach()
         # Spell checking in the real editor (`--editor-script spelltest`, qml/dev/SpellingSelfTest.qml)
         # on word lists: the mark, a right-click (a finger's tap) opening the corrections, one
-        # replacing the word (undo), "Dodaj do słownika", "Ignoruj", syntax never marked, off.
+        # replacing the word (undo), "Add to dictionary", "Ignore", syntax never marked, off.
         foreach(_spell "tst_editor_qml_spelling;1280x800;" "tst_editor_qml_spelling_touch;412x915;--touch")
             list(GET _spell 0 _spell_test)
             list(GET _spell 1 _spell_size)
@@ -195,7 +195,7 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
         # A table's rows and columns (`--editor-script tabletest`, qml/dev/TableSelfTest.qml): the
-        # cell's block menu (a right-click, the toolbar's "Więcej"), new cells edited with the keys,
+        # cell's block menu (a right-click, the toolbar's "More"), new cells edited with the keys,
         # Alt+arrows and Ctrl+Enter, the alignment, deleting; formulas following, undo.
         foreach(_table "tst_editor_qml_table;1280x800;" "tst_editor_qml_table_touch;412x915;--touch")
             list(GET _table 0 _table_test)
@@ -210,8 +210,8 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
         endforeach()
         # The page properties panel (`--editor-script propstest`, qml/dev/PropertiesSelfTest.qml):
         # its header tapped open, typed fields with real keys (text, number "3,5", checkbox, a date
-        # from the dialog's "jutro", list items with Enter / Backspace / ×), the row's menu (rename,
-        # type, remove + "Cofnij"), a key from the suggestions, the first property of a page without
+        # from the dialog's "Tomorrow", list items with Enter / Backspace / ×), the row's menu (rename,
+        # type, remove + "Undo"), a key from the suggestions, the first property of a page without
         # any; a phone (--touch): stacked rows, 44 px targets.
         foreach(_props "tst_editor_qml_properties;1280x800;" "tst_editor_qml_properties_touch;412x915;--touch")
             list(GET _props 0 _props_test)
@@ -241,9 +241,9 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
-        # Links to blocks and headings (`--editor-script blocklinks`): the block menu's "Kopiuj
-        # odnośnik" from right-clicks on text and frames (desktop; also a title drawn above the
-        # page's properties), a bullet's right-click / long press and the touch toolbar's "Więcej"
+        # Links to blocks and headings (`--editor-script blocklinks`): the block menu's "Copy
+        # link" from right-clicks on text and frames (desktop; also a title drawn above the
+        # page's properties), a bullet's right-click / long press and the touch toolbar's "More"
         # (a block's — on a phone's keyboard, below a status bar —, a table cell's), the clipboard
         # read back, Ctrl+Shift+C (also in a cell),
         # following the copied links (scroll, select, flash, again after scrolling away), a missing
@@ -264,7 +264,7 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
         # Ctrl+Z, Alt+arrows, Tab), Shift+click, mouse drags (a document's paragraphs, the view's
         # edge scrolling), the block and text menus, the floating tools, in-block copies keeping
         # no-break spaces; with a finger (--touch): a long press, taps, the grips, a long press
-        # dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz". The clipboard is
+        # dragged to the edge, Back, the toolbar's and the bullet menu's "Select". The clipboard is
         # read back.
         foreach(_sel "tst_editor_qml_selection;1280x800;" "tst_editor_qml_selection_touch;412x915;--touch")
             list(GET _sel 0 _sel_test)

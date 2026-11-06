@@ -6,7 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The pure part of "Udostępnij → Brulion" ([ShareActivity]; docs/ANDROID.md): which shared
+ * The pure part of "Share → Brulion" ([ShareActivity]; docs/ANDROID.md): which shared
  * streams are text, safe names for the local copies, the inbox folders' names and age, and the
  * JSON handed to C++ (`src/core/notebook/share.h`, `sharedContentFromJson`):
  * `{"subject", "text", "dir", "files": [{"path", "name", "mime", "size", "error"}]}`.

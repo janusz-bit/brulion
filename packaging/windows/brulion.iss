@@ -17,7 +17,7 @@
 ; app's switch (Settings -> Application) writes (src/platform/autostart.h); an update leaves it as
 ; the user set it; the uninstaller removes it when it starts this installation's brulion.exe.
 ;
-; "Otwórz za pomocą → Brulion" (docs/WINDOWS.md): always registered for .md, .markdown and .txt —
+; "Open with → Brulion" (docs/WINDOWS.md): always registered for .md, .markdown and .txt —
 ; the ProgID JanuszBit.Brulion.Note (its command `"…\brulion.exe" --open "%1"`), its name in each
 ; type's OpenWithProgids and Applications\brulion.exe with its SupportedTypes, under
 ; HKCU\Software\Classes (HKLM with /ALLUSERS). Offered, never the default: no type's default value
@@ -103,7 +103,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueType: none; ValueName: "Brulion"; Flags: deletevalue dontcreatekey; Tasks: autostart
 ; The app writes it at every start (the toasts' name and icon); removed with the app.
 Root: HKCU; Subkey: "Software\Classes\AppUserModelId\JanuszBit.Brulion"; Flags: uninsdeletekey dontcreatekey
-; "Otwórz za pomocą → Brulion" for .md, .markdown and .txt (docs/WINDOWS.md): offered, never the
+; "Open with → Brulion" for .md, .markdown and .txt (docs/WINDOWS.md): offered, never the
 ; default — no type's default value or UserChoice is written. Explorer starts one brulion.exe per
 ; selected file: the running one collects them in one share dialog (--open, main.cpp).
 Root: HKA; Subkey: "Software\Classes\JanuszBit.Brulion.Note"; ValueType: string; ValueName: ""; ValueData: "{cm:NoteTypeName}"; Flags: uninsdeletekey

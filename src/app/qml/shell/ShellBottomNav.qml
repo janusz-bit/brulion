@@ -4,12 +4,12 @@ import QtQuick.Templates as T
 import Brulion
 
 // ShellBottomNav — the phone's bottom navigation: four views (AppSettings.bottomNavTabs, by
-// default Dziennik, Kalendarz, Szukaj, Zadania; Ustawienia → Wygląd → Układ), quick capture
-// ("+ Notatka", AppSettings.captureButtonShown) and Menu (opens the drawer), always last. Every
+// default Journal, Calendar, Search, Tasks; Settings → Appearance → Layout), quick capture
+// ("+ Note", AppSettings.captureButtonShown) and Menu (opens the drawer), always last. Every
 // item is one NavTab — a ≥ 48 px touch target with an icon in a pill and a label under it —;
 // capture's "+" sits in a small ringed pill (the raised surface, as a button), so it reads as an
 // action, never as the current view. The items share the bar by their labels (`widths`): evenly
-// when every label fits an even share, else a long label ("Kalendarz") takes what it needs from
+// when every label fits an even share, else a long label ("Calendar") takes what it needs from
 // the short ones ("Menu"), so the names stay whole at larger text sizes and on narrow phones.
 // Nothing floats over the content. The bar extends under the Android navigation bar
 // (`bottomInset`).
@@ -250,7 +250,7 @@ Rectangle {
         }
 
         // Quick capture: a note into today's journal (ShellQuickCapture). Hidden by the user
-        // (Ustawienia → Wygląd → Układ): capture stays in the palette and under Ctrl+Shift+N.
+        // (Settings → Appearance → Layout): capture stays in the palette and under Ctrl+Shift+N.
         // Its accessible name holds its label (WCAG 2.5.3: "Note" in "Quick note").
         NavTab {
             objectName: "shellCaptureButton"

@@ -506,7 +506,7 @@ public:
     /// The shortest wiki-link target that resolves to `path` when written in note `from` (SYNTAX
     /// §2): the title ("Dom", an attachment's file name "plan.png"), else a longer path suffix
     /// ("Projekty/Dom", "A/Projekty/Dom"), else the vault path without `.md` (with it as the last
-    /// resort). What `[[` completion and "Kopiuj link" write. nullopt when `path` is not indexed
+    /// resort). What `[[` completion and "Copy link" write. nullopt when `path` is not indexed
     /// or no wiki link can name it (a '#', '|', `[[` or `]]` in its name).
     std::optional<QString> linkTarget(const VaultPath &path, const VaultPath &from = {}) const;
     /// The shortest tag name that names note `path` (resolveTag(): "Dom", else "Projekty/Dom", …,
@@ -526,7 +526,7 @@ public:
     std::optional<BlockRef> blockById(const QString &id) const;
     /// Tags with usage counts, most used first (ties by name).
     QList<TagCount> tags() const;
-    /// The note a tag names (SYNTAX §3 "Tagi jako linki do stron"): `tag` (with or without '#',
+    /// The note a tag names (SYNTAX §3 "Tags as page links"): `tag` (with or without '#',
     /// `[[ ]]`, trailing '/') resolved like a `[[link]]` written at the vault root — exact vault
     /// path ± `.md`, base name (shortest path, then alphabetical), aliases; case-insensitive and
     /// NFC, not diacritic-insensitive. Notes only (never attachments); nullopt when no note has

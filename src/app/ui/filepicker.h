@@ -49,7 +49,7 @@ class FilePicker : public QObject {
     Q_PROPERTY(QString title READ title WRITE setTitle NOTIFY optionsChanged FINAL)
     /// Qt's filter syntax ("Obrazy (*.png *.jpg)"); empty entries are dropped. Empty: every file.
     Q_PROPERTY(QStringList nameFilters READ nameFilters WRITE setNameFilters NOTIFY optionsChanged FINAL)
-    /// SaveFile: appended to a picked local file name without a dot ("Notatka" → "Notatka.md").
+    /// SaveFile: appended to a picked local file name without a dot ("Note" → "Note.md").
     Q_PROPERTY(QString defaultSuffix READ defaultSuffix WRITE setDefaultSuffix NOTIFY optionsChanged FINAL)
     /// The folder the picker starts in (used when it exists; Android: any URL, as a hint).
     Q_PROPERTY(QUrl currentFolder READ currentFolder WRITE setCurrentFolder NOTIFY optionsChanged FINAL)

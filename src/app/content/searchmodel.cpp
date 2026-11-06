@@ -98,7 +98,7 @@ void SearchResultModel::refresh()
             h.title = hit.title.isEmpty() ? paths::pageTitle(hit.path) : hit.title;
             h.folder = folder;
             h.line = hit.line;
-            // Readable text: [[Strona|tekst]] shows as "tekst" (positions are computed on this).
+            // Readable text: [[Page|text]] shows as "text" (positions are computed on this).
             h.excerpt = oneLine(plainText(hit.excerpt, idx), 260);
             h.excerptMatches = toVariantList(matchPositions(h.excerpt, terms));
             h.titleMatches = toVariantList(matchPositions(h.title, terms));

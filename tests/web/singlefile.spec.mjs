@@ -1,5 +1,5 @@
 // The single-file version (scripts/wasm-single-file.py; the release's brulion-web-<version>.html,
-// docs/WEB.md "Jeden plik HTML") opened from disk, file://, in Chromium and Firefox: the app starts
+// docs/WEB.md "Single HTML file") opened from disk, file://, in Chromium and Firefox: the app starts
 // from the page alone — no request leaves it, no service worker —, and its notes survive a reload
 // (the storage self-test's counters in IndexedDB grow by one). The file: $BRULION_SINGLE_FILE
 // (scripts/web-test.sh --single-file), default ../../dist-wasm-single/brulion.html.

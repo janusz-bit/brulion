@@ -6,11 +6,11 @@ import QtQuick.Templates as T
 import Brulion
 
 // ContentPageCoverDialog — the page's cover (docs/UI.md "Page icon and cover"): a picture of the
-// notebook (its pictures as thumbnails, searchable by name), one from a file of the device ("Z
-// pliku…": stored as an attachment, as an inserted picture is), or a picture from the internet by
-// its address — shown only through the web-picture cache, after "Pokaż" unless the device allows
+// notebook (its pictures as thumbnails, searchable by name), one from a file of the device ("From
+// file…": stored as an attachment, as an inserted picture is), or a picture from the internet by
+// its address — shown only through the web-picture cache, after "Show" unless the device allows
 // pictures from the internet. A pick is written at once (PageController.setPageCover: the page's
-// `banner` property, `![[file]]` or the URL; one undo step, "Cofnij" in the toast); "Usuń okładkę"
+// `banner` property, `![[file]]` or the URL; one undo step, "Undo" in the toast); "Remove cover"
 // removes it with its position.
 //
 //   ContentPageCoverDialog { id: coverDialog; controller: page; editor: editor }   coverDialog.open()

@@ -18,7 +18,7 @@
 //
 // A copy has each page's blocks (markdown::blocksMarkdown / blocksPlainText, as
 // PageController::copySelection) preceded by the page's link on a line of its own (`[[2026-10-27]]`;
-// plain text: the long date, "poniedziałek, 27 października 2026"), a blank line between pages; one
+// plain text: the long date, "Tuesday, October 27, 2026"), a blank line between pages; one
 // text/html flavour rendered on request (EditorHost::renderHtml from the first page), the same
 // ClipboardLimit and read-back as PageController::writeClipboard().
 #pragma once

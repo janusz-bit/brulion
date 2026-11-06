@@ -211,7 +211,7 @@ sed -e "s/@BRULION_CACHE_VERSION@/$cache_version/g" \
 
 grep -qE '@BRULION_[A-Z_]+@' "$DIST_DIR/index.html" "$DIST_DIR/sw.js" && die "unreplaced placeholder in index.html/sw.js"
 
-# The same app in one HTML file, opened from disk (docs/WEB.md "Jeden plik HTML").
+# The same app in one HTML file, opened from disk (docs/WEB.md "Single HTML file").
 log "assembling $SINGLE_FILE"
 python3 scripts/wasm-single-file.py "$DIST_DIR" "$SINGLE_FILE" >/dev/null || die "the single file failed"
 

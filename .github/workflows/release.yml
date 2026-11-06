@@ -239,7 +239,7 @@ jobs:
         run: |
           body=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" --jq .body)
           if ! grep -q 'brulion-throwaway' <<< "$body"; then
-            note=$'\n\n> [!WARNING]\n> <!-- brulion-throwaway -->Ten APK jest podpisany tymczasowym kluczem: nie zainstaluje się jako aktualizacja wersji podpisanej innym kluczem. Trzeba najpierw odinstalować aplikację, co usuwa dane z jej pamięci prywatnej (folder z notatkami w pamięci współdzielonej, np. /storage/emulated/0/Brulion, zostaje).'
+            note=$'\n\n> [!WARNING]\n> <!-- brulion-throwaway -->This APK is signed with a throwaway key: it will not install as an update of a version signed with another key. Uninstall the app first, which deletes the data in its private storage (a notes folder on the shared storage, e.g. /storage/emulated/0/Brulion, stays).\n>\n> Ten APK jest podpisany tymczasowym kluczem: nie zainstaluje się jako aktualizacja wersji podpisanej innym kluczem. Trzeba najpierw odinstalować aplikację, co usuwa dane z jej pamięci prywatnej (folder z notatkami w pamięci współdzielonej, np. /storage/emulated/0/Brulion, zostaje).'
             gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -f body="$body$note" > /dev/null
           fi
 

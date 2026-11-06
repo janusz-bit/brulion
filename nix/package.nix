@@ -72,7 +72,8 @@ stdenv.mkDerivation (finalAttrs: {
     # (also found by the dev shell, which takes its inputs from here).
     qt6.qttranslations
     # PDF pages as a drawing's backdrop (src/platform/pdfpages_poppler.cpp): nixpkgs has Qt PDF only
-    # inside QtWebEngine (+615 MiB); poppler-qt6 adds some 26 MiB (docs/PERFORMANCE.md "Rozmiar").
+    # inside QtWebEngine (+615 MiB); poppler-qt6 adds some 26 MiB (docs/PERFORMANCE.md "Drawing
+    # backdrops: PDF renderers and what they cost").
     kdePackages.poppler
     # Spell checking in the editor (src/platform/spell_hunspell.cpp, docs/UI.md "Spell checking");
     # the dictionaries are found through BRULION_SPELL_DICTIONARY_DIRS below.
@@ -159,7 +160,7 @@ stdenv.mkDerivation (finalAttrs: {
     test -f $out/share/icons/hicolor/scalable/apps/$id.svg
     test -f $out/share/icons/hicolor/256x256/apps/$id.png
     desktop-file-validate $out/share/applications/$id.desktop
-    # "Otwórz za pomocą → Inny program → Brulion" for Markdown and text files (docs/NIXOS.md).
+    # "Open with → Other application → Brulion" for Markdown and text files (docs/NIXOS.md).
     grep -qx 'Exec=brulion --open %F' $out/share/applications/$id.desktop
     # No file types: a desktop without a default program would make Brulion the default for them.
     if grep -q '^MimeType=' $out/share/applications/$id.desktop; then

@@ -96,7 +96,7 @@ ColumnLayout {
         }
     }
 
-    // Elapsed · bytes · trigger, e.g. "Trwa 1 min 20 s · 1,4 MB · po zmianie notatki".
+    // Elapsed · bytes · trigger, e.g. "Running for 1 min 20 s · 1.4 MB · after an edit".
     BText {
         Layout.fillWidth: true
         variant: "small"

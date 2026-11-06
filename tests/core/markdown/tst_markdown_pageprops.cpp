@@ -1,5 +1,5 @@
 // Page properties as typed fields (markdown/pageprops.h): type inference, reading both
-// property blocks, and the byte-preserving single-property edits of the "Właściwości" panel.
+// property blocks, and the byte-preserving single-property edits of the "Properties" panel.
 #include "markdown/frontmatter.h"
 #include "markdown/pageprops.h"
 
@@ -551,7 +551,7 @@ private Q_SLOTS:
         QCOMPARE(r.content, expected);
     }
 
-    // ---- adding ("Dodaj właściwość") ---------------------------------------------------------------
+    // ---- adding ("Add property") ----------------------------------------------------------------
     void add_data()
     {
         QTest::addColumn<QString>("source");

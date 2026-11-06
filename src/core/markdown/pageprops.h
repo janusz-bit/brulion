@@ -133,7 +133,7 @@ QString propertyEditStatusName(PropertyEditStatus s);
 /// Unchanged when the value already reads the same.
 PropertyEditResult setPageProperty(const QString &content, PropertySource source, const QString &key,
                                    const QVariant &value, PropertyType type);
-/// Add the new property `key` to `source` ("Dodaj właściwość"): refused with KeyExists when the
+/// Add the new property `key` to `source` ("Add property…"): refused with KeyExists when the
 /// page has the key already, in either block and in any case (NFC) — an existing value is never
 /// overwritten by adding — else setPageProperty().
 PropertyEditResult addPageProperty(const QString &content, PropertySource source, const QString &key,

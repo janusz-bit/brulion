@@ -83,7 +83,7 @@ private Q_SLOTS:
         const QString edited = u"---\nstatus: w toku # wybrany\ntags: [dom]\n---\n- Zażółć gęślą jaźń\n"_s;
         QCOMPARE(f.text(), edited);
         QVERIFY(f.page.canUndo());
-        // The toast's "Cofnij": the edit is the last step.
+        // The toast's "Undo": the edit is the last step.
         const QString token = f.page.undoToken();
         QVERIFY(f.page.undoStep(token));
         QCOMPARE(f.text(), content);
@@ -218,7 +218,7 @@ private Q_SLOTS:
 
     void addNeverOverwrites()
     {
-        // "Dodaj właściwość" with a key the page has (any spelling, either block): refused, the
+        // "Add property" with a key the page has (any spelling, either block): refused, the
         // value kept, no undo step.
         const QString content = u"---\nstatus: w toku # wybrany\ntags: [projekt, dom]\n---\nstan:: x\n\n- a\n"_s;
         Fixture f(content);

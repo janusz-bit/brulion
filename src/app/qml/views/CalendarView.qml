@@ -4,10 +4,10 @@ import QtQuick.Layouts
 import Brulion
 
 // CalendarView — route "calendar" ({date?}): the vault's dates in a month grid, a week with hour
-// rows or an agenda (Miesiąc / Tydzień / Agenda, remembered on this device), from the core's
+// rows or an agenda (Month / Week / Agenda, remembered on this device), from the core's
 // calendar entries (CalendarModel over PlanningContext.vaultIndex): daily notes, task due /
 // scheduled / start / done dates and reminders / alarms with their times, recurring series
-// expanded. Polish month and weekday names (DatesHelper), the vault's first weekday.
+// expanded. Month and weekday names in the UI language (DatesHelper), the vault's first weekday.
 //
 // The selected day's panel (CalendarDayPanel) is a column on the right of wide views and a
 // bottom sheet on phones (tap a day): its entries (tick tasks off — undo in the toast — or open
@@ -382,7 +382,7 @@ FocusScope {
         id: daySheet
         objectName: "calendarDaySheet"
         title: root.capitalized(DatesHelper.formatLong(cal.anchorDate))
-        // A one-word day ("Jutro") only.
+        // A one-word day ("Tomorrow") only.
         subtitle: {
             const h = "" + DatesHelper.formatHuman(cal.anchorDate)
             return Js.indexOf(h, " ") < 0 ? root.capitalized(h) : ""

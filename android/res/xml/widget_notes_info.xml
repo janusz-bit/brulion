@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- "Notatki" (NotesWidget.kt): 3×2 by default, resizable. -->
+<!-- "Notes" (NotesWidget.kt): 3×2 by default, resizable. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/brulion_widget_notes_description"
     android:initialLayout="@layout/widget_notes"

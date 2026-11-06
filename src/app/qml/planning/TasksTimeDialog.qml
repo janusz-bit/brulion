@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// TasksTimeDialog — "Czas pracy" of the Tasks view (docs/UI.md "Tasks: dependencies, subtasks and
+// TasksTimeDialog — "Time spent" of the Tasks view (docs/UI.md "Tasks: dependencies, subtasks and
 // time"): the time clocked on the listed tasks (their `:LOGBOOK:` CLOCK lines, docs/SYNTAX.md §5;
 // the view's filters apply) per day, page, tag or task, for today, this week, this month or
 // everything (TaskListModel.timeSummary). A task row opens the task.

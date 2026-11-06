@@ -132,6 +132,10 @@ AppController::AppController(const Options &options, QObject *parent)
         // workspace, whose texts (sync status, reminders) are rebuilt with tr() in the new language.
         Q_EMIT languageChanged(m_settings->language());
         m_workspace->setUiLanguage(m_settings->language());
+        // The sample and documentation notebooks of the new language (their own folders); a
+        // --locale of this run no longer counts, as for the translation.
+        m_localeOverride.clear();
+        Q_EMIT notebookPathsChanged();
     });
     connect(m_workspace.get(), &Workspace::navigationRequested, this,
             [this](const QVariantMap &route, bool newPane) { navigate(route, newPane); });
@@ -147,6 +151,15 @@ AppController::AppController(const Options &options, QObject *parent)
     const QStringList &args = options.arguments;
     m_devVault = cleanLocalPath(argValue(args, u"--vault"_s));
     m_devDemo = args.contains(u"--demo"_s);
+    // The language of the sample and documentation notebooks follows the UI language: --locale
+    // for this run (main.cpp: the translation), else the setting; --sample-language pins it (tests
+    // written against one language's sample notes).
+    for (const auto &[option, value] : {std::pair{u"--locale"_s, &m_localeOverride},
+                                        std::pair{u"--sample-language"_s, &m_sampleLanguage}}) {
+        const QString language = argValue(args, option);
+        if (language == u"pl" || language == u"en")
+            *value = language;
+    }
     m_devOnboarding = args.contains(u"--onboarding"_s);
     m_devIntro = args.contains(u"--intro"_s);
     connect(m_settings.get(), &AppSettings::introDoneChanged, this, &AppController::introPendingChanged);
@@ -168,7 +181,7 @@ AppController::AppController(const Options &options, QObject *parent)
     m_updates = std::make_unique<AppUpdates>(updates);
     if (!devUpdate.isEmpty())
         m_updates->setLatestForThisRun(devUpdate);
-    // Files opened with Brulion (--open: a file manager's "Otwórz za pomocą"), else --share.
+    // Files opened with Brulion (--open: a file manager's "Open with"), else --share.
     if (const notebook::SharedContent opened = notebook::openedFilesShare(options.openFiles, options.workingDirectory);
         !opened.files.isEmpty())
         m_startShare = QJsonDocument(notebook::sharedContentToJson(opened)).toJson(QJsonDocument::Compact);
@@ -251,8 +264,10 @@ void AppController::start()
     m_updates->start();
     // The documentation is never a recent notebook (the switcher opens it), but 0.3.0–0.3.5 listed
     // it there: the start screen and the switcher would offer it until it was opened again.
-    if (const QString docs = docsVaultPath(); !docs.isEmpty())
-        m_settings->forgetRecentVault(docs);
+    if (!docsVaultPath().isEmpty()) {
+        for (const QString &language : {u"en"_s, u"pl"_s})
+            m_settings->forgetRecentVault(QDir::cleanPath(m_dataDir + u'/' + notebook::docsNotebookFolder(language)));
+    }
 #ifdef Q_OS_WASM
     platform::WasmNotifier::Activation activation;
     if (platform::WasmNotifier::takeLaunchActivation(&activation) && !activation.path.isEmpty())
@@ -853,7 +868,7 @@ void AppController::applyPendingNotification()
     if (inDocsVault()) {
         // The documentation arms no reminders: this one belongs to the user's notebook (Android
         // kept its alarms armed while the documentation was open), also when the documentation
-        // has a page of the same name ("Zadania.md"). Open it there, never the documentation's.
+        // has a page of the same name ("Tasks.md"). Open it there, never the documentation's.
         const QString back = lastUserVault();
         if (!back.isEmpty() && openRecentVault(back))
             return; // applied once that notebook is ready
@@ -1047,13 +1062,21 @@ QString AppController::appStorageVaultPath() const
 #endif
 }
 
+QString AppController::notebooksLanguage() const
+{
+    if (!m_sampleLanguage.isEmpty())
+        return m_sampleLanguage;
+    return m_localeOverride.isEmpty() ? m_settings->language() : m_localeOverride;
+}
+
 QString AppController::demoVaultPath() const
 {
 #ifdef Q_OS_WASM
     // The browser has one vault folder (IndexedDB); the sample notes go there.
     return defaultVaultPath();
 #else
-    return QDir::cleanPath(m_dataDir + u"/Przykładowy brulion"_s);
+    // Each language's sample notebook has its own folder: one created in Polish stays Polish.
+    return QDir::cleanPath(m_dataDir + u'/' + sampleNotebookFolder(notebooksLanguage()));
 #endif
 }
 
@@ -1137,7 +1160,8 @@ QString AppController::docsVaultPath() const
 #ifdef Q_OS_WASM
     return {}; // one vault folder in the browser
 #else
-    return QDir::cleanPath(m_dataDir + u"/Dokumentacja Brulionu"_s);
+    // Each language's documentation has its own folder (the other one stays as it was).
+    return QDir::cleanPath(m_dataDir + u'/' + notebook::docsNotebookFolder(notebooksLanguage()));
 #endif
 }
 
@@ -1146,7 +1170,8 @@ void AppController::openDocsVault()
     if (docsVaultPath().isEmpty())
         return;
     // Always the table of contents, not the journal: this notebook is for reading.
-    m_routeAfterOpen = normalizeRoute({ { u"view"_s, u"page"_s }, { u"path"_s, docsWelcomePage() } });
+    m_routeAfterOpen =
+            normalizeRoute({{u"view"_s, u"page"_s}, {u"path"_s, docsWelcomePage(notebooksLanguage())}});
     m_routeAfterOpenVault.clear();
     setStatus(u"loading"_s);
     scheduleOpening(docsVaultPath(), true);
@@ -1154,7 +1179,18 @@ void AppController::openDocsVault()
 
 bool AppController::isDocsPath(const QString &path) const
 {
-    return !docsVaultPath().isEmpty() && !path.isEmpty() && QDir::cleanPath(path) == docsVaultPath();
+    return !docsLanguage(path).isEmpty();
+}
+
+QString AppController::docsLanguage(const QString &path) const
+{
+#ifdef Q_OS_WASM
+    Q_UNUSED(path);
+    return {};
+#else
+    // Either language's folder, whatever the UI language is now.
+    return notebook::docsNotebookLanguage(m_dataDir, path);
+#endif
 }
 
 bool AppController::inDocsVault() const
@@ -1283,17 +1319,19 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     if (docs) {
         // Written on first use and brought up to date with every version of the app, without
         // touching the pages the user changed (updateDocsVault()).
-        if (!updateDocsVault(*m_workspace->vault()).ok)
+        // Its own language's pages, also after the UI language changed.
+        if (!updateDocsVault(*m_workspace->vault(), docsLanguage(path)).ok)
             toast(tr("Could not update the documentation: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true; // it is for reading: its table of contents, not a journal
     } else if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
-        if (seedDemoVault(*m_workspace->vault(), now(), !docsVaultPath().isEmpty()) < 0)
+        if (seedDemoVault(*m_workspace->vault(), now(), notebooksLanguage(), !docsVaultPath().isEmpty()) < 0)
             toast(tr("Could not write all sample notes: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true;
     }
     // Also when its folder was opened as a notebook by another spelling (a relative path).
-    if (docs || isDocsPath(m_workspace->rootPath()))
-        m_settings->forgetRecentVault(docsVaultPath()); // listed by 0.3.0–0.3.5
+    if (const QString language = docs ? docsLanguage(path) : docsLanguage(m_workspace->rootPath()); !language.isEmpty())
+        m_settings->forgetRecentVault( // listed by 0.3.0–0.3.5
+                QDir::cleanPath(m_dataDir + u'/' + notebook::docsNotebookFolder(language)));
     else
         m_settings->addRecentVault(m_workspace->rootPath());
     // The notebook's tabs as they were left on this device (not for --route: screenshots and
@@ -1326,8 +1364,9 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
                         {{u"view"_s, u"journal"_s}, {u"date"_s, date}, {u"path"_s, m_workspace->journalFileFor(date)}});
     } else if (!first.isEmpty())
         m_tabs.navigate(0, first);
-    else if (showWelcome && m_workspace->exists(docs ? docsWelcomePage() : demoWelcomePage()))
-        m_tabs.navigate(0, {{u"view"_s, u"page"_s}, {u"path"_s, docs ? docsWelcomePage() : demoWelcomePage()}});
+    else if (const QString welcome = docs ? docsWelcomePage(docsLanguage(path)) : demoWelcomePage(notebooksLanguage());
+             showWelcome && m_workspace->exists(welcome))
+        m_tabs.navigate(0, {{u"view"_s, u"page"_s}, {u"path"_s, welcome}});
     setStatus(u"ready"_s);
     endTabs(tabsBefore);
     // (Signalled also when nothing differs from before: the new shell shows the first route.)

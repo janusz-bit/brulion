@@ -1,5 +1,5 @@
 // The links Brulion copies to a page or a block (docs/SYNTAX.md §2 "Copied links"), computed from a
-// note's text so that the editor's "Kopiuj odnośnik" and `brulion-cli block link` give the same
+// note's text so that the editor's "Copy link" and `brulion-cli block link` give the same
 // text. Part of the notebook module — see notebook/notebook.h.
 #pragma once
 
@@ -18,8 +18,8 @@ class VaultIndex;
 namespace brulion::notebook {
 
 /// The page part of every link Brulion copies to `path` (docs/SYNTAX.md §2 "Copied links") — the
-/// page menu's and the folder tree's "Kopiuj link", the editor's "Kopiuj odnośnik" and
-/// `brulion-cli block link` alike: a daily note by its file name ([[2026-10-22]] reads as the
+/// "Copy link" of the page menu, the folder tree and the editor, and `brulion-cli block link`
+/// alike: a daily note by its file name ([[2026-10-22]] reads as the
 /// date, also before the note exists); any other page by the shortest [[target]] that reaches it
 /// from anywhere, VaultIndex::linkTarget() — the title, or the shortest folder path suffix
 /// ("Projekty/Dom") when the title names another page too —, which `shortestTarget` gives ("" when
@@ -31,7 +31,7 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config,
 /// pageLinkTarget() with the index's linkTarget() and resolveLink() (no index: the title).
 QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const VaultIndex *index);
 
-/// What a link menu's "Kopiuj link" copies for a link of rendered text (`url`: an InlineRenderer
+/// What a link menu's "Copy link" copies for a link of rendered text (`url`: an InlineRenderer
 /// URL) written on `fromPath`: `#tag` / `#[[tag with spaces]]` for tag:, `((id))` for block:, the
 /// address for ext:, and for page: `[[target#fragment]]` with the page by pageLinkTarget() (a
 /// `[[#Heading]]` names `fromPath`) — as written when no page has that name (`path` "" then).

@@ -5,7 +5,7 @@ import Brulion
 
 // BTextArea — multi-line plain-text input (notes, manual merge resolution, descriptions).
 //
-//   BTextArea { placeholderText: qsTr("Opis…"); text: draft }
+//   BTextArea { placeholderText: qsTr("Description…"); text: draft }
 //
 // For long texts put it in a ScrollView/Flickable (TextArea.flickable) and set
 // `background: null` on it, giving the ScrollView the frame instead. `monospace` switches

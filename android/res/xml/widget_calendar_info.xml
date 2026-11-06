@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- "Kalendarz" (CalendarWidget.kt): 4×4 by default (the month and the agenda), down to 3×2 (the
+<!-- "Calendar" (CalendarWidget.kt): 4×4 by default (the month and the agenda), down to 3×2 (the
      agenda only). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/brulion_widget_calendar_description"

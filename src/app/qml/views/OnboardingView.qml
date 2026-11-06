@@ -6,8 +6,9 @@ import Brulion
 
 // OnboardingView — first run and "Open another notebook": what Brulion is, how syncing works
 // (Syncthing folder or Nextcloud), choosing or creating the notebook folder for this platform,
-// "Import notes" (opens the chosen notebook on its import screen), the sample notebook
-// ("Przykładowy brulion") and the recently used notebooks.
+// "Import notes" (opens the chosen notebook on its import screen), the sample notebook (in the UI
+// language: "Sample notebook", in Polish "Przykładowy brulion"; demovault.h) and the recently used
+// notebooks.
 //
 // Per platform: desktop — a path field with a folder picker (FilePicker, the system's own,
 // asynchronous); Android — a path on the phone's storage (default /storage/emulated/0/Brulion,
@@ -349,7 +350,7 @@ Rectangle {
                         }
                         BText {
                             Layout.fillWidth: true
-                            text: qsTr("“Przykładowy brulion” — a guided tour in Polish with live examples of every feature: links, tasks, reminders, calculations, tables and queries.")
+                            text: qsTr("“Sample notebook” — a guided tour with live examples of every feature: links, tasks, reminders, calculations, tables and queries.")
                             variant: "muted"
                             font.pixelSize: Theme.textSm
                             wrapMode: Text.Wrap

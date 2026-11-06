@@ -11,8 +11,8 @@ import Brulion
 //   desktop: Esc (Ctrl+Enter then changes the parent alone, not its children) then Shift+↓ twice and
 //     Ctrl+C (three blocks with their children), Shift+↑ from an edited block's first line, Shift+↓
 //     from inside one, Ctrl+A twice, Ctrl+clicks picking blocks with gaps between them (a band each,
-//     the count, Ctrl+C, Tab, Alt+↑ and Więcej's Przenieś w górę refused with the reason, one left out
-//     again, Shift+click after them), Shift+click, Delete and Ctrl+Z, the toast's Cofnij (also one whose
+//     the count, Ctrl+C, Tab, Alt+↑ and More's Move up refused with the reason, one left out
+//     again, Shift+click after them), Shift+click, Delete and Ctrl+Z, the toast's Undo (also one whose
 //     deletion was undone already: nothing else is undone), Alt+↓ and Tab on a range (undone
 //     from another edited block: the range selected again), Ctrl+V over a selection, one copied block
 //     pasted into an empty bullet (no second marker), Shift+click on a calculation and a table,
@@ -20,15 +20,15 @@ import Brulion
 //     menu of a selected and of another block, the floating tools, a mouse drag over three paragraphs
 //     of a document (the list does not scroll), a drag to the view's edge (the list scrolls, the
 //     selection follows), the band after scrolling far away and back, the scroll bar's thumb dragged
-//     (the list scrolls, nothing selected) and the wheel over it, and the floating tools' Więcej
+//     (the list scrolls, nothing selected) and the wheel over it, and the floating tools' More
 //     with no indents for a document's paragraphs;
 //   touch: a long press on a block's text (the selection mode, its tools docked), a tap extending
-//     it, Kopiuj, "Pojedynczo" (no grips; taps leave a block out and pick another one with a gap,
-//     Kopiuj; off again: a tap moves the end), the end grip dragged, Usuń (still in the selection
-//     mode), a tap on the toast's Cofnij,
-//     Usuń and Ctrl+Z, a long press
-//     dragged to the view's edge (autoscroll), Back, the editing toolbar's "Zaznacz", Esc and
-//     Shift+↓ from a keyboard, and the bullet menu's "Zaznacz".
+//     it, Copy, "One by one" (no grips; taps leave a block out and pick another one with a gap,
+//     Copy; off again: a tap moves the end), the end grip dragged, Delete (still in the selection
+//     mode), a tap on the toast's Undo,
+//     Delete and Ctrl+Z, a long press
+//     dragged to the view's edge (autoscroll), Back, the editing toolbar's "Select", Esc and
+//     Shift+↓ from a keyboard, and the bullet menu's "Select".
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -49,7 +49,7 @@ QtObject {
     /// A point mapped to another item (read through a typed property).
     property point mapped
     property string textBefore: ""
-    /// A toast's Cofnij kept after its edit was undone another way.
+    /// A toast's Undo kept after its edit was undone another way.
     property EditorToastAction staleUndo: null
     /// A caret's rectangle (read through a typed property).
     property rect caret
@@ -175,7 +175,7 @@ QtObject {
     }
     /// The shown grip at the end of the selection's band, or null.
     function endGrip(): Item { return window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") }
-    /// The button of a toast ("Cofnij"), when one is shown (clearToasts() first: one at a time).
+    /// The button of a toast ("Undo"), when one is shown (clearToasts() first: one at a time).
     function toastUndo(): T.AbstractButton { return window.findShown(window.toastHost, "toastAction") as T.AbstractButton }
     function clearToasts(): void { window.toastHost.clear() }
 
@@ -354,7 +354,7 @@ QtObject {
         if (window.at()) window.waitStep(window.pageText() === test.textBefore, "Ctrl+Z brings them back byte for byte")
         if (window.at()) check(page.selectionAnchorRow === rowOf("Zmierzyć") && page.selectedRow === rowOf("Wywieźć"),
                     "selected again")
-        // ---- The toast's "Cofnij" (a click on its button), and a stale one --------------------------
+        // ---- The toast's "Undo" (a click on its button), and a stale one --------------------------
         if (window.at()) clearToasts()
         if (window.at()) window.waitStep(toastUndo() === null, "no toast is left")
         if (window.at()) {
@@ -500,7 +500,7 @@ QtObject {
             tap(window.menuItemNamed(textMenu(), "editTextCopy"))
         }
         if (window.at()) window.waitStep(clip() === "Jadę" && !textMenu().opened, "its Kopiuj copies the selected text")
-        // ---- Its "Zakreśl…" (docs/UI.md "Coloured highlights") -----------------------------------
+        // ---- Its "Highlight…" (docs/UI.md "Coloured highlights") -----------------------------------
         if (window.at()) {
             const ed = edit()
             ed.select(0, 4)
@@ -649,7 +649,7 @@ QtObject {
             key(Qt.Key_C, Qt.ControlModifier)
         }
         if (window.at()) window.waitStep(Js.indexOf(clip(), "Trzy dni w Zakopanem") === 0 && Js.indexOf(clip(), "\n\n## Plan\n\nPierwszego dnia") > 0, "copied as Markdown with its blank lines")
-        // A document's paragraphs have no outline: Więcej offers no indents for them.
+        // A document's paragraphs have no outline: More offers no indents for them.
         if (window.at()) tap(window.findShown(floatingTools(), "selectionMore"))
         if (window.at()) window.waitStep(toolsMenuOpen(), "the floating tools' Więcej opens")
         if (window.at()) {
@@ -684,7 +684,7 @@ QtObject {
                    && page.editingRow < 0 && editor.selectionMode, "a tap on another block extends the selection (no editing)")
         if (window.at()) tap(shown(toolbar(), "selectionCopy"))
         if (window.at()) window.waitStep(Js.indexOf(clip(), "- [/] Zadzwonić do hydraulika") === 0 && Js.indexOf(clip(), "- [ ] Położyć hydroizolację") > 0, "Kopiuj copies it")
-        // ---- "Pojedynczo": taps pick single blocks ----------------------------------------------------
+        // ---- "One by one": taps pick single blocks ---------------------------------------------------
         if (window.at()) {
             const pick = shown(toolbar(), "selectionPickMode") as T.AbstractButton
             check(pick !== null && !pick.checked, "the docked tools have Pojedynczo")
@@ -753,7 +753,7 @@ QtObject {
                     && Math.abs(list.contentY - test.contentBefore) < 1,
                     "dragging the end grip moves the selection's end: " + page.selectionAnchorRow + "–" + page.selectedRow
                     + ", scrolled " + (list.contentY - test.contentBefore))
-        // ---- Usuń keeps the selection mode (the block before them selected); the toast's Cofnij, Ctrl+Z --
+        // ---- Delete keeps the selection mode (the block before them selected); the toast's Undo, Ctrl+Z ---
         if (window.at()) clearToasts()
         if (window.at()) window.waitStep(toastUndo() === null, "no toast is left")
         if (window.at()) {
@@ -805,7 +805,7 @@ QtObject {
         if (window.at()) window.waitStep(!editor.dragSelecting && editor.selectionMode && list.interactive
                    && page.selectionAnchorRow === rowOf("Zmierzyć"), "the lifted finger leaves the selection in the selection mode")
         if (window.at()) key(Qt.Key_Back, 0)
-        // ---- The editing toolbar's "Zaznacz" ------------------------------------------------------------
+        // ---- The editing toolbar's "Select" -------------------------------------------------------------
         if (window.at()) {
             test.rowA = rowOf("Skuć")
             center(test.rowA)
@@ -831,7 +831,7 @@ QtObject {
         if (window.at()) window.waitStep(page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
                    && editor.toolbarMode === "selection", "Shift+↓ extends it, the tools stay")
         if (window.at()) key(Qt.Key_Back, 0)
-        // ---- The bullet's menu: Zaznacz -----------------------------------------------------------------
+        // ---- The bullet's menu: Select ------------------------------------------------------------------
         if (window.at()) pressBullet(rowOf("Kolejność"))
         if (window.at()) window.waiting(window.blockMenuOpen())
         if (window.at()) releaseBullet(rowOf("Kolejność"))

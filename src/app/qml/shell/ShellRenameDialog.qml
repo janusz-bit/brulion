@@ -7,7 +7,7 @@ import Brulion
 // in the folder) are rewritten in every note so each keeps its target (docs/SYNTAX.md §2, §3); the
 // dialog says how many — exactly, for the name typed (Workspace.renameImpact: also the links to
 // other pages a new name would take over). A "/" in the name moves it — a path from the notebook
-// root ("Archiwum/Dom") —, with a live "Nowe miejsce: …" line. (Only here: the page header's
+// root ("Archive/Home") —, with a live "New place: …" line. (Only here: the page header's
 // title edit keeps a "/" in the title.)
 BDialog {
     id: dialog
@@ -57,7 +57,7 @@ BDialog {
     function textOf(text: string): string {
         return text
     }
-    /// "Zaktualizowane linki: 3 (w 2 notatkach)", with the notebook settings that follow.
+    /// "Updated links: 3 (in 2 notes)", with the notebook settings that follow.
     function liveText(): string {
         if (!dialog.liveOk)
             return AppController.routeText(dialog.live, "error")

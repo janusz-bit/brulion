@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import Brulion
 
 // CalendarHeader — the bar above the calendar: previous / next period, "Today", the period title
-// ("Październik 2026", "12–18 października 2026"; a click opens the month's / week's note:
+// ("October 2026", "October 12–18, 2026"; a click opens the month's / week's note:
 // titleClicked(), a small book when it has one) and the Month / Week / Agenda switch. On narrow
 // views the switch moves to a second row and stretches.
 //

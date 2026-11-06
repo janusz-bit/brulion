@@ -1,6 +1,6 @@
 // DeviceInfo — facts about the device the UI adapts to (QML singleton `DeviceInfo`):
 // touch screen presence, target platform, the system font families and the installed ones (the
-// font pickers of Ustawienia → Wygląd / Edytor), whether a screen reader is on. Theme.qml derives
+// font pickers of Settings → Appearance / Editor), whether a screen reader is on. Theme.qml derives
 // `touchUi` and the font tokens from it.
 #pragma once
 

@@ -304,7 +304,7 @@ private Q_SLOTS:
     }
 
     /// The editor's text width as stored by any version: unset is today's default (680, about 85
-    /// characters), the presets before 0.6.0 read as their successors (Normalna 760 → 680, Wąska
+    /// characters), the presets before 0.6.0 read as their successors (Normal 760 → 680, Narrow
     /// 640 → 600) so the setting shows the choice made; full width (0), today's presets and
     /// custom widths stay; out of range is clamped, malformed is the default.
     void editorWidthStored_data()
@@ -451,7 +451,7 @@ private Q_SLOTS:
         QSignalSpy fonts(&s, &AppSettings::fontFamiliesChanged);
         s.resetAppearance();
         QCOMPARE(s.accentColor(), u"red"_s);
-        QCOMPARE(s.customAccent(), u"#123456"_s); // kept for "Własny…"
+        QCOMPARE(s.customAccent(), u"#123456"_s); // kept for "Custom…"
         QCOMPARE(s.lightSurface(), u"paper"_s);
         QCOMPARE(s.darkSurface(), u"black"_s);
         QCOMPARE(s.uiFontFamily(), QString());

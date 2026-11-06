@@ -4,11 +4,11 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// ShellShortcutSettings — the "Skróty klawiszowe" section of SettingsView (docs/UI.md "Custom
+// ShellShortcutSettings — the "Keyboard shortcuts" section of SettingsView (docs/UI.md "Custom
 // shortcuts"; C++: ShortcutMap, shell/shortcutmap.h): every command of the palette with its
-// shortcut, a search over titles and keys, "Zmień" records a new key (the next key press with
+// shortcut, a search over titles and keys, "Change" records a new key (the next key press with
 // Ctrl, Alt or a function key; Esc cancels), what cannot be a shortcut said at once, another
-// command's shortcut offered with "Przypisz tutaj" (that command is left without one), a
+// command's shortcut offered with "Assign here" (that command is left without one), a
 // command's own default back, no shortcut at all, everything back to the defaults. A device
 // setting: every device keeps its own.
 ColumnLayout {
@@ -124,7 +124,7 @@ ColumnLayout {
                 section.record(sequence)
         }
         // The keyboard went elsewhere (the search field, another control): no longer recording.
-        // (The rows' Zmień / Anuluj / Przypisz tutaj never take it.)
+        // (The rows' Change / Cancel / Assign here never take it.)
         onActiveFocusChanged: if (!activeFocus && section.recording !== "") section.stopRecording()
     }
 

@@ -7,8 +7,8 @@ import Brulion
 // subtitle and trailing items (a badge, a button) in the header, the content below.
 //
 //   IoCard {
-//       iconName: "cloud"; title: "Nextcloud"; subtitle: qsTr("Twój własny serwer")
-//       trailing: [ BBadge { text: qsTr("Włączone"); variant: "success" } ]
+//       iconName: "cloud"; title: "Nextcloud"; subtitle: qsTr("Your own server")
+//       trailing: [ BBadge { text: qsTr("On"); variant: "success" } ]
 //       BText { Layout.fillWidth: true; text: …; wrapMode: Text.Wrap }
 //   }
 //

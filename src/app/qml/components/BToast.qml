@@ -5,7 +5,7 @@ import Brulion
 
 // BToast — one transient notification (normally created by BToastHost.showToast()).
 //
-// kind: "info" | "success" | "warning" | "error"; optional action button ("Cofnij") and a
+// kind: "info" | "success" | "warning" | "error"; optional action button ("Undo") and a
 // close button. Inverse colours so it stands out over any content. The message is plain text
 // (never markup: it often quotes note text).
 T.Control {
@@ -91,7 +91,7 @@ T.Control {
                 implicitHeight: Theme.touchUi ? Theme.touchTarget : 32
                 implicitWidth: actionLabel.implicitWidth + 20
                 // Tab reaches it; a click or tap leaves the focus where it was (the editor whose
-                // "Cofnij" it is keeps the keys: Delete, Ctrl+Z right after).
+                // "Undo" it is keeps the keys: Delete, Ctrl+Z right after).
                 focusPolicy: Qt.TabFocus
                 hoverEnabled: !Theme.touchUi
                 Accessible.name: text

@@ -17,7 +17,7 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * "Udostępnij → Brulion" (docs/ANDROID.md): the target of the share sheet for text and text files
+ * "Share → Brulion" (docs/ANDROID.md): the target of the share sheet for text and text files
  * (`ACTION_SEND` / `ACTION_SEND_MULTIPLE`, text MIME types). A separate exported activity
  * without a UI of its own — the system starts it in the sending app's task, where a second Qt
  * activity cannot live. It copies the shared files to `files/share-in/<stamp>/<n>/<name>` on a background thread

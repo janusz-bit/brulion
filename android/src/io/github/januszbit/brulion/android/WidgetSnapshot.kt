@@ -293,7 +293,7 @@ internal class WidgetSnapshot private constructor(val json: JSONObject) {
   /** Where quick add writes on [day], null when the snapshot does not know (too old). */
   fun captureOn(day: LocalDate): CaptureDay? = capture.firstOrNull { it.date == day }
 
-  /** The snapshot covers [day] with calendar entries (else: "Otwórz Brulion, aby zobaczyć wpisy"). */
+  /** The snapshot covers [day] with calendar entries (else: "Open Brulion to see this month's entries"). */
   fun covers(day: LocalDate): Boolean {
     val from = calendarFrom ?: return false
     val to = calendarTo ?: return false

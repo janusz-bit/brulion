@@ -7,7 +7,7 @@ import Brulion
 // ShellPageWindow — a page in a window of its own (desktop; docs/UI.md "Tabs, split view and
 // windows"): a tab outside the main window's bar (AppController.windowTabs), made by AppShell as
 // that list grows; it destroys itself once its tab is not in it. Its bar has back / forward (the
-// tab's own history), the title and "Przenieś do okna głównego" (AppController.attachTab: a tab
+// tab's own history), the title and "Move to main window" (AppController.attachTab: a tab
 // of the bar again); under it the tab's view (ShellTabPane). It edits through the same Workspace
 // as the main window, so an edit in one shows in the other (the editors merge each other's saves:
 // EditorHost::fileChanged).

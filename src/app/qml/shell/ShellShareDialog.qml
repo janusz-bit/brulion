@@ -3,9 +3,9 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ShellShareDialog — "Zapisz w Brulionie": text or .md/.txt files another app shared
+// ShellShareDialog — "Save to Brulion": text or .md/.txt files another app shared
 // (AppController.pendingShare) go to today's journal or to a new page. They come from Android's
-// share sheet ("Udostępnij → Brulion", docs/ANDROID.md), a desktop's "Otwórz za pomocą → Brulion"
+// share sheet ("Share → Brulion", docs/ANDROID.md), a desktop's "Open with → Brulion"
 // (`--open`, docs/WINDOWS.md and docs/NIXOS.md: source "open" — a copy is saved, the file stays as
 // it is; a file of the open notebook opens as its page instead), the browser version's share target
 // (docs/WEB.md) or `--share`. Text is edited here before it is saved; files are listed with their

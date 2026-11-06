@@ -15,7 +15,7 @@ Item {
     /// The week's Monday ("YYYY-MM-DD").
     required property string monday
     property bool hasNote: false
-    /// "Tydz." above the number (the week grid's corner has room for it).
+    /// "Wk" above the number (the week grid's corner has room for it).
     property bool showWord: false
 
     signal opened(string monday)

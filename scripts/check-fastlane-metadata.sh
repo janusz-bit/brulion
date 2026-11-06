@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Checks the store texts and pictures that F-Droid and IzzyOnDroid read from
-# fastlane/metadata/android (docs/ANDROID.md, "F-Droid i IzzyOnDroid") against their limits:
+# fastlane/metadata/android (docs/ANDROID.md, "F-Droid and IzzyOnDroid") against their limits:
 #   * every locale (en-US and pl, or those given with -l) has title.txt (at most 50 characters),
 #     short_description.txt (at most 80) and full_description.txt (at most 4000), none of them
 #     empty, short_description.txt a single line;

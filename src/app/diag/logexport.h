@@ -19,15 +19,15 @@ struct ExportInfo {
 };
 
 /// The lines that start every export (translated):
-///   Brulion — rejestr zdarzeń
-///   Wersja 0.2.1 · Android 15, arm64 · Qt 6.11.2
-///   Utworzono 2026-10-18 14:05:12 (UTC+02:00) · szczegółowość: normalna
-///   Zawiera: … (server address and Nextcloud user, note names and paths, the notebook folder)
-///   Nie zawiera: … (passwords, app passwords, tokens, cookies, note contents — removed)
-///   Ostatnie synchronizacje: + the recentSyncs lines indented
+///   Brulion — event log
+///   Version 0.2.1 · Android 15, arm64 · Qt 6.11.2
+///   Created 2026-10-18 14:05:12 (UTC+02:00) · detail: normal
+///   Contains: … (server address and Nextcloud user, note names and paths, the notebook folder)
+///   Does not contain: … (passwords, app passwords, tokens, cookies, note contents — removed)
+///   Recent syncs: + the recentSyncs lines indented
 QStringList exportHeader(const ExportInfo &info);
 
-/// "brulion-rejestr-zdarzen-2026-10-18-1403.txt" (translated stem).
+/// "brulion-event-log-2026-10-18-1403.txt" (translated stem).
 QString suggestedFileName(const QDateTime &now);
 
 /// Android's clipboard takes about 1 MB per transaction; keep `text` within `maxBytes` (UTF-8):

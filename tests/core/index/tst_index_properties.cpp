@@ -1,5 +1,5 @@
 // VaultIndex: the page-property keys and values in use (propertyKeys(), propertyValues()) — the
-// suggestions of the "Właściwości" panel.
+// suggestions of the "Properties" panel.
 #include "index/vaultindex.h"
 
 #include <QTest>

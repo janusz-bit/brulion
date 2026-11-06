@@ -1,7 +1,7 @@
 // DayClock — the local date for every open page: one timer, aligned to the next midnight
 // (re-checked at least hourly, as the clock or the time zone may jump: suspend, travel), emits
 // dayChanged() when the date is no longer the one seen last. PageController follows it, so
-// "dziś"/"jutro" chips, overdue colours and ```query results of an open page move on at
+// "today"/"tomorrow" chips, overdue colours and ```query results of an open page move on at
 // midnight without anyone asking.
 #pragma once
 

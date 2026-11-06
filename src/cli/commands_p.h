@@ -41,7 +41,7 @@ notebook::Notebook::WriteOptions creatingJournal(Call &call, const VaultPath &pa
 int appendedLine(const QString &after, const QString &block);
 /// The text of `content`'s 0-based line `line` ("" when out of range).
 QString lineText(const QString &content, int line);
-/// Links and tags naming `path` (the merged backlinks of the app's "Odnośniki"): [{kind: "link" |
+/// Links and tags naming `path` (the merged backlinks of the app's "Backlinks"): [{kind: "link" |
 /// "tag", path, title, line, text, blockId?, journal, tag?, ref?}].
 QJsonArray backlinksJson(Call &call, const VaultPath &path);
 /// "ref" (line ref) added to every item of a query result's items/groups that has a path and line.

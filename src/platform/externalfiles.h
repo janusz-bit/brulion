@@ -1,5 +1,5 @@
 // Which attachments of the notebook may be handed to another app (docs/UI.md "PDF viewer" → "Other
-// attachments": "Otwórz w innej aplikacji"; openexternal.h hands them over). Pure, so tested on every
+// attachments": "Open in another app"; openexternal.h hands them over). Pure, so tested on every
 // platform (tests/platform/tst_externalfiles.cpp).
 //
 // An allow-list: a file goes out only when its extension names a document, a spreadsheet, a

@@ -3,8 +3,8 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// SyncHistoryList — "Historia synchronizacji": the last Nextcloud sync runs (Workspace.sync.
-// history, newest first; quiet runs folded into one row "Bez zmian ×12"), each with its result,
+// SyncHistoryList — "Sync history": the last Nextcloud sync runs (Workspace.sync.
+// history, newest first; quiet runs folded into one row "No changes ×12"), each with its result,
 // when and why it ran, what it moved and how long it took. A row opens SyncRunDetails.
 //
 //   SyncHistoryList { Layout.fillWidth: true }

@@ -1,4 +1,4 @@
-// What "Sprzątanie" offers (notebook/cleanup.h): notes and attachments nothing refers to — every kind
+// What "Clean up" offers (notebook/cleanup.h): notes and attachments nothing refers to — every kind
 // of reference keeps a file off the list, and what nobody links to on purpose is never on it.
 #include "index/vaultindex.h"
 #include "notebook/cleanup.h"

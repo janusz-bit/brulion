@@ -3,13 +3,13 @@
 //  1. what a link to the site hands the app (its arguments), with the app stubbed (qtloader.js
 //     records them; no wasm runs): the flows that work on the open notebook
 //     (?selftest=webpictures,pen) and ?route= / ?now= only in a tab marked for tests
-//     (sessionStorage, which a link cannot set — docs/WEB.md "Uruchamianie lokalnie"), and then
+//     (sessionStorage, which a link cannot set — docs/WEB.md "Running locally"), and then
 //     each one argument "--option=value", so a value never becomes an option of its own
 //     (?route=--vault=… must not open another notebook);
 //  2. the browser's timeouts for Qt's timers: every wait gets 2 ms more, 0 ms stays (stubbed
 //     app); with the real app in a browser that runs timeouts a millisecond early, Qt's timers
 //     keep firing — the drawing editor saves 1.2 s after the last line without any input
-//     (docs/WEB.md "Ograniczenia techniczne").
+//     (docs/WEB.md "Technical limitations").
 import { expect, test } from './lib/fixtures.mjs';
 import { decodeDrawing, line, markTestTab, mouseStroke, openApp, requireWebGl2, screenOffset, waitGlobal } from './lib/brulion.mjs';
 import { readFile, seed } from './lib/idbfs.mjs';

@@ -119,7 +119,7 @@ void JNICALL nativePermissionsChanged(JNIEnv *, jclass)
         bridge, [bridge] { Q_EMIT bridge->permissionsChanged(); }, Qt::QueuedConnection);
 }
 
-/// "Zrobione" was tapped (DoneQueue.kt queued it): C++ takes it with takeDoneRequests().
+/// "Done" was tapped (DoneQueue.kt queued it): C++ takes it with takeDoneRequests().
 void JNICALL nativeDoneQueued(JNIEnv *, jclass)
 {
     AndroidBridge *bridge = s_bridge.load();
@@ -236,7 +236,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
                 });
     }
     // Cold start from a notification or a share: delivered once the event loop runs (after the
-    // UI connected to activated() and shared()). "Zrobione" taps queued while Brulion was closed
+    // UI connected to activated() and shared()). "Done" taps queued while Brulion was closed
     // likewise.
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingActivation, Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingShare, Qt::QueuedConnection);

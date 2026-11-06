@@ -6,10 +6,10 @@
 //     path: vault-relative note, line: 0-based line of the reminder,
 //     key: the occurrence's id (ScheduledNotification::id), local: its wall-clock time
 //     "yyyy-MM-ddTHH:mm" (never derived through UTC: a natively snoozed copy has another `at`),
-//     task: the reminder is on an open task (the notification offers "Zrobione"),
+//     task: the reminder is on an open task (the notification offers "Done"),
 //     vault: the notebook's id (ScheduledNotification::vault) }
 //
-// "Zrobione" tapped in a notification or on the alarm screen is queued by the Kotlin side
+// "Done" tapped in a notification or on the alarm screen is queued by the Kotlin side
 // (DoneQueue.kt) and taken by AndroidBridge::takeDoneRequests() as a JSON array of
 //
 //   { key, local, path, line, title, day: "yyyy-MM-dd" — the local date of the tap, vault }

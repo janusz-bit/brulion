@@ -111,7 +111,7 @@ public:
     QByteArray takeShare();
 
     /**
-     * The "Zrobione" taps on reminder notifications and the alarm screen not handed over yet
+     * The "Done" taps on reminder notifications and the alarm screen not handed over yet
      * (queued by DoneQueue.kt — while Brulion was closed, too): a JSON array of
      * `{key, local, path, line, title, day, vault}` (src/app/notify/androidpayload.h). Only the
      * taps of notebook @p vault (and those without one: reminders armed by an older version);
@@ -139,7 +139,7 @@ public:
     /// the queue (same JSON; an entry with the same id is replaced), for the next try. Emits nothing.
     void requeueWidgetActions(const QJsonArray &actions);
 
-    // The background check of the notes (docs/ANDROID.md "Sprawdzanie notatek w tle";
+    // The background check of the notes (docs/ANDROID.md "Checking notes in the background";
     // src/app/background/backgroundcheck.h, BackgroundCheck*.kt).
 
     /**
@@ -185,12 +185,12 @@ public:
      * the provider's roots (android/res/xml/qtprovider_paths.xml: the app's files and cache,
      * the shared storage — not a memory card) is copied into the cache first, in the
      * background (Copying; the app opens when the copy is there). NoApp: no app opens the type
-     * (the system's toast is not shown). The PDF viewer's "Otwórz w innej aplikacji"
+     * (the system's toast is not shown). The PDF viewer's "Open in another app"
      * (platform/openexternal.h). Static: needs no bridge instance.
      */
     static ViewResult viewFile(const QString &path, const QString &mimeType);
     /**
-     * "Drukuj…": the PDF at @p path (the app's cache; deleted when the print job is done with it)
+     * "Print…": the PDF at @p path (the app's cache; deleted when the print job is done with it)
      * in the system's print dialog as the job @p jobName — PrintManager with a PrintDocumentAdapter
      * copying the file (PdfPrint.kt), no WebView. False when the file is missing or the call
      * failed. Static: needs no bridge instance.
@@ -235,14 +235,14 @@ public:
     void setSystemBarsLight(bool light);
 
 Q_SIGNALS:
-    /// A reminder notification (or "Otwórz notatkę" on the alarm screen) was tapped.
+    /// A reminder notification (or "Open note" on the alarm screen) was tapped.
     void activated(const QString &path, int line);
-    /// Another app shared text or files with Brulion ("Udostępnij → Brulion": ShareActivity.kt
+    /// Another app shared text or files with Brulion ("Share → Brulion": ShareActivity.kt
     /// copied the files to files/share-in/<stamp>/); `json` as takeShare() gives it.
     void shared(const QByteArray &json);
     /// A permission may have changed (dialog answered, or the app returned to the front).
     void permissionsChanged();
-    /// "Zrobione" was tapped (or the app returned to the front): takeDoneRequests() may have
+    /// "Done" was tapped (or the app returned to the front): takeDoneRequests() may have
     /// some. Also emitted once after start-up, from the event loop.
     void doneRequestsQueued();
     /// Quick add of a widget queued an entry for the app (or the app returned to the front, or
