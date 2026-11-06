@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QPointer>
+#include <QScopedValueRollback>
 
 #include <algorithm>
 #include <cmath>
@@ -464,8 +465,16 @@ void PdfViewModel::sizesArrived(int generation, int from, const QList<QSizeF> &s
         return;
     if (m_fitWidth)
         m_layout.setScale(m_layout.fitWidthScale());
+    // (The view following this move is no scroll away from a page jumped to.)
+    const QScopedValueRollback relayout(m_relayout, true);
     const QPointF point = m_layout.pointOf(anchor);
-    const QPointF at = clampedPosition(QPointF(point.x() - m_viewportWidth / 2, point.y()));
+    QPointF at = clampedPosition(QPointF(point.x() - m_viewportWidth / 2, point.y()));
+    if (m_pinnedPage > 0) {
+        // A page jumped to before the real sizes arrived (a PDF of mixed pages opened at a page)
+        // stays where the jump puts it now, and stays current: the earlier sizes were guesses.
+        at = positionForPage(m_pinnedPage, 0);
+        m_pinnedY = at.y();
+    }
     Q_EMIT layoutChanged();
     m_pages->geometryChanged();
     if (std::abs(at.x() - m_contentX) > 0.5 || std::abs(at.y() - m_contentY) > 0.5) {
@@ -538,15 +547,21 @@ void PdfViewModel::setMaxFitWidth(qreal width)
 void PdfViewModel::applyGeometry()
 {
     const PdfPageLayout::Anchor anchor = m_layout.anchorAt(QPointF(m_contentX, m_contentY));
+    const QScopedValueRollback relayout(m_relayout, true);
     m_layout.setGeometry(m_viewportWidth, m_margin, m_gap, m_maxFitWidth);
     if (m_fitWidth)
         m_layout.setScale(m_layout.fitWidthScale());
     Q_EMIT layoutChanged();
     m_pages->geometryChanged();
     if (m_status == Status::Ready && anchor.index >= 0 && m_fitWidth) {
-        // Fit width follows the view's width; the page at the top stays at the top.
-        const QPointF point = m_layout.pointOf(PdfPageLayout::Anchor{anchor.index, 0, anchor.fy});
+        // Fit width follows the view's width; the page at the top stays at the top, a page jumped
+        // to where the jump puts it now.
+        const QPointF point = m_pinnedPage > 0
+                                      ? positionForPage(m_pinnedPage, 0)
+                                      : m_layout.pointOf(PdfPageLayout::Anchor{anchor.index, 0, anchor.fy});
         const QPointF at = clampedPosition(QPointF(0, point.y()));
+        if (m_pinnedPage > 0)
+            m_pinnedY = at.y();
         if (std::abs(at.y() - m_contentY) > 0.5 || std::abs(at.x() - m_contentX) > 0.5) {
             m_contentX = at.x();
             m_contentY = at.y();
@@ -598,8 +613,8 @@ void PdfViewModel::setViewport(qreal contentX, qreal contentY)
         return;
     m_contentX = contentX;
     m_contentY = contentY;
-    if (m_pinnedPage > 0 && std::abs(contentY - m_pinnedY) > 1)
-        m_pinnedPage = 0; // scrolled away from the jump
+    if (m_pinnedPage > 0 && !m_relayout && std::abs(contentY - m_pinnedY) > 1)
+        m_pinnedPage = 0; // scrolled away from the jump (not the view following a new layout)
     updateVisible();
     updateCurrentPage();
     m_settleTimer.start();
