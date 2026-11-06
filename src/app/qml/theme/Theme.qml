@@ -5,9 +5,10 @@ import Brulion
 // Theme — Brulion's design tokens (singleton). Every component reads colours, fonts, sizes
 // and durations from here; nothing hard-codes them.
 //
-// Look: calm, paper-like light theme and a deep blue-grey dark theme from the logo — ink
-// #1f2430, paper #fbf7ee, margin red #e2574c (accent, destructive), amber #f2b33d (reminders,
-// alarms), grid blue #9fc3e6 (links, focus, selection). All text colours meet WCAG AA (4.5:1)
+// Look ("Nocny" by default): a dense, IDE-like dark theme on true OLED black with a coral accent
+// (#ff7a66; #c4422f in light), and a calm, paper-like light theme — ink #1f2430, paper #fbf7ee,
+// margin red #e2574c (destructive; also an accent preset), amber #f2b33d (reminders, alarms —
+// whatever the accent), grid blue #9fc3e6 (links, focus, selection). All text colours meet WCAG AA (4.5:1)
 // on the backgrounds they are used on (fgFaint on bg/bgElevated/bgSunken included, chip text
 // on its tinted chip over any surface, white on the solid danger/accentSolid fills — the brand
 // red #e2574c is a fill for non-text marks only); state borders (borderControl, focusRing)
@@ -15,8 +16,8 @@ import Brulion
 //
 // Appearance settings (Settings → Appearance): the surfaces, the accent family and the text colours
 // come from ThemePalette (C++, src/app/ui/themepalette.h), which derives a readable accent from
-// any colour and whose tests check every accent on every surface (tst_ui_themepalette); the
-// defaults ("paper" / "slate", "red") are exactly the colours above. The accent marks things
+// any colour and whose tests check every accent on every surface (tst_themepalette); the
+// defaults are "paper" / "black" and "coral". The accent marks things
 // (today, the current tab, drop targets) — it never means "destructive": that is `danger*`,
 // red whatever the accent.
 //
@@ -27,8 +28,8 @@ import Brulion
 //   windowWidth/Height  the main window's size (bind it: Binding { target: Theme; ... })
 //   editorFont     "serif" | "sans";  fontScale  user font size factor
 //   editorFontSize the editor's base size in px (setting; touch UIs add one, fontScale applies)
-//   accentName     "red" | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (+ customAccent "#rrggbb")
-//   lightSurface   "paper" | "white";  darkSurface  "slate" | "black" (OLED)
+//   accentName     "coral" | "red" | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (+ customAccent "#rrggbb")
+//   lightSurface   "paper" | "white";  darkSurface  "black" (OLED) | "slate"
 //   uiFontFamily, editorFontFamily, monoFontFamily  installed families ("" or one missing on
 //                  this device: the default font)
 //   lineSpacing    "compact" | "normal" | "relaxed" (lineHeightLoose: editor prose)
@@ -49,10 +50,10 @@ QtObject {
     property string editorFont: "serif"
     property real fontScale: 1.0
     property int editorFontSize: 16
-    property string accentName: DevTools.accentName !== "" ? DevTools.accentName : "red"
+    property string accentName: DevTools.accentName !== "" ? DevTools.accentName : "coral"
     property string customAccent: DevTools.customAccent
     property string lightSurface: DevTools.lightSurface !== "" ? DevTools.lightSurface : "paper"
-    property string darkSurface: DevTools.darkSurface !== "" ? DevTools.darkSurface : "slate"
+    property string darkSurface: DevTools.darkSurface !== "" ? DevTools.darkSurface : "black"
     property string uiFontFamily: ""
     property string editorFontFamily: ""
     property string monoFontFamily: ""
@@ -87,17 +88,19 @@ QtObject {
     readonly property color amber: "#f2b33d"
     readonly property color gridBlue: "#9fc3e6"
     // Bases of the translucent tokens below (`base.alpha(a)` is Qt.rgba() of its channels).
-    readonly property color _fgDarkBase: "#e8e4da"
+    readonly property color _fgDarkBase: "#d3d8e2"
     readonly property color _scrimDarkBase: "#080a10"
     readonly property color _successDarkBase: "#6fbf8a"
     readonly property color _successLightBase: "#3f8f5a"
     readonly property color _scheduledDarkBase: "#b9a3d8"
     readonly property color _scheduledLightBase: "#7a5ea3"
     readonly property color _black: "#000000"
+    readonly property color _tagDarkBase: "#c89bf0"
+    readonly property color _tagLightBase: "#7a4bb0"
 
     // ---- Surfaces ------------------------------------------------------------------------
-    // Defaults (paper / slate): bg #fbf7ee / #1c2130, bgElevated #fffdf7 / #232a3b, bgElevated2
-    // #fffefb / #2b3245, bgSunken #f3eee2 / #171b28.
+    // Defaults (paper / black): bg #fbf7ee / #000000, bgElevated #fffdf7 / #0d0f13, bgElevated2
+    // #fffefb / #1c2027, bgSunken #f3eee2 / #08090b (slate: #1c2130, #232a3b, #2b3245, #171b28).
     readonly property color bg: palette.bg                     // page / window
     readonly property color bgElevated: palette.bgElevated     // cards, dialogs, menus
     readonly property color bgElevated2: palette.bgElevated2   // popups over cards
@@ -105,7 +108,7 @@ QtObject {
     readonly property color bgHover: dark ? theme._fgDarkBase.alpha(0.06) : theme.ink.alpha(0.055)
     readonly property color bgPressed: dark ? theme._fgDarkBase.alpha(0.11) : theme.ink.alpha(0.10)
     readonly property color bgSelected: dark ? theme.gridBlue.alpha(0.16) : theme.gridBlue.alpha(0.30)
-    readonly property color bgInverse: dark ? "#e8e4da" : "#1f2430"
+    readonly property color bgInverse: dark ? "#d3d8e2" : "#1f2430"
     /// Behind edge sheets (bottom sheets, the full-screen palette, the drawer): the page dims.
     readonly property color scrim: dark ? theme._scrimDarkBase.alpha(0.62) : theme.ink.alpha(0.40)
     /// Behind centred modal panels (the floating command palette and quick switcher, a centred
@@ -115,17 +118,18 @@ QtObject {
     readonly property color scrimModal: palette.scrimModal
 
     // ---- Text ----------------------------------------------------------------------------
-    // fg #1f2430 / #e8e4da, fgMuted #535a6a / #a9aebb, fgFaint #676c7b / #8f96a7.
+    // fg #1f2430 / #d3d8e2, fgMuted #535a6a / #a9b0bf, fgFaint #676c7b / #8f96a7.
     readonly property color fg: palette.fg
     readonly property color fgMuted: palette.fgMuted
     readonly property color fgFaint: palette.fgFaint
     readonly property color fgInverse: dark ? "#1c2130" : "#fbf7ee"
-    readonly property color fgOnAccent: "#ffffff"
+    /// Text on accentSolid: white, dark ink (#2b0a05) on the dark mode's bright coral.
+    readonly property color fgOnAccent: palette.accentOn
     readonly property real disabledOpacity: 0.45
 
     // ---- Lines ---------------------------------------------------------------------------
-    // Defaults: border #e4dccb / #343c51, borderSubtle #ece6d8 / #2b3245, borderStrong #cdc2ab /
-    // #48526b, borderControl #928775 / #6c7793.
+    // Defaults: border #e4dccb / #262a32, borderSubtle #ece6d8 / #1a1d23, borderStrong #cdc2ab /
+    // #3a404d, borderControl #928775 / #6c7793.
     readonly property color border: palette.border
     readonly property color borderSubtle: palette.borderSubtle
     readonly property color borderStrong: palette.borderStrong
@@ -138,24 +142,24 @@ QtObject {
     readonly property color guideOnSunken: dark ? border : borderStrong
 
     // ---- Actions -------------------------------------------------------------------------
-    readonly property color primary: dark ? "#e8e4da" : "#1f2430"        // primary buttons
-    readonly property color primaryHover: dark ? "#f5f1e8" : "#2d3445"
-    readonly property color primaryPressed: dark ? "#d6d1c5" : "#151923"
+    readonly property color primary: dark ? "#d3d8e2" : "#1f2430"        // primary buttons
+    readonly property color primaryHover: dark ? "#e6e9ef" : "#2d3445"
+    readonly property color primaryPressed: dark ? "#bfc5d1" : "#151923"
     readonly property color primaryFg: dark ? "#1c2130" : "#fbf7ee"
-    // The accent (default: the margin red #e2574c; hover #d14b40 / #ec6a5f, text #ad3e2c /
-    // #ef7a6f, solid #c4463a).
+    // The accent (default: coral, #c4422f / #ff7a66; its text and hover shades derived by
+    // ThemePalette, its solid fill #c4422f under white / #ff7a66 under dark ink).
     readonly property color accent: palette.accent                         // marks (≥ 3:1)
     readonly property color accentHover: palette.accentHover
     readonly property color accentText: palette.accentText                 // accent text on bg
     readonly property color accentBg: accent.alpha(dark ? 0.18 : 0.12)
-    /// Accent fill under white text (solid badges): the brand red itself is only 3.7:1 with white.
+    /// Accent fill under fgOnAccent (solid badges, today in the calendar).
     readonly property color accentSolid: palette.accentSolid
-    readonly property color link: palette.link                             // #2c6aa3 / #9fc3e6
-    readonly property color linkHover: dark ? "#c3daf1" : "#1f5486"
+    readonly property color link: palette.link                             // #2a62a6 / #8fb8ea
+    readonly property color linkHover: dark ? "#b8d2f2" : "#1f5486"
     readonly property color linkMissing: palette.linkMissing               // #7a5ea3 / #b9a3d8
     // Tags and due dates: a light tint, well apart from the selection (bgSelected) it used to match.
-    readonly property color tagBg: dark ? theme.gridBlue.alpha(0.10) : theme.gridBlue.alpha(0.16)
-    readonly property color tagFg: palette.tagFg                           // #2b5f8f / #b9d4ee
+    readonly property color tagBg: dark ? theme._tagDarkBase.alpha(0.12) : theme._tagLightBase.alpha(0.10)
+    readonly property color tagFg: palette.tagFg                           // #7a4bb0 / #c89bf0
 
     // ---- Status --------------------------------------------------------------------------
     readonly property color danger: dark ? "#c94a3e" : "#c8473b"          // fills under white text (≥ 4.5:1)
@@ -167,7 +171,7 @@ QtObject {
     readonly property color warningText: palette.warningText               // #835500 / #f2b33d
     readonly property color warningBg: dark ? theme.amber.alpha(0.16) : theme.amber.alpha(0.22)
     readonly property color success: dark ? "#6fbf8a" : "#2f7a4c"
-    readonly property color successText: palette.successText               // #2a6e44 / #7fcb98
+    readonly property color successText: palette.successText               // #2a6e44 / #7fd1a8
     readonly property color successBg: dark ? theme._successDarkBase.alpha(0.16) : theme._successLightBase.alpha(0.14)
     readonly property color info: dark ? "#9fc3e6" : "#2c6aa3"
     readonly property color infoText: dark ? "#9fc3e6" : "#2c6aa3"
@@ -180,8 +184,9 @@ QtObject {
     readonly property color chipOverdueFg: dangerText
     readonly property color chipScheduledBg: dark ? theme._scheduledDarkBase.alpha(0.16) : theme._scheduledLightBase.alpha(0.12)
     readonly property color chipScheduledFg: palette.chipScheduledFg       // #6a4f93 / #c7b5e2
-    readonly property color chipReminderBg: dark ? theme.amber.alpha(0.16) : theme.amber.alpha(0.24)
-    readonly property color chipReminderFg: palette.chipReminderFg         // #7a4f00 / #f5c66a
+    // Reminders and alarms are amber whatever the accent (never coral, never the overdue red).
+    readonly property color chipReminderBg: dark ? theme.amber.alpha(0.13) : theme.amber.alpha(0.22)
+    readonly property color chipReminderFg: palette.chipReminderFg         // #8a5900 / #f2b33d
     readonly property color chipAlarmBg: dark ? theme.amber.alpha(0.28) : "#f2b33d"
     readonly property color chipAlarmFg: dark ? "#ffd27a" : "#1f2430"
     readonly property color chipRecurrenceBg: dark ? theme._successDarkBase.alpha(0.14) : theme._successLightBase.alpha(0.12)
@@ -269,13 +274,16 @@ QtObject {
     readonly property color shadow: dark ? theme._black.alpha(0.5) : theme.ink.alpha(0.18)
 
     // ---- Typography ----------------------------------------------------------------------
-    // A chosen family missing on this device (chosen elsewhere, uninstalled) gives the default.
+    // The defaults are the bundled fonts (src/app/ui/uifonts.h): Inter for the interface,
+    // Literata for note text (serif), JetBrains Mono for code, dates and meta text — the system's
+    // when one did not load. A chosen family missing on this device (chosen elsewhere,
+    // uninstalled) gives the default.
     readonly property string fontUi: uiFontFamily !== "" && DeviceInfo.hasFontFamily(uiFontFamily)
-                                     ? uiFontFamily : DeviceInfo.systemFontFamily
-    readonly property string fontSerif: "serif" // fontconfig / Android map it to the system serif
-    readonly property string fontSans: DeviceInfo.systemFontFamily
+                                     ? uiFontFamily : DeviceInfo.defaultUiFamily
+    readonly property string fontSerif: DeviceInfo.defaultSerifFamily
+    readonly property string fontSans: DeviceInfo.defaultUiFamily
     readonly property string fontMono: monoFontFamily !== "" && DeviceInfo.hasFontFamily(monoFontFamily)
-                                       ? monoFontFamily : DeviceInfo.fixedFontFamily
+                                       ? monoFontFamily : DeviceInfo.defaultMonoFamily
     readonly property string fontEditor: editorFontFamily !== "" && DeviceInfo.hasFontFamily(editorFontFamily)
                                          ? editorFontFamily : editorFont === "sans" ? fontSans : fontSerif
 

@@ -272,7 +272,16 @@ QPalette widgetDialogPalette(bool dark, const QVariantMap &colors)
     };
     const QColor fg = color(u"fg"_s);
     const QColor faint = color(u"fgFaint"_s);
-    const QColor onAccent(Qt::white); // Theme.fgOnAccent; accentSolid keeps 4.5:1 under it
+    const QColor highlight = color(u"accentSolid"_s);
+    // Theme.fgOnAccent: the map's accentOn (white; dark ink on the dark mode's coral); without
+    // one, white or that ink, whichever reads better on the highlight.
+    const QColor onAccent = [&] {
+        if (const auto rgb = parseColor(colors.value(u"accentOn"_s).toString()))
+            return QColor(rgb->r, rgb->g, rgb->b);
+        const Rgb h{highlight.red(), highlight.green(), highlight.blue()};
+        const Rgb ink{0x2b, 0x0a, 0x05};
+        return contrast(h, {255, 255, 255}) >= contrast(h, ink) ? QColor(Qt::white) : QColor(0x2b0a05);
+    }();
     QPalette p;
     p.setColor(QPalette::Window, color(u"bg"_s));
     p.setColor(QPalette::WindowText, fg);
@@ -283,7 +292,7 @@ QPalette widgetDialogPalette(bool dark, const QVariantMap &colors)
     p.setColor(QPalette::Button, color(u"bgElevated2"_s));
     p.setColor(QPalette::ButtonText, fg);
     p.setColor(QPalette::BrightText, onAccent);
-    p.setColor(QPalette::Highlight, color(u"accentSolid"_s));
+    p.setColor(QPalette::Highlight, highlight);
     p.setColor(QPalette::HighlightedText, onAccent);
     p.setColor(QPalette::Accent, color(u"accent"_s));
     p.setColor(QPalette::Link, color(u"link"_s));

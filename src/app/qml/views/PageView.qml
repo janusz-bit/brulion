@@ -232,8 +232,20 @@ FocusScope {
     readonly property string noteMode: !page.loaded || root.pictureRoute || root.pdfRoute || root.fileRoute ? ""
                                        : page.documentMode ? "document" : "outline"
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
+    /// The shell's status bar (wide windows): the word count — the selection's while there is
+    /// one — and the edited block; "" while there is none (docs/UI.md "Status bar").
+    readonly property string statusText: !root.statsFooterShown ? ""
+                                         : Js.hasKey(root.selectionStats, "words")
+                                           ? qsTr("Selection: %1").arg(root.statsSummary(selectionStatsInfo, false))
+                                           : root.statsSummary(pageStatsInfo, false)
+    readonly property string statusPosition: page.loaded && !page.sourceMode && page.editingRow >= 0
+                                             ? qsTr("Block %1 of %2").arg(page.editingRow + 1).arg(page.blocks.count) : ""
+    /// The page's linked references (the side panel drawer handle's badge).
+    readonly property int backlinkCount: page.path !== "" ? refsSection.linkedCount : 0
     /// The tab this page's context panel showed last in the side panel ("": never shown).
     property string sidePanelTab: ""
+    /// route.open asked for a section of the side panel ("links", "outline", "calendar").
+    signal sidePanelRequested(string section)
     /// The side panel shows this page's linked references and unlinked mentions (wide windows,
     /// the panel's rule in AppShell; no page pinned there; its Links tab): the section under
     /// the blocks is not drawn a second time. Closing the panel, pinning a page there or another
@@ -776,7 +788,9 @@ FocusScope {
     Rectangle {
         id: statsFooter
         objectName: "pageStatsFooter"
+        // (In the main window's focused pane the shell's status bar shows it instead.)
         visible: root.statsFooterShown && Js.hasKey(root.pageStats, "words") && !editor.toolbarVisible
+                 && !(root.paneActive && AppController.statusBarShown)
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: Theme.space4

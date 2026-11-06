@@ -182,12 +182,13 @@ Rgb over(const Rgb &fg, double alpha, const Rgb &bg)
 Surface surface(QStringView name, bool dark)
 {
     if (dark) {
-        if (name == u"black") // OLED, the default: true black, elevated surfaces barely lifted
-            return {hex(0x000000), hex(0x111318), hex(0x1a1d24), hex(0x0a0b0e),
-                    hex(0x262a33), hex(0x1a1d24), hex(0x3a404d), hex(0x6c7793)};
-        // "slate": the logo's deep blue-grey
-        return {hex(0x1c2130), hex(0x232a3b), hex(0x2b3245), hex(0x171b28),
-                hex(0x343c51), hex(0x2b3245), hex(0x48526b), hex(0x6c7793)};
+        if (name == u"slate") // the logo's deep blue-grey
+            return {hex(0x1c2130), hex(0x232a3b), hex(0x2b3245), hex(0x171b28),
+                    hex(0x343c51), hex(0x2b3245), hex(0x48526b), hex(0x6c7793)};
+        // "black", the default ("Nocny", for OLED screens): true black, the side panes (bgSunken)
+        // and cards barely lifted
+        return {hex(0x000000), hex(0x0d0f13), hex(0x1c2027), hex(0x08090b),
+                hex(0x262a32), hex(0x1a1d23), hex(0x3a404d), hex(0x6c7793)};
     }
     if (name == u"white") // neutral white, grey wells
         return {hex(0xffffff), hex(0xffffff), hex(0xffffff), hex(0xf4f5f7),
@@ -199,18 +200,20 @@ Surface surface(QStringView name, bool dark)
 
 QStringList surfaceNames(bool dark)
 {
-    return dark ? QStringList{u"slate"_s, u"black"_s} : QStringList{u"paper"_s, u"white"_s};
+    return dark ? QStringList{u"black"_s, u"slate"_s} : QStringList{u"paper"_s, u"white"_s};
 }
 
 // ---- Accent ---------------------------------------------------------------------------------
 
 QStringList accentNames()
 {
-    return {u"red"_s, u"blue"_s, u"green"_s, u"teal"_s, u"violet"_s, u"graphite"_s};
+    return {u"coral"_s, u"red"_s, u"blue"_s, u"green"_s, u"teal"_s, u"violet"_s, u"graphite"_s};
 }
 
-Rgb accentBase(QStringView name)
+Rgb accentBase(QStringView name, bool dark)
 {
+    if (name == u"coral")
+        return dark ? hex(0xff7a66) : hex(0xc4422f);
     if (name == u"blue")
         return hex(0x3b7dd8);
     if (name == u"green")
@@ -241,6 +244,7 @@ Accent deriveAccent(const Rgb &base, bool dark, const Surface &s)
     // Solid fills carry white text in both modes.
     a.accentSolid = adjustUntil(a.accent, true, [&](const Rgb &c) { return contrast(kWhite, c) >= 4.5; });
     a.accentHover = shifted(a.accent, dark ? 0.05 : -0.05);
+    a.onAccent = kWhite;
     return a;
 }
 
@@ -249,13 +253,22 @@ Accent accent(QStringView name, QStringView custom, bool dark, const Surface &s)
     if (name == u"custom") {
         if (const auto c = parseColor(custom))
             return deriveAccent(*c, dark, s);
-    } else if (name != u"red" && accentNames().contains(name)) {
-        return deriveAccent(accentBase(name), dark, s);
+    } else if (name == u"red") {
+        // The margin red, hand-picked (passes every check on every surface: tst_themepalette).
+        if (dark)
+            return {hex(0xe2574c), hex(0xec6a5f), hex(0xef7a6f), hex(0xc4463a), kWhite};
+        return {hex(0xe2574c), hex(0xd14b40), hex(0xad3e2c), hex(0xc4463a), kWhite};
+    } else if (name != u"coral" && accentNames().contains(name)) {
+        return deriveAccent(accentBase(name, dark), dark, s);
     }
-    // The margin red, hand-picked (passes every check on every surface: tst_ui_themepalette).
-    if (dark)
-        return {hex(0xe2574c), hex(0xec6a5f), hex(0xef7a6f), hex(0xc4463a)};
-    return {hex(0xe2574c), hex(0xd14b40), hex(0xad3e2c), hex(0xc4463a)};
+    // Coral, the default ("Nocny"): #c4422f in light (its own solid fill under white text),
+    // #ff7a66 in dark — bright enough that its solid fill is the accent itself, under dark ink.
+    Accent a = deriveAccent(accentBase(u"coral", dark), dark, s);
+    if (dark) {
+        a.accentSolid = a.accent;
+        a.onAccent = hex(0x2b0a05);
+    }
+    return a;
 }
 
 // ---- Text -----------------------------------------------------------------------------------
@@ -263,12 +276,10 @@ Accent accent(QStringView name, QStringView custom, bool dark, const Surface &s)
 TextColors textColors(bool dark)
 {
     if (dark)
-        return {hex(0xe8e4da), hex(0xa9aebb), hex(0x8f96a7), hex(0x9fc3e6), hex(0xb9a3d8), hex(0xb9d4ee),
-                hex(0xf3877c), hex(0xf2b33d), hex(0x7fcb98),
-                hex(0xb9d4ee), hex(0xc7b5e2), hex(0xf5c66a), hex(0x8fd3a6)};
-    return {hex(0x1f2430), hex(0x535a6a), hex(0x676c7b), hex(0x2c6aa3), hex(0x7a5ea3), hex(0x2b5f8f),
-            hex(0xa8382d), hex(0x835500), hex(0x2a6e44),
-            hex(0x2b5f8f), hex(0x6a4f93), hex(0x7a4f00), hex(0x2a6e44)};
+        return {hex(0xd3d8e2), hex(0xa9b0bf), hex(0x8f96a7), hex(0x8fb8ea), hex(0xb9a3d8), hex(0xc89bf0), hex(0xf3877c),
+                hex(0xf2b33d), hex(0x7fd1a8), hex(0xb9d4ee), hex(0xc7b5e2), hex(0xf2b33d), hex(0x8fd3a6)};
+    return {hex(0x1f2430), hex(0x535a6a), hex(0x676c7b), hex(0x2a62a6), hex(0x7a5ea3), hex(0x7a4bb0), hex(0xa8382d),
+            hex(0x835500), hex(0x2a6e44), hex(0x2b5f8f), hex(0x6a4f93), hex(0x8a5900), hex(0x2a6e44)};
 }
 
 Scrim modalScrim(bool dark, const Surface &s, const TextColors &t)
@@ -298,6 +309,7 @@ QVariantMap paletteMap(bool dark, QStringView lightSurface, QStringView darkSurf
     put("accentHover", a.accentHover);
     put("accentText", a.accentText);
     put("accentSolid", a.accentSolid);
+    put("accentOn", a.onAccent);
     put("fg", t.fg);
     put("fgMuted", t.fgMuted);
     put("fgFaint", t.fgFaint);

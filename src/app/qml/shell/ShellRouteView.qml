@@ -18,7 +18,9 @@ import Brulion
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's
 // menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
 // block commands are off), `edgeSwipe` (CalendarView: the view's own horizontal swipe starts at
-// the left edge — the drawer's edge strip makes way). The shell sets `covered` (CalendarView: a
+// the left edge — the drawer's edge strip makes way), `statusText` / `statusPosition` (PageView: the
+// status bar's word count and edited block), `backlinkCount` (PageView: the linked references, the
+// side panel drawer handle's badge). The shell sets `covered` (CalendarView: a
 // modal panel lies over the view), `paneActive` (PageView, JournalsView: false in the other pane of
 // a split view — the window-wide shortcuts and the shell's actions are the focused pane's view's).
 // Optional `viewState()` / `restoreViewState(state)` (PageView, JournalsView): where the view is
@@ -76,6 +78,11 @@ Item {
     readonly property string viewNoteMode: traits.noteMode
     /// The view swipes sideways from the left edge itself (the calendar's grids): no edge strip.
     readonly property bool viewEdgeSwipe: traits.edgeSwipe
+    /// The status bar's texts of the view ("" for none): the word count, the edited block.
+    readonly property string viewStatusText: traits.statusText
+    readonly property string viewStatusPosition: traits.statusPosition
+    /// The open page's linked references (the side panel drawer's handle badge), 0 for none.
+    readonly property int viewBacklinkCount: traits.backlinkCount
 
     /// Ends the editing the view's docked touch toolbar is for (views without one: nothing).
     function endEditing(): void {

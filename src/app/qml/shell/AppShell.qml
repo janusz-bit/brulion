@@ -366,8 +366,7 @@ FocusScope {
         visible: active && !shell.focusMode
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: shell.keyboardRoom
+        anchors.bottom: statusBar.top
         width: visible && rail.item ? (rail.item as Item).implicitWidth : 0
         sourceComponent: ShellRail {
             objectName: "shellRail"
@@ -376,15 +375,31 @@ FocusScope {
         }
     }
 
+    // The status bar along the bottom of wide desktop windows (sync, the view's counts, the
+    // palette's key); the rest ends at its top, or at the keyboard's.
+    ShellStatusBar {
+        id: statusBar
+        objectName: "shellStatusBar"
+        readonly property bool shown: !Theme.narrow && !Theme.touchUi && !shell.focusMode
+        visible: shown
+        height: shown ? implicitHeight : 0
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: shell.keyboardRoom
+        routeView: shell.routeView
+        onPaletteRequested: shell.openPalette("")
+    }
+    Binding { target: AppController; property: "statusBarShown"; value: statusBar.shown }
+
     SplitView {
         id: split
         anchors.left: rail.right
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        // Everything ends at the keyboard's top: an editor in the side panel docks its toolbar
-        // on the keyboard as well as the main view's.
-        anchors.bottomMargin: shell.keyboardRoom
+        // Everything ends at the keyboard's top (the status bar's on the desktop): an editor in
+        // the side panel docks its toolbar on the keyboard as well as the main view's.
+        anchors.bottom: statusBar.top
         orientation: Qt.Horizontal
         handle: BSplitHandle { orientation: Qt.Horizontal }
 

@@ -130,6 +130,9 @@ class AppController : public QObject {
     Q_PROPERTY(bool sidePanelVisible READ sidePanelVisible WRITE setSidePanelVisible NOTIFY sidePanelVisibleChanged FINAL)
     /// Set by the shell: a side panel fits (wide window). Otherwise newPane opens in the main view.
     Q_PROPERTY(bool sidePanelAllowed READ sidePanelAllowed WRITE setSidePanelAllowed NOTIFY sidePanelAllowedChanged FINAL)
+    /// Set by the shell: the windows show a status bar (wide, not in focus mode) — the focused
+    /// pane's page leaves its word count in the corner to it (PageView).
+    Q_PROPERTY(bool statusBarShown READ statusBarShown WRITE setStatusBarShown NOTIFY statusBarShownChanged FINAL)
     /// Set by the shell: the main view's editor shows its page as Markdown source (source mode,
     /// Ctrl+E). The palette's commands for blocks and headings are off then.
     Q_PROPERTY(bool sourceModeShown READ sourceModeShown WRITE setSourceModeShown NOTIFY sourceModeShownChanged FINAL)
@@ -273,6 +276,8 @@ public:
     void setSidePanelVisible(bool visible);
     bool sidePanelAllowed() const { return m_sidePanelAllowed; }
     void setSidePanelAllowed(bool allowed);
+    bool statusBarShown() const { return m_statusBarShown; }
+    void setStatusBarShown(bool shown);
     bool sourceModeShown() const { return m_sourceModeShown; }
     void setSourceModeShown(bool shown);
 
@@ -635,6 +640,7 @@ Q_SIGNALS:
     void sidePanelRouteChanged();
     void sidePanelVisibleChanged();
     void sidePanelAllowedChanged();
+    void statusBarShownChanged();
     void sourceModeShownChanged();
     void tabsChanged();
     void windowTabsChanged();
@@ -740,6 +746,7 @@ private:
     QVariantMap m_sideRoute;
     bool m_sidePanelVisible = false;
     bool m_sidePanelAllowed = true;
+    bool m_statusBarShown = false;
     bool m_sourceModeShown = false;
     bool m_trayAvailable = false;
     QRect m_trayIcon;                  ///< showTrayCalendar()'s anchor

@@ -146,6 +146,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellSidePanel.qml
     qml/shell/ShellSidebar.qml
     qml/shell/ShellSplash.qml
+    qml/shell/ShellStatusBar.qml
     qml/shell/ShellSyncFooter.qml
     qml/shell/ShellTabBar.qml
     qml/shell/ShellTabPane.qml

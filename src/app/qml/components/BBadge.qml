@@ -68,10 +68,12 @@ Rectangle {
         visible: !badge.dot
         anchors.centerIn: parent
         text: badge.label
-        // On solid fills: white on the dark fills (accent, danger, light-theme success/info/
-        // neutral), ink on the light ones (amber, and the pale dark-theme tints).
+        // On solid fills: the accent's own text colour (white, dark ink on the dark mode's
+        // coral), white on the dark fills (danger, light-theme success/info/neutral), ink on the
+        // light ones (amber, and the pale dark-theme tints).
         color: !badge.solid ? badge.softFg
-             : badge.variant === "accent" || badge.variant === "danger" || (!Theme.dark && badge.variant !== "warning")
+             : badge.variant === "accent" ? Theme.fgOnAccent
+             : badge.variant === "danger" || (!Theme.dark && badge.variant !== "warning")
                ? "#ffffff" : Theme.ink
         font.family: Theme.fontUi
         font.pixelSize: Theme.textXs

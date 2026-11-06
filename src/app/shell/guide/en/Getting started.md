@@ -57,12 +57,14 @@ Views without their own button — the Sync center, import and export, trash, cl
 
 ## Appearance
 In *Settings → Appearance* you tailor Brulion to yourself — separately on each device:
-- **Theme**: light, dark or following the system; **accent colour** (red, blue, green, teal, violet, graphite or **Custom…** — any color from the grid or typed as `#3b7dd8`). The accent highlights today, the current tab and selections; where the chosen color would be hard to read, Brulion uses a lighter or darker shade of it by itself. Warnings and deleting stay red.
-- **Light background**: paper or white; **dark background**: blue-grey or black (saves battery on OLED screens).
-- **Text size**, **interface font** (any installed font) and **density** — compact fits more on a computer screen (on a phone the buttons stay large).
+- **Theme**: light, dark or following the system; **accent colour** (coral — the default —, red, blue, green, teal, violet, graphite or **Custom…** — any color from the grid or typed as `#3b7dd8`). The accent highlights today, the current tab and selections; where the chosen color would be hard to read, Brulion uses a lighter or darker shade of it by itself. Warnings and deleting stay red, reminders and alarms amber.
+- **Light background**: paper or white; **dark background**: black (the default; saves battery on OLED screens) or blue-grey.
+- **Text size**, **interface font** (Inter, built in, or any installed font) and **density** — compact fits more on a computer screen (on a phone the buttons stay large).
 - **Layout**: which items and sections the sidebar shows, in what order Favorites, Recent and Pages appear, which four buttons the bottom navigation has on a phone, and whether it has the quick capture button **+ Note**. Hidden views stay in the command palette and under their shortcuts.
 
-The font of notes (serif, sans-serif or **Other…**), the code font, the text size and the **line spacing** are in *Settings → Editor*. “Restore the default look” goes back to the original colors and fonts. In the browser there is no choice of fonts — only the browser's built-in ones work.
+The font of notes (serif — Literata —, sans-serif — Inter — or **Other…**), the code font (JetBrains Mono), the text size and the **line spacing** are in *Settings → Editor*. “Restore the default look” goes back to the original colors and fonts. Brulion brings these three fonts with it, so notes look the same on every device. In the browser there is no choice of fonts — only the built-in ones work.
+
+On a computer a thin **status bar** runs along the bottom of the window: the sync status on the left (green “synced”; a click opens the Sync center), on the right the edited block (“Block 3 of 12”), the word count and the command palette's key.
 
 ## New version
 On Android and Windows, Brulion asks GitHub once a day for the latest release. When there is a newer one, a message appears below the top bar, and **View on GitHub** opens the release page, where you can download it. The × hides the message until the next version. GitHub sees the device's address; nothing about your notes is sent. You turn this off in **Settings → Application → Check for new versions**.

@@ -137,7 +137,7 @@ BDialog {
                     BText {
                         anchors.centerIn: parent
                         text: "14"
-                        color: "#ffffff"
+                        color: previewColors.accentOn
                         font.weight: Theme.weightSemiBold
                         font.pixelSize: Theme.textSm
                     }

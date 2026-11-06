@@ -69,6 +69,9 @@ QtObject {
     property bool fileRoute: false
     property bool sourceMode: false
     property bool edgeSwipe: true
+    property string statusText: "123 słowa"
+    property string statusPosition: "Blok 3 z 12"
+    property int backlinkCount: 4
     property var restored: null
     property int ended: 0
     function viewState(): var { return { contentY: 120, row: 3 } }
@@ -88,6 +91,9 @@ QtObject {
         QVERIFY(traits.replacesBottomNav()); // a `var` holding true counts as `=== true`
         QVERIFY(traits.pictureAsText());
         QVERIFY(traits.edgeSwipe());
+        QCOMPARE(traits.statusText(), u"123 słowa"_s);
+        QCOMPARE(traits.statusPosition(), u"Blok 3 z 12"_s);
+        QCOMPARE(traits.backlinkCount(), 4);
         QCOMPARE(changed.size(), 1);
 
         view->setProperty("editing", true);
@@ -97,6 +103,10 @@ QtObject {
         QCOMPARE(traits.title(), u"Łódź"_s);
         view->setProperty("noteMode", u"document"_s);
         QCOMPARE(traits.noteMode(), u"document"_s);
+        view->setProperty("statusText", u"Zaznaczenie: 2 słowa"_s);
+        QCOMPARE(traits.statusText(), u"Zaznaczenie: 2 słowa"_s);
+        view->setProperty("backlinkCount", -2); // never below 0
+        QCOMPARE(traits.backlinkCount(), 0);
         // The same value again: nothing changed.
         const qsizetype before = changed.size();
         view->setProperty("editing", true);
@@ -129,6 +139,8 @@ QtObject {
     property int title: 7
     property string editing: "true"
     property var noteMode: 3
+    property var statusText: 5
+    property string backlinkCount: "7"
     property var restored: null
     function viewState() { return { page: "Gęś.md" } }
     function restoreViewState(state) { restored = state }
@@ -140,6 +152,8 @@ QtObject {
         QCOMPARE(traits.title(), QString());
         QVERIFY(!traits.editing()); // the text "true" is no boolean true
         QCOMPARE(traits.noteMode(), QString());
+        QCOMPARE(traits.statusText(), QString());
+        QCOMPARE(traits.backlinkCount(), 0);
         QVERIFY(traits.sidePanel() == nullptr);
         QCOMPARE(traits.viewState().value(u"page"_s).toString(), u"Gęś.md"_s);
         traits.restoreViewState({{u"row"_s, 2}});

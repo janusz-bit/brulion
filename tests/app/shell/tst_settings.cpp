@@ -95,7 +95,7 @@ private Q_SLOTS:
         QCOMPARE(s.syncIntervalMinutes(), 15);
         QVERIFY(!s.hasNextcloudPassword());
         // Appearance: today's look.
-        QCOMPARE(s.accentColor(), u"red"_s);
+        QCOMPARE(s.accentColor(), u"coral"_s);
         QCOMPARE(s.customAccent(), QString());
         QCOMPARE(s.lightSurface(), u"paper"_s);
         QCOMPARE(s.darkSurface(), u"black"_s);
@@ -214,10 +214,10 @@ private Q_SLOTS:
         };
         QTest::newRow("accent preset") << "accentColor" << QVariant(u"blue"_s) << QVariant(u"blue"_s);
         QTest::newRow("accent custom") << "accentColor" << QVariant(u"custom"_s) << QVariant(u"custom"_s);
-        QTest::newRow("accent empty") << "accentColor" << QVariant(u""_s) << QVariant(u"red"_s);
-        QTest::newRow("accent Polish") << "accentColor" << QVariant(u"Czerwony"_s) << QVariant(u"red"_s);
-        QTest::newRow("accent spaces") << "accentColor" << QVariant(u"BLUE "_s) << QVariant(u"red"_s);
-        QTest::newRow("accent colour") << "accentColor" << QVariant(u"#12345"_s) << QVariant(u"red"_s);
+        QTest::newRow("accent empty") << "accentColor" << QVariant(u""_s) << QVariant(u"coral"_s);
+        QTest::newRow("accent Polish") << "accentColor" << QVariant(u"Czerwony"_s) << QVariant(u"coral"_s);
+        QTest::newRow("accent spaces") << "accentColor" << QVariant(u"BLUE "_s) << QVariant(u"coral"_s);
+        QTest::newRow("accent colour") << "accentColor" << QVariant(u"#12345"_s) << QVariant(u"coral"_s);
         QTest::newRow("custom upper") << "customAccent" << QVariant(u"#A1B2C3"_s) << QVariant(u"#a1b2c3"_s);
         QTest::newRow("custom spaces") << "customAccent" << QVariant(u" #00ff7f "_s) << QVariant(u"#00ff7f"_s);
         QTest::newRow("custom name") << "customAccent" << QVariant(u"zielony"_s) << QVariant(QString());
@@ -449,7 +449,7 @@ private Q_SLOTS:
         QSignalSpy accent(&s, &AppSettings::accentChanged);
         QSignalSpy fonts(&s, &AppSettings::fontFamiliesChanged);
         s.resetAppearance();
-        QCOMPARE(s.accentColor(), u"red"_s);
+        QCOMPARE(s.accentColor(), u"coral"_s);
         QCOMPARE(s.customAccent(), u"#123456"_s); // kept for "Custom…"
         QCOMPARE(s.lightSurface(), u"paper"_s);
         QCOMPARE(s.darkSurface(), u"black"_s);
@@ -1029,7 +1029,7 @@ private Q_SLOTS:
         s.setNextcloudUrl(u"https://a.example/"_s); // same after normalisation
         QCOMPARE(nc.size(), 1);
         QSignalSpy accent(&s, &AppSettings::accentChanged);
-        s.setAccentColor(u"red"_s); // the default
+        s.setAccentColor(u"coral"_s);     // the default
         s.setAccentColor(u"Purpurowy"_s); // invalid: the default again
         s.setCustomAccent(u"nie kolor"_s);
         QCOMPARE(accent.size(), 0);

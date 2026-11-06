@@ -366,7 +366,7 @@ ApplicationWindow {
         { name: "neutral", fg: Theme.chipNeutralFg, fill: Theme.chipNeutralBg },
         { name: "primaryFg/primary", fg: Theme.primaryFg, fill: Theme.primary },
         { name: "white/danger", fg: Theme.dangerFg, fill: Theme.danger },
-        { name: "white/accentSolid", fg: Qt.color("#ffffff"), fill: Theme.accentSolid },
+        { name: "fgOnAccent/accentSolid", fg: Theme.fgOnAccent, fill: Theme.accentSolid },
         { name: "toast (fgInverse)", fg: Theme.fgInverse, fill: Theme.bgInverse },
         { name: "selected row (fgMuted)", fg: Theme.fgMuted, fill: Theme.bgSelected }
     ]

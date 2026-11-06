@@ -1,6 +1,7 @@
 // DeviceInfo — facts about the device the UI adapts to (QML singleton `DeviceInfo`):
-// touch screen presence, target platform, the system font families and the installed ones (the
-// font pickers of Settings → Appearance / Editor), whether a screen reader is on. Theme.qml derives
+// touch screen presence, target platform, the system font families, the bundled default ones and
+// the installed ones (the font pickers of Settings → Appearance / Editor), whether a screen reader
+// is on. Theme.qml derives
 // `touchUi` and the font tokens from it.
 #pragma once
 
@@ -27,6 +28,12 @@ class DeviceInfo : public QObject, public QAccessible::ActivationObserver {
     Q_PROPERTY(QString systemFontFamily READ systemFontFamily CONSTANT FINAL)
     /// The system's fixed-width font family (code, diffs, keyboard hints).
     Q_PROPERTY(QString fixedFontFamily READ fixedFontFamily CONSTANT FINAL)
+    /// The default fonts (uifonts.h): the bundled "Brulion Inter" for the interface, "Brulion
+    /// Literata" for note text (serif), "Brulion JetBrains Mono" for code and meta text — or, when
+    /// one did not load, the system's general font, "serif" and the system's fixed font.
+    Q_PROPERTY(QString defaultUiFamily READ defaultUiFamily CONSTANT FINAL)
+    Q_PROPERTY(QString defaultSerifFamily READ defaultSerifFamily CONSTANT FINAL)
+    Q_PROPERTY(QString defaultMonoFamily READ defaultMonoFamily CONSTANT FINAL)
     /// A screen reader or another accessibility client (TalkBack, Orca, NVDA, Narrator, Android's
     /// UiAutomator) is active — QAccessible::isActive(), followed through an activation observer
     /// — or simulated (simulateScreenReader; BRULION_SIMULATE_SCREEN_READER=1 for manual runs): the
@@ -47,6 +54,9 @@ public:
     bool hasTouchScreen() const;
     QString systemFontFamily() const;
     QString fixedFontFamily() const;
+    QString defaultUiFamily() const;
+    QString defaultSerifFamily() const;
+    QString defaultMonoFamily() const;
     bool screenReader() const { return m_simulated || m_accessible; }
     bool simulateScreenReader() const { return m_simulated; }
     void setSimulateScreenReader(bool on);

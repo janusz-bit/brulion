@@ -129,6 +129,13 @@ ApplicationWindow {
             paneActive: window.active
             onActivated: AppController.selectTab(window.tabId)
         }
+        // The same status bar as the main window's (its page leaves the word count to it).
+        ShellStatusBar {
+            visible: AppController.statusBarShown
+            Layout.fillWidth: true
+            routeView: pane.routeView
+            onPaletteRequested: AppController.requestUiAction("palette")
+        }
     }
 
     Shortcut {

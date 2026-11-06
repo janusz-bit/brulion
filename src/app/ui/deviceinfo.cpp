@@ -2,6 +2,7 @@
 
 #include "platform.h"
 #include "themepalette.h"
+#include "uifonts.h"
 
 #include <QFontDatabase>
 #include <QGuiApplication>
@@ -85,6 +86,25 @@ QString DeviceInfo::systemFontFamily() const
 QString DeviceInfo::fixedFontFamily() const
 {
     return QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+}
+
+QString DeviceInfo::defaultUiFamily() const
+{
+    const QString bundled = QString::fromUtf16(kBundledUiFamily);
+    return QFontDatabase::hasFamily(bundled) ? bundled : systemFontFamily();
+}
+
+QString DeviceInfo::defaultSerifFamily() const
+{
+    const QString bundled = QString::fromUtf16(kBundledSerifFamily);
+    // "serif": fontconfig / Android map it to the system's serif.
+    return QFontDatabase::hasFamily(bundled) ? bundled : u"serif"_s;
+}
+
+QString DeviceInfo::defaultMonoFamily() const
+{
+    const QString bundled = QString::fromUtf16(kBundledMonoFamily);
+    return QFontDatabase::hasFamily(bundled) ? bundled : fixedFontFamily();
 }
 
 QStringList DeviceInfo::fontFamilies(bool fixedOnly) const

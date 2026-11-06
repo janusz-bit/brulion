@@ -90,6 +90,7 @@ Item {
     readonly property bool fontChoice: DeviceInfo.platform !== "wasm"
     /// Accent presets with their names ({ value, name }).
     readonly property list<var> accents: [
+        { value: "coral", name: qsTr("Coral") },
         { value: "red", name: qsTr("Red") },
         { value: "blue", name: qsTr("Blue") },
         { value: "green", name: qsTr("Green") },
@@ -228,10 +229,10 @@ Item {
             target = which
             fixedOnly = which === "mono"
             title = which === "ui" ? qsTr("Interface font") : which === "mono" ? qsTr("Code font") : qsTr("Font of notes")
-            defaultLabel = which === "ui" ? qsTr("System font") : which === "mono" ? qsTr("System monospaced font")
-                                                                                    : qsTr("Serif (default)")
-            defaultFamily = which === "ui" ? DeviceInfo.systemFontFamily : which === "mono" ? DeviceInfo.fixedFontFamily
-                                                                                            : Theme.fontSerif
+            defaultLabel = which === "ui" ? qsTr("Inter (default)") : which === "mono" ? qsTr("JetBrains Mono (default)")
+                                                                                       : qsTr("Literata (default)")
+            defaultFamily = which === "ui" ? DeviceInfo.defaultUiFamily : which === "mono" ? DeviceInfo.defaultMonoFamily
+                                                                                           : Theme.fontSerif
             openFor(which === "ui" ? AppSettings.uiFontFamily : which === "mono" ? AppSettings.editorMonoFamily
                                                                                 : AppSettings.editorFontFamily)
         }
@@ -667,9 +668,9 @@ Item {
                 ShellSettingRow {
                     visible: root.fontChoice
                     title: qsTr("Interface font")
-                    description: AppSettings.uiFontFamily === "" ? qsTr("The system font.")
+                    description: AppSettings.uiFontFamily === "" ? qsTr("Inter, built into Brulion.")
                                  : Theme.fontUi === AppSettings.uiFontFamily ? AppSettings.uiFontFamily
-                                 : qsTr("%1 is not installed on this device: the system font is used.").arg(AppSettings.uiFontFamily)
+                                 : qsTr("%1 is not installed on this device: Inter is used.").arg(AppSettings.uiFontFamily)
                     BButton {
                         objectName: "uiFontButton"
                         size: "small"
@@ -856,7 +857,7 @@ Item {
                 title: qsTr("Font")
                 // A missing family: Theme.fontEditor falls back to the serif / sans-serif choice.
                 description: AppSettings.editorFontFamily === "" || !root.fontChoice
-                             ? qsTr("Font of your notes; the interface font is set in Appearance.")
+                             ? qsTr("Font of your notes: Literata (serif) or Inter (sans-serif), built into Brulion; the interface font is set in Appearance.")
                              : Theme.fontEditor === AppSettings.editorFontFamily ? AppSettings.editorFontFamily
                              : AppSettings.editorFont === "sans"
                              ? qsTr("%1 is not installed on this device: sans-serif is used.").arg(AppSettings.editorFontFamily)
@@ -890,9 +891,9 @@ Item {
             ShellSettingRow {
                 visible: root.fontChoice
                 title: qsTr("Code font")
-                description: AppSettings.editorMonoFamily === "" ? qsTr("Code blocks, Markdown source and formulas; now the system's monospaced font.")
+                description: AppSettings.editorMonoFamily === "" ? qsTr("Code blocks, Markdown source, formulas and dates; now JetBrains Mono, built into Brulion.")
                              : Theme.fontMono === AppSettings.editorMonoFamily ? AppSettings.editorMonoFamily
-                             : qsTr("%1 is not installed on this device: the system's monospaced font is used.").arg(AppSettings.editorMonoFamily)
+                             : qsTr("%1 is not installed on this device: JetBrains Mono is used.").arg(AppSettings.editorMonoFamily)
                 BButton {
                     objectName: "monoFontButton"
                     size: "small"
@@ -1537,7 +1538,7 @@ Item {
                 }
                 ShellSettingRow {
                     title: qsTr("Licence")
-                    description: qsTr("Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).")
+                    description: qsTr("Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Fonts: Inter, Literata, JetBrains Mono; emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).")
                     BButton {
                         text: qsTr("Read")
                         iconName: "external-link"

@@ -112,6 +112,7 @@ Rectangle {
     }
     /// The accent colours ({ value, name }).
     readonly property list<var> accents: [
+        { value: "coral", name: qsTr("Coral") },
         { value: "red", name: qsTr("Red") },
         { value: "blue", name: qsTr("Blue") },
         { value: "green", name: qsTr("Green") },

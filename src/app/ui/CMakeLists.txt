@@ -99,13 +99,15 @@ target_include_directories(brulion_ui_network PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(brulion_ui_network PUBLIC Qt6::Core Qt6::Network Qt6::Qml)
 brulion_set_warnings(brulion_ui_network)
 
-# brulion_ui_fonts — the fallback fonts for emoji and symbols (fallbackfonts.h; assets/fonts,
+# brulion_ui_fonts — the bundled text fonts (below) and the fallback fonts for emoji and symbols
+# (fallbackfonts.h; assets/fonts,
 # subsets of Noto Emoji and Noto Sans Math under the SIL OFL 1.1, made by
 # scripts/fallback-fonts.py) as resources ":/fonts/Brulion*.{ttf,otf}" (~170 KB, ~108 KB
 # compressed). Android leaves them out: it always has an emoji font, and the app never loads them
 # there. A static library so that tests/app/fonts checks them without the app.
 qt_add_library(brulion_ui_fonts STATIC
     fallbackfonts.h fallbackfonts.cpp
+    uifonts.h uifonts.cpp
 )
 target_include_directories(brulion_ui_fonts PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_ui_fonts PUBLIC Qt6::Gui)
@@ -115,6 +117,14 @@ if(NOT ANDROID)
         BASE ${PROJECT_SOURCE_DIR}/assets/fonts
         FILES ${PROJECT_SOURCE_DIR}/assets/fonts/BrulionEmoji.ttf ${PROJECT_SOURCE_DIR}/assets/fonts/BrulionMath.otf)
 endif()
+# The bundled text fonts (uifonts.h; assets/fonts/ui, subsets of Inter, Literata and JetBrains Mono
+# under the SIL OFL 1.1, made by scripts/ui-fonts.py) as resources ":/fonts/ui/*.ttf" (~1.4 MB),
+# on every platform, Android and the browser included.
+file(GLOB _brulion_ui_font_files CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/fonts/ui/*.ttf)
+qt_add_resources(brulion_ui_fonts brulion_ui_text_fonts
+    PREFIX /fonts/ui
+    BASE ${PROJECT_SOURCE_DIR}/assets/fonts/ui
+    FILES ${_brulion_ui_font_files})
 brulion_set_warnings(brulion_ui_fonts)
 
 # Qt's own Polish texts (standard dialog buttons, the fallback QFileDialog of FilePicker —

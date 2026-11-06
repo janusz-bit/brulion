@@ -1,4 +1,6 @@
 [
   {"screen": "daily", "device": "phone", "kind": "target", "type": "Item", "text": "Przybliż blok", "count": 2,
-   "reason": "A parent's bullet beside its fold arrow (28×44 on phones): both cannot be 44 px wide in the outline's gutter without a wider indent; leaves take the empty arrow column (round 1). Accepted at the loop's end (October 2026): each stays 44 px high, and a wider gutter would push every level of the outline to the right."}
+   "reason": "A parent's bullet beside its fold arrow (28×44 on phones): both cannot be 44 px wide in the outline's gutter without a wider indent; leaves take the empty arrow column (round 1). Accepted at the loop's end (October 2026): each stays 44 px high, and a wider gutter would push every level of the outline to the right."},
+  {"screen": "daily", "device": "desktop", "kind": "target", "type": "Item", "text": "", "count": 1,
+   "reason": "The 12-px gap below a journal day (a tap there edits the day's end) scrolled down to the view's bottom edge, where the status bar's sync button begins (November 2026): the layout dump does not clip it to the journal stream, of which only its top 4 px show."}
 ]

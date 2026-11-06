@@ -212,13 +212,13 @@ private Q_SLOTS:
 
         const QVariantMap light = brulion::ui::paletteMap(false, {}, {}, {}, {});
         const QVariantMap dark = brulion::ui::paletteMap(true, {}, {}, {}, {});
-        // Defaults: paper and slate (Theme.qml's first look), the logo's red.
+        // Defaults: paper and OLED black ("Nocny"), coral.
         QTest::newRow("jasny, domyślne") << false << QVariantMap() << QColor(0xfbf7ee) << QColor(0xfffdf7)
                                          << themeColor(light, u"fg"_s) << themeColor(light, u"accentSolid"_s);
-        QTest::newRow("ciemny, domyślne") << true << QVariantMap() << QColor(0x1c2130) << QColor(0x232a3b)
+        QTest::newRow("ciemny, domyślne") << true << QVariantMap() << QColor(0, 0, 0) << QColor(0x0d0f13)
                                           << themeColor(dark, u"fg"_s) << themeColor(dark, u"accentSolid"_s);
         const QVariantMap oled = brulion::ui::paletteMap(true, {}, u"black", u"custom", u"#13958b");
-        QTest::newRow("ciemny OLED, własny akcent") << true << oled << QColor(0, 0, 0) << QColor(0x111318)
+        QTest::newRow("ciemny OLED, własny akcent") << true << oled << QColor(0, 0, 0) << QColor(0x0d0f13)
                                                     << themeColor(oled, u"fg"_s) << themeColor(oled, u"accentSolid"_s);
         const QVariantMap white = brulion::ui::paletteMap(false, u"white", {}, u"violet", {});
         QTest::newRow("jasny biały, fioletowy") << false << white << QColor(0xffffff) << QColor(0xffffff)
@@ -254,12 +254,14 @@ private Q_SLOTS:
             QCOMPARE(p.color(group, QPalette::WindowText), text);
             QCOMPARE(p.color(group, QPalette::ButtonText), text);
             QCOMPARE(p.color(group, QPalette::Highlight), highlight);
-            QCOMPARE(p.color(group, QPalette::HighlightedText), QColor(Qt::white));
         }
-        // The highlight keeps white text readable (accentSolid: 4.5:1) where the colours are Brulion's.
+        // The highlight keeps its text readable (accentSolid under accentOn: 4.5:1) where the
+        // colours are Brulion's.
         if (qstrcmp(QTest::currentDataTag(), "błędne wpisy") != 0) {
+            const QColor on = p.color(QPalette::Active, QPalette::HighlightedText);
             const brulion::ui::Rgb h{highlight.red(), highlight.green(), highlight.blue()};
-            QVERIFY2(brulion::ui::contrast(h, {255, 255, 255}) >= 4.5, qPrintable(highlight.name()));
+            QVERIFY2(brulion::ui::contrast(h, {on.red(), on.green(), on.blue()}) >= 4.5,
+                     qPrintable(highlight.name() + u" / "_s + on.name()));
         }
         // Disabled texts are faint, not the normal text colour.
         QVERIFY(p.color(QPalette::Disabled, QPalette::Text) != text);
@@ -528,8 +530,8 @@ FilePicker {
         QVERIFY(dialog->testOption(QFileDialog::DontUseNativeDialog));
         QCOMPARE(dialog->nameFilters().size(), 2);
         QCOMPARE(dialog->directory().canonicalPath(), QDir(dir.path()).canonicalPath());
-        QCOMPARE(dialog->palette().color(QPalette::Window), QColor(0x1c2130));
-        QCOMPARE(dialog->palette().color(QPalette::Base), QColor(0x232a3b));
+        QCOMPARE(dialog->palette().color(QPalette::Window), QColor(0, 0, 0));
+        QCOMPARE(dialog->palette().color(QPalette::Base), QColor(0x0d0f13));
         // Fusion for the dialog and the widgets in it (the desktop's style may ignore palettes).
         QVERIFY(dialog->style());
         QCOMPARE(dialog->style()->name().toLower(), u"fusion"_s);
@@ -537,7 +539,7 @@ FilePicker {
         QVERIFY(!edits.isEmpty());
         for (QLineEdit *edit : edits) {
             QCOMPARE(edit->style(), dialog->style());
-            QCOMPARE(edit->palette().color(QPalette::Base), QColor(0x232a3b));
+            QCOMPARE(edit->palette().color(QPalette::Base), QColor(0x0d0f13));
         }
         dialog->selectFile(file);
         static_cast<QDialog *>(dialog)->accept(); // QFileDialog::accept() is protected

@@ -7,21 +7,31 @@ components — no Material/Fusion look, so all targets look identical.
 
 ## Look & feel
 
-* Calm, paper-like light theme and a deep blue-grey dark theme, matching the logo
-  (`assets/logo.svg`): ink `#1f2430`, paper `#fbf7ee`, margin red `#e2574c` (accent /
-  destructive), amber `#f2b33d` (reminders, alarms), grid blue `#9fc3e6` (links lighter tint,
-  focus). Text contrast ≥ WCAG AA. `Theme.dark` follows `Qt.styleHints.colorScheme` unless the
-  user overrides it in the settings.
+* **"Nocny"**, the default look: dark, dense and IDE-like — true OLED black (`#000`; side panes
+  `#08090b`, cards `#0d0f13`, hairlines `#1a1d23` / `#262a32`), cool text (`#d3d8e2`, muted
+  `#a9b0bf`), links `#8fb8ea`, tags violet `#c89bf0`, results and "synced" green `#7fd1a8`, and a
+  **coral accent** `#ff7a66` whose solid fill carries dark ink (`#2b0a05`, `Theme.fgOnAccent`).
+  Its light counterpart: the paper surfaces with coral darkened to `#c4422f` (white text on its
+  fill). **Reminders and alarms (⏰) are amber whatever the accent** (dark `#f2b33d` on amber at
+  13 %, light `#8a5900` on amber at 22 % — a shade darker than the mockup's `#9a6400`, which
+  reaches only 3.9:1 on the tinted chip over a well), so they never clash with the coral accent
+  or the red of overdue tasks; destructive actions stay the margin red `#e2574c`. Brand colours
+  of the logo (`assets/logo.svg`): ink `#1f2430`, paper `#fbf7ee`, margin red `#e2574c`, amber
+  `#f2b33d`, grid blue `#9fc3e6` (focus, selection). Text contrast ≥ WCAG AA. `Theme.dark` follows
+  `Qt.styleHints.colorScheme` unless the user overrides it in the settings (a first start is
+  dark).
 * **Appearance settings** (Settings → **Appearance**, device-local in `AppSettings`; a phone and a
-  desktop want different looks): the theme mode; the **accent colour** — presets Red (the
-  margin red, default), Blue, Green, Teal, Purple, Graphite, or **Custom…** (any
+  desktop want different looks): the theme mode; the **accent colour** — presets Coral (default),
+  Red (the margin red, the default before "Nocny"), Blue, Green, Teal, Purple, Graphite, or
+  **Custom…** (any
   `#rrggbb` from `BAccentDialog`: a 12 × 3 colour grid, a hex field, a live preview);
   `ThemePalette` (C++) derives readable shades by itself — the accent as a mark ≥ 3:1, as text
-  ≥ 4.5:1 on every surface and on its own tint, the solid fill ≥ 4.5:1 under white text. The
+  ≥ 4.5:1 on every surface and on its own tint, the solid fill ≥ 4.5:1 under its text (white;
+  dark ink on the dark mode's coral, `accentOn`). The
   accent marks things (today, the current tab, the selected row's bar, drop targets); it never
   means "destructive": danger callouts, danger cards, deleting stay red. The **light
   background** Paper (default) | White (neutral white, grey wells) and the **dark background**
-  Blue-grey (default) | Black (OLED: true black, barely lifted cards); both rows show while
+  Black (OLED, default: true black, barely lifted side panes and cards) | Blue-grey; both rows show while
   the mode is "System". **Text size** (UI factor), the **interface font** (any installed family,
   `BFontPickerDialog`; "" = the system's), **density** Comfortable | Compact (desktop only: 24/30/36
   px controls, 28 px rows, 26 px sidebar rows, a 248 px sidebar, a smaller paragraph gap; touch
@@ -36,10 +46,21 @@ components — no Material/Fusion look, so all targets look identical.
   "Restore the default look" (colours, fonts, sizes, density, line spacing — the visibility of
   elements stays). A family chosen on another device or since uninstalled falls back to the
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
-* Typography: system sans for UI (or a chosen family); the editor font is serif, sans or any
-  installed family (Settings → Editor → Font → **Other…**), the code font any monospaced
-  family (code blocks, source mode, formulas; inline `code` in rendered text keeps Qt's own fixed
-  font); calculations are note text: the editor font at the editor's size, results with tabular
+* Typography: **bundled fonts** on every platform (`src/app/ui/uifonts.h`, `assets/fonts/ui`,
+  made by `scripts/ui-fonts.py`; SIL OFL 1.1, no Reserved Font Names): **Inter** for the UI
+  (Regular, Medium, SemiBold, Bold, Italic), **Literata** for note text — the editor's "Serif"
+  (Regular, Italic, Bold, Bold Italic) —, **JetBrains Mono** for code, dates and meta text (the
+  status bar's counts). Static instances subset to the Latin alphabets of Europe and the Greek
+  letters with punctuation, arrows and common symbols (other scripts and emoji come from the
+  system's fonts or "Brulion Emoji"), no hinting or stylistic sets — 1.4 MB for all eleven —,
+  renamed "Brulion Inter", "Brulion Literata", "Brulion JetBrains Mono" so a complete system font
+  of the same name never mixes with a subset; the font pickers leave them out and offer them as
+  the default row ("Inter (default)", …). Loaded in `main.cpp` before anything is laid out;
+  `DeviceInfo.defaultUiFamily` / `defaultSerifFamily` / `defaultMonoFamily` give them, or the
+  system's fonts when one failed to load. A chosen interface family (or none: Inter), the editor
+  font serif (Literata), sans (Inter) or any installed family (Settings → Editor → Font →
+  **Other…**), the code font any monospaced family (JetBrains Mono by default: code blocks, source
+  mode, formulas; inline `code` in rendered text keeps Qt's own fixed font); calculations are note text: the editor font at the editor's size, results with tabular
   figures (`tnum`) so they still line up right-aligned, errors smaller in the UI font; line spacing Tight 1.45 | Normal 1.65 | Relaxed 1.9; configurable max
   text width — Narrow 600, **Normal 680** (the default, `Theme.measure`: about 85 characters of
   16-px serif, Obsidian's comfortable measure), Wide 960, Full; the presets before 0.6.0
@@ -88,7 +109,18 @@ components — no Material/Fusion look, so all targets look identical.
   `BRULION_UPDATE_CHECK=OFF` (store builds: F-Droid, IzzyOnDroid; docs/ANDROID.md) have neither
   the card nor the switch (`updates.supported` is false, also with `--update-available`).
 * **Focus mode** (F8; "Statistics and focus mode" below): on a page or the journal no sidebar,
-  top bar, side panel or bottom navigation.
+  top bar, side panel, status bar or bottom navigation.
+* **Status bar** (`ShellStatusBar`, wide windows without a touch UI, not in focus mode; also at the
+  bottom of a page's own window): a 24-px bar (22 dense) along the window's bottom edge in
+  `bgSunken` with a hairline above, everything else ends at its top (`AppController.statusBarShown`
+  tells the views). Left: the sync status (`statusBarSync`) — a dot (green `success`: synced,
+  amber: syncing or offline, red: failed, grey: only on this device) and its words ("synced", or
+  the text of `ShellSyncFooter`: "Syncthing folder", "Only on this device", an error); a click opens
+  the sync center. Right, only what there is: the focused pane's view's `statusPosition` (PageView:
+  "Block 3 of 12" while a block is edited) and `statusText` (the word count, "Statistics and focus
+  mode"), both in the mono font, then the command palette's key as key caps and "commands"
+  (`statusBarPalette`; a click opens the palette). The views report these through `ViewTraits`
+  (`ShellRouteView.viewStatusText`, `viewStatusPosition`).
 * **Wide (≥ 900 px):** the **rail** of views at the window's left edge, then a `SplitView` — the
   **sidebar** (the page panel) | **top bar** + current view | optional right **side panel**. One
   1-px hairline between them: the split handle's (`BSplitHandle`, which also highlights on hover
@@ -628,10 +660,12 @@ with a letter or digit in it (hyphenated words, "m.in.", "3,14", addresses are o
 emoji alone none; a no-break space separates words except between digits) — the header of
 `textstats.h` has the rules, `tst_stats` the cases. Shown:
 
-* in the bottom-right corner of PageView (`pageStatsFooter`, wide windows, not in the side panel,
-  not over a docked touch toolbar; Settings → Editor → "Word count", `AppSettings.wordCountShown`,
+* in the status bar (wide desktop windows, "Window layout" → Status bar; `PageView.statusText`) for
+  the focused pane's page, else in the bottom-right corner of PageView (`pageStatsFooter`: the
+  other pane of a split view, focus mode, touch UIs; wide windows, not in the side panel, not over
+  a docked touch toolbar); both follow Settings → Editor → "Word count" (`AppSettings.wordCountShown`,
   on by default): "123 words · 820 characters · 1 min read", "Selection: …" while something is
-  selected, the characters without spaces in its tooltip and accessible name;
+  selected, the corner's with the characters without spaces in its tooltip and accessible name;
 * at the top of the page's menu (`pageMenuStats`, disabled item, every width) — counted when the
   menu opens.
 
@@ -788,10 +822,12 @@ for the open notebook (`tst_shell_navigation`), the shell shows it (`ShellTabBar
   (`target` "tab") or window ("window") — the editor and the lists need no shell (without it, in the
   editor's tests, only the usual click). At most `TabSet::MaxTabs` (100) tabs: more says so.
 * **The tab bar** (`ShellTabBar`, wide windows): between the top bar and the view, shown while
-  there are two tabs or more (or the view is split). Equal widths (120–220 px; past that the bar
-  scrolls with the wheel), the view's icon and title (`ShellRouteTitles.routeTitle`), × (shown on the
-  focused tab and on hover). The tab of the focused pane is drawn like the view below it with a
-  2-px accent line on top, the other pane's tab of a split view like the view without the line. A
+  there are two tabs or more (or the view is split); 38 px high (44 on touch UIs). Square tabs
+  side by side with full-height hairlines between them (IDE-like), equal widths (120–220 px; past
+  that the bar scrolls with the wheel), the view's icon and title (`ShellRouteTitles.routeTitle`), ×
+  (shown on the focused tab and on hover). The tab of the focused pane is drawn like the view below
+  it with a 2-px accent edge along its whole top (`shellTabAccent`), the other pane's tab of a split
+  view like the view without the edge. A
   click shows a tab (in the focused pane; a tab already shown in the other pane focuses that pane),
   a middle click or × closes it, a drag along the bar moves it (`moveTab`), a right-click or long
   press opens its menu: Close tab, Close other tabs, Show in split view / Close split view,

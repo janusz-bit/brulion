@@ -168,7 +168,7 @@ QString oneOf(const QString &value, std::initializer_list<const char16_t *> allo
 
 QString accentName(const QString &v)
 {
-    return oneOf(v, {u"red", u"blue", u"green", u"teal", u"violet", u"graphite", u"custom"});
+    return oneOf(v, {u"coral", u"red", u"blue", u"green", u"teal", u"violet", u"graphite", u"custom"});
 }
 
 /// "#rrggbb" in lower case, else "".
@@ -496,7 +496,7 @@ void AppSettings::setCaptureButtonShown(bool on)
 
 void AppSettings::resetAppearance()
 {
-    setAccentColor(u"red"_s);
+    setAccentColor(u"coral"_s);
     setLightSurface(u"paper"_s);
     setDarkSurface(u"black"_s);
     setUiFontFamily(QString());

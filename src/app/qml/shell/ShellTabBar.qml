@@ -6,8 +6,9 @@ import Brulion
 // ShellTabBar — the main window's tabs (wide windows; docs/UI.md "Tabs, split view and windows"),
 // between the top bar and the view, shown while there are two tabs or more (or the view is split).
 // Every tab has the same width (at most 220 px, at least 120: past that the bar scrolls with the
-// wheel); the tab of the focused pane is drawn like the view under it with an accent line, the one
-// shown in the other pane of a split view like the view without the line. A click shows a tab, a
+// wheel); the tab of the focused pane is drawn like the view under it with a 2-px accent edge along
+// its top (the "Nocny" look: square tabs, hairlines between them), the one shown in the other pane
+// of a split view like the view without the edge. A click shows a tab, a
 // middle click or its × closes it, a drag along the bar moves it (AppController.moveTab), a
 // right-click (or a long press) opens its menu: Close tab, Close other tabs, Show in split view /
 // Close split view, Move to new window (desktop). The + at the end opens a new tab (Ctrl+T).
@@ -19,7 +20,7 @@ Rectangle {
     readonly property real minTabWidth: 120
     readonly property real maxTabWidth: 220
 
-    implicitHeight: Theme.touchUi ? 44 : 34
+    implicitHeight: Theme.touchUi ? 44 : 38
     color: Theme.bgSunken
     Accessible.role: Accessible.PageTabList
     Accessible.name: qsTr("Tabs")
@@ -54,7 +55,6 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.space1
         anchors.rightMargin: Theme.space1
         spacing: 2
 
@@ -104,38 +104,24 @@ Rectangle {
 
                 transform: Translate { x: drag.active ? drag.activeTranslation.x : 0 }
 
+                // A shown tab runs into the view under it (its fill covers the bar's bottom line).
                 Rectangle {
                     anchors.fill: parent
-                    anchors.topMargin: 3
-                    anchors.bottomMargin: tab.shown ? 0 : 3
-                    radius: Theme.radiusSm
                     color: tab.shown ? Theme.bg : hover.hovered ? Theme.bgHover : "transparent"
-                    // The bottom corners of a shown tab run into the view.
                     Rectangle {
-                        visible: tab.shown
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: Theme.radiusSm
-                        color: Theme.bg
-                    }
-                    Rectangle {
+                        objectName: "shellTabAccent"
                         visible: tab.focusedTab && (AppController.tabCount > 1 || AppController.splitTab !== 0)
                         anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.leftMargin: Theme.radiusSm
-                        anchors.rightMargin: Theme.radiusSm
+                        width: parent.width
                         height: 2
                         color: Theme.accent
                     }
                 }
-                // Separators between tabs not shown.
+                // Hairlines between the tabs, full height (IDE-like).
                 Rectangle {
-                    visible: !tab.shown && tab.index > 0
-                    x: 0
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right
                     width: 1
-                    height: parent.height / 2
+                    height: parent.height
                     color: Theme.borderSubtle
                 }
 

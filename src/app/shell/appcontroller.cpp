@@ -739,6 +739,14 @@ void AppController::setSidePanelAllowed(bool allowed)
     Q_EMIT sidePanelAllowedChanged();
 }
 
+void AppController::setStatusBarShown(bool shown)
+{
+    if (m_statusBarShown == shown)
+        return;
+    m_statusBarShown = shown;
+    Q_EMIT statusBarShownChanged();
+}
+
 void AppController::setSourceModeShown(bool shown)
 {
     if (m_sourceModeShown == shown)

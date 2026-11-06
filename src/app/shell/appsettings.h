@@ -49,13 +49,14 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged FINAL)
 
     // ---- Appearance (Settings → Appearance; Theme inputs, ThemePalette) -------------------
-    /// "red" (default) | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (Theme.accentName).
+    /// "coral" (default) | "red" | "blue" | "green" | "teal" | "violet" | "graphite" | "custom"
+    /// (Theme.accentName).
     Q_PROPERTY(QString accentColor READ accentColor WRITE setAccentColor NOTIFY accentChanged FINAL)
-    /// The custom accent "#rrggbb" (lower case; "" = none: "custom" then looks like "red").
+    /// The custom accent "#rrggbb" (lower case; "" = none: "custom" then looks like "coral").
     Q_PROPERTY(QString customAccent READ customAccent WRITE setCustomAccent NOTIFY accentChanged FINAL)
     /// Light background "paper" (default) | "white".
     Q_PROPERTY(QString lightSurface READ lightSurface WRITE setLightSurface NOTIFY surfacesChanged FINAL)
-    /// Dark background "slate" (default) | "black" (OLED).
+    /// Dark background "black" (OLED, default) | "slate".
     Q_PROPERTY(QString darkSurface READ darkSurface WRITE setDarkSurface NOTIFY surfacesChanged FINAL)
     /// Font family of the interface ("" = the system's).
     Q_PROPERTY(QString uiFontFamily READ uiFontFamily WRITE setUiFontFamily NOTIFY fontFamiliesChanged FINAL)

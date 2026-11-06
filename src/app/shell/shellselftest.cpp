@@ -4939,16 +4939,17 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
     check(waitFor([&] { return app->currentView() == u"page" && (editor = named(u"pageEditor"_s)) != nullptr; }),
           "back on the page");
 
-    // ---- The word count in the corner (wide windows) follows the typing, after a pause; the
-    //      caret's line stays in the middle with typewriter scrolling.
+    // ---- The word count in the status bar (wide windows) follows the typing, after a pause; the
+    //      edited block is there too; the caret's line stays in the middle with typewriter
+    //      scrolling.
     if (!touch && editor) {
         controller = editor->property("controller").value<QObject *>();
         QQuickItem *footer = nullptr;
         check(waitFor([&] {
-                  footer = named(u"pageStatsFooter"_s);
+                  footer = named(u"statusBarWords"_s);
                   return footer && footer->property("text").toString().contains(u"360"_s);
               }),
-              "the page's corner shows its word count");
+              "the status bar shows the page's word count");
         settings->setTypewriterScrolling(true);
         const int last = 59;
         uidriver::callQml(editor, "startEditing", {QVariant(last), QVariant(-1)});
@@ -4973,11 +4974,14 @@ void checkFocusAndShortcuts(QQuickWindow *window, AppController *app, const Chec
                   "typewriter scrolling keeps the caret's line in the middle of the view");
             check(waitFor(
                           [&] {
-                              footer = named(u"pageStatsFooter"_s);
+                              footer = named(u"statusBarWords"_s);
                               return footer && footer->property("text").toString().contains(u"362"_s);
                           },
                           5000),
                   "the word count follows what is typed (after a pause)");
+            QQuickItem *position = named(u"statusBarPosition"_s);
+            check(position && position->property("text").toString().contains(u"60"_s),
+                  "the status bar shows the edited block");
             sendKey(window, Qt::Key_Escape);
             sendKey(window, Qt::Key_Escape);
         }
@@ -6485,9 +6489,10 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     }
     const auto color = [theme](const char *name) { return theme->property(name).value<QColor>().name(); };
     const bool dark = theme->property("dark").toBool();
-    check(color("accent") == u"#e2574c" && color("accentText") == (dark ? u"#ef7a6f"_s : u"#ad3e2c"_s)
+    check(color("accent") == (dark ? u"#ff7a66"_s : u"#c4422f"_s)
+                  && color("fgOnAccent") == (dark ? u"#2b0a05"_s : u"#ffffff"_s)
                   && color("bg") == (dark ? u"#000000"_s : u"#fbf7ee"_s),
-          "the default look keeps the logo's colours (margin red, paper / black)");
+          "the default look is \"Nocny\" (coral on paper / OLED black)");
     // Visible, maybe scrolled out of the view (activate() scrolls it in).
     const auto shownItem = [window](const QString &name) {
         QQuickItem *found = nullptr;
@@ -6587,7 +6592,10 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     }
 
     check(activate(shownItem(u"accentSwatch_green"_s)), "the appearance settings show the accent swatches");
-    check(waitFor([&] { return settings->accentColor() == u"green" && color("accent") != u"#e2574c"; }),
+    check(waitFor([&] {
+              return settings->accentColor() == u"green" && color("accent") != u"#ff7a66"
+                     && color("accent") != u"#c4422f";
+          }),
           "a tap on a swatch changes the accent at once and saves it");
 
     // A custom colour: the dialog's field, then "Use this colour".
@@ -6812,9 +6820,11 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     }
 
     // Back to the default look (the visibility of elements stays).
-    check(activate(shownItem(u"resetAppearance"_s))
-                  && waitFor([&] { return settings->accentColor() == u"red" && color("accent") == u"#e2574c"; }),
-          "\"Restore the default look\" brings the logo's colours back");
+    check(activate(shownItem(u"resetAppearance"_s)) && waitFor([&] {
+              return settings->accentColor() == u"coral"
+                     && (color("accent") == u"#ff7a66" || color("accent") == u"#c4422f");
+          }),
+          "\"Restore the default look\" brings the default coral back");
 
     // Settings → Editor → Font → "Other…" opens the picker; cancelled, the selection stays on the
     // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the

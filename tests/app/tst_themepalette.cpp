@@ -1,7 +1,8 @@
-// Tests for ThemePalette (src/app/ui/themepalette.h): the default look stays exactly today's
-// (every token of the default light and dark palettes), every accent preset and custom colour on
+// Tests for ThemePalette (src/app/ui/themepalette.h): the default look is "Nocny" (the tokens of
+// the default light and dark palettes: coral on paper / OLED black), the red preset keeps its
+// hand-picked shades, every accent preset and custom colour on
 // every surface of both modes passes the contrast checks (accent marks 3:1, accent text 4.5:1 on
-// each surface and on its own tint, white on the solid fill 4.5:1, text colours 4.5:1, control
+// each surface and on its own tint, onAccent on the solid fill 4.5:1, text colours 4.5:1, control
 // borders 3:1 — on the page, cards and wells), the modal scrim makes the page recede on every
 // surface, malformed colours and unknown names fall back to the defaults, and the font
 // pickers' family filter. GUI-free (QTEST_GUILESS_MAIN).
@@ -31,8 +32,10 @@ class TestThemePalette : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
-    void defaultsAreTodaysColours_data();
-    void defaultsAreTodaysColours();
+    void defaultsAreNocny_data();
+    void defaultsAreNocny();
+    void redKeepsItsShades_data();
+    void redKeepsItsShades();
     void unknownNamesGiveDefaults_data();
     void unknownNamesGiveDefaults();
     void contrastOnEverySurface_data();
@@ -52,76 +55,108 @@ private Q_SLOTS:
     void themeColorsFollowInputs();
 };
 
-void TestThemePalette::defaultsAreTodaysColours_data()
+void TestThemePalette::defaultsAreNocny_data()
 {
     QTest::addColumn<bool>("dark");
     QTest::addColumn<QVariantMap>("expected");
-    // The literals of Theme.qml before the appearance settings (screenshots rely on them).
-    QTest::newRow("light paper red") << false
-                                     << QVariantMap{{u"bg"_s, u"#fbf7ee"_s},
-                                                    {u"bgElevated"_s, u"#fffdf7"_s},
-                                                    {u"bgElevated2"_s, u"#fffefb"_s},
-                                                    {u"bgSunken"_s, u"#f3eee2"_s},
-                                                    {u"border"_s, u"#e4dccb"_s},
-                                                    {u"borderSubtle"_s, u"#ece6d8"_s},
-                                                    {u"borderStrong"_s, u"#cdc2ab"_s},
-                                                    {u"borderControl"_s, u"#928775"_s},
-                                                    {u"accent"_s, u"#e2574c"_s},
-                                                    {u"accentHover"_s, u"#d14b40"_s},
-                                                    {u"accentText"_s, u"#ad3e2c"_s},
-                                                    {u"accentSolid"_s, u"#c4463a"_s},
-                                                    {u"fg"_s, u"#1f2430"_s},
-                                                    {u"fgMuted"_s, u"#535a6a"_s},
-                                                    {u"fgFaint"_s, u"#676c7b"_s},
-                                                    {u"link"_s, u"#2c6aa3"_s},
-                                                    {u"linkMissing"_s, u"#7a5ea3"_s},
-                                                    {u"tagFg"_s, u"#2b5f8f"_s},
-                                                    {u"dangerText"_s, u"#a8382d"_s},
-                                                    {u"warningText"_s, u"#835500"_s},
-                                                    {u"successText"_s, u"#2a6e44"_s},
-                                                    {u"chipDueFg"_s, u"#2b5f8f"_s},
-                                                    {u"chipScheduledFg"_s, u"#6a4f93"_s},
-                                                    {u"chipReminderFg"_s, u"#7a4f00"_s},
-                                                    {u"chipRecurrenceFg"_s, u"#2a6e44"_s},
-                                                    {u"scrimModal"_s, u"#9ecbc9c4"_s}};
-    QTest::newRow("dark slate red") << true
-                                    << QVariantMap{{u"bg"_s, u"#1c2130"_s},
-                                                   {u"bgElevated"_s, u"#232a3b"_s},
-                                                   {u"bgElevated2"_s, u"#2b3245"_s},
-                                                   {u"bgSunken"_s, u"#171b28"_s},
-                                                   {u"border"_s, u"#343c51"_s},
-                                                   {u"borderSubtle"_s, u"#2b3245"_s},
-                                                   {u"borderStrong"_s, u"#48526b"_s},
-                                                   {u"borderControl"_s, u"#6c7793"_s},
-                                                   {u"accent"_s, u"#e2574c"_s},
-                                                   {u"accentHover"_s, u"#ec6a5f"_s},
-                                                   {u"accentText"_s, u"#ef7a6f"_s},
-                                                   {u"accentSolid"_s, u"#c4463a"_s},
-                                                   {u"fg"_s, u"#e8e4da"_s},
-                                                   {u"fgMuted"_s, u"#a9aebb"_s},
-                                                   {u"fgFaint"_s, u"#8f96a7"_s},
-                                                   {u"link"_s, u"#9fc3e6"_s},
-                                                   {u"linkMissing"_s, u"#b9a3d8"_s},
-                                                   {u"tagFg"_s, u"#b9d4ee"_s},
-                                                   {u"dangerText"_s, u"#f3877c"_s},
-                                                   {u"warningText"_s, u"#f2b33d"_s},
-                                                   {u"successText"_s, u"#7fcb98"_s},
-                                                   {u"chipDueFg"_s, u"#b9d4ee"_s},
-                                                   {u"chipScheduledFg"_s, u"#c7b5e2"_s},
-                                                   {u"chipReminderFg"_s, u"#f5c66a"_s},
-                                                   {u"chipRecurrenceFg"_s, u"#8fd3a6"_s},
-                                                   {u"scrimModal"_s, u"#b8080a10"_s}};
+    // The "Nocny" look (paper / OLED black, coral): every token but the derived accent shades
+    // (accentHover, accentText: checked by contrastOnEverySurface and below).
+    QTest::newRow("light paper coral") << false
+                                       << QVariantMap{{u"bg"_s, u"#fbf7ee"_s},
+                                                      {u"bgElevated"_s, u"#fffdf7"_s},
+                                                      {u"bgElevated2"_s, u"#fffefb"_s},
+                                                      {u"bgSunken"_s, u"#f3eee2"_s},
+                                                      {u"border"_s, u"#e4dccb"_s},
+                                                      {u"borderSubtle"_s, u"#ece6d8"_s},
+                                                      {u"borderStrong"_s, u"#cdc2ab"_s},
+                                                      {u"borderControl"_s, u"#928775"_s},
+                                                      {u"accent"_s, u"#c4422f"_s},
+                                                      {u"accentSolid"_s, u"#c4422f"_s},
+                                                      {u"accentOn"_s, u"#ffffff"_s},
+                                                      {u"fg"_s, u"#1f2430"_s},
+                                                      {u"fgMuted"_s, u"#535a6a"_s},
+                                                      {u"fgFaint"_s, u"#676c7b"_s},
+                                                      {u"link"_s, u"#2a62a6"_s},
+                                                      {u"linkMissing"_s, u"#7a5ea3"_s},
+                                                      {u"tagFg"_s, u"#7a4bb0"_s},
+                                                      {u"dangerText"_s, u"#a8382d"_s},
+                                                      {u"warningText"_s, u"#835500"_s},
+                                                      {u"successText"_s, u"#2a6e44"_s},
+                                                      {u"chipDueFg"_s, u"#2b5f8f"_s},
+                                                      {u"chipScheduledFg"_s, u"#6a4f93"_s},
+                                                      {u"chipReminderFg"_s, u"#8a5900"_s},
+                                                      {u"chipRecurrenceFg"_s, u"#2a6e44"_s},
+                                                      {u"scrimModal"_s, u"#9ecbc9c4"_s}};
+    QTest::newRow("dark black coral") << true
+                                      << QVariantMap{{u"bg"_s, u"#000000"_s},
+                                                     {u"bgElevated"_s, u"#0d0f13"_s},
+                                                     {u"bgElevated2"_s, u"#1c2027"_s},
+                                                     {u"bgSunken"_s, u"#08090b"_s},
+                                                     {u"border"_s, u"#262a32"_s},
+                                                     {u"borderSubtle"_s, u"#1a1d23"_s},
+                                                     {u"borderStrong"_s, u"#3a404d"_s},
+                                                     {u"borderControl"_s, u"#6c7793"_s},
+                                                     {u"accent"_s, u"#ff7a66"_s},
+                                                     {u"accentText"_s, u"#ff7a66"_s},
+                                                     {u"accentSolid"_s, u"#ff7a66"_s},
+                                                     {u"accentOn"_s, u"#2b0a05"_s},
+                                                     {u"fg"_s, u"#d3d8e2"_s},
+                                                     {u"fgMuted"_s, u"#a9b0bf"_s},
+                                                     {u"fgFaint"_s, u"#8f96a7"_s},
+                                                     {u"link"_s, u"#8fb8ea"_s},
+                                                     {u"linkMissing"_s, u"#b9a3d8"_s},
+                                                     {u"tagFg"_s, u"#c89bf0"_s},
+                                                     {u"dangerText"_s, u"#f3877c"_s},
+                                                     {u"warningText"_s, u"#f2b33d"_s},
+                                                     {u"successText"_s, u"#7fd1a8"_s},
+                                                     {u"chipDueFg"_s, u"#b9d4ee"_s},
+                                                     {u"chipScheduledFg"_s, u"#c7b5e2"_s},
+                                                     {u"chipReminderFg"_s, u"#f2b33d"_s},
+                                                     {u"chipRecurrenceFg"_s, u"#8fd3a6"_s},
+                                                     {u"scrimModal"_s, u"#b8080a10"_s}};
 }
 
-void TestThemePalette::defaultsAreTodaysColours()
+void TestThemePalette::defaultsAreNocny()
 {
     QFETCH(bool, dark);
     QFETCH(QVariantMap, expected);
-    const QVariantMap m = paletteMap(dark, u"paper", u"slate", u"red", u"");
-    QCOMPARE(m.keys(), expected.keys());
+    const QVariantMap m = paletteMap(dark, u"paper", u"black", u"coral", u"");
     for (auto it = expected.cbegin(); it != expected.cend(); ++it)
         QCOMPARE(m.value(it.key()).toString() + u' ' + it.key(), it.value().toString() + u' ' + it.key());
+    // The settings' defaults (AppSettings, Theme.qml): the first names.
+    QCOMPARE(m, paletteMap(dark, surfaceNames(false).first(), surfaceNames(true).first(), accentNames().first(), u""));
+    QCOMPARE(accentNames().first(), u"coral"_s);
+    QCOMPARE(surfaceNames(true).first(), u"black"_s);
     QCOMPARE(accentBgAlpha(dark), dark ? 0.18 : 0.12);
+    // Light coral text: darker than the mark (its tint over the wells needs 4.5:1).
+    if (!dark)
+        QVERIFY(relativeLuminance(rgb(m.value(u"accentText"_s).toString())) < relativeLuminance(rgb(u"#c4422f"_s)));
+}
+
+void TestThemePalette::redKeepsItsShades_data()
+{
+    QTest::addColumn<bool>("dark");
+    QTest::addColumn<QString>("surfaceName");
+    QTest::addColumn<QStringList>("expected"); // accent, accentHover, accentText, accentSolid
+    // The margin red, the default before "Nocny": hand-picked, on every surface.
+    for (const QString &s : surfaceNames(false))
+        QTest::newRow(qPrintable(u"light "_s + s))
+                << false << s << QStringList{u"#e2574c"_s, u"#d14b40"_s, u"#ad3e2c"_s, u"#c4463a"_s};
+    for (const QString &s : surfaceNames(true))
+        QTest::newRow(qPrintable(u"dark "_s + s))
+                << true << s << QStringList{u"#e2574c"_s, u"#ec6a5f"_s, u"#ef7a6f"_s, u"#c4463a"_s};
+}
+
+void TestThemePalette::redKeepsItsShades()
+{
+    QFETCH(bool, dark);
+    QFETCH(QString, surfaceName);
+    QFETCH(QStringList, expected);
+    const QVariantMap m = paletteMap(dark, surfaceName, surfaceName, u"red", u"");
+    QCOMPARE((QStringList{m.value(u"accent"_s).toString(), m.value(u"accentHover"_s).toString(),
+                          m.value(u"accentText"_s).toString(), m.value(u"accentSolid"_s).toString()}),
+             expected);
+    QCOMPARE(m.value(u"accentOn"_s).toString(), u"#ffffff"_s);
 }
 
 void TestThemePalette::unknownNamesGiveDefaults_data()
@@ -131,15 +166,16 @@ void TestThemePalette::unknownNamesGiveDefaults_data()
     QTest::addColumn<QString>("accentName");
     QTest::addColumn<QString>("custom");
     QTest::newRow("empty") << "" << "" << "" << "";
-    QTest::newRow("Polish names") << "papier" << "czarne" << "czerwony" << "";
+    QTest::newRow("Polish names") << "papier" << "czarne" << "koralowy" << "";
     QTest::newRow("case") << "Paper" << "BLACK" << "Blue" << "";
-    QTest::newRow("swapped modes") << "black" << "white" << "red" << "";
-    QTest::newRow("custom without colour") << "paper" << "slate" << "custom" << "";
-    QTest::newRow("custom malformed") << "paper" << "slate" << "custom" << "zielony";
-    QTest::newRow("custom bad digits") << "paper" << "slate" << "custom" << "#ggg000";
-    QTest::newRow("custom too long") << "paper" << "slate" << "custom" << "#1234567";
-    QTest::newRow("custom diacritics") << "paper" << "slate" << "custom" << "#ąęółźż";
-    QTest::newRow("colour as preset name") << "paper" << "slate" << "#3b7dd8" << "";
+    QTest::newRow("swapped modes") << "black" << "white" << "" << "";
+    QTest::newRow("swapped modes 2") << "slate" << "paper" << "coral" << "";
+    QTest::newRow("custom without colour") << "paper" << "black" << "custom" << "";
+    QTest::newRow("custom malformed") << "paper" << "black" << "custom" << "zielony";
+    QTest::newRow("custom bad digits") << "paper" << "black" << "custom" << "#ggg000";
+    QTest::newRow("custom too long") << "paper" << "black" << "custom" << "#1234567";
+    QTest::newRow("custom diacritics") << "paper" << "black" << "custom" << "#ąęółźż";
+    QTest::newRow("colour as preset name") << "paper" << "black" << "#3b7dd8" << "";
 }
 
 void TestThemePalette::unknownNamesGiveDefaults()
@@ -150,7 +186,7 @@ void TestThemePalette::unknownNamesGiveDefaults()
     QFETCH(QString, custom);
     for (const bool dark : {false, true})
         QCOMPARE(paletteMap(dark, lightSurface, darkSurface, accentName, custom),
-                 paletteMap(dark, u"paper", u"slate", u"red", u""));
+                 paletteMap(dark, u"paper", u"black", u"coral", u""));
 }
 
 void TestThemePalette::contrastOnEverySurface_data()
@@ -189,14 +225,17 @@ void TestThemePalette::contrastOnEverySurface()
     // The page, cards and dialogs, wells (Theme.qml's promise; popups over cards use fg).
     const QList<Rgb> surfaces{s.bg, s.bgElevated, s.bgSunken};
     const Rgb white{255, 255, 255};
-    QVERIFY2(contrast(white, a.accentSolid) >= 4.5, qPrintable(describe("white on accentSolid", white, a.accentSolid)));
+    QVERIFY2(contrast(a.onAccent, a.accentSolid) >= 4.5,
+             qPrintable(describe("onAccent on accentSolid", a.onAccent, a.accentSolid)));
+    // White text on the solid fill, except the dark mode's bright coral (dark ink on it).
+    QCOMPARE(a.onAccent == white, !(dark && accentName == u"coral"));
     for (const Rgb &bg : surfaces) {
         QVERIFY2(contrast(a.accent, bg) >= 3.0, qPrintable(describe("accent", a.accent, bg)));
         QVERIFY2(contrast(a.accentText, bg) >= 4.5, qPrintable(describe("accentText", a.accentText, bg)));
         const Rgb tint = over(a.accent, accentBgAlpha(dark), bg);
         // The hand-picked red of the default look reaches 4.3:1 on its tint over a dark card
         // (kept: the default look never changes); derived accents make 4.5:1 everywhere.
-        const bool red = a.accent == accentBase(u"red") && accentName != u"custom";
+        const bool red = accentName == u"red";
         QVERIFY2(contrast(a.accentText, tint) >= (red ? 4.3 : 4.5),
                  qPrintable(describe("accentText on accentBg", a.accentText, tint)));
         QVERIFY2(contrast(s.borderControl, bg) >= 3.0, qPrintable(describe("borderControl", s.borderControl, bg)));
@@ -370,8 +409,10 @@ void TestThemePalette::qmlFacade()
     QCOMPARE(p.colors(false, u"paper"_s, u"slate"_s, u"red"_s, QString()), paletteMap(false, u"paper", u"slate", u"red", u""));
     QCOMPARE(p.colors(true, u"white"_s, u"black"_s, u"green"_s, QString()).value(u"bg"_s).toString(), u"#000000"_s);
     QCOMPARE(p.colors(false, u"white"_s, u"black"_s, u"green"_s, QString()).value(u"bg"_s).toString(), u"#ffffff"_s);
-    QCOMPARE(p.accentNames().first(), u"red"_s);
+    QCOMPARE(p.accentNames().first(), u"coral"_s);
     QCOMPARE(p.accentSwatch(u"red"_s, QString(), false, u"paper"_s), u"#e2574c"_s);
+    QCOMPARE(p.accentSwatch(u"coral"_s, QString(), false, u"paper"_s), u"#c4422f"_s);
+    QCOMPARE(p.accentSwatch(u"coral"_s, QString(), true, u"black"_s), u"#ff7a66"_s);
     QCOMPARE(p.accentSwatch(u"custom"_s, u"#3b7dd8"_s, false, u"paper"_s), u"#3b7dd8"_s);
     QCOMPARE(p.normalizeColor(u" #ABC "_s), u"#aabbcc"_s);
     QCOMPARE(p.normalizeColor(u"żółty"_s), QString());
@@ -410,19 +451,22 @@ void TestThemePalette::colorText()
 void TestThemePalette::themeColorsFollowInputs()
 {
     brulion::ui::ThemeColors c;
-    // Defaults: the light paper surface with the red accent.
+    // Defaults: the light paper surface with the coral accent.
     QCOMPARE(c.map(), paletteMap(false, u"", u"", u"", u""));
     QCOMPARE(c.bg(), u"#fbf7ee"_s);
-    QCOMPARE(c.accent(), u"#e2574c"_s);
+    QCOMPARE(c.accent(), u"#c4422f"_s);
+    QCOMPARE(c.accentOn(), u"#ffffff"_s);
     int changes = 0;
     connect(&c, &brulion::ui::ThemeColors::colorsChanged, this, [&changes] { ++changes; });
     c.setDark(true);
-    c.setDarkSurface(u"black"_s);
-    QCOMPARE(c.bg(), u"#000000"_s);
-    QCOMPARE(c.map(), paletteMap(true, u"", u"black", u"", u""));
+    QCOMPARE(c.bg(), u"#000000"_s); // OLED black by default
+    QCOMPARE(c.accentOn(), u"#2b0a05"_s);
+    c.setDarkSurface(u"slate"_s);
+    QCOMPARE(c.bg(), u"#1c2130"_s);
+    QCOMPARE(c.map(), paletteMap(true, u"", u"slate", u"", u""));
     c.setAccentName(u"custom"_s);
     c.setCustomAccent(u"#3b7dd8"_s);
-    QCOMPARE(c.map(), paletteMap(true, u"", u"black", u"custom", u"#3b7dd8"));
+    QCOMPARE(c.map(), paletteMap(true, u"", u"slate", u"custom", u"#3b7dd8"));
     // Every token of the map is a property of its own.
     const QVariantMap map = c.map();
     for (auto it = map.cbegin(); it != map.cend(); ++it)

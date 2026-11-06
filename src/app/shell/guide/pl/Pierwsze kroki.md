@@ -57,12 +57,14 @@ Widoki bez własnego przycisku — centrum synchronizacji, import i eksport, kos
 
 ## Wygląd
 W *Ustawienia → Wygląd* dopasujesz Brulion do siebie — osobno na każdym urządzeniu:
-- **Motyw** jasny, ciemny albo zgodny z systemem; **kolor akcentu** (czerwony, niebieski, zielony, morski, fioletowy, grafitowy albo **Własny…** — dowolny kolor z siatki lub wpisany jako `#3b7dd8`). Akcent wyróżnia dzisiejszy dzień, bieżącą kartę i zaznaczenia; tam, gdzie wybrany kolor byłby nieczytelny, Brulion sam bierze jego jaśniejszy albo ciemniejszy odcień. Ostrzeżenia i usuwanie zostają czerwone.
-- **Jasne tło**: papier albo białe; **ciemne tło**: granatowe albo czarne (oszczędza baterię na ekranach OLED).
-- **Rozmiar tekstu**, **czcionka interfejsu** (dowolna zainstalowana) i **gęstość** — zwarta mieści więcej na ekranie komputera (na telefonie przyciski zostają duże).
+- **Motyw** jasny, ciemny albo zgodny z systemem; **kolor akcentu** (koralowy — domyślny —, czerwony, niebieski, zielony, morski, fioletowy, grafitowy albo **Własny…** — dowolny kolor z siatki lub wpisany jako `#3b7dd8`). Akcent wyróżnia dzisiejszy dzień, bieżącą kartę i zaznaczenia; tam, gdzie wybrany kolor byłby nieczytelny, Brulion sam bierze jego jaśniejszy albo ciemniejszy odcień. Ostrzeżenia i usuwanie zostają czerwone, przypomnienia i alarmy bursztynowe.
+- **Jasne tło**: papier albo białe; **ciemne tło**: czarne (domyślne; oszczędza baterię na ekranach OLED) albo granatowe.
+- **Rozmiar tekstu**, **czcionka interfejsu** (wbudowana Inter albo dowolna zainstalowana) i **gęstość** — zwarta mieści więcej na ekranie komputera (na telefonie przyciski zostają duże).
 - **Układ**: które pozycje i sekcje pokazuje pasek boczny, w jakiej kolejności są Ulubione, Ostatnie i Strony, jakie cztery przyciski ma dolna nawigacja na telefonie i czy jest w niej przycisk szybkiej notatki **+ Notatka**. Ukryte widoki zostają w palecie poleceń i pod skrótami.
 
-Czcionkę notatek (szeryfowa, bezszeryfowa albo **Inna…**), czcionkę kodu, rozmiar tekstu i **odstęp między wierszami** ustawisz w *Ustawienia → Edytor*. „Przywróć domyślny wygląd” wraca do kolorów i czcionek z początku. W przeglądarce nie ma wyboru czcionek — działają tylko jej wbudowane.
+Czcionkę notatek (szeryfowa — Literata —, bezszeryfowa — Inter — albo **Inna…**), czcionkę kodu (JetBrains Mono), rozmiar tekstu i **odstęp między wierszami** ustawisz w *Ustawienia → Edytor*. „Przywróć domyślny wygląd” wraca do kolorów i czcionek z początku. Brulion ma te trzy czcionki w sobie, więc notatki wyglądają tak samo na każdym urządzeniu. W przeglądarce nie ma wyboru czcionek — działają tylko wbudowane.
+
+Na komputerze wzdłuż dołu okna biegnie cienki **pasek stanu**: po lewej stan synchronizacji (zielone „zsynchronizowano”; kliknięcie otwiera centrum synchronizacji), po prawej edytowany blok („Blok 3 z 12”), liczba słów i klawisz palety poleceń.
 
 ## Nowa wersja
 Na Androidzie i Windows Brulion raz dziennie pyta GitHuba o najnowsze wydanie. Gdy jest nowsze, pod górnym paskiem pojawia się komunikat, a **Zobacz na GitHubie** otwiera stronę wydania, skąd je pobierzesz. Krzyżyk ukrywa komunikat do następnej wersji. GitHub widzi adres urządzenia, nic o Twoich notatkach nie jest wysyłane. Wyłączysz to w **Ustawienia → Aplikacja → Sprawdzaj nowe wersje**.

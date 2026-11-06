@@ -1,7 +1,8 @@
 // ThemePalette — the colours of Theme.qml that the appearance settings change (Settings →
-// Appearance, docs/UI.md "Look & feel"): the surfaces (light "paper" | "white", dark "slate" |
-// "black" for OLED screens), the accent colour (presets "red" — the logo's margin red, the
-// default —, "blue", "green", "teal", "violet", "graphite", or "custom" with any "#rrggbb"),
+// Appearance, docs/UI.md "Look & feel"): the surfaces (light "paper" | "white", dark "black" for
+// OLED screens — the default, the "Nocny" look — | "slate"), the accent colour (presets "coral" —
+// the default, #ff7a66 in dark and #c4422f in light —, "red" — the logo's margin red —, "blue",
+// "green", "teal", "violet", "graphite", or "custom" with any "#rrggbb"),
 // and the text colours, kept here so the tests check every one of them on every surface.
 // QML singleton `ThemePalette` (registered by qmlforeign.h); Theme.qml reads the colours from a
 // `ThemeColors` object (below: the same map as `ThemePalette.colors(dark, lightSurface, darkSurface,
@@ -10,10 +11,10 @@
 // Contrast (WCAG 2): a custom colour stays readable by itself — deriveAccent() moves its HSL
 // lightness (darker on light surfaces, lighter on dark ones) until the accent as a mark reaches
 // 3:1 on the page, cards and wells of the mode (bg, bgElevated, bgSunken), the accent as text
-// 4.5:1 on each of them and on the accent's
-// own tint (accentBg), and the solid fill 4.5:1 under white text. The presets go through the same
-// derivation from a base colour; "red" keeps today's hand-picked values exactly (the default look
-// never changes). Unknown names and malformed colours give the defaults: settings files come
+// 4.5:1 on each of them and on the accent's own tint (accentBg), and the solid fill 4.5:1 under
+// its text (onAccent: white, or dark ink on the bright dark-mode coral). The presets go through
+// the same derivation from a base colour; "red" keeps its hand-picked values (the default look
+// before "coral"). Unknown names and malformed colours give the defaults: settings files come
 // from anywhere.
 //
 // GUI-free (QtCore only; colours are "#rrggbb" strings), unit-tested in tests/app
@@ -53,7 +54,7 @@ struct Surface {
     Rgb bg, bgElevated, bgElevated2, bgSunken;
     Rgb border, borderSubtle, borderStrong, borderControl;
 };
-/// "paper" | "white" (light) or "slate" | "black" (dark); unknown → "paper" / "slate".
+/// "paper" | "white" (light) or "black" | "slate" (dark); unknown → "paper" / "black".
 Surface surface(QStringView name, bool dark);
 /// Known names of the light (`dark` false) or dark surfaces, the default first.
 QStringList surfaceNames(bool dark);
@@ -63,20 +64,23 @@ struct Accent {
     Rgb accent;      ///< marks: today's date, the tab underline, drop targets (≥ 3:1 on bg)
     Rgb accentHover;
     Rgb accentText;  ///< text on any surface and on accentBg (≥ 4.5:1)
-    Rgb accentSolid; ///< fill under white text (≥ 4.5:1)
+    Rgb accentSolid; ///< fill under onAccent text (≥ 4.5:1)
+    Rgb onAccent = {255, 255, 255}; ///< text on accentSolid: white, dark ink on dark-mode coral
 };
 /// Opacity of accentBg over the surface.
 constexpr double accentBgAlpha(bool dark)
 {
     return dark ? 0.18 : 0.12;
 }
-/// The presets, the default ("red") first; "custom" is not among them.
+/// The presets, the default ("coral") first; "custom" is not among them.
 QStringList accentNames();
-/// The base colour of a preset (what deriveAccent() starts from); "red" → #e2574c.
-Rgb accentBase(QStringView name);
+/// The base colour of a preset in a mode (what deriveAccent() starts from); "red" → #e2574c,
+/// "coral" → #ff7a66 in dark, #c4422f in light (the other presets have one base for both).
+Rgb accentBase(QStringView name, bool dark = false);
 /// A readable accent family from any colour on surface `s` of the mode.
 Accent deriveAccent(const Rgb &base, bool dark, const Surface &s);
-/// The accent family of preset `name` ("custom": `custom`, "#rrggbb"; malformed or unknown → "red").
+/// The accent family of preset `name` ("custom": `custom`, "#rrggbb"; malformed or unknown →
+/// "coral", the default).
 Accent accent(QStringView name, QStringView custom, bool dark, const Surface &s);
 
 /// The text colours (they do not depend on the surface; checked on each of them).
@@ -102,7 +106,8 @@ Scrim modalScrim(bool dark, const Surface &s, const TextColors &t);
 /// "#aarrggbb" (QML's colour string with alpha), lower case.
 QString toHexArgb(const Rgb &c, double alpha);
 
-/// Every token above by its Theme.qml name, as "#rrggbb" (scrimModal: "#aarrggbb").
+/// Every token above by its Theme.qml name, as "#rrggbb" (scrimModal: "#aarrggbb"; onAccent as
+/// "accentOn").
 QVariantMap paletteMap(bool dark, QStringView lightSurface, QStringView darkSurface, QStringView accentName,
                        QStringView customAccent);
 
@@ -159,6 +164,7 @@ class ThemeColors : public QObject {
     Q_PROPERTY(QString accentHover READ accentHover NOTIFY colorsChanged FINAL)
     Q_PROPERTY(QString accentText READ accentText NOTIFY colorsChanged FINAL)
     Q_PROPERTY(QString accentSolid READ accentSolid NOTIFY colorsChanged FINAL)
+    Q_PROPERTY(QString accentOn READ accentOn NOTIFY colorsChanged FINAL)
     Q_PROPERTY(QString fg READ fg NOTIFY colorsChanged FINAL)
     Q_PROPERTY(QString fgMuted READ fgMuted NOTIFY colorsChanged FINAL)
     Q_PROPERTY(QString fgFaint READ fgFaint NOTIFY colorsChanged FINAL)
@@ -201,6 +207,7 @@ public:
     QString accentHover() const { return token(u"accentHover"); }
     QString accentText() const { return token(u"accentText"); }
     QString accentSolid() const { return token(u"accentSolid"); }
+    QString accentOn() const { return token(u"accentOn"); }
     QString fg() const { return token(u"fg"); }
     QString fgMuted() const { return token(u"fgMuted"); }
     QString fgFaint() const { return token(u"fgFaint"); }

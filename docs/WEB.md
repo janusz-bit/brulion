@@ -697,6 +697,8 @@ Use a Nextcloud app password (Settings → Security), not your main password.
 
 ## Fonts: emoji and symbols
 
+The text itself is in Brulion's bundled fonts, as on every platform (docs/UI.md "Look & feel":
+Inter, Literata, JetBrains Mono from `assets/fonts/ui/`, `src/app/ui/uifonts.h`).
 Qt for WebAssembly does not see the system's fonts. It has only two of its own, DejaVu Sans and DejaVu
 Sans Mono (which is why in the browser Settings → Appearance and Editor have no choice of the
 interface, note or code font; accent colour, background and density work as everywhere;
@@ -764,6 +766,10 @@ later starts come from the service worker cache (locally < 1 s).
 The emoji and symbol fallback fonts (above, "Fonts: emoji and symbols") add
 +190 272 B of raw `brulion.wasm` (+118 111 B after gzip -9, +103 429 B after brotli; measured on
 2026-10-22, the same toolchain before and after).
+
+The bundled text fonts (Inter, Literata, JetBrains Mono: eleven subsets, `scripts/ui-fonts.py`) add
+1 415 380 B of resources (693 676 B after gzip -9; fonts barely compress) — about 0.7 MB more to
+download on the first visit, for the same letters as on the desktop and Android instead of DejaVu.
 
 The browser build contains no developer QML (the gallery, the editor playground, the
 `--editor-script` scripts and self-tests; option `BRULION_DEV_QML`, docs/UI.md): −597 014 B of raw

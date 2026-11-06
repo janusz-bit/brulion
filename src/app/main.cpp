@@ -6,6 +6,7 @@
 #include "ui/gestureinsets.h" // the system's gesture zones at the window's edges (GestureInsets)
 #include "ui/keyboardinsets.h" // the on-screen keyboard's height (KeyboardInsets)
 #include "ui/keyboardsources.h"
+#include "ui/uifonts.h" // the bundled text fonts (Inter, Literata, JetBrains Mono)
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
@@ -271,6 +272,13 @@ int main(int argc, char *argv[])
     if (translator.load(QStringLiteral(":/i18n/brulion_") + devTools.language() + QStringLiteral(".qm")))
         QCoreApplication::installTranslator(&translator);
     devTools.setTranslator(&translator);
+
+    // The bundled text fonts of the default look (ui/uifonts.h), on every platform, before any text
+    // is laid out; Theme.qml takes them through DeviceInfo.
+    const QStringList bundledFonts = brulion::ui::installBundledFonts();
+    if (bundledFonts.size() < 3)
+        qCWarning(brulion::logging::lcApp).noquote()
+                << u"Bundled fonts: only %1 loaded, the system's are used instead"_s.arg(bundledFonts.join(u", "_s));
 
     // Emoji and symbols where the system has no font for them (ui/fallbackfonts.h), before any
     // text is laid out: Qt for WebAssembly only has DejaVu Sans and DejaVu Sans Mono (every ⏰ 🔔

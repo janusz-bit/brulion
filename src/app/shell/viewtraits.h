@@ -33,6 +33,14 @@ class ViewTraits : public QObject {
     Q_PROPERTY(QQmlComponent *sidePanel READ sidePanel NOTIFY traitsChanged FINAL)
     /// `noteMode` when it is a string, else "".
     Q_PROPERTY(QString noteMode READ noteMode NOTIFY traitsChanged FINAL)
+    /// The status bar's texts (ShellStatusBar, wide windows): `statusText` (PageView: the word
+    /// count, the selection's while there is one) and `statusPosition` (PageView: "Block 3 of 12"
+    /// while a block is edited) when they are strings, else "".
+    Q_PROPERTY(QString statusText READ statusText NOTIFY traitsChanged FINAL)
+    Q_PROPERTY(QString statusPosition READ statusPosition NOTIFY traitsChanged FINAL)
+    /// `backlinkCount` when it is an int (PageView: the page's linked references — the badge of
+    /// the side panel's drawer handle), else 0.
+    Q_PROPERTY(int backlinkCount READ backlinkCount NOTIFY traitsChanged FINAL)
     // Each true only when the view's property of that name is the boolean true.
     Q_PROPERTY(bool editing READ editing NOTIFY traitsChanged FINAL)
     Q_PROPERTY(bool toolbarDocked READ toolbarDocked NOTIFY traitsChanged FINAL)
@@ -53,6 +61,9 @@ public:
     QString title() const { return m_title; }
     QQmlComponent *sidePanel() const { return m_sidePanel; }
     QString noteMode() const { return m_noteMode; }
+    QString statusText() const { return m_statusText; }
+    QString statusPosition() const { return m_statusPosition; }
+    int backlinkCount() const { return m_backlinkCount; }
     bool editing() const { return m_flags & Editing; }
     bool toolbarDocked() const { return m_flags & ToolbarDocked; }
     bool replacesBottomNav() const { return m_flags & ReplacesBottomNav; }
@@ -103,6 +114,9 @@ private:
     QString m_title;
     QPointer<QQmlComponent> m_sidePanel;
     QString m_noteMode;
+    QString m_statusText;
+    QString m_statusPosition;
+    int m_backlinkCount = 0;
     int m_flags = 0;
     QVariantMap m_pending;
     bool m_hasPending = false;
