@@ -140,10 +140,9 @@ components — no Material/Fusion look, so all targets look identical.
     in the panel, as the header's chips hide while the open properties panel shows them); closing
     the panel, pinning a page there or switching to Outline / Calendar brings the section back
     at once. Narrow windows have no side panel and always show the section.
-* **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the bottom bar's **Menu**, or a
-  swipe to the right from the left edge; the top bar's ☰ whenever the bottom navigation is not
-  there — a view whose own bar replaces it, the drawing editor, or the on-screen keyboard up; a
-  swipe to the left on the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
+* **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the top bar's ☰,
+  the bottom bar's **Menu**, or a swipe to the right from the left edge; a swipe to the left on
+  the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
   navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
   `bottomInset` = `AppShell.navigationBar`) keep the notebook button, the notebook row and the sync status clear of
   them — counted once: the Basic style pads a Drawer by the SafeArea margins itself, so the
@@ -158,9 +157,8 @@ components — no Material/Fusion look, so all targets look identical.
   scrolling Flickable); Android's text selection handles are windows of their own above the app.
   While typing or selecting blocks (the keyboard up or an editing toolbar docked, also on the
   bottom navigation after the keyboard went) there is no strip: the drawer took the drag of the
-  selection's start grip, which lies at the left edge (the top bar's ☰ opens it while the keyboard
-  is up, the bottom bar's Menu once the keyboard went, ☰ in the drawing editor; a swipe on it
-  still closes it).
+  selection's start grip, which lies at the left edge (the top bar's ☰ opens it, also the bottom
+  bar's Menu once the keyboard went; a swipe on it still closes it).
   Nor on a view that swipes sideways from the left edge itself (the view's `edgeSwipe`,
   `ShellRouteView.viewEdgeSwipe`): the calendar's week and month grids reach that edge and a
   swipe to the right there shows the previous period; the agenda keeps the strip. While the
@@ -171,14 +169,13 @@ components — no Material/Fusion look, so all targets look identical.
   for "back" first — the bottom bar's Menu opens the drawer there. The strip follows the
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
-  touch UI it is Qt's default (the start-drag distance); the top bar keeps back (when there is
-  history), title, Search and More — no ☰ while the bottom navigation is shown, whose Menu
-  opens the same drawer (`ShellTopBar.menuButtonShown: !AppShell.bottomNavShown`); ☰ comes back
-  whenever that bar is away: a view replaces it (`viewReplacesBottomNav`: the drawing editor) or
-  the on-screen keyboard is up (it takes the bar's place, and there is no edge strip while
-  typing — without ☰ the drawer was out of reach until Back hid the keyboard; the title moves
-  over for it then); with no button before it the title starts on the views' content edge
-  (`Theme.space3` below 600 px, the editor's compact padding, `Theme.space4` up to 900 px);
+  touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back, title,
+  Search and More. ☰ always comes first, in the same place whatever the view, the history or the
+  keyboard (the bottom bar's Menu opens the same drawer, within the thumb's reach; ☰ is the way
+  while that bar is away — the drawing editor's bar replaces it, the on-screen keyboard takes its
+  place); back follows it while there is history, except on Android
+  (`ShellTopBar.systemBack`), whose back key / gesture walks the same history — the browser on
+  a phone and a narrow desktop window keep it;
   a **bottom navigation** bar: Journal, Calendar, Search, Tasks by default — four views
   chosen in Settings → Appearance → Layout —, then **+ Note** (quick capture, its accessible name
   "Quick capture" holding the label: WCAG 2.5.3; its "+" sits in a small ringed pill, the old

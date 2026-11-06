@@ -7,11 +7,10 @@ import Brulion
 // ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
 // (a breadcrumb for pages in folders and for All pages in a folder), search, command palette,
 // quick capture, side panel toggle and the "more" menu with page actions (Move to…, Show in
-// tree among them). On narrow windows it keeps only what fits a phone: back (with history),
-// the title, search and the menu; the drawer button ☰ only where the shell says so
-// (`menuButtonShown`: the bottom navigation's Menu opens the drawer, so ☰ only shows while that
-// bar is not there — a view replaces it, or the on-screen keyboard is up). With no button before
-// it, the title starts on the view's content edge.
+// tree among them). On narrow windows it keeps only what fits a phone: the drawer button ☰,
+// always first (the same place whatever the view, the keyboard or the history), back (with
+// history, and not on Android, whose back key / gesture walks the same history: `systemBack`),
+// the title, search and the menu.
 // Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
 // before Search — the tab switcher, a menu of the tabs (one tap shows it) with New tab, Close
 // tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
@@ -28,9 +27,9 @@ Rectangle {
     property list<string> crumbPaths
     property real topInset: 0
     property bool sidebarVisible: true
-    /// Narrow windows: the drawer button ☰ is shown (the shell turns it off while the bottom
-    /// navigation, whose Menu opens the same drawer, is shown).
-    property bool menuButtonShown: true
+    /// The system has a back key / gesture of its own that walks the history (Android): narrow
+    /// windows leave the top bar's back out.
+    property bool systemBack: AppController.isAndroid
     /// The view shows a picture attachment, as text (`pictureAsText`) or as the picture.
     property bool picture: false
     property bool pictureAsText: false
@@ -77,11 +76,8 @@ Rectangle {
                                      && Workspace.exists(bar.pagePath)
 
     ShellRouteTitles { id: titles }
-    /// A button comes before the title (wide windows always have the sidebar toggle).
-    readonly property bool leadingButton: !Theme.narrow || bar.menuButtonShown || AppController.canGoBack
-    /// Where the title starts with nothing before it: the views' content edge (the editor's
-    /// compact padding on phones).
-    readonly property int contentEdge: Theme.compact ? Theme.space3 : Theme.space4
+    /// The back button is shown (wide windows: always, disabled without history).
+    readonly property bool backShown: !Theme.narrow || (AppController.canGoBack && !bar.systemBack)
 
     implicitHeight: topInset + (Theme.touchUi ? 56 : 46)
     color: Theme.bg
@@ -102,7 +98,7 @@ Rectangle {
 
         BIconButton {
             objectName: "topBarMenu"
-            visible: Theme.narrow && bar.menuButtonShown
+            visible: Theme.narrow
             iconName: "menu"
             label: qsTr("Menu")
             onClicked: bar.menuClicked()
@@ -116,7 +112,8 @@ Rectangle {
             onClicked: bar.sidebarToggled()
         }
         BIconButton {
-            visible: !Theme.narrow || AppController.canGoBack
+            objectName: "topBarBack"
+            visible: bar.backShown
             enabled: AppController.canGoBack
             iconName: "arrow-left"
             label: qsTr("Back")
@@ -137,7 +134,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             // (The row itself starts 4 px in on narrow windows.)
-            Layout.leftMargin: !Theme.narrow ? Theme.space2 : bar.leadingButton ? 4 : bar.contentEdge - 4
+            Layout.leftMargin: !Theme.narrow ? Theme.space2 : 4
 
             BText {
                 visible: bar.crumbs.length === 0

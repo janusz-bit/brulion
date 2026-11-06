@@ -429,11 +429,6 @@ FocusScope {
                 crumbPaths: shell.crumbPaths
                 topInset: shell.SafeArea.margins.top
                 sidebarVisible: shell.sidebarVisible
-                // Phones: one way to the drawer — the bottom navigation's Menu while that bar is
-                // shown; ☰ whenever it is not: a view with its own bar instead (the drawing
-                // editor) or the on-screen keyboard up (it takes the bar's place, and there is no
-                // edge strip while typing: dragMargin), so the drawer is never out of reach.
-                menuButtonShown: !Theme.narrow || !shell.bottomNavShown
                 picture: shell.routeView.viewPicture
                 pictureAsText: shell.routeView.viewPictureAsText
                 pdf: shell.routeView.viewPdf

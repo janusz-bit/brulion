@@ -598,13 +598,12 @@ sensitivity of the "Back" gesture in the system settings), so the finger has to 
 little further from the edge: the app's strip (24 dp) starts right after the system's zone. With
 button navigation the strip is at the very edge. While typing and selecting blocks, and on the
 week and month grids of the calendar (there a swipe to the right from the edge shows the previous
-period), the gesture does not open the drawer (use "Menu" then: with the keyboard open, Back
-first). The strip depends on the UI mode, not on the pointer: a mouse or touchpad in the touch UI
+period), the gesture does not open the drawer (use ☰ or "Menu" then). The strip depends on the UI mode, not on the pointer: a mouse or touchpad in the touch UI
 (e.g. a phone with a mouse) gets it too. In the browser on a phone (WebAssembly) nobody reports the
 system zones: the strip is at the very edge, where the system's or the browser's "Back" gesture
-may take over the swipe — "Menu" opens the drawer then. The top bar on a phone has no ☰ button,
-because "Menu" on the bottom bar opens the same drawer; ☰ returns only in the drawing editor,
-whose toolbar replaces the bottom navigation.
+may take over the swipe — ☰ or "Menu" opens the drawer then. The top bar on a phone always
+starts with ☰ (the bottom bar's "Menu" opens the same drawer, within the thumb's reach); on
+Android it has no back arrow, since the system's Back key / gesture walks the same history.
 
 How it works:
 
