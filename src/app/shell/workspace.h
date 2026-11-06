@@ -506,8 +506,8 @@ public:
     ///   "attachments" | "newPages") and the journal template ("journalTemplate") }.
     Q_INVOKABLE QVariantMap folderInfo(const QString &path) const;
     /// The direct subfolders of `folder` ("" = the root) for All pages' folder rows, in Polish
-    /// order: [{ path, name, pages (at any depth, without journals) }]; attachment-only folders
-    /// left out.
+    /// order: [{ path, name, pages (at any depth, without daily notes outside the journals folder) }];
+    /// attachment-only folders left out.
     Q_INVOKABLE QVariantList subfolders(const QString &folder) const;
     /// Move a file or folder to the trash. Returns its path inside .trash/ ("" on failure).
     Q_INVOKABLE QString deletePage(const QString &path);

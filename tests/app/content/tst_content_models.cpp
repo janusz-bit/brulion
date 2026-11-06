@@ -645,6 +645,24 @@ private Q_SLOTS:
         QCOMPARE(column(model, "title"), (QStringList{u"Lody"_s, u"Łódź"_s, u"Zebra"_s}));
         model.setRecursive(true);
         QVERIFY(ws->deletePage(u"Projekty/Stare"_s).size() > 0);
+        // The journals folder lists its daily notes without "Journals" (in date order, also
+        // when the file names do not sort by date); other folders and the root do not.
+        QVERIFY(!model.journalsFolderListed());
+        QVERIFY(ws->writeFile(u"journals/2026_05_16.md"_s, u"- sobota\n"_s));
+        model.setFolder(u"journals"_s);
+        model.refreshNow();
+        QVERIFY(model.journalsFolderListed());
+        QCOMPARE(column(model, "path"), (QStringList{u"journals/2026_05_16.md"_s, u"journals/2026-10-13.md"_s}));
+        QCOMPARE(model.totalCount(), 2);
+        QCOMPARE(value(model, 0, "journalDate").toString(), u"2026-05-16"_s);
+        model.setFolder(u"journalsy"_s);
+        model.refreshNow();
+        QVERIFY(!model.journalsFolderListed());
+        QCOMPARE(model.rowCount(), 0);
+        model.setFolder(QString());
+        model.refreshNow();
+        QVERIFY(!model.journalsFolderListed());
+        QVERIFY(ws->deletePage(u"journals/2026_05_16.md"_s).size() > 0);
         model.setIncludeJournals(true);
         model.refreshNow();
         QCOMPARE(model.rowCount(), 5);

@@ -1,0 +1,9 @@
+What's new in 0.12.1:
+• Subtasks under their task
+• Folding subtasks
+• Documentation in English
+• ☰ always first on phones
+• Smoother scrolling
+• Tray calendar with one click on Linux
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.12.1

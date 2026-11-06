@@ -459,7 +459,8 @@ in rendered text" below).
 * **All pages** with a folder: its subfolders as rows above its pages (at the root the top-level
   folders; a tap opens one, back returns), "With subfolders" (pages of subfolders too, on by
   default, remembered per device: `allPages/subfolders`), and the top bar's breadcrumb
-  ("All pages › Projekty › …").
+  ("All pages › Projekty › …"). The journals folder (and its year folders) lists its daily
+  notes, in date order, without the "Journals" chip — a journal's breadcrumb leads there.
 * **Sync**: Nextcloud carries folders faithfully — new empty folders, deletions (only of folders
   that hold nothing unsynced), and moves: a folder or page renamed or moved here is moved on the
   server with one WebDAV MOVE, and one renamed or moved on another device or in the Nextcloud web

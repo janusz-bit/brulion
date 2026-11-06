@@ -95,6 +95,12 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
         const qsizetype slash = path.indexOf(u'/', prefix.size());
         return slash < 0 ? QString() : path.left(slash);
     };
+    const QString journalsFolder = paths::normalize(m_vault->config().journalsFolder);
+    const auto inJournals = [&](const QString &path) {
+        return !journalsFolder.isEmpty()
+               && (path.compare(journalsFolder, Qt::CaseInsensitive) == 0
+                   || path.startsWith(journalsFolder + u'/', Qt::CaseInsensitive));
+    };
     for (const FileStat &f : m_vault->files()) {
         const QString child = childOf(f.path);
         if (child.isEmpty())
@@ -103,9 +109,10 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
             withAttachments.insert(child);
             continue;
         }
-        // The index's notes: no conflict copies; daily notes left out (cheap lookups, no parsing).
+        // The index's notes: no conflict copies; daily notes left out (cheap lookups, no
+        // parsing) — except in the journals folder, which lists them (AllPagesView).
         const ParsedNote *note = m_index ? m_index->note(f.path) : nullptr;
-        if (note && !note->journalDate)
+        if (note && (!note->journalDate || inJournals(child)))
             pages[child] += 1;
     }
     QStringList children;

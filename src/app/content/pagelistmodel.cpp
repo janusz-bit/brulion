@@ -113,9 +113,16 @@ void PageListModel::refresh()
 {
     QList<Page> next;
     int total = 0;
+    bool journalsListed = false;
     shell::Workspace *ws = workspace();
     const VaultIndex *idx = vaultIndex();
     if (ws && idx && ws->isOpen() && ws->vault()) {
+        // Listing the journals folder (or a year inside it): its daily notes are its pages.
+        const QString journalsFolder = paths::normalize(idx->config().journalsFolder);
+        journalsListed = !m_folder.isEmpty() && !journalsFolder.isEmpty()
+                         && (m_folder.compare(journalsFolder, Qt::CaseInsensitive) == 0
+                             || m_folder.startsWith(journalsFolder + u'/', Qt::CaseInsensitive));
+        const bool withJournals = m_includeJournals || journalsListed;
         QHash<QString, FileStat> stats;
         for (const FileStat &f : ws->vault()->markdownFiles())
             stats.insert(f.path, f);
@@ -153,7 +160,7 @@ void PageListModel::refresh()
             if (!note)
                 continue;
             const bool journal = note->journalDate.has_value();
-            if (journal && !m_includeJournals)
+            if (journal && !withJournals)
                 continue;
             const QString folder = paths::dirname(path);
             if (!m_recursive && folder != m_folder)
@@ -183,7 +190,9 @@ void PageListModel::refresh()
         }
 
         const auto byTitle = [](const Page &a, const Page &b) {
-            const int c = compareNames(a.title, b.title);
+            // Daily notes in date order, whatever their file name format ("16.05.2026").
+            const int c = !a.journalDate.isEmpty() && !b.journalDate.isEmpty() ? a.journalDate.compare(b.journalDate)
+                                                                               : compareNames(a.title, b.title);
             return c != 0 ? c < 0 : a.path < b.path;
         };
         const bool desc = m_descending;
@@ -216,6 +225,10 @@ void PageListModel::refresh()
     if (total != m_total) {
         m_total = total;
         Q_EMIT totalCountChanged();
+    }
+    if (journalsListed != m_journalsFolderListed) {
+        m_journalsFolderListed = journalsListed;
+        Q_EMIT journalsFolderListedChanged();
     }
 }
 
