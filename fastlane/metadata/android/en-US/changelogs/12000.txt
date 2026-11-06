@@ -1,0 +1,8 @@
+What's new in 0.12.0:
+• Subtasks under their task
+• Folding subtasks
+• Documentation in English
+• ☰ always first on phones
+• Smoother scrolling
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.12.0
