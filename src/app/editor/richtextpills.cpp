@@ -121,17 +121,25 @@ void RichTextPills::setInset(qreal px)
     Q_EMIT insetChanged();
 }
 
+namespace {
+
+RichTextPill typed(const RichTextPills::Pill &p)
+{
+    return RichTextPill{p.rect.x(), p.rect.y(), p.rect.width(), p.rect.height(), p.color,
+                        !p.icon.isEmpty() ? u"icon"_s
+                        : p.round         ? u"pill"_s
+                                          : u"box"_s,
+                        p.icon};
+}
+
+} // namespace
+
 QList<RichTextPill> RichTextPills::shapes() const
 {
     QList<RichTextPill> out;
     out.reserve(m_pills.size());
-    for (const Pill &p : m_pills) {
-        out.append(RichTextPill{p.rect.x(), p.rect.y(), p.rect.width(), p.rect.height(), p.color,
-                                !p.icon.isEmpty() ? u"icon"_s
-                                : p.round         ? u"pill"_s
-                                                  : u"box"_s,
-                                p.icon});
-    }
+    for (const Pill &p : m_pills)
+        out.append(typed(p));
     return out;
 }
 
@@ -182,6 +190,8 @@ void RichTextPills::attach(QTextDocument *document)
             m_connections.clear();
             if (!m_pills.isEmpty()) {
                 m_pills.clear();
+                m_plainShapes.clear();
+                m_iconShapes.clear();
                 Q_EMIT pillsChanged();
             }
         }));
@@ -444,6 +454,10 @@ void RichTextPills::refresh()
     }
     if (out != m_pills) {
         m_pills = out;
+        m_plainShapes.clear();
+        m_iconShapes.clear();
+        for (const Pill &p : std::as_const(m_pills))
+            (p.icon.isEmpty() ? m_plainShapes : m_iconShapes).append(typed(p));
         Q_EMIT pillsChanged();
     }
 }

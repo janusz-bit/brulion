@@ -86,6 +86,15 @@ Window {
         // A rendered block's text with the item taking its taps above it (BlockText): inline.
         Text { id: blockText; objectName: "blockText"; x: 10; y: 330; width: 150; height: 24; text: "Blok do edycji"; font.pixelSize: 14 }
         Item { objectName: "blockTap"; anchors.fill: blockText; TapHandler { } }
+        // The same with chips: the read-only TextEdit in an item of its own, in a Loader (BlockText).
+        Loader {
+            id: tintedLoader; x: 170; y: 330; width: 150
+            sourceComponent: Item {
+                width: 150; implicitHeight: 24
+                TextEdit { width: parent.width; height: 24; readOnly: true; text: "Blok z #tagiem"; font.pixelSize: 14 }
+            }
+        }
+        Item { objectName: "tintedTap"; x: 170; y: 330; width: 150; height: 24; TapHandler { } }
     }
     T.Popup {
         id: popup
@@ -275,6 +284,7 @@ void TestUiBenchLayoutDump::targets()
     QCOMPARE(blockTap[u"kind"_s].toString(), u"tap"_s);
     QCOMPARE(blockTap[u"inline"_s].toBool(), true);
     QCOMPARE(rectOf(blockTap), QRectF(10, 330, 150, 24));
+    QCOMPARE(byName(targets, u"tintedTap"_s)[u"inline"_s].toBool(), true);
 }
 
 void TestUiBenchLayoutDump::occlusion()

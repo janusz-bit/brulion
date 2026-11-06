@@ -31,6 +31,8 @@
 
 #include <QElapsedTimer>
 #include <QList>
+#include <QMetaMethod>
+#include <QMetaProperty>
 #include <QObject>
 #include <QPointer>
 #include <QQuickItem>
@@ -175,9 +177,22 @@ private:
     int unitCount(int count) const;
     int unitOfRow(int row) const;
     int rowOfUnit(int unit) const;
-    qreal real(const char *name) const;
+    qreal real(const QMetaProperty &property) const;
 
     QPointer<QQuickItem> m_view;
+    // The view's and the model's properties and methods, looked up once for each: refresh() runs
+    // every frame while the list moves, and finding them by name every time (QObject::property,
+    // QMetaObject::invokeMethod) was most of its cost. (Moving the view, at most once a frame while
+    // the bar is dragged, still calls by name.)
+    struct ViewMeta {
+        QMetaProperty count, contentY, contentHeight, originY, topMargin, bottomMargin, atYBeginning, atYEnd;
+        QMetaProperty headerItem, footerItem, moving;
+        QMetaMethod itemAtIndex, indexAt;
+    } m_viewMeta;
+    struct ModelMeta {
+        QMetaProperty visibleCount;
+        QMetaMethod visibleRowsBefore, visibleRowAt;
+    } m_modelMeta;
     QList<QMetaObject::Connection> m_connections;
     // The view's model when it hides rows (zero-height delegates: the editor's folded blocks) and
     // says which — `visibleCount`, `visibleRowsBefore(int)`, `visibleRowAt(int)`: then its shown

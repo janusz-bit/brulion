@@ -11,7 +11,7 @@ import Brulion
 // Tinted spans (InlineRenderer's chips and #tags, inline `code`, ==highlights==) are rounded
 // shapes under the text: a text with any is shown by a read-only rich-text TextEdit whose
 // RichTextPills takes Qt's square backgrounds off before they are painted and gives the
-// rectangles of a Repeater (pills for chips and tags, small radii for code and highlights);
+// rectangles BTintShapes draws (pills for chips and tags, small radii for code and highlights);
 // the fixed line height is the same. Any other text stays a Text (cheaper rows).
 // Clicks on links are handled (page:, tag:, block:, ext:, task:,
 // reminder:, day:); a click elsewhere — also on a date, 🔁 or priority chip — starts editing with
@@ -64,11 +64,13 @@ Item {
     /// highlights): the TextEdit with rounded shapes shows it.
     readonly property bool tinted: Js.indexOf(findHtml, "background-color:") >= 0
     /// The item showing the rendered text: linkAt(), the anchor of the token and link menus.
-    readonly property Item renderedItem: tinted && tintedLoader.item ? tintedLoader.item as Item : rendered
+    readonly property Item renderedItem: tinted && tintedEdit !== null ? tintedEdit : rendered
+    /// The tinted text's TextEdit (null while the text has no tints).
+    readonly property TextEdit tintedEdit: tintedLoader.item !== null ? (tintedLoader.item as TintedText).edit : null
 
     /// The link at a point of the rendered text ("" = none).
     function linkAt(x: real, y: real): string {
-        const edit = tintedLoader.item as TextEdit
+        const edit = root.tintedEdit
         return root.tinted && edit ? edit.linkAt(x, y) : rendered.linkAt(x, y)
     }
     /// The link under the mouse, or under the finger / button while it presses ("" = none): shown
@@ -109,6 +111,10 @@ Item {
     Text {
         id: rendered
         width: parent.width
+        // Its implicit height, but never 0: a rich text's height growing from 0 makes QQuickText lay
+        // it out a second time (QQuickText::geometryChange, Qt 6.11); from 1 px its first layout
+        // gives it the rest without another.
+        height: Math.max(1, implicitHeight)
         visible: !root.editing && !root.tinted
         textFormat: Text.RichText
         text: root.tinted ? "" : root.shownHtml
@@ -133,9 +139,17 @@ Item {
         width: parent.width
         active: root.tinted
         visible: !root.editing
-        sourceComponent: TextEdit {
+        sourceComponent: TintedText {}
+    }
+    // The TextEdit inside an item of its own: a Loader reads its item's implicit width, which makes
+    // a wrapped TextEdit lay its text out twice more (unwrapped for the width, then wrapped again).
+    component TintedText: Item {
+        readonly property TextEdit edit: tintedText
+        width: tintedLoader.width
+        implicitHeight: tintedText.implicitHeight
+        TextEdit {
             id: tintedText
-            width: tintedLoader.width
+            width: parent.width
             readOnly: true
             selectByMouse: false
             selectByKeyboard: false
@@ -162,29 +176,7 @@ Item {
                 textDocument: tintedText.textDocument
                 lineHeight: root.lineHeightPx
             }
-            // Under the text: a child with a negative z is drawn below its parent's content.
-            Repeater {
-                model: tints.shapes
-                delegate: Rectangle {
-                    id: tintShape
-                    required property richTextPill modelData
-                    z: -1
-                    x: modelData.x
-                    y: modelData.y
-                    width: modelData.width
-                    height: modelData.height
-                    radius: modelData.kind === "pill" ? height / 2 : Theme.radiusXs
-                    antialiasing: true
-                    // A page's app icon in front of a link (RichTextPills kind "icon"): the icon, no shape.
-                    color: modelData.kind === "icon" ? "transparent" : modelData.color
-                    BIcon {
-                        anchors.centerIn: parent
-                        name: tintShape.modelData.kind === "icon" ? tintShape.modelData.icon : ""
-                        size: Math.round(Math.min(parent.width, parent.height) * 0.9)
-                        color: tintShape.modelData.color
-                    }
-                }
-            }
+            BTintShapes { pills: tints }
         }
     }
     // Clicks on the rendered text: on an item of their own above it, not on the Text itself. A

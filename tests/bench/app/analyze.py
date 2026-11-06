@@ -398,6 +398,29 @@ def m_journal_scroll(run):
     return out
 
 
+def m_page_scroll(run):
+    """page-scroll: the opening as open-page's first round, then the wheel's frames as journal-scroll."""
+    out = {k: v for k, v in m_open_page(run).items() if k.startswith("open1_") or k.endswith(":page:1")}
+    out.update(m_journal_scroll(run))
+    return out
+
+
+def m_page_resize(run):
+    """page-resize: per resize the request → the frame after the window has the new width, and the
+    longest GUI stall within 500 ms of the request."""
+    out = {k: v for k, v in m_open_page(run).items() if k.startswith("open1_") or k.endswith(":page:1")}
+    acts = [x for x in run["actions"] if x["kind"] == "resize" and x["t2"] > 0]
+    frames, stalls = [], []
+    for a in acts:
+        f = frame_after(run, a["t2"])
+        if f is not None:
+            frames.append(f - a["t0"])
+        stalls.append(max([d for _, d in stalls_in(run, a["t0"], a["t0"] + 500)], default=0.0))
+    out.update(dist("resize_frame", frames))
+    out.update(dist("resize_stall", stalls))
+    return out
+
+
 def linfit(xs, ys):
     if len(xs) < 2:
         return None
@@ -488,6 +511,7 @@ SCENARIOS = {
     "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "select-copy": m_select_copy,
     "search": m_search,
     "switcher": m_switcher, "views": m_views, "graph": m_graph, "journal-scroll": m_journal_scroll,
+    "page-scroll": m_page_scroll, "page-resize": m_page_resize,
     "switch-pages": m_switch_pages, "idle": m_idle, "idle-edit": m_idle, "workload": m_workload,
 }
 

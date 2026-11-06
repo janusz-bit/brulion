@@ -17,11 +17,13 @@
 # allpages tasks agenda sidebar; SIZES desktop (1280×800) phone (412×915 --touch); SCRIPTS (default
 # per size: desktop "wheel touchpad", phone "drag flick"); PASSES (default 1); PLATFORM xvfb
 # (default when xvfb-run exists) | offscreen (QT_QPA_PLATFORM=offscreen, software renderer);
-# NOW (fixed clock, default 2026-10-14 10:00); DAYS (big vault, default 365); MAX_MS (time limit of
-# one direction, default 60000); PROBE_XDG_DATA_DIRS (the app's XDG_DATA_DIRS — Qt searches icon
-# themes there: a `nix develop` shell has ~70 entries, a NixOS session ~9, Android none); CACHE
+# LABEL (appended to the run names: two builds measured into one OUT_DIR); NOW (fixed clock,
+# default 2026-10-14 10:00); DAYS (big vault, default 365); MAX_MS (time limit of one direction,
+# default 60000); PROBE_XDG_DATA_DIRS (the app's XDG_DATA_DIRS — Qt searches icon themes there: a
+# `nix develop` shell has ~70 entries, a NixOS session ~9, Android none); CACHE
 # (--probe-cache: the list's cacheBuffer, 0 = every row created at the edge of the view; the runs
-# are named …-cache<px>).
+# are named …-cache<px>); WAIT (--probe-wait: ms from the view's first frame to the first input,
+# default 1500 — e.g. 200 for a page scrolled right after it opened; the runs are named …-wait<ms>).
 # Every run gets a fresh temporary XDG home: the user's own Brulion is never touched. One app
 # instance at a time (lock), and run nothing else heavy meanwhile: the numbers are timings.
 set -euo pipefail
@@ -58,7 +60,9 @@ run_app() { # run_app <home> <args…>
     XDG_DATA_DIRS="${PROBE_XDG_DATA_DIRS:-${XDG_DATA_DIRS:-}}"
     QT_FORCE_STDERR_LOGGING=1 QSG_INFO=1 QT_LOGGING_RULES="qt.scenegraph.time.renderloop=true")
   if [[ "$platform" == xvfb ]]; then
-    env "${env[@]}" xvfb-run -a -s "-screen 0 1920x1200x24" "$bin" --no-single-instance "$@"
+    # (xcb: on a Wayland desktop Qt would otherwise open the window there, not in the X server.)
+    env -u WAYLAND_DISPLAY "${env[@]}" QT_QPA_PLATFORM=xcb \
+      xvfb-run -a -s "-screen 0 1920x1200x24" "$bin" --no-single-instance "$@"
   else
     env "${env[@]}" QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software "$bin" --no-single-instance "$@"
   fi
@@ -105,8 +109,9 @@ for size in "${sizes[@]}"; do
     esac
     cache_args=()
     [[ -n "${CACHE:-}" ]] && cache_args=(--probe-cache "$CACHE")
+    [[ -n "${WAIT:-}" ]] && cache_args+=(--probe-wait "$WAIT")
     for script in "${scripts[@]}"; do
-      name="$vault_kind-$case_name-$size-$script${CACHE:+-cache$CACHE}"
+      name="$vault_kind-$case_name-$size-$script${CACHE:+-cache$CACHE}${WAIT:+-wait$WAIT}${LABEL:+-$LABEL}"
       home="$(mktemp -d)"
       vault="$(prepare_vault "$home")"
       echo "scroll-probe: $name ($platform)" >&2

@@ -18,14 +18,12 @@
 // a fixed-pitch span (inline code) or any other background (a highlight: a small radius). Adjacent
 // fragments of one colour are one span (a highlight with bold words in it). "icon": a page's app
 // icon in front of a link to it (an anchor named `brulion-icon:<name>`, docs/UI.md "Page icon and
-// cover") — {…, kind: "icon", icon: <name>, color: the link's colour}: the Repeater draws a BIcon
-// there instead of a shape.
+// cover") — {…, kind: "icon", icon: <name>, color: the link's colour}: a BIcon is drawn there
+// instead of a shape.
 //
-//   TextEdit { id: edit; textFormat: TextEdit.RichText; readOnly: true; text: html }
-//   RichTextPills { id: pills; textDocument: edit.textDocument; lineHeight: 26 }
-//   Repeater { model: pills.pills
-//              delegate: Rectangle { required property var modelData; x: modelData.x; …
-//                                    radius: modelData.kind === "pill" ? height / 2 : 3 } }
+//   TextEdit { id: edit; textFormat: TextEdit.RichText; readOnly: true; text: html
+//              RichTextPills { id: pills; textDocument: edit.textDocument; lineHeight: 26 }
+//              BTintShapes { pills: pills } }   // Repeaters over plainShapes, iconShapes
 //
 // Lists that cut their text (BRichText.qml: linked references, Tasks, embeds, tables, query
 // results) give it the rich text itself (`html`, the TextEdit's `text` left unset), with the
@@ -87,6 +85,10 @@ class RichTextPills : public QObject, public QQmlParserStatus {
     Q_PROPERTY(QVariantList pills READ pills NOTIFY pillsChanged FINAL)
     /// `pills` as typed values (the same shapes, the same order).
     Q_PROPERTY(QList<brulion::editor::RichTextPill> shapes READ shapes NOTIFY pillsChanged FINAL)
+    /// The shapes without the icons ("pill" and "box"), and the icons alone: BTintShapes' two
+    /// Repeaters, so that only an icon makes an icon item. Kept between changes.
+    Q_PROPERTY(QList<brulion::editor::RichTextPill> plainShapes READ plainShapes NOTIFY pillsChanged FINAL)
+    Q_PROPERTY(QList<brulion::editor::RichTextPill> iconShapes READ iconShapes NOTIFY pillsChanged FINAL)
     /// The rich text this object sets on the document (once written, the document's text is
     /// its: the TextEdit's own `text` stays unset). Needed for maximumLineCount.
     Q_PROPERTY(QString html READ html WRITE setHtml NOTIFY htmlChanged FINAL)
@@ -125,6 +127,8 @@ public:
     void setInset(qreal px);
     QVariantList pills() const;
     QList<RichTextPill> shapes() const;
+    QList<RichTextPill> plainShapes() const { return m_plainShapes; }
+    QList<RichTextPill> iconShapes() const { return m_iconShapes; }
     QString html() const { return m_html; }
     void setHtml(const QString &html);
     int maximumLineCount() const { return m_maxLines; }
@@ -183,6 +187,8 @@ private:
     qreal m_lineHeight = 0;
     qreal m_inset = 0;
     QList<Pill> m_pills;
+    QList<RichTextPill> m_plainShapes; ///< m_pills without an icon, typed
+    QList<RichTextPill> m_iconShapes;  ///< the icons, typed
     bool m_changing = false;  ///< our own document changes: their signals are ignored
     bool m_computing = false; ///< in refresh(): layout signals it causes are ignored
     QString m_html;

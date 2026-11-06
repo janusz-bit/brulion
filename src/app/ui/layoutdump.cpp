@@ -120,7 +120,8 @@ QString innerText(const QQuickItem *item, int depth = 0)
 /// rendered block: a tap edits the text where it lands): the text itself is the target, sized by
 /// its line height — WCAG 2.5.8's inline exception, like a web editor's text, where a tap puts the
 /// caret into the line under it (Obsidian's CodeMirror content is one such field). The text: a
-/// Text, or the read-only TextEdit a block with chips is shown by (in its Loader).
+/// Text, or the read-only TextEdit a block with chips is shown by (in its Loader, inside an item
+/// of its own: BlockText's TintedText).
 bool tapsOnItsText(const QQuickItem *item, const QRectF &scene)
 {
     if (qstrcmp(item->metaObject()->className(), "QQuickItem") != 0 || !item->parentItem())
@@ -134,10 +135,15 @@ bool tapsOnItsText(const QQuickItem *item, const QRectF &scene)
         const QQuickItem *text = sibling;
         if (sibling->inherits("QQuickLoader"))
             text = qobject_cast<const QQuickItem *>(sibling->property("item").value<QObject *>());
-        if (!isText(text))
-            continue;
-        if (sameRect(text->mapRectToScene(QRectF(0, 0, text->width(), text->height())), scene))
-            return true;
+        QList<const QQuickItem *> candidates{text};
+        if (text && !isText(text)) {
+            for (const QQuickItem *child : text->childItems())
+                candidates.append(child);
+        }
+        for (const QQuickItem *t : std::as_const(candidates)) {
+            if (isText(t) && sameRect(t->mapRectToScene(QRectF(0, 0, t->width(), t->height())), scene))
+                return true;
+        }
     }
     return false;
 }

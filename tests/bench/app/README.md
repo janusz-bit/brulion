@@ -11,7 +11,7 @@ the `pageEditor` / `pageController` objects.
 
 | File | What |
 |---|---|
-| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
+| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `select-copy`, `search`, `switcher`, `views`, `graph`, `journal-scroll`, `page-scroll`, `page-resize`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
 | `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`) |
 | `make-bench-vault.py <dir>` | a deterministic synthetic notebook: 10 000 notes (≈ 650 journal days over two years + pages in 40 folders, links, tags, tasks with dates and reminders, a few queries), `Bench/Konspekt 5000.md` (5000-block outline), `Bench/Dokument 5000.md` (5000-block document), `Bench/Mała strona.md`; `<dir>.pages.txt` lists 50 pages for page switching |
 | `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; Xvfb or offscreen); writes one JSONL per run |
@@ -96,6 +96,15 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   runs), `run_frames` / `run_frame_p95_ms` / `run_frame_max_ms`, per drag `*_move_frame` (a move →
   the frame showing it) and `*_frame_p95_ms`, `zoom_frame`.
 * `idle`: CPU % of one core, wakeups/s per thread and the timer events that fired, frames/s.
+* `page-scroll`: `BENCH_PAGE` opened (`open1_*` as `open-page`), then — once it has settled, or
+  `BENCH_SCROLL_WAIT` ms after its first block is on screen (`200`: a reader who scrolls at once) —
+  80 wheel steps down and 80 up, 40 ms apart: `frame_interval_*`, `frames_gt33` / `frames_gt50`,
+  `scroll_stall_*` as `journal-scroll`; memory and items at `page:1` (before) and `scrolled`.
+* `page-resize`: `BENCH_PAGE` opened and settled, then the window made `BENCH_RESIZE_WIDTH` (920:
+  the text column narrower than the 680 px editor width, the sidebar still shown) wide and back
+  six times, 600 ms apart: `resize_frame_*` (the request → the frame after the window has its new
+  width) and `resize_stall_*` (the longest GUI stall within 500 ms of each request): every row
+  that exists lays its text out again.
 * `switch-pages`: 200 page openings: time to the page's frame, heap / RSS / item count every 20.
 
 Caveats: Xvfb + Mesa llvmpipe renders on the CPU (frame costs are higher than on a GPU, idle
