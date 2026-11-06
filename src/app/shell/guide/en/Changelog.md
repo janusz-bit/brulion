@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.12.0 — November 6, 2026
+
+**New**
+- **Subtasks under their task** — the **Tasks** view lists a task's subtasks (the `- [ ]` items indented below it) under it, indented by depth and in the note's order, done ones too, in the task's section. A subtask more urgent than that section — overdue under a task for later, or open under a done one — stays on its own in its own section. Filters apply to subtasks as to any task. The home-screen widget on Android keeps a flat list. See [[Tasks#Subtasks|Subtasks]].
+- **Folding subtasks** — a task with subtasks folds them with the arrow before its progress counter (**3/5**) or with Left / Right. Folding is only how the view looks: nothing is written to the file.
+- **Documentation in English** — the in-app documentation is now also in English, and the documentation (“Brulion Documentation”) and the “Sample notebook” follow the interface language; there is a new English sample notebook. The English interface uses English examples (habits such as `habit:: every day`, repeat rules).
+
+**Changes**
+- On phones and narrow windows the ☰ button is always the first in the top bar, also with the keyboard open. On Android there is no back arrow: the system Back button or gesture goes through the same history.
+- Smoother scrolling of pages: a block coming onto the screen lays out its text once instead of two to four times, and the scroll bar does about a third of the work per frame. Resizing the window on a page with 300 blocks takes 26 ms instead of 34 ms.
+
 ## 0.11.2 — November 6, 2026
 
 **Note**
