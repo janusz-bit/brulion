@@ -1401,8 +1401,8 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     run(u"GestureInsets.simulate(-1, -1)"_s);
 
     // The on-screen keyboard up (simulated): no strip either, and no bottom navigation with its
-    // Menu — the top bar's ☰ opens the drawer then (it was out of reach until Back hid the
-    // keyboard), and the drawer closes with a swipe.
+    // Menu — the top bar's ☰ (always there) opens the drawer then, and the drawer closes with a
+    // swipe.
     const auto menuButton = [window] {
         return uidriver::topmost(window, [](QQuickItem *i) { return i->objectName() == u"topBarMenu"; });
     };
@@ -1410,7 +1410,7 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
         check(waitFor([&] { return margin() <= 0; }), "while the keyboard is up there is no edge strip");
         QQuickItem *button = nullptr;
         check(waitFor([&] { return (button = menuButton()) != nullptr; }),
-              "while the keyboard hides the bottom navigation the top bar shows ☰");
+              "while the keyboard hides the bottom navigation the top bar still shows ☰");
         // (Laid out with the top bar's next polish: found again once it settled.)
         settle(300);
         if ((button = menuButton()))
@@ -1421,8 +1421,8 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
         check(swipeClose(), "with the keyboard up a swipe to the left closes the drawer");
         run(u"KeyboardInsets.simulated = -1"_s);
         check(waitFor([&] { return qAbs(margin() - plain) <= 1; }), "the keyboard gone, the edge strip is back");
-        check(waitFor([&] { return menuButton() == nullptr; }),
-              "the keyboard gone, ☰ leaves the top bar to the bottom navigation's Menu");
+        settle(300);
+        check(menuButton() != nullptr, "the keyboard gone, ☰ stays first in the top bar");
     } else {
         check(false, "the on-screen keyboard can be simulated");
     }
@@ -1439,36 +1439,22 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
     if (editor && editor->property("toolbarMode").toString() == u"block")
         uidriver::callQml(editor, "stopEditing", {QVariant(false)});
     waitFor([&] { return margin() > 0; });
-    // The top bar's first button lies in the strip — back (no ☰ while the bottom navigation has
-    // Menu): a tap there is the button's, not the drawer's. Back leads from another page to this
-    // one, so the page view stays (only its page changes).
+    // The top bar's first button lies in the strip — ☰: a tap there is the button's (it opens
+    // the drawer), not the strip's (which opens it only with a drag).
     const QString page = app->currentRoute().value(u"path"_s).toString();
-    const auto onPage = [app](const QString &path) {
-        return app->currentView() == u"page" && app->currentRoute().value(u"path"_s).toString() == path;
-    };
-    app->openPage(u"Książki 2026.md"_s);
-    check(waitFor([&] { return onPage(u"Książki 2026.md"_s); }) && app->canGoBack(),
-          "another page opens over this one, with history");
-    QQuickItem *backButton = nullptr;
-    waitFor([&] {
-        backButton = findShown(window->contentItem(), [](QQuickItem *item) {
-            return isA(item, "BIconButton") && item->property("iconName").toString() == u"arrow-left"
-                   && hasAncestor(item, "ShellTopBar");
-        });
-        return backButton != nullptr;
-    });
-    const QPointF inStrip = backButton ? QPointF(margin() / 2, pointIn(backButton).y()) : QPointF();
-    if (backButton && backButton->contains(backButton->mapFromScene(inStrip))) {
+    QQuickItem *firstButton = nullptr;
+    waitFor([&] { return (firstButton = menuButton()) != nullptr; });
+    const QPointF inStrip = firstButton ? QPointF(margin() / 2, pointIn(firstButton).y()) : QPointF();
+    if (firstButton && firstButton->contains(firstButton->mapFromScene(inStrip))) {
         touchTap(window, inStrip);
-        check(waitFor([&] { return onPage(page); }, 3000) && closed(),
-              "a tap in the edge strip reaches the button under it (back), the drawer stays closed");
+        check(waitFor(opened, 3000), "a tap in the edge strip reaches the button under it (☰ opens the drawer)");
+        check(swipeClose(), "a swipe to the left closes the drawer again");
     } else {
-        check(false, "the top bar's back button lies in the edge strip");
-        app->openPage(page);
-        waitFor([&] { return onPage(page); });
+        check(false, "the top bar's ☰ lies in the edge strip");
     }
 
-    check(app->currentView() == u"page" && closed(), "the page is still shown, the drawer closed");
+    check(app->currentView() == u"page" && app->currentRoute().value(u"path"_s).toString() == page && closed(),
+          "the page is still shown, the drawer closed");
 }
 
 void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &check)
@@ -1626,15 +1612,14 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                 : "a click on a page in the sidebar opens it, without a menu");
     if (narrow) {
         check(waitFor(drawerClosed), "opening a page from the drawer closes it");
-        // One way to the drawer while the bottom navigation is there: its Menu, no ☰ in the top
-        // bar (the drawing editor, whose bar replaces the bottom navigation, keeps ☰:
-        // checkDrawing). With no button before it the title starts on the content edge; the page
-        // has history, so back leads.
-        check(findNamed(u"topBarMenu"_s) == nullptr && findNamed(u"bottomNav_menu"_s) != nullptr,
-              "on a phone the top bar has no menu button while the bottom navigation has Menu");
+        // ☰ always leads the top bar, the bottom navigation's Menu there too; back follows it
+        // with history, but not on Android, whose back key / gesture walks the same history.
+        check(findNamed(u"topBarMenu"_s) != nullptr && findNamed(u"bottomNav_menu"_s) != nullptr,
+              "on a phone the top bar's ☰ stays next to the bottom navigation's Menu");
         if (QQuickItem *topBar = findType("ShellTopBar")) {
-            check(topBar->property("leadingButton").toBool() == app->canGoBack(),
-                  "the top bar's back button leads only with history");
+            const bool expected = app->canGoBack() && !app->isAndroid();
+            check(topBar->property("backShown").toBool() == expected && (findNamed(u"topBarBack"_s) != nullptr) == expected,
+                  "the top bar's back button shows only with history and without the system's back");
         } else {
             check(false, "the top bar is shown");
         }
@@ -3920,7 +3905,7 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     if (phone) {
         check(nav && waitFor([&] { return !nav->isVisible(); }),
               "the drawing's tool bar at the bottom: the bottom navigation makes way");
-        // With the bottom navigation's Menu gone, the top bar's ☰ is the button to the drawer.
+        // With the bottom navigation's Menu gone, the top bar's ☰ (always there) opens the drawer.
         QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
         QQuickItem *menuButton = nullptr;
         waitFor([&] {
