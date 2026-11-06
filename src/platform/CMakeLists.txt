@@ -13,7 +13,8 @@
 #                documentpaths (the file an Android document URI names: a picked file
 #                of the notebook used where it is; pure, tested everywhere), spelldictionaries (where
 #                Hunspell's dictionaries are; pure, tested everywhere), spellbackends (spell checking
-#                of the editor: one backend per build, below). Tests: tests/platform.
+#                of the editor: one backend per build, below), traywindow (the tray calendar placed
+#                by Wayland's layer shell: one backend per build, below). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
     autostart.h autostart.cpp
@@ -27,6 +28,7 @@ qt_add_library(brulion_platform STATIC
     documentpaths.h documentpaths.cpp
     spelldictionaries.h spelldictionaries.cpp
     spellbackends.h
+    traywindow.h
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)
@@ -178,4 +180,31 @@ if(EMSCRIPTEN)
     target_link_libraries(brulion_platform PRIVATE Qt6::GuiPrivate)
     # IDBFS is an Emscripten JS library; it must be linked into the final executable.
     target_link_options(brulion_platform INTERFACE "-lidbfs.js")
+endif()
+
+# The tray calendar under Wayland (traywindow.h; docs/UI.md "The tray calendar"): a layer-shell
+# surface through KDE's LayerShellQt when found (the Nix package: kdePackages.layer-shell-qt, built
+# against the same Qt — it uses Qt's private Wayland client API), else an ordinary window the
+# compositor places (the AppImage, Windows, Android, the browser). -DBRULION_LAYER_SHELL=<ON|OFF>
+# chooses by hand.
+set(BRULION_LAYER_SHELL "auto" CACHE STRING "The tray calendar as a Wayland layer-shell surface (LayerShellQt): auto, ON or OFF")
+set(_layer_shell OFF)
+if(BRULION_LAYER_SHELL STREQUAL "auto")
+    if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+        find_package(LayerShellQt CONFIG QUIET)
+        if(TARGET LayerShellQt::Interface)
+            set(_layer_shell ON)
+        endif()
+    endif()
+elseif(BRULION_LAYER_SHELL)
+    find_package(LayerShellQt CONFIG REQUIRED)
+    set(_layer_shell ON)
+endif()
+if(_layer_shell)
+    target_sources(brulion_platform PRIVATE traywindow_layershell.cpp)
+    target_link_libraries(brulion_platform PRIVATE LayerShellQt::Interface)
+    message(STATUS "Brulion: the tray calendar through LayerShellQt on Wayland (src/platform/traywindow.h)")
+else()
+    target_sources(brulion_platform PRIVATE traywindow_none.cpp)
+    message(STATUS "Brulion: the tray calendar without layer shell (src/platform/traywindow.h)")
 endif()

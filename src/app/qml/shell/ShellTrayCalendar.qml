@@ -13,7 +13,8 @@ import Brulion
 //
 // Opened by Main.qml ("trayCalendar" / "toggleTrayCalendar", AppController.showTrayCalendar) at
 // AppController.trayPopupPosition (traypopup.h: against the taskbar's edge, inside the work area;
-// Wayland's compositor places it where it wants). It hides itself on Escape, on Alt+F4 and when
+// under Wayland a layer-shell surface in the work area's bottom-right corner, src/platform/
+// traywindow.h, or where the compositor wants it without layer shell). It hides itself on Escape, on Alt+F4 and when
 // it loses the activation (a click elsewhere, as a flyout) — only once it has been active: a
 // refused activation (Wayland, Windows' foreground rules) leaves it open, without the keyboard
 // (no Escape), until its close button, an entry or a click on the icon. Always hide(), never a

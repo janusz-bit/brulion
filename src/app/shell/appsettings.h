@@ -301,7 +301,7 @@ public:
     QString trayClick() const;
     /// Anything but "window" / "calendar" stores the default.
     void setTrayClick(const QString &action);
-    /// "calendar" on Windows (where a click on the clock opens a calendar too), else "window".
+    /// "calendar" (the tray calendar, as a click on the clock of Windows or of a Linux panel).
     static QString defaultTrayClick();
 
     bool remindersEnabled() const;

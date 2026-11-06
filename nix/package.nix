@@ -79,7 +79,12 @@ stdenv.mkDerivation (finalAttrs: {
     # the dictionaries are found through BRULION_SPELL_DICTIONARY_DIRS below.
     hunspell
   ]
-  ++ lib.optionals stdenv.hostPlatform.isLinux [ qt6.qtwayland ];
+  ++ lib.optionals stdenv.hostPlatform.isLinux [
+    qt6.qtwayland
+    # The tray calendar next to the panel under Wayland: a layer-shell surface
+    # (src/platform/traywindow_layershell.cpp).
+    kdePackages.layer-shell-qt
+  ];
 
   cmakeFlags = [
     (lib.cmakeBool "BUILD_TESTING" finalAttrs.finalPackage.doCheck)

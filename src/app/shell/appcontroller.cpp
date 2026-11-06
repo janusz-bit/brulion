@@ -11,7 +11,8 @@
 #include "workspace.h"
 #include "workspaceintegration.h"
 
-#include "autostart.h" // src/platform
+#include "autostart.h"  // src/platform
+#include "traywindow.h" // src/platform
 
 #include "notebook/session.h"
 #include "notebook/share.h"
@@ -1950,8 +1951,16 @@ QVariantList AppController::routeList(const QVariantMap &route, const QString &k
 
 void AppController::placeTrayPopup(QWindow *popup) const
 {
-    if (popup)
-        popup->setPosition(trayPopupPosition(popup->width(), popup->height()));
+    if (!popup)
+        return;
+    // Wayland ignores a window's position: a layer-shell surface in the work area's bottom-right
+    // corner instead (traywindow.h), set up once — before its first show.
+    if (platform::trayPopupAnchorable()) {
+        if (!popup->property("brulionLayerShell").toBool())
+            popup->setProperty("brulionLayerShell", platform::anchorTrayPopup(popup, 8));
+        return;
+    }
+    popup->setPosition(trayPopupPosition(popup->width(), popup->height()));
 }
 
 QVariantList AppController::recentPagesExcept(const QString &path, int limit) const

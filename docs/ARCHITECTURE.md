@@ -9,7 +9,7 @@ One C++/QML code base, four targets, all built against **Qt 6.11.2** (CMake acce
 
 | Target | How | Vault storage | Reminders |
 |---|---|---|---|
-| **NixOS / Linux desktop** | Qt from nixpkgs: flake package + NixOS module; AppImage (Qt from aqt) for other distributions | a folder (e.g. a Syncthing folder) | `org.freedesktop.Notifications` over D-Bus, tray as fallback; timed in-app (`ReminderScheduler`), the app can live hidden in the tray (`--hidden`, autostart); the tray calendar from the icon's menu (or its click, a setting) |
+| **NixOS / Linux desktop** | Qt from nixpkgs: flake package + NixOS module; AppImage (Qt from aqt) for other distributions | a folder (e.g. a Syncthing folder) | `org.freedesktop.Notifications` over D-Bus, tray as fallback; timed in-app (`ReminderScheduler`), the app can live hidden in the tray (`--hidden`, autostart); the tray calendar from the icon's click (a setting) or menu, under Wayland a layer-shell surface (LayerShellQt, `src/platform/traywindow.h`) |
 | **Windows** 10/11 x86_64 (test version, docs/WINDOWS.md) | MSVC 2022 + Qt from aqt, `windeployqt`; portable ZIP and a per-user Inno Setup installer from GitHub Actions | a folder (default `Documents\Brulion`) | toast notifications through C++/WinRT (`WindowsToastBus`: Snooze/Done/OK, alarms on screen with a looping sound; the tray icon's messages when toasts are off), timed in-app (`ReminderScheduler`) while the app runs, also hidden in the tray; optional start at sign-in (the Run key, `Autostart`); a click on the tray icon opens the tray calendar (a setting; the system clock's flyout cannot be replaced) |
 | **Android** (9+, API 28–36) | Qt for Android (aqt) + `androiddeployqt`, signed APK from GitHub Actions | a folder on shared storage (Syncthing-Fork; "All files access") or app storage + Nextcloud | native `AlarmManager` alarms (Kotlin via JNI) — fire while the app is closed and after a reboot; while it is closed a periodic system job reads the notebook (after one Nextcloud sync) in a process of its own and arms what it finds (`src/app/background`, docs/ANDROID.md "Checking notes in the background"); "Done" taps queued natively (`DoneQueue.kt`) and written by C++ at once while the app is in front, else when it returns to the front or starts (Qt's event loop is paused in the background); home-screen widgets drawn by Kotlin from a snapshot the app publishes (their quick add writes today's journal itself, see below) |
 | **Browser** | Qt for WebAssembly (single-threaded) + emsdk, offline PWA shell (`wasm/`) for any web server, and the same in one HTML file opened from disk | Emscripten IDBFS (IndexedDB) + import/export, Nextcloud sync | web Notification API (service worker where needed) while the page is open |
@@ -186,6 +186,15 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   else none. Dictionaries (`spelldictionaries.h`, pure): DICPATH, next to the app, the build's
   `BRULION_SPELL_DICTIONARY_DIRS` (Nix store paths), XDG data folders, the system's; pl_PL, en_US
   preferred; their 8-bit encodings through the core's `spell/dictencoding.h`.
+* **The tray calendar under Wayland** (`traywindow.h`; docs/UI.md "The tray calendar"):
+  `trayPopupAnchorable()` (the build has it and the app runs on Wayland) and
+  `anchorTrayPopup(window, margin)` — the window becomes a layer-shell surface in the bottom-right
+  corner of the active screen's work area (`AppController::placeTrayPopup`; Wayland ignores a
+  window's position and the tray's click comes without one). One backend per build
+  (`BRULION_LAYER_SHELL`, default `auto`): KDE's LayerShellQt when found
+  (`traywindow_layershell.cpp`; the Nix package — it uses Qt's private Wayland API, so it must be
+  built against the same Qt), else none (`traywindow_none.cpp`: the AppImage, Windows, Android, the
+  browser). A compositor without the protocol (GNOME) leaves the window ordinary.
 * **A file handed to the system's app** (`openexternal.h`; one per build): `openFileExternally(path,
   mime, name, bytes)` → `Opened` | `NoApp` | `Blocked` | `Failed` — the desktop's default app
   (`openexternal_desktop.cpp`: `QDesktopServices::openUrl` of the local file), Android's

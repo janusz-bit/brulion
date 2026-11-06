@@ -608,7 +608,8 @@ public:
     /// The value of `key` as a list ([] when missing or null): the specials of folderInfo().
     Q_INVOKABLE QVariantList routeList(const QVariantMap &route, const QString &key) const;
     /// Move the tray calendar `popup` to trayPopupPosition() for its size (a QPoint result's x
-    /// and y cannot be read by compiled QML).
+    /// and y cannot be read by compiled QML); under Wayland anchor it to the work area's
+    /// bottom-right corner through the layer shell instead (src/platform/traywindow.h).
     Q_INVOKABLE void placeTrayPopup(QWindow *popup) const;
     /// The recent pages ([{ path, title }], Workspace::recentPages) without `path`, at most
     /// `limit` of them: the sidebar's "Recent".

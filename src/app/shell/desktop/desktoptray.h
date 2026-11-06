@@ -3,7 +3,7 @@
 //
 // Menu: Show Brulion · Calendar · Today's journal · Quick capture… · Quit. A single left click on
 // the icon does what AppSettings.trayClick says: "window" shows (or, when it is in front, hides)
-// the window, "calendar" (Windows' default) opens or closes the tray calendar next to the icon
+// the window, "calendar" (the default) opens or closes the tray calendar next to the icon
 // (AppController::showTrayCalendar, ShellTrayCalendar.qml); a double click always shows the
 // window (and hides the calendar). With AppSettings.closeToTray the window's close button
 // only hides it (Main.qml) so reminders keep firing; `brulion --hidden` starts in the tray.

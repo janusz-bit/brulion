@@ -1450,7 +1450,7 @@ Item {
                     onToggled: AppSettings.closeToTray = checked
                 }
                 // What a single click on the tray icon does (DesktopTray): the window, or the
-                // tray calendar (ShellTrayCalendar; Windows' default).
+                // tray calendar (ShellTrayCalendar; the default).
                 ShellSettingRow {
                     objectName: "settingsTrayClick"
                     visible: AppController.isDesktop

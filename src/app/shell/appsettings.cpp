@@ -15,7 +15,6 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QSysInfo>
 #include <QTime>
 
 #include <algorithm>
@@ -840,7 +839,7 @@ void AppSettings::setCloseToTray(bool on)
 
 QString AppSettings::defaultTrayClick()
 {
-    return QSysInfo::productType() == u"windows" ? u"calendar"_s : u"window"_s;
+    return u"calendar"_s;
 }
 
 QString AppSettings::trayClick() const
