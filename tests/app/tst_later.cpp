@@ -1,12 +1,11 @@
 // Tests for Later (QML type `Later`, src/app/ui/later.h): Qt.callLater() without a closure — one
-// call however often it is asked for, a posted event that runs ahead of the timers due by then,
-// stop() forgets it, a call asked for from its own handler comes on the next turn.
+// call however often it is asked for, a posted event (not a timer), stop() forgets it, a call asked
+// for from its own handler comes on the next turn.
 #include "later.h"
 
 #include <QCoreApplication>
 #include <QSignalSpy>
 #include <QTest>
-#include <QThread>
 #include <QTimer>
 
 using namespace Qt::StringLiterals;
@@ -49,22 +48,16 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
     }
 
-    void aheadOfTheTimersDue()
+    void aQueuedCallNotATimer()
     {
-        // A zero timer started first, already due: Later's call still comes first (a posted
-        // event, like Qt.callLater) — a Timer { interval: 0 } would come after it.
-        QStringList order;
-        QTimer timer;
-        timer.setSingleShot(true);
-        timer.setInterval(0);
-        connect(&timer, &QTimer::timeout, this, [&] { order.append(u"timer"_s); });
+        // The same call Qt.callLater() makes: a queued one, delivered by the event loop's posted
+        // events (whether before or after the timers due then is the platform's event loop's
+        // choice: on Linux before them, on Windows not always).
         Later later;
-        connect(&later, &Later::triggered, this, [&] { order.append(u"later"_s); });
-        timer.start();
-        QThread::msleep(5); // the timer is overdue (no events processed meanwhile)
+        QSignalSpy spy(&later, &Later::triggered);
         later.restart();
-        QTRY_COMPARE(order.size(), 2);
-        QCOMPARE(order, (QStringList{u"later"_s, u"timer"_s}));
+        QCoreApplication::sendPostedEvents(&later);
+        QCOMPARE(spy.count(), 1);
     }
 
     void askedFromItsHandler()

@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.11.2 — 6 listopada 2026
+
+**Uwaga**
+- Wersja 0.11.1 nie została opublikowana: na Windows ten sam test edytora co w 0.11.0 sprawdzał jeszcze w jednym miejscu, czy edytowany blok wrócił na ekran, zanim edytor zdążył go tam przewinąć, a nowy test odroczonych wywołań zakładał kolejność zdarzeń, której Windows nie gwarantuje — poprawione w tej wersji. Wszystkie nowości wersji 0.11.0, opisane poniżej, są dostępne od tej wersji.
+
 ## 0.11.1 — 5 listopada 2026
 
 **Uwaga**

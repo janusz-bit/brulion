@@ -2,7 +2,7 @@
 
 **Nowości w {{VERSION}}**
 
-Wersja 0.11.0 nie została opublikowana, więc jej nowość trafia do Ciebie dopiero w tym wydaniu.
+Wersje 0.11.0 i 0.11.1 nie zostały opublikowane, więc ich nowość trafia do Ciebie dopiero w tym wydaniu.
 
 * **Interfejs kompilowany do kodu maszynowego** — cały interfejs Brulionu (ponad 18 tysięcy wiązań i funkcji QML) jest teraz przy budowaniu aplikacji kompilowany do C++, zamiast wykonywany w czasie działania przez interpreter JavaScriptu. Wygląd i działanie się nie zmieniają; odciąża to procesor przy otwieraniu widoków, przewijaniu i pisaniu, zwłaszcza na słabszych telefonach.
 

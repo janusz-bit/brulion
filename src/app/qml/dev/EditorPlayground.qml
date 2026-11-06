@@ -894,6 +894,8 @@ ApplicationWindow {
         // Enter at the end of a zoomed paragraph: a paragraph has no children, so the zoom
         // ends and the new block below it is edited — never a caret in a hidden block. Ctrl+Z
         // zooms back in, Ctrl+Shift+Z ends the zoom again.
+        // (The view follows a zoom's change once the event loop is back — BlockEditor's zoomLater:
+        // these steps wait for it, waitStep(), rather than for the next tick.)
         if (window.at()) {
             window.textBefore = page.sourceText
             window.zoomTextRow = rowOf("Plan remontu")
@@ -904,18 +906,18 @@ ApplicationWindow {
                     && page.editingRow === window.zoomTextRow && editor.activeEditor !== null
                     && editor.activeEditor.activeFocus, "a zoomed paragraph is edited: " + window.zoomTextRow)
         if (window.at()) key(Qt.Key_Return, Qt.NoModifier)
-        if (window.at()) check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
+        if (window.at()) window.waitStep(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
                     && editor.activeEditor !== null && editor.activeEditor.activeFocus
                     && editor.activeEditor.row === page.editingRow && rowInView(page.editingRow),
                     "Enter at the end of a zoomed paragraph ends the zoom and edits the new block below it: zoom "
                     + page.zoomBlock + ", row " + page.editingRow + " (paragraph " + window.zoomTextRow + ")")
         if (window.at()) key(Qt.Key_Z, Qt.ControlModifier)
-        if (window.at()) check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+        if (window.at()) window.waitStep(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
                     && page.sourceText === window.textBefore && editor.activeEditor !== null
                     && editor.activeEditor.activeFocus,
                     "Ctrl+Z zooms back into the paragraph: zoom " + page.zoomBlock + ", row " + page.editingRow)
         if (window.at()) key(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier)
-        if (window.at()) check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
+        if (window.at()) window.waitStep(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
                     && editor.activeEditor.activeFocus && editor.activeEditor.row === window.zoomTextRow + 1,
                     "Ctrl+Shift+Z ends the zoom again: zoom " + page.zoomBlock + ", row " + page.editingRow)
         if (window.at()) typeKeys("Źdźbło")
@@ -1015,7 +1017,7 @@ ApplicationWindow {
                     && page.editingRow === window.zoomTextRow && rowInView(window.zoomTextRow),
                     "a zoomed heading far down the page is edited: " + window.zoomTextRow)
         if (window.at()) key(Qt.Key_Return, Qt.NoModifier)
-        if (window.at()) check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
+        if (window.at()) window.waitStep(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && editor.activeEditor !== null
                     && editor.activeEditor.activeFocus && rowInView(window.zoomTextRow + 1)
                     && rowInView(window.zoomTextRow),
                     "Enter at the end of a zoomed heading far down the page keeps it and the new block in view: zoom "
@@ -1023,7 +1025,7 @@ ApplicationWindow {
                     + (editor.listView.itemAtIndex(window.zoomTextRow + 1)
                        ? window.mappedY(editor.listView.itemAtIndex(window.zoomTextRow + 1) as Item, editor.listView, 0, 0) : "-"))
         if (window.at()) key(Qt.Key_Z, Qt.ControlModifier)
-        if (window.at()) check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
+        if (window.at()) window.waitStep(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
                     && rowInView(window.zoomTextRow), "Ctrl+Z zooms back into the heading, in view")
         if (window.at()) key(Qt.Key_Z, Qt.ControlModifier) // the heading added above
         if (window.at()) {
@@ -1040,7 +1042,7 @@ ApplicationWindow {
         if (window.at()) check(page.zoomBlock === window.zoomTextRow && page.editingRow === window.zoomTextRow
                     && rowInView(window.zoomTextRow), "a zoomed block far down the page is edited: " + window.zoomTextRow)
         if (window.at()) page.zoomOut()
-        if (window.at()) check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow && rowInView(window.zoomTextRow)
+        if (window.at()) window.waitStep(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow && rowInView(window.zoomTextRow)
                     && editor.activeEditor !== null && editor.activeEditor.activeFocus,
                     "zooming out keeps the edited block in view: y "
                     + (editor.listView.itemAtIndex(window.zoomTextRow)
@@ -1081,7 +1083,7 @@ ApplicationWindow {
                 zoomEvents.mouseClick(arrow, x, y, Qt.LeftButton, Qt.NoModifier, -1)
             }
         }
-        if (window.at()) check(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
+        if (window.at()) window.waitStep(page.zoomBlock < 0 && page.editingRow === window.zoomTextRow + 1 && info(page.editingRow).visible
                     && !info(window.zoomTextRow).collapsed && rowInView(page.editingRow)
                     && editor.activeEditor !== null && editor.activeEditor.row === page.editingRow,
                     "the breadcrumb's arrow clicked: the zoom ends, the edited child stays shown and in view: zoom "

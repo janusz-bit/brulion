@@ -4,11 +4,11 @@
 //   Later { id: revealLater; onTriggered: editor.revealRow(row) }
 //   revealLater.restart()
 //
-// Like Qt.callLater(), the call is a posted event: it runs once the event loop is back, before the
-// timers that are due by then (a `Timer { interval: 0 }` runs after them — on a slow machine after
-// an overdue timer started earlier), and requests before it runs are one call. stop() forgets a
-// pending call. Library brulion_ui_helpers (QtCore only), type `Later` in module Brulion
-// (registered by qmlforeign.h); tests/app/tst_later.cpp.
+// Like Qt.callLater(), the call is a posted event (a queued call), not a timer: on Linux it runs
+// before the timers due when the event loop is back — a `Timer { interval: 0 }` after them, on a
+// slow machine after an overdue timer started earlier — and requests before it runs are one call.
+// stop() forgets a pending call. Library brulion_ui_helpers (QtCore only), type `Later` in module
+// Brulion (registered by qmlforeign.h); tests/app/tst_later.cpp.
 #pragma once
 
 #include <QObject>

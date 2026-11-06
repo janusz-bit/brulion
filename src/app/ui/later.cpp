@@ -15,7 +15,7 @@ void Later::restart()
         return;
     m_pending = true;
     const quint64 generation = ++m_generation;
-    // A posted event, like Qt.callLater(): ahead of the timers due when the event loop is back.
+    // A posted event, like Qt.callLater() (not a timer).
     QMetaObject::invokeMethod(this, [this, generation] { fire(generation); }, Qt::QueuedConnection);
     Q_EMIT runningChanged();
 }

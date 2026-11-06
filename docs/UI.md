@@ -3555,12 +3555,15 @@ argument) do not compile; neither do `try`/`catch`, `for…of`, `for…in`, `typ
 `arguments`, `ScriptAction { script: … }` (it also makes qmlcachegen skip the rest of the file —
 the animation's `onFinished:` instead). Instead:
 
-* a deferred call: `Later { onTriggered: … }` (`src/app/ui/later.h`), `restart()`ed — like
-  `Qt.callLater` a posted event, ahead of the timers due by then (not a `Timer { interval: 0 }`:
-  on a slow machine it runs after an overdue timer, and the editor's scrolling came after the
-  self-tests' next step); repeated requests are one call, with the last values (unlike
-  `Qt.callLater` with different closures); the handler checks that its owner is still alive
-  (`BlockEditor.laterEnsureEditVisible()` / `laterRevealRow()`);
+* a deferred call: `Later { onTriggered: … }` (`src/app/ui/later.h`), `restart()`ed — the same
+  posted event as `Qt.callLater`, not a timer (a `Timer { interval: 0 }` runs after the timers
+  already due: on slow machines the editor's scrolling after a zoom came after a self-test's next
+  step); repeated requests are one call, with the last values (unlike `Qt.callLater` with
+  different closures); the handler checks that its owner is still alive
+  (`BlockEditor.laterEnsureEditVisible()` / `laterRevealRow()`). Whether a posted event runs
+  before or after a timer due at the same time is the platform's choice (Windows: not always
+  before): a self-test step that checks the outcome of a deferred call waits for it
+  (EditorPlayground's `waitStep()`), it does not count on the next tick;
 * a callback: a signal, or a target name the receiver hands back (`EditorDialogs.pickDateWith(target,
   …)` → `applied(target, action, a, b)`), or an id (`BToastHost.showToast()` returns one,
   `actionTriggered(id)`; `AppController.toastWithAction()` / `toastRestore()`);
