@@ -6,7 +6,8 @@
 // rectangles, older requests dropped, copied to the clipboard; the table of contents and the links
 // of tests/data/pdf/spis.pdf (where a target lies); a protected PDF unlocked with its password (a
 // wrong one rejected and never kept, the image provider's password held while the viewer is open and
-// forgotten with it, never the thumbnails'); two pages side by side keeping the current page; and the
+// forgotten with it, never the thumbnails'); two pages side by side keeping the current page; a page
+// jumped to before the real page sizes arrived (a new version reopened at it) staying current; and the
 // image provider's ids (pure).
 #include "pdfviewmodel.h"
 
@@ -350,6 +351,45 @@ private Q_SLOTS:
         model->setViewport(0, two.y() - 40); // scrolled: the pin goes
         QVERIFY(model->currentPage() != 2 || model->pageRect(2).top() <= two.y() - 40 + 0.4 * 900);
         model->pinPage(99);
+        QCOMPARE(model->currentPage(), 3);
+    }
+
+    void jumpBeforeTheSizesKeepsPage()
+    {
+        // A page jumped to before the real page sizes arrive (pages are laid out the first one's
+        // size until then): a new version reopened at page 2 — pinned in the same event as Ready,
+        // the sizes always later; so is a moved PDF reopened at its route's page on a slow machine.
+        // The landscape page 2 shrinks the content, the view follows the new layout — and page 2
+        // stays current where a jump puts it now, not the last page of a view scrolled to its end.
+        auto model = opened(fixture(u"wyklad.pdf"_s), 400, 900);
+        PdfViewModel *m = model.get();
+        qreal viewY = 0;
+        // (The view: its Flickable follows moveViewport.)
+        connect(m, &PdfViewModel::moveViewport, this, [m, &viewY](qreal x, qreal y) {
+            viewY = y;
+            m->setViewport(x, y);
+        });
+        QTRY_COMPARE(model->status(), Status::Ready);
+        QTRY_VERIFY(model->pageRect(2).width() > model->pageRect(2).height()); // (the sizes arrived)
+        const QPointF two = model->positionForPage(2);
+        QVERIFY(model->contentHeight() - 900 < model->pageRect(2).top()); // (page 2 cannot reach the top)
+        model->setViewport(two.x(), two.y());
+        model->pinPage(2);
+        QCOMPARE(model->currentPage(), 2);
+        bool guessed = false; // (reopened, still laid out with the first page's size)
+        connect(m, &PdfViewModel::statusChanged, this, [m, &guessed] {
+            if (m->status() == Status::Ready)
+                guessed = m->pageRect(2).height() > m->pageRect(2).width();
+        });
+        model->setVersion(u"2"_s);
+        QTRY_VERIFY(guessed);
+        QTRY_VERIFY(model->pageRect(2).width() > model->pageRect(2).height()); // (the sizes again)
+        QCOMPARE(model->currentPage(), 2);
+        QVERIFY(std::abs(viewY - model->positionForPage(2).y()) < 0.5);
+        // Scrolled by hand afterwards: the pin goes, as before.
+        model->setViewport(0, 0);
+        QCOMPARE(model->currentPage(), 1);
+        model->setViewport(0, model->contentHeight() - 900);
         QCOMPARE(model->currentPage(), 3);
     }
 

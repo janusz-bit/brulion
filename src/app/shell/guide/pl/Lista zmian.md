@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.12.1 — 6 listopada 2026
+
+**Uwaga**
+- Wersja 0.12.0 nie została opublikowana: na Windows autotest przeglądarki PDF widział, jak PDF otwarty ponownie na stronie 2 kończył na stronie 3 — poprawione w tej wersji (niżej). Wszystkie nowości wersji 0.12.0, opisane poniżej, są dostępne od tej wersji.
+
+**Zmiany**
+- **Kalendarz z ikony w zasobniku jednym kliknięciem na Linuksie** — kliknięcie ikony Brulionu w zasobniku otwiera teraz kalendarz na każdym pulpicie (dotąd tylko na Windows); *Ustawienia → Aplikacja → Kliknięcie ikony w zasobniku → Okno* przywraca okno. Pod Waylandem w KDE Plasma (i na innych pulpitach z layer shell) kalendarz otwiera się w prawym dolnym rogu ekranu, przy panelu, zamiast tam, gdzie postawi go pulpit. Zobacz [[Dziennik, kalendarz i szablony#Kalendarz z ikony w zasobniku|Kalendarz z ikony w zasobniku]].
+
+**Poprawki**
+- Przeglądarka PDF: strona, do której skoczono, zanim wczytały się prawdziwe rozmiary stron (PDF otwarty ponownie na swojej stronie, na wolnym komputerze), zostaje bieżącą stroną. Wcześniej przy stronach różnej wielkości widok mógł skończyć na innej stronie, a Wstecz nie wracało na właściwą.
+
 ## 0.12.0 — 6 listopada 2026
 
 **Nowe**

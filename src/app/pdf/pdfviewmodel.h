@@ -394,6 +394,9 @@ private:
     int m_currentPage = 0;
     int m_pinnedPage = 0;
     qreal m_pinnedY = 0;
+    /// The layout is being recomputed (real page sizes, the view's width): the view's moves that
+    /// follow it keep the pinned page.
+    bool m_relayout = false;
     PdfVisiblePages *m_pages = nullptr;
     QSet<int> m_failed;
     int m_generation = 0;

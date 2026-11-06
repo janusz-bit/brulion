@@ -1,0 +1,9 @@
+Nowości w 0.12.1:
+• Podzadania pod swoim zadaniem
+• Zwijanie podzadań
+• Dokumentacja po angielsku
+• ☰ zawsze pierwszy na telefonie
+• Płynniejsze przewijanie
+• Kalendarz z zasobnika jednym kliknięciem na Linuksie
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.12.1

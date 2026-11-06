@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.12.1 — November 6, 2026
+
+**Note**
+- Version 0.12.0 was not published: on Windows, the PDF viewer's self-test saw a PDF reopened at page 2 end up on page 3 — fixed in this version (below). Everything new in 0.12.0, described below, is available from this version on.
+
+**Changes**
+- **Calendar from the tray icon with one click on Linux** — a click on Brulion's tray icon now opens the calendar on every desktop (before, only on Windows); *Settings → Application → Click on the tray icon → Window* brings back the window. Under Wayland on KDE Plasma (and other desktops with the layer shell) the calendar opens in the bottom-right corner of the screen, next to the panel, instead of wherever the desktop put it. See [[Journal, calendar and templates#Calendar from the tray icon|Calendar from the tray icon]].
+
+**Fixes**
+- The PDF viewer: a page jumped to before the real page sizes were read (a PDF reopened at its page, on a slow computer) stays the current page. Before, with pages of different sizes the view could end up on another page, and Back didn't return to the right one.
+
 ## 0.12.0 — November 6, 2026
 
 **New**
