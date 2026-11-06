@@ -213,6 +213,9 @@ private Q_SLOTS:
         QCOMPARE(shapes.size(), list.size());
         for (int i = 0; i < shapes.size(); ++i)
             QCOMPARE(shapeMap(shapes[i]), list[i].toMap());
+        // Split for BTintShapes: no icons here, every shape is a pill or a box.
+        QCOMPARE(pills.plainShapes(), shapes);
+        QVERIFY(pills.iconShapes().isEmpty());
     }
 
     // Coloured highlights (`<mark>`) are boxes in their palette colours; a page's app icon in front
@@ -251,6 +254,9 @@ private Q_SLOTS:
         QCOMPARE(shapes.size(), 3);
         for (int i = 0; i < shapes.size(); ++i)
             QCOMPARE(shapeMap(shapes[i]), list[i].toMap());
+        // Split for BTintShapes: the shapes without the icon, in order, and the icon on its own.
+        QCOMPARE(pills.plainShapes(), (QList<RichTextPill>{shapes[0], shapes[2]}));
+        QCOMPARE(pills.iconShapes(), QList<RichTextPill>{shapes[1]});
         // The icon's anchor is the link's: a click on it follows the link.
         QTextCursor cursor(&doc);
         cursor.setPosition(iconPill.from + 1);

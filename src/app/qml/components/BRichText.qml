@@ -53,13 +53,15 @@ Item {
     /// Shown by the TextEdit (tinted or cut), not by the Text.
     readonly property bool rich: tinted || overflows
     /// The item showing the text (BLinkTargets' textItem, the anchor of a link's menu).
-    readonly property Item textItem: rich && richLoader.item ? richLoader.item as Item : plain
+    readonly property Item textItem: rich && richEdit !== null ? richEdit : plain
     /// The text was cut after maximumLineCount lines.
-    readonly property bool truncated: rich && richLoader.item ? (richLoader.item as RichEdit).cut : false
+    readonly property bool truncated: rich && richEdit !== null ? richEdit.cut : false
+    /// The TextEdit (null while the Text shows the text).
+    readonly property RichEdit richEdit: richLoader.item !== null ? (richLoader.item as RichBox).edit : null
 
     /// The link at (x, y) of this item ("" = none).
     function linkAt(x: real, y: real): string {
-        const edit = richLoader.item as TextEdit
+        const edit = root.richEdit
         return root.rich && edit ? edit.linkAt(x, y) : plain.linkAt(x, y)
     }
 
@@ -71,6 +73,10 @@ Item {
     Text {
         id: plain
         width: root.width
+        // Its implicit height, but never 0: a rich text's height growing from 0 makes QQuickText lay
+        // it out a second time (QQuickText::geometryChange, Qt 6.11); from 1 px its first layout
+        // gives it the rest without another.
+        height: Math.max(1, implicitHeight)
         visible: !root.rich
         // Measured while it overflows (the TextEdit shows it); empty when the TextEdit has a tint.
         text: root.tinted ? "" : root.shownHtml
@@ -92,7 +98,16 @@ Item {
         width: root.width
         active: root.rich
         visible: active
-        sourceComponent: RichEdit {}
+        sourceComponent: RichBox {}
+    }
+
+    // The TextEdit inside an item of its own: a Loader reads its item's implicit width, which makes
+    // a wrapped TextEdit lay its text out twice more (unwrapped for the width, then wrapped again).
+    component RichBox: Item {
+        readonly property RichEdit edit: richBoxEdit
+        width: root.width
+        implicitHeight: richBoxEdit.implicitHeight
+        RichEdit { id: richBoxEdit }
     }
 
     /// The tinted or cut text: a read-only TextEdit, its text set by RichTextPills.
@@ -127,35 +142,6 @@ Item {
             font: edit.font
             width: edit.width
         }
-        // Under the text: a child with a negative z is drawn below its parent's content.
-        Repeater {
-            model: tints.pills
-            // (An Item with the shape inside: a pill's `color` is not a Rectangle's own.)
-            delegate: Item {
-                id: tintShape
-                required x
-                required y
-                required width
-                required height
-                required property color color
-                /// "pill", "box" or "icon".
-                required property string kind
-                required property string icon
-                z: -1
-                Rectangle {
-                    anchors.fill: parent
-                    radius: tintShape.kind === "pill" ? height / 2 : Theme.radiusXs
-                    antialiasing: true
-                    // A page's app icon in front of a link (RichTextPills kind "icon"): the icon, no shape.
-                    color: tintShape.kind === "icon" ? "transparent" : tintShape.color
-                }
-                BIcon {
-                    anchors.centerIn: parent
-                    name: tintShape.kind === "icon" ? tintShape.icon : ""
-                    size: Math.round(Math.min(parent.width, parent.height) * 0.9)
-                    color: tintShape.color
-                }
-            }
-        }
+        BTintShapes { pills: tints }
     }
 }

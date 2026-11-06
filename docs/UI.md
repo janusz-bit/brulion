@@ -1114,7 +1114,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   frame — and keeps their colour and kind (a span with its own text colour is a pill, a
   fixed-pitch one or any other a box) on the format, and lays one rectangle per line segment
   out of the document's own layout, centred on the span's glyphs (its font's ascent and descent
-  around the baseline); a `Repeater` draws them under the text (`shapes`: typed `richTextPill`s). Every other text stays a `Text`
+  around the baseline); `BTintShapes` draws them under the text (a Repeater over `plainShapes`,
+  another over `iconShapes`: typed `richTextPill`s). Every other text stays a `Text`
   (cheaper rows); clicks, long presses, right-clicks and the cursor shape go through the same
   overlay for both (`BlockText.linkAt`).
   **Rendered text outside the blocks** — linked references (`ContentRefRow`), Tasks and calendar
@@ -2516,6 +2517,12 @@ while the list moves. Measured with `--scroll-probe` (see "Dev tools"); ctest
 `tst_scroll_jumps_qml` fails on jumps (also of the scroll bar's thumb), `tst_touch_flick` /
 `tst_touch_flick_compressed` on Qt's touch faults, `tst_row_scroll` on the scroll bar.
 
+Pages are **not** created whole: a cache reaching past the end of a page of up to 1000 rows
+(filled in the background) was measured on 2026-11-06 and left out — the desktop scrolled no
+smoother (it had no slow frames before), while a 1100-row outline took 200 MB more and a new
+window width laid out every row again (36 → 337 ms); docs/PERFORMANCE.md "Scrolling pages:
+cheaper rows, pages created whole measured". Rows are made cheaper instead (below).
+
 ### Rules for contributors
 
 Any delegate of a scrolling list (a block and everything inside it, a day of the journal, a Tasks
@@ -2544,7 +2551,10 @@ or agenda row) follows these; the reasons are below.
    documents, no icon theme lookups: an SVG's size comes from its root element only (Qt's SVG
    reader parses the whole drawing — 0.6 s for a 2.4 MB one on a Raspberry Pi 4). Bound what one
    row creates: a query block makes 20 result rows on touch screens, 50 with a mouse
-   ("Show more" adds the rest).
+   ("Show more" adds the rest). Text is laid out once: a rich-text `Text`'s height is never 0
+   (`Math.max(1, implicitHeight)`), a `TextEdit` is not a `Loader`'s item itself (an `Item`
+   around it), and nothing reads a wrapped text's `implicitWidth` ("Why: creating a row stalls
+   the list").
 6. **Every list scrolled by touch gets `TouchFlick.enabled: true`** (not for lists with a
    `snapMode` or `StrictlyEnforceRange`, where it does nothing).
 7. **A long list whose rows differ in height uses `BRowScrollBar { list: … }`**, not the attached
@@ -2623,6 +2633,22 @@ task box's icon for "done" / "deferred" only; `BIcon` creates no image without a
 `IconImage` without a source searches the icon theme on disk). The editor's palette, locale and
 clock reach its controller before its rows are created (applied later, they made every row
 render twice).
+
+Text layout is most of a block's creation, so a block lays its text out once:
+
+* a rich-text `Text` has the height `Math.max(1, implicitHeight)` (`BlockText`, `BRichText`): left
+  to its implicit height, its height grew from 0 after its first layout, and
+  `QQuickText::geometryChange` (Qt 6.11) lays a wrapped rich text out again whenever its height
+  grows from 0;
+* a `TextEdit` loaded by a `Loader` sits in an `Item` of its own (`BlockText`'s `TintedText`,
+  `BRichText`'s `RichBox`): a Loader reads its item's implicit width, and a wrapped TextEdit
+  computes that by laying its text out unwrapped and then wrapped again (two more layouts);
+* the rounded shapes of tags, chips, inline code and highlights (`BTintShapes`) and a page's icon
+  in front of a link to it are two Repeaters (`RichTextPills.plainShapes`, `iconShapes`): only an
+  icon makes a `BIcon`, every pill carried one before.
+
+The editor's scroll bar (`RowScroll`, below) runs every frame while the list moves: it looks the
+list's properties and methods up once per list and model, not by name every frame.
 
 ### Touch flicks: `TouchFlick` (`src/app/ui/touchflick.h`)
 

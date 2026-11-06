@@ -17,6 +17,18 @@ bool finite(qreal v)
     return std::isfinite(v);
 }
 
+QMetaProperty propertyOf(const QMetaObject *mo, const char *name)
+{
+    const int index = mo ? mo->indexOfProperty(name) : -1;
+    return index >= 0 ? mo->property(index) : QMetaProperty();
+}
+
+QMetaMethod methodOf(const QMetaObject *mo, const char *signature)
+{
+    const int index = mo ? mo->indexOfMethod(QMetaObject::normalizedSignature(signature).constData()) : -1;
+    return index >= 0 ? mo->method(index) : QMetaMethod();
+}
+
 /// A unit's span in content coordinates (the header, a row, the footer).
 struct Segment {
     qreal unit = 0;
@@ -172,7 +184,22 @@ void RowScroll::setView(QQuickItem *view)
     disconnect(m_windowConnection);
     m_model = nullptr;
     m_hidden = false;
+    m_modelMeta = {};
     m_view = view;
+    const QMetaObject *mo = view ? view->metaObject() : nullptr;
+    m_viewMeta = {propertyOf(mo, "count"),
+                  propertyOf(mo, "contentY"),
+                  propertyOf(mo, "contentHeight"),
+                  propertyOf(mo, "originY"),
+                  propertyOf(mo, "topMargin"),
+                  propertyOf(mo, "bottomMargin"),
+                  propertyOf(mo, "atYBeginning"),
+                  propertyOf(mo, "atYEnd"),
+                  propertyOf(mo, "headerItem"),
+                  propertyOf(mo, "footerItem"),
+                  propertyOf(mo, "moving"),
+                  methodOf(mo, "itemAtIndex(int)"),
+                  methodOf(mo, "indexAt(qreal,qreal)")};
     m_hasSize = false;
     m_lastRow = -1;
     m_pendingScroll.reset();
@@ -229,8 +256,10 @@ void RowScroll::bindModel()
 {
     m_model = m_view ? qvariant_cast<QObject *>(m_view->property("model")) : nullptr;
     const QMetaObject *mo = m_model ? m_model->metaObject() : nullptr;
-    m_hidden = mo && mo->indexOfProperty("visibleCount") >= 0 && mo->indexOfMethod("visibleRowsBefore(int)") >= 0
-               && mo->indexOfMethod("visibleRowAt(int)") >= 0;
+    m_modelMeta = {propertyOf(mo, "visibleCount"), methodOf(mo, "visibleRowsBefore(int)"),
+                   methodOf(mo, "visibleRowAt(int)")};
+    m_hidden = m_modelMeta.visibleCount.isValid() && m_modelMeta.visibleRowsBefore.isValid()
+               && m_modelMeta.visibleRowAt.isValid();
     if (m_hidden) {
         const int index = mo->indexOfSignal("visibleCountChanged()");
         if (index >= 0)
@@ -258,24 +287,25 @@ void RowScroll::schedule()
         m_refreshTimer.start();
 }
 
-qreal RowScroll::real(const char *name) const
+qreal RowScroll::real(const QMetaProperty &property) const
 {
     bool ok = false;
-    const qreal v = m_view ? m_view->property(name).toReal(&ok) : 0;
+    const qreal v = m_view && property.isValid() ? property.read(m_view).toReal(&ok) : 0;
     return ok && finite(v) ? v : 0;
 }
 
 QQuickItem *RowScroll::itemAt(int index) const
 {
     QQuickItem *item = nullptr;
-    if (m_view && index >= 0)
-        QMetaObject::invokeMethod(m_view, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, item), Q_ARG(int, index));
+    if (m_view && index >= 0 && m_viewMeta.itemAtIndex.isValid())
+        m_viewMeta.itemAtIndex.invoke(m_view, Qt::DirectConnection, Q_RETURN_ARG(QQuickItem *, item),
+                                      Q_ARG(int, index));
     return item;
 }
 
 int RowScroll::unitCount(int count) const
 {
-    return m_hidden && m_model ? std::min(count, m_model->property("visibleCount").toInt()) : count;
+    return m_hidden && m_model ? std::min(count, m_modelMeta.visibleCount.read(m_model).toInt()) : count;
 }
 
 int RowScroll::unitOfRow(int row) const
@@ -283,7 +313,7 @@ int RowScroll::unitOfRow(int row) const
     if (!m_hidden || !m_model)
         return row;
     int unit = row;
-    QMetaObject::invokeMethod(m_model, "visibleRowsBefore", Q_RETURN_ARG(int, unit), Q_ARG(int, row));
+    m_modelMeta.visibleRowsBefore.invoke(m_model, Qt::DirectConnection, Q_RETURN_ARG(int, unit), Q_ARG(int, row));
     return unit;
 }
 
@@ -292,18 +322,19 @@ int RowScroll::rowOfUnit(int unit) const
     if (!m_hidden || !m_model)
         return unit;
     int row = -1;
-    QMetaObject::invokeMethod(m_model, "visibleRowAt", Q_RETURN_ARG(int, row), Q_ARG(int, unit));
+    m_modelMeta.visibleRowAt.invoke(m_model, Qt::DirectConnection, Q_RETURN_ARG(int, row), Q_ARG(int, unit));
     return row;
 }
 
 int RowScroll::rowAt(qreal y, qreal viewTop, qreal viewBottom) const
 {
-    const int count = m_view ? m_view->property("count").toInt() : 0;
-    if (count <= 0)
+    const int count = m_view ? m_viewMeta.count.read(m_view).toInt() : 0;
+    if (count <= 0 || !m_viewMeta.indexAt.isValid())
         return -1;
     const auto indexAt = [this](qreal x, qreal py) {
         int index = -1;
-        QMetaObject::invokeMethod(m_view, "indexAt", Q_RETURN_ARG(int, index), Q_ARG(qreal, x), Q_ARG(qreal, py));
+        m_viewMeta.indexAt.invoke(m_view, Qt::DirectConnection, Q_RETURN_ARG(int, index), Q_ARG(qreal, x),
+                                  Q_ARG(qreal, py));
         return index;
     };
     const qreal w = m_view->width();
@@ -385,19 +416,20 @@ RowEdges RowScroll::edges() const
     QQuickItem *v = m_view;
     if (!v)
         return e;
-    const int count = v->property("count").toInt();
+    const ViewMeta &m = m_viewMeta;
+    const int count = m.count.read(v).toInt();
     e.count = unitCount(count);
-    const qreal contentY = real("contentY");
-    e.viewTop = contentY + real("topMargin");
-    e.viewBottom = contentY + v->height() - real("bottomMargin");
-    e.atBeginning = v->property("atYBeginning").toBool();
-    e.atEnd = v->property("atYEnd").toBool();
-    if (auto *header = v->property("headerItem").value<QQuickItem *>(); header && header->height() > 0) {
+    const qreal contentY = real(m.contentY);
+    e.viewTop = contentY + real(m.topMargin);
+    e.viewBottom = contentY + v->height() - real(m.bottomMargin);
+    e.atBeginning = m.atYBeginning.read(v).toBool();
+    e.atEnd = m.atYEnd.read(v).toBool();
+    if (auto *header = m.headerItem.read(v).value<QQuickItem *>(); header && header->height() > 0) {
         e.hasHeader = true;
         e.headerTop = header->y();
         e.headerBottom = header->y() + header->height();
     }
-    if (auto *footer = v->property("footerItem").value<QQuickItem *>(); footer && footer->height() > 0) {
+    if (auto *footer = m.footerItem.read(v).value<QQuickItem *>(); footer && footer->height() > 0) {
         e.hasFooter = true;
         e.footerTop = footer->y();
         e.footerBottom = footer->y() + footer->height();
@@ -441,10 +473,10 @@ void RowScroll::refresh()
     bool estimated = true;
     if (QQuickItem *v = m_view) {
         const qreal height = v->height();
-        const qreal total = real("contentHeight") + real("topMargin") + real("bottomMargin");
+        const qreal total = real(m_viewMeta.contentHeight) + real(m_viewMeta.topMargin) + real(m_viewMeta.bottomMargin);
         const qreal range = total - height;
         size = m_size;
-        if (!m_hasSize || (!v->property("moving").toBool() && !m_dragging)) {
+        if (!m_hasSize || (!m_viewMeta.moving.read(v).toBool() && !m_dragging)) {
             size = total > 0 && height > 0 && range > 0.5 ? std::clamp<qreal>(height / total, 0, 1) : 1;
             m_hasSize = true;
         }
@@ -453,7 +485,8 @@ void RowScroll::refresh()
             estimated = false;
         } else if (range > 0) {
             // Qt's estimate (what visibleArea says).
-            progress = std::clamp<qreal>((real("contentY") - real("originY") + real("topMargin")) / range, 0, 1);
+            progress = std::clamp<qreal>(
+                    (real(m_viewMeta.contentY) - real(m_viewMeta.originY) + real(m_viewMeta.topMargin)) / range, 0, 1);
         }
     }
     const qreal position = progress * (1 - size);
@@ -522,7 +555,7 @@ void RowScroll::place(const RowFraction::Target &target, const RowEdges &shape)
         QMetaObject::invokeMethod(v, "positionViewAtBeginning");
         auto *header = v->property("headerItem").value<QQuickItem *>();
         if (header && target.fraction > 0)
-            v->setProperty("contentY", real("contentY") + target.fraction * header->height());
+            v->setProperty("contentY", real(m_viewMeta.contentY) + target.fraction * header->height());
         return;
     }
     if (target.row >= shape.count) {
@@ -538,13 +571,14 @@ void RowScroll::place(const RowFraction::Target &target, const RowEdges &shape)
     const std::optional<RowSpan> s = span(row, count);
     if (!s)
         return;
-    const qreal topMargin = real("topMargin");
+    const qreal topMargin = real(m_viewMeta.topMargin);
     const qreal y = s->top + target.fraction * (s->bottom - s->top) - topMargin;
-    const qreal maxY = real("originY") + real("contentHeight") + real("bottomMargin") - v->height();
+    const qreal maxY =
+            real(m_viewMeta.originY) + real(m_viewMeta.contentHeight) + real(m_viewMeta.bottomMargin) - v->height();
     if (y >= maxY)
         QMetaObject::invokeMethod(v, "positionViewAtEnd");
     else
-        v->setProperty("contentY", std::max(y, real("originY") - topMargin));
+        v->setProperty("contentY", std::max(y, real(m_viewMeta.originY) - topMargin));
 }
 
 } // namespace brulion::ui

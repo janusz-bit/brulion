@@ -85,6 +85,14 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 * **Copying blocks on a Linux computer** (2026-10-27): Ctrl+C on a whole page of 5000 blocks
   takes about 4 ms instead of about 40 ms (until the screen refreshes 13–15 instead of 46–50 ms).
   The formatted version for mail and document editors is produced only when pasting into them.
+* **Scrolling long pages** (2026-11-06): a block that scrolls into view takes 20–25 % less work to
+  create (its text is laid out once instead of two to four times, and the rounded shapes of tags
+  and chips cost less), and the scroll bar of a page does about two thirds less work in every
+  frame; making a window narrower or wider redraws a long page a quarter faster.
+  On a computer scrolling was smooth before; the gain is for slower phones, where every
+  block created while scrolling is a few milliseconds of a frame. Keeping the whole page created
+  at once was measured too and left out: it took much more memory and made every change of the
+  window's width slower (details below).
 
 ### How it is now
 
@@ -998,6 +1006,74 @@ Tabs (docs/UI.md "Tabs, split view and windows") are kept cheap by design, not b
   focused tab changed.
 * **Saving** writes one JSON string per notebook (`tabs/<vault id>`, histories trimmed to 20 routes
   a side) half a second after the last change, so a burst of navigation writes the settings once.
+
+### Scrolling pages: cheaper rows, pages created whole measured (2026-11-06)
+
+The question was whether a note's whole page could be created at once, so that scrolling it never
+creates a row. Measured on the x86_64 desktop (16 cores, Release `-O3 -g`, Xvfb + Mesa llvmpipe,
+60 Hz) against `da09d2d` with the app benchmarks' new `page-scroll` and `page-resize` scenarios
+(tests/bench/app/README.md) and perf profiles of the scroll probe with the list's cache off.
+
+**Pages created whole: measured, not done.** `BlockEditor` with a cache past the end of any page of
+up to 1000 rows (the rows on screen at once, the rest filled in the background by ListView's
+asynchronous cache, one row per incubation slice); `run-bench.py`, 3 runs each, medians:
+
+| | base | whole page |
+|---|---:|---:|
+| `Długi dokument` (300 blocks): RSS / heap after opening | 362 / 171 MB | 388 / 209 MB |
+| `Długi konspekt` (~1100 rows): RSS after scrolling it | 364 MB | 562 MB |
+| window 1280 ↔ 920 px, request → frame: document / outline | 36 / 36 ms | 115 / 337 ms |
+| scrolling the document (wheel, 160 steps): frames > 33 ms / longest | 0 / 33 ms | 2 / 52 ms |
+| opening (navigation → frame) | 87–105 ms | 86–102 ms |
+
+The desktop had no slow frames to remove (rows cost 1–2 ms there), the background filling itself
+made frames of 25–45 ms (a row's text layout is one step the incubator cannot split), each row
+costs about 0.1–0.2 MB (13–25 items and a laid-out text document) and every change of the width —
+the window, the side panel, a phone turned — lays out every row again. On a phone, where rows are
+slower, memory is also scarcer. So rows were made cheaper instead.
+
+**Cheaper rows.** perf (`cycles:u` at 1 kHz with DWARF stacks, scroll probe `--probe-cache 0`: every
+row created at the edge of the view, down and up the page) attributed a block's creation to text
+layout done several times and to the tint shapes:
+
+* a rich-text `Text` whose height grows from 0 is laid out a second time by
+  `QQuickText::geometryChange` (Qt 6.11): its height is now `Math.max(1, implicitHeight)`;
+* a `Loader` reads its item's implicit width, and a wrapped `TextEdit` computes it by laying out
+  its text unwrapped and wrapped again: the TextEdit of tinted text (tags, chips, inline code) now
+  sits in an `Item` of its own (`BlockText`, `BRichText`);
+* every tint shape (a tag's or a chip's pill) carried a `BIcon` for the rare page icon: now the
+  icons have a Repeater of their own (`BTintShapes`: `RichTextPills.plainShapes` / `iconShapes`).
+  (A Repeater over a count reading shapes by index would also save the model object each shape
+  gets, but compiled QML in Qt 6.11 indexes no list of value types and takes none from a method
+  call: its bindings would be left to the interpreter, which `tst_qml_compiled` forbids);
+* the page's scroll bar (`RowScroll`, every frame while the list moves) looked the list's
+  properties and methods up by name each time: now once per list and model.
+
+Instructions counted by perf (`EVENT=instructions:u PERIOD=1000000`: a sample every million user
+space instructions — neither the clock nor the other work on a shared machine changes them; timed
+samples varied by up to 40 % between two runs of the same build), one run each, `--probe-cache 0`:
+
+| | base | current | change |
+|---|---:|---:|---:|
+| creating a row, `Długi dokument` (paragraphs and lists with tags and links), M instructions | 8.30 | 6.27 | −24 % |
+| creating a row, `Witaj w Brulionie` (tables, queries, code, callouts), M instructions | 10.78 | 8.49 | −21 % |
+| `RowScroll::refresh` per frame while scrolling, k instructions: document / guide | 188 / 166 | 55 / 58 | −70 / −65 % |
+
+The app benchmarks (`run-bench.py`, 3 runs each, medians) see what a fast desktop shows: scrolling
+was already smooth (frames over 33 ms: 1–2 per 160 wheel steps in both builds, from the frames
+llvmpipe draws), memory unchanged (RSS 359–361 MB), a new window width on the 300-block document
+26 instead of 34 ms (no TextEdit lays its text out unwrapped for a Loader any more; the outline
+30 instead of 33 ms), opening a page within the noise (80–107 vs 87–109 ms). The rows' 20–25 % matter where
+creating a row is a large part of a frame: phones (a Raspberry Pi 4 needed 7–9 ms per journal
+block, "Creating a day of the journal is one step" in docs/UI.md).
+
+What is left of a row's creation is mostly QML object creation (≈ 30 %) and laying out its text
+once (≈ 20 %). The rendering is unchanged (screenshots of both pages identical pixel for pixel).
+Tooling fixed on the way: `scroll-probe.sh` and `perf-record.sh` opened the app on the desktop's
+Wayland session instead of in Xvfb (now `QT_QPA_PLATFORM=xcb` there), `perf-record.sh` records
+user space only (`EVENT`, default `cycles:u`, with `--user-callchains`: what
+`kernel.perf_event_paranoid=2` allows), and the scroll probe can start sooner (`WAIT`) and label
+runs of two builds (`LABEL`).
 
 ### Budgets
 

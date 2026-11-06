@@ -11,10 +11,13 @@
 //   BENCH_T0         CLOCK_MONOTONIC ns at launch (the runner sets it just before exec); times
 //                    in the output are ms since then (default: the library's load)
 //   BENCH_SCENARIO   startup | open-page | typing | select-copy | search | switcher | views |
-//                    graph | journal-scroll | switch-pages | idle | idle-edit | workload (see
-//                    buildScenario())
-//   BENCH_PAGE       page path for open-page / typing / select-copy / idle-edit
-//                    ("Bench/Konspekt 5000.md")
+//                    graph | journal-scroll | page-scroll | page-resize | switch-pages | idle |
+//                    idle-edit | workload (see buildScenario())
+//   BENCH_PAGE       page path for open-page / typing / select-copy / idle-edit / page-scroll /
+//                    page-resize ("Bench/Konspekt 5000.md")
+//   BENCH_RESIZE_WIDTH page-resize: the narrower window width (default 920)
+//   BENCH_SCROLL_WAIT page-scroll: ms between the page's first block on screen and the first
+//                    wheel step (default: -1 = once the page has settled, as a reader would)
 //   BENCH_ROW        row to edit (typing, select-copy; default 10)
 //   BENCH_PAGES      file with one page path per line (switch-pages, workload)
 //   BENCH_IDLE_MS    idle duration (default 30000)
@@ -188,6 +191,8 @@ public:
         m_page = QString::fromUtf8(envOr("BENCH_PAGE", "Bench/Konspekt 5000.md"));
         m_row = envOr("BENCH_ROW", "10").toInt();
         m_idleMs = envOr("BENCH_IDLE_MS", "30000").toInt();
+        m_scrollWait = envOr("BENCH_SCROLL_WAIT", "-1").toInt();
+        m_resizeWidth = envOr("BENCH_RESIZE_WIDTH", "920").toInt();
         m_keep = qgetenv("BENCH_KEEP") == "1";
         const QByteArray pagesFile = qgetenv("BENCH_PAGES");
         if (!pagesFile.isEmpty()) {
@@ -1095,6 +1100,77 @@ private:
         action(u"mem"_s, [this] { markMem(u"scrolled"_s); });
     }
 
+    /// A page scrolled down and up again with the wheel (80 steps each way, 40 ms apart), opened
+    /// fresh: the rows it creates on the way are what the frames show.
+    void pageScrollSteps()
+    {
+        action(u"nav:1"_s, [this] {
+            mark(u"nav_start:1"_s);
+            navigate({{u"view"_s, u"page"_s}, {u"path"_s, m_page}});
+            mark(u"nav_returned:1"_s);
+        });
+        waitUntil(u"page_content:1"_s, [this] { return pageShown(m_page); }, 120000);
+        if (m_scrollWait >= 0)
+            wait(m_scrollWait);
+        else
+            waitSettled(u"page_settled:1"_s, 1000, 120000);
+        action(u"mem"_s, [this] { markMem(u"page:1"_s); });
+        action(u"scroll_start"_s, [this] { mark(u"scroll_start"_s); });
+        for (int i = 0; i < 80; ++i) {
+            action(u"wheel"_s, [this] { wheel(-120, u"down"_s); });
+            wait(40);
+        }
+        for (int i = 0; i < 80; ++i) {
+            action(u"wheel"_s, [this] { wheel(120, u"up"_s); });
+            wait(40);
+        }
+        action(u"scroll_end"_s, [this] { mark(u"scroll_end"_s); });
+        waitSettled(u"scroll_settled"_s, 1000, 60000);
+        action(u"mem"_s, [this] { markMem(u"scrolled"_s); });
+    }
+
+    /// The window made narrower and wider again six times (BENCH_RESIZE_WIDTH, default 920 — still
+    /// wide, with the sidebar, but the text column narrower than the 680 px editor width — ↔ its
+    /// width, 600 ms apart) on a settled page: every row that exists lays its text out again. An
+    /// action per resize: t0 the request, t2 when the window has the new width (the frame after it
+    /// shows the new layout).
+    void pageResizeSteps()
+    {
+        openPageSteps(m_page, u"1"_s);
+        action(u"mem"_s, [this] { markMem(u"page:1"_s); });
+        action(u"resize_base"_s, [this] { m_resizeBase = m_window ? m_window->width() : 1280; });
+        for (int i = 0; i < 12; ++i) {
+            const bool narrow = i % 2 == 0;
+            action(u"resize"_s, [this, narrow] {
+                if (!m_window)
+                    return;
+                const int w = narrow ? m_resizeWidth : m_resizeBase;
+                Action a;
+                a.kind = u"resize"_s;
+                a.label = QString::number(w);
+                a.t0 = monoNs();
+                m_window->setWidth(w);
+                QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::AllEvents);
+                a.t1 = monoNs();
+                m_actions.push_back(a);
+                m_resizeTarget = w;
+                m_resizeAction = qsizetype(m_actions.size()) - 1;
+            });
+            waitUntil(
+                    u"resized"_s,
+                    [this] {
+                        if (!m_window || m_window->width() != m_resizeTarget)
+                            return false;
+                        if (m_resizeAction >= 0 && m_resizeAction < qsizetype(m_actions.size()))
+                            m_actions[size_t(m_resizeAction)].t2 = monoNs();
+                        return true;
+                    },
+                    5000, false);
+            wait(600);
+        }
+        waitSettled(u"resize_settled"_s, 1000, 60000);
+    }
+
     void switchPagesSteps()
     {
         if (m_pages.isEmpty())
@@ -1219,6 +1295,10 @@ private:
             graphSteps();
         } else if (s == u"journal-scroll") {
             journalScrollSteps();
+        } else if (s == u"page-scroll") {
+            pageScrollSteps();
+        } else if (s == u"page-resize") {
+            pageResizeSteps();
         } else if (s == u"switch-pages") {
             switchPagesSteps();
         } else if (s == u"idle") {
@@ -1241,8 +1321,13 @@ private:
     int m_stateBefore = -1;
     int m_row = 10;
     int m_idleMs = 30000;
+    int m_scrollWait = -1;
     bool m_keep = false;
     QStringList m_pages;
+    int m_resizeBase = 1280;
+    int m_resizeWidth = 920;
+    int m_resizeTarget = 0;
+    qsizetype m_resizeAction = -1;
 
     QPointer<QQuickWindow> m_window;
     QQmlEngine *m_engine = nullptr;
