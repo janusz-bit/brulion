@@ -268,6 +268,16 @@ void connectGestureSources(GestureInsets *insets, QQmlApplicationEngine *engine)
     // The observer reports them with the keyboard's state (connectKeyboardSources asks for it
     // again; asking here too keeps this independent of the order of the two calls).
     platform::AndroidBridge::instance()->requestImeState();
+    // The other way: the rectangle the shell keeps for its own swipes (the side panel drawer's
+    // handle), in physical pixels.
+    QObject::connect(insets, &GestureInsets::exclusionChanged, insets, [insets, window] {
+        const qreal dpr = *window ? (*window)->devicePixelRatio() : qGuiApp->devicePixelRatio();
+        const QRectF r = insets->exclusion();
+        QList<QRect> rects;
+        if (!r.isEmpty())
+            rects.append(QRectF(r.x() * dpr, r.y() * dpr, r.width() * dpr, r.height() * dpr).toAlignedRect());
+        platform::AndroidBridge::instance()->setGestureExclusion(rects);
+    });
 #else
     Q_UNUSED(insets)
     Q_UNUSED(engine)

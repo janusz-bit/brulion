@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="784"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="818"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="829"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="863"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="830"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="864"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="839"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="841"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="873"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="875"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -333,7 +333,7 @@
 <context>
     <name>ContentBacklinks</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="146"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="155"/>
         <source>%n linked reference(s)</source>
         <translation>
             <numerusform>%n linked reference</numerusform>
@@ -341,7 +341,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="153"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="162"/>
         <source>in %n page(s)</source>
         <translation>
             <numerusform>in %n page</numerusform>
@@ -349,8 +349,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="187"/>
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="246"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="196"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="257"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -358,7 +358,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="207"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="218"/>
         <source>%n unlinked mention(s)</source>
         <translation>
             <numerusform>%n unlinked mention</numerusform>
@@ -366,11 +366,22 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="219"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="230"/>
         <source>Linked %n mention(s)</source>
         <translation>
             <numerusform>Linked %n mention</numerusform>
             <numerusform>Linked %n mentions</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ContentLocalGraph</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/content/ContentLocalGraph.qml" line="82"/>
+        <source>Local graph: %n linked page(s)</source>
+        <translation>
+            <numerusform>Local graph: %n linked page</numerusform>
+            <numerusform>Local graph: %n linked pages</numerusform>
         </translation>
     </message>
 </context>
@@ -855,7 +866,7 @@
 <context>
     <name>PageView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="592"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="605"/>
         <source>%n word(s)</source>
         <translation>
             <numerusform>%n word</numerusform>
@@ -863,7 +874,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="592"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="605"/>
         <source>%n character(s)</source>
         <translation>
             <numerusform>%n character</numerusform>
@@ -871,7 +882,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="593"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="606"/>
         <source>%n without spaces</source>
         <comment>characters</comment>
         <translation>
@@ -880,7 +891,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/PageView.qml" line="594"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="607"/>
         <source>%n min read</source>
         <translation>
             <numerusform>%n min read</numerusform>
@@ -1039,7 +1050,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="993"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="994"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1047,7 +1058,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1498"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1499"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1055,7 +1066,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1381"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1382"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1063,7 +1074,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1383"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1384"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1103,6 +1114,17 @@
         <translation>
             <numerusform>%n file is too large to restore and stays as it is.</numerusform>
             <numerusform>%n files are too large to restore and stay as they are.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>ShellContextDrawer</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellContextDrawer.qml" line="69"/>
+        <source>Context panel, %n backlink(s)</source>
+        <translation>
+            <numerusform>Context panel, %n backlink</numerusform>
+            <numerusform>Context panel, %n backlinks</numerusform>
         </translation>
     </message>
 </context>
@@ -1244,7 +1266,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5559"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5563"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>

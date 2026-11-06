@@ -11,10 +11,17 @@
 //      (WindowInsets.Type.systemGestures(), android/src/…/ImeInsets.kt via
 //      AndroidBridge::systemGesturesChanged; src/app/ui/keyboardsources.cpp connects it).
 //
+// The other way round, `exclusion`: a rectangle of the window (logical pixels) whose swipes are the
+// app's even inside those zones — the handle of the side panel's drawer at the right edge of a
+// phone (docs/UI.md "Side panel"). The shell sets it, the platform hands it on (Android:
+// View.setSystemGestureExclusionRects, API 29+, keyboardsources.cpp); elsewhere it only says
+// where the handle is.
+//
 // GUI-free (QtCore only; brulion_ui_helpers).
 #pragma once
 
 #include <QObject>
+#include <QRectF>
 
 namespace brulion::ui {
 
@@ -27,6 +34,8 @@ class GestureInsets : public QObject {
     Q_PROPERTY(qreal right READ right NOTIFY changed FINAL)
     /// The values come from simulate() (until simulate(-1, -1)).
     Q_PROPERTY(bool simulated READ simulated NOTIFY changed FINAL)
+    /// The window's rectangle kept from the system's gestures (logical pixels; empty: none).
+    Q_PROPERTY(QRectF exclusion READ exclusion NOTIFY exclusionChanged FINAL)
 
 public:
     explicit GestureInsets(QObject *parent = nullptr);
@@ -38,6 +47,11 @@ public:
     qreal left() const { return m_simulated ? m_simulatedLeft : m_platformLeft; }
     qreal right() const { return m_simulated ? m_simulatedRight : m_platformRight; }
     bool simulated() const { return m_simulated; }
+    QRectF exclusion() const { return m_exclusion; }
+
+    /// Keep `rect` (window coordinates, logical pixels) from the system's gestures; an empty,
+    /// invalid or not finite rectangle clears it. Rounded outwards to whole pixels.
+    Q_INVOKABLE void setExclusion(const QRectF &rect);
 
     /// The platform's report in logical pixels; negative or not finite values count as 0.
     void setPlatformInsets(qreal left, qreal right);
@@ -47,6 +61,7 @@ public:
 
 Q_SIGNALS:
     void changed();
+    void exclusionChanged();
 
 private:
     void apply(qreal oldLeft, qreal oldRight, bool oldSimulated);
@@ -56,6 +71,7 @@ private:
     qreal m_simulatedLeft = 0;
     qreal m_simulatedRight = 0;
     bool m_simulated = false;
+    QRectF m_exclusion;
 };
 
 } // namespace brulion::ui

@@ -38,6 +38,8 @@ Rectangle {
     /// another app" (the browser: "Open in a new tab").
     property bool pdf: false
     property bool fileOnly: false
+    /// Narrow windows: the view has a context panel (the side panel's drawer, contextRequested()).
+    property bool contextAvailable: false
     /// The note's mode shown, "document" | "outline" ("" for none to switch: ShellRouteView.viewNoteMode).
     property string noteMode
 
@@ -53,6 +55,8 @@ Rectangle {
     signal moveRequested(string path)
     signal revealRequested(string path)
     signal aboutRequested()
+    /// The side panel's drawer was asked for (narrow windows).
+    signal contextRequested()
 
     readonly property var route: AppController.currentRoute
     readonly property string routeView: AppController.currentView
@@ -260,6 +264,14 @@ Rectangle {
             label: qsTr("Quick capture")
             shortcut: ShortcutMap.sequences["capture"] || ""
             onClicked: bar.captureRequested()
+        }
+        // Narrow windows: the side panel's drawer from the right edge (ShellContextDrawer).
+        BIconButton {
+            objectName: "topBarContext"
+            visible: Theme.narrow && bar.contextAvailable
+            iconName: "panel-right"
+            label: qsTr("Show side panel")
+            onClicked: bar.contextRequested()
         }
         BIconButton {
             visible: !Theme.narrow

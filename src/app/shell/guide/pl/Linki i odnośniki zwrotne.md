@@ -4,7 +4,9 @@ brulion: document
 ---
 # Linki i odnośniki zwrotne
 
-Linki łączą notatki w sieć. Każda strona pokazuje w panelu bocznym (zakładka **Linki**) i pod treścią **odnośniki zwrotne**: strony i bloki, które do niej prowadzą — linkiem albo [[Tagi i właściwości#Tag to link do strony|tagiem]] — także te, które tylko wspominają jej nazwę bez linku.
+Linki łączą notatki w sieć. Każda strona pokazuje w panelu bocznym (sekcja **Odnośniki**) i pod treścią **odnośniki zwrotne**: strony i bloki, które do niej prowadzą — linkiem albo [[Tagi i właściwości#Tag to link do strony|tagiem]] — także te, które tylko wspominają jej nazwę bez linku (sekcja **Wzmianki bez linku**).
+
+Panel boczny składa się z rozwijanych sekcji: dla strony **Konspekt**, **Odnośniki**, **Wzmianki bez linku** i **Lokalny graf** (strony połączone z nią linkami — kliknięcie otwiera stronę); dla dnia w dzienniku **Plan dnia** (przypomnienia i daty tego dnia według godzin), **Zadania** (otwarte zadania na ten dzień, zaległe na czerwono), **Rok temu** (wpis z tego samego dnia rok wcześniej), **Odnośniki** i **Kalendarz**. Kliknięcie tytułu sekcji zwija ją albo rozwija. Na komputerze panel stoi obok tekstu (przycisk panelu w górnym pasku, `Ctrl+\`); na telefonie wysuwa się z prawej krawędzi: dotknij małej zakładki przy prawej krawędzi (pokazuje liczbę odnośników) albo przycisku panelu w górnym pasku, a zamkniesz go dotknięciem przyciemnionej strony, przesunięciem w prawo albo przyciskiem Wstecz.
 
 ## Rodzaje linków
 | Zapis | Znaczenie |

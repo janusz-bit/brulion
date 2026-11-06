@@ -4,7 +4,9 @@ brulion: document
 ---
 # Links and backlinks
 
-Links tie your notes into a web. Every page shows its **backlinks** in the side panel (the **Links** tab) and below its content: the pages and blocks that lead to it — with a link or a [[Tags and properties#A tag is a link to a page|tag]] — including those that only mention its name without a link.
+Links tie your notes into a web. Every page shows its **backlinks** in the side panel (the **Backlinks** section) and below its content: the pages and blocks that lead to it — with a link or a [[Tags and properties#A tag is a link to a page|tag]] — including those that only mention its name without a link (the **Unlinked mentions** section).
+
+The side panel folds into sections: for a page **Outline**, **Backlinks**, **Unlinked mentions** and **Local graph** (the pages linked to and from it — click one to open it); for a day of the journal **Day plan** (that day's reminders and dates by the hour), **Tasks** (open tasks due by that day, overdue ones in red), **A year ago** (the journal of the same day last year), **Backlinks** and **Calendar**. A click on a section's title folds or unfolds it. On a computer the panel sits beside the text (the panel button in the top bar, `Ctrl+\`); on a phone it slides in from the right edge: tap the small tab on the right edge (it shows the number of backlinks) or the panel button in the top bar, and close it with a tap on the dimmed page, a swipe to the right or Back.
 
 ## Kinds of links
 | Notation | Meaning |

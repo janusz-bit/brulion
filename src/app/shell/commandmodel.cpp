@@ -176,12 +176,7 @@ static QList<Command> buildCommands(const AppController *app)
              CommandModel::tr("Switch between blocks and the page's text"), u"code"_s, u"Ctrl+E"_s, inEditor},
             {u"nav.back"_s, CommandModel::tr("Back"), {}, u"arrow-left"_s, u"Alt+Left"_s, app->canGoBack()},
             {u"nav.forward"_s, CommandModel::tr("Forward"), {}, u"arrow-right"_s, u"Alt+Right"_s, app->canGoForward()},
-            {u"panel.toggle"_s,
-             CommandModel::tr("Toggle side panel"),
-             {},
-             u"panel-right"_s,
-             u"Ctrl+\\"_s,
-             ready && app->sidePanelAllowed()},
+            {u"panel.toggle"_s, CommandModel::tr("Toggle side panel"), {}, u"panel-right"_s, u"Ctrl+\\"_s, ready},
             // Focus mode and typewriter scrolling (docs/UI.md "Statistics and focus mode"): device
             // settings; the bars go only where an editor is shown.
             {u"view.focus"_s,
@@ -604,6 +599,8 @@ bool CommandModel::run(const QString &id)
         m_app->back();
     else if (id == u"nav.forward")
         m_app->forward();
+    else if (id == u"panel.toggle" && !m_app->sidePanelAllowed())
+        m_app->requestUiAction(u"toggleContextDrawer"_s); // narrow windows: the drawer from the right
     else if (id == u"panel.toggle")
         m_app->setSidePanelVisible(!m_app->sidePanelVisible());
     else if (id == u"sync.now")

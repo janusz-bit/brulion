@@ -23,7 +23,7 @@ Shortcuts on a computer — you can change the ones in the “General” table: 
 | Ctrl+W | close the tab (in a page's separate window: that window) |
 | Ctrl+Tab / Ctrl+Shift+Tab | next / previous tab (also Ctrl+PgDown / Ctrl+PgUp) |
 | Ctrl+1 … Ctrl+8 / Ctrl+9 | the tab with that number / the last tab |
-| Ctrl+\ | side panel (wide window) |
+| Ctrl+\ | side panel (on a phone: slides in from the right) |
 | F2 | rename the page |
 | Ctrl+P | print the page ([[Import and export#A single page|exporting and printing a page]]) |
 | Ctrl+, | settings |

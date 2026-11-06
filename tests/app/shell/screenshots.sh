@@ -111,6 +111,14 @@ declare -A shot_args=(
   [page-reminder]="--demo --editor-script reminder"
   [page-source]="--demo --editor-script source"
   [page-sidepanel]="--demo --editor-script sidepanel"
+  # The side panel's accordion (docs/UI.md "Side panel"): docked beside a journal day on wide
+  # windows (Day plan, Tasks, A year ago, Backlinks), and on phones in the drawer from the right
+  # edge — a page's (Outline, Backlinks, Local graph) and today's —, plus the handle alone.
+  [journals-sidepanel]="--demo --route {\"view\":\"page\",\"path\":\"journals/2026-10-14.md\"} --editor-script context"
+  [page-context]="--demo --route {\"view\":\"page\",\"path\":\"$project\"} --editor-script context"
+  [context]="--demo --route {\"view\":\"page\",\"path\":\"$project\"} --popup context"
+  [context-journal]="--demo --route journals --popup context"
+  [context-handle]="--demo --route {\"view\":\"page\",\"path\":\"$project\"}"
   [page-empty]="--demo --editor-script empty"
   [page-new]="--demo --route {\"view\":\"page\",\"path\":\"$new_page\"}"
   # A tag's page not written yet, opened from the tag: on phones not typing yet (the tagged blocks
@@ -167,7 +175,7 @@ declare -A shot_notemode=(
 )
 all_shots=(onboarding journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
   page-editing-toast page-toolbar-menu page-tag-new page-suggest page-tags page-slash page-date page-reminder
-  page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
+  page-source page-sidepanel page-context journals-sidepanel context context-journal context-handle page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-selection page-picture page-picture-text page-picture-links
   pdf-embed pdf-viewer pdf-zoom pdf-search pdf-jump pdf-locked doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-appearance settings-appearance-black journals-teal-white journals-violet-black
@@ -204,8 +212,9 @@ for shot in "${shots[@]}"; do
     esac
     # The drawer only exists on narrow windows.
     [[ ( "$shot" == drawer || "$shot" == drawer-tree ) && "$size" == desktop* ]] && continue
-    # The side panel only exists on wide windows.
-    [[ ( "$shot" == page-sidepanel || "$shot" == page-picture-links ) && "$size" == phone* ]] && continue
+    # The side panel is docked on wide windows only, its drawer and handle exist on narrow ones.
+    [[ ( "$shot" == page-sidepanel || "$shot" == page-context || "$shot" == journals-sidepanel || "$shot" == page-picture-links ) && "$size" == phone* ]] && continue
+    [[ "$shot" == context* && "$size" == desktop* ]] && continue
     for theme in "${themes[@]}"; do
       file="$out/shell-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"

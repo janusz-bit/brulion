@@ -23,7 +23,7 @@ Skróty na komputerze — te z tabeli „Ogólne” możesz zmienić: zobacz [[#
 | Ctrl+W | zamknij kartę (w osobnym oknie strony: to okno) |
 | Ctrl+Tab / Ctrl+Shift+Tab | następna / poprzednia karta (także Ctrl+PgDown / Ctrl+PgUp) |
 | Ctrl+1 … Ctrl+8 / Ctrl+9 | karta o tym numerze / ostatnia karta |
-| Ctrl+\ | panel boczny (szerokie okno) |
+| Ctrl+\ | panel boczny (na telefonie wysuwa się z prawej) |
 | F2 | zmiana nazwy strony |
 | Ctrl+P | drukuj stronę ([[Import i eksport#Jedna strona|eksport i druk strony]]) |
 | Ctrl+, | ustawienia |

@@ -331,6 +331,7 @@ FocusScope {
         case "trashPage": if (shell.currentFile !== "") shell.confirmDelete(shell.currentFile); break
         case "about": shell.openAbout(); break
         case "toggleSidePanel": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
+        case "toggleContextDrawer": contextDrawer.toggle(); break
         case "renamePage": if (shell.currentView === "page") shell.openRename(shell.routePath, false); break
         }
     }
@@ -460,6 +461,8 @@ FocusScope {
                 onMoveRequested: (path) => shell.openMove(path, false)
                 onRevealRequested: (path) => shell.revealInTree(path)
                 onAboutRequested: shell.openAbout()
+                contextAvailable: contextDrawer.available
+                onContextRequested: contextDrawer.open()
             }
             // Not while typing: the room above the on-screen keyboard is the note's.
             ShellUpdateBanner {
@@ -680,6 +683,22 @@ FocusScope {
         }
     }
 
+    // The side panel of narrow windows: a drawer from the right edge with its handle (wide
+    // windows dock ShellSidePanel beside the text instead).
+    ShellContextDrawer {
+        id: contextDrawer
+        objectName: "shellContextDrawer"
+        anchors.fill: parent
+        anchors.bottomMargin: shell.keyboardRoom
+        contextPanel: shell.routeView.viewSidePanel
+        title: shell.title
+        badgeCount: shell.routeView.viewBacklinkCount
+        allowed: !shell.focusMode && !drawer.visible
+        topInset: shell.SafeArea.margins.top
+        bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)
+        onClosed: shell.routeView.forceActiveFocus()
+    }
+
     // ---- Popups -----------------------------------------------------------------------------
 
     BCommandPalette {
@@ -892,7 +911,7 @@ FocusScope {
     }
     function shortcutEnabled(id: string): bool {
         switch (id) {
-        case "panel.toggle": return !Theme.narrow
+        case "panel.toggle": return !Theme.narrow || contextDrawer.available
         case "page.rename": return shell.currentView === "page"
         case "page.print": return shell.currentView === "page"
         }
@@ -906,7 +925,12 @@ FocusScope {
         case "go.search": AppController.search(""); break
         case "page.new": shell.openNewPage(""); break
         case "capture": shell.openCapture(); break
-        case "panel.toggle": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
+        case "panel.toggle":
+            if (Theme.narrow)
+                contextDrawer.toggle()
+            else
+                AppController.sidePanelVisible = !AppController.sidePanelVisible
+            break
         case "page.rename": shell.openRename(shell.routePath, false); break
         default: CommandModel.run(id)
         }
@@ -1009,6 +1033,7 @@ FocusScope {
         case "move": return moveDialog
         case "about": return about
         case "drawer": return drawer
+        case "context": return contextDrawer.drawerItem
         case "more": return topBar.moreMenuPopup
         }
         return shell._noPopup
@@ -1072,6 +1097,12 @@ FocusScope {
         }
         case "about": shell.openAbout(); break
         case "drawer": drawer.open(); break
+        // context[:<section>]: the side panel's drawer (narrow windows), that section unfolded.
+        case "context":
+            if (query !== "")
+                AppSettings.setValue("ui/sidePanel/tab", query)
+            contextDrawer.open()
+            break
         case "more": topBar.openMoreMenu(); break
         }
     }

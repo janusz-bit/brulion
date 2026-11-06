@@ -184,6 +184,10 @@ Item {
             case "sidepanel":
                 AppController.openPage(script.say("Recipes.md", "Przepisy.md"), -1, true)
                 break
+            case "context": // the side panel's accordion of this page (wide windows)
+                AppController.clearSidePanelRoute()
+                AppController.sidePanelVisible = true
+                break
             case "doc-paragraph":
                 script.editor.startEditing(script.rowOf(script.say("Brulion is a notebook", "Brulion to notatnik")), 58)
                 break

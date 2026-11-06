@@ -322,6 +322,62 @@ components — no Material/Fusion look, so all targets look identical.
   the cursor on the icon or within 8 px of the click's (Windows hides it on the press, Trigger
   comes on the release — a held button).
 
+## Side panel
+
+One component, `ContentSidePanel` (`qml/content/`), the view's `sidePanel`, in two hosts: docked
+beside the text in wide windows (≥ 900 px, `ShellSidePanel` in the window's `SplitView`, the top
+bar's panel button and Ctrl+\ show and hide it) and in a drawer from the right edge of narrow ones
+(`ShellContextDrawer`). It is an **accordion**: a scrolling column of folding sections
+(`ContentPanelSection`) — a header row with a chevron, the title in small letter-spaced capitals
+(11 px, `fgMuted`) and a count in the mono font —, each section's content made only while it is
+unfolded (the unlinked mentions read every note, the local graph runs a layout). What is folded is
+no setting: every panel starts with the defaults below, a drawer opened again is a new panel.
+`route.open` ("links", "outline", "calendar"; the page menu's side panel items) and the
+`--popup context:<section>` option unfold one and scroll to it (`ContentSidePanel.reveal()`).
+
+* **A page** — **Outline** (its headings, live while typing, indented by level; a click scrolls the
+  editor there, a right-click / long press copies `[[Page#Heading]]` or its embed;
+  `ContentOutline { embedded: true }`), **Backlinks** (the linked references, compact, grouped by
+  page; `ContentBacklinks { sectioned: true; showUnlinked: false }`), **Unlinked mentions**
+  (folded at first; "Link" per mention and "Link all"), **Local graph** (`ContentLocalGraph`: the
+  page and the pages it links to or that link to it — `GraphModel` with `focusPath`, depth 1, no
+  tags, at most 200 nodes — in a 160–240 px square fitted to them; a click on a node opens it, "Open
+  graph" opens the graph view on the page). A picture or a PDF has only its Backlinks.
+* **A journal day** (also the journal stream: the day being written, else today) — **Day plan**
+  (`ContentDayPlan`, `Workspace.dayPlan()` = `reminders/dayplan.h`: the blocks with a due date, a
+  scheduled date or reminders that day, one row per block — a task due today with a reminder at
+  17:30 is one row at 17:30 —, timed rows first by time; the time in the mono font or a dash, a
+  3-px bar — amber for reminders and alarms whatever the accent, the link blue for due dates, red
+  for a due date already past, violet for scheduled ones, faint for a done task, struck through —,
+  the text, ⏰! as an icon; a click opens the block), **Tasks** (`ContentDayTasks`: the open tasks
+  the Tasks view files under Overdue, Today and Tomorrow seen from that day — `TaskListModel` with
+  `today` = the day —, at most 12; a ring in the task's colour, the text, its date in the mono font,
+  red when overdue; "All tasks"), **A year ago** (`ContentYearAgo`: the same day a year before —
+  29 February: the 28th —, its date as a link, its first six blocks rendered like a link preview,
+  or "No journal on that day."), **Backlinks**, **Calendar** (folded: the month with its journal
+  days, `ContentMiniCalendar`).
+
+**The drawer of narrow windows** (`ShellContextDrawer`, phones and windows under 900 px): about
+85 % of the width (at most 420 px), sliding in from the right over the page, which the scrim
+dims (`Theme.scrim`); a header with the page's title and a close button over the accordion. It
+opens from
+
+* the **handle**, always on the right edge while the view has a context panel (not in focus mode,
+  not while the left drawer is open): a small tab (18 × 56 px, drawn coming out of the edge; a
+  44 × 64 px target) at 38 % of the height with a chevron and the page's backlink count as a badge
+  (`ShellRouteView.viewBacklinkCount`, the view's `backlinkCount`); a tap or a swipe to the left on
+  it opens the drawer. The handle's rectangle is kept from the system's gestures
+  (`GestureInsets.setExclusion()`; Android 10+: `View.setSystemGestureExclusionRects` through
+  `AndroidBridge::setGestureExclusion`, so a swipe from the edge there is the handle's and gesture
+  navigation's "back" keeps the rest of the edge);
+* the top bar's **panel button** (`topBarContext`, narrow windows with a context), Ctrl+\ and the
+  palette's "Toggle side panel";
+* a swipe to the left that starts in the 24-px strip beyond the system's gesture zone at the right
+  edge (as the left drawer's, `GestureInsets.right`).
+
+A tap on the dimmed page, a swipe to the right on the drawer, Escape or the Back key close it; the
+view gets the focus back. Wide windows never show the handle or the drawer.
+
 ## Folders (the sidebar's tree, "Move to…")
 
 Folders are namespaces of pages (docs/SYNTAX.md §1); moving never breaks a link (§2 "Rewriting on

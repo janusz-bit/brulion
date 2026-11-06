@@ -820,6 +820,23 @@ void AndroidBridge::setSystemBarsLight(bool light)
     failed("setSystemBarsLight");
 }
 
+void AndroidBridge::setGestureExclusion(const QList<QRect> &rects)
+{
+    QJniEnvironment env;
+    const jsize size = jsize(rects.size() * 4);
+    jintArray array = env->NewIntArray(size);
+    if (!array)
+        return;
+    QList<jint> values;
+    values.reserve(size);
+    for (const QRect &r : rects)
+        values << jint(r.x()) << jint(r.y()) << jint(r.width()) << jint(r.height());
+    env->SetIntArrayRegion(array, 0, size, values.constData());
+    QJniObject::callStaticMethod<void>(kClass, "setGestureExclusion", "([I)V", array);
+    env->DeleteLocalRef(array);
+    failed("setGestureExclusion");
+}
+
 void AndroidBridge::deliverPendingActivation()
 {
     const Activation activation = takeActivation();

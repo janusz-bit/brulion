@@ -6,7 +6,9 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QList>
 #include <QObject>
+#include <QRect>
 #include <QString>
 
 namespace brulion::platform {
@@ -233,6 +235,10 @@ public:
     /// The system bars' icons over a window drawn behind them (Android 11+): dark over a light
     /// window (`light`), light over a dark one.
     void setSystemBarsLight(bool light);
+
+    /// The window's rectangles (physical pixels) whose swipes are the app's, not the system's
+    /// gesture navigation (Android 10+; the side panel drawer's handle). Empty: none.
+    void setGestureExclusion(const QList<QRect> &rects);
 
 Q_SIGNALS:
     /// A reminder notification (or "Open note" on the alarm screen) was tapped.

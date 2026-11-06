@@ -155,6 +155,33 @@ object BrulionAndroid {
     onMain { applySystemBars() }
   }
 
+  /**
+   * The window's rectangles (physical pixels: x, y, width, height, … — the side panel drawer's
+   * handle at the right edge, docs/UI.md "Side panel") where a swipe is the app's, not gesture
+   * navigation's "back" (Android 10+: View.setSystemGestureExclusionRects; the system honours at
+   * most 200 dp of height per edge). An empty array clears them.
+   */
+  @JvmStatic
+  fun setGestureExclusion(rects: IntArray) {
+    gestureExclusion = rects.copyOf()
+    onMain { applyGestureExclusion() }
+  }
+
+  @Volatile private var gestureExclusion = IntArray(0)
+
+  internal fun applyGestureExclusion() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+    val decor = currentActivity()?.window?.decorView ?: return
+    val rects = gestureExclusion
+    val list = ArrayList<android.graphics.Rect>()
+    var i = 0
+    while (i + 3 < rects.size) {
+      list.add(android.graphics.Rect(rects[i], rects[i + 1], rects[i] + rects[i + 2], rects[i + 1] + rects[i + 3]))
+      i += 4
+    }
+    decor.systemGestureExclusionRects = list
+  }
+
   /** C++ is going away (application shutdown): keep activations for [takeActivation]. */
   @JvmStatic
   fun detach() {
@@ -713,6 +740,7 @@ object BrulionAndroid {
   internal fun onActivityCreated(activity: Activity) {
     activityRef = WeakReference(activity)
     applySystemBars()
+    applyGestureExclusion()
     ReminderNotifier.ensureChannels(activity)
     onActivityIntent(activity, activity.intent)
   }

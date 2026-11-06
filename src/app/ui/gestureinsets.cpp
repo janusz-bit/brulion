@@ -68,6 +68,21 @@ void GestureInsets::simulate(qreal left, qreal right)
     apply(oldLeft, oldRight, oldSimulated);
 }
 
+void GestureInsets::setExclusion(const QRectF &rect)
+{
+    QRectF r;
+    if (std::isfinite(rect.x()) && std::isfinite(rect.y()) && std::isfinite(rect.width())
+        && std::isfinite(rect.height()) && rect.width() > 0 && rect.height() > 0) {
+        const qreal left = std::floor(rect.left());
+        const qreal top = std::floor(rect.top());
+        r = QRectF(left, top, std::ceil(rect.right()) - left, std::ceil(rect.bottom()) - top);
+    }
+    if (r == m_exclusion)
+        return;
+    m_exclusion = r;
+    Q_EMIT exclusionChanged();
+}
+
 void GestureInsets::apply(qreal oldLeft, qreal oldRight, bool oldSimulated)
 {
     if (oldLeft != left() || oldRight != right() || oldSimulated != m_simulated)
