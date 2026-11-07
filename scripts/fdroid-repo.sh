@@ -3,8 +3,9 @@
 #
 # Builds Brulion's own F-Droid repository: the site GitHub Pages serves at
 # https://<owner>.github.io/<repo>/ (docs/ANDROID.md, "Brulion's own F-Droid repository"):
-#   OUT/index.html  the landing page (packaging/fdroid-repo/index.html): how to add the repository,
-#                   its QR code and the fingerprint of its key
+#   OUT/index.html  the landing page (packaging/fdroid-repo/index.html): the files of the latest
+#                   release to download (direct links, sizes, a button for the visitor's system),
+#                   how to add the repository, its QR code and the fingerprint of its key
 #   OUT/repo/       the repository (`fdroid update`): the APKs of the last releases, the signed
 #                   index (index-v1.jar, index-v2.json + entry.jar), icon, screenshots and texts
 #                   (fastlane/metadata/android, packaging/fdroid-repo/io.github.januszbit.brulion.yml)
@@ -12,16 +13,18 @@
 # release updates from the repository and the other way round. The "added" dates of versions
 # already in the published repository are kept (its index-v2.json is read first).
 #
-# Usage: scripts/fdroid-repo.sh [-o OUT] [-n N] [-a APK_DIR] [-u URL]
+# Usage: scripts/fdroid-repo.sh [-o OUT] [-n N] [-a APK_DIR] [-u URL] [-r TAG]
 #   -o OUT      output directory, replaced [dist-fdroid]
 #   -n N        the APKs of the last N published releases (no drafts, no pre-releases) [3]
 #   -a APK_DIR  the APKs from this directory instead of the releases (local runs)
 #   -u URL      the site's address, ending in / [https://<owner>.github.io/<repo>/ of GH_REPO]
+#   -r TAG      the published release vX.Y.Z whose files the page offers [the newest of the N
+#               releases; with -a the latest published release]
 # Env: the repository's signing key (scripts/fdroid-new-keystore.sh): FDROID_KEYSTORE (a file) or
 #      FDROID_KEYSTORE_BASE64, FDROID_KEYSTORE_PASS, FDROID_KEY_ALIAS [brulion-fdroid];
 #      GH_REPO [janusz-bit/brulion]; GH_TOKEN for gh (downloads).
 # Needs fdroidserver (`fdroid`, 2.4), keytool (JDK 17+), apksigner (on PATH or in the Android SDK's
-# build-tools of $ANDROID_HOME), curl, and gh unless -a is given. On NixOS:
+# build-tools of $ANDROID_HOME), curl and gh (also with -a: the page's release). On NixOS:
 #   nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner nixpkgs#gh -c scripts/fdroid-repo.sh
 set -euo pipefail
 
@@ -34,13 +37,14 @@ die() {
 }
 log() { printf '\033[1m[fdroid-repo]\033[0m %s\n' "$*" >&2; }
 
-out=dist-fdroid releases=3 apk_dir='' url=''
-while getopts 'o:n:a:u:h' opt; do
+out=dist-fdroid releases=3 apk_dir='' url='' page_tag=''
+while getopts 'o:n:a:u:r:h' opt; do
   case $opt in
     o) out=$OPTARG ;;
     n) releases=$OPTARG ;;
     a) apk_dir=$OPTARG ;;
     u) url=$OPTARG ;;
+    r) page_tag=$OPTARG ;;
     h)
       awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "${BASH_SOURCE[0]}"
       exit 0
@@ -62,10 +66,9 @@ fi
 repo_url=${url}repo
 alias=${FDROID_KEY_ALIAS:-brulion-fdroid}
 
-for tool in fdroid keytool curl; do
+for tool in fdroid keytool curl gh; do
   command -v "$tool" >/dev/null || die "$tool not found (see --help)"
 done
-[[ -n $apk_dir ]] || command -v gh >/dev/null || die "gh not found (or give the APKs with -a)"
 [[ -n ${FDROID_KEYSTORE_PASS:-} ]] || die "FDROID_KEYSTORE_PASS is not set (scripts/fdroid-new-keystore.sh)"
 
 work=$(mktemp -d)
@@ -125,6 +128,43 @@ else
   done
 fi
 
+# The release the page offers for download (-r; else the newest of the repository's releases, with
+# -a the latest published one). The page links its files directly (…/releases/download/<tag>/<file>),
+# so every one of them has to be in the release; their sizes go next to the links.
+[[ -n $page_tag || -n $apk_dir ]] || page_tag=${tags[0]}
+release_info=$(gh release view ${page_tag:+"$page_tag"} --json tagName,publishedAt,isDraft,isPrerelease,assets \
+  --jq '"\(.tagName) \(.publishedAt) \(.isDraft) \(.isPrerelease)", (.assets[] | "\(.size) \(.name)")') ||
+  die "cannot read the release ${page_tag:-latest} (gh release view)"
+mapfile -t release <<<"$release_info"
+read -r tag published draft prerelease <<<"${release[0]}"
+[[ $tag =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || die "the page offers a release vX.Y.Z, not '$tag'"
+version=${BASH_REMATCH[1]}
+[[ $draft == false && $prerelease == false ]] || die "the release $tag is a draft or a pre-release"
+[[ $published =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]] || die "the release $tag has no publication date"
+published=${published%%T*}
+published_text=$(LC_ALL=C date -u -d "$published" '+%-d %B %Y') || die "bad date $published"
+declare -A asset_size=()
+for line in "${release[@]:1}"; do
+  [[ $line =~ ^([0-9]+)\ ([^ ]+)$ ]] && asset_size[${BASH_REMATCH[2]}]=${BASH_REMATCH[1]}
+done
+download_url="https://github.com/$GH_REPO/releases/download/$tag"
+page_subst=(
+  -e "s|@VERSION@|$version|g" -e "s|@TAG@|$tag|g" -e "s|@REPO@|$GH_REPO|g" -e "s|@DOWNLOAD_URL@|$download_url|g"
+  -e "s|@RELEASE_URL@|https://github.com/$GH_REPO/releases/tag/$tag|g"
+  -e "s|@PUBLISHED@|$published|g" -e "s|@PUBLISHED_TEXT@|$published_text|g"
+)
+# @SIZE_<KEY>@ placeholders and the files they stand for (the page's links name the same files).
+for entry in "APK brulion-$version-arm64-v8a.apk" \
+  "APPIMAGE_X86_64 Brulion-$version-x86_64.AppImage" "APPIMAGE_AARCH64 Brulion-$version-aarch64.AppImage" \
+  "WINDOWS_SETUP Brulion-$version-windows-x86_64-setup.exe" "WINDOWS_ZIP brulion-$version-windows-x86_64.zip" \
+  "WEB_HTML brulion-web-$version.html" "WEB_ZIP brulion-web-$version.zip"; do
+  file=${entry#* }
+  [[ -n ${asset_size[$file]:-} ]] || die "the release $tag has no $file"
+  size=$(LC_ALL=C awk -v b="${asset_size[$file]}" 'BEGIN { printf "%.1f MB", b / 1048576 }')
+  page_subst+=(-e "s|@SIZE_${entry%% *}@|$size|g")
+done
+log "the page offers $tag ($published)"
+
 # Texts, icon and screenshots: fdroid reads the fastlane layout from metadata/<app id>/<locale>/.
 # A version gets its changelog (changelogs/<versionCode>.txt) only through a build entry of its
 # own, so every APK gets one (versionCode = major*1000000 + minor*1000 + patch, from the file name
@@ -177,9 +217,9 @@ touch "$out/.nojekyll"
 versions=$(cd "$out/repo" && for f in *.apk; do printf '%s ' "$f"; done)
 sed -e "s|@REPO_URL@|$repo_url|g" -e "s|@FINGERPRINT@|$fingerprint|g" \
   -e "s|@ADD_URL@|fdroidrepos://${repo_url#https://}?fingerprint=$fingerprint|g" \
-  -e "s|@SOURCE_URL@|https://github.com/$GH_REPO|g" \
+  -e "s|@SOURCE_URL@|https://github.com/$GH_REPO|g" "${page_subst[@]}" \
   "$ROOT/packaging/fdroid-repo/index.html" >"$out/index.html"
-grep -q '@[A-Z_]*@' "$out/index.html" && die "unreplaced placeholder in index.html"
+grep -q '@[A-Z0-9_]*@' "$out/index.html" && die "unreplaced placeholder in index.html"
 
 log "done: $out ($(du -sh -- "$out" | cut -f1); $versions)"
 echo "repository: $repo_url?fingerprint=$fingerprint"

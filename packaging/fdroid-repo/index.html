@@ -1,15 +1,19 @@
 <!doctype html>
 <!--
-  The landing page of Brulion's own F-Droid repository (GitHub Pages, https://<owner>.github.io/brulion/).
-  scripts/fdroid-repo.sh fills in the @…@ placeholders; repo/index.png is the QR code `fdroid update`
-  makes (the repository's address with the fingerprint). docs/ANDROID.md, "Brulion's own F-Droid repository".
+  Brulion's page on GitHub Pages (https://<owner>.github.io/brulion/): the files of the latest release
+  to download and Brulion's own F-Droid repository. scripts/fdroid-repo.sh fills in the @…@
+  placeholders when a release is published: DOWNLOAD_URL is that release's download address, and the
+  script checks that every file linked here is in the release (each SIZE_… stands for one of them);
+  repo/index.png is the QR code `fdroid update` makes (the repository's address with the fingerprint).
+  It works without JavaScript: the script at the end only adds the big button for the visitor's system.
+  docs/ANDROID.md, "Brulion's own F-Droid repository".
 -->
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Brulion — F-Droid repository</title>
-    <meta name="description" content="Brulion — offline Markdown notes. The F-Droid repository with the official Android releases.">
+    <title>Brulion — download</title>
+    <meta name="description" content="Brulion — Markdown notes that work offline. Download Brulion @VERSION@ for Android, Linux, Windows and the browser, or add its F-Droid repository.">
     <meta name="color-scheme" content="light dark">
     <link rel="icon" href="logo.svg" type="image/svg+xml">
     <style>
@@ -89,6 +93,35 @@
         user-select: all;
       }
       .muted { color: var(--muted); font-size: 0.94rem; }
+      [hidden] { display: none !important; }
+      .released {
+        font-size: 0.8rem;
+        font-weight: 400;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        padding: 1px 9px;
+        margin-left: 6px;
+        white-space: nowrap;
+      }
+      .for-you { text-align: center; margin: 6px 0 18px; }
+      .for-you .button { font-size: 1.1rem; padding: 12px 26px; }
+      .for-you small { display: block; font-weight: 400; font-size: 0.8rem; opacity: 0.9; }
+      .for-you p { margin: 8px 0 0; }
+      .files { list-style: none; margin: 0 0 16px; padding: 0; border-top: 1px solid var(--line); }
+      .files li {
+        display: grid;
+        grid-template-columns: minmax(8rem, 13rem) 1fr;
+        gap: 4px 16px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .files li + li { margin-top: 0; }
+      .files li > div:first-child span { display: block; color: var(--muted); font-size: 0.86rem; }
+      .files .size { color: var(--muted); font-size: 0.86rem; white-space: nowrap; }
+      @media (max-width: 30rem) {
+        .files li { grid-template-columns: 1fr; }
+      }
       [lang="pl"] { margin-top: 28px; }
     </style>
   </head>
@@ -98,12 +131,63 @@
         <img src="logo.svg" alt="" width="72" height="72">
         <div>
           <h1>Brulion</h1>
-          <p>Markdown notes that work offline — the F-Droid repository with the official Android releases.</p>
+          <p>Markdown notes that work offline — for Android, Linux, Windows and the browser.</p>
         </div>
       </header>
 
-      <section>
-        <h2>Add the repository</h2>
+      <section id="download">
+        <h2>Download Brulion @VERSION@ <time class="released" datetime="@PUBLISHED@">@PUBLISHED_TEXT@</time></h2>
+        <div class="for-you" id="for-you" hidden>
+          <a class="button" id="for-you-link" href="#download"><span id="for-you-name"></span><small id="for-you-file"></small></a>
+          <p class="muted">Another system? All the files are below.</p>
+        </div>
+        <ul class="files">
+          <li>
+            <div><b>Android</b><span>9 or later, arm64</span></div>
+            <div><a data-for="android" data-what="APK" data-size="@SIZE_APK@"
+                href="@DOWNLOAD_URL@/brulion-@VERSION@-arm64-v8a.apk">APK</a> <span class="size">@SIZE_APK@</span>
+              · or from the <a href="#fdroid">F-Droid repository</a> below</div>
+          </li>
+          <li>
+            <div><b>Linux x86_64</b><span>Ubuntu 22.04+, Debian 12+, Fedora 36+</span></div>
+            <div><a data-for="linux-x86_64" data-what="AppImage x86_64" data-size="@SIZE_APPIMAGE_X86_64@"
+                href="@DOWNLOAD_URL@/Brulion-@VERSION@-x86_64.AppImage">AppImage</a>
+              <span class="size">@SIZE_APPIMAGE_X86_64@</span></div>
+          </li>
+          <li>
+            <div><b>Linux aarch64</b><span>e.g. Raspberry Pi 4/5 with a 64-bit system; Ubuntu 24.04+, Debian 13+</span></div>
+            <div><a data-for="linux-aarch64" data-what="AppImage aarch64" data-size="@SIZE_APPIMAGE_AARCH64@"
+                href="@DOWNLOAD_URL@/Brulion-@VERSION@-aarch64.AppImage">AppImage</a>
+              <span class="size">@SIZE_APPIMAGE_AARCH64@</span></div>
+          </li>
+          <li>
+            <div><b>Windows 10/11</b><span>x86_64, test version</span></div>
+            <div><a data-for="windows" data-what="installer" data-size="@SIZE_WINDOWS_SETUP@"
+                href="@DOWNLOAD_URL@/Brulion-@VERSION@-windows-x86_64-setup.exe">Installer</a>
+              <span class="size">@SIZE_WINDOWS_SETUP@</span> ·
+              <a href="@DOWNLOAD_URL@/brulion-@VERSION@-windows-x86_64.zip">portable .zip</a>
+              <span class="size">@SIZE_WINDOWS_ZIP@</span></div>
+          </li>
+          <li>
+            <div><b>Browser</b><span>works offline, notes stay in the browser</span></div>
+            <div><a data-for="browser" data-what="one HTML file, opened from disk" data-size="@SIZE_WEB_HTML@"
+                href="@DOWNLOAD_URL@/brulion-web-@VERSION@.html">One HTML file</a>
+              <span class="size">@SIZE_WEB_HTML@</span> ·
+              <a href="@DOWNLOAD_URL@/brulion-web-@VERSION@.zip">site for your own server (.zip)</a>
+              <span class="size">@SIZE_WEB_ZIP@</span></div>
+          </li>
+          <li>
+            <div><b>NixOS</b><span>flake, package <code>brulion</code></span></div>
+            <div><code>nix run github:@REPO@/@TAG@</code></div>
+          </li>
+        </ul>
+        <a class="button" href="@RELEASE_URL@">What’s new in @VERSION@</a>
+        <p class="muted">The release page also has the installation notes, the SHA-256 sums and the source
+          code. Older versions: <a href="@SOURCE_URL@/releases">all releases</a>.</p>
+      </section>
+
+      <section id="fdroid">
+        <h2>Add the F-Droid repository</h2>
         <div class="add">
           <img src="repo/index.png" alt="QR code of the repository" width="168" height="168">
           <div>
@@ -127,20 +211,63 @@
           <li>The same APK files as in the <a href="@SOURCE_URL@/releases">releases on GitHub</a>, with the
             same signature — Brulion installed from GitHub updates from here without uninstalling.</li>
           <li>The last three releases; new ones appear here right after they are published.</li>
-          <li>Linux, Windows and the browser version (a single HTML file you open from disk) are in the
-            <a href="@SOURCE_URL@/releases/latest">latest release</a>.</li>
+          <li>Linux, Windows and the browser version are in <a href="#download">Download</a> above and in the
+            <a href="@SOURCE_URL@/releases/latest">latest release</a> on GitHub.</li>
         </ol>
         <p class="muted">Source code (AGPL-3.0): <a href="@SOURCE_URL@">@SOURCE_URL@</a></p>
       </section>
 
       <section lang="pl">
         <h2>Po polsku</h2>
+        <p>Brulion — notatki w Markdown, które działają offline. Pobierz wersję @VERSION@:
+          <a href="@DOWNLOAD_URL@/brulion-@VERSION@-arm64-v8a.apk">Android (APK)</a>,
+          <a href="@DOWNLOAD_URL@/Brulion-@VERSION@-x86_64.AppImage">Linux x86_64</a>,
+          <a href="@DOWNLOAD_URL@/Brulion-@VERSION@-aarch64.AppImage">Linux aarch64</a>,
+          <a href="@DOWNLOAD_URL@/Brulion-@VERSION@-windows-x86_64-setup.exe">Windows (instalator, wersja
+          testowa)</a> albo <a href="@DOWNLOAD_URL@/brulion-web-@VERSION@.html">wersję w przeglądarce</a>
+          (jeden plik HTML, który otwierasz z dysku). Nowości, instrukcje i pozostałe pliki są
+          <a href="@RELEASE_URL@">na stronie wydania</a>.</p>
         <p>Własne repozytorium F-Droid Brulionu: oficjalne wydania na Androida, te same pliki APK (z tym
           samym podpisem) co na GitHubie. Na telefonie stuknij <a href="@ADD_URL@">Dodaj do F-Droid</a>
           albo zeskanuj kod QR; możesz też dodać adres i odcisk klucza ręcznie (F-Droid → Ustawienia →
-          Repozytoria → „+”). Linux, Windows i wersja w przeglądarce (jeden plik HTML, który otwierasz
-          z dysku) są w <a href="@SOURCE_URL@/releases/latest">ostatnim wydaniu</a>.</p>
+          Repozytoria → „+”).</p>
       </section>
     </main>
+    <script>
+      // The big button for the visitor's system: it takes the address and size of that system's
+      // link in the list. No system recognised (e.g. iPhone) → no button, the list stays.
+      (function () {
+        var ua = navigator.userAgent;
+        function offer(key, name) {
+          var link = document.querySelector('a[data-for="' + key + '"]');
+          if (!link) return;
+          document.getElementById('for-you-link').href = link.href;
+          document.getElementById('for-you-name').textContent = name;
+          document.getElementById('for-you-file').textContent =
+            link.getAttribute('data-what') + ' · ' + link.getAttribute('data-size');
+          document.getElementById('for-you').hidden = false;
+        }
+        if (/Android/i.test(ua)) {
+          offer('android', 'Download for Android');
+        } else if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) {
+          return;
+        } else if (/Windows/.test(ua)) {
+          offer('windows', 'Download for Windows');
+        } else if (/Linux|X11/.test(ua) && !/CrOS/.test(ua)) {
+          // Firefox names the processor in the user agent; Chromium always says x86_64 there and
+          // tells the truth only through userAgentData.
+          if (/aarch64|arm64|armv8/i.test(ua)) offer('linux-aarch64', 'Download for Linux');
+          else offer('linux-x86_64', 'Download for Linux');
+          var data = navigator.userAgentData;
+          if (data && data.getHighEntropyValues) {
+            data.getHighEntropyValues(['architecture', 'bitness']).then(function (v) {
+              if (v.architecture === 'arm' && v.bitness === '64') offer('linux-aarch64', 'Download for Linux');
+            }, function () {});
+          }
+        } else {
+          offer('browser', 'Download for your browser');
+        }
+      })();
+    </script>
   </body>
 </html>

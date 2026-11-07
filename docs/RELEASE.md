@@ -48,7 +48,8 @@ nix develop -c git clang-format          # formats the lines changed against HEA
 ## One-time repository setup
 
 1. **GitHub Pages:** Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-   `https://janusz-bit.github.io/brulion/` holds the F-Droid repository (`fdroid.yml`). For a
+   `https://janusz-bit.github.io/brulion/` holds the download page and the F-Droid repository
+   (`fdroid.yml`). For a
    release to be able to deploy it: Settings → Environments → `github-pages` → *Deployment
    branches and tags*: the branch `main` and the tag `v*` (from the command line:
    `gh api -X POST repos/janusz-bit/brulion/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag`).

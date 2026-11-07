@@ -9,7 +9,8 @@ PWA (it can be "installed" from the browser menu), and it keeps notes in the bro
   opened from disk without a server (below, "Single HTML file"), and **a site** `brulion-web-<version>.zip`
   for any static file server, under any path — all addresses are relative (on
   NixOS the `services.brulion-web` module). There is no public hosted version: the project's GitHub Pages
-  (`https://janusz-bit.github.io/brulion/`) is the F-Droid repository (docs/ANDROID.md "Brulion's own F-Droid repository").
+  (`https://janusz-bit.github.io/brulion/`) are the download page (both files linked directly) and the
+  F-Droid repository (docs/ANDROID.md "Brulion's own F-Droid repository").
 * Limitations compared with the native apps: reminders only while the tab/PWA is open,
   no access to folders on disk (file import/export instead), Nextcloud sync
   needs CORS (below), no Syncthing. Qt for WebAssembly has no time zone

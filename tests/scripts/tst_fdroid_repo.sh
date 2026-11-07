@@ -6,7 +6,8 @@
 # itself decides: the APKs of the last releases, fdroid's config (the site's address, the
 # passwords only as {env: …}, readable by its owner only), a build entry per APK so each version
 # gets its changelog (sorted, the newest current), the texts and icon from fastlane, the landing
-# page (address, fingerprint = SHA-256 of the certificate, the "Add to F-Droid" link) and what it
+# page (the release it offers for download: direct links to files the release has, their sizes and
+# date; address, fingerprint = SHA-256 of the certificate, the "Add to F-Droid" link) and what it
 # refuses. The real `fdroid update` runs in CI (.github/workflows/fdroid.yml).
 #
 # Usage: tests/scripts/tst_fdroid_repo.sh [path/to/fdroid-repo.sh]
@@ -71,6 +72,28 @@ case "$1 $2" in
     tag=$3 dir=${@: -1}
     [[ $tag == "$STUB_NO_APK" ]] && exit 1
     echo "apk $tag" >"$dir/brulion-${tag#v}-arm64-v8a.apk" ;;
+  "release view")
+    # [tag] --json … --jq …: the first line "tag publishedAt isDraft isPrerelease", then "size name".
+    tag=$3
+    [[ $tag == --* ]] && tag=${STUB_LATEST:-v0.10.0}
+    [[ $tag == "$STUB_NO_RELEASE" ]] && { echo "release not found" >&2; exit 1; }
+    v=${tag#v}
+    printf '%s %s %s %s\n' "$tag" "${STUB_PUBLISHED:-2026-11-07T19:13:26Z}" "${STUB_DRAFT:-false}" "${STUB_PRE:-false}"
+    while read -r size name; do
+      [[ $name == "$STUB_MISSING" ]] || echo "$size $name"
+    done <<LIST
+92839736 brulion-$v-arm64-v8a.apk
+73214456 Brulion-$v-x86_64.AppImage
+250481 Brulion-$v-x86_64.AppImage.zsync
+75655688 Brulion-$v-aarch64.AppImage
+41094914 Brulion-$v-windows-x86_64-setup.exe
+60295774 brulion-$v-windows-x86_64.zip
+23282235 brulion-web-$v.html
+17467109 brulion-web-$v.zip
+8287847 brulion-$v-source.tar.gz
+977 SHA256SUMS.txt
+LIST
+    ;;
   *) exit 9 ;;
 esac
 EOF
@@ -135,6 +158,32 @@ expect "the fingerprint is the certificate's SHA-256" grep -qF "<code class=\"va
 expect "the link that adds the repository to F-Droid" \
   grep -qF "href=\"fdroidrepos://janusz-bit.github.io/brulion/repo?fingerprint=$fingerprint\"" "$page"
 expect "the source links" grep -qF 'href="https://github.com/janusz-bit/brulion/releases/latest"' "$page"
+
+# The downloads: the newest release's files, linked directly.
+expect "the page's release is read with its files" \
+  grep -qF 'gh release view v0.10.0 --json tagName,publishedAt,isDraft,isPrerelease,assets --jq' "$log/gh.txt"
+expect "the version and the publication date" \
+  grep -qF 'Download Brulion 0.10.0 <time class="released" datetime="2026-11-07">7 November 2026</time>' "$page"
+links=$(grep -oE 'https://github\.com/[^"]*/releases/download/[^"]*' "$page" | sort -u)
+expect "seven files linked directly ($(wc -l <<<"$links"))" test "$(wc -l <<<"$links")" -eq 7
+expect "every link is a file of v0.10.0" \
+  test -z "$(grep -vE '^https://github\.com/janusz-bit/brulion/releases/download/v0\.10\.0/[^/]+$' <<<"$links")"
+for name in brulion-0.10.0-arm64-v8a.apk Brulion-0.10.0-x86_64.AppImage Brulion-0.10.0-aarch64.AppImage \
+  Brulion-0.10.0-windows-x86_64-setup.exe brulion-0.10.0-windows-x86_64.zip brulion-web-0.10.0.html \
+  brulion-web-0.10.0.zip; do
+  expect "a link to $name" grep -qxF "https://github.com/janusz-bit/brulion/releases/download/v0.10.0/$name" <<<"$links"
+done
+expect "each file's size in MiB, one decimal" bash -c "grep -qF 'data-size=\"88.5 MB\"' '$page' &&
+  grep -qF 'data-size=\"69.8 MB\"' '$page' && grep -qF 'data-size=\"72.2 MB\"' '$page' &&
+  grep -qF 'data-size=\"39.2 MB\"' '$page' && grep -qF '57.5 MB' '$page' &&
+  grep -qF 'data-size=\"22.2 MB\"' '$page' && grep -qF '16.7 MB' '$page'"
+expect "the release page" grep -qF 'href="https://github.com/janusz-bit/brulion/releases/tag/v0.10.0"' "$page"
+expect "the NixOS command" grep -qF 'nix run github:janusz-bit/brulion/v0.10.0' "$page"
+mapfile -t keys < <(grep -oE "offer\('[a-z0-9_-]+'" "$page" | cut -d"'" -f2 | sort -u)
+expect "the button offers five systems (${keys[*]})" test "${#keys[@]}" -eq 5
+for key in "${keys[@]}"; do
+  expect "the button's system $key has a link" grep -qF "data-for=\"$key\"" "$page"
+done
 expect "the repository's address printed" has "repository: https://janusz-bit.github.io/brulion/repo?fingerprint=$fingerprint"
 expect "the signed index in the site" test -s "$tmp/site/repo/index-v1.jar"
 expect "fdroid's status files are left out" test ! -e "$tmp/site/repo/status"
@@ -146,14 +195,23 @@ expect "-n 1, another GitHub repository and key alias (exit 0)" test "$status" -
 expect "-n 1 asks for one release" grep -qF -- '--limit 1 ' "$log/gh.txt"
 expect "the address of another owner, in lower case" grep -qx 'repo_url: https://someone.github.io/notes/repo' "$log/config.yml"
 expect "the other alias" grep -qx 'repo_keyalias: inny' "$log/config.yml"
+expect "the downloads from the other GitHub repository" \
+  grep -qF 'href="https://github.com/Someone/notes/releases/download/v0.10.0/brulion-0.10.0-arm64-v8a.apk"' "$tmp/site/index.html"
 
 mkdir -p "$tmp/apks"
 echo apk >"$tmp/apks/brulion-1.2.3-arm64-v8a.apk"
 run -- -a "$tmp/apks" -u https://example.org/brulion/
 expect "-a and -u: APKs from a folder, another address (exit 0)" test "$status" -eq 0
-expect "-a downloads nothing" test ! -e "$log/gh.txt"
+expect "-a downloads no APK" bash -c "! grep -q 'release download' '$log/gh.txt'"
+expect "-a: the page offers the latest published release" grep -qF 'gh release view --json ' "$log/gh.txt"
 expect "-u sets the repository's address" grep -qx 'repo_url: https://example.org/brulion/repo' "$log/config.yml"
 expect "1.2.3 is versionCode 1002003" grep -qx 'CurrentVersionCode: 1002003' "$log/io.github.januszbit.brulion.yml"
+
+run STUB_PUBLISHED=2026-01-31T23:59:59Z -- -a "$tmp/apks" -r v0.9.1
+expect "-r: another release on the page (exit 0)" test "$status" -eq 0
+expect "-r reads that release" grep -qF 'gh release view v0.9.1 --json ' "$log/gh.txt"
+expect "-r: its version, files and date" bash -c "grep -qF 'Download Brulion 0.9.1 <time class=\"released\" datetime=\"2026-01-31\">31 January 2026</time>' '$tmp/site/index.html' &&
+  grep -qF '/releases/download/v0.9.1/brulion-web-0.9.1.html\"' '$tmp/site/index.html'"
 
 run FDROID_KEYSTORE= FDROID_KEYSTORE_BASE64="$(base64 -w0 "$tmp/key.p12")" -- -a "$tmp/apks"
 expect "the key from FDROID_KEYSTORE_BASE64 (exit 0)" test "$status" -eq 0
@@ -174,6 +232,12 @@ refused "an address without the final /" 'must be https://' -- -u https://exampl
 refused "-n 0" '-n needs a positive number' -- -n 0
 refused "a release without an APK" 'no APK in the release v0.9.1' STUB_NO_APK=v0.9.1 --
 refused "no published release" 'no published release' STUB_TAGS=' ' --
+refused "a release without one of the linked files" 'the release v0.10.0 has no brulion-web-0.10.0.html' \
+  STUB_MISSING=brulion-web-0.10.0.html --
+refused "the page's release cannot be read" 'cannot read the release v0.10.0' STUB_NO_RELEASE=v0.10.0 --
+refused "a pre-release's tag on the page" "the page offers a release vX.Y.Z, not 'v1.0.0-rc.1'" -- -r v1.0.0-rc.1
+refused "a pre-release on the page" 'the release v1.1.0 is a draft or a pre-release' STUB_PRE=true -- -r v1.1.0
+refused "a draft on the page" 'the release v0.10.0 is a draft or a pre-release' STUB_DRAFT=true --
 echo apk >"$tmp/apks/brulion-debug.apk"
 refused "an APK name without the version" 'unexpected APK name brulion-debug.apk' -- -a "$tmp/apks"
 rm "$tmp/apks"/*

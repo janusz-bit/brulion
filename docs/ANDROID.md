@@ -897,6 +897,8 @@ build with `OFF` — that the app shows nothing and asks nothing.
 
 At `https://janusz-bit.github.io/brulion/` (the project's GitHub Pages) there is Brulion's F-Droid
 repository: a page with a QR code and the key fingerprint, and the repository itself in `repo/`.
+The same page is Brulion's download page: it opens with the files of the newest release (below,
+"The download page").
 You add it in F-Droid (or Droid-ify, Neo Store) with the **Add to F-Droid** button on the page,
 with the QR code, or by hand (Settings → Repositories → "+": the address
 `https://janusz-bit.github.io/brulion/repo` and the fingerprint from the page). After that F-Droid
@@ -920,14 +922,14 @@ download`), copies the metadata (fastlane as `metadata/<id>/<language>/`, and fo
 version with its `changelogs/<versionCode>.txt`; the newest is `CurrentVersionCode`), reads the
 published `repo/index-v2.json` (it keeps the dates when versions already there were added), runs
 `fdroid update` (index `index-v1.jar`, `index-v2.json` + `entry.jar` signed with the repository
-key, QR code `repo/index.png`), adds the page `packaging/fdroid-repo/index.html` with the address
-and the fingerprint, and the workflow deploys the whole to GitHub Pages. A release (`release.yml`)
+key, QR code `repo/index.png`), adds the page `packaging/fdroid-repo/index.html` with the address,
+the fingerprint and the newest release's files, and the workflow deploys the whole to GitHub Pages. A release (`release.yml`)
 calls it after publishing, except for a test release and an APK with a throwaway key; it can also
 be run by hand (`gh workflow run fdroid.yml`). Locally (no deployment, APKs from a folder):
 
 ```sh
 read -r -s -p 'Repository key password: ' FDROID_KEYSTORE_PASS; echo; export FDROID_KEYSTORE_PASS
-nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner -c \
+nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner nixpkgs#gh -c \
   env FDROID_KEYSTORE=~/.local/share/brulion/brulion-fdroid-repo.p12 \
   scripts/fdroid-repo.sh -a dist-android -o dist-fdroid   # dist-fdroid/index.html, dist-fdroid/repo/
 ```
@@ -942,11 +944,29 @@ repository and add it again. Once, GitHub Pages also has to be turned on with th
 source, and the `github-pages` environment has to allow the `main` branch and the `v*` tags
 (docs/RELEASE.md, "One-time repository setup").
 
+**The download page.** The page's first section, **Download Brulion X.Y.Z**, links the files of
+the newest release directly (`https://github.com/<repo>/releases/download/vX.Y.Z/<file>` — a click
+downloads the file): the APK, both AppImages, the Windows installer and `.zip`, the browser version's
+HTML file and `.zip`, with their sizes and the release's date, the `nix run` command for NixOS and
+a link to the release page (what's new, installation, SHA-256 sums, the source code); the Polish
+section links the same files. `scripts/fdroid-repo.sh` fills them in when it builds the site: the
+release is the newest of the repository's (`-r vX.Y.Z` picks another; with `-a` the default is the
+latest published one), read with `gh release view` (tag, date, file names and sizes). The script
+refuses a draft, a pre-release, a tag other than `vX.Y.Z` and a release without one of the linked
+files, so the page never links a file that is not there. `github.com/…/releases/latest/download/…`
+is not used, because the file names carry the version. The page is rebuilt with every published
+release (`release.yml` → `fdroid.yml`), so it never shows a pre-release. It is static; a short
+script on the page only adds a big button for the visitor's system above the list (Android → APK,
+Windows → installer, Linux → AppImage x86_64 or aarch64 — Chromium tells the processor only through
+`navigator.userAgentData` — another computer → the browser version; none on iPhone/iPad). Without
+JavaScript the list is all there is.
+
 Tests: `tests/scripts/tst_fdroid_repo.sh` (ctest `tst_scripts_fdroid_repo`) runs the script with
 stand-ins for `fdroid`, `keytool`, `gh` and `curl` — the choice of releases, the fdroid
 configuration (passwords only as `{env: …}`, the file readable only by its owner), the `Builds:`
-entries, the metadata, the page with the fingerprint and rejected data; the real `fdroid update`
-runs in `fdroid.yml`.
+entries, the metadata, the page with the fingerprint, the downloads (every link a file of the
+release, the sizes, the date, `-r`, every system of the button with its link) and rejected data;
+the real `fdroid update` runs in `fdroid.yml`.
 
 ## Building the APK
 

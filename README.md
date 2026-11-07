@@ -227,6 +227,9 @@ The screenshots above show the Polish UI with the bundled sample notebook (`brul
 
 ## Install
 
+**Download page: <https://janusz-bit.github.io/brulion/>** — the files of the latest release for
+Android, Linux, Windows and the browser, a button for your system, and the F-Droid repository.
+
 | Platform | How |
 |---|---|
 | **NixOS** | flake + the `programs.brulion` module (with autostart in the tray) — [docs/NIXOS.md](docs/NIXOS.md) |
@@ -458,6 +461,9 @@ przykładowym notatnikiem.
   [src/app/shell/guide/en](src/app/shell/guide/en)).
 
 ## Instalacja
+
+**Strona do pobrania: <https://janusz-bit.github.io/brulion/>** — pliki ostatniego wydania na
+Androida, Linuksa, Windows i do przeglądarki, przycisk dla Twojego systemu i repozytorium F-Droid.
 
 | Platforma | Jak |
 |---|---|
