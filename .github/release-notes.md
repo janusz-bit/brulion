@@ -2,6 +2,8 @@
 
 **What's new in {{VERSION}}**
 
+Version 0.13.0 was not published, so its news reaches you only in this release.
+
 * **The “Nocny” look** — a new default: dark and dense, on true black (OLED screens save battery) with a **coral** accent (a darker coral in the light theme); reminders and alarms ⏰ stay amber whatever the accent. Coral is a new accent preset; red and the others stay in *Settings → Appearance*.
 * **Built-in fonts** — Inter for the interface, Literata for notes and JetBrains Mono for code and dates, the same on every device and in the browser; any installed font can still be chosen.
 * **Side panel in sections** — the panel beside the text folds into sections: for a page **Outline**, **Backlinks**, **Unlinked mentions** and a **Local graph**; for a day of the journal **Day plan** (the day's reminders and dates by the hour), **Tasks** (overdue in red), **A year ago** and **Backlinks**.
@@ -50,6 +52,8 @@ SHA-256 checksums: `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt --ignore-missi
 **Brulion {{VERSION}}** — notatki w Markdown, które działają offline: konspekty z blokami i dziennik (jak w Logseq) na zwykłych plikach `.md` (jak w Obsidianie), zadania, kalendarz, przypomnienia z alarmami, obliczenia i tabele. Synchronizacja przez Syncthing albo Nextcloud.
 
 **Nowości w {{VERSION}}**
+
+Wersja 0.13.0 nie została opublikowana, więc jej nowości trafiają do Ciebie dopiero w tym wydaniu.
 
 * **Wygląd „Nocny”** — nowy domyślny: ciemny i zwarty, na prawdziwej czerni (ekrany OLED oszczędzają baterię) z **koralowym** akcentem (w jasnym motywie ciemniejszy koral); przypomnienia i alarmy ⏰ zostają bursztynowe przy każdym akcencie. Koralowy to nowy kolor akcentu; czerwony i pozostałe są dalej w *Ustawienia → Wygląd*.
 * **Wbudowane czcionki** — Inter w interfejsie, Literata w notatkach i JetBrains Mono w kodzie i datach, takie same na każdym urządzeniu i w przeglądarce; nadal można wybrać dowolną zainstalowaną.

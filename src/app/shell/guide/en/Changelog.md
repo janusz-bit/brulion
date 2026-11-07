@@ -7,6 +7,14 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.13.1 — November 7, 2026
+
+**Note**
+- Version 0.13.0 was not published: its tests found that text written into a PDF with the new built-in fonts lost some characters — an em dash between words, “fi” — when it was copied or searched. Fixed in this version (below). Everything new in 0.13.0, described below, is available from this version on.
+
+**Fixes**
+- The built-in fonts no longer join letters into ligatures or swap a dash for a contextual one: text in PDFs made with them keeps every character when you copy, search or select it.
+
 ## 0.13.0 — November 7, 2026
 
 **New**

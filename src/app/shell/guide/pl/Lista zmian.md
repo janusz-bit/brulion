@@ -7,6 +7,14 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.13.1 — 7 listopada 2026
+
+**Uwaga**
+- Wersja 0.13.0 nie została opublikowana: jej testy wykazały, że tekst zapisany w PDF-ie nowymi wbudowanymi czcionkami tracił niektóre znaki — myślnik między słowami, „fi” — przy kopiowaniu i wyszukiwaniu. Naprawione w tej wersji (poniżej). Wszystkie nowości 0.13.0, opisane niżej, są dostępne od tej wersji.
+
+**Poprawki**
+- Wbudowane czcionki nie łączą już liter w ligatury ani nie podmieniają myślnika na kontekstowy: tekst w PDF-ach zrobionych tymi czcionkami zachowuje każdy znak przy kopiowaniu, wyszukiwaniu i zaznaczaniu.
+
 ## 0.13.0 — 7 listopada 2026
 
 **Nowe**
