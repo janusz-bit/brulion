@@ -4,7 +4,8 @@
 // and PaletteFilter), so qmllint/qmlcachegen still see their full API (from the library's extracted metatypes);
 // KeyboardInsets and GestureInsets are the instances main() creates and feeds (keyboardsources.h). Also TouchFlick
 // (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`; and RowScroll
-// (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; and FilePicker (brulion_ui_files),
+// (brulion_ui_scroll), the scroll bar geometry of BRowScrollBar; SmoothScroll (brulion_ui_smoothscroll),
+// the wheel's and the scroll bars' browser-like scrolling (the instance main() installs); and FilePicker (brulion_ui_files),
 // the system's file picker (`FilePicker { fileMode: FilePicker.OpenFiles }`).
 #pragma once
 
@@ -17,6 +18,7 @@
 #include "keyboardinsets.h"
 #include "mapholder.h"
 #include "rowscroll.h"
+#include "smoothscroll.h"
 #include "texthelper.h"
 #include "themepalette.h"
 #include "touchflick.h"
@@ -163,6 +165,21 @@ struct RowScrollForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ui::RowScroll)
     QML_NAMED_ELEMENT(RowScroll)
+};
+
+struct SmoothScrollForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::SmoothScroll)
+    QML_NAMED_ELEMENT(SmoothScroll)
+    QML_SINGLETON
+public:
+    /// The application's filter (installed by main(), else on first use here).
+    static SmoothScroll *create(QQmlEngine *, QJSEngine *)
+    {
+        SmoothScroll *scroll = SmoothScroll::instance();
+        QJSEngine::setObjectOwnership(scroll, QJSEngine::CppOwnership);
+        return scroll;
+    }
 };
 
 struct FilePickerForeign {

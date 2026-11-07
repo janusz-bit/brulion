@@ -41,6 +41,18 @@ target_link_libraries(brulion_ui_touch PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
 qt_extract_metatypes(brulion_ui_touch)
 brulion_set_warnings(brulion_ui_touch)
 
+# brulion_ui_smoothscroll — SmoothScroll (smoothscroll.h): the mouse wheel and the scroll bar's
+# paging move Flickables like a web browser's smooth scrolling, not Qt's wheel flicks. Qt Quick's
+# public API only; a static library so that tests/app/smoothscroll drives it with wheel events
+# without the app; main() installs it, qmlforeign.h registers the singleton "SmoothScroll".
+qt_add_library(brulion_ui_smoothscroll STATIC
+    smoothscroll.h smoothscroll.cpp
+)
+target_include_directories(brulion_ui_smoothscroll PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_smoothscroll PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
+qt_extract_metatypes(brulion_ui_smoothscroll)
+brulion_set_warnings(brulion_ui_smoothscroll)
+
 # brulion_ui_files — FilePicker (filepicker.h): the system's file picker for QML instead of
 # QtQuick.Dialogs (docs/PERFORMANCE.md L9) — the platform theme's dialog helper (a QPA header:
 # Qt6::GuiPrivate; Android's document picker, Windows' IFileDialog, GTK / KDE / XDG portal), Qt

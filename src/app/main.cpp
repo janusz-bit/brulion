@@ -6,6 +6,7 @@
 #include "ui/gestureinsets.h" // the system's gesture zones at the window's edges (GestureInsets)
 #include "ui/keyboardinsets.h" // the on-screen keyboard's height (KeyboardInsets)
 #include "ui/keyboardsources.h"
+#include "ui/smoothscroll.h" // the wheel and the scroll bars scroll like a web browser (SmoothScroll)
 #include "ui/uifonts.h" // the bundled text fonts (Inter, Literata, JetBrains Mono)
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
@@ -319,6 +320,8 @@ int main(int argc, char *argv[])
     // The system's gesture zones at the window's edges (QML singleton GestureInsets: Android's
     // gesture navigation), fed by the platform (keyboardsources.h).
     brulion::ui::GestureInsets gestureInsets;
+    // The mouse wheel moves every Flickable like a browser's smooth scrolling (smoothscroll.h).
+    brulion::ui::SmoothScroll::instance();
     std::unique_ptr<AppController> controller;
 #ifdef BRULION_DESKTOP_INTEGRATION
     std::unique_ptr<brulion::shell::DesktopTray> tray;

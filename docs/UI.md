@@ -2611,7 +2611,8 @@ Long pages, the journal stream, Tasks and the calendar agenda are lazy `ListView
 created when it scrolls into the list's cache and destroyed when it leaves, on the GUI thread,
 while the list moves. Measured with `--scroll-probe` (see "Dev tools"); ctest
 `tst_scroll_jumps_qml` fails on jumps (also of the scroll bar's thumb), `tst_touch_flick` /
-`tst_touch_flick_compressed` on Qt's touch faults, `tst_row_scroll` on the scroll bar.
+`tst_touch_flick_compressed` on Qt's touch faults, `tst_row_scroll` on the scroll bar,
+`tst_smooth_scroll` on the wheel.
 
 Pages are **not** created whole: a cache reaching past the end of a page of up to 1000 rows
 (filled in the background) was measured on 2026-11-06 and left out — the desktop scrolled no
@@ -2852,6 +2853,56 @@ inserted above, a fold with and without the model's help. The scroll probe check
 ("row scroll bar thumb jumps", `THUMB JUMP` lines; `tst_scroll_jumps_qml` fails on them) next
 to the jumps of `visibleArea` it reports; `SelectionSelfTest` drags the editor's thumb (nothing is
 selected) and turns the wheel over it.
+
+### Wheel and scroll bar: `SmoothScroll` (`src/app/ui/smoothscroll.h`)
+
+The mouse wheel and the scroll bars move like a web browser's smooth scrolling (Firefox's
+`ScrollAnimationBezierPhysics`, Chromium's wheel animations), everywhere: an application event
+filter (`SmoothScroll::instance()`, installed by `main()`; library `brulion_ui_smoothscroll`, Qt
+Quick's public API only) takes the wheel events Qt Quick delivers to an interactive Flickable.
+
+* **Why.** Qt 6.11 makes each notch a short wheel flick (about 100 ms) whose velocity is averaged
+  from the time between notches and capped (`QQuickFlickable::wheelEvent`): the distance depends on
+  how fast the wheel turns — 6 notches 150 ms apart moved 420 px, 40 ms apart 284 px, 10 ms apart
+  118 px instead of 6 × 72 (ctest `tst_smooth_scroll`, `qtWheelLosesNotches`, pins this down; it
+  fails when Qt changes).
+* **A notch** (120 eighths of a degree; a high-resolution wheel's parts in proportion) scrolls
+  `QStyleHints::wheelScrollLines()` (the system's setting, 3) lines of 19 px: 57 px, as Firefox's 3
+  lines of a 16 px font and Chromium's 53 px on Linux. The browser build takes the browser's own
+  distance (the event's `pixelDelta`).
+* **The motion** (`SmoothScrollAxis`, pure): an even deceleration to a stop at the target (an
+  ease-out like Firefox's bezier(0, 0, 0.6, 1)), lasting twice the mean of the last three
+  intervals between events within 50–200 ms (Firefox's rule: a single notch takes 200 ms, a fast
+  wheel gets snappier). A notch while it runs adds to the target — no notch is lost or counted
+  twice however fast the wheel turns — and never slows the motion down; a notch the other way
+  turns back from where it was heading. Never past the content's ends (no overshoot).
+* **Through Flickable's own `flick()`**, with the deceleration and the velocity of the plan
+  (`flickDeceleration` and `maximumFlickVelocity` are set for the call and restored at once; the
+  running flick keeps what it started with). So the view is `moving` and `flicking` as with Qt's
+  wheel: the scroll bar shows, `movementStarted` / `movementEnded` reach the views that listen
+  (the editor's `userMoved`, the sidebar, the PDF viewer), ListView fills its cache ahead; a press,
+  a drag or a new position (`positionViewAtIndex`, the thumb dragged) stops it like any flick.
+* **Left to Qt:** touchpad scrolling (scroll phases: the content follows the fingers 1:1, as in a
+  browser; it also takes over from a running smooth scroll), Ctrl / Alt / Meta + wheel (the zooms
+  of the PDF viewer, drawings and the graph handle Ctrl+wheel before the Flickable anyway), views
+  that snap (`snapMode`, `StrictlyEnforceRange`), a view that is not `interactive`, and a view
+  already at its end in that direction — the event goes on to the Flickable around it (a table
+  inside a page, a list inside a panel), which scrolls smoothly in turn. Shift+wheel scrolls
+  sideways where the view can (a browser's).
+* **The scroll bar** (`BScrollBar`, so `BRowScrollBar` too; mouse UIs): the thumb dragged follows
+  the pointer as before; a press on the track beside it pages towards the pointer — 7/8 of the
+  view between its margins (Chromium's step), smoothly (`SmoothScroll.scrollBy`) — and, held,
+  pages again after 250 ms and then every 50 ms until the thumb reaches the pointer; Shift+press
+  keeps Qt's jump of the thumb to the pointer. (Qt's own track press jumped there on release.)
+
+`BRULION_SMOOTHSCROLL=0` turns it off (Qt's wheel flicks, the bar's page as a jump; A/B
+comparisons). A type check per event, a few property reads per wheel event. ctest
+`tst_smooth_scroll`: the plan (data-driven: one notch from rest, notches 150–4 ms apart adding up
+exactly and never slowing down, durations following the rate, the ends, turning back), and lists
+in an offscreen window turned by wheel events — one notch (also a high-resolution eighth) eased
+into without overshoot, 6 notches at any rate moving exactly 6 × 57 px, the ends, a nested list
+passing the wheel on at its end, Ctrl / Alt / touchpad / a snapping list left to Qt, Shift and a
+tilting wheel sideways, `scrollBy` pages adding up, a new position stopping it.
 
 ### Measured (before → after this work)
 
@@ -3459,6 +3510,10 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   QtCore + core modules, unit-tested by `tests/app/tst_uihelpers.cpp`); the app registers them
   through `QML_FOREIGN` wrappers in `src/app/ui/qmlforeign.h`. New helper API: add it to the
   class, it reaches QML and qmllint through the library's extracted metatypes.
+* **`SmoothScroll`** (singleton; `main()` installs it as an application event filter): the mouse
+  wheel and the scroll bars' paging scroll like a web browser in every Flickable ("Scrolling
+  performance" → "Wheel and scroll bar"); `SmoothScroll.scrollBy(flickable, dx, dy)` scrolls the
+  same way from QML. Static library `brulion_ui_smoothscroll`, tested by `tests/app/smoothscroll`.
 * **`TouchFlick`** (attached, `TouchFlick.enabled: true` on a Flickable / ListView): touch flicks
   at the finger's speed on Android ("Scrolling performance"); static library `brulion_ui_touch`
   (Qt Quick, no private Qt headers), tested by `tests/app/touch`. As an attached type it carries
