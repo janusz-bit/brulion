@@ -21,7 +21,8 @@ import Brulion
 // `cell`) also Row ▸ and Column ▸: insert, move and delete that cell's row or column, the
 // column's alignment, sorting the rows by the column and filtering them (docs/SYNTAX.md §9); a new
 // row or column has its cell opened for typing. Any table's menu also has Filter rows,
-// Copy as CSV and Save as CSV….
+// Copy as CSV and Save as CSV…. In reading mode (BlockEditor.readOnly) only what changes nothing
+// is there: copying, Select, filtering a table, Zoom in, Collapse / Expand and Copy link.
 //
 //   BlockMenu { editor: editor }    menu.openFor(row, -2, 0, 0, 0, ""); menu.popup(item, x, y)
 BMenu {
@@ -48,6 +49,8 @@ BMenu {
     /// Why that selection is not cut or deleted (a selection over several days; "" when it can be).
     property string uncuttable: ""
     readonly property bool documentMode: editor !== null && editor.documentMode
+    /// Reading mode: the items that would change the note are not shown.
+    readonly property bool readOnly: editor !== null && editor.readOnly
     /// The table cell the menu was opened from: its row (-1 the header, -2 no cell), its column, the
     /// table's size and the column's alignment (TableBlockView.cellInfo()).
     property int cellRow: -2
@@ -152,7 +155,8 @@ BMenu {
         for (let i = 0; i < count; ++i) {
             const entry = itemAt(i)
             const optional = entry as OptionalItem
-            if (entry && (!optional || optional.shown))
+            const separator = entry as OptionalSeparator
+            if (entry && (!optional || optional.shown) && (!separator || separator.shown))
                 h += entry.implicitHeight
         }
         return h
@@ -177,6 +181,11 @@ BMenu {
     }
     component OptionalMenu: BMenu {
         property bool shown: true
+    }
+    component OptionalSeparator: BMenuSeparator {
+        property bool shown: true
+        visible: shown
+        height: shown ? implicitHeight : 0
     }
     /// One of the column's alignments, ticked when it is the column's.
     component AlignItem: BMenuItem {
@@ -205,8 +214,9 @@ BMenu {
             menu.editor.copySelection(false)
         }
     }
-    BMenuItem {
+    OptionalItem {
         objectName: "blockMenuCut"
+        shown: !menu.readOnly
         text: menu.inSelection ? qsTr("Cut %n block(s)", "", menu.selectionCount) : qsTr("Cut")
         iconName: "scissors"
         shortcut: "Ctrl+X"
@@ -282,7 +292,7 @@ BMenu {
     BMenuSeparator {}
     OptionalMenu {
         objectName: "tableRowMenu"
-        shown: menu.inCell
+        shown: menu.inCell && !menu.readOnly
         title: qsTr("Row")
         iconName: "rows-3"
 
@@ -341,7 +351,7 @@ BMenu {
     }
     OptionalMenu {
         objectName: "tableColumnMenu"
-        shown: menu.inCell
+        shown: menu.inCell && !menu.readOnly
         title: qsTr("Column")
         iconName: "columns-2"
 
@@ -505,7 +515,8 @@ BMenu {
             }
         }
     }
-    BMenuItem {
+    OptionalItem {
+        shown: !menu.readOnly
         text: qsTr("Insert picture…")
         iconName: "image"
         onTriggered: {
@@ -514,8 +525,9 @@ BMenu {
                 menu.editor.dialogs.pickImage(r, -1)
         }
     }
-    BMenuItem {
+    OptionalItem {
         objectName: "blockMenuDrawing"
+        shown: !menu.readOnly
         text: qsTr("Insert drawing")
         iconName: "pen-tool"
         onTriggered: {
@@ -524,8 +536,9 @@ BMenu {
                 menu.editor.insertDrawing(r, -1)
         }
     }
-    BMenuItem {
+    OptionalItem {
         objectName: "blockMenuDrawingOn"
+        shown: !menu.readOnly
         text: qsTr("Insert a drawing on a picture or PDF…")
         iconName: "pen-tool"
         onTriggered: {
@@ -534,9 +547,9 @@ BMenu {
                 menu.editor.dialogs.pickDrawingBackdrop(r, -1)
         }
     }
-    BMenuSeparator {}
+    OptionalSeparator { shown: !menu.readOnly }
     OptionalItem {
-        shown: !menu.documentMode || menu.listItem
+        shown: (!menu.documentMode || menu.listItem) && !menu.readOnly
         text: qsTr("Indent")
         iconName: "list-indent-increase"
         shortcut: "Tab"
@@ -544,31 +557,34 @@ BMenu {
         onTriggered: menu.moveOr("indent")
     }
     OptionalItem {
-        shown: !menu.documentMode || menu.listItem
+        shown: (!menu.documentMode || menu.listItem) && !menu.readOnly
         text: qsTr("Outdent")
         iconName: "list-indent-decrease"
         shortcut: "Shift+Tab"
         unavailable: menu.unmovable
         onTriggered: menu.moveOr("outdent")
     }
-    BMenuItem {
+    OptionalItem {
         objectName: "blockMenuMoveUp"
+        shown: !menu.readOnly
         text: qsTr("Move up")
         iconName: "move-up"
         shortcut: "Alt+Up"
         unavailable: menu.unmovable
         onTriggered: menu.moveOr("up")
     }
-    BMenuItem {
+    OptionalItem {
+        shown: !menu.readOnly
         text: qsTr("Move down")
         iconName: "move-down"
         shortcut: "Alt+Down"
         unavailable: menu.unmovable
         onTriggered: menu.moveOr("down")
     }
-    BMenuSeparator {}
-    BMenuItem {
+    OptionalSeparator { shown: !menu.readOnly }
+    OptionalItem {
         objectName: "blockMenuDelete"
+        shown: !menu.readOnly
         text: menu.inSelection ? qsTr("Delete %n block(s)", "", menu.selectionCount) : qsTr("Delete block")
         iconName: "trash-2"
         danger: true

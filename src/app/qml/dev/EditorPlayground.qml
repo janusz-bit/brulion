@@ -29,7 +29,8 @@ import Brulion
 // table's rows and columns with real input (TableSelfTest.qml) and exits; `linkpartstest` checks the
 // path parts of [[Folder/Page]] links with real input (LinkPartsSelfTest.qml) and exits, `linkparts`
 // / `linkparts-menu` show them (a part hovered / a folder part's menu); `propstest` checks the
-// page properties panel with real input (PropertiesSelfTest.qml) and exits; `spelltest` checks spell
+// page properties panel with real input (PropertiesSelfTest.qml) and exits; `readingtest` checks
+// reading mode with real input (ReadingSelfTest.qml) and exits; `spelltest` checks spell
 // checking's marks and menu with real input on word lists (SpellingSelfTest.qml) and exits; `properties` /
 // `properties-phone` show the panel expanded on a page with every type; `copylink` /
 // `copylink-document` show the block menu's "Copy link" (outline / document),
@@ -381,6 +382,17 @@ ApplicationWindow {
             host: host
         }
     }
+    // ---- Reading mode (`--editor-script readingtest`) --------------------------------------------
+    Loader {
+        id: readingTestLoader
+        active: false
+        sourceComponent: ReadingSelfTest {
+            appWindow: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
     // ---- The page properties panel (`--editor-script propstest`) --------------------------------
     Loader {
         id: propertiesTestLoader
@@ -516,6 +528,9 @@ ApplicationWindow {
             break
         case "linkpartstest":
             (linkPartsTestLoader.item as LinkPartsSelfTest).steps()
+            break
+        case "readingtest":
+            (readingTestLoader.item as ReadingSelfTest).steps()
             break
         }
     }
@@ -3978,6 +3993,9 @@ ApplicationWindow {
             break
         case "linkpartstest":
             linkPartsTestLoader.active = true
+            break
+        case "readingtest":
+            readingTestLoader.active = true
             break
         case "linkparts":
         case "linkparts-menu": {

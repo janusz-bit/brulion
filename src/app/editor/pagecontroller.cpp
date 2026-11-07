@@ -484,6 +484,33 @@ void PageController::setAllowNewBlockIds(bool allow)
     Q_EMIT allowNewBlockIdsChanged();
 }
 
+void PageController::setReadOnly(bool on)
+{
+    if (on == m_readOnly)
+        return;
+    if (on) {
+        // What was being written is kept: source mode's text is applied (and saved as usual).
+        setSourceMode(false);
+        stopEditing();
+        closeTypingSession();
+    }
+    m_readOnly = on;
+    Q_EMIT readOnlyChanged();
+}
+
+bool PageController::refusesEdit()
+{
+    if (!m_readOnly)
+        return false;
+    Q_EMIT editRefused();
+    return true;
+}
+
+QVariantMap PageController::readOnlyResult()
+{
+    return {{u"ok"_s, false}, {u"reason"_s, u"readingMode"_s}, {u"row"_s, -1}};
+}
+
 QVariantList PageController::foldState() const
 {
     QList<int> lines;
@@ -1257,6 +1284,8 @@ void PageController::refreshMode()
 
 bool PageController::setMode(const QString &name)
 {
+    if (refusesEdit())
+        return false;
     const std::optional<NoteMode> mode = markdown::parseNoteMode(name);
     if (!mode || !m_loaded)
         return false;
@@ -1285,6 +1314,8 @@ bool PageController::setMode(const QString &name)
 
 bool PageController::toggleMode()
 {
+    if (refusesEdit())
+        return false;
     return setMode(markdown::noteModeName(documentMode() ? NoteMode::Outline : NoteMode::Document));
 }
 
@@ -1292,6 +1323,8 @@ bool PageController::toggleMode()
 
 void PageController::startEditing(int row, int cursor)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     reveal(row);
@@ -1314,11 +1347,15 @@ void PageController::stopEditing()
 
 void PageController::setBody(int row, const QString &body)
 {
+    if (refusesEdit())
+        return;
     editBody(row, body);
 }
 
 void PageController::setEditText(int row, const QString &edit, int cursor)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     if (cursor >= 0 && editingRow() == row)
@@ -1359,6 +1396,8 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
 
 QVariantMap PageController::split(int row, int cursor)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
     if (!validRow(row))
         return result(-1, -1);
@@ -1458,6 +1497,8 @@ QVariantMap PageController::split(int row, int cursor)
 
 QVariantMap PageController::mergeWithPrevious(int row)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
     if (!validRow(row) || row == zoomBlock())
         return result(-1, -1);
@@ -1494,6 +1535,8 @@ QVariantMap PageController::mergeWithPrevious(int row)
 
 QVariantMap PageController::mergeNext(int row)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
     if (!validRow(row))
         return result(-1, -1);
@@ -1520,6 +1563,8 @@ QVariantMap PageController::mergeNext(int row)
 
 QVariantMap PageController::leaveList(int row)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
     if (!validRow(row) || row == zoomBlock())
         return result(-1, -1);
@@ -1546,6 +1591,8 @@ QVariantMap PageController::leaveList(int row)
 
 QVariantMap PageController::toggleList(int row)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
     if (!validRow(row))
         return result(-1, -1);
@@ -1569,6 +1616,8 @@ QVariantMap PageController::toggleList(int row)
 
 bool PageController::indent(int row)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row) || row == zoomBlock())
         return false;
     // Document mode: Tab indents list items only (a paragraph never becomes an outline block).
@@ -1590,6 +1639,8 @@ bool PageController::indent(int row)
 
 bool PageController::outdent(int row)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row) || row == zoomBlock())
         return false;
     const BlockDocument &doc = m_model->document();
@@ -1606,6 +1657,8 @@ bool PageController::outdent(int row)
 
 bool PageController::moveUp(int row)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row) || row == zoomBlock())
         return false;
     beginCommand();
@@ -1617,6 +1670,8 @@ bool PageController::moveUp(int row)
 
 bool PageController::moveDown(int row)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row) || row == zoomBlock())
         return false;
     beginCommand();
@@ -1628,6 +1683,8 @@ bool PageController::moveDown(int row)
 
 void PageController::toggleTask(int row)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     if (m_host && m_host->taskStatusHistory()) {
@@ -1648,6 +1705,8 @@ void PageController::toggleTask(int row)
 
 void PageController::cycleTask(int row)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     const std::optional<TaskStatus> status = m_model->shapeAt(row).task;
@@ -1777,6 +1836,8 @@ QVariantMap PageController::taskInfo(int row) const
 
 bool PageController::toggleTaskClock(int row)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row) || !m_model->shapeAt(row).task)
         return false;
     const QDateTime now = currentDateTime();
@@ -1811,6 +1872,8 @@ QVariantList PageController::dependencyCandidates(int row, const QString &textFi
 
 bool PageController::addTaskDependency(int row, const QString &path, int otherLine)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row) || !m_model->shapeAt(row).task)
         return false;
     const VaultIndex *index = m_host ? m_host->taskIndex() : nullptr;
@@ -1860,6 +1923,8 @@ bool PageController::addTaskDependency(int row, const QString &path, int otherLi
 
 bool PageController::removeTaskDependency(int row, const QString &id)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row))
         return false;
     const QString before = text();
@@ -1876,6 +1941,8 @@ bool PageController::removeTaskDependency(int row, const QString &id)
 
 void PageController::setTaskStatus(int row, const QString &status)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     // The caret of the block being edited stays in its words when the text before it changes.
@@ -1894,12 +1961,16 @@ void PageController::setTaskStatus(int row, const QString &status)
 
 void PageController::removeTaskMarker(int row)
 {
+    if (refusesEdit())
+        return;
     if (validRow(row) && m_model->shapeAt(row).task)
         setTaskStatus(row, QString());
 }
 
 int PageController::deleteBlock(int row)
 {
+    if (refusesEdit())
+        return -1;
     if (!validRow(row))
         return -1;
     const bool wasZoom = row == zoomBlock();
@@ -1931,6 +2002,8 @@ int PageController::deleteBlock(int row)
 
 int PageController::insertBlockAfter(int row, const QString &body)
 {
+    if (refusesEdit())
+        return -1;
     const BlockDocument &doc = m_model->document();
     int depth = 0;
     if (validRow(row))
@@ -1950,6 +2023,8 @@ int PageController::insertBlockAfter(int row, const QString &body)
 
 int PageController::appendEmptyBlock()
 {
+    if (refusesEdit())
+        return -1;
     const BlockDocument &doc = m_model->document();
     const int zoom = zoomBlock();
     if (zoom >= 0) {
@@ -1998,6 +2073,8 @@ int PageController::appendEmptyBlock()
 
 int PageController::insertMarkdown(int row, const QString &markdown)
 {
+    if (refusesEdit())
+        return -1;
     QString md = markdown;
     md.replace(u"\r\n"_s, u"\n"_s);
     while (md.endsWith(u'\n'))
@@ -2051,6 +2128,8 @@ int PageController::insertMarkdown(int row, const QString &markdown)
 
 int PageController::insertTemplate(int row, const QString &templatePath)
 {
+    if (refusesEdit())
+        return -1;
     if (!m_host)
         return -1;
     bool ok = false;
@@ -2067,6 +2146,8 @@ int PageController::insertTemplate(int row, const QString &templatePath)
 
 int PageController::startNewPage(const QString &templatePath)
 {
+    if (refusesEdit())
+        return -1;
     if (!m_host || !m_loaded || m_exists || m_sourceMode || m_conflict || m_model->count() > 0 || m_dirty
         || templatePath.trimmed().isEmpty())
         return appendEmptyBlock();
@@ -2326,6 +2407,8 @@ int PageController::lastVisibleRow() const
 
 int PageController::insertToken(int row, int cursor, const QString &token)
 {
+    if (refusesEdit())
+        return -1;
     if (!validRow(row))
         return cursor;
     const QString edit = m_model->editTextAt(row);
@@ -2337,6 +2420,8 @@ int PageController::insertToken(int row, int cursor, const QString &token)
 
 int PageController::replaceRange(int row, int from, int to, const QString &replacement)
 {
+    if (refusesEdit())
+        return -1;
     if (!validRow(row))
         return from;
     const QString edit = m_model->editTextAt(row);
@@ -2350,6 +2435,8 @@ int PageController::replaceRange(int row, int from, int to, const QString &repla
 
 QVariantMap PageController::setHighlight(int row, int from, int to, const QString &color)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     QVariantMap out{{u"changed"_s, false}, {u"refused"_s, false}, {u"from"_s, from}, {u"to"_s, to}};
     if (!validRow(row))
         return out;
@@ -2374,6 +2461,8 @@ QVariantMap PageController::setHighlight(int row, int from, int to, const QStrin
 
 QVariantMap PageController::pasteText(int row, int from, int to, const QString &pasted)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
     if (!validRow(row))
         return result(-1, -1);
@@ -2497,6 +2586,8 @@ QString PageController::ensureBlockRef(int row)
     const QString existing = m_model->document().at(row).blockId;
     if (!existing.isEmpty())
         return existing;
+    if (refusesEdit())
+        return {};
     const QPointer<EditorHost> host = m_host;
     if (host)
         host->finishIndexing(); // every id of the vault known (not inside the edit: it signals)
@@ -2602,6 +2693,8 @@ QVariantMap PageController::linkText(int row, const QString &kind)
     if (id.isEmpty()) {
         if (!m_allowNewBlockIds)
             return failed(u"readOnly"_s);
+        if (m_readOnly)
+            return failed(u"readingMode"_s);
         id = ensureBlockRef(row);
         if (id.isEmpty())
             return failed(u"noId"_s);
@@ -2631,6 +2724,8 @@ QVariantMap PageController::copyLink(int row, const QString &kind)
 
 void PageController::setReminder(int row, const QString &at, bool alarm, const QString &recurrence, int from, int to)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     const auto spec = dates::parseDateSpec(at.trimmed());
@@ -2679,6 +2774,8 @@ void PageController::setReminder(int row, const QString &at, bool alarm, const Q
 
 void PageController::removeToken(int row, int from, int to)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     editBody(row, replaceTokenRange(m_model->document().at(row).body, from, to, QString()));
@@ -2686,6 +2783,8 @@ void PageController::removeToken(int row, int from, int to)
 
 void PageController::setDateToken(int row, const QString &field, const QString &spec)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     markdown::TokenKind kind = markdown::TokenKind::Due;
@@ -2711,6 +2810,8 @@ void PageController::setDateToken(int row, const QString &field, const QString &
 
 void PageController::setRecurrence(int row, const QString &rule)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     // Only the rule's text changes: words written after it stay (markdown::setBlockRecurrence()).
@@ -2778,6 +2879,8 @@ markdown::TokenEditContext PageController::tokenEditContext() const
 bool PageController::applyTokenAction(int row, int from, int to, const QString &action, const QVariant &a,
                                       const QVariant &b)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row))
         return false;
     const QString body = m_model->document().at(row).body;
@@ -2908,6 +3011,8 @@ QVariantMap PageController::tokenChipIn(const QString &raw, const QString &url) 
 QVariantMap PageController::editTokenIn(const QString &path, int line, const QString &raw, const QVariantMap &refMap,
                                         const QString &action, const QVariant &a, const QVariant &b)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](bool ok, const QString &reason, int undo = 0) {
         return QVariantMap{{u"ok"_s, ok}, {u"reason"_s, reason}, {u"undo"_s, undo}};
     };
@@ -2958,6 +3063,8 @@ QVariantMap PageController::editTokenIn(const QString &path, int line, const QSt
 
 bool PageController::undoTokenEdit(int undo)
 {
+    if (refusesEdit())
+        return false;
     const auto it = m_foreignEdits.constFind(undo);
     if (it == m_foreignEdits.constEnd() || !m_host)
         return false;
@@ -2989,6 +3096,8 @@ QVariantMap PageController::tableCellChip(int row, int tableRow, int column, con
 bool PageController::applyTableCellToken(int row, int tableRow, int column, int from, int to, const QString &action,
                                          const QVariant &a, const QVariant &b)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row))
         return false;
     const auto cell = tableCellText(m_model->document().at(row).body, tableRow, column);
@@ -3023,6 +3132,8 @@ bool PageController::applyTableCellToken(int row, int tableRow, int column, int 
 
 void PageController::setDateTokenAt(int row, int from, int to, const QString &spec)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     const QString body = m_model->document().at(row).body;
@@ -3039,6 +3150,8 @@ void PageController::setDateTokenAt(int row, int from, int to, const QString &sp
 
 void PageController::shiftDateTokenAt(int row, int from, int to, int days, int minutes)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     const QString body = m_model->document().at(row).body;
@@ -3051,6 +3164,8 @@ void PageController::shiftDateTokenAt(int row, int from, int to, int days, int m
 
 void PageController::moveDateTokenTo(int row, int from, int to, int days)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     const QString body = m_model->document().at(row).body;
@@ -3062,6 +3177,8 @@ void PageController::moveDateTokenTo(int row, int from, int to, int days)
 
 void PageController::setReminderAlarmAt(int row, int from, int to, bool alarm)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row))
         return;
     editBody(row, setReminderAlarm(m_model->document().at(row).body, from, to, alarm));
@@ -3104,6 +3221,8 @@ QString PageController::journalLink(const QString &date) const
 
 QVariantMap PageController::applyCompletion(int row, const QVariantMap &triggerMap, const QVariantMap &item)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     QVariantMap out{{u"cursor"_s, m_cursor}, {u"action"_s, QString()}};
     if (!validRow(row))
         return out;
@@ -3193,6 +3312,8 @@ QVariantMap PageController::applyCompletion(int row, const QVariantMap &triggerM
 
 QVariantMap PageController::applySlashCommand(int row, int from, int to, const QString &command)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     QVariantMap out{{u"cursor"_s, m_cursor}, {u"action"_s, QString()}, {u"row"_s, row}};
     if (!validRow(row))
         return out;
@@ -3330,6 +3451,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
 
 void PageController::setTableCell(int row, int tableRow, int column, const QString &value, bool typing)
 {
+    if (refusesEdit())
+        return;
     if (!validRow(row) || column < 0)
         return;
     auto model = calc::parseTable(m_model->document().at(row).body);
@@ -3405,11 +3528,15 @@ QString PageController::newColumnHeader(const calc::TableModel &model) const
 
 void PageController::addTableRow(int row)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [](calc::TableModel &m) { return calc::insertTableRow(m, int(m.rows.size())); });
 }
 
 void PageController::addTableColumn(int row)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [this](calc::TableModel &m) {
         return calc::insertTableColumn(m, int(m.header.size()), newColumnHeader(m));
     });
@@ -3417,36 +3544,50 @@ void PageController::addTableColumn(int row)
 
 void PageController::removeTableRow(int row, int tableRow)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [=](calc::TableModel &m) { return calc::removeTableRow(m, tableRow); });
 }
 
 void PageController::insertTableRow(int row, int at)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [=](calc::TableModel &m) { return calc::insertTableRow(m, at); });
 }
 
 void PageController::moveTableRow(int row, int from, int to)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [=](calc::TableModel &m) { return calc::moveTableRow(m, from, to); });
 }
 
 void PageController::insertTableColumn(int row, int at)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [=, this](calc::TableModel &m) { return calc::insertTableColumn(m, at, newColumnHeader(m)); });
 }
 
 void PageController::removeTableColumn(int row, int column)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [=](calc::TableModel &m) { return calc::removeTableColumn(m, column); });
 }
 
 void PageController::moveTableColumn(int row, int from, int to)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [=](calc::TableModel &m) { return calc::moveTableColumn(m, from, to); });
 }
 
 void PageController::setTableColumnAlign(int row, int column, const QString &align)
 {
+    if (refusesEdit())
+        return;
     editTable(row, [&](calc::TableModel &m) {
         if (column < 0 || column >= m.aligns.size())
             return false;
@@ -3472,6 +3613,8 @@ constexpr qint64 MaxCsvFileBytes = 16LL * 1024 * 1024;
 
 bool PageController::sortTable(int row, int column, bool descending)
 {
+    if (refusesEdit())
+        return false;
     if (!validRow(row))
         return false;
     const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
@@ -3562,6 +3705,8 @@ bool PageController::downloadTableCsv(int row)
 
 QVariantMap PageController::insertCsvTable(int row, const QString &text)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const std::optional<io::CsvTable> table = io::tableFromCsv(text);
     if (!table)
         return {{u"row"_s, -1}, {u"truncated"_s, false}};
@@ -3571,6 +3716,8 @@ QVariantMap PageController::insertCsvTable(int row, const QString &text)
 
 QVariantMap PageController::insertCsvFile(int row, const QUrl &url)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     QFile file(url.isLocalFile() ? url.toLocalFile() : url.toString());
     if (url.isEmpty() || !file.open(QIODevice::ReadOnly) || file.size() > MaxCsvFileBytes)
         return {{u"row"_s, -1}, {u"truncated"_s, false}};
@@ -3579,6 +3726,8 @@ QVariantMap PageController::insertCsvFile(int row, const QUrl &url)
 
 bool PageController::pickCsvInBrowser(int row)
 {
+    if (refusesEdit())
+        return false;
 #ifdef Q_OS_WASM
     const int handle = trackBlock(row); // the block may move or go while the picker is open
     const QPointer<PageController> self(this);
@@ -3880,6 +4029,8 @@ QString PageController::toggledStatus(const QString &status)
 
 bool PageController::setTaskStatusAt(const QString &path, int line, const QString &status)
 {
+    if (refusesEdit())
+        return false;
     if (path.isEmpty() || line < 0 || (!status.isEmpty() && !taskStatusFromName(status)))
         return false;
     if (path == m_path) {
@@ -3898,6 +4049,8 @@ bool PageController::setTaskStatusAt(const QString &path, int line, const QStrin
 
 bool PageController::toggleTaskAt(const QString &path, int line, const QString &currentStatus)
 {
+    if (refusesEdit())
+        return false;
     const QString next = toggledStatus(currentStatus);
     return !next.isEmpty() && setTaskStatusAt(path, line, next);
 }
@@ -4037,6 +4190,8 @@ bool PageController::isWebPictureUrl(const QString &url) const
 
 QVariantMap PageController::insertWebPicture(int row, int from, int to, const QString &url, bool download)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     return placeWebPicture(row, from, to, url, download, false);
 }
 
@@ -4074,6 +4229,8 @@ QVariantMap PageController::placeWebPicture(int row, int from, int to, const QSt
 
 QVariantMap PageController::urlToPicture(int row, int from, int to, const QString &url, bool download)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QVariantMap none{{u"row"_s, -1}, {u"cursor"_s, -1}};
     if (!validRow(row) || !webpicture::isWebUrl(url) || from < 0 || to < from)
         return none;
@@ -4115,6 +4272,8 @@ QStringList PageController::webPictureUrls() const
 
 int PageController::downloadWebPictures(const QString &url)
 {
+    if (refusesEdit())
+        return -1;
     if (m_sourceMode)
         return -1; // the blocks are not what is saved: the caller says "switch back to blocks"
     if (!m_host)
@@ -4231,6 +4390,8 @@ QString PageController::linkToFile(const QString &path) const
 
 QVariantMap PageController::insertFileLinks(int row, int from, int to, const QList<QUrl> &urls)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     QStringList stored;
     for (const QUrl &url : urls) {
         const QString path = importPickedFile(url);
@@ -4254,6 +4415,8 @@ QVariantMap PageController::insertLinks(int row, int from, int to, const QString
 
 QVariantMap PageController::insertAttachment(int row, int from, int to, const QString &fileName, const QByteArray &data)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QString name = fileName.trimmed().isEmpty() ? tr("Attachment") : fileName.trimmed();
     const QString path = m_host && !data.isEmpty() ? m_host->saveAttachment(name, data) : QString();
     if (path.isEmpty()) {
@@ -4265,6 +4428,8 @@ QVariantMap PageController::insertAttachment(int row, int from, int to, const QS
 
 QVariantMap PageController::insertDrawing(int row, int from, int to)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QString name = tr("Drawing %1").arg(currentDateTime().toString(u"yyyy-MM-dd HH.mm"_s)) + u".svg"_s;
     const QString path = m_host ? m_host->saveAttachment(name, drawing::toSvg(drawing::Drawing())) : QString();
     if (path.isEmpty()) {
@@ -4301,6 +4466,8 @@ void PageController::discardBackdropSource(const QString &path)
 
 QVariantMap PageController::insertDrawingsOn(int row, int from, int to, const QVariantList &prepared)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     QStringList stored;
     const qint64 now = currentDateTime().toMSecsSinceEpoch();
     for (const QVariant &item : prepared) {
@@ -4374,6 +4541,11 @@ void PageController::openDrawing(const QString &path)
     if (!m_host || path.isEmpty())
         return;
     flush();
+    // Reading mode: the drawing as a picture (its view offers "Edit drawing"), no stroke by accident.
+    if (m_readOnly) {
+        m_host->navigate({{u"view"_s, u"page"_s}, {u"path"_s, path}});
+        return;
+    }
     // (Where it was opened from: the drawing editor's previous / next PDF page put new drawings there.)
     QVariantMap route{{u"view"_s, u"drawing"_s}, {u"path"_s, path}};
     if (!m_path.isEmpty())
@@ -4383,6 +4555,8 @@ void PageController::openDrawing(const QString &path)
 
 QVariantMap PageController::insertFiles(int row, int from, int to, const QList<QUrl> &urls)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QStringList stored = storeFiles(urls);
     QVariantMap out = insertEmbeds(row, from, to, stored);
     out.insert(u"count"_s, stored.size());
@@ -4391,6 +4565,8 @@ QVariantMap PageController::insertFiles(int row, int from, int to, const QList<Q
 
 QVariantMap PageController::insertFilesAfter(int row, const QList<QUrl> &urls)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QStringList stored = storeFiles(urls);
     QVariantMap out = insertEmbeds(validRow(row) ? row : -1, -1, -1, stored, true);
     out.insert(u"count"_s, stored.size());
@@ -4425,6 +4601,8 @@ QStringList PageController::storeFiles(const QList<QUrl> &urls)
 
 QVariantMap PageController::pasteImage(int row, int from, int to)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
     const QMimeData *data = clipboard ? clipboard->mimeData() : nullptr;
     if (const QList<QUrl> files = copiedFiles(data); !files.isEmpty())
@@ -4442,6 +4620,8 @@ QVariantMap PageController::pasteImage(int row, int from, int to)
 
 bool PageController::pickImageInBrowser(int row, int from, int to)
 {
+    if (refusesEdit())
+        return false;
 #ifdef Q_OS_WASM
     // Several pictures at once, as insertFiles() on the desktop; the same size limit per picture
     // and a total for the pick, both checked before a picture is read.
@@ -4458,6 +4638,8 @@ bool PageController::pickImageInBrowser(int row, int from, int to)
 
 bool PageController::pickFileLinksInBrowser(int row, int from, int to)
 {
+    if (refusesEdit())
+        return false;
 #ifdef Q_OS_WASM
     // Any file (no filter); the limits of pickImageInBrowser().
     platform::wasm::openFiles({}, true, MaxAttachmentBytes, MaxPickedAttachmentBytes, fileLinkReceiver(row, from, to));
@@ -4524,6 +4706,8 @@ std::function<void(const QList<platform::PickedFile> &)> PageController::pickRec
 
 void PageController::undo()
 {
+    if (refusesEdit())
+        return;
     if (m_sourceMode)
         return;
     m_typingOpen = false;
@@ -4541,6 +4725,8 @@ QString PageController::undoToken() const
 
 bool PageController::undoStep(const QString &token)
 {
+    if (refusesEdit())
+        return false;
     // Only while the edit is the last step of this history: undoing it later would undo the
     // edits made after it first (or, after a reload, an unrelated step).
     if (m_sourceMode || token.isEmpty() || token != undoToken() || !m_undo->canUndo())
@@ -4551,6 +4737,8 @@ bool PageController::undoStep(const QString &token)
 
 void PageController::redo()
 {
+    if (refusesEdit())
+        return;
     if (m_sourceMode)
         return;
     m_typingOpen = false;
@@ -4567,6 +4755,8 @@ QString PageController::sourceText() const
 
 void PageController::setSourceText(const QString &edited)
 {
+    if (refusesEdit())
+        return;
     // A TextEdit reports every line break as "\n": text without any "\r" gets the file's line
     // terminators back (untouched lines keep theirs, new ones get the document's).
     const QString current = m_sourceMode ? m_sourceText : text();
@@ -4589,7 +4779,7 @@ void PageController::setSourceText(const QString &edited)
 
 void PageController::setSourceMode(bool on)
 {
-    if (m_sourceMode == on)
+    if (m_sourceMode == on || (on && refusesEdit()))
         return;
     if (on) {
         stopEditing();

@@ -217,7 +217,7 @@ FocusScope {
                 root.activeEditor.openCurrentDependencyPicker()
                 return
             }
-            if (action !== "toggleNoteMode")
+            if (action !== "toggleNoteMode" || root.activeEditor.readOnlyRefuses())
                 return
             if (!root.activeController.toggleMode())
                 AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")

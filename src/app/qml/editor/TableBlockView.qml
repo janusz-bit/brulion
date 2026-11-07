@@ -65,7 +65,10 @@ Item {
     /// pointer moved everything below it while the page scrolled past, and room kept for hidden
     /// buttons left a gap under every table (docs/UI.md "Scrolling performance"). Selecting the
     /// table or editing a cell — never scrolling — adds it.
-    readonly property bool buttonsShown: active || Theme.touchUi || filtering
+    /// Reading mode (BlockEditor.readOnly): no cell opens for typing, no "+ Row" / "+ Column";
+    /// filtering (it writes nothing) stays.
+    readonly property bool readOnly: root.block.editor !== null && root.block.editor.readOnly
+    readonly property bool buttonsShown: ((active || Theme.touchUi) && !readOnly) || filtering
 
     /// Natural column widths (clamped), stretched to fill the available width.
     readonly property list<real> columnWidths: BlockViews.tableColumnWidths(root.block.rowData.tableData, headerMetrics.font,
@@ -145,7 +148,7 @@ Item {
         return text.linkAt(x, y)
     }
     function startCell(r: int, c: int): void {
-        if (c < 0 || c >= columns || r < -1 || r >= rows.length)
+        if (c < 0 || c >= columns || r < -1 || r >= rows.length || root.block.editor.readOnlyRefuses())
             return
         root.block.controller.selectedRow = -1
         root.block.controller.stopEditing()
@@ -510,7 +513,7 @@ Item {
                                 id: cellHover
                                 enabled: !Theme.touchUi
                                 cursorShape: cellText.linkAt(point.position.x - cellText.x, point.position.y - cellText.y) !== ""
-                                             ? Qt.PointingHandCursor : Qt.IBeamCursor
+                                             ? Qt.PointingHandCursor : root.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor
                                 onPointChanged: {
                                     cell.trackLink(point.position.x, point.position.y)
                                     // The link under the resting pointer: its preview (LinkPreviews).
@@ -787,7 +790,7 @@ Item {
         sourceComponent: Item {
             id: buttonRow
             readonly property real lineHeight: Math.max(addRow.implicitHeight, addColumn.implicitHeight)
-            readonly property real addedWidth: addColumn.x + addColumn.implicitWidth
+            readonly property real addedWidth: root.readOnly ? 0 : addColumn.x + addColumn.implicitWidth
             /// The filters' line under the add buttons when both do not fit side by side (a phone).
             readonly property bool wrapped: root.filtering
                                             && addedWidth + Theme.space3 + filterStatus.implicitWidth + Theme.space1
@@ -824,6 +827,7 @@ Item {
             }
             BButton {
                 id: addRow
+                visible: !root.readOnly
                 size: "small"
                 variant: "ghost"
                 iconName: "plus"
@@ -833,6 +837,7 @@ Item {
             }
             BButton {
                 id: addColumn
+                visible: !root.readOnly
                 x: addRow.implicitWidth + Theme.space1
                 size: "small"
                 variant: "ghost"

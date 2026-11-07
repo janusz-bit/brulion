@@ -510,6 +510,8 @@ QVariantMap PageController::copySelection(bool plainText)
 
 QVariantMap PageController::cutSelection()
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const int count = m_selectionCount;
     QVariantMap result = copySelection(false);
     if (!result.value(u"ok"_s).toBool())
@@ -554,6 +556,8 @@ QVariantMap PageController::copyEditText(int row, int from, int to, bool cut)
 
 int PageController::deleteSelection()
 {
+    if (refusesEdit())
+        return -1;
     const QList<int> tops = selectionTops();
     if (tops.isEmpty())
         return -1;
@@ -615,6 +619,8 @@ bool PageController::canIndentSelection() const
 
 bool PageController::indentSelection()
 {
+    if (refusesEdit())
+        return false;
     const RowRange range = selectionRange();
     if (range.count <= 0 || !canIndentSelection())
         return false;
@@ -644,6 +650,8 @@ bool PageController::indentSelection()
 
 bool PageController::outdentSelection()
 {
+    if (refusesEdit())
+        return false;
     const RowRange range = selectionRange();
     if (range.count <= 0)
         return false;
@@ -662,6 +670,8 @@ bool PageController::outdentSelection()
 
 bool PageController::moveSelectionUp()
 {
+    if (refusesEdit())
+        return false;
     const RowRange range = selectionRange();
     const int zoom = zoomBlock();
     if (range.count <= 0 || (zoom >= range.first && zoom <= range.last()))
@@ -674,6 +684,8 @@ bool PageController::moveSelectionUp()
 
 bool PageController::moveSelectionDown()
 {
+    if (refusesEdit())
+        return false;
     const RowRange range = selectionRange();
     const int zoom = zoomBlock();
     if (range.count <= 0 || (zoom >= range.first && zoom <= range.last()))
@@ -686,6 +698,8 @@ bool PageController::moveSelectionDown()
 
 void PageController::setSelectionTaskStatus(const QString &status)
 {
+    if (refusesEdit())
+        return;
     const QList<quint64> uids = selectedTaskUids();
     if (uids.isEmpty())
         return;
@@ -705,6 +719,8 @@ void PageController::setSelectionTaskStatus(const QString &status)
 
 void PageController::cycleSelectionTasks()
 {
+    if (refusesEdit())
+        return;
     const QList<quint64> uids = selectedTaskUids();
     if (uids.isEmpty())
         return;
@@ -804,6 +820,8 @@ QString PageController::withoutTakenIds(const QString &text, const QSet<QString>
 
 QVariantMap PageController::replaceSelection(const QString &pasted)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto result = [](int row, int count) { return QVariantMap{{u"row"_s, row}, {u"count"_s, count}}; };
     const QList<int> selected = selectionRowList();
     QString text = normalizedPaste(pasted);
@@ -937,6 +955,8 @@ void PageController::notePastedPictures(QVariantMap &out, const QStringList &bef
 
 QVariantMap PageController::pasteClipboard(int row, int from, int to)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QString text = clipboardText();
     if (text.isEmpty() || !validRow(row))
         return {{u"row"_s, -1}, {u"cursor"_s, -1}};
@@ -983,6 +1003,8 @@ QVariantMap PageController::pasteClipboard(int row, int from, int to)
 
 QVariantMap PageController::pasteOverSelection()
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QString text = clipboardText();
     const QStringList before = webPictureUrls();
     QVariantMap out = replaceSelection(text);

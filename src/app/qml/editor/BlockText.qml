@@ -195,7 +195,8 @@ Item {
             // (A click on a date, 🔁 or priority chip edits the text: its menu is the right button's.)
             cursorShape: {
                 const link = root.linkAt(point.position.x, point.position.y)
-                return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor : Qt.IBeamCursor
+                return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor
+                                                                      : root.editor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor
             }
             onPointChanged: {
                 root.trackLink(point.position.x, point.position.y)

@@ -121,6 +121,11 @@ class AppSettings : public QObject {
     /// top bar, side panel or bottom navigation — the text column alone, centred. F8 (a custom
     /// shortcut), Esc, the Back key or its corner button leave it. Kept on this device.
     Q_PROPERTY(bool focusMode READ focusMode WRITE setFocusMode NOTIFY focusModeChanged FINAL)
+    /// Reading mode (docs/UI.md "Reading mode"): pages and the journal are shown read-only — a tap
+    /// or click follows links, opens embeds and folds, but never starts editing or changes a note
+    /// (PageController::readOnly). Ctrl+Shift+E (a custom shortcut), the page header's book
+    /// button, the page menu, the palette and Settings → Editor. Kept on this device.
+    Q_PROPERTY(bool readingMode READ readingMode WRITE setReadingMode NOTIFY readingModeChanged FINAL)
     /// Typewriter scrolling: the editor keeps the caret's line in the middle of the view.
     Q_PROPERTY(bool typewriterScrolling READ typewriterScrolling WRITE setTypewriterScrolling NOTIFY
                        typewriterScrollingChanged FINAL)
@@ -274,6 +279,8 @@ public:
     void setWordCountShown(bool on);
     bool focusMode() const;
     void setFocusMode(bool on);
+    bool readingMode() const;
+    void setReadingMode(bool on);
     bool typewriterScrolling() const;
     void setTypewriterScrolling(bool on);
 
@@ -422,6 +429,7 @@ Q_SIGNALS:
     void spellingWordsChanged();
     void wordCountShownChanged();
     void focusModeChanged();
+    void readingModeChanged();
     void typewriterScrollingChanged();
     void currentVaultChanged();
     void recentVaultsChanged();

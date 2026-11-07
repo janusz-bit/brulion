@@ -564,6 +564,7 @@ Item {
         y: block.embedsY
         width: Math.max(40, block.contentRight - x)
         embeds: block.hasEmbeds ? block.embeds : block.noItems
+        readOnly: block.editor.readOnly
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
         onDrawingClicked: (path) => block.controller.openDrawing(path)
         onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)

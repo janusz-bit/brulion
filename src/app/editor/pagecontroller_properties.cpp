@@ -278,6 +278,8 @@ markdown::PropertyEditResult removeLookProperties(const QString &content, const 
 
 QVariantMap PageController::setPageIcon(const QString &kind, const QString &name)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     markdown::PageIcon icon;
     if (kind == u"emoji")
         icon = {markdown::PageIcon::Kind::Emoji, name.trimmed()};
@@ -297,6 +299,8 @@ QVariantMap PageController::setPageIcon(const QString &kind, const QString &name
 
 QVariantMap PageController::setPageCover(const QString &given)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QString target = given.trimmed();
     QString value;
     if (!target.isEmpty()) {
@@ -325,6 +329,8 @@ QVariantMap PageController::setPageCover(const QString &given)
 
 QVariantMap PageController::setPageCoverPosition(double position)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QString value = markdown::coverPositionValue(position);
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
         return setLookProperty(content, markdown::PageCoverPositionKey.toString(), value, PropertyType::Number);
@@ -361,6 +367,8 @@ PageController::applyPropertyEdit(const std::function<markdown::PropertyEditResu
 QVariantMap PageController::setPageProperty(const QString &source, const QString &key, const QVariant &given,
                                             const QString &type)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     // A JS array from QML arrives as a QJSValue: the list it holds.
     const QVariant value =
             given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
@@ -379,6 +387,8 @@ QVariantMap PageController::setPageProperty(const QString &source, const QString
 QVariantMap PageController::addPageProperty(const QString &source, const QString &key, const QVariant &given,
                                             const QString &type)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QVariant value =
             given.metaType() == QMetaType::fromType<QJSValue>() ? given.value<QJSValue>().toVariant() : given;
     const QString k = key.trimmed();
@@ -396,6 +406,8 @@ QVariantMap PageController::addPageProperty(const QString &source, const QString
 
 QVariantMap PageController::removePageProperty(const QString &source, const QString &key)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
         return markdown::removePageProperty(content, sourceFor(markdown::readPageProperties(content), source, key),
                                             key);
@@ -405,6 +417,8 @@ QVariantMap PageController::removePageProperty(const QString &source, const QStr
 
 QVariantMap PageController::renamePageProperty(const QString &source, const QString &oldKey, const QString &newKey)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const QString k = newKey.trimmed();
     PropertySource resolved = PropertySource::Yaml;
     const PropertyEditStatus status = applyPropertyEdit([&](const QString &content) {
@@ -416,6 +430,8 @@ QVariantMap PageController::renamePageProperty(const QString &source, const QStr
 
 QVariantMap PageController::setPagePropertyType(const QString &source, const QString &key, const QString &type)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto to = markdown::parsePropertyType(type);
     bool lost = false;
     QString previous;
@@ -441,6 +457,8 @@ QVariantMap PageController::setPagePropertyType(const QString &source, const QSt
 
 QVariantMap PageController::addPageListItem(const QString &kind, const QString &item)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto k = listKind(kind);
     if (!k)
         return editResult(PropertyEditStatus::InvalidValue, reasonFor(PropertyEditStatus::InvalidValue, kind, {}));
@@ -451,6 +469,8 @@ QVariantMap PageController::addPageListItem(const QString &kind, const QString &
 
 QVariantMap PageController::removePageListItem(const QString &kind, const QString &item)
 {
+    if (refusesEdit())
+        return readOnlyResult();
     const auto k = listKind(kind);
     if (!k)
         return editResult(PropertyEditStatus::NotFound, reasonFor(PropertyEditStatus::NotFound, kind, {}));

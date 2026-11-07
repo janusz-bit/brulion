@@ -15,7 +15,9 @@ import Brulion
 //     selected (BlockEditor).
 // Blocks selected across several days of the journal stream (BlockEditor.inSpan): the count is the
 // stream's, Copy and Copy as plain text copy them all; the other tools are shown unavailable and
-// a tap says that only copying works there; Select all selects the day's own blocks.
+// a tap says that only copying works there; Select all selects the day's own blocks. In reading
+// mode (BlockEditor.readOnly) only what changes nothing: Copy, Select all, One by one, Copy as
+// plain text and Copy link.
 // Buttons never take the keyboard: it stays with the selection (the editor's list).
 //
 //   SelectionToolbar { editor: editor; docked: true }
@@ -34,6 +36,8 @@ Row {
     readonly property int count: span ? editor.stream.count : controller ? controller.selectionCount : 0
     /// Why a tool does nothing now ("" when it works): a selection over several days.
     readonly property string spanBlocked: span ? editor.spanReason : ""
+    /// Reading mode: the tools that would change the note are not shown.
+    readonly property bool readOnly: editor !== null && editor.readOnly
     /// One block selected (its two ends are the same block, nothing picked besides it): the
     /// block's own tools apply.
     readonly property bool singleBlock: !span && controller !== null && controller.selectedRow >= 0
@@ -121,6 +125,7 @@ Row {
     }
     Tool {
         objectName: "selectionCut"
+        visible: !bar.readOnly
         iconName: "scissors"
         label: qsTr("Cut")
         shortcut: "Ctrl+X"
@@ -129,6 +134,7 @@ Row {
     }
     Tool {
         objectName: "selectionDelete"
+        visible: !bar.readOnly
         iconName: "trash-2"
         label: qsTr("Delete")
         shortcut: "Delete"
@@ -189,6 +195,9 @@ Row {
             if (entry && entry.subMenu && entry.subMenu.objectName === "selectionCopyLinkMenu") {
                 entry.visible = singleBlock
                 entry.height = singleBlock ? entry.implicitHeight : 0
+            } else if (entry && entry.subMenu && entry.subMenu.objectName === "selectionTaskMenu") {
+                entry.visible = !readOnly
+                entry.height = !readOnly ? entry.implicitHeight : 0
             }
         }
         menu.bottomMargin = editor ? editor.menuBottomMargin() : Theme.space2
@@ -249,10 +258,13 @@ Row {
                     onTriggered: bar.editor.copyLink(bar.controller.selectedRow, "embed")
                 }
             }
-            BMenuSeparator {}
+            BMenuSeparator {
+                visible: !bar.readOnly
+                height: !bar.readOnly ? implicitHeight : 0
+            }
             OptionalItem {
                 objectName: "selectionIndent"
-                shown: bar.indentable
+                shown: bar.indentable && !bar.readOnly
                 text: qsTr("Indent")
                 iconName: "list-indent-increase"
                 shortcut: bar.docked ? "" : "Tab"
@@ -261,23 +273,25 @@ Row {
             }
             OptionalItem {
                 objectName: "selectionOutdent"
-                shown: bar.indentable
+                shown: bar.indentable && !bar.readOnly
                 text: qsTr("Outdent")
                 iconName: "list-indent-decrease"
                 shortcut: bar.docked ? "" : "Shift+Tab"
                 unavailable: bar.unmovable
                 onTriggered: bar.moveOr("outdent")
             }
-            BMenuItem {
+            OptionalItem {
                 objectName: "selectionMoveUp"
+                shown: !bar.readOnly
                 text: qsTr("Move up")
                 iconName: "move-up"
                 shortcut: bar.docked ? "" : "Alt+Up"
                 unavailable: bar.unmovable
                 onTriggered: bar.moveOr("up")
             }
-            BMenuItem {
+            OptionalItem {
                 objectName: "selectionMoveDown"
+                shown: !bar.readOnly
                 text: qsTr("Move down")
                 iconName: "move-down"
                 shortcut: bar.docked ? "" : "Alt+Down"

@@ -74,6 +74,11 @@ brulion_add_test(tst_editor_queryresults
 brulion_add_test(tst_editor_notemode
     SOURCES tst_editor_notemode.cpp
     LIBS brulion_editor brulion_core_markdown)
+# Reading mode: PageController.readOnly refuses every edit, reading (selecting, copying, folding,
+# links, changes from outside) goes on.
+brulion_add_test(tst_editor_readonly
+    SOURCES tst_editor_readonly.cpp
+    LIBS brulion_editor brulion_core_markdown)
 # Page properties as typed fields: PageController's edits, suggestions, the properties roles.
 brulion_add_test(tst_editor_pageprops
     SOURCES tst_editor_pageprops.cpp
@@ -221,6 +226,21 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script propstest --no-single-instance
                     --size ${_props_size} ${_props_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_props_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
+        # Reading mode (`--editor-script readingtest`, qml/dev/ReadingSelfTest.qml): PageController's
+        # readOnly with real clicks / taps — text and a checkbox edit nothing (the toast with
+        # "Edit"), a link opens, the block menu without Cut, Move and Delete, Delete and Enter on a
+        # selected block change nothing, "Edit" leaves the mode; the file as written throughout.
+        foreach(_reading "tst_editor_qml_reading;1280x800;" "tst_editor_qml_reading_touch;412x915;--touch")
+            list(GET _reading 0 _reading_test)
+            list(GET _reading 1 _reading_size)
+            list(GET _reading 2 _reading_touch)
+            add_test(NAME ${_reading_test}
+                COMMAND brulion --editor --editor-script readingtest --no-single-instance
+                    --size ${_reading_size} ${_reading_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_reading_test} PROPERTIES
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()

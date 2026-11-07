@@ -386,8 +386,8 @@ private Q_SLOTS:
         QCOMPARE(s.editorWidth(), expected);
     }
 
-    // The word count, focus mode and typewriter scrolling (docs/UI.md "Statistics and focus
-    // mode"): defaults, kept after a restart, a stored value that is no bool gives the default;
+    // The word count, focus mode, reading mode and typewriter scrolling (docs/UI.md "Statistics
+    // and focus mode", "Reading mode"): defaults, kept after a restart, a stored value that is no bool gives the default;
     // the custom shortcuts' group (ShortcutMap reads it).
     void focusAndStats()
     {
@@ -397,10 +397,15 @@ private Q_SLOTS:
             QVERIFY(s.wordCountShown());
             QVERIFY(!s.focusMode());
             QVERIFY(!s.typewriterScrolling());
+            QVERIFY(!s.readingMode());
             QSignalSpy focus(&s, &AppSettings::focusModeChanged);
             s.setFocusMode(true);
             s.setFocusMode(true);
             QCOMPARE(focus.size(), 1);
+            QSignalSpy reading(&s, &AppSettings::readingModeChanged);
+            s.setReadingMode(true);
+            s.setReadingMode(true);
+            QCOMPARE(reading.size(), 1);
             s.setTypewriterScrolling(true);
             s.setWordCountShown(false);
             s.setShortcutOverride(u"journal.today"_s, u"Ctrl+Alt+J"_s);
@@ -411,6 +416,7 @@ private Q_SLOTS:
         {
             AppSettings s(file, m_tmp.path());
             QVERIFY(s.focusMode());
+            QVERIFY(s.readingMode());
             QVERIFY(s.typewriterScrolling());
             QVERIFY(!s.wordCountShown());
             const QVariantMap shortcuts = s.shortcutOverrides();
@@ -427,10 +433,12 @@ private Q_SLOTS:
         {
             QSettings raw(file, QSettings::IniFormat);
             raw.setValue(u"ui/focusMode"_s, u"zażółć"_s);
+            raw.setValue(u"ui/readingMode"_s, u"źdźbło"_s);
             raw.setValue(u"editor/wordCountShown"_s, u"false"_s);
         }
         AppSettings s(file, m_tmp.path());
         QVERIFY(!s.focusMode());
+        QVERIFY(!s.readingMode());
         QVERIFY(!s.wordCountShown());
     }
 

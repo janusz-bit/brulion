@@ -12,6 +12,7 @@ import Brulion
 //   "urlToPicture"   the pasted picture address [from, to) of `row` made the picture, downloaded
 //   "downloadWeb"    the pictures from the internet `urls` stored in the notebook
 //   "streamUndo"     StreamFind.undo(token): a replace over days of the journal stream
+//   "leaveReadOnly"  the editor's readOnlyLeaveRequested(): its host leaves reading mode
 // Made by the editor (BlockEditor.toastAction()) as its child: a toast outliving the editor finds
 // it gone, and nothing happens (the closure's try/catch made sure of that).
 QtObject {
@@ -77,6 +78,10 @@ QtObject {
                 ed.notice(qsTr("Not undone in %n day(s): they changed since", "", left), "info", null)
             return
         }
+        case "leaveReadOnly":
+            if (ed !== null)
+                ed.readOnlyLeaveRequested()
+            return
         }
     }
 }

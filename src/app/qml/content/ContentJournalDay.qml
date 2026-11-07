@@ -90,7 +90,8 @@ FocusScope {
     /// vault has one), the caret in its first empty block. Like a day opened on its own (PageView),
     /// the note is created by the first change, never by starting to write (startNewPage).
     function begin(): void {
-        if (!page.loaded)
+        // (Reading mode: a toast offers "Edit" instead.)
+        if (!page.loaded || dayEditor.readOnlyRefuses())
             return
         if (page.blocks.visibleCount > 0) {
             dayEditor.startEditing(page.lastVisibleRow(), -1)
@@ -127,6 +128,7 @@ FocusScope {
         host: Workspace
         path: day.path
         allowNewBlockIds: !AppController.inDocsVault // the documentation's pages stay as shipped
+        readOnly: AppSettings.readingMode // docs/UI.md "Reading mode"
         onLoadingChanged: if (page.loaded && !page.loading) day.restoreFolds()
         onFoldStateChanged: {
             if (day._foldsRestored && page.loaded && !page.loading)
@@ -321,8 +323,10 @@ FocusScope {
                     x: promptIcon.x + promptIcon.width + Theme.space2
                     width: Math.max(0, parent.width - x - Theme.space3)
                     anchors.verticalCenter: parent.verticalCenter
-                    text: day.isToday ? qsTr("What's on today? Click to start writing.")
-                                      : qsTr("Nothing written on this day. Click to start writing.")
+                    text: dayEditor.readOnly ? (day.isToday ? qsTr("Nothing written today yet.")
+                                                            : qsTr("Nothing written on this day."))
+                          : day.isToday ? qsTr("What's on today? Click to start writing.")
+                          : qsTr("Nothing written on this day. Click to start writing.")
                     variant: "muted"
                     wrapMode: Text.Wrap
                     activeFocusOnTab: true
@@ -332,7 +336,7 @@ FocusScope {
                     Keys.onReturnPressed: day.begin()
                     Keys.onSpacePressed: day.begin()
                 }
-                HoverHandler { id: promptHover; enabled: !Theme.touchUi; cursorShape: Qt.IBeamCursor }
+                HoverHandler { id: promptHover; enabled: !Theme.touchUi; cursorShape: dayEditor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor }
                 TapHandler { id: promptTap; onTapped: day.begin() }
                 BFocusRing { visible: prompt.activeFocus; targetRadius: Theme.radius }
             }
@@ -367,6 +371,7 @@ FocusScope {
         // blocks are laid out at their final width right away.
         controller: page
         focus: true
+        onReadOnlyLeaveRequested: AppSettings.readingMode = false
         onMessage: (text, kind, action) => {
             if (action) {
                 day.messageAction = action

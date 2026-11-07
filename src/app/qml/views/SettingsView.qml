@@ -1018,6 +1018,15 @@ Item {
                 onToggled: AppSettings.focusMode = checked
             }
             BSwitch {
+                objectName: "settingsReadingMode"
+                Layout.fillWidth: true
+                text: qsTr("Reading mode")
+                description: qsTr("Pages and the journal open for reading: a tap follows links and never starts editing, nothing changes a note. %1 or the book in a page's header switches it.")
+                             .arg(ShortcutMap.sequences["view.reading"] || qsTr("The command palette"))
+                checked: AppSettings.readingMode
+                onToggled: AppSettings.readingMode = checked
+            }
+            BSwitch {
                 objectName: "settingsTypewriter"
                 Layout.fillWidth: true
                 text: qsTr("Typewriter scrolling")

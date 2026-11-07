@@ -293,6 +293,50 @@ FocusScope {
             ensureRowVisible(row)
     }
 
+    // ---- Reading mode (docs/UI.md "Reading mode") ---------------------------------------------------
+    /// The page is read-only (PageController.readOnly, the app's AppSettings.readingMode): no block
+    /// is edited, the tools that change the note are hidden, and whatever would change it anyway (a
+    /// tap on text or a checkbox, a key) says so with a toast offering "Edit".
+    readonly property bool readOnly: controller !== null && controller.readOnly
+    /// Why nothing changes in reading mode (a toast, the tools' tooltips).
+    readonly property string readOnlyReason: qsTr("Reading mode is on: the note is not changed")
+    /// The toast's "Edit": the host leaves reading mode (AppSettings.readingMode = false).
+    signal readOnlyLeaveRequested()
+    /// Reading mode refuses an edit: say so (readOnlyHint()). True when it did (the caller does
+    /// nothing else).
+    function readOnlyRefuses(): bool {
+        if (!readOnly)
+            return false
+        readOnlyHint()
+        return true
+    }
+    /// The reading mode's toast with "Edit" — not again while the last one is still fresh (taps in a
+    /// row, an edit refused twice by one gesture).
+    function readOnlyHint(): void {
+        if (readOnlyHintQuiet.running)
+            return
+        readOnlyHintQuiet.restart()
+        notice(readOnlyReason, "info", toastAction("leaveReadOnly", qsTr("Edit")))
+    }
+    Timer {
+        id: readOnlyHintQuiet
+        interval: 3000
+    }
+    Connections {
+        target: editor.controller
+        function onEditRefused(): void { editor.readOnlyHint() }
+        function onReadOnlyChanged(): void {
+            if (!editor.controller || !editor.controller.readOnly)
+                return
+            // What only editing shows goes with it: suggestions, the keyboard.
+            editor.closeSuggestions()
+            if (editor.touch)
+                DeviceInfo.hideInputMethod()
+            if (!list.activeFocus)
+                list.forceActiveFocus()
+        }
+    }
+
     // ---- Page properties (docs/UI.md "Page properties") ----------------------------------------------
     /// The properties panel ("Properties") is expanded: a device setting in the app (PageView and
     /// the journal days bind it to AppSettings.propertiesExpanded and store it when it is
@@ -327,7 +371,7 @@ FocusScope {
     /// properties, a frontmatter holding only the note mode, also above shown `key::` lines) —
     /// the draft above the blocks.
     function addProperty(): void {
-        if (!controller || controller.sourceMode || !controller.loaded)
+        if (!controller || controller.sourceMode || !controller.loaded || readOnlyRefuses())
             return
         if (controller.zoomBlock >= 0)
             controller.zoomTo(-1)
@@ -566,7 +610,7 @@ FocusScope {
 
     /// Start editing `row` at `cursor` (-1 = end) and give it the keyboard.
     function startEditing(row: int, cursor: int): void {
-        if (!controller || row < 0)
+        if (!controller || row < 0 || readOnlyRefuses())
             return
         closeSuggestions()
         findKeepsKeyboard = false
@@ -620,7 +664,8 @@ FocusScope {
             return
         controller.reveal(row)
         list.userMoved = true
-        const editable = findTarget.map.editable === true
+        // Reading mode: the match's block is selected and flashed, never edited.
+        const editable = findTarget.map.editable === true && !readOnly
         if (editable) {
             findKeepsKeyboard = keepKeyboard
             controller.clearSelection()
@@ -788,6 +833,8 @@ FocusScope {
         switch (reason) {
         case "readOnly":
             return qsTr("Links to blocks are not made in the documentation notebook: they would change its pages. Copy a link to a heading or to the page instead.")
+        case "readingMode":
+            return qsTr("A link to this block would add an id to the note, and reading mode changes nothing. Leave reading mode, or copy a link to a heading or to the page.")
         case "noId":
             return qsTr("This block cannot have a link of its own. Copy a link to the page instead.")
         case "notHeading":
@@ -985,7 +1032,7 @@ FocusScope {
         return ok
     }
     function cutSelection(): bool {
-        if (!controller || spanRefuses())
+        if (!controller || spanRefuses() || readOnlyRefuses())
             return false
         const before = controller.undoToken() + "" // (a typed copy: passed on after other calls)
         copied.map = controller.cutSelection()
@@ -1002,7 +1049,7 @@ FocusScope {
         return ok
     }
     function deleteSelection(): void {
-        if (!controller || spanRefuses())
+        if (!controller || spanRefuses() || readOnlyRefuses())
             return
         const count = Math.max(1, controller.selectionCount)
         const multiple = controller.multiSelection
@@ -1015,7 +1062,7 @@ FocusScope {
     }
     /// Ctrl+V with blocks selected: the clipboard's text replaces them.
     function pasteOverSelection(): void {
-        if (!controller || spanRefuses())
+        if (!controller || spanRefuses() || readOnlyRefuses())
             return
         pastedNow.map = controller.pasteOverSelection()
         const row = resultRow(pastedNow.map)
@@ -1140,7 +1187,7 @@ FocusScope {
     /// block selection back ends the editing of another block (PageController.restore): the keys
     /// go to the selection, and on touch UIs its tools replace the keyboard.
     function undoStep(redo: bool): void {
-        if (!controller)
+        if (!controller || readOnlyRefuses())
             return
         if (redo)
             controller.redo()
@@ -1158,7 +1205,7 @@ FocusScope {
     }
 
     function toggleSourceMode(): void {
-        if (!controller)
+        if (!controller || (!controller.sourceMode && readOnlyRefuses()))
             return
         closeSuggestions()
         controller.save()
@@ -2302,13 +2349,14 @@ FocusScope {
             height: editor.bottomSpace
             TapHandler {
                 onTapped: {
-                    if (!editor.controller || editor.selectionMode)
+                    // (Reading mode: a tap under the blocks, often the end of a scroll, does nothing.)
+                    if (!editor.controller || editor.selectionMode || editor.readOnly)
                         return
                     const row = editor.controller.appendEmptyBlock()
                     editor.startEditing(row, -1)
                 }
             }
-            HoverHandler { cursorShape: Qt.IBeamCursor }
+            HoverHandler { cursorShape: editor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor }
         }
 
         Keys.onPressed: (event) => {
@@ -2832,7 +2880,7 @@ FocusScope {
     /// Store the picture from the internet `url` — "" every one on the page — in the notebook
     /// (PageController.downloadWebPictures; the toast comes with webPicturesDownloaded).
     function downloadWebPictures(url: string): void {
-        if (!controller)
+        if (!controller || readOnlyRefuses())
             return
         const count = controller.downloadWebPictures(url)
         if (count < 0)
@@ -2988,12 +3036,18 @@ FocusScope {
     }
     /// Open DateChipMenu for the chip in `chip` (PageController.dateChip / tokenChipIn /
     /// tableCellChip) at (x, y) of `item`; the choice goes to `mode` (dateMenuMode).
+    /// Reading mode: only a day link's menu opens (open it, copy it); any other token's says why.
     function popupTokenMenu(chip: var, mode: string, item: Item, x: real, y: real): void {
+        dateMenuChip.map = chip
+        if (readOnly && dateMenuChip.kind() !== "day") {
+            dateMenuMode = ""
+            readOnlyHint()
+            return
+        }
         if (!dateMenu)
             dateMenu = dateMenuComponent.createObject(editor) as DateChipMenu
         menuAbove = null
         closeSuggestions()
-        dateMenuChip.map = chip
         dateMenuMode = mode
         dateMenu.kind = dateMenuChip.kind()
         dateMenu.alarm = dateMenuChip.map.alarm === true
@@ -3002,6 +3056,7 @@ FocusScope {
         dateMenu.logseq = dateMenuChip.map.logseq === true
         dateMenu.isTask = dateMenuChip.map.isTask === true
         dateMenu.occurrence = false
+        dateMenu.readOnly = readOnly
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         dateMenu.bottomMargin = menuBottomMargin()
         dateMenu.popup(item, x, y)
@@ -3315,7 +3370,7 @@ FocusScope {
     /// (Ctrl+Shift+Enter on a range: PageController.setSelectionTaskStatus), not of one block.
     property bool taskMenuForSelection: false
     function openTaskStatusMenu(row: int, item: Item, x: real, y: real): void {
-        if (!controller || row < 0 || row >= controller.blocks.count)
+        if (!controller || row < 0 || row >= controller.blocks.count || readOnlyRefuses())
             return
         taskMenuForSelection = false
         if (!taskMenu)
