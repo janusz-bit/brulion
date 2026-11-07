@@ -4,7 +4,7 @@
 // Polish characters; rich-text fragments (a link's colour, a chip's background); invisible,
 // transparent and clipped items left out; a half-transparent parent's opacity; targets (a
 // MouseArea, a button with a MouseArea filling it — one target —, a TapHandler, a disabled
-// MouseArea left out, an editable field); occlusion by a later opaque rectangle and — after a modal
+// MouseArea and a scroll bar's track left out, an editable field); occlusion by a later opaque rectangle and — after a modal
 // popup opened — by the popup's dim (not the popup's own text); the theme's tokens; writing to a
 // missing folder fails with an error.
 #include "layoutdump.h"
@@ -80,6 +80,12 @@ Window {
         MouseArea { objectName: "disabledMouse"; enabled: false; x: 250; y: 130; width: 30; height: 30 }
         MouseArea { objectName: "hoverOnly"; acceptedButtons: Qt.NoButton; x: 300; y: 130; width: 30; height: 30 }
         TextInput { objectName: "input"; x: 250; y: 170; width: 100; height: 20; text: "Pole"; font.pixelSize: 14 }
+        // A scroll bar whose track pages on a press (BScrollBar): neither is a target.
+        T.ScrollBar {
+            x: 380; y: 10; width: 9; height: 200; policy: T.ScrollBar.AlwaysOn; size: 0.3
+            background: MouseArea { objectName: "scrollTrack" }
+            contentItem: Rectangle { color: "#676c7b" }
+        }
         Text { objectName: "covered"; x: 10; y: 200; text: "Zasłonięty"; font.pixelSize: 14 }
         Rectangle { objectName: "cover"; x: 0; y: 195; width: 120; height: 30; color: "#ffffff" }
         Text { objectName: "underDim"; x: 10; y: 260; text: "Pod przyciemnieniem"; font.pixelSize: 14 }
@@ -256,6 +262,7 @@ void TestUiBenchLayoutDump::leftOut()
     const QJsonArray targets = m_dump[u"targets"_s].toArray();
     QVERIFY(byName(targets, u"disabledMouse"_s).isEmpty());
     QVERIFY(byName(targets, u"hoverOnly"_s).isEmpty());
+    QVERIFY(byName(targets, u"scrollTrack"_s).isEmpty());
 }
 
 void TestUiBenchLayoutDump::targets()

@@ -18,7 +18,8 @@
 // text's rectangle is its visible part, a target's its whole hit area (when any of it is visible;
 // its label: text, label, title, Accessible.name or the first text inside; `inline` for a plain
 // Item taking taps on the text it exactly covers — a rendered block's text, sized by its line
-// height, which the metrics leave out as WCAG 2.5.8 does inline targets). A text or target is
+// height, which the metrics leave out as WCAG 2.5.8 does inline targets; a scroll bar and its
+// track are no targets). A text or target is
 // `occluded` when an opaque box painted later (alpha ≥ 0.9, or ≥ 0.3 for a popup's dim in the
 // overlay) covers its centre.
 #pragma once

@@ -116,6 +116,18 @@ QString innerText(const QQuickItem *item, int depth = 0)
     return {};
 }
 
+/// A scroll bar is not a target (the wheel, the keys and dragging the content do what it does:
+/// WCAG 2.5.8's equivalent exception), nor is a mouse area that is part of it — BScrollBar's
+/// track, which pages towards the pointer.
+bool insideScrollBar(const QQuickItem *item)
+{
+    for (const QQuickItem *p = item->parentItem(); p; p = p->parentItem()) {
+        if (p->inherits("QQuickScrollBar"))
+            return true;
+    }
+    return false;
+}
+
 /// A plain Item that only takes taps on a text it exactly covers (BlockText's overlay on a
 /// rendered block: a tap edits the text where it lands): the text itself is the target, sized by
 /// its line height — WCAG 2.5.8's inline exception, like a web editor's text, where a tap puts the
@@ -341,7 +353,7 @@ private:
             || item->inherits("QQuickSpinBox")) {
             kind = u"button"_s;
         } else if (item->inherits("QQuickMouseArea")) {
-            if (enabled && item->property("acceptedButtons").toInt() != 0)
+            if (enabled && item->property("acceptedButtons").toInt() != 0 && !insideScrollBar(item))
                 kind = u"mouse"_s;
         } else if ((item->inherits("QQuickTextInput") || item->inherits("QQuickTextEdit"))
                    && !item->property("readOnly").toBool()) {
