@@ -52,7 +52,10 @@ components — no Material/Fusion look, so all targets look identical.
   (Regular, Italic, Bold, Bold Italic) —, **JetBrains Mono** for code, dates and meta text (the
   status bar's counts). Static instances subset to the Latin alphabets of Europe and the Greek
   letters with punctuation, arrows and common symbols (other scripts and emoji come from the
-  system's fonts or "Brulion Emoji"), no hinting or stylistic sets — 1.4 MB for all eleven —,
+  system's fonts or "Brulion Emoji"), no hinting, stylistic sets or default ligatures and contextual
+  alternates (`liga`, `clig`, `calt`: their glyphs have no character, and Qt's PDF writer maps
+  glyphs back to text through the cmap — Inter's em dash vanished from PDFs; `tst_ui_fonts` checks
+  that shaped text uses only glyphs with a character) — 1.3 MB for all eleven —,
   renamed "Brulion Inter", "Brulion Literata", "Brulion JetBrains Mono" so a complete system font
   of the same name never mixes with a subset; the font pickers leave them out and offer them as
   the default row ("Inter (default)", …). Loaded in `main.cpp` before anything is laid out;

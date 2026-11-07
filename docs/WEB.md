@@ -768,7 +768,7 @@ The emoji and symbol fallback fonts (above, "Fonts: emoji and symbols") add
 2026-10-22, the same toolchain before and after).
 
 The bundled text fonts (Inter, Literata, JetBrains Mono: eleven subsets, `scripts/ui-fonts.py`) add
-1 415 380 B of resources (693 676 B after gzip -9; fonts barely compress) — about 0.7 MB more to
+1 292 260 B of resources (643 737 B after gzip -9; fonts barely compress) — about 0.65 MB more to
 download on the first visit, for the same letters as on the desktop and Android instead of DejaVu.
 
 The browser build contains no developer QML (the gallery, the editor playground, the

@@ -11,8 +11,9 @@ browser, whose Qt has only DejaVu, and Android included — shows the same lette
 
 Each file is a static instance subset to the Latin alphabets of Europe (Polish, of course) and
 the Greek letters, with their punctuation, arrows and common symbols — Cyrillic, Vietnamese and
-emoji come from the system's fonts (or "Brulion Emoji") —, without hinting, stylistic sets and
-character variants. They are renamed ("Inter" → "Brulion
+emoji come from the system's fonts (or "Brulion Emoji") —, without hinting, stylistic sets,
+character variants and default ligatures / contextual alternates (they would take text out of
+PDFs Qt writes with these fonts). They are renamed ("Inter" → "Brulion
 Inter"), so a complete font of the system with the same name never gets mixed up with a subset
 (the font pickers leave the "Brulion …" families out, DeviceInfo / Theme use them as the defaults).
 All three are under the SIL Open Font License 1.1 without Reserved Font Names
@@ -122,18 +123,15 @@ def rename(font, family, style, weight, italic, old_family):
     # the four classic styles (Regular, Italic, Bold, Bold Italic) or a weight of its own.
     name.names = [r for r in name.names if r.nameID not in (1, 2, 3, 4, 6, 16, 17, 21, 22, 25)
                   and r.nameID < 256]
-    classic = style in ("Regular", "Italic", "Bold", "Bold Italic")
-    rib_family = family if classic else f"{family} {style}"
-    rib_style = style if classic else "Regular"
+    # One family for every weight (Medium and SemiBold too): Qt then picks the file by the weight
+    # asked for (OS/2 usWeightClass below), and lists one family per font, not "Brulion Inter
+    # Medium" beside "Brulion Inter".
     for plat, enc, lang in ((3, 1, 0x409), (1, 0, 0)):
-        name.setName(rib_family, 1, plat, enc, lang)
-        name.setName(rib_style, 2, plat, enc, lang)
+        name.setName(family, 1, plat, enc, lang)
+        name.setName(style, 2, plat, enc, lang)
         name.setName(f"{ps};Brulion", 3, plat, enc, lang)
         name.setName(full, 4, plat, enc, lang)
         name.setName(ps, 6, plat, enc, lang)
-        if not classic:
-            name.setName(family, 16, plat, enc, lang)
-            name.setName(style, 17, plat, enc, lang)
     name.setName(f"{family}: a subset of {old_family} for Brulion (https://github.com/janusz-bit/brulion).",
                  10, 3, 1, 0x409)
     os2 = font["OS/2"]
@@ -166,9 +164,12 @@ def build(src, axes, out, family, style, weight, italic, old_family):
         buf.seek(0)
         font = TTFont(buf, recalcTimestamp=False)
     options = subset.Options()
-    # Kerning, marks, ligatures, figures, fractions, case forms — no stylistic sets and character
-    # variants (Inter has dozens: hundreds of glyphs nobody asks for).
-    options.layout_features = ["kern", "mark", "mkmk", "ccmp", "locl", "liga", "clig", "calt", "rlig",
+    # Kerning, marks, figures, fractions, case forms — no stylistic sets and character variants
+    # (Inter has dozens: hundreds of glyphs nobody asks for), and none of the substitutions text
+    # gets by default (liga, clig, calt): a glyph they put in has no character of its own, and
+    # Qt's PDF writer maps glyphs back to text through the cmap only — Inter's contextual em dash
+    # came out of a PDF as nothing (copying, searching, the PDF viewer's selection).
+    options.layout_features = ["kern", "mark", "mkmk", "ccmp", "locl", "rlig",
                                "tnum", "pnum", "lnum", "onum", "case", "frac", "numr", "dnom",
                                "sups", "subs", "zero"]
     options.name_IDs = ["*"]

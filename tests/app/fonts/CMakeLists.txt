@@ -10,6 +10,12 @@ endif()
 brulion_add_test(tst_fallback_fonts
     SOURCES tst_fallback_fonts.cpp
     LIBS brulion_ui_fonts)
+# The bundled text fonts (uifonts.h): they load, cover Polish, and shape text only into glyphs
+# with a character of their own (Qt's PDF writer needs that to give the text back).
+brulion_add_test(tst_ui_fonts
+    SOURCES tst_ui_fonts.cpp
+    LIBS brulion_ui_fonts)
+set_tests_properties(tst_ui_fonts PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 target_compile_definitions(tst_fallback_fonts PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 add_test(NAME tst_fallback_fonts_when_missing COMMAND tst_fallback_fonts installWhenMissing)
 set_tests_properties(tst_fallback_fonts_when_missing PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

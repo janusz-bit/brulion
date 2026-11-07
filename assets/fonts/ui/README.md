@@ -13,17 +13,17 @@ Licence: SIL Open Font License 1.1, no Reserved Font Names — [Inter](OFL-Inter
 
 | File | Family | Style | Source | Characters | Bytes |
 |---|---|---|---|---|---|
-| BrulionInter-Regular.ttf | Brulion Inter | Regular | InterVariable.ttf {'wght': 400, 'opsz': 14} | 1071 | 159256 |
-| BrulionInter-Medium.ttf | Brulion Inter | Medium | InterVariable.ttf {'wght': 500, 'opsz': 14} | 1071 | 159512 |
-| BrulionInter-SemiBold.ttf | Brulion Inter | SemiBold | InterVariable.ttf {'wght': 600, 'opsz': 14} | 1071 | 159844 |
-| BrulionInter-Bold.ttf | Brulion Inter | Bold | InterVariable.ttf {'wght': 700, 'opsz': 14} | 1071 | 159892 |
-| BrulionInter-Italic.ttf | Brulion Inter | Italic | InterVariable-Italic.ttf {'wght': 400, 'opsz': 14} | 1071 | 162520 |
-| BrulionLiterata-Regular.ttf | Brulion Literata | Regular | Literata-Regular.ttf | 610 | 95016 |
-| BrulionLiterata-Italic.ttf | Brulion Literata | Italic | Literata-Italic.ttf | 610 | 93092 |
-| BrulionLiterata-Bold.ttf | Brulion Literata | Bold | Literata-Bold.ttf | 610 | 97920 |
-| BrulionLiterata-BoldItalic.ttf | Brulion Literata | Bold Italic | Literata-BoldItalic.ttf | 610 | 98444 |
-| BrulionJetBrainsMono-Regular.ttf | Brulion JetBrains Mono | Regular | JetBrainsMono-Regular.ttf | 1000 | 115000 |
-| BrulionJetBrainsMono-Bold.ttf | Brulion JetBrains Mono | Bold | JetBrainsMono-Bold.ttf | 1000 | 114884 |
+| BrulionInter-Regular.ttf | Brulion Inter | Regular | InterVariable.ttf {'wght': 400, 'opsz': 14} | 1071 | 151040 |
+| BrulionInter-Medium.ttf | Brulion Inter | Medium | InterVariable.ttf {'wght': 500, 'opsz': 14} | 1071 | 151228 |
+| BrulionInter-SemiBold.ttf | Brulion Inter | SemiBold | InterVariable.ttf {'wght': 600, 'opsz': 14} | 1071 | 151556 |
+| BrulionInter-Bold.ttf | Brulion Inter | Bold | InterVariable.ttf {'wght': 700, 'opsz': 14} | 1071 | 151672 |
+| BrulionInter-Italic.ttf | Brulion Inter | Italic | InterVariable-Italic.ttf {'wght': 400, 'opsz': 14} | 1071 | 154296 |
+| BrulionLiterata-Regular.ttf | Brulion Literata | Regular | Literata-Regular.ttf | 610 | 91824 |
+| BrulionLiterata-Italic.ttf | Brulion Literata | Italic | Literata-Italic.ttf | 610 | 89448 |
+| BrulionLiterata-Bold.ttf | Brulion Literata | Bold | Literata-Bold.ttf | 610 | 94744 |
+| BrulionLiterata-BoldItalic.ttf | Brulion Literata | Bold Italic | Literata-BoldItalic.ttf | 610 | 94648 |
+| BrulionJetBrainsMono-Regular.ttf | Brulion JetBrains Mono | Regular | JetBrainsMono-Regular.ttf | 1000 | 80932 |
+| BrulionJetBrainsMono-Bold.ttf | Brulion JetBrains Mono | Bold | JetBrainsMono-Bold.ttf | 1000 | 80872 |
 
 Sources (nixpkgs of flake.lock, `c59305bab2065cfecc4944690d9eedbb56f3a9fa`):
 

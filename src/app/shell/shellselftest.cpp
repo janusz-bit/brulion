@@ -3447,6 +3447,8 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
             const qreal before = flick ? flick->property("contentY").toReal() : 0;
             uidriver::mouseDragNow(window, QPointF(box.left() + 4, lineY), QPointF(box.right() - 4, lineY + 2));
             expected = line;
+            if (!waitFor([&] { return selected() == line; }, 5000))
+                std::fprintf(stderr, "selftest: PDF drag selected \"%s\"\n", qPrintable(selected()));
             check(waitFor([&] { return selected() == line; }, 5000) && flick
                           && qAbs(flick->property("contentY").toReal() - before) < 1,
                   "a mouse drag over the line selects its text (the pages do not pan)");
