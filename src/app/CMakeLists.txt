@@ -178,9 +178,18 @@ if(_brulion_bad_qml_imports)
         "or QtQuick.Templates as T: ${_bad_list}")
 endif()
 
+# Android and browser builds that are shipped (Release, MinSizeRel) carry their own Qt, so the
+# compiled QML always matches it and the QML source text in the resources is never read: leave it
+# out (DISCARD_QML_CONTENTS: the files stay, empty; ~1 MB). Elsewhere Qt can be the system's: a Qt
+# update makes the compiled units stale and the engine falls back to the source.
+set(_brulion_discard_qml)
+if((ANDROID OR EMSCRIPTEN) AND CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel)$")
+    set(_brulion_discard_qml DISCARD_QML_CONTENTS)
+endif()
 qt_add_qml_module(brulion
     URI Brulion
     VERSION 1.0
+    ${_brulion_discard_qml}
     QML_FILES
         qml/Main.qml
         ${BRULION_UI_QML}
@@ -210,6 +219,32 @@ list(SORT _brulion_app_areas)
 foreach(_area IN LISTS _brulion_app_areas)
     include(${_area})
 endforeach()
+
+# The C++ that qmlcachegen writes for the app's QML (.rcc/qmlcache/brulion_*_qml.cpp, ~200 files)
+# is half of the app's machine code (Android arm64 at -O3: 29 of 54 MB). It is glue — calls into
+# the QML engine, property reads and writes, type conversions — so optimised builds compile it for
+# size (-Oz; on arm64 the outliner also folds repeated sequences): about 40 % less of that code,
+# no measurable change in the app benchmarks (docs/PERFORMANCE.md, L20). Hand-written C++ keeps
+# the build type's optimisation. MSVC has no per-file size level that does not clash with /O2.
+option(BRULION_QML_CODE_FOR_SIZE
+    "Compile the C++ generated from the app's QML for size (-Oz) in optimised builds" ON)
+if(BRULION_QML_CODE_FOR_SIZE AND NOT MSVC)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag(-Oz BRULION_HAVE_OZ)
+    if(BRULION_HAVE_OZ)
+        set(_brulion_qml_size_flag -Oz)
+    else()
+        set(_brulion_qml_size_flag -Os)
+    endif()
+    get_target_property(_brulion_qml_cpp brulion SOURCES)
+    list(FILTER _brulion_qml_cpp INCLUDE REGEX "/\\.rcc/qmlcache/brulion_.+_(qml|js|mjs)\\.cpp$")
+    if(NOT _brulion_qml_cpp)
+        message(FATAL_ERROR "BRULION_QML_CODE_FOR_SIZE: no qmlcachegen sources found in the brulion target "
+            "(did Qt rename .rcc/qmlcache/<target>_<file>.cpp?)")
+    endif()
+    set_source_files_properties(${_brulion_qml_cpp} PROPERTIES COMPILE_OPTIONS
+        "$<$<CONFIG:Release,MinSizeRel,RelWithDebInfo>:${_brulion_qml_size_flag}>")
+endif()
 
 # Builds that treat warnings as errors (scripts/dev-build.sh, CI, the AppImage, Android with
 # BRULION_WERROR) also fail right after linking the app when a binding or function of its QML is
@@ -255,6 +290,19 @@ if(ANDROID)
     # debugger or profiler (-qmljsdebugger), which these builds never start.
     if(CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel)$")
         qt_import_plugins(brulion EXCLUDE_BY_TYPE qmltooling)
+    endif()
+
+    # libbrulion is a shared library that only Qt's loader opens (it looks up `main`; the JNI
+    # methods are registered with RegisterNatives, src/platform/android/androidbridge.cpp), yet by
+    # default it exported every symbol of the static libraries it links (~17 000): their dynamic
+    # symbol table and the relocations through it. --exclude-libs,ALL keeps those symbols local
+    # (−2.4 MB); main.cpp's `main` stays exported. RELR packs the relative relocations
+    # (.rela.dyn, 4 MB → a few KB): API 28 and 29 read them through the DT_ANDROID_RELR tags,
+    # API 30+ as well. docs/PERFORMANCE.md, L20.
+    target_link_options(brulion PRIVATE "LINKER:--exclude-libs,ALL")
+    if(ANDROID_PLATFORM_LEVEL AND ANDROID_PLATFORM_LEVEL GREATER_EQUAL 28)
+        target_link_options(brulion PRIVATE
+            "LINKER:--pack-dyn-relocs=android+relr" "LINKER:--use-android-relr-tags")
     endif()
 
     # HTTPS (Nextcloud / WebDAV sync): Qt's OpenSSL TLS plugin loads libssl_3.so and

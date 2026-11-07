@@ -21,6 +21,10 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
   faster — and that on a server without a graphics card, which draws on the CPU; with a graphics
   card a frame costs a fraction of a millisecond. On a phone the graph animates at 60 frames per
   second instead of 30 (the measurement on a phone is still to come).
+* **Smaller app again** (2026-11-07). The Android APK is 92.7 instead of 105.9 MB (Brulion's own
+  library 45.4 instead of 58.6 MB), the browser version downloads 17.1 instead of 18.5 MB on the
+  first visit (54.7 instead of 60.8 MB unpacked), the desktop program is 68 instead of 78 MB. The
+  interface code generated from QML is now compiled for size; no slowdown was measurable.
 * **Smaller app** (2026-10-30). The Android APK is 76.9 instead of 91.8 MiB (download size
   26.3 instead of 30.9 MB), and the browser version downloads 13.5 instead of 15.8 MB on the first
   visit — on a 20 Mbit/s connection the first frame comes about 1.1 s earlier (7.4 instead of 8.5 s).
@@ -136,8 +140,9 @@ browser version downloads about 0.14 MB more, the APK is about 0.3 MB larger.
 * **The first start on a computer with a small notebook** (a fresh profile) shows content about
   0.09 s later than d1141c0 (the window, on the other hand, 0.1 s earlier); on later starts the
   content is as fast as before (details below).
-* **Size** — the APK is about 81 MB (download about 26 MB), the browser version downloads about
-  13.5 MB on the first visit (the first frame on a 20 Mbit/s connection after about 7.4 s). PDF
+* **Size** — the APK is about 93 MB (download from Google Play about 34 MB; GitHub and F-Droid
+  download the APK whole), the browser version downloads about 17 MB on the first visit (L20;
+  it grew from 13.5 MB when the interface was compiled to native code in 0.11.2). PDF
   pages as a drawing's background did not make the APK larger (Android renders them itself), the
   Nix package grew by about 26 MiB (poppler), the AppImage by about 2.4 MB and the Windows
   installer by about 1.8 MB (the Qt PDF library).
@@ -1075,6 +1080,70 @@ user space only (`EVENT`, default `cycles:u`, with `--user-callchains`: what
 `kernel.perf_event_paranoid=2` allows), and the scroll probe can start sooner (`WAIT`) and label
 runs of two builds (`LABEL`).
 
+### L20: compiled QML for size, a leaner Android library (2026-11-07)
+
+Since the whole QML was compiled to C++ (0.11.2, docs/UI.md "Compiled QML") the app's own
+library grew: the arm64 APK of 0.13.1 was 105.9 MB, `libbrulion` 58.6 MB of it (38.3 MB in
+0.8.1). `bloaty -d compileunits` on the unstripped library: **29.0 of 54.0 MB of its mapped size
+is the C++ that qmlcachegen writes** (`.rcc/qmlcache/brulion_*_qml.cpp`, 208 files; BlockEditor
+alone 1.3 MB), then 4.1 MB of relocations (`.rela.dyn`), 1.7 MB of dynamic symbols (~17 400
+exported: every symbol of the static core and app libraries, `.dynsym` + `.dynstr` + the PLT) and
+1.1 MB of QML source text in the resources (`qrc_brulion_raw_qml_*`), which the compiled units
+make unused. Three changes (`src/app/CMakeLists.txt`):
+
+* **The generated QML code is compiled with `-Oz`** in Release, MinSizeRel and RelWithDebInfo
+  (option `BRULION_QML_CODE_FOR_SIZE`, default ON; not MSVC; `-Os` where the compiler has no
+  `-Oz`). That code is glue — engine calls, property reads, conversions — whose inlined `-O3`
+  copies are mostly identical. Per file (NDK clang, arm64, `.text`): SettingsView 522 → 292 KB,
+  BlockEditor 980 → 665 KB; `-O2` and `-Os` gain 1–7 % only, `-Oz` wins by inlining far less and
+  the AArch64 machine outliner (on at `-Oz`). Hand-written C++ keeps `-O3`: all of it at `-Os`
+  would save 1.4 MB more, `-O2` 0.7 MB.
+* **Android: `--exclude-libs,ALL` and RELR.** The library is opened only by Qt's loader (`main`,
+  which stays exported; JNI methods go through `RegisterNatives`), so the static libraries'
+  symbols are kept local (exported symbols 17 400 → 3 000, −2.4 MB). `--pack-dyn-relocs=android+relr
+  --use-android-relr-tags` packs the relative relocations (4.1 MB → 28 KB of `.relr.dyn`, −4.0
+  MB); Android 9–10 read them through the `DT_ANDROID_RELR` tags, 11+ as well. `--icf=safe` was
+  tried and folds nothing measurable (dropped).
+* **No QML source text in Android and browser releases** (`DISCARD_QML_CONTENTS` in Release and
+  MinSizeRel there): those builds carry their own Qt, so the compiled units always match it and
+  the source is never read (−1.1 MB). Desktop builds keep it: with a system Qt, a Qt update makes
+  the compiled units stale and the engine falls back to the source.
+
+Measured in one session on the x86_64 desktop (NDK r27c, Qt 6.11.2, emsdk 4.0.7), 0.13.1
+(`2968406`) against the change:
+
+| | base | L20 | change |
+|---|---:|---:|---:|
+| APK arm64 Release (`scripts/android-build.sh`, unsigned) | 105 855 511 B | 92 666 391 B | −13.19 MB (−12.5 %) |
+| … `libbrulion` | 58 572 504 B | 45 381 464 B | −13.19 MB (−22.5 %) |
+| … of which: generated QML `-Oz` / `--exclude-libs` / RELR / no QML source | | | −5.7 / −2.4 / −4.0 / −1.1 MB |
+| APK download (every entry deflated) | 36.11 MB | 34.09 MB | −2.02 MB (−5.6 %) |
+| `brulion.wasm` raw (MinSizeRel, `scripts/wasm-build.sh`) | 60 776 806 B | 54 735 094 B | −6.04 MB (−9.9 %) |
+| `brulion.wasm` gzip -9 / brotli -q 11 | 18.52 / 12.15 MB | 17.14 / 11.32 MB | −1.38 / −0.83 MB (−7.4 / −6.8 %) |
+| the single-file web version (`dist-wasm-single/brulion.html`) | 25 048 815 B | 23 209 411 B | −1.84 MB (−7.3 %) |
+| desktop `brulion` x86_64 Release, stripped (GCC; `-Oz` only) | 78 289 280 B | 68 069 760 B | −10.22 MB (−13.1 %) |
+
+The deflated download moves much less than the raw size: `-O3`'s copies of the same inlined
+sequences compress well, and RELR's relocations were mostly zeros. The raw size is what an APK from
+GitHub or F-Droid downloads (native libraries are stored uncompressed, page-aligned) and what it
+takes on the device.
+
+**Speed.** The app benchmarks on the 10 000-note vault (`bench-matrix.sh`, Xvfb, desktop Release
+builds with and without `-Oz` for the generated code, alternating rounds): opening a 5000-block
+page, switching pages and scrolling the journal within ±2 % (`open1_frame_ms` 189.5 vs 187.1,
+`nav_frame_p95` 56.0 vs 56.8, `frame_interval_p95` 19.5 vs 19.7 ms); the views scenario swung both
+ways between two sessions (+40 %, then −40 %, with the index start itself varying 3–13 s: other
+builds ran on the machine). Counted user-space instructions of the whole process (`perf stat -e
+instructions:u`, three warm runs each, medians): views 169.6 G vs 160.8 G, open-page 60.7 vs
+46.6 G, journal-scroll 76.7 vs 79.2 G — differences in both directions within the ±10 % between
+runs of one build. No slowdown was measurable; a phone's measurement is still open (L20b).
+
+Checks: `scripts/android-emulator-test.sh` on API 36 (all checks) and on API 28 (the app starts
+and draws its intro, no crash; the bridge self-test APK, which these options do not touch, fails
+three Android 16-only checks there: permissions and a notification cleared by "Done");
+`wasm-smoke.mjs` (`--selftest --glyphs --keyboard`, `--keyboard-phone`, `--index-notes 3000`);
+the desktop Release build with `-Oz` and `BRULION_WERROR` (the whole ctest suite, 291 tests).
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
@@ -1095,7 +1164,7 @@ emulator (optimistic), web = headless Chromium (×4 CPU = phone). ✅ meets, ⚠
 | after a save, all derived lists (10k) | < 30 ms desktop, < 150 ms phone | ✅ 6.0 ms (L3; base in the same session 112 ms) | ❌ Pi 0.95 s before L3, not measured since (L3b) | – |
 | idle | < 0.5 % CPU | ✅ 0.1 % | ✅ background 0 % CPU, 0 wakeups/s | – |
 | memory | ≤ 100 MB + 10 B per Markdown byte (10k ≤ 330 MB) | ⚠️ 340 MB heap (wave 5; was 512 MB; index alone 221 MiB) | ❌ emulator PSS 359 MB at 5k before wave 5 (< 300 MB wanted; not measured since) | ✅ 86 MB of linear memory at 1k (was 104 MB) |
-| download | APK < 40 MB, web < 10 MB | – | ✅ 26.3 MB download (80.6 MB APK; L9: was 30.9 / 96.2 MB) | ❌ 13.5 MB gzip (9.2 MB brotli, not served; L9: was 15.8 / 10.8 MB) |
+| download | APK < 40 MB, web < 10 MB | – | ✅ 34.1 MB download (92.7 MB APK; L20: was 36.1 / 105.9 MB; L9 on 2026-10-30: 26.3 / 80.6 MB) | ❌ 17.1 MB gzip (11.3 MB brotli, not served; L20: was 18.5 / 12.1 MB; L9 on 2026-10-30: 13.5 MB) |
 
 ### Next steps
 
@@ -1114,6 +1183,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |
+| L20b | measure the generated QML at `-Oz` on a phone (L20): a Release APK built with `-DBRULION_QML_CODE_FOR_SIZE=OFF` against the default one, `android-batch.sh probe` or the Pixel — journal scroll, opening a 5000-block page, the views; if a view loses more than 10 %, compile its few hot files at the build type's level | no phone slowdown > 10 % |
 
 Done in wave 5 (2026-10-29, above): L1 (parse on worker threads), L2 (the index cache), L8 (the
 memory diet); on 2026-10-30 L5 (delta undo/redo, above; the Pi still to be measured: L5b), L9 (native file
@@ -1121,7 +1191,9 @@ pickers, one Qt Quick Controls style: APK −15.6 MB, wasm −2.3 MB gzip, above
 (incremental derived lists, above; the Pi: L3b) and L16 (the graph's layout on a worker thread,
 drawn through the scene graph, above; the phones: L16b). Also
 open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip only) and
-the ~90 ms later content on a desktop first start (above).
+the ~90 ms later content on a desktop first start (above). On 2026-11-07 L20 (the generated QML code for size, Android's
+library without exported static-library symbols and with RELR, no QML source in Android and
+browser releases: APK −13.2 MB, wasm −6.0 MB raw / −1.4 MB gzip, above; the phone: L20b).
 
 ### How to run the benchmarks
 

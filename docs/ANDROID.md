@@ -1131,10 +1131,15 @@ arm64-v8a APK (`tests/bench/mobile/size-report.py apk`):
 | OpenSSL 3 (HTTPS, above) | `src/app/CMakeLists.txt` | +4.45 MB |
 | PDF pages as a drawing background (2026-10-30) through the system's `PdfRenderer` (`PdfPages.kt`, JNI) instead of Qt PDF — Qt PDF for Android is `libQt6Pdf_arm64-v8a.so` 4.53 MB (2.09 MB archived), and in the Qt repository it exists only as an extension aqt does not know | `src/platform/pdfpages_android.cpp`, `android/…/PdfPages.kt` | about 0 MB (a few KB of code) |
 | only the Basic style, no QtQuick.Dialogs (2026-10-30): the system's file pickers through `FilePicker` (choosing files and folders, "Save as" — the same SAF intents as before), QML imports `QtQuick.Controls.Basic` instead of `QtQuick.Controls`, which through optional imports packaged all styles (Material, Universal, Imagine, Fusion, FluentWinUI3) | `src/app/ui/filepicker.h`, a guard in `src/app/CMakeLists.txt` and `scripts/android-build.sh` (`nix/android.nix`) | −15.63 MB (25 files fewer; download −4.6 MB) |
+| the C++ generated from QML compiled with `-Oz` (2026-11-07; it was half of `libbrulion`'s code at `-O3`) | the `BRULION_QML_CODE_FOR_SIZE` option in `src/app/CMakeLists.txt` (Release, MinSizeRel, RelWithDebInfo) | `libbrulion` −5.7 MB |
+| `libbrulion` exports no symbols of the static libraries (`-Wl,--exclude-libs,ALL`: only Qt's loader opens it and looks up `main`; JNI goes through `RegisterNatives`) and packs its relative relocations (RELR with `--use-android-relr-tags`, read by Android 9+) | `src/app/CMakeLists.txt` (every Android build type) | −2.4 MB and −4.0 MB |
+| no QML source text in the resources (`DISCARD_QML_CONTENTS`; the compiled units always match the bundled Qt) | `src/app/CMakeLists.txt` (Release, MinSizeRel) | −1.1 MB |
 
 In total 83.15 MB → 81.02 MB (download size, compressed: 27.46 → 27.18 MB); without OpenSSL it
 would be 76.5 MB. Since 2026-10-30 (without the unused styles and QtQuick.Dialogs): 96.23 →
-80.60 MB, download 30.86 → 26.26 MB (docs/PERFORMANCE.md, L9). What remains is QtTest, QuickTest
+80.60 MB, download 30.86 → 26.26 MB (docs/PERFORMANCE.md, L9). The QML compiled to C++ (0.11.2)
+brought it to 105.86 MB; since 2026-11-07 (the last three rows) 92.67 MB, download 36.11 →
+34.09 MB (docs/PERFORMANCE.md, L20). What remains is QtTest, QuickTest
 and Qt.labs.folderlistmodel (0.84 MB) from the developer QML: `androiddeployqt` scans the whole of
 `src/app`, including files the build does not compile. Debug and RelWithDebInfo builds
 (measurement APKs) have `qmltooling` and the developer QML.

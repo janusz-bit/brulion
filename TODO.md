@@ -214,6 +214,9 @@ Details in docs/PERFORMANCE.md, "Next steps":
 * measuring the faster undo on a Raspberry Pi (before the change 214 ms, target < 50 ms) and
   recording its baseline row in tests/bench/baselines/pi.csv — until then the performance check
   on the Pi skips it (L5b);
+* measuring the QML code compiled for size (`-Oz`) on a real phone against a build with
+  `-DBRULION_QML_CODE_FOR_SIZE=OFF`: journal scrolling, opening a long page, the views — on the
+  desktop no slowdown was measurable (L20b);
 * developer QML and self-tests (`qml/dev`, `qml/content/*SelfTest.qml`) outside `src/app`, so that
   releases do not package QtTest, QuickTest and Qt.labs.folderlistmodel (L9b: APK −0.84 MB, web
   version −0.27 MB before wasm-opt);

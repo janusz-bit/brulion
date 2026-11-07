@@ -3736,7 +3736,14 @@ The statistics are the per-file `.aotstats` that qmlcachegen writes with `--dump
 (`all_aotstats` prints Qt's own summary). Qt 6.11 writes them for `qt_add_qml_module()`'s files only;
 `src/app/CMakeLists.txt` turns them on for the areas' `qt_target_qml_sources()` too. Only the first
 reason of each function is listed. A file is compiled again only when it changes: after changing
-a component's API, `touch` the files that use it before reading the list. Everything below was
+a component's API, `touch` the files that use it before reading the list.
+
+The generated C++ (`.rcc/qmlcache/brulion_*_qml.cpp`) is compiled with `-Oz` in optimised builds
+(`BRULION_QML_CODE_FOR_SIZE`, `src/app/CMakeLists.txt`): at `-O3` it was half of the app's machine
+code, and being glue around engine calls it measured no slower for size (docs/PERFORMANCE.md, L20).
+Work that has to be fast belongs in C++ helpers anyway, which keep the build type's optimisation.
+Android and browser releases also leave the QML source text out of the resources
+(`DISCARD_QML_CONTENTS`). Everything below was
 verified with Qt 6.11.2 (6.12 compiles the same).
 
 **Types everywhere.** Functions get annotated parameters and return types
