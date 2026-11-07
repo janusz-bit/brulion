@@ -368,9 +368,8 @@ opens from
 
 * the **handle**, always on the right edge while the view has a context panel (not in focus mode,
   not while the left drawer is open): a small tab (18 × 56 px, drawn coming out of the edge; a
-  44 × 64 px target) at 38 % of the height with a chevron and the page's backlink count as a badge
-  (`ShellRouteView.viewBacklinkCount`, the view's `backlinkCount`); a tap or a swipe to the left on
-  it opens the drawer. The handle's rectangle is kept from the system's gestures
+  44 × 64 px target) at 38 % of the height with a chevron; a tap or a swipe to the left on it
+  opens the drawer. The handle's rectangle is kept from the system's gestures
   (`GestureInsets.setExclusion()`; Android 10+: `View.setSystemGestureExclusionRects` through
   `AndroidBridge::setGestureExclusion`, so a swipe from the edge there is the handle's and gesture
   navigation's "back" keeps the rest of the edge);

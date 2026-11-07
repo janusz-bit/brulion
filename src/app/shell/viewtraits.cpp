@@ -4,8 +4,6 @@
 #include <QMetaProperty>
 #include <QQmlComponent>
 
-#include <algorithm>
-
 namespace brulion::shell {
 
 namespace {
@@ -21,7 +19,6 @@ constexpr Trait kTraits[] = {
         {"noteMode", 0},
         {"statusText", 0},
         {"statusPosition", 0},
-        {"backlinkCount", 0},
         {"editing", 1 << 0},
         {"toolbarDocked", 1 << 1},
         {"replacesBottomNav", 1 << 2},
@@ -88,9 +85,6 @@ void ViewTraits::refresh()
     const QString newNoteMode = text("noteMode");
     const QString newStatusText = text("statusText");
     const QString newStatusPosition = text("statusPosition");
-    const QVariant backlinks = read("backlinkCount");
-    const int newBacklinkCount =
-            backlinks.metaType() == QMetaType::fromType<int>() ? std::max(0, backlinks.toInt()) : 0;
     QQmlComponent *newSidePanel = qobject_cast<QQmlComponent *>(read("sidePanel").value<QObject *>());
     int newFlags = 0;
     for (const Trait &trait : kTraits) {
@@ -101,14 +95,12 @@ void ViewTraits::refresh()
             newFlags |= trait.flag;
     }
     if (newTitle == m_title && newNoteMode == m_noteMode && newSidePanel == m_sidePanel && newFlags == m_flags
-        && newStatusText == m_statusText && newStatusPosition == m_statusPosition
-        && newBacklinkCount == m_backlinkCount)
+        && newStatusText == m_statusText && newStatusPosition == m_statusPosition)
         return;
     m_title = newTitle;
     m_noteMode = newNoteMode;
     m_statusText = newStatusText;
     m_statusPosition = newStatusPosition;
-    m_backlinkCount = newBacklinkCount;
     m_sidePanel = newSidePanel;
     m_flags = newFlags;
     Q_EMIT traitsChanged();

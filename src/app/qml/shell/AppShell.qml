@@ -690,7 +690,6 @@ FocusScope {
         anchors.bottomMargin: shell.keyboardRoom
         contextPanel: shell.routeView.viewSidePanel
         title: shell.title
-        badgeCount: shell.routeView.viewBacklinkCount
         allowed: !shell.focusMode && !drawer.visible
         topInset: shell.SafeArea.margins.top
         bottomInset: Math.max(0, shell.navigationBar - shell.keyboardRoom)

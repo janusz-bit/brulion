@@ -241,8 +241,6 @@ FocusScope {
                                            : root.statsSummary(pageStatsInfo, false)
     readonly property string statusPosition: page.loaded && !page.sourceMode && page.editingRow >= 0
                                              ? qsTr("Block %1 of %2").arg(page.editingRow + 1).arg(page.blocks.count) : ""
-    /// The page's linked references (the side panel drawer handle's badge).
-    readonly property int backlinkCount: page.path !== "" ? refsSection.linkedCount : 0
     /// The tab this page's context panel showed last in the side panel ("": never shown).
     property string sidePanelTab: ""
     /// route.open asked for a section of the side panel ("links", "outline", "calendar").

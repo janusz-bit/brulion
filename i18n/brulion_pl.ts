@@ -12372,15 +12372,6 @@
 </context>
 <context>
     <name>ShellContextDrawer</name>
-    <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellContextDrawer.qml" line="69"/>
-        <source>Context panel, %n backlink(s)</source>
-        <translation>
-            <numerusform>Panel kontekstu, %n odnośnik</numerusform>
-            <numerusform>Panel kontekstu, %n odnośniki</numerusform>
-            <numerusform>Panel kontekstu, %n odnośników</numerusform>
-        </translation>
-    </message>
     <message>
         <location filename="../src/app/qml/shell/ShellContextDrawer.qml" line="70"/>
         <source>Context panel</source>

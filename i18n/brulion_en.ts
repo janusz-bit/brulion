@@ -1118,17 +1118,6 @@
     </message>
 </context>
 <context>
-    <name>ShellContextDrawer</name>
-    <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellContextDrawer.qml" line="69"/>
-        <source>Context panel, %n backlink(s)</source>
-        <translation>
-            <numerusform>Context panel, %n backlink</numerusform>
-            <numerusform>Context panel, %n backlinks</numerusform>
-        </translation>
-    </message>
-</context>
-<context>
     <name>ShellMoveWords</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="28"/>

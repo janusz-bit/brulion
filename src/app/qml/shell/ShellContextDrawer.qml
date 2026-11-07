@@ -10,9 +10,9 @@ import Brulion
 // window, the page dimmed behind it (Theme.scrim). It opens from
 //
 //   * the handle, a small tab always on the right edge while the view has a context (a tap, or a
-//     swipe to the left on it) — with the page's backlink count as its badge; the window keeps
-//     its rectangle from Android's back gesture (GestureInsets.setExclusion: there a swipe from
-//     the edge is the handle's, everywhere else the system's "back");
+//     swipe to the left on it); the window keeps its rectangle from Android's back gesture
+//     (GestureInsets.setExclusion: there a swipe from the edge is the handle's, everywhere else
+//     the system's "back");
 //   * the top bar's panel button (ShellTopBar.contextRequested), `open()`.
 //
 // A tap on the dimmed page, a swipe to the right on the drawer, Escape or the Back key close it.
@@ -27,8 +27,6 @@ Item {
     property Component contextPanel: null
     /// The title in the drawer's header (the page's).
     property string title
-    /// The handle's badge (ShellRouteView.viewBacklinkCount; 0: none).
-    property int badgeCount: 0
     /// The handle may show (narrow windows, not in focus mode, not over a modal surface).
     property bool allowed: true
     /// The window's top and bottom room taken by the system bars (the drawer runs under them).
@@ -66,8 +64,7 @@ Item {
         x: root.width - width - root.SafeArea.margins.right
         y: Math.round((root.height - height) * root.handlePosition)
         Accessible.role: Accessible.Button
-        Accessible.name: root.badgeCount > 0 ? qsTr("Context panel, %n backlink(s)", "", root.badgeCount)
-                                             : qsTr("Context panel")
+        Accessible.name: qsTr("Context panel")
         Accessible.onPressAction: root.open()
 
         Rectangle {
@@ -90,34 +87,12 @@ Item {
                 Rectangle { width: parent.width; height: 1; color: Theme.border }
                 Rectangle { y: parent.height - 1; width: parent.width; height: 1; color: Theme.border }
             }
-            Column {
+            BIcon {
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: -1
-                spacing: 4
-                BIcon {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    name: "chevron-left"
-                    size: 12
-                    color: Theme.fgMuted
-                }
-                Rectangle {
-                    objectName: "contextDrawerBadge"
-                    visible: root.badgeCount > 0
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: Math.max(14, badgeText.implicitWidth + 4)
-                    height: 14
-                    radius: 7
-                    color: Theme.accentSolid
-                    Text {
-                        id: badgeText
-                        anchors.centerIn: parent
-                        text: root.badgeCount > 99 ? "99+" : "" + root.badgeCount
-                        font.family: Theme.fontMono
-                        font.pixelSize: 9
-                        font.weight: Theme.weightBold
-                        color: Theme.fgOnAccent
-                    }
-                }
+                name: "chevron-left"
+                size: 12
+                color: Theme.fgMuted
             }
         }
         TapHandler {
