@@ -7,11 +7,13 @@ import Brulion
 // coloured pills ("09:00 Meeting", "+3 more"; an alarm in the reminder's tint with its
 // alarm clock, not a solid amber pill; open entries first, so "+N more" hides finished ones; a
 // done entry is muted with a check, not struck out — as in Tasks —, a cancelled one struck out
-// with an x); narrow cells (phones) show coloured dots per kind. The
+// with an x); narrow cells (phones) show a small icon in its colour per kind of open entry
+// (overdue: an alert, reminder: a bell, due: a calendar, scheduled: an hourglass — none for done
+// entries) and a short faint line under the number for a daily note. The
 // cells are one surface (no weekend or other-month tint): today has a red disc on its number, the
 // selected day a dark disc (Theme.primary, as in BDatePicker; ≥ 3:1, WCAG 1.4.11) — today
 // selected shows only the red one —, days of other months have faint numbers, a daily note
-// shows a small book.
+// shows a small book (wide cells) or the line (narrow cells).
 //
 //   CalendarMonthGrid { calendar: cal; onDayTapped: (date) => …; onItemOpened: (entry) => … }
 //
@@ -50,6 +52,18 @@ FocusScope {
             return names
         const at = (start - 1 + 7) % 7
         return Js.concatStrings(names.slice(at), names.slice(0, at))
+    }
+
+    /// The icon of a narrow cell's mark (CalendarModel `openKinds`): as the date chips' icons
+    /// (Theme.chipIcon), but an alert for overdue — a calendar both for it and for due told them
+    /// apart by colour alone.
+    function markIcon(kind: string): string {
+        switch (kind) {
+        case "overdue": return "circle-alert"
+        case "reminder": return "bell"
+        case "scheduled": return "hourglass"
+        default: return "calendar"
+        }
     }
 
     signal dayTapped(string date)
@@ -196,7 +210,8 @@ FocusScope {
                     /// on one read this order.
                     required property list<var> orderedItems
                     required property int itemCount
-                    required property list<string> kinds
+                    /// The open entries' kinds for the dots, most urgent first (CalendarModel).
+                    required property list<string> openKinds
                     required property string longLabel
 
                     readonly property int column: index % 7
@@ -340,19 +355,33 @@ FocusScope {
                         }
                     }
 
-                    // Entries as dots (narrow cells): one per kind, the journal in grey.
+                    // A daily note (narrow cells): a short faint line under the number — not a
+                    // mark: nearly every day has one, a grey one drowned out the others.
+                    Rectangle {
+                        id: journalMark
+                        visible: root.dots && cell.hasJournal
+                        anchors.horizontalCenter: dayBadge.horizontalCenter
+                        y: dayBadge.y + dayBadge.height + 2
+                        width: 12
+                        height: 2
+                        radius: 1
+                        color: Theme.fgFaint
+                    }
+
+                    // Open entries as small icons in their colours (narrow cells): one per kind,
+                    // the most urgent first (markIcon()) — a shape, not only a colour, to tell
+                    // them apart.
                     Row {
-                        visible: root.dots && cell.kinds.length > 0
+                        visible: root.dots && cell.openKinds.length > 0
                         anchors.horizontalCenter: parent.horizontalCenter
-                        y: dayBadge.y + dayBadge.height + 4
-                        spacing: 3
+                        y: journalMark.y + journalMark.height + 4
+                        spacing: 2
                         Repeater {
-                            model: cell.kinds.slice(0, 4)
-                            delegate: Rectangle {
+                            model: cell.openKinds
+                            delegate: BIcon {
                                 required property string modelData
-                                width: 6
-                                height: 6
-                                radius: 3
+                                name: root.markIcon(modelData)
+                                size: 14
                                 color: Theme.markColor(modelData)
                             }
                         }

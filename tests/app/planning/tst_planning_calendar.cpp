@@ -266,6 +266,16 @@ private Q_SLOTS:
         QCOMPARE(kindsOf(fourteenth), (QStringList{u"done"_s, u"done"_s}));
         QCOMPARE(kindsOf(fourteenth, u"kind"_s), (QStringList{u"due"_s, u"done"_s}));
 
+        // The month grid's marks: open entries only, the most urgent first, an alarm as a reminder.
+        const auto openKinds = [&m](const QString &date) {
+            return role(m, m.rowForDate(date), CalendarModel::OpenKindsRole).toStringList();
+        };
+        QCOMPARE(openKinds(u"2026-10-16"_s), (QStringList{u"reminder"_s, u"due"_s, u"scheduled"_s}));
+        QCOMPARE(openKinds(u"2026-10-10"_s), QStringList{u"overdue"_s});
+        QVERIFY(openKinds(u"2026-10-14"_s).isEmpty()); // done only
+        QVERIFY(openKinds(u"2026-10-15"_s).isEmpty()); // a journal only
+        QVERIFY(openKinds(u"2026-10-17"_s).isEmpty()); // nothing
+
         QCOMPARE(m.overdueCount(), 1);
         const QVariantMap overdue = m.overdue().first().toMap();
         QCOMPARE(overdue.value(u"title"_s).toString(), u"Zaległa rata"_s);

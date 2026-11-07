@@ -32,6 +32,8 @@ Widok **Kalendarz** ma układ miesiąca, tygodnia i agendy. Pokazuje:
 - przypomnienia ⏰ i alarmy,
 - dni, w których jest wpis w dzienniku.
 
+Na telefonie miesiąc pokazuje małą ikonę dla każdego rodzaju otwartego wpisu: czerwony wykrzyknik — zaległe, bursztynowy dzwonek — przypomnienie lub alarm, niebieski kalendarz — termin, fioletowa klepsydra — zaplanowane. Zrobione wpisy nie mają ikony. Krótka szara kreska pod numerem dnia oznacza, że w tym dniu jest wpis w dzienniku.
+
 Kliknięcie dnia otwiera jego plan, z którego możesz dodać zadanie lub przypomnienie bez wychodzenia z kalendarza. Prawy przycisk myszy na wpisie (na telefonie przytrzymanie) otwiera menu jego daty albo przypomnienia — zmiana trafia do notatki, a powiadomienie ma przycisk **Cofnij**. W panelu bocznym strony dziennika jest też mały kalendarz miesiąca.
 
 ### Kalendarz z ikony w zasobniku

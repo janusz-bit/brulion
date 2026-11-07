@@ -167,6 +167,7 @@ public:
         OrderedItemsRole,
         AllDayRole,
         TimedRole,
+        OpenKindsRole,
     };
     Q_ENUM(Role)
 

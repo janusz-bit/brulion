@@ -213,6 +213,23 @@ QVariantList openEntriesFirst(const QVariantList &items)
     return open + closed;
 }
 
+/// The kinds of a day's open entries for the month grid's marks on phones, the most urgent first:
+/// overdue, reminder (an alarm too: one bell, four marks do not fit a phone's cell), due,
+/// scheduled. No journal and no done entries: a mark only for what still asks for attention.
+QStringList openKinds(const QStringList &kinds)
+{
+    QStringList out;
+    if (kinds.contains(u"overdue"_s))
+        out.append(u"overdue"_s);
+    if (kinds.contains(u"reminder"_s) || kinds.contains(u"alarm"_s))
+        out.append(u"reminder"_s);
+    if (kinds.contains(u"due"_s))
+        out.append(u"due"_s);
+    if (kinds.contains(u"scheduled"_s))
+        out.append(u"scheduled"_s);
+    return out;
+}
+
 QVariantList allDayEntries(const QVariantList &items)
 {
     QVariantList out;
@@ -283,6 +300,7 @@ QVariant CalendarModel::dayData(const Day &day, int role) const
     case ItemCountRole: return int(day.items.size());
     case TimedCountRole: return day.timed;
     case KindsRole: return day.kinds;
+    case OpenKindsRole: return openKinds(day.kinds);
     case LabelRole: return dates::formatDateShort(date, loc);
     case LongLabelRole: return longLabel(date, loc);
     case OrderedItemsRole: return openEntriesFirst(day.items);
@@ -312,6 +330,7 @@ QHash<int, QByteArray> CalendarModel::roleNames() const
             {ItemCountRole, "itemCount"},
             {TimedCountRole, "timedCount"},
             {KindsRole, "kinds"},
+            {OpenKindsRole, "openKinds"},
             {LabelRole, "label"},
             {LongLabelRole, "longLabel"},
             {OrderedItemsRole, "orderedItems"},
