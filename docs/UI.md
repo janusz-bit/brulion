@@ -2655,11 +2655,18 @@ while the list moves. Measured with `--scroll-probe` (see "Dev tools"); ctest
 `tst_touch_flick_compressed` on Qt's touch faults, `tst_row_scroll` on the scroll bar,
 `tst_smooth_scroll` on the wheel.
 
-Pages are **not** created whole: a cache reaching past the end of a page of up to 1000 rows
-(filled in the background) was measured on 2026-11-06 and left out — the desktop scrolled no
-smoother (it had no slow frames before), while a 1100-row outline took 200 MB more and a new
-window width laid out every row again (36 → 337 ms); docs/PERFORMANCE.md "Scrolling pages:
-cheaper rows, pages created whole measured". Rows are made cheaper instead (below).
+A page of up to `BlockEditor.wholePageRows` rows (1000; 300 on phones and in the browser) is
+**created whole**: its list's cache reaches past the page's end (`wholePageCache`), so the rows on
+screen are created at once, as on any page, and the others in the background — ListView's
+asynchronous cache, one row per incubation slice — and scrolling creates no rows and releases
+none. The page stays whole until it has a quarter more rows than the threshold (no rows dropped
+and created again while rows are typed or pasted at it); a longer page keeps a cache of about two
+screens (1600 px). The price, measured on 2026-11-06 (docs/PERFORMANCE.md "Scrolling pages:
+cheaper rows, pages created whole"): about 0.1–0.2 MB a row (a 1100-row outline 200 MB more), a
+new width — the window, the side panel, a phone turned — lays every row out again (36 → 337 ms on
+that outline), and the background filling makes some frames of 25–45 ms just after a page opens.
+Rows are also made cheaper (below): the rows on screen, and every row of a longer page, are still
+created while the page opens or scrolls.
 
 ### Rules for contributors
 

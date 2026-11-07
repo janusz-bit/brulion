@@ -81,6 +81,27 @@ FocusScope {
     /// from the start — so the editor has its final height as soon as it exists. (A list that
     /// created them as it grew made the day grow after the journal list had placed it.)
     property bool autoHeight: false
+    /// A page of at most this many rows is created whole (docs/UI.md "Scrolling performance"): the
+    /// rows on screen at once, as on any page, the others in the background — the list's cache,
+    /// which ListView fills asynchronously between frames — so scrolling it creates no rows and
+    /// a row once created stays. A longer page keeps a cache of about two screens. A phone has
+    /// slower cores and less memory, the browser one thread and a bounded heap. (0: no page is.)
+    property int wholePageRows: DeviceInfo.mobile || DeviceInfo.platform === "wasm" ? 300 : 1000
+    /// The page is created whole: at most wholePageRows rows, and it stays so until it has a
+    /// quarter more (rows typed or pasted one by one do not make the list drop its rows and create
+    /// them again at the threshold). Set by updateWholePage() only — its own value is an input,
+    /// which a binding would make a loop.
+    property bool wholePage: false
+    readonly property int rowCount: controller !== null ? controller.blocks.count : 0
+    function updateWholePage(): void {
+        wholePage = !autoHeight && controller !== null
+                && (rowCount <= wholePageRows || (wholePage && rowCount <= wholePageRows * 5 / 4))
+    }
+    onRowCountChanged: updateWholePage()
+    onWholePageRowsChanged: updateWholePage()
+    onAutoHeightChanged: updateWholePage()
+    /// The cache of a page created whole: past the end of any page of wholePageRows rows.
+    readonly property int wholePageCache: 10000000
 
     // ---- Geometry shared by the delegates ---------------------------------------------------
     /// The page is shown as a document (Obsidian-like), not as an outline.
@@ -529,6 +550,7 @@ FocusScope {
     // applies its value only when the editor has been completed — after the rows exist — and the
     // new palette (or day) made every row render its text a second time.
     onControllerChanged: {
+        updateWholePage()
         if (!controller)
             return
         shownZoom = controller.zoomBlock
@@ -2238,8 +2260,11 @@ FocusScope {
         focus: true
         model: editor.controller ? editor.controller.blocks : null
         reuseItems: false
-        readonly property int rowCache: editor.autoHeight ? 0 : 1600
+        readonly property int rowCache: editor.autoHeight ? 0 : editor.wholePage ? editor.wholePageCache : 1600
         cacheBuffer: rowCache
+        // (Assigned below while a touchpad scrolls up, so not left to the binding; a cache set to 0
+        // from outside stays 0.)
+        onRowCacheChanged: if (cacheBuffer > 0) cacheBuffer = rowCache
         // A touchpad scrolls without Flickable knowing its velocity (scroll phases), so ListView
         // filled its cache below the view only, and every row above was created at the view's top
         // edge — where a row that still grows (a query's results, a Layout's next polish) pushed
@@ -3610,7 +3635,11 @@ FocusScope {
     // binding, so an onLoaded that changed one of its inputs was a binding loop. The Loader is
     // the editor's (destroyed with it) even when it is shown in another item.
     onToolbarVisibleChanged: if (toolbarVisible) toolbarLoader.active = true
-    Component.onCompleted: if (toolbarVisible) toolbarLoader.active = true
+    Component.onCompleted: {
+        updateWholePage()
+        if (toolbarVisible)
+            toolbarLoader.active = true
+    }
     Loader {
         id: toolbarLoader
         objectName: "editToolbarSlot"

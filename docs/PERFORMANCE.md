@@ -94,9 +94,12 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
   and chips cost less), and the scroll bar of a page does about two thirds less work in every
   frame; making a window narrower or wider redraws a long page a quarter faster.
   On a computer scrolling was smooth before; the gain is for slower phones, where every
-  block created while scrolling is a few milliseconds of a frame. Keeping the whole page created
-  at once was measured too and left out: it took much more memory and made every change of the
-  window's width slower (details below).
+  block created while scrolling is a few milliseconds of a frame.
+* **Pages created whole** (2026-11-07): a page of up to 1000 blocks (300 on phones and in the
+  browser) creates all its blocks as soon as it opens — the ones on screen at once, the others in
+  the background — so scrolling it never waits for a block to be made. It costs memory (about
+  0.1–0.2 MB a block) and makes a change of the window's width slower on long pages (details
+  below).
 
 ### How it is now
 
@@ -1012,14 +1015,16 @@ Tabs (docs/UI.md "Tabs, split view and windows") are kept cheap by design, not b
 * **Saving** writes one JSON string per notebook (`tabs/<vault id>`, histories trimmed to 20 routes
   a side) half a second after the last change, so a burst of navigation writes the settings once.
 
-### Scrolling pages: cheaper rows, pages created whole measured (2026-11-06)
+### Scrolling pages: cheaper rows, pages created whole (2026-11-06, 2026-11-07)
 
 The question was whether a note's whole page could be created at once, so that scrolling it never
 creates a row. Measured on the x86_64 desktop (16 cores, Release `-O3 -g`, Xvfb + Mesa llvmpipe,
 60 Hz) against `da09d2d` with the app benchmarks' new `page-scroll` and `page-resize` scenarios
 (tests/bench/app/README.md) and perf profiles of the scroll probe with the list's cache off.
 
-**Pages created whole: measured, not done.** `BlockEditor` with a cache past the end of any page of
+**Pages created whole: measured on 2026-11-06, left out then, done on 2026-11-07** (asked for:
+a page that never creates a row while it scrolls was worth its memory and its slower width
+changes). `BlockEditor` with a cache past the end of any page of
 up to 1000 rows (the rows on screen at once, the rest filled in the background by ListView's
 asynchronous cache, one row per incubation slice); `run-bench.py`, 3 runs each, medians:
 
@@ -1035,7 +1040,9 @@ The desktop had no slow frames to remove (rows cost 1–2 ms there), the backgro
 made frames of 25–45 ms (a row's text layout is one step the incubator cannot split), each row
 costs about 0.1–0.2 MB (13–25 items and a laid-out text document) and every change of the width —
 the window, the side panel, a phone turned — lays out every row again. On a phone, where rows are
-slower, memory is also scarcer. So rows were made cheaper instead.
+slower, memory is also scarcer. So rows were made cheaper first (below), and pages created whole
+came a day later, with the threshold of 1000 rows (`BlockEditor.wholePageRows`; 300 on phones and
+in the browser, unmeasured there) and the numbers above as their price.
 
 **Cheaper rows.** perf (`cycles:u` at 1 kHz with DWARF stacks, scroll probe `--probe-cache 0`: every
 row created at the edge of the view, down and up the page) attributed a block's creation to text
