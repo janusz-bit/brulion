@@ -403,6 +403,11 @@ QVariantMap StreamFind::replaceAll(const QString &replacement)
                     {u"failed"_s, QStringList()}};
     if (!m_find || !m_host)
         return out;
+    // Reading mode (the stream's days share it): no day is changed, not even one only on disk.
+    if (PageController *page = m_find->controller(); page && page->readOnly()) {
+        Q_EMIT page->editRefused();
+        return out;
+    }
     refresh();
     const QString line = oneLine(replacement);
     QList<UndoEdit> edits;

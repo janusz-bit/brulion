@@ -8,7 +8,8 @@ import Brulion
 // with "Undo" in the toast; tags and aliases keep theirs), "Rename" (F2), "Copy value",
 // "Remove" (Ctrl+Backspace; "Undo" in the toast); a row the fields cannot edit (a map, a nested
 // list, a block Brulion cannot edit safely) offers "Edit as text" (the block's raw text in
-// its inline editor). One menu per panel, created when first needed.
+// its inline editor). In reading mode only "Copy value" is available. One menu per panel, created
+// when first needed.
 BMenu {
     id: menu
 
@@ -91,7 +92,8 @@ BMenu {
     }
     BMenuItem {
         objectName: "propertyEditAsText"
-        visible: menu.row !== null && !menu.editable
+        // (Reading mode: nothing is edited, not as text either.)
+        visible: menu.row !== null && !menu.editable && !(menu.row.editor !== null && menu.row.editor.readOnly)
         height: visible ? implicitHeight : 0
         text: qsTr("Edit as text")
         iconName: "code"

@@ -28,6 +28,7 @@ Skróty na komputerze — te z tabeli „Ogólne” możesz zmienić: zobacz [[#
 | Ctrl+P | drukuj stronę ([[Import i eksport#Jedna strona|eksport i druk strony]]) |
 | Ctrl+, | ustawienia |
 | F8 | tryb skupienia: sam tekst, bez pasków (Esc też z niego wychodzi; [[Dokument i konspekt#Statystyki i tryb skupienia|Tryb skupienia]]) |
+| Ctrl+Shift+E | tryb do czytania: strony i dziennik tylko do odczytu ([[Dokument i konspekt#Tryb do czytania|Tryb do czytania]]) |
 | Ctrl+E | tryb źródła Markdown |
 | Ctrl+F | znajdź w notatce, w dzienniku we wszystkich dniach (Enter: następne, Shift+Enter: poprzednie, Esc: zamknij) |
 | Ctrl+H | znajdź i zamień w notatce |

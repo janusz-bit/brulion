@@ -24,6 +24,11 @@ Rectangle {
     /// The field's placeholder when not the default one.
     property string placeholder: ""
     property bool replaceOpen: false
+    /// Reading mode (BlockEditor.readOnly): finding only — no replace row (Ctrl+H opens the bar
+    /// without it).
+    readonly property bool readOnly: editor !== null && editor.readOnly
+    /// The replace row is shown.
+    readonly property bool replacing: replaceOpen && !readOnly
     /// The match NoteFind asked to show last.
     property var target
 
@@ -60,7 +65,10 @@ Rectangle {
     }
     function openReplace(): void {
         bar.replaceOpen = true
-        replacementLater.restart()
+        if (bar.readOnly)
+            focusField() // (no replace row: the query field has the keys)
+        else
+            replacementLater.restart()
     }
     Later {
         id: replacementLater
@@ -180,6 +188,7 @@ Rectangle {
 
             BIconButton {
                 objectName: "findReplaceToggle"
+                visible: !bar.readOnly
                 size: "small"
                 iconName: bar.replaceOpen ? "chevron-down" : "chevron-right"
                 label: bar.replaceOpen ? qsTr("Hide replace") : qsTr("Replace")
@@ -319,7 +328,7 @@ Rectangle {
         // What Replace all would also change: the bar says so before it does.
         BText {
             objectName: "findReplaceNote"
-            visible: bar.replaceOpen && text !== ""
+            visible: bar.replacing && text !== ""
             Layout.fillWidth: true
             variant: "muted"
             wrapMode: Text.Wrap
@@ -341,7 +350,7 @@ Rectangle {
             text: bar.stream ? qsTr("Searched the latest %n day(s). Older ones: In the whole notebook…", "", bar.stream.searchedDays) : ""
         }
         RowLayout {
-            visible: bar.replaceOpen
+            visible: bar.replacing
             Layout.fillWidth: true
             spacing: Theme.space1
 

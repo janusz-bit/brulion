@@ -241,8 +241,6 @@ FocusScope {
                                            : root.statsSummary(pageStatsInfo, false)
     readonly property string statusPosition: page.loaded && !page.sourceMode && page.editingRow >= 0
                                              ? qsTr("Block %1 of %2").arg(page.editingRow + 1).arg(page.blocks.count) : ""
-    /// The page's linked references (the side panel drawer handle's badge).
-    readonly property int backlinkCount: page.path !== "" ? refsSection.linkedCount : 0
     /// The tab this page's context panel showed last in the side panel ("": never shown).
     property string sidePanelTab: ""
     /// route.open asked for a section of the side panel ("links", "outline", "calendar").
@@ -361,14 +359,16 @@ FocusScope {
             root.restoreFolds()
             root.updateStartsWithTitle()
             root._openedMissing = page.loaded && !page.exists
-            page.sourceMode = AppSettings.editorSourceMode || AppController.routeText(root.route, "source") === "true"
+            // (Reading mode: the blocks, read-only.)
+            page.sourceMode = !page.readOnly
+                    && (AppSettings.editorSourceMode || AppController.routeText(root.route, "source") === "true")
             // A page that does not exist yet: something to type into. A day without a note starts
             // from the journal template, like in the journal stream — written only once changed; a
             // week or month without a note from its own template.
             // A page opened from a #tag on a touch screen waits for a tap ("Start writing", the
             // space under the header): the keyboard would cover the blocks with the tag it lists.
             const waits = Theme.touchUi && AppController.routeFlag(root.route, "fromTag") && root.journalDate === ""
-            if (page.loaded && !page.exists && page.blocks.count === 0 && !waits)
+            if (page.loaded && !page.exists && page.blocks.count === 0 && !waits && !page.readOnly)
                 editor.startEditing(page.startNewPage(root.journalDate !== "" ? (Workspace.config.journalTemplate || "")
                                                                                : AppController.routeText(root.periodic, "template")), -1)
         }
@@ -490,7 +490,7 @@ FocusScope {
 
     /// Switch between document and outline (the header's toggle, the menu, the palette).
     function toggleNoteMode(): void {
-        if (!page.loaded)
+        if (!page.loaded || editor.readOnlyRefuses())
             return
         if (!page.toggleMode())
             AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")
@@ -649,6 +649,8 @@ FocusScope {
         host: Workspace
         // The documentation's pages stay as shipped (they are brought up to date on every open).
         allowNewBlockIds: !AppController.inDocsVault
+        // Reading mode (docs/UI.md "Reading mode"): a device setting.
+        readOnly: AppSettings.readingMode
         // A page opened before it existed (a link to a missing page) joins the recent pages
         // once its first content created it.
         onExistsChanged: {
@@ -731,6 +733,8 @@ FocusScope {
         visible: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
         focus: !root.pdfRoute
         controller: page
+        // The reading mode's toast: "Edit" leaves it.
+        onReadOnlyLeaveRequested: AppSettings.readingMode = false
         // Problems the editor reports (a picture that could not be added) as the window's toast.
         onMessage: (text, kind, action) => {
             if (action) {
@@ -967,7 +971,7 @@ FocusScope {
             objectName: "pageMenuFind"
             visible: !root.inSidePanel
             height: visible ? implicitHeight : 0
-            text: qsTr("Find and replace…")
+            text: page.readOnly ? qsTr("Find…") : qsTr("Find and replace…")
             iconName: "search"
             shortcut: ShortcutMap.sequences["page.find"] || ""
             enabled: root.findable
@@ -989,12 +993,21 @@ FocusScope {
             iconName: "list-todo"
             onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagKey) })
         }
+        // Reading mode (docs/UI.md "Reading mode"; also the header's book, the palette, the keys).
+        BMenuItem {
+            objectName: "pageMenuReadingMode"
+            text: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
+            iconName: AppSettings.readingMode ? "pencil" : "book-open"
+            shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["view.reading"] || ""
+            onTriggered: AppSettings.readingMode = !AppSettings.readingMode
+        }
         // The note mode (also the header's toggle on a wide header, More, the palette).
         BMenuItem {
             objectName: "pageMenuNoteMode"
             text: page.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
             iconName: page.documentMode ? "list" : "file-text"
             enabled: page.loaded
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: root.toggleNoteMode()
         }
         // The page's look (docs/UI.md "Page icon and cover").
@@ -1003,6 +1016,7 @@ FocusScope {
             text: AppController.routeFlag(page.look.icon, "kind") ? qsTr("Change icon…") : qsTr("Add icon…")
             iconName: "sparkles"
             enabled: page.loaded && !root.pictureRoute
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: root.openIconDialog()
         }
         BMenuItem {
@@ -1010,6 +1024,7 @@ FocusScope {
             text: AppController.routeFlag(page.look.cover, "kind") ? qsTr("Change cover…") : qsTr("Add cover…")
             iconName: "image"
             enabled: page.loaded && !root.pictureRoute
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: root.openCoverDialog()
         }
         BMenuItem {
@@ -1018,12 +1033,14 @@ FocusScope {
             iconName: "plus"
             shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.addProperty"] || ""
             enabled: page.loaded && !page.sourceMode && !root.pictureRoute
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: editor.addProperty()
         }
         BMenuItem {
             text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
             iconName: "code"
             shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.source"] || ""
+            unavailable: page.readOnly ? editor.readOnlyReason : ""
             onTriggered: editor.toggleSourceMode()
         }
         BMenuSeparator {}
@@ -1040,14 +1057,14 @@ FocusScope {
     property ContentPageIconDialog iconDialog: null
     property ContentPageCoverDialog coverDialog: null
     function openIconDialog(): void {
-        if (!page.loaded)
+        if (!page.loaded || editor.readOnlyRefuses())
             return
         if (!iconDialog)
             iconDialog = iconDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageIconDialog
         iconDialog.open()
     }
     function openCoverDialog(): void {
-        if (!page.loaded)
+        if (!page.loaded || editor.readOnlyRefuses())
             return
         if (!coverDialog)
             coverDialog = coverDialogComponent.createObject(T.Overlay.overlay, { controller: page, editor: editor }) as ContentPageCoverDialog

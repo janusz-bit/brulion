@@ -40,6 +40,8 @@ Column {
     id: root
 
     property list<var> embeds
+    /// Reading mode (BlockEditor.readOnly): a click beside a picture edits nothing (no text cursor).
+    property bool readOnly: false
     signal clicked(string target)
     /// A click on a drawing (`drawing`: an SVG with an embedded scene): the drawing editor.
     signal drawingClicked(string path)
@@ -136,7 +138,7 @@ Column {
                 x: embed.pdfTile ? pdfLoader.width : embed.image ? picture.width : chip.width
                 width: Math.max(0, embed.width - x)
                 height: embed.height
-                HoverHandler { cursorShape: Qt.IBeamCursor; enabled: !Theme.touchUi }
+                HoverHandler { cursorShape: root.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor; enabled: !Theme.touchUi }
                 TapHandler { onTapped: root.backgroundClicked() }
                 TapHandler {
                     enabled: Theme.touchUi

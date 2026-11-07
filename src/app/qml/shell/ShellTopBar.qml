@@ -590,6 +590,16 @@ Rectangle {
         BMenuSeparator {}
 
         // ---- A few actions --------------------------------------------------------------------
+        // Reading mode (docs/UI.md "Reading mode"): a device setting for every page and the journal.
+        BMenuItem {
+            objectName: "menuReadingMode"
+            visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
+            height: visible ? implicitHeight : 0
+            text: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
+            iconName: AppSettings.readingMode ? "pencil" : "book-open"
+            shortcut: ShortcutMap.sequences["view.reading"] || ""
+            onTriggered: AppSettings.readingMode = !AppSettings.readingMode
+        }
         BMenuItem {
             // The properties panel's add row of the page shown (the day being written in).
             objectName: "menuAddProperty"
@@ -597,7 +607,7 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Add property")
             iconName: "plus"
-            enabled: !AppController.sourceModeShown
+            enabled: !AppController.sourceModeShown && !AppSettings.readingMode
             onTriggered: AppController.requestUiAction("addProperty")
         }
         BMenuItem {

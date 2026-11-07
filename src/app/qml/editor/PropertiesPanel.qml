@@ -33,9 +33,12 @@ Item {
 
     readonly property string source: panel.infoRec.map.source
                                      || (panel.controller ? panel.controller.pageProperties.addTarget || "yaml" : "yaml")
-    readonly property bool editable: draft || panel.infoRec.map.editable !== false
-    readonly property bool canAdd: draft ? (panel.controller !== null && panel.controller.pageProperties.canAdd !== false)
-                                         : (editable && panel.infoRec.map.canAdd !== false)
+    /// Reading mode (BlockEditor.readOnly): the values are shown, never edited, no add row.
+    readonly property bool readOnly: editor !== null && editor.readOnly
+    readonly property bool editable: !readOnly && (draft || panel.infoRec.map.editable !== false)
+    readonly property bool canAdd: readOnly ? false
+                                   : draft ? (panel.controller !== null && panel.controller.pageProperties.canAdd !== false)
+                                   : (editable && panel.infoRec.map.canAdd !== false)
     /// The key above the value when the two columns (icon + key | value) would cut a key or
     /// squeeze the value: the widest key does not fit 40 % of the panel, or the value column
     /// beside it would be narrower than ~168 px (a narrow side panel). Short keys (tags, status,
@@ -356,7 +359,7 @@ Item {
     // ---- a block that cannot be edited in fields ----------------------------------------------------
     Item {
         id: note
-        visible: !panel.editable && !panel.draft
+        visible: !panel.editable && !panel.draft && !panel.readOnly
         y: panel.rowsHeight + Theme.space2
         width: panel.width
         height: !visible ? 0 : panel.stacked ? noteText.implicitHeight + Theme.space1 + noteButton.implicitHeight

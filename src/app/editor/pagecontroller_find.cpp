@@ -98,6 +98,8 @@ PageController::TextLocation PageController::locateText(qsizetype start, qsizety
 
 bool PageController::replaceTextRanges(const QList<text::TextRange> &ranges, const QString &replacement)
 {
+    if (refusesEdit())
+        return false;
     if (!m_loaded || m_sourceMode || ranges.isEmpty())
         return false;
     const QString current = text();

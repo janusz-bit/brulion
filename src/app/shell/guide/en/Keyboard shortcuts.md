@@ -28,6 +28,7 @@ Shortcuts on a computer — you can change the ones in the “General” table: 
 | Ctrl+P | print the page ([[Import and export#A single page|exporting and printing a page]]) |
 | Ctrl+, | settings |
 | F8 | focus mode: only the text, no bars (Esc leaves it too; [[Document and outline#Statistics and focus mode|Focus mode]]) |
+| Ctrl+Shift+E | reading mode: pages and the journal read-only ([[Document and outline#Reading mode|Reading mode]]) |
 | Ctrl+E | Markdown source mode |
 | Ctrl+F | find in the note, in the journal in all days (Enter: next, Shift+Enter: previous, Esc: close) |
 | Ctrl+H | find and replace in the note |

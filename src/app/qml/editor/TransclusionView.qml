@@ -395,7 +395,8 @@ Column {
                             HoverHandler {
                                 id: bodyHover
                                 enabled: !Theme.touchUi
-                                cursorShape: body.linkAt(point.position.x, point.position.y) !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
+                                cursorShape: body.linkAt(point.position.x, point.position.y) !== "" ? Qt.PointingHandCursor
+                                             : root.editor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor
                                 onPointChanged: {
                                     entry.trackLink(point.position.x, point.position.y)
                                     // The link under the resting pointer: its preview (LinkPreviews).

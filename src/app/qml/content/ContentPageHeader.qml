@@ -29,6 +29,11 @@ import Brulion
 // (coverRequested). A cover from the internet shows only from the device's cache: "Show" first
 // (unless the device allows such pictures), a spinner, the reason it failed; a file that is not in
 // the notebook (any more) is named.
+// Reading mode (docs/UI.md "Reading mode"; PageController.readOnly): the book button among the page
+// actions (every width) switches it (AppSettings.readingMode); while it is on the title, the icon,
+// the cover and the chips change nothing (a click on the title opens no field — the page menu's
+// "Rename…" still does —, no "+", no "Remove", no "Change cover"), the note mode toggle and "Start
+// writing" are not shown.
 //
 //   ContentPageHeader {
 //       controller: page; editor: editor; tools: tools
@@ -73,6 +78,8 @@ Item {
     property Item menuAnchor: null
 
     readonly property bool small: Theme.compact || inSidePanel
+    /// Reading mode: nothing in the header changes the page.
+    readonly property bool readOnly: controller !== null && controller.readOnly
     /// The page's look (PageController.look): its icon ({ kind, name }) and its cover ({ kind,
     /// state, url, target, host, error, position }).
     readonly property var pageIcon: header.controller ? header.controller.look.icon : ({})
@@ -184,6 +191,7 @@ Item {
             header.chipMenu = chipMenuComponent.createObject(header) as PropertyChipMenu
         header.chipMenu.kind = kind
         header.chipMenu.item = name
+        header.chipMenu.readOnly = header.readOnly
         header.chipMenu.popup(item, 0, item.height)
     }
     function openAddMenu(item: Item): void {
@@ -254,7 +262,9 @@ Item {
         hoverEnabled: !Theme.touchUi
         Accessible.role: Accessible.Button
         Accessible.name: qsTr("Page icon")
-        Accessible.description: qsTr("Change icon")
+        Accessible.description: header.readOnly ? "" : qsTr("Change icon")
+        // (Reading mode: the icon is only shown.)
+        enabled: !header.readOnly
         onClicked: header.iconRequested()
         background: Rectangle {
             radius: Theme.radius
@@ -301,13 +311,27 @@ Item {
             BIconButton {
                 objectName: "noteModeToggle"
                 // A small header leaves it to the page menu ⋯ (also the top bar's More, the palette).
-                visible: header.loaded && !header.small
+                visible: header.loaded && !header.small && !header.readOnly
                 iconName: header.documentMode ? "file-text" : "list"
                 label: header.documentMode ? qsTr("Document mode") : qsTr("Outline mode")
                 // The name says the current mode; screen readers also hear what a press does.
                 Accessible.description: header.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
                 size: "small"
                 onClicked: header.modeToggleRequested()
+            }
+            // Reading mode at every width (phones read the most): checked while it is on.
+            BIconButton {
+                objectName: "readingModeToggle"
+                visible: header.loaded
+                iconName: "book-open"
+                label: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
+                shortcut: AppController.routeText(ShortcutMap.sequences, "view.reading")
+                size: "small"
+                // (Not `checkable`: a click must not break the binding to the setting.)
+                checked: AppSettings.readingMode
+                Accessible.checkable: true
+                Accessible.checked: checked
+                onClicked: AppSettings.readingMode = !AppSettings.readingMode
             }
             BIconButton {
                 visible: header.exists
@@ -433,7 +457,7 @@ Item {
                 anchors.margins: Theme.space2
                 spacing: Theme.space1
                 // (With the keys: the page menu's "Change cover…".)
-                visible: header.coverMoving || Theme.touchUi || coverHover.hovered
+                visible: !header.readOnly && (header.coverMoving || Theme.touchUi || coverHover.hovered)
                 BButton {
                     objectName: "pageCoverMove"
                     visible: !header.coverMoving && coverBand.ready
@@ -574,7 +598,7 @@ Item {
                     wrapMode: Text.Wrap
                     Accessible.role: Accessible.Heading
                     Accessible.name: text
-                    Accessible.description: !header.journal && header.exists ? qsTr("Click to rename") : ""
+                    Accessible.description: !header.journal && header.exists && !header.readOnly ? qsTr("Click to rename") : ""
 
                     // The tap area (rename): a touch target tall on touch UIs, centred on the title.
                     Item {
@@ -583,11 +607,11 @@ Item {
                         y: (parent.height - height) / 2
                         HoverHandler {
                             id: titleHover
-                            enabled: !Theme.touchUi && !header.journal && header.exists
+                            enabled: !Theme.touchUi && !header.journal && header.exists && !header.readOnly
                             cursorShape: Qt.IBeamCursor
                         }
                         TapHandler {
-                            enabled: !header.journal && header.exists
+                            enabled: !header.journal && header.exists && !header.readOnly
                             onTapped: header.startTitleEdit()
                         }
                     }
@@ -778,7 +802,7 @@ Item {
                 id: chipsAdd
                 objectName: "pageHeaderAdd"
                 visible: chips.live && chips.adding === "" && AppController.routeFlag(header.controller.pageProperties, "canAdd")
-                         && !header.controller.sourceMode
+                         && !header.controller.sourceMode && !header.readOnly
                 size: "small"
                 iconName: "plus"
                 label: qsTr("Add a tag or alias…")
@@ -875,7 +899,7 @@ Item {
 
         // An empty page (e.g. today's journal without a template): say where to type.
         BButton {
-            visible: header.loaded && header.controller.blocks.visibleCount === 0
+            visible: header.loaded && header.controller.blocks.visibleCount === 0 && !header.readOnly
             Layout.topMargin: Theme.space2
             Layout.leftMargin: -Theme.space3
             variant: "ghost"

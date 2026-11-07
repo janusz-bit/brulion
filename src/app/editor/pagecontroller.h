@@ -186,6 +186,14 @@ class PageController : public QObject {
     /// and to blocks that already have an id, are copied either way.
     Q_PROPERTY(
             bool allowNewBlockIds READ allowNewBlockIds WRITE setAllowNewBlockIds NOTIFY allowNewBlockIdsChanged FINAL)
+    /// Reading mode (docs/UI.md "Reading mode"; the app binds AppSettings.readingMode): the page is
+    /// shown, followed and searched, folded and its blocks selected and copied, but nothing changes
+    /// it — no block is edited (startEditing() refuses), and every edit (tasks, tokens, tables,
+    /// properties, the mode key, pastes, drops, undo / redo, source mode, a new block id for a
+    /// copied link) refuses with editRefused(). Turning it on ends the editing and source mode
+    /// (their text is applied and saved as usual). Changes from outside (sync, another editor)
+    /// still reload the page.
+    Q_PROPERTY(bool readOnly READ readOnly WRITE setReadOnly NOTIFY readOnlyChanged FINAL)
     /// The page's properties (see "Page properties" in the file comment): { items: [{ key, source
     /// ("yaml" | "logseq"), type, value (one line), raw (the typed value), items, empty, editable,
     /// multiline, linkDate }], tags: [{ name, source, property }], aliases: [{ name, source,
@@ -267,6 +275,8 @@ public:
     bool documentMode() const { return m_mode == NoteMode::Document; }
     NoteMode noteMode() const { return m_mode; }
     bool allowNewBlockIds() const { return m_allowNewBlockIds; }
+    bool readOnly() const { return m_readOnly; }
+    void setReadOnly(bool on);
     void setAllowNewBlockIds(bool allow);
     /// Colours the renderer uses (from `palette`).
     const markdown::Palette &rendererPalette() const { return m_model->palette(); }
@@ -626,7 +636,7 @@ public:
     /// step, ensureBlockRef()); the heading and page kinds change nothing. Returns { ok, text,
     /// reason }; reason when not ok: "noPage" (no path), "noRow", "notHeading", "sourceMode" (the
     /// blocks are not being edited), "readOnly" (a new id is needed but allowNewBlockIds is
-    /// false), "noId" (the block cannot carry an id: frontmatter, an unclosed code fence).
+    /// false), "readingMode" (a new id is needed but the page is readOnly), "noId" (the block cannot carry an id: frontmatter, an unclosed code fence).
     Q_INVOKABLE QVariantMap linkText(int row, const QString &kind);
     /// linkText() put on the clipboard. Not ok with reason "noClipboard" (and the text) when the
     /// platform has no clipboard or it did not take the text — success is never claimed then.
@@ -1023,6 +1033,10 @@ Q_SIGNALS:
     void titleRowChanged();
     void modeChanged();
     void allowNewBlockIdsChanged();
+    void readOnlyChanged();
+    /// An edit was asked for while readOnly (a click on text, a checkbox, a menu's change, a key)
+    /// and nothing was changed: the editor says so (once in a while) and offers to leave the mode.
+    void editRefused();
     void pagePropertiesChanged();
     void lookChanged();
     /// An attachment could not be read or stored (file name for the message).
@@ -1064,6 +1078,10 @@ private:
         int zoom = KeepZoom;
     };
 
+    /// readOnly: editRefused() and true — the caller changes nothing.
+    bool refusesEdit();
+    /// What a refused edit returning a map gives: { ok: false, reason: "readingMode", row: -1 }.
+    static QVariantMap readOnlyResult();
     void onFileChanged(const QString &path);
     void onEditsDiscarded(const QString &path);
     /// Tell the hosts which file this editor shows (EditorHost::editorOpened/editorClosed).
@@ -1264,6 +1282,7 @@ private:
     NoteMode m_keylessMode = NoteMode::Outline;
     int m_keylessSource = -1;
     bool m_allowNewBlockIds = true;
+    bool m_readOnly = false;
     QVariantMap m_pageProperties;
     QString m_pagePropertiesText; ///< the text pageProperties was read from
     Properties m_lookProperties;  ///< the page properties `look` is read from (keys lower case)

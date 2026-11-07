@@ -71,7 +71,6 @@ QtObject {
     property bool edgeSwipe: true
     property string statusText: "123 słowa"
     property string statusPosition: "Blok 3 z 12"
-    property int backlinkCount: 4
     property var restored: null
     property int ended: 0
     function viewState(): var { return { contentY: 120, row: 3 } }
@@ -93,7 +92,6 @@ QtObject {
         QVERIFY(traits.edgeSwipe());
         QCOMPARE(traits.statusText(), u"123 słowa"_s);
         QCOMPARE(traits.statusPosition(), u"Blok 3 z 12"_s);
-        QCOMPARE(traits.backlinkCount(), 4);
         QCOMPARE(changed.size(), 1);
 
         view->setProperty("editing", true);
@@ -105,8 +103,6 @@ QtObject {
         QCOMPARE(traits.noteMode(), u"document"_s);
         view->setProperty("statusText", u"Zaznaczenie: 2 słowa"_s);
         QCOMPARE(traits.statusText(), u"Zaznaczenie: 2 słowa"_s);
-        view->setProperty("backlinkCount", -2); // never below 0
-        QCOMPARE(traits.backlinkCount(), 0);
         // The same value again: nothing changed.
         const qsizetype before = changed.size();
         view->setProperty("editing", true);
@@ -140,7 +136,6 @@ QtObject {
     property string editing: "true"
     property var noteMode: 3
     property var statusText: 5
-    property string backlinkCount: "7"
     property var restored: null
     function viewState() { return { page: "Gęś.md" } }
     function restoreViewState(state) { restored = state }
@@ -153,7 +148,6 @@ QtObject {
         QVERIFY(!traits.editing()); // the text "true" is no boolean true
         QCOMPARE(traits.noteMode(), QString());
         QCOMPARE(traits.statusText(), QString());
-        QCOMPARE(traits.backlinkCount(), 0);
         QVERIFY(traits.sidePanel() == nullptr);
         QCOMPARE(traits.viewState().value(u"page"_s).toString(), u"Gęś.md"_s);
         traits.restoreViewState({{u"row"_s, 2}});

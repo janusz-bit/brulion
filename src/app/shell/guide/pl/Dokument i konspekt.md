@@ -85,6 +85,11 @@ Brulion liczy to, co czytelnik widzi: bez znaczników Markdown, nagłówka YAML 
 
 **Przewijanie jak w maszynie do pisania** (*Ustawienia → Edytor*, albo „Przewijanie jak w maszynie do pisania” w palecie) trzyma wiersz, w którym piszesz, na środku ekranu — także w trybie źródła i w dzienniku. Pod ostatnim blokiem jest wtedy miejsce, by i ostatni wiersz mógł stanąć na środku.
 
+## Tryb do czytania
+**Tryb do czytania** pokazuje strony i dziennik tylko do czytania: stuknięcie albo kliknięcie otwiera linki, obrazy, PDF-y i osadzone notatki, zwija i przybliża bloki — ale nigdy nie zaczyna edycji, więc na telefonie klawiatura nie wyskakuje w trakcie czytania i nic nie zmienia notatki przez przypadek. Włączasz go i wyłączasz przyciskiem z **książką** obok gwiazdki w nagłówku strony, poleceniem „Tryb do czytania” w menu strony (**⋯**), w menu **Więcej** albo w palecie, skrótem **Ctrl+Shift+E** albo w *Ustawienia → Edytor*. Brulion pamięta go na tym urządzeniu, dla wszystkich stron i dziennika.
+
+Podczas czytania nadal zaznaczysz i skopiujesz bloki (także „Kopiuj link” — oprócz linku do bloku, który nie ma jeszcze identyfikatora, bo ten trzeba by dopisać do notatki), przeszukasz notatkę skrótem Ctrl+F, przefiltrujesz tabelę, zobaczysz historię wersji, wyeksportujesz i wydrukujesz stronę. To, co zmieniłoby notatkę — stuknięcie w tekst albo pole zadania, menu statusu zadania, Delete, Ctrl+V, Ctrl+Z, Ctrl+E — pokazuje zamiast tego powiadomienie z przyciskiem **Edytuj**, który wyłącza tryb do czytania. Rysunek otwiera się jako obraz; „Edytuj rysunek” otwiera go do rysowania. Zmiany z synchronizacji i z innych urządzeń pojawiają się od razu.
+
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…` — okno wyboru plików przyjmie kilka obrazów naraz, także w przeglądarce. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 

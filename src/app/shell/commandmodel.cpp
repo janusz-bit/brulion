@@ -55,6 +55,7 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app, &AppController::languageChanged, this, &CommandModel::commandsChanged);
     connect(app->workspace(), &Workspace::favoritesChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::focusModeChanged, this, &CommandModel::commandsChanged);
+    connect(app->settings(), &AppSettings::readingModeChanged, this, &CommandModel::commandsChanged);
     connect(app->settings(), &AppSettings::typewriterScrollingChanged, this, &CommandModel::commandsChanged);
     // The shortcuts' list: these commands with their default shortcuts (titles in the language:
     // again after a language switch, eventFilter()).
@@ -182,6 +183,11 @@ static QList<Command> buildCommands(const AppController *app)
             {u"view.focus"_s,
              app->settings()->focusMode() ? CommandModel::tr("Leave focus mode") : CommandModel::tr("Focus mode"),
              CommandModel::tr("Only the text, without side bars and toolbars"), u"maximize"_s, u"F8"_s, true},
+            // Reading mode (docs/UI.md "Reading mode"): a device setting; pages and the journal
+            // read-only.
+            {u"view.reading"_s,
+             app->settings()->readingMode() ? CommandModel::tr("Leave reading mode") : CommandModel::tr("Reading mode"),
+             CommandModel::tr("Read notes without changing them by accident"), u"book-open"_s, u"Ctrl+Shift+E"_s, true},
             {u"view.typewriter"_s,
              app->settings()->typewriterScrolling() ? CommandModel::tr("Turn off typewriter scrolling")
                                                     : CommandModel::tr("Typewriter scrolling"),
@@ -575,6 +581,8 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"printPage"_s);
     else if (id == u"view.focus")
         m_app->settings()->setFocusMode(!m_app->settings()->focusMode());
+    else if (id == u"view.reading")
+        m_app->settings()->setReadingMode(!m_app->settings()->readingMode());
     else if (id == u"view.typewriter")
         m_app->settings()->setTypewriterScrolling(!m_app->settings()->typewriterScrolling());
     else if (id == u"settings.shortcuts")

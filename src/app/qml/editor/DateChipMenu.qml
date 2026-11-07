@@ -18,8 +18,8 @@ import Brulion
 // later), "alarm" (a: on or off), "remove", "recurrence" (a: the rule, "" = none), "priority" (a:
 // "highest" … "lowest", "" = none); on a reminder "blockRecurrence" (a: the block's rule),
 // "blockRecurrenceChange" (the recurrence dialog for it), "blockPriority" (a: the block's
-// priority); on a day "open", "openSide", "copy". React to it with the last statement of the
-// handler: the change rebuilds the text, the chip included.
+// priority); on a day "open", "openSide", "copy" (all a `readOnly` menu has). React to it with
+// the last statement of the handler: the change rebuilds the text, the chip included.
 BMenu {
     id: menu
 
@@ -42,6 +42,9 @@ BMenu {
     /// A reminder's "An hour later" / "Tomorrow at this time" are offered (false: a series' time
     /// still to come, which a snooze would not keep from ringing).
     property bool snoozable: true
+    /// Reading mode (docs/UI.md "Reading mode"): only a day link's items — open it, copy it — are
+    /// there; nothing that changes the token.
+    property bool readOnly: false
     /// "Open in side panel" offered for a day link (wide windows, a host with panels).
     property bool sidePanel: !Theme.narrow
 
@@ -111,7 +114,7 @@ BMenu {
             const item = itemAt(i) as BMenuItem
             if (!item || !item.subMenu)
                 continue
-            const shown = item.subMenu === repeatMenu ? reminder : item.subMenu === priorityMenu ? reminder && isTask : true
+            const shown = !readOnly && (item.subMenu === repeatMenu ? reminder : item.subMenu === priorityMenu ? reminder && isTask : true)
             item.visible = shown
             item.height = shown ? item.implicitHeight : 0
         }
@@ -139,12 +142,12 @@ BMenu {
         iconName: "link"
         onTriggered: menu.chosen("copy", 0, 0)
     }
-    ShownSeparator { shown: menu.day }
+    ShownSeparator { shown: menu.day && !menu.readOnly }
 
     // ---- The date, the rule: "Change…" --------------------------------------------------------------
     ShownItem {
         objectName: "dateChipChange"
-        shown: !menu.priorityKind
+        shown: !menu.priorityKind && !menu.readOnly
         text: menu.reminder ? (menu.occurrence ? qsTr("Change the whole series…") : qsTr("Change date and time…"))
                             : menu.recurrence ? qsTr("Change rule…")
                             : menu.occurrence ? qsTr("Change the whole series…")
@@ -152,61 +155,61 @@ BMenu {
         iconName: menu.reminder ? "calendar-clock" : menu.recurrence ? "repeat" : "calendar"
         onTriggered: menu.chosen("change", 0, 0)
     }
-    ShownSeparator { shown: !menu.priorityKind }
+    ShownSeparator { shown: !menu.priorityKind && !menu.readOnly }
     ShownItem {
         objectName: "dateChipToday"
-        shown: menu.movable
+        shown: menu.movable && !menu.readOnly
         text: qsTr("Today")
         iconName: "sun"
         onTriggered: menu.chosen("move", 0, 0)
     }
     ShownItem {
         objectName: "dateChipTomorrow"
-        shown: menu.movable
+        shown: menu.movable && !menu.readOnly
         text: qsTr("Tomorrow")
         iconName: "calendar-days"
         onTriggered: menu.chosen("move", 1, 0)
     }
     ShownItem {
         objectName: "dateChipDayLater"
-        shown: menu.movable
+        shown: menu.movable && !menu.readOnly
         text: qsTr("A day later")
         iconName: "arrow-right"
         onTriggered: menu.chosen("shift", 1, 0)
     }
     ShownItem {
         objectName: "dateChipHourLater"
-        shown: menu.reminder && menu.snoozable
+        shown: (menu.reminder && menu.snoozable) && !menu.readOnly
         text: qsTr("An hour later")
         iconName: "clock"
         onTriggered: menu.chosen("shift", 0, 60)
     }
     ShownItem {
         objectName: "dateChipTomorrowSameTime"
-        shown: menu.reminder && menu.snoozable
+        shown: (menu.reminder && menu.snoozable) && !menu.readOnly
         text: qsTr("Tomorrow at this time")
         iconName: "calendar-days"
         onTriggered: menu.chosen("move", 1, 0)
     }
     ShownItem {
         objectName: "dateChipWeekLater"
-        shown: menu.movable || (menu.reminder && !menu.occurrence)
+        shown: (menu.movable || (menu.reminder && !menu.occurrence)) && !menu.readOnly
         text: qsTr("A week later")
         iconName: "calendar-plus"
         onTriggered: menu.chosen("shift", 7, 0)
     }
 
     // ---- 🔁: the quick rules --------------------------------------------------------------------------
-    RuleItem { objectName: "dateChipRuleDaily"; shown: menu.recurrence; ruleText: "every day"; text: qsTr("Daily") }
-    RuleItem { objectName: "dateChipRuleWeekdays"; shown: menu.recurrence; ruleText: "every weekday"; text: qsTr("Weekdays") }
-    RuleItem { objectName: "dateChipRuleWeekly"; shown: menu.recurrence; ruleText: "every week"; text: qsTr("Weekly") }
-    RuleItem { objectName: "dateChipRuleTwoWeeks"; shown: menu.recurrence; ruleText: "every 2 weeks"; text: qsTr("Every 2 weeks") }
-    RuleItem { objectName: "dateChipRuleMonthly"; shown: menu.recurrence; ruleText: "every month"; text: qsTr("Monthly") }
-    RuleItem { objectName: "dateChipRuleYearly"; shown: menu.recurrence; ruleText: "every year"; text: qsTr("Yearly") }
-    ShownSeparator { shown: menu.recurrence }
+    RuleItem { objectName: "dateChipRuleDaily"; shown: menu.recurrence && !menu.readOnly; ruleText: "every day"; text: qsTr("Daily") }
+    RuleItem { objectName: "dateChipRuleWeekdays"; shown: menu.recurrence && !menu.readOnly; ruleText: "every weekday"; text: qsTr("Weekdays") }
+    RuleItem { objectName: "dateChipRuleWeekly"; shown: menu.recurrence && !menu.readOnly; ruleText: "every week"; text: qsTr("Weekly") }
+    RuleItem { objectName: "dateChipRuleTwoWeeks"; shown: menu.recurrence && !menu.readOnly; ruleText: "every 2 weeks"; text: qsTr("Every 2 weeks") }
+    RuleItem { objectName: "dateChipRuleMonthly"; shown: menu.recurrence && !menu.readOnly; ruleText: "every month"; text: qsTr("Monthly") }
+    RuleItem { objectName: "dateChipRuleYearly"; shown: menu.recurrence && !menu.readOnly; ruleText: "every year"; text: qsTr("Yearly") }
+    ShownSeparator { shown: menu.recurrence && !menu.readOnly }
     ShownItem {
         objectName: "dateChipWhenDone"
-        shown: menu.recurrence
+        shown: menu.recurrence && !menu.readOnly
         text: qsTr("From the completion date")
         iconName: "check"
         checkable: true
@@ -218,17 +221,17 @@ BMenu {
     }
 
     // ---- Priorities ---------------------------------------------------------------------------------
-    PriorityItem { objectName: "dateChipPriorityHighest"; shown: menu.priorityKind && !menu.logseq; level: "highest"; text: qsTr("Highest"); iconName: "arrow-up" }
-    PriorityItem { objectName: "dateChipPriorityHigh"; shown: menu.priorityKind; level: "high"; text: qsTr("High"); iconName: "chevron-up" }
-    PriorityItem { objectName: "dateChipPriorityMedium"; shown: menu.priorityKind; level: "medium"; text: qsTr("Medium"); iconName: "minus" }
-    PriorityItem { objectName: "dateChipPriorityLow"; shown: menu.priorityKind; level: "low"; text: qsTr("Low"); iconName: "chevron-down" }
-    PriorityItem { objectName: "dateChipPriorityLowest"; shown: menu.priorityKind && !menu.logseq; level: "lowest"; text: qsTr("Lowest"); iconName: "arrow-down" }
+    PriorityItem { objectName: "dateChipPriorityHighest"; shown: (menu.priorityKind && !menu.logseq) && !menu.readOnly; level: "highest"; text: qsTr("Highest"); iconName: "arrow-up" }
+    PriorityItem { objectName: "dateChipPriorityHigh"; shown: menu.priorityKind && !menu.readOnly; level: "high"; text: qsTr("High"); iconName: "chevron-up" }
+    PriorityItem { objectName: "dateChipPriorityMedium"; shown: menu.priorityKind && !menu.readOnly; level: "medium"; text: qsTr("Medium"); iconName: "minus" }
+    PriorityItem { objectName: "dateChipPriorityLow"; shown: menu.priorityKind && !menu.readOnly; level: "low"; text: qsTr("Low"); iconName: "chevron-down" }
+    PriorityItem { objectName: "dateChipPriorityLowest"; shown: (menu.priorityKind && !menu.logseq) && !menu.readOnly; level: "lowest"; text: qsTr("Lowest"); iconName: "arrow-down" }
 
     // ---- A reminder: the alarm, the block's rule and priority ---------------------------------------
-    ShownSeparator { shown: menu.reminder }
+    ShownSeparator { shown: menu.reminder && !menu.readOnly }
     ShownItem {
         objectName: "dateChipAlarm"
-        shown: menu.reminder
+        shown: menu.reminder && !menu.readOnly
         text: qsTr("Alarm")
         iconName: "bell-ring"
         checkable: true
@@ -289,10 +292,10 @@ BMenu {
     }
 
     // ---- Remove ---------------------------------------------------------------------------------------
-    ShownSeparator { shown: !menu.day }
+    ShownSeparator { shown: !menu.day && !menu.readOnly }
     ShownItem {
         objectName: "dateChipRemove"
-        shown: !menu.day
+        shown: !menu.day && !menu.readOnly
         text: menu.reminder ? qsTr("Delete reminder")
                             : menu.recurrence ? qsTr("Don't repeat")
                             : menu.priorityKind ? qsTr("No priority")

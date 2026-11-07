@@ -55,6 +55,7 @@ constexpr auto kSpellingWords = "spelling/words";
 constexpr auto kExportWebPictures = "export/webPictures";
 constexpr auto kWordCount = "editor/wordCountShown";
 constexpr auto kFocusMode = "ui/focusMode";
+constexpr auto kReadingMode = "ui/readingMode";
 constexpr auto kTypewriter = "editor/typewriterScrolling";
 constexpr auto kShortcuts = "shortcuts";
 constexpr auto kIntroDone = "app/introDone";
@@ -719,6 +720,17 @@ void AppSettings::setFocusMode(bool on)
 {
     if (store(key(kFocusMode), on, focusMode()))
         Q_EMIT focusModeChanged();
+}
+
+bool AppSettings::readingMode() const
+{
+    return value(key(kReadingMode), false).toBool(); // (not a bool: the default)
+}
+
+void AppSettings::setReadingMode(bool on)
+{
+    if (store(key(kReadingMode), on, readingMode()))
+        Q_EMIT readingModeChanged();
 }
 
 bool AppSettings::typewriterScrolling() const
