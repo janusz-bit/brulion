@@ -5795,11 +5795,22 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
             if (lines.at(i).startsWith(u"- Link do strony:"_s))
                 QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(i));
         }
-        if (auto *list = editor->property("listView").value<QQuickItem *>(); list && linkRow >= 0)
+        auto *list = editor->property("listView").value<QQuickItem *>();
+        if (!list || linkRow < 0)
+            return {-1, -1};
+        // The tab shown again restores where it was scrolled a few event-loop turns later (PageView
+        // restoreViewState), which may move the link away again; the whole page is built, so its
+        // text is found off screen too: position until the link is in the list's view.
+        const QRectF view = list->mapRectToScene(QRectF(0, 0, list->width(), list->height()));
+        QPointF point(-1, -1);
+        waitFor([&] {
             QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
-        settle(250);
-        QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s);
-        return text ? linkPoint(text, u"page:Remont"_s) : QPointF(-1, -1);
+            settle(250);
+            QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s);
+            point = text ? linkPoint(text, u"page:Remont"_s) : QPointF(-1, -1);
+            return view.contains(point);
+        });
+        return view.contains(point) ? point : QPointF(-1, -1);
     };
     QPointF link = linkOnScreen();
     check(link.x() >= 0, "the guide shows its link to the renovation project");
