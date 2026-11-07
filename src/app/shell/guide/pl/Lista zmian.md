@@ -7,6 +7,37 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.15.0 — 8 listopada 2026
+
+**Uwaga**
+- Wersja 0.14.2 nie została opublikowana: na Windows jej testy wykazały, że strona pokazana znów w swojej karcie wraca teraz chwilę później tam, gdzie była przewinięta — to jedna z poprawek 0.14.2 — i to przesuwało link, który self-test miał kliknąć. Test czeka teraz, aż link będzie widoczny; w aplikacji nic się nie zmienia. Wszystkie nowości 0.14.2, opisane niżej, są dostępne od tej wersji.
+
+**Nowe**
+- **Menu z klawiatury** — strzałki przechodzą po każdym menu (menu kontekstowe, menu wiersza paska bocznego z klawisza Menu, **Więcej** na górnym pasku…), a Enter wybiera pozycję; zamknięcie menu oddaje fokus tam, gdzie był, a edytowany tekst zachowuje zaznaczenie.
+- **Wszystkie polecenia w menu „/”** — samo **/** (i przycisk poleceń na pasku narzędzi telefonu) pokazuje wszystkie polecenia i się przewija; zaczyna od najczęstszych — Zadanie: do zrobienia, Nagłówek 1, Nagłówek 2, Tabela, Przypomnienie…, Termin…, Plik…, Obraz… — potem bloki tekstu, daty, wstawki, dane, a pozostałe statusy zadań na końcu.
+- **Wybór dnia w agendzie** — nagłówek dnia w agendzie kalendarza wybiera dzień (stuknięcie albo kliknięcie; na komputerze też strzałki w górę i w dół i Enter): jego numer dostaje ciemne kółko, panel boczny go pokazuje, a na telefonie otwiera się arkusz dnia, by dodać zadanie albo przypomnienie. Lista zostaje na miejscu.
+- **Android: Wstecz najpierw oddala** — w przybliżonym bloku systemowe Wstecz oddala o jeden poziom, zanim opuści stronę; w dzienniku wraca do całego dnia.
+- **Strona pobierania** — strona Brulionu na GitHub Pages (ta z repozytorium F-Droid) otwiera się bezpośrednimi linkami do plików najnowszego wydania, z ich rozmiarami, i dużym przyciskiem dla Twojego systemu: Android, Windows, Linux albo wersja w przeglądarce.
+
+**Zmiany**
+- **Tryb do czytania to oko** — przycisk na górnym pasku, menu strony i paleta pokazują oko: otwarta książka znów należy do dziennika (na telefonie oba stały jeden nad drugim), **Dokumentacja Brulionu** ma znak zapytania, a „Otwórz w głównym widoku” w panelu bocznym strzałkę linku zewnętrznego. Zobacz [[Dokument i konspekt#Tryb do czytania|Tryb do czytania]].
+- **Miesiąc na komputerze znów pokazuje wpisy** — siatka miesiąca pokazuje wpisy z tytułami, gdy używasz myszy, a komórka ma co najmniej 72 px, zamiast ikon z telefonu; w wąskiej komórce wpis pokazuje tytuł bez godziny, która jest w jego podpowiedzi i w panelu dnia. Ekrany dotykowe zachowują ikony.
+- **Kosz** — wiersz pokazuje **Przywróć** i menu **⋯** (także prawy przycisk albo przytrzymanie) z **Usuń na zawsze…**; **Opróżnij kosz** to zwykły przycisk z czerwonym tekstem, a jego potwierdzenie zostaje czerwone.
+- **Potwierdzenia pokazują nazwę w ramce** — usuwanie strony i podobne pokazują jej nazwę tak, jak ją zapisano, z ikoną, w ramce nad komunikatem.
+- **Pytanie przed tym, czego nie da się cofnąć** — **Wyczyść historię…** w historii synchronizacji najpierw pyta; *Ustawienia → Wygląd* kończy **Przywróć domyślny wygląd…**, które pyta i mówi, co przywraca (kolor akcentu, tła, wielkość tekstu, czcionki, gęstość, odstęp wierszy), a co zostaje (motyw, układ, szerokość tekstu). Pozycja, która usuwa, jest ostatnia w swoim menu, oddzielona kreską; „Nie powtarzaj” i „Bez priorytetu” to zwykłe wybory, nie czerwone.
+- **Okna mówią przy polu, co jest nie tak** — okno zmiany nazwy zaznacza zajętą nazwę przy polu; okno nowego folderu nie przyjmuje nazwy istniejącego folderu (przy dowolnej wielkości liter), nazwy ukrytej ani pliku na drodze i mówi dlaczego.
+- **Nowe przypomnienie w kalendarzu zapisuje tylko wybraną godzinę** — godzina wpisana w oknie dodawania obowiązuje po Enterze, po wyjściu z pola albo po Dodaj, nigdy w trakcie pisania („25:00” nie zmienia się już w 02:00); dla dzisiaj szybkie godziny, które minęły, są wyłączone, a miniona godzina jest wskazana.
+- **Przejdź do strony w PDF-ie** (Ctrl+G) bierze wpisane cyfry — pokazana strona jest zaznaczona, pierwsza cyfra ją zastępuje — a strony, której PDF nie ma, dotyczy komunikat przy polu.
+- **Na telefonie** — filtry wyszukiwania zajmują dwa wiersze (zakres sam w pierwszym, Zamień…, folder i liczba wyników pod nim), więc widok nie wychodzi już poza ekran; długi komunikat wyszukiwania w PDF-ie (PDF bez tekstu) ma własny wiersz, a × zostaje na ekranie; kolory akcentu mieszczą się w jednym wierszu (albo w dwóch równych); Wstecz z konfliktu synchronizacji wraca do listy konfliktów.
+- **Rysunki** — zwykły papier ma pustą kartkę zamiast kwadratu prostokąta, Duplikuj własną ikonę, a Zaznaczanie i Kształty mały trójkącik: drugie kliknięcie otwiera ich menu.
+- **Minione dni w agendzie** są wyróżnione kolorami zamiast przygaszenia, więc ich tekst zostaje czytelny.
+
+**Poprawki**
+- Nazwy w oknach, podpowiedziach, chipach i pustych widokach są pokazywane tak, jak je zapisano: strona nazwana ze znacznikami HTML („<b>Ważne”) nie wychodzi już pogrubiona ani nie może udawać innej nazwy. Wartość z „<” nie czyta się już w menu jako „&lt;”.
+- Etykiety i nazwy serii wykresów pokazują to, co tabela, bez `**`, `*` ani nawiasów linków.
+- Wiersze Zadań i karty nawyków stoją w kolumnie swojego nagłówka, zamiast wisieć w lewo.
+- Notatki dzienne w pasku bocznym i tytuły kart i okien dni zmieniają się razem z językiem; karta rejestru zdarzeń nazywa się „Rejestr zdarzeń”, a karty widoków mają swoje ikony; podpowiedzi klawiszy uwzględniają własne skróty, a strzałki są pokazywane jako ↑ ↓ ← →.
+
 ## 0.14.2 — 7 listopada 2026
 
 **Zmiany**

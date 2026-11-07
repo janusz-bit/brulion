@@ -7,6 +7,37 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.15.0 — November 8, 2026
+
+**Note**
+- Version 0.14.2 was not published: on Windows its tests found that a page shown again in its tab now returns to where it was scrolled a moment later — a fix of 0.14.2 —, which moved a link the self-test was about to click. The test now waits until the link is in view; nothing changes in the app. Everything new in 0.14.2, described below, is available from this version on.
+
+**New**
+- **Menus by keyboard** — the arrow keys walk every menu (context menus, the menu of a sidebar row from the Menu key, the top bar's **More**…) and Enter picks the item; closing a menu gives the focus back to where it was, an edited text keeping its selection.
+- **Every command in the / menu** — a bare **/** (and the phone toolbar's Commands button) lists all the commands and scrolls; it starts with the kinds used most — Task: to do, Heading 1, Heading 2, Table, Reminder…, Due date…, File…, Image… — then text blocks, dates, inserts, data, and the other task statuses last.
+- **Pick a day in the agenda** — a day's header in the calendar's agenda selects the day (a tap or click; Up, Down and Enter on a computer): its number gets the dark disc, the side panel shows it and on a phone the day's sheet opens, to add a task or reminder. The list stays where it is.
+- **Android: Back zooms out first** — on a block you zoomed into, the system's Back zooms out one level at a time before it leaves the page; in the journal it goes back to the whole day.
+- **A download page** — Brulion's page on GitHub Pages (the one with the F-Droid repository) opens with direct links to the latest release's files, with their sizes, and a big button for your system: Android, Windows, Linux or the browser version.
+
+**Changes**
+- **Reading mode is an eye** — the top bar's button, the page menu and the palette show an eye: the open book is the journal's again (on a phone the two sat one above the other), **Brulion Documentation** has a question mark, the side panel's “Open in the main view” the external-link arrow. See [[Document and outline#Reading mode|Reading mode]].
+- **The month on a computer lists its entries again** — the month grid shows titled entries whenever the mouse is used and a cell is at least 72 px wide, instead of the phone's icons; in a narrow cell an entry shows its title without the time, which is in its tooltip and the day panel. Touch screens keep the icons.
+- **Trash** — a row shows **Restore** and a **⋯** menu (also a right click or a long press) with **Delete for good…**; **Empty trash** is an ordinary button with red text, its confirmation stays red.
+- **Confirmations name the item in a frame** — deleting a page and the like show its name as written, with its icon, in a frame above the message.
+- **Asking before what can't be undone** — the sync history's **Clear history…** asks first; *Settings → Appearance* ends with **Restore the default look…**, which asks and says what it resets (the accent colour, backgrounds, text size, fonts, density, line spacing) and what stays (the theme, the layout, the text width). An item that deletes is the last of its menu, set apart by a line; “Don't repeat” and “No priority” are ordinary choices, not red.
+- **Dialogs say what is wrong at the field** — the rename dialog marks a taken name at the field; the new folder dialog refuses the name of a folder that exists (in any letter case), a hidden name or a file in the way, and says why.
+- **A new reminder in the calendar saves only a time you chose** — a time typed in the add dialog applies on Enter, when you leave the field or on Add, never while you type (“25:00” no longer became 02:00); for today the quick times already past are disabled and a past time is pointed out.
+- **The PDF's Go to page** (Ctrl+G) takes the digits typed — the page shown is selected, the first digit replaces it — and a page the PDF has not is said at the field.
+- **On a phone** — Search's filters take two rows (the scope alone on the first, Replace…, the folder and the number of results below), so the view no longer runs off the screen; a PDF search's long message (a PDF without text) takes its own line and × stays on screen; the accent colours fit one line (or two of the same length); Back from a sync conflict returns to the list of conflicts.
+- **Drawing** — plain paper has a blank sheet instead of the rectangle's square, Duplicate its own icon, and Select and Shapes a small caret: a second click opens their menu.
+- **Past days in the agenda** are said with colours instead of a fade, so their text stays readable.
+
+**Fixes**
+- Names in dialogs, tooltips, chips and empty states are shown as written: a page named with HTML tags (“<b>Ważne”) no longer came out bold, nor could pass for another name. A value with “<” no longer reads “&lt;” in a menu.
+- Chart labels and series names show what the table shows, without `**`, `*` or link brackets.
+- Tasks rows and habit cards sit in their header's column instead of hanging to the left.
+- The sidebar's daily notes and the tab and window titles of days follow a language switch; the event log's tab is “Event log” and the views' tabs have their icons; key hints follow custom shortcuts, arrows shown as ↑ ↓ ← →.
+
 ## 0.14.2 — November 7, 2026
 
 **Changes**
