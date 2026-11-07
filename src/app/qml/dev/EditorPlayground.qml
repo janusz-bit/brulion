@@ -995,9 +995,22 @@ ApplicationWindow {
             for (let i = 0; i < 150; ++i)
                 md += "- Wiersz " + i + "\n"
             page.insertMarkdown(page.lastVisibleRow(), md)
+            editor.listView.positionViewAtBeginning()
+        }
+        // A page of fewer than wholePageRows rows is created whole: its last row exists without
+        // the view going there, filled in the background.
+        if (window.at()) check(editor.wholePage && editor.listView.cacheBuffer >= editor.wholePageCache,
+                               "a page of " + page.blocks.count + " rows is created whole")
+        if (window.at()) waitStep(editor.listView.itemAtIndex(page.blocks.count - 1) !== null,
+                                  "the last row of a page created whole exists without scrolling to it")
+        // The lazy list of a longer page: rows far from the view are released.
+        if (window.at()) {
+            editor.wholePageRows = 0
             window.farRow = rowOf("Kupić płytki")
             editor.startEditing(window.farRow, -1)
         }
+        if (window.at()) check(!editor.wholePage && editor.listView.cacheBuffer <= 1601,
+                               "a page past wholePageRows has a cache of about two screens")
         if (window.at()) editor.listView.positionViewAtEnd()
         if (window.at()) check(editor.listView.itemAtIndex(window.farRow) === null, "the edited block's delegate is gone")
         if (window.at()) realKey(Qt.Key_Control, Qt.ControlModifier, "")
@@ -1005,6 +1018,7 @@ ApplicationWindow {
         if (window.at()) typeKeys("Q")
         if (window.at()) check(Js.indexOf(info(window.farRow).plainText, "Q") > 0 && page.editingRow === window.farRow
                     && editor.activeEditor && editor.activeEditor.activeFocus, "typing brings the edited block back: " + info(window.farRow).plainText)
+        if (window.at()) editor.wholePageRows = 1000
         // Enter at the end of a zoomed heading far down the page: the rows above it come back
         // with the zoom's end, and the view follows the new block below it (it does not stay
         // at the page's top, where the zoom had shown the heading).

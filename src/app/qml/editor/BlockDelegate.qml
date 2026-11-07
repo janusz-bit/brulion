@@ -93,13 +93,17 @@ Item {
     readonly property bool framed: view === "code" || view === "calc" || view === "query" || view === "math"
                                    || view === "mermaid" || view === "chart" || view === "table" || view === "callout"
                                    || view === "frontmatter"
-    // The title shown above the properties panel (see the file comment).
-    readonly property bool titleFirst: editor.titleFirst && index === controller.titleRow
-    readonly property bool propertiesAfterTitle: editor.titleFirst && index === controller.titleRow - 1
+    // The title shown above the properties panel (see the file comment). (`controller` checked
+    // too: when the editor's page goes, a row created in the background reads it before the
+    // editor's titleFirst follows.)
+    readonly property bool titleFirst: editor.titleFirst && controller !== null && index === controller.titleRow
+    readonly property bool propertiesAfterTitle: editor.titleFirst && controller !== null
+                                                 && index === controller.titleRow - 1
     /// The first block drawn under the properties panel — the one after it in the file, or after
     /// the title drawn above it —: 24 px under the panel in both modes (constant per row).
     readonly property bool belowProperties: (prevKind === "frontmatter" && !titleFirst)
-                                            || (editor.titleFirst && index === controller.titleRow + 1)
+                                            || (editor.titleFirst && controller !== null
+                                                && index === controller.titleRow + 1)
     readonly property real topPad: doc ? docTopPad : outlineTopPad
     readonly property real outlineTopPad: {
         // With the panel's 8 px bottom padding: 24 px.
