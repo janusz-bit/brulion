@@ -101,8 +101,11 @@ FocusScope {
     }
     function openAsPage(source: bool): void {
         page.save()
-        AppController.navigate(source ? { view: "journal", date: day.date, source: true }
-                                       : { view: "journal", date: day.date })
+        // (`if`, not `cond ? {…} : {…}`: that compiles to undefined — docs/UI.md "Compiled QML".)
+        if (source)
+            AppController.navigate({ view: "journal", date: day.date, source: true })
+        else
+            AppController.navigate({ view: "journal", date: day.date })
     }
     function keepCaretVisible(): void {
         dayEditor.ensureEditVisible()

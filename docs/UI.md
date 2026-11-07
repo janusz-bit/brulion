@@ -3781,7 +3781,11 @@ areas' helper singletons (`UiModels`, `BlockViews`, `PageTools`, `IoLists`). Wha
 `list[list.length] = x` on a `list<…>` property (not across `if`/`return` branches). An array
 literal compiles only into a `list<…>` property or return value: not as a call's argument, not
 inside an object literal, not as `cond ? x : []` (`if (!cond) return []`; a
-`readonly property list<var> noRows: []`). `QVariantList` converts to `list<var>`, not to
+`readonly property list<var> noRows: []`). Neither does an object literal in a conditional,
+`cond ? { … } : { … }` (also `: {}`): qmlcachegen stores the first branch's map in a register the
+result is not read from, so it gives an empty value when `cond` holds (the page icon dialog's emoji
+were blank) — `if`/`else`, or one object literal with the conditions inside its fields
+(`({ kind: e !== "" ? "emoji" : "app", name: … })`). `QVariantList` converts to `list<var>`, not to
 `list<int>`; `QStringList` not to `list<var>` (`Js.fromStrings`).
 
 **No functions as values.** Arrow functions and `function () {}` as values (`array.map(x => …)`,

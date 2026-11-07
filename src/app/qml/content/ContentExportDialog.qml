@@ -299,9 +299,11 @@ BDialog {
             enabled: !exporter.busy
             onClicked: {
                 // (Kept in a property: a call cannot take a map from a local after another call.)
-                dialog._preset = dialog.format !== "markdown-file"
-                        ? { view: "importExport", tab: "export", scope: "page", path: dialog.path, format: dialog.format }
-                        : { view: "importExport", tab: "export", scope: "page", path: dialog.path }
+                // (`if`, not `cond ? {…} : {…}`: that compiles to undefined — docs/UI.md "Compiled QML".)
+                if (dialog.format !== "markdown-file")
+                    dialog._preset = { view: "importExport", tab: "export", scope: "page", path: dialog.path, format: dialog.format }
+                else
+                    dialog._preset = { view: "importExport", tab: "export", scope: "page", path: dialog.path }
                 dialog.close()
                 AppController.navigate(dialog._preset)
             }

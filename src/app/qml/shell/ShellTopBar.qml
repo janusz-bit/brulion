@@ -159,7 +159,11 @@ Rectangle {
                     if (index < 0 || index >= bar.crumbPaths.length)
                         return
                     const path = bar.crumbPaths[index]
-                    AppController.navigate(path !== "" ? { view: "allPages", path: path } : { view: "allPages" })
+                    // (`if`, not `cond ? {…} : {…}`: that compiles to undefined — docs/UI.md "Compiled QML".)
+                    if (path !== "")
+                        AppController.navigate({ view: "allPages", path: path })
+                    else
+                        AppController.navigate({ view: "allPages" })
                 }
             }
         }

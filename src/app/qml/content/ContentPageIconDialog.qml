@@ -104,7 +104,8 @@ BDialog {
             border.color: Theme.focusRing
         }
         contentItem: BPageIcon {
-            icon: choice.emoji !== "" ? { kind: "emoji", name: choice.emoji } : { kind: "app", name: choice.appIcon }
+            // One object literal: `cond ? {…} : {…}` compiles to undefined (docs/UI.md "Compiled QML").
+            icon: ({ kind: choice.emoji !== "" ? "emoji" : "app", name: choice.emoji !== "" ? choice.emoji : choice.appIcon })
             size: Theme.iconSizeLg
             color: Theme.fg
         }

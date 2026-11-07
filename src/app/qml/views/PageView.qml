@@ -87,8 +87,12 @@ FocusScope {
             return {}
         const row = editor.rowAt(list.width / 2, list.contentY + 1)
         const item = row >= 0 ? root.editorItemAt(row) : null
-        if (!item)
-            return list.contentY > list.originY + 1 ? { top: list.contentY - list.originY } : {}
+        if (!item) {
+            // (`if`, not `cond ? {…} : {}`: that compiles to undefined — docs/UI.md "Compiled QML".)
+            if (list.contentY > list.originY + 1)
+                return { top: list.contentY - list.originY }
+            return {}
+        }
         return { row: row, offset: Math.round(list.contentY - item.y) }
     }
     /// The editor list's item of `row` (null: not created).

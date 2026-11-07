@@ -5123,6 +5123,11 @@ void checkPageLook(QQuickWindow *window, AppController *app, const Check &check)
                     first = child;
             }
         }
+        // The choice draws its emoji (an icon that compiled to undefined left the grid blank).
+        const auto *firstIcon = first ? first->property("contentItem").value<QQuickItem *>() : nullptr;
+        check(firstIcon && firstIcon->property("emoji").toBool()
+                      && firstIcon->property("_name").toString() == u"📝"_s,
+              "the dialog's emoji are drawn (BPageIcon of 📝)");
         if (first)
             tapOrClick(window, pointIn(first), touch);
         check(first
