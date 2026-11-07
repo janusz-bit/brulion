@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.14.1 — 7 listopada 2026
+
+**Uwaga**
+- Wersja 0.14.0 nie została opublikowana: jej testy wykazały, że nowy tor paska przewijania, który naciśnięciem przewija o ekran, liczył się w sprawdzaniu rozmiaru celów dotykowych jako osobny cel szeroki na 9 pikseli. Pasek przewijania nie jest takim celem — to samo robią kółko, klawisze i przeciąganie strony — więc sprawdzanie pomija teraz jego tor, tak jak sam pasek. W aplikacji nic się nie zmienia. Wszystkie nowości 0.14.0, opisane niżej, są dostępne od tej wersji.
+
 ## 0.14.0 — 7 listopada 2026
 
 **Nowe**

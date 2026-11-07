@@ -2,6 +2,8 @@
 
 **What's new in {{VERSION}}**
 
+Version 0.14.0 was not published, so its news reaches you only in this release.
+
 * **Reading mode** — pages and the journal for reading only: a tap or click follows links, opens pictures and PDFs, folds and zooms in, but never starts editing, so on a phone the keyboard stays down and nothing changes a note by accident. The book button in a page's header, the page menu, **Ctrl+Shift+E** or *Settings → Editor*.
 * **Wheel scrolling like in a web browser** — on a computer each notch of the mouse wheel scrolls the same three lines, smoothly, however fast you turn it; a press on the scroll bar's track scrolls a screen towards the pointer and repeats while you hold it.
 * **Bottom navigation with views only** — on phones Journal, Pages, Search, Tasks and Calendar; quick capture is the **+** in the top bar, the sidebar opens with ☰ or a swipe from the left edge.
@@ -51,6 +53,8 @@ SHA-256 checksums: `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt --ignore-missi
 **Brulion {{VERSION}}** — notatki w Markdown, które działają offline: konspekty z blokami i dziennik (jak w Logseq) na zwykłych plikach `.md` (jak w Obsidianie), zadania, kalendarz, przypomnienia z alarmami, obliczenia i tabele. Synchronizacja przez Syncthing albo Nextcloud.
 
 **Nowości w {{VERSION}}**
+
+Wersja 0.14.0 nie została opublikowana, więc jej nowości trafiają do Ciebie dopiero w tym wydaniu.
 
 * **Tryb do czytania** — strony i dziennik tylko do czytania: stuknięcie albo kliknięcie otwiera linki, obrazy i PDF-y, zwija i przybliża bloki, ale nigdy nie zaczyna edycji, więc na telefonie klawiatura nie wyskakuje i nic nie zmienia notatki przez przypadek. Przycisk z książką w nagłówku strony, menu strony, **Ctrl+Shift+E** albo *Ustawienia → Edytor*.
 * **Kółko myszy jak w przeglądarce** — na komputerze każdy ząbek kółka przewija o te same trzy wiersze, płynnie, niezależnie od tego, jak szybko kręcisz; naciśnięcie toru paska przewijania obok suwaka przewija o ekran w stronę wskaźnika i powtarza to, dopóki trzymasz.

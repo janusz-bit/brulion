@@ -7,6 +7,11 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.14.1 — November 7, 2026
+
+**Note**
+- Version 0.14.0 was not published: its tests found that the scroll bar's new track, which a press pages, counted in the check of touch target sizes as a target of its own, 9 pixels wide. A scroll bar is no such target — the wheel, the keys and dragging the page do what it does — so the check now leaves its track out, as it does the bar. Nothing changes in the app. Everything new in 0.14.0, described below, is available from this version on.
+
 ## 0.14.0 — November 7, 2026
 
 **New**
