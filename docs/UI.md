@@ -39,10 +39,10 @@ components — no Material/Fusion look, so all targets look identical.
   entries (Journal, Calendar, Tasks, All pages, Tags, Graph, Search) and its sections
   Favorites and Recent can be unticked (the "Pages" tree stays; hidden views stay in the
   command palette and their shortcuts; ticked, Favorites shows once a page is starred and
-  Recent once another page was opened); the phone's **bottom navigation**: four buttons, each
-  from a menu of Journal, Calendar, Search, Tasks, Pages, Tags, Graph (a view already in
-  another slot swaps places with it), Menu always last; the bottom bar's **+ Note** (the
-  quick note button) on or off;
+  Recent once another page was opened); the phone's **bottom navigation**: five buttons, each
+  from a menu of Journal, Calendar, Search, Tasks, Habits, All pages, Tags, Graph (a view
+  already in another slot swaps places with it); the top bar's **+** on phones (the quick note
+  button) on or off;
   "Restore the default look" (colours, fonts, sizes, density, line spacing — the visibility of
   elements stays). A family chosen on another device or since uninstalled falls back to the
   default font. The browser has no font rows (Qt there sees only its bundled DejaVu fonts).
@@ -173,8 +173,8 @@ components — no Material/Fusion look, so all targets look identical.
     header's chips hide while the open properties panel shows them); closing the panel, pinning a
     page there or folding the section brings it back at once. Narrow windows reach the same panel
     in a drawer from the right edge and always show the section.
-* **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the top bar's ☰,
-  the bottom bar's **Menu**, or a swipe to the right from the left edge; a swipe to the left on
+* **Narrow (< 900 px, phones):** the rail and the sidebar become a `Drawer` (the top bar's ☰
+  or a swipe to the right from the left edge; a swipe to the left on
   the drawer or the scrim closes it). The drawer is edge to edge: its `bgSunken` runs under the status and
   navigation bars, and the sidebar's own insets (`topInset` = the SafeArea's top,
   `bottomInset` = `AppShell.navigationBar`) keep the notebook button, the notebook row and the sync status clear of
@@ -190,8 +190,8 @@ components — no Material/Fusion look, so all targets look identical.
   scrolling Flickable); Android's text selection handles are windows of their own above the app.
   While typing or selecting blocks (the keyboard up or an editing toolbar docked, also on the
   bottom navigation after the keyboard went) there is no strip: the drawer took the drag of the
-  selection's start grip, which lies at the left edge (the top bar's ☰ opens it, also the bottom
-  bar's Menu once the keyboard went; a swipe on it still closes it).
+  selection's start grip, which lies at the left edge (the top bar's ☰ opens it; a swipe on it
+  still closes it).
   Nor on a view that swipes sideways from the left edge itself (the view's `edgeSwipe`,
   `ShellRouteView.viewEdgeSwipe`): the calendar's week and month grids reach that edge and a
   swipe to the right there shows the previous period; the agenda keeps the strip. While the
@@ -199,32 +199,33 @@ components — no Material/Fusion look, so all targets look identical.
   the drawer closes it instead of turning the period underneath. In a mobile browser
   (WebAssembly) nothing reports the system's zones, so the strip lies at the very edge, where
   Android's gesture navigation or the browser's own edge swipe (iOS Safari) may take the swipe
-  for "back" first — the bottom bar's Menu opens the drawer there. The strip follows the
+  for "back" first — the top bar's ☰ opens the drawer there. The strip follows the
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back, title,
-  Search and More. ☰ always comes first, in the same place whatever the view, the history or the
-  keyboard (the bottom bar's Menu opens the same drawer, within the thumb's reach; ☰ is the way
-  while that bar is away — the drawing editor's bar replaces it, the on-screen keyboard takes its
-  place); back follows it while there is history, except on Android
+  **+** (quick capture; off in Settings → Appearance → Layout, capture stays in the palette and
+  under Ctrl+Shift+N), Search only while the bottom navigation has no Search tab, and More.
+  ☰ always comes first, in the same place whatever the view, the history or the keyboard;
+  back follows it while there is history, except on Android
   (`ShellTopBar.systemBack`), whose back key / gesture walks the same history — the browser on
   a phone and a narrow desktop window keep it;
-  a **bottom navigation** bar: Journal, Calendar, Search, Tasks by default — four views
-  chosen in Settings → Appearance → Layout —, then **+ Note** (quick capture, its accessible name
-  "Quick capture" holding the label: WCAG 2.5.3; its "+" sits in a small ringed pill, the old
-  floating button's popup surface scaled down, so it reads as an action and never as the
-  current view; off in the settings, capture stays in the palette and under Ctrl+Shift+N) and
-  Menu → drawer, always last. Every item is one `NavTab` (icon pill, label) of at least 48 px;
+  a **bottom navigation** bar of views only: Journal, All pages ("Pages"), Search, Tasks,
+  Calendar by default — five views chosen in Settings → Appearance → Layout. Every item
+  switches the view and shows which one is current; actions stay on the top bar, so the two
+  bars never repeat a button (up to 0.13 the bottom bar also had **+ Note** and **Menu** →
+  drawer, which were the top bar's + and ☰ again and behaved unlike the tabs around them).
+  Every item is one `NavTab` (icon pill, label) of at least 48 px;
   they share the width by their labels (`ShellBottomNav.widths`): evenly while every label fits
   an even share, else a long label ("Calendar") gets what it needs (its semibold width and
-  4 px on each side, then 2 px) and the short ones ("Menu") share the rest, so at the larger text
-  sizes (Large, Larger) and on 320-dp phones the names stay whole; only beyond that are the
-  widths scaled and the longest labels elide. Nothing floats over a phone's content; capture is wherever the bar is, settings, sync
-  and the graph included. The navigation makes way while the on-screen
+  4 px on each side, then 2 px) and the short ones ("Tasks") share the rest, so at the larger
+  text sizes (Large, Larger) and on 320-dp phones the names stay whole; only beyond that are
+  the widths scaled and the longest labels elide. The bar is the page's surface (`Theme.bg`)
+  with a subtle top edge, as the top bar. Nothing floats over a phone's content. The
+  navigation makes way while the on-screen
   keyboard is up — when the keyboard goes while the editing goes on, it comes back and the
   editing toolbar docks right on it; a tap on one of its tabs then opens that view, the editing
-  ends as when leaving the page, and + Note ends the editing (the view's `endEditing()`, as
-  the toolbar's "Hide keyboard") before quick capture opens —, and for the drawing editor's
+  ends as when leaving the page, and the top bar's + ends the editing (the view's
+  `endEditing()`, as the toolbar's "Hide keyboard") before quick capture opens —, and for the drawing editor's
   tool bar, which takes its place ("On-screen keyboard"). The Android back key /
   gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
@@ -532,8 +533,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   at the bottom instead (`replacesBottomNav`: the drawing editor's tool bar on phones) keeps the
   navigation away. Views tell the shell with
   `toolbarDocked` and `replacesBottomNav` (view contract, `ShellRouteView`). Once the keyboard
-  has settled, the detailed event log notes where the view ends ("Typing: the content ends 84 px
-  above the window's bottom (keyboard 0 px, navigation bar 24 px, bottom navigation 84 px),
+  has settled, the detailed event log notes where the view ends ("Typing: the content ends 88 px
+  above the window's bottom (keyboard 0 px, navigation bar 24 px, bottom navigation 88 px),
   editing toolbar docked").
 * **The touch editing toolbar** (`MobileEditToolbar`) docks on the bottom edge of a dock host that
   never scrolls (`BlockEditor.toolbarHost`): the editor itself on a page, the journal stream's
@@ -594,8 +595,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
   `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast; editing with the
   keyboard hidden: the bottom navigation shown and the docked toolbar right on it, also over a
-  system navigation bar — the shell's `SafeArea.additionalMargins` —, + Note on the
-  navigation under it, a tap on it ending the editing and opening quick capture;
+  system navigation bar — the shell's `SafeArea.additionalMargins` —, + on the top bar, a
+  tap on it ending the editing and opening quick capture;
   the keyboard sliding in frame by frame leaving the navigation under it until covered, sliding
   away uncovering it, a keyboard shorter than the navigation leaving the toolbar where it was,
   a browser's keyboard — viewport samples, the page resized — taking it at

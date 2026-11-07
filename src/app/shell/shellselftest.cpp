@@ -1268,11 +1268,11 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
     const auto pick = [&](const std::function<bool(QQuickItem *)> &pred) {
         closeMenus(window);
         if (window->width() < 900) {
-            // A fresh shell after each switch: its drawer, found through its bottom bar.
-            QQuickItem *menuTab = shownItem(named(u"bottomNav_menu"_s));
-            if (!menuTab)
+            // A fresh shell after each switch: its drawer, through its top bar's ☰.
+            QQuickItem *menuButton = shownItem(named(u"topBarMenu"_s));
+            if (!menuButton)
                 return false;
-            activate(menuTab);
+            activate(menuButton);
         }
         QQuickItem *button = shownItem(named(u"notebookSwitch"_s));
         if (!button)
@@ -1553,15 +1553,15 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
     app->goHome();
     pause(200);
 
-    // ---- The page tree: the drawer on phones (opened from the bottom bar and the top bar),
-    //      the sidebar on desktops.
+    // ---- The page tree: the drawer on phones (opened from the top bar's ☰), the sidebar on
+    //      desktops.
     if (narrow) {
-        QQuickItem *menuTab = findNamed(u"bottomNav_menu"_s);
-        check(menuTab != nullptr, "the bottom bar has a Menu tab");
-        if (!menuTab)
+        QQuickItem *menuButton = findNamed(u"topBarMenu"_s);
+        check(menuButton != nullptr, "the top bar has ☰");
+        if (!menuButton)
             return;
-        activate(menuTab);
-        check(waitFor(drawerOpen), "the bottom bar's Menu opens the drawer");
+        activate(menuButton);
+        check(waitFor(drawerOpen), "the top bar's ☰ opens the drawer");
     }
     treeMenu = findTreeMenu();
     if (!treeMenu) {
@@ -1612,10 +1612,14 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                 : "a click on a page in the sidebar opens it, without a menu");
     if (narrow) {
         check(waitFor(drawerClosed), "opening a page from the drawer closes it");
-        // ☰ always leads the top bar, the bottom navigation's Menu there too; back follows it
-        // with history, but not on Android, whose back key / gesture walks the same history.
-        check(findNamed(u"topBarMenu"_s) != nullptr && findNamed(u"bottomNav_menu"_s) != nullptr,
-              "on a phone the top bar's ☰ stays next to the bottom navigation's Menu");
+        // ☰ always leads the top bar; the bottom navigation holds views only (no Menu, no
+        // capture: nothing there repeats the top bar). Back follows ☰ with history, but not on
+        // Android, whose back key / gesture walks the same history.
+        check(findNamed(u"topBarMenu"_s) != nullptr && findNamed(u"bottomNav_menu"_s) == nullptr
+                      && findNamed(u"bottomNav_capture"_s) == nullptr,
+              "on a phone ☰ is on the top bar and the bottom navigation has views only");
+        check(findNamed(u"bottomNav_search"_s) != nullptr && findNamed(u"topBarSearch"_s) == nullptr,
+              "Search is on the bottom navigation, not again on the top bar");
         if (QQuickItem *topBar = findType("ShellTopBar")) {
             const bool expected = app->canGoBack() && !app->isAndroid();
             check(topBar->property("backShown").toBool() == expected && (findNamed(u"topBarBack"_s) != nullptr) == expected,
@@ -1623,12 +1627,12 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         } else {
             check(false, "the top bar is shown");
         }
-        // Through the bottom navigation's Menu: a long press opens the row's context menu.
-        QQuickItem *menuTab = findNamed(u"bottomNav_menu"_s);
-        if (!menuTab)
+        // Through ☰ again: a long press opens the row's context menu.
+        QQuickItem *menuButton = findNamed(u"topBarMenu"_s);
+        if (!menuButton)
             return;
-        activate(menuTab);
-        check(waitFor(drawerOpen), "the bottom bar's Menu opens the drawer again");
+        activate(menuButton);
+        check(waitFor(drawerOpen), "the top bar's ☰ opens the drawer again");
         checkEmptyFolder();
         if (QQuickItem *pageRow = treeRow(page)) {
             openMenuOn(pageRow);
@@ -6160,11 +6164,12 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
     // docks right on it.
     const QString guide = u"Witaj w Brulionie.md"_s;
     QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
-    // Quick capture's item on the bottom navigation ("+ Note").
+    // Quick capture's + on the top bar (it was the bottom navigation's "+ Note" up to 0.13).
     QQuickItem *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
-    const auto captureOnNav = [&] {
+    const auto captureOnTop = [&] {
         return captureButton && captureButton->isVisible()
-               && captureButton->mapToScene(QPointF(0, 0)).y() >= nav->mapToScene(QPointF(0, 0)).y() - 1;
+               && captureButton->mapToScene(QPointF(0, captureButton->height())).y()
+                          < nav->mapToScene(QPointF(0, 0)).y() / 4;
     };
     const auto navTop = [&] { return nav->mapToScene(QPointF(0, 0)).y(); };
     const auto navAtBottom = [&] { return nav->isVisible() && near(navTop() + nav->height(), window->height()); };
@@ -6200,8 +6205,8 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         // (Laid out with the shell's next polish.)
         check(waitFor([&] { return slot && near(slotBottom(), navTop()); }),
               "the docked toolbar sits right on the bottom navigation");
-        check(waitFor([&] { return !room->isVisible(); }) && captureOnNav(),
-              "no keyboard's room under the navigation; “+ Notatka” is on it, under the toolbar");
+        check(waitFor([&] { return !room->isVisible(); }) && captureOnTop(),
+              "no keyboard's room under the navigation; + is on the top bar");
         auto *theme = engine->singletonInstance<QObject *>("Brulion", "Theme");
         check(theme
                       && near(shellItem->property("toastClearance").toReal(),
@@ -6349,23 +6354,23 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 
         QMetaObject::invokeMethod(page, "stopEditing");
         check(waitFor([&] { return !editor->property("toolbarVisible").toBool() && navAtBottom(); })
-                      && captureOnNav(),
-              "editing stops: the toolbar goes, the bottom navigation stays with “+ Notatka”");
+                      && captureOnTop(),
+              "editing stops: the toolbar goes, the bottom navigation stays, + on the top bar");
 
-        // "+ Note" while editing without the keyboard: the editing ends (nothing written),
-        // quick capture opens.
+        // The top bar's + while editing without the keyboard: the editing ends (nothing
+        // written), quick capture opens.
         {
             const QString unchanged = app->workspace()->readFile(guide);
             editLastRow();
-            check(waitFor([&] { return editor->property("toolbarVisible").toBool() && navAtBottom() && captureOnNav(); }),
-                  "editing again, the keyboard hidden: “+ Notatka” is on the bottom navigation");
+            check(waitFor([&] { return editor->property("toolbarVisible").toBool() && navAtBottom() && captureOnTop(); }),
+                  "editing again, the keyboard hidden: + is on the top bar");
             if (captureButton)
                 tapOrClick(window, pointIn(captureButton), QCoreApplication::arguments().contains(u"--touch"_s));
             check(waitFor([&] {
                       return capture->property("opened").toBool() && !editor->property("toolbarVisible").toBool()
                              && page->property("editingRow").toInt() < 0;
                   }),
-                  "a tap on “+ Notatka” while editing ends the editing and opens quick capture");
+                  "a tap on + while editing ends the editing and opens quick capture");
             sendKey(window, Qt::Key_Escape);
             check(waitFor([&] { return !capture->property("visible").toBool(); })
                           && app->workspace()->readFile(guide) == unchanged,
@@ -6748,12 +6753,13 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
             waitFor([palette] { return !palette->property("visible").toBool(); });
     }
 
-    // The bottom navigation's last slot: Graph instead of Tasks.
-    check(activate(shownItem(u"bottomNavSlot_3"_s)), "the bottom navigation's slots are listed");
+    // The bottom navigation's fourth slot: Graph instead of Tasks.
+    check(shownItem(u"bottomNavSlot_4"_s) != nullptr && activate(shownItem(u"bottomNavSlot_3"_s)),
+          "the bottom navigation's five slots are listed");
     check(activate(shownItem(u"bottomNavChoice_graph"_s)), "a slot's menu lists the views");
     check(waitFor([&] {
               return settings->bottomNavTabs()
-                     == QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"graph"_s};
+                     == QStringList{u"journals"_s, u"allPages"_s, u"search"_s, u"graph"_s, u"calendar"_s};
           }),
           "a view picked in a slot's menu takes the slot");
     if (narrow)
@@ -6783,17 +6789,16 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         check(capture && waitFor([&] { return app->currentView() == u"journals"; }) && !capture->isVisible(),
               "switched off, the quick note button is not shown");
         settings->setCaptureButtonShown(true);
-        QQuickItem *menuTab = window->findChild<QQuickItem *>(u"bottomNav_menu"_s);
+        QQuickItem *topBar = window->findChild<QQuickItem *>(u"shellTopBar"_s);
         // (Laid out with the bar's next polish.)
-        check(capture && menuTab && waitFor([&] {
+        check(capture && topBar && waitFor([&] {
                   return capture->isVisible() && capture->width() > 0
-                         && capture->mapToScene(QPointF(capture->width(), 0)).x()
-                                    <= menuTab->mapToScene(QPointF(0, 0)).x() + 1;
+                         && capture->mapToScene(QPointF(0, capture->height())).y()
+                                    <= topBar->mapToScene(QPointF(0, topBar->height())).y() + 1;
               }),
-              "switched on again, it is back on the bottom bar, before Menu");
-        // Larger text (Appearance → Text size: Larger): the six labels stay whole — a long one
-        // ("Calendar") takes room from the short ones; with "+ Note" in a fixed slot they were
-        // cut.
+              "switched on again, it is back on the top bar");
+        // Larger text (Appearance → Text size: Larger): the five labels stay whole — a long one
+        // ("Kalendarz") takes room from the short ones.
         QQuickItem *bar = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
         const qreal scale = settings->fontScale();
         settings->setFontScale(1.3);
@@ -6812,11 +6817,11 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                 if (item->property("truncated").toBool())
                     cut += item->property("text").toString() + u' ';
             }
-            return labels == 6 && scaled && cut.isEmpty();
+            return labels == 5 && scaled && cut.isEmpty();
         });
         if (!whole)
             std::fprintf(stderr, "selftest: bottom bar labels %d, cut: %s\n", labels, qPrintable(cut));
-        check(whole, "at a larger text size the bottom bar's six labels stay whole");
+        check(whole, "at a larger text size the bottom bar's five labels stay whole");
         settings->setFontScale(scale);
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
     }

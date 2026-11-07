@@ -196,17 +196,20 @@ QStringList knownIds(const QStringList &ids, const QStringList &known)
     return out;
 }
 
-/// Four views for the bottom navigation: the known ones first, the rest from the default order.
+/// The bottom navigation's number of views.
+constexpr qsizetype kBottomNavSlots = 5;
+
+/// Five views for the bottom navigation: the known ones first, the rest from the default order.
 QStringList normalizedTabs(const QStringList &views)
 {
-    QStringList out = knownIds(views, AppSettings::bottomNavViews()).mid(0, 4);
-    // The default four first, then the other views.
+    QStringList out = knownIds(views, AppSettings::bottomNavViews()).mid(0, kBottomNavSlots);
+    // The default five first, then the other views.
     for (const QString &d : AppSettings::defaultBottomNavTabs()) {
-        if (out.size() < 4 && !out.contains(d))
+        if (out.size() < kBottomNavSlots && !out.contains(d))
             out.append(d);
     }
     for (const QString &d : AppSettings::bottomNavViews()) {
-        if (out.size() < 4 && !out.contains(d))
+        if (out.size() < kBottomNavSlots && !out.contains(d))
             out.append(d);
     }
     return out;
@@ -336,7 +339,7 @@ QStringList AppSettings::bottomNavViews()
 
 QStringList AppSettings::defaultBottomNavTabs()
 {
-    return {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s};
+    return {u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"calendar"_s};
 }
 
 QString AppSettings::cleanFontFamily(const QString &family)
@@ -462,7 +465,12 @@ void AppSettings::moveSidebarSection(const QString &id, int delta)
 
 QStringList AppSettings::bottomNavTabs() const
 {
-    return normalizedTabs(storedList(m_settings->value(key(kBottomNavTabs))));
+    const QStringList stored = storedList(m_settings->value(key(kBottomNavTabs)));
+    // The default of the four slots with Menu after them (up to 0.13), as stored by a reset or a
+    // slot picked and put back: the default of today, not those four with a fifth view appended.
+    if (stored == QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s})
+        return defaultBottomNavTabs();
+    return normalizedTabs(stored);
 }
 
 void AppSettings::setBottomNavTabs(const QStringList &views)

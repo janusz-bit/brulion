@@ -10,7 +10,8 @@ import Brulion
 // tree among them). On narrow windows it keeps only what fits a phone: the drawer button ☰,
 // always first (the same place whatever the view, the keyboard or the history), back (with
 // history, and not on Android, whose back key / gesture walks the same history: `systemBack`),
-// the title, search and the menu.
+// the title, quick capture + (AppSettings.captureButtonShown), search only while the bottom
+// navigation has no Search tab (so the two bars never repeat a button), and the menu.
 // Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
 // before Search — the tab switcher, a menu of the tabs (one tap shows it) with New tab, Close
 // tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
@@ -250,16 +251,22 @@ Rectangle {
                 }
             }
         }
-        // Phones: the search of the notes' text (the palette is in the menu).
+        // Phones: the search of the notes' text (the palette is in the menu) — unless the bottom
+        // navigation has it.
         BIconButton {
-            visible: Theme.narrow
+            objectName: "topBarSearch"
+            visible: Theme.narrow && AppSettings.bottomNavTabs.indexOf("search") < 0
             iconName: "search"
             label: qsTr("Search")
             shortcut: ShortcutMap.sequences["go.search"] || ""
             onClicked: AppController.search("")
         }
+        // Quick capture (a note into today's journal): always on wide windows; on phones unless
+        // switched off (Settings → Appearance → Layout; capture stays in the palette and under
+        // Ctrl+Shift+N).
         BIconButton {
-            visible: !Theme.narrow
+            objectName: "shellCaptureButton"
+            visible: !Theme.narrow || AppSettings.captureButtonShown
             iconName: "plus"
             label: qsTr("Quick capture")
             shortcut: ShortcutMap.sequences["capture"] || ""

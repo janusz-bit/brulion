@@ -106,7 +106,8 @@ private Q_SLOTS:
         QCOMPARE(s.density(), u"comfortable"_s);
         QCOMPARE(s.sidebarHidden(), QStringList());
         QCOMPARE(s.sidebarSections(), (QStringList{u"favorites"_s, u"recent"_s, u"pages"_s}));
-        QCOMPARE(s.bottomNavTabs(), (QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s}));
+        QCOMPARE(s.bottomNavTabs(),
+                 (QStringList{u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"calendar"_s}));
         QVERIFY(s.captureButtonShown());
         QVERIFY(!s.taskStatusHistory()); // docs/SYNTAX.md §5: off by default
     }
@@ -197,7 +198,8 @@ private Q_SLOTS:
         QCOMPARE(s.editorLineSpacing(), u"relaxed"_s);
         QCOMPARE(s.density(), u"compact"_s);
         QCOMPARE(s.sidebarHidden(), QStringList{u"graph"_s}); // one entry: a plain string in the file
-        QCOMPARE(s.bottomNavTabs(), (QStringList{u"tags"_s, u"journals"_s, u"graph"_s, u"allPages"_s}));
+        // Four views (as the four slots of 0.13 stored them): the fifth from the default order.
+        QCOMPARE(s.bottomNavTabs(), (QStringList{u"tags"_s, u"journals"_s, u"graph"_s, u"allPages"_s, u"search"_s}));
         QVERIFY(!s.captureButtonShown());
     }
 
@@ -257,13 +259,14 @@ private Q_SLOTS:
                                                  << list({u"recent", u"ulubione", u"recent", u"graph", u"pages"})
                                                  << list({u"recent", u"pages", u"favorites"});
         QTest::newRow("tabs empty") << "bottomNavTabs" << list({})
-                                    << list({u"journals", u"calendar", u"search", u"tasks"});
-        QTest::newRow("tabs filled") << "bottomNavTabs" << list({u"tags", u"tags", u"menu"})
-                                     << list({u"tags", u"journals", u"calendar", u"search"});
-        QTest::newRow("tabs five") << "bottomNavTabs" << list({u"graph", u"tags", u"allPages", u"tasks", u"search"})
-                                   << list({u"graph", u"tags", u"allPages", u"tasks"});
+                                    << list({u"journals", u"allPages", u"search", u"tasks", u"calendar"});
+        QTest::newRow("tabs filled") << "bottomNavTabs" << list({u"tags", u"tags", u"menu", u"capture"})
+                                     << list({u"tags", u"journals", u"allPages", u"search", u"tasks"});
+        QTest::newRow("tabs six") << "bottomNavTabs"
+                                  << list({u"graph", u"tags", u"allPages", u"tasks", u"search", u"habits"})
+                                  << list({u"graph", u"tags", u"allPages", u"tasks", u"search"});
         QTest::newRow("tabs unknown") << "bottomNavTabs" << list({u"zadania", u"settings", u"graph"})
-                                      << list({u"graph", u"journals", u"calendar", u"search"});
+                                      << list({u"graph", u"journals", u"allPages", u"search", u"tasks"});
     }
 
     void appearanceValidation()
@@ -300,6 +303,47 @@ private Q_SLOTS:
         }
         AppSettings s(file, m_tmp.path());
         QCOMPARE(s.property(qPrintable(property)), expected);
+    }
+
+    /// The bottom navigation as 0.13 stored it — four slots, Menu after them: its default four
+    /// (stored by a reset or a slot put back) read as today's default five; other choices keep
+    /// their views and get a fifth from the default order.
+    void bottomNavFromFourSlots_data()
+    {
+        QTest::addColumn<QStringList>("stored");
+        QTest::addColumn<QStringList>("expected");
+        QTest::newRow("old default")
+                << QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s}
+                << QStringList{u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"calendar"_s};
+        QTest::newRow("old default reordered")
+                << QStringList{u"calendar"_s, u"journals"_s, u"search"_s, u"tasks"_s}
+                << QStringList{u"calendar"_s, u"journals"_s, u"search"_s, u"tasks"_s, u"allPages"_s};
+        QTest::newRow("a view picked")
+                << QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"habits"_s}
+                << QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"habits"_s, u"allPages"_s};
+        QTest::newRow("pages already there")
+                << QStringList{u"allPages"_s, u"journals"_s, u"tags"_s, u"graph"_s}
+                << QStringList{u"allPages"_s, u"journals"_s, u"tags"_s, u"graph"_s, u"search"_s};
+    }
+
+    void bottomNavFromFourSlots()
+    {
+        QFETCH(QStringList, stored);
+        QFETCH(QStringList, expected);
+        const QString file = nextFile();
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"ui/bottomNav/tabs"_s, stored);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.bottomNavTabs(), expected);
+            // A slot picked from there on stores the five.
+            s.setBottomNavTab(1, u"graph"_s);
+        }
+        AppSettings again(file, m_tmp.path());
+        QCOMPARE(again.bottomNavTabs().size(), 5);
+        QCOMPARE(again.bottomNavTabs().at(1), u"graph"_s);
     }
 
     /// The editor's text width as stored by any version: unset is today's default (680, about 85
@@ -420,16 +464,20 @@ private Q_SLOTS:
 
         // A slot takes a view; one already in another slot swaps places.
         QSignalSpy tabs(&s, &AppSettings::bottomNavTabsChanged);
-        s.setBottomNavTab(3, u"graph"_s);
-        QCOMPARE(s.bottomNavTabs(), (QStringList{u"journals"_s, u"calendar"_s, u"search"_s, u"graph"_s}));
+        s.setBottomNavTab(4, u"graph"_s);
+        QCOMPARE(s.bottomNavTabs(),
+                 (QStringList{u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"graph"_s}));
         s.setBottomNavTab(0, u"graph"_s);
-        QCOMPARE(s.bottomNavTabs(), (QStringList{u"graph"_s, u"calendar"_s, u"search"_s, u"journals"_s}));
-        s.setBottomNavTab(4, u"tags"_s);  // no such slot
+        QCOMPARE(s.bottomNavTabs(),
+                 (QStringList{u"graph"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"journals"_s}));
+        s.setBottomNavTab(5, u"tags"_s);  // no such slot
         s.setBottomNavTab(-1, u"tags"_s);
-        s.setBottomNavTab(1, u"menu"_s);  // the menu is always last, not a slot's view
+        s.setBottomNavTab(1, u"menu"_s);  // the drawer is the top bar's ☰, not a view
+        s.setBottomNavTab(1, u"capture"_s); // quick capture is the top bar's +, not a view
         s.setBottomNavTab(1, u"kalendarz"_s);
         s.setBottomNavTab(2, u"search"_s); // there already
-        QCOMPARE(s.bottomNavTabs(), (QStringList{u"graph"_s, u"calendar"_s, u"search"_s, u"journals"_s}));
+        QCOMPARE(s.bottomNavTabs(),
+                 (QStringList{u"graph"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"journals"_s}));
         QCOMPARE(tabs.size(), 2);
 
         // Back to the default look; the visibility of elements stays.
@@ -1037,7 +1085,7 @@ private Q_SLOTS:
         s.setCustomAccent(u"#abcdef"_s); // same after normalisation
         QCOMPARE(accent.size(), 1);
         QSignalSpy tabs(&s, &AppSettings::bottomNavTabsChanged);
-        s.setBottomNavTabs({u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"graph"_s});
+        s.setBottomNavTabs({u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"calendar"_s, u"graph"_s});
         s.setBottomNavTabs({});
         QCOMPARE(tabs.size(), 0);
         QSignalSpy value(&s, &AppSettings::valueChanged);

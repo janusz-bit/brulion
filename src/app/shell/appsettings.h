@@ -68,9 +68,10 @@ class AppSettings : public QObject {
     /// The order of the sidebar's page sections: all of SidebarSections, each once.
     Q_PROPERTY(QStringList sidebarSections READ sidebarSections WRITE setSidebarSections NOTIFY
                        sidebarSectionsChanged FINAL)
-    /// The phone's bottom navigation: exactly four views of BottomNavViews (the menu comes last).
+    /// The phone's bottom navigation: exactly five views of bottomNavViews(), nothing else (the
+    /// drawer opens from the top bar's ☰, quick capture is the top bar's +).
     Q_PROPERTY(QStringList bottomNavTabs READ bottomNavTabs WRITE setBottomNavTabs NOTIFY bottomNavTabsChanged FINAL)
-    /// Quick capture's "+ Note" item on the phone's bottom navigation (before Menu).
+    /// Quick capture's + on the top bar of phones and narrow windows (wide ones always show it).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
 
@@ -202,7 +203,8 @@ public:
     static QStringList sidebarItems();
     /// The sidebar's page sections in their default order: Favorites, Recent, All pages.
     static QStringList sidebarSectionIds();
-    /// Views the bottom navigation can offer, and its default four.
+    /// Views the bottom navigation can offer, and its default five (Journal, Pages, Search, Tasks,
+    /// Calendar).
     static QStringList bottomNavViews();
     static QStringList defaultBottomNavTabs();
     /// A font family name as stored: trimmed; "" for one longer than 128 characters or with
@@ -231,7 +233,7 @@ public:
     Q_INVOKABLE void moveSidebarSection(const QString &id, int delta);
     QStringList bottomNavTabs() const;
     void setBottomNavTabs(const QStringList &views);
-    /// Put `view` into slot `index` (0 … 3) of the bottom navigation; a view already in another
+    /// Put `view` into slot `index` (0 … 4) of the bottom navigation; a view already in another
     /// slot swaps places with the one it replaces.
     Q_INVOKABLE void setBottomNavTab(int index, const QString &view);
     bool captureButtonShown() const;

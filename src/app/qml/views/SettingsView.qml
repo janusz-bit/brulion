@@ -799,16 +799,16 @@ Item {
                 }
                 ShellSettingRow {
                     title: qsTr("Bottom navigation")
-                    description: qsTr("The four buttons at the bottom of narrow windows and phones; Menu comes last.")
+                    description: qsTr("The five views at the bottom of narrow windows and phones.")
                 }
                 GridLayout {
                     objectName: "bottomNavSlots"
                     Layout.fillWidth: true
-                    columns: Theme.compact ? 2 : 4
+                    columns: Theme.compact ? 3 : 5
                     columnSpacing: Theme.space2
                     rowSpacing: Theme.space2
                     Repeater {
-                        model: 4
+                        model: 5
                         delegate: BButton {
                             id: slotButton
                             required property int index
@@ -831,7 +831,7 @@ Item {
                     objectName: "captureButtonSetting"
                     Layout.fillWidth: true
                     text: qsTr("Quick note button")
-                    description: qsTr("The + Note button in the bottom bar of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
+                    description: qsTr("The + button in the top bar of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
                     checked: AppSettings.captureButtonShown
                     onToggled: AppSettings.captureButtonShown = checked
                 }

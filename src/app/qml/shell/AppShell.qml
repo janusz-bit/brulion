@@ -16,11 +16,10 @@ import Brulion
 // per AppController.windowTabs entry, made and destroyed here. The editor and the lists open
 // links in a new tab through OpenIn (set up here). Shortcuts: Ctrl+T, Ctrl+W, Ctrl+Tab,
 // Ctrl+Shift+Tab, Ctrl+1…9.
-// Narrow: the sidebar is a Drawer (the bottom navigation's Menu, or a swipe from the left edge — on
-// touch UIs from a strip beyond the zone Android's gesture navigation keeps for "back"; the top
-// bar's ☰ only on a view that replaces the bottom navigation, the drawing editor) and a bottom
-// navigation bar with quick capture ("+ Note") before Menu; the Android back key walks back through
-// AppController's history and only lets the app close from the home view.
+// Narrow: the sidebar is a Drawer (the top bar's ☰, or a swipe from the left edge — on touch UIs
+// from a strip beyond the zone Android's gesture navigation keeps for "back") and a bottom
+// navigation bar of views only (quick capture is the top bar's +); the Android back key walks
+// back through AppController's history and only lets the app close from the home view.
 //
 // Owns the shell's popups (command palette, quick switcher, quick capture, new page or folder,
 // rename, "Move to…", delete confirmation, about) and the global shortcuts (ShortcutMap's,
@@ -34,7 +33,7 @@ import Brulion
 // toolbar a view docks on its bottom edge sits on the keyboard, in the side panel too. While the
 // keyboard is up the bottom navigation makes way; when it goes (Back, the keyboard's own key)
 // the navigation comes back and a toolbar that stays — the editing goes on — docks right above
-// it (its "+ Note" then ends that editing before quick capture opens); a bar a view has at
+// it (the top bar's + then ends that editing before quick capture opens); a bar a view has at
 // the bottom instead of the navigation (the drawing's tools) takes its place.
 FocusScope {
     id: shell
@@ -454,7 +453,13 @@ FocusScope {
                 onSidebarToggled: shell.toggleSidebar()
                 onPaletteRequested: shell.openPalette("")
                 onSwitcherRequested: shell.openSwitcher("")
-                onCaptureRequested: shell.openCapture()
+                // On a phone a block still edited with the keyboard hidden (its toolbar docked on
+                // the bottom navigation) is ended first, as a tab's view change ends it.
+                onCaptureRequested: {
+                    if (Theme.narrow)
+                        shell.routeView.endEditing()
+                    shell.openCapture()
+                }
                 onNewPageRequested: shell.openNewPage("")
                 onRenameRequested: (path) => shell.openRename(path, false)
                 onDeleteRequested: (path) => shell.confirmDelete(path)
@@ -532,13 +537,6 @@ FocusScope {
                 Behavior on opacity { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
                 Layout.fillWidth: true
                 bottomInset: shell.navigationBar
-                onMenuClicked: drawer.open()
-                // "+ Note": a block still edited with the keyboard hidden (its toolbar docked on
-                // the bar) is ended first, as a tab's view change ends it.
-                onCaptureClicked: {
-                    shell.routeView.endEditing()
-                    shell.openCapture()
-                }
             }
         }
 
@@ -612,8 +610,8 @@ FocusScope {
         // the drag of the selection's start grip, which lies at the left edge (its MouseArea's
         // preventStealing did not stop it). Nor on a view that swipes sideways from that edge
         // itself (`edgeSwipe`: the calendar's week and month grids, to the previous period): a
-        // swipe there is the view's. The bottom navigation's Menu (☰ in the top bar where a view
-        // replaces that bar or the keyboard hides it) still opens it, a swipe on it still closes it. The strip follows
+        // swipe there is the view's. The top bar's ☰ still opens it, a swipe on it still closes
+        // it. The strip follows
         // the UI mode, not the pointer: a mouse in a touch UI gets it too.
         dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
                     : shell.typing || shell.routeView.viewEdgeSwipe ? 0

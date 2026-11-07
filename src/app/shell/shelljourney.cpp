@@ -190,6 +190,16 @@ private:
             waitFor([d] { return !d->property("visible").toBool(); }, 1500);
         }
     }
+    /// Phones: the drawer, through the top bar's ☰.
+    bool openDrawer()
+    {
+        QQuickItem *menu = m_window->findChild<QQuickItem *>(u"topBarMenu"_s);
+        if (!menu || !menu->isVisible() || !click(menu)) {
+            log(u"no visible ☰ on the top bar"_s);
+            return false;
+        }
+        return waitFor([this] { return drawer() && drawer()->property("opened").toBool(); }, 2000);
+    }
     /// Open a view the way a user does: the sidebar's rail (wide), the bottom bar or the drawer
     /// (phone).
     void go(const QString &viewName, const char *sidebarText, const char *bottomText = nullptr)
@@ -199,8 +209,7 @@ private:
         if (narrow() && bottomText)
             clicked = clickText(ui("ShellBottomNav", bottomText), "ShellBottomNav");
         if (!clicked && narrow() && sidebarText) {
-            if (clickText(ui("ShellBottomNav", "Menu"), "ShellBottomNav")) {
-                waitFor([this] { return drawer() && drawer()->property("opened").toBool(); }, 2000);
+            if (openDrawer()) {
                 if (!m_drawerShot) {
                     m_drawerShot = true;
                     shot(u"drawer"_s, 500);
@@ -550,8 +559,8 @@ void Journey::sync()
 {
     closePopups();
     bool clicked = false;
-    if (narrow() && clickText(ui("ShellBottomNav", "Menu"), "ShellBottomNav"))
-        waitFor([this] { return drawer() && drawer()->property("opened").toBool(); }, 2000);
+    if (narrow())
+        openDrawer();
     if (QQuickItem *footer = findType("ShellSyncFooter"))
         clicked = click(footer, 0.25, 0.5);
     if (!clicked || !waitFor([this] { return view() == u"sync"; })) {
@@ -640,7 +649,7 @@ void Journey::longTitles()
     m_app->openPage(path);
     waitFor([&] { return m_app->currentRoute().value(u"path"_s).toString() == path; });
     shot(u"long-title"_s, 1200);
-    go(u"allPages"_s, "All pages");
+    go(u"allPages"_s, "All pages", "Pages");
     shot(u"all-pages"_s, 1000);
 }
 
@@ -723,7 +732,7 @@ void Journey::emptyNotebook()
     shot(u"empty-calendar"_s, 1000);
     go(u"tasks"_s, "Tasks", "Tasks");
     shot(u"empty-tasks"_s, 1000);
-    go(u"allPages"_s, "All pages");
+    go(u"allPages"_s, "All pages", "Pages");
     shot(u"empty-all-pages"_s, 1000);
     go(u"tags"_s, "Tags");
     shot(u"empty-tags"_s, 1000);
