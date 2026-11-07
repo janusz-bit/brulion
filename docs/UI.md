@@ -152,7 +152,8 @@ components — no Material/Fusion look, so all targets look identical.
     in folders), the **search field** "Search or type a command…" (the page switcher's key in
     it, Ctrl+O by default: it opens the switcher, `BQuickSwitcher` — pages by name, "Create
     page “…”", and last "Search the notes for “…”" (the search view with the query); a query starting
-    with ">" turns to the command palette with the rest typed), Quick capture, side panel toggle
+    with ">" turns to the command palette with the rest typed), Reading mode (the book, on pages and
+    the journal: "Reading mode" below), Quick capture, side panel toggle
     and **More** (⋯; ⋮ on phones). More: a row of the page's actions as icons with short
     names (Favorite — the star tinted when the page is one —, Rename, Move, History; a daily
     note has no Rename nor Move); **Mode**, a segmented switch Document | Outline | Source
@@ -203,7 +204,7 @@ components — no Material/Fusion look, so all targets look identical.
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back, title,
-  **+** (quick capture; off in Settings → Appearance → Layout, capture stays in the palette and
+  the reading mode's book (pages and the journal), **+** (quick capture; off in Settings → Appearance → Layout, capture stays in the palette and
   under Ctrl+Shift+N), Search only while the bottom navigation has no Search tab, and More.
   ☰ always comes first, in the same place whatever the view, the history or the keyboard;
   back follows it while there is history, except on Android
@@ -753,9 +754,9 @@ as the content goes (the first lines of a page stay where they are).
 ## Reading mode
 
 **Reading mode** (`AppSettings.readingMode`, `ui/readingMode`, a device setting kept across
-restarts; palette `view.reading` "Reading mode" / "Leave reading mode", Ctrl+Shift+E; the book
-button among a page header's actions — every width, checked while it is on —, the page menu "⋯",
-the top bar's More, Settings → Editor) shows pages and the journal read-only, like Obsidian's
+restarts; palette `view.reading` "Reading mode" / "Leave reading mode", Ctrl+Shift+E; the top bar's
+book button — on pages and the journal, every width, checked while it is on —, the page menu "⋯",
+Settings → Editor) shows pages and the journal read-only, like Obsidian's
 reading view: a tap or click follows links, opens embeds, pictures, PDFs and query results, folds
 and zooms, but never starts editing, so on a phone no keyboard comes up while reading. PageView and
 the journal days bind `PageController.readOnly` to it; the editor reads it as `BlockEditor.readOnly`.

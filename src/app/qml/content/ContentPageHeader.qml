@@ -29,8 +29,8 @@ import Brulion
 // (coverRequested). A cover from the internet shows only from the device's cache: "Show" first
 // (unless the device allows such pictures), a spinner, the reason it failed; a file that is not in
 // the notebook (any more) is named.
-// Reading mode (docs/UI.md "Reading mode"; PageController.readOnly): the book button among the page
-// actions (every width) switches it (AppSettings.readingMode); while it is on the title, the icon,
+// Reading mode (docs/UI.md "Reading mode"; PageController.readOnly; the top bar's book button
+// switches it: AppSettings.readingMode): while it is on the title, the icon,
 // the cover and the chips change nothing (a click on the title opens no field — the page menu's
 // "Rename…" still does —, no "+", no "Remove", no "Change cover"), the note mode toggle and "Start
 // writing" are not shown.
@@ -318,20 +318,6 @@ Item {
                 Accessible.description: header.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
                 size: "small"
                 onClicked: header.modeToggleRequested()
-            }
-            // Reading mode at every width (phones read the most): checked while it is on.
-            BIconButton {
-                objectName: "readingModeToggle"
-                visible: header.loaded
-                iconName: "book-open"
-                label: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
-                shortcut: AppController.routeText(ShortcutMap.sequences, "view.reading")
-                size: "small"
-                // (Not `checkable`: a click must not break the binding to the setting.)
-                checked: AppSettings.readingMode
-                Accessible.checkable: true
-                Accessible.checked: checked
-                onClicked: AppSettings.readingMode = !AppSettings.readingMode
             }
             BIconButton {
                 visible: header.exists

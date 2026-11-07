@@ -6,12 +6,13 @@ import Brulion
 
 // ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
 // (a breadcrumb for pages in folders and for All pages in a folder), search, command palette,
-// quick capture, side panel toggle and the "more" menu with page actions (Move to…, Show in
+// reading mode, quick capture, side panel toggle and the "more" menu with page actions (Move to…, Show in
 // tree among them). On narrow windows it keeps only what fits a phone: the drawer button ☰,
 // always first (the same place whatever the view, the keyboard or the history), back (with
 // history, and not on Android, whose back key / gesture walks the same history: `systemBack`),
-// the title, quick capture + (AppSettings.captureButtonShown), search only while the bottom
-// navigation has no Search tab (so the two bars never repeat a button), and the menu.
+// the title, the reading mode's book (pages and the journal), quick capture +
+// (AppSettings.captureButtonShown), search only while the bottom navigation has no Search tab
+// (so the two bars never repeat a button), and the menu.
 // Phones (narrow windows) show no tab bar: with two tabs or more a square with their number comes
 // before Search — the tab switcher, a menu of the tabs (one tap shows it) with New tab, Close
 // tab and Close other tabs (docs/UI.md "Tabs, split view and windows").
@@ -264,6 +265,20 @@ Rectangle {
             label: qsTr("Search")
             shortcut: ShortcutMap.sequences["go.search"] || ""
             onClicked: AppController.search("")
+        }
+        // Reading mode (docs/UI.md "Reading mode"): a device setting for every page and the journal,
+        // at every width (phones read the most); checked while it is on.
+        BIconButton {
+            objectName: "topBarReadingMode"
+            visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
+            iconName: "book-open"
+            label: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
+            shortcut: ShortcutMap.sequences["view.reading"] || ""
+            // (Not `checkable`: a click must not break the binding to the setting.)
+            checked: AppSettings.readingMode
+            Accessible.checkable: true
+            Accessible.checked: checked
+            onClicked: AppSettings.readingMode = !AppSettings.readingMode
         }
         // Quick capture (a note into today's journal): always on wide windows; on phones unless
         // switched off (Settings → Appearance → Layout; capture stays in the palette and under
@@ -594,16 +609,6 @@ Rectangle {
         BMenuSeparator {}
 
         // ---- A few actions --------------------------------------------------------------------
-        // Reading mode (docs/UI.md "Reading mode"): a device setting for every page and the journal.
-        BMenuItem {
-            objectName: "menuReadingMode"
-            visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
-            height: visible ? implicitHeight : 0
-            text: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
-            iconName: AppSettings.readingMode ? "pencil" : "book-open"
-            shortcut: ShortcutMap.sequences["view.reading"] || ""
-            onTriggered: AppSettings.readingMode = !AppSettings.readingMode
-        }
         BMenuItem {
             // The properties panel's add row of the page shown (the day being written in).
             objectName: "menuAddProperty"
