@@ -7,6 +7,20 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.14.0 — 7 listopada 2026
+
+**Nowe**
+- **Tryb do czytania** — strony i dziennik tylko do czytania: stuknięcie albo kliknięcie otwiera linki, obrazy, PDF-y i osadzone notatki, zwija i przybliża bloki, ale nigdy nie zaczyna edycji, więc na telefonie klawiatura nie wyskakuje w trakcie czytania i nic nie zmienia notatki przez przypadek. Włączasz go przyciskiem z **książką** obok gwiazdki w nagłówku strony, poleceniem „Tryb do czytania” w menu strony (**⋯**), w menu **Więcej** albo w palecie, skrótem **Ctrl+Shift+E** albo w *Ustawienia → Edytor*; Brulion pamięta go na tym urządzeniu. Zaznaczanie i kopiowanie, wyszukiwanie, filtr tabeli, historia wersji, eksport i druk działają dalej; to, co zmieniłoby notatkę, pokazuje powiadomienie z przyciskiem **Edytuj**, który wyłącza tryb do czytania. Zobacz [[Dokument i konspekt#Tryb do czytania|Tryb do czytania]].
+- **Kółko myszy jak w przeglądarce** — na komputerze każdy ząbek kółka przewija o tyle samo (trzy wiersze), płynnie, niezależnie od tego, jak szybko kręcisz; wcześniej odległość zależała od szybkości, a szybkie ząbki przewijały mniej. Naciśnięcie toru paska przewijania obok suwaka przewija o ekran w stronę wskaźnika, płynnie, i powtarza to, dopóki trzymasz; Shift+naciśnięcie przeskakuje tam jak dawniej. Przewijanie touchpadem zostaje bez zmian.
+
+**Zmiany**
+- **Telefon: dolna nawigacja tylko z widokami** — domyślnie Dziennik, Strony (wszystkie strony i foldery), Szukaj, Zadania i Kalendarz. Szybka notatka to **+** na górnym pasku, pasek boczny otwiera przycisk menu (trzy kreski) albo przesunięcie od lewej krawędzi, a pole wyszukiwania na górnym pasku jest tylko wtedy, gdy dolny pasek nie ma Szukaj. Pasek ma kolor strony z cienką krawędzią u góry. Jego pięć widoków wybierzesz w *Ustawienia → Wygląd → Układ*; widoki wybrane wcześniej zostają, a dochodzi piąty. Zobacz [[Pierwsze kroki#Pasek boczny|Pasek boczny]].
+- **Miesiąc w kalendarzu na telefonie: ikony zamiast kropek** — dzień pokazuje małą ikonę dla każdego rodzaju otwartego wpisu, od najpilniejszego: czerwony wykrzyknik — zaległe, bursztynowy dzwonek — przypomnienie lub alarm, niebieski kalendarz — termin, fioletowa klepsydra — zaplanowane. Zrobione wpisy nie mają ikony, a krótka szara kreska pod numerem dnia oznacza wpis w dzienniku. Zobacz [[Dziennik, kalendarz i szablony#Kalendarz|Kalendarz]].
+- **Płynniejsze przewijanie długich stron** — strona do 1000 bloków (300 na telefonie i w przeglądarce) tworzy wszystkie bloki przy otwarciu — widoczne od razu, resztę w tle — więc przewijanie nie buduje już i nie usuwa bloków po drodze. Zajmuje to trochę więcej pamięci, około 0,1–0,2 MB na blok.
+- **Mniejsza aplikacja** — aplikacja na Androida ma 93 MB zamiast 106 MB, wersja w przeglądarce 55 MB zamiast 61 MB (17 MB do pobrania zamiast 18,5 MB), a program na Linuksa 68 MB zamiast 78 MB.
+- **Graf: lepiej widoczne linki** — linie między notatkami w grafie i w lokalnym grafie są mocniejsze i nigdy cieńsze niż piksel, więc w dużym grafie nie giną już w tle.
+- Zakładka panelu bocznego przy prawej krawędzi telefonu pokazuje tylko strzałkę, bez liczby odnośników; odnośniki są wymienione w panelu.
+
 ## 0.13.1 — 7 listopada 2026
 
 **Uwaga**

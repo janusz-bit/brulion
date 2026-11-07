@@ -7,6 +7,20 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.14.0 — November 7, 2026
+
+**New**
+- **Reading mode** — pages and the journal for reading only: a tap or click follows links, opens pictures, PDFs and embedded notes, folds and zooms in, but never starts editing, so on a phone the keyboard doesn't pop up while you read and nothing changes a note by accident. You switch it with the **book** button next to the star in a page's header, “Reading mode” in the page menu (**⋯**), in the **More** menu or in the palette, **Ctrl+Shift+E**, or in *Settings → Editor*; Brulion remembers it on this device. Selecting and copying, find, a table's filter, the version history, export and print still work; whatever would change the note shows a notification with **Edit**, which turns reading mode off. See [[Document and outline#Reading mode|Reading mode]].
+- **Wheel scrolling like in a web browser** — on a computer each notch of the mouse wheel scrolls the same distance (three lines), smoothly, however fast you turn the wheel; before, the distance depended on the speed, and quick notches scrolled less. A press on the scroll bar's track beside the thumb scrolls a screen towards the pointer, smoothly, and repeats while you hold it; Shift+press jumps there as before. Touchpad scrolling stays as it was.
+
+**Changes**
+- **Phone: the bottom navigation holds views only** — by default Journal, Pages (all pages and folders), Search, Tasks and Calendar. Quick capture is the **+** in the top bar, the sidebar opens with the menu button (three lines) or a swipe from the left edge, and the top bar's search field shows only when the bottom bar has no Search. The bar has the page's colour with a thin edge on top. You choose its five views in *Settings → Appearance → Layout*; views you chose before stay, with a fifth added. See [[Getting started#Sidebar|Sidebar]].
+- **Calendar month on phones: icons instead of dots** — a day shows a small icon for each kind of open entry, most urgent first: a red exclamation mark — overdue, an amber bell — a reminder or alarm, a blue calendar — due, a violet hourglass — scheduled. Done entries get no icon, and a short grey line under the day's number marks a journal entry. See [[Journal, calendar and templates#Calendar|Calendar]].
+- **Smoother scrolling of long pages** — a page of up to 1000 blocks (300 on phones and in the browser) creates all its blocks when it opens — the ones on screen at once, the rest in the background — so scrolling it no longer builds and drops blocks on the way. It takes a little more memory, about 0.1–0.2 MB a block.
+- **A smaller app** — the Android app is 93 MB instead of 106 MB, the browser version 55 MB instead of 61 MB (17 MB to download instead of 18.5 MB) and the Linux program 68 MB instead of 78 MB.
+- **Graph: more visible links** — the lines between notes in the graph and in the local graph are stronger and never thinner than one pixel, so in a large graph they no longer fade into the background.
+- The side panel's tab on the right edge of a phone shows only its arrow, without the number of backlinks; the backlinks are listed in the panel.
+
 ## 0.13.1 — November 7, 2026
 
 **Note**
