@@ -7,6 +7,18 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.14.2 — 7 listopada 2026
+
+**Zmiany**
+- **Tryb do czytania na górnym pasku** — przycisk z **książką**, który włącza tryb do czytania, przeniósł się z przycisków nagłówka strony i menu **Więcej** na górny pasek, na stronach i w dzienniku przy każdej szerokości; jest podświetlony, gdy tryb do czytania jest włączony. Menu strony (**⋯**), paleta, **Ctrl+Shift+E** i *Ustawienia → Edytor* przełączają go jak wcześniej. Zobacz [[Dokument i konspekt#Tryb do czytania|Tryb do czytania]].
+
+**Poprawki**
+- Okno ikony strony znów pokazuje emoji — siatka do wyboru była pusta.
+- Folder w ścieżce na górnym pasku (strona w folderze) znów otwiera ten folder we Wszystkich stronach, a nie listę wszystkich stron.
+- Przełączenie dnia w dzienniku na tryb źródła (Ctrl+E) znów otwiera go jako stronę w trybie źródła.
+- **Więcej opcji eksportu…** w oknie eksportu strony znów otwiera widok Import i eksport z wybraną stroną i formatem.
+- Powrót do strony przewiniętej tylko w obrębie nagłówka (nad pierwszym blokiem) wraca w to samo miejsce.
+
 ## 0.14.1 — 7 listopada 2026
 
 **Uwaga**

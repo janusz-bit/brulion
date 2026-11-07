@@ -7,6 +7,18 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.14.2 — November 7, 2026
+
+**Changes**
+- **Reading mode on the top bar** — the **book** button that switches reading mode moved from a page header's buttons and the **More** menu to the top bar, on pages and the journal at every width; it is highlighted while reading mode is on. The page menu (**⋯**), the palette, **Ctrl+Shift+E** and *Settings → Editor* switch it as before. See [[Document and outline#Reading mode|Reading mode]].
+
+**Fixes**
+- The page icon dialog shows its emoji again — the grid of choices was blank.
+- A folder in the top bar's path (a page in a folder) opens that folder in All pages again, not the list of all pages.
+- Switching a journal day to source mode (Ctrl+E) opens it as a page in source mode again.
+- **More export options…** in a page's export dialog opens the Import and export view with that page and format chosen again.
+- Going back to a page scrolled only within its header (above the first block) returns to the same place.
+
 ## 0.14.1 — November 7, 2026
 
 **Note**
