@@ -7,6 +7,19 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.13.0 — November 7, 2026
+
+**New**
+- **The “Nocny” look** — the new default look: dark and dense, on true black (OLED screens save battery), with a **coral** accent; in the light theme the coral is darker. Coral is a new accent colour in *Settings → Appearance*; red and the other colours stay there. Reminders and alarms (`⏰`) are amber whatever the accent, so they never look like the accent or like overdue tasks in red. See [[Getting started#Appearance|Appearance]].
+- **Built-in fonts** — Brulion brings its fonts: Inter for the interface, Literata for notes (the “Serif” choice) and JetBrains Mono for code, formulas and dates. Notes look the same on every device and in the browser; any installed font can still be chosen.
+- **Side panel in sections** — the side panel folds into sections, each with its count: for a page **Outline**, **Backlinks**, **Unlinked mentions** and **Local graph** (the pages linked to and from it); for a day of the journal **Day plan** (the day's reminders and dates by the hour, with coloured bars), **Tasks** (open tasks due by that day, overdue ones in red), **A year ago** (that day's journal a year before), **Backlinks** and **Calendar**. A click on a section's title folds or unfolds it. See [[Links and backlinks]].
+- **Side panel on phones** — a small tab on the right edge, with the number of backlinks, or the panel button in the top bar opens the side panel as a drawer from the right; a tap on the dimmed page, a swipe to the right or Back closes it. Android's back gesture leaves the tab alone.
+- **Status bar** — on a computer a thin bar along the bottom of the window shows the sync status (green “synced”), the edited block (“Block 3 of 12”), the word count and the command palette's key.
+
+**Changes**
+- Tabs are square, with a coral edge on top of the active one.
+- *All pages*: the journals folder (a journal's breadcrumb leads there) always lists its daily notes, in date order, and its row counts them.
+
 ## 0.12.1 — November 6, 2026
 
 **Note**

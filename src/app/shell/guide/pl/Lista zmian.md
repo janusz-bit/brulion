@@ -7,6 +7,19 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.13.0 — 7 listopada 2026
+
+**Nowe**
+- **Wygląd „Nocny”** — nowy domyślny wygląd: ciemny i zwarty, na prawdziwej czerni (ekrany OLED oszczędzają baterię), z **koralowym** akcentem; w jasnym motywie koral jest ciemniejszy. Koralowy to nowy kolor akcentu w *Ustawienia → Wygląd*; czerwony i pozostałe kolory zostają. Przypomnienia i alarmy (`⏰`) są bursztynowe przy każdym akcencie, więc nie mylą się z akcentem ani z zaległymi zadaniami na czerwono. Zobacz [[Pierwsze kroki#Wygląd|Wygląd]].
+- **Wbudowane czcionki** — Brulion ma swoje czcionki: Inter w interfejsie, Literata w notatkach (wybór „Szeryfowa”) i JetBrains Mono w kodzie, wzorach i datach. Notatki wyglądają tak samo na każdym urządzeniu i w przeglądarce; nadal można wybrać dowolną zainstalowaną czcionkę.
+- **Panel boczny w sekcjach** — panel boczny składa się z rozwijanych sekcji, każda z licznikiem: dla strony **Konspekt**, **Odnośniki**, **Wzmianki bez linku** i **Lokalny graf** (strony połączone z nią linkami); dla dnia w dzienniku **Plan dnia** (przypomnienia i daty dnia według godzin, z kolorowymi paskami), **Zadania** (otwarte zadania na ten dzień, zaległe na czerwono), **Rok temu** (wpis z tego dnia rok wcześniej), **Odnośniki** i **Kalendarz**. Kliknięcie tytułu sekcji zwija ją albo rozwija. Zobacz [[Linki i odnośniki zwrotne]].
+- **Panel boczny na telefonie** — mała zakładka przy prawej krawędzi, z liczbą odnośników, albo przycisk panelu w górnym pasku otwiera panel boczny jako szufladę z prawej; dotknięcie przyciemnionej strony, przesunięcie w prawo albo Wstecz go zamyka. Gest „wstecz” Androida omija zakładkę.
+- **Pasek stanu** — na komputerze cienki pasek wzdłuż dołu okna pokazuje stan synchronizacji (zielone „zsynchronizowano”), edytowany blok („Blok 3 z 12”), liczbę słów i klawisz palety poleceń.
+
+**Zmiany**
+- Karty są kwadratowe, aktywna ma u góry koralową krawędź.
+- *Wszystkie strony*: folder dziennika (prowadzi do niego ścieżka wpisu) zawsze pokazuje swoje notatki dzienne, w kolejności dat, a jego wiersz je liczy.
+
 ## 0.12.1 — 6 listopada 2026
 
 **Uwaga**
