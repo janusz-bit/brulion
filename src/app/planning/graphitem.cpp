@@ -28,6 +28,12 @@ constexpr double kMaxFitZoom = 2.2;
 constexpr int kAntialiasNodeLimit = 900;
 constexpr double kLabelMaxWidth = 220;
 constexpr int kAntialiasEdgeLimit = 2500;
+/// An edge's width at zoom `z`: never thinner than 1 px, so the links stay visible when the
+/// whole graph is zoomed out (0.6 px faded into the background).
+double edgeWidthAt(double z)
+{
+    return std::clamp(z * 1.1, 1.0, 2.0);
+}
 constexpr double kSpriteMaxRadius = 24;
 constexpr int kMaxSprites = 600;
 /// Throttled repaints of a moving layout (software renderer): at least this far apart, at most
@@ -1098,7 +1104,7 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
         else
             normal.append(QLineF(pa, pb));
     }
-    const double edgeWidth = std::clamp(z * 0.9, 0.6, 1.6);
+    const double edgeWidth = edgeWidthAt(z);
     QPen edgePen(dimming ? withAlpha(m_edge, 0.45) : m_edge, edgeWidth);
     edgePen.setCosmetic(true);
     painter->setPen(edgePen);
@@ -1232,7 +1238,7 @@ void GraphItem::buildMesh(geometry::MeshChunks &out, qreal dpr) const
         focus = -1;
 
     // Edges, then the highlighted node's (stronger, on top).
-    const double edgeWidth = std::clamp(z * 0.9, 0.6, 1.6) * px;
+    const double edgeWidth = edgeWidthAt(z) * px;
     const QRgb edge = premultiplied(m_edge, dimming ? 0.45 : 1.0);
     const auto &edges = m_model->edges();
     for (const auto &[a, b] : edges) {

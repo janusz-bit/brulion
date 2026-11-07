@@ -67,7 +67,7 @@ Item {
                 animationDuration: Theme.durationSlow
                 labelZoom: 0.6
                 backgroundColor: Theme.bgSunken
-                edgeColor: Theme.fg.alpha(Theme.dark ? 0.22 : 0.18)
+                edgeColor: Theme.fg.alpha(Theme.dark ? 0.5 : 0.42)
                 highlightColor: Theme.accent
                 pageColor: Theme.link
                 journalColor: Theme.markColor("journal")

@@ -153,7 +153,7 @@ FocusScope {
         fitTopMargin: toolbar.visible ? toolbar.y + toolbar.implicitHeight + Theme.space2 : Theme.space8
         fitBottomMargin: Theme.narrow ? Theme.space12 : Theme.space10
         backgroundColor: Theme.bg
-        edgeColor: Theme.fg.alpha(Theme.dark ? 0.2 : 0.17)
+        edgeColor: Theme.fg.alpha(Theme.dark ? 0.5 : 0.42)
         highlightColor: Theme.accent
         pageColor: Theme.link
         journalColor: Theme.markColor("journal")
