@@ -1,0 +1,5 @@
+Nowości w 0.14.2:
+• Tryb do czytania na górnym pasku
+• Poprawki
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.14.2
