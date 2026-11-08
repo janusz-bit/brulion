@@ -316,7 +316,8 @@ Rectangle {
         }
     }
 
-    // The tab switcher (phones): the tabs, the one shown checked; then new / close.
+    // The tab switcher (phones): the tabs, the one shown checked like the notebook switcher's
+    // notebook; then new / close.
     BMenu {
         id: tabSwitcher
         objectName: "tabSwitcher"
@@ -327,13 +328,21 @@ Rectangle {
                 // (AppController.tabs: { tabId, route, … })
                 required property int tabId
                 required property var route
+                readonly property bool isCurrent: tabId === AppController.focusedTab
                 objectName: "tabSwitcherEntry"
                 text: titles.routeTitle(titles.field(entry.route, "view"),
                                         titles.field(entry.route, "path"),
                                         titles.field(entry.route, "date"),
                                         titles.field(entry.route, "tag"))
-                iconName: tabId === AppController.focusedTab ? "check" : "file-text"
-                onTriggered: AppController.selectTab(tabId)
+                // (No view icon: a checkable item draws its check where the icon would be.)
+                checkable: true
+                // Not `checked`: a checkable item has already toggled it when onTriggered runs.
+                // (A Binding: it follows isCurrent again after the toggle; onTriggered puts it back.)
+                Binding on checked { value: entry.isCurrent }
+                onTriggered: {
+                    entry.checked = entry.isCurrent
+                    AppController.selectTab(entry.tabId)
+                }
             }
             onObjectAdded: (index, object) => tabSwitcher.insertItem(index, object as Item)
             // (takeItem: the Instantiator destroys its objects itself.)
@@ -350,11 +359,13 @@ Rectangle {
         BMenuItem {
             text: qsTr("New tab")
             iconName: "plus"
+            shortcut: ShortcutMap.sequences["tab.new"] || ""
             onTriggered: AppController.newTab()
         }
         BMenuItem {
             text: qsTr("Close tab")
             iconName: "x"
+            shortcut: ShortcutMap.sequences["tab.close"] || ""
             onTriggered: AppController.closeTab(AppController.focusedTab)
         }
         BMenuItem {
@@ -616,6 +627,7 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Add property")
             iconName: "plus"
+            shortcut: ShortcutMap.sequences["page.addProperty"] || ""
             enabled: !AppController.sourceModeShown && !AppSettings.readingMode
             onTriggered: AppController.requestUiAction("addProperty")
         }
@@ -669,6 +681,7 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Command palette")
             iconName: "command"
+            shortcut: ShortcutMap.sequences["palette"] || ""
             onTriggered: bar.paletteRequested()
         }
 

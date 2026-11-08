@@ -246,6 +246,7 @@ Item {
                 objectName: "headerAddProperty"
                 text: qsTr("Add property…")
                 iconName: "plus"
+                shortcut: ShortcutMap.sequences["page.addProperty"] || ""
                 onTriggered: if (header.editor) header.editor.addProperty()
             }
         }

@@ -961,6 +961,7 @@ FocusScope {
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
+            shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.rename"] || ""
             onTriggered: if (root.pageHeader) root.pageHeader.startTitleEdit()
         }
         BMenuItem {

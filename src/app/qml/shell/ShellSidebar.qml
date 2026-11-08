@@ -603,8 +603,9 @@ Rectangle {
                 width: list.width - list.leftMargin - list.rightMargin
                 dense: true
                 leftPadding: (Theme.touchUi ? 14 : 10) + sidebar.indent(depth)
-                // Daily notes by their date ("Wed, Oct 14"), not by their file name.
-                text: journalDate !== "" ? DatesHelper.formatShort(journalDate) : title
+                // Daily notes by their date ("Wed, Oct 14"), not by their file name, in the language
+                // shown: DatesHelper.locale read for real (a method call alone is not tracked).
+                text: journalDate === "" ? title : DatesHelper.locale !== "" ? DatesHelper.formatShort(journalDate) : journalDate
                 // An empty folder opens too (folder-open) and says why nothing appears under it.
                 subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
                 /// A page's own icon (docs/UI.md "Page icon and cover"), following its edits.
@@ -1048,6 +1049,8 @@ Rectangle {
             objectName: "treeMenuTrash"
             text: qsTr("Move to trash")
             iconName: "trash-2"
+            // Delete on a focused row (a fixed key, no command's).
+            shortcut: "Del"
             danger: true
             onTriggered: sidebar.deleteRequested(contextMenu.path)
         }

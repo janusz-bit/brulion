@@ -27,23 +27,9 @@ Rectangle {
 
     ShellRouteTitles { id: titles }
 
-    /// The icon of a route's view.
+    /// The icon of a route's view (ShellRouteTitles.routeIcon).
     function iconOf(route: var): string {
-        switch (titles.field(route, "view")) {
-        case "journals": return "book-open"
-        case "journal": return "notebook-pen"
-        case "calendar": return "calendar"
-        case "tasks": return "list-todo"
-        case "habits": return "flame"
-        case "graph": return "waypoints"
-        case "search": return "search"
-        case "allPages": return "files"
-        case "tags":
-        case "tag": return "tags"
-        case "settings": return "settings"
-        case "drawing": return "pencil"
-        default: return "file-text"
-        }
+        return titles.routeIcon(titles.field(route, "view"))
     }
 
     Rectangle {
@@ -148,7 +134,7 @@ Rectangle {
                         objectName: "shellTabClose"
                         iconName: "x"
                         label: qsTr("Close tab")
-                        shortcut: tab.focusedTab ? "Ctrl+W" : ""
+                        shortcut: tab.focusedTab ? ShortcutMap.sequences["tab.close"] || "" : ""
                         size: "small"
                         showToolTip: false
                         opacity: hover.hovered || tab.focusedTab || Theme.touchUi ? 1 : 0
@@ -196,7 +182,7 @@ Rectangle {
             objectName: "shellNewTab"
             iconName: "plus"
             label: qsTr("New tab")
-            shortcut: "Ctrl+T"
+            shortcut: ShortcutMap.sequences["tab.new"] || ""
             size: "small"
             onClicked: AppController.newTab()
         }
@@ -213,6 +199,8 @@ Rectangle {
         BMenuItem {
             text: qsTr("Close tab")
             iconName: "x"
+            // (Its key closes the focused tab.)
+            shortcut: tabMenu.tabId === AppController.focusedTab ? ShortcutMap.sequences["tab.close"] || "" : ""
             onTriggered: AppController.closeTab(tabMenu.tabId)
         }
         BMenuItem {

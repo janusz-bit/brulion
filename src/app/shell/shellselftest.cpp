@@ -5798,6 +5798,10 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
             std::sort(entries.begin(), entries.end(), [](QQuickItem *a, QQuickItem *b) {
                 return a->mapToScene(QPointF()).y() < b->mapToScene(QPointF()).y();
             });
+            // The tab shown checked, as the notebook switcher checks the notebook open.
+            check(entries.size() == 2 && !entries.first()->property("checked").toBool()
+                          && entries.last()->property("checked").toBool(),
+                  "the tab shown is the one checked in the switcher");
             tapOrClick(window, pointIn(entries.first()), touch);
         }
         check(waitFor([&] { return app->focusedTab() == first && path() == guide && openMenus(window) == 0; }),
@@ -6035,6 +6039,23 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
           "closing the window's tab closes the window");
     window->requestActivate();
     waitFor([window] { return window->isActive(); }, 2000);
+
+    // A view's tab says what it shows: the event log's "Event log" (not "Brulion") with the
+    // palette's icon of the log (not a page's).
+    app->openTab({{u"view"_s, u"logs"_s}});
+    const QString logTitle = QCoreApplication::translate("AppShell", "Event log");
+    QQuickItem *logTab = nullptr;
+    check(waitFor([&] {
+              QQuickItem *list = named(u"shellTabList"_s);
+              logTab = list ? findShown(list, [&](QQuickItem *item) {
+                  return item->property("title").toString() == logTitle;
+              })
+                            : nullptr;
+              return logTab && findShown(logTab, [](QQuickItem *item) {
+                         return isA(item, "BIcon") && item->property("name").toString() == u"scroll-text";
+                     });
+          }),
+          "the event log's tab is titled “Event log”, with the log's icon");
 
     // One tab again.
     app->closeOtherTabs(app->focusedTab());
@@ -7077,6 +7098,64 @@ void checkNamesWithMarkup(QQuickWindow *window, AppController *app, const Check 
     app->goHome();
 }
 
+/// 3l. A language switched at run time reaches the frame's dates: the tree's daily notes are
+///     labelled in the new language (their binding reads DatesHelper.locale: a method call alone is
+///     not tracked, and the days kept the old language). Desktop: the sidebar's tree. The language
+///     is put back.
+void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check &check)
+{
+    if (window->width() < 900)
+        return;
+    QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    if (!shellItem) {
+        check(false, "the shell is shown");
+        return;
+    }
+    const auto evaluate = [&](const QString &js) {
+        QQmlExpression expression(qmlContext(shellItem), shellItem, js);
+        const QVariant value = expression.evaluate();
+        if (expression.hasError())
+            std::fprintf(stderr, "selftest: %s\n", qPrintable(expression.error().toString()));
+        return value;
+    };
+    const QString journal = app->workspace()->journalPath(app->today(0));
+    app->requestItemAction(u"reveal"_s, journal);
+    const auto dayRow = [&]() -> QQuickItem * {
+        QQuickItem *list = shownNamed(window->contentItem(), u"sidebarTree"_s);
+        return list ? findShown(list,
+                                [&](QQuickItem *item) {
+                                    return item->property("isDir").isValid()
+                                           && item->property("path").toString() == journal;
+                                })
+                    : nullptr;
+    };
+    QQuickItem *row = nullptr;
+    QString before;
+    check(waitFor([&] {
+              row = dayRow();
+              before = row ? row->property("text").toString() : QString();
+              return !before.isEmpty();
+          }),
+          "today's daily note is in the tree");
+    const QString language = evaluate(u"DevTools.language"_s).toString();
+    const QString other = language == u"en" ? u"pl"_s : u"en"_s;
+    evaluate(u"DevTools.setLanguage(\"%1\")"_s.arg(other));
+    QString after;
+    const bool switched = waitFor([&] {
+        row = dayRow();
+        after = row ? row->property("text").toString() : QString();
+        return !after.isEmpty() && after != before;
+    });
+    if (!switched || !after.contains(other == u"en" ? u"Oct"_s : u"paź"_s))
+        std::fprintf(stderr, "selftest: the day's label: %s, then %s\n", qPrintable(before), qPrintable(after));
+    check(switched && after.contains(other == u"en" ? u"Oct"_s : u"paź"_s),
+          "the tree's daily notes are labelled in the language switched to");
+    evaluate(u"DevTools.setLanguage(\"%1\")"_s.arg(language));
+    check(waitFor([&] { return (row = dayRow()) && row->property("text").toString() == before; }),
+          "and in the first language again");
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -7186,6 +7265,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     closeMenus(window);
     // 3k. Names with markup in the dialogs that quote them (Move, the trash confirmation).
     checkNamesWithMarkup(window, app, check);
+    // 3l. A language switched at run time: the tree's daily notes follow.
+    checkLanguageFollows(window, app, check);
 
     // 4. The command palette: Escape closes it; the focus returns to the shell.
     app->navigate({ { u"view"_s, u"tasks"_s } });
