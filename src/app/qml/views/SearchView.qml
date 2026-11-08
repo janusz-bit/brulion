@@ -144,13 +144,20 @@ FocusScope {
         }
 
         // ---- Filters ---------------------------------------------------------------------------------
-        RowLayout {
+        // One row; on compact windows two — the scope alone across the width, then Replace…, the
+        // folder and the count —, so the row never makes the whole view wider than a phone (the
+        // scope with its icons and the buttons needed ~426 px in Polish).
+        GridLayout {
             visible: root.query !== "" || results.folder !== ""
             Layout.fillWidth: true
             Layout.leftMargin: root.sideMargin
             Layout.rightMargin: root.sideMargin
-            spacing: Theme.space2
+            columns: Theme.compact ? 1 : 2
+            columnSpacing: Theme.space2
+            rowSpacing: Theme.space2
             BSegmented {
+                Layout.fillWidth: Theme.compact
+                fill: Theme.compact
                 model: [{ value: "all", text: qsTr("All"), icon: "files" },
                         { value: "pages", text: qsTr("Pages"), icon: "file-text" },
                         { value: "journals", text: qsTr("Journals"), icon: "calendar-days" }]
@@ -159,34 +166,38 @@ FocusScope {
                 accessibleName: qsTr("Search in")
                 onActivated: (value) => results.scope = value
             }
-            BButton {
-                objectName: "searchReplace"
-                visible: !AppController.inDocsVault
-                size: "small"
-                variant: "ghost"
-                iconName: "pencil"
-                text: Theme.compact ? "" : qsTr("Replace…")
-                Accessible.name: qsTr("Replace in notebook")
-                onClicked: AppController.navigate({ view: "replace", query: root.query })
-            }
-            BButton {
-                id: folderButton
-                visible: results.folders.length > 1 || results.folder !== ""
-                Layout.maximumWidth: Theme.compact ? 120 : 260
-                size: "small"
-                variant: results.folder !== "" ? "secondary" : "ghost"
-                iconName: "folder"
-                text: results.folder !== "" ? results.folder : Theme.compact ? "" : qsTr("Folder")
-                Accessible.name: qsTr("Folder: %1").arg(results.folder !== "" ? results.folder : qsTr("all"))
-                onClicked: folderMenu.popup(folderButton, 0, folderButton.height)
-            }
-            Item { Layout.fillWidth: true }
-            BText {
-                visible: !Theme.compact
-                text: results.count < results.totalCount ? qsTr("%1 of %n result(s)", "", results.totalCount).arg(results.count)
-                                                         : qsTr("%n result(s)", "", results.count)
-                variant: "caption"
-                color: Theme.fgFaint
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space2
+                BButton {
+                    objectName: "searchReplace"
+                    visible: !AppController.inDocsVault
+                    size: "small"
+                    variant: "ghost"
+                    iconName: "pencil"
+                    text: Theme.compact ? "" : qsTr("Replace…")
+                    Accessible.name: qsTr("Replace in notebook")
+                    onClicked: AppController.navigate({ view: "replace", query: root.query })
+                }
+                BButton {
+                    id: folderButton
+                    visible: results.folders.length > 1 || results.folder !== ""
+                    Layout.maximumWidth: Theme.compact ? 120 : 260
+                    size: "small"
+                    variant: results.folder !== "" ? "secondary" : "ghost"
+                    iconName: "folder"
+                    text: results.folder !== "" ? results.folder : Theme.compact ? "" : qsTr("Folder")
+                    Accessible.name: qsTr("Folder: %1").arg(results.folder !== "" ? results.folder : qsTr("all"))
+                    onClicked: folderMenu.popup(folderButton, 0, folderButton.height)
+                }
+                Item { Layout.fillWidth: true }
+                BText {
+                    objectName: "searchCount"
+                    text: results.count < results.totalCount ? qsTr("%1 of %n result(s)", "", results.totalCount).arg(results.count)
+                                                             : qsTr("%n result(s)", "", results.count)
+                    variant: "caption"
+                    color: Theme.fgFaint
+                }
             }
         }
 
