@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brulion_alarm_background">#FF1F2430</color>
+    <!-- Black: an alarm often rings in the dark, and black pixels of an OLED screen are off. -->
+    <color name="brulion_alarm_background">#FF000000</color>
+
+    <!-- The alarm slider's actions for accessibility services (AlarmSlider). -->
+    <item name="brulion_alarm_action_snooze" type="id" />
+    <item name="brulion_alarm_action_ok" type="id" />
 
     <!-- Theme of AlarmActivity (a plain Activity: no AppCompat theme needed). -->
     <style name="Theme.BrulionAlarm" parent="@android:style/Theme.Material.NoActionBar">

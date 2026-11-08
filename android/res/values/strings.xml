@@ -14,6 +14,9 @@
     <string name="brulion_missed">Missed · %1$s</string>
     <string name="brulion_missed_alarm">Missed alarm · %1$s</string>
     <string name="brulion_alarm_label">Alarm · %1$s</string>
+    <!-- The alarm screen: the word over the time, the line under its slider -->
+    <string name="brulion_alarm_heading">Alarm</string>
+    <string name="brulion_alarm_slide_hint">Slide left to snooze, right for OK</string>
     <string name="brulion_pick_reminder_sound">Reminder sound</string>
     <string name="brulion_pick_alarm_sound">Alarm sound</string>
     <!-- The share sheet's entry for Brulion (ShareActivity) -->
