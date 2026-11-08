@@ -522,7 +522,7 @@ void CalendarModel::next()
     else if (m_mode == u"week")
         setAnchorDate(isoDate(a.addDays(7)));
     else
-        setAnchorDate(isoDate(a.addDays(m_agendaDays)));
+        setAnchorDate(isoDate(agendaStep(a, m_agendaDays)));
 }
 
 void CalendarModel::previous()
@@ -533,7 +533,17 @@ void CalendarModel::previous()
     else if (m_mode == u"week")
         setAnchorDate(isoDate(a.addDays(-7)));
     else
-        setAnchorDate(isoDate(a.addDays(-m_agendaDays)));
+        setAnchorDate(isoDate(agendaStep(a, -m_agendaDays)));
+}
+
+QDate CalendarModel::agendaStep(QDate a, int days) const
+{
+    // From the range's first week, not from the anchor: the anchor may be in any of its weeks (a
+    // day picked in the list), and the next range must start right after this one.
+    const QDate start = m_rangeStart.isValid() && a >= m_rangeStart && a <= m_rangeEnd
+                                ? m_rangeStart
+                                : dates::startOfWeek(a, weekStartDay());
+    return start.addDays(days + int(start.daysTo(a) % 7));
 }
 
 void CalendarModel::goToday()
@@ -667,6 +677,12 @@ std::pair<QDate, QDate> CalendarModel::rangeFor(QDate a) const
         return {s, s.addDays(6)};
     }
     if (m_mode == u"agenda") {
+        // The days shown stay while a chosen anchor is among them (a day picked in the list),
+        // unless the weeks now start on another day. An anchor that follows today still starts
+        // them at today's week (a new week after midnight).
+        if (m_anchor.isValid() && m_agendaStart.isValid() && a >= m_agendaStart
+            && a < m_agendaStart.addDays(m_agendaDays) && dates::startOfWeek(m_agendaStart, ws) == m_agendaStart)
+            return {m_agendaStart, m_agendaStart.addDays(m_agendaDays - 1)};
         const QDate s = dates::startOfWeek(a, ws);
         return {s, s.addDays(m_agendaDays - 1)};
     }
@@ -842,6 +858,7 @@ void CalendarModel::rebuild(bool forceReset)
         m_rowOf.insert(m_days.at(i).date, int(i));
     m_rangeStart = from;
     m_rangeEnd = to;
+    m_agendaStart = m_mode == u"agenda" ? from : QDate();
     m_itemCount = itemCount;
     m_overdue = overdue;
     m_overdueCount = overdueCount;

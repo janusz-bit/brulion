@@ -433,6 +433,64 @@ private Q_SLOTS:
         QCOMPARE(m.title(), u"9 listopada – 6 grudnia 2026"_s);
     }
 
+    void agendaKeepsItsRange()
+    {
+        // A day picked in the agenda's list moves only the selection: the four weeks stay (they
+        // started at the anchor's week once); next() / previous() go on from them.
+        auto index = makeIndex({
+                {u"Dom.md"_s, u"- [ ] A 📅 2026-10-13\n- [ ] B 📅 2026-10-28\n"_s},
+        });
+        CalendarModel m;
+        m.setToday(u"2026-10-15"_s);
+        m.setWeekStart(1);
+        m.setVaultIndex(index.get());
+        m.setMode(u"agenda"_s);
+        QCOMPARE(m.rangeStart(), u"2026-10-12"_s);
+        QSignalSpy reset(&m, &QAbstractItemModel::modelReset);
+        QSignalSpy changed(&m, &QAbstractItemModel::dataChanged);
+        m.setAnchorDate(u"2026-10-28"_s); // a day of the third week
+        QCOMPARE(m.rangeStart(), u"2026-10-12"_s);
+        QCOMPARE(m.rangeEnd(), u"2026-11-08"_s);
+        QCOMPARE(reset.count(), 0);
+        QCOMPARE(changed.count(), 2); // the old and the new selected day
+        QCOMPARE(m.rowCount(), 3);
+        QVERIFY(!role(m, 1, CalendarModel::IsSelectedRole).toBool()); // today
+        QVERIFY(role(m, 2, CalendarModel::IsSelectedRole).toBool());
+        // An index change rebuilds the same weeks.
+        m.refresh();
+        QCOMPARE(m.rangeStart(), u"2026-10-12"_s);
+        QCOMPARE(m.anchorDate(), u"2026-10-28"_s);
+        // The next four weeks start right after these, on the anchor's weekday of their first week.
+        m.next();
+        QCOMPARE(m.rangeStart(), u"2026-11-09"_s);
+        QCOMPARE(m.anchorDate(), u"2026-11-11"_s);
+        m.previous();
+        QCOMPARE(m.rangeStart(), u"2026-10-12"_s);
+        QCOMPARE(m.anchorDate(), u"2026-10-14"_s);
+        // A day outside them starts them at its week; another mode forgets them.
+        m.setAnchorDate(u"2026-11-20"_s);
+        QCOMPARE(m.rangeStart(), u"2026-11-16"_s);
+        m.setAnchorDate(u"2026-12-02"_s);
+        QCOMPARE(m.rangeStart(), u"2026-11-16"_s);
+        m.setMode(u"week"_s);
+        m.setMode(u"agenda"_s);
+        QCOMPARE(m.rangeStart(), u"2026-11-30"_s);
+        // Weeks starting on Sunday: the days shown start on a Sunday again.
+        m.setWeekStart(7);
+        QCOMPARE(m.rangeStart(), u"2026-11-29"_s);
+
+        // An anchor that follows today (none chosen) starts them at today's week, also when a new
+        // week begins at midnight.
+        CalendarModel live;
+        live.setToday(u"2026-10-18"_s); // a Sunday
+        live.setWeekStart(1);
+        live.setVaultIndex(index.get());
+        live.setMode(u"agenda"_s);
+        QCOMPARE(live.rangeStart(), u"2026-10-12"_s);
+        live.setToday(u"2026-10-19"_s);
+        QCOMPARE(live.rangeStart(), u"2026-10-19"_s);
+    }
+
     void navigation()
     {
         CalendarModel m;

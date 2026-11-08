@@ -625,6 +625,71 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     ws->deletePage(pills);
     restore();
 
+    // ---- The agenda: a day's header is a button — a tap / click selects the day (its number on
+    //      the dark disc; the side panel follows, on phones the day's sheet opens) and the list
+    //      stays where it is (the model keeps its four weeks); on a desktop Down and Enter pick the
+    //      next day.
+    {
+        QQuickItem *calendarView =
+                shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarView"); });
+        QObject *daySheet = calendarView ? calendarView->findChild<QObject *>(u"calendarDaySheet"_s) : nullptr;
+        const bool sideBySide = calendarView && calendarView->property("sideBySide").toBool();
+        agenda = shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarAgendaList"); });
+        auto *model = agenda ? qobject_cast<QAbstractItemModel *>(agenda->property("calendar").value<QObject *>())
+                             : nullptr;
+        const QString tomorrow = app->today(1);
+        QQuickItem *header = agenda ? named(agenda, u"agendaDay_"_s + tomorrow) : nullptr;
+        QQuickItem *list = header;
+        while (list && !isA(list, "QQuickListView"))
+            list = list->parentItem();
+        check(header && list && model, "the agenda shows tomorrow's day header");
+        if (header && list && model) {
+            QQuickItem *day = header;
+            while (day && !day->property("isSelected").isValid())
+                day = day->parentItem();
+            const QString start = model->property("rangeStart").toString();
+            const qreal contentY = list->property("contentY").toReal();
+            tapOrClick(window, pointIn(header, 0.4, 0.5), touch);
+            check(waitFor([&] { return model->property("anchorDate").toString() == tomorrow; })
+                          && day && day->property("isSelected").toBool(),
+                  "a tap / click on a day's header in the agenda selects the day");
+            check(model->property("rangeStart").toString() == start
+                          && qAbs(list->property("contentY").toReal() - contentY) < 1,
+                  "the agenda stays where it is when a day is picked");
+            const bool sheetOpened =
+                    daySheet && (sideBySide ? daySheet->property("opened").toBool()
+                                            : waitFor([&] { return daySheet->property("opened").toBool(); }, 3000));
+            const bool panelShows = findShown(window->contentItem(), [&](QQuickItem *item) {
+                                        return isA(item, "CalendarDayPanel")
+                                               && item->property("date").toString() == tomorrow;
+                                    }) != nullptr;
+            check(sideBySide ? panelShows && !sheetOpened : sheetOpened,
+                  "the picked day shows in the side panel (on phones in its sheet)");
+            if (sheetOpened) {
+                QMetaObject::invokeMethod(daySheet, "close");
+                waitFor([&] { return !daySheet->property("visible").toBool(); });
+            }
+            if (!touch) {
+                // The next day of the list, read from the model.
+                const int dateRole = model->roleNames().key("date", -1);
+                int row = -1;
+                for (int r = 0; r < model->rowCount() && row < 0; ++r) {
+                    if (model->data(model->index(r, 0), dateRole).toString() == tomorrow)
+                        row = r;
+                }
+                const QString next = row >= 0 && row + 1 < model->rowCount()
+                                             ? model->data(model->index(row + 1, 0), dateRole).toString()
+                                             : QString();
+                sendKey(window, Qt::Key_Down);
+                sendKey(window, Qt::Key_Return);
+                check(!next.isEmpty() && waitFor([&] { return model->property("anchorDate").toString() == next; }),
+                      "Down and Enter in the agenda pick the next day");
+            }
+        }
+        if (model)
+            QMetaObject::invokeMethod(model, "goToday");
+    }
+
     // ---- A day of the week view: its day panel, beside the week on wide windows and a bottom
     //      sheet (a modal dialog) on phones, where the menu opens over the sheet and the sheet
     //      stays open after the choice. The day in two days has dated tasks.

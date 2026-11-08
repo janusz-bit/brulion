@@ -9,9 +9,11 @@
 //   "month"   42 days (6 weeks) starting on `weekStart` at the week of the anchor's 1st
 //   "week"    the 7 days of the anchor's week (QML lays out hour rows from `minutes`)
 //   "agenda"  the days of [start of the anchor's week, + agendaDays - 1] that have entries,
-//             plus today
-// next() / previous() move the anchor by a month, a week or agendaDays; goToday(). The anchor
-// is the selected day (isSelected); moving it inside the range only updates that role.
+//             plus today; the range stays while a chosen anchor moves inside it (a day picked
+//             in the list moves only the selection), a day outside it starts it at its week
+// next() / previous() move the anchor by a month, a week or agendaDays (the agenda: to the
+// anchor's weekday in the first week of the next / previous range); goToday(). The anchor is the
+// selected day (isSelected); moving it inside the range only updates that role.
 //
 // Day roles: date ("YYYY-MM-DD"), day, month, year, dayOfWeek (1 = Monday), inMonth, isToday,
 // isPast, isWeekend, isSelected, weekNumber (ISO), journalPath ("" = none), hasJournal, items
@@ -275,6 +277,9 @@ private:
     Qt::DayOfWeek weekStartDay() const;
     /// [first, last] of the range for `anchor` in the current mode.
     std::pair<QDate, QDate> rangeFor(QDate anchor) const;
+    /// The agenda's next() / previous(): the anchor's weekday in the first week of the range
+    /// `days` after (before) the one holding anchor `a`.
+    QDate agendaStep(QDate a, int days) const;
     void scheduleRefresh();
     /// rebuild(forceReset), or once when the QML component is complete.
     void requestRebuild(bool forceReset);
@@ -298,6 +303,9 @@ private:
 
     QDate m_rangeStart;
     QDate m_rangeEnd;
+    /// The agenda's first day while it is shown (invalid in the other modes): kept while the
+    /// anchor moves inside the agenda's range.
+    QDate m_agendaStart;
     QList<Day> m_days;
     QHash<QDate, int> m_rowOf;
     int m_itemCount = 0;
