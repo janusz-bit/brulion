@@ -223,12 +223,9 @@ type:tasks status:open due:<=+7d sort:due
 ==Zakreślenie== i ~~przekreślenie~~ też działają.
 )md"_s;
 
-/// The welcome page's "Dokumentacja" section: where the documentation notebook is ...
+/// The welcome page's "Dokumentacja" section: where the documentation notebook is.
 const auto kDocsNotebook =
-        uR"md(Pełna dokumentacja jest w osobnym notatniku „Dokumentacja Brulionu” (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty). Otworzysz go przyciskiem „Przełącz notatnik” (dwie strzałki) obok nazwy notatnika w pasku bocznym albo skrótem Ctrl+Shift+B — i tak samo wrócisz.)md"_s;
-/// ... and where it is read without one (the browser).
-const auto kDocsOnline =
-        uR"md(Pełna dokumentacja (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty) jest częścią aplikacji na komputer i na Androida, gdzie tworzy osobny notatnik „Dokumentacja Brulionu”. W przeglądarce przeczytasz ją na [stronie projektu](https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/pl).)md"_s;
+        uR"md(Pełna dokumentacja jest w osobnym notatniku „Dokumentacja Brulionu” (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty). Otworzysz go przyciskiem „Przełącz notatnik” (pierwsza litera nazwy notatnika na górze paska ikon po lewej) albo skrótem Ctrl+Shift+B — i tak samo wrócisz.)md"_s;
 
 const auto kToday = uR"md(- Pierwszy dzień z [[Witaj w Brulionie|Brulionem]] #przewodnik
 - [ ] Przejrzeć [[Remont mieszkania]] i zamówić farbę 📅 {in2}
@@ -570,12 +567,9 @@ type:tasks status:open due:<=+7d sort:due
 ==Highlights== and ~~strikethrough~~ work too.
 )md"_s;
 
-/// The welcome page's "Documentation" section: where the documentation notebook is ...
+/// The welcome page's "Documentation" section: where the documentation notebook is.
 const auto kDocsNotebook =
         uR"md(The full documentation is in a separate notebook, “Brulion Documentation” (modes, links, tasks, reminders, calculations, queries, sync, shortcuts). Open it with the “Switch notebook” button (the first letter of the notebook's name at the top of the icon bar on the left) or with Ctrl+Shift+B — and come back the same way.)md"_s;
-/// ... and where it is read without one (the browser).
-const auto kDocsOnline =
-        uR"md(The full documentation (modes, links, tasks, reminders, calculations, queries, sync, shortcuts) comes with the desktop and Android apps, where it is a separate notebook, “Brulion Documentation”. In the browser, read it on the [project page](https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/en).)md"_s;
 
 const auto kToday = uR"md(- My first day with [[Welcome to Brulion|Brulion]] #guide
 - [ ] Go through [[Home renovation]] and order the paint 📅 {in2}
@@ -766,7 +760,7 @@ namespace {
 
 /// The sample notebook's texts and paths in one language.
 struct SampleTexts {
-    QStringView welcome, docsNotebook, docsOnline, today, yesterday, weekAgo;
+    QStringView welcome, docsNotebook, today, yesterday, weekAgo;
     QStringView projectPath, project, booksPath, books, recipesPath, recipes;
     QStringView journalTemplate, meetingTemplatePath, meetingTemplate, picturePath, picture;
 };
@@ -779,11 +773,11 @@ bool isPolish(QStringView language)
 SampleTexts sampleTexts(QStringView language)
 {
     if (isPolish(language))
-        return {pl::kWelcome, pl::kDocsNotebook, pl::kDocsOnline, pl::kToday, pl::kYesterday, pl::kWeekAgo,
+        return {pl::kWelcome, pl::kDocsNotebook, pl::kToday, pl::kYesterday, pl::kWeekAgo,
                 u"Projekty/Remont mieszkania.md", pl::kRemont, u"Książki 2026.md", pl::kBooks, u"Przepisy.md",
                 pl::kRecipes, pl::kJournalTemplate, u"templates/Spotkanie.md", pl::kMeetingTemplate,
                 u"assets/plan-mieszkania.svg", pl::kPlanSvg};
-    return {en::kWelcome, en::kDocsNotebook, en::kDocsOnline, en::kToday, en::kYesterday, en::kWeekAgo,
+    return {en::kWelcome, en::kDocsNotebook, en::kToday, en::kYesterday, en::kWeekAgo,
             u"Projects/Home renovation.md", en::kRenovation, u"Books 2026.md", en::kBooks, u"Recipes.md",
             en::kRecipes, en::kJournalTemplate, u"templates/Meeting.md", en::kMeetingTemplate,
             u"assets/floor-plan.svg", en::kPlanSvg};
@@ -806,7 +800,7 @@ QString demoWelcomePage(QStringView language)
     return isPolish(language) ? u"Witaj w Brulionie.md"_s : u"Welcome to Brulion.md"_s;
 }
 
-QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language, bool docsNotebook)
+QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language)
 {
     const SampleTexts texts = sampleTexts(language);
     const QDate today = now.date();
@@ -821,7 +815,7 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language, bool 
             {u"nextMonday"_s, iso(nextWeekday(today, Qt::Monday))},
             {u"nextSaturday"_s, iso(nextWeekday(today, Qt::Saturday))},
             {u"next10th"_s, iso(nextTenth(today))},
-            {u"docs"_s, (docsNotebook ? texts.docsNotebook : texts.docsOnline).toString()},
+            {u"docs"_s, texts.docsNotebook.toString()},
     };
     const VaultConfig config;
     const auto journal = [&](QDate d) { return markdown::journalPathForDate(d, config); };
@@ -1021,9 +1015,9 @@ DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
     return updateDocs(vault, pages, true);
 }
 
-int seedDemoVault(Vault &vault, const QDateTime &now, QStringView language, bool docsNotebook)
+int seedDemoVault(Vault &vault, const QDateTime &now, QStringView language)
 {
-    return seedFiles(vault, demoVaultFiles(now, language, docsNotebook));
+    return seedFiles(vault, demoVaultFiles(now, language));
 }
 
 } // namespace brulion::shell

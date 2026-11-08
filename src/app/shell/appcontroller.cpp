@@ -1166,12 +1166,9 @@ void AppController::openVaultAt(const QString &path, const QVariantMap &route)
 
 QString AppController::docsVaultPath() const
 {
-#ifdef Q_OS_WASM
-    return {}; // one vault folder in the browser
-#else
-    // Each language's documentation has its own folder (the other one stays as it was).
+    // Each language's documentation has its own folder (the other one stays as it was). In the
+    // browser too: the app data folder is kept in IndexedDB like the notebook's (docs/WEB.md).
     return QDir::cleanPath(m_dataDir + u'/' + notebook::docsNotebookFolder(notebooksLanguage()));
-#endif
 }
 
 void AppController::openDocsVault()
@@ -1193,13 +1190,8 @@ bool AppController::isDocsPath(const QString &path) const
 
 QString AppController::docsLanguage(const QString &path) const
 {
-#ifdef Q_OS_WASM
-    Q_UNUSED(path);
-    return {};
-#else
     // Either language's folder, whatever the UI language is now.
     return notebook::docsNotebookLanguage(m_dataDir, path);
-#endif
 }
 
 bool AppController::inDocsVault() const
@@ -1333,7 +1325,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
             toast(tr("Could not update the documentation: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true; // it is for reading: its table of contents, not a journal
     } else if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
-        if (seedDemoVault(*m_workspace->vault(), now(), notebooksLanguage(), !docsVaultPath().isEmpty()) < 0)
+        if (seedDemoVault(*m_workspace->vault(), now(), notebooksLanguage()) < 0)
             toast(tr("Could not write all sample notes: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true;
     }

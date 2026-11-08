@@ -37,9 +37,8 @@ QString sampleNotebookFolder(QStringView language);
 QString demoWelcomePage(QStringView language);
 
 /// Files of the sample vault in `language` (journal paths use the default
-/// "journals/yyyy-MM-dd.md"). Without `docsNotebook` (the browser has no documentation notebook)
-/// the welcome page sends readers to the documentation online instead of the notebook switcher.
-QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language, bool docsNotebook = true);
+/// "journals/yyyy-MM-dd.md"). The welcome page sends readers to the documentation notebook.
+QList<DemoFile> demoVaultFiles(const QDateTime &now, QStringView language);
 
 /// The first page of the documentation notebook in `language` and all its files.
 QString docsWelcomePage(QStringView language);
@@ -68,6 +67,6 @@ DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages);
 
 /// Write the sample files in `language` into an open vault; files that already exist are left
 /// alone. Returns how many files were written (-1 when a write failed).
-int seedDemoVault(Vault &vault, const QDateTime &now, QStringView language, bool docsNotebook = true);
+int seedDemoVault(Vault &vault, const QDateTime &now, QStringView language);
 
 } // namespace brulion::shell

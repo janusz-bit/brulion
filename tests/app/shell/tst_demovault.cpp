@@ -54,7 +54,7 @@ QHash<QString, QString> filesByPath(const QDateTime &now, const QString &languag
 struct Sample {
     QString folder, project, books, recipes, picture, meetingTemplate;
     QString title, alias, guideTag, toReadTag, blockId, formula, pie, toCreate, toggleCommand;
-    QString docsNotebook, switchButton, meetingDate;
+    QString docsNotebook, switchButton, switchPlace, meetingDate;
     QStringList headings;
 };
 
@@ -65,7 +65,8 @@ Sample sample(const QString &language)
                 u"assets/plan-mieszkania.svg"_s, u"templates/Spotkanie.md"_s, u"Witaj w Brulionie"_s,
                 u"Przewodnik"_s, u"przewodnik"_s, u"do przeczytania"_s, u"budzet1"_s, u"=[Cena]*[Ilość]"_s,
                 u"Szarlotka babci"_s, u"Pomysły na prezenty"_s, u"Przełącz tryb notatki"_s,
-                u"„Dokumentacja Brulionu”"_s, u"„Przełącz notatnik”"_s, u"Data: 2026-10-14 10:00"_s,
+                u"„Dokumentacja Brulionu”"_s, u"„Przełącz notatnik”"_s,
+                u"pierwsza litera nazwy notatnika na górze paska ikon po lewej"_s, u"Data: 2026-10-14 10:00"_s,
                 {u"Dokument i konspekt"_s, u"Konspekt"_s, u"Linki i odwołania"_s, u"Tagi"_s, u"Zadania"_s,
                  u"Przypomnienia i alarmy"_s, u"Obliczenia"_s, u"Tabele z formułami"_s, u"Zapytania"_s,
                  u"Osadzenia"_s, u"Ramki (callouty)"_s, u"Szablony"_s, u"Kalendarz i dziennik"_s,
@@ -74,7 +75,9 @@ Sample sample(const QString &language)
             u"assets/floor-plan.svg"_s, u"templates/Meeting.md"_s, u"Welcome to Brulion"_s,
             u"Guide"_s, u"guide"_s, u"to read"_s, u"budget1"_s, u"=[Price]*[Qty]"_s,
             u"Grandma's apple pie"_s, u"Gift ideas"_s, u"Toggle note mode"_s,
-            u"“Brulion Documentation”"_s, u"“Switch notebook”"_s, u"Date: 2026-10-14 10:00"_s,
+            u"“Brulion Documentation”"_s, u"“Switch notebook”"_s,
+            u"the first letter of the notebook's name at the top of the icon bar on the left"_s,
+            u"Date: 2026-10-14 10:00"_s,
             {u"Documents and outlines"_s, u"Outliner"_s, u"Links and references"_s, u"Tags"_s, u"Tasks"_s,
              u"Reminders and alarms"_s, u"Calculations"_s, u"Tables with formulas"_s, u"Queries"_s,
              u"Embeds"_s, u"Callouts"_s, u"Templates"_s, u"Calendar and journal"_s, u"Sync"_s,
@@ -285,33 +288,20 @@ private Q_SLOTS:
     void welcomePageFindsTheDocumentation_data() { addLanguages(); }
     void welcomePageFindsTheDocumentation()
     {
-        // Desktop and Android: the documentation notebook, through the switcher or Ctrl+Shift+B.
-        // The browser has none: the documentation online, in the same language. The rest of the
-        // sample is the same.
+        // Every platform (the browser too) has the documentation notebook: the welcome page
+        // names it and how to get there — the switcher or Ctrl+Shift+B —, in the sample's
+        // language, and never sends readers to the guide pages online instead.
         QFETCH(QString, language);
         const Sample names = sample(language);
         const QString welcome = shell::demoWelcomePage(language);
-        const auto withNotebook = shell::demoVaultFiles(kNow, language, true);
-        const auto browser = shell::demoVaultFiles(kNow, language, false);
-        QCOMPARE(withNotebook.size(), browser.size());
-        for (qsizetype i = 0; i < browser.size(); ++i) {
-            QCOMPARE(browser.at(i).path, withNotebook.at(i).path);
-            if (browser.at(i).path != welcome)
-                QCOMPARE(browser.at(i).content, withNotebook.at(i).content);
-        }
-        const QString local = filesByPath(kNow, language).value(welcome);
-        QCOMPARE(local, withNotebook.first().content);
-        QVERIFY(local.contains(names.docsNotebook));
-        QVERIFY(local.contains(names.switchButton) && local.contains(u"Ctrl+Shift+B"_s));
-        const QString web = browser.first().content;
-        QCOMPARE(browser.first().path, welcome);
-        QVERIFY(!web.contains(names.switchButton) && !web.contains(u"Ctrl+Shift+B"_s));
-        QVERIFY(!web.contains(u"{docs}"_s) && !local.contains(u"{docs}"_s));
-        const ParsedNote note = markdown::parseNote(welcome, web);
-        bool online = false;
+        const QString text = filesByPath(kNow, language).value(welcome);
+        QVERIFY(text.contains(names.docsNotebook));
+        QVERIFY(text.contains(names.switchButton) && text.contains(u"Ctrl+Shift+B"_s));
+        QVERIFY(text.contains(names.switchPlace));
+        QVERIFY(!text.contains(u"{docs}"_s));
+        const ParsedNote note = markdown::parseNote(welcome, text);
         for (const Link &l : note.links)
-            online |= l.target == u"https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/"_s + language;
-        QVERIFY(online);
+            QVERIFY2(!l.target.contains(u"/src/app/shell/guide"_s), qPrintable(l.target));
     }
 
     void showsBothNoteModes_data() { addLanguages(); }

@@ -257,8 +257,8 @@ components — no Material/Fusion look, so all targets look identical.
   (`AppController.openVaultAt`); outside the browser its text first says that an Obsidian vault
   (also one synced with Syncthing) needs no import: its folder opens as the notebook
   (docs/IMPORT.md "Obsidian folder without importing").
-* **The documentation notebook** "Brulion Documentation" (desktop and Android; the browser has
-  one notebook, so its sample welcome page links to the guide online): Brulion notes in the UI
+* **The documentation notebook** "Brulion Documentation" (every platform; in the browser the
+  app data folder lives in IndexedDB, docs/WEB.md "Data in the browser"): Brulion notes in the UI
   language written from `src/app/shell/guide/<language>/*.md` (`en`, `pl`) into
   `<AppData>/Brulion Documentation` — with the Polish UI `<AppData>/Dokumentacja Brulionu`
   (`notebook::docsNotebookFolder()`) — and brought up to date on every open (pages the user

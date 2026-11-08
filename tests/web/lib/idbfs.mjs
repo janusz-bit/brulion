@@ -60,6 +60,38 @@ export async function seed(page, origin, { files = {}, settings = settingsIni() 
 
 /** The notebook's file `path` as the app last wrote it back (a Buffer), or null. */
 export async function readFile(page, path) {
+  return readStored(page, VAULT, `${VAULT}/${path}`);
+}
+
+/** The app data's file `path` (relative to APP_DATA) as the app last wrote it back, or null. */
+export async function readAppData(page, path) {
+  return readStored(page, APP_DATA, `${APP_DATA}/${path}`);
+}
+
+/** The paths (relative to APP_DATA) of the app data's files under `folder`, as written back. */
+export async function listAppData(page, folder) {
+  return page.evaluate(async ({ dbName, prefix }) => {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open(dbName);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => resolve(req.result);
+    });
+    try {
+      if (!db.objectStoreNames.contains('FILE_DATA')) return [];
+      const keys = await new Promise((resolve, reject) => {
+        const all = db.transaction(['FILE_DATA'], 'readonly').objectStore('FILE_DATA').getAllKeys();
+        all.onerror = () => reject(all.error);
+        all.onsuccess = () => resolve(all.result);
+      });
+      return keys.filter((k) => typeof k === 'string' && k.startsWith(prefix)).map((k) => k.slice(prefix.length)).sort();
+    } finally {
+      db.close();
+    }
+  }, { dbName: APP_DATA, prefix: `${APP_DATA}/${folder}/` });
+}
+
+/** The file `key` (an absolute path) of the mount `dbName` as last written back, or null. */
+async function readStored(page, dbName, key) {
   const b64 = await page.evaluate(async ({ dbName, key }) => {
     const db = await new Promise((resolve, reject) => {
       const req = indexedDB.open(dbName);
@@ -81,6 +113,6 @@ export async function readFile(page, path) {
     } finally {
       db.close();
     }
-  }, { dbName: VAULT, key: `${VAULT}/${path}` });
+  }, { dbName, key });
   return b64 === null ? null : Buffer.from(b64, 'base64');
 }

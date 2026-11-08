@@ -15,10 +15,10 @@ PWA (it can be "installed" from the browser menu), and it keeps notes in the bro
   no access to folders on disk (file import/export instead), Nextcloud sync
   needs CORS (below), no Syncthing. Qt for WebAssembly has no time zone
   database: when importing a calendar (`.ics`), times with a zone (`TZID`) are taken as local
-  time (UTC times are converted normally). The browser has a single notebook, so it has no
-  documentation notebook ("Brulion Documentation", with the Polish UI "Dokumentacja
-  Brulionu"): the welcome page of the sample notebook points to the documentation in the
-  repository (`src/app/shell/guide/en`, with the Polish UI `src/app/shell/guide/pl`).
+  time (UTC times are converted normally). The browser has one notebook of the user's own
+  (`/home/web_user/Brulion`) and, as everywhere, the documentation notebook ("Brulion
+  Documentation", with the Polish UI "Dokumentacja Brulionu") in the app data folder (below,
+  "Data in the browser"): "Switch notebook" or Ctrl+Shift+B opens it and goes back.
 
 ## Tool versions
 
@@ -277,8 +277,9 @@ Chromium: `$CHROME` or `chromium`/`google-chrome` from `PATH`; WebGL 2 through S
 
 `tests/web/` (a separate npm project: `@playwright/test` 1.64.1 and `pngjs` 7.0.0; CMake skips it)
 checks the built site in **Chromium and Firefox** — pictures from the internet (below, "Pictures
-from the internet"), the stylus in the drawing editor ("Stylus (pressure)"), PDFs ("PDFs in the browser") and parts
-of a link to a page in a folder (`linkparts.spec.mjs`, below). GitHub Actions runs it in
+from the internet"), the stylus in the drawing editor ("Stylus (pressure)"), PDFs ("PDFs in the browser"), parts
+of a link to a page in a folder (`linkparts.spec.mjs`, below) and the documentation notebook (`docs.spec.mjs`,
+below). GitHub Actions runs it in
 `wasm.yml` (job `browsers`, after `build`; the release waits for it — it calls `wasm.yml`); the HTML report, screenshots and traces of failed tests are in the `web-browser-tests` artifact
 (7 days). In CI a failed test is retried once (`retries: 1`; one that passes the second time is marked
 "flaky" in the report). Locally, after `scripts/wasm-build.sh`:
@@ -346,6 +347,11 @@ scripts/web-test.sh --single-file file.html -- singlefile.spec.mjs   # another s
     `Projekty/Remont mieszkania.md`), clicks with the browser's real mouse in the middle of "Projekty" →
     route `{view: allPages, path: Projekty}`, after Alt+← on "Remont mieszkania" → the page; the same
     with a tap in Chromium with touch (412×915, `isMobile`); the journal file does not change.
+* **The documentation notebook** (`docs.spec.mjs`): Ctrl+Shift+B in the user's notebook writes every
+  page of `src/app/shell/guide/<language>/` byte for byte into the app data mount (`<AppData>/Brulion
+  Documentation/`, with the Polish UI `Dokumentacja Brulionu/`; read back from IndexedDB) and makes it the
+  current notebook (`settings.ini`); after a reload the app starts in the user's notebook, the pages are
+  still there and the key opens them again; the user's note does not change.
 * **Single HTML file** (`singlefile.spec.mjs`; the file from `--single-file`, by default
   `dist-wasm-single/brulion.html`): opened from `file://` it starts without any request other than to itself,
   does not register a service worker, releases the base64 text and after a reload sees its own
@@ -460,7 +466,9 @@ mounts IDBFS (a mirror in IndexedDB) on it in three directories:
 * `/home/web_user/Brulion` — the vault of the browser version,
 * the app data directory (`QStandardPaths::AppDataLocation`,
   `/home/web_user/.local/share/Brulion/Brulion`) — version history, sync state,
-  local settings,
+  local settings, and the documentation notebook (`Brulion Documentation/`, with the Polish UI
+  `Dokumentacja Brulionu/`: the app's guide pages written on its first open, about 350 KB, and
+  brought up to date by each new version like on the desktop — docs/UI.md),
 * the cache directory (`WasmStorage::indexCacheRoot()`, `QStandardPaths::CacheLocation`
   + `/index`, i.e. `/home/web_user/.cache/Brulion/Brulion/index`) — the notebook's ready index
   (`<notebook id>/index-cache.bin`, docs/PERFORMANCE.md L2): on the next visit, notes
