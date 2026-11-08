@@ -1546,11 +1546,23 @@ Item {
         objectName: "pdfJump"
         parent: T.Overlay.overlay
         title: qsTr("Go to page")
+        // The range stays in sight: the field opens filled, so its placeholder seldom shows.
+        subtitle: qsTr("%n page(s)", "", pdf.pageCount)
         acceptText: qsTr("Go")
         preferredWidth: 320
         initialFocusItem: jumpField
-        acceptEnabled: jumpField.acceptableInput
-        onAccepted: root.jumpTo(Js.parseInt(jumpField.text))
+        /// The page typed (0: none, or not only digits) and whether the PDF has it.
+        readonly property int typedPage: Js.test(jumpField.text, "^[0-9]{1,7}$", "") ? Js.parseInt(jumpField.text) : 0
+        readonly property bool pageInRange: typedPage >= 1 && typedPage <= pdf.pageCount
+        acceptEnabled: pageInRange
+        onAccepted: root.jumpTo(jumpDialog.typedPage)
+        // The page shown, filled in by openJump() while the field had no focus (the caret at its
+        // start), is selected once the field has the focus: a digit typed replaces it instead of
+        // going in front of it ("7" on page 3 made 73).
+        onOpened: {
+            jumpField.forceActiveFocus(Qt.PopupFocusReason)
+            jumpField.selectAll()
+        }
         onClosed: root.forceActiveFocus()
 
         BTextField {
@@ -1560,8 +1572,12 @@ Item {
             accessibleName: qsTr("Page number")
             placeholderText: "1–%1".arg(pdf.pageCount)
             inputMethodHints: Qt.ImhDigitsOnly
-            validator: IntValidator { bottom: 1; top: Math.max(1, pdf.pageCount) }
-            onAccepted: if (jumpField.acceptableInput) jumpDialog.accept()
+            // A number, whatever its range: a page the PDF has not is said here instead of the key
+            // being swallowed. (A regular expression literal does not compile to C++.)
+            validator: IntValidator { bottom: 0; top: 9999999 }
+            errorText: jumpField.text !== "" && !jumpDialog.pageInRange
+                       ? qsTr("Enter a page from 1 to %1.").arg(pdf.pageCount) : ""
+            onAccepted: jumpDialog.tryAccept()
         }
     }
 }

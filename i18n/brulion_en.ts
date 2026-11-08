@@ -422,6 +422,18 @@
     </message>
 </context>
 <context>
+    <name>ContentPdfView</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1550"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3597"/>
+        <source>%n page(s)</source>
+        <translation>
+            <numerusform>%n page</numerusform>
+            <numerusform>%n pages</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ContentRenameDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="52"/>
@@ -1255,7 +1267,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5904"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5926"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>

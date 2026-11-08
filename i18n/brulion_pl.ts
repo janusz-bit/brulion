@@ -298,7 +298,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="55"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6269"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6291"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -414,7 +414,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="830"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7314"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7336"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
@@ -2614,28 +2614,28 @@
         <translation>Wiersz %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/core/chart/data.cpp" line="281"/>
+        <location filename="../src/core/chart/data.cpp" line="307"/>
         <source>%1 “%2”</source>
         <translation>%1 „%2”</translation>
     </message>
     <message>
-        <location filename="../src/core/chart/data.cpp" line="283"/>
+        <location filename="../src/core/chart/data.cpp" line="309"/>
         <source>no value</source>
         <translation>brak wartości</translation>
     </message>
     <message>
-        <location filename="../src/core/chart/data.cpp" line="299"/>
+        <location filename="../src/core/chart/data.cpp" line="325"/>
         <source>%1: %2 (%3%)</source>
         <translation>%1: %2 (%3%)</translation>
     </message>
     <message>
-        <location filename="../src/core/chart/data.cpp" line="303"/>
-        <location filename="../src/core/chart/data.cpp" line="309"/>
+        <location filename="../src/core/chart/data.cpp" line="329"/>
+        <location filename="../src/core/chart/data.cpp" line="335"/>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location filename="../src/core/chart/data.cpp" line="308"/>
+        <location filename="../src/core/chart/data.cpp" line="334"/>
         <source>%1 %2</source>
         <translation>%1 %2</translation>
     </message>
@@ -2696,7 +2696,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="117"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5574"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5596"/>
         <source>Attachments (%1)</source>
         <translation>Załączniki (%1)</translation>
     </message>
@@ -2717,7 +2717,7 @@
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="144"/>
         <location filename="../src/app/qml/views/CleanupView.qml" line="235"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5587"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5609"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -3883,15 +3883,31 @@
         <source>Page %1</source>
         <translation>Strona %1</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1550"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3597"/>
+        <source>%n page(s)</source>
+        <translation>
+            <numerusform>%n strona</numerusform>
+            <numerusform>%n strony</numerusform>
+            <numerusform>%n stron</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1549"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1551"/>
         <source>Go</source>
         <translation>Przejdź</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1560"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1572"/>
         <source>Page number</source>
         <translation>Numer strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1579"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3599"/>
+        <source>Enter a page from 1 to %1.</source>
+        <translation>Wpisz numer strony od 1 do %1.</translation>
     </message>
 </context>
 <context>
@@ -10416,7 +10432,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/ReplaceView.qml" line="314"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4856"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4878"/>
         <source>Replace</source>
         <translation>Zamień</translation>
     </message>
@@ -11581,7 +11597,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="728"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7194"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7216"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12364,7 +12380,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="319"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5776"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5798"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12375,7 +12391,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="330"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5805"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5827"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -12521,7 +12537,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="126"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7307"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7329"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -12824,7 +12840,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6495"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6517"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -13024,7 +13040,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5904"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5926"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -13043,7 +13059,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5838"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5860"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -13599,8 +13615,8 @@
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="315"/>
         <location filename="../src/app/io/ioselftest.cpp" line="372"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3781"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8026"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3803"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8048"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -13878,13 +13894,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="112"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8394"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8416"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8384"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8406"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -14202,7 +14218,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="548"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5698"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5720"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
@@ -14922,7 +14938,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SyncView.qml" line="282"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5673"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5695"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
@@ -19324,7 +19340,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8197"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8219"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>

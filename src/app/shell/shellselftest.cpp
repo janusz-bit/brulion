@@ -3578,14 +3578,36 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     }
     view->forceActiveFocus();
 
-    // The page jump.
+    // The page jump, typed with real keys: it opens on the page shown, selected, so a digit
+    // replaces it (it went in front of it: "31", refused); its subtitle says how many pages there
+    // are, and a page past them is said at the field while Go waits.
     sendKey(window, Qt::Key_G, Qt::ControlModifier);
     QQuickItem *jumpField = nullptr;
     check(waitFor([&] { return (jumpField = shownNamed(window->contentItem(), u"pdfJumpField"_s)) != nullptr; }),
           "Ctrl+G opens the page jump");
     if (jumpField) {
-        jumpField->forceActiveFocus();
-        jumpField->setProperty("text", u"3"_s);
+        QObject *jump = view->findChild<QObject *>(u"pdfJump"_s);
+        check(waitFor([&] {
+                  return jumpField->hasActiveFocus() && jumpField->property("text").toString() == u"1"_s
+                         && jumpField->property("selectedText").toString() == u"1"_s;
+              }),
+              "the page jump's field has the page shown, selected");
+        check(jump
+                      && jump->property("subtitle").toString()
+                                 == QCoreApplication::translate("ContentPdfView", "%n page(s)", nullptr, 3),
+              "the page jump's subtitle says how many pages the PDF has");
+        const QString pastTheEnd = QCoreApplication::translate("ContentPdfView", "Enter a page from 1 to %1.").arg(3);
+        sendKey(window, Qt::Key_7, Qt::NoModifier, u"7"_s);
+        check(jumpField->property("text").toString() == u"7"_s
+                      && jumpField->property("errorText").toString() == pastTheEnd && jump
+                      && !jump->property("acceptEnabled").toBool(),
+              "a page past the end is said at the field, and Go waits");
+        sendKey(window, Qt::Key_Return);
+        check(jump && jump->property("visible").toBool() && opened(1), "Enter goes nowhere with it");
+        sendKey(window, Qt::Key_Backspace);
+        sendKey(window, Qt::Key_3, Qt::NoModifier, u"3"_s);
+        check(jumpField->property("text").toString() == u"3"_s && jumpField->property("errorText").toString().isEmpty(),
+              "a page of the PDF typed instead clears it");
         sendKey(window, Qt::Key_Return);
     }
     check(waitFor([&] { return opened(3); }), "the page jump goes to page 3");
