@@ -1900,6 +1900,14 @@ ApplicationWindow {
             window.dialogPicks = Js.appendedString(window.dialogPicks, time)
         }
     }
+    /// The `at` of each reminder the calendar's add dialog added.
+    property list<string> addedReminders: []
+    Connections {
+        target: window.addDialog
+        function onReminderAdded(text: string, at: string, alarm: bool) {
+            window.addedReminders = Js.appendedString(window.addedReminders, at)
+        }
+    }
     Component {
         id: clockComponent
         BTimePicker { x: 40; y: 40; z: 100000; time: "18:30" }
@@ -2361,6 +2369,79 @@ ApplicationWindow {
                   "a time picked on the clock replaces the typed one: " + window.addDialog.time)
             window.addDialog.reject()
         }
+        // A typed time applies on Enter or when the field is left, never per keystroke; text that
+        // is no time keeps Add disabled, its hint shown only once it is applied (no hint coming and
+        // going while typing). Today (--now 10:00): the next full hour, the quick times already
+        // past disabled, a past time said under the field.
+        if (window.at()) {
+            if (!waitUntil(!window.addDialog.visible))
+                return
+            window.addDialog.openFor("reminder", DatesHelper.today)
+        }
+        if (window.at()) {
+            if (!waitUntil(window.addDialog.opened))
+                return
+            check(window.addDialog.time === "11:00", "today after the default time the add dialog opens on the next full hour: " + window.addDialog.time)
+            check(!window.dialogField(window.addDialog, "calendarAddQuick_09:00").enabled
+                  && window.dialogField(window.addDialog, "calendarAddQuick_12:00").enabled, "today the quick times already past are disabled")
+            typeKeys("Zadzwonić do mamy")
+        }
+        if (window.at()) {
+            check(window.addDialog.acceptEnabled, "Add is enabled once there is something to remind of")
+            window.addTimeField().forceActiveFocus()
+        }
+        if (window.at()) typeKeys("25:00")
+        if (window.at()) {
+            check(window.addDialog.time === "11:00" && !window.addDialog.acceptEnabled && !window.addTimeHint().visible,
+                  "a typed text that is no time changes nothing and keeps Add disabled, without a hint while typed: "
+                  + window.addDialog.time + ", " + window.addTimeHint().text)
+            realKey(Qt.Key_Return, 0, "")
+        }
+        if (window.at()) {
+            const hint = "" + window.addTimeHint().text
+            check(window.addDialog.opened && window.addDialog.time === "11:00" && window.addedReminders.length === 0
+                  && window.addTimeHint().visible && hint === window.addDialog.badTimeHint,
+                  "Enter on it applies and adds nothing, the hint under the field says why: " + hint)
+            window.addTimeField().selectAll()
+        }
+        if (window.at()) typeKeys("0930")
+        if (window.at()) {
+            check(window.addDialog.time === "11:00" && window.addDialog.acceptEnabled && !window.addTimeHint().visible,
+                  "keystrokes do not change the time, the first one takes the hint away: " + window.addDialog.time)
+            window.dialogField(window.addDialog, "calendarAddText").forceActiveFocus()
+        }
+        if (window.at()) {
+            check(window.addDialog.time === "09:30" && window.addTimeField().text === "09:30", "leaving the field applies the typed time: " + window.addDialog.time)
+            const hint = "" + window.addTimeHint().text
+            check(window.addDialog.past && window.addTimeHint().visible && hint === window.addDialog.pastHint,
+                  "a time already past is said under the field: " + hint)
+            window.addTimeField().forceActiveFocus()
+            window.addTimeField().selectAll()
+        }
+        if (window.at()) typeKeys("14:")
+        if (window.at()) {
+            const hint = "" + window.addTimeHint().text
+            check(window.addDialog.time === "09:30" && !window.addDialog.acceptEnabled && hint === window.addDialog.pastHint,
+                  "a time half typed keeps Add disabled quietly, the hint still the applied time's: " + hint)
+        }
+        if (window.at()) typeKeys("30")
+        if (window.at()) {
+            check(window.addDialog.time === "09:30" && window.addDialog.acceptEnabled, "typing does not change the time: " + window.addDialog.time)
+            realKey(Qt.Key_Return, 0, "")
+        }
+        if (window.at()) {
+            if (!waitUntil(!window.addDialog.visible))
+                return
+            check(window.addedReminders.length === 1 && window.addedReminders[0] === DatesHelper.today + " 14:30",
+                  "Enter applies the typed time and adds the reminder: " + window.addedReminders.join(", "))
+        }
+    }
+    /// The add dialog's typed time and the hint under it.
+    function addTimeField(): BTextField {
+        return window.dialogField(window.addDialog, "calendarAddTime") as BTextField
+    }
+    function addTimeHint(): Text {
+        return window.dialogField(window.addDialog, "calendarAddTimeHint") as Text
     }
     property BTimePickerDialog firstClock: null
     property real scrollBefore: 0

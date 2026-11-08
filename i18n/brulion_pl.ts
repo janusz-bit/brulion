@@ -2056,82 +2056,87 @@
 <context>
     <name>CalendarAddDialog</name>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="49"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="44"/>
+        <source>Use a 24-hour time, e.g. 18:30</source>
+        <translation>Wpisz godzinę w formacie 24-godzinnym, np. 18:30</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="45"/>
+        <source>This time has already passed</source>
+        <translation>Ta godzina już minęła</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="79"/>
         <source>New task</source>
         <translation>Nowe zadanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="49"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="79"/>
         <source>New reminder</source>
         <translation>Nowe przypomnienie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="54"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="84"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="63"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="93"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="63"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="93"/>
         <source>More options…</source>
         <translation>Więcej opcji…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="64"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="94"/>
         <source>More options: date, repetition</source>
         <translation>Więcej opcji: data, powtarzanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="81"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="118"/>
         <source>What needs to be done?</source>
         <translation>Co trzeba zrobić?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="81"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="118"/>
         <source>What should I remind you of?</source>
         <translation>O czym przypomnieć?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="97"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="134"/>
         <source>Time</source>
         <translation>Godzina</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="109"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="146"/>
         <source>Pick a time on a clock, now %1</source>
         <translation>Wybierz godzinę na zegarze (obecnie %1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="144"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="181"/>
         <source>other</source>
         <translation>inna</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="145"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="182"/>
         <source>Other time (HH:mm)</source>
         <translation>Inna godzina (GG:MM)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="147"/>
-        <source>e.g. 14:30</source>
-        <translation>np. 14:30</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="159"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="227"/>
         <source>Alarm (loud, until dismissed)</source>
         <translation>Alarm (głośny, aż do wyłączenia)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="170"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="238"/>
         <source>Goes into the journal of %1, due that day.</source>
         <translation>Trafi do dziennika (%1), z terminem na ten dzień.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="171"/>
+        <location filename="../src/app/qml/planning/CalendarAddDialog.qml" line="239"/>
         <source>Goes into the journal of %1; the reminder comes at %2.</source>
         <translation>Trafi do dziennika (%1); przypomnienie przyjdzie o %2.</translation>
     </message>
