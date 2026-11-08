@@ -608,6 +608,25 @@
     </message>
 </context>
 <context>
+    <name>GitHubPanel</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="122"/>
+        <source>%n change(s)</source>
+        <translation>
+            <numerusform>%n change</numerusform>
+            <numerusform>%n changes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="265"/>
+        <source>%n file(s) left out or not done</source>
+        <translation>
+            <numerusform>%n file left out or not done</numerusform>
+            <numerusform>%n files left out or not done</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>GraphNodeCard</name>
     <message numerus="yes">
         <location filename="../src/app/qml/planning/GraphNodeCard.qml" line="74"/>
@@ -1421,7 +1440,15 @@
 <context>
     <name>SyncView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="279"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="293"/>
+        <source>%n change(s)</source>
+        <translation>
+            <numerusform>%n change</numerusform>
+            <numerusform>%n changes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SyncView.qml" line="324"/>
         <source>%n note(s) changed on two devices at once</source>
         <translation>
             <numerusform>%n note changed on two devices at once</numerusform>
@@ -1429,7 +1456,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="373"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="425"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n note with two versions</numerusform>
@@ -1852,9 +1879,116 @@
     </message>
 </context>
 <context>
+    <name>brulion::shell::WorkspaceGitHub</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="444"/>
+        <source>%n change(s) not on GitHub yet</source>
+        <translation>
+            <numerusform>%n change not on GitHub yet</numerusform>
+            <numerusform>%n changes not on GitHub yet</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="445"/>
+        <source>%n change(s) not on GitHub yet · checked %1</source>
+        <translation>
+            <numerusform>%n change not on GitHub yet · checked %1</numerusform>
+            <numerusform>%n changes not on GitHub yet · checked %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="521"/>
+        <source>Update %n note(s) from Brulion</source>
+        <translation>
+            <numerusform>Update %n note from Brulion</numerusform>
+            <numerusform>Update %n notes from Brulion</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="526"/>
+        <source>Changes to %n note(s)</source>
+        <translation>
+            <numerusform>Changes to %n note</numerusform>
+            <numerusform>Changes to %n notes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="544"/>
+        <source>GitHub asks to wait a moment: try again in %n minute(s).</source>
+        <translation>
+            <numerusform>GitHub asks to wait a moment: try again in %n minute.</numerusform>
+            <numerusform>GitHub asks to wait a moment: try again in %n minutes.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="697"/>
+        <source>%n file(s) downloaded</source>
+        <translation>
+            <numerusform>%n file downloaded</numerusform>
+            <numerusform>%n files downloaded</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="699"/>
+        <source>%n removed</source>
+        <translation>
+            <numerusform>%n removed</numerusform>
+            <numerusform>%n removed</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="701"/>
+        <source>%n renamed</source>
+        <translation>
+            <numerusform>%n renamed</numerusform>
+            <numerusform>%n renamed</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="703"/>
+        <source>%n merged</source>
+        <translation>
+            <numerusform>%n merged</numerusform>
+            <numerusform>%n merged</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="705"/>
+        <source>%n with conflicts</source>
+        <translation>
+            <numerusform>%n with a conflict</numerusform>
+            <numerusform>%n with conflicts</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="707"/>
+        <source>%n failed</source>
+        <translation>
+            <numerusform>%n failed</numerusform>
+            <numerusform>%n failed</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="734"/>
+        <source>%n note(s) changed both here and on GitHub. Both versions are kept: merge them in the sync center.</source>
+        <translation>
+            <numerusform>%n note changed both here and on GitHub. Both versions are kept: merge them in the sync center.</numerusform>
+            <numerusform>%n notes changed both here and on GitHub. Both versions are kept: merge them in the sync center.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="830"/>
+        <source>%n file(s) committed to “%1”.</source>
+        <translation>
+            <numerusform>%n file committed to “%1”.</numerusform>
+            <numerusform>%n files committed to “%1”.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="291"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="306"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>

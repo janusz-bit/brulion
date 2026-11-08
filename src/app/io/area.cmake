@@ -87,6 +87,9 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/SyncDeletionGuard.qml
     qml/io/NextcloudForm.qml
     qml/io/SyncthingPanel.qml
+    qml/io/GitHubPanel.qml
+    qml/io/GitHubCommitDialog.qml
+    qml/io/GitHubOpenDialog.qml
     qml/io/SyncConflictList.qml
     qml/io/SyncConflictResolver.qml
     qml/io/SyncSettings.qml

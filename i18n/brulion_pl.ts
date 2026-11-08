@@ -298,7 +298,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="55"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6358"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6369"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -6044,6 +6044,592 @@
     </message>
 </context>
 <context>
+    <name>GitHubCommitDialog</name>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="38"/>
+        <source>Commit to GitHub</source>
+        <translation>Zatwierdź na GitHubie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="39"/>
+        <source>Update the proposal</source>
+        <translation>Uzupełnij propozycję</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="39"/>
+        <source>Propose changes</source>
+        <translation>Zaproponuj zmiany</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="40"/>
+        <source>One commit on the branch “%1” of %2.</source>
+        <translation>Jeden commit w gałęzi „%1” repozytorium %2.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="41"/>
+        <source>Pull request #%1 gets one more commit with these notes; the notes it already has stay in it.</source>
+        <translation>Pull request #%1 dostanie kolejny commit z tymi notatkami; notatki, które już w nim są, zostają.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="43"/>
+        <source>A pull request to the branch “%1” of %2, from a new branch there.</source>
+        <translation>Pull request do gałęzi „%1” repozytorium %2, z nowej gałęzi w tym repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="44"/>
+        <source>A pull request to the branch “%1” of %2, from your copy of the repository (a fork, made when you have none).</source>
+        <translation>Pull request do gałęzi „%1” repozytorium %2, z twojej kopii repozytorium (forka, utworzonego, jeśli go nie masz).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="46"/>
+        <source>Commit</source>
+        <translation>Zatwierdź</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="46"/>
+        <source>Update</source>
+        <translation>Uzupełnij</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="46"/>
+        <source>Propose</source>
+        <translation>Zaproponuj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="59"/>
+        <source>What changed</source>
+        <translation>Co się zmieniło</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="59"/>
+        <source>Title</source>
+        <translation>Tytuł</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="59"/>
+        <source>Message</source>
+        <translation>Opis zmian</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="66"/>
+        <source>Title of the pull request</source>
+        <translation>Tytuł pull requestu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="66"/>
+        <source>Commit message</source>
+        <translation>Opis commita</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="67"/>
+        <source>e.g. Correct the page about sync</source>
+        <translation>np. Popraw stronę o synchronizacji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="67"/>
+        <source>e.g. Notes from the meeting</source>
+        <translation>np. Notatki ze spotkania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="73"/>
+        <source>Description</source>
+        <translation>Opis</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="81"/>
+        <source>Description of the pull request</source>
+        <translation>Opis pull requestu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="82"/>
+        <source>What and why (optional)…</source>
+        <translation>Co i dlaczego (opcjonalnie)…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="87"/>
+        <source>Notes</source>
+        <translation>Notatki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="93"/>
+        <source>Nothing to send: the notes are the same as on GitHub.</source>
+        <translation>Nie ma czego wysłać: notatki są takie same jak na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="109"/>
+        <source>in the proposal</source>
+        <translation>w propozycji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubCommitDialog.qml" line="118"/>
+        <source>Unticked notes stay on this device, to send later. Conflict copies are never sent.</source>
+        <translation>Odznaczone notatki zostają na tym urządzeniu, do wysłania później. Kopie konfliktów nigdy nie są wysyłane.</translation>
+    </message>
+</context>
+<context>
+    <name>GitHubOpenDialog</name>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="53"/>
+        <source>Open a notebook from GitHub</source>
+        <translation>Otwórz notatnik z GitHuba</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="54"/>
+        <source>Markdown notes kept in a GitHub repository — all of it or one folder — as a notebook. Brulion downloads them, keeps them up to date and sends your changes back as commits or pull requests.</source>
+        <translation>Notatki w Markdown trzymane w repozytorium na GitHubie — w całym albo w jednym folderze — jako notatnik. Brulion je pobiera, aktualizuje i odsyła twoje zmiany jako commity albo pull requesty.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="55"/>
+        <source>Open</source>
+        <translation>Otwórz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="100"/>
+        <source>Repository</source>
+        <translation>Repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="108"/>
+        <source>Address of the repository</source>
+        <translation>Adres repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="109"/>
+        <source>owner/name or https://github.com/…</source>
+        <translation>właściciel/nazwa albo https://github.com/…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="122"/>
+        <source>%1: its default branch, the whole repository</source>
+        <translation>%1: domyślna gałąź, całe repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="124"/>
+        <source>%1: the branch “%2”, the whole repository</source>
+        <translation>%1: gałąź „%2”, całe repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="125"/>
+        <source>%1: the branch “%2”, the folder “%3”</source>
+        <translation>%1: gałąź „%2”, folder „%3”</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="137"/>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="142"/>
+        <source>Branch</source>
+        <translation>Gałąź</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="138"/>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="147"/>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="152"/>
+        <source>Folder in the repository</source>
+        <translation>Folder w repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="143"/>
+        <source>The default one</source>
+        <translation>Domyślna</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="153"/>
+        <source>The whole repository</source>
+        <translation>Całe repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="166"/>
+        <source>Token (optional)</source>
+        <translation>Token (opcjonalnie)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="174"/>
+        <source>Personal access token</source>
+        <translation>Osobisty token dostępu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="180"/>
+        <source>Hide the token</source>
+        <translation>Ukryj token</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="180"/>
+        <source>Show the token</source>
+        <translation>Pokaż token</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="187"/>
+        <source>Public repositories open without one (to read). A private repository, and sending your changes, need a personal access token of your GitHub account.</source>
+        <translation>Publiczne repozytoria otwierają się bez niego (do czytania). Prywatne repozytorium i wysyłanie zmian wymagają osobistego tokenu dostępu twojego konta GitHub.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="193"/>
+        <source>Make a token on GitHub</source>
+        <translation>Utwórz token na GitHubie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="203"/>
+        <source>Signed in to GitHub as %1.</source>
+        <translation>Zalogowano do GitHuba jako %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="204"/>
+        <source>A GitHub token is saved on this device.</source>
+        <translation>Na tym urządzeniu zapisano token GitHuba.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="217"/>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="227"/>
+        <source>Folder on this device</source>
+        <translation>Folder na tym urządzeniu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="228"/>
+        <source>In Brulion&apos;s own storage</source>
+        <translation>W pamięci Brulionu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="233"/>
+        <source>Browse…</source>
+        <translation>Przeglądaj…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubOpenDialog.qml" line="262"/>
+        <source>Choose the notebook folder</source>
+        <translation>Wybierz folder notatnika</translation>
+    </message>
+</context>
+<context>
+    <name>GitHubPanel</name>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="73"/>
+        <source>Unlink from GitHub?</source>
+        <translation>Odłączyć od GitHuba?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="74"/>
+        <source>The notes stay in this notebook; Brulion stops getting new versions and sending changes. Changes not on GitHub yet are not lost.</source>
+        <translation>Notatki zostają w tym notatniku; Brulion przestaje pobierać nowe wersje i wysyłać zmiany. Zmiany, których nie ma jeszcze na GitHubie, nie przepadną.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="75"/>
+        <source>Unlink</source>
+        <translation>Odłącz</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="122"/>
+        <source>%n change(s)</source>
+        <translation>
+            <numerusform>%n zmiana</numerusform>
+            <numerusform>%n zmiany</numerusform>
+            <numerusform>%n zmian</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="123"/>
+        <source>Problem</source>
+        <translation>Problem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="124"/>
+        <source>Offline</source>
+        <translation>Offline</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="124"/>
+        <source>Up to date</source>
+        <translation>Aktualne</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="137"/>
+        <source>Branch “%1”, folder “%2”</source>
+        <translation>Gałąź „%1”, folder „%2”</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="138"/>
+        <source>Branch “%1”, the whole repository</source>
+        <translation>Gałąź „%1”, całe repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="144"/>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="343"/>
+        <source>Open on GitHub</source>
+        <translation>Otwórz na GitHubie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="171"/>
+        <source>Stop</source>
+        <translation>Zatrzymaj</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="184"/>
+        <source>Get the newest version</source>
+        <translation>Pobierz najnowszą wersję</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="194"/>
+        <source>Commit…</source>
+        <translation>Zatwierdź…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="203"/>
+        <source>Update the proposal…</source>
+        <translation>Uzupełnij propozycję…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="203"/>
+        <source>Propose changes…</source>
+        <translation>Zaproponuj zmiany…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="212"/>
+        <source>Commit %1</source>
+        <translation>Commit %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="221"/>
+        <source>Without a token Brulion only reads this repository. To send changes, save a token below.</source>
+        <translation>Bez tokenu Brulion tylko czyta to repozytorium. Aby wysyłać zmiany, zapisz token poniżej.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="229"/>
+        <source>Your token may not write to this repository: changes go as a pull request from your copy of it.</source>
+        <translation>Twój token nie może zapisywać w tym repozytorium: zmiany pójdą jako pull request z twojej kopii repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="252"/>
+        <source>Some notes changed both here and on GitHub: both versions are kept until you merge them.</source>
+        <translation>Niektóre notatki zmieniły się i tutaj, i na GitHubie: obie wersje zostają, dopóki ich nie scalisz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="257"/>
+        <source>Merge</source>
+        <translation>Scal</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="264"/>
+        <source>Hide what was left out</source>
+        <translation>Ukryj pominięte</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="265"/>
+        <source>%n file(s) left out or not done</source>
+        <translation>
+            <numerusform>%n plik pominięty albo nieprzetworzony</numerusform>
+            <numerusform>%n pliki pominięte albo nieprzetworzone</numerusform>
+            <numerusform>%n plików pominiętych albo nieprzetworzonych</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="319"/>
+        <source>Proposal #%1</source>
+        <translation>Propozycja #%1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="331"/>
+        <source>Waiting for the repository&apos;s people to look at it. Proposing again adds your new changes to it.</source>
+        <translation>Czeka, aż przejrzą ją opiekunowie repozytorium. Kolejna propozycja dopisze do niej twoje nowe zmiany.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="333"/>
+        <source>Accepted: its notes are on the branch now.</source>
+        <translation>Przyjęta: jej notatki są już w gałęzi.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="334"/>
+        <source>Closed without being accepted. Your changes are still here; a new proposal can send them again.</source>
+        <translation>Zamknięta bez przyjęcia. Twoje zmiany wciąż są tutaj; nowa propozycja może wysłać je ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="350"/>
+        <source>Check its state</source>
+        <translation>Sprawdź stan</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="359"/>
+        <source>Forget</source>
+        <translation>Zapomnij</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="375"/>
+        <source>Not on GitHub yet</source>
+        <translation>Jeszcze nie na GitHubie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="395"/>
+        <source>In the proposal</source>
+        <translation>W propozycji</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="406"/>
+        <source>Found a mistake in the documentation?</source>
+        <translation>Błąd w dokumentacji?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="407"/>
+        <source>Its pages are kept in Brulion&apos;s repository on GitHub. Open them from there as a notebook of their own, correct them and propose the correction — the documentation here is written again by every new version.</source>
+        <translation>Jej strony są w repozytorium Brulionu na GitHubie. Otwórz je stamtąd jako osobny notatnik, popraw i zaproponuj poprawkę — dokumentacja tutaj jest zapisywana od nowa przez każdą nową wersję.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="409"/>
+        <source>Open the documentation from GitHub…</source>
+        <translation>Otwórz dokumentację z GitHuba…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="419"/>
+        <source>Keep this notebook on GitHub</source>
+        <translation>Trzymaj ten notatnik na GitHubie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="420"/>
+        <source>Link it to a GitHub repository — all of it or one folder: Brulion gets its newest version, and sends your changes back as commits or as pull requests.</source>
+        <translation>Połącz go z repozytorium na GitHubie — całym albo z jednym folderem: Brulion pobiera jego najnowszą wersję i odsyła twoje zmiany jako commity albo pull requesty.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="429"/>
+        <source>Works on every device, in the browser too — no git needed.</source>
+        <translation>Działa na każdym urządzeniu, także w przeglądarce — bez gita.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="434"/>
+        <source>Notes changed here and on GitHub are merged line by line; when they cannot be, both versions are kept.</source>
+        <translation>Notatki zmienione tutaj i na GitHubie są scalane wiersz po wierszu; gdy się nie da, zostają obie wersje.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="439"/>
+        <source>Notes in this notebook that are not in the repository stay here until you commit them.</source>
+        <translation>Notatki z tego notatnika, których nie ma w repozytorium, zostają tutaj, dopóki ich nie zatwierdzisz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="444"/>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="453"/>
+        <source>Repository</source>
+        <translation>Repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="446"/>
+        <source>“owner/name” or the address of a page of the repository on github.com (also of a folder).</source>
+        <translation>„właściciel/nazwa” albo adres strony repozytorium na github.com (także folderu).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="454"/>
+        <source>owner/name or https://github.com/…</source>
+        <translation>właściciel/nazwa albo https://github.com/…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="466"/>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="471"/>
+        <source>Branch</source>
+        <translation>Gałąź</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="467"/>
+        <source>Empty: the one in the address, else the repository&apos;s default.</source>
+        <translation>Puste: ta z adresu, a bez niej domyślna gałąź repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="477"/>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="483"/>
+        <source>Folder in the repository</source>
+        <translation>Folder w repozytorium</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="478"/>
+        <source>Empty: the folder in the address, else the whole repository.</source>
+        <translation>Puste: folder z adresu, a bez niego całe repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="484"/>
+        <source>e.g. Notes</source>
+        <translation>np. Notatki</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="501"/>
+        <source>Link this notebook</source>
+        <translation>Połącz ten notatnik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="512"/>
+        <source>Open as a new notebook…</source>
+        <translation>Otwórz jako nowy notatnik…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="522"/>
+        <source>GitHub account</source>
+        <translation>Konto GitHub</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="524"/>
+        <source>Signed in as %1.</source>
+        <translation>Zalogowano jako %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="524"/>
+        <source>A token is saved on this device.</source>
+        <translation>Na tym urządzeniu zapisano token.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="525"/>
+        <source>Public repositories can be read without an account. Private ones, commits and pull requests need a personal access token.</source>
+        <translation>Publiczne repozytoria można czytać bez konta. Prywatne, commity i pull requesty wymagają osobistego tokenu dostępu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="529"/>
+        <source>Replace the token</source>
+        <translation>Zastąp token</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="529"/>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="536"/>
+        <source>Personal access token</source>
+        <translation>Osobisty token dostępu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="537"/>
+        <source>Saved – paste a new one to replace it</source>
+        <translation>Zapisany – wklej nowy, aby go zastąpić</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="543"/>
+        <source>Hide the token</source>
+        <translation>Ukryj token</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="543"/>
+        <source>Show the token</source>
+        <translation>Pokaż token</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="567"/>
+        <source>On GitHub: Settings → Developer settings → Personal access tokens → “Generate new token (classic)” with the “repo” scope (“public_repo” is enough for public repositories). A fine-grained token works for your own repositories with read and write access to “Contents” and “Pull requests”. The token is kept only on this device and sent only to GitHub.</source>
+        <translation>Na GitHubie: Settings → Developer settings → Personal access tokens → „Generate new token (classic)” z zakresem „repo” (dla publicznych repozytoriów wystarczy „public_repo”). Token szczegółowy (fine-grained) działa z twoimi własnymi repozytoriami, gdy ma dostęp do odczytu i zapisu „Contents” i „Pull requests”. Token zostaje tylko na tym urządzeniu i trafia tylko do GitHuba.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="572"/>
+        <source>Make a token on GitHub</source>
+        <translation>Utwórz token na GitHubie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="592"/>
+        <source>Check and save</source>
+        <translation>Sprawdź i zapisz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="601"/>
+        <source>Forget the token</source>
+        <translation>Zapomnij token</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="620"/>
+        <source>Brulion checks GitHub when the notebook opens and every 15 minutes while it is in front. Your changes go to GitHub only when you commit or propose them.</source>
+        <translation>Brulion sprawdza GitHuba przy otwarciu notatnika i co 15 minut, gdy jest na wierzchu. Twoje zmiany trafiają na GitHuba tylko wtedy, gdy je zatwierdzisz albo zaproponujesz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/GitHubPanel.qml" line="626"/>
+        <source>Unlink…</source>
+        <translation>Odłącz…</translation>
+    </message>
+</context>
+<context>
     <name>GraphNodeCard</name>
     <message>
         <location filename="../src/app/qml/planning/GraphNodeCard.qml" line="27"/>
@@ -9209,172 +9795,187 @@
 <context>
     <name>OnboardingView</name>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="89"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="90"/>
         <source>Welcome to Brulion</source>
         <translation>Witaj w Brulionie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="97"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="98"/>
         <source>Your notes as plain Markdown files: an outliner with a daily journal, tasks, reminders and calculations. Everything works offline and stays yours.</source>
         <translation>Notatki w zwykłych plikach Markdown: konspekt z codziennym dziennikiem, zadaniami, przypomnieniami i obliczeniami. Wszystko działa bez internetu i należy do Ciebie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="26"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="27"/>
         <source>Plain files</source>
         <translation>Zwykłe pliki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="27"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="28"/>
         <source>Every page is a .md file in a folder you choose — readable by Obsidian, Logseq or any editor.</source>
         <translation>Każda strona to plik .md w wybranym przez Ciebie folderze — czytelny dla Obsidiana, Logseq i każdego edytora.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="28"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="29"/>
         <source>Journal and reminders</source>
         <translation>Dziennik i przypomnienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="29"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="30"/>
         <source>A page for every day, tasks with dates, reminders and alarms that ring on time.</source>
         <translation>Strona na każdy dzień, zadania z datami, przypomnienia i alarmy, które dzwonią na czas.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="30"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="31"/>
         <source>Sync your way</source>
         <translation>Synchronizacja po Twojemu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="31"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="32"/>
         <source>Share the folder with Syncthing, or connect Nextcloud. No account needed.</source>
         <translation>Udostępnij folder przez Syncthing albo połącz Nextcloud. Bez zakładania konta.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="168"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="169"/>
         <source>Your notebook in this browser</source>
         <translation>Twój notatnik w tej przeglądarce</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="168"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="169"/>
         <source>Your notebook</source>
         <translation>Twój notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="175"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="176"/>
         <source>Notes are kept in this browser&apos;s storage on this device and work offline. Move them with import and export, or sync them with Nextcloud.</source>
         <translation>Notatki są przechowywane w pamięci tej przeglądarki na tym urządzeniu i działają bez internetu. Przenoś je importem i eksportem albo synchronizuj z Nextcloud.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="177"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="178"/>
         <source>To sync with Syncthing, use a folder on the phone&apos;s storage — Brulion then asks for “All files access”. Without it, keep the notes in the app&apos;s own storage and sync them with Nextcloud.</source>
         <translation>Aby synchronizować przez Syncthing, użyj folderu w pamięci telefonu — Brulion poprosi wtedy o „Dostęp do wszystkich plików”. Bez tego trzymaj notatki w pamięci aplikacji i synchronizuj je z Nextcloud.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="178"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="179"/>
         <source>Choose a folder for your notes: a new one, or one you already sync with Syncthing. A missing folder is created.</source>
         <translation>Wybierz folder na notatki: nowy albo taki, który już synchronizujesz przez Syncthing. Brakujący folder zostanie utworzony.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="196"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="197"/>
         <source>Notebook folder</source>
         <translation>Folder notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="202"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="203"/>
         <source>Browse…</source>
         <translation>Przeglądaj…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="220"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="221"/>
         <source>Brulion needs “All files access” to keep notes in %1. Allow it in the system settings and come back — the notebook opens by itself.</source>
         <translation>Brulion potrzebuje „Dostępu do wszystkich plików”, aby przechowywać notatki w %1. Zezwól na to w ustawieniach systemu i wróć — notatnik otworzy się sam.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="228"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="229"/>
         <source>Open system settings</source>
         <translation>Otwórz ustawienia systemu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="234"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="235"/>
         <source>Use app storage instead</source>
         <translation>Zamiast tego użyj pamięci aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="246"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="247"/>
         <source>Start with an empty notebook</source>
         <translation>Zacznij od pustego notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="246"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="247"/>
         <source>Open notebook</source>
         <translation>Otwórz notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="254"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="255"/>
         <source>Use app storage</source>
         <translation>Użyj pamięci aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="300"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="301"/>
         <source>An Obsidian vault needs no import: choose its folder above and open it — also one synced with Syncthing. Other notes come in through import: Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others; the notebook above opens on its import screen.</source>
         <translation>Skarbca Obsidiana nie trzeba importować: wskaż jego folder powyżej i otwórz go — także taki, który synchronizujesz Syncthingiem. Inne notatki przeniesiesz importem: grafy Logseq oraz eksporty z Notion, Evernote, Google Keep, Joplina i innych; notatnik wskazany powyżej otworzy się na ekranie importu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="321"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="344"/>
+        <source>Notes on GitHub?</source>
+        <translation>Notatki na GitHubie?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="351"/>
+        <source>Open Markdown notes from a GitHub repository — all of it or one folder — as a notebook: Brulion keeps it up to date and sends your changes back as commits or pull requests. No git needed, also in the browser.</source>
+        <translation>Otwórz notatki w Markdown z repozytorium na GitHubie — całego albo jednego folderu — jako notatnik: Brulion go aktualizuje i odsyła twoje zmiany jako commity albo pull requesty. Bez gita, także w przeglądarce.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="358"/>
+        <source>Open from GitHub…</source>
+        <translation>Otwórz z GitHuba…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="371"/>
         <source>Open the sample notebook</source>
         <translation>Otwórz przykładowy notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="346"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="396"/>
         <source>Try the sample notebook</source>
         <translation>Wypróbuj przykładowy notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="353"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="403"/>
         <source>“Sample notebook” — a guided tour with live examples of every feature: links, tasks, reminders, calculations, tables and queries.</source>
         <translation>„Przykładowy brulion” — przewodnik z działającymi przykładami wszystkich funkcji: linków, zadań, przypomnień, obliczeń, tabel i zapytań.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="374"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="424"/>
         <source>Recent notebooks</source>
         <translation>Ostatnie notatniki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="391"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="441"/>
         <source>Remove from the list</source>
         <translation>Usuń z listy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="410"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="460"/>
         <source>How do notes get to my other devices?</source>
         <translation>Jak notatki trafią na moje inne urządzenia?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="36"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="37"/>
         <source>Share the notebook folder between computers and phones (on Android with Syncthing-Fork) and pick that folder in Brulion on every device. Edits arrive within seconds; conflicting copies can be merged in the sync center.</source>
         <translation>Udostępnij folder notatnika między komputerami i telefonami (na Androidzie przez Syncthing-Fork) i wybierz ten folder w Brulionie na każdym urządzeniu. Zmiany docierają w kilka sekund; sprzeczne kopie scalisz w centrum synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="38"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="39"/>
         <source>Keep the notebook anywhere — also in app storage or in the browser — and connect your Nextcloud in Settings → Sync with an app password. Edits from several devices are merged, nothing is lost.</source>
         <translation>Trzymaj notatnik gdziekolwiek — także w pamięci aplikacji lub w przeglądarce — i połącz swój Nextcloud w Ustawienia → Synchronizacja za pomocą hasła aplikacji. Zmiany z kilku urządzeń są scalane, nic nie ginie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="447"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="501"/>
         <source>Choose the notebook folder</source>
         <translation>Wybierz folder notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="289"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="290"/>
         <source>Notes in another app?</source>
         <translation>Notatki w innej aplikacji?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="299"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="300"/>
         <source>Brulion imports Obsidian vaults, Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others. The notebook above opens on its import screen.</source>
         <translation>Brulion importuje skarbce Obsidiana, grafy Logseq oraz eksporty z Notion, Evernote, Google Keep, Joplina i innych. Notatnik wskazany powyżej otworzy się na ekranie importu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/OnboardingView.qml" line="307"/>
+        <location filename="../src/app/qml/views/OnboardingView.qml" line="308"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
     </message>
@@ -11597,7 +12198,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="728"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7283"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7294"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12537,7 +13138,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="126"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7396"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7407"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -12840,7 +13441,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6584"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6595"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -13474,49 +14075,54 @@
 <context>
     <name>ShellSyncFooter</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="29"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="32"/>
         <source>Synced with Nextcloud</source>
         <translation>Zsynchronizowano z Nextcloud</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="30"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="33"/>
         <source>Syncing…</source>
         <translation>Synchronizowanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="31"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="34"/>
         <source>Sync failed</source>
         <translation>Synchronizacja nie powiodła się</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="32"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="35"/>
         <source>Offline — will sync later</source>
         <translation>Offline — synchronizacja później</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="35"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="38"/>
         <source>Syncthing folder</source>
         <translation>Folder Syncthing</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="37"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="40"/>
         <source>Stored in this browser</source>
         <translation>Zapisane w tej przeglądarce</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="38"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="41"/>
         <source>Only on this device</source>
         <translation>Tylko na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="63"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="66"/>
         <source>Sync: %1</source>
         <translation>Synchronizacja: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="96"/>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="99"/>
         <source>Sync now</source>
         <translation>Synchronizuj teraz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellSyncFooter.qml" line="99"/>
+        <source>Get the newest version from GitHub</source>
+        <translation>Pobierz najnowszą wersję z GitHuba</translation>
     </message>
 </context>
 <context>
@@ -13616,7 +14222,7 @@
         <location filename="../src/app/io/ioselftest.cpp" line="372"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3804"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8122"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8133"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -13894,13 +14500,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="112"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8490"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8501"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8480"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8491"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -14793,137 +15399,172 @@
 <context>
     <name>SyncView</name>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="27"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="31"/>
         <source>Sync</source>
         <translation>Synchronizacja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="147"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="153"/>
         <source>Overview</source>
         <translation>Przegląd</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="150"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="157"/>
         <source>Conflicts</source>
         <translation>Konflikty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="170"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="177"/>
         <source>Brulion keeps your notes as plain Markdown files in the folder “%1”. To have the same notes on several devices, choose one of two ways:</source>
         <translation>Brulion przechowuje notatki jako zwykłe pliki Markdown w folderze „%1”. Aby mieć te same notatki na kilku urządzeniach, wybierz jeden z dwóch sposobów:</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="171"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="178"/>
         <source>Open a notebook to set up syncing.</source>
         <translation>Otwórz notatnik, aby skonfigurować synchronizację.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="187"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="194"/>
         <source>Without a server: your devices exchange the files directly.</source>
         <translation>Bez serwera: urządzenia wymieniają pliki bezpośrednio.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="192"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="199"/>
         <source>Up to date</source>
         <translation>Aktualne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="192"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="199"/>
         <source>Shared</source>
         <translation>Udostępniony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="196"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="203"/>
         <source>For computers and Android phones (Syncthing-Fork).</source>
         <translation>Dla komputerów i telefonów z Androidem (Syncthing-Fork).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="197"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="204"/>
         <source>Works in your home Wi-Fi even without internet.</source>
         <translation>Działa w domowej sieci Wi-Fi nawet bez internetu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="198"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="205"/>
         <source>Not available in the browser.</source>
         <translation>Niedostępne w przeglądarce.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="198"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="205"/>
         <source>Nothing to sign up for; your notes never leave your devices.</source>
         <translation>Nie trzeba zakładać konta; notatki nigdy nie opuszczają Twoich urządzeń.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="202"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="209"/>
         <source>Show the status</source>
         <translation>Pokaż stan</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="202"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="209"/>
         <source>Set up Syncthing</source>
         <translation>Skonfiguruj Syncthing</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="213"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="220"/>
         <source>Through your own server (WebDAV) – also in the browser.</source>
         <translation>Przez własny serwer (WebDAV) – także w przeglądarce.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="219"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="226"/>
         <source>Syncing</source>
         <translation>Synchronizowanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="220"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="227"/>
         <source>Offline</source>
         <translation>Offline</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="221"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="228"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="294"/>
         <source>Problem</source>
         <translation>Problem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="222"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="229"/>
         <source>On</source>
         <translation>Włączona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="235"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="242"/>
         <source>Needs a Nextcloud account and an app password.</source>
         <translation>Wymaga konta Nextcloud i hasła aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="236"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="243"/>
         <source>Syncs every few minutes and right after your edits.</source>
         <translation>Synchronizuje co kilka minut i zaraz po Twoich zmianach.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="237"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="244"/>
         <source>Changes from several devices are merged line by line.</source>
         <translation>Zmiany z kilku urządzeń są scalane wiersz po wierszu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="255"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="262"/>
         <source>Choose another folder</source>
         <translation>Wybierz inny folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="256"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="263"/>
         <source>Settings</source>
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="256"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="263"/>
         <source>Set up Nextcloud</source>
         <translation>Skonfiguruj Nextcloud</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="264"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="271"/>
         <source>Sync now</source>
         <translation>Synchronizuj teraz</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/SyncView.qml" line="288"/>
+        <source>Notes kept in a GitHub repository, as a notebook — also in the browser.</source>
+        <translation>Notatki trzymane w repozytorium na GitHubie jako notatnik — także w przeglądarce.</translation>
+    </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="279"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="293"/>
+        <source>%n change(s)</source>
+        <translation>
+            <numerusform>%n zmiana</numerusform>
+            <numerusform>%n zmiany</numerusform>
+            <numerusform>%n zmian</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SyncView.qml" line="294"/>
+        <source>Linked</source>
+        <translation>Połączony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SyncView.qml" line="309"/>
+        <source>Brulion gets the newest version and sends your changes back as commits or pull requests.</source>
+        <translation>Brulion pobiera najnowszą wersję i odsyła twoje zmiany jako commity albo pull requesty.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SyncView.qml" line="312"/>
+        <source>Show</source>
+        <translation>Pokaż</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SyncView.qml" line="312"/>
+        <source>Set up GitHub</source>
+        <translation>Skonfiguruj GitHuba</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SyncView.qml" line="324"/>
         <source>%n note(s) changed on two devices at once</source>
         <translation>
             <numerusform>%n notatka zmieniła się jednocześnie na dwóch urządzeniach</numerusform>
@@ -14932,43 +15573,43 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="280"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="325"/>
         <source>Both versions were kept. Merge them so that only one remains.</source>
         <translation>Zachowano obie wersje. Scal je, aby została tylko jedna.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="282"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="327"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="5762"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="295"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="340"/>
         <source>Use one way per notebook: a folder synced by both Syncthing and Nextcloud sends every change twice and causes needless conflicts.</source>
         <translation>Używaj jednego sposobu na notatnik: folder synchronizowany jednocześnie przez Syncthing i Nextcloud wysyła każdą zmianę dwa razy i powoduje niepotrzebne konflikty.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="325"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="370"/>
         <source>Sync takes long or something fails? The event log shows every step.</source>
         <translation>Synchronizacja trwa długo albo coś się nie udaje? Rejestr zdarzeń pokazuje każdy krok.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="332"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="377"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="349"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="401"/>
         <source>No conflicts</source>
         <translation>Brak konfliktów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="350"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="402"/>
         <source>When a note changes on two devices at the same time, the other version is kept as a copy and appears here to be merged.</source>
         <translation>Gdy notatka zmieni się jednocześnie na dwóch urządzeniach, druga wersja zostaje zachowana jako kopia i pojawia się tutaj do scalenia.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="373"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="425"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n notatka z dwiema wersjami</numerusform>
@@ -19240,29 +19881,29 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::editor::PageController</name>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4131"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4136"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4131"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4136"/>
         <source>Pictures (%1)</source>
         <extracomment>%1: the file name patterns of pictures, e.g. &quot;*.png *.jpg *.jpeg&quot;</extracomment>
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4420"/>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4681"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4425"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4686"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4433"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4438"/>
         <source>Drawing %1</source>
         <translation>Rysunek %1</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4480"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4485"/>
         <source>Drawing</source>
         <translation>Rysunek</translation>
     </message>
@@ -19279,7 +19920,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>%1 (rysunek)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="4617"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="4622"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -19340,7 +19981,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8293"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8304"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
@@ -19390,7 +20031,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nazwy tego pliku nie da się użyć w linku</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3735"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3740"/>
         <source>CSV files (*.csv *.tsv *.txt)</source>
         <translation>Pliki CSV (*.csv *.tsv *.txt)</translation>
     </message>
@@ -20750,62 +21391,62 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Wybierz folder na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1315"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1307"/>
         <source>Could not open the notebook %1: %2</source>
         <translation>Nie udało się otworzyć notatnika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1333"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1325"/>
         <source>Could not update the documentation: %1</source>
         <translation>Nie udało się zaktualizować dokumentacji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1337"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1329"/>
         <source>Could not write all sample notes: %1</source>
         <translation>Nie udało się zapisać wszystkich przykładowych notatek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1554"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1546"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1555"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1547"/>
         <source>Reminders work. This is how they will look.</source>
         <translation>Przypomnienia działają. Tak będą wyglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1573"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1565"/>
         <source>Could not schedule the notification: %1</source>
         <translation>Nie udało się zaplanować powiadomienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1575"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1567"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1578"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1570"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1585"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1577"/>
         <source>No system tray on this desktop: notifications cannot be shown yet.</source>
         <translation>Na tym pulpicie nie ma zasobnika systemowego: powiadomień nie da się jeszcze pokazać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1605"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1597"/>
         <source>Quick capture writes into your own notebook. Open or create one first.</source>
         <translation>Szybka notatka trafia do Twojego własnego notatnika. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1744"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1736"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1745"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1737"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
@@ -21572,36 +22213,36 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::Workspace</name>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="573"/>
-        <location filename="../src/app/shell/workspace.cpp" line="589"/>
+        <location filename="../src/app/shell/workspace.cpp" line="579"/>
+        <location filename="../src/app/shell/workspace.cpp" line="595"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="763"/>
-        <location filename="../src/app/shell/workspace.cpp" line="774"/>
+        <location filename="../src/app/shell/workspace.cpp" line="769"/>
+        <location filename="../src/app/shell/workspace.cpp" line="780"/>
         <source>Could not save the drawing %1: %2</source>
         <translation>Nie można zapisać rysunku %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1106"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1112"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1254"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1275"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1260"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1281"/>
         <location filename="../src/app/shell/workspacefolders.cpp" line="348"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1426"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1432"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1429"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1435"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
@@ -21733,17 +22374,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Zaktualizowano ustawienia notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1444"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1450"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1459"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1465"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1556"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1562"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
@@ -21893,7 +22534,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1643"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1649"/>
         <source>The journal page is not UTF-8 text; it was left unchanged.</source>
         <translation>Strona dziennika nie jest tekstem UTF-8; zostawiono ją bez zmian.</translation>
     </message>
@@ -22147,34 +22788,552 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
 </context>
 <context>
+    <name>brulion::shell::WorkspaceGitHub</name>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="365"/>
+        <source>Downloading %1 of %2…</source>
+        <translation>Pobieranie %1 z %2…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="367"/>
+        <source>Uploading %1 of %2…</source>
+        <translation>Wysyłanie %1 z %2…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="369"/>
+        <source>Comparing the files…</source>
+        <translation>Porównywanie plików…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="371"/>
+        <source>Preparing your copy of the repository…</source>
+        <translation>Przygotowywanie twojej kopii repozytorium…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="373"/>
+        <source>Opening the pull request…</source>
+        <translation>Otwieranie pull requestu…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="375"/>
+        <source>Writing the proposal…</source>
+        <translation>Zapisywanie propozycji…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="375"/>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="377"/>
+        <source>Committing…</source>
+        <translation>Zatwierdzanie…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="376"/>
+        <source>Getting the newest version from GitHub…</source>
+        <translation>Pobieranie najnowszej wersji z GitHuba…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="378"/>
+        <source>Proposing the changes…</source>
+        <translation>Proponowanie zmian…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="436"/>
+        <source>Offline — Brulion checks GitHub again later</source>
+        <translation>Offline — Brulion sprawdzi GitHuba później</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="440"/>
+        <source>Not downloaded from GitHub yet</source>
+        <translation>Jeszcze nie pobrano z GitHuba</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="444"/>
+        <source>%n change(s) not on GitHub yet</source>
+        <translation>
+            <numerusform>%n zmiana jeszcze nie na GitHubie</numerusform>
+            <numerusform>%n zmiany jeszcze nie na GitHubie</numerusform>
+            <numerusform>%n zmian jeszcze nie na GitHubie</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="445"/>
+        <source>%n change(s) not on GitHub yet · checked %1</source>
+        <translation>
+            <numerusform>%n zmiana jeszcze nie na GitHubie · sprawdzono %1</numerusform>
+            <numerusform>%n zmiany jeszcze nie na GitHubie · sprawdzono %1</numerusform>
+            <numerusform>%n zmian jeszcze nie na GitHubie · sprawdzono %1</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="447"/>
+        <source>The same as on GitHub</source>
+        <translation>Tak samo jak na GitHubie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="447"/>
+        <source>The same as on GitHub · checked %1</source>
+        <translation>Tak samo jak na GitHubie · sprawdzono %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="468"/>
+        <source>New</source>
+        <translation>Dodano</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="470"/>
+        <source>Removed</source>
+        <translation>Usunięto</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="471"/>
+        <source>Changed</source>
+        <translation>Zmieniono</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="479"/>
+        <source>Open</source>
+        <translation>Otwarty</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="481"/>
+        <source>Merged</source>
+        <translation>Scalony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="483"/>
+        <source>Closed</source>
+        <translation>Zamknięty</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="521"/>
+        <source>Update %n note(s) from Brulion</source>
+        <translation>
+            <numerusform>Aktualizacja %n notatki z Brulionu</numerusform>
+            <numerusform>Aktualizacja %n notatek z Brulionu</numerusform>
+            <numerusform>Aktualizacja %n notatek z Brulionu</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="526"/>
+        <source>Changes to %n note(s)</source>
+        <translation>
+            <numerusform>Zmiany w %n notatce</numerusform>
+            <numerusform>Zmiany w %n notatkach</numerusform>
+            <numerusform>Zmiany w %n notatkach</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="534"/>
+        <source>GitHub did not accept the token. Make a new one and save it again.</source>
+        <translation>GitHub nie przyjął tokenu. Utwórz nowy i zapisz go ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="536"/>
+        <source>The token may not do this here. A classic token needs the “repo” scope (“public_repo” for public repositories); a fine-grained one, access to this repository&apos;s contents and pull requests.</source>
+        <translation>Ten token nie ma do tego uprawnień. Token klasyczny potrzebuje zakresu „repo” („public_repo” dla publicznych repozytoriów), a szczegółowy (fine-grained) — dostępu do zawartości i pull requestów tego repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="540"/>
+        <source>GitHub&apos;s limit of requests is used up until %1. With a token the limit is much higher.</source>
+        <translation>Limit zapytań do GitHuba wyczerpał się do %1. Z tokenem limit jest dużo wyższy.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="544"/>
+        <source>GitHub asks to wait a moment: try again in %n minute(s).</source>
+        <translation>
+            <numerusform>GitHub prosi o chwilę przerwy: spróbuj ponownie za %n minutę.</numerusform>
+            <numerusform>GitHub prosi o chwilę przerwy: spróbuj ponownie za %n minuty.</numerusform>
+            <numerusform>GitHub prosi o chwilę przerwy: spróbuj ponownie za %n minut.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="545"/>
+        <source>GitHub&apos;s limit of requests is used up for now. With a token the limit is much higher.</source>
+        <translation>Limit zapytań do GitHuba na razie się wyczerpał. Z tokenem limit jest dużo wyższy.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="548"/>
+        <source>The repository, branch or folder was not found on GitHub — or the token cannot see it.</source>
+        <translation>Nie znaleziono repozytorium, gałęzi ani folderu na GitHubie — albo token ich nie widzi.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="549"/>
+        <source>The repository, branch or folder was not found on GitHub. A private repository needs a token.</source>
+        <translation>Nie znaleziono repozytorium, gałęzi ani folderu na GitHubie. Prywatne repozytorium wymaga tokenu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="552"/>
+        <source>The branch changed on GitHub meanwhile. Try again.</source>
+        <translation>Gałąź zmieniła się w międzyczasie na GitHubie. Spróbuj ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="554"/>
+        <source>GitHub refused the request.</source>
+        <translation>GitHub odrzucił żądanie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="555"/>
+        <source>GitHub refused the request: %1</source>
+        <translation>GitHub odrzucił żądanie: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="557"/>
+        <source>GitHub reported an error. Try again later.</source>
+        <translation>GitHub zgłosił błąd. Spróbuj później.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="559"/>
+        <source>Cannot reach GitHub. Check the connection.</source>
+        <translation>Nie można połączyć się z GitHubem. Sprawdź połączenie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="561"/>
+        <source>GitHub did not answer in time.</source>
+        <translation>GitHub nie odpowiedział na czas.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="563"/>
+        <source>GitHub sent an answer Brulion does not understand.</source>
+        <translation>GitHub odesłał odpowiedź, której Brulion nie rozumie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="565"/>
+        <source>A file was damaged on the way and was not saved. Try again.</source>
+        <translation>Plik uszkodził się po drodze i nie został zapisany. Spróbuj ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="567"/>
+        <source>This folder has more files than GitHub lists at once. Choose a smaller folder.</source>
+        <translation>Ten folder ma więcej plików, niż GitHub podaje naraz. Wybierz mniejszy folder.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="569"/>
+        <source>Stopped.</source>
+        <translation>Zatrzymano.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="571"/>
+        <source>Another GitHub operation is running.</source>
+        <translation>Trwa już inna operacja z GitHubem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="573"/>
+        <source>This notebook is not linked to GitHub.</source>
+        <translation>Ten notatnik nie jest połączony z GitHubem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="575"/>
+        <source>The notebook folder is not available (an unmounted card or drive?).</source>
+        <translation>Folder notatnika jest niedostępny (odmontowana karta lub dysk?).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="577"/>
+        <source>The folder on GitHub has no files any more, although it had notes: nothing was removed here. Check the branch and the folder, or link the notebook again.</source>
+        <translation>Folder na GitHubie nie ma już żadnych plików, choć były w nim notatki: tutaj nic nie usunięto. Sprawdź gałąź i folder albo połącz notatnik ponownie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="580"/>
+        <source>Merge the conflicting notes first (the sync center&apos;s Conflicts tab), then commit.</source>
+        <translation>Najpierw scal notatki z konfliktami (karta Konflikty w centrum synchronizacji), potem zatwierdź.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="582"/>
+        <source>Some files could not be brought up to date. Get the newest version again first.</source>
+        <translation>Nie udało się zaktualizować niektórych plików. Najpierw pobierz ponownie najnowszą wersję.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="584"/>
+        <source>The notes downloaded from GitHub are all gone from this device, so nothing was committed (is the notebook&apos;s storage missing?).</source>
+        <translation>Wszystkie notatki pobrane z GitHuba zniknęły z tego urządzenia, więc niczego nie zatwierdzono (czy nośnik z notatnikiem jest niedostępny?).</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="587"/>
+        <source>Committing and proposing changes need a token: save one in the GitHub settings below.</source>
+        <translation>Zatwierdzanie i proponowanie zmian wymaga tokenu: zapisz go niżej, w ustawieniach GitHuba.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="589"/>
+        <source>Your token may not write to this repository: propose the changes instead.</source>
+        <translation>Twój token nie może zapisywać w tym repozytorium: zamiast tego zaproponuj zmiany.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="591"/>
+        <source>Someone else changed the proposal on GitHub. Open it there, or start a new one.</source>
+        <translation>Ktoś inny zmienił propozycję na GitHubie. Otwórz ją tam albo zacznij nową.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="592"/>
+        <source>Something went wrong with GitHub.</source>
+        <translation>Coś poszło nie tak z GitHubem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="598"/>
+        <source>Too large (over 50 MB): left on GitHub.</source>
+        <translation>Za duży (ponad 50 MB): zostaje na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="600"/>
+        <source>Kept in Git LFS: Brulion does not download it.</source>
+        <translation>Trzymany w Git LFS: Brulion go nie pobiera.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="602"/>
+        <source>A symbolic link: left on GitHub.</source>
+        <translation>Dowiązanie symboliczne: zostaje na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="604"/>
+        <source>Another repository (a submodule): left on GitHub.</source>
+        <translation>Inne repozytorium (submoduł): zostaje na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="606"/>
+        <source>Another file has the same name in other letter case: left on GitHub.</source>
+        <translation>Inny plik ma tę samą nazwę, tylko innymi wielkimi i małymi literami: zostaje na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="608"/>
+        <source>Two files whose names differ only in how their letters are encoded: one is left on GitHub.</source>
+        <translation>Dwa pliki, których nazwy różnią się tylko zapisem liter: jeden zostaje na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="610"/>
+        <source>Could not be downloaded; tried again next time.</source>
+        <translation>Nie udało się go pobrać; kolejna próba następnym razem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="612"/>
+        <source>Damaged on the way; downloaded again next time.</source>
+        <translation>Uszkodzony po drodze; zostanie pobrany ponownie następnym razem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="614"/>
+        <source>Could not be read on this device.</source>
+        <translation>Nie udało się go odczytać na tym urządzeniu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="616"/>
+        <source>Could not be saved on this device.</source>
+        <translation>Nie udało się go zapisać na tym urządzeniu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="618"/>
+        <source>Changed here meanwhile; merged next time.</source>
+        <translation>W międzyczasie zmieniony tutaj; zostanie scalony następnym razem.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="620"/>
+        <source>GitHub&apos;s version could not be saved beside it.</source>
+        <translation>Nie udało się zapisać obok niego wersji z GitHuba.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="697"/>
+        <source>%n file(s) downloaded</source>
+        <translation>
+            <numerusform>pobrano %n plik</numerusform>
+            <numerusform>pobrano %n pliki</numerusform>
+            <numerusform>pobrano %n plików</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="699"/>
+        <source>%n removed</source>
+        <translation>
+            <numerusform>%n usunięty</numerusform>
+            <numerusform>%n usunięte</numerusform>
+            <numerusform>%n usuniętych</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="701"/>
+        <source>%n renamed</source>
+        <translation>
+            <numerusform>%n przeniesiony</numerusform>
+            <numerusform>%n przeniesione</numerusform>
+            <numerusform>%n przeniesionych</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="703"/>
+        <source>%n merged</source>
+        <translation>
+            <numerusform>%n scalony</numerusform>
+            <numerusform>%n scalone</numerusform>
+            <numerusform>%n scalonych</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="705"/>
+        <source>%n with conflicts</source>
+        <translation>
+            <numerusform>%n z konfliktem</numerusform>
+            <numerusform>%n z konfliktami</numerusform>
+            <numerusform>%n z konfliktami</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="707"/>
+        <source>%n failed</source>
+        <translation>
+            <numerusform>%n nieudany</numerusform>
+            <numerusform>%n nieudane</numerusform>
+            <numerusform>%n nieudanych</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="708"/>
+        <source>No changes on GitHub</source>
+        <translation>Brak zmian na GitHubie</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="734"/>
+        <source>%n note(s) changed both here and on GitHub. Both versions are kept: merge them in the sync center.</source>
+        <translation>
+            <numerusform>%n notatka zmieniła się i tutaj, i na GitHubie. Obie wersje zostały zachowane: scal je w centrum synchronizacji.</numerusform>
+            <numerusform>%n notatki zmieniły się i tutaj, i na GitHubie. Obie wersje zostały zachowane: scal je w centrum synchronizacji.</numerusform>
+            <numerusform>%n notatek zmieniło się i tutaj, i na GitHubie. Obie wersje zostały zachowane: scal je w centrum synchronizacji.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="742"/>
+        <source>From GitHub: %1</source>
+        <translation>Z GitHuba: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="767"/>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="787"/>
+        <source>Choose at least one note.</source>
+        <translation>Wybierz co najmniej jedną notatkę.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="824"/>
+        <source>Nothing to commit: the notes are the same as on GitHub.</source>
+        <translation>Nie ma czego zatwierdzać: notatki są takie same jak na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="826"/>
+        <source>Proposed as pull request #%1 from your copy of the repository.</source>
+        <translation>Zaproponowano jako pull request #%1 z twojej kopii repozytorium.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="828"/>
+        <source>Proposed as pull request #%1.</source>
+        <translation>Zaproponowano jako pull request #%1.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacegithub.cpp" line="830"/>
+        <source>%n file(s) committed to “%1”.</source>
+        <translation>
+            <numerusform>Zatwierdzono %n plik w gałęzi „%1”.</numerusform>
+            <numerusform>Zatwierdzono %n pliki w gałęzi „%1”.</numerusform>
+            <numerusform>Zatwierdzono %n plików w gałęzi „%1”.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="888"/>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="907"/>
+        <source>This is not the address of a GitHub repository.</source>
+        <translation>To nie jest adres repozytorium na GitHubie.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="912"/>
+        <source>This folder name cannot be used: no “..”, “.” or backslashes.</source>
+        <translation>Tej nazwy folderu nie można użyć: bez „..”, „.” i ukośników wstecznych.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="917"/>
+        <source>“%1” cannot be the name of a branch.</source>
+        <translation>„%1” nie może być nazwą gałęzi.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="971"/>
+        <source>The repository has no branch “%1”.</source>
+        <translation>Repozytorium nie ma gałęzi „%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="998"/>
+        <source>Open a notebook first.</source>
+        <translation>Najpierw otwórz notatnik.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1012"/>
+        <source>Another notebook was opened meanwhile.</source>
+        <translation>W międzyczasie otwarto inny notatnik.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1022"/>
+        <source>Linked. The repository is empty: your first commit fills it.</source>
+        <translation>Połączono. Repozytorium jest puste: wypełni je twój pierwszy commit.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1023"/>
+        <source>Linked. Brulion now gets the newest version.</source>
+        <translation>Połączono. Brulion pobiera teraz najnowszą wersję.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1072"/>
+        <source>Choose a folder for the notebook.</source>
+        <translation>Wybierz folder na notatnik.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1104"/>
+        <source>Paste the token first.</source>
+        <translation>Najpierw wklej token.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1108"/>
+        <source>This does not look like a GitHub token.</source>
+        <translation>To nie wygląda na token GitHuba.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1125"/>
+        <source>GitHub did not accept this token.</source>
+        <translation>GitHub nie przyjął tego tokenu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1130"/>
+        <source>The token could not be saved on this device.</source>
+        <translation>Nie udało się zapisać tokenu na tym urządzeniu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1138"/>
+        <source>Signed in to GitHub as %1.</source>
+        <translation>Zalogowano do GitHuba jako %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacegithub.cpp" line="1141"/>
+        <source>This token has neither the “repo” nor the “public_repo” scope: it can only read.</source>
+        <translation>Ten token nie ma zakresu „repo” ani „public_repo”: może tylko czytać.</translation>
+    </message>
+</context>
+<context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="110"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="111"/>
         <source>“%1” marked done</source>
         <translation>„%1” — zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="139"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="140"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="142"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="143"/>
         <source>Notifications are turned off for Brulion in Android&apos;s settings.</source>
         <translation>Powiadomienia Brulionu są wyłączone w ustawieniach Androida.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="145"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="146"/>
         <source>No notification service or system tray on this desktop: reminders appear only inside Brulion.</source>
         <translation>Na tym pulpicie nie ma usługi powiadomień ani zasobnika systemowego: przypomnienia pojawiają się tylko w Brulionie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="153"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="154"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="291"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="306"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n notatka zmieniła się jednocześnie na dwóch urządzeniach. Zachowano obie wersje: scal je w centrum synchronizacji.</numerusform>

@@ -146,6 +146,15 @@ still leaves a `*.sync-conflict-*` copy, merge it in the sync center. Conflicts 
 (`.obsidian/workspace*.json`, each device has its own) and the `.trash` folder. Syncthing does not
 transfer `.stignore` itself — copy it to every device.
 
+## Notes in a GitHub repository
+
+Markdown notes kept in a GitHub repository — an Obsidian vault pushed there, a project's
+documentation folder — need no import either: **Open from GitHub…** on the start screen opens the
+repository, or one of its folders, as a notebook that stays linked to it. Brulion downloads the
+notes, gets new versions by itself and sends your changes back as commits or as a pull request
+(docs/UI.md "Notebooks from GitHub"). The same works in the browser. An existing notebook can be
+linked to a repository too (Sync center → GitHub).
+
 ## Tags and pages
 
 In Brulion a tag names a page, as in Logseq: `#work` leads to the page "work" (details:

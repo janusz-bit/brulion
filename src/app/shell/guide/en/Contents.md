@@ -33,7 +33,7 @@ Brulion updates the documentation together with the app: new pages are added, an
 - [[Tables and charts|Tables and charts]] — sorting and filtering tables, CSV, charts from tables and calculations.
 
 ## Files and devices
-- [[Sync|Sync]] — Syncthing, Nextcloud, conflicts, version history.
+- [[Sync|Sync]] — Syncthing, Nextcloud, notebooks from GitHub, conflicts, version history.
 - [[Import and export|Import and export]] — moving notes from and to other apps.
 - [[Backups|Backups]] — scheduled notebook backups and restoring them.
 - [[File format|File format]] — what your notes look like on disk.

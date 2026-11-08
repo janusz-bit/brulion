@@ -185,6 +185,12 @@ add_test(NAME tst_shell_workspace_wiring_inline COMMAND tst_shell_workspace_wiri
 math(EXPR _wiring_timeout_ms "300000 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_shell_workspace_wiring_inline PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;BRULION_INDEX_THREADS=0;QTEST_FUNCTION_TIMEOUT=${_wiring_timeout_ms}")
+# Workspace.github against the core's in-memory GitHub (tests/core/github/fakegithub.h): the token,
+# linking a notebook, pulls, commits, proposals, a repository opened as a new notebook.
+if(TARGET brulion_github_testsupport)
+    brulion_add_test(tst_shell_workspace_github SOURCES tst_workspace_github.cpp
+        LIBS brulion_shell brulion_github_testsupport brulion_core_vault)
+endif()
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_shell_workspace_sync SOURCES tst_workspace_sync.cpp
         LIBS brulion_shell brulion_sync_testsupport brulion_pdfview)

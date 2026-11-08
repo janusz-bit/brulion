@@ -6,9 +6,10 @@ import Brulion
 
 // OnboardingView — first run and "Open another notebook": what Brulion is, how syncing works
 // (Syncthing folder or Nextcloud), choosing or creating the notebook folder for this platform,
-// "Import notes" (opens the chosen notebook on its import screen), the sample notebook (in the UI
-// language: "Sample notebook", in Polish "Przykładowy brulion"; demovault.h) and the recently used
-// notebooks.
+// "Import notes" (opens the chosen notebook on its import screen), a notebook from a GitHub
+// repository (qml/io/GitHubOpenDialog: it opens on the sync center's GitHub tab), the sample
+// notebook (in the UI language: "Sample notebook", in Polish "Przykładowy brulion"; demovault.h)
+// and the recently used notebooks.
 //
 // Per platform: desktop — a path field with a folder picker (FilePicker, the system's own,
 // asynchronous); Android — a path on the phone's storage (default /storage/emulated/0/Brulion,
@@ -313,6 +314,55 @@ Rectangle {
                 }
             }
 
+            // ---- Notes on GitHub: a repository (or one of its folders) as a notebook ------------
+            BCard {
+                Layout.fillWidth: true
+                padding: Theme.compact ? Theme.space4 : Theme.space5
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: Theme.space4
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignTop
+                        implicitWidth: 44
+                        implicitHeight: 44
+                        radius: 22
+                        color: Theme.bgSunken
+                        BIcon {
+                            anchors.centerIn: parent
+                            name: "git-branch"
+                            size: Theme.iconSizeLg
+                            color: Theme.fgMuted
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.space2
+                        BText {
+                            Layout.fillWidth: true
+                            text: qsTr("Notes on GitHub?")
+                            variant: "label"
+                            font.pixelSize: Theme.textMd
+                            wrapMode: Text.Wrap
+                        }
+                        BText {
+                            Layout.fillWidth: true
+                            text: qsTr("Open Markdown notes from a GitHub repository — all of it or one folder — as a notebook: Brulion keeps it up to date and sends your changes back as commits or pull requests. No git needed, also in the browser.")
+                            variant: "muted"
+                            font.pixelSize: Theme.textSm
+                            wrapMode: Text.Wrap
+                        }
+                        BButton {
+                            objectName: "onboardingGitHub"
+                            text: qsTr("Open from GitHub…")
+                            iconName: "git-branch"
+                            onClicked: githubDialog.openWith("", "")
+                        }
+                    }
+                }
+            }
+
             // ---- Sample notebook -----------------------------------------------------------
             BCard {
                 id: sampleCard
@@ -439,6 +489,10 @@ Rectangle {
                 }
             }
         }
+    }
+
+    GitHubOpenDialog {
+        id: githubDialog
     }
 
     FilePicker {

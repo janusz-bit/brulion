@@ -4,16 +4,20 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// SyncView — route "sync" ({tab?: "overview" | "syncthing" | "nextcloud" | "conflicts", copy?: a
-// conflict copy to open, run?: a sync run whose details to open}): the sync center.
+// SyncView — route "sync" ({tab?: "overview" | "syncthing" | "nextcloud" | "github" | "conflicts",
+// copy?: a conflict copy to open, run?: a sync run whose details to open}): the sync center.
 //   Overview   the two ways explained in plain words (Syncthing: a folder kept the same by
 //              Syncthing on every device; Nextcloud: your own server over WebDAV, also in the
-//              browser), their state, waiting conflicts and the mass-deletion guard
+//              browser), their state, a notebook kept on GitHub, waiting conflicts and the
+//              mass-deletion guard
 //   Syncthing  steps, live status, the recommended .stignore, REST access (qml/io/SyncthingPanel)
 //   Nextcloud  status with "Sync now", live progress, the last report, offline / error
 //              explanations, the deletion guard, the history of runs with their details
 //              (qml/io/SyncHistoryList, SyncRunDetails), the way to the event log, the account
 //              form (qml/io/NextcloudForm)
+//   GitHub     a notebook kept in a folder of a GitHub repository: get the newest version, commit,
+//              propose changes as a pull request, the notes not on GitHub yet, the token
+//              (qml/io/GitHubPanel; docs/UI.md "Notebooks from GitHub")
 //   Conflicts  conflict copies (list) and the resolver (qml/io/SyncConflictResolver): side by side
 //              on wide windows, one after the other on narrow ones — there a conflict opens
 //              through the route ({tab: "conflicts", copy}), so Back (the top bar's ←, Android's)
@@ -25,7 +29,8 @@ FocusScope {
 
     property var route: ({})
     readonly property string title: qsTr("Sync")
-    readonly property list<string> tabIds: ["overview", "syncthing", "nextcloud", "conflicts"]
+    readonly property list<string> tabIds: ["overview", "syncthing", "nextcloud", "github", "conflicts"]
+    readonly property WorkspaceGitHub github: Workspace.github
     readonly property WorkspaceSync sync: Workspace.sync
     readonly property int conflictCount: sync ? sync.conflictCount : 0
     readonly property int tabPadding: Theme.compact ? 9 : (Theme.touchUi ? 14 : 12)
@@ -143,10 +148,12 @@ FocusScope {
             Layout.fillWidth: true
             leftPadding: Theme.compact ? Theme.space1 : Theme.space6
             fadeColor: Theme.bg
-            // Phones: four tabs without icons fit the width (the conflict count stays visible).
+            // Phones: the tabs without icons (the bar scrolls on the narrowest; the conflict count
+            // stays visible).
             BTabButton { text: qsTr("Overview"); iconName: Theme.compact ? "" : "folder-sync"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
             BTabButton { text: "Syncthing"; iconName: Theme.compact ? "" : "laptop"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
             BTabButton { text: "Nextcloud"; iconName: Theme.compact ? "" : "cloud"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
+            BTabButton { objectName: "syncTabGitHub"; text: "GitHub"; iconName: Theme.compact ? "" : "git-branch"; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
             BTabButton { text: qsTr("Conflicts"); iconName: Theme.compact ? "" : "git-merge"; count: root.conflictCount; leftPadding: root.tabPadding; rightPadding: root.tabPadding }
         }
         Rectangle {
@@ -271,6 +278,44 @@ FocusScope {
                     }
                 }
 
+                // A notebook kept in a GitHub repository (not a way between devices: a source).
+                IoCard {
+                    Layout.fillWidth: true
+                    iconName: "git-branch"
+                    title: "GitHub"
+                    subtitle: root.github !== null && root.github.linked
+                              ? root.github.linkText
+                              : qsTr("Notes kept in a GitHub repository, as a notebook — also in the browser.")
+                    trailing: [
+                        BBadge {
+                            visible: root.github !== null && root.github.linked
+                            text: root.github !== null && root.github.changeCount > 0
+                                  ? qsTr("%n change(s)", "", root.github.changeCount)
+                                  : root.github !== null && root.github.state === "error" ? qsTr("Problem") : qsTr("Linked")
+                            variant: root.github !== null && root.github.changeCount > 0 ? "info"
+                                   : root.github !== null && root.github.state === "error" ? "danger" : "success"
+                        }
+                    ]
+                    BText {
+                        Layout.fillWidth: true
+                        visible: root.github !== null && root.github.linked
+                        text: root.github !== null ? root.github.statusText : ""
+                        variant: "small"
+                        color: root.github !== null && root.github.state === "error" ? Theme.dangerText : Theme.fgMuted
+                        wrapMode: Text.Wrap
+                    }
+                    Bullet {
+                        visible: root.github === null || !root.github.linked
+                        text: qsTr("Brulion gets the newest version and sends your changes back as commits or pull requests.")
+                    }
+                    BButton {
+                        text: root.github !== null && root.github.linked ? qsTr("Show") : qsTr("Set up GitHub")
+                        iconName: "arrow-right"
+                        iconRight: true
+                        onClicked: root.showTab("github")
+                    }
+                }
+
                 IoCard {
                     visible: root.conflictCount > 0
                     tone: "warning"
@@ -335,6 +380,13 @@ FocusScope {
                     }
                 }
                 NextcloudForm {}
+            }
+
+            // ---- GitHub -----------------------------------------------------------------------
+            Page {
+                GitHubPanel {
+                    onShowConflicts: root.showTab("conflicts")
+                }
             }
 
             // ---- Conflicts --------------------------------------------------------------------

@@ -39,8 +39,21 @@ Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz 
 > [!note] Strony dokumentacji w Twoim notatniku
 > W wersji 0.3.0 otwarcie tej dokumentacji przy włączonym Nextcloudzie synchronizowało ją z Twoim folderem na serwerze. Jej strony (np. „Spis treści”, „Synchronizacja”) mogły więc trafić do Twojego notatnika na wszystkich urządzeniach, a do dokumentacji — kopie Twoich notatek. Strony dokumentacji znajdziesz w swoim notatniku w widoku **Tagi**, pod tagiem `dokumentacja`, i możesz je tam usunąć: dokumentacja ma własne. Twoje notatki, które pojawiły się w dokumentacji, to tylko kopie.
 
+## GitHub
+Notatki trzymane w **repozytorium na GitHubie** — w całym repozytorium albo w jednym jego folderze — też mogą być notatnikiem. Brulion je pobiera, sam ściąga nowe wersje i odsyła twoje zmiany, kiedy o to poprosisz. Nie potrzebujesz do tego gita, a w przeglądarce działa to tak samo.
+
+- **Nowy notatnik z GitHuba:** na ekranie startowym (*Przełącz notatnik → Otwórz inny notatnik…*) wybierz **Otwórz z GitHuba…** i wklej adres: `właściciel/nazwa` albo adres strony repozytorium lub jednego z jego folderów na github.com (na przykład `https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/pl`). Gałąź i folder Brulion bierze z adresu. Notatnik otwiera się na karcie **GitHub** w Centrum synchronizacji, a jego notatki dochodzą po chwili.
+- **Ten notatnik na GitHubie:** *Centrum synchronizacji → GitHub → Trzymaj ten notatnik na GitHubie*. Notatki, które są tylko tutaj, zostają tutaj, dopóki ich nie zatwierdzisz; przy notatkach, które się różnią, pojawia się wersja z GitHuba — jako konflikt do scalenia.
+- **Nowe wersje** przychodzą przy otwarciu notatnika, co 15 minut, gdy Brulion jest na wierzchu, i po **Pobierz najnowszą wersję**. Notatka zmieniona i tutaj, i na GitHubie jest scalana wiersz po wierszu (rysunek — po elementach); kiedy się nie da, zostaje twoja wersja, a wersja z GitHuba czeka obok jako `Notatka.conflict-GitHub-….md` w **Konfliktach**. Notatka usunięta na GitHubie trafia tutaj do kosza, a przemianowana lub przeniesiona — zmienia nazwę także tutaj.
+- **Twoje zmiany** czekają na liście *Jeszcze nie na GitHubie*. **Zatwierdź…** wysyła zaznaczone notatki jednym commitem do gałęzi; **Zaproponuj zmiany…** wysyła je jako **pull request** — z twojej kopii repozytorium (forka), gdy nie możesz do niego pisać. Kolejna propozycja, póki pull request jest otwarty, dopisuje do niego nowe zmiany. Notatki z czekającym konfliktem idą dopiero po scaleniu.
+- **Token:** publiczne repozytorium otwiera się bez konta, tylko do czytania. Prywatne, commity i pull requesty wymagają *osobistego tokenu dostępu* z ustawień GitHuba (*Settings → Developer settings → Personal access tokens*; klasycznego z zakresem `repo`, dla publicznych repozytoriów wystarczy `public_repo`). Wklej go w karcie **Konto GitHub**; zostaje tylko na tym urządzeniu i trafia tylko do GitHuba.
+- Ukryte pliki repozytorium (`.gitignore`, `.github/…`) zostają nietknięte; pliki większe niż 50 MB i pliki trzymane w Git LFS zostają na GitHubie. Tak działa tylko GitHub — nie GitLab ani inne serwery Gita.
+
+> [!tip] Poprawki w tej dokumentacji
+> Ta dokumentacja mieszka w repozytorium Brulionu na GitHubie. W notatniku z dokumentacją *Centrum synchronizacji → GitHub → Otwórz dokumentację z GitHuba…* otwiera ją jako osobny notatnik, w którym poprawiasz stronę i proponujesz poprawkę jako pull request.
+
 ## Centrum synchronizacji
-Menu **Więcej** → **Notatnik** → *Centrum synchronizacji*, albo kliknięcie ikony stanu synchronizacji na dole paska ikon po lewej (dymek mówi, jaki to stan). Zakładki: Przegląd, Syncthing, Nextcloud, Konflikty.
+Menu **Więcej** → **Notatnik** → *Centrum synchronizacji*, albo kliknięcie ikony stanu synchronizacji na dole paska ikon po lewej (dymek mówi, jaki to stan). Zakładki: Przegląd, Syncthing, Nextcloud, GitHub, Konflikty.
 
 - Na bieżąco widać, co się dzieje: etap, liczbę plików, czas trwania i pliki w drodze.
 - Jeśli serwer długo nie odpowiada, pojawia się ostrzeżenie, a po 180 s próba jest przerywana i ponawiana — panel nie „synchronizuje” w nieskończoność.

@@ -870,7 +870,7 @@ tab's in its pane (`ShellTabPane`), and the side panel's route.
 | `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Search in folder"; the route follows its renames and moves). The filters are one row; on compact windows (< 600 px) two — the scope (All / Pages / Journals) alone across the width, then Replace…, the folder and the result count —, so they never make the view wider than a phone (one row needed ~426 px in Polish) | `query?`, `folder?` |
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves; a path part of a link naming a folder opens it (below) | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Open page" or "Create page", "Tasks with this tag"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
-| `sync` | `SyncView` — Overview, Syncthing, Nextcloud (live progress, history of runs), Conflicts (merge; drawings element by element). Conflicts: the list beside the resolver on wide windows; on narrow ones (< 900 px) one at a time, and a conflict opens through the route (`{tab: "conflicts", copy}`, the entry before it showing the list, also when the tab was chosen here), so the top bar's ← and Android's Back return to the list — the resolver has no ← of its own — and a resolved one goes back to it too. `copy` is read on every route change: a route without one shows the list | `tab?`, `copy?`, `run?` (open a run's details) |
+| `sync` | `SyncView` — Overview, Syncthing, Nextcloud (live progress, history of runs), GitHub (a notebook kept in a GitHub repository: "Notebooks from GitHub" below; `{tab: "github"}` is where a notebook opened from GitHub lands), Conflicts (merge; drawings element by element). Conflicts: the list beside the resolver on wide windows; on narrow ones (< 900 px) one at a time, and a conflict opens through the route (`{tab: "conflicts", copy}`, the entry before it showing the list, also when the tab was chosen here), so the top bar's ← and Android's Back return to the list — the resolver has no ← of its own — and a resolved one goes back to it too. `copy` is read on every route change: a route without one shows the list | `tab?`, `copy?`, `run?` (open a run's details) |
 | `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder (the system's picker, `FilePicker`; the browser's own, several files at once) / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "More" (both remembered on the device), **Sign in to Microsoft**; then a well with the device code in large monospace, **Copy code**, the address as text and an **Open microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Cancel**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles (also PDF and Word: "Exporting and printing a page"), what to export (notebook / folder / page; several notes in a PDF or DOCX: each on its own page), for the HTML, PDF, Word and Pandoc formats **Pictures from the internet**: Keep addresses / Include copies (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Fetching pictures from the internet (1 of 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Export…, the progress card, save (the system's save picker, `FilePicker`; the browser's save picker or a download) | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Replaced from the command line (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` — a row shows "Restore" (its icon on compact windows) and a "⋯" whose menu, also from a right-click or a long press on the row, has Restore and, after a separator in the danger colour, "Delete for good…" (asked first; no bare red × — the app's dismiss glyph — that deletes); the header's "Empty trash" is a secondary button with danger text, only the confirmations are solid red, and both say "This cannot be undone." | — |
@@ -3469,6 +3469,105 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   menu.
 * An export starts with a translated header: version, device, Qt, time and detail level, what
   it contains and what it never contains, and the last five sync runs.
+
+## Notebooks from GitHub
+
+Markdown notes kept in a GitHub repository — the whole repository or one folder of a branch — are
+a notebook (`Workspace.github`, `shell/workspacegithub.h`, over the core module `github`:
+docs/ARCHITECTURE.md). One implementation everywhere, the browser included: Brulion talks to
+GitHub's REST API (api.github.com answers the browser's CORS requests), not to Git — no git
+program or library, and only the folder's files travel, never the history. Other Git hosts are
+not supported (GitLab, Codeberg, a server of one's own: a Git client beside a Syncthing or plain
+folder does that on the desktop).
+
+* **Opening one** — the start screen's card "Notes on GitHub?" → "Open from GitHub…"
+  (`qml/io/GitHubOpenDialog.qml`), also "Open as a new notebook…" in the sync center's GitHub tab:
+  the address as pasted — `owner/name`, a github.com page of the repository, of a folder
+  (`…/tree/<branch>/<folder>`) or of a file (its folder), a git remote (`git@github.com:…`,
+  `ssh://`), a raw.githubusercontent.com file — with a line saying what Brulion understood; the
+  branch (empty: the address's — GitHub is asked which leading segments name a branch, as a branch
+  name may hold "/" — else the repository's default) and the folder (empty: the address's, else the
+  whole repository) as fields; a token when none is saved (optional: public repositories open
+  without one); on the desktop the folder on this device, by default the app's storage:
+  `<app data>/GitHub/<owner>/<name>` (with " – <folder>" for a folder; " 2", " 3"… when another
+  link or other notes have that folder). GitHub is asked first (the repository, the branch; an
+  empty repository is fine — the first commit fills it); then the notebook opens on the sync
+  center's GitHub tab and its notes arrive. In the browser the notebook lives in the app data
+  folder kept in IndexedDB (docs/WEB.md), like the documentation, and is one of the recent
+  notebooks of the switcher.
+* **Linking an open notebook** — the sync center's tab **GitHub** (`qml/io/GitHubPanel.qml`,
+  between Nextcloud and Conflicts; the overview has a GitHub card): "Keep this notebook on GitHub"
+  with the same address, branch and folder → "Link this notebook" (checked with GitHub; the
+  link is the notebook's on this device: AppSettings `github/notebooks/<notebook id>/…`, never in the
+  notebook). The first pull of a notebook with notes of its own keeps them: files only here stay
+  (changes to commit), files that differ get GitHub's version as a conflict copy. In the
+  documentation notebook the tab instead says how to correct it: "Open the documentation from
+  GitHub…" opens the guide's folder of Brulion's repository
+  (`janusz-bit/brulion`, `src/app/shell/guide/<language>`) as a notebook of its own, whose
+  corrections are proposed as a pull request (the documentation notebook itself is written
+  again by every version).
+* **Getting the newest version** ("Get the newest version", the sync footer's ⟳ while Nextcloud
+  is off; automatically 1.5 s after the notebook opens, every 15 minutes while the app is in
+  front and when it comes back after 5 minutes): an unmoved branch costs one request
+  (If-None-Match: GitHub's 304 is free of the rate limit), an unchanged folder no listing; files new
+  or changed on GitHub and unchanged here are downloaded (verified against the blob id the tree
+  names: a proxy's error page is never written), files removed there go to the trash (their
+  emptied folders go: Git keeps none), a file renamed or moved there (its content under one new
+  name) is renamed here too — its history, favourite and folds follow; changed on both sides — text merged three-way like
+  Nextcloud's (line by line, the config key by key, drawings element by element), else this
+  device's version stays and GitHub's is saved beside it as `Name.conflict-GitHub-<stamp>.md`
+  for the Conflicts tab (once, however often it pulls); removed here and changed there:
+  restored; changed here and removed there: kept (committed again). Left out and listed under
+  "n file(s) left out or not done": files over 50 MB, Git LFS files (their pointers), symbolic
+  links, submodules, names that clash in letter case; hidden files and folders (`.gitignore`,
+  `.github/`) are the repository's and never touched, `.brulion/config.json` travels. A pull
+  that failed for some files does not count as complete: the next one compares everything
+  again. A branch or folder that lost every file the notebook had removes nothing here ("The
+  folder on GitHub has no files any more…"). Without a token the files come from
+  raw.githubusercontent.com (by the commit), the API only for the branch and the trees — 60 API
+  requests an hour are enough for that.
+* **The notes not on GitHub yet** — "Not on GitHub yet" (new, changed, removed; "In the
+  proposal"): every notebook file whose Git blob id differs from the version last pulled or
+  committed (hashed again only when its size or time changed); a row opens the page. Conflict
+  copies made here are never sent. The status: "3 change(s) not on GitHub yet · checked today 10:32",
+  "The same as on GitHub · …", what failed, "Offline — Brulion checks GitHub again later" (no
+  error: it tries again); the same line in the sync footer with the branch icon when Nextcloud
+  is off (`WorkspaceGitHub.appStatus`).
+* **Commit…** (only when the token may push there; `qml/io/GitHubCommitDialog.qml`): the message
+  ("Update 3 note(s) from Brulion" proposed), the notes ticked (unticked ones stay here for
+  later) → one commit on the branch, made on its newest version (pulled first): text inline in
+  the new tree, other files as blobs, the executable bit and the repository's spelling of names
+  kept; the branch moved only as a fast-forward — when someone pushed meanwhile, their version is
+  pulled and merged and the commit made again (once). Refused, with the reason as a toast: no
+  token, a token that may not push ("propose the changes instead"), notes whose GitHub version
+  waits in a conflict copy ("Merge the conflicting notes first"), a pull that could not bring
+  every file up to date, every pulled file gone here (a lost storage). An empty repository gets
+  its first file through the contents API, the rest in a commit after it.
+* **Propose changes…** — a pull request to the notebook's branch, titled and described in the same
+  dialog: from a new branch `brulion/<yyyyMMdd-HHmmss>` of the repository when the token may push,
+  else of the user's fork (made when missing — GitHub returns the existing one —, waited for until
+  it has its branches); the card "Proposal #12" shows its state (Open, Merged, Closed) with "Open on
+  GitHub", "Check its state" and, once it ended, "Forget". While it is open, proposing again
+  ("Update the proposal…") adds one commit to its branch with every note it changes at this
+  device's version (a merge commit when the notebook's branch moved meanwhile) — never a second
+  pull request; a branch someone else changed on GitHub is never overwritten. The notes stay
+  "changes" until the pull request is merged and pulled.
+* **The token** (the card "GitHub account" on the tab; also in the opening dialog): a personal
+  access token pasted, checked with GitHub ("Signed in as @jan"; a classic token without the `repo`
+  or `public_repo` scope is told it can only read), kept in an owner-only file next to the
+  Nextcloud app password (`<app data>/secrets/github-token`) and sent only to api.github.com
+  (masked in every log line); "Make a token on GitHub" opens the classic token page with the
+  `repo` scope; "Forget the token". A classic token is what proposing to other people's
+  repositories needs (a fine-grained one only reaches its owner's repositories). No OAuth sign-in:
+  GitHub's sign-in endpoints refuse a browser page, and Brulion has no client registration to
+  hand out.
+* **Unlink…** (confirmed): the notes stay, the bookkeeping goes (`RepoSync::resetState`);
+  linking again starts as a first pull.
+* Errors in words (`WorkspaceGitHub::errorText`): a token not accepted, one that may not do this
+  (which scopes), the rate limit used up until a time ("With a token the limit is much higher"),
+  not found ("A private repository needs a token"), the branch moved meanwhile, GitHub's own
+  refusal quoted, offline, damaged on the way. Tests: `tst_github_address`, `tst_github_sync`
+  (core, against the in-memory `tests/core/github/fakegithub.h`), `tst_shell_workspace_github`.
 
 ## Shared components (`qml/components/`)
 

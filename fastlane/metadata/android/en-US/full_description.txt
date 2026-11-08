@@ -6,6 +6,7 @@ Brulion keeps your notes as plain Markdown files in a folder you choose. Write t
 • Calculations with units, percentages and table formulas
 • Drawings in notes, with pressure-sensitive stylus support
 • Sync through Syncthing (a plain folder) or Nextcloud (WebDAV)
+• Notes from a GitHub repository as a notebook: new versions downloaded, your changes committed or proposed as pull requests
 • Home screen widgets and "Share → Brulion"
 • Interface in English and Polish
 

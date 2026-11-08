@@ -6,6 +6,7 @@ Brulion trzyma notatki jako zwykłe pliki Markdown w wybranym folderze. Piszesz 
 • Obliczenia z jednostkami, procentami i formułami w tabelach
 • Rysunki w notatkach, z naciskiem rysika
 • Synchronizacja przez Syncthing (zwykły folder) albo Nextcloud (WebDAV)
+• Notatki z repozytorium na GitHubie jako notatnik: nowe wersje pobierane, twoje zmiany zatwierdzane albo proponowane jako pull requesty
 • Widżety na ekranie głównym i „Udostępnij → Brulion”
 • Interfejs po polsku i po angielsku
 

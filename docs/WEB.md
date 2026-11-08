@@ -21,7 +21,9 @@ PWA (it can be "installed" from the browser menu), and it keeps notes in the bro
   time (UTC times are converted normally). The browser has one notebook of the user's own
   (`/home/web_user/Brulion`) and, as everywhere, the documentation notebook ("Brulion
   Documentation", with the Polish UI "Dokumentacja Brulionu") in the app data folder (below,
-  "Data in the browser"): "Switch notebook" or Ctrl+Shift+B opens it and goes back.
+  "Data in the browser"): "Switch notebook" or Ctrl+Shift+B opens it and goes back. Notebooks
+  opened from GitHub live in the app data folder too (below, "Notebooks from GitHub in the
+  browser"), each one of the recent notebooks of the switcher.
 
 ## Tool versions
 
@@ -440,7 +442,8 @@ without a server and without the internet. Locally `scripts/wasm-build.sh` makes
 * **Nextcloud:** a page from disk has the origin `null`, and CORS for `null` would open WebDAV to every
   file on disk — for sync use the apps or the site on your own server (below,
   "Nextcloud (WebDAV) and CORS"). **Pictures from the internet** show only from servers that
-  allow it for all sites (`Access-Control-Allow-Origin: *`).
+  allow it for all sites (`Access-Control-Allow-Origin: *`). **Notebooks from GitHub** work: GitHub
+  allows every site.
 * The browser must have `DecompressionStream` (Chrome and Edge 80+, Firefox 113+, Safari 16.4+).
 
 How it works: `scripts/wasm-single-file.py` takes the assembled site from `dist-wasm/`. It compresses
@@ -743,6 +746,22 @@ WebDAV by default, so sync from the browser version will not "just work". Option
    with Nextcloud without any changes on the server side (and Syncthing is available only there).
 
 Use a Nextcloud app password (Settings → Security), not your main password.
+
+## Notebooks from GitHub in the browser
+
+A notebook kept in a GitHub repository (docs/UI.md "Notebooks from GitHub") works in the browser as
+in the apps, with nothing to set up: `api.github.com` answers every site's CORS requests (its
+`Access-Control-Allow-Origin: *`, also for the `null` origin of the single HTML file, with the
+`Authorization`, `If-None-Match`, `X-GitHub-Api-Version` headers allowed and `ETag` and the rate
+limit's headers exposed), and so does `raw.githubusercontent.com`, where the files of a public
+repository come from without a token. There is no git in the browser and none is needed: Brulion
+uses GitHub's REST API (`src/core/github`). The page sends no `User-Agent` of its own
+(`GitHubClient::setBrowser`; browsers refuse one set by a page and send theirs). The notebook's
+files are in the app data folder (`<app data>/GitHub/<owner>/<name>`, kept in IndexedDB like the
+documentation), the personal access token in its owner-only secrets file there — readable by
+scripts of the same origin, as the Nextcloud app password is: host Brulion on an origin of its
+own. GitHub's OAuth sign-in endpoints (`github.com/login/…`) send no CORS headers, which is one
+reason the sign-in is a pasted token.
 
 ## Fonts: emoji and symbols
 

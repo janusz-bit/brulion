@@ -33,7 +33,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 - [[Tabele i wykresy|Tabele i wykresy]] — sortowanie i filtrowanie tabel, CSV, wykresy z tabel i obliczeń.
 
 ## Pliki i urządzenia
-- [[Synchronizacja|Synchronizacja]] — Syncthing, Nextcloud, konflikty, historia wersji.
+- [[Synchronizacja|Synchronizacja]] — Syncthing, Nextcloud, notatniki z GitHuba, konflikty, historia wersji.
 - [[Import i eksport|Import i eksport]] — przenoszenie notatek z i do innych programów.
 - [[Kopie zapasowe|Kopie zapasowe]] — kopie notatnika według harmonogramu i ich przywracanie.
 - [[Format plików|Format plików]] — jak notatki wyglądają na dysku.

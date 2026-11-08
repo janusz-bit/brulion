@@ -39,8 +39,21 @@ Deletions are held back until you decide when they affect many files at once —
 > [!note] Documentation pages in your notebook
 > In version 0.3.0, opening this documentation with Nextcloud turned on synced it with your folder on the server. Its pages (back then in Polish, e.g. “Spis treści”, “Synchronizacja”) could therefore end up in your notebook on all devices, and copies of your notes in the documentation. You find documentation pages in your notebook in the **Tags** view, under the tag `dokumentacja`, and you can delete them there: the documentation has its own. Your notes that appeared in the documentation are only copies.
 
+## GitHub
+Notes kept in a **GitHub repository** — the whole repository or one of its folders — can be a notebook too. Brulion downloads them, gets new versions by itself and sends your changes back when you ask. You need no git for it, and it works the same in the browser.
+
+- **A new notebook from GitHub:** on the start screen (*Switch notebook → Open another notebook…*) choose **Open from GitHub…** and paste the address: `owner/name`, or the address of the repository's page or of one of its folders on github.com (for example `https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/en`). The branch and the folder are taken from the address. The notebook opens on the **GitHub** tab of the Sync center, and its notes arrive in a moment.
+- **This notebook on GitHub:** *Sync center → GitHub → Keep this notebook on GitHub*. Notes that are only here stay here until you commit them; notes that differ get GitHub's version beside them, as a conflict to merge.
+- **New versions** arrive when the notebook opens, every 15 minutes while Brulion is in front, and with **Get the newest version**. A note changed both here and on GitHub is merged line by line (a drawing by its elements); when that is impossible, your version stays and GitHub's is kept beside it as `Note.conflict-GitHub-….md` in **Conflicts**. A note removed on GitHub goes to the trash here; one renamed or moved there is renamed here too.
+- **Your changes** wait in the list *Not on GitHub yet*. **Commit…** sends the ticked notes as one commit to the branch; **Propose changes…** sends them as a **pull request** — from your own copy of the repository (a fork) when you may not write to it. Proposing again while the pull request is open adds the new changes to it. Notes with a conflict waiting are sent only after you merge them.
+- **The token:** a public repository opens without an account, only for reading. A private one, commits and pull requests need a *personal access token* from your GitHub settings (*Settings → Developer settings → Personal access tokens*; a classic one with the `repo` scope, `public_repo` for public repositories). Paste it in the **GitHub account** card; it stays only on this device and goes only to GitHub.
+- Hidden files of the repository (`.gitignore`, `.github/…`) are never touched; files larger than 50 MB and files kept in Git LFS stay on GitHub. Only GitHub works this way — not GitLab or other Git servers.
+
+> [!tip] Corrections to this documentation
+> This documentation lives in Brulion's repository on GitHub. In the documentation notebook, *Sync center → GitHub → Open the documentation from GitHub…* opens it as a notebook of its own, where you correct a page and propose the correction as a pull request.
+
 ## Sync center
-The **More** menu → **Notebook** → *Sync center*, or a click on the sync status icon at the bottom of the icon bar on the left (its tooltip tells you the status). Tabs: Overview, Syncthing, Nextcloud, Conflicts.
+The **More** menu → **Notebook** → *Sync center*, or a click on the sync status icon at the bottom of the icon bar on the left (its tooltip tells you the status). Tabs: Overview, Syncthing, Nextcloud, GitHub, Conflicts.
 
 - You see what is going on as it happens: the stage, the number of files, how long it has been running and the files on their way.
 - If the server doesn't answer for a long time, a warning appears, and after 180 s the attempt is stopped and retried — the panel doesn't “sync” forever.

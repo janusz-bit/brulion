@@ -103,6 +103,13 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   or page renamed in the app is moved on the server in one WebDAV MOVE (also when you keep
   typing in it right away), never mistaken for a mass deletion; one renamed on another device or in the Nextcloud web UI is renamed here too,
   recognised by its `oc:fileid` or ETag, so its version history, favourites and folds follow).
+* **Notebooks from GitHub**: Markdown notes in a GitHub repository — all of it or one folder of a
+  branch (`https://github.com/owner/name/tree/main/notes`) — open as a notebook on every platform,
+  the browser included, through GitHub's REST API (no git needed): the newest version pulled when
+  the notebook opens and every 15 minutes (three-way merges, GitHub's version kept as a conflict
+  copy when they fail), your changes committed to the branch or proposed as a **pull request** —
+  from your fork when you may not push; a personal access token for private repositories and for
+  sending changes (docs/UI.md "Notebooks from GitHub").
 * Weekly (ISO week, `2026-W45.md`) and monthly notes (`2026-11.md`) next to the daily ones, with
   their own folders, file names and templates, opened from the calendar's week numbers and month
   title or with `Ctrl+Alt+W` / `Ctrl+Alt+M`; `Ctrl+F` in the journal searches every day at once.
@@ -532,6 +539,15 @@ wysyłania plików (także stronę, w której zaraz potem piszesz dalej). Folder
 w przeglądarce Brulion przemianowuje też u siebie (rozpoznaje je po identyfikatorze pliku
 `oc:fileid`, a bez niego po ETagu), więc historia wersji, ulubione i zwinięte bloki idą za
 notatkami, zamiast trafić do kosza z ich starą kopią. Syncthing synchronizuje foldery sam.
+
+**GitHub:** notatki w Markdown trzymane w repozytorium na GitHubie — całym albo w jednym folderze
+gałęzi — otwierasz jako notatnik (ekran startowy → *Otwórz z GitHuba…*, albo *Centrum
+synchronizacji → GitHub* dla otwartego notatnika), także w przeglądarce i bez gita. Brulion
+pobiera najnowszą wersję przy otwarciu notatnika i co 15 minut (scala zmiany z obu stron, a gdy
+się nie da, zostawia wersję z GitHuba jako kopię konfliktu), a twoje zmiany wysyła, kiedy
+o to poprosisz: jako commit do gałęzi albo jako **pull request** — z twojego forka, gdy nie
+możesz pisać do repozytorium. Prywatne repozytoria i wysyłanie zmian wymagają osobistego tokenu
+dostępu GitHuba (zostaje tylko na urządzeniu).
 
 W zakładce *Nextcloud* widać na żywo, co robi trwająca synchronizacja (etap, „folder 12 z
 ok. 40”, aktualne pliki, czas trwania, ilość danych), ostrzeżenie, gdy serwer przestaje

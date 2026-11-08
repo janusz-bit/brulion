@@ -54,6 +54,7 @@
 #include "replacesession.h"
 #include "types.h"
 #include "workspacebackups.h"
+#include "workspacegithub.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -124,6 +125,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(brulion::shell::WorkspaceReminders *reminders READ reminders CONSTANT FINAL)
     /// Nextcloud sync, Syncthing status and conflict copies: workspacesync.h.
     Q_PROPERTY(brulion::shell::WorkspaceSync *sync READ sync CONSTANT FINAL)
+    /// The notebook kept in a GitHub repository (pull, commit, propose): workspacegithub.h.
+    Q_PROPERTY(brulion::shell::WorkspaceGitHub *github READ github CONSTANT FINAL)
     /// Automatic backups of the open notebook: workspacebackups.h.
     Q_PROPERTY(brulion::shell::WorkspaceBackups *backups READ backups CONSTANT FINAL)
     /// Find and replace in the whole notebook (replacesession.h).
@@ -184,6 +187,7 @@ public:
     void setRemindersPaused(bool paused) { m_remindersPaused = paused; }
     bool remindersPaused() const { return m_remindersPaused; }
     WorkspaceSync *sync() const { return m_sync; }
+    WorkspaceGitHub *github() const { return m_github; }
     WorkspaceBackups *backups() const { return m_backups; }
     ReplaceSession *replacing() const { return m_replacing; }
     /// The threads for looking through notes (indexworkers.h); none on WebAssembly.
@@ -782,6 +786,7 @@ private:
     // Children of this object (parented: QML never takes them over); detached by close().
     WorkspaceReminders *m_reminders = nullptr;
     WorkspaceSync *m_sync = nullptr;
+    WorkspaceGitHub *m_github = nullptr;
     WorkspaceBackups *m_backups = nullptr;
     ReplaceSession *m_replacing = nullptr;
     std::function<QDateTime()> m_clock;

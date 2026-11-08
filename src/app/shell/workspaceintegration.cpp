@@ -4,6 +4,7 @@
 #include "appsettings.h"
 #include "workspace.h"
 #include "workspacebackups.h"
+#include "workspacegithub.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -276,15 +277,29 @@ void wireSync(AppController *app)
             applySyncthing();
     });
 
-    // The AppController's sync seam (status footer, "Sync now").
-    const auto publish = [app, sync] {
+    // The AppController's sync seam (status footer, "Sync now"): Nextcloud's, else — a notebook
+    // kept on GitHub without Nextcloud — GitHub's (its "Sync now" gets the newest version).
+    WorkspaceGitHub *github = app->workspace()->github();
+    const auto publish = [app, sync, github] {
+        if (!sync->active() && github->linked()) {
+            app->setSyncAvailable(true);
+            app->setSyncStatus(github->appStatus());
+            return;
+        }
         app->setSyncAvailable(sync->active());
         app->setSyncStatus(sync->appStatus());
     };
     publish();
     QObject::connect(sync, &WorkspaceSync::statusChanged, app, publish);
     QObject::connect(sync, &WorkspaceSync::configurationChanged, app, publish);
-    QObject::connect(app, &AppController::syncRequested, sync, &WorkspaceSync::syncNow);
+    QObject::connect(github, &WorkspaceGitHub::statusChanged, app, publish);
+    QObject::connect(github, &WorkspaceGitHub::linkChanged, app, publish);
+    QObject::connect(app, &AppController::syncRequested, sync, [sync, github] {
+        if (!sync->active() && github->linked())
+            github->pull();
+        else
+            sync->syncNow();
+    });
     QObject::connect(sync, &WorkspaceSync::folderSharingFound, app,
                      [app](const QString &message) { app->toast(message, u"warning"_s); });
     QObject::connect(sync, &WorkspaceSync::conflictsFound, app, [app](int count) {
@@ -296,11 +311,33 @@ void wireSync(AppController *app)
     });
 }
 
+void wireGitHub(AppController *app)
+{
+    // A notebook kept in a GitHub repository (workspacegithub.h): the per-notebook links in
+    // AppSettings, the token in an owner-only file next to the Nextcloud app password, new
+    // notebooks from GitHub in the app's storage (in the browser too: the app data folder is kept
+    // in IndexedDB), its messages as toasts.
+    AppSettings *settings = app->settings();
+    WorkspaceGitHub *github = app->workspace()->github();
+    github->setBrowser(app->isWasm());
+    github->setNotebooksRoot(QDir(app->dataDir()).filePath(u"GitHub"_s));
+    github->setSettingsAccess(
+            [settings](const QString &key, const QVariant &fallback) { return settings->value(key, fallback); },
+            [settings](const QString &key, const QVariant &value) { settings->setValue(key, value); });
+    github->setTokenFile(QFileInfo(settings->passwordFile()).absolutePath() + u"/github-token"_s);
+    QObject::connect(github, &WorkspaceGitHub::operationFinished, app,
+                     [app](const QString &, bool, const QString &message, const QString &tone) {
+                         if (!message.isEmpty())
+                             app->toast(message, tone);
+                     });
+}
+
 } // namespace
 
 void integrateWorkspace(AppController *app)
 {
     wireReminders(app);
+    wireGitHub(app);
     wireSync(app);
     // Pictures from the internet: shown without asking only when the device's setting says so.
     AppSettings *settings = app->settings();

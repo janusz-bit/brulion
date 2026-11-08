@@ -183,12 +183,20 @@ done in the repository simply disappears from the list.
 * **Shared notebooks** — a notebook shared with another person: who changed what, comments; to be
   decided whether Nextcloud is enough or live editing is needed (Logseq RTC, AFFiNE, Obsidian:
   "Multiplayer" planned).
-* **A notebook from a GitHub repository** — Markdown notes kept in a GitHub (or any Git) repository
-  opened as a notebook, also in the browser where there is no git: pulling new versions, committing
-  one's own changes, and proposing them as a pull request from a branch (e.g. corrections to
-  Brulion's own documentation, `src/app/shell/guide/`). To be decided: the GitHub REST API (works
-  in the browser too, needs a token) or a Git library on the desktop and Android;
-  signing in; how conflicts meet the existing sync (Obsidian Git, GitJournal).
+* **Notebooks from GitHub — check against the real GitHub and further ideas.** The GitHub notebook
+  (docs/UI.md "Notebooks from GitHub", core `github`) is tested against an in-memory GitHub
+  (`tests/core/github/fakegithub.h`). What remains:
+  * by hand against github.com, on the desktop, Android and in the browser (the site and the
+    single HTML file): a fork made a moment ago taking the new branch and the pull request at once,
+    text sent inline in a tree coming back with the same blob id (CRLF, Polish letters), the
+    anonymous rate limit with the raw.githubusercontent.com downloads, a fine-grained token, a
+    repository with thousands of files and a folder deep inside it, an empty repository's first
+    commit, the CORS answers of api.github.com with a token;
+  * other Git hosts (GitLab, Codeberg/Forgejo, a server of one's own) and plain Git: their own
+    REST APIs, or a Git library on the desktop and Android (no git in the browser);
+  * a sign-in without pasting a token (GitHub's device flow needs a registered OAuth app and is
+    refused by browsers' CORS), automatic commits after edits (GitJournal, Obsidian Git), the
+    history of a note from the repository's commits.
 
 ## Platforms and distribution
 

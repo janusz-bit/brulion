@@ -5,7 +5,8 @@ import QtQuick.Templates as T
 import Brulion
 
 // ShellSyncFooter — the sync status: where the notes are synced (Nextcloud status from the sync
-// integration via AppController.syncStatus, a Syncthing folder, this browser, this device only).
+// integration via AppController.syncStatus — or, for a notebook kept on GitHub without Nextcloud,
+// GitHub's, with its own icon —, a Syncthing folder, this browser, this device only).
 // A line with "Sync now" when a sync engine is available, or `compact`: the status icon alone
 // (the sidebar's rail, ShellRail), its text as the tooltip. Clicking it opens the sync center.
 T.ItemDelegate {
@@ -15,8 +16,10 @@ T.ItemDelegate {
     /// Only the icon, in a square button (the rail).
     property bool compact: false
 
-    /// AppController.syncStatus: { state, text }.
+    /// AppController.syncStatus: { state, text, icon? }.
     readonly property string statusState: AppController.routeText(AppController.syncStatus, "state")
+    /// The icon of a status that is not Nextcloud's ("git-branch": a notebook kept on GitHub).
+    readonly property string statusIcon: AppController.routeText(AppController.syncStatus, "icon")
     // Without a sync engine an error can still stop the sync (another notebook syncs with the
     // same server folder): shown as one.
     readonly property string syncState: AppController.syncAvailable ? (statusState !== "" ? statusState : "idle")
@@ -39,7 +42,7 @@ T.ItemDelegate {
     }
     readonly property string iconName: {
         switch (control.syncState) {
-        case "idle": return "cloud"
+        case "idle": return control.statusIcon !== "" ? control.statusIcon : "cloud"
         case "error": return "cloud-off"
         case "offline": return "cloud-off"
         }
@@ -93,7 +96,7 @@ T.ItemDelegate {
             visible: AppController.syncAvailable && !control.compact
             enabled: control.syncState !== "syncing"
             iconName: "refresh-cw"
-            label: qsTr("Sync now")
+            label: control.statusIcon === "git-branch" ? qsTr("Get the newest version from GitHub") : qsTr("Sync now")
             size: "small"
             onClicked: AppController.requestSync()
         }

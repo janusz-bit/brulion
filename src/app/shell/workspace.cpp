@@ -124,6 +124,8 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_replacing = new ReplaceSession(this);
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
+    m_github = new WorkspaceGitHub(this);
+    m_github->setClock([this] { return now(); });
     m_backups->setSyncControl([this](std::function<void()> ready) { m_sync->holdSync(std::move(ready)); },
                               [this] { m_sync->releaseSync(); });
     connect(m_backups, &WorkspaceBackups::saveOpenEditors, this, &EditorHost::saveOpenEditorsRequested);
@@ -147,6 +149,7 @@ Workspace::~Workspace()
     // Nobody may react to a workspace that is going away (the app's controller is half
     // destroyed by now): close quietly.
     m_sync->blockSignals(true);
+    m_github->blockSignals(true);
     m_reminders->blockSignals(true);
     m_backups->blockSignals(true);
     blockSignals(true);
@@ -217,6 +220,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     m_trashCount = -1;
     m_reminders->attach(m_vault.get(), m_index.get());
     m_sync->attach(m_vault.get());
+    m_github->attach(m_vault.get());
     {
         // Backups next to History and LocalStore: in the browser a mount of their own, as the index
         // cache's (a quota failure must not touch History or settings), and their temporary file
@@ -265,6 +269,7 @@ void Workspace::close()
     m_reminders->detach();
     m_backups->detach(); // before sync: it releases its hold there
     m_sync->detach();
+    m_github->detach();
     m_indexTimer.stop();
     cancelMoveImpact(); // its planner reads the index
     m_impacts = ImpactCache();
@@ -338,6 +343,7 @@ void Workspace::setUiLanguage(const QString &language)
     m_language = language == u"en" ? u"en"_s : u"pl"_s;
     m_reminders->setLanguage(m_language);
     m_sync->setLanguage(m_language);
+    m_github->setLanguage(m_language);
     m_backups->setLanguage(m_language);
 }
 
@@ -1758,6 +1764,7 @@ void Workspace::setFavorite(const QString &rawPath, bool favorite)
 
 void Workspace::applicationStateChanged(Qt::ApplicationState state)
 {
+    m_github->setAppActive(state == Qt::ApplicationActive);
     if (state != Qt::ApplicationActive) {
         m_wasInactive = true;
         return;

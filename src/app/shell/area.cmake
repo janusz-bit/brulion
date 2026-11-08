@@ -9,7 +9,8 @@
 # the clipboard's HTML of copied blocks and pasted HTML (core io), PDFs (workspacepdf.cpp: thumbnails,
 # "Open in another app", a drawing on a PDF page), reminders — WorkspaceReminders
 # over the notifiers of src/app/notify —, sync —
-# WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
+# WorkspaceSync: Nextcloud, Syncthing, conflicts —, the notebook kept in a GitHub repository —
+# WorkspaceGitHub: pull, commit, propose (core github) — and their wiring to the app,
 # workspaceintegration), CommandModel, ShortcutMap (the commands' custom shortcuts), FolderTreeModel, the sample vault, the tray calendar's
 # placement (traypopup.h, pure). SingleInstance is in
 # src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
@@ -69,6 +70,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacebackups.h ${_brulion_shell_dir}/workspacebackups.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
     ${_brulion_shell_dir}/workspacesyncruns.cpp
+    ${_brulion_shell_dir}/workspacegithub.h ${_brulion_shell_dir}/workspacegithub.cpp
     ${_brulion_shell_dir}/workspaceintegration.h ${_brulion_shell_dir}/workspaceintegration.cpp
     # The views' C++ (qml/views/*.qml)
     ${_brulion_shell_dir}/cleanupselection.h ${_brulion_shell_dir}/cleanupselection.cpp
@@ -90,6 +92,7 @@ target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook brulion_core_backup
     PRIVATE Qt6::Network brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
+            brulion_core_github
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers) # folderchoices.cpp: TextHelper's fuzzy ranking
 # Autostart ("Start when you sign in", Windows); AndroidBridge (permissions, test notification);

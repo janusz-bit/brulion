@@ -5,8 +5,8 @@
 //   AppController    singleton — main()'s instance (AppController::instance())
 //   AppSettings      singleton — AppController.settings
 //   Workspace        singleton — AppController.workspace (the EditorHost for the editor)
-//   WorkspaceReminders, WorkspaceSync, WorkspaceBackups   uncreatable — Workspace.reminders /
-//                                       Workspace.sync / Workspace.backups
+//   WorkspaceReminders, WorkspaceSync, WorkspaceGitHub, WorkspaceBackups   uncreatable —
+//                                       Workspace.reminders / .sync / .github / .backups
 //   ReplaceSession   uncreatable — Workspace.replacing (the notebook-wide replace)
 //   CommandModel     singleton — the command palette's commands
 //   ShortcutMap      singleton — the commands' keyboard shortcuts (custom ones too)
@@ -26,6 +26,7 @@
 #include "viewtraits.h"
 #include "workspace.h"
 #include "workspacebackups.h"
+#include "workspacegithub.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -109,6 +110,13 @@ struct WorkspaceSyncForeign {
     QML_FOREIGN(brulion::shell::WorkspaceSync)
     QML_NAMED_ELEMENT(WorkspaceSync)
     QML_UNCREATABLE("Use Workspace.sync")
+};
+
+struct WorkspaceGitHubForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::shell::WorkspaceGitHub)
+    QML_NAMED_ELEMENT(WorkspaceGitHub)
+    QML_UNCREATABLE("Use Workspace.github")
 };
 
 struct WorkspaceBackupsForeign {
