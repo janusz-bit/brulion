@@ -2736,7 +2736,14 @@ or agenda row) follows these; the reasons are below.
 7. **A long list whose rows differ in height uses `BRowScrollBar { list: … }`**, not the attached
    `BScrollBar` (its thumb jumps: "The scroll bar: `RowScroll`" below). A model that hides rows as
    zero-height delegates offers `visibleCount`, `visibleRowsBefore()` and `visibleRowAt()`.
-8. **Measure, before and after:** `tests/app/perf/scroll-probe.sh` (also `CACHE=0`: every row
+8. **Never set `x` on a delegate's root: inset the row.** A vertical `ListView` places every
+   delegate at x 0 (an `x` binding there holds only until the next layout — Tasks' rows hung up to
+   200 px left of their centred header). The delegate is as wide as the list and the row is inset
+   into its column: a control's `leftInset` / `rightInset` and paddings (`TasksRow.sideMargin`, All
+   pages, Search), an inset its parts are drawn from (`HabitCard.inset`) or a full-width `Item`
+   with the row inside it (the agenda's days). A header that offsets its column counts the
+   offset in its height.
+9. **Measure, before and after:** `tests/app/perf/scroll-probe.sh` (also `CACHE=0`: every row
    created at the edge of the view), `VAULT=big` for long journals, a Raspberry Pi for ARM times
    (`PLATFORM=offscreen`), `tests/app/perf/android-scroll.sh` on the emulator or a phone; ctest
    `tst_scroll_jumps_qml` and the QML self-tests.

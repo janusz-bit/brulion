@@ -9,7 +9,8 @@ import Brulion
 // that day. A definition that is not understood (or a second one of a name) shows the problem.
 //
 // Laid out with bindings (docs/UI.md "Scrolling performance"): the card has its final height when
-// it is created.
+// it is created. The delegate is as wide as the list (a ListView places its delegates at x 0):
+// `inset` puts the card into its column.
 //
 //   delegate: HabitCard { weekdayNames: habitModel.weekdayNames; monthOffset: habitModel.monthOffset
 //                         onCheckRequested: (date, state) => …; onOpenRequested: … }
@@ -58,6 +59,9 @@ Item {
     readonly property int statsHeight: valid ? Theme.textSm + Theme.space3 : 0
     readonly property int gridHeight: gridRows > 0 ? Theme.textXs + Theme.space2 + gridRows * (cell + gap) : 0
     readonly property int pad: Theme.narrow ? Theme.space3 : Theme.space4
+    /// The card's inset on each side, and its own width within them.
+    property real inset: 0
+    readonly property real cardWidth: width - 2 * inset
 
     implicitHeight: pad + headerHeight + (statsHeight > 0 ? Theme.space2 + statsHeight : 0)
                     + (gridHeight > 0 ? Theme.space3 + gridHeight : 0) + pad
@@ -89,7 +93,9 @@ Item {
     property point _menuAt
 
     Rectangle {
-        anchors.fill: parent
+        x: card.inset
+        width: card.cardWidth
+        height: card.height
         radius: Theme.radiusLg
         color: Theme.bgElevated
         border.width: 1
@@ -102,7 +108,7 @@ Item {
         objectName: "habitToggle_" + card.key
         readonly property string mark: card.todayMark !== "" ? card.todayMark : "open"
         readonly property int size: Theme.touchUi ? 40 : 32
-        x: card.pad
+        x: card.inset + card.pad
         y: card.pad + (card.headerHeight - height) / 2
         width: size
         height: size
@@ -175,7 +181,7 @@ Item {
     BIconButton {
         id: menuButton
         objectName: "habitMenu_" + card.key
-        x: card.width - width - card.pad + Theme.space1
+        x: card.inset + card.cardWidth - width - card.pad + Theme.space1
         y: card.pad + (card.headerHeight - height) / 2
         label: qsTr("More")
         iconName: "ellipsis"
@@ -190,9 +196,9 @@ Item {
     Item {
         id: stats
         visible: card.valid
-        x: card.pad
+        x: card.inset + card.pad
         y: card.pad + card.headerHeight + Theme.space2
-        width: card.width - 2 * card.pad
+        width: card.cardWidth - 2 * card.pad
         height: card.statsHeight
 
         BIcon {
@@ -221,7 +227,7 @@ Item {
     Item {
         id: grid
         visible: card.gridRows > 0
-        x: card.pad
+        x: card.inset + card.pad
         y: card.pad + card.headerHeight + (card.statsHeight > 0 ? Theme.space2 + card.statsHeight : 0) + Theme.space3
         width: 7 * card.cell + 6 * card.gap
         height: card.gridHeight
