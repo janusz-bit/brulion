@@ -6223,25 +6223,42 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
         if (!list || linkRow < 0)
             return {-1, -1};
         // The tab shown again restores where it was scrolled a few event-loop turns later (PageView
-        // restoreViewState), which may move the link away again; the whole page is built, so its
-        // text is found off screen too: position until the link is in the list's view.
+        // restoreViewState), which may move the link away again — after it was found, in a slow
+        // (sanitizer) build; the whole page is built, so its text is found off screen too: position
+        // until the link is in the list's view, then until it stays where it is for a moment
+        // without being positioned again.
         const QRectF view = list->mapRectToScene(QRectF(0, 0, list->width(), list->height()));
         QPointF point(-1, -1);
-        waitFor([&] {
-            QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
-            settle(250);
+        const bool steady = waitFor([&] {
             QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s);
-            point = text ? linkPoint(text, u"page:Remont"_s) : QPointF(-1, -1);
-            return view.contains(point);
+            const QPointF now = text ? linkPoint(text, u"page:Remont"_s) : QPointF(-1, -1);
+            if (!view.contains(now)) {
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
+                point = QPointF(-1, -1);
+                settle(250);
+                return false;
+            }
+            const bool still = now == point;
+            point = now;
+            if (!still)
+                settle(250);
+            return still;
         });
-        return view.contains(point) ? point : QPointF(-1, -1);
+        return steady ? point : QPointF(-1, -1);
     };
     QPointF link = linkOnScreen();
     check(link.x() >= 0, "the guide shows its link to the renovation project");
     if (link.x() >= 0)
         mouseClick(window, link, Qt::MiddleButton);
-    check(waitFor([&] { return app->tabCount() == 4 && path() == renovation; }),
-          "a middle click on a link in the editor opens it in a new tab");
+    const bool middleOpened = waitFor([&] { return app->tabCount() == 4 && path() == renovation; });
+    if (!middleOpened && link.x() >= 0) {
+        QQuickItem *target = uidriver::pressTargetAt(window, link);
+        std::fprintf(stderr, "selftest: middle click at %.0f,%.0f: %s; press target %s %s; %d tab(s), %s\n",
+                     link.x(), link.y(), qPrintable(uidriver::itemsAt(window, link)),
+                     target ? target->metaObject()->className() : "", target ? qPrintable(target->objectName()) : "",
+                     int(app->tabCount()), qPrintable(path()));
+    }
+    check(middleOpened, "a middle click on a link in the editor opens it in a new tab");
     app->closeTab(app->focusedTab());
     app->selectTab(second);
     link = linkOnScreen();
