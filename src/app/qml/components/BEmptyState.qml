@@ -11,6 +11,7 @@ import Brulion
 //       actionText: qsTr("Open journal"); onActionTriggered: openJournal()
 //   }
 //
+// `title` and `description` are plain text (they quote what was searched for, a tag, a page).
 // Centre it in the empty area (anchors.centerIn / Layout.alignment). `compact` for small
 // panels (smaller icon, no circle); `alignStart` lines it up with a list's header above it
 // instead of centring it (a panel's empty section, usually without an icon: iconName "").
@@ -58,6 +59,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.title !== ""
         text: root.title
+        textFormat: Text.PlainText
         horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
         wrapMode: Text.Wrap
         font.family: Theme.fontUi
@@ -70,6 +72,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.description !== ""
         text: root.description
+        textFormat: Text.PlainText
         horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
         wrapMode: Text.Wrap
         lineHeightMode: Text.FixedHeight

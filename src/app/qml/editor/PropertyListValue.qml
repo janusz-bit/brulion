@@ -59,9 +59,6 @@ Item {
     function withoutLast(t: string): string {
         return Js.slice(t, 0, t.length - 1)
     }
-    function safe(s: string): string {
-        return editor ? editor.autoTextSafe(s) : s
-    }
     /// The target of a `[[Page]]` item ("" for any other item).
     function linkTarget(item: string): string {
         return BlockViews.listLinkTarget(item)
@@ -146,7 +143,7 @@ Item {
         root.chipMenuIndex = i
         menu.kind = root.type === "tags" || root.type === "aliases" ? root.type : "list"
         menu.item = item
-        menu.display = root.safe(root.display(item))
+        menu.display = root.display(item)
         menu.opensItem = root.type === "list" && root.linkTarget(item) !== ""
         menu.readOnly = root.readOnly
         menu.bottomMargin = root.editor.menuBottomMargin()
@@ -218,7 +215,7 @@ Item {
                 variant: root.type === "tags" ? "tag" : "neutral"
                 iconName: root.type === "aliases" ? "bookmark" : target !== "" ? "file-text" : ""
                 showIcon: iconName !== ""
-                text: root.safe(root.display(modelData))
+                text: root.display(modelData)
                 interactive: opens || (Theme.touchUi && !root.readOnly)
                 // An item of the list, not a filter: filled like the other items (the page icon
                 // marks a [[Page]]; a link colour would be too faint on the chip in light).

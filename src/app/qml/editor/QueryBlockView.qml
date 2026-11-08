@@ -273,8 +273,7 @@ Rectangle {
                     size: "small"
                     variant: root.chipVariant(filterChip.key)
                     showIcon: variant !== "neutral" && variant !== "done"
-                    text: root.editor.autoTextSafe((filterChip.negated ? "≠ " : "") + root.filterLabel(filterChip.key) + ": "
-                                                   + filterChip.value)
+                    text: (filterChip.negated ? "≠ " : "") + root.filterLabel(filterChip.key) + ": " + filterChip.value
                 }
             }
             Repeater {
@@ -287,7 +286,7 @@ Rectangle {
                     required property string modelData
                     size: "small"
                     iconName: "search"
-                    text: root.editor.autoTextSafe("„" + modelData + "”")
+                    text: "„" + modelData + "”"
                 }
             }
             TapHandler {

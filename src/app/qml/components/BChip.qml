@@ -19,6 +19,8 @@ import Brulion
 // On touch UIs an interactive or removable chip is a touch target: 44 px tall (its visual part
 // centred) and at least 44 px wide.
 // size:        "small" (inline in text) | "normal"
+// The text is plain text: chips show tags, aliases, folder and page names and list values, which
+// come from anywhere (sync, imports) and must never turn into markup.
 T.AbstractButton {
     id: control
 
@@ -113,6 +115,7 @@ T.AbstractButton {
             x: chipContent.labelX
             anchors.verticalCenter: parent.verticalCenter
             text: control.text
+            textFormat: Text.PlainText
             font: control.font
             color: control.fgColor
             elide: Text.ElideRight

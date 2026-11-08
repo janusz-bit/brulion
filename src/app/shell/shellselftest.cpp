@@ -6966,6 +6966,58 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     app->goHome();
 }
 
+/// 3k. A name written with markup (a synced or imported file can be named anything without a "/",
+///     so its tags stay open) is quoted as written by the dialogs: "Move …"'s title and the trash
+///     confirmation show it as plain text, never as styled text (BDialog, BConfirmDialog). Windows
+///     allows no "<" or ">" in file names: there entities stand for the markup.
+void checkNamesWithMarkup(QQuickWindow *window, AppController *app, const Check &check)
+{
+#ifdef Q_OS_WIN
+    const QString name = u"&lt;b&gt;Ważne &lt;i&gt;notatki"_s;
+#else
+    const QString name = u"<b>Ważne <i>notatki"_s;
+#endif
+    const QString path = name + u".md"_s;
+    Workspace *ws = app->workspace();
+    check(ws->writeFile(path, u"Treść.\n"_s) && waitFor([&] { return ws->exists(path); }),
+          "a page named with markup is added to the notebook");
+    // The shown text item that reads `text` exactly — in plain text (Text.PlainText is 0).
+    const auto plainTextShown = [&](const QString &text) {
+        QQuickItem *label = nullptr;
+        waitFor([&] {
+            label = findShown(window->contentItem(), [&](QQuickItem *item) {
+                return item->inherits("QQuickText") && item->property("text").toString() == text;
+            });
+            return label != nullptr;
+        });
+        return label && label->property("textFormat").toInt() == 0;
+    };
+    const auto closeDialog = [&](QObject *dialog) {
+        if (dialog)
+            QMetaObject::invokeMethod(dialog, "close");
+        waitFor([&] { return !dialog || !dialog->property("visible").toBool(); });
+    };
+
+    app->requestItemAction(u"move"_s, path);
+    QObject *moveDialog = window->findChild<QObject *>(u"shellMoveDialog"_s);
+    check(moveDialog && waitFor([&] { return moveDialog->property("opened").toBool(); })
+                  && plainTextShown(QCoreApplication::translate("ShellMoveDialog", "Move “%1”").arg(name)),
+          "the move dialog's title quotes a name with markup as written");
+    closeDialog(moveDialog);
+
+    app->requestItemAction(u"delete"_s, path);
+    QObject *deleteDialog = window->findChild<QObject *>(u"shellDeleteDialog"_s);
+    check(deleteDialog && waitFor([&] { return deleteDialog->property("opened").toBool(); })
+                  && plainTextShown(QCoreApplication::translate(
+                                            "AppShell", "“%1” will be moved to the trash. You can restore it from there.")
+                                            .arg(name)),
+          "the trash confirmation quotes a name with markup as written");
+    closeDialog(deleteDialog);
+    check(ws->exists(path) && ws->vault()->removePermanently(path), "the page named with markup is removed again");
+    closeMenus(window);
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -7073,6 +7125,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3j. A page's icon and cover: the page menu, their dialogs, the header, the sidebar's tree.
     checkPageLook(window, app, check);
     closeMenus(window);
+    // 3k. Names with markup in the dialogs that quote them (Move, the trash confirmation).
+    checkNamesWithMarkup(window, app, check);
 
     // 4. The command palette: Escape closes it; the focus returns to the shell.
     app->navigate({ { u"view"_s, u"tasks"_s } });

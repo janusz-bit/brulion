@@ -506,7 +506,7 @@ Item {
                                 sourceComponent: BToolTip {
                                     parent: cell
                                     visible: true
-                                    text: root.block.editor.autoTextSafe(cell.error !== "" ? cell.error : cell.shown)
+                                    text: cell.error !== "" ? cell.error : cell.shown
                                 }
                             }
                             HoverHandler {

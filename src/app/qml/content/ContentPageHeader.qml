@@ -746,7 +746,7 @@ Item {
                     readonly property string name: AppController.routeText(modelData, "name")
                     readonly property bool editable: chips.live && AppController.routeFlag(aliasChip.modelData, "editable")
                     objectName: "headerAlias_" + name
-                    text: header.editor ? header.editor.autoTextSafe(aliasChip.name) : aliasChip.name
+                    text: aliasChip.name
                     iconName: "bookmark"
                     interactive: editable
                     Accessible.name: qsTr("Alias: %1").arg(aliasChip.name)
@@ -771,7 +771,7 @@ Item {
                     readonly property bool editable: chips.live && AppController.routeFlag(tagChip.modelData, "editable")
                     objectName: "headerTag_" + name
                     variant: "tag"
-                    text: "#" + (header.editor ? header.editor.autoTextSafe(tagChip.name) : tagChip.name)
+                    text: "#" + tagChip.name
                     interactive: true
                     Accessible.name: qsTr("Tag %1").arg(tagChip.name)
                     onClicked: AppController.openTag(tagChip.key !== "" ? tagChip.key : tagChip.name)
@@ -875,8 +875,7 @@ Item {
                     readonly property string tagDisplay: AppController.routeText(modelData, "display")
                     variant: "tag"
                     interactive: true
-                    text: "#" + (header.editor ? header.editor.autoTextSafe(subTagChip.tagDisplay) : subTagChip.tagDisplay)
-                          + " · " + AppController.routeText(subTagChip.modelData, "count")
+                    text: "#" + subTagChip.tagDisplay + " · " + AppController.routeText(subTagChip.modelData, "count")
                     Accessible.name: qsTr("Tag %1").arg(subTagChip.tagDisplay)
                     onClicked: AppController.openTag(AppController.routeText(subTagChip.modelData, "tag"))
                 }

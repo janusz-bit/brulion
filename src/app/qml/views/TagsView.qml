@@ -309,7 +309,7 @@ FocusScope {
                                         id: subTagChip
                                         variant: "tag"
                                         interactive: true
-                                        text: "#" + root.safe(subTag.display) + " · " + subTag.count
+                                        text: "#" + subTag.display + " · " + subTag.count
                                         Accessible.name: qsTr("Tag %1").arg(subTag.display)
                                         onClicked: AppController.navigate({ view: "tag", tag: subTag.tag, overview: true })
                                     }

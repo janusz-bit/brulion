@@ -1875,14 +1875,6 @@ FocusScope {
         return true
     }
 
-    /// Text for a design-system component that shows it with Text.AutoText (BChip, BDialog
-    /// subtitle, BToolTip; BBreadcrumb, BMenuItem and BToast show plain text): such text is rendered as styled text — images loaded, tags
-    /// applied — when it looks like markup. Note text containing "<" is escaped, which AutoText
-    /// then shows exactly as written.
-    function autoTextSafe(s: string): string {
-        return s !== "" && Js.indexOf(s, "<") >= 0 ? TextHelper.escapeHtml(s) : s
-    }
-
     /// Keys while blocks are selected (not editing): one block (Esc) or a range — Shift+↑/↓ extend
     /// or shrink it, Ctrl+A selects every block, Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste over
     /// it, Delete removes it, Tab / Shift+Tab, Alt+↑/↓ and Ctrl+Enter act on all of it.

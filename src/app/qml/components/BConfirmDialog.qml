@@ -16,7 +16,8 @@ import Brulion
 //   confirmDelete.open()
 //
 // `checkText` adds a check box (e.g. "Don't ask again"), read it from `checked`.
-// Destructive dialogs focus the safe (cancel) button first.
+// Destructive dialogs focus the safe (cancel) button first. `message` and `detail` are plain text
+// (they quote names, like the title: BDialog).
 BDialog {
     id: control
 
@@ -41,6 +42,7 @@ BDialog {
             Layout.fillWidth: true
             visible: control.message !== ""
             text: control.message
+            textFormat: Text.PlainText
             wrapMode: Text.Wrap
             lineHeightMode: Text.FixedHeight
             lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
@@ -52,6 +54,7 @@ BDialog {
             Layout.fillWidth: true
             visible: control.detail !== ""
             text: control.detail
+            textFormat: Text.PlainText
             wrapMode: Text.Wrap
             font.family: Theme.fontUi
             font.pixelSize: Theme.textSm
