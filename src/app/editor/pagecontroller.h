@@ -1054,7 +1054,8 @@ Q_SIGNALS:
     void saveFailed();
     /// The file changed outside and was reloaded / merged.
     void externallyChanged(bool merged);
-    /// The file was deleted outside the editor (the text is kept, unsaved).
+    /// The file was deleted outside the editor: reloaded as a page not written yet, or — with
+    /// unsaved edits — the text is kept, unsaved.
     void fileRemoved();
 
 private:

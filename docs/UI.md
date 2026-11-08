@@ -1363,7 +1363,10 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
     blocks, missing ones, links without a preview, escaping, malformed URLs, the routes followed),
     `--selftest-shell` (`checkLinkPreviews`: real mouse moves and clicks).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
-  and on focus loss / suspend / quit, and merges external changes three-way. An undo step is a
+  and on focus loss / suspend / quit, and merges external changes three-way. Its file deleted (the
+  trash, another program, a sync) with nothing unsaved, it shows the page as one not written yet —
+  a journal day stays on screen without the deleted text —; unsaved edits are kept and saved
+  again (`removedFileShowsEmptyPage`, `removedFileKeepsUnsavedText`). An undo step is a
   `BlockDocument::Delta` — the run of blocks the command changed, a block in both versions with
   only its changed range of text (`undoStoresChangesNotPages`, `pasteIsASmallUndoStep`) — and
   undo / redo apply it as a document operation through `BlockListModel::apply()`

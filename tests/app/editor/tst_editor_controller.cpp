@@ -6267,13 +6267,45 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(host.events.last(), u"+D.md"_s);
     }
 
-    void removedFileKeepsText()
+    void removedFileShowsEmptyPage()
     {
-        Fixture f(u"- a\n"_s);
+        // Moved to the trash with nothing unsaved (a journal day stays on screen): the deleted text
+        // goes, the page is one not written yet, and nothing writes the file again.
+        Fixture f(u"- Zażółć gęślą jaźń\n  - dziecko\n"_s);
+        QSignalSpy removed(&f.page, &PageController::fileRemoved);
+        QSignalSpy exists(&f.page, &PageController::existsChanged);
+        QVERIFY(f.page.exists());
+        const int writes = f.host.writeCount();
+        f.host.removeFile(Page);
+        QCOMPARE(removed.size(), 1);
+        QCOMPARE(exists.size(), 1);
+        QVERIFY(!f.page.exists());
+        QVERIFY(!f.page.dirty());
+        QCOMPARE(f.text(), QString());
+        QVERIFY(!f.page.canUndo());
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.writeCount(), writes);
+        QVERIFY(!f.host.files().contains(Page));
+        // Typed into afterwards: a new file.
+        f.page.insertBlockAfter(-1, u"nowy"_s);
+        QVERIFY(f.page.save());
+        QVERIFY(f.page.exists());
+        QCOMPARE(f.host.file(Page), u"- nowy\n"_s);
+    }
+
+    void removedFileKeepsUnsavedText()
+    {
+        // Deleted elsewhere while edits wait to be saved: they are kept and saved again.
+        Fixture f(u"- a\n"_s, 60'000);
+        f.page.setEditText(0, u"ał"_s, 2);
+        QVERIFY(f.page.dirty());
         QSignalSpy removed(&f.page, &PageController::fileRemoved);
         f.host.removeFile(Page);
         QCOMPARE(removed.size(), 1);
-        QCOMPARE(f.text(), u"- a\n"_s);
+        QCOMPARE(f.text(), u"- ał\n"_s);
+        QVERIFY(f.page.dirty());
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"- ał\n"_s);
     }
 
     // --- source mode ----------------------------------------------------------------------------------

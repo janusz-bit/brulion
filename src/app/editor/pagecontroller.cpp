@@ -869,6 +869,11 @@ void PageController::onFileChanged(const QString &path)
     bool ok = false;
     const QString remote = m_host->read(path, &ok);
     if (!ok) {
+        // Deleted (moved to the trash in the app, by another program or a sync). With nothing
+        // unsaved the editor shows the page as one not written yet: a day of the journal stays on
+        // screen, but without the deleted text. Unsaved edits are kept (saving writes them again).
+        if (!m_dirty && !m_conflict && !m_editsDiscarded)
+            load();
         Q_EMIT fileRemoved();
         return;
     }
