@@ -2116,13 +2116,16 @@ and diagrams (shapes, arrows, text), on every platform.
   below), **Shapes** (one button showing the last shape — R Rectangle, O Ellipse, D Diamond, L Line,
   A Arrow and, after a separator and without keys, the polygons Triangle, Right triangle,
   Parallelogram, Trapezoid, Pentagon, Hexagon, Star, Block arrow, Speech bubble, Heart, Cloud,
-  remembered in `drawing/shape` —; clicked again while a shape is the tool it opens their menu),
+  remembered in `drawing/shape` —; clicked again while a shape is the tool it opens their menu;
+  both buttons carry a small caret, a `chevron-down` in the bottom-right corner of their square in
+  `fgMuted` — `MenuCaret` —, the one sign that a menu lies behind them, phones having no tooltip),
   **Text** (T; below), the current tool's colours
   (pen, shapes and text: ink, blue, red, green, orange, purple;
   highlighter: yellow, green, pink, blue, orange) and widths (fine / medium /
   thick; narrow / medium / wide; text: its sizes Small / Medium / Large / Extra large, 16 / 20 /
   28 / 36 — an "A" at four sizes, `drawing/fontSize`) — on phones behind one swatch, a popup above
-  the bar —, Paper (plain, lines, grid: an undo step; and the backdrop's entries, below),
+  the bar —, Paper (plain — a blank sheet's icon, `file`: the square is the rectangle's —, lines,
+  grid: an undo step; and the backdrop's entries, below),
   **Drawing background** (a sun-and-moon, sun or moon icon: Like the app / Light / Dark; on phones in
   More: "Background like the app", "Light background", "Dark background"), Draw with finger (touch screens), Show the whole
   drawing (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Done**
@@ -2153,8 +2156,8 @@ and diagrams (shapes, arrows, text), on every platform.
   follow, labels go along). **DrawingSelectionBar** floats centred above the frame (below it when
   there is no room, always inside the view), touch-sized on touch screens, while nothing is being
   drawn, moved or written: the pen's colours (recolour; on narrow windows one swatch opening them
-  — a highlighter stays one), **Style** (below), **Duplicate** (Ctrl+D: copies 10 units right and
-  down, selected), **Bring to front** (Ctrl+Shift+]), **Send to back** (Ctrl+Shift+[: above a locked
+  — a highlighter stays one), **Style** (below), **Duplicate** (Ctrl+D, `copy-plus` — the plain
+  `copy` is More's Copy, right under it on phones —: copies 10 units right and down, selected), **Bring to front** (Ctrl+Shift+]), **Send to back** (Ctrl+Shift+[: above a locked
   backdrop; both in More on narrow windows), **More** (**Copy**, Ctrl+C, **Cut**, Ctrl+X —
   as Excalidraw's clipboard, below —, **Rotate by 90°**, **Flip horizontally**,
   Shift+H, **Flip vertically**, Shift+V, **Group**, Ctrl+G, **Ungroup**, Ctrl+Shift+G: one outermost
@@ -3667,7 +3670,8 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   `pencil`), the documentation `circle-help`, opening something in the main view `external-link`
   (the journal day's "Open as page", the side panel's "Open in the main view"), `arrow-left` is
   only Back and `panel-left` only the sidebar (a page window's "Move to main window":
-  `square-arrow-down-left`).
+  `square-arrow-down-left`); in the drawing editor `square` is only the rectangle (plain paper:
+  `file`) and `copy` only Copy (Duplicate: `copy-plus`).
   New icons: copy from `lucide-static`, normalise like the others, re-run CMake. They render
   everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
   on the CPU, no shader effect).

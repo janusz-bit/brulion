@@ -118,7 +118,7 @@ Item {
             BIconButton {
                 objectName: "drawingSelectionDuplicate"
                 anchors.verticalCenter: parent.verticalCenter
-                iconName: "copy"
+                iconName: "copy-plus" // ("copy" is the menu's Copy, right under it on phones)
                 label: qsTr("Duplicate")
                 shortcut: "Ctrl+D"
                 focusPolicy: Qt.NoFocus
