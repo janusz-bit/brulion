@@ -424,8 +424,8 @@
 <context>
     <name>ContentPdfView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1550"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3597"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1584"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3598"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -1267,7 +1267,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5926"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5993"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>

@@ -3443,7 +3443,8 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// link to page 2 jumps, its web link keeps its address and no script is a link, the menu's two
 /// pages side by side keeps page 2; a ZIP opens read-only, never in the editor nor handed over; a
 /// DOCX opens read-only and "Open in another app" hands it over as a Word document. Builds without
-/// a renderer: the chip, its click hands the file over, the viewer's message with its button.
+/// a renderer: the chip, its click hands the file over, the viewer's message with its button. A PDF
+/// without text: the search's sentence whole, under the row in the narrow bar (phones).
 void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check,
                     const std::function<QObject *(const QString &)> &controllerFor)
 {
@@ -4036,6 +4037,72 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         uidriver::callQml(pdfView(), "setTwoPages", {QVariant(false)});
         check(waitFor([&] { return m && !m->property("twoPages").toBool() && !sideBySide(); }),
               "and back to one page per row");
+    }
+
+    // A PDF without text (a scan: shapes only): the search says so, the sentence whole. In the
+    // narrow bar (the phone run) it takes the line under the row — the field keeping its room, ‹ ›
+    // hidden without hits, × on the screen —; in the wide bar (desktop) it stays in the row.
+    {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly);
+        {
+            QPdfWriter writer(&buffer);
+            writer.setResolution(72);
+            writer.setPageSize(QPageSize(QPageSize::A4));
+            QPainter p(&writer);
+            p.fillRect(QRectF(60, 80, 400, 30), Qt::gray);
+            p.end();
+        }
+        const QString scan = workspace->createAttachment(u"assets/Skan umowy.pdf"_s, buffer.data());
+        app->openPage(scan);
+        const bool shown = waitFor([&] {
+            return pdfView() && pdfView()->property("ready").toBool() && pdfView()->property("path").toString() == scan;
+        });
+        check(shown, "a PDF without text opens in the viewer");
+        // (The viewer searches wherever it shows a PDF: the text PDF's search above ran too.)
+        const bool searchable = shown && modelValue("searchAvailable").toBool();
+        check(searchable, "the viewer offers its search");
+        if (searchable) {
+            QQuickItem *scanView = pdfView();
+            scanView->forceActiveFocus();
+            sendKey(window, Qt::Key_F, Qt::ControlModifier);
+            check(waitFor([&] { return shownNamed(scanView, u"pdfSearchField"_s) != nullptr; }), "its search opens");
+            for (const QChar ch : u"wzor"_s)
+                sendKey(window, 0, Qt::NoModifier, QString(ch));
+            const QString textless =
+                    QCoreApplication::translate("ContentPdfView", "This PDF has no text to search (it may be a scan).");
+            QQuickItem *status = nullptr;
+            const bool said = waitFor(
+                    [&] {
+                        status = scanView->findChild<QQuickItem *>(u"pdfSearchStatus"_s);
+                        return modelValue("textless").toBool() && !modelValue("searching").toBool() && status
+                               && status->property("text").toString() == textless;
+                    },
+                    10000);
+            check(said, "the search says the PDF has no text to search");
+            QQuickItem *line = shownNamed(scanView, u"pdfSearchStatusLine"_s);
+            QQuickItem *close = shownNamed(scanView, u"pdfSearchClose"_s);
+            const QRectF closeBox =
+                    close ? close->mapRectToScene(QRectF(0, 0, close->width(), close->height())) : QRectF();
+            if (touch) {
+                check(said && line && line->property("text").toString() == textless && !status->isVisible()
+                              && shownNamed(scanView, u"pdfSearchPrevious"_s) == nullptr
+                              && shownNamed(scanView, u"pdfSearchNext"_s) == nullptr && close
+                              && closeBox.right() <= window->width() + 0.5,
+                      "in the narrow bar it is the line under the row, ‹ › hidden, × on the screen");
+            } else {
+                check(said && status->isVisible() && line == nullptr, "in the wide bar it stays in the row");
+            }
+            sendKey(window, Qt::Key_Escape);
+            check(waitFor([&] { return !scanView->property("searchOpen").toBool(); }), "Esc closes that search");
+        }
+        // Removed again, so the steps after it (Clean up's unreferenced attachments) never see it:
+        // left first, then deleted as the app deletes a file (deletePage closes its PDF readers,
+        // which hold it open on Windows) and out of the trash.
+        app->goHome();
+        check(waitFor([&] { return pdfView() == nullptr; }) && workspace->deleteForever(workspace->deletePage(scan))
+                      && !workspace->exists(scan),
+              "the PDF without text is removed again");
     }
 
     // Another attachment that is no note (a ZIP): read-only text, never the editor.

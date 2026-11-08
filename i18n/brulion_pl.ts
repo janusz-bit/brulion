@@ -298,7 +298,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="55"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6291"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6358"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -414,7 +414,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="830"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7336"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7403"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
@@ -2696,7 +2696,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="117"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5596"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5663"/>
         <source>Attachments (%1)</source>
         <translation>Załączniki (%1)</translation>
     </message>
@@ -2717,7 +2717,7 @@
     <message>
         <location filename="../src/app/qml/views/CleanupView.qml" line="144"/>
         <location filename="../src/app/qml/views/CleanupView.qml" line="235"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5609"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5676"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -3682,210 +3682,211 @@
         <translation>Otwórz w innej aplikacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="425"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="445"/>
         <source>The drawing was added to today&apos;s journal.</source>
         <translation>Rysunek dodano do dzisiejszego dziennika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="469"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="489"/>
         <source>Copied to the clipboard</source>
         <translation>Skopiowano do schowka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="621"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="623"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1020"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1098"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3573"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="641"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="643"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1054"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1132"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3574"/>
         <source>Page %1 of %2</source>
         <extracomment>The PDF viewer&apos;s page indicator (&quot;Page 3 of 12&quot;); a click jumps to a page</extracomment>
         <translation>Strona %1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="624"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1548"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="644"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1582"/>
         <source>Go to page</source>
         <translation>Przejdź do strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="633"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="753"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="653"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="773"/>
         <source>Zoom out</source>
         <translation>Pomniejsz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="645"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="981"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="665"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1015"/>
         <source>Zoom %1 %</source>
         <extracomment>The PDF viewer&apos;s pages for screen readers: the zoom (&quot;Zoom 85 %&quot;)</extracomment>
         <translation>Powiększenie %1 %</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="654"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="746"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="674"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="766"/>
         <source>Zoom in</source>
         <translation>Powiększ</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="664"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="875"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="684"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="901"/>
         <source>Search in PDF</source>
         <translation>Szukaj w PDF-ie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="680"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1319"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1487"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="700"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1353"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1521"/>
         <source>Table of contents</source>
         <translation>Spis treści</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="692"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="712"/>
         <source>Preparing page %1…</source>
         <translation>Przygotowuję stronę %1…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="692"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="786"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="712"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="806"/>
         <source>Draw on this page</source>
         <translation>Rysuj na tej stronie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="701"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="721"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="711"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="760"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="731"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="780"/>
         <source>Fit width</source>
         <translation>Dopasuj do szerokości</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="726"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="768"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="746"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="788"/>
         <source>Two pages side by side</source>
         <translation>Dwie strony obok siebie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="734"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="777"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="754"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="797"/>
         <source>Cover page alone</source>
         <translation>Okładka osobno</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="808"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="815"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="822"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="828"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="835"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="842"/>
         <source>Open the drawing “%1”</source>
         <extracomment>&quot;Draw on this page&quot;: a drawing of this page already in the note</extracomment>
         <translation>Otwórz rysunek „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="829"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="849"/>
         <source>New drawing on this page</source>
         <translation>Nowy rysunek na tej stronie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="915"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="72"/>
         <source>%1 of %2</source>
         <extracomment>Search hits in the PDF viewer: &quot;3 of 12&quot; (+ while still searching or capped)</extracomment>
         <translation>%1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="918"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="75"/>
         <source>Searching… page %1 of %2</source>
         <translation>Szukam… strona %1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="920"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="77"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4073"/>
         <source>This PDF has no text to search (it may be a scan).</source>
         <translation>Ten PDF nie ma tekstu do przeszukania (to pewnie skan).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="920"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="77"/>
         <source>No results</source>
         <translation>Brak wyników</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="927"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="946"/>
         <source>Previous result</source>
         <translation>Poprzedni wynik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="936"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="956"/>
         <source>Next result</source>
         <translation>Następny wynik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="945"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="965"/>
         <source>Close search</source>
         <translation>Zamknij wyszukiwanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1118"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1152"/>
         <source>Page %1 cannot be shown.</source>
         <translation>Nie można pokazać strony %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1253"/>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1303"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1287"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1337"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1265"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1299"/>
         <source>Showing the first %1 pages.</source>
         <translation>Pokazano pierwsze %1 stron.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1311"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1345"/>
         <source>Select the whole page</source>
         <translation>Zaznacz całą stronę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1405"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1439"/>
         <source>Brulion here does not draw PDFs: the browser&apos;s own viewer opens it in a new tab (scrolling, zoom, search).</source>
         <translation>Brulion w przeglądarce nie rysuje PDF-ów: ten plik otworzy się w nowej karcie, we wbudowanej przeglądarce PDF (przewijanie, powiększanie, szukanie).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1406"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1440"/>
         <source>This version of Brulion has no PDF renderer: open it in another app.</source>
         <translation>Ta wersja Brulionu nie ma modułu PDF — otwórz plik w innej aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1415"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1449"/>
         <source>Password</source>
         <translation>Hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1416"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1450"/>
         <source>The PDF&apos;s password</source>
         <translation>Hasło PDF-a</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1419"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1453"/>
         <source>Wrong password. Try again.</source>
         <translation>Nieprawidłowe hasło. Spróbuj jeszcze raz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1429"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1463"/>
         <source>Open the PDF</source>
         <translation>Otwórz PDF</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1443"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1477"/>
         <source>Brulion does not remember the password: it is asked for each time the PDF is opened.</source>
         <translation>Brulion nie zapamiętuje hasła: trzeba je wpisać przy każdym otwarciu PDF-a.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1523"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1557"/>
         <source>Page %1</source>
         <translation>Strona %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1550"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3597"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1584"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3598"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n strona</numerusform>
@@ -3894,18 +3895,18 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1551"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1585"/>
         <source>Go</source>
         <translation>Przejdź</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1572"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1606"/>
         <source>Page number</source>
         <translation>Numer strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1579"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3599"/>
+        <location filename="../src/app/qml/content/ContentPdfView.qml" line="1613"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3600"/>
         <source>Enter a page from 1 to %1.</source>
         <translation>Wpisz numer strony od 1 do %1.</translation>
     </message>
@@ -10432,7 +10433,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/ReplaceView.qml" line="314"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4878"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4945"/>
         <source>Replace</source>
         <translation>Zamień</translation>
     </message>
@@ -11597,7 +11598,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="728"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7216"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7283"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12380,7 +12381,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="319"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5798"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5865"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12391,7 +12392,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="330"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5827"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5894"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -12537,7 +12538,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="126"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7329"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7396"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -12840,7 +12841,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6517"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6584"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -13040,7 +13041,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5926"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5993"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -13059,7 +13060,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5860"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5927"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -13615,8 +13616,8 @@
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="315"/>
         <location filename="../src/app/io/ioselftest.cpp" line="372"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3803"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8048"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3804"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8115"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -13894,13 +13895,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="112"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8416"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8483"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8406"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8473"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -14218,7 +14219,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="548"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5720"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5787"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
@@ -14938,7 +14939,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SyncView.qml" line="282"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5695"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5762"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
@@ -19340,7 +19341,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8219"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8286"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
