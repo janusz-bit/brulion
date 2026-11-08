@@ -70,24 +70,14 @@ BMenu {
         }
     }
 
-    /// A status: checked when it is the task's. It takes the keyboard focus from Up / Down (T.Menu
-    /// moves only to items that do — BMenuItem itself takes none), and Enter chooses it.
+    /// A status: checked when it is the task's.
     component StatusItem: BMenuItem {
         id: statusItem
         required property string value
         objectName: "taskStatus_" + (value === "" ? "none" : value)
         checkable: true
         checked: menu.checkRevision >= 0 && menu.status === value
-        focusPolicy: Qt.TabFocus
         onTriggered: menu.choose(statusItem, value)
-        Keys.onReturnPressed: {
-            menu.close()
-            menu.choose(statusItem, value)
-        }
-        Keys.onEnterPressed: {
-            menu.close()
-            menu.choose(statusItem, value)
-        }
     }
 
     BMenuItem {
@@ -96,17 +86,7 @@ BMenu {
         height: visible ? implicitHeight : 0
         text: qsTr("Open")
         iconName: "file-text"
-        // Up / Down reach it too, only while it is shown (T.Menu does not look at visibility).
-        focusPolicy: menu.showOpen ? Qt.TabFocus : Qt.NoFocus
         onTriggered: menu.openRequested()
-        Keys.onReturnPressed: {
-            menu.close()
-            menu.openRequested()
-        }
-        Keys.onEnterPressed: {
-            menu.close()
-            menu.openRequested()
-        }
     }
     BMenuSeparator {
         visible: menu.showOpen
@@ -120,22 +100,10 @@ BMenu {
     BMenuSeparator {}
     StatusItem { value: ""; text: qsTr("No status") }
 
-    /// An action of the task tools: shown with showTaskTools, reached by Up / Down then.
+    /// An action of the task tools: shown with showTaskTools.
     component ToolItem: BMenuItem {
-        id: toolItem
-        signal chosen()
         visible: menu.showTaskTools
         height: visible ? implicitHeight : 0
-        focusPolicy: menu.showTaskTools ? Qt.TabFocus : Qt.NoFocus
-        onTriggered: toolItem.chosen()
-        Keys.onReturnPressed: {
-            menu.close()
-            toolItem.chosen()
-        }
-        Keys.onEnterPressed: {
-            menu.close()
-            toolItem.chosen()
-        }
     }
     BMenuSeparator {
         visible: menu.showTaskTools
@@ -145,12 +113,12 @@ BMenu {
         objectName: "taskClockToggle"
         text: menu.clockRunning ? qsTr("Stop timer") : qsTr("Start timer")
         iconName: menu.clockRunning ? "square" : "play"
-        onChosen: menu.clockRequested()
+        onTriggered: menu.clockRequested()
     }
     ToolItem {
         objectName: "taskAddDependency"
         text: qsTr("Add dependency…")
         iconName: "link"
-        onChosen: menu.dependencyRequested()
+        onTriggered: menu.dependencyRequested()
     }
 }

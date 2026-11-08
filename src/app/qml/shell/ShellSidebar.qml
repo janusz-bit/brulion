@@ -986,6 +986,7 @@ Rectangle {
             onTriggered: sidebar.openPage(contextMenu.path, "tab")
         }
         BMenuItem {
+            objectName: "treeMenuOpenSide"
             visible: !contextMenu.isDir && !Theme.narrow
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")

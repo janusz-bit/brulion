@@ -13,8 +13,14 @@ import Brulion
 //       BMenuItem { text: qsTr("Move to trash"); iconName: "trash-2"; danger: true }
 //   }
 //
-// Keyboard: Up/Down (wrapping), Enter/Space activate, Right opens a submenu, Left/Escape
-// close. Opening by keyboard highlights the first item. Use `popup()` (at the pointer or
+// Keyboard (every BMenuItem shown takes part, so no menu needs key handlers of its own): a menu
+// opens with no item highlighted, Down starts at the first item shown, Down / Up move to the next /
+// previous one (hidden and disabled ones skipped; the ends do not wrap — Qt's T.Menu), Enter,
+// Return and Space trigger it, Right opens its submenu, Left / Escape close. Tab moves on too and
+// also reaches what is no BMenuItem (the More menu's page tiles and Mode switch: not the arrows).
+// Closing gives the focus back to what had it (the edited text keeps its selection: the menu took
+// the focus as a popup). A menu that knows where to start sets `currentIndex` after popup() (the
+// task status menu: the task's status). Use `popup()` (at the pointer or
 // at an item) — never blocking; react in each item's triggered(). Menus stay above the on-screen
 // keyboard (bottomMargin; they flip above their item when there is no room below) and below the
 // system's status bar over an edge-to-edge window (topMargin, the window's safe area: a finger's

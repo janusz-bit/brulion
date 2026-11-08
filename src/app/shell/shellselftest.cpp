@@ -102,6 +102,13 @@ bool sendKey(QQuickWindow *window, int key, Qt::KeyboardModifiers modifiers = Qt
     return uidriver::sendKey(window, key, modifiers, text, 50); // then bindings, transitions and queued calls settle
 }
 
+/// The objectName of the item with the keyboard focus ("" for none or an unnamed one).
+QString focusName(const QQuickWindow *window)
+{
+    const QQuickItem *focus = window->activeFocusItem();
+    return focus ? focus->objectName() : QString();
+}
+
 /// A tap with one finger at `scenePos`, as a touch screen sends it (press, `holdMs`, release).
 void touchTap(QQuickWindow *window, QPointF scenePos, int holdMs = 110)
 {
@@ -440,17 +447,13 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         row->forceActiveFocus(Qt::TabFocusReason);
         sendKey(window, Qt::Key_Menu);
         const bool opened = waitFor([&] { return openMenus(window) == 1; });
-        const auto focusName = [window] {
-            const QQuickItem *focus = window->activeFocusItem();
-            return focus ? focus->objectName() : QString();
-        };
         const QQuickItem *rowBox = named(row, u"tasksRowTaskBox"_s);
         const QString status = rowBox ? rowBox->property("status").toString() : QString();
-        check(opened && focusName() == u"taskStatus_"_s + status,
+        check(opened && focusName(window) == u"taskStatus_"_s + status,
               "the Menu key opens a task's menu in Tasks with its status highlighted");
-        for (int i = 0; i < 8 && opened && focusName() != u"taskStatusOpen"; ++i)
+        for (int i = 0; i < 8 && opened && focusName(window) != u"taskStatusOpen"; ++i)
             sendKey(window, Qt::Key_Up);
-        const bool reached = focusName() == u"taskStatusOpen";
+        const bool reached = focusName(window) == u"taskStatusOpen";
         sendKey(window, Qt::Key_Return);
         check(opened && reached && waitFor([&] { return app->currentView() != u"tasks" && openMenus(window) == 0; }),
               "in a task's menu in Tasks Up reaches “Otwórz” and Enter opens the note");
@@ -1606,6 +1609,44 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
               "a right-click on a page opens its context menu (and does not open the page)");
         check(closeMenu(), "Escape closes the page's context menu");
     }
+    // The keyboard (desktop): the Menu key on the focused row opens the same menu with nothing
+    // highlighted, Down walks the items shown (a folder's own are hidden for a page), Escape gives
+    // the focus back to the row; Down, Down reaches "Open in side panel" (wide windows) and Enter
+    // opens the page there. First the pointer leaves the place where the menu opens (the item
+    // under it would take the highlight).
+    if (!touch && !narrow && app->sidePanelAllowed()) {
+        mouseMove(window, QPointF(1, 1));
+        const auto menuFromKey = [&] {
+            QQuickItem *r = treeRow(page);
+            if (!r)
+                return false;
+            r->forceActiveFocus(Qt::TabFocusReason);
+            sendKey(window, Qt::Key_Menu);
+            return waitFor([&] { return treeMenu->property("visible").toBool(); })
+                   && treeMenu->property("path").toString() == page;
+        };
+        bool opened = menuFromKey();
+        sendKey(window, Qt::Key_Down);
+        const QString first = focusName(window);
+        sendKey(window, Qt::Key_Escape);
+        QQuickItem *r = nullptr;
+        check(opened && first == u"treeMenuOpenTab" && waitFor([&] { return openMenus(window) == 0; })
+                      && (r = treeRow(page)) && r->hasActiveFocus(),
+              "the Menu key opens a page's menu in the tree, Down highlights its first item, Escape gives the "
+              "focus back to the row");
+        opened = menuFromKey();
+        sendKey(window, Qt::Key_Down);
+        sendKey(window, Qt::Key_Down);
+        const QString second = focusName(window);
+        sendKey(window, Qt::Key_Return);
+        check(opened && second == u"treeMenuOpenSide" && waitFor([&] {
+                  return openMenus(window) == 0 && app->sidePanelVisible()
+                         && app->sidePanelRoute().value(u"path"_s).toString() == page;
+              }),
+              "in a page's menu in the tree Down, Down reaches “Open in side panel” and Enter opens the page there");
+        app->clearSidePanelRoute();
+        app->setSidePanelVisible(false);
+    }
     activate(treeRow(page));
     check(waitFor([&] { return view() == u"page" && routePath() == page; }) && openMenus(window) == 0,
           touch ? "a tap on a page in the drawer opens it, without a menu"
@@ -1740,6 +1781,34 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         activate(bullet());
         check(waitFor([&] { return controller->property("zoomBlock").toInt() >= 0; }) && openMenus(window) == 0,
               "a tap or click on a bullet zooms into the block, without a menu");
+        QMetaObject::invokeMethod(controller, "zoomOut");
+    }
+    // The block menu walked by keyboard (desktop): Down goes from item to item shown — past the
+    // ones this block has not (a table's, a table cell's Row and Column submenus) — to "Zoom in",
+    // and Enter zooms into the block. (An item under the pointer may be highlighted first: the
+    // walk is a tail of the items shown.)
+    if (dot && !touch) {
+        settle(200); // (the zoom ended: the bullets laid out again)
+        openMenuOn(bullet());
+        const bool opened = waitFor([&] { return openMenus(window) == 1; });
+        mouseMove(window, QPointF(1, 1));
+        QStringList walked;
+        for (int i = 0; i < 12 && opened && focusName(window) != u"blockMenuZoom"; ++i) {
+            sendKey(window, Qt::Key_Down);
+            walked << focusName(window);
+        }
+        const QStringList shownItems = {u"blockMenuCopy"_s, u"blockMenuCut"_s, u"blockMenuCopyText"_s,
+                                        u"blockMenuSelect"_s, u"blockMenuZoom"_s};
+        const bool tail = !walked.isEmpty() && walked.size() <= shownItems.size()
+                          && shownItems.mid(shownItems.size() - walked.size()) == walked;
+        if (!tail)
+            std::fprintf(stderr, "selftest: the block menu's keyboard walk: %s\n", qPrintable(walked.join(u", "_s)));
+        sendKey(window, Qt::Key_Return);
+        check(opened && tail
+                      && waitFor([&] {
+                             return controller->property("zoomBlock").toInt() >= 0 && openMenus(window) == 0;
+                         }),
+              "the block menu is walked with Down over the items shown only, and Enter on “Zoom in” zooms in");
         QMetaObject::invokeMethod(controller, "zoomOut");
     }
 }
