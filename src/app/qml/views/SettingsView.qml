@@ -7,8 +7,9 @@ import Brulion
 // SettingsView — route "settings" ({section?}). Sections: General (language, "Run the intro
 // again": AppController.restartIntro()), Appearance (theme,
 // accent colour with presets and BAccentDialog, light and dark backgrounds, text size, interface
-// font, density, reduce motion; Layout: sidebar entries and sections, the bottom navigation's
-// four buttons, the quick note button; back to the default look — AppSettings, Theme inputs),
+// font, density, reduce motion, back to the default look after a confirmation —
+// AppSettings.resetAppearance(), Theme inputs; Layout: sidebar entries and sections, the bottom
+// navigation's buttons, the quick note button),
 // Editor (font — serif, sans or any installed family —, code font, size, line spacing, width,
 // source mode, spell checking — on/off, its languages, the personal dictionary's dialog, shown only
 // where SpellCheck.available —, word count, focus mode, typewriter scrolling; font pickers:
@@ -702,6 +703,25 @@ Item {
                     checked: AppSettings.reducedMotion
                     onToggled: AppSettings.reducedMotion = checked
                 }
+                // The end of the card whose settings it restores (and the editor's look), asked
+                // first: no undo.
+                BButton {
+                    objectName: "resetAppearance"
+                    size: "small"
+                    variant: "ghost"
+                    iconName: "rotate-ccw"
+                    text: qsTr("Restore the default look…")
+                    onClicked: resetLookConfirm.open()
+                }
+            }
+            // What AppSettings.resetAppearance() restores, and what it leaves.
+            BConfirmDialog {
+                id: resetLookConfirm
+                objectName: "resetLookConfirm"
+                title: qsTr("Restore the default look?")
+                message: qsTr("The accent colour, backgrounds, text size, interface font and density, and the editor's fonts, font size and line spacing go back to their defaults. The theme, the layout and the text width stay.")
+                confirmText: qsTr("Restore")
+                onAccepted: AppSettings.resetAppearance()
             }
 
             SettingsGroup {
@@ -834,14 +854,6 @@ Item {
                     description: qsTr("The + button in the top bar of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
                     checked: AppSettings.captureButtonShown
                     onToggled: AppSettings.captureButtonShown = checked
-                }
-                BButton {
-                    objectName: "resetAppearance"
-                    size: "small"
-                    variant: "ghost"
-                    iconName: "rotate-ccw"
-                    text: qsTr("Restore the default look")
-                    onClicked: AppSettings.resetAppearance()
                 }
             }
         }

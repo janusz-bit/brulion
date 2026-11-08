@@ -6938,12 +6938,33 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
     }
 
-    // Back to the default look (the visibility of elements stays).
-    check(activate(shownItem(u"resetAppearance"_s)) && waitFor([&] {
-              return settings->accentColor() == u"coral"
-                     && (color("accent") == u"#ff7a66" || color("accent") == u"#c4422f");
-          }),
-          "\"Restore the default look\" brings the default coral back");
+    // Back to the default look (the visibility of elements stays): the end of the Appearance card,
+    // asked first (no undo), then the default coral.
+    {
+        QQuickItem *reset = shownItem(u"resetAppearance"_s);
+        QQuickItem *card = reset;
+        while (card && card->objectName() != u"settingsAppearance")
+            card = card->parentItem();
+        check(card != nullptr, "\"Restore the default look…\" is in the Appearance card");
+        activate(reset);
+        const QString restoreText = QCoreApplication::translate("SettingsView", "Restore");
+        QQuickItem *restoreButton = nullptr;
+        check(waitFor([&] {
+                  restoreButton = findShown(window->contentItem(), [&](QQuickItem *item) {
+                      return isA(item, "BButton") && item->property("text").toString() == restoreText;
+                  });
+                  return restoreButton != nullptr;
+              }) && settings->accentColor() == u"custom",
+              "\"Restore the default look…\" asks first (nothing restored yet)");
+        settle(250);
+        if (restoreButton)
+            tapOrClick(window, pointIn(restoreButton), touch);
+        check(waitFor([&] {
+                  return settings->accentColor() == u"coral"
+                         && (color("accent") == u"#ff7a66" || color("accent") == u"#c4422f");
+              }),
+              "its “Restore” brings the default coral back");
+    }
 
     // Settings → Editor → Font → "Other…" opens the picker; cancelled, the selection stays on the
     // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the

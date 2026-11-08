@@ -1050,7 +1050,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="994"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1006"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1058,7 +1058,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1508"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1520"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1066,7 +1066,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1391"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1403"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1074,7 +1074,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1393"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1405"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -1333,7 +1333,7 @@
 <context>
     <name>SyncHistoryList</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncHistoryList.qml" line="54"/>
+        <location filename="../src/app/qml/io/SyncHistoryList.qml" line="55"/>
         <source>The last %n run(s) on this device.</source>
         <translation>
             <numerusform>The last run on this device.</numerusform>

@@ -645,7 +645,13 @@ Rectangle {
             iconName: "external-link"
             onTriggered: Workspace.openInOtherApp(bar.pagePath)
         }
+        // The page's last item, set apart on both sides (the rule of BMenuItem's header).
+        BMenuSeparator {
+            visible: bar.onPage
+            height: visible ? implicitHeight : 0
+        }
         BMenuItem {
+            objectName: "menuTrashPage"
             visible: bar.onPage
             height: visible ? implicitHeight : 0
             text: qsTr("Move to trash")

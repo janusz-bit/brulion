@@ -17,6 +17,12 @@ import Brulion
 // where there is no hover.
 // Keyboard (BMenu): Up / Down reach every item shown, Enter, Return and Space trigger it (Qt's
 // MenuItem), so a menu needs no key handlers of its own.
+// Destructive items, one rule for every menu (docs/UI.md "Design system in code"): an item that
+// deletes is the last of its menu or section, with a separator above it (and below it when
+// sections follow); `danger` only for deleting content or files (the trash, a block, a row or
+// column, a reminder, a backdrop, a history or a log), never for the "none" value of a choice
+// (No status, No priority, Don't repeat: a choice like the others); a clear that cannot be undone
+// asks first (its text ends with "…", a BConfirmDialog).
 T.MenuItem {
     id: control
 

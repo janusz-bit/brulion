@@ -5,7 +5,8 @@ import Brulion
 
 // SyncHistoryList — "Sync history": the last Nextcloud sync runs (Workspace.sync.
 // history, newest first; quiet runs folded into one row "No changes ×12"), each with its result,
-// when and why it ran, what it moved and how long it took. A row opens SyncRunDetails.
+// when and why it ran, what it moved and how long it took. A row opens SyncRunDetails. Its "⋯":
+// the event log's sync entries; "Clear history…", asked first (it cannot be undone).
 //
 //   SyncHistoryList { Layout.fillWidth: true }
 IoCard {
@@ -65,17 +66,29 @@ IoCard {
 
     BMenu {
         id: historyMenu
+        objectName: "syncHistoryMenu"
         BMenuItem {
             text: qsTr("Event log")
             iconName: "scroll-text"
             onTriggered: AppController.navigate({ view: "logs", group: "sync" })
         }
+        BMenuSeparator {}
         BMenuItem {
-            text: qsTr("Clear history")
+            objectName: "syncHistoryClear"
+            text: qsTr("Clear history…")
             iconName: "trash-2"
             danger: true
-            onTriggered: card.sync.clearHistory()
+            onTriggered: clearConfirm.open()
         }
+    }
+    BConfirmDialog {
+        id: clearConfirm
+        objectName: "syncHistoryClearConfirm"
+        title: qsTr("Clear the sync history?")
+        message: qsTr("The list of the last syncs on this device is deleted, with their details. Your notes and the event log stay as they are. This cannot be undone.")
+        confirmText: qsTr("Clear")
+        destructive: true
+        onAccepted: card.sync.clearHistory()
     }
 
     Repeater {

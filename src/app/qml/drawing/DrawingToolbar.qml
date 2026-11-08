@@ -684,14 +684,6 @@ Rectangle {
             shortcut: "PgDown"
             onTriggered: bar.pageStepRequested(1)
         }
-        BMenuItem {
-            objectName: "drawingBackdropRemove"
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-            text: qsTr("Remove backdrop")
-            iconName: "trash-2"
-            onTriggered: bar.backdropRemoved()
-        }
         BMenuSeparator {}
         BMenuItem {
             objectName: "drawingPaste"
@@ -700,6 +692,20 @@ Rectangle {
             shortcut: "Ctrl+V"
             enabled: bar.canvas.editable
             onTriggered: bar.pasteRequested()
+        }
+        // Deleting: last, set apart (the rule of BMenuItem's header).
+        BMenuSeparator {
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+        }
+        BMenuItem {
+            objectName: "drawingBackdropRemove"
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+            text: qsTr("Remove backdrop")
+            iconName: "trash-2"
+            danger: true
+            onTriggered: bar.backdropRemoved()
         }
     }
 
@@ -827,13 +833,6 @@ Rectangle {
             shortcut: "PgDown"
             onTriggered: bar.pageStepRequested(1)
         }
-        BMenuItem {
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-            text: qsTr("Remove backdrop")
-            iconName: "trash-2"
-            onTriggered: bar.backdropRemoved()
-        }
         BMenuSeparator {}
         BMenuItem {
             objectName: "drawingPasteItem"
@@ -856,6 +855,20 @@ Rectangle {
             text: qsTr("Show the whole drawing")
             iconName: "maximize"
             onTriggered: bar.fitRequested()
+        }
+        // Deleting: last, set apart (the rule of BMenuItem's header).
+        BMenuSeparator {
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+        }
+        BMenuItem {
+            objectName: "drawingBackdropRemoveItem"
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+            text: qsTr("Remove backdrop")
+            iconName: "trash-2"
+            danger: true
+            onTriggered: bar.backdropRemoved()
         }
     }
 
