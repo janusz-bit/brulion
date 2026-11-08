@@ -147,9 +147,12 @@ private Q_SLOTS:
         QCOMPARE(gh->login(), u"jan"_s);
         QVERIFY(!account.isEmpty());
         const QString file = m_tmp.filePath(u"appdata/secrets/github-token"_s);
-        QFile in(file);
-        QVERIFY(in.open(QIODevice::ReadOnly));
-        QCOMPARE(QString::fromUtf8(in.readAll()), github.token);
+        {
+            // Closed again at once: on Windows an open file cannot be replaced (the next save).
+            QFile in(file);
+            QVERIFY(in.open(QIODevice::ReadOnly));
+            QCOMPARE(QString::fromUtf8(in.readAll()), github.token);
+        }
 #ifndef Q_OS_WIN
         QCOMPARE(QFileInfo(file).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
                  QFileDevice::Permissions());
