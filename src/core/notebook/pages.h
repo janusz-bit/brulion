@@ -90,10 +90,14 @@ CreatedPage createPage(Vault &vault, const QString &title, const QString &folder
 /// new name is sanitised like a page title; a name that would be hidden is refused (HiddenFolder),
 /// so is a file of that name (NotAFolder). An existing folder is fine.
 struct CreatedFolder {
-    VaultPath path; ///< "" on failure
+    VaultPath path;        ///< "" on failure
+    bool existing = false; ///< `path` is a folder already there (in any letter case): nothing new
     PathProblem problem;
 };
 CreatedFolder createFolder(Vault &vault, const QString &path);
+/// What createFolder() would do, without writing: its checks (NoName, HiddenFolder, NotAFolder)
+/// and the folder it would make or reuse (`existing`), spelled as the vault spells it.
+CreatedFolder plannedFolder(const Vault &vault, const QString &path);
 
 /// Tracked folders (not hidden or ignored ones) in Polish alphabetical order, segment by segment.
 QStringList folderPaths(const Vault &vault);

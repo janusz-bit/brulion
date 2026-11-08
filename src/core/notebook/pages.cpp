@@ -141,7 +141,7 @@ CreatedPage createPage(Vault &vault, const QString &title, const QString &folder
     return out;
 }
 
-CreatedFolder createFolder(Vault &vault, const QString &rawPath)
+CreatedFolder plannedFolder(const Vault &vault, const QString &rawPath)
 {
     CreatedFolder out;
     QStringList segments;
@@ -165,15 +165,26 @@ CreatedFolder createFolder(Vault &vault, const QString &rawPath)
     }
     // Folders as the vault spells them ("projekty/Nowy" goes into "Projekty/").
     const QString folder = vault.existingCase(segments.join(u'/'));
-    if (const auto existing = vault.stat(folder); existing && !existing->isDir) {
-        out.problem = problem(PathProblem::NotAFolder, paths::basename(folder));
-        return out;
-    }
-    if (!vault.createFolder(folder)) {
-        out.problem = problem(PathProblem::Failed, QString(), vault.errorString());
-        return out;
+    if (const auto existing = vault.stat(folder)) {
+        if (!existing->isDir) {
+            out.problem = problem(PathProblem::NotAFolder, paths::basename(folder));
+            return out;
+        }
+        out.existing = true;
     }
     out.path = folder;
+    return out;
+}
+
+CreatedFolder createFolder(Vault &vault, const QString &rawPath)
+{
+    CreatedFolder out = plannedFolder(vault, rawPath);
+    if (out.path.isEmpty())
+        return out;
+    if (!vault.createFolder(out.path)) {
+        out = CreatedFolder();
+        out.problem = problem(PathProblem::Failed, QString(), vault.errorString());
+    }
     return out;
 }
 

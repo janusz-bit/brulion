@@ -13,7 +13,8 @@
 //                bullet, the note's own line ending) and blockFromText(text), contentLocale("pl" |
 //                "en"), appLanguage(saved ui/language) (else English)
 //   pages.h      newPagePath, newPageText, createPage (letter-case twins are one page),
-//                createFolder, folderPaths, folderInfo, specialsWithin; renames and moves through
+//                createFolder (plannedFolder: its checks, without writing), folderPaths,
+//                folderInfo, specialsWithin; renames and moves through
 //                relocate() (VaultIndex::planRelocation(): every link and tag keeps its target,
 //                special folders rebase .brulion/config.json), relocationImpact (counts and the
 //                notes' rewritten texts, for a dry run), renamePage, renameFolder,

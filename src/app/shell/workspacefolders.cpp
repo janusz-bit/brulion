@@ -60,6 +60,16 @@ QString Workspace::createFolder(const QString &rawPath)
     return created.path;
 }
 
+QString Workspace::folderProblem(const QString &rawPath) const
+{
+    if (!m_vault)
+        return {};
+    const notebook::CreatedFolder planned = notebook::plannedFolder(*m_vault, rawPath);
+    if (planned.existing)
+        return pathProblemMessage({notebook::PathProblem::FolderExists, paths::basename(planned.path), QString()});
+    return pathProblemMessage(planned.problem);
+}
+
 QStringList Workspace::folderPaths() const
 {
     return m_vault ? notebook::folderPaths(*m_vault) : QStringList();

@@ -7,8 +7,10 @@ import Brulion
 // in the folder) are rewritten in every note so each keeps its target (docs/SYNTAX.md §2, §3); the
 // dialog says how many — exactly, for the name typed (Workspace.renameImpact: also the links to
 // other pages a new name would take over). A "/" in the name moves it — a path from the notebook
-// root ("Archive/Home") —, with a live "New place: …" line. (Only here: the page header's
-// title edit keeps a "/" in the title.)
+// root ("Archive/Home") —, with a live "New place: …" line. What is wrong with the name typed (a
+// page or folder of that name there already, a hidden name) shows at the field, Rename disabled;
+// the subtitle only ever says what changes. (Only here: the page header's title edit keeps a "/"
+// in the title.)
 BDialog {
     id: dialog
 
@@ -31,6 +33,8 @@ BDialog {
     readonly property string livePath: AppController.routeText(live, "path")
     /// The live impact applies: a new name typed.
     readonly property bool useLive: typed !== "" && typed !== currentName && liveTyped === typed
+    /// Why the name typed cannot be used ("" when it can): the field's error.
+    readonly property string liveError: useLive && !liveOk ? AppController.routeText(live, "error") : ""
 
     function openFor(itemPath: string, folder: bool): void {
         dialog.path = itemPath
@@ -59,8 +63,6 @@ BDialog {
     }
     /// "Updated links: 3 (in 2 notes)", with the notebook settings that follow.
     function liveText(): string {
-        if (!dialog.liveOk)
-            return AppController.routeText(dialog.live, "error")
         return words.impactText(words.count(dialog.live, "links"), words.count(dialog.live, "tags"),
                                 words.count(dialog.live, "notes"), words.strings(dialog.live, "specials"))
     }
@@ -76,7 +78,7 @@ BDialog {
 
     title: isDir ? qsTr("Rename folder") : qsTr("Rename page")
     // One sentence (the verb agrees with the number in Polish); %1 = "in %n note(s)".
-    subtitle: useLive ? liveText()
+    subtitle: useLive && liveOk ? liveText()
               : isDir ? qsTr("Links and tags that name the folder are updated.")
               : dialog.changes === 0 ? qsTr("Links and tags that name this page are updated in all notes.")
               : (dialog.impactTags > 0 ? qsTr("%n link(s) and tag(s) %1 will be updated to the new name.", "", dialog.changes)
@@ -120,6 +122,7 @@ BDialog {
         objectName: "renameField"
         Layout.fillWidth: true
         placeholderText: dialog.isDir ? qsTr("Folder name") : qsTr("Page title")
+        errorText: dialog.liveError
         onAccepted: dialog.tryAccept()
     }
     // Where a "/" puts it.

@@ -1065,6 +1065,23 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         check(waitFor([&] { return rename->property("opened").toBool(); }) && changes > 0
                       && rename->property("subtitle").toString().contains(QString::number(changes)),
               "the sidebar's rename dialog counts the links and tags naming the page");
+        // A name taken by another page: said at the field (a moment after typing), Rename
+        // disabled; the subtitle still says what a rename changes.
+        const QString impact = rename->property("subtitle").toString();
+        QQuickItem *nameField = nullptr;
+        waitFor([&] {
+            nameField = findShown(window->contentItem(),
+                                  [](QQuickItem *item) { return item->objectName() == u"renameField"; });
+            return nameField != nullptr;
+        });
+        if (nameField)
+            nameField->setProperty("text", u"Przepisy"_s);
+        const QString taken = QCoreApplication::translate("brulion::shell::Workspace",
+                                                          "A page named “%1” already exists here.")
+                                      .arg(u"Przepisy"_s);
+        check(nameField && waitFor([&] { return nameField->property("errorText").toString() == taken; })
+                      && !rename->property("acceptEnabled").toBool() && rename->property("subtitle").toString() == impact,
+              "a taken name in the rename dialog is said at the field (Rename disabled), not in the subtitle");
         QMetaObject::invokeMethod(rename, "close");
         waitFor([&] { return !rename->property("opened").toBool(); });
         // A "/" moves the page, here renamed too: the toast names the folder and the new name.
@@ -2044,6 +2061,18 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             const QQuickItem *f = window->activeFocusItem();
             return f && f->inherits("QQuickTextInput");
         });
+        // A folder that exists (typed in another case: createFolder would only show it) is said
+        // at the field while typing, Create disabled.
+        if (QQuickItem *field = window->activeFocusItem()) {
+            field->setProperty("text", u"projekty"_s);
+            const QString exists = QCoreApplication::translate("brulion::shell::Workspace",
+                                                               "A folder named “%1” already exists here.")
+                                           .arg(u"Projekty"_s);
+            check(waitFor([&] { return field->property("errorText").toString() == exists; })
+                          && !newPage->property("acceptEnabled").toBool(),
+                  "a folder that exists is said at the new folder's name field, Create disabled");
+            field->setProperty("text", QString());
+        }
         // (The drawer, closed for the dialog, opens again with the new folder revealed while it
         // lays itself out at another height: the keyboard's room on a phone.)
         shortWindow(true);
@@ -4863,6 +4892,15 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
     check(!dialog->property("preview").toString().isEmpty(), "the schedule is previewed in words");
     scheduleField->setProperty("text", u"co drugi wtorek"_s);
     check(!dialog->property("acceptEnabled").toBool(), "a schedule not understood cannot be added");
+    // A word a phone's keyboard still composes (preedit text, outside `text`) counts: one word
+    // being typed is previewed and can be added.
+    scheduleField->setProperty("text", QString());
+    scheduleField->forceActiveFocus();
+    composeWord(scheduleField, u"codziennie"_s);
+    check(dialog->property("acceptEnabled").toBool() && !dialog->property("preview").toString().isEmpty(),
+          "a schedule still being composed is previewed and can be added");
+    QInputMethodEvent composed; // (the composition dropped: the text is set below)
+    QCoreApplication::sendEvent(scheduleField, &composed);
     scheduleField->setProperty("text", u"codziennie"_s);
     check(dialog->property("acceptEnabled").toBool(), "a daily habit can be added");
     QMetaObject::invokeMethod(dialog, "accept");

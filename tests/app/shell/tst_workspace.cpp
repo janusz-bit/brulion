@@ -1426,6 +1426,46 @@ private Q_SLOTS:
         }
     }
 
+    // What the new folder dialog says while a name is typed (folderProblem): createFolder's own
+    // checks, writing nothing — "" exactly when createFolder makes a new folder.
+    void folderProblem_data()
+    {
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<QString>("problem");
+        const QString exists = u"A folder named “%1” already exists here."_s;
+        const QString hidden = u"A folder named “%1” would be hidden — choose another name."_s;
+        QTest::newRow("a new name") << u"Nowy folder"_s << QString();
+        QTest::newRow("new, in a folder typed in another case") << u"projekty/Nowy"_s << QString();
+        QTest::newRow("another case") << u"projekty"_s << exists.arg(u"Projekty"_s);
+        QTest::newRow("another case, nested") << u"PROJEKTY/remont"_s << exists.arg(u"Remont"_s);
+        QTest::newRow("sanitised ?") << u"Projekty?"_s << exists.arg(u"Projekty"_s);
+        QTest::newRow("sanitised :") << u"Projekty:"_s << exists.arg(u"Projekty"_s);
+        QTest::newRow("sanitised double space") << u"Moje  projekty"_s << exists.arg(u"Moje projekty"_s);
+        QTest::newRow("decomposed ó (NFC)") << u"Ogro\u0301d"_s << exists.arg(u"Ogród"_s);
+        QTest::newRow("ignored folder") << u"logseq"_s << hidden.arg(u"logseq"_s);
+        QTest::newRow("ignored folder below, sanitised") << u"Kod/node_modules?"_s << hidden.arg(u"node_modules"_s);
+        QTest::newRow("hidden name") << u".ukryty"_s << hidden.arg(u".ukryty"_s);
+        QTest::newRow("a file in the way") << u"dom.md"_s << u"“Dom.md” is a file, not a folder."_s;
+        QTest::newRow("no name") << u" / . "_s << u"Enter a name."_s;
+    }
+    void folderProblem()
+    {
+        QFETCH(QString, typed);
+        QFETCH(QString, problem);
+        auto ws = open({{u"Projekty/Remont/Plan.md"_s, u"x"_s},
+                        {u"Moje projekty/a.md"_s, u"x"_s},
+                        {u"Ogród/Grządki.md"_s, u"x"_s},
+                        {u"Dom.md"_s, u"x"_s},
+                        {u"logseq/config.edn"_s, u"{}"_s}});
+        QSignalSpy files(ws.get(), &Workspace::filesChanged);
+        const QStringList before = ws->folderPaths();
+        QCOMPARE(ws->folderProblem(typed), problem);
+        QCOMPARE(ws->folderPaths(), before);
+        QVERIFY(files.isEmpty());
+        const QString created = ws->createFolder(typed);
+        QCOMPARE(!created.isEmpty() && !before.contains(created), problem.isEmpty());
+    }
+
     void renameKeepsTargets_data()
     {
         QTest::addColumn<QStringList>("files"); // "path=content"
