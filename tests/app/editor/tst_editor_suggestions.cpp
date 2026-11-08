@@ -365,8 +365,20 @@ private Q_SLOTS:
         QCOMPARE(values(m, u"command"_s).mid(0, 3), QStringList({u"h1"_s, u"h2"_s, u"h3"_s}));
         m.setFilter(u"zażółć"_s);
         QCOMPARE(m.count(), 0);
+        // A bare "/" lists every command, past `limit`: its first screen mixes the kinds used most
+        // (5 rows on touch — Reminder… the fifth —, 8 on desktop), the other task statuses come
+        // last in their own order.
         m.setFilter(QString());
-        QCOMPARE(m.count(), m.limit());
+        QVERIFY(int(slashCommands().size()) > m.limit());
+        QCOMPARE(m.count(), int(slashCommands().size()));
+        const QStringList commands = values(m, u"command"_s);
+        QCOMPARE(commands.mid(0, 8), QStringList({u"task"_s, u"h1"_s, u"h2"_s, u"table"_s, u"reminder"_s, u"due"_s,
+                                                  u"fileLink"_s, u"image"_s}));
+        QCOMPARE(commands.mid(commands.size() - 5),
+                 QStringList({u"taskDoing"_s, u"taskDone"_s, u"taskWaiting"_s, u"taskCancelled"_s, u"taskNone"_s}));
+        // A filter matching more than `limit` commands lists them all too.
+        m.setFilter(u"a"_s);
+        QVERIFY(m.count() > m.limit());
         QVERIFY(count.size() >= 2);
     }
 

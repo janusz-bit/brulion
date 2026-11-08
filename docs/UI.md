@@ -1440,15 +1440,21 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   Such a space the editor adds after a completed date or tag or a reminder at the end of the
   block is not saved while nothing follows it, and goes when the caret leaves the block (part
   of the undo step that wrote it; `PageController::rememberEditorSpace`).
-* Slash commands (`/`, Polish and English names, diacritic-insensitive filter): the task
-  statuses Task: to do / in progress / done / waiting / cancelled / no status
-  (in Polish "Zadanie: do zrobienia" … "Zadanie: bez statusu"; also found as todo, doing, done,
-  czeka, odłożone, waiting, anulowane, cancel, bez statusu…), Reminder…, Alarm…, Due date…,
-  Scheduled…, Repeat…, Today, Tomorrow, Date…, Table, Calculation, Query, Heading 1–3, Quote,
-  Callout, Code block, Math formula, Template…, File… (any files as links), Image…, Drawing (a new
-  drawing, opened in the drawing editor), Drawing on a picture or PDF… (drawings on a picture or a
-  PDF's pages: "Drawing editor" → Backdrop), Embed, Block reference, High / Low priority, Divider,
-  Current time. Under each name: the syntax it writes ("⏰ date time", "- [ ]
+* Slash commands (`/`, Polish and English names, diacritic-insensitive filter), every one of them
+  listed (the other lists stop at `SuggestionModel.limit`), in this order (`slashCommands()`,
+  blocktext.cpp): a first screen (5 rows on touch, 8 on desktop) of the kinds used most —
+  Task: to do, Heading 1, Heading 2, Table, Reminder…, Due date…, File… (any files as links),
+  Image… —, then text blocks — Code block, Quote, Callout, Heading 3, Divider —, dates — Alarm…,
+  Scheduled…, Repeat…, Today, Tomorrow, Date…, Current time, High / Low priority —, inserts —
+  Picture from the internet…, Drawing (a new drawing, opened in the drawing editor), Drawing on a
+  picture or PDF… (drawings on a picture or a PDF's pages: "Drawing editor" → Backdrop), Embed,
+  Block reference, Template…, Table from CSV… —, data — Calculation, Query, Diagram, Chart, Math
+  formula — and last the other task statuses, Task: in progress / done / waiting / cancelled /
+  no status (in Polish "Zadanie: do zrobienia" … "Zadanie: bez statusu"; also found as todo,
+  doing, done, czeka, odłożone, waiting, anulowane, cancel, bez statusu…). A filtered list ranks
+  by the match (a name's start, a word's start, anywhere in it; keywords after names), then by
+  that order: "/zad" lists the six statuses as the status menu does, "/załącznik" File… before
+  Image…. Under each name: the syntax it writes ("⏰ date time", "- [ ]
   task", "```calc block"). A status command sets the status of the block being edited
   (`PageController.applySlashCommand` → `setTaskStatus`) in the same undo step that removes the
   "/command": a block that is no task becomes one (a paragraph a list item), Logseq keywords keep

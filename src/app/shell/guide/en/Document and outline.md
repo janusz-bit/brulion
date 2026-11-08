@@ -54,7 +54,7 @@ In the block you are editing you select text as usual. A selection that goes bey
 **Parts of several paragraphs** (the end of one and the start of the next): select the whole blocks and copy them, or switch the page to Markdown source (Ctrl+E, *More* menu → *Mode* → “Source”) and select exactly those characters there — by dragging the mouse, or on a phone by long-pressing a word.
 
 ## The `/` menu
-Type `/` at the start of a block and a list of commands appears: task, reminder, alarm, due date, repeat, table, calculation, math formula, diagram, query, heading, quote, callout, code block, template, image, embed and block reference. Accents are optional in the filter, and the Polish names of the commands work too.
+Type `/` at the start of a block and the list of all commands appears — scroll it, or type a few letters to narrow it down. It starts with the ones used most: task, headings, table, reminder, due date, file and image; further down are code block, quote, callout, divider, alarm, repeat, dates, picture from the internet, drawing, embed, block reference, template, table from CSV, calculation, query, diagram, chart, math formula and the other task statuses. Accents are optional in the filter, and the Polish names of the commands work too.
 
 ## Suggestions while typing
 - `[[` — pages; when the typed name isn't in the notebook yet, the first item, “Create page “…””, inserts a link to a new page with that name. Enter picks the highlighted item: the best matching existing page (go up with the arrow key to get the new one), or the new page when nothing matches,

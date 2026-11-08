@@ -54,7 +54,7 @@ W edytowanym bloku zaznaczasz tekst jak zwykle. Zaznaczenie, które wychodzi poz
 **Kawałki kilku akapitów** (koniec jednego i początek następnego): zaznacz całe bloki i skopiuj je albo przełącz stronę na źródło Markdown (Ctrl+E, menu *Więcej* → *Tryb* → „Źródło”) i tam zaznacz dokładnie te znaki — przeciągnięciem myszy, a na telefonie przytrzymaniem słowa.
 
 ## Menu `/`
-Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnienie, alarm, termin, powtarzanie, tabela, obliczenia, wzór, diagram, zapytanie, nagłówek, cytat, ramka, kod, szablon, obraz, osadzenie i odwołanie do bloku. Polskie znaki w filtrze są opcjonalne.
+Wpisz `/` na początku bloku, a pojawi się lista wszystkich poleceń — przewiń ją albo wpisz kilka liter, żeby ją zawęzić. Zaczyna się od najczęstszych: zadanie, nagłówki, tabela, przypomnienie, termin, plik i obraz; niżej są kod, cytat, ramka, linia pozioma, alarm, powtarzanie, daty, obraz z internetu, rysunek, osadzenie, odwołanie do bloku, szablon, tabela z CSV, obliczenia, zapytanie, diagram, wykres, wzór i pozostałe statusy zadań. Polskie znaki w filtrze są opcjonalne.
 
 ## Podpowiedzi podczas pisania
 - `[[` — strony; gdy wpisanej nazwy nie ma jeszcze w notatniku, pierwsza pozycja, „Utwórz stronę…”, wstawia link do nowej strony o tej nazwie. Enter wybiera podświetloną pozycję: najlepiej pasującą istniejącą stronę (do nowej przejdziesz strzałką w górę), a gdy nic nie pasuje — nową stronę,

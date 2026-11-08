@@ -176,10 +176,12 @@ void SuggestionModel::refresh()
         items = dateItems();
     else if (m_mode == u"templates")
         items = templateItems();
-    // "Create page" leads the list on top of `limit` matches; Enter takes the first match.
+    // "Create page" leads the list on top of `limit` matches; Enter takes the first match. The
+    // slash commands are never capped: a fixed list of light rows (the popup builds only those in
+    // view), each reachable by scrolling, a bare "/" included.
     const bool create = !items.isEmpty() && items.first().toMap().value(u"kind"_s).toString() == u"create";
     const int cap = m_limit + (create ? 1 : 0);
-    if (items.size() > cap)
+    if (m_mode != u"slash" && items.size() > cap)
         items = items.mid(0, cap);
     const int defaultIndex = create && items.size() > 1 ? 1 : 0;
     if (items == m_items && defaultIndex == m_defaultIndex)
