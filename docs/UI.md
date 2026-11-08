@@ -154,7 +154,7 @@ components — no Material/Fusion look, so all targets look identical.
     in folders), the **search field** "Search or type a command…" (the page switcher's key in
     it, Ctrl+O by default: it opens the switcher, `BQuickSwitcher` — pages by name, "Create
     page “…”", and last "Search the notes for “…”" (the search view with the query); a query starting
-    with ">" turns to the command palette with the rest typed), Reading mode (the book, on pages and
+    with ">" turns to the command palette with the rest typed), Reading mode (the eye, on pages and
     the journal: "Reading mode" below), Quick capture, side panel toggle
     and **More** (⋯; ⋮ on phones). More: a row of the page's actions as icons with short
     names (Favorite — the star tinted when the page is one —, Rename, Move, History; a daily
@@ -206,7 +206,7 @@ components — no Material/Fusion look, so all targets look identical.
   UI mode (`Theme.touchUi`), not the pointer: a mouse or touchpad in a touch UI (a narrow window
   on a laptop with a touch screen, Android with a mouse) gets the 24 px strip too, outside a
   touch UI it is Qt's default (the start-drag distance); the top bar keeps ☰, back, title,
-  the reading mode's book (pages and the journal), **+** (quick capture; off in Settings → Appearance → Layout, capture stays in the palette and
+  the reading mode's eye (pages and the journal), **+** (quick capture; off in Settings → Appearance → Layout, capture stays in the palette and
   under Ctrl+Shift+N), Search only while the bottom navigation has no Search tab, and More.
   ☰ always comes first, in the same place whatever the view, the history or the keyboard;
   back follows it while there is history, except on Android
@@ -766,8 +766,8 @@ as the content goes (the first lines of a page stay where they are).
 ## Reading mode
 
 **Reading mode** (`AppSettings.readingMode`, `ui/readingMode`, a device setting kept across
-restarts; palette `view.reading` "Reading mode" / "Leave reading mode", Ctrl+Shift+E; the top bar's
-book button — on pages and the journal, every width, checked while it is on —, the page menu "⋯",
+restarts; palette `view.reading` "Reading mode" (the eye) / "Leave reading mode" (the pencil),
+Ctrl+Shift+E; the top bar's eye button — on pages and the journal, every width, checked while it is on —, the page menu "⋯",
 Settings → Editor) shows pages and the journal read-only, like Obsidian's
 reading view: a tap or click follows links, opens embeds, pictures, PDFs and query results, folds
 and zooms, but never starts editing, so on a phone no keyboard comes up while reading. PageView and
@@ -3630,7 +3630,13 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   (Qt Quick, no private Qt headers), tested by `tests/app/touch`. As an attached type it carries
   `QML_ATTACHED` itself (Qt resolves `qmlAttachedProperties` on the registered class), the app's
   wrapper in `qmlforeign.h` gives it its QML name.
-* **Icons**: Lucide SVGs in `assets/icons/` (see its LICENSE), `BIcon { name: "bell" }`.
+* **Icons**: Lucide SVGs in `assets/icons/` (see its LICENSE), `BIcon { name: "bell" }`. One icon,
+  one meaning in the frame: `book-open` is the journal (the rail, the bottom navigation, tabs, the
+  palette's Journals), reading mode is `eye` (the top bar, the page menu, the palette; leaving it
+  `pencil`), the documentation `circle-help`, opening something in the main view `external-link`
+  (the journal day's "Open as page", the side panel's "Open in the main view"), `arrow-left` is
+  only Back and `panel-left` only the sidebar (a page window's "Move to main window":
+  `square-arrow-down-left`).
   New icons: copy from `lucide-static`, normalise like the others, re-run CMake. They render
   everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
   on the CPU, no shader effect).

@@ -229,7 +229,7 @@ Rectangle {
             visible: notebookMenu.docsPath !== ""
             height: visible ? implicitHeight : 0
             text: qsTr("Brulion Documentation")
-            iconName: "book-open"
+            iconName: "circle-help"
             // (Its key opens the documentation; from the documentation it goes back.)
             shortcut: docsItem.isCurrent ? "" : ShortcutMap.sequences["vault.docs"] || ""
             id: docsItem

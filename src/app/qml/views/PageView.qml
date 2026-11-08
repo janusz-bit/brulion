@@ -998,11 +998,11 @@ FocusScope {
             iconName: "list-todo"
             onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagKey) })
         }
-        // Reading mode (docs/UI.md "Reading mode"; also the top bar's book, the palette, the keys).
+        // Reading mode (docs/UI.md "Reading mode"; also the top bar's eye, the palette, the keys).
         BMenuItem {
             objectName: "pageMenuReadingMode"
             text: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
-            iconName: AppSettings.readingMode ? "pencil" : "book-open"
+            iconName: AppSettings.readingMode ? "pencil" : "eye"
             shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["view.reading"] || ""
             onTriggered: AppSettings.readingMode = !AppSettings.readingMode
         }

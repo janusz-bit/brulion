@@ -106,7 +106,8 @@ ApplicationWindow {
                 }
                 BIconButton {
                     objectName: "pageWindowAttach"
-                    iconName: "panel-left"
+                    // (panel-left is the sidebar's: Lucide's square-arrow-down-left, into the window.)
+                    iconName: "square-arrow-down-left"
                     label: qsTr("Move to main window")
                     onClicked: AppController.attachTab(window.tabId)
                 }

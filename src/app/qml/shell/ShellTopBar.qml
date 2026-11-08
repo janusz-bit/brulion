@@ -267,11 +267,12 @@ Rectangle {
             onClicked: AppController.search("")
         }
         // Reading mode (docs/UI.md "Reading mode"): a device setting for every page and the journal,
-        // at every width (phones read the most); checked while it is on.
+        // at every width (phones read the most); checked while it is on. An eye: the book is the
+        // journal's (the rail, the bottom navigation — on a phone both are on screen).
         BIconButton {
             objectName: "topBarReadingMode"
             visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
-            iconName: "book-open"
+            iconName: "eye"
             label: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
             shortcut: ShortcutMap.sequences["view.reading"] || ""
             // (Not `checkable`: a click must not break the binding to the setting.)
