@@ -153,6 +153,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   undone; on a `#tag`, a `[[link]]` or a link to a day: open, open in the side panel, copy.
   A task's reminder notification has a **Done** button (Linux, Windows, Android) that completes
   the task without opening the note.
+* Obsidian's Dataview queries in a shared vault show their results: ```` ```dataview ```` blocks
+  with `LIST`, `TABLE` and `TASK`, `FROM #tag / "folder" / [[page]]`, `WHERE`, `SORT`,
+  `GROUP BY`, `FLATTEN` and Dataview's fields and functions — read by Brulion's own parser (no
+  script runs), tasks checked off right in the results.
 * Android home-screen widgets: today's tasks ("My day": overdue and today) with a quick add —
   day, time and alarm from chips, written to the journal at once, even with the app closed —, a
   calendar with dots and an agenda (timed tasks first), and notes (today's journal, a quick
@@ -408,6 +412,10 @@ przykładowym notatnikiem.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
+* **Zapytania Dataview z Obsidiana.** Bloki ` ```dataview ` ze wspólnego skarbca pokazują swoje
+  wyniki: `LIST`, `TABLE` i `TASK`, `FROM #tag / "folder" / [[strona]]`, `WHERE`, `SORT`,
+  `GROUP BY`, `FLATTEN` oraz pola i funkcje Dataview — czytane własnym parserem Brulionu (żaden
+  skrypt się nie uruchamia), zadania odhaczasz wprost w wynikach.
 * **Wprowadzenie przy pierwszym uruchomieniu.** Język, wygląd, uprawnienia potrzebne
   przypomnieniom na tym urządzeniu (na Androidzie powiadomienia, dokładne alarmy, alarmy na
   ekranie blokady i — tylko dla folderu w pamięci telefonu — dostęp do wszystkich plików;

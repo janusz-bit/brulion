@@ -425,7 +425,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1584"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="3598"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3599"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -955,7 +955,7 @@
 <context>
     <name>QueryBlockView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="98"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="107"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n task</numerusform>
@@ -963,7 +963,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="99"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="108"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -971,7 +971,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="100"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="109"/>
         <source>%n reminder(s)</source>
         <translation>
             <numerusform>%n reminder</numerusform>
@@ -979,7 +979,23 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="101"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="110"/>
+        <source>%n result(s)</source>
+        <translation>
+            <numerusform>%n result</numerusform>
+            <numerusform>%n results</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="111"/>
+        <source>%n row(s)</source>
+        <translation>
+            <numerusform>%n row</numerusform>
+            <numerusform>%n rows</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="112"/>
         <source>%n block(s)</source>
         <translation>
             <numerusform>%n block</numerusform>
@@ -987,7 +1003,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="564"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="663"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -1286,7 +1302,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5993"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5994"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1669,6 +1685,73 @@
         <translation>
             <numerusform>%n item will be deleted permanently. This cannot be undone.</numerusform>
             <numerusform>%n items will be deleted permanently. This cannot be undone.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::Dataview</name>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="143"/>
+        <source>%n year(s)</source>
+        <translation>
+            <numerusform>%n year</numerusform>
+            <numerusform>%n years</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="148"/>
+        <source>%n month(s)</source>
+        <translation>
+            <numerusform>%n month</numerusform>
+            <numerusform>%n months</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="153"/>
+        <source>%n week(s)</source>
+        <translation>
+            <numerusform>%n week</numerusform>
+            <numerusform>%n weeks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="158"/>
+        <source>%n day(s)</source>
+        <translation>
+            <numerusform>%n day</numerusform>
+            <numerusform>%n days</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="163"/>
+        <source>%n hour(s)</source>
+        <translation>
+            <numerusform>%n hour</numerusform>
+            <numerusform>%n hours</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="168"/>
+        <source>%n minute(s)</source>
+        <translation>
+            <numerusform>%n minute</numerusform>
+            <numerusform>%n minutes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="173"/>
+        <source>%n second(s)</source>
+        <translation>
+            <numerusform>%n second</numerusform>
+            <numerusform>%n seconds</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/dataview/messages.cpp" line="178"/>
+        <source>%n millisecond(s)</source>
+        <translation>
+            <numerusform>%n millisecond</numerusform>
+            <numerusform>%n milliseconds</numerusform>
         </translation>
     </message>
 </context>

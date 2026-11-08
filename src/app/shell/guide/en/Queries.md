@@ -58,3 +58,18 @@ Example: `due:<=+7d` means “due within a week, overdue ones included”.
 - `status:open -is:blocked sort:due` — what you can do right now (without tasks that are waiting for something).
 
 See also [[Reminders and alarms|Reminders and alarms]]. If there is an error in a query, a description of what to fix appears in place of the results.
+
+## Dataview queries from Obsidian
+A vault shared with Obsidian often has queries of the Dataview plugin. Brulion shows their results too: a code block with the language `dataview` lists pages, a table or tasks, read-only — only the tasks can be checked off.
+
+```text
+TABLE status, budget AS "Budget" FROM #project WHERE status != "done" SORT budget DESC
+```
+
+- `LIST`, `TABLE` (columns with `AS "name"`, `WITHOUT ID` hides the page column) and `TASK`,
+- `FROM #tag`, `FROM "Folder"`, `FROM [[Page]]` (pages linking to it), combined with `AND`, `OR` and `-`,
+- `WHERE`, `SORT … DESC`, `GROUP BY`, `FLATTEN`, `LIMIT`,
+- fields from the frontmatter and from `key:: value` lines, and `file.name`, `file.mtime`, `file.tags`, `file.tasks`…,
+- dates such as `date(today) + dur(7 days)` and Dataview's functions (`contains`, `length`, `round`, `dateformat`…).
+
+Brulion reads these queries itself and never runs scripts: `dataviewjs` blocks stay code, and functions with regular expressions and `CALENDAR` views say they are not supported.

@@ -583,6 +583,9 @@ public:
 
     // ---- QueryHost ----------------------------------------------------------------------------
     Q_INVOKABLE QVariantMap runQuery(const QString &source, const QString &currentPath = QString()) override;
+    /// A ```dataview block's results (QueryHost; the last few are kept until the index changes or
+    /// the minute turns: Dataview's `date(now)`).
+    Q_INVOKABLE QVariantMap runDataview(const QString &source, const QString &currentPath = QString()) override;
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;
 
     // ---- Journals ---------------------------------------------------------------------------

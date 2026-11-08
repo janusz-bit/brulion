@@ -7,6 +7,7 @@
 #include "pagecontroller.h"
 #include "queryhost.h"
 
+#include "markdown/blockclipboard.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
@@ -67,7 +68,7 @@ QHash<int, QByteArray> QueryResultModel::roleNames() const
             {StatusRole, "status"}, {IsTaskRole, "isTask"},     {BlockIdRole, "blockId"},
             {DueRole, "due"},       {OverdueRole, "overdue"},   {ReminderRole, "reminder"},
             {AlarmRole, "alarm"},   {ShowPageRole, "showPage"}, {JournalRole, "journal"},
-            {RawRole, "raw"}};
+            {RawRole, "raw"},       {CellsRole, "cells"}};
 }
 
 QVariant QueryResultModel::data(const QModelIndex &index, int role) const
@@ -87,15 +88,29 @@ QVariant QueryResultModel::data(const QModelIndex &index, int role) const
     case FolderRole: return item.value(u"folder"_s).toString();
     case LineRole: return item.value(u"line"_s, -1).toInt();
     case Qt::DisplayRole:
-    case TextRole: return item.value(u"text"_s).toString().simplified();
+    case TextRole:
+        // Dataview rows: their cells as plain text (screen readers, tests).
+        if (item.contains(u"cells"_s)) {
+            QStringList plain;
+            for (const QString &cell : item.value(u"cells"_s).toStringList())
+                plain.append(markdown::stripInlineMarkup(cell).simplified());
+            return plain.join(u" · "_s);
+        }
+        return item.value(u"text"_s).toString().simplified();
     case HtmlRole:
+    case CellsRole:
         if (r.group)
-            return QString();
+            return role == CellsRole ? QVariant(QStringList()) : QVariant(QString());
         if (!r.htmlValid) {
             r.html = renderItem(item);
+            r.cells.clear();
+            if (m_type == u"table") {
+                for (const QString &cell : item.value(u"cells"_s).toStringList())
+                    r.cells.append(renderMarkdown(cell));
+            }
             r.htmlValid = true;
         }
-        return r.html;
+        return role == CellsRole ? QVariant(r.cells) : QVariant(r.html);
     case StatusRole: return r.status;
     case IsTaskRole: return !r.group && !r.status.isEmpty();
     case BlockIdRole: return item.value(u"blockId"_s).toString();
@@ -110,8 +125,9 @@ QVariant QueryResultModel::data(const QModelIndex &index, int role) const
     case ReminderRole: return reminder.value(u"at"_s).toString();
     case AlarmRole: return reminder.value(u"alarm"_s).toBool();
     case ShowPageRole:
-        // Items of this page need no page name; grouped by page, the header names it.
-        return !r.group && !m_groupedByPage && !(m_controller && item.value(u"path"_s).toString() == m_controller->path());
+        // Items of this page need no page name; grouped by page, the header names it; Dataview's
+        // LIST and TABLE rows name their page themselves.
+        return !r.group && !m_groupedByPage && !item.contains(u"cells"_s) && !(m_controller && item.value(u"path"_s).toString() == m_controller->path());
     case JournalRole: {
         // "YYYY-MM-DD" when the item's page is a daily note (shown as a date), else "".
         const auto date = markdown::journalDateFromPath(item.value(u"path"_s).toString(), m_config);
@@ -169,6 +185,23 @@ void QueryResultModel::connectHost()
         Q_EMIT availableChanged();
     }
     schedule();
+}
+
+void QueryResultModel::setLanguage(const QString &language)
+{
+    const QString l = language == u"dataview" ? language : u"query"_s;
+    if (m_language == l)
+        return;
+    m_language = l;
+    m_ready = false;
+    Q_EMIT languageChanged();
+    schedule();
+}
+
+QVariantMap QueryResultModel::runHost(QueryHost *queries) const
+{
+    const QString path = m_controller ? m_controller->path() : QString();
+    return dataview() ? queries->runDataview(m_source, path) : queries->runQuery(m_source, path);
 }
 
 void QueryResultModel::setSource(const QString &source)
@@ -284,8 +317,10 @@ void QueryResultModel::refresh()
     QVariantList groups;
     if (m_host)
         m_config = vaultConfigFromMap(m_host->vaultConfig());
+    QStringList columns;
     if (queries && m_controller && !m_source.trimmed().isEmpty()) {
-        const QVariantMap r = queries->runQuery(m_source, m_controller->path());
+        const QVariantMap r = runHost(queries);
+        columns = r.value(u"columns"_s).toStringList();
         ok = r.value(u"ok"_s).toBool();
         error = r.value(u"error"_s).toString();
         type = r.value(u"type"_s).toString();
@@ -295,7 +330,7 @@ void QueryResultModel::refresh()
         groups = r.value(u"groups"_s).toList();
     }
     const bool same = m_ready && ok == m_ok && error == m_error && type == m_type && total == m_total
-                      && complete == m_complete && items == m_items && groups == m_groups;
+                      && complete == m_complete && items == m_items && groups == m_groups && columns == m_columns;
     m_ready = queries != nullptr;
     if (same) {
         // Statuses shown ahead of the index are confirmed (or corrected) by the new run.
@@ -317,6 +352,7 @@ void QueryResultModel::refresh()
     m_complete = complete;
     m_items = items;
     m_groups = groups;
+    m_columns = columns;
     rebuildRows();
     Q_EMIT resultChanged();
 }
@@ -383,11 +419,25 @@ void QueryResultModel::invalidateHtml()
     for (Row &r : m_rows)
         r.htmlValid = false;
     if (!m_rows.isEmpty())
-        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {HtmlRole, OverdueRole});
+        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {HtmlRole, CellsRole, OverdueRole});
+}
+
+QString QueryResultModel::renderMarkdown(const QString &markdown) const
+{
+    if (!m_controller)
+        return markdown::InlineRenderer::escape(markdown);
+    markdown::RenderContext ctx = m_controller->blocks()->renderContextFor(m_controller->path(), markdown, 0);
+    ctx.inlineCalc = nullptr;
+    ctx.hideTransclusions = false;
+    ctx.dateLinks = false;
+    return markdown::InlineRenderer(ctx).render(markdown);
 }
 
 QString QueryResultModel::renderItem(const QVariantMap &item) const
 {
+    // Dataview's LIST rows: one Markdown text ("[[Page]]: value"); TABLE rows draw their cells.
+    if (item.contains(u"cells"_s))
+        return m_type == u"table" ? QString() : renderMarkdown(item.value(u"cells"_s).toStringList().value(0));
     const QString title = item.value(u"title"_s).toString();
     const QString raw = item.value(u"raw"_s).toString();
     if (m_type == u"pages" || raw.trimmed().isEmpty())
@@ -438,7 +488,7 @@ int QueryResultModel::currentLine(const Row &row) const
     const QString path = row.item.value(u"path"_s).toString();
     const QString text = row.item.value(u"text"_s).toString();
     const QString raw = row.item.value(u"raw"_s).toString();
-    const QVariantMap result = queries->runQuery(m_source, m_controller->path());
+    const QVariantMap result = runHost(queries);
     QVariantList items = result.value(u"items"_s).toList();
     for (const QVariant &g : result.value(u"groups"_s).toList())
         items.append(g.toMap().value(u"items"_s).toList());
@@ -508,8 +558,8 @@ QVariantMap QueryResultModel::open(int row, bool newPane)
     const QString path = r.item.value(u"path"_s).toString();
     if (path.isEmpty())
         return {};
-    return m_controller->openLocation(path, r.group || m_type == u"pages" ? -1 : r.item.value(u"line"_s, -1).toInt(),
-                                      newPane);
+    const bool page = r.group || m_type == u"pages" || r.item.contains(u"cells"_s);
+    return m_controller->openLocation(path, page ? -1 : r.item.value(u"line"_s, -1).toInt(), newPane);
 }
 
 QVariantMap QueryResultModel::activateLink(int row, const QString &url, bool newPane)

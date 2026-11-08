@@ -58,3 +58,18 @@ Przykład: `due:<=+7d` oznacza „termin w ciągu tygodnia, łącznie z zaległy
 - `status:open -is:blocked sort:due` — to, co można zrobić już teraz (bez zadań, które na coś czekają).
 
 Zobacz też [[Przypomnienia i alarmy|Przypomnienia i alarmy]]. Jeśli w zapytaniu jest błąd, w miejscu wyników pojawia się opis, co poprawić.
+
+## Zapytania Dataview z Obsidiana
+Skarbiec współdzielony z Obsidianem często ma zapytania wtyczki Dataview. Brulion pokazuje także ich wyniki: blok kodu z językiem `dataview` wypisuje strony, tabelę albo zadania, tylko do odczytu — odhaczyć można jedynie zadania.
+
+```text
+TABLE status, budżet AS "Budżet" FROM #projekt WHERE status != "zrobione" SORT budżet DESC
+```
+
+- `LIST`, `TABLE` (kolumny z `AS "nazwa"`, `WITHOUT ID` ukrywa kolumnę ze stroną) i `TASK`,
+- `FROM #tag`, `FROM "Folder"`, `FROM [[Strona]]` (strony, które do niej linkują), łączone przez `AND`, `OR` i `-`,
+- `WHERE`, `SORT … DESC`, `GROUP BY`, `FLATTEN`, `LIMIT`,
+- pola z nagłówka YAML i z linii `klucz:: wartość` oraz `file.name`, `file.mtime`, `file.tags`, `file.tasks`…,
+- daty, np. `date(today) + dur(7 days)`, i funkcje Dataview (`contains`, `length`, `round`, `dateformat`…).
+
+Brulion czyta te zapytania sam i nigdy nie uruchamia skryptów: bloki `dataviewjs` zostają kodem, a funkcje z wyrażeniami regularnymi i widoki `CALENDAR` mówią, że nie są obsługiwane.

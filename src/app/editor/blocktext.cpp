@@ -425,11 +425,12 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
     const auto fenced = [&](const Fence &f) {
         s.lang = f.lang;
         // ```math / ```latex / ```tex: a formula block (docs/SYNTAX.md §11); ```mermaid: a diagram
-        // (docs/SYNTAX.md §11 "Mermaid diagrams"); ```chart: a chart (docs/SYNTAX.md §9 "Charts").
+        // (docs/SYNTAX.md §11 "Mermaid diagrams"); ```chart: a chart (docs/SYNTAX.md §9 "Charts");
+        // ```dataview: an Obsidian Dataview query, shown like ```query (§10 "Dataview queries").
         const bool math = f.lang == u"math" || f.lang == u"latex" || f.lang == u"tex";
         s.view = math                   ? BlockView::Math
                  : f.lang == u"calc"    ? BlockView::Calc
-                 : f.lang == u"query"   ? BlockView::Query
+                 : f.lang == u"query" || f.lang == u"dataview" ? BlockView::Query
                  : f.lang == u"mermaid" ? BlockView::Mermaid
                  : f.lang == u"chart"   ? BlockView::Chart
                                         : BlockView::Code;

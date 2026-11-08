@@ -1,5 +1,7 @@
 #include "notebook/json.h"
 
+#include "dataview/dataview.h"
+
 #include "index/vaultindex.h"
 #include "markdown/journal.h"
 #include "markdown/notemode.h"
@@ -283,6 +285,54 @@ QJsonObject queryResultJson(const VaultIndex &index, const QueryResult &result)
     }
     return {{u"type"_s, queryTypeName(result.type)},
             {u"total"_s, result.total},
+            {u"items"_s, items},
+            {u"groups"_s, groups}};
+}
+
+QString dataviewTypeName(dataview::QueryType type)
+{
+    switch (type) {
+    case dataview::QueryType::List: return u"list"_s;
+    case dataview::QueryType::Table: return u"table"_s;
+    case dataview::QueryType::Task: return u"tasks"_s;
+    }
+    return u"list"_s;
+}
+
+namespace {
+
+QJsonObject dataviewRowJson(const VaultIndex &index, const dataview::Row &row)
+{
+    if (row.blockIndex >= 0)
+        return queryItemJson(index, QueryItem{row.path, row.blockIndex, row.task, std::nullopt});
+    const ParsedNote *note = row.path.isEmpty() ? nullptr : index.note(row.path);
+    QJsonObject o{{u"path"_s, row.path},
+                  {u"title"_s, note ? note->title : row.path.isEmpty() ? QString() : paths::pageTitle(row.path)},
+                  {u"folder"_s, paths::dirname(row.path)},
+                  {u"line"_s, 0},
+                  {u"cells"_s, QJsonArray::fromStringList(row.cells)}};
+    return o;
+}
+
+} // namespace
+
+QJsonObject dataviewResultJson(const VaultIndex &index, const dataview::Result &result)
+{
+    QJsonArray items;
+    for (const dataview::Row &row : result.rows)
+        items.append(dataviewRowJson(index, row));
+    QJsonArray groups;
+    for (const dataview::Group &group : result.groups) {
+        QJsonArray groupItems;
+        for (const dataview::Row &row : group.rows) {
+            groupItems.append(dataviewRowJson(index, row));
+            items.append(groupItems.last()); // every item, as runQuery gives them with its groups
+        }
+        groups.append(QJsonObject{{u"key"_s, group.key}, {u"label"_s, group.label}, {u"items"_s, groupItems}});
+    }
+    return {{u"type"_s, dataviewTypeName(result.type)},
+            {u"total"_s, result.total},
+            {u"columns"_s, QJsonArray::fromStringList(result.headers)},
             {u"items"_s, items},
             {u"groups"_s, groups}};
 }

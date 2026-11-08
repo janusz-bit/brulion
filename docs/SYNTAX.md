@@ -1459,6 +1459,94 @@ status:open -is:blocked sort:due        // what can be done right now
 ```
 ````
 
+### Dataview queries
+
+A fenced block with language `dataview` — a query of Obsidian's Dataview plugin, as vaults shared
+with Obsidian have them — renders its live results in the editor like a `query` block
+(`dataview/dataview.h`). Brulion reads the Dataview Query Language with its own parser and
+evaluates it against its index: the results are read-only (tasks can be checked off), nothing
+from a note runs as a script — ```` ```dataviewjs ```` blocks and inline `` `= …` `` / `` `$= …` ``
+queries stay code. Without `LIMIT` at most 500 rows are shown (the total is still reported).
+
+````
+```dataview
+TABLE status, budżet AS "Budżet", file.mtime AS "Zmieniono"
+FROM #projekt AND -"Archiwum"
+WHERE status != "zrobione" AND (termin <= date(today) + dur(7 days) OR !termin)
+SORT termin ASC, file.name
+```
+```dataview
+TASK FROM "Projekty" WHERE !completed AND due <= date(today)
+```
+```dataview
+LIST rows.file.link FROM #spotkanie GROUP BY dateformat(file.day, "yyyy-MM") AS Miesiąc
+```
+````
+
+**Query types.** `LIST [WITHOUT ID] [expression]` — the pages, each with the value after it
+(`[[Page]]: value`; `WITHOUT ID` the value alone); `TABLE [WITHOUT ID] expression [AS name], …` —
+a table whose first column is the page (`File`) unless `WITHOUT ID`; a header is the expression
+as written or its `AS` name (`"…"` for one with spaces); `TASK` — the tasks of the pages,
+grouped by page, checked off and given a status (right-click / long press) in their own file.
+`CALENDAR` is not supported (an error says so).
+
+**Data commands**, written after the type in any order and as often as needed, are applied one
+after another: `FROM` (once, right after the type), `WHERE expr` (keeps rows where it is true),
+`SORT expr [ASC|DESC], …` (missing values first ascending), `GROUP BY expr [AS name]` (one row
+per value, in order of the values: `key` and `rows` — `rows.file.link` lists the rows' links; a
+grouped `TABLE` names its first column after the group, a grouped `LIST` without a value lists the
+rows under each key), `FLATTEN expr [AS name]` (a row per element of a list), `LIMIT n`. Keywords
+are case-insensitive; a line starting with `//` is a comment.
+
+**Sources of `FROM`:** `#tag` (pages with the tag or a sub-tag anywhere, case-insensitive),
+`"Folder"` (the folder and its subfolders) or `"Folder/Page"` (that page, with or without `.md`),
+`[[Page]]` (pages linking to it), `[[]]` (pages linking to this page), `outgoing([[Page]])` (pages
+it links to), combined with `AND`, `OR`, `-` / `!` (not) and parentheses. Without `FROM`: every page.
+Renaming or moving a page does not rewrite Dataview queries (Obsidian does not either).
+
+**Fields.** A page's fields are its frontmatter keys and every `key:: value` in the note — on a
+line of its own (also in a list item) or `[key:: value]` / `(key:: value)` inside a line; a key
+written twice holds a list. Keys are read in a canonical form: lower-case, blanks as `-`
+(`Termin Oddania` = `termin-oddania`); `row["termin oddania"]` reads one with a blank. Values are
+typed as Dataview types them: `[[links]]`, dates (`2026-10-15`, `2026-10-15T09:30`), numbers,
+`true` / `false`, durations (`3 days`, `1h 30m`, also Polish units: `2 dni`, `3 godziny`), lists of
+links (`[[A]], [[B]]`), text otherwise. Every page also has `file`: `name`, `path`, `folder`,
+`ext`, `link`, `size`, `mtime` / `mday` (the file's modification time; `ctime` / `cday` the same —
+the files do not say when they were created), `day` (a daily note's date, a date in the name or the
+`date` field), `tags` (with `#`, each parent of a nested tag too), `etags` (the tags as written),
+`inlinks`, `outlinks`, `aliases`, `tasks`, `lists`, `frontmatter`. A task (TASK rows,
+`file.tasks`) has `status` (the checkbox mark: `" "`, `"x"`, `"/"`), `checked`, `completed`,
+`fullyCompleted`, `text`, `line`, `lineCount`, `path`, `section`, `link`, `tags`, `outlinks`,
+`children`, `parent`, `blockId`, `due`, `scheduled`, `start`, `created`, `completion` (from 📅 ⏳ 🛫 ➕
+✅, or its own `[due:: …]` fields), its own fields, and — for any other name — its page's fields
+(`file.name`). `this` is the page holding the query; a field of a link reads the linked page
+(`[[Jan Kowalski]].telefon`), a field of a list maps over it (`file.tasks.text`).
+
+**Expressions:** numbers, `"strings"`, `true`, `false`, `null`, `[[links]]`, lists `[1, 2]`;
+`+ - * / %` (`+` joins text; dates ± durations: `date(today) + dur(1 week)`; date − date is a
+duration), `= != < <= > >=` (values of different types in a fixed order, `null` first), `and`,
+`or`, `!`; `list[0]`, `object["key"]`; lambdas `(t) => !t.completed`. Dates: `date(today)`,
+`date(now)`, `date(tomorrow)`, `date(yesterday)`, `date(sow)` / `date(eow)` (the week, as the
+notebook's first day of the week says), `date(som)`, `date(eom)`, `date(soy)`, `date(eoy)`,
+`date(2026-10-15)`, `date("2026-10-15 09:30")`, `date("15.10.2026", "dd.MM.yyyy")`; parts
+`.year .month .day .hour .minute .weekday .week`; durations `dur(3 days)` with `.days`, `.hours`, ….
+**Functions** (Dataview's names and behaviour): `contains`, `icontains`, `econtains`,
+`containsword`, `length`, `lower`, `upper`, `startswith`, `endswith`, `replace` and `split` (plain
+text, not patterns), `join`, `substring`, `padleft`, `padright`, `truncate`, `date`, `dur`,
+`number`, `string`, `link`, `embed`, `elink`, `typeof`, `default`, `ldefault`, `choice`, `round`,
+`trunc`, `floor`, `ceil`, `min`, `max`, `sum`, `product`, `average`, `minby`, `maxby`, `reduce`,
+`sort`, `reverse`, `unique`, `flat`, `slice`, `filter`, `map`, `any`, `all`, `none`, `nonnull`,
+`firstvalue`, `extract`, `list` / `array`, `object`, `meta`, `dateformat` (Luxon tokens:
+`yyyy-MM-dd`, `EEEE`, `MMMM`, …; English names), `striptime`, `localtime`, `display`. The
+regular-expression functions (`regextest`, `regexmatch`, `regexreplace`) and `csv()` sources are
+not supported: a note synced from anywhere could make a pattern run for minutes. An unknown
+function, a syntax error or a query too costly to evaluate (the index's notes times a heavy
+expression) shows a helpful message (in the UI language) with its line instead of results.
+
+**Results** show values as the editor renders text: links as links, lists joined with `, `,
+dates as `2026-10-15` (`2026-10-15 09:30` with a time), durations in words, a missing value as
+`–`. The HTML export, the clipboard and the other exports keep the block's source.
+
 ## 11. Other rendering extensions (Obsidian compatible)
 
 `==highlight==`, coloured highlights (below), `%%hidden comment%%`, callouts `> [!note] Title`

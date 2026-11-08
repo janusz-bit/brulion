@@ -4,6 +4,7 @@
 
 #include "blocktext.h"
 
+#include "dataview/dataview.h"
 #include "dates/local.h"
 #include "index/query.h"
 #include "index/vaultindex.h"
@@ -195,6 +196,39 @@ QVariantMap FakeEditorHost::runQuery(const QString &source, const QString &curre
     out.insert(u"total"_s, result.total);
     out.insert(u"items"_s, items);
     out.insert(u"groups"_s, groups);
+    return out;
+}
+
+QVariantMap FakeEditorHost::runDataview(const QString &source, const QString &currentPath)
+{
+    ++m_queryRuns;
+    QVariantMap out{{u"ok"_s, false}, {u"error"_s, QString()},      {u"type"_s, u"list"_s},
+                    {u"total"_s, 0},  {u"items"_s, QVariantList()}, {u"groups"_s, QVariantList()},
+                    {u"columns"_s, QStringList()}, {u"complete"_s, true}};
+    if (m_queriesFail) {
+        out.insert(u"error"_s, u"No notebook is open."_s);
+        return out;
+    }
+    const std::variant<dataview::Query, QString> parsed = dataview::parseQuery(source);
+    if (const QString *error = std::get_if<QString>(&parsed)) {
+        out.insert(u"error"_s, *error);
+        return out;
+    }
+    const VaultIndex &index = currentIndex();
+    dataview::Options options;
+    options.currentPath = paths::normalize(currentPath);
+    options.now = QDateTime::currentDateTime();
+    if (const auto spec = dates::parseDateSpec(m_now))
+        options.now = spec->toLocalDateTime();
+    const auto result = dataview::runQuery(std::get<dataview::Query>(parsed), index, options);
+    if (const QString *error = std::get_if<QString>(&result)) {
+        out.insert(u"error"_s, *error);
+        return out;
+    }
+    const QVariantMap json = notebook::dataviewResultJson(index, std::get<dataview::Result>(result)).toVariantMap();
+    for (auto it = json.constBegin(); it != json.constEnd(); ++it)
+        out.insert(it.key(), it.value());
+    out.insert(u"ok"_s, true);
     return out;
 }
 

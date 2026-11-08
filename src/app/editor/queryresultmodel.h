@@ -16,12 +16,17 @@
 // "YYYY-MM-DD HH:mm"), alarm, showPage (show the page next to the item: it is another page and
 // not the group header), journal ("YYYY-MM-DD" when the page is a daily note, else ""), raw (the
 // item's block as Markdown: its token menus, PageController::tokenChipIn / editTokenIn — the
-// rendered date, 🔁 and priority chips are links naming ranges of it).
+// rendered date, 🔁 and priority chips are links naming ranges of it), cells (Dataview TABLE rows:
+// the rendered cells).
 // Only the first `maxItems` items get rows (hiddenCount: the others; showMore() adds rows).
 // A task's status menu open on a row holds the rows (hold() / release(): new rows would take the
 // menu away with the old ones): runs that come due meanwhile (index changes from sync or other
 // notes, the query edited) wait and run once when the last holder lets go; a status chosen on
 // held rows goes to the task where the index has it now (lines may have moved meanwhile).
+// `language: "dataview"` runs a ```dataview block instead (QueryHost::runDataview; docs/SYNTAX.md
+// §10 "Dataview queries"): LIST rows are items whose html is their one Markdown text, TABLE rows
+// items with `cells` (rendered, one per column of `columns`), TASK results task items grouped by
+// page — checked like a query's tasks.
 // Created from QML, it runs the query the first time when it is completed (with its controller
 // and source), so the block is created with its results — a block whose results came a moment
 // later grew after the editor's list had placed it (docs/UI.md "Scrolling performance").
@@ -34,12 +39,14 @@
 #include <QPointer>
 #include <QQmlParserStatus>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 
 namespace brulion {
 class EditorHost;
+class QueryHost;
 }
 
 namespace brulion::editor {
@@ -54,12 +61,16 @@ class QueryResultModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(brulion::editor::PageController *controller READ controller WRITE setController NOTIFY controllerChanged FINAL)
     /// The query text (the block's edit text without the fences).
     Q_PROPERTY(QString source READ source WRITE setSource NOTIFY sourceChanged FINAL)
+    /// "query" (a ```query block, the default) or "dataview" (a ```dataview block).
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged FINAL)
+    /// TABLE results: the column headers (each row's `cells` has one per header).
+    Q_PROPERTY(QStringList columns READ columns NOTIFY resultChanged FINAL)
     /// The host can run queries; false: the view shows the query's filters only.
     Q_PROPERTY(bool available READ available NOTIFY availableChanged FINAL)
     /// The last run succeeded (false with `error` for an invalid query).
     Q_PROPERTY(bool ok READ ok NOTIFY resultChanged FINAL)
     Q_PROPERTY(QString error READ error NOTIFY resultChanged FINAL)
-    /// "tasks" | "blocks" | "pages" | "reminders".
+    /// "tasks" | "blocks" | "pages" | "reminders"; Dataview: "list" | "table" | "tasks".
     Q_PROPERTY(QString type READ type NOTIFY resultChanged FINAL)
     /// Matches before the query's `limit`.
     Q_PROPERTY(int total READ total NOTIFY resultChanged FINAL)
@@ -101,6 +112,7 @@ public:
         ShowPageRole,
         JournalRole,
         RawRole,
+        CellsRole,
     };
     Q_ENUM(Role)
 
@@ -118,6 +130,9 @@ public:
     void setController(PageController *controller);
     QString source() const { return m_source; }
     void setSource(const QString &source);
+    QString language() const { return m_language; }
+    void setLanguage(const QString &language);
+    QStringList columns() const { return m_columns; }
     bool available() const;
     bool ok() const { return m_ok; }
     QString error() const { return m_error; }
@@ -164,6 +179,7 @@ public:
 Q_SIGNALS:
     void controllerChanged();
     void sourceChanged();
+    void languageChanged();
     void availableChanged();
     void resultChanged();
     void maxItemsChanged();
@@ -178,6 +194,7 @@ private:
         QString status;   ///< task status shown (follows toggles before the index does)
         QString html;
         bool htmlValid = false;
+        QStringList cells; ///< TABLE cells rendered (with htmlValid)
     };
 
     void schedule();
@@ -187,11 +204,18 @@ private:
     void rebuildRows();
     void invalidateHtml();
     QString renderItem(const QVariantMap &item) const;
+    /// Markdown of a Dataview value rendered as the query's page renders text.
+    QString renderMarkdown(const QString &markdown) const;
+    /// The host's answer for the source (runQuery or runDataview).
+    QVariantMap runHost(QueryHost *queries) const;
+    bool dataview() const { return m_language == u"dataview"; }
     void connectHost();
 
     QPointer<PageController> m_controller;
     QPointer<EditorHost> m_host;
     QString m_source;
+    QString m_language = QStringLiteral("query");
+    QStringList m_columns;
     QTimer m_timer;
     bool m_ok = false;
     bool m_ready = false;

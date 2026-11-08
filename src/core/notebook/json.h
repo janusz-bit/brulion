@@ -21,6 +21,11 @@ namespace brulion {
 class VaultIndex;
 }
 
+namespace brulion::dataview {
+enum class QueryType;
+struct Result;
+}
+
 namespace brulion::notebook {
 
 // ---- Names ----------------------------------------------------------------------------------
@@ -39,6 +44,8 @@ std::optional<Priority> priorityFromName(QStringView name);
 QString blockKindName(BlockKind kind);
 QString linkKindName(LinkKind kind);
 QString queryTypeName(QueryType type);
+/// "list" | "table" | "tasks".
+QString dataviewTypeName(dataview::QueryType type);
 QString calendarKindName(CalendarItem::Kind kind);
 
 // ---- Values ---------------------------------------------------------------------------------
@@ -58,6 +65,12 @@ QJsonObject blockJson(const Block &block);
 QJsonObject queryItemJson(const VaultIndex &index, const QueryItem &item);
 /// {type, total, items, groups: [{key, label, items}]}.
 QJsonObject queryResultJson(const VaultIndex &index, const QueryResult &result);
+/// A ```dataview block's result as Workspace::runDataview gives it (QueryHost): {type, total,
+/// columns (TABLE headers), items (all of them, also those of the groups), groups: [{key, label,
+/// items}]}; a TASK item is queryItemJson()'s,
+/// a LIST / TABLE item {path ("" for a group of a grouped TABLE), title, folder, line 0, cells:
+/// [Markdown]} (dataview::Row).
+QJsonObject dataviewResultJson(const VaultIndex &index, const dataview::Result &result);
 /// {path, title, folder, line, excerpt, score, journal} (journal: the daily note's date or "").
 QJsonObject searchHitJson(const SearchHit &hit, const VaultConfig &config);
 /// {date, time, kind, title, path, line, status, recurring, alarm} (Workspace::calendarItems).

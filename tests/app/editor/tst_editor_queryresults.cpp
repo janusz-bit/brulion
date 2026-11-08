@@ -1,6 +1,7 @@
 // QueryResultModel (src/app/editor): live ```query results through the host's QueryHost — the
 // FakeEditorHost runs them on the real index module — rows for groups and items, rendering,
-// checking tasks here and in other files, refreshing after index changes, limits, navigation.
+// checking tasks here and in other files, refreshing after index changes, limits, navigation;
+// ```dataview blocks (language "dataview": LIST, TABLE cells, TASK groups).
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
 #include "queryresultmodel.h"
@@ -26,7 +27,7 @@ struct Fixture {
     QueryResultModel results;
     std::unique_ptr<QAbstractItemModelTester> tester;
 
-    explicit Fixture(const QString &query, const QString &content = QString())
+    explicit Fixture(const QString &query, const QString &content = QString(), const QString &language = u"query"_s)
     {
         host.setNow(Now);
         host.setFile(Page, content.isEmpty()
@@ -41,6 +42,7 @@ struct Fixture {
         page.setPath(Page);
         results.setRefreshDelay(0);
         results.setController(&page);
+        results.setLanguage(language);
         results.setSource(query);
         tester = std::make_unique<QAbstractItemModelTester>(&results, QAbstractItemModelTester::FailureReportingMode::QtTest);
         results.refresh();
@@ -586,6 +588,78 @@ private Q_SLOTS:
         const QVariantMap here = f.results.activateLink(f.rowOf(u"Pomalować"_s), u"page:#%5Ebrak"_s);
         QCOMPARE(here.value(u"action"_s).toString(), u"notFound"_s);
         QCOMPARE(nav.size(), 2);
+    }
+
+    void dataviewList()
+    {
+        const QString query = u"LIST FROM #remont SORT file.name"_s;
+        Fixture f(query, u"- [ ] Pomalować ścianę #remont\n\n```dataview\n"_s + query + u"\n```\n"_s, u"dataview"_s);
+        QVERIFY2(f.results.ok(), qPrintable(f.results.error()));
+        QCOMPARE(f.results.language(), u"dataview"_s);
+        QCOMPARE(f.results.type(), u"list"_s);
+        QCOMPARE(f.texts(), (QStringList{u"2026-10-15"_s, u"Dom"_s, u"Zakupy"_s}));
+        const QVariantMap first = f.row(0);
+        QVERIFY(!first.value(u"isTask"_s).toBool());
+        QVERIFY(!first.value(u"showPage"_s).toBool());
+        // The page link rendered as the editor renders links (a journal by its date).
+        QVERIFY2(first.value(u"html"_s).toString().contains(u"page:"_s), qPrintable(first.value(u"html"_s).toString()));
+        // A click opens the page.
+        QSignalSpy nav(&f.host, &FakeEditorHost::navigated);
+        QVERIFY(f.results.open(2).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Zakupy.md"_s);
+    }
+
+    void dataviewTable()
+    {
+        const QString query = u"TABLE length(file.tasks) AS \"Zadań\", file.etags AS Tagi FROM #zakupy"_s;
+        Fixture f(query, u"```dataview\n"_s + query + u"\n```\n"_s, u"dataview"_s);
+        QVERIFY2(f.results.ok(), qPrintable(f.results.error()));
+        QCOMPARE(f.results.type(), u"table"_s);
+        QCOMPARE(f.results.columns(), (QStringList{u"File"_s, u"Zadań"_s, u"Tagi"_s}));
+        QCOMPARE(f.results.rowCount(), 1);
+        const QVariantMap row = f.row(0);
+        QCOMPARE(row.value(u"text"_s).toString(), u"Zakupy · 3 · #zakupy, #remont"_s);
+        const QStringList cells = row.value(u"cells"_s).toStringList();
+        QCOMPARE(cells.size(), 3);
+        QVERIFY2(cells.at(0).contains(u"page:Zakupy"_s), qPrintable(cells.at(0)));
+        QCOMPARE(cells.at(1), u"3"_s);
+        QVERIFY2(cells.at(2).contains(u"tag:zakupy"_s), qPrintable(cells.at(2)));
+        QVERIFY(row.value(u"html"_s).toString().isEmpty());
+    }
+
+    void dataviewTasks()
+    {
+        const QString query = u"TASK WHERE !completed AND contains(text, \"Mleko\")"_s;
+        Fixture f(query, u"```dataview\n"_s + query + u"\n```\n"_s, u"dataview"_s);
+        QVERIFY2(f.results.ok(), qPrintable(f.results.error()));
+        QCOMPARE(f.results.type(), u"tasks"_s);
+        QVERIFY(f.results.grouped());
+        QCOMPARE(f.results.itemCount(), 1);
+        QCOMPARE(f.results.total(), 1);
+        QCOMPARE(f.texts().size(), 2);
+        QCOMPARE(f.texts().at(0), u"# Zakupy"_s);
+        QVERIFY(f.texts().at(1).startsWith(u"Mleko"_s));
+        // Grouped by page: the item needs no page name; checked in its own file.
+        QVERIFY(!f.row(1).value(u"showPage"_s).toBool());
+        QVERIFY(f.row(1).value(u"isTask"_s).toBool());
+        QVERIFY(f.results.toggleTask(1));
+        QVERIFY(f.host.file(u"Zakupy.md"_s).startsWith(u"- [x] Mleko"_s));
+        QTRY_COMPARE(f.results.rowCount(), 0);
+    }
+
+    void dataviewErrors()
+    {
+        Fixture bad(u"LIST WHERE ("_s, u"```dataview\nLIST WHERE (\n```\n"_s, u"dataview"_s);
+        QVERIFY(bad.results.ready());
+        QVERIFY(!bad.results.ok());
+        QVERIFY2(bad.results.error().contains(u"An expression is missing"_s), qPrintable(bad.results.error()));
+        // A ```query text read as Dataview is an error, not a query.
+        Fixture query(u"type:tasks"_s, u"```dataview\ntype:tasks\n```\n"_s, u"dataview"_s);
+        QVERIFY(!query.results.ok());
+        query.results.setLanguage(u"query"_s);
+        query.results.refresh();
+        QVERIFY(query.results.ok());
+        QCOMPARE(query.results.type(), u"tasks"_s);
     }
 
     void rendersWithTheThemeAndLanguage()

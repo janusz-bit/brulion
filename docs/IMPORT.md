@@ -103,8 +103,12 @@ instead of a path) is skipped with a warning, and Brulion keeps its own.
   Obsidian shows it as plain text. In a vault you open in both apps, use *Copy link to block* —
   `[[Page#^id]]` works in both.
 * Reminders `⏰ …`, `calc` and `query` code blocks and formulas in tables are Brulion syntax —
-  Obsidian shows them as text or a code block. The other way round: Brulion shows Dataview queries
-  and files of other plugins as plain text or a page (exception: Excalidraw drawings, below);
+  Obsidian shows them as text or a code block. The other way round: ```` ```dataview ```` blocks
+  show their results in Brulion too — `LIST`, `TABLE` and `TASK` queries with `FROM`, `WHERE`,
+  `SORT`, `GROUP BY`, `FLATTEN`, `LIMIT` and Dataview's fields and functions, read-only (tasks can
+  be checked off; docs/SYNTAX.md §10 "Dataview queries"); `dataviewjs` blocks, inline `= …` queries,
+  regular-expression functions and `CALENDAR` stay code or say they are not supported. Files of
+  other plugins are plain text or a page (exception: Excalidraw drawings, below); `.base` and
   `.canvas` files are not pages.
 * Brulion **drawings** (`/Drawing`) are SVG files with an embedded Excalidraw scene: Obsidian
   shows them as pictures, and excalidraw.com opens them for editing. A drawing from Excalidraw

@@ -1,6 +1,7 @@
 // Workspace: index queries for the views and the editor's QueryHost (see workspace.h).
 #include "workspace.h"
 
+#include "dataview/dataview.h"
 #include "dates/dates.h"
 #include "index/index.h"
 #include "index/querycache.h"
@@ -87,9 +88,17 @@ QString shortText(const QString &text)
 
 // ---- Caches of the lists asked for again and again ------------------------------------------------
 
+/// A ```dataview block's last result: valid for its index version and minute (`date(now)`).
+struct DataviewEntry {
+    int version = -1;
+    QDateTime minute;
+    QVariantMap result;
+};
+
 struct Workspace::ListCaches {
     RecentCaches<CalendarCache> ranges{MaxCachedRanges}; ///< the side panel's month, a picked day, …
     RecentCaches<QueryCache> queries{MaxCachedQueries};  ///< the ```query blocks of the open pages
+    RecentCaches<DataviewEntry> dataview{MaxCachedQueries}; ///< the ```dataview blocks of the open pages
 };
 
 Workspace::ListCaches &Workspace::listCaches() const
@@ -305,6 +314,52 @@ QVariantMap Workspace::runQuery(const QString &source, const QString &currentPat
     out.insert(u"total"_s, result.total);
     out.insert(u"items"_s, items);
     out.insert(u"groups"_s, groups);
+    return out;
+}
+
+QVariantMap Workspace::runDataview(const QString &source, const QString &currentPath)
+{
+    QVariantMap out{{u"ok"_s, false},  {u"error"_s, QString()},      {u"type"_s, u"list"_s},
+                    {u"total"_s, 0},   {u"items"_s, QVariantList()}, {u"groups"_s, QVariantList()},
+                    {u"columns"_s, QStringList()}, {u"complete"_s, !indexing()}};
+    if (!m_index || !m_vault) {
+        out.insert(u"error"_s, tr("No notebook is open."));
+        return out;
+    }
+    const VaultPath path = paths::normalize(currentPath);
+    QDateTime minute = now();
+    minute.setTime(QTime(minute.time().hour(), minute.time().minute()));
+    // Every block re-runs after each change of the index: the same query on the same version and
+    // minute gives the same result.
+    DataviewEntry &cached = listCaches().dataview.get(source + u'\x1f' + path);
+    if (cached.version == m_index->version() && cached.minute == minute && !cached.result.isEmpty()) {
+        QVariantMap result = cached.result;
+        result.insert(u"complete"_s, !indexing());
+        return result;
+    }
+    const std::variant<dataview::Query, QString> parsed = dataview::parseQuery(source);
+    if (const QString *error = std::get_if<QString>(&parsed)) {
+        out.insert(u"error"_s, *error);
+        return out;
+    }
+    dataview::Options options;
+    options.currentPath = path;
+    options.now = now();
+    options.weekStart = m_vault->config().weekStartsOn;
+    const Vault *vault = m_vault.get();
+    options.stat = [vault](const VaultPath &p) { return vault->stat(p); };
+    const auto result = dataview::runQuery(std::get<dataview::Query>(parsed), *m_index, options);
+    if (const QString *error = std::get_if<QString>(&result)) {
+        out.insert(u"error"_s, *error);
+    } else {
+        const QVariantMap json = notebook::dataviewResultJson(*m_index, std::get<dataview::Result>(result)).toVariantMap();
+        for (auto it = json.constBegin(); it != json.constEnd(); ++it)
+            out.insert(it.key(), it.value());
+        out.insert(u"ok"_s, true);
+    }
+    cached.version = m_index->version();
+    cached.minute = minute;
+    cached.result = out;
     return out;
 }
 

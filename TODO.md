@@ -120,9 +120,10 @@ done in the repository simply disappears from the list.
   Obsidian has Bases (table, list, map, kanban), Logseq a table and a gallery, Anytype and AFFiNE
   boards and galleries. `query` blocks today show only a list and do not filter by page properties
   (`status:: in progress`, `cost > 100`).
-* **Obsidian compatibility: `.base`, `.canvas`, Dataview** — `.base` and `.canvas` files from a
-  shared vault and `dataview` blocks are today a file or plain text in Brulion (docs/IMPORT.md);
-  to be decided what to read and what to edit as well.
+* **Obsidian compatibility: `.base`, `.canvas`** — `.base` and `.canvas` files from a shared vault
+  are today a file in Brulion (docs/IMPORT.md); to be decided what to read and what to edit as
+  well. Dataview's `CALENDAR` views, inline `= …` queries and `dataviewjs` stay code
+  (docs/SYNTAX.md §10 "Dataview queries").
 * **Whiteboard (infinite canvas)** — notes, pictures, PDFs and drawings laid out on a canvas, with
   connections; preferably in the JSON Canvas format (Obsidian Canvas, AFFiNE). The drawing editor
   covers sketches, but does not embed notes in them.

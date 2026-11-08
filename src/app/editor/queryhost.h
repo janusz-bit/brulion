@@ -1,4 +1,4 @@
-// QueryHost — an optional extension of EditorHost (editorhost.h) for live ```query blocks
+// QueryHost — an optional extension of EditorHost (editorhost.h) for live ```query and ```dataview blocks
 // (docs/SYNTAX.md §10) and tasks checked in their results. A host that can run index queries
 // implements it next to EditorHost; the editor finds it with
 //
@@ -20,6 +20,12 @@
 //              due?, scheduled?, start? ("YYYY-MM-DD[ HH:mm]"), done?, priority ("" | "lowest" …
 //              "highest"), recurrence? (canonical English rule) },
 //     reminder?: { at: "YYYY-MM-DD HH:mm", alarm: bool, recurrence? } }
+// runDataview(source, currentPath) runs a ```dataview block (docs/SYNTAX.md §10 "Dataview
+// queries"; read-only, the dataview module) with the same keys: type "list" | "table" | "tasks",
+// columns (TABLE headers), items / groups — a TASK item is a runQuery task item, a LIST or TABLE
+// item { path ("" for a group of a grouped TABLE), title, folder, line 0, cells: [Markdown] }
+// (notebook::dataviewResultJson). Grouped LIST and TASK results come in groups (TASK without
+// GROUP BY: one group per page, keyed by its path).
 // setTaskStatus(path, line, status) writes the task's new status ("todo", "doing", "done",
 // "cancelled", "deferred"; completing a recurring task writes its next instance; "" = no status:
 // markdown::removeTaskMarker) into the file and returns whether it changed.
@@ -38,6 +44,8 @@ public:
     /// Run the query `source` (the body of a ```query block) written in the page `currentPath`
     /// (`page:this`, relative `ref:`); see the file comment for the result.
     virtual QVariantMap runQuery(const QString &source, const QString &currentPath) = 0;
+    /// Run the Dataview query `source` (the body of a ```dataview block) written in `currentPath`.
+    virtual QVariantMap runDataview(const QString &source, const QString &currentPath) = 0;
     /// Set the status of the task on `line` (0-based) of `path` ("" removes the task marker);
     /// false when nothing changed.
     virtual bool setTaskStatus(const QString &path, int line, const QString &status) = 0;

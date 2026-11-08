@@ -1773,8 +1773,15 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case OnlyEmbedsRole: ensureEmbeds(row); return stateFor(e.uid).onlyEmbeds;
     case PropertiesRole: ensureProperties(row); return stateFor(e.uid).properties;
     case PropertiesInfoRole: ensureProperties(row); return stateFor(e.uid).propertiesInfo;
-    case QueryRole:
-        return cachedShape(row).view == BlockView::Query ? queryInfo(cachedShape(row).editText) : QVariantMap();
+    case QueryRole: {
+        const BlockShape &shape = cachedShape(row);
+        if (shape.view != BlockView::Query)
+            return QVariantMap();
+        // A Dataview query has no filters to show as chips: its results say it all.
+        if (shape.lang == u"dataview")
+            return QVariantMap{{u"filters"_s, QVariantList()}, {u"terms"_s, QStringList()}};
+        return queryInfo(shape.editText);
+    }
     case CalloutTypeRole: return cachedShape(row).calloutType;
     case CalloutFoldedRole: return cachedShape(row).calloutFolded;
     case LineRole: return e.line;

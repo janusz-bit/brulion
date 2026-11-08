@@ -9,7 +9,7 @@
 # dependencies and clocks as the views show them (tasktools.h).
 # The shell's Workspace delegates to it; brulion-cli (src/cli) is built on it.
 # Public headers: notebook.h (overview), capture.h, journals.h, pages.h, links.h, itemref.h,
-# json.h, session.h, share.h, embeds.h, cleanup.h, replace.h, periodicnotes.h (weekly and monthly notes),
+# json.h (also of Dataview results), session.h, share.h, embeds.h, cleanup.h, replace.h, periodicnotes.h (weekly and monthly notes),
 # habitchecks.h (a habit's check in a daily note), tasktools.h (task dependencies and clocks for the
 # app's views).
 brulion_add_core_module(notebook
@@ -31,4 +31,4 @@ brulion_add_core_module(notebook
         session.h session.cpp
         share.h share.cpp
         tasktools.h tasktools.cpp
-    DEPS util text dates markdown vault index reminders log drawing periodic habits)
+    DEPS util text dates markdown vault index dataview reminders log drawing periodic habits)

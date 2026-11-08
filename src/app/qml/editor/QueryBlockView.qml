@@ -15,7 +15,9 @@ import Brulion
 // elsewhere; while a result's status menu is open they wait, QueryResultModel.hold(), and follow
 // once it closed). The header, the filters (or Enter when the block is selected) edit the query
 // source in place; while editing, the results follow the typed query. Without a host that runs
-// queries (QueryHost) only the filters show.
+// queries (QueryHost) only the filters show. A ```dataview block (docs/SYNTAX.md §10 "Dataview
+// queries") is shown the same way with Dataview's results: LIST rows, TABLE rows under their
+// column headers (equal columns, each cell at most 4 lines), TASK results grouped by page.
 Rectangle {
     id: root
 
@@ -29,6 +31,12 @@ Rectangle {
     readonly property real firstLineCenter: Theme.space3 + headerRow.height / 2
     readonly property bool live: results.available
     readonly property bool emptySource: Js.trim(root.block.rowData.editText) === ""
+    /// A ```dataview block (else a ```query block).
+    readonly property bool dataview: root.block.rowData.lang === "dataview"
+    /// Dataview TABLE results: rows of cells under column headers.
+    readonly property bool table: results.type === "table"
+    readonly property int columnCount: Math.max(1, results.columns.length)
+    readonly property real columnWidth: resultList.width / root.columnCount
     readonly property int itemFontSize: Theme.textEditor
     readonly property int itemLineHeight: Theme.lineHeightPx(itemFontSize, 1.45)
 
@@ -40,7 +48,7 @@ Rectangle {
     border.color: root.block.editing ? Theme.alpha(Theme.focusRing, 0.5) : Theme.border
 
     Accessible.role: Accessible.Grouping
-    Accessible.name: qsTr("Query")
+    Accessible.name: root.dataview ? qsTr("Dataview query") : qsTr("Query")
 
     /// The live results (tests, the playground's self test).
     readonly property alias results: results
@@ -49,6 +57,7 @@ Rectangle {
         id: results
         controller: root.block.controller
         source: root.block.rowData.editText
+        language: root.dataview ? "dataview" : "query"
         // The block is created with its rows (while the page scrolls): on a phone 20 of them are
         // about a screenful and take less than half the time of 50 ("Show more" adds the rest).
         maxItems: Theme.touchUi ? 20 : 50
@@ -98,6 +107,8 @@ Rectangle {
         case "tasks": what = qsTr("%n task(s)", "", n); break
         case "pages": what = qsTr("%n page(s)", "", n); break
         case "reminders": what = qsTr("%n reminder(s)", "", n); break
+        case "list": what = qsTr("%n result(s)", "", n); break
+        case "table": what = qsTr("%n row(s)", "", n); break
         default: what = qsTr("%n block(s)", "", n); break
         }
         return results.total > n ? qsTr("%1 of %2").arg(what).arg(results.total) : what
@@ -163,6 +174,7 @@ Rectangle {
         readonly property real filtersBottom: filtersFlow.visible ? filtersFlow.y + filtersFlow.height : headerBottom
         readonly property real sourceBottom: sourceLoader.visible ? sourceLoader.y + sourceLoader.height : filtersBottom
         readonly property real separatorBottom: resultsSeparator.visible ? resultsSeparator.y + resultsSeparator.height : sourceBottom
+        readonly property real headersBottom: columnHeaders.visible ? columnHeaders.y + columnHeaders.height : separatorBottom
         readonly property real resultsBottom: resultList.visible ? resultList.y + resultList.height : separatorBottom
         readonly property real moreBottom: moreButton.visible ? moreButton.y + moreButton.implicitHeight : resultsBottom
         x: Theme.space4
@@ -185,7 +197,7 @@ Rectangle {
                 BIcon { name: "filter"; size: Theme.iconSizeSm; color: Theme.fgMuted }
                 Text {
                     id: queryLabel
-                    text: qsTr("Query")
+                    text: root.dataview ? qsTr("Dataview") : qsTr("Query")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
                     font.weight: Theme.weightSemiBold
@@ -328,10 +340,37 @@ Rectangle {
             color: Theme.borderSubtle
         }
 
+        // Dataview TABLE: the column headers.
+        Item {
+            id: columnHeaders
+            y: column.separatorBottom + column.spacing
+            width: parent.width
+            visible: root.live && results.ok && !root.emptySource && root.table && results.itemCount > 0
+            height: visible ? Math.ceil(Theme.lineHeightPx(Theme.textXs, 1.4)) : 0
+            Repeater {
+                model: results.columns
+                delegate: Text {
+                    required property int index
+                    required property string modelData
+                    x: index * root.columnWidth
+                    width: root.columnWidth - Theme.space2
+                    text: modelData
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textXs
+                    font.weight: Theme.weightSemiBold
+                    font.capitalization: Font.AllUppercase
+                    font.letterSpacing: 0.4
+                    color: Theme.fgMuted
+                    elide: Text.ElideRight
+                }
+            }
+        }
+
         Column {
             id: resultList
             objectName: "queryResultList" // (the editor's self-tests)
-            y: column.separatorBottom + column.spacing
+            y: column.headersBottom + column.spacing
             width: parent.width
             visible: root.live && results.ok && !root.emptySource
             spacing: Theme.touchUi ? 0 : 2
@@ -373,7 +412,10 @@ Rectangle {
                     required property string text
                     required property int line
                     required property string raw
+                    required property list<string> cells
                     readonly property bool group: kind === "group"
+                    /// A Dataview TABLE row: cells instead of one text.
+                    readonly property bool tableRow: root.table && !group
                     readonly property BRichText textItem: itemText
                     readonly property bool closed: status === "done" || status === "cancelled"
                     /// The link under the mouse or the pressing finger, underlined (BlockText.qml).
@@ -382,17 +424,28 @@ Rectangle {
                     property point at
                     /// Where a right-click was, in the scene (the block menu's place).
                     property point scene
+                    /// The text the link preview was asked for (a TABLE row's cell under the pointer).
+                    property Item previewText: itemText
+                    /// The text under x of the row: a TABLE row's cell, else the item's text.
+                    function textAt(x: real): Item {
+                        if (!row.tableRow)
+                            return itemText
+                        const cell = cellRepeater.itemAt(Math.min(cellRepeater.count - 1, Math.max(0, Math.floor(x / root.columnWidth))))
+                        return cell !== null ? cell : itemText
+                    }
                     function trackLink(x: real, y: real): void {
-                        row.at = itemText.mapFromItem(row, x, y)
-                        const link = row.group ? "" : itemText.linkAt(row.at.x, row.at.y)
+                        const text = row.textAt(x)
+                        row.at = text.mapFromItem(row, x, y)
+                        const link = row.group ? "" : root.linkIn(text as BRichText, row.at.x, row.at.y)
                         const h = link !== "" && !Js.startsWith(link, "task:") && !root.editor.editsOnClick(link) ? link : ""
                         if (h !== row.hoveredLink)
                             row.hoveredLink = h
                     }
                     /// The menu of the token or link at (x, y) of the row; false: none there.
                     function menuAt(x: real, y: real): bool {
-                        row.at = itemText.mapFromItem(row, x, y)
-                        return root.resultMenu(row.index, row.path, row.line, row.raw, itemText, row.at.x, row.at.y)
+                        const text = row.textAt(x)
+                        row.at = text.mapFromItem(row, x, y)
+                        return root.resultMenu(row.index, row.path, row.line, row.raw, text as BRichText, row.at.x, row.at.y)
                     }
                     readonly property string itemHtml: row.group ? "" : row.html + (row.showPage && row.title !== ""
                         ? "&nbsp;&nbsp;<a href=\"open:\" style=\"color:" + BlockViews.colorName(Theme.fgFaint) + ";text-decoration:none\">·&nbsp;"
@@ -401,7 +454,8 @@ Rectangle {
                     readonly property real pad: Theme.touchUi ? Math.max(3, Math.round((Theme.touchTarget - root.itemLineHeight) / 2)) : 1
                     width: resultList.width
                     height: group ? groupLabel.implicitHeight + (index > 0 ? Theme.space3 : Theme.space1) + Theme.space1
-                                  : Math.max(itemText.implicitHeight + 2 * pad, Theme.touchUi ? Theme.touchTarget : 0)
+                                  : Math.max((row.tableRow ? cellsRow.height : itemText.implicitHeight) + 2 * pad,
+                                             Theme.touchUi ? Theme.touchTarget : 0)
 
                     // Each row has only the parts of its kind: up to 50 rows are created with the
                     // block (while the page scrolls). Group header: "Bathroom renovation · 3".
@@ -454,9 +508,53 @@ Rectangle {
                         }
                     }
 
+                    // A TABLE row's cells side by side; the row is as tall as its tallest cell.
+                    // (`revision`: itemAt() notifies nothing; read for real, see resultList.)
+                    Item {
+                        id: cellsRow
+                        visible: row.tableRow
+                        Accessible.role: Accessible.Row
+                        Accessible.name: row.text
+                        y: row.pad
+                        width: parent.width
+                        height: {
+                            if (!row.tableRow || cellRepeater.revision < 0)
+                                return 0
+                            let h = root.itemLineHeight
+                            for (let i = 0; i < cellRepeater.count; ++i) {
+                                const cell = cellRepeater.itemAt(i)
+                                if (cell)
+                                    h = Math.max(h, cell.implicitHeight)
+                            }
+                            return h
+                        }
+                        Repeater {
+                            id: cellRepeater
+                            property int revision: 0
+                            onItemAdded: revision++
+                            onItemRemoved: revision++
+                            model: row.cells
+                            delegate: BRichText {
+                                required property int index
+                                required property string modelData
+                                x: index * root.columnWidth
+                                width: root.columnWidth - Theme.space2
+                                html: modelData
+                                hoveredLink: row.hoveredLink
+                                maximumLineCount: 4
+                                font.family: Theme.fontEditor
+                                font.pixelSize: root.itemFontSize
+                                lineHeight: root.itemLineHeight
+                                color: Theme.fg
+                                Accessible.role: Accessible.Cell
+                                Accessible.name: index < results.columns.length ? results.columns[index] : ""
+                            }
+                        }
+                    }
+
                     BRichText {
                         id: itemText
-                        visible: !row.group
+                        visible: !row.group && !row.tableRow
                         x: row.isTask ? root.editor.taskBoxWidth + 2 : 0
                         y: row.pad
                         width: parent.width - x
@@ -480,7 +578,7 @@ Rectangle {
                         html: row.itemHtml
                         lineHeight: root.itemLineHeight
                         maxHeight: 4 * root.itemLineHeight
-                        shown: !row.group
+                        shown: !row.group && !row.tableRow
                         onActivated: (href, x, y) => {
                             if (root.editor.editsOnClick(href))
                                 root.resultMenu(row.index, row.path, row.line, row.raw, itemText, x, y)
@@ -495,12 +593,16 @@ Rectangle {
                         onPointChanged: {
                             // The link under the resting pointer: its preview (LinkPreviews).
                             row.trackLink(itemHover.point.position.x, itemHover.point.position.y)
-                            LinkPreviews.hover(itemText, row.hoveredLink, row.path, root.block.controller ? root.block.controller.host : null,
+                            const text = row.textAt(itemHover.point.position.x)
+                            if (text !== row.previewText)
+                                LinkPreviews.leave(row.previewText)
+                            row.previewText = text
+                            LinkPreviews.hover(text, row.hoveredLink, row.path, root.block.controller ? root.block.controller.host : null,
                                                row.at.x, row.at.y)
                         }
                         onHoveredChanged: {
                             if (!hovered) {
-                                LinkPreviews.leave(itemText)
+                                LinkPreviews.leave(row.previewText)
                                 if (!itemTap.pressed)
                                     row.hoveredLink = ""
                             }
@@ -517,8 +619,11 @@ Rectangle {
                                 row.hoveredLink = ""
                         }
                         onTapped: (eventPoint) => {
-                            row.at = itemText.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
-                            const link = itemText.linkAt(row.at.x, row.at.y)
+                            const x = eventPoint.position.x
+                            const y = eventPoint.position.y
+                            const text = row.textAt(x)
+                            row.at = text.mapFromItem(row, x, y)
+                            const link = root.linkIn(text as BRichText, row.at.x, row.at.y)
                             if (link !== "")
                                 root.activateResultLink(row.index, link)
                             else
@@ -591,7 +696,8 @@ Rectangle {
                     if (!results.ok)
                         return results.error !== "" ? results.error : qsTr("This query cannot be run.")
                     if (root.emptySource)
-                        return qsTr("Write filters, e.g. type:tasks status:open tag:zakupy")
+                        return root.dataview ? qsTr("Write a Dataview query, e.g. TABLE status FROM #projekt")
+                                             : qsTr("Write filters, e.g. type:tasks status:open tag:zakupy")
                     if (results.itemCount === 0)
                         return results.complete ? qsTr("Nothing matches this query.") : qsTr("Nothing yet — the notebook is still being indexed.")
                     if (!results.complete)

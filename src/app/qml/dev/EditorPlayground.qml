@@ -4319,6 +4319,15 @@ ApplicationWindow {
             editor.listView.positionViewAtIndex(row, ListView.Beginning)
             break
         }
+        case "dataview": {
+            // ```dataview blocks (docs/SYNTAX.md §10 "Dataview queries"): a TABLE and a TASK query.
+            const row = page.insertBlockAfter(viewRow("query"), "```dataview\nTABLE status, budżet AS \"Budżet\", "
+                                              + "length(file.tasks) AS Zadania, file.etags AS Tagi\nFROM #projekt\n```")
+            page.insertBlockAfter(row, "```dataview\nTASK WHERE !completed AND contains(tags, \"#zakupy\")\n```")
+            page.stopEditing()
+            editor.listView.positionViewAtIndex(row, ListView.Beginning)
+            break
+        }
         case "mermaid":
         case "mermaid-editing": {
             // ```mermaid blocks: a flowchart drawn, a type Brulion does not draw yet (its source and
