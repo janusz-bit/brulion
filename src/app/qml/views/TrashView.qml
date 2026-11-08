@@ -247,7 +247,8 @@ FocusScope {
             iconName: "trash-2"
             danger: true
             Accessible.name: qsTr("Delete %1 for good").arg(rowMenu.itemShownTitle)
-            onTriggered: deleteDialog.openFor(rowMenu.itemTrashPath, rowMenu.itemTitle, rowMenu.itemFolder,
+            // The name as the row shows it (a day of the journal by its date).
+            onTriggered: deleteDialog.openFor(rowMenu.itemTrashPath, rowMenu.itemShownTitle, rowMenu.itemFolder,
                                               rowMenu.itemFiles)
         }
     }
@@ -267,9 +268,11 @@ FocusScope {
         }
         parent: T.Overlay.overlay
         title: qsTr("Delete for good?")
+        subject: deleteDialog.itemTitle
+        subjectIcon: deleteDialog.itemFolder ? "folder" : "file-text"
         message: deleteDialog.itemFolder
-                 ? qsTr("The folder “%1” and the %n file(s) in it will be deleted permanently. This cannot be undone.", "", deleteDialog.itemFiles).arg(deleteDialog.itemTitle)
-                 : qsTr("“%1” will be deleted permanently. This cannot be undone.").arg(deleteDialog.itemTitle)
+                 ? qsTr("This folder and the %n file(s) in it will be deleted permanently. This cannot be undone.", "", deleteDialog.itemFiles)
+                 : qsTr("It will be deleted permanently. This cannot be undone.")
         confirmText: qsTr("Delete")
         destructive: true
         onAccepted: {

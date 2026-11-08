@@ -1448,7 +1448,8 @@ ApplicationWindow {
             }
             BConfirmDialog {
                 id: confirm
-                title: "Usunąć stronę „Plan podróży”?"
+                title: "Przenieść do kosza?"
+                subject: "Plan podróży"
                 message: "Strona trafi do kosza. Możesz ją przywrócić przez 30\u00a0dni."
                 detail: "Na tę stronę wskazuje 14 odnośników."
                 confirmText: "Przenieś do kosza"

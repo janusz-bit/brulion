@@ -1104,8 +1104,9 @@ FocusScope {
         id: deleteDialog
         parent: T.Overlay.overlay
         title: qsTr("Move to trash?")
-        message: qsTr("“%1” will be moved to the trash. You can restore it from there.")
-                 .arg(root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title)
+        subject: root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title
+        subjectIcon: root.journalDate !== "" ? "calendar-days" : "file-text"
+        message: qsTr("It will be moved to the trash. You can restore it from there.")
         confirmText: qsTr("Move to trash")
         destructive: true
         onAccepted: {

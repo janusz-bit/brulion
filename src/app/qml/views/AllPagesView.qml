@@ -672,7 +672,8 @@ FocusScope {
         }
         parent: T.Overlay.overlay
         title: qsTr("Move to trash?")
-        message: qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(Workspace.pageTitle(path))
+        subject: Workspace.pageTitle(path)
+        message: qsTr("It will be moved to the trash. You can restore it from there.")
         confirmText: qsTr("Move to trash")
         destructive: true
         onAccepted: {

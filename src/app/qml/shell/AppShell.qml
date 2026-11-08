@@ -824,10 +824,12 @@ FocusScope {
         }
 
         title: qsTr("Move to trash?")
+        subject: name
+        subjectIcon: folder ? "folder" : Js.endsWith(path, ".md") ? "file-text" : "file"
         message: (folder && pages > 0
-                  ? qsTr("The folder “%1” and %n page(s) in it will be moved to the trash.", "", pages).arg(name)
+                  ? qsTr("This folder and %n page(s) in it will be moved to the trash.", "", pages)
                     + " " + qsTr("You can restore them from there.")
-                  : qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(name))
+                  : qsTr("It will be moved to the trash. You can restore it from there."))
                  + specialWarnings()
         confirmText: qsTr("Move to trash")
         destructive: true

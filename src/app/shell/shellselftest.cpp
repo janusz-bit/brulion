@@ -7397,13 +7397,20 @@ void checkNamesWithMarkup(QQuickWindow *window, AppController *app, const Check 
           "the move dialog's title quotes a name with markup as written");
     closeDialog(moveDialog);
 
+    // The trash confirmation names the page in a frame of its own (BConfirmDialog.subject), as written.
     app->requestItemAction(u"delete"_s, path);
     QObject *deleteDialog = window->findChild<QObject *>(u"shellDeleteDialog"_s);
+    QQuickItem *subjectText = nullptr;
     check(deleteDialog && waitFor([&] { return deleteDialog->property("opened").toBool(); })
-                  && plainTextShown(QCoreApplication::translate(
-                                            "AppShell", "“%1” will be moved to the trash. You can restore it from there.")
-                                            .arg(name)),
-          "the trash confirmation quotes a name with markup as written");
+                  && waitFor([&] {
+                         subjectText = findShown(window->contentItem(), [](QQuickItem *item) {
+                             return item->objectName() == u"confirmSubjectText"_s;
+                         });
+                         return subjectText != nullptr;
+                     })
+                  && subjectText->property("text").toString() == name
+                  && subjectText->property("textFormat").toInt() == 0,
+          "the trash confirmation shows a name with markup as written, in a frame of its own");
     closeDialog(deleteDialog);
     check(ws->exists(path) && ws->vault()->removePermanently(path), "the page named with markup is removed again");
     closeMenus(window);

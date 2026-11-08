@@ -32,15 +32,15 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="828"/>
-        <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="830"/>
+        <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
-            <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
-            <numerusform>The folder “%1” and %n pages in it will be moved to the trash.</numerusform>
+            <numerusform>This folder and %n page in it will be moved to the trash.</numerusform>
+            <numerusform>This folder and %n pages in it will be moved to the trash.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="873"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="875"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="874"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="876"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="883"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="885"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="887"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -1629,15 +1629,15 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="271"/>
-        <source>The folder “%1” and the %n file(s) in it will be deleted permanently. This cannot be undone.</source>
+        <location filename="../src/app/qml/views/TrashView.qml" line="274"/>
+        <source>This folder and the %n file(s) in it will be deleted permanently. This cannot be undone.</source>
         <translation>
-            <numerusform>The folder “%1” and the %n file in it will be deleted permanently. This cannot be undone.</numerusform>
-            <numerusform>The folder “%1” and the %n files in it will be deleted permanently. This cannot be undone.</numerusform>
+            <numerusform>This folder and the %n file in it will be deleted permanently. This cannot be undone.</numerusform>
+            <numerusform>This folder and the %n files in it will be deleted permanently. This cannot be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="284"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="287"/>
         <source>%n item(s) will be deleted permanently. This cannot be undone.</source>
         <translation>
             <numerusform>%n item will be deleted permanently. This cannot be undone.</numerusform>

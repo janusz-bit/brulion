@@ -197,7 +197,7 @@
     <message>
         <location filename="../src/app/qml/views/AllPagesView.qml" line="618"/>
         <location filename="../src/app/qml/views/AllPagesView.qml" line="655"/>
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="676"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="677"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -212,17 +212,17 @@
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="675"/>
-        <source>“%1” will be moved to the trash. You can restore it from there.</source>
-        <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="676"/>
+        <source>It will be moved to the trash. You can restore it from there.</source>
+        <translation>Ten element trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="682"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="683"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="682"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="683"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
@@ -412,41 +412,40 @@
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
-    <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="830"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7403"/>
-        <source>“%1” will be moved to the trash. You can restore it from there.</source>
-        <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
-    </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="828"/>
-        <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="830"/>
+        <source>This folder and %n page(s) in it will be moved to the trash.</source>
         <translation>
-            <numerusform>Folder „%1” i %n strona w nim trafią do kosza.</numerusform>
-            <numerusform>Folder „%1” i %n strony w nim trafią do kosza.</numerusform>
-            <numerusform>Folder „%1” i %n stron w nim trafią do kosza.</numerusform>
+            <numerusform>Ten folder i %n strona w nim trafią do kosza.</numerusform>
+            <numerusform>Ten folder i %n strony w nim trafią do kosza.</numerusform>
+            <numerusform>Ten folder i %n stron w nim trafią do kosza.</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="829"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="831"/>
         <source>You can restore them from there.</source>
         <translation>Możesz je stamtąd przywrócić.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="832"/>
+        <source>It will be moved to the trash. You can restore it from there.</source>
+        <translation>Ten element trafi do kosza. Możesz go stamtąd przywrócić.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="834"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="2239"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="838"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="840"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="278"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="838"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="874"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="840"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="876"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
@@ -456,7 +455,7 @@
         <translation>Zamień w notatniku</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="873"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="875"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>Zamieniono %n trafienie</numerusform>
@@ -465,7 +464,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="874"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="876"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n notatka</numerusform>
@@ -474,18 +473,18 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="877"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="879"/>
         <source>Left as they are, changed since the preview: %1</source>
         <translation>Bez zmian, bo zmieniły się po podglądzie: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="879"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="881"/>
         <source>Could not write: %1</source>
         <translation>Nie udało się zapisać: %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="883"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="885"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="887"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>Przywrócono %n notatkę</numerusform>
@@ -494,7 +493,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="884"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="886"/>
         <source>Changed since, left as they are: %1</source>
         <translation>Zmienione w międzyczasie, zostają bez zmian: %1</translation>
     </message>
@@ -594,7 +593,7 @@
 <context>
     <name>BConfirmDialog</name>
     <message>
-        <location filename="../src/app/qml/components/BConfirmDialog.qml" line="26"/>
+        <location filename="../src/app/qml/components/BConfirmDialog.qml" line="34"/>
         <source>Confirm</source>
         <translation>Potwierdź</translation>
     </message>
@@ -9475,7 +9474,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/PageView.qml" line="1060"/>
-        <location filename="../src/app/qml/views/PageView.qml" line="1109"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="1110"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
@@ -9485,17 +9484,17 @@
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="1107"/>
-        <source>“%1” will be moved to the trash. You can restore it from there.</source>
-        <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
+        <location filename="../src/app/qml/views/PageView.qml" line="1109"/>
+        <source>It will be moved to the trash. You can restore it from there.</source>
+        <translation>Ten element trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="1116"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="1117"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="1116"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="1117"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
@@ -13617,7 +13616,7 @@
         <location filename="../src/app/io/ioselftest.cpp" line="372"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3155"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3804"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8115"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8122"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -13895,13 +13894,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="112"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8483"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8490"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8473"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8480"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -16344,7 +16343,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/TrashView.qml" line="102"/>
-        <location filename="../src/app/qml/views/TrashView.qml" line="285"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="288"/>
         <source>Empty trash</source>
         <translation>Opróżnij kosz</translation>
     </message>
@@ -16405,17 +16404,22 @@
         <translation>Usuń %1 na zawsze</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="271"/>
-        <source>The folder “%1” and the %n file(s) in it will be deleted permanently. This cannot be undone.</source>
+        <location filename="../src/app/qml/views/TrashView.qml" line="274"/>
+        <source>This folder and the %n file(s) in it will be deleted permanently. This cannot be undone.</source>
         <translation>
-            <numerusform>Folder „%1” i %n plik w nim zostaną trwale usunięte. Tej operacji nie można cofnąć.</numerusform>
-            <numerusform>Folder „%1” i %n pliki w nim zostaną trwale usunięte. Tej operacji nie można cofnąć.</numerusform>
-            <numerusform>Folder „%1” i %n plików w nim zostanie trwale usuniętych. Tej operacji nie można cofnąć.</numerusform>
+            <numerusform>Ten folder i %n plik w nim zostaną trwale usunięte. Tej operacji nie można cofnąć.</numerusform>
+            <numerusform>Ten folder i %n pliki w nim zostaną trwale usunięte. Tej operacji nie można cofnąć.</numerusform>
+            <numerusform>Ten folder i %n plików w nim zostanie trwale usuniętych. Tej operacji nie można cofnąć.</numerusform>
         </translation>
     </message>
     <message>
+        <location filename="../src/app/qml/views/TrashView.qml" line="275"/>
+        <source>It will be deleted permanently. This cannot be undone.</source>
+        <translation>Ten element zostanie trwale usunięty. Tej operacji nie można cofnąć.</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/TrashView.qml" line="212"/>
-        <location filename="../src/app/qml/views/TrashView.qml" line="289"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="292"/>
         <source>The trash is empty</source>
         <translation>Kosz jest pusty</translation>
     </message>
@@ -16425,32 +16429,27 @@
         <translation>Usunięte strony najpierw trafiają tutaj i można je przywrócić. Historia wersji przechowuje też na tym urządzeniu starsze teksty stron.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="269"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="270"/>
         <source>Delete for good?</source>
         <translation>Usunąć na zawsze?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="272"/>
-        <source>“%1” will be deleted permanently. This cannot be undone.</source>
-        <translation>Element „%1” zostanie trwale usunięty. Tej operacji nie można cofnąć.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="273"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="276"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="277"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="280"/>
         <source>Deleted</source>
         <translation>Usunięto</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="283"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="286"/>
         <source>Empty the trash?</source>
         <translation>Opróżnić kosz?</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="284"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="287"/>
         <source>%n item(s) will be deleted permanently. This cannot be undone.</source>
         <translation>
             <numerusform>%n element zostanie trwale usunięty. Tej operacji nie można cofnąć.</numerusform>
@@ -19341,7 +19340,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8286"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8293"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>
