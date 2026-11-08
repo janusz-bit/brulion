@@ -30,6 +30,21 @@ bool isSeparator(QChar c)
     return !text::isWordChar(c);
 }
 
+/// A key cap's text: the arrow keys by their arrows, as keyboards print them ("Alt+Up" is
+/// written "Alt ↑", the same in every language; the sequence itself keeps Qt's names).
+QString keyCap(const QString &key)
+{
+    if (key == u"Up")
+        return u"↑"_s;
+    if (key == u"Down")
+        return u"↓"_s;
+    if (key == u"Left")
+        return u"←"_s;
+    if (key == u"Right")
+        return u"→"_s;
+    return key;
+}
+
 } // namespace
 
 FuzzyMatch fuzzyMatch(QStringView query, QStringView text)
@@ -186,7 +201,7 @@ QStringList TextHelper::shortcutKeys(const QString &sequence) const
             out.append(u"+"_s);
             ++i;
         } else if (!parts.at(i).isEmpty()) {
-            out.append(parts.at(i));
+            out.append(keyCap(parts.at(i)));
         }
     }
     return out;

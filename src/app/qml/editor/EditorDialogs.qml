@@ -163,14 +163,6 @@ Item {
     function answerText(key: string): string {
         return BlockViews.textAt(answer.map, key)
     }
-    /// `text` safe for the reminder dialog's context line (BlockEditor.autoTextSafe).
-    function safeText(text: string): string {
-        return editor.autoTextSafe(text)
-    }
-    /// `text` escaped when it has markup.
-    function escapedText(text: string): string {
-        return Js.indexOf(text, "<") >= 0 ? TextHelper.escapeHtml(text) : text
-    }
     function chosenText(key: string): string {
         return BlockViews.textAt(chosen.map, key)
     }
@@ -206,7 +198,7 @@ Item {
         from = -1
         to = -1
         const reminder = reminderPopup()
-        reminder.create(editor.autoTextSafe(controller.blockContext(r)))
+        reminder.create(controller.blockContext(r))
         answer.map = controller.blockDates(r)
         const rule = BlockViews.textAt(answer.map, "recurrence")
         if (rule !== "")
@@ -223,7 +215,7 @@ Item {
         to = t
         const at = root.answerText("at")
         const recurrence = root.answerText("recurrence")
-        const context = root.safeText(root.answerText("context"))
+        const context = root.answerText("context")
         reminderPopup().editWith(at, answer.map.alarm === true, recurrence, context)
     }
     /// The reminder dialog for a reminder elsewhere (a chip's dialogAt || at, alarm, rule,
@@ -232,8 +224,7 @@ Item {
     function editReminderWith(target: string, at: string, alarm: bool, rule: string, context: string): void {
         applyTarget = target
         reminderApply = true
-        const shown = root.escapedText(context)
-        reminderPopup().editWith(at, alarm, rule, shown)
+        reminderPopup().editWith(at, alarm, rule, context)
     }
     function pickDate(r: int, which: string): void {
         remember(r)

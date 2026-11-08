@@ -140,6 +140,9 @@ FocusScope {
         // A block selection in this day: the other days' selections end (one at a time) — not the
         // part of a selection over several days the stream gives it.
         onSelectionChanged: if (page.selectionCount > 0 && !(day.stream && day.stream.applying)) day.activated()
+        // A zoom into one of its blocks makes the day the active one: Back zooms it out first
+        // (JournalsView.stepBack()).
+        onZoomChanged: if (page.zoomBlock >= 0) day.activated()
         onEditingRowChanged: {
             if (page.editingRow >= 0) {
                 day.activated()

@@ -27,6 +27,10 @@ FocusScope {
     readonly property string title: qsTr("Tasks")
     /// Text width of the list on wide windows.
     readonly property int maximumWidth: 860
+    /// The rows' inset on each side in the full-width delegates: centred, 4 px wider than the
+    /// header's column (the hover fill around the text).
+    readonly property real rowMargin: Math.max(Theme.narrow ? Theme.space2 : Theme.space5,
+                                               (list.width - root.maximumWidth - Theme.space2) / 2)
 
     readonly property var rendererPalette: ({
         link: Theme.link, unresolved: Theme.linkMissing, muted: Theme.fgMuted,
@@ -203,7 +207,7 @@ FocusScope {
         // The quick-add field, the filters and the summary scroll with the list.
         header: Item {
             width: list.width
-            implicitHeight: headerColumn.implicitHeight + Theme.space2
+            implicitHeight: headerColumn.y + headerColumn.implicitHeight + Theme.space2
             height: implicitHeight
             onHeightChanged: if (!list.userScrolled) toTopLater.restart()
             ColumnLayout {
@@ -267,8 +271,8 @@ FocusScope {
                     height: sectionHeader.implicitHeight
                     BSectionHeader {
                         id: sectionHeader
-                        width: Math.min(parent.width - 2 * (Theme.narrow ? Theme.space2 : Theme.space5), root.maximumWidth + Theme.space2)
-                        x: (parent.width - width) / 2
+                        width: parent.width - 2 * root.rowMargin
+                        x: root.rowMargin
                         topPadding: Theme.space4
                         text: headerRow.sectionLabel
                         count: headerRow.sectionCount
@@ -287,8 +291,9 @@ FocusScope {
                         return kind === "due" ? due : kind === "scheduled" ? scheduled : kind === "start" ? start
                              : kind === "reminder" ? reminderSpec : kind === "recurrence" ? recurrence : priorityName
                     }
-                    width: Math.min(ListView.view.width - 2 * (Theme.narrow ? Theme.space2 : Theme.space5), root.maximumWidth + Theme.space2)
-                    x: (ListView.view.width - width) / 2
+                    // Full width (ListView places delegates at x 0); the row itself is inset.
+                    width: ListView.view.width
+                    sideMargin: root.rowMargin
                     focus: ListView.isCurrentItem
                     onTaskToggled: root.toggle(taskRow.path, taskRow.line, taskRow.text, taskRow.status)
                     onFoldToggled: taskModel.toggleSubtasks(taskRow.key)

@@ -4,11 +4,18 @@ import Brulion
 
 // CalendarAgendaList — the agenda: the days of a CalendarModel in "agenda" mode (four weeks from
 // the start of the selected week) that have entries, plus today, each with its entries as
-// PlanningItemRows; a day with a daily note offers to open it. Past days are muted. Scrolls to
-// today (or the selected day) when the range changes.
+// PlanningItemRows; a day with a daily note offers to open it. Past days say so with colours, not
+// a fade (at 72 % opacity faint text fell to 2.9:1, under WCAG AA): the date's circle outlined
+// (Theme.border) with its number and the open entries' titles in fgMuted; the rest as on other
+// days. Scrolls to today (or the selected day) when the range changes.
+// A day's header is a button (a tap or click, Enter on the list's current day — Up / Down move a
+// focus ring from the selected day): dayTapped, the view selects the day (the side panel follows,
+// phones open its sheet). The selected day's number is on a dark disc (Theme.primary), as in the
+// month grid; today keeps its red one. The list stays where it is (the model keeps the range: only
+// the selection moves).
 //
 //   CalendarAgendaList { calendar: cal; onItemOpened: …; onItemToggled: …; onItemStatusRequested: …
-//                        onJournalOpened: … }
+//                        onJournalOpened: …; onDayTapped: (date) => … }
 FocusScope {
     id: root
 
@@ -28,6 +35,21 @@ FocusScope {
 
     readonly property bool empty: list.count === 0 || (list.count === 1 && calendar.itemCount === 0
                                                        && calendar.data(calendar.index(0, 0), CalendarModel.HasJournalRole) !== true)
+    /// The keyboard was used last (the current day's focus ring shows only then).
+    property bool keyboardActive: false
+    /// A day of the list is being picked: the selection moves, the list does not scroll to it.
+    property bool picking: false
+
+    /// Pick day `date` (its header tapped, Enter): the view selects it.
+    function pickDay(date: string): void {
+        root.picking = true
+        root.dayTapped(date)
+        root.picking = false
+    }
+    /// The list's row of the selected day (-1 when it has none).
+    function selectedRow(): int {
+        return calendar.rowForDate(calendar.anchorDate)
+    }
 
     /// `s` with its first letter upper case ("today" → "Today").
     function capitalized(s: string): string {
@@ -42,7 +64,10 @@ FocusScope {
     }
     Connections {
         target: root.calendar
-        function onRangeChanged() { scrollLater.restart() }
+        function onRangeChanged() {
+            if (!root.picking)
+                scrollLater.restart()
+        }
     }
     Component.onCompleted: scrollLater.restart()
     // Qt.callLater(scrollToAnchor): once, after this turn's changes.
@@ -68,6 +93,30 @@ FocusScope {
         BRowScrollBar { list: list }
         Accessible.role: Accessible.List
         Accessible.name: root.calendar.title
+        onActiveFocusChanged: if (!activeFocus) root.keyboardActive = false
+        // Up / Down move the current day (the list's own keys; the first one from the selected
+        // day), Enter picks it (before any arrow: the selected day). A tap leaves the current
+        // index alone: setting it scrolls the whole day into view, moving the list under the
+        // pointer.
+        Keys.onPressed: (event) => {
+            const key = event.key
+            const plain = event.modifiers === Qt.NoModifier
+            if ((key === Qt.Key_Return || key === Qt.Key_Enter) && plain) {
+                const row = root.keyboardActive ? list.currentIndex : root.selectedRow()
+                if (row >= 0) {
+                    root.pickDay("" + root.calendar.data(root.calendar.index(row, 0), CalendarModel.DateRole))
+                    event.accepted = true
+                }
+                return
+            }
+            if ((key === Qt.Key_Up || key === Qt.Key_Down) && !root.keyboardActive) {
+                root.keyboardActive = true
+                const selected = root.selectedRow()
+                if (selected >= 0)
+                    list.currentIndex = selected
+            }
+            event.accepted = false
+        }
 
         delegate: Item {
             id: day
@@ -77,13 +126,16 @@ FocusScope {
             required property int day
             required property bool isToday
             required property bool isPast
+            required property bool isSelected
             required property bool hasJournal
             required property list<var> items
             required property string longLabel
 
+            /// A day before today.
+            readonly property bool pastDay: isPast && !isToday
+
             width: ListView.view.width
             implicitHeight: column.height + Theme.space2
-            opacity: isPast && !isToday ? 0.72 : 1
 
             // Laid out with bindings, not Layouts: a day has its final height when the list creates
             // it (a Layout's size arrives only with its next polish, and a day growing after the
@@ -96,20 +148,49 @@ FocusScope {
                 x: (parent.width - width) / 2
                 height: separator.y + separator.height
 
-                // Day header: number, weekday and month, "Today", the daily note.
+                // Day header: number, weekday and month, "Today", the daily note. A button that
+                // picks the day (the journal button keeps its own click).
                 Item {
                     id: header
+                    objectName: "agendaDay_" + day.date
                     y: Theme.space2
                     width: parent.width
                     height: Math.max(circle.height, labels.height, journalButton.visible ? journalButton.implicitHeight : 0)
+                    Accessible.role: Accessible.Button
+                    Accessible.name: root.capitalized(day.longLabel) + (day.isToday ? ", " + qsTr("today") : "")
+                    Accessible.selected: day.isSelected
+                    Accessible.onPressAction: root.pickDay(day.date)
 
+                    TapHandler {
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onTapped: {
+                            list.forceActiveFocus(Qt.MouseFocusReason)
+                            root.keyboardActive = false
+                            root.pickDay(day.date)
+                        }
+                    }
+                    HoverHandler {
+                        enabled: !Theme.touchUi
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    BFocusRing {
+                        visible: day.ListView.isCurrentItem && list.activeFocus && root.keyboardActive
+                        targetRadius: Theme.radius
+                    }
+
+                    // Today on a red disc, the selected day on a dark one (only the red one when
+                    // today is selected), as in the month grid; a past day only outlined.
                     Rectangle {
                         id: circle
+                        readonly property bool outlined: day.pastDay && !day.isSelected
                         width: column.markerWidth
                         height: width
                         y: (header.height - height) / 2
                         radius: width / 2
-                        color: day.isToday ? Theme.accentSolid : Theme.bgSunken
+                        color: day.isToday ? Theme.accentSolid : day.isSelected ? Theme.primary
+                             : outlined ? "transparent" : Theme.bgSunken
+                        border.width: outlined ? 1 : 0
+                        border.color: Theme.border
                         Text {
                             anchors.centerIn: parent
                             text: "" + day.day
@@ -117,7 +198,8 @@ FocusScope {
                             font.pixelSize: Theme.textLg
                             font.weight: Theme.weightBold
                             font.features: { "tnum": 1 }
-                            color: day.isToday ? Theme.fgOnAccent : Theme.fg
+                            color: day.isToday ? Theme.fgOnAccent : day.isSelected ? Theme.primaryFg
+                                 : circle.outlined ? Theme.fgMuted : Theme.fg
                         }
                     }
                     Item {
@@ -194,6 +276,7 @@ FocusScope {
                             required property var modelData
                             width: entries.width
                             entry: modelData
+                            past: day.pastDay
                             onOpened: root.itemOpened(modelData)
                             onTaskToggled: root.itemToggled(modelData)
                             onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
@@ -231,6 +314,6 @@ FocusScope {
         visible: root.empty
         iconName: "calendar"
         title: qsTr("Nothing planned in these four weeks")
-        description: qsTr("Dates with 📅, ⏳ and reminders with ⏰ from your notes appear here. Add one to a journal with the buttons of a day.")
+        description: qsTr("Dates (📅, ⏳) and reminders (⏰) from your notes appear here. Choose a day to add a task or a reminder to it.")
     }
 }

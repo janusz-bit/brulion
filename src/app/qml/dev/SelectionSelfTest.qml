@@ -16,7 +16,8 @@ import Brulion
 //     deletion was undone already: nothing else is undone), Alt+↓ and Tab on a range (undone
 //     from another edited block: the range selected again), Ctrl+V over a selection, one copied block
 //     pasted into an empty bullet (no second marker), Shift+click on a calculation and a table,
-//     in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block
+//     in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu (also
+//     walked with Down, Escape giving the keys back to the text, still selected), the block
 //     menu of a selected and of another block, the floating tools, a mouse drag over three paragraphs
 //     of a document (the list does not scroll), a drag to the view's edge (the list scrolls, the
 //     selection follows), the band after scrolling far away and back, the scroll bar's thumb dragged
@@ -500,6 +501,23 @@ QtObject {
             tap(window.menuItemNamed(textMenu(), "editTextCopy"))
         }
         if (window.at()) window.waitStep(clip() === "Jadę" && !textMenu().opened, "its Kopiuj copies the selected text")
+        // ---- The same menu walked by keyboard: the highlighted item takes the keys inside the menu,
+        //      Escape gives them back to the text, still selected ----------------------------------------
+        if (window.at()) {
+            const ed = edit()
+            ed.select(0, 4)
+            test.caret = ed.positionToRectangle(2)
+            events.mouseClick(ed, test.caret.x, test.caret.y + test.caret.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+        }
+        if (window.at()) window.waitStep(textMenu() !== null && textMenu().opened, "the edited text's menu for the keys")
+        if (window.at()) key(Qt.Key_Down, 0)
+        if (window.at())
+            check(textMenu().opened && textMenu().currentIndex >= 0 && edit().selectionStart === 0 && edit().selectionEnd === 4,
+                  "Down highlights an item of the edited text's menu, the text stays selected")
+        if (window.at()) key(Qt.Key_Escape, 0)
+        if (window.at()) window.waitStep(!textMenu().opened && edit() !== null && edit().activeFocus
+                                         && edit().selectionStart === 0 && edit().selectionEnd === 4,
+                                         "Escape closes it: the edited text has the keys again, still selected")
         // ---- Its "Highlight…" (docs/UI.md "Coloured highlights") -----------------------------------
         if (window.at()) {
             const ed = edit()

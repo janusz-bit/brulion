@@ -580,6 +580,13 @@ private Q_SLOTS:
         QTest::newRow("plus first") << u"++Ctrl"_s << QStringList{u"+"_s, u"Ctrl"_s};
         QTest::newRow("one") << u"Enter"_s << QStringList{u"Enter"_s};
         QTest::newRow("arrows") << u"↑+↓"_s << QStringList{u"↑"_s, u"↓"_s};
+        // Qt's names of the arrow keys are shown as arrows; other names stay.
+        QTest::newRow("Alt+Up") << u"Alt+Up"_s << QStringList{u"Alt"_s, u"↑"_s};
+        QTest::newRow("Shift+Down") << u"Shift+Down"_s << QStringList{u"Shift"_s, u"↓"_s};
+        QTest::newRow("Alt+Left") << u"Alt+Left"_s << QStringList{u"Alt"_s, u"←"_s};
+        QTest::newRow("Ctrl+Shift+Right") << u"Ctrl+Shift+Right"_s << QStringList{u"Ctrl"_s, u"Shift"_s, u"→"_s};
+        QTest::newRow("page keys stay") << u"PgUp"_s << QStringList{u"PgUp"_s};
+        QTest::newRow("a letter U stays") << u"Ctrl+U"_s << QStringList{u"Ctrl"_s, u"U"_s};
         QTest::newRow("Polish") << u"Alt+ł"_s << QStringList{u"Alt"_s, u"ł"_s};
         QTest::newRow("empty") << QString() << QStringList();
         QTest::newRow("only plus") << u"+"_s << QStringList{u"+"_s};

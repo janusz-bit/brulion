@@ -85,7 +85,7 @@ ApplicationWindow {
                     enabled: titles.field(window.route, "view") !== "" && AppController.tabCanGoBack(window.tabId)
                     iconName: "arrow-left"
                     label: qsTr("Back")
-                    shortcut: "Alt+Left"
+                    shortcut: ShortcutMap.sequences["nav.back"] || ""
                     onClicked: AppController.back(window.tabId)
                 }
                 BIconButton {
@@ -93,7 +93,7 @@ ApplicationWindow {
                     enabled: titles.field(window.route, "view") !== "" && AppController.tabCanGoForward(window.tabId)
                     iconName: "arrow-right"
                     label: qsTr("Forward")
-                    shortcut: "Alt+Right"
+                    shortcut: ShortcutMap.sequences["nav.forward"] || ""
                     onClicked: AppController.forward(window.tabId)
                 }
                 BText {
@@ -106,7 +106,8 @@ ApplicationWindow {
                 }
                 BIconButton {
                     objectName: "pageWindowAttach"
-                    iconName: "panel-left"
+                    // (panel-left is the sidebar's: Lucide's square-arrow-down-left, into the window.)
+                    iconName: "square-arrow-down-left"
                     label: qsTr("Move to main window")
                     onClicked: AppController.attachTab(window.tabId)
                 }

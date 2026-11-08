@@ -51,6 +51,11 @@ BMenu {
         iconName: "copy"
         onTriggered: menu.copyRequested()
     }
+    // (Open or Copy is always above it.)
+    BMenuSeparator {
+        visible: !menu.readOnly
+        height: visible ? implicitHeight : 0
+    }
     BMenuItem {
         objectName: "propertyChipRemove"
         visible: !menu.readOnly

@@ -34,7 +34,7 @@ Widok **Kalendarz** ma układ miesiąca, tygodnia i agendy. Pokazuje:
 
 Na telefonie miesiąc pokazuje małą ikonę dla każdego rodzaju otwartego wpisu: czerwony wykrzyknik — zaległe, bursztynowy dzwonek — przypomnienie lub alarm, niebieski kalendarz — termin, fioletowa klepsydra — zaplanowane. Zrobione wpisy nie mają ikony. Krótka szara kreska pod numerem dnia oznacza, że w tym dniu jest wpis w dzienniku.
 
-Kliknięcie dnia otwiera jego plan, z którego możesz dodać zadanie lub przypomnienie bez wychodzenia z kalendarza. Prawy przycisk myszy na wpisie (na telefonie przytrzymanie) otwiera menu jego daty albo przypomnienia — zmiana trafia do notatki, a powiadomienie ma przycisk **Cofnij**. W panelu bocznym strony dziennika jest też mały kalendarz miesiąca.
+Kliknięcie dnia — w agendzie jego nagłówka — otwiera jego plan, z którego możesz dodać zadanie lub przypomnienie bez wychodzenia z kalendarza. Prawy przycisk myszy na wpisie (na telefonie przytrzymanie) otwiera menu jego daty albo przypomnienia — zmiana trafia do notatki, a powiadomienie ma przycisk **Cofnij**. W panelu bocznym strony dziennika jest też mały kalendarz miesiąca.
 
 ### Kalendarz z ikony w zasobniku
 Na komputerze (Windows i Linux) mały kalendarz otworzysz bez wyciągania okna Brulionu: z ikony Brulionu w zasobniku systemowym, obok zegara. Wystarczy kliknąć ikonę (albo wybrać **Kalendarz** z jej menu, prawy przycisk myszy). Okienko pokazuje dzisiejszą datę, miesiąc z kropkami w dniach z wpisami i listę zadań i przypomnień wybranego dnia. Kliknięcie zadania albo **Otwórz dziennik** pokazuje ten dzień w oknie Brulionu, a na dole są **Otwórz Brulion** i **Szybka notatka…**. Kalendarz znika po kliknięciu obok, po Escape albo po ponownym kliknięciu ikony.

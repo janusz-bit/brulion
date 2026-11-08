@@ -25,26 +25,26 @@ ApplicationWindow {
     font.pixelSize: Theme.textBase
 
     readonly property list<var> sections: [
-        { key: "foundations", title: "Podstawy", icon: "sun", popup: false },
-        { key: "icons", title: "Ikony", icon: "image", popup: false },
-        { key: "buttons", title: "Przyciski", icon: "square-check-big", popup: false },
-        { key: "inputs", title: "Pola tekstowe", icon: "pencil", popup: false },
-        { key: "selection", title: "Przełączniki i karty", icon: "list-checks", popup: false },
-        { key: "chips", title: "Chipy i plakietki", icon: "tag", popup: false },
-        { key: "lists", title: "Listy i karty", icon: "list", popup: false },
-        { key: "feedback", title: "Postęp i powiadomienia", icon: "bell", popup: true },
-        { key: "menus", title: "Menu", icon: "ellipsis", popup: true },
-        { key: "taskstatus", title: "Status zadania", icon: "list-todo", popup: true },
-        { key: "dialog", title: "Okno dialogowe", icon: "panel-right", popup: true },
-        { key: "confirm", title: "Potwierdzenie", icon: "triangle-alert", popup: true },
-        { key: "datepicker", title: "Wybór daty", icon: "calendar", popup: false },
-        { key: "timepicker", title: "Wybór godziny", icon: "clock", popup: true },
-        { key: "reminder", title: "Przypomnienie", icon: "alarm-clock", popup: true },
-        { key: "diff", title: "Porównanie wersji", icon: "file-diff", popup: false },
-        { key: "merge", title: "Scalanie konfliktów", icon: "git-merge", popup: false },
-        { key: "palette", title: "Paleta poleceń", icon: "command", popup: true },
-        { key: "switcher", title: "Szybkie przejście", icon: "file-text", popup: true },
-        { key: "split", title: "Podział widoku", icon: "columns-2", popup: false }
+        { key: "foundations", title: "Podstawy", glyph: "sun", popup: false },
+        { key: "icons", title: "Ikony", glyph: "image", popup: false },
+        { key: "buttons", title: "Przyciski", glyph: "square-check-big", popup: false },
+        { key: "inputs", title: "Pola tekstowe", glyph: "pencil", popup: false },
+        { key: "selection", title: "Przełączniki i karty", glyph: "list-checks", popup: false },
+        { key: "chips", title: "Chipy i plakietki", glyph: "tag", popup: false },
+        { key: "lists", title: "Listy i karty", glyph: "list", popup: false },
+        { key: "feedback", title: "Postęp i powiadomienia", glyph: "bell", popup: true },
+        { key: "menus", title: "Menu", glyph: "ellipsis", popup: true },
+        { key: "taskstatus", title: "Status zadania", glyph: "list-todo", popup: true },
+        { key: "dialog", title: "Okno dialogowe", glyph: "panel-right", popup: true },
+        { key: "confirm", title: "Potwierdzenie", glyph: "triangle-alert", popup: true },
+        { key: "datepicker", title: "Wybór daty", glyph: "calendar", popup: false },
+        { key: "timepicker", title: "Wybór godziny", glyph: "clock", popup: true },
+        { key: "reminder", title: "Przypomnienie", glyph: "alarm-clock", popup: true },
+        { key: "diff", title: "Porównanie wersji", glyph: "file-diff", popup: false },
+        { key: "merge", title: "Scalanie konfliktów", glyph: "git-merge", popup: false },
+        { key: "palette", title: "Paleta poleceń", glyph: "command", popup: true },
+        { key: "switcher", title: "Szybkie przejście", glyph: "file-text", popup: true },
+        { key: "split", title: "Podział widoku", glyph: "columns-2", popup: false }
     ]
     property string current: DevTools.section !== "" ? DevTools.section : "foundations"
     readonly property bool autoOpen: DevTools.section !== ""
@@ -184,11 +184,11 @@ ApplicationWindow {
         delegate: BListItem {
             required property string key
             required property string title
-            required property string icon
+            required property string glyph
             width: sectionList.width
             dense: true
             text: title
-            iconName: icon
+            iconName: glyph
             selected: window.current === key
             selectionBar: true
             onClicked: {
@@ -1448,7 +1448,8 @@ ApplicationWindow {
             }
             BConfirmDialog {
                 id: confirm
-                title: "Usunąć stronę „Plan podróży”?"
+                title: "Przenieść do kosza?"
+                subject: "Plan podróży"
                 message: "Strona trafi do kosza. Możesz ją przywrócić przez 30\u00a0dni."
                 detail: "Na tę stronę wskazuje 14 odnośników."
                 confirmText: "Przenieś do kosza"

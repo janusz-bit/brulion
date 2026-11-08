@@ -28,7 +28,7 @@ Rysunek w notatce ma w rogu ikonę pióra. Kliknij go albo stuknij, żeby rysowa
 Na telefonie pasek narzędzi jest na dole ekranu. Gdy telefon trzymasz pionowo, pasek ma dwa wiersze: u góry narzędzia i kółko koloru, niżej **Cofnij**, **Ponów**, **Więcej** i **Gotowe** — wszystkie przyciski są na ekranie.
 
 ## Kształty i strzałki
-Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jeszcze raz, gdy kształt jest wybrany, a rozwinie się lista: **Prostokąt** (R), **Elipsa** (O), **Romb** (D), **Linia** (L), **Strzałka** (A), a pod nimi **Trójkąt**, **Trójkąt prostokątny**, **Równoległobok**, **Trapez**, **Pięciokąt**, **Sześciokąt**, **Gwiazda**, **Strzałka blokowa**, **Dymek**, **Serce** i **Chmurka**.
+Przycisk kształtu na pasku pokazuje ostatnio używany kształt (mała strzałka w jego rogu oznacza listę pod nim); kliknij go jeszcze raz, gdy kształt jest wybrany, a rozwinie się lista: **Prostokąt** (R), **Elipsa** (O), **Romb** (D), **Linia** (L), **Strzałka** (A), a pod nimi **Trójkąt**, **Trójkąt prostokątny**, **Równoległobok**, **Trapez**, **Pięciokąt**, **Sześciokąt**, **Gwiazda**, **Strzałka blokowa**, **Dymek**, **Serce** i **Chmurka**.
 - Przeciągnij po kartce — kształt rośnie razem z ruchem rysika, palca albo myszy. Z wciśniętym `Shift` prostokąt staje się kwadratem, elipsa kołem, a linia i strzałka obracają się co 15°; pozostałe kształty rysują się wtedy w kwadracie.
 - Kształt ma kolor pióra i dwa razy większą grubość (cienka, średnia, gruba). Prostokąty mają zaokrąglone rogi, jak w Excalidraw.
 - Narzędzie zostaje wybrane, więc możesz narysować kilka kształtów po kolei. Pióro wybierzesz klawiszem P.
@@ -43,7 +43,7 @@ Przycisk kształtu na pasku pokazuje ostatnio używany kształt; kliknij go jesz
 - Na telefonie kartka przesuwa się tak, żeby pisany tekst był nad klawiaturą.
 
 ## Zaznaczanie lassem
-Wybierz **Zaznacz** (V) i obrysuj rysikiem, palcem albo myszką to, co chcesz zaznaczyć — zaznaczy się wszystko, co jest przynajmniej w połowie w środku. Kliknij **Zaznacz** jeszcze raz, gdy jest już wybrane, a wybierzesz sposób: **Lassem** albo **Prostokątem** (przeciągasz prostokąt zamiast obrysowywać). Brulion pamięta wybór na tym urządzeniu. Stuknięcie zaznacza jeden element, stuknięcie w puste miejsce zdejmuje zaznaczenie, a `Shift` dodaje do zaznaczenia (myszką).
+Wybierz **Zaznacz** (V) i obrysuj rysikiem, palcem albo myszką to, co chcesz zaznaczyć — zaznaczy się wszystko, co jest przynajmniej w połowie w środku. Kliknij **Zaznacz** jeszcze raz, gdy jest już wybrane (on też ma małą strzałkę w rogu), a wybierzesz sposób: **Lassem** albo **Prostokątem** (przeciągasz prostokąt zamiast obrysowywać). Brulion pamięta wybór na tym urządzeniu. Stuknięcie zaznacza jeden element, stuknięcie w puste miejsce zdejmuje zaznaczenie, a `Shift` dodaje do zaznaczenia (myszką).
 - **Przeciągnij** wewnątrz ramki zaznaczenia, żeby je przesunąć. Strzałki przyczepione do przesuwanych kształtów idą za nimi.
 - Nad zaznaczeniem pojawia się pasek: **kolory** (zmiana koloru), **Styl** (zobacz niżej [[#Styl zaznaczenia|Styl zaznaczenia]]), **Duplikuj** (`Ctrl+D`), **Na wierzch** (`Ctrl+Shift+]`), **Na spód** (`Ctrl+Shift+[`), **Więcej** i **Usuń** (`Delete`). Na telefonie **Na wierzch** i **Na spód** są w **Więcej**.
 - **Więcej** ma też **Kopiuj** (`Ctrl+C`), **Wytnij** (`Ctrl+X`), **Obróć o 90°**, **Odbij w poziomie** (`Shift+H`), **Odbij w pionie** (`Shift+V`), **Grupuj** (`Ctrl+G`) i **Rozgrupuj** (`Ctrl+Shift+G`). Tekst przy odbiciu zostaje czytelny — zmienia tylko miejsce. Grupa zaznacza się i przesuwa w całości.

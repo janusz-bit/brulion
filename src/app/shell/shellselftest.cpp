@@ -102,6 +102,13 @@ bool sendKey(QQuickWindow *window, int key, Qt::KeyboardModifiers modifiers = Qt
     return uidriver::sendKey(window, key, modifiers, text, 50); // then bindings, transitions and queued calls settle
 }
 
+/// The objectName of the item with the keyboard focus ("" for none or an unnamed one).
+QString focusName(const QQuickWindow *window)
+{
+    const QQuickItem *focus = window->activeFocusItem();
+    return focus ? focus->objectName() : QString();
+}
+
 /// A tap with one finger at `scenePos`, as a touch screen sends it (press, `holdMs`, release).
 void touchTap(QQuickWindow *window, QPointF scenePos, int holdMs = 110)
 {
@@ -320,6 +327,50 @@ void checkCalendarEdgeSwipe(QQuickWindow *window, QQuickItem *calendarView, cons
     settle(200);
 }
 
+/// 1b. Back on a block zoomed into in the journal stream at home (phones: Android's back key, which
+///     at home with no history would leave the app): today's nested "albo żurek" zoomed into, each
+///     Back is taken and goes one level out (to "Pomysł na obiad", then the whole day), the stream
+///     staying; then Back is left to the system again.
+void checkBackZoomsOutAtHome(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *ws = app->workspace();
+    const QString today = ws->journalPath(app->today(0));
+    app->goHome();
+    // Today's day of the stream (list delegates are not in the QObject tree: the visual tree).
+    QObject *day = nullptr;
+    waitFor([&] {
+        QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
+            const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>()
+                                                                      : nullptr;
+            return c && c->property("path").toString() == today && c->property("loaded").toBool();
+        });
+        day = editor ? editor->property("controller").value<QObject *>() : nullptr;
+        return day != nullptr;
+    });
+    const QStringList lines = ws->readFile(today).split(u'\n');
+    int parent = -1;
+    int child = -1;
+    for (qsizetype i = 0; i < lines.size(); ++i) {
+        if (lines.at(i).startsWith(u"- Pomysł na obiad"_s))
+            QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(parent), int(i));
+        else if (lines.at(i).startsWith(u"  - albo żurek"_s))
+            QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(child), int(i));
+    }
+    check(day && parent >= 0 && child > parent && !app->canGoBack() && app->atHome(),
+          "at home, today's journal has a nested block to zoom into");
+    if (!day || parent < 0 || child <= parent)
+        return;
+    const auto zoom = [day] { return day->property("zoomBlock").toInt(); };
+    QMetaObject::invokeMethod(day, "zoomInto", child);
+    check(waitFor([&] { return zoom() == child; }), "the nested block is zoomed into");
+    bool handled = sendKey(window, Qt::Key_Back);
+    check(handled && zoom() == parent && app->atHome(), "Back zooms out to the block's parent, the journal stays");
+    handled = sendKey(window, Qt::Key_Back);
+    check(handled && zoom() < 0 && app->atHome(), "the next Back zooms out to the whole day");
+    handled = sendKey(window, Qt::Key_Back);
+    check(!handled && zoom() < 0 && app->atHome(), "with the zoom gone, Back at home is left to the system again");
+}
+
 /// 3c. Task statuses wherever a checkbox is shown, with real input: a right-click (desktop) or a
 ///     long press (--touch) on the checkbox opens the status menu with the task's status checked
 ///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
@@ -440,17 +491,13 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         row->forceActiveFocus(Qt::TabFocusReason);
         sendKey(window, Qt::Key_Menu);
         const bool opened = waitFor([&] { return openMenus(window) == 1; });
-        const auto focusName = [window] {
-            const QQuickItem *focus = window->activeFocusItem();
-            return focus ? focus->objectName() : QString();
-        };
         const QQuickItem *rowBox = named(row, u"tasksRowTaskBox"_s);
         const QString status = rowBox ? rowBox->property("status").toString() : QString();
-        check(opened && focusName() == u"taskStatus_"_s + status,
+        check(opened && focusName(window) == u"taskStatus_"_s + status,
               "the Menu key opens a task's menu in Tasks with its status highlighted");
-        for (int i = 0; i < 8 && opened && focusName() != u"taskStatusOpen"; ++i)
+        for (int i = 0; i < 8 && opened && focusName(window) != u"taskStatusOpen"; ++i)
             sendKey(window, Qt::Key_Up);
-        const bool reached = focusName() == u"taskStatusOpen";
+        const bool reached = focusName(window) == u"taskStatusOpen";
         sendKey(window, Qt::Key_Return);
         check(opened && reached && waitFor([&] { return app->currentView() != u"tasks" && openMenus(window) == 0; }),
               "in a task's menu in Tasks Up reaches “Otwórz” and Enter opens the note");
@@ -621,6 +668,71 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     }
     ws->deletePage(pills);
     restore();
+
+    // ---- The agenda: a day's header is a button — a tap / click selects the day (its number on
+    //      the dark disc; the side panel follows, on phones the day's sheet opens) and the list
+    //      stays where it is (the model keeps its four weeks); on a desktop Down and Enter pick the
+    //      next day.
+    {
+        QQuickItem *calendarView =
+                shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarView"); });
+        QObject *daySheet = calendarView ? calendarView->findChild<QObject *>(u"calendarDaySheet"_s) : nullptr;
+        const bool sideBySide = calendarView && calendarView->property("sideBySide").toBool();
+        agenda = shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarAgendaList"); });
+        auto *model = agenda ? qobject_cast<QAbstractItemModel *>(agenda->property("calendar").value<QObject *>())
+                             : nullptr;
+        const QString tomorrow = app->today(1);
+        QQuickItem *header = agenda ? named(agenda, u"agendaDay_"_s + tomorrow) : nullptr;
+        QQuickItem *list = header;
+        while (list && !isA(list, "QQuickListView"))
+            list = list->parentItem();
+        check(header && list && model, "the agenda shows tomorrow's day header");
+        if (header && list && model) {
+            QQuickItem *day = header;
+            while (day && !day->property("isSelected").isValid())
+                day = day->parentItem();
+            const QString start = model->property("rangeStart").toString();
+            const qreal contentY = list->property("contentY").toReal();
+            tapOrClick(window, pointIn(header, 0.4, 0.5), touch);
+            check(waitFor([&] { return model->property("anchorDate").toString() == tomorrow; })
+                          && day && day->property("isSelected").toBool(),
+                  "a tap / click on a day's header in the agenda selects the day");
+            check(model->property("rangeStart").toString() == start
+                          && qAbs(list->property("contentY").toReal() - contentY) < 1,
+                  "the agenda stays where it is when a day is picked");
+            const bool sheetOpened =
+                    daySheet && (sideBySide ? daySheet->property("opened").toBool()
+                                            : waitFor([&] { return daySheet->property("opened").toBool(); }, 3000));
+            const bool panelShows = findShown(window->contentItem(), [&](QQuickItem *item) {
+                                        return isA(item, "CalendarDayPanel")
+                                               && item->property("date").toString() == tomorrow;
+                                    }) != nullptr;
+            check(sideBySide ? panelShows && !sheetOpened : sheetOpened,
+                  "the picked day shows in the side panel (on phones in its sheet)");
+            if (sheetOpened) {
+                QMetaObject::invokeMethod(daySheet, "close");
+                waitFor([&] { return !daySheet->property("visible").toBool(); });
+            }
+            if (!touch) {
+                // The next day of the list, read from the model.
+                const int dateRole = model->roleNames().key("date", -1);
+                int row = -1;
+                for (int r = 0; r < model->rowCount() && row < 0; ++r) {
+                    if (model->data(model->index(r, 0), dateRole).toString() == tomorrow)
+                        row = r;
+                }
+                const QString next = row >= 0 && row + 1 < model->rowCount()
+                                             ? model->data(model->index(row + 1, 0), dateRole).toString()
+                                             : QString();
+                sendKey(window, Qt::Key_Down);
+                sendKey(window, Qt::Key_Return);
+                check(!next.isEmpty() && waitFor([&] { return model->property("anchorDate").toString() == next; }),
+                      "Down and Enter in the agenda pick the next day");
+            }
+        }
+        if (model)
+            QMetaObject::invokeMethod(model, "goToday");
+    }
 
     // ---- A day of the week view: its day panel, beside the week on wide windows and a bottom
     //      sheet (a modal dialog) on phones, where the menu opens over the sheet and the sheet
@@ -1062,6 +1174,23 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         check(waitFor([&] { return rename->property("opened").toBool(); }) && changes > 0
                       && rename->property("subtitle").toString().contains(QString::number(changes)),
               "the sidebar's rename dialog counts the links and tags naming the page");
+        // A name taken by another page: said at the field (a moment after typing), Rename
+        // disabled; the subtitle still says what a rename changes.
+        const QString impact = rename->property("subtitle").toString();
+        QQuickItem *nameField = nullptr;
+        waitFor([&] {
+            nameField = findShown(window->contentItem(),
+                                  [](QQuickItem *item) { return item->objectName() == u"renameField"; });
+            return nameField != nullptr;
+        });
+        if (nameField)
+            nameField->setProperty("text", u"Przepisy"_s);
+        const QString taken = QCoreApplication::translate("brulion::shell::Workspace",
+                                                          "A page named “%1” already exists here.")
+                                      .arg(u"Przepisy"_s);
+        check(nameField && waitFor([&] { return nameField->property("errorText").toString() == taken; })
+                      && !rename->property("acceptEnabled").toBool() && rename->property("subtitle").toString() == impact,
+              "a taken name in the rename dialog is said at the field (Rename disabled), not in the subtitle");
         QMetaObject::invokeMethod(rename, "close");
         waitFor([&] { return !rename->property("opened").toBool(); });
         // A "/" moves the page, here renamed too: the toast names the folder and the new name.
@@ -1237,8 +1366,9 @@ void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Che
 
 /// 3b. Rows with a context menu, with the input people really use: a finger on phones (--touch:
 ///     real touch events through the window), the mouse on desktops. A tap or a left click does
-///     what the row says — expands the folder, opens the page, zooms into the block — and never
-///     opens the menu; a long press or a right-click opens it. Regression (Android, the drawer):
+///     what the row says — expands the folder, opens the page, zooms into the block (on phones
+///     Back then zooms out before it leaves the page) — and never opens the menu; a long press or
+///     a right-click opens it. Regression (Android, the drawer):
 ///     the rows' right-click TapHandlers took every finger tap too (touch points carry no
 ///     buttons, so Qt ignores a TapHandler's acceptedButtons for them): each tap opened the modal
 ///     context menu, which then swallowed the release — no folder expanded, no page opened.
@@ -1606,6 +1736,44 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
               "a right-click on a page opens its context menu (and does not open the page)");
         check(closeMenu(), "Escape closes the page's context menu");
     }
+    // The keyboard (desktop): the Menu key on the focused row opens the same menu with nothing
+    // highlighted, Down walks the items shown (a folder's own are hidden for a page), Escape gives
+    // the focus back to the row; Down, Down reaches "Open in side panel" (wide windows) and Enter
+    // opens the page there. First the pointer leaves the place where the menu opens (the item
+    // under it would take the highlight).
+    if (!touch && !narrow && app->sidePanelAllowed()) {
+        mouseMove(window, QPointF(1, 1));
+        const auto menuFromKey = [&] {
+            QQuickItem *r = treeRow(page);
+            if (!r)
+                return false;
+            r->forceActiveFocus(Qt::TabFocusReason);
+            sendKey(window, Qt::Key_Menu);
+            return waitFor([&] { return treeMenu->property("visible").toBool(); })
+                   && treeMenu->property("path").toString() == page;
+        };
+        bool opened = menuFromKey();
+        sendKey(window, Qt::Key_Down);
+        const QString first = focusName(window);
+        sendKey(window, Qt::Key_Escape);
+        QQuickItem *r = nullptr;
+        check(opened && first == u"treeMenuOpenTab" && waitFor([&] { return openMenus(window) == 0; })
+                      && (r = treeRow(page)) && r->hasActiveFocus(),
+              "the Menu key opens a page's menu in the tree, Down highlights its first item, Escape gives the "
+              "focus back to the row");
+        opened = menuFromKey();
+        sendKey(window, Qt::Key_Down);
+        sendKey(window, Qt::Key_Down);
+        const QString second = focusName(window);
+        sendKey(window, Qt::Key_Return);
+        check(opened && second == u"treeMenuOpenSide" && waitFor([&] {
+                  return openMenus(window) == 0 && app->sidePanelVisible()
+                         && app->sidePanelRoute().value(u"path"_s).toString() == page;
+              }),
+              "in a page's menu in the tree Down, Down reaches “Open in side panel” and Enter opens the page there");
+        app->clearSidePanelRoute();
+        app->setSidePanelVisible(false);
+    }
     activate(treeRow(page));
     check(waitFor([&] { return view() == u"page" && routePath() == page; }) && openMenus(window) == 0,
           touch ? "a tap on a page in the drawer opens it, without a menu"
@@ -1740,6 +1908,55 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         activate(bullet());
         check(waitFor([&] { return controller->property("zoomBlock").toInt() >= 0; }) && openMenus(window) == 0,
               "a tap or click on a bullet zooms into the block, without a menu");
+        if (touch) {
+            // Android's Back zooms out first, one level each (to the zoomed block's parent), on
+            // the page — its press and release both taken, so the history is not walked too —;
+            // once the zoom is gone, Back leaves the page.
+            const QVariantMap zoomedRoute = app->currentRoute();
+            bool outward = true;
+            for (int i = 0; i < 8 && controller->property("zoomBlock").toInt() >= 0; ++i) {
+                const qsizetype crumbs = controller->property("breadcrumb").toList().size();
+                int parent = -1;
+                if (crumbs >= 2)
+                    QMetaObject::invokeMethod(controller, "breadcrumbRow", qReturnArg(parent), int(crumbs - 2));
+                const bool handled = sendKey(window, Qt::Key_Back);
+                outward = outward && handled && controller->property("zoomBlock").toInt() == parent
+                          && app->currentRoute() == zoomedRoute;
+            }
+            check(outward && controller->property("zoomBlock").toInt() < 0,
+                  "Back on a zoomed block zooms out a level at a time and stays on the page");
+            const bool handled = sendKey(window, Qt::Key_Back);
+            check(handled && app->currentRoute() != zoomedRoute, "with the zoom gone, Back leaves the page");
+        } else {
+            QMetaObject::invokeMethod(controller, "zoomOut");
+        }
+    }
+    // The block menu walked by keyboard (desktop): Down goes from item to item shown — past the
+    // ones this block has not (a table's, a table cell's Row and Column submenus) — to "Zoom in",
+    // and Enter zooms into the block. (An item under the pointer may be highlighted first: the
+    // walk is a tail of the items shown.)
+    if (dot && !touch) {
+        settle(200); // (the zoom ended: the bullets laid out again)
+        openMenuOn(bullet());
+        const bool opened = waitFor([&] { return openMenus(window) == 1; });
+        mouseMove(window, QPointF(1, 1));
+        QStringList walked;
+        for (int i = 0; i < 12 && opened && focusName(window) != u"blockMenuZoom"; ++i) {
+            sendKey(window, Qt::Key_Down);
+            walked << focusName(window);
+        }
+        const QStringList shownItems = {u"blockMenuCopy"_s, u"blockMenuCut"_s, u"blockMenuCopyText"_s,
+                                        u"blockMenuSelect"_s, u"blockMenuZoom"_s};
+        const bool tail = !walked.isEmpty() && walked.size() <= shownItems.size()
+                          && shownItems.mid(shownItems.size() - walked.size()) == walked;
+        if (!tail)
+            std::fprintf(stderr, "selftest: the block menu's keyboard walk: %s\n", qPrintable(walked.join(u", "_s)));
+        sendKey(window, Qt::Key_Return);
+        check(opened && tail
+                      && waitFor([&] {
+                             return controller->property("zoomBlock").toInt() >= 0 && openMenus(window) == 0;
+                         }),
+              "the block menu is walked with Down over the items shown only, and Enter on “Zoom in” zooms in");
         QMetaObject::invokeMethod(controller, "zoomOut");
     }
 }
@@ -1975,6 +2192,18 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             const QQuickItem *f = window->activeFocusItem();
             return f && f->inherits("QQuickTextInput");
         });
+        // A folder that exists (typed in another case: createFolder would only show it) is said
+        // at the field while typing, Create disabled.
+        if (QQuickItem *field = window->activeFocusItem()) {
+            field->setProperty("text", u"projekty"_s);
+            const QString exists = QCoreApplication::translate("brulion::shell::Workspace",
+                                                               "A folder named “%1” already exists here.")
+                                           .arg(u"Projekty"_s);
+            check(waitFor([&] { return field->property("errorText").toString() == exists; })
+                          && !newPage->property("acceptEnabled").toBool(),
+                  "a folder that exists is said at the new folder's name field, Create disabled");
+            field->setProperty("text", QString());
+        }
         // (The drawer, closed for the dialog, opens again with the new folder revealed while it
         // lays itself out at another height: the keyboard's room on a phone.)
         shortWindow(true);
@@ -3214,7 +3443,8 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// link to page 2 jumps, its web link keeps its address and no script is a link, the menu's two
 /// pages side by side keeps page 2; a ZIP opens read-only, never in the editor nor handed over; a
 /// DOCX opens read-only and "Open in another app" hands it over as a Word document. Builds without
-/// a renderer: the chip, its click hands the file over, the viewer's message with its button.
+/// a renderer: the chip, its click hands the file over, the viewer's message with its button. A PDF
+/// without text: the search's sentence whole, under the row in the narrow bar (phones).
 void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check,
                     const std::function<QObject *(const QString &)> &controllerFor)
 {
@@ -3349,14 +3579,36 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
     }
     view->forceActiveFocus();
 
-    // The page jump.
+    // The page jump, typed with real keys: it opens on the page shown, selected, so a digit
+    // replaces it (it went in front of it: "31", refused); its subtitle says how many pages there
+    // are, and a page past them is said at the field while Go waits.
     sendKey(window, Qt::Key_G, Qt::ControlModifier);
     QQuickItem *jumpField = nullptr;
     check(waitFor([&] { return (jumpField = shownNamed(window->contentItem(), u"pdfJumpField"_s)) != nullptr; }),
           "Ctrl+G opens the page jump");
     if (jumpField) {
-        jumpField->forceActiveFocus();
-        jumpField->setProperty("text", u"3"_s);
+        QObject *jump = view->findChild<QObject *>(u"pdfJump"_s);
+        check(waitFor([&] {
+                  return jumpField->hasActiveFocus() && jumpField->property("text").toString() == u"1"_s
+                         && jumpField->property("selectedText").toString() == u"1"_s;
+              }),
+              "the page jump's field has the page shown, selected");
+        check(jump
+                      && jump->property("subtitle").toString()
+                                 == QCoreApplication::translate("ContentPdfView", "%n page(s)", nullptr, 3),
+              "the page jump's subtitle says how many pages the PDF has");
+        const QString pastTheEnd = QCoreApplication::translate("ContentPdfView", "Enter a page from 1 to %1.").arg(3);
+        sendKey(window, Qt::Key_7, Qt::NoModifier, u"7"_s);
+        check(jumpField->property("text").toString() == u"7"_s
+                      && jumpField->property("errorText").toString() == pastTheEnd && jump
+                      && !jump->property("acceptEnabled").toBool(),
+              "a page past the end is said at the field, and Go waits");
+        sendKey(window, Qt::Key_Return);
+        check(jump && jump->property("visible").toBool() && opened(1), "Enter goes nowhere with it");
+        sendKey(window, Qt::Key_Backspace);
+        sendKey(window, Qt::Key_3, Qt::NoModifier, u"3"_s);
+        check(jumpField->property("text").toString() == u"3"_s && jumpField->property("errorText").toString().isEmpty(),
+              "a page of the PDF typed instead clears it");
         sendKey(window, Qt::Key_Return);
     }
     check(waitFor([&] { return opened(3); }), "the page jump goes to page 3");
@@ -3785,6 +4037,72 @@ void checkPdfViewer(QQuickWindow *window, AppController *app, const Check &check
         uidriver::callQml(pdfView(), "setTwoPages", {QVariant(false)});
         check(waitFor([&] { return m && !m->property("twoPages").toBool() && !sideBySide(); }),
               "and back to one page per row");
+    }
+
+    // A PDF without text (a scan: shapes only): the search says so, the sentence whole. In the
+    // narrow bar (the phone run) it takes the line under the row — the field keeping its room, ‹ ›
+    // hidden without hits, × on the screen —; in the wide bar (desktop) it stays in the row.
+    {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly);
+        {
+            QPdfWriter writer(&buffer);
+            writer.setResolution(72);
+            writer.setPageSize(QPageSize(QPageSize::A4));
+            QPainter p(&writer);
+            p.fillRect(QRectF(60, 80, 400, 30), Qt::gray);
+            p.end();
+        }
+        const QString scan = workspace->createAttachment(u"assets/Skan umowy.pdf"_s, buffer.data());
+        app->openPage(scan);
+        const bool shown = waitFor([&] {
+            return pdfView() && pdfView()->property("ready").toBool() && pdfView()->property("path").toString() == scan;
+        });
+        check(shown, "a PDF without text opens in the viewer");
+        // (The viewer searches wherever it shows a PDF: the text PDF's search above ran too.)
+        const bool searchable = shown && modelValue("searchAvailable").toBool();
+        check(searchable, "the viewer offers its search");
+        if (searchable) {
+            QQuickItem *scanView = pdfView();
+            scanView->forceActiveFocus();
+            sendKey(window, Qt::Key_F, Qt::ControlModifier);
+            check(waitFor([&] { return shownNamed(scanView, u"pdfSearchField"_s) != nullptr; }), "its search opens");
+            for (const QChar ch : u"wzor"_s)
+                sendKey(window, 0, Qt::NoModifier, QString(ch));
+            const QString textless =
+                    QCoreApplication::translate("ContentPdfView", "This PDF has no text to search (it may be a scan).");
+            QQuickItem *status = nullptr;
+            const bool said = waitFor(
+                    [&] {
+                        status = scanView->findChild<QQuickItem *>(u"pdfSearchStatus"_s);
+                        return modelValue("textless").toBool() && !modelValue("searching").toBool() && status
+                               && status->property("text").toString() == textless;
+                    },
+                    10000);
+            check(said, "the search says the PDF has no text to search");
+            QQuickItem *line = shownNamed(scanView, u"pdfSearchStatusLine"_s);
+            QQuickItem *close = shownNamed(scanView, u"pdfSearchClose"_s);
+            const QRectF closeBox =
+                    close ? close->mapRectToScene(QRectF(0, 0, close->width(), close->height())) : QRectF();
+            if (touch) {
+                check(said && line && line->property("text").toString() == textless && !status->isVisible()
+                              && shownNamed(scanView, u"pdfSearchPrevious"_s) == nullptr
+                              && shownNamed(scanView, u"pdfSearchNext"_s) == nullptr && close
+                              && closeBox.right() <= window->width() + 0.5,
+                      "in the narrow bar it is the line under the row, ‹ › hidden, × on the screen");
+            } else {
+                check(said && status->isVisible() && line == nullptr, "in the wide bar it stays in the row");
+            }
+            sendKey(window, Qt::Key_Escape);
+            check(waitFor([&] { return !scanView->property("searchOpen").toBool(); }), "Esc closes that search");
+        }
+        // Removed again, so the steps after it (Clean up's unreferenced attachments) never see it:
+        // left first, then deleted as the app deletes a file (deletePage closes its PDF readers,
+        // which hold it open on Windows) and out of the trash.
+        app->goHome();
+        check(waitFor([&] { return pdfView() == nullptr; }) && workspace->deleteForever(workspace->deletePage(scan))
+                      && !workspace->exists(scan),
+              "the PDF without text is removed again");
     }
 
     // Another attachment that is no note (a ZIP): read-only text, never the editor.
@@ -4794,6 +5112,15 @@ void checkHabits(QQuickWindow *window, AppController *app, const Check &check)
     check(!dialog->property("preview").toString().isEmpty(), "the schedule is previewed in words");
     scheduleField->setProperty("text", u"co drugi wtorek"_s);
     check(!dialog->property("acceptEnabled").toBool(), "a schedule not understood cannot be added");
+    // A word a phone's keyboard still composes (preedit text, outside `text`) counts: one word
+    // being typed is previewed and can be added.
+    scheduleField->setProperty("text", QString());
+    scheduleField->forceActiveFocus();
+    composeWord(scheduleField, u"codziennie"_s);
+    check(dialog->property("acceptEnabled").toBool() && !dialog->property("preview").toString().isEmpty(),
+          "a schedule still being composed is previewed and can be added");
+    QInputMethodEvent composed; // (the composition dropped: the text is set below)
+    QCoreApplication::sendEvent(scheduleField, &composed);
     scheduleField->setProperty("text", u"codziennie"_s);
     check(dialog->property("acceptEnabled").toBool(), "a daily habit can be added");
     QMetaObject::invokeMethod(dialog, "accept");
@@ -5385,6 +5712,98 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
     app->goHome();
 }
 
+/// The sync center's conflicts: on a narrow window (the phone run) a conflict opened from the list
+/// goes through the route, so Back returns to the list, not out of the sync center — also when
+/// Conflicts was reached by the overview's "Merge" from a route with another tab —, and "Keep mine"
+/// goes back to the list too. On a wide window the list stays beside the resolver (no route).
+void checkSyncConflicts(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    WorkspaceSync *sync = ws->sync();
+    const QString note = u"Zakupy na weekend.md"_s;
+    const QString copy = u"Zakupy na weekend.sync-conflict-20261013-184500-LAPTOP7.md"_s;
+    ws->writeFile(note, u"- mleko\n- chleb żytni\n"_s);
+    ws->writeFile(copy, u"- mleko\n- chleb\n- ser żółty\n"_s);
+    check(sync && waitFor([&] { return sync->conflictCopies().contains(copy); }, 5000),
+          "a conflict copy waits in the sync center");
+    if (!sync)
+        return;
+    const auto view = [app] { return app->currentView(); };
+    const auto routeCopy = [app] { return app->currentRoute().value(u"copy"_s).toString(); };
+    const auto shownType = [window](const char *type) {
+        return findShown(window->contentItem(), [type](QQuickItem *item) { return isA(item, type); });
+    };
+    // A button shown with this text (maybe below the fold of a phone's page), and a press on it.
+    const auto shownButton = [window](const QString &text) {
+        return uidriver::topmost(window, [&text](QQuickItem *item) {
+            return isA(item, "BButton") && item->property("text").toString() == text;
+        });
+    };
+    const auto press = [&](QQuickItem *item) {
+        uidriver::scrollIntoView(window, item);
+        tapOrClick(window, pointIn(item), touch);
+    };
+    // A conflict's row in the list.
+    const auto conflictRow = [&]() -> QQuickItem * {
+        QQuickItem *list = shownType("SyncConflictList");
+        return list ? findShown(list, [](QQuickItem *item) { return isA(item, "BListItem"); }) : nullptr;
+    };
+    const bool narrow = [&] {
+        app->navigate({{u"view"_s, u"sync"_s}, {u"tab"_s, u"nextcloud"_s}});
+        settle(300);
+        app->navigate({{u"view"_s, u"sync"_s}, {u"tab"_s, u"overview"_s}});
+        settle(400);
+        QQuickItem *syncView = shownType("SyncView");
+        return syncView && syncView->width() < 900;
+    }();
+    // The overview's "Merge" chooses the Conflicts tab here, not in the route.
+    QQuickItem *merge = nullptr;
+    check(waitFor([&] { return (merge = shownButton(QCoreApplication::translate("SyncView", "Merge"))) != nullptr; }),
+          "the sync center's overview offers to merge the conflict");
+    if (merge)
+        press(merge);
+    QQuickItem *row = nullptr;
+    check(waitFor([&] { return (row = conflictRow()) != nullptr; }), "“Merge” shows the list of conflicts");
+    if (row)
+        tapOrClick(window, pointIn(row), touch);
+    check(waitFor([&] { return shownType("SyncConflictResolver") != nullptr; }), "a tap on a conflict opens it");
+    if (narrow) {
+        check(routeCopy() == copy && conflictRow() == nullptr,
+              "on a narrow window the conflict opens through the route, in place of the list");
+        sendKey(window, Qt::Key_Back);
+        check(waitFor([&] { return view() == u"sync" && routeCopy().isEmpty() && conflictRow() != nullptr; })
+                      && shownType("SyncConflictResolver") == nullptr,
+              "Back from a conflict returns to the list, in the sync center");
+        if ((row = conflictRow()))
+            tapOrClick(window, pointIn(row), touch);
+        waitFor([&] { return routeCopy() == copy; });
+    } else {
+        check(routeCopy().isEmpty() && conflictRow() != nullptr, "on a wide window the list stays beside the conflict");
+    }
+    // "Keep mine": the copy goes to the trash; a narrow window goes back to the list.
+    QQuickItem *keep = nullptr;
+    check(waitFor([&] {
+              return (keep = shownButton(QCoreApplication::translate("SyncConflictResolver", "Keep mine"))) != nullptr;
+          }),
+          "the conflict offers “Keep mine”");
+    if (keep)
+        press(keep);
+    check(waitFor([&] { return !sync->conflictCopies().contains(copy); }) && waitFor([&] {
+              return view() == u"sync" && routeCopy().isEmpty() && shownType("SyncConflictResolver") == nullptr;
+          }),
+          "a resolved conflict leaves the resolver for the list, in the sync center");
+
+    // The notebook as it was.
+    for (const QVariant &item : ws->trashItems()) {
+        const QVariantMap entry = item.toMap();
+        if (entry.value(u"original"_s).toString() == copy)
+            ws->deleteForever(entry.value(u"trashPath"_s).toString());
+    }
+    ws->deleteForever(ws->deletePage(note));
+    app->goHome();
+}
+
 /// "Backups": the settings' section with real input: a backup made with its button, the row of
 /// the list, "Restore" through the confirmation with its counts, the note back; "Delete" asks first.
 void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
@@ -5691,6 +6110,10 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
             std::sort(entries.begin(), entries.end(), [](QQuickItem *a, QQuickItem *b) {
                 return a->mapToScene(QPointF()).y() < b->mapToScene(QPointF()).y();
             });
+            // The tab shown checked, as the notebook switcher checks the notebook open.
+            check(entries.size() == 2 && !entries.first()->property("checked").toBool()
+                          && entries.last()->property("checked").toBool(),
+                  "the tab shown is the one checked in the switcher");
             tapOrClick(window, pointIn(entries.first()), touch);
         }
         check(waitFor([&] { return app->focusedTab() == first && path() == guide && openMenus(window) == 0; }),
@@ -5939,6 +6362,23 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
           "closing the window's tab closes the window");
     window->requestActivate();
     waitFor([window] { return window->isActive(); }, 2000);
+
+    // A view's tab says what it shows: the event log's "Event log" (not "Brulion") with the
+    // palette's icon of the log (not a page's).
+    app->openTab({{u"view"_s, u"logs"_s}});
+    const QString logTitle = QCoreApplication::translate("AppShell", "Event log");
+    QQuickItem *logTab = nullptr;
+    check(waitFor([&] {
+              QQuickItem *list = named(u"shellTabList"_s);
+              logTab = list ? findShown(list, [&](QQuickItem *item) {
+                  return item->property("title").toString() == logTitle;
+              })
+                            : nullptr;
+              return logTab && findShown(logTab, [](QQuickItem *item) {
+                         return isA(item, "BIcon") && item->property("name").toString() == u"scroll-text";
+                     });
+          }),
+          "the event log's tab is titled “Event log”, with the log's icon");
 
     // One tab again.
     app->closeOtherTabs(app->focusedTab());
@@ -6842,12 +7282,33 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
         app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"appearance"_s}});
     }
 
-    // Back to the default look (the visibility of elements stays).
-    check(activate(shownItem(u"resetAppearance"_s)) && waitFor([&] {
-              return settings->accentColor() == u"coral"
-                     && (color("accent") == u"#ff7a66" || color("accent") == u"#c4422f");
-          }),
-          "\"Restore the default look\" brings the default coral back");
+    // Back to the default look (the visibility of elements stays): the end of the Appearance card,
+    // asked first (no undo), then the default coral.
+    {
+        QQuickItem *reset = shownItem(u"resetAppearance"_s);
+        QQuickItem *card = reset;
+        while (card && card->objectName() != u"settingsAppearance")
+            card = card->parentItem();
+        check(card != nullptr, "\"Restore the default look…\" is in the Appearance card");
+        activate(reset);
+        const QString restoreText = QCoreApplication::translate("SettingsView", "Restore");
+        QQuickItem *restoreButton = nullptr;
+        check(waitFor([&] {
+                  restoreButton = findShown(window->contentItem(), [&](QQuickItem *item) {
+                      return isA(item, "BButton") && item->property("text").toString() == restoreText;
+                  });
+                  return restoreButton != nullptr;
+              }) && settings->accentColor() == u"custom",
+              "\"Restore the default look…\" asks first (nothing restored yet)");
+        settle(250);
+        if (restoreButton)
+            tapOrClick(window, pointIn(restoreButton), touch);
+        check(waitFor([&] {
+                  return settings->accentColor() == u"coral"
+                         && (color("accent") == u"#ff7a66" || color("accent") == u"#c4422f");
+              }),
+              "its “Restore” brings the default coral back");
+    }
 
     // Settings → Editor → Font → "Other…" opens the picker; cancelled, the selection stays on the
     // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the
@@ -6908,6 +7369,123 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     app->goHome();
 }
 
+/// 3k. A name written with markup (a synced or imported file can be named anything without a "/",
+///     so its tags stay open) is quoted as written by the dialogs: "Move …"'s title and the trash
+///     confirmation show it as plain text, never as styled text (BDialog, BConfirmDialog). Windows
+///     allows no "<" or ">" in file names: there entities stand for the markup.
+void checkNamesWithMarkup(QQuickWindow *window, AppController *app, const Check &check)
+{
+#ifdef Q_OS_WIN
+    const QString name = u"&lt;b&gt;Ważne &lt;i&gt;notatki"_s;
+#else
+    const QString name = u"<b>Ważne <i>notatki"_s;
+#endif
+    const QString path = name + u".md"_s;
+    Workspace *ws = app->workspace();
+    check(ws->writeFile(path, u"Treść.\n"_s) && waitFor([&] { return ws->exists(path); }),
+          "a page named with markup is added to the notebook");
+    // The shown text item that reads `text` exactly — in plain text (Text.PlainText is 0).
+    const auto plainTextShown = [&](const QString &text) {
+        QQuickItem *label = nullptr;
+        waitFor([&] {
+            label = findShown(window->contentItem(), [&](QQuickItem *item) {
+                return item->inherits("QQuickText") && item->property("text").toString() == text;
+            });
+            return label != nullptr;
+        });
+        return label && label->property("textFormat").toInt() == 0;
+    };
+    const auto closeDialog = [&](QObject *dialog) {
+        if (dialog)
+            QMetaObject::invokeMethod(dialog, "close");
+        waitFor([&] { return !dialog || !dialog->property("visible").toBool(); });
+    };
+
+    app->requestItemAction(u"move"_s, path);
+    QObject *moveDialog = window->findChild<QObject *>(u"shellMoveDialog"_s);
+    check(moveDialog && waitFor([&] { return moveDialog->property("opened").toBool(); })
+                  && plainTextShown(QCoreApplication::translate("ShellMoveDialog", "Move “%1”").arg(name)),
+          "the move dialog's title quotes a name with markup as written");
+    closeDialog(moveDialog);
+
+    // The trash confirmation names the page in a frame of its own (BConfirmDialog.subject), as written.
+    app->requestItemAction(u"delete"_s, path);
+    QObject *deleteDialog = window->findChild<QObject *>(u"shellDeleteDialog"_s);
+    QQuickItem *subjectText = nullptr;
+    check(deleteDialog && waitFor([&] { return deleteDialog->property("opened").toBool(); })
+                  && waitFor([&] {
+                         subjectText = findShown(window->contentItem(), [](QQuickItem *item) {
+                             return item->objectName() == u"confirmSubjectText"_s;
+                         });
+                         return subjectText != nullptr;
+                     })
+                  && subjectText->property("text").toString() == name
+                  && subjectText->property("textFormat").toInt() == 0,
+          "the trash confirmation shows a name with markup as written, in a frame of its own");
+    closeDialog(deleteDialog);
+    check(ws->exists(path) && ws->vault()->removePermanently(path), "the page named with markup is removed again");
+    closeMenus(window);
+    app->goHome();
+}
+
+/// 3l. A language switched at run time reaches the frame's dates: the tree's daily notes are
+///     labelled in the new language (their binding reads DatesHelper.locale: a method call alone is
+///     not tracked, and the days kept the old language). Desktop: the sidebar's tree. The language
+///     is put back.
+void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check &check)
+{
+    if (window->width() < 900)
+        return;
+    QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    if (!shellItem) {
+        check(false, "the shell is shown");
+        return;
+    }
+    const auto evaluate = [&](const QString &js) {
+        QQmlExpression expression(qmlContext(shellItem), shellItem, js);
+        const QVariant value = expression.evaluate();
+        if (expression.hasError())
+            std::fprintf(stderr, "selftest: %s\n", qPrintable(expression.error().toString()));
+        return value;
+    };
+    const QString journal = app->workspace()->journalPath(app->today(0));
+    app->requestItemAction(u"reveal"_s, journal);
+    const auto dayRow = [&]() -> QQuickItem * {
+        QQuickItem *list = shownNamed(window->contentItem(), u"sidebarTree"_s);
+        return list ? findShown(list,
+                                [&](QQuickItem *item) {
+                                    return item->property("isDir").isValid()
+                                           && item->property("path").toString() == journal;
+                                })
+                    : nullptr;
+    };
+    QQuickItem *row = nullptr;
+    QString before;
+    check(waitFor([&] {
+              row = dayRow();
+              before = row ? row->property("text").toString() : QString();
+              return !before.isEmpty();
+          }),
+          "today's daily note is in the tree");
+    const QString language = evaluate(u"DevTools.language"_s).toString();
+    const QString other = language == u"en" ? u"pl"_s : u"en"_s;
+    evaluate(u"DevTools.setLanguage(\"%1\")"_s.arg(other));
+    QString after;
+    const bool switched = waitFor([&] {
+        row = dayRow();
+        after = row ? row->property("text").toString() : QString();
+        return !after.isEmpty() && after != before;
+    });
+    if (!switched || !after.contains(other == u"en" ? u"Oct"_s : u"paź"_s))
+        std::fprintf(stderr, "selftest: the day's label: %s, then %s\n", qPrintable(before), qPrintable(after));
+    check(switched && after.contains(other == u"en" ? u"Oct"_s : u"paź"_s),
+          "the tree's daily notes are labelled in the language switched to");
+    evaluate(u"DevTools.setLanguage(\"%1\")"_s.arg(language));
+    check(waitFor([&] { return (row = dayRow()) && row->property("text").toString() == before; }),
+          "and in the first language again");
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -6953,6 +7531,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     check(handled && view() == u"journals", "back goes back through the history");
     handled = sendKey(window, Qt::Key_Back);
     check(!handled && view() == u"journals", "back at home is not handled (Android may close the app)");
+    // 1b. Phones: a zoom in the journal at home goes out with Back first.
+    if (QCoreApplication::arguments().contains(u"--touch"_s))
+        checkBackZoomsOutAtHome(window, app, check);
 
     // 2. + 3. The drawer (narrow windows; wide ones have the sidebar instead).
     if (window->width() < 900) {
@@ -7015,6 +7596,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3j. A page's icon and cover: the page menu, their dialogs, the header, the sidebar's tree.
     checkPageLook(window, app, check);
     closeMenus(window);
+    // 3k. Names with markup in the dialogs that quote them (Move, the trash confirmation).
+    checkNamesWithMarkup(window, app, check);
+    // 3l. A language switched at run time: the tree's daily notes follow.
+    checkLanguageFollows(window, app, check);
 
     // 4. The command palette: Escape closes it; the focus returns to the shell.
     app->navigate({ { u"view"_s, u"tasks"_s } });
@@ -7841,6 +8426,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     checkLogsAndSyncDetails(window, app, check);
     closeMenus(window);
     app->goHome();
+    // 5c'. The sync center's conflicts: Back on a phone returns to the list.
+    checkSyncConflicts(window, app, check);
+    closeMenus(window);
 
     // 5d. The notebook switcher: to the documentation and back with one tap / click each.
     checkNotebookSwitcher(window, app, check);

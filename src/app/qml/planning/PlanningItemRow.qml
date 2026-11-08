@@ -35,6 +35,8 @@ T.ItemDelegate {
     readonly property bool recurring: AppController.routeText(entry, "recurring") === "true"
     /// Show the entry's date in the subtitle (lists spanning several days: overdue tasks).
     property bool showDate: false
+    /// The entry's day has passed (the agenda's past days): an open entry's title is muted too.
+    property bool past: false
 
     signal taskToggled()
     /// The checkbox's status menu (right-click / long press): "todo" … "cancelled", "" = none.
@@ -193,7 +195,7 @@ T.ItemDelegate {
                 font.pixelSize: Theme.textBase
                 // Done: muted (its ticked box says so); cancelled: struck out too — as in Tasks.
                 font.strikeout: control.entryStatus === "cancelled"
-                color: control.closed ? Theme.fgMuted : Theme.fg
+                color: control.closed || control.past ? Theme.fgMuted : Theme.fg
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 elide: Text.ElideRight

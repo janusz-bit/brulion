@@ -52,7 +52,8 @@ brulion_add_test(tst_shell_workspace_pdf SOURCES tst_workspace_pdf.cpp
 # history, back at home left to the system), rows with context menus with real input (the phone
 # run: touch taps and long presses in the drawer opened from the bottom bar and the top bar, its
 # edge swipe (also beyond a simulated gesture-navigation zone), All
-# pages, tasks, editor bullets; the desktop run: left and right clicks), folders (the open page
+# pages, tasks, editor bullets; the desktop run: left and right clicks, and the keys of a tree row's
+# menu and of the block menu), folders (the open page
 # revealed in the tree — wholly in the list's visible part, also when the window got shorter while
 # the drawer was closed; the new folder and "Show in tree" too —; a click on a row in view
 # leaves the tree where it was; touchpad, wheel and arrow-key scrolling stays across a resize;

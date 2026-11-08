@@ -18,8 +18,10 @@ BDialog {
 
     signal addRequested(string name, string schedule)
 
-    readonly property string name: Js.trim(nameField.text)
-    readonly property string schedule: Js.trim(scheduleField.text)
+    // What is typed with the word an on-screen keyboard still composes (BTextField.typedText):
+    // Android keeps it outside `text`, so "codziennie" typed alone left Add disabled, no preview.
+    readonly property string name: Js.trim(nameField.typedText)
+    readonly property string schedule: Js.trim(scheduleField.typedText)
     readonly property string preview: habits ? habits.describeSchedule(schedule) : ""
     readonly property bool taken: name !== "" && habits !== null && habits.hasHabit(name)
 

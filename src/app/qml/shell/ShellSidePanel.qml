@@ -51,7 +51,8 @@ Rectangle {
                 }
                 BIconButton {
                     visible: panel.hasPinned
-                    iconName: "arrow-left"
+                    // (Not an arrow back: the page opens in the main view, as "Open as page" does.)
+                    iconName: "external-link"
                     label: qsTr("Open in the main view")
                     size: "small"
                     onClicked: {

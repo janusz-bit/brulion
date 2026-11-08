@@ -418,6 +418,14 @@ FocusScope {
     property real propertiesHeight: 0
     /// The zoomed row the view last followed (onZoomChanged in the controller's Connections).
     property int shownZoom: -1
+    /// Back (Android's key or gesture: AppShell asks the view, which asks its editor) has a step
+    /// to take here before the history: a zoom goes one level out, as the breadcrumb's arrow does.
+    /// (The touch selection mode is left first: the list takes that Back while it has the keys.)
+    readonly property bool canStepBack: controller !== null && controller.zoomBlock >= 0 && !controller.sourceMode
+    function stepBack(): void {
+        if (canStepBack)
+            controller.zoomOut()
+    }
 
     /// The next / previous visible row in on-screen order (the title above the properties).
     function visualNext(row: int): int {
@@ -1873,14 +1881,6 @@ FocusScope {
             return false
         EditorInput.sendKey(target, event.key, event.modifiers, event.text)
         return true
-    }
-
-    /// Text for a design-system component that shows it with Text.AutoText (BChip, BDialog
-    /// subtitle, BToolTip; BBreadcrumb, BMenuItem and BToast show plain text): such text is rendered as styled text — images loaded, tags
-    /// applied — when it looks like markup. Note text containing "<" is escaped, which AutoText
-    /// then shows exactly as written.
-    function autoTextSafe(s: string): string {
-        return s !== "" && Js.indexOf(s, "<") >= 0 ? TextHelper.escapeHtml(s) : s
     }
 
     /// Keys while blocks are selected (not editing): one block (Esc) or a range — Shift+↑/↓ extend

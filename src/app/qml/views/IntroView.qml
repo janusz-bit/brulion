@@ -560,10 +560,13 @@ Rectangle {
                     }
                     Group {
                         ShellSettingRow {
+                            id: accentRow
                             title: qsTr("Accent colour")
                             description: qsTr("Marks today, the current tab and highlights.")
                             Flow {
-                                Layout.maximumWidth: 6 * (Theme.touchUi ? Theme.touchTarget : 34)
+                                // The presets on one line, else even lines (filling up to that).
+                                Layout.fillWidth: true
+                                Layout.maximumWidth: accentRow.evenWrapWidth(root.accents.length, Theme.touchUi ? Theme.touchTarget : 34)
                                 spacing: 0
                                 Repeater {
                                     model: root.accents

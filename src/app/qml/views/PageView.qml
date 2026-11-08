@@ -63,7 +63,8 @@ import Brulion
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`, `paneActive`
 // (false: the other pane of a split view — the window's shortcuts and the palette's actions are
 // the focused pane's); offers `title` (daily notes by their date), `sidePanel`, `editing`,
-// `toolbarDocked`, `endEditing()`, `sourceMode` and `viewState()` / `restoreViewState()` (where
+// `toolbarDocked`, `endEditing()`, `canStepBack` / `stepBack()` (Back zooms out a zoomed block
+// first), `sourceMode` and `viewState()` / `restoreViewState()` (where
 // the blocks were scrolled: the tab keeps it while another tab is shown, docs/UI.md "Tabs, split
 // view and windows"). `--editor-script <state>` drives the
 // editor for screenshots through qml/dev/PageScript.qml.
@@ -229,6 +230,12 @@ FocusScope {
     /// ends first, as when the page is left.
     function endEditing(): void {
         editor.endTouchEditing()
+    }
+    /// Back's own step before the history (the shell's Back key): a block zoomed into zooms out
+    /// one level (BlockEditor.stepBack()).
+    readonly property bool canStepBack: editor.visible && editor.canStepBack
+    function stepBack(): void {
+        editor.stepBack()
     }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
     readonly property bool sourceMode: page.sourceMode && !root.pictureRoute && !root.pdfRoute && !root.fileRoute
@@ -961,6 +968,7 @@ FocusScope {
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
+            shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["page.rename"] || ""
             onTriggered: if (root.pageHeader) root.pageHeader.startTitleEdit()
         }
         BMenuItem {
@@ -997,11 +1005,11 @@ FocusScope {
             iconName: "list-todo"
             onTriggered: AppController.navigate({ view: "tasks", query: root.pageHeader.tagQuery(root.pageHeader.tagKey) })
         }
-        // Reading mode (docs/UI.md "Reading mode"; also the top bar's book, the palette, the keys).
+        // Reading mode (docs/UI.md "Reading mode"; also the top bar's eye, the palette, the keys).
         BMenuItem {
             objectName: "pageMenuReadingMode"
             text: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
-            iconName: AppSettings.readingMode ? "pencil" : "book-open"
+            iconName: AppSettings.readingMode ? "pencil" : "eye"
             shortcut: root.inSidePanel ? "" : ShortcutMap.sequences["view.reading"] || ""
             onTriggered: AppSettings.readingMode = !AppSettings.readingMode
         }
@@ -1096,8 +1104,9 @@ FocusScope {
         id: deleteDialog
         parent: T.Overlay.overlay
         title: qsTr("Move to trash?")
-        message: qsTr("“%1” will be moved to the trash. You can restore it from there.")
-                 .arg(root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title)
+        subject: root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title
+        subjectIcon: root.journalDate !== "" ? "calendar-days" : "file-text"
+        message: qsTr("It will be moved to the trash. You can restore it from there.")
         confirmText: qsTr("Move to trash")
         destructive: true
         onAccepted: {

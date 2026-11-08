@@ -8,6 +8,11 @@ import Brulion
 // device syncing the folder sees the same), most recently deleted first — a deleted folder is
 // one entry. Each can be restored to where it was (Workspace.restore; links to it work again) or
 // deleted for good after a confirmation; "Empty trash" deletes everything (confirmed).
+// A row shows "Restore" (on compact windows its icon) and a "⋯" whose menu — also from a
+// right-click or a long press on the row — has Restore and, set apart at its end in the danger
+// colour, "Delete for good…" (as the All pages and tree rows: no bare red × that deletes). The
+// header's "Empty trash" is a secondary button with danger text; only the confirmations are
+// solid red.
 // The list follows Workspace.trashChanged (deletions anywhere, Syncthing).
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
 FocusScope {
@@ -90,9 +95,10 @@ FocusScope {
                     wrapMode: Text.Wrap
                 }
                 BButton {
+                    objectName: "trashEmpty"
                     visible: root.items.length > 0
-                    variant: "danger"
                     iconName: "trash-2"
+                    textColor: Theme.dangerText
                     text: qsTr("Empty trash")
                     onClicked: emptyDialog.open()
                 }
@@ -116,6 +122,11 @@ FocusScope {
             width: list.width
             implicitHeight: Math.max(Theme.listItemHeightTwoLine, rowLayout.implicitHeight + 2 * Theme.space2)
 
+            /// The row's menu at (x, y) of `item`.
+            function openMenu(item: Item, x: real, y: real): void {
+                rowMenu.openFor(entry.trashPath, entry.title, entry.shownTitle, entry.folder, entry.files, item, x, y)
+            }
+
             Rectangle {
                 x: root.sideMargin - Theme.space2
                 width: list.width - 2 * root.sideMargin + 2 * Theme.space2
@@ -123,6 +134,18 @@ FocusScope {
                 radius: Theme.radius
                 color: entryHover.hovered ? Theme.bgHover : "transparent"
                 HoverHandler { id: entryHover; enabled: !Theme.touchUi }
+            }
+            TapHandler {
+                // Right-click only: Qt gives a finger (no buttons) to every TapHandler.
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                acceptedButtons: Qt.RightButton
+                onTapped: (eventPoint) => entry.openMenu(entry, eventPoint.position.x, eventPoint.position.y)
+            }
+            TapHandler {
+                // A finger held on the row (a passive grab: a flick of the list goes on).
+                id: rowHold
+                acceptedDevices: PointerDevice.TouchScreen
+                onLongPressed: entry.openMenu(entry, rowHold.point.position.x, rowHold.point.position.y)
             }
 
             RowLayout {
@@ -161,6 +184,7 @@ FocusScope {
                     }
                 }
                 BButton {
+                    objectName: "trashRestore"
                     size: "small"
                     iconName: "undo-2"
                     text: Theme.compact ? "" : qsTr("Restore")
@@ -168,12 +192,13 @@ FocusScope {
                     onClicked: root.restore(entry.trashPath, entry.title)
                 }
                 BIconButton {
+                    id: moreButton
+                    objectName: "trashRowMore"
                     size: "small"
-                    variant: "ghost"
-                    iconName: "x"
-                    iconColor: Theme.dangerText
-                    label: qsTr("Delete %1 for good").arg(entry.shownTitle)
-                    onClicked: deleteDialog.openFor(entry.trashPath, entry.title, entry.folder, entry.files)
+                    iconName: "ellipsis"
+                    label: qsTr("More")
+                    Accessible.name: qsTr("More: %1").arg(entry.shownTitle)
+                    onClicked: entry.openMenu(moreButton, 0, moreButton.height)
                 }
             }
         }
@@ -186,6 +211,45 @@ FocusScope {
             iconName: "trash-2"
             title: qsTr("The trash is empty")
             description: qsTr("Deleted pages land here first and can be restored. Version history keeps older texts of pages on this device too.")
+        }
+    }
+
+    // A row's menu: Restore, and "Delete for good…" set apart at its end (BMenuItem's rule for
+    // destructive items).
+    BMenu {
+        id: rowMenu
+        objectName: "trashRowMenu"
+        property string itemTrashPath
+        property string itemTitle
+        property string itemShownTitle
+        property bool itemFolder
+        property int itemFiles
+        function openFor(trashPath: string, title: string, shownTitle: string, folder: bool, files: int,
+                         item: Item, x: real, y: real): void {
+            itemTrashPath = trashPath
+            itemTitle = title
+            itemShownTitle = shownTitle
+            itemFolder = folder
+            itemFiles = files
+            popup(item, x, y)
+        }
+        BMenuItem {
+            objectName: "trashMenuRestore"
+            text: qsTr("Restore")
+            iconName: "undo-2"
+            Accessible.name: qsTr("Restore %1").arg(rowMenu.itemShownTitle)
+            onTriggered: root.restore(rowMenu.itemTrashPath, rowMenu.itemTitle)
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "trashMenuDelete"
+            text: qsTr("Delete for good…")
+            iconName: "trash-2"
+            danger: true
+            Accessible.name: qsTr("Delete %1 for good").arg(rowMenu.itemShownTitle)
+            // The name as the row shows it (a day of the journal by its date).
+            onTriggered: deleteDialog.openFor(rowMenu.itemTrashPath, rowMenu.itemShownTitle, rowMenu.itemFolder,
+                                              rowMenu.itemFiles)
         }
     }
 
@@ -204,9 +268,11 @@ FocusScope {
         }
         parent: T.Overlay.overlay
         title: qsTr("Delete for good?")
+        subject: deleteDialog.itemTitle
+        subjectIcon: deleteDialog.itemFolder ? "folder" : "file-text"
         message: deleteDialog.itemFolder
-                 ? qsTr("The folder “%1” and the %n file(s) in it will be deleted permanently.", "", deleteDialog.itemFiles).arg(deleteDialog.itemTitle)
-                 : qsTr("“%1” will be deleted permanently. This cannot be undone.").arg(deleteDialog.itemTitle)
+                 ? qsTr("This folder and the %n file(s) in it will be deleted permanently. This cannot be undone.", "", deleteDialog.itemFiles)
+                 : qsTr("It will be deleted permanently. This cannot be undone.")
         confirmText: qsTr("Delete")
         destructive: true
         onAccepted: {

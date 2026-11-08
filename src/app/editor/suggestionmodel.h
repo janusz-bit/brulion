@@ -3,7 +3,8 @@
 //          view, on top of `limit` pages), then EditorHost::suggestPages
 //   blocks `((` — EditorHost::suggestBlocks (ids are created when one is accepted)
 //   tags   `#`  — EditorHost::suggestTags: tags in use, then pages (a tag names a page)
-//   slash  `/`  — the slash commands (Polish + English names, diacritic-insensitive filter)
+//   slash  `/`  — the slash commands (Polish + English names, diacritic-insensitive filter), all
+//          of them in their menu order (blocktext.cpp slashCommands()) — `limit` caps the others
 //   date   after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` — natural-language dates (dates::parseNaturalDate,
 //          Polish + English) offered as canonical "YYYY-MM-DD[ HH:mm]" values; `@` also offers
 //          the journal page link and a reminder
@@ -45,6 +46,7 @@ class SuggestionModel : public QAbstractListModel {
     Q_PROPERTY(QString now READ now WRITE setNow NOTIFY nowChanged FINAL)
     /// The page being edited ("create page" suggestions, block refs within the page).
     Q_PROPERTY(QString currentPath READ currentPath WRITE setCurrentPath NOTIFY currentPathChanged FINAL)
+    /// Most items of a list (pages, blocks, tags, dates, templates); a slash list is never capped.
     Q_PROPERTY(int limit READ limit WRITE setLimit NOTIFY limitChanged FINAL)
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
     /// The row highlighted when the items change (Enter/Tab take it): the first existing match —

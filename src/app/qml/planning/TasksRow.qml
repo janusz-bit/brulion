@@ -30,6 +30,8 @@ import Brulion
 // listed under the task it belongs to, TaskListModel nestSubtasks) is indented by its depth, the
 // row's highlight with it, without the page (its task's, shown above). A task with subtasks listed
 // under it folds them with its progress chip (a chevron before "3/5": foldToggled) or Left / Right.
+// The delegate is as wide as the list (a ListView places its delegates at x 0): `sideMargin` insets
+// the row into its column.
 T.ItemDelegate {
     id: control
 
@@ -72,6 +74,8 @@ T.ItemDelegate {
     /// How far the row is indented: a step per level (on a desktop the subtask's checkbox under its
     /// task's text), at most five.
     readonly property real indent: Math.min(depth, 5) * (Theme.touchUi ? 24 : 30)
+    /// The row's inset on each side: its column in the list's full width.
+    property real sideMargin: 0
     /// The status, "todo" for none.
     readonly property string statusOrTodo: status !== "" ? status : "todo"
 
@@ -198,9 +202,10 @@ T.ItemDelegate {
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: implicitContentHeight + topPadding + bottomPadding
-    leftInset: indent
-    leftPadding: indent + (Theme.touchUi ? 2 : 4)
-    rightPadding: Theme.touchUi ? 10 : 8
+    leftInset: sideMargin + indent
+    rightInset: sideMargin
+    leftPadding: sideMargin + indent + (Theme.touchUi ? 2 : 4)
+    rightPadding: sideMargin + (Theme.touchUi ? 10 : 8)
     topPadding: Theme.touchUi ? 4 : 5
     bottomPadding: Theme.touchUi ? 6 : 6
     focusPolicy: Qt.StrongFocus
@@ -231,7 +236,7 @@ T.ItemDelegate {
             control.foldToggled()
     }
     Keys.onMenuPressed: {
-        control.openMenuFrom(control, Theme.space8, control.height)
+        control.openMenuFrom(control, control.leftInset + Theme.space8, control.height)
         control.statusMenu.highlightStatus() // the keyboard starts at the task's status
     }
 

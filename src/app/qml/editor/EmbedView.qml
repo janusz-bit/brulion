@@ -57,11 +57,6 @@ Column {
     /// A finger held beside the picture / chip (touch UIs).
     signal backgroundLongPressed()
 
-    /// See BlockEditor.autoTextSafe (BChip shows its text with Text.AutoText).
-    function autoTextSafe(s: string): string {
-        return Js.indexOf(s, "<") >= 0 ? TextHelper.escapeHtml(s) : s
-    }
-
     spacing: Theme.space2
     // (`revision`: itemAt() notifies nothing, a Repeater's items may come after its count; read for
     // real — qmlcachegen compiles a bare `void pictures.revision` away with the dependency.)
@@ -366,7 +361,7 @@ Column {
                 visible: !embed.image && !embed.pdfTile
                 interactive: true
                 iconName: embed.pdf ? "file-text" : embed.rec.map.image === true ? "image" : "file"
-                text: root.autoTextSafe(embed.name)
+                text: embed.name
                 onClicked: embed.pdf ? root.pdfClicked(embed.rec.map.path || "", embed.rec.map.page || 1)
                                      : root.clicked(embed.target)
                 HoverHandler {

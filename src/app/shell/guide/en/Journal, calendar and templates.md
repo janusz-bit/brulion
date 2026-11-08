@@ -34,7 +34,7 @@ The **Calendar** view has a month, week and agenda layout. It shows:
 
 On a phone the month shows a small icon for each kind of open entry: a red exclamation mark — overdue, an amber bell — a reminder or alarm, a blue calendar — due, a violet hourglass — scheduled. Done entries get no icon. A short grey line under the day's number means the day has a journal entry.
 
-Clicking a day opens its plan, from which you can add a task or reminder without leaving the calendar. A right click on an entry (on a phone, a long press) opens the menu of its date or reminder — the change goes into the note, and the notification has an **Undo** button. The side panel of a journal page also has a small month calendar.
+Clicking a day — in the agenda, its header — opens its plan, from which you can add a task or reminder without leaving the calendar. A right click on an entry (on a phone, a long press) opens the menu of its date or reminder — the change goes into the note, and the notification has an **Undo** button. The side panel of a journal page also has a small month calendar.
 
 ### Calendar from the tray icon
 On a computer (Windows and Linux) you open a small calendar without bringing up the Brulion window: from Brulion's icon in the system tray, next to the clock. Just click the icon (or choose **Calendar** from its menu, right click). The pop-up shows today's date, the month with dots on days with entries, and the list of tasks and reminders of the selected day. Clicking a task or **Open journal** shows that day in the Brulion window, and at the bottom there are **Open Brulion** and **Quick capture…**. The calendar goes away when you click elsewhere, press Escape or click the icon again.

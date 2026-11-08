@@ -261,13 +261,17 @@ BMenu {
         RuleItem { objectName: "dateChipRepeatMonthly"; chosenAction: "blockRecurrence"; ruleText: "every month"; text: qsTr("Monthly") }
         RuleItem { objectName: "dateChipRepeatYearly"; chosenAction: "blockRecurrence"; ruleText: "every year"; text: qsTr("Yearly") }
         ShownSeparator { shown: menu.rule !== "" }
+        // A choice like the rules (no red, no ×: BMenuItem's rule), never checked while shown.
         ShownItem {
             objectName: "dateChipRepeatNone"
             shown: menu.rule !== ""
             text: qsTr("Don't repeat")
-            iconName: "x"
-            danger: true
-            onTriggered: menu.chosen("blockRecurrence", "", 0)
+            checkable: true
+            checked: menu.checkRevision >= 0 && menu.rule === ""
+            onTriggered: {
+                ++menu.checkRevision // (a checkable item toggles itself)
+                menu.chosen("blockRecurrence", "", 0)
+            }
         }
     }
     BMenu {
@@ -281,27 +285,36 @@ BMenu {
         PriorityItem { objectName: "dateChipTaskPriorityLow"; chosenAction: "blockPriority"; level: "low"; text: qsTr("Low"); iconName: "chevron-down" }
         PriorityItem { objectName: "dateChipTaskPriorityLowest"; chosenAction: "blockPriority"; shown: !menu.logseq; level: "lowest"; text: qsTr("Lowest"); iconName: "arrow-down" }
         ShownSeparator { shown: menu.priority !== "" }
-        ShownItem {
+        // A choice like the levels (no red, no ×: BMenuItem's rule).
+        PriorityItem {
             objectName: "dateChipTaskPriorityNone"
+            chosenAction: "blockPriority"
             shown: menu.priority !== ""
+            level: ""
             text: qsTr("No priority")
-            iconName: "x"
-            danger: true
-            onTriggered: menu.chosen("blockPriority", "", 0)
         }
     }
 
     // ---- Remove ---------------------------------------------------------------------------------------
     ShownSeparator { shown: !menu.day && !menu.readOnly }
+    // Deleting a reminder, removing a date: red, the trash. A 🔁's "Don't repeat" and a priority's
+    // "No priority" are the none value of the choices above them (BMenuItem's rule: no red, no
+    // trash), checkable like those, as in a reminder's Repeat ▸ and Priority ▸.
     ShownItem {
         objectName: "dateChipRemove"
+        readonly property bool noneChoice: menu.recurrence || menu.priorityKind
         shown: !menu.day && !menu.readOnly
         text: menu.reminder ? qsTr("Delete reminder")
                             : menu.recurrence ? qsTr("Don't repeat")
                             : menu.priorityKind ? qsTr("No priority")
                             : qsTr("Remove date")
-        iconName: "trash-2"
-        danger: true
-        onTriggered: menu.chosen("remove", 0, 0)
+        iconName: noneChoice ? "" : "trash-2"
+        danger: !noneChoice
+        checkable: noneChoice
+        checked: menu.checkRevision >= 0 && (menu.recurrence ? menu.rule === "" : menu.priorityKind && menu.priority === "")
+        onTriggered: {
+            ++menu.checkRevision // (a checkable item toggles itself)
+            menu.chosen("remove", 0, 0)
+        }
     }
 }

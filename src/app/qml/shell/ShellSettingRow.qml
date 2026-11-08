@@ -13,7 +13,8 @@ import Brulion
 // (BSegmented's `fill`) takes the whole width, so every stacked row ends at the same right edge as
 // the inline ones — a framed button too when it is the row's only shown control (BButton's
 // `fill`); a button beside a badge or another button, a text button ("ghost": no frame to line
-// up), switches and swatches keep their width.
+// up), switches and swatches keep their width; a wrapping group takes `evenWrapWidth()` as its
+// maximum width (all on one line, or even lines).
 // A row without controls titles what follows it (no divider below it: ShellSettingDividers).
 //
 //   ShellSettingRow { title: qsTr("Theme"); description: qsTr("…"); BSegmented { … } }
@@ -51,6 +52,15 @@ GridLayout {
     }
     /// The row has controls (shown or not); one without titles the rows after it.
     readonly property bool hasControls: slot.children.length > 0
+
+    /// The width for a wrapping group (the swatches' Flow: `Layout.maximumWidth`, with
+    /// `Layout.fillWidth` — a fixed width wider than the row would widen the row, and the page with
+    /// it) of `count` items `itemWidth` wide: one line when the row has the room, else lines holding
+    /// the same number of items (4 + 4, not 7 + 1).
+    function evenWrapWidth(count: int, itemWidth: real): real {
+        const lines = Math.max(1, Math.ceil(count * itemWidth / Math.max(itemWidth, row.width)))
+        return Math.ceil(count / lines) * itemWidth
+    }
 
     Layout.fillWidth: true
     columns: stacked ? 1 : 2

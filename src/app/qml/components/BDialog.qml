@@ -29,6 +29,8 @@ import Brulion
 // `acceptEnabled` is checked again afterwards (onAcceptRequested: picker.commitPending()).
 // The on-screen keyboard (KeyboardInsets): a sheet sits on it and a centred dialog stays above
 // it, so the field being typed in is never under the keyboard.
+// `title` and `subtitle` are plain text: they quote page and folder names, which come from
+// anywhere (sync, imports) and must never turn into markup.
 T.Dialog {
     id: control
 
@@ -189,6 +191,7 @@ T.Dialog {
                         readonly property real lineHeightPx: font.pixelSize * 1.3
                         width: parent.width
                         text: control.title
+                        textFormat: Text.PlainText
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textLg
                         font.weight: Theme.weightSemiBold
@@ -199,6 +202,7 @@ T.Dialog {
                         width: parent.width
                         visible: control.subtitle !== ""
                         text: control.subtitle
+                        textFormat: Text.PlainText
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm
                         color: Theme.fgMuted

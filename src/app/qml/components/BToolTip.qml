@@ -8,7 +8,8 @@ import Brulion
 //   BIconButton { ... }            // shows its own tooltip from `label` + `shortcut`
 //   BToolTip { parent: someItem; visible: hover.hovered; text: qsTr("Paste") }
 //
-// Inverse colours (ink on paper, paper on ink), small radius, fades in after `delay`.
+// Inverse colours (ink on paper, paper on ink), small radius, fades in after `delay`. The text is
+// plain text (a cell's value, a file's path, a name: never markup).
 // `below: true` places it under the parent (for controls at the top edge), `beside: true` to its
 // right (a column of buttons at the window's left edge: the sidebar's rail).
 T.ToolTip {
@@ -45,6 +46,7 @@ T.ToolTip {
             anchors.verticalCenter: parent.verticalCenter
             width: Math.min(implicitWidth, 300 - (kbd.visible ? kbd.width + 8 : 0))
             text: control.text
+            textFormat: Text.PlainText
             font: control.font
             color: Theme.fgInverse
             wrapMode: Text.Wrap

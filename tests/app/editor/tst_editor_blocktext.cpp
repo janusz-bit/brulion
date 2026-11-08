@@ -1100,6 +1100,7 @@ private Q_SLOTS:
         QTest::newRow("załącznik") << u"zalacznik"_s << u"fileLink"_s;
         QTest::newRow("attachment") << u"attach"_s << u"fileLink"_s;
         QTest::newRow("dokument") << u"dokument"_s << u"fileLink"_s;
+        QTest::newRow("rysunek") << u"rys"_s << u"drawing"_s; // before "Drawing on a picture or PDF…"
         // Task statuses: Polish and English names and aliases (the filter is one word).
         QTest::newRow("zadanie") << u"zadanie"_s << u"task"_s;
         QTest::newRow("todo") << u"todo"_s << u"task"_s;

@@ -150,7 +150,7 @@ FocusScope {
 
         header: Item {
             width: list.width
-            height: headerColumn.height + Theme.space3
+            height: headerColumn.y + headerColumn.height + Theme.space3
 
             Item {
                 id: headerColumn
@@ -244,8 +244,9 @@ FocusScope {
         // A habit row of habitModel (HabitCard takes its roles).
         delegate: HabitCard {
             id: habitCard
-            width: Math.min(ListView.view.width - 2 * (Theme.narrow ? Theme.space3 : Theme.space6), root.maximumWidth)
-            x: (ListView.view.width - width) / 2
+            // Full width (ListView places delegates at x 0); the card itself is inset.
+            width: ListView.view.width
+            inset: Math.max(Theme.narrow ? Theme.space3 : Theme.space6, (ListView.view.width - root.maximumWidth) / 2)
             today: DatesHelper.today
             weekdayNames: habitModel.weekdayNames
             monthOffset: habitModel.monthOffset

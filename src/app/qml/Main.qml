@@ -270,9 +270,12 @@ ApplicationWindow {
         window.hideTrayCalendar()
         if (AppController.isAndroid && !AppController.quitting) {
             close.accepted = false
-            // The intro: a step back first.
+            // The intro: a step back first; the shell's view: its own step (a zoomed block).
             const intro = stage.item as IntroView
             if (intro && intro.backStep())
+                return
+            const shell = stage.item as AppShell
+            if (shell && shell.viewStepBack())
                 return
             if (AppController.status !== "ready" || !AppController.handleBackKey())
                 AppController.moveToBackground()

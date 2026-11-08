@@ -61,6 +61,26 @@ Item {
     readonly property bool browser: Qt.platform.os === "wasm"
     readonly property string openElsewhereText: root.browser ? qsTr("Open in a new tab") : qsTr("Open in another app")
     property bool searchOpen: false
+    /// The search in words ("" before anything is searched): "3 of 12" (+ while still searching or
+    /// capped), "No results", or a long state — the pages searched before a first hit, why this PDF
+    /// has nothing to search.
+    readonly property string searchStatus: {
+        if (Js.trim(pdf.searchText) === "")
+            return ""
+        if (pdf.hitCount > 0)
+            //: Search hits in the PDF viewer: "3 of 12" (+ while still searching or capped)
+            return qsTr("%1 of %2").arg(pdf.currentHit + 1).arg(pdf.hitCount)
+                   + (pdf.hitsCapped || pdf.searching ? "+" : "")
+        if (pdf.searching)
+            return pdf.searchedPages > 0 ? qsTr("Searching… page %1 of %2").arg(pdf.searchedPages).arg(pdf.pageCount)
+                                         : ""
+        return pdf.textless ? qsTr("This PDF has no text to search (it may be a scan).") : qsTr("No results")
+    }
+    /// A long state in the narrow bar (a phone, the side panel) goes on a line of its own under the
+    /// search row, full width: in the row it was cut ("Ten PDF nie ma tekstu do pr…"), squeezed the
+    /// field and pushed × off the screen. The counters stay in the row.
+    readonly property bool searchStatusBelow: !root.wide && root.searchStatus !== "" && pdf.hitCount === 0
+                                              && (pdf.searching || pdf.textless)
     /// "Draw on this page" being prepared (DrawingBackdrops' job) and its page.
     property int drawJob: 0
     property int drawPage: 0
@@ -842,7 +862,7 @@ Item {
         anchors.top: bar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        height: visible ? searchRow.implicitHeight + Theme.space2 * 2 : 0
+        height: visible ? searchColumn.implicitHeight + Theme.space2 * 2 : 0
         color: Theme.bg
         z: 2
 
@@ -854,8 +874,10 @@ Item {
             color: Theme.borderSubtle
         }
 
-        RowLayout {
-            id: searchRow
+        // The field, the status, ‹ › and ×; in the narrow bar (a phone, the side panel) a long status
+        // takes the line under them instead (searchStatusBelow).
+        ColumnLayout {
+            id: searchColumn
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
@@ -863,87 +885,99 @@ Item {
             anchors.rightMargin: Theme.space2
             spacing: Theme.space1
 
-            BSearchField {
-                id: searchField
-                objectName: "pdfSearchField"
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.minimumWidth: 80
-                size: "small"
-                debounce: 0 // (the model waits 250 ms itself)
-                // Esc closes the search (below), never only clears its text.
-                clearable: false
-                placeholderText: qsTr("Search in PDF")
-                onTextEdited: pdf.searchText = searchField.text
-                onCleared: pdf.searchText = ""
-                onAccepted: root.nextHit((searchField.lastModifiers & Qt.ShiftModifier) !== 0)
-                property int lastModifiers: 0
-                Keys.priority: Keys.BeforeItem
-                Keys.onPressed: (event) => {
-                    searchField.lastModifiers = event.modifiers
-                    if (event.key === Qt.Key_F3) {
-                        root.nextHit((event.modifiers & Qt.ShiftModifier) !== 0)
-                        event.accepted = true
-                    } else if (event.key === Qt.Key_Escape) {
-                        root.closeSearch()
-                        event.accepted = true
+                spacing: Theme.space1
+
+                BSearchField {
+                    id: searchField
+                    objectName: "pdfSearchField"
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 80
+                    size: "small"
+                    debounce: 0 // (the model waits 250 ms itself)
+                    // Esc closes the search (below), never only clears its text.
+                    clearable: false
+                    placeholderText: qsTr("Search in PDF")
+                    onTextEdited: pdf.searchText = searchField.text
+                    onCleared: pdf.searchText = ""
+                    onAccepted: root.nextHit((searchField.lastModifiers & Qt.ShiftModifier) !== 0)
+                    property int lastModifiers: 0
+                    Keys.priority: Keys.BeforeItem
+                    Keys.onPressed: (event) => {
+                        searchField.lastModifiers = event.modifiers
+                        if (event.key === Qt.Key_F3) {
+                            root.nextHit((event.modifiers & Qt.ShiftModifier) !== 0)
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Escape) {
+                            root.closeSearch()
+                            event.accepted = true
+                        }
+                    }
+                    // Android: Back while typing closes the search first.
+                    Keys.onReleased: (event) => {
+                        if (event.key === Qt.Key_Back && root.searchOpen) {
+                            root.closeSearch()
+                            event.accepted = true
+                        }
                     }
                 }
-                // Android: Back while typing closes the search first.
-                Keys.onReleased: (event) => {
-                    if (event.key === Qt.Key_Back && root.searchOpen) {
-                        root.closeSearch()
-                        event.accepted = true
-                    }
+                // (The status in every state, also while the line below shows it.)
+                Text {
+                    objectName: "pdfSearchStatus"
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.maximumWidth: root.width * 0.45
+                    visible: text !== "" && !root.searchStatusBelow
+                    elide: Text.ElideRight
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    color: Theme.fgMuted
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                    text: root.searchStatus
+                }
+                // ‹ › only with hits in the narrow bar (disabled without: room for the field and ×).
+                BIconButton {
+                    objectName: "pdfSearchPrevious"
+                    visible: root.wide || pdf.hitCount > 0
+                    size: "small"
+                    iconName: "chevron-up"
+                    label: qsTr("Previous result")
+                    shortcut: "Shift+F3"
+                    enabled: pdf.hitCount > 0
+                    onClicked: root.nextHit(true)
+                }
+                BIconButton {
+                    objectName: "pdfSearchNext"
+                    visible: root.wide || pdf.hitCount > 0
+                    size: "small"
+                    iconName: "chevron-down"
+                    label: qsTr("Next result")
+                    shortcut: "F3"
+                    enabled: pdf.hitCount > 0
+                    onClicked: root.nextHit(false)
+                }
+                BIconButton {
+                    objectName: "pdfSearchClose"
+                    size: "small"
+                    iconName: "x"
+                    label: qsTr("Close search")
+                    onClicked: root.closeSearch()
                 }
             }
             Text {
-                objectName: "pdfSearchStatus"
-                Layout.alignment: Qt.AlignVCenter
-                Layout.maximumWidth: root.width * 0.45
-                elide: Text.ElideRight
+                objectName: "pdfSearchStatusLine"
+                Layout.fillWidth: true
+                visible: root.searchStatusBelow
+                wrapMode: Text.Wrap
                 textFormat: Text.PlainText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
                 color: Theme.fgMuted
                 Accessible.role: Accessible.StaticText
                 Accessible.name: text
-                text: {
-                    if (Js.trim(pdf.searchText) === "")
-                        return ""
-                    if (pdf.hitCount > 0)
-                        //: Search hits in the PDF viewer: "3 of 12" (+ while still searching or capped)
-                        return qsTr("%1 of %2").arg(pdf.currentHit + 1).arg(pdf.hitCount)
-                               + (pdf.hitsCapped || pdf.searching ? "+" : "")
-                    if (pdf.searching)
-                        return pdf.searchedPages > 0 ? qsTr("Searching… page %1 of %2").arg(pdf.searchedPages).arg(pdf.pageCount)
-                                                     : ""
-                    return pdf.textless ? qsTr("This PDF has no text to search (it may be a scan).") : qsTr("No results")
-                }
-            }
-            BIconButton {
-                objectName: "pdfSearchPrevious"
-                size: "small"
-                iconName: "chevron-up"
-                label: qsTr("Previous result")
-                shortcut: "Shift+F3"
-                enabled: pdf.hitCount > 0
-                onClicked: root.nextHit(true)
-            }
-            BIconButton {
-                objectName: "pdfSearchNext"
-                size: "small"
-                iconName: "chevron-down"
-                label: qsTr("Next result")
-                shortcut: "F3"
-                enabled: pdf.hitCount > 0
-                onClicked: root.nextHit(false)
-            }
-            BIconButton {
-                objectName: "pdfSearchClose"
-                size: "small"
-                iconName: "x"
-                label: qsTr("Close search")
-                onClicked: root.closeSearch()
+                text: root.searchStatus
             }
         }
     }
@@ -1546,11 +1580,23 @@ Item {
         objectName: "pdfJump"
         parent: T.Overlay.overlay
         title: qsTr("Go to page")
+        // The range stays in sight: the field opens filled, so its placeholder seldom shows.
+        subtitle: qsTr("%n page(s)", "", pdf.pageCount)
         acceptText: qsTr("Go")
         preferredWidth: 320
         initialFocusItem: jumpField
-        acceptEnabled: jumpField.acceptableInput
-        onAccepted: root.jumpTo(Js.parseInt(jumpField.text))
+        /// The page typed (0: none, or not only digits) and whether the PDF has it.
+        readonly property int typedPage: Js.test(jumpField.text, "^[0-9]{1,7}$", "") ? Js.parseInt(jumpField.text) : 0
+        readonly property bool pageInRange: typedPage >= 1 && typedPage <= pdf.pageCount
+        acceptEnabled: pageInRange
+        onAccepted: root.jumpTo(jumpDialog.typedPage)
+        // The page shown, filled in by openJump() while the field had no focus (the caret at its
+        // start), is selected once the field has the focus: a digit typed replaces it instead of
+        // going in front of it ("7" on page 3 made 73).
+        onOpened: {
+            jumpField.forceActiveFocus(Qt.PopupFocusReason)
+            jumpField.selectAll()
+        }
         onClosed: root.forceActiveFocus()
 
         BTextField {
@@ -1560,8 +1606,12 @@ Item {
             accessibleName: qsTr("Page number")
             placeholderText: "1–%1".arg(pdf.pageCount)
             inputMethodHints: Qt.ImhDigitsOnly
-            validator: IntValidator { bottom: 1; top: Math.max(1, pdf.pageCount) }
-            onAccepted: if (jumpField.acceptableInput) jumpDialog.accept()
+            // A number, whatever its range: a page the PDF has not is said here instead of the key
+            // being swallowed. (A regular expression literal does not compile to C++.)
+            validator: IntValidator { bottom: 0; top: 9999999 }
+            errorText: jumpField.text !== "" && !jumpDialog.pageInRange
+                       ? qsTr("Enter a page from 1 to %1.").arg(pdf.pageCount) : ""
+            onAccepted: jumpDialog.tryAccept()
         }
     }
 }

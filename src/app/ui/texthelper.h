@@ -47,7 +47,8 @@ public:
     explicit TextHelper(QObject *parent = nullptr);
 
     /// BKbd's key caps of a shortcut: `sequence` split on "+", "++" giving a "+" key ("Ctrl++" ->
-    /// ["Ctrl", "+"], "Ctrl+Shift+F" -> ["Ctrl", "Shift", "F"]); empty parts dropped.
+    /// ["Ctrl", "+"], "Ctrl+Shift+F" -> ["Ctrl", "Shift", "F"]); empty parts dropped; the arrow
+    /// keys as arrows ("Alt+Up" -> ["Alt", "↑"]; display only).
     Q_INVOKABLE QStringList shortcutKeys(const QString &sequence) const;
     /// Search key: lower-case without diacritics ("Zażółć" -> "zazolc").
     Q_INVOKABLE QString fold(const QString &text) const;

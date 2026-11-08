@@ -187,7 +187,9 @@ static QList<Command> buildCommands(const AppController *app)
             // read-only.
             {u"view.reading"_s,
              app->settings()->readingMode() ? CommandModel::tr("Leave reading mode") : CommandModel::tr("Reading mode"),
-             CommandModel::tr("Read notes without changing them by accident"), u"book-open"_s, u"Ctrl+Shift+E"_s, true},
+             CommandModel::tr("Read notes without changing them by accident"),
+             // (The book is the journal's; leaving the mode: the pencil, as in the page menu.)
+             app->settings()->readingMode() ? u"pencil"_s : u"eye"_s, u"Ctrl+Shift+E"_s, true},
             {u"view.typewriter"_s,
              app->settings()->typewriterScrolling() ? CommandModel::tr("Turn off typewriter scrolling")
                                                     : CommandModel::tr("Typewriter scrolling"),
@@ -227,7 +229,7 @@ static QList<Command> buildCommands(const AppController *app)
              ready},
             {u"vault.docs"_s,
              app->inDocsVault() ? CommandModel::tr("Back to my notebook") : CommandModel::tr("Brulion Documentation"),
-             CommandModel::tr("Switch notebook"), u"book-open"_s, u"Ctrl+Shift+B"_s, !app->docsVaultPath().isEmpty()},
+             CommandModel::tr("Switch notebook"), u"circle-help"_s, u"Ctrl+Shift+B"_s, !app->docsVaultPath().isEmpty()},
             {u"vault.switch"_s, CommandModel::tr("Open another notebook…"), {}, u"folder-open"_s, {}, ready},
             {u"about"_s, CommandModel::tr("About Brulion"), {}, u"info"_s, {}, true},
     };

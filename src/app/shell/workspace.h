@@ -22,7 +22,8 @@
 //                                      linking to it), deletePage (-> .trash/), restore,
 //                                      trashItems, deleteForever, emptyTrash; the cleanup view:
 //                                      unreferencedFiles, deletePages, restoreAll
-//   folders                            createFolder (names sanitised, hidden ones refused),
+//   folders                            createFolder (names sanitised, hidden ones refused;
+//                                      folderProblem: why it would make none, without writing),
 //                                      renameFolder, movePath (pages, attachments and folders;
 //                                      every link and tag keeps its target: the index's
 //                                      planRelocation(); special folders rebase the notebook's
@@ -462,6 +463,11 @@ public:
     /// (a leading '.', or one of the ignored folders: logseq, node_modules, …) is refused with an
     /// error. Returns the folder's path ("" on failure); an existing folder is fine.
     Q_INVOKABLE QString createFolder(const QString &path);
+    /// Why createFolder(path) would make no new folder, translated: its own refusal (a name that
+    /// would be hidden, a file in the way, "Enter a name.") or "A folder named “…” already exists
+    /// here." for a folder it would only reuse (in any letter case, its name once sanitised); ""
+    /// when it would make one. Writes nothing (notebook::plannedFolder: createFolder's checks).
+    Q_INVOKABLE QString folderProblem(const QString &path) const;
     /// Rename a page in its folder and rewrite what names it in every file (links, tags:
     /// docs/SYNTAX.md §2, §3; every link keeps its target, an ambiguous one gets the shortest
     /// path). `newTitle` is a title: a "/" in it is sanitised like any character a file name cannot

@@ -13,7 +13,8 @@ import Brulion
 // date and time…" the reminder dialog; each change is one undo step and the rest of the line
 // stays as written; a plain click or tap on the chip still edits the text. The same gesture on the
 // ⏫ priority, the 🔁 rule (its quick rules), the reminder's "Priority" submenu, a [[day]] link (a
-// day later) opens their menus, and on a #tag and a [[link]] the link menu (LinkMenu: "Copy"
+// day later) opens their menus (removing a date or a reminder red, the 🔁's and the priority's
+// none value a neutral choice), and on a #tag and a [[link]] the link menu (LinkMenu: "Copy"
 // copies the tag, the link) — never the block menu.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
@@ -42,6 +43,14 @@ QtObject {
     function list(): ListView { return editor.listView }
     function dialogs(): EditorDialogs { return editor.dialogs as EditorDialogs }
     function item(name: string): T.MenuItem { return window.menuItemNamed(menu(), name) }
+    /// The menu's "remove" item looks as it should: with `danger` red with the trash (a date, a
+    /// reminder), else a choice like the ones above it (🔁's "Don't repeat", a priority's "No
+    /// priority": no red, no trash, checkable, unchecked).
+    function removeItemLooks(danger: bool): bool {
+        const remove = item("dateChipRemove") as BMenuItem
+        return remove !== null && remove.visible && remove.danger === danger && (remove.iconName === "trash-2") === danger
+               && remove.checkable === !danger && !remove.checked
+    }
     function linkMenu(): LinkMenu { return editor.linkMenu }
     function linkMenuOpen(): bool { return linkMenu() !== null && linkMenu().opened }
     function linkItem(name: string): T.MenuItem { return window.menuItemNamed(linkMenu(), name) }
@@ -175,6 +184,7 @@ QtObject {
         // ---- 📅: removed ---------------------------------------------------------------------------
         chipGesture("date:", false)
         if (window.at()) window.waitStep(menuOpen(), "the menu opens to remove the date")
+        if (window.at()) check(removeItemLooks(true), "“Remove date” is red, with the trash")
         choose("dateChipRemove")
         if (window.at()) {
             check(Js.indexOf(line("Kupić płytki"), "Kupić płytki ⏫ #zakupy") > 0, "“Remove date”: " + line("Kupić płytki"))
@@ -197,6 +207,7 @@ QtObject {
             check(!blockMenuOpen() && menu().kind === "reminder" && !menu().alarm, "the menu is the reminder's")
             check(item("dateChipHourLater").visible && item("dateChipAlarm").visible && !item("dateChipAlarm").checked
                   && !item("dateChipToday").visible, "a reminder's items, the alarm off")
+            check(removeItemLooks(true), "“Delete reminder” is red, with the trash")
         }
         choose("dateChipHourLater")
         if (window.at()) check(Js.indexOf(line("Zadzwonić do hydraulika"), "Zadzwonić do hydraulika ⏰ 2026-10-15 19:00 #telefon") > 0,
@@ -227,6 +238,7 @@ QtObject {
             check(!blockMenuOpen() && menu().kind === "priority" && menu().priority === "high", "the menu is the priority's")
             check(item("dateChipPriorityHigh").checked && item("dateChipPriorityLowest").visible
                   && !item("dateChipToday").visible, "the current priority checked, five levels, no dates")
+            check(removeItemLooks(false), "“No priority” is a choice like the levels: no red, no trash")
         }
         choose("dateChipPriorityLow")
         if (window.at()) {
@@ -262,6 +274,7 @@ QtObject {
                   "the menu is the rule's: " + menu().rule)
             check(item("dateChipRuleDaily").visible && !item("dateChipRuleDaily").checked && !item("dateChipToday").visible,
                   "its quick rules, no dates")
+            check(removeItemLooks(false), "“Don't repeat” is a choice like the rules: no red, no trash")
         }
         choose("dateChipRuleDaily")
         if (window.at()) {

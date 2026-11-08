@@ -154,7 +154,7 @@ Rectangle {
             size: "small"
             iconName: "plus"
             label: qsTr("Add property")
-            shortcut: "Ctrl+;"
+            shortcut: ShortcutMap.sequences["page.addProperty"] || ""
             focusPolicy: Qt.NoFocus
             onClicked: if (panelLoader.item) (panelLoader.item as PropertiesPanel).openAdd()
         }

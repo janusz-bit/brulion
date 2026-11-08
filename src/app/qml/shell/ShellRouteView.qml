@@ -11,7 +11,9 @@ import Brulion
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
 // `property bool editing` (text is being edited, or a picture fills the view: toasts go to the top
 // while a toolbar is docked), `function endEditing()` (the editing a docked touch toolbar is for
-// ends — the bottom navigation's quick capture, which would open over it),
+// ends — the bottom navigation's quick capture, which would open over it), `property bool
+// canStepBack` and `function stepBack()` (Back has a step of its own in the view, taken before
+// the history: PageView and JournalsView zoom a block zoomed into out one level),
 // `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge:
 // on the keyboard, or on the phone's bottom navigation once the keyboard went), `replacesBottomNav` (DrawingView on phones: the view's own bar at the
 // bottom takes the bottom navigation's place),
@@ -84,6 +86,11 @@ Item {
     /// Ends the editing the view's docked touch toolbar is for (views without one: nothing).
     function endEditing(): void {
         traits.endEditing()
+    }
+    /// Back has a step to take in the view before the history (a zoomed block), and taking it.
+    readonly property bool viewCanStepBack: traits.canStepBack
+    function stepBack(): void {
+        traits.stepBack()
     }
 
     function componentFor(view: string): Component {

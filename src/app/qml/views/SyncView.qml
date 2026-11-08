@@ -15,7 +15,9 @@ import Brulion
 //              (qml/io/SyncHistoryList, SyncRunDetails), the way to the event log, the account
 //              form (qml/io/NextcloudForm)
 //   Conflicts  conflict copies (list) and the resolver (qml/io/SyncConflictResolver): side by side
-//              on wide windows, one after the other on narrow ones
+//              on wide windows, one after the other on narrow ones — there a conflict opens
+//              through the route ({tab: "conflicts", copy}), so Back (the top bar's ←, Android's)
+//              returns to the list, not out of the sync center, and a resolved one goes back too
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `title`.
 FocusScope {
@@ -42,9 +44,30 @@ FocusScope {
         if (i >= 0)
             tabs.currentIndex = i
     }
+    /// Open conflict copy `copy`: beside the list on wide windows; on narrow ones through the
+    /// route, the entry Back returns to showing the list (the tab may have been chosen here).
+    function openCopy(copy: string): void {
+        if (!Theme.narrow) {
+            chosenCopy = copy
+            return
+        }
+        if (AppController.routeText(route, "tab") !== "conflicts" || AppController.routeText(route, "copy") !== "")
+            AppController.replaceRoute({ view: "sync", tab: "conflicts" })
+        AppController.navigate({ view: "sync", tab: "conflicts", copy: copy })
+    }
+    /// The resolver is done with its conflict (resolved): a narrow window that opened it through
+    /// the route goes back (to the list); otherwise the list's next conflict or the list.
+    function closeCopy(): void {
+        if (Theme.narrow && chosenCopy !== "" && AppController.routeText(route, "copy") === chosenCopy)
+            AppController.back()
+        else
+            chosenCopy = ""
+    }
     function applyRoute(): void {
-        if (AppController.routeFlag(route, "copy")) {
-            chosenCopy = AppController.routeText(route, "copy")
+        // The route's conflict copy, every time: a route without one shows the list (Back from a
+        // conflict on a narrow window).
+        chosenCopy = AppController.routeText(route, "copy")
+        if (chosenCopy !== "") {
             showTab("conflicts")
         } else if (AppController.routeFlag(route, "run")) {
             // A run's details (the event log's links, screenshots): on the Nextcloud tab.
@@ -358,7 +381,7 @@ FocusScope {
                                 Layout.leftMargin: Theme.space2
                                 Layout.rightMargin: Theme.space2
                                 currentCopy: root.currentCopy
-                                onActivated: (copy) => root.chosenCopy = copy
+                                onActivated: (copy) => root.openCopy(copy)
                             }
                         }
                         Rectangle {
@@ -377,8 +400,7 @@ FocusScope {
                         Layout.bottomMargin: Theme.compact ? Theme.space4 : Theme.space6
                         visible: root.currentCopy !== ""
                         copy: root.currentCopy
-                        showBack: Theme.narrow
-                        onClosed: root.chosenCopy = ""
+                        onClosed: root.closeCopy()
                     }
                     Item {
                         Layout.fillWidth: true

@@ -15,6 +15,14 @@ import Brulion
 // `unavailable`: shown but not possible now — drawn disabled, the reason in a tooltip on hover;
 // it still triggers (and closes the menu), so the menu can say why with a toast on touch screens,
 // where there is no hover.
+// Keyboard (BMenu): Up / Down reach every item shown, Enter, Return and Space trigger it (Qt's
+// MenuItem), so a menu needs no key handlers of its own.
+// Destructive items, one rule for every menu (docs/UI.md "Design system in code"): an item that
+// deletes is the last of its menu or section, with a separator above it (and below it when
+// sections follow); `danger` only for deleting content or files (the trash, a block, a row or
+// column, a reminder, a backdrop, a history or a log), never for the "none" value of a choice
+// (No status, No priority, Don't repeat: a choice like the others); a clear that cannot be undone
+// asks first (its text ends with "…", a BConfirmDialog).
 T.MenuItem {
     id: control
 
@@ -36,7 +44,11 @@ T.MenuItem {
     rightPadding: 10
     spacing: 10
     hoverEnabled: !Theme.touchUi
-    focusPolicy: Qt.NoFocus
+    // T.Menu's Up / Down move only to items that take the focus from Tab, and it does not look at
+    // visibility: an item hidden with `visible: false` (one only some rows have) takes none. A click
+    // takes no focus (TabFocus only). The focus stays inside the menu's popup, which took it on
+    // opening: what had it before (an edited text, its selection kept) gets it back on closing.
+    focusPolicy: visible ? Qt.TabFocus : Qt.NoFocus
     font.family: Theme.fontUi
     font.pixelSize: Theme.textControl
 

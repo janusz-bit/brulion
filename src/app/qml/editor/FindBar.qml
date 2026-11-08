@@ -192,7 +192,7 @@ Rectangle {
                 size: "small"
                 iconName: bar.replaceOpen ? "chevron-down" : "chevron-right"
                 label: bar.replaceOpen ? qsTr("Hide replace") : qsTr("Replace")
-                shortcut: "Ctrl+H"
+                shortcut: ShortcutMap.sequences["page.replace"] || ""
                 focusPolicy: Qt.NoFocus
                 onClicked: {
                     if (bar.replaceOpen)

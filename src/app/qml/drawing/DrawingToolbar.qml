@@ -188,8 +188,9 @@ Rectangle {
         bar.shapeChosen(tool)
     }
 
+    /// The paper's icon: plain paper a blank sheet ("square" is the rectangle tool's).
     function backgroundIcon(name: string): string {
-        return name === "lines" ? "rows-3" : name === "grid" ? "grid-3x3" : "square"
+        return name === "lines" ? "rows-3" : name === "grid" ? "grid-3x3" : "file"
     }
     function themeIcon(name: string): string {
         return name === "light" ? "sun" : name === "dark" ? "moon" : "sun-moon"
@@ -288,6 +289,19 @@ Rectangle {
         height: Theme.controlHeight - 8
         y: parent ? (parent.height - height) / 2 : 0
         color: Theme.borderSubtle
+    }
+
+    /// The corner caret of a tool with a menu behind its second click (Select, Shapes): a small
+    /// chevron in the bottom-right corner of the button's square — nothing else said that the
+    /// rectangle selection and the eleven polygons are there. (Lucide's chevron fills the middle
+    /// of its box: at 14 px it draws 7 × 3.5 px, set 3 px in from the corner.)
+    component MenuCaret: BIcon {
+        required property BIconButton button
+        size: 14
+        x: button.width - button.rightInset - 13
+        y: button.height - button.bottomInset - 12
+        name: "chevron-down"
+        color: Theme.fgMuted
     }
 
     Flickable {
@@ -399,6 +413,7 @@ Rectangle {
                         else
                             bar.canvas.tool = "select"
                     }
+                    MenuCaret { button: selectButton }
                 }
                 // The last shape; clicked while a shape is the tool: the shapes' menu.
                 BIconButton {
@@ -417,6 +432,7 @@ Rectangle {
                         else
                             bar.chooseShape(bar.shapeTool)
                     }
+                    MenuCaret { button: shapeButton }
                 }
                 BIconButton {
                     objectName: "drawingText"
@@ -630,7 +646,7 @@ Rectangle {
         objectName: "drawingBackgroundMenu"
         BMenuItem {
             text: qsTr("Plain")
-            iconName: "square"
+            iconName: "file"
             checkable: true
             checked: bar.canvas.background === "plain"
             onTriggered: bar.canvas.background = "plain"
@@ -684,14 +700,6 @@ Rectangle {
             shortcut: "PgDown"
             onTriggered: bar.pageStepRequested(1)
         }
-        BMenuItem {
-            objectName: "drawingBackdropRemove"
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-            text: qsTr("Remove backdrop")
-            iconName: "trash-2"
-            onTriggered: bar.backdropRemoved()
-        }
         BMenuSeparator {}
         BMenuItem {
             objectName: "drawingPaste"
@@ -700,6 +708,20 @@ Rectangle {
             shortcut: "Ctrl+V"
             enabled: bar.canvas.editable
             onTriggered: bar.pasteRequested()
+        }
+        // Deleting: last, set apart (the rule of BMenuItem's header).
+        BMenuSeparator {
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+        }
+        BMenuItem {
+            objectName: "drawingBackdropRemove"
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+            text: qsTr("Remove backdrop")
+            iconName: "trash-2"
+            danger: true
+            onTriggered: bar.backdropRemoved()
         }
     }
 
@@ -743,7 +765,7 @@ Rectangle {
         id: moreMenu
         BMenuItem {
             text: qsTr("Plain paper")
-            iconName: "square"
+            iconName: "file"
             checkable: true
             checked: bar.canvas.background === "plain"
             onTriggered: bar.canvas.background = "plain"
@@ -827,13 +849,6 @@ Rectangle {
             shortcut: "PgDown"
             onTriggered: bar.pageStepRequested(1)
         }
-        BMenuItem {
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-            text: qsTr("Remove backdrop")
-            iconName: "trash-2"
-            onTriggered: bar.backdropRemoved()
-        }
         BMenuSeparator {}
         BMenuItem {
             objectName: "drawingPasteItem"
@@ -856,6 +871,20 @@ Rectangle {
             text: qsTr("Show the whole drawing")
             iconName: "maximize"
             onTriggered: bar.fitRequested()
+        }
+        // Deleting: last, set apart (the rule of BMenuItem's header).
+        BMenuSeparator {
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+        }
+        BMenuItem {
+            objectName: "drawingBackdropRemoveItem"
+            visible: bar.canvas.hasBackdrop
+            height: visible ? implicitHeight : 0
+            text: qsTr("Remove backdrop")
+            iconName: "trash-2"
+            danger: true
+            onTriggered: bar.backdropRemoved()
         }
     }
 

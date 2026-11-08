@@ -3,13 +3,15 @@ import QtQuick
 import Brulion
 
 // CalendarMonthGrid — the month view: 6 weeks × 7 days of a CalendarModel (weekday names from
-// DatesHelper, starting on the model's first weekday). Wide cells list the day's entries as
+// DatesHelper, starting on the model's first weekday). Cells list the day's entries as
 // coloured pills ("09:00 Meeting", "+3 more"; an alarm in the reminder's tint with its
 // alarm clock, not a solid amber pill; open entries first, so "+N more" hides finished ones; a
 // done entry is muted with a check, not struck out — as in Tasks —, a cancelled one struck out
-// with an x); narrow cells (phones) show a small icon in its colour per kind of open entry
-// (overdue: an alert, reminder: a bell, due: a calendar, scheduled: an hourglass — none for done
-// entries) and a short faint line under the number for a daily note. The
+// with an x; under ~104-px cells the title alone: the time stays in the pill's accessible name,
+// its tooltip — also for an elided title — and the day panel). Narrow cells on touch UIs (phones,
+// touch tablets: under 96 px; with a mouse only under 72 px) show a small icon in its colour per
+// kind of open entry (overdue: an alert, reminder: a bell, due: a calendar, scheduled: an
+// hourglass — none for done entries) and a short faint line under the number for a daily note. The
 // cells are one surface (no weekend or other-month tint): today has a red disc on its number, the
 // selected day a dark disc (Theme.primary, as in BDatePicker; ≥ 3:1, WCAG 1.4.11) — today
 // selected shows only the red one —, days of other months have faint numbers, a daily note
@@ -35,8 +37,12 @@ FocusScope {
     readonly property real weekColumn: showWeekNumbers ? (Theme.touchUi ? 26 : 28) : 0
     readonly property real cellWidth: (width - weekColumn) / 7
     readonly property real cellHeight: Math.max(1, (height - headerHeight) / 6)
-    /// Dots instead of pills (narrow cells).
-    readonly property bool dots: cellWidth < 96
+    /// Icons instead of pills: narrow cells, decided by the input as well — a finger needs the
+    /// whole cell to pick the day, a mouse keeps the titled pills down to 72 px (a 1280-px
+    /// desktop with the sidebar and the day panel has cells of ~91 px).
+    readonly property bool dots: Theme.touchUi ? cellWidth < 96 : cellWidth < 72
+    /// The pills start with their entry's time (narrower cells: the title alone).
+    readonly property bool pillTimes: cellWidth >= 104
     readonly property int pillHeight: Theme.touchUi ? 20 : 18
     readonly property int pillsTop: Theme.touchUi ? 34 : 30
     readonly property int maxPills: Math.max(0, Math.floor((cellHeight - pillsTop - 2) / (pillHeight + 2)))
@@ -52,6 +58,18 @@ FocusScope {
             return names
         const at = (start - 1 + 7) % 7
         return Js.concatStrings(names.slice(at), names.slice(0, at))
+    }
+
+    /// An entry's accessible name and tooltip: its time (if any), its title and its state when
+    /// finished (as the week grid's).
+    function entryName(closed: bool, status: string, title: string, time: string): string {
+        const state = !closed ? "" : status === "cancelled" ? qsTr("cancelled") : qsTr("done")
+        let out = time
+        if (title !== "")
+            out = out === "" ? title : out + ", " + title
+        if (state !== "")
+            out = out === "" ? state : out + ", " + state
+        return out
     }
 
     /// The icon of a narrow cell's mark (CalendarModel `openKinds`): as the date chips' icons
@@ -307,9 +325,12 @@ FocusScope {
                                 // solid amber pill was the loudest thing on the month).
                                 readonly property string tint: variant === "alarm" ? "reminder" : variant
                                 readonly property color fgColor: Theme.chipFg(tint)
+                                readonly property string title: AppController.routeText(entry, "title")
                                 width: parent ? parent.width : 0 // (null while the Repeater drops it: a new month)
                                 height: root.pillHeight
                                 radius: Theme.radiusSm
+                                Accessible.role: Accessible.Button
+                                Accessible.name: root.entryName(closed, status, title, time)
                                 // (Done and cancelled entries: the "done" chip's colours at full
                                 // opacity — readable text, AA —, with a check, or struck out with
                                 // an x when cancelled, as in Tasks.)
@@ -329,10 +350,11 @@ FocusScope {
                                         color: pill.fgColor
                                     }
                                     Text {
+                                        id: pillText
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width - (x > 0 ? 13 : 0)
-                                        text: (pill.time !== "" ? "<b>" + pill.time + "</b> " : "")
-                                              + TextHelper.escapeHtml(AppController.routeText(pill.entry, "title"))
+                                        text: (pill.time !== "" && root.pillTimes ? "<b>" + pill.time + "</b> " : "")
+                                              + TextHelper.escapeHtml(pill.title)
                                         textFormat: Text.StyledText
                                         font.family: Theme.fontUi
                                         font.pixelSize: Theme.textXs
@@ -340,6 +362,20 @@ FocusScope {
                                         color: pill.fgColor
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
+                                    }
+                                }
+                                // What the pill leaves out — its time, the end of its title —
+                                // when the mouse rests on it (created then).
+                                HoverHandler {
+                                    id: pillHover
+                                    enabled: !Theme.touchUi
+                                }
+                                Loader {
+                                    active: pillHover.hovered && (pillText.truncated || (pill.time !== "" && !root.pillTimes))
+                                    sourceComponent: BToolTip {
+                                        parent: pill
+                                        text: root.entryName(pill.closed, pill.status, pill.title, pill.time)
+                                        visible: true
                                     }
                                 }
                             }

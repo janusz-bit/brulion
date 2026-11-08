@@ -267,11 +267,12 @@ Rectangle {
             onClicked: AppController.search("")
         }
         // Reading mode (docs/UI.md "Reading mode"): a device setting for every page and the journal,
-        // at every width (phones read the most); checked while it is on.
+        // at every width (phones read the most); checked while it is on. An eye: the book is the
+        // journal's (the rail, the bottom navigation — on a phone both are on screen).
         BIconButton {
             objectName: "topBarReadingMode"
             visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
-            iconName: "book-open"
+            iconName: "eye"
             label: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
             shortcut: ShortcutMap.sequences["view.reading"] || ""
             // (Not `checkable`: a click must not break the binding to the setting.)
@@ -316,7 +317,8 @@ Rectangle {
         }
     }
 
-    // The tab switcher (phones): the tabs, the one shown checked; then new / close.
+    // The tab switcher (phones): the tabs, the one shown checked like the notebook switcher's
+    // notebook; then new / close.
     BMenu {
         id: tabSwitcher
         objectName: "tabSwitcher"
@@ -327,13 +329,21 @@ Rectangle {
                 // (AppController.tabs: { tabId, route, … })
                 required property int tabId
                 required property var route
+                readonly property bool isCurrent: tabId === AppController.focusedTab
                 objectName: "tabSwitcherEntry"
                 text: titles.routeTitle(titles.field(entry.route, "view"),
                                         titles.field(entry.route, "path"),
                                         titles.field(entry.route, "date"),
                                         titles.field(entry.route, "tag"))
-                iconName: tabId === AppController.focusedTab ? "check" : "file-text"
-                onTriggered: AppController.selectTab(tabId)
+                // (No view icon: a checkable item draws its check where the icon would be.)
+                checkable: true
+                // Not `checked`: a checkable item has already toggled it when onTriggered runs.
+                // (A Binding: it follows isCurrent again after the toggle; onTriggered puts it back.)
+                Binding on checked { value: entry.isCurrent }
+                onTriggered: {
+                    entry.checked = entry.isCurrent
+                    AppController.selectTab(entry.tabId)
+                }
             }
             onObjectAdded: (index, object) => tabSwitcher.insertItem(index, object as Item)
             // (takeItem: the Instantiator destroys its objects itself.)
@@ -350,11 +360,13 @@ Rectangle {
         BMenuItem {
             text: qsTr("New tab")
             iconName: "plus"
+            shortcut: ShortcutMap.sequences["tab.new"] || ""
             onTriggered: AppController.newTab()
         }
         BMenuItem {
             text: qsTr("Close tab")
             iconName: "x"
+            shortcut: ShortcutMap.sequences["tab.close"] || ""
             onTriggered: AppController.closeTab(AppController.focusedTab)
         }
         BMenuItem {
@@ -616,6 +628,7 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Add property")
             iconName: "plus"
+            shortcut: ShortcutMap.sequences["page.addProperty"] || ""
             enabled: !AppController.sourceModeShown && !AppSettings.readingMode
             onTriggered: AppController.requestUiAction("addProperty")
         }
@@ -645,7 +658,13 @@ Rectangle {
             iconName: "external-link"
             onTriggered: Workspace.openInOtherApp(bar.pagePath)
         }
+        // The page's last item, set apart on both sides (the rule of BMenuItem's header).
+        BMenuSeparator {
+            visible: bar.onPage
+            height: visible ? implicitHeight : 0
+        }
         BMenuItem {
+            objectName: "menuTrashPage"
             visible: bar.onPage
             height: visible ? implicitHeight : 0
             text: qsTr("Move to trash")
@@ -663,6 +682,7 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Command palette")
             iconName: "command"
+            shortcut: ShortcutMap.sequences["palette"] || ""
             onTriggered: bar.paletteRequested()
         }
 
