@@ -53,7 +53,7 @@ When something doesn't work, look into the **Event log** (*Settings → Applicat
 
 ## Version history and trash
 - Before a note is overwritten, its previous version goes into the history on the device. Page menu → **History** lets you compare versions and restore any of them.
-- Deleted pages go to the **Trash**, from which you can recover them. You delete a page, an attachment or a folder from the **More** menu, from the page tree (also with the `Delete` key), from **All pages** and from the command palette (“Move to trash”), and **Undo** in the notification brings it back right away. Files disappear from the trash for good only when you ask for it — a deletion spreads through sync to your other devices, so the trash is a safeguard.
+- Deleted pages go to the **Trash**, from which you can recover them. You delete a page, an attachment or a folder from the **More** menu, from the page tree (also with the `Delete` key), from **All pages** and from the command palette (“Move to trash”), and **Undo** in the notification brings it back right away. Files disappear from the trash for good only when you ask for it (**⋯** next to a file → **Delete for good…**, or **Empty trash**) — a deletion spreads through sync to your other devices, so the trash is a safeguard.
 - **Clean up** (the **More** menu and the command palette) shows notes and attachments that no link, tag or query leads to. You choose what to move to the trash: notes, attachments or single files. Journals, templates and favorites aren't listed there.
 - Sync's working data (history, merge traces) lives outside the notebook folder, so it doesn't sync between devices.
 

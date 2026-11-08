@@ -1601,7 +1601,7 @@
 <context>
     <name>TrashView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="88"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="93"/>
         <source>%n item(s) in the trash</source>
         <translation>
             <numerusform>%n item in the trash</numerusform>
@@ -1609,7 +1609,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="156"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="179"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n file</numerusform>
@@ -1617,15 +1617,15 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="208"/>
-        <source>The folder “%1” and the %n file(s) in it will be deleted permanently.</source>
+        <location filename="../src/app/qml/views/TrashView.qml" line="271"/>
+        <source>The folder “%1” and the %n file(s) in it will be deleted permanently. This cannot be undone.</source>
         <translation>
-            <numerusform>The folder “%1” and the %n file in it will be deleted permanently.</numerusform>
-            <numerusform>The folder “%1” and the %n files in it will be deleted permanently.</numerusform>
+            <numerusform>The folder “%1” and the %n file in it will be deleted permanently. This cannot be undone.</numerusform>
+            <numerusform>The folder “%1” and the %n files in it will be deleted permanently. This cannot be undone.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="221"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="284"/>
         <source>%n item(s) will be deleted permanently. This cannot be undone.</source>
         <translation>
             <numerusform>%n item will be deleted permanently. This cannot be undone.</numerusform>

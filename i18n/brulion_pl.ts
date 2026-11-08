@@ -2144,42 +2144,42 @@
 <context>
     <name>CalendarAgendaList</name>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="156"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="160"/>
         <source>today</source>
         <translation>dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="219"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="228"/>
         <source>Today</source>
         <translation>Dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="237"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="246"/>
         <source>Journal</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="238"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="247"/>
         <source>Open the journal of %1</source>
         <translation>Otwórz dziennik: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="283"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="293"/>
         <source>Only a journal entry.</source>
         <translation>Tylko wpis w dzienniku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="283"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="293"/>
         <source>Nothing planned.</source>
         <translation>Nic nie zaplanowano.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="306"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="316"/>
         <source>Nothing planned in these four weeks</source>
         <translation>Nic nie zaplanowano na te cztery tygodnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="307"/>
+        <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="317"/>
         <source>Dates (📅, ⏳) and reminders (⏰) from your notes appear here. Choose a day to add a task or a reminder to it.</source>
         <translation>Tu pojawiają się daty (📅, ⏳) i przypomnienia (⏰) z Twoich notatek. Wybierz dzień, aby dodać do niego zadanie lub przypomnienie.</translation>
     </message>
@@ -9595,57 +9595,57 @@
 <context>
     <name>PlanningItemRow</name>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="56"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="58"/>
         <source>Overdue</source>
         <translation>Zaległe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="57"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="59"/>
         <source>Alarm</source>
         <translation>Alarm</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="58"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="60"/>
         <source>Reminder</source>
         <translation>Przypomnienie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="59"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="61"/>
         <source>Scheduled</source>
         <translation>Zaplanowane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="60"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="62"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="60"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="62"/>
         <source>Finished</source>
         <translation>Zakończone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="63"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="65"/>
         <source>Due</source>
         <translation>Termin</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="64"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="66"/>
         <source>Starts</source>
         <translation>Początek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="65"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="67"/>
         <source>Journal</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="70"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="72"/>
         <source>Journal · %1</source>
         <translation>Dziennik · %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="143"/>
+        <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="145"/>
         <source>Done: %1</source>
         <translation>Zrobione: %1</translation>
     </message>
@@ -16285,42 +16285,42 @@
 <context>
     <name>TrashView</name>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="28"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="33"/>
         <source>%1 B</source>
         <translation>%1 B</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="30"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="35"/>
         <source>%1 kB</source>
         <translation>%1 kB</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="31"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="36"/>
         <source>%1 MB</source>
         <translation>%1 MB</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="39"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="44"/>
         <source>“%1” could not be restored.</source>
         <translation>Nie udało się przywrócić „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="43"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="48"/>
         <source>“%1” is back in the folder %2</source>
         <translation>Przywrócono „%1” do folderu %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="44"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="49"/>
         <source>“%1” is back in the notebook</source>
         <translation>Przywrócono „%1” do notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="74"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="79"/>
         <source>Trash</source>
         <translation>Kosz</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="88"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="93"/>
         <source>%n item(s) in the trash</source>
         <translation>
             <numerusform>%n element w koszu</numerusform>
@@ -16329,28 +16329,28 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="96"/>
-        <location filename="../src/app/qml/views/TrashView.qml" line="222"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="102"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="285"/>
         <source>Empty trash</source>
         <translation>Opróżnij kosz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="153"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="176"/>
         <source>journal</source>
         <translation>dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="154"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="177"/>
         <source>from %1</source>
         <translation>z %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="155"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="178"/>
         <source>deleted %1</source>
         <translation>usunięto %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="156"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="179"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n plik</numerusform>
@@ -16359,67 +16359,84 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="166"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="190"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="238"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="167"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="191"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="240"/>
         <source>Restore %1</source>
         <translation>Przywróć %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="175"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="199"/>
+        <source>More</source>
+        <translation>Więcej</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/TrashView.qml" line="200"/>
+        <source>More: %1</source>
+        <translation>Więcej: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/TrashView.qml" line="246"/>
+        <source>Delete for good…</source>
+        <translation>Usuń na zawsze…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/TrashView.qml" line="249"/>
         <source>Delete %1 for good</source>
         <translation>Usuń %1 na zawsze</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/TrashView.qml" line="271"/>
+        <source>The folder “%1” and the %n file(s) in it will be deleted permanently. This cannot be undone.</source>
+        <translation>
+            <numerusform>Folder „%1” i %n plik w nim zostaną trwale usunięte. Tej operacji nie można cofnąć.</numerusform>
+            <numerusform>Folder „%1” i %n pliki w nim zostaną trwale usunięte. Tej operacji nie można cofnąć.</numerusform>
+            <numerusform>Folder „%1” i %n plików w nim zostanie trwale usuniętych. Tej operacji nie można cofnąć.</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="187"/>
-        <location filename="../src/app/qml/views/TrashView.qml" line="226"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="212"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="289"/>
         <source>The trash is empty</source>
         <translation>Kosz jest pusty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="188"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="213"/>
         <source>Deleted pages land here first and can be restored. Version history keeps older texts of pages on this device too.</source>
         <translation>Usunięte strony najpierw trafiają tutaj i można je przywrócić. Historia wersji przechowuje też na tym urządzeniu starsze teksty stron.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="206"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="269"/>
         <source>Delete for good?</source>
         <translation>Usunąć na zawsze?</translation>
     </message>
-    <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="208"/>
-        <source>The folder “%1” and the %n file(s) in it will be deleted permanently.</source>
-        <translation>
-            <numerusform>Folder „%1” i %n plik w nim zostaną trwale usunięte.</numerusform>
-            <numerusform>Folder „%1” i %n pliki w nim zostaną trwale usunięte.</numerusform>
-            <numerusform>Folder „%1” i %n plików w nim zostanie trwale usuniętych.</numerusform>
-        </translation>
-    </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="209"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="272"/>
         <source>“%1” will be deleted permanently. This cannot be undone.</source>
         <translation>Element „%1” zostanie trwale usunięty. Tej operacji nie można cofnąć.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="210"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="273"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="214"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="277"/>
         <source>Deleted</source>
         <translation>Usunięto</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TrashView.qml" line="220"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="283"/>
         <source>Empty the trash?</source>
         <translation>Opróżnić kosz?</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TrashView.qml" line="221"/>
+        <location filename="../src/app/qml/views/TrashView.qml" line="284"/>
         <source>%n item(s) will be deleted permanently. This cannot be undone.</source>
         <translation>
             <numerusform>%n element zostanie trwale usunięty. Tej operacji nie można cofnąć.</numerusform>
