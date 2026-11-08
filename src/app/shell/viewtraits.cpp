@@ -28,6 +28,7 @@ constexpr Trait kTraits[] = {
         {"fileRoute", 1 << 6},
         {"sourceMode", 1 << 7},
         {"edgeSwipe", 1 << 8},
+        {"canStepBack", 1 << 9},
 };
 
 /// A `var` property's value as the plain QVariant (a QJSValue unwrapped).
@@ -178,6 +179,13 @@ void ViewTraits::applyPendingState()
 void ViewTraits::endEditing() const
 {
     const QMetaMethod m = method("endEditing", 0);
+    if (m.isValid())
+        m.invoke(m_view, Qt::DirectConnection);
+}
+
+void ViewTraits::stepBack() const
+{
+    const QMetaMethod m = method("stepBack", 0);
     if (m.isValid())
         m.invoke(m_view, Qt::DirectConnection);
 }

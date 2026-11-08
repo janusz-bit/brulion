@@ -338,10 +338,13 @@ FocusScope {
     focus: true
 
     // Android back key / gesture: back through the history; at home the app may close. Focus
-    // mode first ends (also Esc, once nothing in the view took it).
+    // mode first ends (also Esc, once nothing in the view took it), then the view takes a step of
+    // its own (a block zoomed into zooms out one level). Each is one Back: the press is taken and
+    // the step done on the release, which is taken too, so it never walks the history as well.
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Back)
-            event.accepted = shell.focusMode || AppController.canGoBack || !AppController.atHome
+            event.accepted = shell.focusMode || shell.routeView.viewCanStepBack || AppController.canGoBack
+                             || !AppController.atHome
         else if (event.key === Qt.Key_Escape && shell.focusMode) {
             shell.leaveFocusMode()
             event.accepted = true
@@ -351,9 +354,19 @@ FocusScope {
         if (event.key === Qt.Key_Back && shell.focusMode) {
             shell.leaveFocusMode()
             event.accepted = true
+        } else if (event.key === Qt.Key_Back && shell.viewStepBack()) {
+            event.accepted = true
         } else if (event.key === Qt.Key_Back) {
             event.accepted = AppController.handleBackKey()
         }
+    }
+    /// Back's step in the shown view before the history (a zoomed block zooms out); true when it
+    /// had one. Also Main.qml's step for a Back no item took.
+    function viewStepBack(): bool {
+        if (!shell.routeView.viewCanStepBack)
+            return false
+        shell.routeView.stepBack()
+        return true
     }
 
     onWidthChanged: if (!Theme.narrow && drawer.opened) drawer.close()

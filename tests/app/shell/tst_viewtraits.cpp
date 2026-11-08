@@ -69,13 +69,16 @@ QtObject {
     property bool fileRoute: false
     property bool sourceMode: false
     property bool edgeSwipe: true
+    property bool canStepBack: true
     property string statusText: "123 słowa"
     property string statusPosition: "Blok 3 z 12"
     property var restored: null
     property int ended: 0
+    property int stepped: 0
     function viewState(): var { return { contentY: 120, row: 3 } }
     function restoreViewState(state: var): void { restored = state }
     function endEditing(): void { ++ended }
+    function stepBack(): void { ++stepped; canStepBack = false }
 }
 )"_s);
         QVERIFY(view);
@@ -122,6 +125,11 @@ QtObject {
         QVERIFY(!view->property("restored").isValid() || view->property("restored").isNull());
         traits.endEditing();
         QCOMPARE(view->property("ended").toInt(), 1);
+        // Back's step in the view (a zoomed block): taken, and the trait follows the view.
+        QVERIFY(traits.canStepBack());
+        traits.stepBack();
+        QCOMPARE(view->property("stepped").toInt(), 1);
+        QVERIFY(!traits.canStepBack());
     }
 
     // Untyped functions and members of other types (the views as they were): `var` parameters,
@@ -163,12 +171,16 @@ QtObject {
         QCOMPARE(traits.viewState(), QVariantMap());
         traits.restoreViewState({{u"row"_s, 5}}); // kept for the view to come
         traits.endEditing();
+        traits.stepBack();
+        QVERIFY(!traits.canStepBack());
 
         auto bare = makeObject(engine, u"import QtQml\nQtObject {}"_s);
         QVERIFY(bare);
         traits.setView(bare.get());
         QCOMPARE(traits.title(), QString());
         QVERIFY(!traits.toolbarDocked());
+        QVERIFY(!traits.canStepBack()); // no step of its own: Back walks the history
+        traits.stepBack();
 
         auto view = makeObject(engine, uR"(
 import QtQml

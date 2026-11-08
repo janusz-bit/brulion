@@ -1,7 +1,7 @@
 // ViewTraits — what the shell reads of the view a ShellRouteView shows (docs/UI.md "Navigation":
 // the view contract). The views share no base type: each has some of the optional properties
-// (`title`, `sidePanel`, `editing`, `toolbarDocked`, …) and functions (`viewState()`,
-// `restoreViewState(state)`, `endEditing()`). QML looked them up dynamically, which qmlcachegen
+// (`title`, `sidePanel`, `editing`, `toolbarDocked`, `canStepBack`, …) and functions (`viewState()`,
+// `restoreViewState(state)`, `endEditing()`, `stepBack()`). QML looked them up dynamically, which qmlcachegen
 // cannot compile; this object does it through the view's meta-object and gives typed results,
 // following the properties' change signals:
 //
@@ -48,6 +48,9 @@ class ViewTraits : public QObject {
     Q_PROPERTY(bool fileRoute READ fileRoute NOTIFY traitsChanged FINAL)
     Q_PROPERTY(bool sourceMode READ sourceMode NOTIFY traitsChanged FINAL)
     Q_PROPERTY(bool edgeSwipe READ edgeSwipe NOTIFY traitsChanged FINAL)
+    /// Back has a step of its own to take in the view before the history (stepBack()): a page or
+    /// journal day zoomed into a block zooms out.
+    Q_PROPERTY(bool canStepBack READ canStepBack NOTIFY traitsChanged FINAL)
 
 public:
     explicit ViewTraits(QObject *parent = nullptr);
@@ -69,6 +72,7 @@ public:
     bool fileRoute() const { return m_flags & FileRoute; }
     bool sourceMode() const { return m_flags & SourceMode; }
     bool edgeSwipe() const { return m_flags & EdgeSwipe; }
+    bool canStepBack() const { return m_flags & CanStepBack; }
 
     /// The view's viewState() ({} when it has none, or it gives no map).
     Q_INVOKABLE QVariantMap viewState() const;
@@ -80,6 +84,8 @@ public:
     Q_INVOKABLE void applyPendingState();
     /// The view's endEditing(), when it has one.
     Q_INVOKABLE void endEditing() const;
+    /// The view's stepBack(), when it has one (AppShell calls it while canStepBack holds).
+    Q_INVOKABLE void stepBack() const;
 
 Q_SIGNALS:
     void viewChanged();
@@ -100,6 +106,7 @@ private:
         FileRoute = 1 << 6,
         SourceMode = 1 << 7,
         EdgeSwipe = 1 << 8,
+        CanStepBack = 1 << 9,
     };
     /// The view's method `name` with `parameters` parameters (invalid when it has none).
     QMetaMethod method(const char *name, int parameters) const;

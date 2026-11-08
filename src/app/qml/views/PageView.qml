@@ -63,7 +63,8 @@ import Brulion
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`, `paneActive`
 // (false: the other pane of a split view — the window's shortcuts and the palette's actions are
 // the focused pane's); offers `title` (daily notes by their date), `sidePanel`, `editing`,
-// `toolbarDocked`, `endEditing()`, `sourceMode` and `viewState()` / `restoreViewState()` (where
+// `toolbarDocked`, `endEditing()`, `canStepBack` / `stepBack()` (Back zooms out a zoomed block
+// first), `sourceMode` and `viewState()` / `restoreViewState()` (where
 // the blocks were scrolled: the tab keeps it while another tab is shown, docs/UI.md "Tabs, split
 // view and windows"). `--editor-script <state>` drives the
 // editor for screenshots through qml/dev/PageScript.qml.
@@ -229,6 +230,12 @@ FocusScope {
     /// ends first, as when the page is left.
     function endEditing(): void {
         editor.endTouchEditing()
+    }
+    /// Back's own step before the history (the shell's Back key): a block zoomed into zooms out
+    /// one level (BlockEditor.stepBack()).
+    readonly property bool canStepBack: editor.visible && editor.canStepBack
+    function stepBack(): void {
+        editor.stepBack()
     }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
     readonly property bool sourceMode: page.sourceMode && !root.pictureRoute && !root.pdfRoute && !root.fileRoute

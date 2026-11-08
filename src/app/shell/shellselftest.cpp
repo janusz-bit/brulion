@@ -327,6 +327,50 @@ void checkCalendarEdgeSwipe(QQuickWindow *window, QQuickItem *calendarView, cons
     settle(200);
 }
 
+/// 1b. Back on a block zoomed into in the journal stream at home (phones: Android's back key, which
+///     at home with no history would leave the app): today's nested "albo żurek" zoomed into, each
+///     Back is taken and goes one level out (to "Pomysł na obiad", then the whole day), the stream
+///     staying; then Back is left to the system again.
+void checkBackZoomsOutAtHome(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *ws = app->workspace();
+    const QString today = ws->journalPath(app->today(0));
+    app->goHome();
+    // Today's day of the stream (list delegates are not in the QObject tree: the visual tree).
+    QObject *day = nullptr;
+    waitFor([&] {
+        QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
+            const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>()
+                                                                      : nullptr;
+            return c && c->property("path").toString() == today && c->property("loaded").toBool();
+        });
+        day = editor ? editor->property("controller").value<QObject *>() : nullptr;
+        return day != nullptr;
+    });
+    const QStringList lines = ws->readFile(today).split(u'\n');
+    int parent = -1;
+    int child = -1;
+    for (qsizetype i = 0; i < lines.size(); ++i) {
+        if (lines.at(i).startsWith(u"- Pomysł na obiad"_s))
+            QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(parent), int(i));
+        else if (lines.at(i).startsWith(u"  - albo żurek"_s))
+            QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(child), int(i));
+    }
+    check(day && parent >= 0 && child > parent && !app->canGoBack() && app->atHome(),
+          "at home, today's journal has a nested block to zoom into");
+    if (!day || parent < 0 || child <= parent)
+        return;
+    const auto zoom = [day] { return day->property("zoomBlock").toInt(); };
+    QMetaObject::invokeMethod(day, "zoomInto", child);
+    check(waitFor([&] { return zoom() == child; }), "the nested block is zoomed into");
+    bool handled = sendKey(window, Qt::Key_Back);
+    check(handled && zoom() == parent && app->atHome(), "Back zooms out to the block's parent, the journal stays");
+    handled = sendKey(window, Qt::Key_Back);
+    check(handled && zoom() < 0 && app->atHome(), "the next Back zooms out to the whole day");
+    handled = sendKey(window, Qt::Key_Back);
+    check(!handled && zoom() < 0 && app->atHome(), "with the zoom gone, Back at home is left to the system again");
+}
+
 /// 3c. Task statuses wherever a checkbox is shown, with real input: a right-click (desktop) or a
 ///     long press (--touch) on the checkbox opens the status menu with the task's status checked
 ///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
@@ -1322,8 +1366,9 @@ void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Che
 
 /// 3b. Rows with a context menu, with the input people really use: a finger on phones (--touch:
 ///     real touch events through the window), the mouse on desktops. A tap or a left click does
-///     what the row says — expands the folder, opens the page, zooms into the block — and never
-///     opens the menu; a long press or a right-click opens it. Regression (Android, the drawer):
+///     what the row says — expands the folder, opens the page, zooms into the block (on phones
+///     Back then zooms out before it leaves the page) — and never opens the menu; a long press or
+///     a right-click opens it. Regression (Android, the drawer):
 ///     the rows' right-click TapHandlers took every finger tap too (touch points carry no
 ///     buttons, so Qt ignores a TapHandler's acceptedButtons for them): each tap opened the modal
 ///     context menu, which then swallowed the release — no folder expanded, no page opened.
@@ -1863,7 +1908,28 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         activate(bullet());
         check(waitFor([&] { return controller->property("zoomBlock").toInt() >= 0; }) && openMenus(window) == 0,
               "a tap or click on a bullet zooms into the block, without a menu");
-        QMetaObject::invokeMethod(controller, "zoomOut");
+        if (touch) {
+            // Android's Back zooms out first, one level each (to the zoomed block's parent), on
+            // the page — its press and release both taken, so the history is not walked too —;
+            // once the zoom is gone, Back leaves the page.
+            const QVariantMap zoomedRoute = app->currentRoute();
+            bool outward = true;
+            for (int i = 0; i < 8 && controller->property("zoomBlock").toInt() >= 0; ++i) {
+                const qsizetype crumbs = controller->property("breadcrumb").toList().size();
+                int parent = -1;
+                if (crumbs >= 2)
+                    QMetaObject::invokeMethod(controller, "breadcrumbRow", qReturnArg(parent), int(crumbs - 2));
+                const bool handled = sendKey(window, Qt::Key_Back);
+                outward = outward && handled && controller->property("zoomBlock").toInt() == parent
+                          && app->currentRoute() == zoomedRoute;
+            }
+            check(outward && controller->property("zoomBlock").toInt() < 0,
+                  "Back on a zoomed block zooms out a level at a time and stays on the page");
+            const bool handled = sendKey(window, Qt::Key_Back);
+            check(handled && app->currentRoute() != zoomedRoute, "with the zoom gone, Back leaves the page");
+        } else {
+            QMetaObject::invokeMethod(controller, "zoomOut");
+        }
     }
     // The block menu walked by keyboard (desktop): Down goes from item to item shown — past the
     // ones this block has not (a table's, a table cell's Row and Column submenus) — to "Zoom in",
@@ -7358,6 +7424,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     check(handled && view() == u"journals", "back goes back through the history");
     handled = sendKey(window, Qt::Key_Back);
     check(!handled && view() == u"journals", "back at home is not handled (Android may close the app)");
+    // 1b. Phones: a zoom in the journal at home goes out with Back first.
+    if (QCoreApplication::arguments().contains(u"--touch"_s))
+        checkBackZoomsOutAtHome(window, app, check);
 
     // 2. + 3. The drawer (narrow windows; wide ones have the sidebar instead).
     if (window->width() < 900) {

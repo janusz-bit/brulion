@@ -27,8 +27,9 @@ import Brulion
 // its PageView has the bar. The notebook-wide search and replace cover all notes.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`, `paneActive` (false:
 // the other pane of a split view); offers `title` (one day: its date), `sidePanel`, `editing`,
-// `toolbarDocked`, `endEditing()`, `sourceMode` and `viewState()` / `restoreViewState()` (the stream:
-// the day at the top and how far into it; one day: its PageView's).
+// `toolbarDocked`, `endEditing()`, `canStepBack` / `stepBack()` (Back zooms out the zoom of the day
+// written in first — a day zoomed into becomes that day), `sourceMode` and `viewState()` /
+// `restoreViewState()` (the stream: the day at the top and how far into it; one day: its PageView's).
 FocusScope {
     id: root
 
@@ -166,6 +167,18 @@ FocusScope {
                 pageView.endEditing()
         } else if (activeEditor) {
             activeEditor.endTouchEditing()
+        }
+    }
+    /// Back's own step before the history (the shell's Back key): the zoom of the day written in
+    /// goes one level out (ContentJournalDay makes a day zoomed into the active one).
+    readonly property bool canStepBack: single ? (pageView !== null && pageView.canStepBack)
+                                               : (activeEditor !== null && activeEditor.canStepBack)
+    function stepBack(): void {
+        if (single) {
+            if (pageView)
+                pageView.stepBack()
+        } else if (activeEditor) {
+            activeEditor.stepBack()
         }
     }
     /// One day as a page in source mode (the stream opens a day as a page for that).
