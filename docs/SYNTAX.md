@@ -1333,7 +1333,10 @@ line; blank lines are skipped; only one of `table:`, `calc:`, `query:`.
 
 * **Tables**: one point per row except the summary rows (as for sorting); cells are read as numbers
   like formula cells (`12,50 zł`, `23%`); text, `#ERR`, non-finite values and magnitudes above 10¹⁵
-  are gaps (a missing bar, a break in the line). Formulas see the page's calc variables.
+  are gaps (a missing bar, a break in the line). Formulas see the page's calc variables. Labels
+  and series names read as the table shows them, as "Copy as plain text" does: links become
+  their text, emphasis and code marks go, `#tags` and dates stay (`**Płytki** z [[Castorama]]` →
+  "Płytki z Castorama").
 * **Calc blocks**: one point per line with a numeric result — an assignment by its name
   (`czynsz = 1800` → „czynsz”), a `Label: expr` line by its label, other lines by their text;
   `sum` / `avg` lines and errors are left out.

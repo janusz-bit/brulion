@@ -150,6 +150,36 @@ private Q_SLOTS:
         QVERIFY(!r.scene.items.isEmpty());
     }
 
+    void labelsAsTheyShow()
+    {
+        // Labels and series names read as the table shows them, as "Copy as plain text" does:
+        // emphasis inside the text, links (their labels), code spans and line breaks; tags stay.
+        const QString table = u"| **Pozycja** | Cena *netto* | `Ilość` |\n|---|--:|--:|\n"
+                              u"| **Płytki** z Castorama | 120 | 3 |\n"
+                              u"| Klej *elastyczny* | 45 | 2 |\n"
+                              u"| [[Fuga szara]] #zakupy | 30 | 1 |\n"
+                              u"| `Silikon` i [taśma](https://example.com/tasma) | 20 | 4 |\n"
+                              u"| Listwy<br>__przypodłogowe__ | 18 | 40 |\n\n"_s;
+        const Result r = renderOn(table, QString());
+        QVERIFY2(r.ok(), qPrintable(r.error ? r.error->message() : QString()));
+        QCOMPARE(r.data.labels, (QStringList{u"Płytki z Castorama"_s, u"Klej elastyczny"_s, u"Fuga szara #zakupy"_s,
+                                             u"Silikon i taśma"_s, u"Listwy przypodłogowe"_s}));
+        QCOMPARE(r.data.labelsName, u"Pozycja"_s);
+        QCOMPARE(r.data.series.size(), 2);
+        QCOMPARE(r.data.series.at(0).name, u"Cena netto"_s);
+        QCOMPARE(r.data.series.at(1).name, u"Ilość"_s);
+        QCOMPARE(values(r, 0), (QList<double>{120, 45, 30, 20, 18}));
+        const QString text = describeChart(r.spec, r.data);
+        QVERIFY2(text.contains(u"Płytki z Castorama: Cena netto 120"_s) && !text.contains(u'*') && !text.contains(u'`')
+                         && !text.contains(u"https"_s),
+                 qPrintable(text));
+        // A formula's label is its result.
+        const Result f =
+                renderOn(u"| Tydzień | Wynik |\n|---|--:|\n| =40+5 | 5 |\n| **46** | 7 |\n\n"_s, u"x: Tydzień"_s);
+        QVERIFY2(f.ok(), qPrintable(f.error ? f.error->message() : QString()));
+        QCOMPARE(f.data.labels, (QStringList{u"45"_s, u"46"_s}));
+    }
+
     void columns_data()
     {
         QTest::addColumn<QString>("chart");

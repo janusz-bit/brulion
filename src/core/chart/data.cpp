@@ -4,7 +4,10 @@
 #include "chart/messages_p.h"
 
 #include "calc/calc.h"
+#include "markdown/blockclipboard.h"
 #include "text/text.h"
+
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +27,30 @@ QString capLabel(const QString &text)
     if (t.size() > limits::MaxLabelLength)
         t = t.left(limits::MaxLabelLength - 1) + u'…';
     return t;
+}
+
+/// A table's text as a label (a header, a cell): what it shows — its inline Markdown reduced as
+/// "Copy as plain text" does (markdown::stripInlineMarkup: links their labels, emphasis and code
+/// marks and a highlight's `<mark>` tags gone, tags and dates kept), a line break `<br>` a space —
+/// capped. (calc::tableCellValue() leaves out marks around the whole value only: "**Płytki** z
+/// Castorama" kept its asterisks.)
+QString plainLabel(const QString &text)
+{
+    static const QRegularExpression br(u"<br\\s*/?>"_s, QRegularExpression::CaseInsensitiveOption);
+    QString t = text;
+    if (t.contains(u'<'))
+        t.replace(br, u" "_s);
+    return capLabel(markdown::stripInlineMarkup(t));
+}
+
+/// The label of a table cell: a formula's result, else the cell's text as it shows.
+QString cellLabel(const calc::TableModel &model, const calc::TableEval &eval, int row, int column)
+{
+    const QStringList &cells = model.rows.at(row);
+    const QString cell = column < cells.size() ? cells.at(column).trimmed() : QString();
+    if (cell.startsWith(u'='))
+        return capLabel(calc::tableCellValue(model, eval, row, column));
+    return plainLabel(cell);
 }
 
 /// A value of a chart: a finite number not beyond limits::MaxMagnitude, else NaN (a gap).
@@ -152,14 +179,13 @@ DataResult fromTable(const Spec &spec, const PageSources &page)
 
     DataResult out;
     if (xColumn >= 0)
-        out.data.labelsName = capLabel(calc::stripInlineMarkup(model->header.at(xColumn)));
+        out.data.labelsName = plainLabel(model->header.at(xColumn));
     for (int r = first; r < last; ++r)
-        out.data.labels.append(xColumn >= 0 ? capLabel(calc::tableCellValue(*model, eval, r, xColumn))
-                                            : QString::number(r - first + 1));
+        out.data.labels.append(xColumn >= 0 ? cellLabel(*model, eval, r, xColumn) : QString::number(r - first + 1));
     bool any = false;
     for (const int c : std::as_const(yColumns)) {
         Series s;
-        s.name = capLabel(calc::stripInlineMarkup(model->header.at(c)));
+        s.name = plainLabel(model->header.at(c));
         for (int r = first; r < last; ++r) {
             s.values.append(valueOf(calc::tableCellValue(*model, eval, r, c), page.locale));
             any = any || !std::isnan(s.values.last());
