@@ -1,0 +1,14 @@
+Nowości w 0.15.0:
+• Tryb do czytania na górnym pasku
+• Menu z klawiatury
+• Wszystkie polecenia w menu „/”
+• Wybór dnia w agendzie
+• Miesiąc na komputerze znów z tytułami
+• Android: Wstecz najpierw oddala
+• Bezpieczniejsze usuwanie
+• Okna mówią, co jest nie tak
+• Na miarę telefonu
+• Poprawki
+• Strona pobierania
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.15.0
