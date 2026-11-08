@@ -3573,7 +3573,10 @@ pickers (Android, Windows, GTK / KDE, the portal, the browser's) speak the syste
   the text left under 40 % of it, or a wrapping group such as the accent swatches, or a text
   field); each row decides alone (at 412 px Light background, Dark background and Interface font stay
   beside their text, Theme, Text size and the swatches go under it; at 360 px Dark background
-  goes under too; a long translation stacks by itself). Under its text a control fills the row:
+  goes under too; a long translation stacks by itself). A wrapping group fills the row up to
+  `ShellSettingRow.evenWrapWidth()`: the accent swatches are one line wherever they fit (the
+  seven presets and "Custom…": 8 × 44 px at 412 px, the intro's seven), else even lines (4 + 4 at
+  360 px, not 7 + 1). Under its text a control fills the row:
   a segmented control (its segments as even as their labels allow: the narrow ones share one
   width, none is cut) and a lone framed button (one beside a badge or another button, and a text
   button, keep their width), so every row ends at the same right edge. A segmented control's selected segment

@@ -585,11 +585,16 @@ Item {
                     }
                 }
                 ShellSettingRow {
+                    id: accentRow
                     title: qsTr("Accent colour")
                     description: qsTr("Marks today, the current tab and highlights. Warnings and deleting stay red.")
                     Flow {
                         objectName: "accentSwatches"
-                        Layout.maximumWidth: 7 * (Theme.touchUi ? Theme.touchTarget : 34)
+                        // The presets and "Custom…" on one line (8 × 44 = 352 px fit a 412-px
+                        // phone), else even lines. (Filling up to that, not a fixed width: a fixed
+                        // one wider than the row widened the whole page.)
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: accentRow.evenWrapWidth(root.accents.length + 1, Theme.touchUi ? Theme.touchTarget : 34)
                         spacing: 0
                         Repeater {
                             model: root.accents
