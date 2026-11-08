@@ -2339,12 +2339,22 @@
 <context>
     <name>CalendarMonthGrid</name>
     <message>
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="233"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="66"/>
+        <source>cancelled</source>
+        <translation>anulowane</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="66"/>
+        <source>done</source>
+        <translation>zrobione</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="251"/>
         <source>today</source>
         <translation>dziś</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="235"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="253"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n wpis</numerusform>
@@ -2353,12 +2363,12 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="237"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="255"/>
         <source>journal</source>
         <translation>dziennik</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="350"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="386"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n</numerusform>
@@ -6317,129 +6327,129 @@
 <context>
     <name>HabitCard</name>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="265"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="271"/>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="116"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="122"/>
         <source>%1 today: %2</source>
         <translation>%1 dziś: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="73"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="77"/>
         <source>before the start</source>
         <translation>przed początkiem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="215"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="221"/>
         <source>completed: %1</source>
         <translation>wykonano: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="168"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="174"/>
         <source>Defined twice — this definition is not used</source>
         <translation>Zapisany dwa razy — ta definicja nie jest używana</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="68"/>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="117"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="72"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="123"/>
         <source>done</source>
         <translation>zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="341"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="347"/>
         <source>Done</source>
         <translation>Zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="302"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="308"/>
         <source>Done today</source>
         <translation>Zrobione dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="71"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="75"/>
         <source>due today</source>
         <translation>na dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="72"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="76"/>
         <source>future</source>
         <translation>przyszły dzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="214"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="220"/>
         <source>longest: %1</source>
         <translation>najdłuższa: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="70"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="74"/>
         <source>missed</source>
         <translation>opuszczone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="180"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="186"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="351"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="357"/>
         <source>No check</source>
         <translation>Bez odhaczenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="315"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="321"/>
         <source>No check today</source>
         <translation>Bez odhaczenia dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="117"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="123"/>
         <source>not done</source>
         <translation>niezrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="75"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="79"/>
         <source>nothing due</source>
         <translation>nic zaplanowanego</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="323"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="329"/>
         <source>Open its definition</source>
         <translation>Otwórz definicję</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="358"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="364"/>
         <source>Open the journal of this day</source>
         <translation>Otwórz dziennik tego dnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="328"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="334"/>
         <source>Open today&apos;s journal</source>
         <translation>Otwórz dzisiejszy dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="169"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="175"/>
         <source>Schedule not understood: “%1”</source>
         <translation>Niezrozumiały harmonogram: „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="309"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="315"/>
         <source>Skip today</source>
         <translation>Pomiń dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="69"/>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="117"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="73"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="123"/>
         <source>skipped</source>
         <translation>pominięte</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="346"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="352"/>
         <source>Skipped (no streak lost)</source>
         <translation>Pominięte (seria trwa)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/HabitCard.qml" line="214"/>
+        <location filename="../src/app/qml/planning/HabitCard.qml" line="220"/>
         <source>Streak: %1</source>
         <translation>Seria: %1</translation>
     </message>
@@ -6454,12 +6464,12 @@
     <message>
         <location filename="../src/app/qml/views/HabitsView.qml" line="195"/>
         <location filename="../src/app/qml/views/HabitsView.qml" line="198"/>
-        <location filename="../src/app/qml/views/HabitsView.qml" line="267"/>
+        <location filename="../src/app/qml/views/HabitsView.qml" line="268"/>
         <source>Add habit</source>
         <translation>Dodaj nawyk</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/HabitsView.qml" line="266"/>
+        <location filename="../src/app/qml/views/HabitsView.qml" line="267"/>
         <source>Add one here, or give any point the property “habit:: every day” (or “mon, wed, fri”, “3 times a week”). Tick it here or in the journal: “- [x] Name #habit”.</source>
         <translation>Dodaj go tutaj albo dopisz do dowolnego punktu właściwość „habit:: codziennie” (albo „pn, śr, pt”, „3 razy w tygodniu”). Odhaczaj tutaj albo w dzienniku: „- [x] Nazwa #nawyk”.</translation>
     </message>
@@ -6510,7 +6520,7 @@
         <translation>Następny miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/HabitsView.qml" line="265"/>
+        <location filename="../src/app/qml/views/HabitsView.qml" line="266"/>
         <source>No habits yet</source>
         <translation>Nie ma jeszcze nawyków</translation>
     </message>
@@ -15892,7 +15902,7 @@
 <context>
     <name>TasksRow</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="449"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="454"/>
         <source>Blocks %n task(s)</source>
         <translation>
             <numerusform>Blokuje %n zadanie</numerusform>
@@ -15901,67 +15911,67 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="431"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="436"/>
         <source>Waits for: %1</source>
         <translation>Czeka na: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="441"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="446"/>
         <source>Dependency cycle</source>
         <translation>Cykl zależności</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="441"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="446"/>
         <source>Missing dependency</source>
         <translation>Brak zależności</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="177"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="181"/>
         <source>Journal · %1</source>
         <translation>Dziennik · %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="181"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="185"/>
         <source>Highest</source>
         <translation>Najwyższy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="182"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="186"/>
         <source>High</source>
         <translation>Wysoki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="183"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="187"/>
         <source>Medium</source>
         <translation>Średni</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="184"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="188"/>
         <source>Low</source>
         <translation>Niski</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="185"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="189"/>
         <source>Lowest</source>
         <translation>Najniższy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="191"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="195"/>
         <source>In progress</source>
         <translation>W toku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="192"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="196"/>
         <source>Waiting</source>
         <translation>Oczekujące</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="193"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="197"/>
         <source>Cancelled</source>
         <translation>Anulowane</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="211"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="216"/>
         <source>%n subtask(s) folded</source>
         <translation>
             <numerusform>%n podzadanie zwinięte</numerusform>
@@ -15970,12 +15980,12 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="212"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="217"/>
         <source>due %1</source>
         <translation>termin %1</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="459"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="464"/>
         <source>%n subtask(s)</source>
         <translation>
             <numerusform>%n podzadanie</numerusform>
@@ -15984,37 +15994,37 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="463"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="468"/>
         <source>Show subtasks, %1</source>
         <translation>Pokaż podzadania, %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="463"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="468"/>
         <source>Hide subtasks, %1</source>
         <translation>Ukryj podzadania, %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="210"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="215"/>
         <source>subtask</source>
         <translation>podzadanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="213"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="218"/>
         <source>overdue</source>
         <translation>zaległe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="261"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="266"/>
         <source>Done: %1</source>
         <translation>Zrobione: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="392"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="397"/>
         <source>%1, overdue</source>
         <translation>%1, zaległe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="407"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="412"/>
         <source>from %1</source>
         <translation>od %1</translation>
     </message>
@@ -16103,63 +16113,63 @@
 <context>
     <name>TasksView</name>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="75"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="79"/>
         <source>Timer stopped</source>
         <translation>Zatrzymano licznik czasu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="75"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="79"/>
         <source>Timer started</source>
         <translation>Uruchomiono licznik czasu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="373"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="378"/>
         <source>Dependency added</source>
         <translation>Dodano zależność</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/TasksView.qml" line="27"/>
-        <location filename="../src/app/qml/views/TasksView.qml" line="196"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="200"/>
         <source>Tasks</source>
         <translation>Zadania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="66"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="70"/>
         <source>Task reopened</source>
         <translation>Zadanie ponownie otwarte</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="66"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="70"/>
         <source>Task done</source>
         <translation>Zadanie zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="61"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="65"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="70"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="74"/>
         <source>Status changed</source>
         <translation>Zmieniono status</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="226"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="230"/>
         <source>The journal could not be saved.</source>
         <translation>Nie udało się zapisać dziennika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="229"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="233"/>
         <source>Task added: %1</source>
         <translation>Dodano zadanie: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="229"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="233"/>
         <source>Task added to today&apos;s journal</source>
         <translation>Dodano zadanie do dzisiejszego dziennika</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="244"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="248"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n otwarte</numerusform>
@@ -16168,7 +16178,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="245"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="249"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n zaległe</numerusform>
@@ -16177,7 +16187,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="246"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="250"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n na dziś</numerusform>
@@ -16186,22 +16196,22 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="338"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="343"/>
         <source>No tasks yet</source>
         <translation>Nie ma jeszcze zadań</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="338"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="343"/>
         <source>No tasks match the filters</source>
         <translation>Żadne zadanie nie pasuje do filtrów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="340"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="345"/>
         <source>Write “- [ ] something” in any note, or type a task above — “tomorrow at 9” adds a reminder.</source>
         <translation>Wpisz „- [ ] coś” w dowolnej notatce albo wpisz zadanie powyżej — „jutro o 9” doda przypomnienie.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="341"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="346"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>Filtry ukrywają %n zadanie w notatniku.</numerusform>
@@ -16210,12 +16220,12 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="342"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="347"/>
         <source>Clear filters</source>
         <translation>Wyczyść filtry</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/TasksView.qml" line="379"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="384"/>
         <source>Query copied — paste it into a page</source>
         <translation>Skopiowano zapytanie — wklej je na stronę</translation>
     </message>

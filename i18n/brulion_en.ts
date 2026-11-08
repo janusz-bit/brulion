@@ -260,7 +260,7 @@
 <context>
     <name>CalendarMonthGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="235"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="253"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -268,7 +268,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="350"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="386"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -1509,7 +1509,7 @@
 <context>
     <name>TasksRow</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="211"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="216"/>
         <source>%n subtask(s) folded</source>
         <translation>
             <numerusform>%n subtask folded</numerusform>
@@ -1517,7 +1517,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="449"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="454"/>
         <source>Blocks %n task(s)</source>
         <translation>
             <numerusform>Blocks %n task</numerusform>
@@ -1525,7 +1525,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/TasksRow.qml" line="459"/>
+        <location filename="../src/app/qml/planning/TasksRow.qml" line="464"/>
         <source>%n subtask(s)</source>
         <translation>
             <numerusform>%n subtask</numerusform>
@@ -1555,7 +1555,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="244"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="248"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -1563,7 +1563,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="245"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="249"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -1571,7 +1571,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="246"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="250"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -1579,7 +1579,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="341"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="346"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>
