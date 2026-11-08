@@ -5,6 +5,7 @@
 #include "commandmodel.h"
 #include "demovault.h"
 #include "keyboardinsets.h"
+#include "pagecontroller.h"
 #include "shortcutmap.h"
 #include "traypopup.h"
 #include "uidriver.h"
@@ -7486,6 +7487,47 @@ void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check 
     app->goHome();
 }
 
+/// 5n. The views a route leaves go with their editors: ShellRouteView's Loader detaches the old
+///     view and deletes it later (deleteLater), and nothing — the tabs, their view states, the
+///     side panel, the history — may keep it. The running self-test never lets the event loop run
+///     those deletions (nested event processing does not), so the old views pile up while it runs
+///     (26 PageViews at one moment); the check runs them itself once the journal is shown again —
+///     the event loop's next turn in the app — and counts the PageControllers left. Rounds of
+///     pages and views one after another must not leave more than the first round did.
+void checkViewsLetGo(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const QStringList pages{u"Projekty/Remont mieszkania.md"_s, u"Przepisy.md"_s};
+    const QStringList views{u"tasks"_s, u"calendar"_s, u"allPages"_s, u"search"_s, u"graph"_s, u"habits"_s};
+    int waiting = 0;
+    const auto round = [&] {
+        for (const QString &page : pages) {
+            for (const QString &v : views) {
+                app->navigate({{u"view"_s, v}});
+                waitFor([&] { return app->currentView() == v; });
+                settle(30);
+                app->openPage(page);
+                waitFor([&] { return shownPageEditor(window, nullptr, page).first != nullptr; });
+            }
+        }
+        app->goHome();
+        waitFor([&] { return app->currentView() == u"journals"; });
+        settle(100);
+        waiting = editor::PageController::liveCount();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        settle(50);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        return editor::PageController::liveCount();
+    };
+    const int first = round();
+    const int firstWaiting = waiting;
+    const int second = round();
+    const int third = round();
+    std::fprintf(stderr, "selftest: page controllers after each round: %d, %d, %d (%d before the deletions ran)\n",
+                 first, second, third, firstWaiting);
+    check(firstWaiting > first, "the views a route left wait for the event loop to delete them");
+    check(second <= first && third <= first, "the views a route left are deleted with their editors");
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -8473,6 +8515,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
               "the tray click setting is shown on desktops (enabled with a tray)");
         app->goHome();
     }
+
+    // 5n. The views a route leaves are deleted with their editors (nothing keeps them).
+    checkViewsLetGo(window, app, check);
 
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
     QTimer::singleShot(0, app, [app] { app->closeVault(); });

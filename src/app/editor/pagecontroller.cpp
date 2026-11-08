@@ -190,7 +190,15 @@ std::optional<QString> joinedAfterFence(const QString &prev, const QString &next
     return QString(prev + u'\n' + next);
 }
 
+/// PageController::liveCount(): controllers are made and deleted on the GUI thread only.
+int s_liveCount = 0;
+
 } // namespace
+
+int PageController::liveCount()
+{
+    return s_liveCount;
+}
 
 PageController::PageController(QObject *parent) : QObject(parent), m_model(new BlockListModel(this)), m_undo(new QUndoStack(this))
 {
@@ -239,10 +247,12 @@ PageController::PageController(QObject *parent) : QObject(parent), m_model(new B
     };
 #endif
     rebuildPalette();
+    ++s_liveCount;
 }
 
 PageController::~PageController()
 {
+    --s_liveCount;
     flush();
     showFile(nullptr, QString());
 }

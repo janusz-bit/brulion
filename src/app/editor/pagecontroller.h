@@ -215,6 +215,9 @@ class PageController : public QObject {
 public:
     explicit PageController(QObject *parent = nullptr);
     ~PageController() override;
+    /// The PageControllers alive in this process (the GUI thread's): the shell self-test checks
+    /// that the views it leaves let theirs go.
+    static int liveCount();
 
     EditorHost *host() const { return m_host; }
     void setHost(EditorHost *host);

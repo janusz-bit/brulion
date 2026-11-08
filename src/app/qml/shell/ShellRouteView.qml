@@ -5,7 +5,9 @@ import Brulion
 // ShellRouteView — shows the view component for a route (a tab's in a ShellTabPane — the main
 // window's panes, a page's own window —, AppController.sidePanelRoute in the side panel). The view
 // instance is kept while only the route's parameters change (another page, another day; another tab
-// showing the same view) and replaced when the view changes, with a short fade.
+// showing the same view) and replaced when the view changes, with a short fade. The Loader detaches
+// the old view and deletes it on the event loop's next turn (deleteLater), its editor with it;
+// nothing else keeps a view (the shell self-test's "5n").
 //
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and

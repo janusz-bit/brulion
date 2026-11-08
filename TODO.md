@@ -239,7 +239,3 @@ Details in docs/PERFORMANCE.md, "Next steps":
   the graphics card done, L16b): on a real phone with a large notebook panning, zooming and
   dragging pages while the layout runs; Windows with a graphics card (Direct3D 11) and the browser
   on a phone; measuring on a Raspberry Pi (software rendering) and in the Android emulator.
-* **Views that the shell's Loader detached stay in memory** — after switching to another view the
-  old `PageView` (with the editor, the page controller and its file) is not destroyed: in
-  `tst_shell_qml` there are 26 of them at one moment, the same before QML was compiled to C++.
-  Check what holds them (ShellRouteView, tabs, view state) and release them.
