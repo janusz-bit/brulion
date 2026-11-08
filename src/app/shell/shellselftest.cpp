@@ -5557,6 +5557,98 @@ void checkCleanup(QQuickWindow *window, AppController *app, const Check &check)
     app->goHome();
 }
 
+/// The sync center's conflicts: on a narrow window (the phone run) a conflict opened from the list
+/// goes through the route, so Back returns to the list, not out of the sync center — also when
+/// Conflicts was reached by the overview's "Merge" from a route with another tab —, and "Keep mine"
+/// goes back to the list too. On a wide window the list stays beside the resolver (no route).
+void checkSyncConflicts(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    WorkspaceSync *sync = ws->sync();
+    const QString note = u"Zakupy na weekend.md"_s;
+    const QString copy = u"Zakupy na weekend.sync-conflict-20261013-184500-LAPTOP7.md"_s;
+    ws->writeFile(note, u"- mleko\n- chleb żytni\n"_s);
+    ws->writeFile(copy, u"- mleko\n- chleb\n- ser żółty\n"_s);
+    check(sync && waitFor([&] { return sync->conflictCopies().contains(copy); }, 5000),
+          "a conflict copy waits in the sync center");
+    if (!sync)
+        return;
+    const auto view = [app] { return app->currentView(); };
+    const auto routeCopy = [app] { return app->currentRoute().value(u"copy"_s).toString(); };
+    const auto shownType = [window](const char *type) {
+        return findShown(window->contentItem(), [type](QQuickItem *item) { return isA(item, type); });
+    };
+    // A button shown with this text (maybe below the fold of a phone's page), and a press on it.
+    const auto shownButton = [window](const QString &text) {
+        return uidriver::topmost(window, [&text](QQuickItem *item) {
+            return isA(item, "BButton") && item->property("text").toString() == text;
+        });
+    };
+    const auto press = [&](QQuickItem *item) {
+        uidriver::scrollIntoView(window, item);
+        tapOrClick(window, pointIn(item), touch);
+    };
+    // A conflict's row in the list.
+    const auto conflictRow = [&]() -> QQuickItem * {
+        QQuickItem *list = shownType("SyncConflictList");
+        return list ? findShown(list, [](QQuickItem *item) { return isA(item, "BListItem"); }) : nullptr;
+    };
+    const bool narrow = [&] {
+        app->navigate({{u"view"_s, u"sync"_s}, {u"tab"_s, u"nextcloud"_s}});
+        settle(300);
+        app->navigate({{u"view"_s, u"sync"_s}, {u"tab"_s, u"overview"_s}});
+        settle(400);
+        QQuickItem *syncView = shownType("SyncView");
+        return syncView && syncView->width() < 900;
+    }();
+    // The overview's "Merge" chooses the Conflicts tab here, not in the route.
+    QQuickItem *merge = nullptr;
+    check(waitFor([&] { return (merge = shownButton(QCoreApplication::translate("SyncView", "Merge"))) != nullptr; }),
+          "the sync center's overview offers to merge the conflict");
+    if (merge)
+        press(merge);
+    QQuickItem *row = nullptr;
+    check(waitFor([&] { return (row = conflictRow()) != nullptr; }), "“Merge” shows the list of conflicts");
+    if (row)
+        tapOrClick(window, pointIn(row), touch);
+    check(waitFor([&] { return shownType("SyncConflictResolver") != nullptr; }), "a tap on a conflict opens it");
+    if (narrow) {
+        check(routeCopy() == copy && conflictRow() == nullptr,
+              "on a narrow window the conflict opens through the route, in place of the list");
+        sendKey(window, Qt::Key_Back);
+        check(waitFor([&] { return view() == u"sync" && routeCopy().isEmpty() && conflictRow() != nullptr; })
+                      && shownType("SyncConflictResolver") == nullptr,
+              "Back from a conflict returns to the list, in the sync center");
+        if ((row = conflictRow()))
+            tapOrClick(window, pointIn(row), touch);
+        waitFor([&] { return routeCopy() == copy; });
+    } else {
+        check(routeCopy().isEmpty() && conflictRow() != nullptr, "on a wide window the list stays beside the conflict");
+    }
+    // "Keep mine": the copy goes to the trash; a narrow window goes back to the list.
+    QQuickItem *keep = nullptr;
+    check(waitFor([&] {
+              return (keep = shownButton(QCoreApplication::translate("SyncConflictResolver", "Keep mine"))) != nullptr;
+          }),
+          "the conflict offers “Keep mine”");
+    if (keep)
+        press(keep);
+    check(waitFor([&] { return !sync->conflictCopies().contains(copy); }) && waitFor([&] {
+              return view() == u"sync" && routeCopy().isEmpty() && shownType("SyncConflictResolver") == nullptr;
+          }),
+          "a resolved conflict leaves the resolver for the list, in the sync center");
+
+    // The notebook as it was.
+    for (const QVariant &item : ws->trashItems()) {
+        const QVariantMap entry = item.toMap();
+        if (entry.value(u"original"_s).toString() == copy)
+            ws->deleteForever(entry.value(u"trashPath"_s).toString());
+    }
+    ws->deleteForever(ws->deletePage(note));
+    app->goHome();
+}
+
 /// "Backups": the settings' section with real input: a backup made with its button, the row of
 /// the list, "Restore" through the confirmation with its counts, the note back; "Delete" asks first.
 void checkBackups(QQuickWindow *window, AppController *app, const Check &check)
@@ -8158,6 +8250,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     checkLogsAndSyncDetails(window, app, check);
     closeMenus(window);
     app->goHome();
+    // 5c'. The sync center's conflicts: Back on a phone returns to the list.
+    checkSyncConflicts(window, app, check);
+    closeMenus(window);
 
     // 5d. The notebook switcher: to the documentation and back with one tap / click each.
     checkNotebookSwitcher(window, app, check);

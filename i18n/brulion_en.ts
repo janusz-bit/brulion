@@ -1255,7 +1255,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5746"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5838"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -1285,9 +1285,9 @@
 <context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="298"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="307"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="320"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="292"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="301"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="314"/>
         <source>%n element(s)</source>
         <translation>
             <numerusform>%n element</numerusform>
@@ -1295,7 +1295,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="468"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="462"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Changes made on one side only are merged already. Decide the %n place changed on both sides.</numerusform>
@@ -1409,7 +1409,7 @@
 <context>
     <name>SyncView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="256"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="279"/>
         <source>%n note(s) changed on two devices at once</source>
         <translation>
             <numerusform>%n note changed on two devices at once</numerusform>
@@ -1417,7 +1417,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="350"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="373"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n note with two versions</numerusform>

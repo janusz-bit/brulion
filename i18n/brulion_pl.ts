@@ -298,7 +298,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellRouteTitles.qml" line="55"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6111"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6203"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
@@ -414,7 +414,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="817"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7156"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7248"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
@@ -11581,7 +11581,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="723"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7036"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7128"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12364,7 +12364,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="319"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5618"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5710"/>
         <source>Restore</source>
         <translation>Przywróć</translation>
     </message>
@@ -12375,7 +12375,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellBackupSettings.qml" line="330"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5647"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5739"/>
         <source>Delete</source>
         <translation>Usuń</translation>
     </message>
@@ -12521,7 +12521,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="126"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7149"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7241"/>
         <source>Move “%1”</source>
         <translation>Przenieś „%1”</translation>
     </message>
@@ -12824,7 +12824,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="6337"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="6429"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -13024,7 +13024,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="32"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5746"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5838"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n plik do zapisania w notatniku</numerusform>
@@ -13043,7 +13043,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="36"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="5680"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5772"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -13600,7 +13600,7 @@
         <location filename="../src/app/io/ioselftest.cpp" line="372"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3089"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="3715"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="7865"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="7957"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -13878,13 +13878,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="112"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8230"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8325"/>
         <source>Opening the notebook…</source>
         <translation>Otwieranie notatnika…</translation>
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8220"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8315"/>
         <source>Open a notebook to see its tasks and reminders.</source>
         <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
     </message>
@@ -13965,159 +13965,154 @@
 <context>
     <name>SyncConflictResolver</name>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="35"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="36"/>
         <source>Copy from %1</source>
         <translation>Kopia z urządzenia %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="35"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="36"/>
         <source>Copy</source>
         <translation>Kopia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="87"/>
-        <source>Back to the list</source>
-        <translation>Wróć do listy</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="115"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="109"/>
         <source>other version from “%1”</source>
         <translation>druga wersja z „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="124"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="118"/>
         <source>Open the note</source>
         <translation>Otwórz notatkę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="132"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="126"/>
         <source>Open the drawing</source>
         <translation>Otwórz rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="150"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="144"/>
         <source>The drawing was deleted on this device while it changed on another one. The other version is in the copy.</source>
         <translation>Rysunek został usunięty na tym urządzeniu, gdy zmieniał się na innym. Druga wersja jest w kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="151"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="145"/>
         <source>The note was deleted on this device while it changed on another one. The other version is in the copy.</source>
         <translation>Notatka została usunięta na tym urządzeniu, gdy zmieniała się na innym. Druga wersja jest w kopii.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="153"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="147"/>
         <source>This drawing changed on two devices at the same time. Your version is in the drawing, the other one in a copy next to it. Nothing is lost until you decide.</source>
         <translation>Ten rysunek zmienił się jednocześnie na dwóch urządzeniach. Twoja wersja jest w rysunku, druga w kopii obok. Nic nie zginie, dopóki nie zdecydujesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="155"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="149"/>
         <source>This file changed on two devices at the same time. Nothing is lost until you decide.</source>
         <translation>Ten plik zmienił się jednocześnie na dwóch urządzeniach. Nic nie zginie, dopóki nie zdecydujesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="156"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="150"/>
         <source>This note changed on two devices at the same time. Your version is in the note, the other one in a copy next to it. Nothing is lost until you decide.</source>
         <translation>Ta notatka zmieniła się jednocześnie na dwóch urządzeniach. Twoja wersja jest w notatce, druga w kopii obok. Nic nie zginie, dopóki nie zdecydujesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="166"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="160"/>
         <source>The copy has the same drawing</source>
         <translation>Kopia ma ten sam rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="167"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="161"/>
         <source>Everything in the copy is already in the drawing</source>
         <translation>Wszystko z kopii jest już w rysunku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="168"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="162"/>
         <source>The copy is the same as the note</source>
         <translation>Kopia jest taka sama jak notatka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="169"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="163"/>
         <source>The copy is an older version of this note</source>
         <translation>Kopia to starsza wersja tej notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="171"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="165"/>
         <source>Nothing differs. The copy can simply go.</source>
         <translation>Nic się nie różni. Kopię można po prostu usunąć.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="172"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="166"/>
         <source>Keeping yours loses nothing.</source>
         <translation>Zachowując swoją wersję, nic nie stracisz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="173"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="167"/>
         <source>Nothing differs (line endings aside). The copy can simply go.</source>
         <translation>Nic się nie różni (poza znakami końca wiersza). Kopię można po prostu usunąć.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="174"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="168"/>
         <source>Everything in it is already contained in your version. Keeping yours loses nothing.</source>
         <translation>Cała jej treść jest już w Twojej wersji. Zachowując swoją, nic nie stracisz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="176"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="191"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="170"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="185"/>
         <source>Remove the copy</source>
         <translation>Usuń kopię</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="188"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="182"/>
         <source>Only the notes around the drawing differ</source>
         <translation>Różnią się tylko notatki wokół rysunku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="189"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="183"/>
         <source>Everything drawn in the copy is already in your drawing, but the notes around it (Obsidian&apos;s frontmatter, the back of the drawing, links) differ. Carry over what you need in Obsidian, then remove the copy.</source>
         <translation>Wszystko, co narysowano w kopii, jest już w twoim rysunku, ale notatki wokół niego (frontmatter, tył rysunku i linki z Obsidiana) są inne. Przenieś w Obsidianie to, czego potrzebujesz, a potem usuń kopię.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="213"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="207"/>
         <source>Two versions of a file</source>
         <translation>Dwie wersje pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="214"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="208"/>
         <source>This file cannot be merged line by line. Keep one of the versions; the other goes to the trash.</source>
         <translation>Tego pliku nie da się scalić wiersz po wierszu. Zachowaj jedną z wersji; druga trafi do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="55"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="206"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="294"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="524"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="537"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="56"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="200"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="288"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="518"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="531"/>
         <source>This device</source>
         <translation>To urządzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="281"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="275"/>
         <source>Two versions of a drawing</source>
         <translation>Dwie wersje rysunku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="283"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="277"/>
         <source>Merging keeps the elements of both versions in your drawing (elements erased on one device only come back). The notes around the drawing (Obsidian) differ as well: yours stay, and so does the copy until you carry its notes over.</source>
         <translation>Scalenie łączy elementy obu wersji w twoim rysunku (elementy starte tylko na jednym urządzeniu wrócą). Różnią się też notatki wokół rysunku (Obsidian): zostają twoje, a kopia zostaje, dopóki nie przeniesiesz z niej notatek.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="285"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="279"/>
         <source>Merging keeps the elements of both versions. Elements erased on one device only come back – erase them again.</source>
         <translation>Scalenie zachowa elementy obu wersji. Elementy starte tylko na jednym urządzeniu wrócą – zetrzyj je jeszcze raz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="286"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="280"/>
         <source>Brulion cannot merge these drawings: one has elements it does not edit (such as frames) or cannot be read as a drawing. Keep one of the versions.</source>
         <translation>Brulion nie scali tych rysunków: jeden ma elementy, których Brulion nie edytuje (np. ramki), albo nie da się go odczytać jako rysunku. Zachowaj jedną z wersji.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="298"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="307"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="320"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="292"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="301"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="314"/>
         <source>%n element(s)</source>
         <translation>
             <numerusform>%n element</numerusform>
@@ -14126,41 +14121,41 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="321"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="315"/>
         <source>%1 in both, %2 only here, %3 only in the copy</source>
         <translation>wspólne: %1, tylko tutaj: %2, tylko w kopii: %3</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="332"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="326"/>
         <source>Merge drawings</source>
         <extracomment>Polish: &quot;Scal rysunki&quot;</extracomment>
         <translation>Scal rysunki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="429"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="423"/>
         <source>Show</source>
         <translation>Pokaż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="46"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="509"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="526"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="47"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="503"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="520"/>
         <source>Merge</source>
         <extracomment>Polish: &quot;Scal&quot;</extracomment>
         <translation>Scal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="47"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="48"/>
         <source>Compare</source>
         <translation>Porównaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="466"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="460"/>
         <source>The changes of both versions fit together. Check your note after merging below, then merge.</source>
         <translation>Zmiany z obu wersji do siebie pasują. Sprawdź poniżej, jak notatka będzie wyglądać po scaleniu, i scal.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="468"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="462"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Zmiany wprowadzone tylko po jednej stronie są już scalone. Zdecyduj o %n miejscu zmienionym po obu stronach.</numerusform>
@@ -14169,76 +14164,77 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="469"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="463"/>
         <source>For every difference choose which version to keep – or both, or edit the text yourself.</source>
         <translation>Przy każdej różnicy wybierz, którą wersję zachować – albo obie, albo popraw tekst samodzielnie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="475"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="469"/>
         <source>Compared with the common version from %1 in this device&apos;s history.</source>
         <translation>Porównano ze wspólną wersją (%1) z historii tego urządzenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="486"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="480"/>
         <source>Use the automatic merge</source>
         <translation>Użyj automatycznego scalenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="486"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="480"/>
         <source>Decide myself</source>
         <translation>Wybierz ręcznie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="502"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="496"/>
         <source>Now</source>
         <translation>Teraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="316"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="503"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="310"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="497"/>
         <source>After merging</source>
         <translation>Po scaleniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="554"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="548"/>
         <source>Keep it deleted</source>
         <extracomment>Polish: &quot;Zachowaj moją&quot; (keep my version of the note)</extracomment>
         <translation>Pozostaw usuniętą</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="554"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="548"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5632"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="560"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="554"/>
         <source>Restore from the copy</source>
         <extracomment>Polish: &quot;Zachowaj kopię&quot;</extracomment>
         <translation>Przywróć z kopii</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="560"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="574"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="554"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="568"/>
         <source>Keep the copy</source>
         <translation>Zachowaj kopię</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="568"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="562"/>
         <source>Keep the copy?</source>
         <translation>Zachować kopię?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="570"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="564"/>
         <source>“%1” gets the drawing from the copy. Your current version stays in its history.</source>
         <translation>„%1” otrzyma rysunek z kopii. Twoja obecna wersja zostanie w jego historii.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="572"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="566"/>
         <source>“%1” gets the content of the copy. Your current version goes to the trash.</source>
         <translation>„%1” otrzyma treść kopii. Twoja obecna wersja trafi do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="573"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="567"/>
         <source>“%1” gets the content of the copy. Your current version stays in the note&apos;s history.</source>
         <translation>„%1” otrzyma treść kopii. Twoja obecna wersja zostanie w historii notatki.</translation>
     </message>
@@ -14781,137 +14777,137 @@
 <context>
     <name>SyncView</name>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="25"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="27"/>
         <source>Sync</source>
         <translation>Synchronizacja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="124"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="147"/>
         <source>Overview</source>
         <translation>Przegląd</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="127"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="150"/>
         <source>Conflicts</source>
         <translation>Konflikty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="147"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="170"/>
         <source>Brulion keeps your notes as plain Markdown files in the folder “%1”. To have the same notes on several devices, choose one of two ways:</source>
         <translation>Brulion przechowuje notatki jako zwykłe pliki Markdown w folderze „%1”. Aby mieć te same notatki na kilku urządzeniach, wybierz jeden z dwóch sposobów:</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="148"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="171"/>
         <source>Open a notebook to set up syncing.</source>
         <translation>Otwórz notatnik, aby skonfigurować synchronizację.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="164"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="187"/>
         <source>Without a server: your devices exchange the files directly.</source>
         <translation>Bez serwera: urządzenia wymieniają pliki bezpośrednio.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="169"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="192"/>
         <source>Up to date</source>
         <translation>Aktualne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="169"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="192"/>
         <source>Shared</source>
         <translation>Udostępniony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="173"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="196"/>
         <source>For computers and Android phones (Syncthing-Fork).</source>
         <translation>Dla komputerów i telefonów z Androidem (Syncthing-Fork).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="174"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="197"/>
         <source>Works in your home Wi-Fi even without internet.</source>
         <translation>Działa w domowej sieci Wi-Fi nawet bez internetu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="175"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="198"/>
         <source>Not available in the browser.</source>
         <translation>Niedostępne w przeglądarce.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="175"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="198"/>
         <source>Nothing to sign up for; your notes never leave your devices.</source>
         <translation>Nie trzeba zakładać konta; notatki nigdy nie opuszczają Twoich urządzeń.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="179"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="202"/>
         <source>Show the status</source>
         <translation>Pokaż stan</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="179"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="202"/>
         <source>Set up Syncthing</source>
         <translation>Skonfiguruj Syncthing</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="190"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="213"/>
         <source>Through your own server (WebDAV) – also in the browser.</source>
         <translation>Przez własny serwer (WebDAV) – także w przeglądarce.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="196"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="219"/>
         <source>Syncing</source>
         <translation>Synchronizowanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="197"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="220"/>
         <source>Offline</source>
         <translation>Offline</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="198"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="221"/>
         <source>Problem</source>
         <translation>Problem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="199"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="222"/>
         <source>On</source>
         <translation>Włączona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="212"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="235"/>
         <source>Needs a Nextcloud account and an app password.</source>
         <translation>Wymaga konta Nextcloud i hasła aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="213"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="236"/>
         <source>Syncs every few minutes and right after your edits.</source>
         <translation>Synchronizuje co kilka minut i zaraz po Twoich zmianach.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="214"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="237"/>
         <source>Changes from several devices are merged line by line.</source>
         <translation>Zmiany z kilku urządzeń są scalane wiersz po wierszu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="232"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="255"/>
         <source>Choose another folder</source>
         <translation>Wybierz inny folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="233"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="256"/>
         <source>Settings</source>
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="233"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="256"/>
         <source>Set up Nextcloud</source>
         <translation>Skonfiguruj Nextcloud</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="241"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="264"/>
         <source>Sync now</source>
         <translation>Synchronizuj teraz</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="256"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="279"/>
         <source>%n note(s) changed on two devices at once</source>
         <translation>
             <numerusform>%n notatka zmieniła się jednocześnie na dwóch urządzeniach</numerusform>
@@ -14920,42 +14916,43 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="257"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="280"/>
         <source>Both versions were kept. Merge them so that only one remains.</source>
         <translation>Zachowano obie wersje. Scal je, aby została tylko jedna.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="259"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="282"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="5607"/>
         <source>Merge</source>
         <translation>Scal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="272"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="295"/>
         <source>Use one way per notebook: a folder synced by both Syncthing and Nextcloud sends every change twice and causes needless conflicts.</source>
         <translation>Używaj jednego sposobu na notatnik: folder synchronizowany jednocześnie przez Syncthing i Nextcloud wysyła każdą zmianę dwa razy i powoduje niepotrzebne konflikty.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="302"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="325"/>
         <source>Sync takes long or something fails? The event log shows every step.</source>
         <translation>Synchronizacja trwa długo albo coś się nie udaje? Rejestr zdarzeń pokazuje każdy krok.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="309"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="332"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="326"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="349"/>
         <source>No conflicts</source>
         <translation>Brak konfliktów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SyncView.qml" line="327"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="350"/>
         <source>When a note changes on two devices at the same time, the other version is kept as a copy and appears here to be merged.</source>
         <translation>Gdy notatka zmieni się jednocześnie na dwóch urządzeniach, druga wersja zostaje zachowana jako kopia i pojawia się tutaj do scalenia.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="350"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="373"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n notatka z dwiema wersjami</numerusform>
@@ -19327,7 +19324,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/editor/pagecontroller_properties.cpp" line="79"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="8036"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="8128"/>
         <source>An alias with this character cannot be used in a link</source>
         <translation>Aliasu z takim znakiem nie da się użyć w linku</translation>
     </message>

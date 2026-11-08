@@ -19,13 +19,14 @@ import Brulion
 //   * always: "Keep mine" (the copy goes to the trash) and "Keep the copy" (its content
 //     replaces the note; the old text stays in the history). Binary files: only these two.
 //
-//   SyncConflictResolver { copy: list.currentCopy; showBack: Theme.narrow; onClosed: … }
+// closed() after a resolve. No back button of its own: on narrow windows SyncView opens a
+// conflict through the route, so the top bar's ← and Android's Back return to the list.
+//
+//   SyncConflictResolver { copy: list.currentCopy; onClosed: … }
 ColumnLayout {
     id: view
 
     property string copy
-    /// A back button in the header (narrow windows show the list and the resolver one at a time).
-    property bool showBack: false
     /// "merge" | "compare"
     property string mode: "merge"
     /// Decide every difference by hand, ignoring the automatic three-way merge.
@@ -80,13 +81,6 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: Theme.space2
-        BIconButton {
-            visible: view.showBack
-            Layout.alignment: Qt.AlignTop
-            iconName: "arrow-left"
-            label: qsTr("Back to the list")
-            onClicked: view.closed()
-        }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 2
