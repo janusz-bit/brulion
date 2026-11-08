@@ -97,6 +97,8 @@ The times are local (as on the clock). A task shows its total time, e.g. “⏱ 
 
 **Status history** — in the Settings (Editor) you can turn on “Log task status changes”. Then every status change adds a line with the time to `:LOGBOOK:`, e.g. `State "DONE" from "DOING" [2026-11-03 Tue 10:25]`, and the **In progress** status starts the timer and stops it on a change to another status — as in Logseq. Off by default.
 
+An **import from Logseq** keeps the tasks' `:LOGBOOK:` drawers, so their time and status history come along. An **export to Obsidian** leaves the drawers out (Obsidian would show them as text).
+
 ## The Tasks view
 The **Tasks** view gathers tasks from the whole notebook: a quick add field, filters and the sections Overdue, Today, Tomorrow, This week, Later, No date, Done. “Show as query” turns the current filters into a [[Queries|query]] block that you can paste into a note. Clicking a tag in a task filters the list by that tag; Ctrl+click opens the tag's page, and a right click (on a phone, a long press) the tag menu: “Filter by tag”, “Open tag page”, “Tag overview”, “Open in side panel”, “Copy tag”. A right click or a long press on a marker below a task (due, scheduled, start, reminder, recurrence, priority) opens its menu; you undo the change with the **Undo** button in the notification. Below a task you also see what it waits for (“Waiting for: …” — a click opens that task), how many tasks wait for it, the progress of its subtasks and the logged time.
 

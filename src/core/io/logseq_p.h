@@ -48,9 +48,12 @@ LogseqPageProperties takeLogseqPageProperties(const QString &content);
 /// TODO/LATER -> `[ ]`, DOING/NOW/IN-PROGRESS -> `[/]`, DONE -> `[x]`, CANCELED/CANCELLED ->
 /// `[-]`, WAITING/WAIT -> `[>]`; `[#A]`/`[#B]`/`[#C]` on tasks -> ⏫/🔼/🔽; SCHEDULED: / DEADLINE:
 /// lines -> ⏳ / 📅 (+ 🔁 from a repeater) on the first line; `id::` -> ` ^id`; `collapsed::`
-/// lines and :LOGBOOK: drawers removed; `{{embed [[p]]}}` -> `![[p]]`, `{{embed ((id))}}` ->
-/// `!((id))`, `[alias]([[p]])` -> `[[p|alias]]`. Code (fences, inline code) is never changed.
-QString logseqBlocksToBrulion(const QString &content);
+/// lines removed; `{{embed [[p]]}}` -> `![[p]]`, `{{embed ((id))}}` -> `!((id))`,
+/// `[alias]([[p]])` -> `[[p|alias]]`. Code (fences, inline code) is never changed. A `:LOGBOOK:`
+/// drawer (time tracking and status history, read by Brulion as Logseq writes it) stays byte for
+/// byte with `Keep` (the import), or goes with `Remove` (an export for apps that do not read it).
+enum class LogbookDrawers { Keep, Remove };
+QString logseqBlocksToBrulion(const QString &content, LogbookDrawers logbook = LogbookDrawers::Keep);
 
 /// Logseq page name of a file name: "a___b" -> "a/b" (namespaces), legacy "a%2Fb" -> "a/b",
 /// other %XX sequences decoded, ".md" removed.

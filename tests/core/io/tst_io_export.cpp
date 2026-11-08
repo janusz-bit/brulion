@@ -187,6 +187,16 @@ private Q_SLOTS:
         QVERIFY(!iotest::entryPaths(entries).contains(root + u".brulion/config.json"_s));
     }
 
+    // Obsidian does not read Logseq's :LOGBOOK: drawers (Brulion's time tracking): they would be text.
+    void obsidianDropsLogbook()
+    {
+        ExportInput in;
+        in.files = {iotest::text(u"Praca.md"_s, u"- [x] raport\n  :LOGBOOK:\n  CLOCK: [2026-11-03 Tue 10:00:00]--"
+                                                u"[2026-11-03 Tue 10:25:00] =>  00:25:00\n  :END:\n- dalej\n"_s)};
+        const QList<FileEntry> entries = readZip(exportWith(u"obsidian-zip"_s, in).data);
+        QCOMPARE(textOf(entries, u"Brulion/Praca.md"_s), u"- [x] raport\n- dalej\n"_s);
+    }
+
     void obsidianRelativeLinks()
     {
         ExportInput in;

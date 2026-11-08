@@ -66,7 +66,8 @@ public:
 private:
     static QString toObsidian(const ExportVault &vault, const ExportVault::Note &note)
     {
-        const QString content = logseqBlocksToBrulion(note.content);
+        // Obsidian does not read Logseq's drawers: they would show as text.
+        const QString content = logseqBlocksToBrulion(note.content, LogbookDrawers::Remove);
         return replaceLinks(content, [&](const FoundLink &l) -> std::optional<QString> {
             switch (l.kind) {
             case LinkKind::BlockRef:

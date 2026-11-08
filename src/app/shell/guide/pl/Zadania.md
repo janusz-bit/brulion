@@ -97,6 +97,8 @@ Godziny są lokalne (tak jak na zegarze). Zadanie pokazuje łączny czas, np. �
 
 **Historia statusów** — w Ustawieniach (Edytor) włączysz „Zapisuj zmiany statusu zadań”. Wtedy każda zmiana statusu dopisuje do `:LOGBOOK:` wiersz z godziną, np. `State "DONE" from "DOING" [2026-11-03 Tue 10:25]`, a status **W toku** uruchamia licznik czasu i zatrzymuje go przy zmianie na inny — jak w Logsequ. Domyślnie wyłączone.
 
+**Import z Logseqa** zachowuje szufladki `:LOGBOOK:` zadań, więc ich czas i historia statusów przechodzą razem z nimi. **Eksport do Obsidiana** pomija szufladki (Obsidian pokazałby je jako tekst).
+
 ## Widok Zadania
 Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki. Kliknięcie tagu w zadaniu filtruje listę po tym tagu; Ctrl+kliknięcie otwiera stronę tagu, a prawy przycisk (na telefonie przytrzymanie) — menu tagu: „Filtruj po tagu”, „Otwórz stronę tagu”, „Widok tagu”, „Otwórz w panelu bocznym”, „Kopiuj tag”. Prawy przycisk albo przytrzymanie znacznika pod zadaniem (termin, zaplanowanie, początek, przypomnienie, powtarzanie, priorytet) otwiera jego menu; zmianę cofniesz przyciskiem **Cofnij** w powiadomieniu. Pod zadaniem widać też, na co czeka („Czeka na: …” — kliknięcie otwiera to zadanie), ile zadań czeka na nie, postęp podzadań i zapisany czas.
 

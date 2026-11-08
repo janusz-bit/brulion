@@ -253,7 +253,7 @@ struct BlockSpan {
     bool firstOpensFence = false;
 };
 
-void convertBlock(QList<text::Line> &lines, QList<bool> &removed, const BlockSpan &block)
+void convertBlock(QList<text::Line> &lines, QList<bool> &removed, const BlockSpan &block, LogbookDrawers logbook)
 {
     static const QRegularExpression marker(
             u"^(TODO|LATER|DOING|NOW|IN-PROGRESS|DONE|CANCELED|CANCELLED|WAITING|WAIT)(?=\\s|$)\\s*"_s);
@@ -279,14 +279,15 @@ void convertBlock(QList<text::Line> &lines, QList<bool> &removed, const BlockSpa
         const qsizetype i = block.rest[k];
         const QString &t = lines[i].text;
         const QStringView trimmed = QStringView(t).trimmed();
+        // Drawer lines are never converted (an `id::` or a macro in them is not the block's).
         if (logbookStart >= 0) {
-            removed[i] = true;
+            removed[i] = logbook == LogbookDrawers::Remove;
             if (trimmed.compare(u":END:", Qt::CaseInsensitive) == 0)
                 logbookStart = -1;
             continue;
         }
         if (trimmed.compare(u":LOGBOOK:", Qt::CaseInsensitive) == 0) {
-            removed[i] = true;
+            removed[i] = logbook == LogbookDrawers::Remove;
             logbookStart = k;
             continue;
         }
@@ -526,7 +527,7 @@ LogseqPageProperties takeLogseqPageProperties(const QString &content)
 
 // --- blocks --------------------------------------------------------------------------------------
 
-QString logseqBlocksToBrulion(const QString &content)
+QString logseqBlocksToBrulion(const QString &content, LogbookDrawers logbook)
 {
     QList<text::Line> lines = text::splitLines(content);
     QList<bool> removed(lines.size(), false);
@@ -536,7 +537,7 @@ QString logseqBlocksToBrulion(const QString &content)
     qsizetype paragraphLine = -1; // the previous line, when it is text of a top-level paragraph
     const auto finish = [&] {
         if (block.first >= 0)
-            convertBlock(lines, removed, block);
+            convertBlock(lines, removed, block, logbook);
         block = BlockSpan();
         blockColumn = -1;
     };

@@ -6,6 +6,7 @@
 #include "io/logseq_p.h"
 #include "io/zip.h"
 #include "markdown/frontmatter.h"
+#include "markdown/logbook.h"
 
 #include <QRegularExpression>
 #include <QTest>
@@ -194,10 +195,27 @@ private Q_SLOTS:
                 << u"- [ ] x ⏳ 2026-10-15 📅 2026-10-16 🔁 every month\n"_s;
         QTest::newRow("id and collapsed") << u"- blok z id\n  id:: "_s + Uuid + u"\n  collapsed:: true\n\t- dziecko\n"_s
                                           << u"- blok z id ^"_s + Uuid + u"\n\t- dziecko\n"_s;
-        QTest::newRow("logbook") << u"- DONE zadanie\n  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 10:00]--[2026-10-14 Wed "
-                                    u"11:00] =>  01:00:00\n"
+        // The drawer stays as written: Brulion reads Logseq's clocks and status history.
+        QTest::newRow("logbook") << u"- DONE zadanie\n  SCHEDULED: <2026-10-14 Wed>\n  :LOGBOOK:\n"
+                                    u"  CLOCK: [2026-10-14 Wed 10:00:00]--[2026-10-14 Wed 11:00:00] =>  01:00:00\n"
+                                    u"  State \"DONE\"       from \"DOING\"      [2026-10-14 Wed 11:00]\n"
                                     u"  :END:\n  dalszy tekst\n"_s
-                                 << u"- [x] zadanie\n  dalszy tekst\n"_s;
+                                 << u"- [x] zadanie ⏳ 2026-10-14\n  :LOGBOOK:\n"
+                                    u"  CLOCK: [2026-10-14 Wed 10:00:00]--[2026-10-14 Wed 11:00:00] =>  01:00:00\n"
+                                    u"  State \"DONE\"       from \"DOING\"      [2026-10-14 Wed 11:00]\n"
+                                    u"  :END:\n  dalszy tekst\n"_s;
+        QTest::newRow("logbook running clock, tabs, crlf")
+                << u"- projekt\r\n\t- NOW pisać rozdział\r\n\t  :LOGBOOK:\r\n\t  CLOCK: [2026-11-03 Tue 10:00:00]\r\n"
+                   u"\t  :END:\r\n\t  id:: abc\r\n"_s
+                << u"- projekt\r\n\t- [/] pisać rozdział ^abc\r\n\t  :LOGBOOK:\r\n\t  CLOCK: [2026-11-03 Tue 10:00:00]\r\n"
+                   u"\t  :END:\r\n"_s;
+        // Lines inside the drawer are its own: never taken as the block's id or converted.
+        QTest::newRow("logbook lines untouched")
+                << u"- TODO ż\n  :LOGBOOK:\n  id:: w-szufladzie\n  {{embed [[Strona]]}}\n  SCHEDULED: <2026-10-15 Thu>\n"
+                   u"  :END:\n"_s
+                << u"- [ ] ż\n  :LOGBOOK:\n  id:: w-szufladzie\n  {{embed [[Strona]]}}\n  SCHEDULED: <2026-10-15 Thu>\n"
+                   u"  :END:\n"_s;
+        QTest::newRow("logbook last line") << u"- DONE x\n  :LOGBOOK:\n  :END:"_s << u"- [x] x\n  :LOGBOOK:\n  :END:"_s;
         QTest::newRow("embeds")
                 << u"- {{embed [[Strona]]}}\n- {{embed ((abc-123))}}\n- `{{embed [[kod]]}}`\nTekst {{embed [[Inna]]}}\n"_s
                 << u"- ![[Strona]]\n- !((abc-123))\n- `{{embed [[kod]]}}`\nTekst ![[Inna]]\n"_s;
@@ -233,7 +251,57 @@ private Q_SLOTS:
         QCOMPARE(logseqBlocksToBrulion(input), expected);
     }
 
+    // For an export to apps that do not read Logseq's drawers (Obsidian).
+    void blocksLogbookRemoved_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("removed") << u"- DONE zadanie\n  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 10:00]--[2026-10-14 Wed "
+                                    u"11:00] =>  01:00:00\n"
+                                    u"  :END:\n  dalszy tekst\n"_s
+                                 << u"- [x] zadanie\n  dalszy tekst\n"_s;
+        QTest::newRow("lower case, crlf") << u"- DONE a\r\n  :logbook:\r\n  CLOCK: [2026-10-14 Wed 10:00]\r\n  :end:\r\n"_s
+                                          << u"- [x] a\r\n"_s;
+        QTest::newRow("unterminated kept")
+                << u"- DONE x\n  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 10:00]\n  notatka\n- następny\n"_s
+                << u"- [x] x\n  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 10:00]\n  notatka\n- następny\n"_s;
+    }
+
+    void blocksLogbookRemoved()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(logseqBlocksToBrulion(input, LogbookDrawers::Remove), expected);
+    }
+
     // --- importer ---------------------------------------------------------------------------------
+
+    // A task's time and status history from a Logseq graph reach Brulion's time tracking.
+    void importKeepsTaskTime()
+    {
+        const QString journal = u"- DONE spotkanie\n  :LOGBOOK:\n"
+                                u"  CLOCK: [2026-10-14 Wed 10:00:00]--[2026-10-14 Wed 10:25:00] =>  00:25:00\n"
+                                u"  CLOCK: [2026-10-14 Wed 11:00:00]--[2026-10-14 Wed 12:00:00] =>  01:00:00\n"
+                                u"  State \"DONE\"       from \"NOW\"        [2026-10-14 Wed 12:00]\n"
+                                u"  :END:\n- NOW pisać\n  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 13:00:00]\n  :END:\n"_s;
+        const ImportResult r = runImport(*importerById(u"logseq"),
+                                         {iotest::text(u"logseq/config.edn"_s, u"{:meta/version 1}"_s),
+                                          iotest::text(u"journals/2026_10_14.md"_s, journal)},
+                                         iotest::options());
+        const QString content = iotest::textAt(r, u"journals/2026-10-14.md"_s);
+        const markdown::Logbook done = markdown::taskLogbook(content, 0);
+        QVERIFY(done.present);
+        QCOMPARE(done.clocks.size(), 2);
+        QCOMPARE(markdown::clockedSeconds(done.clocks), 85 * 60);
+        QCOMPARE(done.changes.size(), 1);
+        QCOMPARE(done.changes.front().from, u"NOW"_s);
+        QCOMPARE(done.malformed, 0);
+        const int doing = int(content.left(content.indexOf(u"[/] pisać"_s)).count(u'\n'));
+        const markdown::Logbook running = markdown::taskLogbook(content, doing);
+        QVERIFY(running.running());
+        QCOMPARE(running.running()->start, QDateTime(QDate(2026, 10, 14), QTime(13, 0)));
+    }
+
 
     void importGraph()
     {

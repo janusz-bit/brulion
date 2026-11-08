@@ -1112,6 +1112,8 @@ and written exactly as Logseq does:
   `LATER`/`NOW` kept) to its `:LOGBOOK:`, and — as Logseq does — becoming doing starts its clock,
   leaving doing stops it. Brulion writes the line without org's leading `- `, which Markdown would
   read as a child list item; it reads both.
+* The Logseq import keeps the drawers byte for byte (only the task's first line and its
+  planning, `id::` and `collapsed::` lines are converted); the Obsidian export leaves them out.
 
 ## 6. Reminders and alarms
 

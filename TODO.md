@@ -135,9 +135,6 @@ done in the repository simply disappears from the list.
 * **CalDAV calendars** — two-way sync of tasks and events (Nextcloud, Google, Thunderbird, DAVx⁵)
   and read-only subscription to ICS calendars in the calendar view. Today there is a one-time
   iCalendar import and export.
-* **Task time when importing from Logseq** — importing a Logseq graph still drops the `:LOGBOOK:`
-  drawers, although Brulion now reads and writes them (time tracker, status history); they should
-  stay with the tasks.
 
 ## Capture
 
