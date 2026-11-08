@@ -228,7 +228,9 @@ The screenshots above show the Polish UI with the bundled sample notebook (`brul
 ## Install
 
 **Download page: <https://janusz-bit.github.io/brulion/>** — the files of the latest release for
-Android, Linux, Windows and the browser, a button for your system, and the F-Droid repository.
+Android, Linux, Windows and the browser, a button for your system, the F-Droid repository, and
+**Open in the browser**: Brulion right in your browser, nothing to download
+(<https://janusz-bit.github.io/brulion/app/>).
 
 | Platform | How |
 |---|---|
@@ -236,7 +238,7 @@ Android, Linux, Windows and the browser, a button for your system, and the F-Dro
 | **Other Linux** | AppImage (x86_64, aarch64) from [Releases](https://github.com/janusz-bit/brulion/releases); updates itself through AppImageUpdate, Gear Lever or AppImageLauncher |
 | **Windows** 10/11 (x86_64) — **test version** | the installer `Brulion-<version>-windows-x86_64-setup.exe` (for the current user, no administrator rights) or the portable `brulion-<version>-windows-x86_64.zip` from [Releases](https://github.com/janusz-bit/brulion/releases); the files are not signed (SmartScreen: "More info" → "Run anyway"); reminders as Windows notifications with Snooze/Done/OK, start at sign-in, a calendar with the day's tasks from a click on the tray icon — [docs/WINDOWS.md](docs/WINDOWS.md) |
 | **Android** (9+) | Brulion's own F-Droid repository — <https://janusz-bit.github.io/brulion/> (add it in F-Droid with the button or the QR code on that page; updates come through F-Droid) — or the APK file (arm64) from [Releases](https://github.com/janusz-bit/brulion/releases), the same APK with the same signature; a notice in the app with a link to the release also tells you about a new version (it can be turned off in the settings) — [docs/ANDROID.md](docs/ANDROID.md) |
-| **Browser** | one file, `brulion-web-<version>.html` from [Releases](https://github.com/janusz-bit/brulion/releases), opened from disk — no server, no internet — [docs/WEB.md](docs/WEB.md); on your own server (works offline after the first visit, installs as an app): `brulion-web-<version>.zip` from Releases or the NixOS module `services.brulion-web` |
+| **Browser** | open <https://janusz-bit.github.io/brulion/app/> — nothing to download: the latest release, works offline after the first visit, installs as an app, your notes stay in your browser; or one file, `brulion-web-<version>.html` from [Releases](https://github.com/janusz-bit/brulion/releases), opened from disk — no server, no internet — [docs/WEB.md](docs/WEB.md); on your own server (works offline after the first visit, installs as an app): `brulion-web-<version>.zip` from Releases or the NixOS module `services.brulion-web` |
 
 On NixOS:
 
@@ -463,7 +465,9 @@ przykładowym notatnikiem.
 ## Instalacja
 
 **Strona do pobrania: <https://janusz-bit.github.io/brulion/>** — pliki ostatniego wydania na
-Androida, Linuksa, Windows i do przeglądarki, przycisk dla Twojego systemu i repozytorium F-Droid.
+Androida, Linuksa, Windows i do przeglądarki, przycisk dla Twojego systemu, repozytorium F-Droid
+oraz **Otwórz w przeglądarce**: Brulion od razu w przeglądarce, bez pobierania
+(<https://janusz-bit.github.io/brulion/app/>).
 
 | Platforma | Jak |
 |---|---|
@@ -471,7 +475,7 @@ Androida, Linuksa, Windows i do przeglądarki, przycisk dla Twojego systemu i re
 | **Inne Linuksy** | AppImage (x86_64, aarch64) z [Wydań](https://github.com/janusz-bit/brulion/releases); aktualizuje się przez AppImageUpdate, Gear Lever albo AppImageLauncher |
 | **Windows** 10/11 (x86_64) — **wersja testowa** | instalator `Brulion-<wersja>-windows-x86_64-setup.exe` (dla bieżącego użytkownika, bez uprawnień administratora) albo przenośny `brulion-<wersja>-windows-x86_64.zip` z [Wydań](https://github.com/janusz-bit/brulion/releases); pliki nie są podpisane (SmartScreen: „Więcej informacji” → „Uruchom mimo to”); przypomnienia jako powiadomienia Windows z „Drzemka”/„Zrobione”/„OK”, autostart po zalogowaniu, kalendarz z zadaniami po kliknięciu ikony w zasobniku — [docs/WINDOWS.md](docs/WINDOWS.md) |
 | **Android** (9+) | repozytorium F-Droid Brulionu — <https://janusz-bit.github.io/brulion/> (dodaj je w F-Droid przyciskiem albo kodem QR ze strony; aktualizacje przez F-Droid) — albo plik APK (arm64) z [Wydań](https://github.com/janusz-bit/brulion/releases), ten sam APK z tym samym podpisem; o nowej wersji mówi też komunikat w aplikacji z linkiem do wydania (można wyłączyć w ustawieniach) — [docs/ANDROID.md](docs/ANDROID.md) |
-| **Przeglądarka** | jeden plik `brulion-web-<wersja>.html` z [Wydań](https://github.com/janusz-bit/brulion/releases), otwierany z dysku — bez serwera i bez internetu — [docs/WEB.md](docs/WEB.md); na własnym serwerze (działa offline po pierwszym otwarciu, instaluje się jako aplikacja): `brulion-web-<wersja>.zip` z Wydań albo moduł `services.brulion-web` |
+| **Przeglądarka** | otwórz <https://janusz-bit.github.io/brulion/app/> — bez pobierania: ostatnie wydanie, działa offline po pierwszym otwarciu, instaluje się jako aplikacja, notatki zostają w Twojej przeglądarce; albo jeden plik `brulion-web-<wersja>.html` z [Wydań](https://github.com/janusz-bit/brulion/releases), otwierany z dysku — bez serwera i bez internetu — [docs/WEB.md](docs/WEB.md); na własnym serwerze (działa offline po pierwszym otwarciu, instaluje się jako aplikacja): `brulion-web-<wersja>.zip` z Wydań albo moduł `services.brulion-web` |
 
 ### NixOS w skrócie
 

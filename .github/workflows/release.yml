@@ -13,8 +13,8 @@
 #   brulion-<version>-source.tar.gz          the tagged sources (git archive)
 #   SHA256SUMS.txt
 # and publishes the release once the tests passed and every build succeeded; then GitHub Pages get
-# the F-Droid repository with its APK and the download page with direct links to this release's
-# files (fdroid.yml; not for an APK signed with a throwaway key).
+# the F-Droid repository with its APK, the download page with direct links to this release's files
+# and its browser version in app/ (fdroid.yml; not for an APK signed with a throwaway key).
 # A tag with a suffix (v0.2.0-rc.1) becomes a pre-release (the repository keeps the last release);
 # the files carry the CMake version (0.2.0).
 name: Release
@@ -250,10 +250,10 @@ jobs:
           echo "Published $url"
           echo "### Released [$TAG]($url)" >> "$GITHUB_STEP_SUMMARY"
 
-  # The F-Droid repository on GitHub Pages, with the APK of this release (fdroid.yml): from a tag
-  # only (the github-pages environment admits main and the tags v*), not for a pre-release (the
-  # repository stays at the last release), and not for an APK signed with a throwaway key (it would
-  # not update the installed app).
+  # The F-Droid repository on GitHub Pages, with the APK and the browser version (app/) of this
+  # release (fdroid.yml): from a tag only (the github-pages environment admits main and the tags v*),
+  # not for a pre-release (the repository stays at the last release), and not for an APK signed with
+  # a throwaway key (it would not update the installed app).
   fdroid:
     name: F-Droid repository
     needs: [android, publish]

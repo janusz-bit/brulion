@@ -903,8 +903,9 @@ build with `OFF` — that the app shows nothing and asks nothing.
 
 At `https://janusz-bit.github.io/brulion/` (the project's GitHub Pages) there is Brulion's F-Droid
 repository: a page with a QR code and the key fingerprint, and the repository itself in `repo/`.
-The same page is Brulion's download page: it opens with the files of the newest release (below,
-"The download page").
+The same page is Brulion's download page: it opens with the files of the newest release and a button
+that opens its browser version, `app/` next to the page — nothing to download (below, "The download
+page").
 You add it in F-Droid (or Droid-ify, Neo Store) with the **Add to F-Droid** button on the page,
 with the QR code, or by hand (Settings → Repositories → "+": the address
 `https://janusz-bit.github.io/brulion/repo` and the fingerprint from the page). After that F-Droid
@@ -914,8 +915,9 @@ offers updates by itself.
   from GitHub updates from the repository without uninstalling (and the other way round). An APK
   from f-droid.org, if F-Droid signed it itself (below, "Signing: a decision for the owner"),
   would have a different signature.
-* The last three releases (no test releases); an APK is about 90 MB, so about 270 MB together out
-  of the 1 GB limit of a GitHub Pages site. The description, icon, screenshots and each version's
+* The last three releases (no test releases); an APK is about 90 MB, so about 270 MB together, and
+  with the browser version in `app/` (about 55 MB) about 330 MB out of the 1 GB limit of a GitHub Pages
+  site. The description, icon, screenshots and each version's
   "what's new" come from `fastlane/metadata/android` (above), the categories and links from
   `packaging/fdroid-repo/io.github.januszbit.brulion.yml`.
 * The new-version message from GitHub (above) stays — it is the same APK; F-Droid usually offers
@@ -929,7 +931,8 @@ version with its `changelogs/<versionCode>.txt`; the newest is `CurrentVersionCo
 published `repo/index-v2.json` (it keeps the dates when versions already there were added), runs
 `fdroid update` (index `index-v1.jar`, `index-v2.json` + `entry.jar` signed with the repository
 key, QR code `repo/index.png`), adds the page `packaging/fdroid-repo/index.html` with the address,
-the fingerprint and the newest release's files, and the workflow deploys the whole to GitHub Pages. A release (`release.yml`)
+the fingerprint and the newest release's files, unpacks that release's `brulion-web-<version>.zip`
+into `app/` (docs/WEB.md "On GitHub Pages"), and the workflow deploys the whole to GitHub Pages. A release (`release.yml`)
 calls it after publishing, except for a test release and an APK with a throwaway key; so does a push
 to `main` that changes what the site is built from (`packaging/fdroid-repo/`, `scripts/fdroid-repo.sh`,
 `fastlane/metadata/android/`, `assets/logo.svg`, the workflow) — the site is rebuilt from the
@@ -939,9 +942,9 @@ site itself). It can also be run by hand (`gh workflow run fdroid.yml`). Locally
 
 ```sh
 read -r -s -p 'Repository key password: ' FDROID_KEYSTORE_PASS; echo; export FDROID_KEYSTORE_PASS
-nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner nixpkgs#gh -c \
+nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner nixpkgs#gh nixpkgs#unzip -c \
   env FDROID_KEYSTORE=~/.local/share/brulion/brulion-fdroid-repo.p12 \
-  scripts/fdroid-repo.sh -a dist-android -o dist-fdroid   # dist-fdroid/index.html, dist-fdroid/repo/
+  scripts/fdroid-repo.sh -a dist-android -o dist-fdroid   # dist-fdroid/index.html, app/, repo/
 ```
 
 **The repository key** (separate from the APK key: it signs only the index) is created by
@@ -967,18 +970,23 @@ files, so the page never links a file that is not there. `github.com/…/release
 is not used, because the file names carry the version. The page is rebuilt with every published
 release (`release.yml` → `fdroid.yml`) and with every push to `main` that changes the page, the
 script or the store texts, so it never shows a pre-release and an edit of the page goes live by
-itself. It is static; a short
-script on the page only adds a big button for the visitor's system above the list (Android → APK,
-Windows → installer, Linux → AppImage x86_64 or aarch64 — Chromium tells the processor only through
-`navigator.userAgentData` — another computer → the browser version; none on iPhone/iPad). Without
-JavaScript the list is all there is.
+itself. Above the list, **Open in the browser** opens the same release's browser version, `app/` next
+to the page (docs/WEB.md "On GitHub Pages"): nothing to download or install; the list's "Browser" row
+links it too, and the Polish section has its own button, **Otwórz w przeglądarce**. The page is
+static; a short script only adds a big download button for the visitor's system next to **Open in
+the browser** (Android → APK, Windows → installer, Linux → AppImage x86_64 or aarch64 — Chromium
+tells the processor only through `navigator.userAgentData`), which then turns into an outline. Another
+system (a Mac, iPhone, iPad, a Chromebook) has no download of its own, so **Open in the browser**
+stays the only button, filled, as it is without JavaScript.
 
 Tests: `tests/scripts/tst_fdroid_repo.sh` (ctest `tst_scripts_fdroid_repo`) runs the script with
-stand-ins for `fdroid`, `keytool`, `gh` and `curl` — the choice of releases, the fdroid
+stand-ins for `fdroid`, `keytool`, `gh`, `curl` and `unzip` — the choice of releases, the fdroid
 configuration (passwords only as `{env: …}`, the file readable only by its owner), the `Builds:`
 entries, the metadata, the page with the fingerprint, the downloads (every link a file of the
-release, the sizes, the date, `-r`, every system of the button with its link) and rejected data;
-the real `fdroid update` runs in `fdroid.yml`.
+release, the sizes, the date, `-r`, every system of the button with its link), the browser version
+in `app/` (the zip of the page's release, also with `-a` and `-r`; the buttons and the link that
+open it) and rejected data (also a browser version that cannot be downloaded or unpacked, is not
+Brulion's build or holds a symbolic link); the real `fdroid update` and `unzip` run in `fdroid.yml`.
 
 ## Building the APK
 

@@ -38,7 +38,7 @@ From version 0.14.1: reading mode, wheel scrolling like in a web browser, bottom
 | Windows 10/11 (x86_64) — test version | `Brulion-{{FILE_VERSION}}-windows-x86_64-setup.exe` (installer) or `brulion-{{FILE_VERSION}}-windows-x86_64.zip` (portable) |
 | NixOS | flake `github:{{REPO}}/{{TAG}}`, package `brulion` |
 | Command line (Linux, Windows) | `brulion-cli` — in the AppImage as `./Brulion-{{FILE_VERSION}}-x86_64.AppImage cli …`, with Nix `nix run github:{{REPO}}/{{TAG}}#brulion-cli -- …`, on Windows `brulion-cli.exe` next to `brulion.exe` |
-| Browser | `brulion-web-{{FILE_VERSION}}.html` — a single file you open from disk — or `brulion-web-{{FILE_VERSION}}.zip` for your own server (any directory, HTTPS) |
+| Browser | nothing to download: {{PAGES_URL}}app/ — or `brulion-web-{{FILE_VERSION}}.html`, a single file you open from disk, or `brulion-web-{{FILE_VERSION}}.zip` for your own server (any directory, HTTPS) |
 | Source code | `brulion-{{FILE_VERSION}}-source.tar.gz` |
 
 **Installation**
@@ -47,7 +47,7 @@ From version 0.14.1: reading mode, wheel scrolling like in a web browser, bottom
 * **Linux (AppImage):** `chmod +x Brulion-*.AppImage`, then `./Brulion-{{FILE_VERSION}}-x86_64.AppImage` (or `…-aarch64.AppImage`). When the system reports a FUSE error (e.g. in a container): `./Brulion-*.AppImage --appimage-extract-and-run`.
 * **Windows (test version):** run `Brulion-{{FILE_VERSION}}-windows-x86_64-setup.exe` — it installs for the current user only, without administrator rights (uninstalling keeps your notes and settings). The app is not signed, so SmartScreen warns: "More info" → "Run anyway". Portable version: unpack `brulion-{{FILE_VERSION}}-windows-x86_64.zip` and run `brulion.exe` from the `Brulion` folder. Reminders and alarms are Windows notifications; the settings can start Brulion when you sign in.
 * **NixOS:** `nix run github:{{REPO}}/{{TAG}}` or the flake's package in your system configuration.
-* **Browser:** download `brulion-web-{{FILE_VERSION}}.html` and open it in a browser (double-click it or drag it into the window) — it works without a server and without internet, and your notes stay in the browser also after you download a newer version of the file. On your own server (`brulion-web-{{FILE_VERSION}}.zip`) choose "Install app" — it works offline too.
+* **Browser:** open {{PAGES_URL}}app/ (**Open in the browser** on the download page) — nothing to download or install; it works offline after the first visit, "Install app" in the browser's menu makes it an app, and your notes stay in that browser. Or download `brulion-web-{{FILE_VERSION}}.html` and open it in a browser (double-click it or drag it into the window) — it works without a server and without internet, and your notes stay in the browser also after you download a newer version of the file. On your own server (`brulion-web-{{FILE_VERSION}}.zip`) choose "Install app" — it works offline too.
 
 SHA-256 checksums: `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt --ignore-missing`).
 
@@ -94,7 +94,7 @@ Z wersji 0.14.1: tryb do czytania, kółko myszy jak w przeglądarce, dolna nawi
 | Windows 10/11 (x86_64) — wersja testowa | `Brulion-{{FILE_VERSION}}-windows-x86_64-setup.exe` (instalator) albo `brulion-{{FILE_VERSION}}-windows-x86_64.zip` (wersja przenośna) |
 | NixOS | flake `github:{{REPO}}/{{TAG}}`, pakiet `brulion` |
 | Wiersz poleceń (Linux, Windows) | `brulion-cli` — w AppImage jako `./Brulion-{{FILE_VERSION}}-x86_64.AppImage cli …`, w Nix `nix run github:{{REPO}}/{{TAG}}#brulion-cli -- …`, w Windows `brulion-cli.exe` obok `brulion.exe` |
-| Przeglądarka | `brulion-web-{{FILE_VERSION}}.html` — jeden plik, otwierasz go z dysku — albo `brulion-web-{{FILE_VERSION}}.zip` na własny serwer (dowolny katalog, HTTPS) |
+| Przeglądarka | bez pobierania: {{PAGES_URL}}app/ — albo `brulion-web-{{FILE_VERSION}}.html`, jeden plik, który otwierasz z dysku, albo `brulion-web-{{FILE_VERSION}}.zip` na własny serwer (dowolny katalog, HTTPS) |
 | Kod źródłowy | `brulion-{{FILE_VERSION}}-source.tar.gz` |
 
 **Instalacja**
@@ -103,7 +103,7 @@ Z wersji 0.14.1: tryb do czytania, kółko myszy jak w przeglądarce, dolna nawi
 * **Linux (AppImage):** `chmod +x Brulion-*.AppImage`, a potem `./Brulion-{{FILE_VERSION}}-x86_64.AppImage` (albo `…-aarch64.AppImage`). Gdy system zgłasza błąd FUSE (np. w kontenerze): `./Brulion-*.AppImage --appimage-extract-and-run`.
 * **Windows (wersja testowa):** uruchom `Brulion-{{FILE_VERSION}}-windows-x86_64-setup.exe` — instaluje się tylko dla bieżącego użytkownika, bez uprawnień administratora (odinstalowanie zostawia notatki i ustawienia). Aplikacja nie jest podpisana, więc SmartScreen ostrzega: „Więcej informacji” → „Uruchom mimo to”. Wersja przenośna: rozpakuj `brulion-{{FILE_VERSION}}-windows-x86_64.zip` i uruchom `brulion.exe` z folderu `Brulion`. Przypomnienia i alarmy są powiadomieniami Windows; w ustawieniach włączysz uruchamianie po zalogowaniu.
 * **NixOS:** `nix run github:{{REPO}}/{{TAG}}` albo pakiet z flake'a w konfiguracji systemu.
-* **Przeglądarka:** pobierz `brulion-web-{{FILE_VERSION}}.html` i otwórz go w przeglądarce (dwuklik albo przeciągnięcie do okna) — działa bez serwera i bez internetu, notatki zostają w przeglądarce także po pobraniu nowszej wersji pliku. Na własnym serwerze (`brulion-web-{{FILE_VERSION}}.zip`) wybierz „Zainstaluj aplikację” — działa też offline.
+* **Przeglądarka:** otwórz {{PAGES_URL}}app/ („Otwórz w przeglądarce” na stronie pobierania) — bez pobierania i instalowania; po pierwszym otwarciu działa offline, „Zainstaluj aplikację” w menu przeglądarki robi z niej aplikację, a notatki zostają w tej przeglądarce. Albo pobierz `brulion-web-{{FILE_VERSION}}.html` i otwórz go w przeglądarce (dwuklik albo przeciągnięcie do okna) — działa bez serwera i bez internetu, notatki zostają w przeglądarce także po pobraniu nowszej wersji pliku. Na własnym serwerze (`brulion-web-{{FILE_VERSION}}.zip`) wybierz „Zainstaluj aplikację” — działa też offline.
 
 Sumy kontrolne SHA-256: `SHA256SUMS.txt` (`sha256sum -c SHA256SUMS.txt --ignore-missing`).
 

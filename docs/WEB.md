@@ -8,9 +8,12 @@ PWA (it can be "installed" from the browser menu), and it keeps notes in the bro
 * Two forms, both in every release: **a single HTML file** `brulion-web-<version>.html`,
   opened from disk without a server (below, "Single HTML file"), and **a site** `brulion-web-<version>.zip`
   for any static file server, under any path — all addresses are relative (on
-  NixOS the `services.brulion-web` module). There is no public hosted version: the project's GitHub Pages
-  (`https://janusz-bit.github.io/brulion/`) are the download page (both files linked directly) and the
-  F-Droid repository (docs/ANDROID.md "Brulion's own F-Droid repository").
+  NixOS the `services.brulion-web` module).
+* **Hosted, nothing to download:** the project's GitHub Pages serve the newest release's site at
+  `https://janusz-bit.github.io/brulion/app/` — the **Open in the browser** button of the download page
+  `https://janusz-bit.github.io/brulion/` (which also links both files directly and holds the F-Droid
+  repository: docs/ANDROID.md "Brulion's own F-Droid repository"). It loads like any page, works
+  offline after the first visit and installs as an app (below, "On GitHub Pages").
 * Limitations compared with the native apps: reminders only while the tab/PWA is open,
   no access to folders on disk (file import/export instead), Nextcloud sync
   needs CORS (below), no Syncthing. Qt for WebAssembly has no time zone
@@ -381,7 +384,40 @@ reload and browser restart) — and then the Playwright tests (above). It does n
 start on every push by itself: it runs manually or on a push to `main` with the `[ci]` marker
 in the commit message (and changes in `src/`, `wasm/`…). It deploys nothing; called from `release.yml`
 it gives the release `brulion-web-<version>.zip` (artifact `brulion-web`) and
-`brulion-web-<version>.html` (artifact `brulion-web-html`).
+`brulion-web-<version>.html` (artifact `brulion-web-html`). The published release's zip is what
+GitHub Pages serve (below).
+
+### On GitHub Pages
+
+`https://janusz-bit.github.io/brulion/app/` is the site of the newest published release, next to the
+download page that opens it (its **Open in the browser** button — the main one for a visitor whose
+system has no download of its own, e.g. a Mac, an iPhone or a Chromebook — and a link in its
+"Browser" row; "Otwórz w przeglądarce" in its Polish section). `scripts/fdroid-repo.sh` puts it there
+whenever it builds the Pages site (`.github/workflows/fdroid.yml`, docs/ANDROID.md "Brulion's own F-Droid
+repository"): it downloads the `brulion-web-<version>.zip` of the release the page offers (`gh release
+download`) and unpacks it into `app/` — the zip has the site's files at its top level, and every
+address in them is relative, so nothing is rebuilt or rewritten. The script stops, and nothing is
+deployed, when the zip is missing, does not unpack, lacks one of `index.html`, `sw.js`,
+`brulion.js`, `brulion.wasm`, `qtloader.js` (the check of `nix/web-site.nix`), or holds anything
+but files and folders (the upload of the Pages artifact follows symbolic links).
+
+* **When it changes:** when a release is published (`release.yml` → `fdroid.yml`, as for the F-Droid
+  repository: not for a pre-release, which the page never offers, nor for an APK signed with a
+  throwaway key) and whenever the site is rebuilt (by hand, or a push to `main` changing the site's
+  sources), which unpacks the same release's zip again. A change in `src/` or `wasm/` reaches `app/`
+  with the next release.
+* **Headers:** a GitHub Pages site cannot set its own (the recommendations in "Self-hosting" below):
+  every file comes with `Cache-Control: max-age=600`, `.wasm` as `application/wasm`. The app copes:
+  the service worker is registered with `updateViaCache: 'none'` and fills its cache with
+  `cache: 'no-cache'` requests (`wasm/sw.js`), so the first visit after a deployment installs the new
+  release, the next page load runs it, and the cache never mixes two releases.
+* **Size:** `app/` is about 55 MB, nearly all of it `brulion.wasm` (the zip is about 17 MB), next to the
+  three APKs of the F-Droid repository — about 330 MB of the 1 GB limit of a Pages site. A first visit
+  downloads the app; later visits start from the service worker's cache (GitHub Pages have a soft limit
+  of 100 GB of traffic a month).
+* **Privacy:** notes stay in the visitor's browser (IndexedDB), as with any copy of the site. The origin
+  `janusz-bit.github.io` is shared with the owner's other GitHub Pages projects (below, "Data in the
+  browser", "One origin").
 
 ### Single HTML file
 
@@ -537,7 +573,11 @@ Notes:
 * **One origin:** all pages of one origin share IndexedDB — e.g. on GitHub
   Pages all projects `<user>.github.io/*`, and from disk all `file://` files
   (above, "Single HTML file"). Another page of that origin could read the notes — for private
-  data it is best to host Brulion on your own domain (or subdomain).
+  data it is best to host Brulion on your own domain (or subdomain). The hosted version
+  (`janusz-bit.github.io/brulion/app/`, above, "On GitHub Pages") shares its origin with the download
+  page next to it (static; its only script picks the download button) and with the owner's other
+  GitHub Pages projects (`janusz-bit.github.io/<project>/`): a project published there must not run
+  scripts it does not trust.
 * Qt on WebAssembly keeps settings via `QSettings` (native format) in `localStorage`.
 * **Pictures from the internet** (docs/SYNTAX.md §2): the cache
   (`QStandardPaths::CacheLocation`/web-pictures) is not an IDBFS mount — it lives in the tab's

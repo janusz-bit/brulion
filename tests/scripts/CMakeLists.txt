@@ -54,7 +54,7 @@ if(BRULION_BASH)
 endif()
 
 # Brulion's own F-Droid repository (docs/ANDROID.md, "Brulion's own F-Droid repository"):
-# scripts/fdroid-repo.sh with stand-ins for fdroid, keytool, gh and curl.
+# scripts/fdroid-repo.sh with stand-ins for fdroid, keytool, gh, curl and unzip.
 if(BRULION_BASH)
     add_test(NAME tst_scripts_fdroid_repo
              COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_fdroid_repo.sh

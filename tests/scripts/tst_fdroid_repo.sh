@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Tests scripts/fdroid-repo.sh (Brulion's own F-Droid repository, docs/ANDROID.md "Brulion's
-# own F-Droid repository") with stand-ins for fdroid, keytool, gh and curl on PATH — what the script
-# itself decides: the APKs of the last releases, fdroid's config (the site's address, the
+# own F-Droid repository") with stand-ins for fdroid, keytool, gh, curl and unzip on PATH — what the
+# script itself decides: the APKs of the last releases, fdroid's config (the site's address, the
 # passwords only as {env: …}, readable by its owner only), a build entry per APK so each version
 # gets its changelog (sorted, the newest current), the texts and icon from fastlane, the landing
 # page (the release it offers for download: direct links to files the release has, their sizes and
-# date; address, fingerprint = SHA-256 of the certificate, the "Add to F-Droid" link) and what it
-# refuses. The real `fdroid update` runs in CI (.github/workflows/fdroid.yml).
+# date; address, fingerprint = SHA-256 of the certificate, the "Add to F-Droid" link), the same
+# release's browser version in app/ (its brulion-web zip unpacked, "Open in the browser") and what
+# it refuses. The real `fdroid update` and unzip run in CI (.github/workflows/fdroid.yml).
 #
 # Usage: tests/scripts/tst_fdroid_repo.sh [path/to/fdroid-repo.sh]
 set -euo pipefail
@@ -69,7 +70,19 @@ echo "gh $*" >>"$STUB_LOG/gh.txt"
 case "$1 $2" in
   "release list") printf '%s\n' ${STUB_TAGS:-v0.10.0 v0.9.1 v0.9.0} ;;
   "release download")
-    tag=$3 dir=${@: -1}
+    # <tag> --pattern <pattern> --dir <dir>
+    tag=$3 pattern=$5 dir=${@: -1}
+    if [[ $pattern == brulion-web-*.zip ]]; then
+      # The browser version: a stand-in zip for the unzip below, one entry per line.
+      [[ $tag == "$STUB_NO_WEB" ]] && exit 1
+      [[ $pattern == "brulion-web-${tag#v}.zip" ]] || exit 8
+      files=${STUB_WEB_FILES:-index.html sw.js brulion.js brulion.wasm qtloader.js manifest.webmanifest}
+      {
+        printf '%s\n' $files icons/logo.svg .nojekyll
+        [[ -z ${STUB_WEB_LINK:-} ]] || echo "$STUB_WEB_LINK -> /etc/hostname"
+      } >"$dir/$pattern"
+      exit 0
+    fi
     [[ $tag == "$STUB_NO_APK" ]] && exit 1
     echo "apk $tag" >"$dir/brulion-${tag#v}-arm64-v8a.apk" ;;
   "release view")
@@ -99,6 +112,28 @@ esac
 EOF
 } >"$bin/gh"
 printf '#!%s\necho "curl: (22) 404" >&2\nexit 22\n' "$BASH" >"$bin/curl"
+{
+  printf '#!%s\n' "$BASH"
+  cat <<'EOF'
+# [-q] [-o] <zip> -d <dir>: unpacks gh's stand-in zip — "<name>" is a file holding "<name> of <zip>",
+# "<name> -> <target>" a symbolic link.
+zip='' dir=''
+while (($#)); do
+  case $1 in
+    -d) dir=$2; shift 2 ;;
+    -*) shift ;;
+    *) zip=$1; shift ;;
+  esac
+done
+[[ -f $zip && -n $dir ]] || exit 10
+echo "unzip $zip -d $dir" >>"$STUB_LOG/unzip.txt"
+[[ -n ${STUB_WEB_BROKEN:-} ]] && { echo "End-of-central-directory signature not found." >&2; exit 9; }
+while read -r name arrow target; do
+  mkdir -p "$dir/$(dirname -- "$name")"
+  if [[ $arrow == '->' ]]; then ln -s -- "$target" "$dir/$name"; else echo "$name of ${zip##*/}" >"$dir/$name"; fi
+done <"$zip"
+EOF
+} >"$bin/unzip"
 chmod +x "$bin"/*
 
 export STUB_LOG=$log STUB_ICON=$root/fastlane/metadata/android/en-US/images/icon.png
@@ -124,7 +159,8 @@ run --
 expect "builds the site (exit 0)" test "$status" -eq 0
 expect "asks for the last three published releases" \
   grep -qF 'gh release list --exclude-drafts --exclude-pre-releases --limit 3 --json tagName --jq .[].tagName' "$log/gh.txt"
-expect "downloads each release's APK" test "$(grep -c '^gh release download v' "$log/gh.txt")" -eq 3
+expect "downloads each release's APK" \
+  test "$(grep -c -- '--pattern brulion-\*-arm64-v8a\.apk ' "$log/gh.txt")" -eq 3
 expect "the APKs reach fdroid" grep -qx 'brulion-0.10.0-arm64-v8a.apk' "$log/repo.txt"
 config=$log/config.yml
 expect "the repository's address from the default GitHub repository" \
@@ -176,14 +212,26 @@ done
 expect "each file's size in MiB, one decimal" bash -c "grep -qF 'data-size=\"88.5 MB\"' '$page' &&
   grep -qF 'data-size=\"69.8 MB\"' '$page' && grep -qF 'data-size=\"72.2 MB\"' '$page' &&
   grep -qF 'data-size=\"39.2 MB\"' '$page' && grep -qF '57.5 MB' '$page' &&
-  grep -qF 'data-size=\"22.2 MB\"' '$page' && grep -qF '16.7 MB' '$page'"
+  grep -qF '22.2 MB' '$page' && grep -qF '16.7 MB' '$page'"
 expect "the release page" grep -qF 'href="https://github.com/janusz-bit/brulion/releases/tag/v0.10.0"' "$page"
 expect "the NixOS command" grep -qF 'nix run github:janusz-bit/brulion/v0.10.0' "$page"
 mapfile -t keys < <(grep -oE "offer\('[a-z0-9_-]+'" "$page" | cut -d"'" -f2 | sort -u)
-expect "the button offers five systems (${keys[*]})" test "${#keys[@]}" -eq 5
+expect "the download button offers four systems (${keys[*]})" test "${#keys[@]}" -eq 4
 for key in "${keys[@]}"; do
   expect "the button's system $key has a link" grep -qF "data-for=\"$key\"" "$page"
 done
+
+# The browser version: the same release's zip unpacked into app/, next to the page.
+expect "downloads the browser version of the page's release" \
+  grep -qE '^gh release download v0\.10\.0 --pattern brulion-web-0\.10\.0\.zip --dir ' "$log/gh.txt"
+expect "unpacks it once" test "$(wc -l <"$log/unzip.txt")" -eq 1
+app=$tmp/site/app
+expect "its files in app/, as in the zip" bash -c "grep -qx 'index.html of brulion-web-0.10.0.zip' '$app/index.html' &&
+  grep -qx 'brulion.wasm of brulion-web-0.10.0.zip' '$app/brulion.wasm' &&
+  grep -qx 'icons/logo.svg of brulion-web-0.10.0.zip' '$app/icons/logo.svg' && test -s '$app/.nojekyll'"
+expect "the page's own button opens app/" grep -qE '<a class="button open" id="open" href="app/">Open in the browser' "$page"
+expect "the Polish section's button opens app/" grep -qF '<a class="button" href="app/">Otwórz w przeglądarce</a>' "$page"
+expect "the browser's row opens app/" grep -qF '<div><a href="app/">Open in the browser</a>' "$page"
 expect "the repository's address printed" has "repository: https://janusz-bit.github.io/brulion/repo?fingerprint=$fingerprint"
 expect "the signed index in the site" test -s "$tmp/site/repo/index-v1.jar"
 expect "fdroid's status files are left out" test ! -e "$tmp/site/repo/status"
@@ -202,8 +250,11 @@ mkdir -p "$tmp/apks"
 echo apk >"$tmp/apks/brulion-1.2.3-arm64-v8a.apk"
 run -- -a "$tmp/apks" -u https://example.org/brulion/
 expect "-a and -u: APKs from a folder, another address (exit 0)" test "$status" -eq 0
-expect "-a downloads no APK" bash -c "! grep -q 'release download' '$log/gh.txt'"
+expect "-a downloads no APK" bash -c "! grep -q -- '--pattern brulion-\*-arm64-v8a\.apk' '$log/gh.txt'"
 expect "-a: the page offers the latest published release" grep -qF 'gh release view --json ' "$log/gh.txt"
+expect "-a: app/ holds that release's browser version" \
+  bash -c "grep -qF 'gh release download v0.10.0 --pattern brulion-web-0.10.0.zip ' '$log/gh.txt' &&
+  grep -qx 'index.html of brulion-web-0.10.0.zip' '$tmp/site/app/index.html'"
 expect "-u sets the repository's address" grep -qx 'repo_url: https://example.org/brulion/repo' "$log/config.yml"
 expect "1.2.3 is versionCode 1002003" grep -qx 'CurrentVersionCode: 1002003' "$log/io.github.januszbit.brulion.yml"
 
@@ -212,6 +263,7 @@ expect "-r: another release on the page (exit 0)" test "$status" -eq 0
 expect "-r reads that release" grep -qF 'gh release view v0.9.1 --json ' "$log/gh.txt"
 expect "-r: its version, files and date" bash -c "grep -qF 'Download Brulion 0.9.1 <time class=\"released\" datetime=\"2026-01-31\">31 January 2026</time>' '$tmp/site/index.html' &&
   grep -qF '/releases/download/v0.9.1/brulion-web-0.9.1.html\"' '$tmp/site/index.html'"
+expect "-r: its browser version in app/" grep -qx 'index.html of brulion-web-0.9.1.zip' "$tmp/site/app/index.html"
 
 run FDROID_KEYSTORE= FDROID_KEYSTORE_BASE64="$(base64 -w0 "$tmp/key.p12")" -- -a "$tmp/apks"
 expect "the key from FDROID_KEYSTORE_BASE64 (exit 0)" test "$status" -eq 0
@@ -238,6 +290,13 @@ refused "the page's release cannot be read" 'cannot read the release v0.10.0' ST
 refused "a pre-release's tag on the page" "the page offers a release vX.Y.Z, not 'v1.0.0-rc.1'" -- -r v1.0.0-rc.1
 refused "a pre-release on the page" 'the release v1.1.0 is a draft or a pre-release' STUB_PRE=true -- -r v1.1.0
 refused "a draft on the page" 'the release v0.10.0 is a draft or a pre-release' STUB_DRAFT=true --
+refused "the browser version cannot be downloaded" 'cannot download brulion-web-0.10.0.zip of the release v0.10.0' \
+  STUB_NO_WEB=v0.10.0 --
+refused "a browser version that does not unpack" 'cannot unpack brulion-web-0.10.0.zip' STUB_WEB_BROKEN=1 --
+refused "a zip that is not the browser version" 'brulion-web-0.10.0.zip is not a Brulion browser build (no brulion.wasm)' \
+  STUB_WEB_FILES='index.html sw.js brulion.js qtloader.js' --
+refused "a symbolic link in the browser version" \
+  'brulion-web-0.10.0.zip holds something other than files and folders: icons/hostname' STUB_WEB_LINK=icons/hostname --
 echo apk >"$tmp/apks/brulion-debug.apk"
 refused "an APK name without the version" 'unexpected APK name brulion-debug.apk' -- -a "$tmp/apks"
 rm "$tmp/apks"/*

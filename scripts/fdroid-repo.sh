@@ -5,7 +5,10 @@
 # https://<owner>.github.io/<repo>/ (docs/ANDROID.md, "Brulion's own F-Droid repository"):
 #   OUT/index.html  the landing page (packaging/fdroid-repo/index.html): the files of the latest
 #                   release to download (direct links, sizes, a button for the visitor's system),
-#                   how to add the repository, its QR code and the fingerprint of its key
+#                   the "Open in the browser" button, how to add the repository, its QR code and
+#                   the fingerprint of its key
+#   OUT/app/        the browser version of the same release (its brulion-web-X.Y.Z.zip unpacked,
+#                   docs/WEB.md): Brulion opened right from the page, nothing to download
 #   OUT/repo/       the repository (`fdroid update`): the APKs of the last releases, the signed
 #                   index (index-v1.jar, index-v2.json + entry.jar), icon, screenshots and texts
 #                   (fastlane/metadata/android, packaging/fdroid-repo/io.github.januszbit.brulion.yml)
@@ -18,14 +21,17 @@
 #   -n N        the APKs of the last N published releases (no drafts, no pre-releases) [3]
 #   -a APK_DIR  the APKs from this directory instead of the releases (local runs)
 #   -u URL      the site's address, ending in / [https://<owner>.github.io/<repo>/ of GH_REPO]
-#   -r TAG      the published release vX.Y.Z whose files the page offers [the newest of the N
-#               releases; with -a the latest published release]
+#   -r TAG      the published release vX.Y.Z whose files the page offers and whose browser
+#               version app/ holds [the newest of the N releases; with -a the latest published
+#               release]
 # Env: the repository's signing key (scripts/fdroid-new-keystore.sh): FDROID_KEYSTORE (a file) or
 #      FDROID_KEYSTORE_BASE64, FDROID_KEYSTORE_PASS, FDROID_KEY_ALIAS [brulion-fdroid];
 #      GH_REPO [janusz-bit/brulion]; GH_TOKEN for gh (downloads).
 # Needs fdroidserver (`fdroid`, 2.4), keytool (JDK 17+), apksigner (on PATH or in the Android SDK's
-# build-tools of $ANDROID_HOME), curl and gh (also with -a: the page's release). On NixOS:
-#   nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner nixpkgs#gh -c scripts/fdroid-repo.sh
+# build-tools of $ANDROID_HOME), curl, unzip and gh (also with -a: the page's release and its
+# browser version). On NixOS:
+#   nix shell nixpkgs#fdroidserver nixpkgs#jdk21_headless nixpkgs#apksigner nixpkgs#gh nixpkgs#unzip \
+#     -c scripts/fdroid-repo.sh
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -66,7 +72,7 @@ fi
 repo_url=${url}repo
 alias=${FDROID_KEY_ALIAS:-brulion-fdroid}
 
-for tool in fdroid keytool curl gh; do
+for tool in fdroid keytool curl gh unzip; do
   command -v "$tool" >/dev/null || die "$tool not found (see --help)"
 done
 [[ -n ${FDROID_KEYSTORE_PASS:-} ]] || die "FDROID_KEYSTORE_PASS is not set (scripts/fdroid-new-keystore.sh)"
@@ -165,6 +171,22 @@ for entry in "APK brulion-$version-arm64-v8a.apk" \
 done
 log "the page offers $tag ($published)"
 
+# The browser version of the same release, served next to the page in app/ (its "Open in the
+# browser" button): the release's brulion-web-X.Y.Z.zip has the site's files at the top level, with
+# relative addresses only, so it works under app/ as it is (docs/WEB.md). Only files and folders
+# are taken: the Pages artifact's upload follows symbolic links.
+web_zip=brulion-web-$version.zip
+mkdir -p "$work/web" "$work/app"
+gh release download "$tag" --pattern "$web_zip" --dir "$work/web" && [[ -s $work/web/$web_zip ]] ||
+  die "cannot download $web_zip of the release $tag"
+unzip -q -o "$work/web/$web_zip" -d "$work/app" || die "cannot unpack $web_zip"
+for f in index.html sw.js brulion.js brulion.wasm qtloader.js; do
+  [[ -f $work/app/$f ]] || die "$web_zip is not a Brulion browser build (no $f)"
+done
+odd=$(find "$work/app" ! -type f ! -type d -print -quit)
+[[ -z $odd ]] || die "$web_zip holds something other than files and folders: ${odd#"$work/app/"}"
+log "the browser version of $tag in app/ ($(du -sh -- "$work/app" | cut -f1))"
+
 # Texts, icon and screenshots: fdroid reads the fastlane layout from metadata/<app id>/<locale>/.
 # A version gets its changelog (changelogs/<versionCode>.txt) only through a build entry of its
 # own, so every APK gets one (versionCode = major*1000000 + minor*1000 + patch, from the file name
@@ -212,6 +234,7 @@ rm -rf -- "$out"
 mkdir -p -- "$out"
 cp -r -- "$work/repo" "$out/repo"
 rm -rf -- "$out/repo/status"
+cp -r -- "$work/app" "$out/app"
 cp -- "$ROOT/assets/logo.svg" "$out/logo.svg"
 touch "$out/.nojekyll"
 versions=$(cd "$out/repo" && for f in *.apk; do printf '%s ' "$f"; done)

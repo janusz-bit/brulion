@@ -3,8 +3,8 @@
 # brulion-web) and the same app in one HTML file opened from disk (scripts/wasm-single-file.py;
 # artifact brulion-web-html). Runs by hand and for a push to main with "[ci]" in a commit message
 # (and changes in the paths below; see the build job's `if`), and is called by release.yml for the
-# release's brulion-web-<version>.zip and brulion-web-<version>.html. Nothing is deployed: GitHub
-# Pages serve the F-Droid repository (fdroid.yml).
+# release's brulion-web-<version>.zip and brulion-web-<version>.html. Nothing is deployed here: the
+# published release's zip becomes app/ on GitHub Pages (fdroid.yml, docs/WEB.md "On GitHub Pages").
 # The job "browsers" tests the built site in Playwright's Chromium and Firefox (tests/web: pictures
 # from the internet — CORS, mixed content, no preflight, the export with copies — and the pen's
 # pressure and eraser end in the drawing editor, the single file from disk); a release waits for it.

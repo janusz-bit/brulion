@@ -1,19 +1,22 @@
 <!doctype html>
 <!--
   Brulion's page on GitHub Pages (https://<owner>.github.io/brulion/): the files of the latest release
-  to download and Brulion's own F-Droid repository. scripts/fdroid-repo.sh fills in the @…@
+  to download, the same release's browser version to open without downloading (app/, next to this
+  page) and Brulion's own F-Droid repository. scripts/fdroid-repo.sh fills in the @…@
   placeholders when a release is published: DOWNLOAD_URL is that release's download address, and the
   script checks that every file linked here is in the release (each SIZE_… stands for one of them);
-  repo/index.png is the QR code `fdroid update` makes (the repository's address with the fingerprint).
-  It works without JavaScript: the script at the end only adds the big button for the visitor's system.
-  docs/ANDROID.md, "Brulion's own F-Droid repository".
+  app/ is that release's brulion-web-X.Y.Z.zip unpacked; repo/index.png is the QR code
+  `fdroid update` makes (the repository's address with the fingerprint).
+  It works without JavaScript: the script at the end only adds the big download button for the
+  visitor's system, next to "Open in the browser". docs/ANDROID.md, "Brulion's own F-Droid
+  repository".
 -->
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Brulion — download</title>
-    <meta name="description" content="Brulion — Markdown notes that work offline. Download Brulion @VERSION@ for Android, Linux, Windows and the browser, or add its F-Droid repository.">
+    <meta name="description" content="Brulion — Markdown notes that work offline. Open Brulion @VERSION@ right in your browser, download it for Android, Linux, Windows and the browser, or add its F-Droid repository.">
     <meta name="color-scheme" content="light dark">
     <link rel="icon" href="logo.svg" type="image/svg+xml">
     <style>
@@ -104,10 +107,31 @@
         margin-left: 6px;
         white-space: nowrap;
       }
-      .for-you { text-align: center; margin: 6px 0 18px; }
-      .for-you .button { font-size: 1.1rem; padding: 12px 26px; }
-      .for-you small { display: block; font-weight: 400; font-size: 0.8rem; opacity: 0.9; }
-      .for-you p { margin: 8px 0 0; }
+      .button small { display: block; font-weight: 400; font-size: 0.8rem; opacity: 0.9; }
+      .start {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px 12px;
+        margin: 6px 0 18px;
+      }
+      .start .button {
+        box-sizing: border-box;
+        flex: 0 1 17rem;
+        margin: 0;
+        font-size: 1.1rem;
+        padding: 12px 26px;
+        text-align: center;
+      }
+      /* Next to the download for the visitor's system the browser version is the second choice; on
+         its own (no system recognised, no JavaScript) it is the page's main button. */
+      .start .open {
+        background: transparent;
+        color: var(--ink);
+        box-shadow: inset 0 0 0 2px var(--accent);
+      }
+      .start [hidden] + .open { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+      .start p { flex-basis: 100%; text-align: center; margin: 0; }
       .files { list-style: none; margin: 0 0 16px; padding: 0; border-top: 1px solid var(--line); }
       .files li {
         display: grid;
@@ -137,9 +161,10 @@
 
       <section id="download">
         <h2>Download Brulion @VERSION@ <time class="released" datetime="@PUBLISHED@">@PUBLISHED_TEXT@</time></h2>
-        <div class="for-you" id="for-you" hidden>
-          <a class="button" id="for-you-link" href="#download"><span id="for-you-name"></span><small id="for-you-file"></small></a>
-          <p class="muted">Another system? All the files are below.</p>
+        <div class="start">
+          <a class="button" id="for-you" href="#download" hidden><span id="for-you-name"></span><small id="for-you-file"></small></a>
+          <a class="button open" id="open" href="app/">Open in the browser<small>no download, nothing to install</small></a>
+          <p class="muted" id="for-you-more" hidden>Another system? All the files are below.</p>
         </div>
         <ul class="files">
           <li>
@@ -170,8 +195,8 @@
           </li>
           <li>
             <div><b>Browser</b><span>works offline, notes stay in the browser</span></div>
-            <div><a data-for="browser" data-what="one HTML file, opened from disk" data-size="@SIZE_WEB_HTML@"
-                href="@DOWNLOAD_URL@/brulion-web-@VERSION@.html">One HTML file</a>
+            <div><a href="app/">Open in the browser</a>, nothing to download<br>
+              or <a href="@DOWNLOAD_URL@/brulion-web-@VERSION@.html">one HTML file</a>
               <span class="size">@SIZE_WEB_HTML@</span> ·
               <a href="@DOWNLOAD_URL@/brulion-web-@VERSION@.zip">site for your own server (.zip)</a>
               <span class="size">@SIZE_WEB_ZIP@</span></div>
@@ -213,19 +238,25 @@
           <li>The last three releases; new ones appear here right after they are published.</li>
           <li>Linux, Windows and the browser version are in <a href="#download">Download</a> above and in the
             <a href="@SOURCE_URL@/releases/latest">latest release</a> on GitHub.</li>
+          <li>The browser version of Brulion @VERSION@ itself, in <a href="app/">app/</a>: it opens without
+            downloading anything, works offline after the first visit and can be installed as an app from
+            the browser’s menu. Your notes stay in that browser on your device — export them for a backup.</li>
         </ol>
         <p class="muted">Source code (AGPL-3.0): <a href="@SOURCE_URL@">@SOURCE_URL@</a></p>
       </section>
 
       <section lang="pl">
         <h2>Po polsku</h2>
-        <p>Brulion — notatki w Markdown, które działają offline. Pobierz wersję @VERSION@:
+        <p>Brulion — notatki w Markdown, które działają offline. Otwórz go od razu w przeglądarce, bez
+          pobierania i instalowania; notatki zostają w Twojej przeglądarce, na tym urządzeniu.</p>
+        <a class="button" href="app/">Otwórz w przeglądarce</a>
+        <p>Albo pobierz wersję @VERSION@:
           <a href="@DOWNLOAD_URL@/brulion-@VERSION@-arm64-v8a.apk">Android (APK)</a>,
           <a href="@DOWNLOAD_URL@/Brulion-@VERSION@-x86_64.AppImage">Linux x86_64</a>,
           <a href="@DOWNLOAD_URL@/Brulion-@VERSION@-aarch64.AppImage">Linux aarch64</a>,
           <a href="@DOWNLOAD_URL@/Brulion-@VERSION@-windows-x86_64-setup.exe">Windows (instalator, wersja
-          testowa)</a> albo <a href="@DOWNLOAD_URL@/brulion-web-@VERSION@.html">wersję w przeglądarce</a>
-          (jeden plik HTML, który otwierasz z dysku). Nowości, instrukcje i pozostałe pliki są
+          testowa)</a> lub <a href="@DOWNLOAD_URL@/brulion-web-@VERSION@.html">wersję w przeglądarce w
+          jednym pliku HTML</a>, który otwierasz z dysku. Nowości, instrukcje i pozostałe pliki są
           <a href="@RELEASE_URL@">na stronie wydania</a>.</p>
         <p>Własne repozytorium F-Droid Brulionu: oficjalne wydania na Androida, te same pliki APK (z tym
           samym podpisem) co na GitHubie. Na telefonie stuknij <a href="@ADD_URL@">Dodaj do F-Droid</a>
@@ -234,23 +265,24 @@
       </section>
     </main>
     <script>
-      // The big button for the visitor's system: it takes the address and size of that system's
-      // link in the list. No system recognised (e.g. iPhone) → no button, the list stays.
+      // The big download button for the visitor's system, next to "Open in the browser": it takes
+      // the address and size of that system's link in the list. Another system (iPhone, iPad, a Mac,
+      // a Chromebook…) has no download of its own: "Open in the browser" stays the only button.
       (function () {
         var ua = navigator.userAgent;
         function offer(key, name) {
           var link = document.querySelector('a[data-for="' + key + '"]');
           if (!link) return;
-          document.getElementById('for-you-link').href = link.href;
+          var button = document.getElementById('for-you');
+          button.href = link.href;
           document.getElementById('for-you-name').textContent = name;
           document.getElementById('for-you-file').textContent =
             link.getAttribute('data-what') + ' · ' + link.getAttribute('data-size');
-          document.getElementById('for-you').hidden = false;
+          button.hidden = false;
+          document.getElementById('for-you-more').hidden = false;
         }
         if (/Android/i.test(ua)) {
           offer('android', 'Download for Android');
-        } else if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) {
-          return;
         } else if (/Windows/.test(ua)) {
           offer('windows', 'Download for Windows');
         } else if (/Linux|X11/.test(ua) && !/CrOS/.test(ua)) {
@@ -264,8 +296,6 @@
               if (v.architecture === 'arm' && v.bitness === '64') offer('linux-aarch64', 'Download for Linux');
             }, function () {});
           }
-        } else {
-          offer('browser', 'Download for your browser');
         }
       })();
     </script>
