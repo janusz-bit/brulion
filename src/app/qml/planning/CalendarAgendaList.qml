@@ -4,13 +4,15 @@ import Brulion
 
 // CalendarAgendaList — the agenda: the days of a CalendarModel in "agenda" mode (four weeks from
 // the start of the selected week) that have entries, plus today, each with its entries as
-// PlanningItemRows; a day with a daily note offers to open it. Past days are muted. Scrolls to
-// today (or the selected day) when the range changes.
+// PlanningItemRows; a day with a daily note offers to open it. Past days say so with colours, not
+// a fade (at 72 % opacity faint text fell to 2.9:1, under WCAG AA): the date's circle outlined
+// (Theme.border) with its number and the open entries' titles in fgMuted; the rest as on other
+// days. Scrolls to today (or the selected day) when the range changes.
 // A day's header is a button (a tap or click, Enter on the list's current day — Up / Down move a
 // focus ring from the selected day): dayTapped, the view selects the day (the side panel follows,
-// phones open its sheet). The selected day's number
-// is on a dark disc (Theme.primary), as in the month grid; today keeps its red one. The list stays
-// where it is (the model keeps the range: only the selection moves).
+// phones open its sheet). The selected day's number is on a dark disc (Theme.primary), as in the
+// month grid; today keeps its red one. The list stays where it is (the model keeps the range: only
+// the selection moves).
 //
 //   CalendarAgendaList { calendar: cal; onItemOpened: …; onItemToggled: …; onItemStatusRequested: …
 //                        onJournalOpened: …; onDayTapped: (date) => … }
@@ -129,9 +131,11 @@ FocusScope {
             required property list<var> items
             required property string longLabel
 
+            /// A day before today.
+            readonly property bool pastDay: isPast && !isToday
+
             width: ListView.view.width
             implicitHeight: column.height + Theme.space2
-            opacity: isPast && !isToday ? 0.72 : 1
 
             // Laid out with bindings, not Layouts: a day has its final height when the list creates
             // it (a Layout's size arrives only with its next polish, and a day growing after the
@@ -175,14 +179,18 @@ FocusScope {
                     }
 
                     // Today on a red disc, the selected day on a dark one (only the red one when
-                    // today is selected), as in the month grid.
+                    // today is selected), as in the month grid; a past day only outlined.
                     Rectangle {
                         id: circle
+                        readonly property bool outlined: day.pastDay && !day.isSelected
                         width: column.markerWidth
                         height: width
                         y: (header.height - height) / 2
                         radius: width / 2
-                        color: day.isToday ? Theme.accentSolid : day.isSelected ? Theme.primary : Theme.bgSunken
+                        color: day.isToday ? Theme.accentSolid : day.isSelected ? Theme.primary
+                             : outlined ? "transparent" : Theme.bgSunken
+                        border.width: outlined ? 1 : 0
+                        border.color: Theme.border
                         Text {
                             anchors.centerIn: parent
                             text: "" + day.day
@@ -190,7 +198,8 @@ FocusScope {
                             font.pixelSize: Theme.textLg
                             font.weight: Theme.weightBold
                             font.features: { "tnum": 1 }
-                            color: day.isToday ? Theme.fgOnAccent : day.isSelected ? Theme.primaryFg : Theme.fg
+                            color: day.isToday ? Theme.fgOnAccent : day.isSelected ? Theme.primaryFg
+                                 : circle.outlined ? Theme.fgMuted : Theme.fg
                         }
                     }
                     Item {
@@ -267,6 +276,7 @@ FocusScope {
                             required property var modelData
                             width: entries.width
                             entry: modelData
+                            past: day.pastDay
                             onOpened: root.itemOpened(modelData)
                             onTaskToggled: root.itemToggled(modelData)
                             onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
