@@ -7,6 +7,21 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.0 — 8 listopada 2026
+
+**Nowe**
+- **Notatniki na GitHubie** — repozytorium GitHub albo jeden folder gałęzi to notatnik na każdej platformie, także w przeglądarce, bez gita: **Otwórz z GitHuba…** na ekranie startowym przyjmuje adres repozytorium albo folderu na github.com, a *Centrum synchronizacji → GitHub → Trzymaj ten notatnik na GitHubie* łączy notatnik, który już masz. Nowe wersje przychodzą przy otwarciu notatnika, co 15 minut, gdy Brulion jest na wierzchu, i po **Pobierz najnowszą wersję**; notatka zmieniona po obu stronach jest scalana wiersz po wierszu, a gdy się nie da, wersja z GitHuba zostaje obok Twojej w **Konfliktach**. Twoje zmiany wracają tylko na Twoją prośbę: jako commit albo jako pull request z własnej gałęzi (w Twoim forku, gdy repozytorium nie jest Twoje). Publiczne repozytoria nie wymagają konta; do wysyłania zmian wklej osobisty token dostępu — zostaje na tym urządzeniu i trafia tylko do GitHuba. Zobacz [[Synchronizacja#GitHub|GitHub]].
+- **Zapytania Dataview** — blok kodu z językiem `dataview`, ze skarbca wspólnego z Obsidianem, pokazuje wyniki zamiast kodu: LIST, TABLE z kolumnami i TASK, z FROM (tagi, foldery, linki), WHERE, SORT, GROUP BY, FLATTEN i LIMIT, polami strony, polami `klucz:: wartość` i funkcjami Dataview. Tylko do odczytu, z wyjątkiem odhaczania zadań. Nic nie jest uruchamiane jako skrypt: `dataviewjs`, `CALENDAR` i funkcje z wyrażeniami regularnymi mówią, że nie są obsługiwane. Zobacz [[Zapytania#Zapytania Dataview z Obsidiana|Zapytania Dataview]].
+- **Otwórz w przeglądarce** — strona pobierania sama uruchamia wersję w przeglądarce z najnowszego wydania, bez pobierania (GitHub Pages trzymają ją obok strony); na Macu, iPhonie, iPadzie i Chromebooku to główny przycisk.
+- **Dokumentacja w przeglądarce** — **Dokumentacja Brulionu** (przełącznik notatników, Ctrl+Shift+B) jest też w wersji w przeglądarce, offline, jak na komputerze i Androidzie.
+
+**Zmiany**
+- **Android: ekran alarmu** — czarny (piksele OLED wyłączone), z dużą godziną, datą, przypomnieniem i jego stroną, **Zrobione** i **Otwórz notatkę** jako chipy, a na dole suwak: przeciągnij dzwonek w lewo, by odłożyć, w prawo na OK. Samo stuknięcie niczego nie odpowiada (dzwonek się trzęsie), więc muśnięcie w kieszeni go nie wyciszy; puszczony za wcześnie wraca na miejsce. Z TalkBackiem są zamiast tego dwa zwykłe przyciski.
+- **Import z Logseqa** zachowuje szufladki `:LOGBOOK:` zadań, więc ich zmierzony czas i historia statusów przechodzą razem z nimi; eksport do Obsidiana je pomija (Obsidian pokazałby je jako tekst). Zobacz [[Zadania#Licznik czasu|Licznik czasu]].
+
+**Poprawki**
+- Dzień dziennika, którego notatkę usunięto (do kosza, innym programem, przez synchronizację), nie pokazuje już jej tekstu; niezapisane jeszcze zmiany nadal zostają i są zapisywane ponownie.
+
 ## 0.15.0 — 8 listopada 2026
 
 **Uwaga**

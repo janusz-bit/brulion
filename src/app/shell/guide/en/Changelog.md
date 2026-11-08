@@ -7,6 +7,21 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.0 — November 8, 2026
+
+**New**
+- **Notebooks on GitHub** — a GitHub repository, or one folder of a branch, is a notebook on every platform, the browser too, with no git: **Open from GitHub…** on the start screen takes the address of the repository or of a folder on github.com, and *Sync center → GitHub → Keep this notebook on GitHub* links the notebook you have. New versions arrive when the notebook opens, every 15 minutes while Brulion is in front and with **Get the newest version**; a note changed on both sides is merged line by line, and when that is impossible GitHub's version is kept beside yours in **Conflicts**. Your changes go back only when you ask: as a commit, or as a pull request from a branch of your own (in your fork when the repository is not yours). Public repositories need no account; to send changes, paste a personal access token — it is kept on this device and sent only to GitHub. See [[Sync#GitHub|GitHub]].
+- **Dataview queries** — a code block with the language `dataview`, from a vault shared with Obsidian, shows its results instead of its code: LIST, TABLE with its columns and TASK, with FROM (tags, folders, links), WHERE, SORT, GROUP BY, FLATTEN and LIMIT, page fields, `key:: value` fields and Dataview's functions. Read-only, except that tasks can be checked off. Nothing runs as a script: `dataviewjs`, `CALENDAR` and functions with regular expressions say they are not supported. See [[Queries#Dataview queries from Obsidian|Dataview queries]].
+- **Open in the browser** — the download page runs the browser version of the latest release itself, nothing to download (GitHub Pages host it next to the page); on a Mac, an iPhone, an iPad or a Chromebook it is the main button.
+- **The documentation in the browser** — **Brulion Documentation** (the notebook switcher, Ctrl+Shift+B) is in the browser version too, offline, as on the desktop and Android.
+
+**Changes**
+- **Android: the alarm screen** — black (OLED pixels off), with the time large, the date, the reminder and its page, **Done** and **Open note** as chips, and at the bottom a slider: drag the bell left to snooze, right for OK. A tap alone answers nothing (the bell shakes), so a brush in a pocket does not silence it; letting go early springs it back. With TalkBack there are two plain buttons instead.
+- **Import from Logseq** keeps the tasks' `:LOGBOOK:` drawers, so their clocked time and status history come along; the export to Obsidian leaves them out (Obsidian would show them as text). See [[Tasks#Time tracking|Time tracking]].
+
+**Fixes**
+- A journal day whose note was deleted (in the trash, by another program, by sync) no longer shows its text; edits not saved yet are still kept and saved again.
+
 ## 0.15.0 — November 8, 2026
 
 **Note**
