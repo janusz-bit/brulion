@@ -6,7 +6,11 @@
 # docs/ANDROID.md, "Brulion's own F-Droid repository".
 #
 # Called by release.yml once a release is published (not for a pre-release, nor for an APK signed
-# with a throwaway key), and by hand (e.g. after the secrets were set; from main or a tag v*).
+# with a throwaway key), by hand (e.g. after the secrets were set; from main or a tag v*), and by
+# a push to main that changes what the site is built from (the page, the script, the store texts,
+# the logo): the site is rebuilt from the published releases as they are, so the change shows
+# without waiting for the next release. Not for a "Release v…" commit: its new changelogs belong
+# to a release not published yet, and release.yml rebuilds the site once it is.
 # Secrets (scripts/fdroid-new-keystore.sh): FDROID_KEYSTORE_BASE64, FDROID_KEYSTORE_PASS and
 # FDROID_KEY_ALIAS (default brulion-fdroid). One-time setup: Settings -> Pages -> Build and
 # deployment -> Source: "GitHub Actions", and Settings -> Environments -> github-pages ->
@@ -14,6 +18,14 @@
 name: F-Droid repository
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - packaging/fdroid-repo/**
+      - scripts/fdroid-repo.sh
+      - fastlane/metadata/android/**
+      - assets/logo.svg
+      - .github/workflows/fdroid.yml
   workflow_dispatch:
   workflow_call:
     secrets:
@@ -33,6 +45,7 @@ env:
 jobs:
   build:
     name: Build the repository
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Release v')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

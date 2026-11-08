@@ -930,8 +930,12 @@ published `repo/index-v2.json` (it keeps the dates when versions already there w
 `fdroid update` (index `index-v1.jar`, `index-v2.json` + `entry.jar` signed with the repository
 key, QR code `repo/index.png`), adds the page `packaging/fdroid-repo/index.html` with the address,
 the fingerprint and the newest release's files, and the workflow deploys the whole to GitHub Pages. A release (`release.yml`)
-calls it after publishing, except for a test release and an APK with a throwaway key; it can also
-be run by hand (`gh workflow run fdroid.yml`). Locally (no deployment, APKs from a folder):
+calls it after publishing, except for a test release and an APK with a throwaway key; so does a push
+to `main` that changes what the site is built from (`packaging/fdroid-repo/`, `scripts/fdroid-repo.sh`,
+`fastlane/metadata/android/`, `assets/logo.svg`, the workflow) — the site is rebuilt from the
+published releases as they are, so the change shows without waiting for the next release (not for
+a "Release v…" commit: its changelogs belong to a release not published yet, which rebuilds the
+site itself). It can also be run by hand (`gh workflow run fdroid.yml`). Locally (no deployment, APKs from a folder):
 
 ```sh
 read -r -s -p 'Repository key password: ' FDROID_KEYSTORE_PASS; echo; export FDROID_KEYSTORE_PASS
@@ -961,7 +965,9 @@ latest published one), read with `gh release view` (tag, date, file names and si
 refuses a draft, a pre-release, a tag other than `vX.Y.Z` and a release without one of the linked
 files, so the page never links a file that is not there. `github.com/…/releases/latest/download/…`
 is not used, because the file names carry the version. The page is rebuilt with every published
-release (`release.yml` → `fdroid.yml`), so it never shows a pre-release. It is static; a short
+release (`release.yml` → `fdroid.yml`) and with every push to `main` that changes the page, the
+script or the store texts, so it never shows a pre-release and an edit of the page goes live by
+itself. It is static; a short
 script on the page only adds a big button for the visitor's system above the list (Android → APK,
 Windows → installer, Linux → AppImage x86_64 or aarch64 — Chromium tells the processor only through
 `navigator.userAgentData` — another computer → the browser version; none on iPhone/iPad). Without
