@@ -12,24 +12,27 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
+/// What detectCsvSeparator() reads: the records of about the first 64 kB, at most 20.
+constexpr qsizetype SampleLength = 64 * 1024;
+constexpr qsizetype SampleRecords = 20;
+
 /// A cell's text for CSV: `<br>` a line break (the table's form of one).
 QString csvCellText(const QString &cell)
 {
     if (!cell.contains(u'<'))
         return cell;
     static const QRegularExpression br(u"<br\\s*/?>"_s, QRegularExpression::CaseInsensitiveOption);
-    QString out = cell;
-    return out.replace(br, u"\n"_s);
+    return QString(cell).replace(br, u"\n"_s);
 }
 
-/// The first records of `text` (about 64 kB, at most 20 records) split by `separator`.
+/// The first records of `text` (SampleLength, SampleRecords) split by `separator`.
 QList<QStringList> sample(QStringView text, QChar separator)
 {
-    QList<QStringList> rows = parseCsv(text.left(64 * 1024), separator);
-    if (text.size() > 64 * 1024 && !rows.isEmpty())
+    QList<QStringList> rows = parseCsv(text.left(SampleLength), separator);
+    if (text.size() > SampleLength && !rows.isEmpty())
         rows.removeLast(); // cut in the middle
-    if (rows.size() > 20)
-        rows.resize(20);
+    if (rows.size() > SampleRecords)
+        rows.resize(SampleRecords);
     return rows;
 }
 
@@ -51,31 +54,27 @@ QString tableToCsv(const calc::TableModel &model, const calc::TableEval &eval, Q
     qsizetype columns = model.header.size();
     for (const QStringList &row : model.rows)
         columns = std::max(columns, row.size());
-    const auto record = [&](const QStringList &cells) {
-        QStringList fields;
-        fields.reserve(columns);
-        for (qsizetype c = 0; c < columns; ++c)
-            fields.append(csvSafeText(c < cells.size() ? cells.at(c) : QString()));
-        return csvRow(fields, separator) + u"\r\n"_s;
+    // Cell `c` of `row` (`r`: its index in model.rows, -1 for the header): a formula's result when
+    // `eval` has one, else the text as written.
+    const auto cellText = [&](const QStringList &row, qsizetype r, qsizetype c) -> QString {
+        const QStringView trimmed = QStringView(row.at(c)).trimmed();
+        const bool formula = r >= 0 && trimmed.startsWith(u'=') && !trimmed.mid(1).trimmed().isEmpty();
+        if (formula && r < eval.values.size() && c < eval.values.at(r).size() && !eval.values.at(r).at(c).isNull())
+            return eval.values.at(r).at(c);
+        return csvCellText(row.at(c));
     };
-    QStringList header;
-    for (const QString &h : model.header)
-        header.append(csvCellText(h));
-    QString out = record(header);
-    for (qsizetype r = 0; r < model.rows.size(); ++r) {
-        QStringList cells;
-        const QStringList &row = model.rows.at(r);
-        for (qsizetype c = 0; c < row.size(); ++c) {
-            const QString &cell = row.at(c);
-            const QStringView trimmed = QStringView(cell).trimmed();
-            const bool formula = trimmed.startsWith(u'=') && !trimmed.mid(1).trimmed().isEmpty();
-            if (formula && r < eval.values.size() && c < eval.values.at(r).size() && !eval.values.at(r).at(c).isNull())
-                cells.append(eval.values.at(r).at(c));
-            else
-                cells.append(csvCellText(cell));
-        }
-        out += record(cells);
-    }
+    QString out;
+    QStringList fields;
+    fields.reserve(columns);
+    const auto record = [&](const QStringList &row, qsizetype r) {
+        fields.clear();
+        for (qsizetype c = 0; c < columns; ++c)
+            fields.append(csvSafeText(c < row.size() ? cellText(row, r, c) : QString()));
+        out += csvRow(fields, separator) + u"\r\n"_s;
+    };
+    record(model.header, -1);
+    for (qsizetype r = 0; r < model.rows.size(); ++r)
+        record(model.rows.at(r), r);
     return out;
 }
 
@@ -87,13 +86,10 @@ QChar detectCsvSeparator(QStringView text)
     qsizetype bestScore = 0;
     for (const QChar candidate : {u'\t', u';', u','}) {
         const QList<QStringList> rows = sample(text, candidate);
-        if (rows.isEmpty())
-            continue;
-        const qsizetype fields = rows.first().size();
+        const qsizetype fields = rows.isEmpty() ? 0 : rows.first().size();
         if (fields < 2)
             continue;
-        const qsizetype same =
-                std::count_if(rows.cbegin(), rows.cend(), [&](const QStringList &r) { return r.size() == fields; });
+        const qsizetype same = std::ranges::count_if(rows, [&](const QStringList &r) { return r.size() == fields; });
         const qsizetype score = same * 1000 + std::min<qsizetype>(fields, 999);
         if (score > bestScore) { // ties: tab, then semicolon (decimal commas), then comma
             bestScore = score;
@@ -110,15 +106,18 @@ std::optional<CsvTable> tableFromCsv(QStringView text)
     if (text.startsWith(QChar(0xFEFF)))
         text = text.sliced(1);
     CsvTable out;
-    out.separator = detectCsvSeparator(text);
-    if (declaredSeparator(text)) {
-        const qsizetype eol = text.indexOf(u'\n');
-        text = eol < 0 ? QStringView() : text.sliced(eol + 1);
+    if (const auto declared = declaredSeparator(text)) {
+        out.separator = *declared;
+        // The records after the "sep=" line and its line break (CRLF, LF or CR).
+        const qsizetype lineEnd = text.sliced(5).startsWith(u"\r\n") ? 7 : 6;
+        text = text.sliced(std::min(text.size(), lineEnd));
+    } else {
+        out.separator = detectCsvSeparator(text);
     }
     QList<QStringList> records = parseCsv(text, out.separator);
     // Records without any text (blank lines, ";;;" lines) are left out.
     records.removeIf([](const QStringList &r) {
-        return std::all_of(r.cbegin(), r.cend(), [](const QString &f) { return f.trimmed().isEmpty(); });
+        return std::ranges::all_of(r, [](const QString &f) { return QStringView(f).trimmed().isEmpty(); });
     });
     if (records.isEmpty())
         return std::nullopt;

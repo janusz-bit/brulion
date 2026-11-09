@@ -145,7 +145,7 @@ QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *
         budget.maxEntries = int(remaining(limits.maxEntries, unpackedEntries));
         budget.expandNested = false; // nesting is decided here, level by level
         const QList<FileEntry> entries = kind == ArchiveKind::Zip ? readZip(file.data, &archiveWarnings, budget)
-                                                                  : readTar(file.data, &archiveWarnings);
+                                                                  : readTar(file.data, &archiveWarnings, budget);
         for (const FileEntry &e : entries)
             unpackedBytes += e.data.size();
         unpackedEntries += entries.size();

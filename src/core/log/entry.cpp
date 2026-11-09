@@ -27,10 +27,17 @@ std::optional<qint64> parseTime(QStringView text)
 {
     if (text.size() != kTimeLength)
         return std::nullopt;
-    const QDateTime time = QDateTime::fromString(text.toString(), kTimeFormat.toString());
+    const QDateTime time = QDateTime::fromString(text, kTimeFormat);
     if (!time.isValid())
         return std::nullopt;
     return time.toMSecsSinceEpoch();
+}
+
+/// "<time>\t<L>\t<category>\t", the start of every line of an entry.
+QString linePrefix(const Entry &entry, qint64 time)
+{
+    return formatTime(time) + u'\t' + levelLetter(entry.level) + u'\t'
+           + (entry.category.isEmpty() ? u"default"_s : entry.category) + u'\t';
 }
 
 } // namespace
@@ -104,7 +111,7 @@ QString truncateMessage(const QString &message)
 
 QString formatTime(qint64 msecsSinceEpoch)
 {
-    return QDateTime::fromMSecsSinceEpoch(msecsSinceEpoch).toString(kTimeFormat.toString());
+    return QDateTime::fromMSecsSinceEpoch(msecsSinceEpoch).toString(kTimeFormat);
 }
 
 QString formatLine(const Entry &entry)
@@ -112,9 +119,8 @@ QString formatLine(const Entry &entry)
     QString message = entry.message;
     message.replace(u"\r\n"_s, u"\n"_s);
     message.replace(u'\r', u'\n');
-    message.replace(u"\n"_s, u"\n\t"_s);
-    QString line = formatTime(entry.time) + u'\t' + levelLetter(entry.level) + u'\t'
-                   + (entry.category.isEmpty() ? u"default"_s : entry.category) + u'\t' + message;
+    message.replace(u'\n', u"\n\t"_s);
+    QString line = linePrefix(entry, entry.time) + message;
     if (entry.repeat > 1)
         line += u'\n' + formatRepeatLine(entry);
     return line;
@@ -124,14 +130,20 @@ QString formatRepeatLine(const Entry &entry)
 {
     if (entry.repeat <= 1)
         return {};
-    return formatTime(entry.lastTime ? entry.lastTime : entry.time) + u'\t' + levelLetter(entry.level) + u'\t'
-           + (entry.category.isEmpty() ? u"default"_s : entry.category) + u'\t'
+    return linePrefix(entry, entry.lastTime ? entry.lastTime : entry.time)
            + u"(previous message repeated %1 more times)"_s.arg(entry.repeat - 1);
 }
 
 QList<Entry> parseLines(QStringView text)
 {
     QList<Entry> out;
+    // A line that is no entry of its own continues the previous one (or starts one of category "log").
+    const auto continueLast = [&out](QStringView line) {
+        if (out.isEmpty())
+            out.append(Entry{.category = u"log"_s, .message = line.toString()});
+        else
+            out.last().message.append(u'\n').append(line);
+    };
     if (text.startsWith(QChar(0xFEFF)))
         text = text.mid(1);
     qsizetype pos = 0;
@@ -146,10 +158,7 @@ QList<Entry> parseLines(QStringView text)
         if (line.isEmpty())
             continue;
         if (line.startsWith(u'\t')) {
-            if (out.isEmpty())
-                out.append(Entry{0, 0, Level::Info, u"log"_s, line.mid(1).toString(), 1, 0});
-            else
-                out.last().message += u'\n' + line.mid(1).toString();
+            continueLast(line.mid(1));
             continue;
         }
         // "<time>\t<L>\t<category>\t<message>"
@@ -159,24 +168,20 @@ QList<Entry> parseLines(QStringView text)
         const std::optional<qint64> time = t1 > 0 ? parseTime(line.left(t1)) : std::nullopt;
         const std::optional<Level> level = t2 == t1 + 2 ? levelFromLetter(line.at(t1 + 1)) : std::nullopt;
         if (!time || !level || t3 < 0) {
-            if (out.isEmpty())
-                out.append(Entry{0, 0, Level::Info, u"log"_s, line.toString(), 1, 0});
-            else
-                out.last().message += u'\n' + line.toString();
+            continueLast(line);
             continue;
         }
-        Entry entry;
-        entry.time = *time;
-        entry.level = *level;
-        entry.category = line.mid(t2 + 1, t3 - t2 - 1).toString();
-        entry.message = line.mid(t3 + 1).toString();
+        Entry entry{.time = *time,
+                    .level = *level,
+                    .category = line.mid(t2 + 1, t3 - t2 - 1).toString(),
+                    .message = line.mid(t3 + 1).toString()};
         if (const std::optional<int> n = repeatCount(entry.message);
             n && !out.isEmpty() && out.last().category == entry.category && out.last().level == entry.level) {
             out.last().repeat += *n;
             out.last().lastTime = entry.time;
             continue;
         }
-        out.append(entry);
+        out.append(std::move(entry));
     }
     return out;
 }

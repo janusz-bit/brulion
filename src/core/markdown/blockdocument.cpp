@@ -195,7 +195,7 @@ std::optional<QList<BlockSource>> convertRun(const BlockDeltaData &d, int from, 
         BlockSource t{uid, b.own, e->eol[to], e->trailing[to]};
         if (e->text[from] != e->text[to])
             t.own = b.own.first(e->from) + e->text[to] + b.own.sliced(e->from + e->text[from].size());
-        out.append(t);
+        out.append(std::move(t));
     }
     return out;
 }
@@ -232,16 +232,23 @@ QString normalizeNewlines(const QString &text)
     return out;
 }
 
-/// The first line terminator inside `s`, or an empty string.
-QString firstEol(QStringView s)
+/// The line terminator of a block's lines: the first one inside its text `own`, else `after` (the
+/// one after the block), else `document` (the document's).
+QString linesEol(QStringView own, const QString &after, const QString &document)
 {
-    for (qsizetype i = 0; i < s.size(); ++i) {
-        if (s[i] == u'\n')
+    for (qsizetype i = 0; i < own.size(); ++i) {
+        if (own[i] == u'\n')
             return u"\n"_s;
-        if (s[i] == u'\r')
-            return charAt(s, i + 1) == u'\n' ? u"\r\n"_s : u"\r"_s;
+        if (own[i] == u'\r')
+            return charAt(own, i + 1) == u'\n' ? u"\r\n"_s : u"\r"_s;
     }
-    return {};
+    return after.isEmpty() ? document : after;
+}
+
+/// The first line of `s`, without its terminator.
+QStringView firstLine(QStringView s)
+{
+    return s.first(std::ranges::find_if(s, isLineBreak) - s.begin());
 }
 
 QString joinLineRange(const QList<text::Line> &lines, int from, int to, bool withLastEol)
@@ -297,6 +304,23 @@ QStringView trimStartBlanks(QStringView s)
     return s.sliced(indentOf(s).chars);
 }
 
+/// A non-list block's text as a top-level list item: "- " before its first line, two spaces before
+/// the others (blank lines stay as they are).
+QString asListItem(const QString &own)
+{
+    QString out;
+    const QList<text::Line> lines = text::splitLines(own);
+    for (qsizetype k = 0; k < lines.size(); ++k) {
+        const QString &t = lines[k].text;
+        if (k == 0)
+            out += u"- "_s + trimStartBlanks(t);
+        else
+            out += isBlank(t) ? t : u"  "_s + t;
+        out += lines[k].eol;
+    }
+    return out;
+}
+
 /// Re-indent one line from indentation `from` to `to` (visual delta for other indentation).
 QString reindentLine(const QString &line, const QString &from, const QString &to)
 {
@@ -330,12 +354,8 @@ struct DeriveKey {
     QStringView own;
     bool frontmatter = false;
     bool properties = false;
+    friend bool operator==(const DeriveKey &, const DeriveKey &) = default;
 };
-
-bool operator==(const DeriveKey &a, const DeriveKey &b)
-{
-    return a.frontmatter == b.frontmatter && a.properties == b.properties && a.own == b.own;
-}
 
 size_t qHash(const DeriveKey &key, size_t seed = 0)
 {
@@ -369,7 +389,7 @@ qsizetype BlockDocument::Delta::size() const
         if (!sameText(e.trailing[0], e.trailing[1]))
             n += e.trailing[0].size() + e.trailing[1].size();
     }
-    if (!(d->side[0].edges == d->side[1].edges)) {
+    if (d->side[0].edges != d->side[1].edges) {
         for (const BlockDeltaSide &side : d->side)
             n += side.edges.bom.size() + side.edges.leading.size() + side.edges.eol.size();
     }
@@ -396,13 +416,8 @@ void BlockDocument::setContent(const QString &content, const BlockDocument *reus
     }
 
     m_items.clear();
-    m_leading.clear();
-    m_bom.clear();
-    QString text = content;
-    if (!text.isEmpty() && text[0].unicode() == 0xfeff) {
-        m_bom = text.first(1);
-        text = text.sliced(1);
-    }
+    m_bom = content.startsWith(QChar::ByteOrderMark) ? content.first(1) : QString();
+    const QString text = m_bom.isEmpty() ? content : content.sliced(1);
     m_eol = text::detectEol(text);
     m_finalNewline = text.isEmpty() || endsWithEol(text);
 
@@ -414,7 +429,8 @@ void BlockDocument::setContent(const QString &content, const BlockDocument *reus
     // quotes are one block with everything inside them).
     QList<bool> included(st.nodes.size(), false);
     QList<int> starts;
-    for (const auto &[n, parent] : preOrder(st)) {
+    const QList<std::pair<int, int>> order = preOrder(st);
+    for (const auto &[n, parent] : order) {
         const Node &node = st.nodes[n];
         const bool listChild = parent >= 0 && node.kind == BlockKind::ListItem
                                && st.nodes[parent].kind == BlockKind::ListItem && included[parent];
@@ -440,6 +456,7 @@ void BlockDocument::setContent(const QString &content, const BlockDocument *reus
         starts.prepend(firstText);
     m_leading = joinLineRange(lines, 0, firstText >= 0 ? firstText : firstStart, true);
 
+    m_items.reserve(starts.size());
     for (qsizetype s = 0; s < starts.size(); ++s) {
         const int from = starts[s];
         const int to = s + 1 < starts.size() ? starts[s + 1] : lineCount;
@@ -478,20 +495,17 @@ QString BlockDocument::blockSource(int i) const
 
 int BlockDocument::indexOfUid(quint64 uid) const
 {
-    for (int i = 0; i < count(); ++i) {
-        if (m_items[i].entry.uid == uid)
-            return i;
-    }
-    return -1;
+    const auto it = std::ranges::find(m_items, uid, [](const Item &item) { return item.entry.uid; });
+    return it == m_items.cend() ? -1 : int(it - m_items.cbegin());
 }
 
 int BlockDocument::indexAtLine(int line) const
 {
     if (line < 0)
         return -1;
-    int found = -1;
-    for (int i = 0; i < count() && m_items[i].entry.line <= line; ++i)
-        found = i;
+    // The last block that starts at or before `line` (the blocks are in line order).
+    const auto after = std::ranges::upper_bound(m_items, line, {}, [](const Item &item) { return item.entry.line; });
+    const int found = int(after - m_items.cbegin()) - 1;
     if (found >= 0 && found == count() - 1) {
         const Item &it = m_items[found];
         const int end =
@@ -536,7 +550,7 @@ QList<BlankBlock> BlockDocument::blankBlocks() const
 int BlockDocument::restoreBlankBlocks(const QList<BlankBlock> &blocks)
 {
     QList<BlankBlock> wanted = blocks;
-    std::ranges::sort(wanted, [](const BlankBlock &x, const BlankBlock &y) { return x.line < y.line; });
+    std::ranges::sort(wanted, {}, &BlankBlock::line);
     int made = 0;
     for (const BlankBlock &b : std::as_const(wanted)) {
         if (b.line < 0 || b.lines < 1)
@@ -616,11 +630,8 @@ void BlockDocument::setEdges(const BlockEdges &edges)
 
 BlockDocument::Version BlockDocument::version() const
 {
-    auto data = std::make_shared<BlockVersionData>();
-    data->blocks = sourcesOf(0, count());
-    data->edges = edges();
     Version v;
-    v.d = std::move(data);
+    v.d = std::make_shared<const BlockVersionData>(BlockVersionData{sourcesOf(0, count()), edges()});
     return v;
 }
 
@@ -672,7 +683,7 @@ EditResult BlockDocument::applyDelta(const Delta &delta, int from, int to, bool 
         return {};
     const BlockDeltaData &d = *delta.d;
     const int n = int(d.side[from].run.size());
-    if (count() != d.side[from].count || !(edges() == d.side[from].edges) || d.first < 0 || d.first + n > count())
+    if (count() != d.side[from].count || edges() != d.side[from].edges || d.first < 0 || d.first + n > count())
         return {};
     const std::optional<QList<BlockSource>> target = convertRun(d, from, to, sourcesOf(d.first, d.first + n));
     if (!target)
@@ -724,7 +735,7 @@ EditResult BlockDocument::applyDelta(const Delta &delta, int from, int to, bool 
     // Only the edges changed (a BOM, the blank lines before the first block): the text did, which
     // a caller learns from changed rows. A document with no blocks has no row to report it with
     // (BlockListModel::apply() makes the text of an empty page again).
-    if (r.changes.isEmpty() && !(d.side[from].edges == d.side[to].edges) && count() > 0)
+    if (r.changes.isEmpty() && d.side[from].edges != d.side[to].edges && count() > 0)
         r.changes.append({BlockChange::Type::Changed, 0, 1, -1});
     return r;
 }
@@ -737,8 +748,8 @@ std::optional<BlockDocument::Delta> BlockDocument::composed(const Delta &first, 
         return first;
     const BlockDeltaData &a = *first.d;  // A -> B
     const BlockDeltaData &b = *second.d; // B -> C (this document)
-    if (a.side[1].count != b.side[0].count || !(a.side[1].edges == b.side[0].edges) || count() != b.side[1].count
-        || !(edges() == b.side[1].edges))
+    if (a.side[1].count != b.side[0].count || a.side[1].edges != b.side[0].edges || count() != b.side[1].count
+        || edges() != b.side[1].edges)
         return std::nullopt;
     // Both runs in B: one window of B over them (with the untouched blocks between them).
     const int end1 = a.first + int(a.side[1].run.size());
@@ -836,20 +847,17 @@ void BlockDocument::derive(int i)
     e.blockId = b ? b->id : QString();
     it.displayMathOpen = it.own.contains(u"$$") && parseStructure(it.own, options).displayMathOpenAtEnd;
 
-    const QList<text::Line> lines = text::splitLines(it.own);
-    const auto lm = e.kind == BlockKind::ListItem ? matchListMarker(lines.first().text) : std::nullopt;
+    const auto lm = e.kind == BlockKind::ListItem ? matchListMarker(firstLine(it.own)) : std::nullopt;
     if (!lm) {
         if (e.kind == BlockKind::ListItem)
             e.kind = BlockKind::Paragraph;
         e.prefix.clear();
         it.markerCol = -1;
         it.contIndent.clear();
-        QStringList body;
-        for (const text::Line &l : lines)
-            body.append(l.text);
-        e.body = body.join(u'\n');
+        e.body = normalizeNewlines(it.own); // its lines joined by "\n"
         return;
     }
+    const QList<text::Line> lines = text::splitLines(it.own);
     const QString &first = lines.first().text;
     e.prefix = first.first(lm->contentStart);
     it.markerCol = lm->indent.col;
@@ -904,9 +912,7 @@ void BlockDocument::touch(int i)
 QString BlockDocument::serializeBody(const Item &item, const QString &body) const
 {
     const QStringList lines = normalizeNewlines(body).split(u'\n');
-    QString eol = firstEol(item.own);
-    if (eol.isEmpty())
-        eol = item.eol.isEmpty() ? m_eol : item.eol;
+    const QString eol = linesEol(item.own, item.eol, m_eol);
     if (item.entry.kind != BlockKind::ListItem)
         return lines.join(eol);
     QString out = (lines.first().isEmpty() ? item.entry.prefix : spacedPrefix(item.entry.prefix)) + lines.first();
@@ -966,8 +972,7 @@ void BlockDocument::recompute()
         line += countLineBreaks(it.own) + countLineBreaks(it.eol) + countLineBreaks(e.trailing);
     }
     for (int i = 0; i < count(); ++i) {
-        const bool kids = i + 1 < count() && m_items[i + 1].entry.parent == i;
-        if (kids != m_items[i].hasChildren) {
+        if (const bool kids = hasChildren(i); kids != m_items[i].hasChildren) {
             m_items[i].hasChildren = kids;
             touch(i);
         }
@@ -990,8 +995,8 @@ BlockDocument::Snapshot BlockDocument::snapshot() const
 /// everything between them YAML frontmatter on reload: a blank line before it keeps it a rule.
 void BlockDocument::protectLeadingRule()
 {
-    if (m_items.isEmpty() || !m_leading.isEmpty() || m_items.first().entry.kind == BlockKind::Frontmatter
-        || !m_items.first().own.startsWith(u"---"))
+    if (m_items.isEmpty() || !m_leading.isEmpty() || m_items.constFirst().entry.kind == BlockKind::Frontmatter
+        || !m_items.constFirst().own.startsWith(u"---"))
         return;
     if (findFrontmatter(toString()))
         m_leading = m_eol;
@@ -1020,7 +1025,8 @@ void BlockDocument::separateDisplayMath()
         int stop = count(); // where the search ended without a closing line
         for (int j = i + 1; j < count() && !closes; ++j) {
             bool blank = false;
-            for (const text::Line &l : text::splitLines(m_items[j].own)) {
+            const QList<text::Line> lines = text::splitLines(m_items[j].own);
+            for (const text::Line &l : lines) {
                 blank = isBlank(l.text);
                 closes = !blank && mayClose(l.text);
                 if (blank || closes)
@@ -1090,10 +1096,7 @@ EditResult BlockDocument::rowChanges(const Snapshot &before, int focus, int curs
         while (p + len < target.size() && q + len < work.size() && work[q + len] == target[p + len])
             ++len;
         r.changes.append({BlockChange::Type::Moved, q, len, p});
-        const QList<quint64> moved = work.mid(q, len);
-        work.remove(q, len);
-        for (int k = 0; k < len; ++k)
-            work.insert(p + k, moved[k]);
+        std::ranges::rotate(work.begin() + p, work.begin() + q, work.begin() + q + len);
         p += len - 1;
     }
     // 3. Inserted rows (runs in ascending order of their final position).
@@ -1227,22 +1230,16 @@ QString BlockDocument::siblingPrefix(int ref, bool increment) const
         return u"- "_s;
     if (!lm->ordered)
         return prefix;
+    // Lazy numbering ("1. 1. 1.": a sibling has the same number) keeps the same number.
+    const auto sameNumber = [&](int other) {
+        if (other < 0 || !isListItem(other))
+            return false;
+        const auto olm = markerOfPrefix(m_items[other].entry.prefix);
+        return olm && olm->ordered && olm->number == lm->number;
+    };
     int number = lm->number;
-    if (increment) {
-        // Lazy numbering ("1. 1. 1.") keeps the same number.
-        bool lazy = false;
-        const int prev = prevSibling(ref);
-        const int next = nextSibling(ref);
-        for (int other : {prev, next}) {
-            if (other < 0 || !isListItem(other))
-                continue;
-            const auto olm = markerOfPrefix(m_items[other].entry.prefix);
-            if (olm && olm->ordered && olm->number == number)
-                lazy = true;
-        }
-        if (!lazy)
-            ++number;
-    }
+    if (increment && !sameNumber(prevSibling(ref)) && !sameNumber(nextSibling(ref)))
+        ++number;
     return prefix.first(lm->markerFrom) + QString::number(number) + prefix.sliced(lm->markerEnd - 1);
 }
 
@@ -1260,8 +1257,9 @@ void BlockDocument::shiftIndent(int first, int end, const QString &from, const Q
     if (from == to)
         return;
     for (int i = first; i < end; ++i) {
+        const QList<text::Line> lines = text::splitLines(m_items[i].own);
         QString out;
-        for (const text::Line &l : text::splitLines(m_items[i].own))
+        for (const text::Line &l : lines)
             out += (isBlank(l.text) ? l.text : reindentLine(l.text, from, to)) + l.eol;
         setOwn(i, out);
     }
@@ -1271,8 +1269,8 @@ void BlockDocument::renumberChildren(int parent, quint64 restartUid)
 {
     QList<int> children;
     for (int i = parent + 1; i < count(); ++i) {
-        const BlockEntry &e = m_items[i].entry;
-        if (parent >= 0 && e.depth <= m_items[parent].entry.depth)
+        const BlockEntry &e = at(i);
+        if (parent >= 0 && e.depth <= at(parent).depth)
             break;
         if (e.parent == parent && (parent >= 0 || e.depth == 0))
             children.append(i);
@@ -1308,7 +1306,8 @@ void BlockDocument::renumberChildren(int parent, quint64 restartUid)
                 continue;
             const int i = run[r];
             const QString &own = m_items[i].own;
-            const auto mlm = matchListMarker(own);
+            // The first line's marker ("2." may end that line, its text on the next ones).
+            const auto mlm = matchListMarker(firstLine(own));
             if (!mlm)
                 continue;
             setOwn(i, own.first(mlm->markerFrom) + QString::number(want) + own.sliced(mlm->markerEnd - 1));
@@ -1393,7 +1392,12 @@ void BlockDocument::insertItem(int pos, Item item, bool takeTrailingFromPrevious
 
 void BlockDocument::removeItems(int first, int end)
 {
+    // Rows that ended the document without a final line break: the block before them ends it so
+    // too, unless blank lines follow it.
+    const bool noFinalBreak = end == count() && m_items[end - 1].eol.isEmpty();
     m_items.remove(first, end - first);
+    if (noFinalBreak && first > 0 && m_items[first - 1].entry.trailing.isEmpty())
+        m_items[first - 1].eol.clear();
 }
 
 void BlockDocument::swapRanges(int a0, int b0, int b1)
@@ -1401,27 +1405,18 @@ void BlockDocument::swapRanges(int a0, int b0, int b1)
     const QString wsA = leadingWhitespace(a0);
     const QString wsB = leadingWhitespace(b0);
     const bool bothLists = isListItem(a0) && isListItem(b0);
-    QList<Item> a = m_items.mid(a0, b0 - a0);
-    QList<Item> b = m_items.mid(b0, b1 - b0);
     // Separators stay where they are: the one between the two ranges and the one after them.
-    const QString sepA = a.last().entry.trailing;
-    const QString eolA = a.last().eol;
-    const QString sepB = b.last().entry.trailing;
-    const QString eolB = b.last().eol;
-    if (b.last().entry.trailing != sepA)
-        ++b.last().version;
-    b.last().entry.trailing = sepA;
-    b.last().eol = eolA;
-    if (a.last().entry.trailing != sepB)
-        ++a.last().version;
-    a.last().entry.trailing = sepB;
-    a.last().eol = eolB;
-    const int nb = int(b.size());
-    for (int k = 0; k < nb; ++k)
-        m_items[a0 + k] = b[k];
-    for (int k = 0; k < a.size(); ++k)
-        m_items[a0 + nb + k] = a[k];
+    Item &lastA = m_items[b0 - 1];
+    Item &lastB = m_items[b1 - 1];
+    if (lastA.entry.trailing != lastB.entry.trailing) {
+        ++lastA.version;
+        ++lastB.version;
+    }
+    std::swap(lastA.entry.trailing, lastB.entry.trailing);
+    std::swap(lastA.eol, lastB.eol);
+    std::ranges::rotate(m_items.begin() + a0, m_items.begin() + b0, m_items.begin() + b1);
     // Keep each position's indentation so siblings stay siblings.
+    const int nb = b1 - b0;
     if (bothLists && wsA != wsB) {
         shiftIndent(a0, a0 + nb, wsB, wsA);
         shiftIndent(a0 + nb, b1, wsA, wsB);
@@ -1597,9 +1592,6 @@ EditResult BlockDocument::mergeWithPrevious(int i)
     const quint64 prevUid = at(p).uid;
     const int caret = isTextBlock(p) ? int(at(p).body.size()) : -1;
     if (isTextBlock(i) && at(i).body.isEmpty()) {
-        Item &prev = m_items[p];
-        if (m_items[i].eol.isEmpty() && prev.entry.trailing.isEmpty())
-            prev.eol.clear();
         removeItems(i, i + 1);
     } else if (isTextBlock(i) && isTextBlock(p)) {
         const QString joined = at(p).body + at(i).body;
@@ -1629,17 +1621,9 @@ EditResult BlockDocument::remove(int i, bool withChildren)
     const Snapshot before = snapshot();
     const int parentIdx = at(i).parent;
     const quint64 parentUid = parentIdx >= 0 ? at(parentIdx).uid : 0;
-    const int end = withChildren ? subtreeEnd(i) : i + 1;
-    const bool wasLast = end == count();
-    const bool noFinalBreak = wasLast && m_items[end - 1].eol.isEmpty();
-    removeItems(i, end);
-    if (wasLast && i > 0 && noFinalBreak && m_items[i - 1].entry.trailing.isEmpty())
-        m_items[i - 1].eol.clear();
+    removeItems(i, withChildren ? subtreeEnd(i) : i + 1);
     recompute();
-    if (parentUid)
-        renumberChildren(indexOfUid(parentUid));
-    else
-        renumberChildren(-1);
+    renumberChildren(parentUid ? indexOfUid(parentUid) : -1);
     if (!withChildren && i < count())
         renumberAround(at(i).uid);
     ensureSeparated(i - 1);
@@ -1653,17 +1637,7 @@ EditResult BlockDocument::convertToList(int i)
     if (i < 0 || i >= count() || isListItem(i) || at(i).kind == BlockKind::Frontmatter || at(i).kind == BlockKind::Rule)
         return {};
     const Snapshot before = snapshot();
-    QString out;
-    const QList<text::Line> lines = text::splitLines(m_items[i].own);
-    for (qsizetype k = 0; k < lines.size(); ++k) {
-        const QString &t = lines[k].text;
-        if (k == 0)
-            out += u"- "_s + trimStartBlanks(t);
-        else
-            out += isBlank(t) ? t : u"  "_s + t;
-        out += lines[k].eol;
-    }
-    setOwn(i, out);
+    setOwn(i, asListItem(m_items[i].own));
     recompute();
     renumberChildren(-1);
     ensureSeparated(i - 1);
@@ -1688,10 +1662,7 @@ EditResult BlockDocument::convertToParagraph(int i)
     // The item's own lines without the marker and the continuation indentation (the body holds
     // them that way), with the block's line terminator.
     const Item &it = m_items[i];
-    QString eol = firstEol(it.own);
-    if (eol.isEmpty())
-        eol = it.eol.isEmpty() ? m_eol : it.eol;
-    setOwn(i, normalizeNewlines(body).split(u'\n').join(eol));
+    setOwn(i, normalizeNewlines(body).split(u'\n').join(linesEol(it.own, it.eol, m_eol)));
     touch(i);
     recompute();
     renumberChildren(-1);
@@ -1711,13 +1682,7 @@ EditResult BlockDocument::indent(int i)
     if (!isListItem(i)) {
         if (at(i).kind == BlockKind::Frontmatter || at(i).kind == BlockKind::Rule)
             return {};
-        QString out;
-        const QList<text::Line> lines = text::splitLines(m_items[i].own);
-        for (qsizetype k = 0; k < lines.size(); ++k) {
-            const QString &t = lines[k].text;
-            out += (k == 0 ? u"- "_s + trimStartBlanks(t) : isBlank(t) ? t : u"  "_s + t) + lines[k].eol;
-        }
-        setOwn(i, out);
+        setOwn(i, asListItem(m_items[i].own));
         recompute();
         ensureSeparated(i - 1);
         ensureSeparated(i);
@@ -1727,13 +1692,12 @@ EditResult BlockDocument::indent(int i)
         const int parentIdx = at(i).parent;
         const quint64 oldParentUid = parentIdx >= 0 ? at(parentIdx).uid : 0;
         const quint64 siblingUid = at(s).uid;
-        QString newWs;
         int lastChild = -1;
         for (int j = s + 1; j < i; ++j) {
             if (at(j).parent == s)
                 lastChild = j;
         }
-        newWs = lastChild >= 0 ? leadingWhitespace(lastChild) : childIndent(s);
+        const QString newWs = lastChild >= 0 ? leadingWhitespace(lastChild) : childIndent(s);
         shiftIndent(i, subtreeEnd(i), leadingWhitespace(i), newWs);
         recompute();
         renumberChildren(oldParentUid ? indexOfUid(oldParentUid) : -1);
@@ -1765,49 +1729,22 @@ EditResult BlockDocument::outdent(int i)
     return finish(before, indexOfUid(uid), -1);
 }
 
+// A range of one row: the block with its subtree (a frontmatter block, always at the top, never
+// moves either way).
 EditResult BlockDocument::moveUp(int i)
 {
-    if (i < 0 || i >= count())
-        return {};
-    const int s = prevSibling(i);
-    if (s < 0 || s < pinnedCount())
-        return {};
-    const Snapshot before = snapshot();
-    const quint64 uid = at(i).uid;
-    const int end = subtreeEnd(i);
-    swapRanges(s, i, end);
-    recompute();
-    const int ni = indexOfUid(uid);
-    renumberAround(uid);
-    ensureSeparated(s - 1);
-    ensureSeparated(s + (end - i) - 1);
-    ensureSeparated(end - 1);
-    fixEnds();
-    return finish(before, ni, -1);
+    return moveRangeUp(i, i);
 }
 
 EditResult BlockDocument::moveDown(int i)
 {
-    if (i < 0 || i >= count())
-        return {};
-    const int t = nextSibling(i);
-    if (t < 0 || i < pinnedCount())
-        return {};
-    const Snapshot before = snapshot();
-    const quint64 uid = at(i).uid;
-    const int end = subtreeEnd(t);
-    swapRanges(i, t, end);
-    recompute();
-    renumberAround(uid);
-    ensureSeparated(i - 1);
-    ensureSeparated(i + (end - t) - 1);
-    ensureSeparated(end - 1);
-    fixEnds();
-    return finish(before, indexOfUid(uid), -1);
+    return moveRangeDown(i, i);
 }
 
 EditResult BlockDocument::applyTaskEdit(int i, int lineInBlock, const QString &newOwn)
 {
+    if (newOwn == m_items[i].own)
+        return {};
     const Snapshot before = snapshot();
     const quint64 uid = at(i).uid;
     const QList<text::Line> lines = text::splitLines(newOwn);
@@ -1834,20 +1771,14 @@ EditResult BlockDocument::toggleTask(int i, QDate today, int lineInBlock)
 {
     if (i < 0 || i >= count())
         return {};
-    const QString out = markdown::toggleTask(m_items[i].own, lineInBlock, today);
-    if (out == m_items[i].own)
-        return {};
-    return applyTaskEdit(i, lineInBlock, out);
+    return applyTaskEdit(i, lineInBlock, markdown::toggleTask(m_items[i].own, lineInBlock, today));
 }
 
 EditResult BlockDocument::setTaskStatus(int i, TaskStatus status, QDate today, int lineInBlock)
 {
     if (i < 0 || i >= count())
         return {};
-    const QString out = markdown::setTaskStatus(m_items[i].own, lineInBlock, status, today);
-    if (out == m_items[i].own)
-        return {};
-    return applyTaskEdit(i, lineInBlock, out);
+    return applyTaskEdit(i, lineInBlock, markdown::setTaskStatus(m_items[i].own, lineInBlock, status, today));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1881,11 +1812,7 @@ EditResult BlockDocument::removeRange(int first, int last)
         if (p < first && !parents.contains(parentUid))
             parents.append(parentUid);
     }
-    const bool wasLast = end == count();
-    const bool noFinalBreak = wasLast && m_items[end - 1].eol.isEmpty();
     removeItems(first, end);
-    if (wasLast && first > 0 && noFinalBreak && m_items[first - 1].entry.trailing.isEmpty())
-        m_items[first - 1].eol.clear();
     recompute();
     for (const quint64 uid : std::as_const(parents)) {
         const int p = uid ? indexOfUid(uid) : -1;
@@ -1900,8 +1827,9 @@ EditResult BlockDocument::removeRange(int first, int last)
 
 EditResult BlockDocument::indentRange(int first, int last)
 {
+    const QList<int> rows = rangeTops(first, last);
     QList<quint64> tops;
-    for (const int i : rangeTops(first, last))
+    for (const int i : rows)
         tops.append(at(i).uid);
     if (tops.isEmpty())
         return {};
@@ -1925,8 +1853,9 @@ EditResult BlockDocument::indentRange(int first, int last)
 
 EditResult BlockDocument::outdentRange(int first, int last)
 {
+    const QList<int> rows = rangeTops(first, last);
     QList<quint64> tops;
-    for (const int i : rangeTops(first, last))
+    for (const int i : rows)
         tops.append(at(i).uid);
     if (tops.isEmpty())
         return {};

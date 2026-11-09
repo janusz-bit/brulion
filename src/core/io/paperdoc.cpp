@@ -21,6 +21,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
+#include <optional>
+#include <utility>
 
 namespace brulion::io::detail {
 
@@ -34,48 +37,47 @@ constexpr qreal MmPerInch = 25.4;
 const QString kUnchecked = u"☐ "_s;
 const QString kChecked = u"☑ "_s;
 
+/// A length on paper in CSS pixels (1/96 inch).
+constexpr qreal cssPixels(qreal millimetres)
+{
+    return millimetres / MmPerInch * CssDpi;
+}
+
+/// The character an HTML entity names (`entity`: what is between '&' and ';'); "" for one we do
+/// not know.
+QString entityText(QStringView entity)
+{
+    static constexpr std::pair<QStringView, QStringView> Named[] = {
+            {u"amp", u"&"}, {u"lt", u"<"}, {u"gt", u">"}, {u"quot", u"\""}, {u"apos", u"'"}};
+    for (const auto &[name, character] : Named) {
+        if (entity == name)
+            return character.toString();
+    }
+    if (!entity.startsWith(u'#'))
+        return {};
+    bool ok = false;
+    const bool hex = entity.startsWith(u"#x") || entity.startsWith(u"#X");
+    const char32_t code = hex ? entity.sliced(2).toUInt(&ok, 16) : entity.sliced(1).toUInt(&ok, 10);
+    if (!ok || code == 0 || code > QChar::LastValidCodePoint || QChar::isSurrogate(code))
+        return {};
+    return QString::fromUcs4(&code, 1);
+}
+
 /// The text of escaped HTML (what HtmlRenderer::escape produced, plus numeric references).
 QString unescape(QStringView html)
 {
     QString out;
     out.reserve(html.size());
     for (qsizetype i = 0; i < html.size(); ++i) {
-        if (html[i] != u'&') {
-            out += html[i];
-            continue;
-        }
-        const qsizetype end = html.indexOf(u';', i);
-        if (end < 0 || end - i > 10) {
-            out += html[i];
-            continue;
-        }
-        const QStringView entity = html.sliced(i + 1, end - i - 1);
-        QString text;
-        if (entity == u"amp")
-            text = u"&"_s;
-        else if (entity == u"lt")
-            text = u"<"_s;
-        else if (entity == u"gt")
-            text = u">"_s;
-        else if (entity == u"quot")
-            text = u"\""_s;
-        else if (entity == u"apos")
-            text = u"'"_s;
-        else if (entity.startsWith(u'#')) {
-            bool ok = false;
-            const uint code = entity.startsWith(u"#x") || entity.startsWith(u"#X") ? entity.sliced(2).toUInt(&ok, 16)
-                                                                                   : entity.sliced(1).toUInt(&ok, 10);
-            if (ok && code > 0 && code <= 0x10FFFF && !(code >= 0xD800 && code <= 0xDFFF)) {
-                const char32_t c = code;
-                text = QString::fromUcs4(&c, 1);
-            }
-        }
+        // An entity: '&', at most nine characters, ';'.
+        const qsizetype end = html[i] == u'&' ? html.first(std::min(html.size(), i + 11)).indexOf(u';', i) : -1;
+        const QString text = end < 0 ? QString() : entityText(html.sliced(i + 1, end - i - 1));
         if (text.isEmpty()) {
             out += html[i];
-            continue;
+        } else {
+            out += text;
+            i = end;
         }
-        out += text;
-        i = end;
     }
     return out;
 }
@@ -164,31 +166,56 @@ private:
     const QHash<QString, PaperPicture> *m_pictures;
 };
 
-/// The rows of `table` (our renderer's <table>…</table>) cut to at most `maxRows` rows and
-/// `maxCells` cells.
-QString limitTable(const QString &table, int maxRows, int maxCells, int *keptRows, int *allRows)
+/// `text` with the matches of `re` (never empty ones) replaced by what `replace` makes of them;
+/// std::nullopt keeps a match as it is.
+template<std::invocable<const QRegularExpressionMatch &> Replace>
+QString replaceMatches(const QString &text, const QRegularExpression &re, Replace replace)
+{
+    QString out;
+    qsizetype pos = 0;
+    for (auto it = re.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        const std::optional<QString> replacement = replace(m);
+        if (!replacement)
+            continue;
+        out += QStringView(text).sliced(pos, m.capturedStart() - pos);
+        out += *replacement;
+        pos = m.capturedEnd();
+    }
+    if (pos == 0)
+        return text;
+    out += QStringView(text).sliced(pos);
+    return out;
+}
+
+/// What paper shows of a table of our renderer.
+struct TableRows {
+    QStringView kept; ///< the table up to the first row left out (all of it when none is)
+    int keptRows = 0;
+    int allRows = 0;
+};
+
+/// The rows of `table` (our renderer's, from after `<table …>` to `</table>`) cut to at most
+/// MaxTableRows rows and MaxTableCells cells.
+TableRows limitTable(QStringView table)
 {
     QList<qsizetype> rowStarts;
     for (qsizetype i = table.indexOf(u"<tr"); i >= 0; i = table.indexOf(u"<tr", i + 3)) {
         if (i + 3 < table.size() && (table[i + 3] == u'>' || table[i + 3] == u' '))
             rowStarts.append(i);
     }
-    *allRows = int(rowStarts.size());
-    *keptRows = *allRows;
-    if (rowStarts.isEmpty())
-        return table;
+    const int all = int(rowStarts.size());
     // Columns: the widest of the first rows (a row is one line of cells).
     qsizetype columns = 1;
-    for (qsizetype r = 0; r < std::min<qsizetype>(rowStarts.size(), 3); ++r) {
-        const qsizetype end = r + 1 < rowStarts.size() ? rowStarts[r + 1] : table.size();
-        const QStringView row = QStringView(table).sliced(rowStarts[r], end - rowStarts[r]);
+    for (qsizetype r = 0; r < std::min(all, 3); ++r) {
+        const qsizetype end = r + 1 < all ? rowStarts.at(r + 1) : table.size();
+        const QStringView row = table.sliced(rowStarts.at(r), end - rowStarts.at(r));
         columns = std::max(columns, row.count(u"<td") + row.count(u"<th"));
     }
-    const qsizetype rows = std::clamp<qsizetype>(maxCells / columns, 2, maxRows);
-    if (rowStarts.size() <= rows)
-        return table;
-    *keptRows = int(rows);
-    return table.left(rowStarts[rows]) + u"</tbody></table>"_s;
+    const int rows = int(std::clamp<qsizetype>(PaperDocument::MaxTableCells / columns, 2, PaperDocument::MaxTableRows));
+    if (all <= rows)
+        return {table, all, all};
+    return {table.first(rowStarts.at(rows)), rows, all};
 }
 
 /// The words of a date / reminder / priority chip of the HTML ("📅 2026-10-20" -> "due:
@@ -245,8 +272,7 @@ QPageSize pageSizeOf(PaperSize size)
 
 PaperDocument::PaperDocument(const ExportInput &input, const QPageLayout &layout) : m_layout(layout)
 {
-    const std::unique_ptr<Exporter> html = makeHtmlSingleExporter();
-    const ExportResult r = html->run(input);
+    const ExportResult r = makeHtmlSingleExporter()->run(input);
     m_warnings = r.warnings;
     QString page = r.files.isEmpty() ? QString() : QString::fromUtf8(r.files.first().data);
     const qsizetype from = page.indexOf(u"<main>");
@@ -254,11 +280,12 @@ PaperDocument::PaperDocument(const ExportInput &input, const QPageLayout &layout
     QString body = from >= 0 && to > from ? page.sliced(from + 6, to - from - 6) : QString();
     page.clear();
     m_notes = int(body.count(u"<section class=\"note\""));
-    m_title = input.vaultName.trimmed().isEmpty() ? u"Brulion"_s : input.vaultName.trimmed();
+    const QString vaultName = input.vaultName.trimmed();
+    m_title = vaultName.isEmpty() ? u"Brulion"_s : vaultName;
     if (m_notes == 1) {
         static const QRegularExpression title(u"<h1 class=\"title\">(.*?)</h1>"_s);
         if (const auto m = title.match(body); m.hasMatch())
-            m_title = unescape(m.captured(1));
+            m_title = unescape(m.capturedView(1));
     }
     m_document = std::make_unique<PaperTextDocument>(&m_pictures);
     m_document->setUndoRedoEnabled(false);
@@ -286,7 +313,7 @@ QTextDocument *PaperDocument::document() const
 
 qreal PaperDocument::textWidth() const
 {
-    return m_layout.paintRect(QPageLayout::Millimeter).width() / MmPerInch * CssDpi;
+    return cssPixels(m_layout.paintRect(QPageLayout::Millimeter).width());
 }
 
 QString PaperDocument::addPicture(QImage image, QByteArray data, QString format, const QString &alt)
@@ -296,20 +323,21 @@ QString PaperDocument::addPicture(QImage image, QByteArray data, QString format,
         data.clear();
     }
     if (data.isEmpty() || (format != u"png" && format != u"jpeg")) {
+        // Encoded anew: a JPEG without transparency as JPEG, anything else as PNG.
+        const bool jpeg = format == u"jpeg" && !image.hasAlphaChannel();
+        format = jpeg ? u"jpeg"_s : u"png"_s;
         QBuffer buffer(&data);
-        buffer.open(QIODevice::WriteOnly);
-        const bool opaque = !image.hasAlphaChannel();
-        format = opaque && format == u"jpeg" ? u"jpeg"_s : u"png"_s;
-        image.save(&buffer, format == u"jpeg" ? "JPEG" : "PNG", format == u"jpeg" ? 90 : -1);
+        if (buffer.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            image.save(&buffer, jpeg ? "JPEG" : "PNG", jpeg ? 90 : -1);
     }
     // Shown at its size in CSS pixels (a picture of a high-density screen at its logical size),
     // at most the text's width and most of a page's height.
     QSizeF size = QSizeF(image.size()) / std::max<qreal>(1, image.devicePixelRatio());
-    const QSizeF room(textWidth(), m_layout.paintRect(QPageLayout::Millimeter).height() / MmPerInch * CssDpi * 0.85);
+    const QSizeF room(textWidth(), cssPixels(m_layout.paintRect(QPageLayout::Millimeter).height()) * 0.85);
     if (size.width() > room.width() || size.height() > room.height())
         size = size.scaled(room, Qt::KeepAspectRatio);
     const QString name = u"brulion-picture:"_s + QString::number(m_pictures.size() + 1);
-    m_pictures.insert(name, PaperPicture{std::move(image), std::move(data), format, size, alt});
+    m_pictures.insert(name, PaperPicture{std::move(image), std::move(data), std::move(format), size, alt});
     return u"<img src=\""_s + name + u"\" width=\""_s + QString::number(std::max(1, qRound(size.width())))
            + u"\" height=\""_s + QString::number(std::max(1, qRound(size.height()))) + u"\">"_s;
 }
@@ -320,15 +348,13 @@ QString PaperDocument::svgPicture(const QString &svgText, const QString &alt)
     static const QRegularExpression style(u"<style\\b.*?</style>"_s, QRegularExpression::DotMatchesEverythingOption);
     QByteArray svg = QString(svgText).remove(style).toUtf8();
     QBuffer buffer(&svg);
-    buffer.open(QIODevice::ReadOnly);
-    QImageReader reader(&buffer, "svg");
+    QImageReader reader(&buffer, "svg"); // opens the buffer
     const QSize natural = reader.size();
     if (!reader.canRead() || natural.isEmpty())
         return {};
     // Twice the size for print, at most 4000 px a side and 16 MP.
-    qreal scale = std::min({2.0, 4000.0 / std::max(natural.width(), natural.height()),
-                            std::sqrt(16e6 / (qreal(natural.width()) * natural.height()))});
-    scale = std::max(scale, 0.01);
+    const qreal scale = std::max(0.01, std::min({2.0, 4000.0 / std::max(natural.width(), natural.height()),
+                                                 std::sqrt(16e6 / (qreal(natural.width()) * natural.height()))}));
     reader.setScaledSize((QSizeF(natural) * scale).toSize().expandedTo(QSize(1, 1)));
     reader.setBackgroundColor(Qt::white);
     QImage image = reader.read();
@@ -353,24 +379,22 @@ QString PaperDocument::pictureHtml(const QString &src, const QString &alt)
             } else {
                 QBuffer buffer;
                 buffer.setData(bytes);
-                buffer.open(QIODevice::ReadOnly);
-                QImageReader reader(&buffer);
+                QImageReader reader(&buffer); // opens the buffer
                 reader.setAutoTransform(true);
                 QString format = QString::fromLatin1(reader.format()).toLower();
                 if (format == u"jpg")
                     format = u"jpeg"_s;
-                const QImage image = reader.read();
+                QImage image = reader.read();
                 if (!image.isNull()) {
                     // A JPEG turned by its EXIF orientation is embedded as drawn.
                     const bool asIs = (format == u"png" || format == u"jpeg") && !reader.transformation();
-                    return addPicture(image, asIs ? bytes : QByteArray(), format, alt);
+                    return addPicture(std::move(image), asIs ? bytes : QByteArray(), std::move(format), alt);
                 }
             }
         }
-        m_warnings.append(
-                IoMessages::tr("The picture “%1” could not be shown in the document.").arg(alt.isEmpty() ? mime : alt));
-        return u"<span class=\"missing\">"_s + esc(IoMessages::tr("Picture: %1").arg(alt.isEmpty() ? mime : alt))
-               + u"</span>"_s;
+        const QString what = alt.isEmpty() ? mime : alt;
+        m_warnings.append(IoMessages::tr("The picture “%1” could not be shown in the document.").arg(what));
+        return u"<span class=\"missing\">"_s + esc(IoMessages::tr("Picture: %1").arg(what)) + u"</span>"_s;
     }
     // A picture from the internet without a copy in the export: its address.
     const QString label = IoMessages::tr("Picture: %1").arg(alt.isEmpty() ? src : alt);
@@ -382,180 +406,113 @@ QString PaperDocument::pictureHtml(const QString &src, const QString &alt)
 QString PaperDocument::adapt(QString body)
 {
     using RE = QRegularExpression;
+    using Match = QRegularExpressionMatch;
     // One note: no table of contents, no notebook heading.
     if (m_notes <= 1) {
         static const RE head(u"^\\s*<h1>.*?</h1>\\s*<nav class=\"toc\">.*?</nav>"_s, RE::DotMatchesEverythingOption);
         body.remove(head);
     }
     // A first heading that repeats the title: the title alone.
-    {
-        static const RE repeated(
-                u"(<h1 class=\"title\">(.*?)</h1>\\n(?:<p class=\"tags\">.*?</p>)?)<h1 id=\"[^\"]*\">(.*?)</h1>"_s);
-        QString out;
-        qsizetype pos = 0;
-        for (auto it = repeated.globalMatch(body); it.hasNext();) {
-            const auto m = it.next();
-            if (unescape(m.captured(2)).trimmed().compare(unescape(m.captured(3)).trimmed(), Qt::CaseInsensitive) != 0)
-                continue;
-            out += QStringView(body).sliced(pos, m.capturedStart() - pos);
-            out += m.captured(1);
-            pos = m.capturedEnd();
-        }
-        if (pos > 0)
-            body = out + QStringView(body).sliced(pos);
-    }
+    static const RE repeated(
+            u"(<h1 class=\"title\">(.*?)</h1>\\n(?:<p class=\"tags\">.*?</p>)?)<h1 id=\"[^\"]*\">(.*?)</h1>"_s);
+    body = replaceMatches(body, repeated, [](const Match &m) -> std::optional<QString> {
+        const QString title = unescape(m.capturedView(2)).trimmed();
+        if (title.compare(unescape(m.capturedView(3)).trimmed(), Qt::CaseInsensitive) != 0)
+            return std::nullopt;
+        return m.captured(1);
+    });
     // Each note after the first on a new page.
-    {
-        qsizetype at = body.indexOf(u"<section class=\"note\"");
-        bool first = true;
-        while (at >= 0) {
-            const qsizetype heading = body.indexOf(u"<h1 class=\"title\"", at);
-            if (heading < 0)
-                break;
-            if (!first) {
-                const QString broken = u"<h1 class=\"title\" style=\"page-break-before:always\""_s;
-                body.replace(heading, 17, broken);
-            }
-            first = false;
-            at = body.indexOf(u"<section class=\"note\"", heading + 17);
-        }
-    }
+    static const RE noteHeading(u"<section class=\"note\".*?<h1 class=\"title\""_s, RE::DotMatchesEverythingOption);
+    bool first = true;
+    body = replaceMatches(body, noteHeading, [&first](const Match &m) -> std::optional<QString> {
+        if (std::exchange(first, false))
+            return std::nullopt;
+        return m.captured(0) + u" style=\"page-break-before:always\""_s;
+    });
     // Mermaid diagrams: the SVG as a picture, else the source.
-    {
-        static const RE figure(u"<figure class=\"mermaid\"[^>]*>(<svg\\b.*?</svg>)\\s*<details><summary>.*?</summary>"
-                               u"<pre><code class=\"language-mermaid\">(.*?)</code></pre></details></figure>"_s,
-                               RE::DotMatchesEverythingOption);
-        static const RE svgTitle(u"<title>(.*?)</title>"_s, RE::DotMatchesEverythingOption);
-        QString out;
-        qsizetype pos = 0;
-        for (auto it = figure.globalMatch(body); it.hasNext();) {
-            const auto m = it.next();
-            out += QStringView(body).sliced(pos, m.capturedStart() - pos);
-            const auto t = svgTitle.match(m.captured(1));
-            const QString alt = t.hasMatch() ? unescape(t.captured(1)) : IoMessages::tr("Diagram");
-            const QString picture = svgPicture(m.captured(1), alt);
-            if (picture.isEmpty()) {
-                m_warnings.append(IoMessages::tr("A diagram could not be drawn in the document – its source is "
-                                                 "shown instead."));
-                out += u"<pre>"_s + m.captured(2) + u"</pre>"_s;
-            } else {
-                out += u"<p class=\"picture\" align=\"center\">"_s + picture + u"</p>"_s;
-            }
-            pos = m.capturedEnd();
-        }
-        if (pos > 0)
-            body = out + QStringView(body).sliced(pos);
-    }
+    static const RE figure(u"<figure class=\"mermaid\"[^>]*>(<svg\\b.*?</svg>)\\s*<details><summary>.*?</summary>"
+                           u"<pre><code class=\"language-mermaid\">(.*?)</code></pre></details></figure>"_s,
+                           RE::DotMatchesEverythingOption);
+    static const RE svgTitle(u"<title>(.*?)</title>"_s, RE::DotMatchesEverythingOption);
+    body = replaceMatches(body, figure, [this](const Match &m) -> std::optional<QString> {
+        const QString svg = m.captured(1);
+        const Match t = svgTitle.match(svg);
+        const QString alt = t.hasMatch() ? unescape(t.capturedView(1)) : IoMessages::tr("Diagram");
+        const QString picture = svgPicture(svg, alt);
+        if (!picture.isEmpty())
+            return u"<p class=\"picture\" align=\"center\">"_s + picture + u"</p>"_s;
+        m_warnings.append(IoMessages::tr("A diagram could not be drawn in the document – its source is "
+                                         "shown instead."));
+        return u"<pre>"_s + m.capturedView(2) + u"</pre>"_s;
+    });
     // Other inline SVG (charts…).
-    {
-        static const RE svg(u"<svg\\b.*?</svg>"_s, RE::DotMatchesEverythingOption);
-        QString out;
-        qsizetype pos = 0;
-        for (auto it = svg.globalMatch(body); it.hasNext();) {
-            const auto m = it.next();
-            out += QStringView(body).sliced(pos, m.capturedStart() - pos);
-            const QString picture = svgPicture(m.captured(0), IoMessages::tr("Picture"));
-            if (picture.isEmpty())
-                m_warnings.append(IoMessages::tr("A picture could not be shown in the document."));
-            out += picture;
-            pos = m.capturedEnd();
-        }
-        if (pos > 0)
-            body = out + QStringView(body).sliced(pos);
-    }
+    static const RE inlineSvg(u"<svg\\b.*?</svg>"_s, RE::DotMatchesEverythingOption);
+    body = replaceMatches(body, inlineSvg, [this](const Match &m) -> std::optional<QString> {
+        const QString picture = svgPicture(m.captured(0), IoMessages::tr("Picture"));
+        if (picture.isEmpty())
+            m_warnings.append(IoMessages::tr("A picture could not be shown in the document."));
+        return picture;
+    });
     // Pictures, audio and video.
-    {
-        static const RE media(u"<img\\b[^>]*>|<(audio|video)\\b[^>]*></(?:audio|video)>"_s);
-        QString out;
-        qsizetype pos = 0;
-        for (auto it = media.globalMatch(body); it.hasNext();) {
-            const auto m = it.next();
-            out += QStringView(body).sliced(pos, m.capturedStart() - pos);
-            const QStringView tag = m.capturedView(0);
-            if (m.capturedLength(1) > 0) {
-                out += u"<span class=\"missing\">"_s
-                       + esc(m.captured(1) == u"audio" ? IoMessages::tr("[Audio recording]")
-                                                       : IoMessages::tr("[Video]"))
-                       + u"</span>"_s;
-            } else if (const QString src = attribute(tag, u"src"); src.startsWith(u"brulion-picture:")) {
-                out += tag; // a diagram's, made above
-            } else {
-                out += pictureHtml(src, attribute(tag, u"alt"));
-            }
-            pos = m.capturedEnd();
+    static const RE media(u"<img\\b[^>]*>|<(audio|video)\\b[^>]*></(?:audio|video)>"_s);
+    body = replaceMatches(body, media, [this](const Match &m) -> std::optional<QString> {
+        if (m.capturedLength(1) > 0) {
+            const QString what =
+                    m.capturedView(1) == u"audio" ? IoMessages::tr("[Audio recording]") : IoMessages::tr("[Video]");
+            return u"<span class=\"missing\">"_s + esc(what) + u"</span>"_s;
         }
-        if (pos > 0)
-            body = out + QStringView(body).sliced(pos);
-    }
+        const QString src = attribute(m.capturedView(0), u"src");
+        if (src.startsWith(u"brulion-picture:"))
+            return std::nullopt; // a diagram's, made above
+        return pictureHtml(src, attribute(m.capturedView(0), u"alt"));
+    });
     // Links: to the web and mail stay links; inside the document (#…), to embedded attachments
     // (data:) and anything else become text in the link colour.
-    {
-        static const RE anchor(u"<a\\b[^>]*>|</a>"_s);
-        QString out;
-        qsizetype pos = 0;
-        QList<bool> open;
-        for (auto it = anchor.globalMatch(body); it.hasNext();) {
-            const auto m = it.next();
-            out += QStringView(body).sliced(pos, m.capturedStart() - pos);
-            if (m.capturedView(0) == u"</a>") {
-                out += !open.isEmpty() && !open.takeLast() ? u"</span>"_s : u"</a>"_s;
-            } else {
-                const QString href = attribute(m.capturedView(0), u"href");
-                const bool keep = isExternalLink(href);
-                open.append(keep);
-                out += keep ? u"<a href=\""_s + esc(href) + u"\">"_s : u"<span class=\"link\">"_s;
-            }
-            pos = m.capturedEnd();
-        }
-        if (pos > 0)
-            body = out + QStringView(body).sliced(pos);
-    }
+    static const RE anchor(u"<a\\b[^>]*>|</a>"_s);
+    QList<bool> open; // per <a> not closed yet: whether it stays a link
+    body = replaceMatches(body, anchor, [&open](const Match &m) -> std::optional<QString> {
+        if (m.capturedView(0) == u"</a>")
+            return !open.isEmpty() && !open.takeLast() ? u"</span>"_s : u"</a>"_s;
+        const QString href = attribute(m.capturedView(0), u"href");
+        const bool keep = isExternalLink(href);
+        open.append(keep);
+        return keep ? u"<a href=\""_s + esc(href) + u"\">"_s : u"<span class=\"link\">"_s;
+    });
     // Tables: borders; a huge one keeps its first rows.
     {
+        const QStringView view(body);
         QString out;
         qsizetype pos = 0;
-        for (qsizetype at = body.indexOf(u"<table"); at >= 0; at = body.indexOf(u"<table", pos)) {
-            const qsizetype end = body.indexOf(u"</table>", at);
+        for (qsizetype at = view.indexOf(u"<table"); at >= 0; at = view.indexOf(u"<table", pos)) {
+            const qsizetype end = view.indexOf(u"</table>", at);
             if (end < 0)
                 break;
-            const qsizetype close = body.indexOf(u'>', at);
-            out += QStringView(body).sliced(pos, at - pos);
-            QString table = body.sliced(close + 1, end + 8 - close - 1);
-            int kept = 0;
-            int all = 0;
-            table = limitTable(u"<table>"_s + table, MaxTableRows, MaxTableCells, &kept, &all).sliced(7);
+            const qsizetype close = view.indexOf(u'>', at);
+            const auto [rows, kept, all] = limitTable(view.sliced(close + 1, end + 8 - (close + 1)));
+            out += view.sliced(pos, at - pos);
             out += u"<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\" "
                    u"style=\"border-collapse:collapse; border-style:solid; border-color:#bdb6a6\""_s
-                   + body.sliced(at + 6, close - at - 6) + u'>' + table;
+                   + view.sliced(at + 6, close - at - 6) + u'>' + rows;
             if (kept < all) {
-                out += u"<p class=\"missing\">"_s + esc(IoMessages::tr("(%1 more rows are left out)").arg(all - kept))
-                       + u"</p>"_s;
+                out += u"</tbody></table><p class=\"missing\">"_s
+                       + esc(IoMessages::tr("(%1 more rows are left out)").arg(all - kept)) + u"</p>"_s;
                 m_warnings.append(
                         IoMessages::tr("A table is too large for paper: only its first %1 rows are shown.").arg(kept));
             }
             pos = end + 8;
         }
         if (pos > 0)
-            body = out + QStringView(body).sliced(pos);
+            body = out + view.sliced(pos);
     }
     // Dates, reminders and priorities in words (as the Pandoc export writes them): emoji fonts
     // are colour bitmaps that a PDF does not show.
-    {
-        static const RE chip(u"<span class=\"chip ([^\"]*)\">([^<]*)</span>"_s);
-        QString out;
-        qsizetype pos = 0;
-        for (auto it = chip.globalMatch(body); it.hasNext();) {
-            const auto m = it.next();
-            const QString words = chipWords(m.captured(1), unescape(m.captured(2)));
-            if (words.isEmpty())
-                continue;
-            out += QStringView(body).sliced(pos, m.capturedStart() - pos);
-            out += u"<span class=\"chip "_s + m.captured(1) + u"\">"_s + esc(words) + u"</span>"_s;
-            pos = m.capturedEnd();
-        }
-        if (pos > 0)
-            body = out + QStringView(body).sliced(pos);
-    }
+    static const RE chip(u"<span class=\"chip ([^\"]*)\">([^<]*)</span>"_s);
+    body = replaceMatches(body, chip, [](const Match &m) -> std::optional<QString> {
+        const QString words = chipWords(m.captured(1), unescape(m.capturedView(2)));
+        if (words.isEmpty())
+            return std::nullopt;
+        return u"<span class=\"chip "_s + m.capturedView(1) + u"\">"_s + esc(words) + u"</span>"_s;
+    });
     body.replace(u"<input type=\"checkbox\" disabled checked> "_s, kChecked);
     body.replace(u"<input type=\"checkbox\" disabled> "_s, kUnchecked);
     body.replace(u"<mark>"_s, u"<span style=\"background-color:#f9e2a6\">"_s).replace(u"</mark>"_s, u"</span>"_s);

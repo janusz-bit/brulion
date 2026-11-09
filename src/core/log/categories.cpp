@@ -1,5 +1,7 @@
 #include "log/categories.h"
 
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::logging {
@@ -13,32 +15,24 @@ Q_LOGGING_CATEGORY(lcReminders, "brulion.reminders")
 Q_LOGGING_CATEGORY(lcIo, "brulion.io")
 Q_LOGGING_CATEGORY(lcPlatform, "brulion.platform")
 
-namespace {
-
-bool isOrBelow(QStringView category, QStringView prefix)
-{
-    return category == prefix
-           || (category.startsWith(prefix) && category.size() > prefix.size() && category.at(prefix.size()) == u'.');
-}
-
-} // namespace
-
 QString categoryGroup(QStringView category)
 {
-    if (isOrBelow(category, u"brulion.sync"))
-        return u"sync"_s;
-    if (isOrBelow(category, u"brulion.net") || isOrBelow(category, u"qt.network"))
-        return u"net"_s;
-    if (isOrBelow(category, u"brulion.vault") || isOrBelow(category, u"brulion.workspace"))
-        return u"vault"_s;
-    if (isOrBelow(category, u"brulion.index"))
-        return u"index"_s;
-    if (isOrBelow(category, u"brulion.reminders") || isOrBelow(category, u"brulion.notify"))
-        return u"reminders"_s;
-    if (isOrBelow(category, u"brulion.io"))
-        return u"io"_s;
-    if (isOrBelow(category, u"brulion"))
-        return u"app"_s;
+    // Checked in order: "brulion" last, it takes every other brulion.* category.
+    static const std::pair<QStringView, QString> groups[] = {{u"brulion.sync", u"sync"_s},
+                                                             {u"brulion.net", u"net"_s},
+                                                             {u"qt.network", u"net"_s},
+                                                             {u"brulion.vault", u"vault"_s},
+                                                             {u"brulion.workspace", u"vault"_s},
+                                                             {u"brulion.index", u"index"_s},
+                                                             {u"brulion.reminders", u"reminders"_s},
+                                                             {u"brulion.notify", u"reminders"_s},
+                                                             {u"brulion.io", u"io"_s},
+                                                             {u"brulion", u"app"_s}};
+    for (const auto &[prefix, group] : groups) {
+        // The category itself or one below it ("brulion.sync.webdav", not "brulion.synchronous").
+        if (category.startsWith(prefix) && (category.size() == prefix.size() || category.at(prefix.size()) == u'.'))
+            return group;
+    }
     return u"system"_s;
 }
 

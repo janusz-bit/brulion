@@ -22,13 +22,13 @@ struct Piece {
     Type type = Type::Text;
     qsizetype from = 0;
     qsizetype to = 0;
-    QString out;
-    QChar ch;
+    QString out = {};
+    QChar ch = {};
     int remaining = 0;
     bool canOpen = false;
     bool canClose = false;
-    QString openTags;
-    QString closeTags;
+    QString openTags = {};
+    QString closeTags = {};
 };
 
 bool isDelimChar(QChar c)
@@ -39,14 +39,6 @@ bool isDelimChar(QChar c)
 bool isPunctuation(QChar c)
 {
     return c.isPunct() || c.isSymbol();
-}
-
-Piece textPiece(qsizetype from, qsizetype to)
-{
-    Piece p;
-    p.from = from;
-    p.to = to;
-    return p;
 }
 
 QList<Piece> buildPieces(QStringView text, const QList<InlineAtom> &atoms)
@@ -70,47 +62,41 @@ QList<Piece> buildPieces(QStringView text, const QList<InlineAtom> &atoms)
                 continue;
             }
             if (i > textStart)
-                pieces.append(textPiece(textStart, i));
+                pieces.append(Piece{.from = textStart, .to = i});
             const QChar prev = i > a ? text[i - 1] : before;
             const QChar next = j < b ? text[j] : after;
             const bool prevSpace = prev.isSpace();
             const bool nextSpace = next.isSpace();
             const bool left = !nextSpace && (!isPunctuation(next) || prevSpace || isPunctuation(prev));
             const bool right = !prevSpace && (!isPunctuation(prev) || nextSpace || isPunctuation(next));
-            Piece d;
-            d.type = Piece::Type::Delim;
-            d.from = i;
-            d.to = j;
-            d.ch = c;
-            d.remaining = int(len);
-            if (c == u'_') {
-                d.canOpen = left && (!right || isPunctuation(prev));
-                d.canClose = right && (!left || isPunctuation(next));
-            } else {
-                d.canOpen = left;
-                d.canClose = right;
-            }
-            pieces.append(d);
+            // An '_' run inside a word (left- and right-flanking) opens only after punctuation and
+            // closes only before it.
+            const bool underscore = c == u'_';
+            pieces.append(Piece{.type = Piece::Type::Delim,
+                                .from = i,
+                                .to = j,
+                                .ch = c,
+                                .remaining = int(len),
+                                .canOpen = left && (!underscore || !right || isPunctuation(prev)),
+                                .canClose = right && (!underscore || !left || isPunctuation(next))});
             i = j;
             textStart = j;
         }
         if (b > textStart)
-            pieces.append(textPiece(textStart, b));
+            pieces.append(Piece{.from = textStart, .to = b});
     };
+    // Next to a delimiter run, an atom that shows something is like a letter, a hidden one like a
+    // space.
     const QChar space(u' ');
     const QChar letter(u'a');
     qsizetype pos = 0;
     QChar before = space;
     for (const InlineAtom &atom : atoms) {
-        addGap(pos, atom.from, before, atom.out.isEmpty() ? space : letter);
-        Piece h;
-        h.type = Piece::Type::Atom;
-        h.from = atom.from;
-        h.to = atom.to;
-        h.out = atom.out;
-        pieces.append(h);
+        const QChar edge = atom.out.isEmpty() ? space : letter;
+        addGap(pos, atom.from, before, edge);
+        pieces.append(Piece{.type = Piece::Type::Atom, .from = atom.from, .to = atom.to, .out = atom.out});
         pos = atom.to;
-        before = atom.out.isEmpty() ? space : letter;
+        before = edge;
     }
     addGap(pos, text.size(), before, space);
     return pieces;
@@ -124,7 +110,7 @@ int delimSlot(QChar c)
 void processEmphasis(QList<Piece> &pieces, const EmphasisMarks &marks)
 {
     QList<int> openers;
-    std::array<qsizetype, 4> bottom{0, 0, 0, 0};
+    std::array<qsizetype, 4> bottom{};
     const auto shrink = [&](qsizetype size) {
         openers.resize(size);
         for (qsizetype &b : bottom)
@@ -192,7 +178,7 @@ QString renderAtoms(QStringView text, QList<InlineAtom> atoms, const EmphasisMar
     QList<Piece> pieces = buildPieces(text, kept);
     processEmphasis(pieces, marks);
     QString out;
-    for (const Piece &p : pieces) {
+    for (const Piece &p : std::as_const(pieces)) {
         switch (p.type) {
         case Piece::Type::Text: out += plain(text.sliced(p.from, p.to - p.from)); break;
         case Piece::Type::Atom: out += p.out; break;
@@ -259,12 +245,12 @@ void codeAndCommentAtoms(QStringView text, QStringView masked, QList<InlineAtom>
 
 void markAtoms(QStringView masked, QList<InlineAtom> &atoms, const HighlightMarks &marks)
 {
-    int pair = 0;
-    for (const markdown::MarkPair &p : markdown::findMarkPairs(masked)) {
+    const QList<markdown::MarkPair> pairs = markdown::findMarkPairs(masked);
+    for (qsizetype pair = 0; pair < pairs.size(); ++pair) {
+        const markdown::MarkPair &p = pairs.at(pair);
         const auto [open, close] = marks(p.open.color);
-        atoms.append(InlineAtom{p.open.from, p.open.to, open, pair});
-        atoms.append(InlineAtom{p.close.from, p.close.to, close, pair});
-        ++pair;
+        atoms.append(InlineAtom{p.open.from, p.open.to, open, int(pair)});
+        atoms.append(InlineAtom{p.close.from, p.close.to, close, int(pair)});
     }
 }
 
@@ -371,13 +357,11 @@ QStringList tableCells(QStringView row)
 QString calloutTitle(const Block &b)
 {
     static const QRegularExpression header(u"^\\s*>?\\s*\\[![^\\]]*\\][+-]?\\s*"_s);
-    QString first = b.text.section(u'\n', 0, 0);
-    first.remove(header);
-    if (first.trimmed().isEmpty()) {
-        const QString type = b.properties.value(u"callouttype"_s).toString();
-        return type.isEmpty() ? QString() : type.first(1).toUpper() + type.sliced(1);
-    }
-    return first.trimmed();
+    const QString first = b.text.section(u'\n', 0, 0).remove(header).trimmed();
+    if (!first.isEmpty())
+        return first;
+    const QString type = b.properties.value(u"callouttype"_s).toString();
+    return type.isEmpty() ? QString() : type.first(1).toUpper() + type.sliced(1);
 }
 
 std::optional<std::pair<QString, QString>> itemFence(const QString &text)
@@ -406,7 +390,7 @@ std::optional<std::pair<QString, QString>> itemFence(const QString &text)
     QString lang = info.section(u' ', 0, 0, QString::SectionSkipEmpty).toLower();
     if (lang.startsWith(u'{'))
         lang.clear();
-    return std::pair{lang, lines.mid(1, lines.size() - (closed ? 2 : 1)).join(u'\n')};
+    return std::pair{std::move(lang), lines.mid(1, lines.size() - (closed ? 2 : 1)).join(u'\n')};
 }
 
 bool isMathFence(const QString &lang)

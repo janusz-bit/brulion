@@ -4,7 +4,6 @@
 #include "log/logfile_p.h"
 #include "log/redact.h"
 
-#include <QAtomicPointer>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QElapsedTimer>
@@ -14,8 +13,10 @@
 #include <QMutex>
 #include <QTimer>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -23,35 +24,14 @@ namespace brulion::logging {
 
 namespace {
 
-QAtomicPointer<Logger> s_instance;
-QtMessageHandler s_previous = nullptr;
-bool s_forward = true;
+std::atomic<Logger *> s_instance = nullptr;
+// Read by the message handler on any thread.
+std::atomic<QtMessageHandler> s_previous = nullptr;
+std::atomic<bool> s_forward = true;
 
 constexpr QStringView kSessionStart = u"=== session start";
 constexpr QStringView kSessionEnd = u"=== session end";
 constexpr qint64 kTailBytes = 64 * 1024;
-
-void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
-{
-    static thread_local bool inHandler = false;
-    Logger *logger = s_instance.loadAcquire();
-    const QtMessageHandler previous = s_previous;
-    if (inHandler || !logger) {
-        // A message produced while handling one (or after uninstall): only the previous handler.
-        if (previous)
-            previous(type, context, message);
-        return;
-    }
-    inHandler = true;
-    const QString redacted = redact(message);
-    const QString category = context.category ? QString::fromUtf8(context.category) : u"default"_s;
-    logger->append(levelFromQt(type), category, redacted);
-    if (type == QtFatalMsg)
-        logger->flush(); // the previous handler aborts
-    inHandler = false;
-    if (s_forward && previous)
-        previous(type, context, redacted);
-}
 
 QString utcOffsetText(qint64 now)
 {
@@ -133,21 +113,44 @@ struct Logger::Private {
         unwrittenRepeats = 0;
     }
 
+    /// Count `text` as one more repeat of the newest entry when it is the same message within the
+    /// repeat window (mutex held). The file gets the repeats later (writeRepeats()).
+    bool collapse(Level level, const QString &category, const QString &text, qint64 time)
+    {
+        if (ring.isEmpty())
+            return false;
+        Entry &last = newest();
+        const qint64 lastTime = last.lastTime > 0 ? last.lastTime : last.time;
+        if (last.level != level || last.category != category || last.message != text
+            || time - lastTime > options.repeatWindowMs)
+            return false;
+        ++last.repeat;
+        last.lastTime = time;
+        ++unwrittenRepeats;
+        return true;
+    }
+
     /// Store a new entry (mutex held).
     void store(Level level, const QString &category, const QString &message, qint64 time)
     {
         writeRepeats();
-        Entry entry;
-        entry.seq = ++seq;
-        entry.time = time;
-        entry.level = level;
-        entry.category = category;
-        entry.message = message;
+        Entry entry{.seq = ++seq, .time = time, .level = level, .category = category, .message = message};
         if (level >= Level::Warning)
             ++problems;
         if (file)
             file->append(formatLine(entry));
         push(std::move(entry));
+    }
+
+    /// The tokens of a bucket at `time`, before the burst cap.
+    double tokensAt(const Bucket &b, qint64 time) const
+    {
+        return b.tokens + double(time - b.refilled) * options.perSecond / 1000.0;
+    }
+
+    void noteDropped(const QString &category, int dropped, qint64 time)
+    {
+        store(Level::Info, category, u"(dropped %1 lines of %2: too many at once)"_s.arg(dropped).arg(category), time);
     }
 
     /// Token bucket of debug / info lines (mutex held). True: the line may be stored.
@@ -158,20 +161,17 @@ struct Logger::Private {
         const QString key = category + u'\x1f' + levelLetter(level);
         auto it = buckets.find(key);
         if (it == buckets.end())
-            it = buckets.insert(key, Bucket{double(options.burst), time, 0});
+            it = buckets.insert(key, Bucket{.tokens = double(options.burst), .refilled = time});
         Bucket &b = it.value();
-        b.tokens = qMin<double>(options.burst, b.tokens + double(time - b.refilled) * options.perSecond / 1000.0);
+        b.tokens = std::min(double(options.burst), tokensAt(b, time));
         b.refilled = time;
         if (b.tokens < 1.0) {
             ++b.dropped;
             return false;
         }
         b.tokens -= 1.0;
-        if (b.dropped > 0) {
-            const int dropped = std::exchange(b.dropped, 0);
-            store(Level::Info, category, u"(dropped %1 lines of %2: too many at once)"_s.arg(dropped).arg(category),
-                  time);
-        }
+        if (b.dropped > 0)
+            noteDropped(category, std::exchange(b.dropped, 0), time);
         return true;
     }
 
@@ -179,15 +179,8 @@ struct Logger::Private {
     void noteDrops(qint64 time)
     {
         for (auto it = buckets.begin(); it != buckets.end(); ++it) {
-            Bucket &b = it.value();
-            if (b.dropped == 0)
-                continue;
-            const double tokens = b.tokens + double(time - b.refilled) * options.perSecond / 1000.0;
-            if (tokens < 1.0)
-                continue;
-            const QString category = it.key().section(u'\x1f', 0, 0);
-            store(Level::Info, category,
-                  u"(dropped %1 lines of %2: too many at once)"_s.arg(std::exchange(b.dropped, 0)).arg(category), time);
+            if (it->dropped > 0 && tokensAt(*it, time) >= 1.0)
+                noteDropped(it.key().section(u'\x1f', 0, 0), std::exchange(it->dropped, 0), time);
         }
     }
 
@@ -199,10 +192,9 @@ struct Logger::Private {
         if (!ok && !fileWarned) {
             fileWarned = true;
             // Never through the handler (recursion): straight to the previous one.
-            if (s_previous) {
-                const QByteArray text =
-                        u"Brulion: the event log file cannot be written: %1"_s.arg(file->errorString()).toUtf8();
-                s_previous(QtWarningMsg, QMessageLogContext(), QString::fromUtf8(text));
+            if (const QtMessageHandler previous = s_previous.load()) {
+                previous(QtWarningMsg, QMessageLogContext(),
+                         u"Brulion: the event log file cannot be written: %1"_s.arg(file->errorString()));
             }
         }
         return ok;
@@ -211,7 +203,7 @@ struct Logger::Private {
 
 Logger *Logger::instance()
 {
-    return s_instance.loadAcquire();
+    return s_instance.load(std::memory_order_acquire);
 }
 
 Logger *Logger::install(const LoggerOptions &options)
@@ -219,56 +211,70 @@ Logger *Logger::install(const LoggerOptions &options)
     if (Logger *existing = instance())
         return existing;
     auto *logger = new Logger(options);
-    s_instance.storeRelease(logger);
+    s_instance.store(logger, std::memory_order_release);
     if (options.installHandler) {
-        s_forward = options.forwardToPrevious;
-        s_previous = qInstallMessageHandler(messageHandler);
+        s_forward.store(options.forwardToPrevious);
+        s_previous.store(qInstallMessageHandler(handleMessage));
     }
     return logger;
 }
 
 void Logger::uninstall()
 {
-    Logger *logger = s_instance.fetchAndStoreAcquire(nullptr);
+    const std::unique_ptr<Logger> logger(s_instance.exchange(nullptr, std::memory_order_acquire));
     if (!logger)
         return;
     if (logger->d->options.installHandler) {
-        qInstallMessageHandler(s_previous);
-        s_previous = nullptr;
+        qInstallMessageHandler(s_previous.load());
+        s_previous.store(nullptr);
     }
-    delete logger;
+}
+
+void Logger::handleMessage(QtMsgType type, const QMessageLogContext &context, const QString &message)
+{
+    static thread_local bool inHandler = false;
+    Logger *logger = instance();
+    const QtMessageHandler previous = s_previous.load();
+    if (inHandler || !logger) {
+        // A message produced while handling one (or after uninstall): only the previous handler.
+        if (previous)
+            previous(type, context, message);
+        return;
+    }
+    inHandler = true;
+    const QString redacted = redact(message);
+    logger->appendRedacted(levelFromQt(type), context.category ? QString::fromUtf8(context.category) : u"default"_s,
+                           redacted);
+    if (type == QtFatalMsg)
+        logger->flush(); // the previous handler aborts
+    inHandler = false;
+    if (s_forward.load() && previous)
+        previous(type, context, redacted);
 }
 
 Logger::Logger(const LoggerOptions &options) : d(std::make_unique<Private>())
 {
     d->options = options;
-    d->options.capacity = qMax(16, options.capacity);
-    d->ring.reserve(qMin(d->options.capacity, 1024));
+    d->options.capacity = std::max(16, options.capacity);
+    d->ring.reserve(std::min(d->options.capacity, 1024));
     d->sessionStart = d->now();
     d->sinceNotify.start();
     QString previousSession;
     if (!options.directory.isEmpty()) {
         d->file = std::make_unique<detail::LogFile>(options.directory, options.maxFileBytes);
-        // Did the previous session end properly? (Android kills apps without aboutToQuit.)
+        // Did the previous session end properly? (Android kills apps without aboutToQuit.) The
+        // newest session line tells.
         const QList<Entry> tail = parseLines(QString::fromUtf8(d->file->tail(kTailBytes)));
         d->hadEarlier = !tail.isEmpty();
-        qsizetype start = -1;
-        for (qsizetype i = tail.size() - 1; i >= 0; --i) {
-            if (tail.at(i).message.startsWith(kSessionStart)) {
-                start = i;
+        for (const Entry &entry : tail | std::views::reverse) {
+            if (entry.message.startsWith(kSessionEnd))
                 break;
-            }
-        }
-        if (start >= 0) {
-            bool ended = false;
-            for (qsizetype i = start + 1; i < tail.size() && !ended; ++i)
-                ended = tail.at(i).message.startsWith(kSessionEnd);
-            if (!ended) {
-                previousSession =
-                        u"Previous session (started %1) ended without closing (stopped by the system or "
-                        u"crashed); its last entry: %2"_s.arg(
-                                formatTime(tail.at(start).time),
-                                formatTime(tail.last().lastTime > 0 ? tail.last().lastTime : tail.last().time));
+            if (entry.message.startsWith(kSessionStart)) {
+                const Entry &last = tail.last();
+                const qint64 lastTime = last.lastTime > 0 ? last.lastTime : last.time;
+                previousSession = u"Previous session (started %1) ended without closing (stopped by the system or "
+                                  u"crashed); its last entry: %2"_s.arg(formatTime(entry.time), formatTime(lastTime));
+                break;
             }
         }
         if (!d->file->open()) {
@@ -279,9 +285,8 @@ Logger::Logger(const LoggerOptions &options) : d(std::make_unique<Private>())
     }
     const QString info = options.sessionInfo.isEmpty() ? QCoreApplication::applicationName() : options.sessionInfo;
     append(Level::Info, u"brulion.app",
-           u"=== session start: %1, pid %2, %3 ==="_s.arg(info)
-                   .arg(QCoreApplication::applicationPid())
-                   .arg(utcOffsetText(d->sessionStart)));
+           u"=== session start: %1, pid %2, %3 ==="_s.arg(info, QString::number(QCoreApplication::applicationPid()),
+                                                          utcOffsetText(d->sessionStart)));
     if (!previousSession.isEmpty())
         append(Level::Info, u"brulion.app", previousSession);
     flush();
@@ -294,12 +299,11 @@ Logger::~Logger()
 
 void Logger::setVerbosity(Verbosity verbosity)
 {
-    const bool changed = d->verbosity != verbosity;
-    d->verbosity = verbosity;
-    QStringList rules;
-    const QString value = verbosity == Verbosity::Detailed ? u"true"_s : u"false"_s;
-    for (const QString &category : verbosityCategories())
-        rules.append(category + u".debug="_s + value);
+    const bool changed = std::exchange(d->verbosity, verbosity) != verbosity;
+    const QString suffix = verbosity == Verbosity::Detailed ? u".debug=true"_s : u".debug=false"_s;
+    QStringList rules = verbosityCategories();
+    for (QString &rule : rules)
+        rule += suffix;
     QLoggingCategory::setFilterRules(rules.join(u'\n'));
     if (changed) {
         qCInfo(lcApp).noquote() << u"Log verbosity: %1"_s.arg(verbosityName(verbosity));
@@ -328,31 +332,24 @@ qint64 Logger::maxFileBytes() const
 
 void Logger::append(Level level, QStringView category, QStringView message)
 {
-    const QString text = truncateMessage(redact(message));
-    const QString cat = category.isEmpty() ? u"default"_s : category.toString();
-    bool urgent = level >= Level::Warning;
+    appendRedacted(level, category.toString(), redact(message));
+}
+
+void Logger::appendRedacted(Level level, QString category, const QString &redacted)
+{
+    const QString text = truncateMessage(redacted);
+    if (category.isEmpty())
+        category = u"default"_s;
     {
         QMutexLocker locker(&d->mutex);
         const qint64 time = d->now();
-        if (!d->ring.isEmpty()) {
-            Entry &last = d->newest();
-            const qint64 lastTime = last.lastTime > 0 ? last.lastTime : last.time;
-            if (last.level == level && last.category == cat && last.message == text
-                && time - lastTime <= d->options.repeatWindowMs) {
-                ++last.repeat;
-                last.lastTime = time;
-                ++d->unwrittenRepeats;
-                urgent = false; // already written once
-                locker.unlock();
-                scheduleNotify();
+        if (!d->collapse(level, category, text, time)) {
+            if (!d->admit(level, category, time))
                 return;
-            }
+            d->store(level, category, text, time);
+            if (level >= Level::Warning)
+                d->flushFile();
         }
-        if (!d->admit(level, cat, time))
-            return;
-        d->store(level, cat, text, time);
-        if (urgent)
-            d->flushFile();
     }
     scheduleNotify();
 }
@@ -382,9 +379,9 @@ void Logger::deliver()
     quint64 last = 0;
     {
         QMutexLocker locker(&d->mutex);
-        d->noteDrops(d->now());
-        if (d->unwrittenRepeats > 0 && !d->ring.isEmpty()
-            && d->now() - d->newest().lastTime > d->options.repeatWindowMs)
+        const qint64 now = d->now();
+        d->noteDrops(now);
+        if (d->unwrittenRepeats > 0 && !d->ring.isEmpty() && now - d->newest().lastTime > d->options.repeatWindowMs)
             d->writeRepeats();
         d->flushFile();
         last = d->seq;
@@ -451,12 +448,8 @@ QList<Entry> Logger::earlierEntries(int max) const
         const qsizetype nl = bytes.indexOf('\n');
         bytes = nl >= 0 ? bytes.mid(nl + 1) : QByteArray();
     }
-    QList<Entry> all = parseLines(QString::fromUtf8(bytes));
-    QList<Entry> out;
-    for (const Entry &e : std::as_const(all)) {
-        if (e.time < d->sessionStart)
-            out.append(e);
-    }
+    QList<Entry> out = parseLines(QString::fromUtf8(bytes));
+    out.removeIf([start = d->sessionStart](const Entry &e) { return e.time >= start; });
     if (out.size() > max)
         out = out.mid(out.size() - max);
     return out;
@@ -501,8 +494,7 @@ QString Logger::exportText(const QStringList &header, qint64 maxBytes) const
     QByteArray body;
     {
         QMutexLocker locker(&d->mutex);
-        if (d->unwrittenRepeats > 0)
-            d->writeRepeats();
+        d->writeRepeats();
         if (d->file) {
             body = d->file->readAll();
         } else {
@@ -513,22 +505,15 @@ QString Logger::exportText(const QStringList &header, qint64 maxBytes) const
         }
     }
     const QByteArray head = (header.join(u'\n') + u"\n----\n"_s).toUtf8();
-    const qint64 room = qMax<qint64>(0, maxBytes - head.size());
-    bool shortened = false;
-    if (body.size() > room) {
-        shortened = true;
-        qsizetype cut = body.size() - room;
+    const qint64 room = std::max<qint64>(0, maxBytes - head.size());
+    const bool shortened = body.size() > room;
+    if (shortened) {
         // Start at a line that begins an entry (not a continuation line).
-        while (cut < body.size()) {
+        qsizetype cut = body.size() - room;
+        do {
             const qsizetype nl = body.indexOf('\n', cut);
-            if (nl < 0) {
-                cut = body.size();
-                break;
-            }
-            cut = nl + 1;
-            if (cut < body.size() && body.at(cut) != '\t')
-                break;
-        }
+            cut = nl < 0 ? body.size() : nl + 1;
+        } while (cut < body.size() && body.at(cut) == '\t');
         body = body.mid(cut);
     }
     QString text = QString::fromUtf8(head);
@@ -542,9 +527,8 @@ void Logger::endSession()
 {
     {
         QMutexLocker locker(&d->mutex);
-        if (d->sessionEnded)
+        if (std::exchange(d->sessionEnded, true))
             return;
-        d->sessionEnded = true;
     }
     append(Level::Info, u"brulion.app", u"=== session end ===");
     QMutexLocker locker(&d->mutex);

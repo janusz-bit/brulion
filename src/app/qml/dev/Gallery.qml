@@ -25,26 +25,26 @@ ApplicationWindow {
     font.pixelSize: Theme.textBase
 
     readonly property list<var> sections: [
-        { key: "foundations", title: "Podstawy", glyph: "sun", popup: false },
-        { key: "icons", title: "Ikony", glyph: "image", popup: false },
-        { key: "buttons", title: "Przyciski", glyph: "square-check-big", popup: false },
-        { key: "inputs", title: "Pola tekstowe", glyph: "pencil", popup: false },
-        { key: "selection", title: "Przełączniki i karty", glyph: "list-checks", popup: false },
-        { key: "chips", title: "Chipy i plakietki", glyph: "tag", popup: false },
-        { key: "lists", title: "Listy i karty", glyph: "list", popup: false },
-        { key: "feedback", title: "Postęp i powiadomienia", glyph: "bell", popup: true },
-        { key: "menus", title: "Menu", glyph: "ellipsis", popup: true },
-        { key: "taskstatus", title: "Status zadania", glyph: "list-todo", popup: true },
-        { key: "dialog", title: "Okno dialogowe", glyph: "panel-right", popup: true },
-        { key: "confirm", title: "Potwierdzenie", glyph: "triangle-alert", popup: true },
-        { key: "datepicker", title: "Wybór daty", glyph: "calendar", popup: false },
-        { key: "timepicker", title: "Wybór godziny", glyph: "clock", popup: true },
-        { key: "reminder", title: "Przypomnienie", glyph: "alarm-clock", popup: true },
-        { key: "diff", title: "Porównanie wersji", glyph: "file-diff", popup: false },
-        { key: "merge", title: "Scalanie konfliktów", glyph: "git-merge", popup: false },
-        { key: "palette", title: "Paleta poleceń", glyph: "command", popup: true },
-        { key: "switcher", title: "Szybkie przejście", glyph: "file-text", popup: true },
-        { key: "split", title: "Podział widoku", glyph: "columns-2", popup: false }
+        { key: "foundations", title: "Podstawy", glyph: "sun" },
+        { key: "icons", title: "Ikony", glyph: "image" },
+        { key: "buttons", title: "Przyciski", glyph: "square-check-big" },
+        { key: "inputs", title: "Pola tekstowe", glyph: "pencil" },
+        { key: "selection", title: "Przełączniki i karty", glyph: "list-checks" },
+        { key: "chips", title: "Chipy i plakietki", glyph: "tag" },
+        { key: "lists", title: "Listy i karty", glyph: "list" },
+        { key: "feedback", title: "Postęp i powiadomienia", glyph: "bell" },
+        { key: "menus", title: "Menu", glyph: "ellipsis" },
+        { key: "taskstatus", title: "Status zadania", glyph: "list-todo" },
+        { key: "dialog", title: "Okno dialogowe", glyph: "panel-right" },
+        { key: "confirm", title: "Potwierdzenie", glyph: "triangle-alert" },
+        { key: "datepicker", title: "Wybór daty", glyph: "calendar" },
+        { key: "timepicker", title: "Wybór godziny", glyph: "clock" },
+        { key: "reminder", title: "Przypomnienie", glyph: "alarm-clock" },
+        { key: "diff", title: "Porównanie wersji", glyph: "file-diff" },
+        { key: "merge", title: "Scalanie konfliktów", glyph: "git-merge" },
+        { key: "palette", title: "Paleta poleceń", glyph: "command" },
+        { key: "switcher", title: "Szybkie przejście", glyph: "file-text" },
+        { key: "split", title: "Podział widoku", glyph: "columns-2" }
     ]
     property string current: DevTools.section !== "" ? DevTools.section : "foundations"
     readonly property bool autoOpen: DevTools.section !== ""
@@ -96,10 +96,9 @@ ApplicationWindow {
                 Layout.preferredWidth: 28
                 Layout.preferredHeight: 28
             }
-            Text {
+            UiText {
                 Layout.fillWidth: true
                 text: Theme.narrow ? window.currentTitle : "Brulion · system projektowy"
-                font.family: Theme.fontUi
                 font.pixelSize: Theme.textMd
                 font.weight: Theme.weightSemiBold
                 color: Theme.fg
@@ -296,21 +295,19 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             spacing: Theme.space2
-            Text {
+            UiText {
                 Layout.fillWidth: specimen.note === ""
                 text: specimen.label
                 wrapMode: Text.Wrap
-                font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs
                 font.weight: Theme.weightSemiBold
                 font.letterSpacing: 0.5
                 color: Theme.fgFaint
             }
-            Text {
+            UiText {
                 Layout.fillWidth: true
                 visible: specimen.note !== ""
                 text: specimen.note
-                font.family: Theme.fontUi
                 font.pixelSize: Theme.textXs
                 color: Theme.fgFaint
                 elide: Text.ElideRight
@@ -320,6 +317,37 @@ ApplicationWindow {
             id: flow
             Layout.fillWidth: true
             spacing: Theme.space2
+        }
+    }
+    /// Plain texts in the UI font, the small monospace caption and the editor's font.
+    component UiText: Text {
+        font.family: Theme.fontUi
+        textFormat: Text.PlainText
+    }
+    component MonoText: Text {
+        color: Theme.fgMuted
+        font.family: Theme.fontMono
+        font.pixelSize: Theme.textXs
+        textFormat: Text.PlainText
+    }
+    component EditorText: Text {
+        color: Theme.fg
+        font.family: Theme.fontEditor
+        font.pixelSize: Theme.textEditor
+        textFormat: Text.PlainText
+    }
+    /// A swatch card: its children are stacked in a padded column.
+    component SwatchCard: Rectangle {
+        default property alias content: column.data
+        radius: Theme.radius
+        color: Theme.bgElevated
+        border.width: 1
+        border.color: Theme.border
+        Column {
+            id: column
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 2
         }
     }
 
@@ -346,7 +374,6 @@ ApplicationWindow {
         return bg.tint(c)
     }
 
-
     // ---- The foundations' specimens (Repeater models; each row has every key its delegate takes) ----
     readonly property list<var> textSwatches: [
         { name: "fg", sample: Theme.fg }, { name: "fgMuted", sample: Theme.fgMuted },
@@ -371,21 +398,10 @@ ApplicationWindow {
         { name: "selected row (fgMuted)", fg: Theme.fgMuted, fill: Theme.bgSelected }
     ]
     /// The controls' states: their mark, the surfaces it lies on and its worst contrast there (the
-    /// selected segment's outline only in dark: in light the thumb shows it).
-    readonly property list<var> stateSwatchesLight: [
+    /// selected segment's outline is shown only in dark: in light the thumb shows it).
+    readonly property list<var> stateSwatches: [
         { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, fg: Theme.fg, kind: "switch",
-          onNames: "bg, bgElevated, bgSunken",
-          worst: Math.min(window.contrast(Theme.borderControl, Theme.bg), window.contrast(Theme.borderControl, Theme.bgElevated),
-                          window.contrast(Theme.borderControl, Theme.bgSunken)) },
-        { name: "kalendarz: wybrany dzień", token: "primary", mark: Theme.primary, fg: Theme.primaryFg, kind: "disc",
-          onNames: "bg", worst: Math.min(99, window.contrast(Theme.primary, Theme.bg)) },
-        { name: "kalendarz: dziś", token: "accentSolid", mark: Theme.accentSolid, fg: Theme.fgOnAccent, kind: "disc",
-          onNames: "bg", worst: Math.min(99, window.contrast(Theme.accentSolid, Theme.bg)) }
-    ]
-    readonly property list<var> stateSwatchesDark: [
-        { name: "przełącznik wyłączony", token: "borderControl", mark: Theme.borderControl, fg: Theme.fg, kind: "switch",
-          onNames: "bg, bgElevated, bgSunken",
-          worst: Math.min(window.contrast(Theme.borderControl, Theme.bg), window.contrast(Theme.borderControl, Theme.bgElevated),
+          onNames: "bg, bgElevated, bgSunken", worst: Math.min(window.contrast(Theme.borderControl, Theme.bg), window.contrast(Theme.borderControl, Theme.bgElevated),
                           window.contrast(Theme.borderControl, Theme.bgSunken)) },
         { name: "wybrany segment", token: "borderControl", mark: Theme.borderControl, fg: Theme.fg, kind: "segmented",
           onNames: "bgSunken, bgElevated",
@@ -451,43 +467,26 @@ ApplicationWindow {
                 label: "TEKST NA TŁACH (kontrast)"
                 Repeater {
                     model: window.textSwatches
-                    delegate: Rectangle {
+                    delegate: SwatchCard {
                         id: swatch
                         required property string name
                         required property color sample
+                        readonly property real worst: Math.min(window.contrast(swatch.sample, Theme.bg),
+                                                               window.contrast(swatch.sample, Theme.bgElevated),
+                                                               window.contrast(swatch.sample, Theme.bgSunken))
                         width: 172
                         height: 74
-                        radius: Theme.radius
-                        color: Theme.bgElevated
-                        border.width: 1
-                        border.color: Theme.border
-                        readonly property real worst: Math.min(window.contrast(sample, Theme.bg),
-                                                               window.contrast(sample, Theme.bgElevated),
-                                                               window.contrast(sample, Theme.bgSunken))
-                        Column {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 2
-                            Text {
-                                text: "Zażółć gęślą jaźń"
-                                color: swatch.sample
-                                font.family: Theme.fontUi
-                                font.pixelSize: Theme.textBase
-                                font.weight: Theme.weightMedium
-                            }
-                            Text {
-                                text: swatch.name
-                                color: Theme.fgMuted
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.textXs
-                            }
-                            Text {
-                                text: (swatch.worst >= 4.5 ? "AA " : "✗ ") + Js.toFixed(swatch.worst, 1) + ":1"
-                                color: swatch.worst >= 4.5 ? Theme.successText : Theme.dangerText
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.textXs
-                                font.weight: Theme.weightSemiBold
-                            }
+                        UiText {
+                            text: "Zażółć gęślą jaźń"
+                            color: swatch.sample
+                            font.pixelSize: Theme.textBase
+                            font.weight: Theme.weightMedium
+                        }
+                        MonoText { text: swatch.name }
+                        MonoText {
+                            text: (swatch.worst >= 4.5 ? "AA " : "✗ ") + Js.toFixed(swatch.worst, 1) + ":1"
+                            color: swatch.worst >= 4.5 ? Theme.successText : Theme.dangerText
+                            font.weight: Theme.weightSemiBold
                         }
                     }
                 }
@@ -499,47 +498,35 @@ ApplicationWindow {
                 label: "TEKST NA WYPEŁNIENIACH (chipy, plakietki, przyciski, powiadomienia)"
                 Repeater {
                     model: window.fillSwatches
-                    delegate: Rectangle {
+                    delegate: SwatchCard {
                         id: fillSwatch
                         required property string name
                         required property color fg
                         required property color fill
+                        readonly property color onBg: window.over(fillSwatch.fill, Theme.bg)
+                        readonly property color onBgElevated: window.over(fillSwatch.fill, Theme.bgElevated)
+                        readonly property color onBgSunken: window.over(fillSwatch.fill, Theme.bgSunken)
+                        readonly property real worst: Math.min(window.contrast(fillSwatch.fg, fillSwatch.onBg),
+                                                               window.contrast(fillSwatch.fg, fillSwatch.onBgElevated),
+                                                               window.contrast(fillSwatch.fg, fillSwatch.onBgSunken))
                         width: 172
                         height: 74
-                        radius: Theme.radius
-                        color: window.over(fill, Theme.bgElevated)
-                        border.width: 1
-                        border.color: Theme.border
-                        readonly property color onBg: window.over(fill, Theme.bg)
-                        readonly property color onBgElevated: window.over(fill, Theme.bgElevated)
-                        readonly property color onBgSunken: window.over(fill, Theme.bgSunken)
-                        readonly property real worst: Math.min(window.contrast(fg, onBg), window.contrast(fg, onBgElevated),
-                                                               window.contrast(fg, onBgSunken))
-                        Column {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 2
-                            Text {
-                                text: "Zażółć gęślą jaźń"
-                                color: fillSwatch.fg
-                                font.family: Theme.fontUi
-                                font.pixelSize: Theme.textSm
-                                font.weight: Theme.weightMedium
-                            }
-                            Text {
-                                text: fillSwatch.name
-                                color: fillSwatch.fg
-                                opacity: 0.8
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.textXs
-                            }
-                            Text {
-                                text: (fillSwatch.worst >= 4.5 ? "AA " : "✗ ") + Js.toFixed(fillSwatch.worst, 1) + ":1"
-                                color: fillSwatch.fg
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.textXs
-                                font.weight: Theme.weightSemiBold
-                            }
+                        color: fillSwatch.onBgElevated
+                        UiText {
+                            text: "Zażółć gęślą jaźń"
+                            color: fillSwatch.fg
+                            font.pixelSize: Theme.textSm
+                            font.weight: Theme.weightMedium
+                        }
+                        MonoText {
+                            text: fillSwatch.name
+                            color: fillSwatch.fg
+                            opacity: 0.8
+                        }
+                        MonoText {
+                            text: (fillSwatch.worst >= 4.5 ? "AA " : "✗ ") + Js.toFixed(fillSwatch.worst, 1) + ":1"
+                            color: fillSwatch.fg
+                            font.weight: Theme.weightSemiBold
                         }
                     }
                 }
@@ -554,8 +541,8 @@ ApplicationWindow {
                 label: "STANY KONTROLEK (≥ 3:1)"
                 note: "najgorszy wynik na tłach, na których leżą"
                 Repeater {
-                    model: Theme.dark ? window.stateSwatchesDark : window.stateSwatchesLight
-                    delegate: Rectangle {
+                    model: window.stateSwatches
+                    delegate: SwatchCard {
                         id: stateSwatch
                         required property string name
                         required property string token
@@ -564,81 +551,65 @@ ApplicationWindow {
                         required property string kind
                         required property string onNames
                         required property real worst
+                        visible: stateSwatch.kind !== "segmented" || Theme.dark
                         width: 264
                         height: 104
-                        radius: Theme.radius
-                        color: Theme.bgElevated
-                        border.width: 1
-                        border.color: Theme.border
-                        Column {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 2
-                            Item {
-                                width: parent.width
-                                height: 32
-                                // Both states: the knob's cross and check say it besides the colour.
-                                Row {
-                                    visible: stateSwatch.kind === "switch"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    spacing: Theme.space3
-                                    BSwitch {
-                                        checked: false
-                                        Accessible.name: "wyłączony"
-                                    }
-                                    BSwitch {
-                                        checked: true
-                                        Accessible.name: "włączony"
-                                    }
+                        Item {
+                            width: parent.width
+                            height: 32
+                            // Both states: the knob's cross and check say it besides the colour.
+                            Row {
+                                visible: stateSwatch.kind === "switch"
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.space3
+                                BSwitch {
+                                    checked: false
+                                    Accessible.name: "wyłączony"
                                 }
-                                BSegmented {
-                                    visible: stateSwatch.kind === "segmented"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    size: "small"
-                                    model: ["Miesiąc", "Tydzień"]
-                                    currentValue: "Miesiąc"
-                                    accessibleName: "Widok"
-                                }
-                                Rectangle {
-                                    visible: stateSwatch.kind === "disc"
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 24
-                                    height: 24
-                                    radius: 12
-                                    color: stateSwatch.mark
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "14"
-                                        font.family: Theme.fontUi
-                                        font.pixelSize: Theme.textSm
-                                        font.weight: Theme.weightBold
-                                        color: stateSwatch.fg
-                                    }
+                                BSwitch {
+                                    checked: true
+                                    Accessible.name: "włączony"
                                 }
                             }
-                            Text {
-                                width: parent.width
-                                text: stateSwatch.name + " · " + stateSwatch.token
-                                color: Theme.fgMuted
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.textXs
-                                elide: Text.ElideRight
+                            BSegmented {
+                                visible: stateSwatch.kind === "segmented"
+                                anchors.verticalCenter: parent.verticalCenter
+                                size: "small"
+                                model: ["Miesiąc", "Tydzień"]
+                                currentValue: "Miesiąc"
+                                accessibleName: "Widok"
                             }
-                            Text {
-                                width: parent.width
-                                text: "na " + stateSwatch.onNames
-                                color: Theme.fgFaint
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.textXs
-                                elide: Text.ElideRight
+                            Rectangle {
+                                visible: stateSwatch.kind === "disc"
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 24
+                                height: 24
+                                radius: 12
+                                color: stateSwatch.mark
+                                UiText {
+                                    anchors.centerIn: parent
+                                    text: "14"
+                                    font.pixelSize: Theme.textSm
+                                    font.weight: Theme.weightBold
+                                    color: stateSwatch.fg
+                                }
                             }
-                            Text {
-                                text: (stateSwatch.worst >= 3 ? "≥ 3:1 " : "✗ ") + Js.toFixed(stateSwatch.worst, 2) + ":1"
-                                color: stateSwatch.worst >= 3 ? Theme.successText : Theme.dangerText
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.textXs
-                                font.weight: Theme.weightSemiBold
-                            }
+                        }
+                        MonoText {
+                            width: parent.width
+                            text: stateSwatch.name + " · " + stateSwatch.token
+                            elide: Text.ElideRight
+                        }
+                        MonoText {
+                            width: parent.width
+                            text: "na " + stateSwatch.onNames
+                            color: Theme.fgFaint
+                            elide: Text.ElideRight
+                        }
+                        MonoText {
+                            text: (stateSwatch.worst >= 3 ? "≥ 3:1 " : "✗ ") + Js.toFixed(stateSwatch.worst, 2) + ":1"
+                            color: stateSwatch.worst >= 3 ? Theme.successText : Theme.dangerText
+                            font.weight: Theme.weightSemiBold
                         }
                     }
                 }
@@ -661,12 +632,7 @@ ApplicationWindow {
                             border.width: 1
                             border.color: Theme.border
                         }
-                        Text {
-                            text: surface.name
-                            color: Theme.fgMuted
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.textXs
-                        }
+                        MonoText { text: surface.name }
                     }
                 }
             }
@@ -683,15 +649,12 @@ ApplicationWindow {
                     BText { variant: "muted"; text: "Tekst pomocniczy — ostatnia synchronizacja 5 min temu" }
                     BText { variant: "small"; text: "Mały tekst: 12 plików, 3 konflikty" }
                     BText { variant: "mono"; text: "- [ ] Zadzwonić do mamy  2026-10-15 09:00  every week on Monday" }
-                    Text {
+                    EditorText {
                         width: parent.width
                         wrapMode: Text.Wrap
                         text: "Edytor (szeryfowy): Brulion to notatnik w kratkę, w którym myśli układają się w punkty."
-                        font.family: Theme.fontEditor
-                        font.pixelSize: Theme.textEditor
                         lineHeightMode: Text.FixedHeight
                         lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeightLoose)
-                        color: Theme.fg
                     }
                 }
             }
@@ -711,7 +674,7 @@ ApplicationWindow {
                             border.width: 1
                             border.color: Theme.accent
                         }
-                        Text { text: spaceSample.modelData; color: Theme.fgFaint; font.pixelSize: Theme.textXs; font.family: Theme.fontMono }
+                        MonoText { text: spaceSample.modelData; color: Theme.fgFaint }
                     }
                 }
                 Item { width: Theme.space4; height: 1 }
@@ -733,11 +696,10 @@ ApplicationWindow {
                             color: Theme.bgElevated
                             border.width: elev.modelData === 0 ? 1 : 0
                             border.color: Theme.border
-                            Text {
+                            UiText {
                                 anchors.centerIn: parent
                                 text: "poziom " + elev.modelData
                                 color: Theme.fgMuted
-                                font.family: Theme.fontUi
                                 font.pixelSize: Theme.textSm
                             }
                         }
@@ -755,22 +717,21 @@ ApplicationWindow {
 
             Specimen {
                 label: "ROZMIARY I KOLORY"
-                Row {
+                RowLayout {
                     spacing: Theme.space3
                     Repeater {
                         model: window.iconSizes
                         delegate: BIcon {
                             required property int modelData
-                            anchors.verticalCenter: parent.verticalCenter
                             name: "bell-ring"
                             size: modelData
                             color: Theme.fg
                         }
                     }
-                    BIcon { anchors.verticalCenter: parent.verticalCenter; name: "alarm-clock"; size: 24; color: Theme.chipReminderFg }
-                    BIcon { anchors.verticalCenter: parent.verticalCenter; name: "repeat"; size: 24; color: Theme.chipRecurrenceFg }
-                    BIcon { anchors.verticalCenter: parent.verticalCenter; name: "triangle-alert"; size: 24; color: Theme.dangerText }
-                    BIcon { anchors.verticalCenter: parent.verticalCenter; name: "cloud"; size: 24; color: Theme.link }
+                    BIcon { name: "alarm-clock"; size: 24; color: Theme.chipReminderFg }
+                    BIcon { name: "repeat"; size: 24; color: Theme.chipRecurrenceFg }
+                    BIcon { name: "triangle-alert"; size: 24; color: Theme.dangerText }
+                    BIcon { name: "cloud"; size: 24; color: Theme.link }
                 }
             }
 
@@ -799,7 +760,7 @@ ApplicationWindow {
                             size: 22
                             color: Theme.fg
                         }
-                        Text {
+                        UiText {
                             anchors.horizontalCenter: parent.horizontalCenter
                             y: 44
                             width: parent.width - 6
@@ -807,7 +768,6 @@ ApplicationWindow {
                             text: iconCell.fileBaseName
                             elide: Text.ElideMiddle
                             color: Theme.fgMuted
-                            font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs
                         }
                     }
@@ -1023,13 +983,10 @@ ApplicationWindow {
             }
             Specimen {
                 label: "MAŁE (W TEKŚCIE)"
-                Text {
+                EditorText {
                     height: 22
                     verticalAlignment: Text.AlignVCenter
                     text: "Zadzwonić do mamy"
-                    font.family: Theme.fontEditor
-                    font.pixelSize: Theme.textEditor
-                    color: Theme.fg
                 }
                 BChip { size: "small"; variant: "reminder"; text: "jutro 09:00" }
                 BChip { size: "small"; variant: "recurrence"; text: "co tydzień" }
@@ -1046,16 +1003,16 @@ ApplicationWindow {
             }
             Specimen {
                 label: "PLAKIETKI"
-                Row {
+                RowLayout {
                     spacing: Theme.space2
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; count: 3 }
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; count: 12; variant: "accent" }
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; count: 250; variant: "danger" }
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; text: "Nowe"; variant: "info" }
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; text: "Offline"; variant: "warning" }
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; text: "Zsynchronizowano"; variant: "success" }
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; dot: true; variant: "accent" }
-                    BBadge { anchors.verticalCenter: parent.verticalCenter; dot: true; variant: "warning" }
+                    BBadge { count: 3 }
+                    BBadge { count: 12; variant: "accent" }
+                    BBadge { count: 250; variant: "danger" }
+                    BBadge { text: "Nowe"; variant: "info" }
+                    BBadge { text: "Offline"; variant: "warning" }
+                    BBadge { text: "Zsynchronizowano"; variant: "success" }
+                    BBadge { dot: true; variant: "accent" }
+                    BBadge { dot: true; variant: "warning" }
                 }
             }
             Specimen {
@@ -1206,7 +1163,6 @@ ApplicationWindow {
     Component {
         id: feedbackSection
         GallerySection {
-            id: feedback
             title: "Postęp i powiadomienia"
             description: "Wskaźniki aktywności, paski postępu, dymki podpowiedzi i powiadomienia (toast) z akcją cofnięcia."
 
@@ -1225,12 +1181,12 @@ ApplicationWindow {
 
             Specimen {
                 label: "WSKAŹNIKI"
-                Row {
+                RowLayout {
                     spacing: Theme.space4
-                    BSpinner { anchors.verticalCenter: parent.verticalCenter; size: 16 }
-                    BSpinner { anchors.verticalCenter: parent.verticalCenter; size: 24 }
-                    BSpinner { anchors.verticalCenter: parent.verticalCenter; size: 32; color: Theme.link }
-                    BButton { anchors.verticalCenter: parent.verticalCenter; text: "Synchronizowanie…"; busy: true }
+                    BSpinner { size: 16 }
+                    BSpinner { size: 24 }
+                    BSpinner { size: 32; color: Theme.link }
+                    BButton { text: "Synchronizowanie…"; busy: true }
                 }
             }
             Specimen {
@@ -1363,10 +1319,9 @@ ApplicationWindow {
                             onToggled: toasts.showToast("Kliknięcie: " + specimenRow.text, "info", "", -1)
                             onStatusChosen: (status) => specimenBox.status = status === "" ? "todo" : status
                         }
-                        Text {
+                        UiText {
                             anchors.verticalCenter: parent.verticalCenter
                             text: specimenRow.text
-                            font.family: Theme.fontUi
                             font.pixelSize: Theme.textBase
                             color: Theme.fg
                         }
@@ -1387,12 +1342,9 @@ ApplicationWindow {
                             status: "doing"
                             onStatusChosen: (status) => doingBox.status = status === "" ? "todo" : status
                         }
-                        Text {
+                        EditorText {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "Pomalować ścianę w łazience"
-                            font.family: Theme.fontEditor
-                            font.pixelSize: Theme.textEditor
-                            color: Theme.fg
                         }
                     }
                 }
@@ -1753,7 +1705,6 @@ ApplicationWindow {
                 color: Theme.bgElevated
                 border.width: 1
                 border.color: Theme.border
-                clip: true
 
                 SplitView {
                     anchors.fill: parent

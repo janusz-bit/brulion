@@ -3,11 +3,11 @@
 #include "io/messages_p.h"
 #include "io/zip.h"
 
+#include <algorithm>
 #include <optional>
 
 namespace brulion::io {
 
-using namespace Qt::StringLiterals;
 using detail::IoMessages;
 
 namespace {
@@ -22,12 +22,12 @@ constexpr qsizetype TypeOffset = 156;
 constexpr qsizetype MagicOffset = 257;
 constexpr qsizetype PrefixOffset = 345, PrefixSize = 155;
 
-/// A NUL-terminated header field.
-QByteArray field(QByteArrayView header, qsizetype offset, qsizetype size)
+/// A NUL-terminated field.
+QByteArrayView field(QByteArrayView header, qsizetype offset, qsizetype size)
 {
     const QByteArrayView f = header.sliced(offset, size);
     const qsizetype nul = f.indexOf('\0');
-    return (nul < 0 ? f : f.first(nul)).toByteArray();
+    return nul < 0 ? f : f.first(nul);
 }
 
 /// Octal number field (spaces / NULs around it allowed) or GNU base-256 (high bit set).
@@ -79,11 +79,7 @@ bool checksumOk(QByteArrayView header)
 
 bool isZeroBlock(QByteArrayView block)
 {
-    for (const char c : block) {
-        if (c != '\0')
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(block, [](char c) { return c == '\0'; });
 }
 
 /// The "path" record of a PAX extended header ("<len> path=<value>\n" records).
@@ -110,11 +106,10 @@ QString paxPath(QByteArrayView data)
 
 QString headerName(QByteArrayView header)
 {
-    QByteArray name = field(header, NameOffset, NameSize);
+    QByteArray name = field(header, NameOffset, NameSize).toByteArray();
     if (header.sliced(MagicOffset, 5) == "ustar") {
-        const QByteArray prefix = field(header, PrefixOffset, PrefixSize);
-        if (!prefix.isEmpty())
-            name = prefix + '/' + name;
+        if (const QByteArrayView prefix = field(header, PrefixOffset, PrefixSize); !prefix.isEmpty())
+            name.prepend('/').prepend(prefix);
     }
     return QString::fromUtf8(name);
 }
@@ -131,7 +126,7 @@ bool isTar(QByteArrayView data)
     return header.sliced(MagicOffset, 5) == "ustar" || !field(header, NameOffset, NameSize).isEmpty();
 }
 
-QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings)
+QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings, const ZipReadOptions &limits)
 {
     QList<FileEntry> out;
     const auto warn = [&](const QString &message) {
@@ -139,6 +134,7 @@ QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings)
             warnings->append(message);
     };
     QString longName;
+    qint64 total = 0;
     qsizetype pos = 0;
     while (pos + BlockSize <= tar.size()) {
         const QByteArrayView header = tar.sliced(pos, BlockSize);
@@ -159,8 +155,7 @@ QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings)
 
         const char type = header[TypeOffset];
         if (type == 'L') { // GNU long name of the next entry
-            const qsizetype nul = data.indexOf('\0');
-            longName = QString::fromUtf8(nul < 0 ? data : data.first(nul));
+            longName = QString::fromUtf8(field(data, 0, data.size()));
             continue;
         }
         if (type == 'x') { // PAX header of the next entry
@@ -176,8 +171,19 @@ QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings)
         if (name.endsWith(u'/'))
             continue;
         const QString path = sanitizeArchivePath(name);
-        if (!path.isEmpty())
-            out.append(FileEntry{path, data.toByteArray()});
+        if (path.isEmpty())
+            continue;
+        // The limits as readZip() applies them (and with its messages).
+        if (data.size() > limits.maxEntrySize) {
+            warn(IoMessages::tr("“%1” is too large and was skipped.").arg(path));
+            continue;
+        }
+        if (total + data.size() > limits.maxTotalSize || out.size() >= limits.maxEntries) {
+            warn(IoMessages::tr("The archive is too large; only a part of it was read."));
+            return out;
+        }
+        total += data.size();
+        out.append(FileEntry{path, data.toByteArray()});
     }
     return out;
 }

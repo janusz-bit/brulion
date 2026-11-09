@@ -7,6 +7,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <algorithm>
+
 namespace brulion::logging::detail {
 
 class LogFile {
@@ -19,8 +21,6 @@ public:
     /// Create the folder (owner-only) and open brulion.log for appending. False when that fails
     /// (errorString()); the sink is then disabled.
     bool open();
-    bool isOpen() const { return m_file.isOpen(); }
-    bool failed() const { return m_failed; }
     QString errorString() const { return m_error; }
 
     QString path() const;
@@ -28,14 +28,13 @@ public:
     /// Existing files, oldest first.
     QStringList files() const;
 
-    void setMaxBytes(qint64 bytes) { m_maxBytes = qMax<qint64>(4096, bytes); }
+    void setMaxBytes(qint64 bytes) { m_maxBytes = std::max<qint64>(4096, bytes); }
     qint64 maxBytes() const { return m_maxBytes; }
 
     /// Queue `line` (a newline is added).
     void append(const QString &line);
-    bool hasPending() const { return !m_pending.isEmpty(); }
-    /// Write the queued lines; rotates when the file reached maxBytes. False on a write error
-    /// (the sink disables itself; errorString()).
+    /// Write the queued lines; rotates when the file reached maxBytes. False on a write error or
+    /// when brulion.log cannot be reopened after rotating (the sink disables itself; errorString()).
     bool flush();
     /// Truncate both files.
     void clear();
@@ -45,6 +44,8 @@ public:
     QByteArray tail(qint64 bytes) const;
 
 private:
+    /// (Re)open brulion.log with `mode`, owner-only. False when that fails (the sink disables itself).
+    bool openFile(QIODevice::OpenMode mode);
     void rotate();
     void fail(const QString &error);
 

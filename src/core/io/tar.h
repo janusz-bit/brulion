@@ -3,6 +3,7 @@
 #pragma once
 
 #include "io/files.h"
+#include "io/zip.h"
 
 #include <QByteArrayView>
 #include <QStringList>
@@ -16,7 +17,9 @@ bool isTar(QByteArrayView data);
 /// Regular files of a tar archive in archive order; paths are made safe with
 /// sanitizeArchivePath() (io/zip.h). Directories, links and special files are skipped. Reading
 /// stops with a warning at the first damaged header or truncated entry; the files read so far
-/// are returned. Never crashes on malformed input.
-QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings = nullptr);
+/// are returned. `limits` bound it as they bound readZip(): files larger than maxEntrySize are
+/// skipped with a warning, reading stops with one before maxTotalSize bytes or maxEntries files
+/// are exceeded (archives inside are never unpacked). Never crashes on malformed input.
+QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings = nullptr, const ZipReadOptions &limits = {});
 
 } // namespace brulion::io

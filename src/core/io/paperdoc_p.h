@@ -9,7 +9,7 @@
 //   <svg>…</svg>                other inline SVG (charts…) as a picture, or left out (a warning)
 //   <img src="data:…">          the picture decoded (image/* only) and scaled to the text width
 //                               and page height; a picture from the internet without a copy is
-//                               its address as a link ("Obraz: …"), a broken one its text
+//                               its address as a link ("Picture: …"), a broken one its text
 //   <a href="#…|data:…">        links inside the document and to embedded attachments become
 //                               text in the link colour (http, https, mailto stay links)
 //   <mark> <del> <audio> <video> what QTextDocument understands
@@ -88,8 +88,8 @@ private:
     void finish();
 
     QPageLayout m_layout;
+    QHash<QString, PaperPicture> m_pictures; // outlives m_document, which loads them
     std::unique_ptr<QTextDocument> m_document;
-    QHash<QString, PaperPicture> m_pictures;
     QStringList m_warnings;
     QString m_title;
     int m_notes = 0;

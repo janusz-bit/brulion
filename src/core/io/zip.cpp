@@ -6,10 +6,12 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QStringDecoder>
+#include <QStringTokenizer>
 
 #include <miniz.h>
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 #include <string_view>
 
@@ -34,7 +36,7 @@ QString decodeCp437(const QByteArray &raw)
     out.reserve(raw.size());
     for (const char c : raw) {
         const auto b = static_cast<unsigned char>(c);
-        out += b < 0x80 ? QChar(char16_t(b)) : QChar(Cp437High[b - 0x80]);
+        out += b < 0x80 ? char16_t(b) : Cp437High[b - 0x80];
     }
     return out;
 }
@@ -199,9 +201,8 @@ QByteArray writeZip(const QList<FileEntry> &entries, const ZipWriteOptions &opti
     size_t size = 0;
     if (!mz_zip_writer_finalize_heap_archive(&archive, &buffer, &size))
         return {};
-    QByteArray out(static_cast<const char *>(buffer), qsizetype(size));
-    mz_free(buffer);
-    return out;
+    const std::unique_ptr<void, decltype(&mz_free)> owner(buffer, &mz_free);
+    return QByteArray(static_cast<const char *>(buffer), qsizetype(size));
 }
 
 QString sanitizeArchivePath(QStringView name)
@@ -210,22 +211,15 @@ QString sanitizeArchivePath(QStringView name)
     s.replace(u'\\', u'/');
     if (s.size() >= 2 && s[1] == u':' && s[0].isLetter())
         s.remove(0, 2);
+    s.removeIf([](QChar c) { return c.unicode() < 0x20 || c.unicode() == 0x7f; });
     QStringList parts;
-    for (const QString &rawSegment : s.split(u'/')) {
-        QString segment;
-        segment.reserve(rawSegment.size());
-        for (const QChar c : rawSegment) {
-            if (c.unicode() >= 0x20 && c.unicode() != 0x7f)
-                segment += c;
-        }
-        if (segment.isEmpty() || segment == u".")
-            continue;
+    for (const QStringView segment : qTokenize(s, u'/', Qt::SkipEmptyParts)) {
         if (segment == u"..") {
             if (!parts.isEmpty())
                 parts.removeLast();
-            continue;
+        } else if (segment != u".") {
+            parts.append(segment.toString());
         }
-        parts.append(segment);
     }
     return parts.join(u'/');
 }

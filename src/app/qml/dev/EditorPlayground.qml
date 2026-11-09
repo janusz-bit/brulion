@@ -1402,29 +1402,39 @@ ApplicationWindow {
     }
     function guideXs(d: Item, name: string): string {
         let xs = ""
-        for (let i = 0; i < window.guideCount(d, name); ++i)
-            xs += (i > 0 ? ", " : "") + window.guideAt(d, name, i).x
+        for (let i = 0; i < window.childCount(d); ++i) {
+            const child = window.childAt(d, i)
+            if (child.objectName === name && child.visible)
+                xs += (xs === "" ? "" : ", ") + child.x
+        }
         return xs
     }
+    /// The delegate shown for `row`, or null.
+    function shownItem(row: int): BlockDelegate {
+        return editor.listView.itemAtIndex(row) as BlockDelegate
+    }
+    /// The item named `name` inside the embeds of `item`, or null.
+    function embedPart(item: BlockDelegate, name: string): Item {
+        return item ? window.findItem(window.embedViewOf(item), name) : null
+    }
     function selfTestDocument(): void {
-        const r = window.baseRow
         // ---- Document mode (docs/UI.md "Note modes"): the trip plan reads as a document --------
         if (window.at()) { page.save(); page.path = host.documentPath }
         if (window.at()) {
             check(page.loaded && page.mode === "document" && editor.documentMode, "the document sample opens as a document")
             const para = rowOf("Pierwszego dnia")
-            const item = editor.listView.itemAtIndex(para) as BlockDelegate
+            const item = window.shownItem(para)
             check(item !== null && Math.abs(item.contentLeft - editor.contentX) < 0.5 && editor.gutter === 0,
                   "paragraphs start at the text column, no outline gutter")
             const li = rowOf("Sobota")
             const nested = rowOf("Wejście od Palenicy")
-            const liItem = editor.listView.itemAtIndex(li) as BlockDelegate
-            const nestedItem = editor.listView.itemAtIndex(nested) as BlockDelegate
+            const liItem = window.shownItem(li)
+            const nestedItem = window.shownItem(nested)
             check(liItem !== null && nestedItem !== null && liItem.contentLeft > editor.contentX
                   && nestedItem.contentLeft > liItem.contentLeft, "list items are indented per level")
             check(liItem !== null && liItem.topPad < item.topPad, "list items sit closer together than paragraphs")
             const h = rowOf("Plan")
-            const hItem = editor.listView.itemAtIndex(h) as BlockDelegate
+            const hItem = window.shownItem(h)
             check(hItem !== null && hItem.topPad > item.topPad && editor.headingSize(2) > editor.fontSize,
                   "headings are larger with air above them")
             check(info(rowOf("Pociąg")).listMarker === "1.", "numbered items keep their numbers")
@@ -1445,7 +1455,7 @@ ApplicationWindow {
             check(window.guideCount(liItem, "guideLine") === 0 && window.guideCount(item, "guideLine") === 0
                   && window.guideCount(hItem, "guideLine") === 0 && window.guideCount(item, "parentGuide") === 0,
                   "top-level items, paragraphs and headings draw no guides")
-            const after = editor.listView.itemAtIndex(nested + 1) as BlockDelegate
+            const after = window.shownItem(nested + 1)
             check(after !== null && Math.abs(after.y - (nestedItem.y + nestedItem.height)) < 0.5,
                   "the next nested item starts where this one ends: the guide runs on unbroken")
         }
@@ -1497,15 +1507,13 @@ ApplicationWindow {
         }
         if (window.at()) editor.listView.positionViewAtIndex(window.realRow, ListView.Center)
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+            const item = window.shownItem(window.realRow)
             const w = window.embedWidth(item)
             const h = window.embedHeight(item)
             // The picture loads asynchronously: this step repeats until it has (at most
             // 2 × waitLimit steps).
-            if ((!item || Math.abs(h - w / 4) > 2) && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (!window.waitUntil(item !== null && Math.abs(h - w / 4) <= 2))
                 return
-            }
             check(item !== null && Math.abs(h - w / 4) <= 2, "an SVG picture keeps its aspect ratio: " + w + "×" + h)
             check(item !== null && item.onlyPictures && item.contentHeight === 0 && item.embedsY - item.topPad === 0,
                   "a picture-only paragraph has no empty text line above the picture")
@@ -1513,7 +1521,7 @@ ApplicationWindow {
                 window.embedViewOf(item).backgroundClicked()
         }
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+            const item = window.shownItem(window.realRow)
             check(page.editingRow === window.realRow && item !== null && !item.onlyPictures && item.contentHeight > 0
                   && editor.activeEditor && editor.activeEditor.text === "![[trasa.svg]]",
                   "a click beside the picture edits its line")
@@ -1529,15 +1537,13 @@ ApplicationWindow {
             window.waits = 0
         }
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
-            const frame = item ? window.findItem(window.embedViewOf(item), "embedPicture") : null
-            const img = item ? window.findItem(window.embedViewOf(item), "embedImage") as Image : null
+            const item = window.shownItem(window.realRow)
+            const frame = window.embedPart(item, "embedPicture")
+            const img = window.embedPart(item, "embedImage") as Image
             const ready = frame !== null && img !== null && img.status === Image.Ready && frame.height > 0
                           && img.implicitHeight > 0
-            if (!ready && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (!window.waitUntil(ready))
                 return
-            }
             const shown = ready ? img.implicitWidth / img.implicitHeight : -1
             const box = ready ? frame.width / frame.height : -2
             check(ready && Math.abs(box / shown - 1) < 0.03,
@@ -1558,9 +1564,9 @@ ApplicationWindow {
         }
         if (window.at()) editor.listView.positionViewAtIndex(window.realRow, ListView.Center)
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
-            const holder = item ? window.findItem(window.embedViewOf(item), "webPicturePlaceholder") : null
-            const show = item ? window.findItem(window.embedViewOf(item), "webPictureShow") as T.AbstractButton : null
+            const item = window.shownItem(window.realRow)
+            const holder = window.embedPart(item, "webPicturePlaceholder")
+            const show = window.embedPart(item, "webPictureShow") as T.AbstractButton
             check(holder !== null && holder.visible && show !== null && show.visible,
                   "a picture from the internet waits for “Pokaż”")
             check(host.webFetchCount() === 0, "nothing is fetched before “Pokaż”")
@@ -1568,15 +1574,13 @@ ApplicationWindow {
                 show.clicked()
         }
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
-            const frame = item ? window.findItem(window.embedViewOf(item), "embedPicture") : null
-            const img = item ? window.findItem(window.embedViewOf(item), "embedImage") as Image : null
+            const item = window.shownItem(window.realRow)
+            const frame = window.embedPart(item, "embedPicture")
+            const img = window.embedPart(item, "embedImage") as Image
             const ready = window.pictureReady(frame, img)
-            if (!ready && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (!window.waitUntil(ready))
                 return
-            }
-            check(window.cachedPicture(frame, img), 
+            check(window.cachedPicture(frame, img),
                   "the picture is shown from the cache with its shape: " + (frame ? frame.width + "×" + frame.height : "-"))
             window.pictureSize = img ? img.sourceSize : Qt.size(0, 0)
             check(img !== null && window.pictureSize.width === 1024 && window.pictureSize.height === 420,
@@ -1594,10 +1598,8 @@ ApplicationWindow {
             const viewer = editor.webPictureViewer
             const img = viewer ? window.findItem(viewer.contentItem, "webPictureViewerImage") as Image : null
             const ready = window.viewerReady(viewer, img)
-            if (!ready && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (!window.waitUntil(ready))
                 return
-            }
             check(window.viewerReady(viewer, img) && window.fromCache(img),
                   "a click on the picture opens it in the viewer, from the cache: " + (img ? img.source : "-"))
             const name = viewer ? window.findItem(viewer.contentItem, "webPictureViewerName") as Text : null
@@ -1614,8 +1616,8 @@ ApplicationWindow {
         }
         if (window.at()) {
             check(editor.webPictureViewer !== null && !editor.webPictureViewer.visible, "“Zamknij” closes the viewer")
-            const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
-            const frame = item ? window.findItem(window.embedViewOf(item), "embedPicture") : null
+            const item = window.shownItem(window.realRow)
+            const frame = window.embedPart(item, "embedPicture")
             // A right-click: the picture's menu.
             if (frame && webEvents.available())
                 webEvents.mouseClick(frame, frame.width / 2, frame.height / 2, Qt.RightButton, Qt.NoModifier, -1)
@@ -1644,7 +1646,7 @@ ApplicationWindow {
                 editor.webPictureMenu.close()
         }
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+            const item = window.shownItem(window.realRow)
             check(window.webUrls().length === 0 && window.embedTarget(item) === "assets/mapa.svg" && !window.embedIsWeb(item),
                   "“Zapisz w notatniku” points the picture at the attachment: " + window.embedTarget(item))
             page.undo()
@@ -1662,20 +1664,16 @@ ApplicationWindow {
         }
         if (window.at()) editor.listView.positionViewAtIndex(window.farRow, ListView.Center)
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.farRow) as BlockDelegate
+            const item = window.shownItem(window.farRow)
             window.checkWebPlaceholder(item, false)
-            const show = item ? window.findItem(window.embedViewOf(item), "webPictureShow") as T.AbstractButton : null
+            const show = window.embedPart(item, "webPictureShow") as T.AbstractButton
             if (show)
                 show.clicked()
         }
         if (window.at()) {
-            const item = editor.listView.itemAtIndex(window.farRow) as BlockDelegate
-            const failed = window.embedFailed(item)
-            if (!failed && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            const item = window.shownItem(window.farRow)
+            if (!window.waitUntil(window.embedFailed(item)))
                 return
-            }
-            window.waits = 0
             check(window.embedFailed(item), "a picture that cannot be fetched fails")
             window.checkWebPlaceholder(item, true)
             page.deleteBlock(window.farRow)
@@ -1741,7 +1739,7 @@ ApplicationWindow {
         // a few pixels under the heading's descenders).
         if (window.at()) editor.listView.positionViewAtIndex(rowOf("Pierwszego dnia"), ListView.Center)
         if (window.at()) {
-            const para = editor.listView.itemAtIndex(rowOf("Pierwszego dnia")) as BlockDelegate
+            const para = window.shownItem(rowOf("Pierwszego dnia"))
             check(para !== null && para.topPad - editor.headingGapBelow === 0, "a paragraph sits close under its heading")
             window.countBefore = page.blocks.count
             window.realRow = page.insertMarkdown(rowOf("Plan"), "```\nmapa-trasy.gpx\n```")
@@ -1749,8 +1747,8 @@ ApplicationWindow {
         }
         if (window.at()) editor.listView.positionViewAtIndex(window.realRow, ListView.Center)
         if (window.at()) {
-            const code = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
-            const para = editor.listView.itemAtIndex(rowOf("Pierwszego dnia")) as BlockDelegate
+            const code = window.shownItem(window.realRow)
+            const para = window.shownItem(rowOf("Pierwszego dnia"))
             check(code !== null && code.view === "code" && code.prevKind === "heading"
                   && code.topPad - (editor.headingGapBelow + Theme.space2) === 0,
                   "a code block under a heading gets more air than text: " + (code ? code.topPad : -1))
@@ -1770,10 +1768,8 @@ ApplicationWindow {
                   && list.visible && writing.visible && list.x < writing.x && writing.x < structure.x
             // The toolbar is laid out asynchronously (slow under sanitizers): repeat this step
             // until it is (at most 2 × waitLimit steps).
-            if (!ordered && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (!window.waitUntil(ordered))
                 return
-            }
             check(ordered, "document toolbar: list and writing tools first, indentation after them")
             check(structure !== null && !window.childAt(structure, 0).enabled && !window.childAt(structure, 1).enabled,
                   "document toolbar: no indentation for a paragraph")
@@ -1800,6 +1796,7 @@ ApplicationWindow {
         }
     }
     readonly property list<string> projectsCrumb: ["Projekty"]
+    readonly property string probeMarkup: "<font size=1>Żółw " + Js.repeat("ż", 24) + "</font>.png"
     Component {
         id: menuItemProbeComponent
         BMenuItem {}
@@ -1813,7 +1810,6 @@ ApplicationWindow {
         TextInput { width: 10; height: 10 }
     }
     function selfTestProbes(): void {
-        const r = window.baseRow
         // ---- An editor destroyed before its deferred work runs (scrolling to a row, focus
         // loss, completions, scrolling to the top after loading): nothing touches it then.
         // A TypeError in the output fails the ctest (tests/app/editor/CMakeLists.txt). -------
@@ -1834,7 +1830,7 @@ ApplicationWindow {
         if (window.at()) check(page.loaded && editor.alive, "the page's own editor still works")
         // ---- Names in menus and breadcrumbs are shown as written -------------------------------
         if (window.at()) {
-            const markup = "<font size=1>Żółw " + Js.repeat("ż", 24) + "</font>.png"
+            const markup = window.probeMarkup
             const item = menuItemProbeComponent.createObject(window.contentItem) as BMenuItem
             item.text = markup
             check(showsAsWritten(textShowing(item, markup), markup), "a menu item shows a name with markup as written")
@@ -1844,8 +1840,7 @@ ApplicationWindow {
             window.crumbsProbe = crumbs
         }
         if (window.at()) {
-            check(showsAsWritten(textShowing(window.crumbsProbe, "<font size=1>Żółw " + Js.repeat("ż", 24) + "</font>.png"),
-                                 "<font size=1>Żółw " + Js.repeat("ż", 24) + "</font>.png"),
+            check(showsAsWritten(textShowing(window.crumbsProbe, window.probeMarkup), window.probeMarkup),
                   "a breadcrumb shows a name with markup as written")
             window.crumbsProbe.destroy()
             page.save()
@@ -1927,6 +1922,10 @@ ApplicationWindow {
     function clockY(c: BTimePicker, radius: real, deg: real): real {
         return c.center + Math.sin((deg - 90) * Math.PI / 180) * radius
     }
+    /// A pick on the face at `radius` and `deg` (no events: BTimePicker.pickAt()).
+    function clockPick(c: BTimePicker, radius: real, deg: real): void {
+        c.pickAt(window.clockX(c, radius, deg), window.clockY(c, radius, deg))
+    }
     /// The clock's face (BTimePicker.focusItem).
     function clockFace(c: BTimePicker): Item {
         return c.focusItem
@@ -1955,40 +1954,43 @@ ApplicationWindow {
         const face = window.clockFace(c)
         const x = window.clockX(c, radius, deg)
         const y = window.clockY(c, radius, deg)
-        if (Theme.touchUi) {
-            clockEvents.touchPress(face, x, y)
-            clockEvents.touchMove(face, x + 2, y + 1)
-            clockEvents.touchMove(face, x + 3, y - 1)
-            clockEvents.touchRelease(face, x + 3, y - 1)
-        } else {
-            clockEvents.mousePress(face, x, y, Qt.LeftButton, Qt.NoModifier, -1)
-            clockEvents.mouseMove(face, x + 2, y + 1, -1, Qt.LeftButton, Qt.NoModifier)
-            clockEvents.mouseMove(face, x + 3, y - 1, -1, Qt.LeftButton, Qt.NoModifier)
-            clockEvents.mouseRelease(face, x + 3, y - 1, Qt.LeftButton, Qt.NoModifier, -1)
-        }
+        window.pointerDown(face, x, y)
+        window.pointerMove(face, x + 2, y + 1)
+        window.pointerMove(face, x + 3, y - 1)
+        window.pointerUp(face, x + 3, y - 1)
+    }
+    /// The pointer pressed, moved and released at (x, y) of `item`: a finger on touch UIs, else the mouse.
+    function pointerDown(item: Item, x: real, y: real): void {
+        if (Theme.touchUi)
+            clockEvents.touchPress(item, x, y)
+        else
+            clockEvents.mousePress(item, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+    function pointerMove(item: Item, x: real, y: real): void {
+        if (Theme.touchUi)
+            clockEvents.touchMove(item, x, y)
+        else
+            clockEvents.mouseMove(item, x, y, -1, Qt.LeftButton, Qt.NoModifier)
+    }
+    function pointerUp(item: Item, x: real, y: real): void {
+        if (Theme.touchUi)
+            clockEvents.touchRelease(item, x, y)
+        else
+            clockEvents.mouseRelease(item, x, y, Qt.LeftButton, Qt.NoModifier, -1)
     }
     /// A drag along the circle of `radius` from `fromDeg` to `toDeg`, in twelve moves.
     function clockDrag(c: BTimePicker, radius: real, fromDeg: real, toDeg: real): void {
         const face = window.clockFace(c)
-        const touch = Theme.touchUi
         let x = window.clockX(c, radius, fromDeg)
         let y = window.clockY(c, radius, fromDeg)
-        if (touch)
-            clockEvents.touchPress(face, x, y)
-        else
-            clockEvents.mousePress(face, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        window.pointerDown(face, x, y)
         for (let i = 1; i <= 12; ++i) {
-            x = window.clockX(c, radius, fromDeg + (toDeg - fromDeg) * i / 12)
-            y = window.clockY(c, radius, fromDeg + (toDeg - fromDeg) * i / 12)
-            if (touch)
-                clockEvents.touchMove(face, x, y)
-            else
-                clockEvents.mouseMove(face, x, y, -1, Qt.LeftButton, Qt.NoModifier)
+            const deg = fromDeg + (toDeg - fromDeg) * i / 12
+            x = window.clockX(c, radius, deg)
+            y = window.clockY(c, radius, deg)
+            window.pointerMove(face, x, y)
         }
-        if (touch)
-            clockEvents.touchRelease(face, x, y)
-        else
-            clockEvents.mouseRelease(face, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        window.pointerUp(face, x, y)
     }
     function clockRing(c: BTimePicker): Item {
         return window.findItem(c, "clockFocusRing")
@@ -2035,7 +2037,7 @@ ApplicationWindow {
     /// The time a pick on the outer ring at `deg` gives (from 10:30, on the minutes).
     function clockAt(c: BTimePicker, deg: real): string {
         c.time = "10:30"
-        c.pickAt(window.clockX(c, c.outerRadius, deg), window.clockY(c, c.outerRadius, deg))
+        window.clockPick(c, c.outerRadius, deg)
         return c.time
     }
 
@@ -2083,7 +2085,7 @@ ApplicationWindow {
             for (let h = 0; h < 24; ++h) {
                 c.time = "12:34"
                 const radius = window.hourRadius(c, h)
-                c.pickAt(window.clockX(c, radius, (h % 12) * 30), window.clockY(c, radius, (h % 12) * 30))
+                window.clockPick(c, radius, (h % 12) * 30)
                 if (c.time !== c.pad(h) + ":34")
                     bad += (bad === "" ? "" : ",") + h + "→" + c.time
             }
@@ -2094,7 +2096,7 @@ ApplicationWindow {
             let outerFrom = -1
             for (let r = 13; r < c.center && outerFrom < 0; ++r) {
                 c.time = "06:00"
-                c.pickAt(window.clockX(c, r, 90), window.clockY(c, r, 90))
+                window.clockPick(c, r, 90)
                 if (c.selectedHour === 3)
                     outerFrom = r
             }
@@ -2108,7 +2110,7 @@ ApplicationWindow {
                 for (let k = 0; k < 4; ++k) {
                     const r = window.minuteRadius(c, k)
                     c.time = "10:" + (m === 7 ? "08" : "07")
-                    c.pickAt(window.clockX(c, r, m * 6), window.clockY(c, r, m * 6))
+                    window.clockPick(c, r, m * 6)
                     if (c.selectedMinute !== m || c.selectedHour !== 10)
                         bad += (bad === "" ? "" : ",") + m + "@" + Math.round(r) + "→" + c.time
                 }
@@ -2121,7 +2123,7 @@ ApplicationWindow {
             c.mode = "hour"
             c.time = "18:30"
             window.clockPicks = []
-            c.pickAt(window.clockX(c, 5, 0), window.clockY(c, 5, 0))
+            window.clockPick(c, 5, 0)
             check(c.time === "18:30" && window.clockPicks.length === 0, "the hub is no value")
         }
         // ---- Taps and drags (a finger on touch UIs, the mouse elsewhere) ------------------
@@ -2340,7 +2342,7 @@ ApplicationWindow {
         if (window.at()) {
             if (!waitUntil(window.addDialog.opened))
                 return
-            window.dialogField(window.addDialog, "calendarAddTime").forceActiveFocus()
+            window.addTimeField().forceActiveFocus()
         }
         if (window.at()) typeKeys("2346")
         if (window.at()) tapInDialog(window.addDialog, window.dialogField(window.addDialog, "calendarAddClock"))
@@ -2356,7 +2358,7 @@ ApplicationWindow {
         if (window.at()) {
             if (!waitUntil(!window.addClock().visible))
                 return
-            check(window.addDialog.time === "01:10" && (window.dialogField(window.addDialog, "calendarAddTime") as TextInput).text === "",
+            check(window.addDialog.time === "01:10" && window.addTimeField().text === "",
                   "a time picked on the clock replaces the typed one: " + window.addDialog.time)
             window.addDialog.reject()
         }
@@ -2471,7 +2473,7 @@ ApplicationWindow {
     }
     /// The query block's live results (QueryResultModel), or null.
     function queryResults(): QueryResultModel {
-        const item = editor.listView.itemAtIndex(viewRow("query")) as BlockDelegate
+        const item = window.shownItem(viewRow("query"))
         const view = item ? item.contentItem as QueryBlockView : null
         return view ? view.results : null
     }
@@ -2489,9 +2491,10 @@ ApplicationWindow {
             return false
         for (let i = 0; i < shownCount; ++i) {
             queryShown.value = results.get(i)
-            const status = queryNow.at("items." + i + ".task") ? queryNow.at("items." + i + ".task.status") : ""
-            if ("" + queryShown.at("path") !== "" + queryNow.at("items." + i + ".path")
-                    || "" + queryShown.at("line") !== "" + queryNow.at("items." + i + ".line")
+            const key = "items." + i
+            const status = queryNow.at(key + ".task") ? queryNow.at(key + ".task.status") : ""
+            if ("" + queryShown.at("path") !== "" + queryNow.at(key + ".path")
+                    || "" + queryShown.at("line") !== "" + queryNow.at(key + ".line")
                     || "" + queryShown.at("status") !== "" + status)
                 return false
         }
@@ -2554,12 +2557,10 @@ ApplicationWindow {
         return -1
     }
     function menuItemNamed(menu: T.Menu, name: string): T.MenuItem {
-        for (let i = 0; menu && i < menu.count; ++i) {
-            const item = menu.itemAt(i) as Item
-            if (item && item.objectName === name)
-                return item as T.MenuItem
-        }
-        return null
+        const at = window.menuIndexOf(menu, name)
+        if (at < 0)
+            return null
+        return menu.itemAt(at) as T.MenuItem
     }
     /// A tap with a finger on touch UIs, else a left click, in the middle of `item`.
     function tapItem(item: Item): void {
@@ -2598,6 +2599,10 @@ ApplicationWindow {
             if (target)
                 taskEvents.touchRelease(target, target.width / 2, target.height / 2)
         }
+    }
+    /// The touch toolbar's task button.
+    function toolbarTask(): Item {
+        return window.findItem(window.findItem(editor, "toolbarWriting"), "toolbarTask")
     }
     /// The page's text as saved.
     function pageText(): string {
@@ -2899,17 +2904,17 @@ ApplicationWindow {
         if (window.at())
             window.waitStep(window.toolbarTaskShown(), "the touch toolbar shows its task button")
         if (window.at()) {
-            const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+            const button = window.toolbarTask()
             taskEvents.touchPress(button, button.width / 2, button.height / 2)
         }
         if (window.at()) window.waiting(editorMenuOpen())
         if (window.at()) {
-            const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+            const button = window.toolbarTask()
             taskEvents.touchRelease(button, button.width / 2, button.height / 2)
         }
         if (window.at()) window.waitStep(editorMenuOpen(), "holding the toolbar's task button opens the status menu")
         if (window.at()) {
-            const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+            const button = window.toolbarTask()
             const menuBottom = window.windowY(editor.taskMenu.contentItem, 0, editor.taskMenu.contentItem.height)
             const buttonTop = window.windowY(button, 0, 0)
             check(menuBottom <= buttonTop + 1, "the menu is above the toolbar: " + menuBottom + " ≤ " + buttonTop)
@@ -2917,7 +2922,7 @@ ApplicationWindow {
             tapItem(menuItemNamed(editor.taskMenu, "taskStatus_done"))
         }
         if (window.at()) window.waitStep(!editor.taskMenu.visible && info(window.taskRow).taskStatus === "done", "a status from the toolbar's menu")
-        if (window.at()) tapItem(findItem(findItem(editor, "toolbarWriting"), "toolbarTask"))
+        if (window.at()) tapItem(window.toolbarTask())
         if (window.at()) check(info(window.taskRow).taskStatus === "", "a tap on the task button cycles (done → none)")
         if (window.at()) {
             page.stopEditing()

@@ -83,21 +83,17 @@ bool needsBlankLine(BlockKind a, BlockKind b)
     }
 }
 
-/// The top rows in order with their subtree ends, nested or invalid tops skipped.
-struct TopRange {
-    int first = 0;
-    int end = 0; ///< exclusive
-};
-QList<TopRange> topRanges(const BlockDocument &doc, const QList<int> &tops)
+/// The subtrees of the top rows in order, nested or invalid tops skipped.
+QList<RowRange> topRanges(const BlockDocument &doc, const QList<int> &tops)
 {
-    QList<TopRange> out;
+    QList<RowRange> out;
     int prevEnd = -1;
     for (const int t : tops) {
         if (t < 0 || t >= doc.count() || t < prevEnd || doc.at(t).kind == BlockKind::Frontmatter)
             continue;
         const RowRange range = doc.subtreeRange(t);
-        out.append({range.first, range.first + range.count});
-        prevEnd = range.first + range.count;
+        out.append(range);
+        prevEnd = range.last() + 1;
     }
     return out;
 }
@@ -135,9 +131,7 @@ QString plainLine(const QString &line, const PlainTextOptions &options)
     if (t.contains(u"((")) {
         QString out;
         qsizetype at = 0;
-        auto it = ref.globalMatch(t);
-        while (it.hasNext()) {
-            const auto m = it.next();
+        for (const QRegularExpressionMatch &m : ref.globalMatch(t)) {
             out += t.sliced(at, m.capturedStart() - at);
             const QString text = options.blockText ? options.blockText(m.captured(1)) : QString();
             out += text.isEmpty() ? m.captured(0) : stripInlineMarkup(lf(text)).split(u'\n').join(u' ');
@@ -157,15 +151,15 @@ bool isIdPropertyLine(QStringView line)
                || p->key.compare(u"collapsed"_s, Qt::CaseInsensitive) == 0);
 }
 
-/// The text lines of one block as plain text (no indentation, no marker yet).
-QStringList plainLines(const BlockEntry &e, const PlainTextOptions &options)
+/// The text lines of a block (its kind and body) as plain text (no indentation, no marker yet).
+QStringList plainLines(BlockKind kind, const QString &body, const PlainTextOptions &options)
 {
-    QStringList src = lf(e.body).split(u'\n');
+    const QStringList src = lf(body).split(u'\n');
     QStringList out;
-    switch (e.kind) {
+    switch (kind) {
     case BlockKind::Table:
     case BlockKind::Html:
-        for (const QString &l : std::as_const(src)) {
+        for (const QString &l : src) {
             if (standaloneBlockId(l).isEmpty() && !isIdPropertyLine(l))
                 out.append(l);
         }
@@ -175,21 +169,18 @@ QStringList plainLines(const BlockEntry &e, const PlainTextOptions &options)
     case BlockKind::Quote:
     case BlockKind::Callout: {
         bool first = true;
-        for (const QString &l : std::as_const(src)) {
+        for (const QString &l : src) {
             QStringView rest = l;
             // Every level of quote markers.
             for (qsizetype n = quoteMarkerLength(rest); n > 0; n = quoteMarkerLength(rest))
                 rest = rest.sliced(n);
-            if (first && e.kind == BlockKind::Callout) {
+            if (std::exchange(first, false) && kind == BlockKind::Callout) {
                 if (const auto h = matchCalloutHeader(rest)) {
-                    const QString title = rest.sliced(h->titleStart).trimmed().toString();
-                    first = false;
-                    if (!title.isEmpty())
-                        out.append(plainLine(title, options));
+                    if (const QStringView title = rest.sliced(h->titleStart).trimmed(); !title.isEmpty())
+                        out.append(plainLine(title.toString(), options));
                     continue;
                 }
             }
-            first = false;
             if (!standaloneBlockId(rest).isEmpty() || isIdPropertyLine(rest))
                 continue;
             out.append(plainLine(rest.toString(), options));
@@ -215,7 +206,7 @@ QStringList plainLines(const BlockEntry &e, const PlainTextOptions &options)
         }
         if (!standaloneBlockId(l).isEmpty() || isIdPropertyLine(l))
             continue;
-        if (k == 0 && (e.kind == BlockKind::Heading || e.kind == BlockKind::ListItem)) {
+        if (k == 0 && (kind == BlockKind::Heading || kind == BlockKind::ListItem)) {
             static const QRegularExpression heading(u"^[ ]{0,3}#{1,6}(?:[ \\t]+|$)"_s);
             static const QRegularExpression closing(u"[ \\t]+#+[ \\t]*$"_s);
             if (const auto m = heading.match(l); m.hasMatch()) {
@@ -224,7 +215,7 @@ QStringList plainLines(const BlockEntry &e, const PlainTextOptions &options)
             }
         }
         // A setext heading's underline.
-        if (k == 1 && e.kind == BlockKind::Heading && setextLevel(l) > 0)
+        if (k == 1 && kind == BlockKind::Heading && setextLevel(l) > 0)
             continue;
         out.append(plainLine(l, options));
     }
@@ -235,23 +226,22 @@ QStringList plainLines(const BlockEntry &e, const PlainTextOptions &options)
 
 QList<int> topRows(const BlockDocument &doc, const QList<int> &rows)
 {
-    QList<int> sorted;
-    sorted.reserve(rows.size());
+    QList<int> out;
+    out.reserve(rows.size());
     for (const int r : rows) {
         if (r >= 0 && r < doc.count() && doc.at(r).kind != BlockKind::Frontmatter)
-            sorted.append(r);
-    }
-    std::ranges::sort(sorted);
-    sorted.erase(std::ranges::unique(sorted).begin(), sorted.end());
-    const QSet<int> in(sorted.cbegin(), sorted.cend());
-    QList<int> out;
-    for (const int r : std::as_const(sorted)) {
-        bool nested = false;
-        for (int p = doc.parent(r); p >= 0 && !nested; p = doc.parent(p))
-            nested = in.contains(p);
-        if (!nested)
             out.append(r);
     }
+    std::ranges::sort(out);
+    out.erase(std::ranges::unique(out).begin(), out.end());
+    const QSet<int> in(out.cbegin(), out.cend());
+    out.removeIf([&](int r) {
+        for (int p = doc.parent(r); p >= 0; p = doc.parent(p)) {
+            if (in.contains(p))
+                return true;
+        }
+        return false;
+    });
     return out;
 }
 
@@ -259,17 +249,17 @@ QString blocksMarkdown(const BlockDocument &doc, const QList<int> &tops)
 {
     QString out;
     int prev = -1;
-    for (const TopRange &range : topRanges(doc, tops)) {
+    const QList<RowRange> ranges = topRanges(doc, tops);
+    for (const RowRange &range : ranges) {
         const int cols = markerColumn(doc, range.first);
-        for (int i = range.first; i < range.end; ++i) {
+        for (int i = range.first; i <= range.last(); ++i) {
             if (prev >= 0) {
+                // Neighbours: the blank lines as written (whitespace on them dedented like the text).
                 const QString between = i == prev + 1 ? lf(doc.at(prev).trailing) : QString();
-                if (i == prev + 1 && !between.isEmpty()) {
-                    // The blank lines as written (whitespace on them dedented like the text).
+                if (!between.isEmpty())
                     out += u'\n' + dedented(between.endsWith(u'\n') ? between.chopped(1) : between, cols);
-                } else {
+                else
                     out += QString(blankLinesBetween(doc, prev, i), u'\n');
-                }
                 out += u'\n';
             }
             out += dedented(lf(doc.blockSource(i)), cols);
@@ -283,16 +273,17 @@ QString blocksPlainText(const BlockDocument &doc, const QList<int> &tops, const 
 {
     QString out;
     int prev = -1;
-    for (const TopRange &range : topRanges(doc, tops)) {
+    const QList<RowRange> ranges = topRanges(doc, tops);
+    for (const RowRange &range : ranges) {
         const int baseDepth = doc.at(range.first).depth;
-        for (int i = range.first; i < range.end; ++i) {
+        for (int i = range.first; i <= range.last(); ++i) {
             const BlockEntry &e = doc.at(i);
             if (prev >= 0)
                 out += u'\n' + QString(std::min(1, blankLinesBetween(doc, prev, i)), u'\n');
             prev = i;
             const QString indent(2 * std::max(0, e.depth - baseDepth), u' ');
             QString marker;
-            BlockEntry text = e;
+            QString body = e.body;
             if (e.kind == BlockKind::ListItem) {
                 const QString written = e.prefix.trimmed();
                 const bool ordered = !written.isEmpty() && written.front().isDigit();
@@ -301,16 +292,16 @@ QString blocksPlainText(const BlockDocument &doc, const QList<int> &tops, const 
                     box = task->status == TaskStatus::Done        ? u"☑ "_s
                           : task->status == TaskStatus::Cancelled ? u"☒ "_s
                                                                   : u"☐ "_s;
-                    text.body = e.body.sliced(task->contentStart);
+                    body = e.body.sliced(task->contentStart);
                 }
                 marker = ordered ? written + u' ' + box : box.isEmpty() ? u"• "_s : box;
             }
-            const QStringList lines = plainLines(text, options);
-            const QString continuation = indent + QString(marker.size(), u' ');
-            if (lines.join(QString()).isEmpty()) {
+            const QStringList lines = plainLines(e.kind, body, options);
+            if (std::ranges::all_of(lines, &QString::isEmpty)) {
                 out += indent + marker.trimmed(); // an empty item: its bullet only
                 continue;
             }
+            const QString continuation = indent + QString(marker.size(), u' ');
             for (qsizetype k = 0; k < lines.size(); ++k) {
                 if (k > 0)
                     out += u'\n';
@@ -335,9 +326,15 @@ QString stripInlineMarkup(const QString &text)
     // has such characters itself keeps its code marks instead.)
     constexpr char16_t placeholder = 0xE000;
     constexpr qsizetype maxSpans = 0x1800;
-    const bool canMask = std::none_of(text.cbegin(), text.cend(), [](QChar c) {
-        return c.unicode() >= placeholder && c.unicode() < placeholder + maxSpans;
-    });
+    const bool canMask = std::ranges::none_of(
+            text, [](QChar c) { return c.unicode() >= placeholder && c.unicode() < placeholder + maxSpans; });
+    // The length of the run of backticks at `at`.
+    const auto runAt = [&text](qsizetype at) {
+        qsizetype n = 0;
+        while (at + n < text.size() && text[at + n] == u'`')
+            ++n;
+        return n;
+    };
     QStringList code;
     QString t;
     t.reserve(text.size());
@@ -346,12 +343,6 @@ QString stripInlineMarkup(const QString &text)
             t += text[i++];
             continue;
         }
-        const auto runAt = [&](qsizetype at) {
-            qsizetype n = 0;
-            while (at + n < text.size() && text[at + n] == u'`')
-                ++n;
-            return n;
-        };
         const qsizetype n = runAt(i);
         qsizetype close = -1;
         for (qsizetype j = i + n; j < text.size() && text[j] != u'\n';) {
@@ -379,18 +370,18 @@ QString stripInlineMarkup(const QString &text)
         static const QRegularExpression codeSpan(u"(?<!`)(`+)(?!`)([^\\n]*?[^`\\n])\\1(?!`)"_s);
         t.replace(codeSpan, u"\\2"_s);
     }
-    // Coloured highlights: the tags of a `<mark>` pair come off (markdown/highlight.h); a lone one
-    // is text.
-    {
-        QList<std::pair<qsizetype, qsizetype>> tags;
-        for (const MarkPair &p : findMarkPairs(t)) {
-            tags.append({p.open.from, p.open.to});
-            tags.append({p.close.from, p.close.to});
-        }
-        std::ranges::sort(tags);
-        for (qsizetype k = tags.size() - 1; k >= 0; --k)
-            t.remove(tags[k].first, tags[k].second - tags[k].first);
+    // Coloured highlights: the tags of a `<mark>` pair come off (markdown/highlight.h), the last one
+    // first so the offsets of the others stay; a lone one is text.
+    const QList<MarkPair> marks = findMarkPairs(t);
+    QList<std::pair<qsizetype, qsizetype>> tags;
+    tags.reserve(2 * marks.size());
+    for (const MarkPair &p : marks) {
+        tags.append({p.open.from, p.open.to});
+        tags.append({p.close.from, p.close.to});
     }
+    std::ranges::sort(tags, std::greater{});
+    for (const auto &[from, to] : std::as_const(tags))
+        t.remove(from, to - from);
     t.replace(wikiAlias, u"\\1"_s);
     t.replace(mdLink, u"\\1"_s);
     // Nested pairs ("**__b__**") come off one level per pass.

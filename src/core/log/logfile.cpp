@@ -8,15 +8,12 @@ using namespace Qt::StringLiterals;
 namespace brulion::logging::detail {
 
 LogFile::LogFile(const QString &directory, qint64 maxBytes)
-    : m_directory(directory), m_maxBytes(qMax<qint64>(4096, maxBytes))
+    : m_directory(directory), m_maxBytes(std::max<qint64>(4096, maxBytes))
 { }
 
 LogFile::~LogFile()
 {
-    if (m_file.isOpen()) {
-        flush();
-        m_file.close();
-    }
+    flush();
 }
 
 QString LogFile::path() const
@@ -32,10 +29,10 @@ QString LogFile::rotatedPath() const
 QStringList LogFile::files() const
 {
     QStringList out;
-    if (QFileInfo::exists(rotatedPath()))
-        out.append(rotatedPath());
-    if (QFileInfo::exists(path()))
-        out.append(path());
+    for (const QString &name : {rotatedPath(), path()}) {
+        if (QFileInfo::exists(name))
+            out.append(name);
+    }
     return out;
 }
 
@@ -45,22 +42,28 @@ bool LogFile::open()
         fail(u"no folder for the log"_s);
         return false;
     }
-    QDir dir(m_directory);
-    if (!dir.exists() && !QDir().mkpath(m_directory)) {
+    if (!QDir().mkpath(m_directory)) {
         fail(u"cannot create %1"_s.arg(m_directory));
         return false;
     }
     // The log names notes and the server: owner-only, like the secrets folder.
     QFile::setPermissions(m_directory, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    if (!openFile(QIODevice::WriteOnly | QIODevice::Append))
+        return false;
+    if (m_file.size() >= m_maxBytes)
+        rotate();
+    return m_file.isOpen();
+}
+
+bool LogFile::openFile(QIODevice::OpenMode mode)
+{
     m_file.setFileName(path());
-    if (!m_file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+    if (!m_file.open(mode)) {
         fail(m_file.errorString());
         return false;
     }
     m_file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    if (m_file.size() >= m_maxBytes)
-        rotate();
-    return m_file.isOpen();
+    return true;
 }
 
 void LogFile::append(const QString &line)
@@ -73,20 +76,18 @@ void LogFile::append(const QString &line)
 
 bool LogFile::flush()
 {
-    if (m_failed) {
-        m_pending.clear();
+    if (m_failed)
         return false;
-    }
     if (m_pending.isEmpty() || !m_file.isOpen())
         return m_file.isOpen();
-    const QByteArray data = std::exchange(m_pending, QByteArray());
+    const QByteArray data = std::exchange(m_pending, {});
     if (m_file.write(data) != data.size() || !m_file.flush()) {
         fail(m_file.errorString());
         return false;
     }
     if (m_file.size() >= m_maxBytes)
         rotate();
-    return true;
+    return !m_failed; // reopening after the rotation can fail
 }
 
 void LogFile::rotate()
@@ -94,12 +95,7 @@ void LogFile::rotate()
     m_file.close();
     QFile::remove(rotatedPath());
     QFile::rename(path(), rotatedPath());
-    m_file.setFileName(path());
-    if (!m_file.open(QIODevice::WriteOnly | QIODevice::Append)) {
-        fail(m_file.errorString());
-        return;
-    }
-    m_file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    openFile(QIODevice::WriteOnly | QIODevice::Append);
 }
 
 void LogFile::clear()
@@ -109,18 +105,15 @@ void LogFile::clear()
         return;
     m_file.close();
     QFile::remove(rotatedPath());
-    m_file.setFileName(path());
-    if (!m_file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        fail(m_file.errorString());
+    openFile(QIODevice::WriteOnly | QIODevice::Truncate);
 }
 
 QByteArray LogFile::readAll()
 {
     flush();
     QByteArray out;
-    for (const QString &name : files()) {
-        QFile f(name);
-        if (f.open(QIODevice::ReadOnly))
+    for (const QString &name : {rotatedPath(), path()}) {
+        if (QFile f(name); f.open(QIODevice::ReadOnly))
             out += f.readAll();
     }
     return out;

@@ -119,6 +119,10 @@ Q_SIGNALS:
 
 private:
     explicit Logger(const LoggerOptions &options);
+    /// The chained Qt message handler: records the redacted message and hands it on.
+    static void handleMessage(QtMsgType type, const QMessageLogContext &context, const QString &message);
+    /// append() of a message that redact() has already seen.
+    void appendRedacted(Level level, QString category, const QString &redacted);
     void scheduleNotify();
     void deliver();
 

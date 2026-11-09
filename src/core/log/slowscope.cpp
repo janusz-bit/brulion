@@ -1,5 +1,7 @@
 #include "log/slowscope.h"
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::logging {
@@ -19,15 +21,13 @@ SlowScope::~SlowScope()
     QString text = u"%1 took %2"_s.arg(QString::fromUtf8(m_what), formatMs(ms));
     if (!m_detail.isEmpty())
         text += u" ("_s + m_detail + u')';
-    if (slow)
-        QMessageLogger(nullptr, 0, nullptr, m_category.categoryName()).info().noquote() << text;
-    else
-        QMessageLogger(nullptr, 0, nullptr, m_category.categoryName()).debug().noquote() << text;
+    const QMessageLogger logger(nullptr, 0, nullptr, m_category.categoryName());
+    (slow ? logger.info() : logger.debug()).noquote() << text;
 }
 
 QString formatBytes(qint64 bytes)
 {
-    const qint64 b = qMax<qint64>(0, bytes);
+    const qint64 b = std::max<qint64>(0, bytes);
     if (b < 1024)
         return u"%1 B"_s.arg(b);
     const double kb = double(b) / 1024.0;
@@ -41,7 +41,7 @@ QString formatBytes(qint64 bytes)
 
 QString formatMs(qint64 ms)
 {
-    const qint64 m = qMax<qint64>(0, ms);
+    const qint64 m = std::max<qint64>(0, ms);
     if (m < 1000)
         return u"%1 ms"_s.arg(m);
     if (m < 60'000)

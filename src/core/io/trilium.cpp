@@ -25,7 +25,7 @@ namespace {
 
 /// Trilium's code MIME types (packages/commons/src/lib/mime_type.ts) and their fence languages.
 /// Types missing here get a language from their subtype (languageFromSubtype()).
-const std::pair<const char16_t *, const char16_t *> MimeLanguages[] = {
+constexpr std::pair<const char16_t *, const char16_t *> MimeLanguages[] = {
         {u"text/plain", u""},
         {u"text/x-trilium-log", u""},
         {u"text/x-abap", u"abap"},
@@ -197,6 +197,35 @@ QString tidy(const QString &text)
     return t.sliced(start, end - start);
 }
 
+/// `text` rewritten up to `last` into `out`: `out` with the rest of `text`, or `text` itself when
+/// nothing was rewritten (`last` 0).
+QString rewritten(const QString &text, QString out, qsizetype last)
+{
+    if (last == 0)
+        return text;
+    out += QStringView(text).sliced(last);
+    return out;
+}
+
+/// `text` with each match of `re` in `masked` (`text` with code blanked, same length; or `text`
+/// itself) replaced by `fn(match)`; matches touching code stay as they are.
+template<typename Fn>
+QString replaceMatches(const QString &text, const QString &masked, const QRegularExpression &re, const Fn &fn)
+{
+    QString out;
+    qsizetype last = 0;
+    for (auto it = re.globalMatch(masked); it.hasNext();) {
+        const auto m = it.next();
+        if (QStringView(masked).sliced(m.capturedStart(), m.capturedLength())
+            != QStringView(text).sliced(m.capturedStart(), m.capturedLength()))
+            continue; // touches code
+        out += QStringView(text).sliced(last, m.capturedStart() - last);
+        out += fn(m);
+        last = m.capturedEnd();
+    }
+    return rewritten(text, std::move(out), last);
+}
+
 // --- HTML elements ---------------------------------------------------------------------------------
 
 bool isTagNameChar(QChar c)
@@ -224,7 +253,7 @@ qsizetype startTagEnd(const QString &html, qsizetype from)
 }
 
 /// Next `<name` / `</name` at or after `from` and before `limit` (whole tag name,
-/// case-insensitive), or -1.
+/// case-insensitive), or -1; `*closing` (unless null): whether it is an end tag.
 qsizetype findTag(const QString &html, QStringView name, qsizetype from, bool *closing,
                   qsizetype limit = std::numeric_limits<qsizetype>::max())
 {
@@ -238,7 +267,8 @@ qsizetype findTag(const QString &html, QStringView name, qsizetype from, bool *c
         const qsizetype after = k + name.size();
         if (after < html.size() && isTagNameChar(html[after]))
             continue;
-        *closing = close;
+        if (closing)
+            *closing = close;
         return i;
     }
     return -1;
@@ -297,9 +327,6 @@ QList<Element> elementsOf(const QString &html, QStringView name, bool isVoid = f
     return out;
 }
 
-/// The first element `name` (with the class `cls`, when given).
-std::optional<Element> firstElement(const QString &html, QStringView name, QStringView cls = {});
-
 using ElementFn = std::function<std::optional<QString>(const Element &element, QStringView inner)>;
 
 /// Replace elements `name` by `fn(element, inner HTML)`; where `fn` returns nullopt the element
@@ -308,7 +335,6 @@ QString transformElements(const QString &html, QStringView name, const ElementFn
 {
     QString out;
     qsizetype last = 0;
-    bool changed = false;
     for (const Element &e : elementsOf(html, name)) {
         if (e.start < last)
             continue; // inside a replaced element
@@ -316,13 +342,9 @@ QString transformElements(const QString &html, QStringView name, const ElementFn
             out += QStringView(html).sliced(last, e.start - last);
             out += *replacement;
             last = e.end;
-            changed = true;
         }
     }
-    if (!changed)
-        return html;
-    out += QStringView(html).sliced(last);
-    return out;
+    return rewritten(html, std::move(out), last);
 }
 
 /// Replace every start tag `<name …>` by `fn(attributes)` (nullopt: kept as written).
@@ -350,19 +372,16 @@ QString replaceStartTags(const QString &html, QStringView name,
         last = gt + 1;
         i = gt;
     }
-    if (last == 0)
-        return html;
-    out += QStringView(html).sliced(last);
-    return out;
+    return rewritten(html, std::move(out), last);
 }
 
-/// Rename the elements `from` to `to` (`<figure class=x>` -> `<div>`), attributes dropped.
-QString renameElements(const QString &html, QStringView from, const QString &to)
+/// Rename the elements `from` to `to` (`<figure class=x>` -> `<div>`), attributes dropped;
+/// `endTag` matches their end tags.
+QString renameElements(const QString &html, QStringView from, const QString &to, const QRegularExpression &endTag)
 {
     QString out =
             replaceStartTags(html, from, [&](const QString &) -> std::optional<QString> { return u'<' + to + u'>'; });
-    const QRegularExpression end(u"</"_s + from.toString() + u"\\s*>"_s, QRegularExpression::CaseInsensitiveOption);
-    return out.replace(end, u"</"_s + to + u'>');
+    return out.replace(endTag, u"</"_s + to + u'>');
 }
 
 QStringList classesOf(const QString &attributes)
@@ -372,11 +391,19 @@ QStringList classesOf(const QString &attributes)
 
 bool hasClass(const QString &attributes, QStringView cls)
 {
-    const QStringList classes = classesOf(attributes);
-    return std::ranges::any_of(classes, [&](const QString &c) { return c.compare(cls, Qt::CaseInsensitive) == 0; });
+    return classesOf(attributes).contains(cls, Qt::CaseInsensitive);
 }
 
-std::optional<Element> firstElement(const QString &html, QStringView name, QStringView cls)
+/// `html` without its elements `name` of the class `cls`.
+QString dropElements(const QString &html, QStringView name, QStringView cls)
+{
+    return transformElements(html, name, [&](const Element &e, QStringView) -> std::optional<QString> {
+        return hasClass(e.attributes, cls) ? std::optional<QString>(QString()) : std::nullopt;
+    });
+}
+
+/// The first element `name` (with the class `cls`, when given).
+std::optional<Element> firstElement(const QString &html, QStringView name, QStringView cls = {})
 {
     for (const Element &e : elementsOf(html, name)) {
         if (cls.isEmpty() || hasClass(e.attributes, cls))
@@ -403,9 +430,8 @@ QList<Element> outermostElements(const QString &html, QStringView name)
 /// Is `pos` inside one of `elements` (outermostElements(), in document order)?
 bool insideAny(const QList<Element> &elements, qsizetype pos)
 {
-    const auto it = std::upper_bound(elements.cbegin(), elements.cend(), pos,
-                                     [](qsizetype p, const Element &e) { return p < e.start; });
-    return it != elements.cbegin() && pos < std::prev(it)->end;
+    const auto it = std::ranges::upper_bound(elements, pos, {}, &Element::start);
+    return it != elements.begin() && pos < std::prev(it)->end;
 }
 
 /// Text of an HTML fragment without its tags (entities decoded, whitespace collapsed).
@@ -480,8 +506,7 @@ QString maskCodeAndMath(const QString &line)
         const qsizetype close = masked.indexOf(QChar(FormulaClose), i);
         if (close < 0)
             break;
-        for (qsizetype k = i; k <= close; ++k)
-            masked[k] = u' ';
+        std::fill_n(masked.begin() + i, close + 1 - i, u' ');
         i = close + 1;
     }
     return masked;
@@ -510,12 +535,15 @@ constexpr qsizetype MaxIslandLine = 200'000;
 constexpr int MaxIslands = 2'000;
 constexpr int MaxHtmlBlockLines = 5'000;
 
-/// The label of a footnote (`[^label]`): its number, else its id (letters, digits, "-").
-QString footnoteLabel(const QString &index, const QString &id, int counter)
+/// The label of a footnote (`[^label]`) of CKEditor's markup (`attributes`: of its element): its
+/// number, else its id (letters, digits, "-"), else `counter`.
+QString footnoteLabel(const QString &attributes, int counter)
 {
     static const QRegularExpression digits(u"^\\d{1,6}$"_s);
-    if (digits.match(index.trimmed()).hasMatch())
-        return index.trimmed();
+    const QString index = htmlAttribute(attributes, u"data-footnote-index"_s).value_or(QString()).trimmed();
+    if (digits.match(index).hasMatch())
+        return index;
+    const QString id = htmlAttribute(attributes, u"data-footnote-id"_s).value_or(QString());
     QString clean;
     for (const QChar c : id) {
         if ((c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') || (c >= u'0' && c <= u'9') || c == u'-')
@@ -664,10 +692,8 @@ public:
             return m_resolver.image ? m_resolver.image(img.src, img.alt) : QString();
         };
         o.link = [&](const QString &href, const QString &label) -> std::optional<QString> {
-            QString target = href;
-            const bool reference = target.startsWith(RefScheme);
-            if (reference)
-                target.remove(0, RefScheme.size());
+            const bool reference = href.startsWith(RefScheme);
+            const QString target = reference ? href.sliced(RefScheme.size()) : href;
             if (m_resolver.link) {
                 if (auto md = m_resolver.link(target, label, reference))
                     return md;
@@ -719,13 +745,11 @@ private:
         s = sections(s);
         s = callouts(s);
         s = blockquotes(s);
-        s = transformElements(s, u"div", [](const Element &e, QStringView) -> std::optional<QString> {
-            if (hasClass(e.attributes, u"page-break"))
-                return QString();
-            return std::nullopt;
-        });
-        s = renameElements(s, u"figure", u"div"_s);
-        s = renameElements(s, u"figcaption", u"p"_s);
+        s = dropElements(s, u"div", u"page-break");
+        static const QRegularExpression figureEnd(u"</figure\\s*>"_s, QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression captionEnd(u"</figcaption\\s*>"_s, QRegularExpression::CaseInsensitiveOption);
+        s = renameElements(s, u"figure", u"div"_s, figureEnd);
+        s = renameElements(s, u"figcaption", u"p"_s, captionEnd);
         s = dropEmptyTasks(s);
         s = taskStates(s);
         s = replaceStartTags(s, u"code", [](const QString &attrs) -> std::optional<QString> {
@@ -769,10 +793,7 @@ private:
             last = gt + 1;
             i = gt;
         }
-        if (last == 0)
-            return html;
-        out += QStringView(html).sliced(last);
-        return out;
+        return rewritten(html, std::move(out), last);
     }
 
     std::optional<QString> raw(const QString &src) const
@@ -780,7 +801,7 @@ private:
         if (!src.startsWith(RawScheme))
             return std::nullopt;
         bool ok = false;
-        const int index = src.sliced(RawScheme.size()).toInt(&ok);
+        const int index = QStringView(src).sliced(RawScheme.size()).toInt(&ok);
         return ok && index >= 0 && index < m_raws->size() ? m_raws->at(index) : QString();
     }
 
@@ -820,7 +841,7 @@ private:
                 const auto m = it.next();
                 const QString before = line.sliced(last, m.capturedStart() - last);
                 lines.last() += before;
-                if (lines.size() == 1 && last == 0) {
+                if (last == 0) {
                     // The text before the first block: quote markers repeat, anything else
                     // (a list marker) becomes indentation.
                     for (const QChar c : before)
@@ -860,21 +881,11 @@ private:
                 QRegularExpression::CaseInsensitiveOption);
         if (!html.contains(u"#fn"_s))
             return html;
-        QString out;
-        qsizetype last = 0;
-        for (auto it = ref.globalMatch(html); it.hasNext();) {
-            const auto m = it.next();
-            const QString id = m.captured(1) + m.captured(3);
+        return replaceMatches(html, html, ref, [&](const QRegularExpressionMatch &m) -> QString {
             const QString number = m.captured(2) + m.captured(4);
-            m_footnoteIds->insert(id, number);
-            out += QStringView(html).sliced(last, m.capturedStart() - last);
-            out += marker(u"[^"_s + number + u']');
-            last = m.capturedEnd();
-        }
-        if (last == 0)
-            return html;
-        out += QStringView(html).sliced(last);
-        return out;
+            m_footnoteIds->insert(m.captured(1) + m.captured(3), number);
+            return marker(u"[^"_s + number + u']');
+        });
     }
 
     /// A footnote definition `[^label]: …` of the item content `html` (continuation lines
@@ -900,21 +911,10 @@ private:
             if (hasClass(e.attributes, u"footnote-section")) {
                 for (const Element &item : outermostElements(in, u"li")) {
                     const QString content = in.sliced(item.contentStart, item.contentEnd - item.contentStart);
-                    QString text = content;
-                    if (const auto div = firstElement(content, u"div", u"footnote-content"))
-                        text = content.sliced(div->contentStart, div->contentEnd - div->contentStart);
-                    else
-                        text = transformElements(content, u"span",
-                                                 [](const Element &s, QStringView) -> std::optional<QString> {
-                                                     if (hasClass(s.attributes, u"footnote-back-link"))
-                                                         return QString();
-                                                     return std::nullopt;
-                                                 });
-                    addFootnote(
-                            footnoteLabel(htmlAttribute(item.attributes, u"data-footnote-index"_s).value_or(QString()),
-                                          htmlAttribute(item.attributes, u"data-footnote-id"_s).value_or(QString()),
-                                          int(m_footnotes.size()) + 1),
-                            text);
+                    const auto div = firstElement(content, u"div", u"footnote-content");
+                    addFootnote(footnoteLabel(item.attributes, int(m_footnotes.size()) + 1),
+                                div ? content.sliced(div->contentStart, div->contentEnd - div->contentStart)
+                                    : dropElements(content, u"span", u"footnote-back-link"));
                 }
                 return QString();
             }
@@ -942,7 +942,8 @@ private:
                 const qsizetype closeEnd = close < 0 ? -1 : content.indexOf(u'>', close);
                 const QString text =
                         content.first(m.capturedStart(1)) + (closeEnd < 0 ? QString() : content.sliced(closeEnd + 1));
-                const QString number = QString::number((ok ? start : 1) + int(k));
+                // 64 bits: no overflow whatever `start` the note gives.
+                const QString number = QString::number((ok ? qint64(start) : 1) + k);
                 addFootnote(m_footnoteIds->value(m.captured(2), number), text);
             }
             return QString();
@@ -951,24 +952,20 @@ private:
 
     std::optional<QString> span(const Element &e, QStringView inner)
     {
-        const QString &attrs = e.attributes;
-        if (hasClass(attrs, u"footnote-reference")) {
-            return marker(u"[^"_s
-                          + footnoteLabel(htmlAttribute(attrs, u"data-footnote-index"_s).value_or(QString()),
-                                          htmlAttribute(attrs, u"data-footnote-id"_s).value_or(QString()),
-                                          ++m_references)
-                          + u']');
-        }
-        if (hasClass(attrs, u"math-tex")) {
+        const QStringList classes = classesOf(e.attributes);
+        const auto has = [&](QStringView cls) { return classes.contains(cls, Qt::CaseInsensitive); };
+        if (has(u"footnote-reference"))
+            return marker(u"[^"_s + footnoteLabel(e.attributes, ++m_references) + u']');
+        if (has(u"math-tex")) {
             const auto [tex, display] = mathSource(plainText(inner));
             if (tex.isEmpty())
                 return QString();
             return display ? block(displayMath(tex)) : marker(inlineMath(tex));
         }
-        if (hasClass(attrs, u"tn-icon"))
+        if (has(u"tn-icon"))
             return QString();
-        if (hasClass(attrs, u"link-mention"))
-            return previewLink(attrs, inner);
+        if (has(u"link-mention"))
+            return previewLink(e.attributes, inner);
         return std::nullopt;
     }
 
@@ -996,14 +993,22 @@ private:
             }
             if (hasClass(e.attributes, u"link-embed"))
                 return u"<p>"_s + previewLink(e.attributes, inner) + u"</p>"_s;
-            if (depth() >= MaxDepth)
-                return u"<div>"_s + inner.toString() + u"</div>"_s;
-            ++m_elementDepth;
-            const QString body = transformElements(inner.toString(), u"section", fn);
-            --m_elementDepth;
-            return u"<div>"_s + body + u"</div>"_s;
+            return nestedDiv(inner, u"section", fn);
         };
         return transformElements(html, u"section", fn);
+    }
+
+    /// A `<div>` with `inner`, its elements `name` replaced by `fn` (left as they are when nested
+    /// too deeply).
+    QString nestedDiv(QStringView inner, QStringView name, const ElementFn &fn)
+    {
+        QString body = inner.toString();
+        if (depth() < MaxDepth) {
+            ++m_elementDepth;
+            body = transformElements(body, name, fn);
+            --m_elementDepth;
+        }
+        return u"<div>"_s + body + u"</div>"_s;
     }
 
     /// Admonitions (`<aside class="admonition tip">`) -> `> [!tip]`, collapsible blocks
@@ -1011,22 +1016,13 @@ private:
     QString callouts(const QString &html)
     {
         ElementFn aside = [&](const Element &e, QStringView inner) -> std::optional<QString> {
-            if (!hasClass(e.attributes, u"admonition")) {
-                if (depth() >= MaxDepth)
-                    return u"<div>"_s + inner.toString() + u"</div>"_s;
-                ++m_elementDepth;
-                const QString body = transformElements(inner.toString(), u"aside", aside);
-                --m_elementDepth;
-                return u"<div>"_s + body + u"</div>"_s;
-            }
-            QString type = u"note"_s;
-            for (const QString &c : classesOf(e.attributes)) {
-                if (c.compare(u"admonition"_s, Qt::CaseInsensitive) != 0) {
-                    type = c.toLower();
-                    break;
-                }
-            }
-            return callout(u"[!"_s + type + u']', inner);
+            const QStringList classes = classesOf(e.attributes);
+            if (!classes.contains(QStringView(u"admonition"), Qt::CaseInsensitive))
+                return nestedDiv(inner, u"aside", aside);
+            // The type: the first class besides "admonition".
+            const auto type = std::ranges::find_if(
+                    classes, [](const QString &c) { return c.compare(u"admonition"_s, Qt::CaseInsensitive) != 0; });
+            return callout(u"[!"_s + (type == classes.end() ? u"note"_s : type->toLower()) + u']', inner);
         };
         const ElementFn details = [&](const Element &e, QStringView inner) -> std::optional<QString> {
             const QString in = inner.toString();
@@ -1098,10 +1094,7 @@ private:
             out += QStringView(html).sliced(last, item.start - last);
             last = item.end;
         }
-        if (last == 0)
-            return html;
-        out += QStringView(html).sliced(last);
-        return out;
+        return rewritten(html, std::move(out), last);
     }
 
     /// To-do items in progress / cancelled (`<li data-trilium-task-state="doing">`): their
@@ -1129,10 +1122,7 @@ private:
             const qsizetype input = findTag(html, u"input", gt, &closing, gt + 2000);
             if (input < 0 || closing)
                 continue;
-            const auto before = [&](QStringView tag) {
-                bool c = false;
-                return findTag(html, tag, gt, &c, input) >= 0;
-            };
+            const auto before = [&](QStringView tag) { return findTag(html, tag, gt, nullptr, input) >= 0; };
             if (before(u"li") || before(u"ul") || before(u"ol"))
                 continue;
             const qsizetype inputEnd = startTagEnd(html, input + 6);
@@ -1142,10 +1132,7 @@ private:
             out += marker(u'[' + symbol + u"] "_s);
             last = inputEnd + 1;
         }
-        if (last == 0)
-            return html;
-        out += QStringView(html).sliced(last);
-        return out;
+        return rewritten(html, std::move(out), last);
     }
 
     /// Lists QTextDocument cannot keep: an item holding blocks besides its text (code, images,
@@ -1183,8 +1170,8 @@ private:
                 continue;
             }
             const bool adjacent = previousEnd >= 0 && l.ordered == previousOrdered
-                                  && plainText(QStringView(html).sliced(previousEnd, e.start - previousEnd)).isEmpty()
-                                  && !QStringView(html).sliced(previousEnd, e.start - previousEnd).contains(u'<');
+                                  && !QStringView(html).sliced(previousEnd, e.start - previousEnd).contains(u'<')
+                                  && plainText(QStringView(html).sliced(previousEnd, e.start - previousEnd)).isEmpty();
             const bool alternate = adjacent && !previousAlternate;
             previousEnd = e.end;
             previousOrdered = l.ordered;
@@ -1197,10 +1184,7 @@ private:
             out += lines.isEmpty() ? QString() : block(lines.join(u'\n'));
             last = e.end;
         }
-        if (last == 0)
-            return html;
-        out += QStringView(html).sliced(last);
-        return out;
+        return rewritten(html, std::move(out), last);
     }
 
     static int listStart(const Element &list)
@@ -1400,6 +1384,15 @@ QString inlineHtml(const QString &html, const Resolver &resolver)
     return htmlNoteToMarkdown(html, resolver).replace(u'\n', u' ').trimmed();
 }
 
+/// Markdown of an `<img>` element through `resolver`.
+QString imageMarkdown(const Element &img, const Resolver &resolver)
+{
+    if (!resolver.image)
+        return QString();
+    return resolver.image(htmlAttribute(img.attributes, u"src"_s).value_or(QString()).trimmed(),
+                          htmlAttribute(img.attributes, u"alt"_s).value_or(QString()).trimmed());
+}
+
 /// The islands Turndown leaves most often, when they hold plain text only: written directly
 /// (a QTextDocument per island is slow). nullopt: needs the full conversion.
 std::optional<QString> simpleInline(const QString &name, const Element &e, const QString &line,
@@ -1407,16 +1400,12 @@ std::optional<QString> simpleInline(const QString &name, const Element &e, const
 {
     static const QSet<QString> plain = {u"sub"_s,  u"sup"_s,  u"u"_s,    u"small"_s, u"big"_s,
                                         u"abbr"_s, u"cite"_s, u"time"_s, u"var"_s,   u"ins"_s};
+    if (name == u"img") // a void element: no content
+        return imageMarkdown(e, resolver);
     const QString inner = line.sliced(e.contentStart, e.contentEnd - e.contentStart);
     if (inner.contains(u'<'))
         return std::nullopt;
     const QString text = decodeHtmlEntities(inner).replace(QChar::Nbsp, u' ').simplified();
-    if (name == u"img") {
-        if (!resolver.image)
-            return QString();
-        return resolver.image(htmlAttribute(e.attributes, u"src"_s).value_or(QString()).trimmed(),
-                              htmlAttribute(e.attributes, u"alt"_s).value_or(QString()).trimmed());
-    }
     if (name == u"a") {
         const auto href = htmlAttribute(e.attributes, u"href"_s);
         if (!href || !resolver.link)
@@ -1458,9 +1447,7 @@ std::optional<QString> figureInline(const Element &e, const QString &line, const
     if (!plainText(QStringView(inner).first(img.start)).isEmpty()
         || !plainText(QStringView(inner).sliced(img.end)).isEmpty())
         return std::nullopt;
-    QString md = resolver.image ? resolver.image(htmlAttribute(img.attributes, u"src"_s).value_or(QString()).trimmed(),
-                                                 htmlAttribute(img.attributes, u"alt"_s).value_or(QString()).trimmed())
-                                : QString();
+    QString md = imageMarkdown(img, resolver);
     if (!caption.isEmpty())
         md += (md.isEmpty() ? QString() : u" "_s) + escapeMarkdownText(caption, false);
     return md;
@@ -1502,8 +1489,7 @@ QString convertLine(const QString &line, const Resolver &resolver, int &budget)
         auto it = elements.find(name);
         if (it == elements.end()) // in `masked`: no "<b" of inline code taken for a tag
             it = elements.insert(name, elementsOf(masked, name, name == u"img" || name == u"br"));
-        const auto e = std::lower_bound(it->cbegin(), it->cend(), pos,
-                                        [](const Element &x, qsizetype p) { return x.start < p; });
+        const auto e = std::ranges::lower_bound(std::as_const(*it), pos, {}, &Element::start);
         return e != it->cend() && e->start == pos ? &*e : nullptr;
     };
     QString out;
@@ -1577,29 +1563,15 @@ QString convertInlineMath(const QString &line)
             uR"((?<![\\$\w])\$\$([^$\n]+?)\$\$(?![$\d])|(?<![\\$\w])\$(?=[^\s$])([^$\n]*?[^\s$\\])\$(?![$\d])|\\\\\((.+?)\\\\\)|\\\\\\?\[(.+?)\\\\\\?\])"_s);
     if (!line.contains(u'$') && !line.contains(u"\\\\"_s))
         return line;
-    const QString masked = markdown::maskInlineCode(line);
-    QString out;
-    qsizetype last = 0;
-    for (auto it = math.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        if (QStringView(masked).sliced(m.capturedStart(), m.capturedLength())
-            != QStringView(line).sliced(m.capturedStart(), m.capturedLength()))
-            continue; // touches code
-        out += QStringView(line).sliced(last, m.capturedStart() - last);
+    return replaceMatches(line, markdown::maskInlineCode(line), math, [](const QRegularExpressionMatch &m) -> QString {
         if (m.capturedLength(1) > 0)
-            out += inlineDisplayMath(m.captured(1).trimmed());
-        else if (m.capturedLength(2) > 0)
-            out += inlineMath(m.captured(2));
-        else if (m.capturedLength(3) > 0)
-            out += inlineMath(unescapeMarkdown(m.captured(3)).trimmed());
-        else
-            out += inlineDisplayMath(unescapeMarkdown(m.captured(4)).trimmed());
-        last = m.capturedEnd();
-    }
-    if (last == 0)
-        return line;
-    out += QStringView(line).sliced(last);
-    return out;
+            return inlineDisplayMath(m.captured(1).trimmed());
+        if (m.capturedLength(2) > 0)
+            return inlineMath(m.captured(2));
+        if (m.capturedLength(3) > 0)
+            return inlineMath(unescapeMarkdown(m.captured(3)).trimmed());
+        return inlineDisplayMath(unescapeMarkdown(m.captured(4)).trimmed());
+    });
 }
 
 /// A line holding only display math — `$$…$$` (several: one block each) or 0.6x's
@@ -1660,21 +1632,9 @@ QString convertStrike(const QString &line)
     static const QRegularExpression strike(u"(?<![~\\\\\\w])~(?=[^\\s~])([^~\\n]*?[^\\s~\\\\])~(?![~\\w])"_s);
     if (!line.contains(u'~'))
         return line;
-    const QString masked = maskCodeAndMath(line);
-    QString out;
-    qsizetype last = 0;
-    for (auto it = strike.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        if (QStringView(masked).sliced(m.capturedStart(), m.capturedLength())
-            != QStringView(line).sliced(m.capturedStart(), m.capturedLength()))
-            continue;
-        out += QStringView(line).sliced(last, m.capturedStart() - last);
-        out += u"~~"_s + m.captured(1) + u"~~"_s;
-        last = m.capturedEnd();
-    }
-    if (last == 0)
-        return line;
-    return out + QStringView(line).sliced(last);
+    return replaceMatches(line, maskCodeAndMath(line), strike, [](const QRegularExpressionMatch &m) -> QString {
+        return u"~~"_s + m.captured(1) + u"~~"_s;
+    });
 }
 
 /// Callout types lower-cased (`> [!TIP]` -> `> [!tip]`), task states the dialect lacks
@@ -1722,6 +1682,23 @@ std::optional<FenceLine> fenceLine(const QString &line)
     return f;
 }
 
+/// Does `line` close the fenced code that `fence` opened?
+bool closesFence(const QString &line, const Fence &fence)
+{
+    const auto f = fenceLine(line);
+    return f && f->fence.ch == fence.ch && f->fence.length >= fence.length && f->info.isEmpty()
+           && f->rest.trimmed().isEmpty();
+}
+
+/// The number of spaces and tabs `line` starts with.
+qsizetype indentOf(const QString &line)
+{
+    qsizetype n = 0;
+    while (n < line.size() && (line[n] == u' ' || line[n] == u'\t'))
+        ++n;
+    return n;
+}
+
 /// Footnote references of notes Trilium imported from Markdown, as its Markdown export writes
 /// them (`[<sup>[1]</sup>](#fn…)`) -> `[^1]`.
 QString convertFootnoteRefs(const QString &line)
@@ -1730,21 +1707,8 @@ QString convertFootnoteRefs(const QString &line)
                                         QRegularExpression::CaseInsensitiveOption);
     if (!line.contains(u"](#fn"_s))
         return line;
-    const QString masked = maskCodeAndMath(line);
-    QString out;
-    qsizetype last = 0;
-    for (auto it = ref.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        if (QStringView(masked).sliced(m.capturedStart(), m.capturedLength())
-            != QStringView(line).sliced(m.capturedStart(), m.capturedLength()))
-            continue;
-        out += QStringView(line).sliced(last, m.capturedStart() - last);
-        out += u"[^"_s + m.captured(1) + u']';
-        last = m.capturedEnd();
-    }
-    if (last == 0)
-        return line;
-    return out + QStringView(line).sliced(last);
+    return replaceMatches(line, maskCodeAndMath(line), ref,
+                          [](const QRegularExpressionMatch &m) -> QString { return u"[^"_s + m.captured(1) + u']'; });
 }
 
 /// A text line of the Markdown export (outside code blocks): footnote references, math (first,
@@ -1760,12 +1724,6 @@ QString convertText(const QString &line, const Resolver &resolver, int &budget)
 QStringList separateOrderedLists(QStringList lines)
 {
     static const QRegularExpression item(u"^([ \\t]*)(\\d{1,9})([.)])(?=[ \\t]|$)"_s);
-    const auto indentOf = [](const QString &l) {
-        qsizetype n = 0;
-        while (n < l.size() && (l[n] == u' ' || l[n] == u'\t'))
-            ++n;
-        return n;
-    };
     struct Last {
         qsizetype indent = 0;
         int number = 0;
@@ -1777,8 +1735,7 @@ QStringList separateOrderedLists(QStringList lines)
     std::optional<Fence> fence;
     for (QString &line : lines) {
         if (fence) {
-            if (const auto f = fenceLine(line); f && f->fence.ch == fence->ch && f->fence.length >= fence->length
-                                                && f->info.isEmpty() && f->rest.trimmed().isEmpty())
+            if (closesFence(line, *fence))
                 fence.reset();
             continue;
         }
@@ -1824,7 +1781,7 @@ QStringList separateOrderedLists(QStringList lines)
 /// Is `text` at `pos` the body of a tag (`#tag`, `#[[tag]]`): tag characters with a non-digit?
 bool tagBodyAt(QStringView text, qsizetype pos)
 {
-    if (QStringView(text).sliced(pos).startsWith(u"[["))
+    if (text.sliced(pos).startsWith(u"[["))
         return true;
     bool nonDigit = false;
     qsizetype k = pos;
@@ -1922,7 +1879,7 @@ void checkFormulas(QStringList &lines, qsizetype from, qsizetype to)
             if (k > from)
                 text += u'\n';
             qsizetype open = -1;
-            for (const QChar c : std::as_const(lines[k])) {
+            for (const QChar c : lines.at(k)) {
                 if (c == QChar(FormulaOpen)) {
                     open = text.size();
                 } else if (c == QChar(FormulaClose)) {
@@ -1963,10 +1920,9 @@ QString finishFormulas(const QString &markdown)
     for (qsizetype k = 0; k <= lines.size(); ++k) {
         bool text = false;
         if (k < lines.size()) {
-            const QString &line = lines[k];
+            const QString &line = lines.at(k);
             if (fence) {
-                if (const auto f = fenceLine(line); f && f->fence.ch == fence->ch && f->fence.length >= fence->length
-                                                    && f->info.isEmpty() && f->rest.trimmed().isEmpty())
+                if (closesFence(line, *fence))
                     fence.reset();
             } else if (const auto f = fenceLine(line)) {
                 fence = f->fence;
@@ -1984,6 +1940,44 @@ QString finishFormulas(const QString &markdown)
         paragraph = -1;
     }
     return lines.join(u'\n').remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
+}
+
+/// Markdown for a Markdown link (an image when `image`) of the export to `dest` labelled `label`,
+/// through `resolver`; nullopt: written as it is.
+std::optional<QString> resolveLink(const Resolver &resolver, bool image, const QString &dest, const QString &label)
+{
+    if (image)
+        return resolver.image ? std::optional<QString>(resolver.image(dest, QString(label).remove(u'\\')))
+                              : std::nullopt;
+    return resolver.link ? resolver.link(dest, label, false) : std::nullopt;
+}
+
+/// `markdown` with the links CommonMark does not accept resolved: old exports wrote attachment
+/// names with spaces raw (`[lista zakupów.txt](Ogród planbudżet_lista zakupów.txt)`).
+QString resolveLooseLinks(const QString &markdown, const Resolver &resolver)
+{
+    static const QRegularExpression loose(u"(!?)\\[([^\\]\\n]*)\\]\\(([^()\\n]+)\\)"_s);
+    static const QRegularExpression scheme(u"^[A-Za-z][A-Za-z0-9+.-]{1,31}:"_s);
+    return mapLinesOutsideCode(markdown, [&](const QString &line, const QString &masked) -> QString {
+        if (!masked.contains(u"]("_s))
+            return line;
+        QString result;
+        qsizetype last = 0;
+        for (auto it = loose.globalMatch(masked); it.hasNext();) {
+            const auto m = it.next();
+            const QString dest = line.sliced(m.capturedStart(3), m.capturedLength(3)).trimmed();
+            if (scheme.match(dest).hasMatch() || escapedAt(line, m.capturedStart()))
+                continue;
+            const auto md = resolveLink(resolver, m.capturedLength(1) > 0, dest,
+                                        line.sliced(m.capturedStart(2), m.capturedLength(2)));
+            if (!md)
+                continue;
+            result += QStringView(line).sliced(last, m.capturedStart() - last);
+            result += *md;
+            last = m.capturedEnd();
+        }
+        return rewritten(line, std::move(result), last);
+    });
 }
 
 } // namespace
@@ -2029,9 +2023,7 @@ QString noteBody(const QString &page)
         const QString inner = page.sliced(body->contentStart, body->contentEnd - body->contentStart);
         // The title heading of a page without the content wrapper.
         return transformElements(inner, u"h1", [](const Element &h, QStringView) -> std::optional<QString> {
-            if (htmlAttribute(h.attributes, u"data-trilium-h1"_s))
-                return QString();
-            return std::nullopt;
+            return htmlAttribute(h.attributes, u"data-trilium-h1"_s) ? std::optional<QString>(QString()) : std::nullopt;
         });
     }
     return page;
@@ -2064,10 +2056,9 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
     std::optional<Fence> fence;
     int islands = MaxIslands;
     for (qsizetype i = 0; i < lines.size(); ++i) {
-        const QString &line = lines[i];
+        const QString &line = lines.at(i);
         if (fence) {
-            if (const auto f = fenceLine(line); f && f->fence.ch == fence->ch && f->fence.length >= fence->length
-                                                && f->info.isEmpty() && f->rest.trimmed().isEmpty())
+            if (closesFence(line, *fence))
                 fence.reset();
             out.append(line);
             continue;
@@ -2079,8 +2070,8 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
         }
         if (const auto m = footnoteItem.match(line); m.hasMatch()) {
             QStringList body;
-            if (!m.captured(2).trimmed().isEmpty())
-                body.append(m.captured(2).trimmed());
+            if (const QString first = m.captured(2).trimmed(); !first.isEmpty())
+                body.append(first);
             qsizetype j = i + 1;
             for (; j < lines.size(); ++j) {
                 const QString &next = lines[j];
@@ -2102,9 +2093,8 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
         }
         // A block of HTML (figure, include-note box, <details>, table): converted as a whole.
         const QString trimmed = line.trimmed();
-        const qsizetype lead = trimmed.isEmpty() ? 0 : line.indexOf(trimmed.front());
-        if (trimmed.startsWith(u'<') && blockTags().contains(tagNameAt(trimmed, 0))) {
-            const QString name = tagNameAt(trimmed, 0);
+        const QString name = trimmed.startsWith(u'<') ? tagNameAt(trimmed, 0) : QString();
+        if (blockTags().contains(name)) {
             // The block ends with the line that closes its first element.
             const auto depthChange = [&](const QString &part) {
                 int d = 0;
@@ -2120,7 +2110,7 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
                 depth += depthChange(lines[j]);
             }
             i = j;
-            const QString prefix = line.first(lead);
+            const QString prefix = line.first(line.indexOf(trimmed.front()));
             const QString md = htmlNoteToMarkdown(html, resolver);
             if (!out.isEmpty() && !out.last().trimmed().isEmpty())
                 out.append(QString());
@@ -2148,19 +2138,13 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
             qsizetype next = i + 1;
             while (next < lines.size() && lines[next].trimmed().isEmpty())
                 ++next;
-            const auto indentOf = [](const QString &l) {
-                qsizetype n = 0;
-                while (n < l.size() && (l[n] == u' ' || l[n] == u'\t'))
-                    ++n;
-                return n;
-            };
             if (next < lines.size() && indentOf(lines[next]) > indentOf(line))
                 out.append(m.captured(1));
             continue;
         }
         out.append(convertMarkers(convertText(line, resolver, islands)));
     }
-    text = separateOrderedLists(out).join(u'\n');
+    text = separateOrderedLists(std::move(out)).join(u'\n');
 
     // Markdown links and images into the export.
     text = replaceLinks(text, [&](const FoundLink &l) -> std::optional<QString> {
@@ -2169,43 +2153,9 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
         QString dest = l.destination;
         if (dest.startsWith(u'<') && dest.endsWith(u'>'))
             dest = dest.sliced(1, dest.size() - 2);
-        if (l.image)
-            return resolver.image ? std::optional<QString>(resolver.image(dest, QString(l.display).remove(u'\\')))
-                                  : std::nullopt;
-        return resolver.link ? resolver.link(dest, l.display, false) : std::nullopt;
+        return resolveLink(resolver, l.image, dest, l.display);
     });
-    // Links CommonMark does not accept: old exports wrote attachment names with spaces raw
-    // (`[lista zakupów.txt](Ogród planbudżet_lista zakupów.txt)`).
-    static const QRegularExpression loose(u"(!?)\\[([^\\]\\n]*)\\]\\(([^()\\n]+)\\)"_s);
-    text = mapLinesOutsideCode(text, [&](const QString &line, const QString &masked) -> QString {
-        if (!masked.contains(u"]("_s))
-            return line;
-        QString result;
-        qsizetype last = 0;
-        for (auto it = loose.globalMatch(masked); it.hasNext();) {
-            const auto m = it.next();
-            const QString dest = line.sliced(m.capturedStart(3), m.capturedLength(3)).trimmed();
-            static const QRegularExpression scheme(u"^[A-Za-z][A-Za-z0-9+.-]{1,31}:"_s);
-            if (scheme.match(dest).hasMatch() || escapedAt(line, m.capturedStart()))
-                continue;
-            const QString label = line.sliced(m.capturedStart(2), m.capturedLength(2));
-            std::optional<QString> md;
-            if (m.capturedLength(1) > 0)
-                md = resolver.image ? std::optional<QString>(resolver.image(dest, QString(label).remove(u'\\')))
-                                    : std::nullopt;
-            else if (resolver.link)
-                md = resolver.link(dest, label, false);
-            if (!md)
-                continue;
-            result += QStringView(line).sliced(last, m.capturedStart() - last);
-            result += *md;
-            last = m.capturedEnd();
-        }
-        if (last == 0)
-            return line;
-        return result + QStringView(line).sliced(last);
-    });
-    return finishFormulas(escapeHashtags(tidy(text)));
+    return finishFormulas(escapeHashtags(tidy(resolveLooseLinks(text, resolver))));
 }
 
 } // namespace brulion::io::detail::trilium
