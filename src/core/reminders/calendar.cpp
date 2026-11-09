@@ -5,7 +5,6 @@
 #include "reminders/reminders_p.h"
 
 #include <algorithm>
-#include <numeric>
 
 namespace brulion {
 
@@ -57,25 +56,19 @@ public:
     /// The final order of `items`: by date; within a day timed items first (by time), then
     /// all-day ones; ties in the given order (a stable sort). Sorted through pointers, so every
     /// item is copied once.
-    static QList<CalendarItem> sorted(const QList<const CalendarItem *> &items)
+    static QList<CalendarItem> sorted(QList<const CalendarItem *> items)
     {
-        QList<qsizetype> order(items.size());
-        std::iota(order.begin(), order.end(), 0);
-        std::ranges::sort(order, [&items](qsizetype x, qsizetype y) {
-            const CalendarItem &a = *items[x];
-            const CalendarItem &b = *items[y];
-            if (a.date != b.date)
-                return a.date < b.date;
-            if (a.time.has_value() != b.time.has_value())
-                return a.time.has_value(); // timed items before all-day ones
-            if (a.time && *a.time != *b.time)
-                return *a.time < *b.time;
-            return x < y;
+        std::ranges::stable_sort(items, [](const CalendarItem *a, const CalendarItem *b) {
+            if (a->date != b->date)
+                return a->date < b->date;
+            if (a->time.has_value() != b->time.has_value())
+                return a->time.has_value(); // timed items before all-day ones
+            return a->time && *a->time < *b->time;
         });
         QList<CalendarItem> out;
         out.reserve(items.size());
-        for (const qsizetype i : std::as_const(order))
-            out.append(*items[i]);
+        for (const CalendarItem *item : std::as_const(items))
+            out.append(*item);
         return out;
     }
 
@@ -87,24 +80,21 @@ public:
         const std::optional<dates::RecurrenceRule> expand = isClosed(task) ? std::nullopt : rule;
         // The dates of a series move together: each keeps its distance to the reference date.
         const std::optional<DateSpec> reference = seriesReference(task);
-        const bool recurring = rule.has_value();
         QString title;
-        const auto add = [&](CalendarItem::Kind kind, const DateSpec &spec, const DateSpec &written) {
+        const auto add = [&](CalendarItem::Kind kind, DateSpec spec, DateSpec written) {
             if (title.isNull())
                 title = titleFor(task.text, path);
-            CalendarItem item;
-            item.date = spec.date;
-            item.time = spec.time;
-            item.kind = kind;
-            item.title = title;
-            item.path = path;
-            item.line = task.line;
-            item.status = task.status;
-            item.recurring = recurring;
-            item.written = written;
-            item.rule = task.recurrence;
-            item.priority = task.priority;
-            m_items.append(std::move(item));
+            m_items.append({.date = spec.date,
+                            .time = spec.time,
+                            .kind = kind,
+                            .title = title,
+                            .path = path,
+                            .line = task.line,
+                            .status = task.status,
+                            .recurring = rule.has_value(),
+                            .written = written,
+                            .rule = task.recurrence,
+                            .priority = task.priority});
         };
         const auto addSeries = [&](CalendarItem::Kind kind, const std::optional<DateSpec> &anchor) {
             if (!anchor)
@@ -127,7 +117,7 @@ public:
         if (ref.path != m_blockPath || ref.blockIndex != m_blockIndex) {
             m_blockPath = ref.path;
             m_blockIndex = ref.blockIndex;
-            m_blockSource = m_note ? sourceOf(m_note, ref) : sourceOf(m_index, ref);
+            m_blockSource = sourceOf(m_note ? m_note : m_index.note(ref.path), ref);
             m_blockTitle = QString();
         }
         const ReminderSource &src = m_blockSource;
@@ -137,24 +127,19 @@ public:
         const bool recurring = ruleOf(ref.reminder.recurrence).has_value();
         if (m_blockTitle.isNull())
             m_blockTitle = titleFor(src.text, ref.path);
-        const QString &title = m_blockTitle;
         for (const DateSpec &spec : specs) {
-            CalendarItem item;
-            item.date = spec.date;
-            item.time = spec.time;
-            item.kind = CalendarItem::Reminder;
-            item.title = title;
-            item.path = ref.path;
-            item.line = ref.reminder.line;
-            if (src.task)
-                item.status = src.task->status;
-            item.recurring = recurring;
-            item.alarm = ref.reminder.alarm;
-            item.written = ref.reminder.at;
-            item.rule = ref.reminder.recurrence;
-            if (src.task)
-                item.priority = src.task->priority;
-            m_items.append(std::move(item));
+            m_items.append({.date = spec.date,
+                            .time = spec.time,
+                            .kind = CalendarItem::Reminder,
+                            .title = m_blockTitle,
+                            .path = ref.path,
+                            .line = ref.reminder.line,
+                            .status = src.task ? std::optional(src.task->status) : std::nullopt,
+                            .recurring = recurring,
+                            .alarm = ref.reminder.alarm,
+                            .written = ref.reminder.at,
+                            .rule = ref.reminder.recurrence,
+                            .priority = src.task ? src.task->priority : Priority::None});
         }
     }
 
@@ -244,17 +229,16 @@ QList<CalendarItem> CalendarCache::items(const VaultIndex &index, QDate from, QD
     QList<CalendarItem> journals;
     CalendarBuilder(index, from, to, journals).addJournals();
     QList<const CalendarItem *> all;
-    for (const CalendarItem &item : std::as_const(journals))
-        all.append(&item);
-    for (const auto &[path, items] : d->notes.values()) {
-        for (const CalendarItem &item : items.tasks)
+    const auto collect = [&all](const QList<CalendarItem> &list) {
+        for (const CalendarItem &item : list)
             all.append(&item);
-    }
-    for (const auto &[path, items] : d->notes.values()) {
-        for (const CalendarItem &item : items.reminders)
-            all.append(&item);
-    }
-    return CalendarBuilder::sorted(all);
+    };
+    collect(journals);
+    for (const auto &[path, items] : d->notes.values())
+        collect(items.tasks);
+    for (const auto &[path, items] : d->notes.values())
+        collect(items.reminders);
+    return CalendarBuilder::sorted(std::move(all));
 }
 
 const NoteCacheSync &CalendarCache::lastSync() const

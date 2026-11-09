@@ -19,10 +19,7 @@ void mask(QString &s, qsizetype from, qsizetype to)
 {
     from = std::clamp<qsizetype>(from, 0, s.size());
     to = std::clamp<qsizetype>(to, from, s.size());
-    for (qsizetype i = from; i < to; ++i) {
-        if (s[i] != u'\n')
-            s[i] = u' ';
-    }
+    std::replace_if(s.begin() + from, s.begin() + to, [](QChar c) { return c != u'\n'; }, QChar(u' '));
 }
 
 void maskMatches(QString &s, const QRegularExpression &re)
@@ -81,11 +78,8 @@ QString prose(QStringView text, bool lineStart)
     static const QRegularExpression macroRe(u"\\{\\{.*?\\}\\}"_s);
     static const QRegularExpression timestampRe(u"<\\d{4}-\\d{2}-\\d{2}[^<>\\n]*>"_s);
     static const QRegularExpression footnoteRe(u"\\[\\^[^\\]\\s]+\\]"_s);
-    maskMatches(s, htmlTagRe);
-    maskMatches(s, entityRe);
-    maskMatches(s, macroRe);
-    maskMatches(s, timestampRe);
-    maskMatches(s, footnoteRe);
+    for (const QRegularExpression *re : {&htmlTagRe, &entityRe, &macroRe, &timestampRe, &footnoteRe})
+        maskMatches(s, *re);
 
     if (lineStart) {
         // Quote and list markers, a checkbox, then a task keyword, a callout type or a property.
@@ -107,16 +101,18 @@ QString prose(QStringView text, bool lineStart)
     return s;
 }
 
-/// The code point at `i` of `s` and its length in UTF-16 units.
-char32_t codePointAt(QStringView s, qsizetype i, int *units)
+struct CodePoint {
+    char32_t value = 0;
+    int units = 1; ///< its length in UTF-16 units
+};
+
+/// The code point at `i` of `s`.
+CodePoint codePointAt(QStringView s, qsizetype i)
 {
     const QChar c = s[i];
-    if (c.isHighSurrogate() && i + 1 < s.size() && s[i + 1].isLowSurrogate()) {
-        *units = 2;
-        return QChar::surrogateToUcs4(c, s[i + 1]);
-    }
-    *units = 1;
-    return c.unicode();
+    if (c.isHighSurrogate() && i + 1 < s.size() && s[i + 1].isLowSurrogate())
+        return {QChar::surrogateToUcs4(c, s[i + 1]), 2};
+    return {c.unicode(), 1};
 }
 
 bool isMark(char32_t c)
@@ -168,8 +164,7 @@ bool checkable(QStringView s, qsizetype from, qsizetype to)
     int lower = 0;
     bool previousLower = false;
     for (qsizetype i = from; i < to;) {
-        int units = 1;
-        const char32_t c = codePointAt(s, i, &units);
+        const auto [c, units] = codePointAt(s, i);
         i += units;
         if (QChar::isNumber(c) || c == U'_' || c == U'.' || c == U'@')
             return false;
@@ -211,24 +206,19 @@ QList<WordSpan> findWords(QStringView text, bool lineStart)
     const qsizetype n = v.size();
     qsizetype i = 0;
     while (i < n) {
-        int units = 1;
-        const char32_t c = codePointAt(v, i, &units);
-        if (!isCore(c)) {
-            i += units;
-            continue;
-        }
+        const auto [c, units] = codePointAt(v, i);
         const qsizetype from = i;
         i += units;
+        if (!isCore(c))
+            continue;
         while (i < n) {
-            int u1 = 1;
-            const char32_t next = codePointAt(v, i, &u1);
+            const auto [next, u1] = codePointAt(v, i);
             if (isCore(next)) {
                 i += u1;
                 continue;
             }
             if (isJoiner(next) && i + u1 < n) {
-                int u2 = 1;
-                if (isCore(codePointAt(v, i + u1, &u2))) {
+                if (const auto [after, u2] = codePointAt(v, i + u1); isCore(after)) {
                     i += u1 + u2;
                     continue;
                 }
@@ -288,8 +278,7 @@ QStringList hyphenParts(QStringView word)
     const QString w = normalizedWord(word);
     if (!w.contains(u'-'))
         return {};
-    QStringList parts = w.split(u'-', Qt::SkipEmptyParts);
-    return parts;
+    return w.split(u'-', Qt::SkipEmptyParts);
 }
 
 } // namespace brulion::spell

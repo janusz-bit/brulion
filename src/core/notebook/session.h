@@ -88,7 +88,7 @@ public:
     QString stateDir() const;
 
     /// The index of every note and attachment, read from the disk on first use and kept up to
-    /// date with the vault's changes from then on.
+    /// date with the vault's changes from then on (an empty one while no notebook is open).
     VaultIndex &index();
     bool hasIndex() const;
     /// How index() loaded the index (IndexLoader::Stats; empty before the first index()).

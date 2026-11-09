@@ -85,18 +85,12 @@ std::optional<Fence> fenceOpening(QStringView s)
 }
 
 /// `s` closes `fence`: as many of its characters or more, then only blanks.
-bool closesFence(QStringView s, const Fence &fence)
+bool closesFence(QStringView s, Fence fence)
 {
     qsizetype n = 0;
     while (n < s.size() && s[n] == fence.ch)
         ++n;
-    if (n < fence.length)
-        return false;
-    for (qsizetype i = n; i < s.size(); ++i) {
-        if (!isBlank(s[i]))
-            return false;
-    }
-    return true;
+    return n >= fence.length && std::ranges::all_of(s.sliced(n), isBlank);
 }
 
 /// `line` without its comments (`%%…%%`, `<!-- … -->`); `inPercent` / `inHtml` carry an open one
@@ -177,7 +171,7 @@ QString lineText(QStringView line)
     QStringView s = withoutContainers(line);
     if (s.isEmpty() || rule.matchView(s).hasMatch() || tableSeparator.matchView(s).hasMatch())
         return {};
-    if (std::all_of(s.cbegin(), s.cend(), [](QChar c) { return c == u'=' || isBlank(c); }))
+    if (std::ranges::all_of(s, [](QChar c) { return c == u'=' || isBlank(c); }))
         return {}; // a setext heading's underline
     if (s.startsWith(u'|'))
         return tableCells(s);
@@ -282,7 +276,7 @@ TextStats countPlainText(QStringView text)
         if (g == u"\n" || g == u"\r\n" || g == u"\r")
             continue;
         ++stats.characters;
-        if (!std::all_of(g.cbegin(), g.cend(), [](QChar c) { return c.isSpace(); }))
+        if (!std::ranges::all_of(g, [](QChar c) { return c.isSpace(); }))
             ++stats.charactersNoSpaces;
     }
     stats.readingMinutes = readingMinutes(stats.words);
@@ -291,7 +285,7 @@ TextStats countPlainText(QStringView text)
 
 QString readableText(QStringView markdown, const CountOptions &options)
 {
-    qsizetype start = !markdown.isEmpty() && markdown[0].unicode() == 0xfeff ? 1 : 0;
+    qsizetype start = markdown.startsWith(u'\uFEFF') ? 1 : 0;
     if (options.page) {
         if (const auto fm = markdown::findFrontmatter(markdown))
             start = fm->bodyStart;
@@ -301,13 +295,7 @@ QString readableText(QStringView markdown, const CountOptions &options)
     bool inMath = false;
     bool inPercent = false;
     bool inHtml = false;
-    qsizetype at = start;
-    while (at <= markdown.size()) {
-        qsizetype end = markdown.indexOf(u'\n', at);
-        if (end < 0)
-            end = markdown.size();
-        QStringView raw = markdown.mid(at, end - at);
-        at = end + 1;
+    for (QStringView raw : markdown.mid(start).tokenize(u'\n')) {
         if (raw.endsWith(u'\r'))
             raw.chop(1);
 
@@ -349,7 +337,7 @@ QString readableText(QStringView markdown, const CountOptions &options)
     const QString stripped = inlineText(lines);
     QString out;
     out.reserve(stripped.size());
-    for (QStringView line : QStringView(stripped).split(u'\n')) {
+    for (QStringView line : QStringView(stripped).tokenize(u'\n')) {
         line = line.trimmed();
         if (line.isEmpty())
             continue;
@@ -357,16 +345,11 @@ QString readableText(QStringView markdown, const CountOptions &options)
             out += u'\n';
         // Spaces and tabs in a row are one space, as the note shows them (also where something
         // left out stood between two words).
-        bool blank = false;
         for (const QChar c : line) {
-            if (isBlank(c)) {
-                if (!blank)
-                    out += u' ';
-                blank = true;
-            } else {
+            if (!isBlank(c))
                 out += c;
-                blank = false;
-            }
+            else if (!out.endsWith(u' '))
+                out += u' ';
         }
     }
     return out;

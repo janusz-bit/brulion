@@ -36,7 +36,9 @@ namespace brulion::spell {
 /// or a word list (tests).
 class SpellBackend {
 public:
+    SpellBackend() = default;
     virtual ~SpellBackend();
+    Q_DISABLE_COPY_MOVE(SpellBackend)
     /// The language it checks: a primary language subtag ("pl", "en").
     virtual QString language() const = 0;
     /// True when `word` (normalizedWord()) is spelled right.

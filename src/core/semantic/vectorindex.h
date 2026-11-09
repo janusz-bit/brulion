@@ -10,10 +10,10 @@
 #include "semantic/calibration.h"
 #include "semantic/chunker.h"
 
-#include <QByteArray>
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include <vector>
 
@@ -60,7 +60,7 @@ private:
     std::vector<int> m_owner; ///< note slot of chunk k
     std::vector<int> m_line;
     std::vector<bool> m_english;
-    QList<QString> m_slotIds; ///< note id of a slot ("" = free)
+    QStringList m_slotIds;      ///< note id of a slot ("" = free)
     QHash<QString, int> m_docs; ///< id -> slot
 };
 

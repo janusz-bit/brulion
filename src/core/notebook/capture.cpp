@@ -53,7 +53,7 @@ CaptureLine buildCaptureLine(const QString &input, const QDateTime &now, Qt::Day
     out.text = content.trimmed();
     out.kind = CaptureLine::Kind::Note;
 
-    const bool hasToken = content.contains(u"⏰"_s) || content.contains(u"📅"_s);
+    const bool hasToken = content.contains(u"⏰") || content.contains(u"📅");
     std::optional<dates::NaturalDate> found;
     if (!hasToken && now.isValid())
         found = dates::parseNaturalDate(content, now, weekStart, locale);
@@ -61,30 +61,23 @@ CaptureLine buildCaptureLine(const QString &input, const QDateTime &now, Qt::Day
         found.reset(); // "wczoraj …": a note about the past, not a task
     QString line;
     if (found) {
-        QString stripped = dates::stripNaturalDate(content, *found).trimmed();
-        if (stripped.isEmpty())
-            stripped = content.trimmed(); // only a date ("jutro o 9"): keep the words
-        out.text = stripped;
+        // Only a date ("jutro o 9"): the words stay.
+        if (const QString stripped = dates::stripNaturalDate(content, *found).trimmed(); !stripped.isEmpty())
+            out.text = stripped;
+        const bool reminder = found->spec.hasTime();
+        out.kind = reminder ? CaptureLine::Kind::Reminder : CaptureLine::Kind::Due;
         out.when = found->spec;
-        QString token;
-        if (found->spec.hasTime()) {
-            out.kind = CaptureLine::Kind::Reminder;
-            token = u"⏰ "_s + found->spec.toString();
-        } else {
-            out.kind = CaptureLine::Kind::Due;
-            token = u"📅 "_s + found->spec.toString();
-        }
-        line = marker + (task.isEmpty() ? u"[ ] "_s : task) + stripped + u' ' + token;
+        line = marker + (task.isEmpty() ? u"[ ] "_s : task) + out.text + (reminder ? u" ⏰ "_s : u" 📅 "_s)
+               + found->spec.toString();
     } else {
-        line = marker + task + content.trimmed();
+        line = marker + task + out.text;
     }
 
-    QStringList block{line.trimmed()};
+    out.block = line.trimmed();
     for (qsizetype i = 1; i < lines.size(); ++i) {
         const QString rest = lines.at(i).trimmed();
-        block.append(rest.isEmpty() ? QString() : u"  "_s + rest);
+        out.block += rest.isEmpty() ? u"\n"_s : u"\n  "_s + rest;
     }
-    out.block = block.join(u'\n');
     return out;
 }
 

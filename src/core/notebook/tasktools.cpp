@@ -100,7 +100,8 @@ QVariantList dependencyCandidates(const VaultIndex &index, const QString &text, 
         QString titleKey;
     };
     QList<Candidate> found;
-    for (const TaskRef &t : index.tasks()) {
+    // const: tasks() shares the index's cached list, which a non-const loop would copy.
+    for (const QList<TaskRef> tasks = index.tasks(); const TaskRef &t : tasks) {
         if (isClosed(t.task.status))
             continue;
         const auto place = placeOf(index, t);
@@ -109,7 +110,7 @@ QVariantList dependencyCandidates(const VaultIndex &index, const QString &text, 
         if (!t.task.id.isEmpty() && waitsFor.contains(t.task.id))
             continue;
         const QString folded = text::foldKey(t.task.text);
-        if (!std::all_of(words.cbegin(), words.cend(), [&](const QString &w) { return folded.contains(w); }))
+        if (!std::ranges::all_of(words, [&](const QString &w) { return folded.contains(w); }))
             continue;
         found.append({*place, !query.isEmpty() && folded.startsWith(query), text::nameSortKey(titleOf(index, t.path))});
     }

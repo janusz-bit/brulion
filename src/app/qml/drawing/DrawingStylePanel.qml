@@ -16,7 +16,6 @@ T.Popup {
     required property Item area
     required property Item barHost
 
-    readonly property var current: canvas.selectionStyle
     /// selectionStyle's `key` as text ("" missing) and as a flag.
     function styleText(key: string): string {
         return AppController.routeText(panel.canvas.selectionStyle, key)
@@ -88,7 +87,8 @@ T.Popup {
             width: parent.width
             height: Theme.controlHeight
             radius: Theme.radius
-            color: choice.selected ? Theme.bgSelected : choice.hovered ? Theme.bgHover : "transparent"
+            visible: choice.selected || choice.hovered
+            color: choice.selected ? Theme.bgSelected : Theme.bgHover
         }
         contentItem: Text {
             id: choiceText
@@ -101,34 +101,41 @@ T.Popup {
         }
     }
 
-    /// A row: its title and its choices ([{ value, label }]).
-    component Options: Column {
-        id: options
+    /// A titled row of whatever is put in it.
+    component Section: Column {
+        id: section
         required property string title
+        default property alias content: flow.data
+        spacing: 2
+        width: parent ? parent.width : 0
+        BText {
+            text: section.title
+            variant: "caption"
+        }
+        Flow {
+            id: flow
+            width: parent.width
+            spacing: 2
+        }
+    }
+
+    /// A row: its title and its choices ([{ value, label }]).
+    component Options: Section {
+        id: options
         required property string key
         property list<var> choices: []
         /// The selection's value of `key`, as text (the choices' values compared as text).
         readonly property string valueText: panel.styleText(options.key)
-        spacing: 2
-        width: parent ? parent.width : 0
-        BText {
-            text: options.title
-            variant: "caption"
-        }
-        Flow {
-            width: parent.width
-            spacing: 2
-            Repeater {
-                model: options.choices
-                delegate: Choice {
-                    id: choiceItem
-                    required property var modelData
-                    required property var value
-                    readonly property string valueText: AppController.routeText(modelData, "value")
-                    objectName: "drawingStyle_" + options.key + "_" + valueText
-                    selected: options.valueText === valueText
-                    onClicked: panel.canvas.styleSelection(Js.withKey({}, options.key, choiceItem.value))
-                }
+        Repeater {
+            model: options.choices
+            delegate: Choice {
+                id: choiceItem
+                required property var modelData
+                required property var value
+                readonly property string valueText: AppController.routeText(modelData, "value")
+                objectName: "drawingStyle_" + options.key + "_" + valueText
+                selected: options.valueText === valueText
+                onClicked: panel.canvas.styleSelection(Js.withKey({}, options.key, choiceItem.value))
             }
         }
     }
@@ -146,37 +153,28 @@ T.Popup {
             width: parent.width
             spacing: Theme.space2
 
-            Column {
+            Section {
                 visible: panel.styleFlag("fillable")
-                width: parent.width
-                spacing: 2
-                BText {
-                    text: qsTr("Fill")
-                    variant: "caption"
+                title: qsTr("Fill")
+                Choice {
+                    objectName: "drawingStyleNoFill"
+                    label: qsTr("None", "fill")
+                    selected: panel.styleText("fill") === "transparent"
+                    onClicked: panel.canvas.styleSelection({ fill: "transparent" })
                 }
-                Flow {
-                    width: parent.width
-                    spacing: 2
-                    Choice {
-                        objectName: "drawingStyleNoFill"
-                        label: qsTr("None", "fill")
-                        selected: panel.styleText("fill") === "transparent"
-                        onClicked: panel.canvas.styleSelection({ fill: "transparent" })
-                    }
-                    Repeater {
-                        model: panel.fillColors
-                        delegate: BColorSwatch {
-                            id: fillSwatch
-                            required property var modelData
-                            readonly property string fill: AppController.routeText(modelData, "color")
-                            objectName: "drawingStyleFill" + Js.sliceFrom(fill, 1)
-                            color: panel.displayed(fill)
-                            label: AppController.routeText(modelData, "label")
-                            size: 22
-                            focusPolicy: Qt.NoFocus
-                            selected: panel.styleText("fill") === fill
-                            onClicked: panel.canvas.styleSelection({ fill: fillSwatch.fill })
-                        }
+                Repeater {
+                    model: panel.fillColors
+                    delegate: BColorSwatch {
+                        id: fillSwatch
+                        required property var modelData
+                        readonly property string fill: AppController.routeText(modelData, "color")
+                        objectName: "drawingStyleFill" + Js.sliceFrom(fill, 1)
+                        color: panel.displayed(fill)
+                        label: AppController.routeText(modelData, "label")
+                        size: 22
+                        focusPolicy: Qt.NoFocus
+                        selected: panel.styleText("fill") === fill
+                        onClicked: panel.canvas.styleSelection({ fill: fillSwatch.fill })
                     }
                 }
             }
@@ -242,54 +240,45 @@ T.Popup {
                     { value: 36, label: qsTr("Extra large") }
                 ]
             }
-            Column {
+            Section {
                 visible: panel.styleFlag("canAlign")
-                width: parent.width
-                spacing: 2
-                BText {
-                    text: qsTr("Align")
-                    variant: "caption"
+                title: qsTr("Align")
+                Repeater {
+                    model: panel.alignments
+                    delegate: BIconButton {
+                        id: alignButton
+                        required property var modelData
+                        readonly property string value: AppController.routeText(modelData, "value")
+                        objectName: "drawingStyleAlign_" + value
+                        iconName: AppController.routeText(modelData, "icon")
+                        label: AppController.routeText(modelData, "label")
+                        shortcut: AppController.routeText(modelData, "keys")
+                        focusPolicy: Qt.NoFocus
+                        onClicked: panel.canvas.alignSelection(alignButton.value)
+                    }
                 }
-                Flow {
-                    width: parent.width
-                    spacing: 2
-                    Repeater {
-                        model: panel.alignments
-                        delegate: BIconButton {
-                            id: alignButton
-                            required property var modelData
-                            readonly property string value: AppController.routeText(modelData, "value")
-                            objectName: "drawingStyleAlign_" + value
-                            iconName: AppController.routeText(modelData, "icon")
-                            label: AppController.routeText(modelData, "label")
-                            shortcut: AppController.routeText(modelData, "keys")
-                            focusPolicy: Qt.NoFocus
-                            onClicked: panel.canvas.alignSelection(alignButton.value)
-                        }
-                    }
-                    Item {
-                        visible: panel.styleFlag("canDistribute")
-                        width: Theme.space2
-                        height: 1
-                    }
-                    BIconButton {
-                        objectName: "drawingStyleDistribute_horizontal"
-                        visible: panel.styleFlag("canDistribute")
-                        iconName: "align-horizontal-distribute-center"
-                        label: qsTr("Distribute horizontally")
-                        shortcut: "Alt+H"
-                        focusPolicy: Qt.NoFocus
-                        onClicked: panel.canvas.distributeSelection("horizontal")
-                    }
-                    BIconButton {
-                        objectName: "drawingStyleDistribute_vertical"
-                        visible: panel.styleFlag("canDistribute")
-                        iconName: "align-vertical-distribute-center"
-                        label: qsTr("Distribute vertically")
-                        shortcut: "Alt+V"
-                        focusPolicy: Qt.NoFocus
-                        onClicked: panel.canvas.distributeSelection("vertical")
-                    }
+                Item {
+                    visible: panel.styleFlag("canDistribute")
+                    width: Theme.space2
+                    height: 1
+                }
+                BIconButton {
+                    objectName: "drawingStyleDistribute_horizontal"
+                    visible: panel.styleFlag("canDistribute")
+                    iconName: "align-horizontal-distribute-center"
+                    label: qsTr("Distribute horizontally")
+                    shortcut: "Alt+H"
+                    focusPolicy: Qt.NoFocus
+                    onClicked: panel.canvas.distributeSelection("horizontal")
+                }
+                BIconButton {
+                    objectName: "drawingStyleDistribute_vertical"
+                    visible: panel.styleFlag("canDistribute")
+                    iconName: "align-vertical-distribute-center"
+                    label: qsTr("Distribute vertically")
+                    shortcut: "Alt+V"
+                    focusPolicy: Qt.NoFocus
+                    onClicked: panel.canvas.distributeSelection("vertical")
                 }
             }
             Options {

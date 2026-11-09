@@ -12,11 +12,8 @@ void addScaled(const QList<ScoredId> &list, double weight, QHash<QString, double
 {
     if (list.isEmpty())
         return;
-    double lo = list.first().score, hi = lo;
-    for (const ScoredId &s : list) {
-        lo = std::min(lo, s.score);
-        hi = std::max(hi, s.score);
-    }
+    const double lo = std::ranges::min(list, {}, &ScoredId::score).score;
+    const double hi = std::ranges::max(list, {}, &ScoredId::score).score;
     for (const ScoredId &s : list) {
         const double scaled = hi > lo ? (s.score - lo) / (hi - lo) : 1.0;
         (*out)[s.id] += weight * scaled;

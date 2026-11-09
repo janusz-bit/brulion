@@ -1,5 +1,6 @@
 #include "spell/dictencoding.h"
 
+#include <algorithm>
 #include <array>
 
 namespace brulion::spell {
@@ -37,11 +38,8 @@ constexpr std::array<Latin9Pair, 8> Latin9 = {{
 
 Encoding encodingOf(QByteArrayView name)
 {
-    QByteArray n;
-    for (const char c : name) {
-        if (c != '-' && c != '_' && c != ' ')
-            n.append(char(c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c));
-    }
+    QByteArray n = name.toByteArray().toUpper();
+    n.removeIf([](char c) { return c == '-' || c == '_' || c == ' '; });
     if (n == "UTF8")
         return Encoding::Utf8;
     if (n == "ISO88591" || n == "LATIN1")
@@ -60,10 +58,8 @@ char16_t decodeByte(unsigned char b, Encoding e)
     if (e == Encoding::Latin2)
         return Latin2High[b - 0xA0];
     if (e == Encoding::Latin9) {
-        for (const Latin9Pair &p : Latin9) {
-            if (p.byte == b)
-                return p.code;
-        }
+        if (const auto it = std::ranges::find(Latin9, b, &Latin9Pair::byte); it != Latin9.end())
+            return it->code;
     }
     return b;
 }
@@ -73,10 +69,8 @@ std::optional<unsigned char> encodeChar(char16_t c, Encoding e)
     if (c < 0xA0)
         return static_cast<unsigned char>(c);
     if (e == Encoding::Latin2) {
-        for (std::size_t i = 0; i < Latin2High.size(); ++i) {
-            if (Latin2High[i] == c)
-                return static_cast<unsigned char>(0xA0 + i);
-        }
+        if (const auto it = std::ranges::find(Latin2High, c); it != Latin2High.end())
+            return static_cast<unsigned char>(0xA0 + (it - Latin2High.begin()));
         return std::nullopt;
     }
     if (e == Encoding::Latin9) {

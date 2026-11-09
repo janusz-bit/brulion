@@ -14,18 +14,13 @@ namespace brulion::reminders_detail {
 
 using namespace Qt::StringLiterals;
 
-ReminderSource sourceOf(const VaultIndex &index, const ReminderRef &ref)
-{
-    return sourceOf(index.note(ref.path), ref);
-}
-
 QList<ReminderRef> remindersOf(const VaultPath &path, const ParsedNote &note, QDate from, QDate to)
 {
     QList<ReminderRef> out;
     // Most reminders of a vault are one-off ones on other days (skipped cheaply), and most notes
     // have no other.
     const auto mayOccur = [&](const Reminder &r) { return mayOccurWithin(r, from, to); };
-    if (std::none_of(note.reminders.cbegin(), note.reminders.cend(), mayOccur))
+    if (std::ranges::none_of(note.reminders, mayOccur))
         return out;
     for (qsizetype i = 0; i < note.blocks.size(); ++i) {
         const Block &block = note.blocks.at(i);
@@ -76,7 +71,7 @@ bool isClosed(const std::optional<Task> &task)
 
 std::optional<dates::RecurrenceRule> ruleOf(const QString &recurrence)
 {
-    if (recurrence.isEmpty() || recurrence.trimmed().isEmpty())
+    if (QStringView(recurrence).trimmed().isEmpty())
         return std::nullopt;
     return dates::parseRecurrence(recurrence);
 }
@@ -90,8 +85,8 @@ std::optional<DateSpec> seriesReference(const Task &task)
     return std::nullopt;
 }
 
-QList<DateSpec> datesWithin(const DateSpec &date, const std::optional<dates::RecurrenceRule> &rule, QDate from,
-                            QDate to, const std::optional<DateSpec> &reference)
+QList<DateSpec> datesWithin(DateSpec date, const std::optional<dates::RecurrenceRule> &rule, QDate from, QDate to,
+                            const std::optional<DateSpec> &reference)
 {
     if (!date.isValid() || !from.isValid() || !to.isValid() || from > to)
         return {};
@@ -121,7 +116,7 @@ QList<DateSpec> reminderDates(const ReminderRef &ref, bool expand, QDate from, Q
     const std::optional<dates::RecurrenceRule> rule = expand ? ruleOf(ref.reminder.recurrence) : std::nullopt;
     // The block's own task recurs (its rule is the reminder's): the reminder moves with it.
     std::optional<DateSpec> reference;
-    if (rule && ref.task && !ref.task->recurrence.trimmed().isEmpty())
+    if (rule && ref.task && !QStringView(ref.task->recurrence).trimmed().isEmpty())
         reference = seriesReference(*ref.task);
     return datesWithin(ref.reminder.at, rule, from, to, reference);
 }
@@ -200,7 +195,7 @@ void markEmphasis(QStringView text, QList<CharRole> &roles)
             ++i;
             continue;
         }
-        const auto kind = std::find(Markers.cbegin(), Markers.cend(), c.unicode()) - Markers.cbegin();
+        const auto kind = std::ranges::find(Markers, c.unicode()) - Markers.begin();
         if (kind == qsizetype(Markers.size()) || i + 1 >= text.size() || text.at(i + 1) != c
             || roles.at(i) != CharRole::Text || roles.at(i + 1) != CharRole::Text) {
             ++i;
@@ -318,7 +313,7 @@ QDateTime parseStamp(QStringView text)
     if (t < 0)
         return {};
     const auto date = dates::parseIsoDate(text.first(t));
-    const QTime time = QTime::fromString(text.sliced(t + 1).toString(), Qt::ISODateWithMs);
+    const QTime time = QTime::fromString(text.sliced(t + 1), Qt::ISODateWithMs);
     if (!date || !time.isValid())
         return {};
     return QDateTime(*date, time);
@@ -327,7 +322,7 @@ QDateTime parseStamp(QStringView text)
 int probeNativeId(int candidate, const QSet<int> &used)
 {
     constexpr int Max = 0x7FFF'FFFF;
-    int value = candidate < 1 ? 1 : candidate;
+    int value = std::max(candidate, 1);
     while (used.contains(value))
         value = value == Max ? 1 : value + 1;
     return value;

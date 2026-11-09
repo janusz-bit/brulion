@@ -19,6 +19,7 @@
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <utility>
 
 namespace brulion::notebook {
 
@@ -52,7 +53,8 @@ struct SearchJob {
 } // namespace
 
 /// State shared by the loader and its jobs (each job holds it: a cancelled loader may go away
-/// while a worker finishes its current file). Everything but `items` and `next` under `mutex`.
+/// while a worker finishes its current file). Under `mutex` but `next` and what start() sets
+/// before the jobs run (`items`, the cache's path, identity and config, `buildSearch`).
 struct LoaderShared {
     std::mutex mutex;
     std::condition_variable workersCv; ///< space for results, cancellation
@@ -131,25 +133,28 @@ struct IndexLoader::Private {
         QMetaObject::invokeMethod(receiver, [receiver] { receiver->d->onPosted(); }, Qt::QueuedConnection);
     }
 
-    /// Open the index cache once (the first caller does it, the others wait for it).
-    static void ensureCache(LoaderShared &shared)
+    /// Open the index cache once (the first caller does it, the others wait for it); whether the
+    /// full-text index comes from it, read under the mutex (a cancelled wait returns while another
+    /// thread may still be opening the cache).
+    static bool ensureCache(LoaderShared &shared)
     {
         {
             std::unique_lock lock(shared.mutex);
             if (shared.cacheOpened || shared.cachePath.isEmpty())
-                return;
+                return shared.searchFromCache;
             if (shared.cacheOpening) {
                 shared.workersCv.wait(lock, [&] { return shared.cacheOpened || shared.cancelled; });
-                return;
+                return shared.searchFromCache;
             }
             shared.cacheOpening = true;
         }
         QString status;
         std::shared_ptr<const indexcache::Reader> reader;
+        const QFileInfo info(shared.cachePath);
         QFile file(shared.cachePath);
-        if (!QFileInfo::exists(shared.cachePath)) {
+        if (!info.exists()) {
             status = u"absent"_s;
-        } else if (!QFileInfo(shared.cachePath).isFile() || !file.open(QIODevice::ReadOnly)) {
+        } else if (!info.isFile() || !file.open(QIODevice::ReadOnly)) {
             status = u"invalid: cannot read"_s;
         } else {
             QString why;
@@ -162,11 +167,11 @@ struct IndexLoader::Private {
         shared.cacheStatus = status;
         shared.cacheOpened = true;
         shared.workersCv.notify_all();
+        return shared.searchFromCache;
     }
 
-    /// The note of `item` from the cache, when it has a valid record for this text.
-    static std::optional<ParsedNote> fromCache(LoaderShared &shared, const Item &item, const DetachedRead &read,
-                                               const QString &text)
+    /// The note of `item` from the cache, when it has a valid record for the text `read` holds.
+    static std::optional<ParsedNote> fromCache(LoaderShared &shared, const Item &item, const DetachedRead &read)
     {
         std::shared_ptr<const indexcache::Reader> cache;
         {
@@ -177,9 +182,9 @@ struct IndexLoader::Private {
             return std::nullopt;
         const indexcache::Record *record = cache->find(item.path);
         if (!record || record->length <= 0 || record->fileSize != read.bytes.size()
-            || record->contentKey != VaultIndex::contentKey(text))
+            || record->contentKey != VaultIndex::contentKey(read.text))
             return std::nullopt;
-        std::optional<ParsedNote> note = cache->decodeNote(*record, item.path, text, shared.cacheConfig);
+        std::optional<ParsedNote> note = cache->decodeNote(*record, item.path, read.text, shared.cacheConfig);
         if (!note) {
             std::lock_guard lock(shared.mutex);
             ++shared.recordsRejected;
@@ -190,13 +195,13 @@ struct IndexLoader::Private {
     /// Read and prepare note `i` (pure apart from reading the file).
     static Result process(LoaderShared &shared, qsizetype i, const VaultConfig &config)
     {
-        ensureCache(shared);
+        const bool searchFromCache = ensureCache(shared);
         const Item &item = shared.items.at(i);
         Result r;
         r.item = i;
         r.read = Vault::readDetached(item.path, item.absolute);
         if (r.read.ok) {
-            if (std::optional<ParsedNote> cached = fromCache(shared, item, r.read, r.read.text)) {
+            if (std::optional<ParsedNote> cached = fromCache(shared, item, r.read)) {
                 // Prepared with the config the cache was written for: a config changed since
                 // makes updatePrepared() parse it again.
                 r.prepared = VaultIndex::prepareParsed(item.path, r.read.text, std::move(*cached), shared.cacheConfig);
@@ -205,7 +210,7 @@ struct IndexLoader::Private {
                 r.prepared = VaultIndex::prepare(item.path, r.read.text, config);
             }
             // Documents of notes from the cache come with its search section (if it has one).
-            if (shared.buildSearch && (!r.fromCache || !shared.searchFromCache)) {
+            if (shared.buildSearch && (!r.fromCache || !searchFromCache)) {
                 const ParsedNote &note = r.prepared.note();
                 SearchJob job{item.path, SearchIndex::prepare(note.title, note.aliases, r.read.text),
                               r.prepared.contentKey()};
@@ -264,11 +269,10 @@ struct IndexLoader::Private {
         SearchIndex built;
         // Start from the cache's full-text index (its documents are checked by content key
         // when adopted); the workers send the documents of the notes they parse.
-        ensureCache(s);
         std::shared_ptr<const indexcache::Reader> cache;
-        {
+        if (ensureCache(s)) {
             std::lock_guard lock(s.mutex);
-            cache = s.searchFromCache ? s.cache : nullptr;
+            cache = s.cache;
         }
         if (cache) {
             indexcache::Reader::SearchDecoder decoder = cache->searchDecoder();
@@ -328,7 +332,7 @@ struct IndexLoader::Private {
         return r;
     }
 
-    void merge(Result &&r)
+    void merge(Result r)
     {
         const Item &item = s->items.at(r.item);
         ++mergedNotes;
@@ -361,7 +365,7 @@ struct IndexLoader::Private {
     void mergeAttachments(const QElapsedTimer *timer, int budgetMs)
     {
         while (nextAttachment < attachments.size()) {
-            const VaultPath &path = attachments[nextAttachment++];
+            const VaultPath &path = attachments.at(nextAttachment++);
             ++stats.merged;
             if (!forgotten.contains(path))
                 index.update(path, QString());
@@ -425,11 +429,10 @@ struct IndexLoader::Private {
         std::optional<SearchIndex> built;
         {
             std::lock_guard lock(s->mutex);
-            if (!s->searchResult)
-                return;
-            built = std::move(s->searchResult);
-            s->searchResult.reset();
+            built = std::exchange(s->searchResult, std::nullopt);
         }
+        if (!built)
+            return;
         searchAdopted = true;
         index.adoptSearch(std::move(*built));
     }
@@ -445,14 +448,10 @@ struct IndexLoader::Private {
             stats.cache = s->cacheStatus;
             stats.recordsRejected = s->recordsRejected;
             stats.searchFromCache = s->searchFromCache;
+            s->cache.reset(); // its bytes are not needed any more (a search builder holds its own copy)
         }
         closeSearchIfDone();
         adoptSearchIfReady();
-        {
-            // The cache's bytes are not needed any more (a search builder holds its own copy).
-            std::lock_guard lock(s->mutex);
-            s->cache.reset();
-        }
         Q_EMIT q->finished();
     }
 };

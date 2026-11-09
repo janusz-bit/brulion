@@ -25,15 +25,14 @@ QStringList resolveLanguages(const QString &setting, const QString &uiLanguage, 
             have.append(p);
     }
     QStringList wanted;
-    const QString trimmed = setting.trimmed().toLower();
-    if (trimmed.isEmpty() || trimmed == u"auto") {
-        wanted = {primaryLanguage(uiLanguage), primaryLanguage(systemLanguage), u"en"_s};
-    } else {
-        for (const QString &part : trimmed.split(u',', Qt::SkipEmptyParts))
+    if (const QString trimmed = setting.trimmed().toLower(); !trimmed.isEmpty() && trimmed != u"auto") {
+        const QStringList parts = trimmed.split(u',', Qt::SkipEmptyParts);
+        for (const QString &part : parts)
             wanted.append(primaryLanguage(part));
-        if (std::all_of(wanted.cbegin(), wanted.cend(), [](const QString &w) { return w.isEmpty(); }))
-            wanted = {primaryLanguage(uiLanguage), primaryLanguage(systemLanguage), u"en"_s};
     }
+    // "auto", also for an empty or unreadable setting.
+    if (std::ranges::all_of(std::as_const(wanted), &QString::isEmpty))
+        wanted = {primaryLanguage(uiLanguage), primaryLanguage(systemLanguage), u"en"_s};
     QStringList out;
     for (const QString &w : std::as_const(wanted)) {
         if (!w.isEmpty() && have.contains(w) && !out.contains(w))

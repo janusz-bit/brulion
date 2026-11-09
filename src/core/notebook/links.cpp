@@ -11,6 +11,8 @@
 
 #include <QUrl>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::notebook {
@@ -21,11 +23,10 @@ namespace {
 /// else quoted ("Projekty/Zażółć gęślą/" with its quotes), by « » when it holds a '"'.
 QString queryPathValue(const QString &path)
 {
-    bool bare = !path.startsWith(u"//"_s) && !path.contains(u"[["_s) && !path.contains(u"]]"_s);
-    for (qsizetype k = 0; bare && k < path.size(); ++k) {
-        const QChar c = path[k];
-        bare = !c.isSpace() && c != u',' && c != u'"' && c != u'„' && c != u'“' && c != u'«';
-    }
+    const bool bare = !path.startsWith(u"//") && !path.contains(u"[[") && !path.contains(u"]]")
+                      && std::ranges::none_of(path, [](QChar c) {
+                             return c.isSpace() || c == u',' || c == u'"' || c == u'„' || c == u'“' || c == u'«';
+                         });
     if (bare)
         return path;
     if (!path.contains(u'"'))
@@ -53,23 +54,22 @@ int atxLevel(QStringView line)
 
 /// A block as a heading of the page, as the editor lists them (documentHeadings(), shapeOf()): a
 /// Markdown heading, or a list item whose text — after a task checkbox — starts with "## "
-/// (Logseq writes headings inside list items); its level (0: no heading) and first line.
-int headingOf(const markdown::BlockEntry &e, QString *name)
+/// (Logseq writes headings inside list items): its level, first line and line; nullopt for others.
+std::optional<Heading> headingOf(const markdown::BlockEntry &e)
 {
+    QString first;
+    int level = 0;
     if (e.kind == BlockKind::Heading) {
-        *name = e.body.section(u'\n', 0, 0);
-        return e.headingLevel;
+        first = e.body.section(u'\n', 0, 0);
+        level = e.headingLevel;
+    } else if (e.kind == BlockKind::ListItem) {
+        const auto marker = markdown::matchTaskMarker(e.body, 0);
+        first = e.body.mid(marker ? marker->contentStart : 0).section(u'\n', 0, 0);
+        level = atxLevel(first);
     }
-    if (e.kind != BlockKind::ListItem)
-        return 0;
-    qsizetype start = 0;
-    if (const auto marker = markdown::matchTaskMarker(e.body, 0))
-        start = marker->contentStart;
-    const QString first = e.body.mid(start).section(u'\n', 0, 0);
-    const int level = atxLevel(first);
-    if (level > 0)
-        *name = first;
-    return level;
+    if (level <= 0)
+        return std::nullopt;
+    return Heading{level, first, e.line};
 }
 
 } // namespace
@@ -116,19 +116,20 @@ CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultCo
         return {};
     const QStringView scheme = QStringView(url).left(colon);
     const QString rest = url.mid(colon + 1);
+    // `[[page]]` by the target every copied link uses: a link pasted on any page reaches it.
+    const auto pageLink = [&](const VaultPath &page, const QString &suffix) -> QString {
+        const QString target = pageLinkTarget(page, config, shortestTarget, [&resolveLink](const QString &title) {
+            return resolveLink ? resolveLink(title, QString()) : QString();
+        });
+        return u"[["_s + target + suffix + u"]]"_s;
+    };
     if (scheme == u"part") {
         const auto parsed = markdown::parseLinkPartUrl(url);
         const auto part = parsed && resolvePart ? resolvePart(parsed->target, parsed->part, fromPath) : std::nullopt;
         if (!part)
             return {};
         switch (part->kind) {
-        case markdown::LinkPartTarget::Kind::Page: {
-            const QString page =
-                    pageLinkTarget(part->path, config, shortestTarget, [&resolveLink](const QString &title) {
-                        return resolveLink ? resolveLink(title, QString()) : QString();
-                    });
-            return {u"[["_s + page + u"]]"_s, part->path, QString()};
-        }
+        case markdown::LinkPartTarget::Kind::Page: return {pageLink(part->path, QString()), part->path, QString()};
         case markdown::LinkPartTarget::Kind::Folder: return {queryPathValue(part->path + u'/'), part->path, part->path};
         case markdown::LinkPartTarget::Kind::New: return {u"[["_s + part->prefix + u"]]"_s, QString(), QString()};
         }
@@ -152,11 +153,7 @@ CopiedLink copiedLink(const QString &url, const QString &fromPath, const VaultCo
     const QString resolved = target.isEmpty() ? fromPath : resolveLink ? resolveLink(target, fromPath) : QString();
     if (resolved.isEmpty())
         return {target.isEmpty() ? QString() : u"[["_s + target + suffix + u"]]"_s, QString(), QString()};
-    // The page by the target every copied link uses: a link pasted on any page reaches it.
-    const QString page = pageLinkTarget(resolved, config, shortestTarget, [&resolveLink](const QString &title) {
-        return resolveLink ? resolveLink(title, QString()) : QString();
-    });
-    return {u"[["_s + page + suffix + u"]]"_s, resolved, QString()};
+    return {pageLink(resolved, suffix), resolved, QString()};
 }
 
 std::optional<BlockLinks> blockLinks(const QString &content, int line, const QString &pageTarget,
@@ -180,17 +177,16 @@ std::optional<BlockLinks> blockLinks(const QString &content, int line, const QSt
     out.embed = markdown::formatReference(ReferenceKind::BlockEmbed, {}, {}, out.id);
     // A heading: its name, or a heading path when another heading has that name too (the editor's
     // documentHeadings(): every heading-shaped block, its first line).
-    QString name;
-    if (headingOf(doc.at(row), &name) > 0) {
+    if (headingOf(doc.at(row))) {
         QList<Heading> headings;
         int index = -1;
         for (int i = 0; i < doc.count(); ++i) {
-            const int level = headingOf(doc.at(i), &name);
-            if (level <= 0)
+            std::optional<Heading> heading = headingOf(doc.at(i));
+            if (!heading)
                 continue;
             if (i == row)
                 index = int(headings.size());
-            headings.append(Heading{level, name, doc.at(i).line});
+            headings.append(std::move(*heading));
         }
         const QString fragment = markdown::uniqueHeadingFragment(headings, index);
         if (!fragment.isEmpty()) {

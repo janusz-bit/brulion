@@ -2,7 +2,10 @@
 
 #include <QJsonArray>
 
+#include <algorithm>
 #include <cmath>
+#include <functional>
+#include <numeric>
 
 using namespace Qt::StringLiterals;
 
@@ -22,12 +25,7 @@ void normalize(Vector &v)
 
 float dot(const Vector &a, const Vector &b)
 {
-    if (a.size() != b.size())
-        return 0;
-    float s = 0;
-    for (qsizetype i = 0; i < a.size(); ++i)
-        s += a.at(i) * b.at(i);
-    return s;
+    return a.size() == b.size() ? std::inner_product(a.cbegin(), a.cend(), b.cbegin(), 0.0f) : 0.0f;
 }
 
 bool Calibration::appliesTo(QStringView query) const
@@ -35,8 +33,7 @@ bool Calibration::appliesTo(QStringView query) const
     if (isEmpty())
         return false;
     int words = 0;
-    for (QStringView w : query.tokenize(u' ', Qt::SkipEmptyParts)) {
-        Q_UNUSED(w)
+    for ([[maybe_unused]] QStringView w : query.tokenize(u' ', Qt::SkipEmptyParts)) {
         if (++words > maxQueryWords)
             return false;
     }
@@ -47,14 +44,11 @@ Vector Calibration::apply(const Vector &v, bool query) const
 {
     Vector out = v;
     const Vector &mean = query ? queryMean : passageMean;
-    if (mean.size() == out.size()) {
-        for (qsizetype i = 0; i < out.size(); ++i)
-            out[i] -= mean.at(i);
-    }
+    if (mean.size() == out.size())
+        std::ranges::transform(out, mean, out.begin(), std::minus<>());
     if (direction.size() == out.size()) {
         const float p = dot(out, direction);
-        for (qsizetype i = 0; i < out.size(); ++i)
-            out[i] -= p * direction.at(i);
+        std::ranges::transform(out, direction, out.begin(), [p](float x, float d) { return x - p * d; });
     }
     normalize(out);
     return out;
@@ -82,13 +76,12 @@ Calibration Calibration::estimate(const QList<Vector> &passages, const QList<boo
             lang[size_t(i)] += v.at(i);
         }
     }
-    const int n = nPl + nEn;
-    if (n == 0)
-        return c;
+    const int n = nPl + nEn; // > 0: the first passage always counts
     c.passageMean.resize(dim);
     for (qsizetype i = 0; i < dim; ++i)
         c.passageMean[i] = float(all[size_t(i)] / n);
-    if (nPl >= minPerLanguage && nEn >= minPerLanguage) {
+    // A language without chunks has no mean: one chunk of each at least, whatever minPerLanguage says.
+    if (std::min(nPl, nEn) >= std::max(1, minPerLanguage)) {
         c.direction.resize(dim);
         for (qsizetype i = 0; i < dim; ++i)
             c.direction[i] = float(pl[size_t(i)] / nPl - en[size_t(i)] / nEn);
@@ -112,7 +105,7 @@ Vector fromArray(const QJsonValue &value)
     Vector v;
     const QJsonArray a = value.toArray();
     v.reserve(a.size());
-    for (const QJsonValue &x : a)
+    for (const auto &x : a)
         v.append(float(x.toDouble()));
     return v;
 }

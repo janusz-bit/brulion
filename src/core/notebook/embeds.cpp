@@ -3,6 +3,7 @@
 #include "markdown/blockdocument.h"
 #include "markdown/inline.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 
@@ -14,24 +15,17 @@ namespace {
 bool blockEmbeds(const markdown::BlockDocument &doc, int i, const std::function<bool(QStringView)> &embedsIt)
 {
     const markdown::BlockEntry &e = doc.at(i);
-    if (e.kind == BlockKind::Code || e.kind == BlockKind::Frontmatter || e.kind == BlockKind::Rule)
-        return false;
-    if (!e.body.contains(u"!["))
+    if (e.kind == BlockKind::Code || e.kind == BlockKind::Frontmatter || e.kind == BlockKind::Rule
+        || !e.body.contains(u"!["))
         return false;
     const markdown::InlineScan scan = markdown::extractInline(e.body);
-    for (const Link &link : scan.links) {
+    return std::ranges::any_of(scan.links, [&](const Link &link) {
         const bool embed = link.kind == LinkKind::Embed
                            || (link.kind == LinkKind::Markdown && link.from >= 0 && link.from < e.body.size()
                                && e.body.at(link.from) == u'!');
-        if (embed && !link.target.isEmpty() && embedsIt(link.target))
-            return true;
-    }
-    return false;
+        return embed && !link.target.isEmpty() && embedsIt(link.target);
+    });
 }
-
-} // namespace
-
-namespace {
 
 EmbedInsertion insertBesideEmbed(const QString &content, int lineHint,
                                  const std::function<bool(QStringView target)> &embedsIt, const QString &blockBody,
@@ -58,16 +52,14 @@ EmbedInsertion insertBesideEmbed(const QString &content, int lineHint,
     }
     markdown::EditResult edit;
     if (found >= 0) {
-        const markdown::BlockEntry &e = doc.at(found);
-        edit = e.kind == BlockKind::ListItem ? doc.insertAfter(found, blockBody, e.depth, true)
-                                             : doc.insertAfter(found, blockBody, 0, false);
+        const bool listItem = doc.at(found).kind == BlockKind::ListItem;
+        edit = doc.insertAfter(found, blockBody, listItem ? doc.at(found).depth : 0, listItem);
         out.afterEmbed = true;
         if (before && edit.focus >= 0 && edit.focus < doc.count())
             edit = doc.moveUp(edit.focus);
     } else {
         const int last = doc.count() - 1;
-        const bool list = last < 0 || doc.at(last).kind == BlockKind::ListItem;
-        edit = doc.insertAfter(last, blockBody, 0, list);
+        edit = doc.insertAfter(last, blockBody, 0, last < 0 || doc.at(last).kind == BlockKind::ListItem);
     }
     out.content = doc.toString();
     if (edit.focus >= 0 && edit.focus < doc.count())

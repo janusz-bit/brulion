@@ -35,6 +35,34 @@ PathProblem problem(PathProblem::Kind kind, const QString &name = QString(), con
     return PathProblem{kind, name, detail};
 }
 
+/// A result (CreatedPage, Relocation, …) that only carries a problem.
+template<typename Result>
+Result refused(PathProblem::Kind kind, const QString &name = QString(), const QString &detail = QString())
+{
+    Result out;
+    out.problem = problem(kind, name, detail);
+    return out;
+}
+
+/// The segments of a typed name sanitised like file names; blank ones dropped.
+QStringList sanitizedSegments(const QStringList &segments)
+{
+    QStringList out;
+    for (const QString &segment : segments) {
+        if (const QString trimmed = segment.trimmed(); !trimmed.isEmpty())
+            out.append(paths::sanitizeFileName(trimmed));
+    }
+    return out;
+}
+
+/// The page of the segments `parts` in `folder` ("" or null: the notebook root).
+VaultPath pagePath(const QString &folder, const QStringList &parts)
+{
+    const QString base = paths::normalize(folder);
+    const QString relative = parts.join(u'/') + u".md"_s;
+    return base.isEmpty() ? relative : paths::join(base, relative);
+}
+
 /// The settings of the notebook that name folders (and the journal template), with their keys.
 struct SpecialSetting {
     const char *key;
@@ -65,7 +93,7 @@ QString withoutMdExtension(const QString &title)
 
 VaultPath newPagePath(const Vault &vault, const QString &target)
 {
-    const VaultConfig config = vault.config();
+    const VaultConfig &config = vault.config();
     // [[2026-10-20]]: a day without a note yet opens that day's journal page.
     const QString name = withoutMdExtension(target).trimmed();
     QDate day = QDate::fromString(name, config.journalFileFormat);
@@ -75,36 +103,21 @@ VaultPath newPagePath(const Vault &vault, const QString &target)
         return markdown::journalPathForDate(day, config);
     // SYNTAX.md §2: an unresolved link points to a page in newPagesFolder ("Projekty/Dom" keeps
     // its folders). The page is not created here: the editor creates it with its first content.
-    QStringList parts;
-    for (const QString &part : name.split(u'/', Qt::SkipEmptyParts)) {
-        if (!part.trimmed().isEmpty())
-            parts.append(paths::sanitizeFileName(part.trimmed()));
-    }
+    const QStringList parts = sanitizedSegments(name.split(u'/', Qt::SkipEmptyParts));
     if (parts.isEmpty())
         return {};
-    const QString base = paths::normalize(config.newPagesFolder);
-    const QString relative = parts.join(u'/') + u".md"_s;
     // Folders as the vault spells them: [[projekty/Dom]] next to "Projekty/" is a page in it.
-    return vault.existingCase(base.isEmpty() ? relative : paths::join(base, relative));
+    return vault.existingCase(pagePath(config.newPagesFolder, parts));
 }
 
 CreatedPage plannedPage(const Vault &vault, const QString &title, const QString &folder)
 {
-    CreatedPage out;
     // "Projekty/Dom" creates the page "Dom" in the folder "Projekty".
-    QStringList parts;
-    for (const QString &part : withoutMdExtension(title).split(u'/', Qt::SkipEmptyParts)) {
-        if (!part.trimmed().isEmpty())
-            parts.append(paths::sanitizeFileName(part));
-    }
-    if (parts.isEmpty()) {
-        out.problem = problem(PathProblem::NoName);
-        return out;
-    }
-    QString base = folder.isNull() ? vault.config().newPagesFolder : folder;
-    base = paths::normalize(base);
-    const QString relative = parts.join(u'/') + u".md"_s;
-    const QString wanted = base.isEmpty() ? relative : paths::join(base, relative);
+    const QStringList parts = sanitizedSegments(withoutMdExtension(title).split(u'/', Qt::SkipEmptyParts));
+    if (parts.isEmpty())
+        return refused<CreatedPage>(PathProblem::NoName);
+    const VaultPath wanted = pagePath(folder.isNull() ? vault.config().newPagesFolder : folder, parts);
+    CreatedPage out;
     out.wanted = wanted;
     out.path = wanted;
     // A page whose name differs only in letter case ("dom" next to "Dom"): one file on Android's
@@ -124,7 +137,7 @@ QString newPageText(const Vault &vault, const VaultPath &path, std::optional<Not
         return content;
     // The mode chosen for the page is written only when the new page would not get it anyway
     // (docs/SYNTAX.md §4 "Note mode": an empty page takes the notebook's page mode).
-    const VaultConfig config = vault.config();
+    const VaultConfig &config = vault.config();
     return markdown::withNoteModeChoice(content, *mode, markdown::journalDateFromPath(path, config).has_value(),
                                         config);
 }
@@ -143,7 +156,6 @@ CreatedPage createPage(Vault &vault, const QString &title, const QString &folder
 
 CreatedFolder plannedFolder(const Vault &vault, const QString &rawPath)
 {
-    CreatedFolder out;
     QStringList segments;
     const QString unified = QString(rawPath).replace(u'\\', u'/');
     for (const QString &raw : unified.split(u'/', Qt::SkipEmptyParts)) {
@@ -153,39 +165,29 @@ CreatedFolder plannedFolder(const Vault &vault, const QString &rawPath)
         // Hidden as typed (".notatki": the leading dot would be dropped) or once sanitised
         // ("logseq?" becomes "logseq").
         const QString clean = paths::sanitizeFileName(segment);
-        if (hiddenName(segment) || hiddenName(clean)) {
-            out.problem = problem(PathProblem::HiddenFolder, hiddenName(segment) ? segment : clean);
-            return out;
-        }
+        if (hiddenName(segment) || hiddenName(clean))
+            return refused<CreatedFolder>(PathProblem::HiddenFolder, hiddenName(segment) ? segment : clean);
         segments.append(clean);
     }
-    if (segments.isEmpty()) {
-        out.problem = problem(PathProblem::NoName);
-        return out;
-    }
+    if (segments.isEmpty())
+        return refused<CreatedFolder>(PathProblem::NoName);
     // Folders as the vault spells them ("projekty/Nowy" goes into "Projekty/").
-    const QString folder = vault.existingCase(segments.join(u'/'));
-    if (const auto existing = vault.stat(folder)) {
-        if (!existing->isDir) {
-            out.problem = problem(PathProblem::NotAFolder, paths::basename(folder));
-            return out;
-        }
+    CreatedFolder out;
+    out.path = vault.existingCase(segments.join(u'/'));
+    if (const auto existing = vault.stat(out.path)) {
+        if (!existing->isDir)
+            return refused<CreatedFolder>(PathProblem::NotAFolder, paths::basename(out.path));
         out.existing = true;
     }
-    out.path = folder;
     return out;
 }
 
 CreatedFolder createFolder(Vault &vault, const QString &rawPath)
 {
     CreatedFolder out = plannedFolder(vault, rawPath);
-    if (out.path.isEmpty())
+    if (out.path.isEmpty() || vault.createFolder(out.path))
         return out;
-    if (!vault.createFolder(out.path)) {
-        out = CreatedFolder();
-        out.problem = problem(PathProblem::Failed, QString(), vault.errorString());
-    }
-    return out;
+    return refused<CreatedFolder>(PathProblem::Failed, QString(), vault.errorString());
 }
 
 QStringList folderPaths(const Vault &vault)
@@ -249,18 +251,18 @@ FolderInfo folderInfo(const Vault &vault, const VaultPath &rawPath)
         return out;
     const auto stat = vault.stat(path);
     out.exists = stat && stat->isDir;
-    for (const FileStat &f : vault.files()) {
-        if (!f.path.startsWith(path + u'/'))
+    const QString prefix = path + u'/';
+    const auto inside = [&prefix](const FileStat &f) { return f.path.startsWith(prefix); };
+    // const: files() shares the vault's cached list, which a non-const loop would copy.
+    for (const QList<FileStat> files = vault.files(); const FileStat &f : files) {
+        if (!inside(f))
             continue;
         if (!paths::isMarkdown(f.path))
             ++out.attachments;
         else if (!paths::isConflictCopy(f.path))
             ++out.pages;
     }
-    for (const FileStat &f : vault.folders()) {
-        if (f.path.startsWith(path + u'/'))
-            ++out.folders;
-    }
+    out.folders = int(std::ranges::count_if(vault.folders(), inside));
     out.specials = presentSpecialsWithin(vault, path);
     return out;
 }
@@ -298,19 +300,13 @@ VaultPath renamedPath(const VaultPath &rawPath, const QString &newName, bool isD
     // A title: its "/" is sanitised like the other characters a file name cannot have ("TCP/IP"
     // -> "TCP IP"); in the Rename dialog it separates folders.
     const bool moves = slashMoves && typed.contains(u'/');
-    QStringList parts;
-    for (const QString &part :
-         moves ? QString(typed).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts) : QStringList{typed}) {
-        if (!part.trimmed().isEmpty())
-            parts.append(paths::sanitizeFileName(part.trimmed()));
-    }
+    QStringList parts = sanitizedSegments(moves ? QString(typed).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts)
+                                                : QStringList{typed});
     if (parts.isEmpty())
         return {};
     QString name = parts.takeLast();
-    // An attachment keeps its type ("plan" -> "plan.png").
-    if (!isDir && !note && !ext.isEmpty() && !name.endsWith(ext, Qt::CaseInsensitive))
-        name += ext;
-    else if (note)
+    // A page gets its extension back, an attachment keeps its type ("plan" -> "plan.png").
+    if (!isDir && (note || !name.endsWith(ext, Qt::CaseInsensitive)))
         name += ext;
     // "/" in the name: a path from the notebook root; else the item stays in its folder.
     const QString folder = moves ? parts.join(u'/') : paths::dirname(path);
@@ -332,38 +328,38 @@ PathProblem relocationProblem(const Vault &vault, const VaultIndex *index, const
         return problem(PathProblem::HiddenPath, paths::basename(to));
     const QStringList segments = to.split(u'/');
     for (qsizetype i = 0; i < segments.size(); ++i) {
-        const QString prefix = segments.mid(0, i + 1).join(u'/');
+        const QString &segment = segments.at(i);
+        if (!hiddenName(segment))
+            continue;
+        // A new name: the item's own when it is renamed, or a folder that is not there yet.
         const bool last = i + 1 == segments.size();
-        const bool exists = !last && vault.stat(vault.existingCase(prefix)).has_value();
-        const bool renamed = last && segments.at(i) != paths::basename(from);
-        if ((renamed || (!last && !exists)) && hiddenName(segments.at(i)))
-            return problem(PathProblem::HiddenFolder, segments.at(i));
+        if (last ? segment != paths::basename(from) : !vault.stat(vault.existingCase(segments.first(i + 1).join(u'/'))))
+            return problem(PathProblem::HiddenFolder, segment);
     }
     // A page into itself as a folder ("Dom.md" into "Dom.md/") is no folder.
     for (QString parent = paths::dirname(to); !parent.isEmpty(); parent = paths::dirname(parent)) {
-        const auto st = vault.stat(vault.existingCase(parent));
-        if (st && !st->isDir)
+        if (const auto st = vault.stat(vault.existingCase(parent)); st && !st->isDir)
             return problem(PathProblem::NotAFolder, paths::basename(parent));
     }
-    const bool caseOnly = from.compare(to, Qt::CaseInsensitive) == 0;
-    if (!caseOnly) {
-        // The name taken, also in another letter case ("dom" next to "Dom": one file on
-        // case-insensitive storage, and links do not tell them apart).
-        const QString spelled = vault.existingCase(to);
-        if (vault.exists(to) || vault.exists(spelled)) {
-            const QString name = paths::basename(vault.exists(spelled) ? spelled : to);
-            if (source->isDir)
-                return problem(PathProblem::FolderExists, name);
-            if (paths::isMarkdown(from))
-                return problem(PathProblem::PageExists, paths::pageTitle(name));
-            return problem(PathProblem::FileExists, name);
-        }
-        // Another page whose path differs only in case (the index knows every note).
-        if (index && paths::isMarkdown(to)) {
-            for (const VaultPath &other : index->paths()) {
-                if (other.compare(to, Qt::CaseInsensitive) == 0 && other.compare(from, Qt::CaseInsensitive) != 0)
-                    return problem(PathProblem::PageExists, paths::pageTitle(other));
-            }
+    if (from.compare(to, Qt::CaseInsensitive) == 0)
+        return {}; // only the letter case changes
+    // The name taken, also in another letter case ("dom" next to "Dom": one file on
+    // case-insensitive storage, and links do not tell them apart).
+    const QString spelled = vault.existingCase(to);
+    if (const bool spelledTaken = vault.exists(spelled); spelledTaken || vault.exists(to)) {
+        const QString name = paths::basename(spelledTaken ? spelled : to);
+        if (source->isDir)
+            return problem(PathProblem::FolderExists, name);
+        if (paths::isMarkdown(from))
+            return problem(PathProblem::PageExists, paths::pageTitle(name));
+        return problem(PathProblem::FileExists, name);
+    }
+    // Another page whose path differs only in case (the index knows every note).
+    if (index && paths::isMarkdown(to)) {
+        // const: paths() shares the index's cached list, which a non-const loop would copy.
+        for (const QList<VaultPath> all = index->paths(); const VaultPath &other : all) {
+            if (other.compare(to, Qt::CaseInsensitive) == 0 && other.compare(from, Qt::CaseInsensitive) != 0)
+                return problem(PathProblem::PageExists, paths::pageTitle(other));
         }
     }
     return {};
@@ -371,16 +367,14 @@ PathProblem relocationProblem(const Vault &vault, const VaultIndex *index, const
 
 QList<FileMove> fileMoves(const Vault &vault, const VaultPath &from, const VaultPath &to)
 {
+    if (const auto stat = vault.stat(from); !stat || !stat->isDir)
+        return {FileMove{from, to}};
     QList<FileMove> moves;
-    const auto stat = vault.stat(from);
-    if (stat && stat->isDir) {
-        const QString prefix = from + u'/';
-        for (const FileStat &f : vault.files()) {
-            if (f.path.startsWith(prefix))
-                moves.append({f.path, to + u'/' + f.path.mid(prefix.size())});
-        }
-    } else {
-        moves.append({from, to});
+    const QString prefix = from + u'/';
+    // const: files() shares the vault's cached list, which a non-const loop would copy.
+    for (const QList<FileStat> files = vault.files(); const FileStat &f : files) {
+        if (f.path.startsWith(prefix))
+            moves.append({f.path, to + u'/' + f.path.mid(prefix.size())});
     }
     return moves;
 }
@@ -392,7 +386,7 @@ RelocationImpact relocationChecks(const Vault &vault, const VaultIndex *index, c
     const QString from = paths::normalize(rawFrom);
     const QString to = spelledFolders(vault, paths::normalize(rawTo));
     out.path = to;
-    if (from == to && !from.isEmpty() && vault.exists(from)) {
+    if (from == to && vault.exists(from)) {
         out.ok = true;
         out.same = true;
         return out;
@@ -436,7 +430,7 @@ Relocation relocate(Vault &vault, const VaultIndex *index, const VaultPath &rawF
     Relocation out;
     const QString from = paths::normalize(rawFrom);
     const QString to = spelledFolders(vault, paths::normalize(rawTo));
-    if (!from.isEmpty() && from == to && vault.exists(from)) {
+    if (from == to && vault.exists(from)) {
         out.path = from;
         out.folder = vault.stat(from)->isDir;
         return out;
@@ -481,84 +475,60 @@ Relocation relocate(Vault &vault, const VaultIndex *index, const VaultPath &rawF
     return out;
 }
 
+namespace {
+
+/// renamePage() and renameFolder(): `newName` is checked as typed, before it is sanitised.
+Relocation renameItem(Vault &vault, const VaultIndex *index, const VaultPath &rawPath, const QString &newName,
+                      bool isDir, bool slashMoves, ChangeSource source, const WriteText &write)
+{
+    const QString path = paths::normalize(rawPath);
+    if (!vault.exists(path))
+        return refused<Relocation>(PathProblem::Missing, isDir ? paths::basename(path) : paths::pageTitle(path));
+    // A name the vault would hide is refused (as for a new folder); a blank one gives no path.
+    if (const QString hidden = hiddenTypedSegment(newName, isDir, slashMoves); !hidden.isEmpty())
+        return refused<Relocation>(PathProblem::HiddenFolder, hidden);
+    const QString to = renamedPath(path, newName, isDir, slashMoves);
+    if (to.isEmpty())
+        return refused<Relocation>(PathProblem::NoName);
+    return relocate(vault, index, path, to, source, write);
+}
+
+} // namespace
+
 Relocation renamePage(Vault &vault, const VaultIndex *index, const VaultPath &rawPath, const QString &newTitle,
                       bool slashMoves, ChangeSource source, const WriteText &write)
 {
-    Relocation out;
-    const QString path = paths::normalize(rawPath);
-    if (!vault.exists(path)) {
-        out.problem = problem(PathProblem::Missing, paths::pageTitle(path));
-        return out;
-    }
-    if (const QString hidden = hiddenTypedSegment(newTitle, false, slashMoves); !hidden.isEmpty()) {
-        out.problem = problem(PathProblem::HiddenFolder, hidden);
-        return out;
-    }
-    const QString to = renamedPath(path, newTitle, false, slashMoves);
-    if (to.isEmpty()) {
-        out.problem = problem(PathProblem::NoName);
-        return out;
-    }
-    return relocate(vault, index, path, to, source, write);
+    return renameItem(vault, index, rawPath, newTitle, /*isDir=*/false, slashMoves, source, write);
 }
 
 Relocation renameFolder(Vault &vault, const VaultIndex *index, const VaultPath &rawPath, const QString &newName,
                         bool slashMoves, ChangeSource source, const WriteText &write)
 {
-    Relocation out;
-    const QString path = paths::normalize(rawPath);
-    if (path.isEmpty() || !vault.exists(path)) {
-        out.problem = problem(PathProblem::Missing, paths::basename(path));
-        return out;
-    }
-    if (newName.trimmed().isEmpty()) {
-        out.problem = problem(PathProblem::NoName);
-        return out;
-    }
-    // A name the vault would hide is refused (as for a new folder), before it is sanitised.
-    if (const QString hidden = hiddenTypedSegment(newName, true, slashMoves); !hidden.isEmpty()) {
-        out.problem = problem(PathProblem::HiddenFolder, hidden);
-        return out;
-    }
-    const QString to = renamedPath(path, newName, true, slashMoves);
-    if (to.isEmpty()) {
-        out.problem = problem(PathProblem::NoName);
-        return out;
-    }
-    return relocate(vault, index, path, to, source, write);
+    return renameItem(vault, index, rawPath, newName, /*isDir=*/true, slashMoves, source, write);
 }
 
 Relocation movePath(Vault &vault, const VaultIndex *index, const VaultPath &rawPath, const QString &targetFolder,
                     ChangeSource source, const WriteText &write)
 {
-    Relocation out;
     const QString path = paths::normalize(rawPath);
     const QString folder = paths::normalize(targetFolder);
-    if (path.isEmpty() || !vault.exists(path)) {
-        out.problem = problem(PathProblem::Missing, paths::pageTitle(path));
-        return out;
-    }
-    if (!folder.isEmpty()) {
-        if (const auto st = vault.stat(vault.existingCase(folder)); st && !st->isDir) {
-            out.problem = problem(PathProblem::NotAFolder, paths::basename(folder));
-            return out;
-        }
-    }
+    if (!vault.exists(path))
+        return refused<Relocation>(PathProblem::Missing, paths::pageTitle(path));
+    if (const auto st = folder.isEmpty() ? std::nullopt : vault.stat(vault.existingCase(folder)); st && !st->isDir)
+        return refused<Relocation>(PathProblem::NotAFolder, paths::basename(folder));
     const QString name = paths::basename(path);
     return relocate(vault, index, path, folder.isEmpty() ? name : folder + u'/' + name, source, write);
 }
 
 DeletedPath deletePath(Vault &vault, const VaultPath &rawPath, ChangeSource source)
 {
-    DeletedPath out;
     const QString path = paths::normalize(rawPath);
-    if (path.isEmpty() || !vault.exists(path)) {
-        out.problem = problem(PathProblem::Missing, paths::pageTitle(path));
-        return out;
-    }
+    if (!vault.exists(path))
+        return refused<DeletedPath>(PathProblem::Missing, paths::pageTitle(path));
     QSet<QString> before;
     for (const FileStat &f : vault.trash())
         before.insert(f.path);
+    DeletedPath out;
     const auto stat = vault.stat(path);
     out.folder = stat && stat->isDir;
     if (!vault.remove(path, source)) {

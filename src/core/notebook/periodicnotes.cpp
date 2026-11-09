@@ -12,7 +12,7 @@ namespace brulion::notebook {
 
 VaultPath existingPeriodicNote(const Vault &vault, periodic::Period period, QDate date)
 {
-    const VaultConfig config = vault.config();
+    const VaultConfig &config = vault.config();
     const QDate start = periodic::periodStart(period, date);
     if (!start.isValid())
         return {};
@@ -20,7 +20,8 @@ VaultPath existingPeriodicNote(const Vault &vault, periodic::Period period, QDat
     const QString preferred = folder.isEmpty() ? QString() : folder + u'/';
     const auto inPreferred = [&](const QString &path) { return preferred.isEmpty() || path.startsWith(preferred); };
     QString found;
-    for (const FileStat &f : vault.markdownFiles()) {
+    // const: markdownFiles() may share the vault's cached list, which a non-const loop would copy.
+    for (const QList<FileStat> notes = vault.markdownFiles(); const FileStat &f : notes) {
         if (periodic::dateFromPath(period, f.path, config) != start)
             continue;
         if (found.isEmpty() || (inPreferred(f.path) && !inPreferred(found)))

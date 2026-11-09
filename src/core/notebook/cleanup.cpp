@@ -23,19 +23,21 @@ namespace {
 QSet<VaultPath> referencedFiles(const VaultIndex &index)
 {
     QSet<VaultPath> referenced;
-    for (const VaultPath &from : index.paths()) {
-        for (const ResolvedLink &link : index.outgoingLinks(from)) {
+    // (The index's lists as const locals: a range-for over the copy of a list it keeps would detach it.)
+    for (const QList<VaultPath> notes = index.paths(); const VaultPath &from : notes) {
+        for (const QList<ResolvedLink> links = index.outgoingLinks(from); const ResolvedLink &link : links) {
             if (!link.target.isEmpty() && link.target != from)
                 referenced.insert(link.target);
         }
     }
-    for (const TagCount &tag : index.tags()) {
+    for (const QList<TagCount> tags = index.tags(); const TagCount &tag : tags) {
         const std::optional<VaultPath> named = index.resolveTag(tag.tag);
-        if (named && std::any_of(tag.paths.cbegin(), tag.paths.cend(), [&](const VaultPath &p) { return p != *named; }))
+        if (named && std::ranges::any_of(tag.paths, [&](const VaultPath &p) { return p != *named; }))
             referenced.insert(*named);
     }
-    for (const VaultPath &from : index.notesWithQueries()) {
-        for (const QueryNameRef &name : findQueryNames(index.content(from), index.note(from))) {
+    for (const QList<VaultPath> notes = index.notesWithQueries(); const VaultPath &from : notes) {
+        const QList<QueryNameRef> names = findQueryNames(index.content(from), index.note(from));
+        for (const QueryNameRef &name : names) {
             std::optional<VaultPath> named;
             if (name.kind == QueryFilterKind::Tag)
                 named = index.resolveTag(name.value);
@@ -73,21 +75,24 @@ QSet<VaultPath> attachmentsNamedInText(const VaultIndex &index, const QList<Vaul
     }
 
     QSet<VaultPath> named;
+    if (byName.isEmpty())
+        return named; // no name to look for: no text to read
     index.forEachNote([&](const VaultPath &from, const ParsedNote &) {
         const QString text = index.content(from).toLower();
+        const QStringView view(text); // looked up as views: no string built per '.' of every note
         for (qsizetype dot = text.indexOf(u'.'); dot >= 0; dot = text.indexOf(u'.', dot + 1)) {
             qsizetype end = dot + 1;
             // A name's extension may end with what percent-encoding leaves: letters, digits.
             while (end < text.size() && text.at(end).isLetterOrNumber())
                 ++end;
-            const auto lengths = lengthsByExt.constFind(text.mid(dot + 1, end - dot - 1));
+            const auto lengths = lengthsByExt.constFind(view.sliced(dot + 1, end - dot - 1));
             if (lengths == lengthsByExt.cend())
                 continue;
             for (const qsizetype length : *lengths) {
                 const qsizetype start = end - length;
                 if (start < 0 || (start > 0 && text.at(start - 1).isLetterOrNumber()))
                     continue;
-                const auto files = byName.constFind(text.mid(start, length));
+                const auto files = byName.constFind(view.sliced(start, length));
                 if (files != byName.cend())
                     named.unite(QSet<VaultPath>(files->cbegin(), files->cend()));
             }
@@ -96,10 +101,16 @@ QSet<VaultPath> attachmentsNamedInText(const VaultIndex &index, const QList<Vaul
     return named;
 }
 
+/// A hidden file, or one in a hidden folder: a segment of its path starts with '.'.
 bool isHidden(const VaultPath &path)
 {
-    const QStringList segments = path.split(u'/');
-    return std::any_of(segments.cbegin(), segments.cend(), [](const QString &s) { return s.startsWith(u'.'); });
+    return path.startsWith(u'.') || path.contains(u"/.");
+}
+
+/// Still to do: to do, in progress or deferred.
+bool isOpen(TaskStatus status)
+{
+    return status != TaskStatus::Done && status != TaskStatus::Cancelled;
 }
 
 } // namespace
@@ -108,48 +119,40 @@ QList<UnreferencedFile> unreferencedFiles(const VaultIndex &index, const VaultCo
 {
     const QSet<VaultPath> referenced = referencedFiles(index);
     QSet<VaultPath> journals;
-    for (const JournalRef &journal : index.journals())
+    for (const QList<JournalRef> days = index.journals(); const JournalRef &journal : days)
         journals.insert(journal.path);
     const QString templates = paths::normalize(config.templatesFolder);
+    const QString inTemplates = templates.isEmpty() ? QString() : templates + u'/';
     const VaultPath journalTemplate = paths::normalize(config.journalTemplate);
     const VaultPath weeklyTemplate = periodic::templatePath(periodic::Period::Week, config);
     const VaultPath monthlyTemplate = periodic::templatePath(periodic::Period::Month, config);
     const auto left = [&](const VaultPath &path) {
         return !referenced.contains(path) && !journals.contains(path) && path != journalTemplate
                && path != weeklyTemplate && path != monthlyTemplate && !isHidden(path)
-               && (templates.isEmpty() || !path.startsWith(templates + u'/'))
+               && (inTemplates.isEmpty() || !path.startsWith(inTemplates))
                && !periodic::periodicNoteFromPath(path, config); // weekly and monthly notes, like the days
     };
 
     QList<UnreferencedFile> out;
-    for (const VaultPath &path : index.paths()) {
+    for (const QList<VaultPath> notes = index.paths(); const VaultPath &path : notes) {
         if (!left(path))
             continue;
+        const QList<TaskRef> tasks = index.tasksOf(path);
+        const QList<ReminderRef> reminders = index.remindersOf(path);
         UnreferencedFile file{path};
-        for (const TaskRef &task : index.tasksOf(path)) {
-            const TaskStatus status = task.task.status;
-            if (status == TaskStatus::Todo || status == TaskStatus::Doing || status == TaskStatus::Deferred)
-                ++file.openTasks;
-        }
-        for (const ReminderRef &reminder : index.remindersOf(path)) {
-            const std::optional<TaskStatus> status = reminder.task ? std::optional(reminder.task->status) : std::nullopt;
-            if (status != TaskStatus::Done && status != TaskStatus::Cancelled)
-                ++file.reminders;
-        }
+        file.openTasks = int(std::ranges::count_if(tasks, [](const TaskRef &t) { return isOpen(t.task.status); }));
+        // Without the reminders of closed tasks.
+        file.reminders = int(std::ranges::count_if(
+                reminders, [](const ReminderRef &r) { return !r.task || isOpen(r.task->status); }));
         out.append(file);
     }
 
-    QList<VaultPath> attachments;
-    for (const VaultPath &path : index.attachments()) {
-        if (left(path))
-            attachments.append(path);
-    }
-    if (!attachments.isEmpty()) {
-        const QSet<VaultPath> named = attachmentsNamedInText(index, attachments);
-        for (const VaultPath &path : std::as_const(attachments)) {
-            if (!named.contains(path))
-                out.append(UnreferencedFile{path, true});
-        }
+    QList<VaultPath> attachments = index.attachments();
+    attachments.removeIf([&](const VaultPath &path) { return !left(path); });
+    const QSet<VaultPath> named = attachmentsNamedInText(index, attachments);
+    for (const VaultPath &path : std::as_const(attachments)) {
+        if (!named.contains(path))
+            out.append(UnreferencedFile{path, true});
     }
     return out;
 }

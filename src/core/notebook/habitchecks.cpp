@@ -7,18 +7,20 @@
 #include "notebook/journals.h"
 #include "text/text.h"
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::notebook {
 
 namespace {
 
-/// The checks of `content` read as the daily note of `date` (whatever its path says).
-QList<habits::Check> checksIn(const QString &content, const VaultPath &path, const VaultConfig &config, QDate date)
+/// `content` parsed as the daily note of `date` (whatever its path says).
+ParsedNote dailyNote(const QString &content, const VaultPath &path, const VaultConfig &config, QDate date)
 {
     ParsedNote note = markdown::parseNote(path, content, config);
     note.journalDate = date;
-    return habits::checksOf(note);
+    return note;
 }
 
 TaskStatus statusOf(habits::Mark mark)
@@ -38,15 +40,11 @@ QString insertLineAfter(const QString &content, int after, const QString &line)
     QList<text::Line> lines = text::splitLines(content);
     if (after < 0 || after >= lines.size())
         return appendBlock(content, line);
-    const QString eol = text::preferredEol(lines, after);
     text::Line inserted;
     inserted.text = line;
-    if (lines[after].eol.isEmpty()) {
-        lines[after].eol = eol; // the note's last line: the new one ends the note as it did
-        inserted.eol = QString();
-    } else {
-        inserted.eol = lines[after].eol;
-    }
+    inserted.eol = lines.at(after).eol;
+    if (inserted.eol.isEmpty()) // the note's last line: the new one ends the note as it did
+        lines[after].eol = text::preferredEol(lines, after);
     lines.insert(after + 1, inserted);
     return text::joinLines(lines);
 }
@@ -57,7 +55,7 @@ QString indentOf(const QString &content, int line)
     const QList<text::Line> lines = text::splitLines(content);
     if (line < 0 || line >= lines.size())
         return {};
-    const QString &t = lines[line].text;
+    const QString &t = lines.at(line).text;
     qsizetype n = 0;
     while (n < t.size() && (t[n] == u' ' || t[n] == u'\t'))
         ++n;
@@ -83,15 +81,16 @@ HabitCheckEdit setHabitCheck(const QString &content, const VaultPath &path, cons
         out.refused = true;
         return out;
     }
-    const QList<habits::Check> checks = checksIn(content, path, config, date);
+    const ParsedNote note = dailyNote(content, path, config, date);
+    const QList<habits::Check> checks = habits::checksOf(note);
     QList<habits::Check> mine;
     for (const habits::Check &c : checks) {
-        if (c.key == key)
+        if (c.key == key) {
             mine.append(c);
+            out.before = habits::strongerMark(out.before, c.mark);
+        }
     }
     out.hadCheck = !mine.isEmpty();
-    for (const habits::Check &c : std::as_const(mine))
-        out.before = habits::strongerMark(out.before, c.mark);
 
     if (mark == habits::Mark::Open) {
         QString text = content;
@@ -104,23 +103,17 @@ HabitCheckEdit setHabitCheck(const QString &content, const VaultPath &path, cons
         out.line = mine.isEmpty() ? -1 : mine.first().line;
         return out;
     }
-
-    for (const habits::Check &c : std::as_const(mine)) {
-        if (c.mark == mark) {
-            out.line = c.line;
-            return out; // already so
-        }
+    if (const auto same = std::ranges::find(std::as_const(mine), mark, &habits::Check::mark); same != mine.cend()) {
+        out.line = same->line;
+        return out; // already so
     }
     QString text = content;
-    int line = -1;
-    if (!mine.isEmpty()) {
-        line = mine.first().line;
-    } else {
+    int line = mine.isEmpty() ? -1 : mine.first().line;
+    if (mine.isEmpty()) {
         const QString newLine = habitCheckLine(name, tag, pageLink);
         if (!checks.isEmpty()) {
             // Next to the other habits' checks: after the last one (and its children).
             const habits::Check &last = checks.last();
-            const ParsedNote note = markdown::parseNote(path, content, config);
             const int end = last.blockIndex >= 0 && last.blockIndex < note.blocks.size()
                                     ? note.blocks[last.blockIndex].endLine
                                     : last.line;
@@ -129,16 +122,13 @@ HabitCheckEdit setHabitCheck(const QString &content, const VaultPath &path, cons
             text = appendBlock(content, newLine);
         }
         // Find the new line: the check of the habit (the note had none).
-        for (const habits::Check &c : checksIn(text, path, config, date)) {
-            if (c.key == key) {
-                line = c.line;
-                break;
-            }
-        }
-        if (line < 0) {
+        const QList<habits::Check> written = habits::checksOf(dailyNote(text, path, config, date));
+        const auto created = std::ranges::find(written, key, &habits::Check::key);
+        if (created == written.cend()) {
             out.refused = true; // the name reads back as another habit's (or none)
             return out;
         }
+        line = created->line;
         out.created = true;
     }
     text = markdown::setTaskStatus(text, line, statusOf(mark), today);

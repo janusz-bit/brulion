@@ -46,12 +46,13 @@ BDialog {
     readonly property int maxPages: 60
     /// DrawingBackdrops.pdfInfo() of the file (kept: read with AppController.route*()).
     property var _info: ({})
-    /// The prepared items (kept from the job's end to prepared()).
-    property list<var> _items: []
 
     /// The prepared backdrops ({ bytes, mimeType, width, height, path, page, name, error } each;
     /// "insert": the drawings' files in `svg` instead of `bytes`, DrawingBackdrops.prepare()).
     signal prepared(list<var> items)
+    /// The prepared items (kept from the job's end to prepared(): a signal's argument must not be a
+    /// function's parameter, qmlsc).
+    property list<var> _items: []
 
     function openFor(vaultPath: string, openMode: string, page: int): void {
         dialog.path = vaultPath
@@ -91,12 +92,13 @@ BDialog {
         dialog.capped = sorted.length > dialog.maxPages
         dialog.chosen = sorted.slice(0, dialog.maxPages)
         if (!pagesField.activeFocus)
-            pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
+            dialog.showChosen()
+    }
+    /// The field "Pages" as the chosen pages.
+    function showChosen(): void {
+        pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
     }
 
-    function toggledPages(page: int): list<int> {
-        return DrawingBackdrops.toggledPage(dialog.chosen, page)
-    }
     function toggle(page: int): void {
         if (dialog.job !== 0)
             return
@@ -104,16 +106,8 @@ BDialog {
             dialog.setChosen([page])
             return
         }
-        dialog.setChosen(dialog.toggledPages(page))
-        pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
-    }
-    function allPages(): list<int> {
-        return DrawingBackdrops.allPages(dialog.pageCount)
-    }
-
-    function chooseAll(): void {
-        dialog.setChosen(dialog.allPages())
-        pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
+        dialog.setChosen(DrawingBackdrops.toggledPage(dialog.chosen, page))
+        dialog.showChosen()
     }
 
     title: fileName
@@ -182,14 +176,17 @@ BDialog {
             enabled: dialog.job === 0
             inputMethodHints: Qt.ImhNoPredictiveText
             onTextEdited: dialog.setChosen(DrawingBackdrops.parsePages(pagesField.text, dialog.pageCount))
-            onEditingFinished: pagesField.text = DrawingBackdrops.formatPages(dialog.chosen)
+            onEditingFinished: dialog.showChosen()
         }
         BButton {
             objectName: "drawingBackdropAll"
             text: qsTr("All")
             size: "small"
             enabled: dialog.job === 0
-            onClicked: dialog.chooseAll()
+            onClicked: {
+                dialog.setChosen(DrawingBackdrops.allPages(dialog.pageCount))
+                dialog.showChosen()
+            }
         }
         BButton {
             objectName: "drawingBackdropNone"

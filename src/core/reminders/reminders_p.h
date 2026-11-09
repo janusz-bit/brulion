@@ -16,6 +16,9 @@
 
 namespace brulion::reminders_detail {
 
+/// Largest horizon of upcomingNotifications() and ReminderScheduler::setHorizonDays() (ten years).
+inline constexpr int MaxHorizonDays = 3660;
+
 /// The text, task and page a reminder belongs to.
 struct ReminderSource {
     /// Markdown text of the reminder's block; for a bare reminder bullet (a list item without
@@ -28,9 +31,7 @@ struct ReminderSource {
     QString pageTitle;
 };
 
-/// Resolve the source of `ref` (see ReminderSource).
-ReminderSource sourceOf(const VaultIndex &index, const ReminderRef &ref);
-/// The same with the reminder's note at hand (null: unknown).
+/// Resolve the source of `ref` (see ReminderSource) in its note (null: unknown).
 ReminderSource sourceOf(const ParsedNote *note, const ReminderRef &ref);
 
 /// May the reminder have a date within [from, to]? With a 🔁 rule perhaps; without one only on
@@ -47,7 +48,7 @@ QList<ReminderRef> remindersOf(const VaultPath &path, const ParsedNote &note, QD
 /// The same for every note, from the index's reminder list (notes by path): visit(path, refs) for
 /// each note with such reminders.
 template<typename Visit>
-void forEachNoteReminders(const VaultIndex &index, QDate from, QDate to, Visit &&visit)
+void forEachNoteReminders(const VaultIndex &index, QDate from, QDate to, Visit visit)
 {
     const QList<ReminderRef> all = index.reminders();
     QList<ReminderRef> refs;
@@ -80,8 +81,8 @@ std::optional<DateSpec> seriesReference(const Task &task);
 /// `rule` from `date`; with one, `date` keeps its distance in days to `reference`, whose
 /// occurrences follow `rule` (a task's other dates and reminders move with its due date, like
 /// the next instance written on completion). At most MaxOccurrences.
-QList<DateSpec> datesWithin(const DateSpec &date, const std::optional<dates::RecurrenceRule> &rule, QDate from,
-                            QDate to, const std::optional<DateSpec> &reference = std::nullopt);
+QList<DateSpec> datesWithin(DateSpec date, const std::optional<dates::RecurrenceRule> &rule, QDate from, QDate to,
+                            const std::optional<DateSpec> &reference = std::nullopt);
 inline constexpr int MaxOccurrences = 500;
 
 /// The dates of a reminder within [from, to]: one-off, or (when `expand` and the block has a

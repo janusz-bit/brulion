@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
 
 namespace brulion::semantic {
 
@@ -88,14 +89,11 @@ void VectorIndex::rebuildCalibrated()
 Calibration VectorIndex::estimateCalibration(const Vector &queryMean) const
 {
     QList<Vector> raw;
-    QList<bool> english;
     raw.reserve(qsizetype(m_owner.size()));
     const size_t d = size_t(m_dim);
-    for (size_t k = 0; k < m_owner.size(); ++k) {
+    for (size_t k = 0; k < m_owner.size(); ++k)
         raw.append(Vector(m_raw.cbegin() + ptrdiff_t(k * d), m_raw.cbegin() + ptrdiff_t((k + 1) * d)));
-        english.append(m_english[k]);
-    }
-    return Calibration::estimate(raw, english, queryMean);
+    return Calibration::estimate(raw, QList<bool>(m_english.cbegin(), m_english.cend()), queryMean);
 }
 
 QList<VectorIndex::Hit> VectorIndex::search(const Vector &query, int limit, bool calibrated) const
@@ -111,10 +109,7 @@ QList<VectorIndex::Hit> VectorIndex::search(const Vector &query, int limit, bool
     std::vector<int> bestLine(best.size(), 0);
     const float *qv = q.constData();
     for (size_t k = 0; k < m_owner.size(); ++k) {
-        const float *c = chunks.data() + k * d;
-        float s = 0;
-        for (size_t i = 0; i < d; ++i)
-            s += qv[i] * c[i];
+        const float s = std::inner_product(qv, qv + d, chunks.data() + k * d, 0.0f);
         const size_t slot = size_t(m_owner[k]);
         if (s > best[slot]) {
             best[slot] = s;

@@ -9,33 +9,30 @@ namespace brulion {
 QList<DayPlanEntry> dayPlan(const QList<CalendarItem> &items, QDate day)
 {
     QList<DayPlanEntry> out;
-    QHash<QString, qsizetype> rowOfBlock;
+    QHash<std::pair<VaultPath, int>, qsizetype> rowOfBlock;
     for (const CalendarItem &item : items) {
         if (item.date != day
             || (item.kind != CalendarItem::Due && item.kind != CalendarItem::Scheduled
                 && item.kind != CalendarItem::Reminder))
             continue;
-        const QString key = item.path + u'\n' + QString::number(item.line);
-        auto found = rowOfBlock.constFind(key);
-        if (found == rowOfBlock.constEnd()) {
-            found = rowOfBlock.insert(key, out.size());
-            DayPlanEntry entry;
-            entry.title = item.title;
-            entry.path = item.path;
-            entry.line = item.line;
-            entry.status = item.status;
-            out.append(entry);
+        const auto [row, added] = rowOfBlock.tryEmplace({item.path, item.line}, out.size());
+        if (added) {
+            out.append({.time = item.time,
+                        .title = item.title,
+                        .path = item.path,
+                        .line = item.line,
+                        .status = item.status});
         }
-        DayPlanEntry &entry = out[*found];
+        DayPlanEntry &entry = out[*row];
         if (item.time && (!entry.time || *item.time < *entry.time))
             entry.time = item.time;
         if (!entry.status)
             entry.status = item.status;
-        entry.due = entry.due || item.kind == CalendarItem::Due;
-        entry.scheduled = entry.scheduled || item.kind == CalendarItem::Scheduled;
-        entry.reminder = entry.reminder || item.kind == CalendarItem::Reminder;
-        entry.alarm = entry.alarm || item.alarm;
-        entry.recurring = entry.recurring || item.recurring;
+        entry.due |= item.kind == CalendarItem::Due;
+        entry.scheduled |= item.kind == CalendarItem::Scheduled;
+        entry.reminder |= item.kind == CalendarItem::Reminder;
+        entry.alarm |= item.alarm;
+        entry.recurring |= item.recurring;
     }
     std::ranges::stable_sort(out, [](const DayPlanEntry &a, const DayPlanEntry &b) {
         if (a.time.has_value() != b.time.has_value())

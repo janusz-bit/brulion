@@ -37,7 +37,6 @@ QString keyMissed()
 /// lastSeen is written at most this often while running (and always by stop()); a stale value
 /// only widens the next catch-up window, which the handled ids make harmless.
 constexpr qint64 LastSeenSaveSecs = 5 * 60;
-constexpr int MaxHorizonDays = 3660;
 constexpr int MaxScheduledLimit = 1000;
 
 QJsonObject toJson(const ScheduledNotification &n)
@@ -51,9 +50,8 @@ QJsonObject toJson(const ScheduledNotification &n)
     return o;
 }
 
-std::optional<ScheduledNotification> fromJson(const QJsonValue &value)
+std::optional<ScheduledNotification> fromJson(const QJsonObject &o)
 {
-    const QJsonObject o = value.toObject();
     ScheduledNotification n;
     n.id = o.value(u"id"_s).toString();
     n.at = parseStamp(o.value(u"at"_s).toString());
@@ -392,14 +390,11 @@ void ReminderScheduler::armTimer(const QDateTime &now)
     followDays(now);
     const QList<ScheduledNotification> soon =
             m_occurrences.between(*m_index, now, now.addSecs(qint64(TimerWindowHours) * 3600), m_locale);
-    for (const ScheduledNotification &n : soon) {
-        if (n.at > now && !m_handled.contains(n.id)) {
-            m_nextFire = n.at;
-            break;
-        }
-    }
-    if (!m_nextFire.isValid())
+    const auto next = std::ranges::find_if(
+            soon, [&](const ScheduledNotification &n) { return n.at > now && !m_handled.contains(n.id); });
+    if (next == soon.end())
         return;
+    m_nextFire = next->at;
     const qint64 msec = std::clamp<qint64>(now.msecsTo(m_nextFire), 0, qint64(TimerWindowHours) * 3600 * 1000);
     m_fireTimer.start(std::chrono::milliseconds(msec));
 }
@@ -447,16 +442,15 @@ void ReminderScheduler::loadState(const QDateTime &now)
         m_handled.clear();
         const QJsonObject handled = m_store->get(keyHandled()).toObject();
         for (auto it = handled.constBegin(); it != handled.constEnd(); ++it) {
-            const QDateTime when = parseStamp(it.value().toString());
-            if (when.isValid())
+            if (const QDateTime when = parseStamp(it.value().toString()); when.isValid())
                 m_handled.insert(it.key(), when);
         }
 
         const QList<ScheduledNotification> before = m_missed;
         m_missed.clear();
         const QJsonArray missed = m_store->get(keyMissed()).toArray();
-        for (const QJsonValue &v : missed) {
-            if (auto n = fromJson(v))
+        for (const auto &v : missed) {
+            if (auto n = fromJson(v.toObject()))
                 m_missed.append(std::move(*n));
         }
         std::ranges::stable_sort(m_missed, byTime);
@@ -471,13 +465,12 @@ void ReminderScheduler::loadState(const QDateTime &now)
 void ReminderScheduler::pruneHandled(const QDateTime &now)
 {
     const QDateTime limit = now.addDays(-HistoryDays);
-    using Iterator = QHash<QString, QDateTime>::iterator;
-    qsizetype removed = m_handled.removeIf([&limit](const Iterator &it) { return it.value() < limit; });
+    qsizetype removed = m_handled.removeIf([&limit](auto it) { return it.value() < limit; });
     if (m_handled.size() > MaxHandled) {
         QList<QDateTime> times = m_handled.values();
-        std::ranges::sort(times);
-        const QDateTime cutoff = times.at(times.size() - MaxHandled);
-        removed += m_handled.removeIf([&cutoff](const Iterator &it) { return it.value() < cutoff; });
+        const auto cutoff = times.begin() + (times.size() - MaxHandled);
+        std::ranges::nth_element(times, cutoff);
+        removed += m_handled.removeIf([&cutoff](auto it) { return it.value() < *cutoff; });
     }
     if (removed > 0)
         saveHandled();
@@ -506,7 +499,7 @@ void ReminderScheduler::pruneMissed(const QDateTime &now)
     if (check) {
         for (ScheduledNotification &n : m_missed) {
             const int taskLine = alive.value(n.id, n.taskLine);
-            changed = changed || taskLine != n.taskLine;
+            changed |= taskLine != n.taskLine;
             n.taskLine = taskLine;
         }
     }
@@ -534,8 +527,8 @@ void ReminderScheduler::saveHandled()
     if (!m_store)
         return;
     QJsonObject object;
-    for (auto it = m_handled.constBegin(); it != m_handled.constEnd(); ++it)
-        object.insert(it.key(), formatStamp(it.value()));
+    for (const auto &[id, when] : std::as_const(m_handled).asKeyValueRange())
+        object.insert(id, formatStamp(when));
     m_store->set(keyHandled(), object);
 }
 

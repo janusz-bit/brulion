@@ -4,6 +4,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::semantic {
@@ -43,16 +45,17 @@ qsizetype bodyStart(const QList<QStringView> &lines)
 
 void splitLong(const Part &p, int maxWords, QList<Part> *out)
 {
-    const QStringList words = p.text.split(QRegularExpression(u"\\s+"_s), Qt::SkipEmptyParts);
+    static const QRegularExpression space(u"\\s+"_s);
+    const QStringList words = p.text.split(space, Qt::SkipEmptyParts);
     for (qsizetype i = 0; i < words.size(); i += maxWords)
-        out->append({words.mid(i, maxWords).join(u' '), p.line, int(qMin<qsizetype>(maxWords, words.size() - i))});
+        out->append({words.mid(i, maxWords).join(u' '), p.line, int(std::min<qsizetype>(maxWords, words.size() - i))});
 }
 
 } // namespace
 
 QList<Chunk> chunkNote(QStringView title, QStringView content, int maxWords)
 {
-    maxWords = qMax(1, maxWords);
+    maxWords = std::max(1, maxWords);
     QList<QStringView> lines;
     for (QStringView l : content.tokenize(u'\n'))
         lines.append(l.endsWith(u'\r') ? l.chopped(1) : l);
@@ -105,8 +108,8 @@ QList<Chunk> chunkNote(QStringView title, QStringView content, int maxWords)
         text += p.text;
         words += p.words;
     }
-    if (!text.isEmpty() || chunks.isEmpty())
-        chunks.append({head + text, text.isEmpty() ? 0 : line});
+    // The last chunk (every part has text); the title alone for a note without text.
+    chunks.append({head + text, line});
     return chunks;
 }
 
@@ -117,11 +120,8 @@ bool looksEnglish(QStringView text)
     static const QSet<QString> en = {u"the"_s, u"and"_s, u"is"_s, u"with"_s, u"for"_s, u"that"_s,
                                      u"this"_s, u"to"_s, u"of"_s, u"was"_s, u"have"_s};
     static const QString plLetters = u"ąćęłńóśźżĄĆĘŁŃÓŚŹŻ"_s;
-    int p = 0, e = 0;
-    for (QChar c : text) {
-        if (plLetters.contains(c))
-            ++p;
-    }
+    int p = int(std::ranges::count_if(text, [](QChar c) { return plLetters.contains(c); }));
+    int e = 0;
     qsizetype start = -1;
     for (qsizetype i = 0; i <= text.size(); ++i) {
         const bool letter = i < text.size() && text.at(i).isLetter();

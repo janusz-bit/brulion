@@ -41,6 +41,15 @@ Item {
         color: Theme.borderSubtle
     }
 
+    /// One of the pen's colours (a model row of `colors`).
+    component PenSwatch: BColorSwatch {
+        required property var modelData
+        readonly property string stored: AppController.routeText(modelData, "color")
+        color: root.displayed(stored)
+        label: AppController.routeText(modelData, "label")
+        focusPolicy: Qt.NoFocus
+    }
+
     BShadow {
         target: frame
         level: 2
@@ -81,16 +90,11 @@ Item {
 
             Repeater {
                 model: Theme.compact ? root.noRows : root.colors
-                delegate: BColorSwatch {
+                delegate: PenSwatch {
                     id: barSwatch
-                    required property var modelData
-                    readonly property string stored: AppController.routeText(modelData, "color")
                     objectName: "drawingSelectionColor" + Js.sliceFrom(stored, 1)
                     y: parent ? (parent.height - height) / 2 : 0
-                    color: root.displayed(stored)
-                    label: AppController.routeText(modelData, "label")
                     size: 22
-                    focusPolicy: Qt.NoFocus
                     onClicked: root.canvas.recolorSelection(barSwatch.stored)
                 }
             }
@@ -113,7 +117,7 @@ Item {
                 iconName: "sliders-horizontal"
                 label: qsTr("Style")
                 focusPolicy: Qt.NoFocus
-                onClicked: stylePanel.open()
+                onClicked: root.openStyle()
             }
             BIconButton {
                 objectName: "drawingSelectionDuplicate"
@@ -151,7 +155,7 @@ Item {
                 iconName: "ellipsis"
                 label: qsTr("More")
                 focusPolicy: Qt.NoFocus
-                onClicked: moreMenu.popup(moreButton, 0, moreButton.height)
+                onClicked: root.openMore()
             }
             BIconButton {
                 objectName: "drawingSelectionDelete"
@@ -278,13 +282,8 @@ Item {
             spacing: 2
             Repeater {
                 model: root.colors
-                delegate: BColorSwatch {
+                delegate: PenSwatch {
                     id: popupSwatch
-                    required property var modelData
-                    readonly property string stored: AppController.routeText(modelData, "color")
-                    color: root.displayed(stored)
-                    label: AppController.routeText(modelData, "label")
-                    focusPolicy: Qt.NoFocus
                     onClicked: {
                         root.canvas.recolorSelection(popupSwatch.stored)
                         colorPopup.close()

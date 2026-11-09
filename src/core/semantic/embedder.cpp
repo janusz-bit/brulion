@@ -45,12 +45,29 @@ void initBackend()
     });
 }
 
+/// Every text with `prefix` in front.
+QStringList prefixed(const QString &prefix, const QStringList &texts)
+{
+    QStringList out;
+    out.reserve(texts.size());
+    for (const QString &t : texts)
+        out.append(prefix + t);
+    return out;
+}
+
 } // namespace
 
 struct Embedder::Impl {
+    struct ModelFree {
+        void operator()(llama_model *m) const { llama_model_free(m); }
+    };
+    struct ContextFree {
+        void operator()(llama_context *c) const { llama_free(c); }
+    };
+
     Options options;
-    llama_model *model = nullptr;
-    llama_context *ctx = nullptr;
+    std::unique_ptr<llama_model, ModelFree> model;
+    std::unique_ptr<llama_context, ContextFree> ctx; ///< after `model`: freed before it
     const llama_vocab *vocab = nullptr;
     QString deviceName;
     int dim = 0;
@@ -61,17 +78,9 @@ struct Embedder::Impl {
     void useThreads(int n)
     {
         if (n != activeThreads) {
-            llama_set_n_threads(ctx, n, n);
+            llama_set_n_threads(ctx.get(), n, n);
             activeThreads = n;
         }
-    }
-
-    ~Impl()
-    {
-        if (ctx)
-            llama_free(ctx);
-        if (model)
-            llama_model_free(model);
     }
 
     std::vector<llama_token> tokenize(const QString &text) const
@@ -113,14 +122,14 @@ struct Embedder::Impl {
                 batch.logits[j] = 1;
             }
         }
-        if (llama_memory_t mem = llama_get_memory(ctx))
+        if (llama_memory_t mem = llama_get_memory(ctx.get()))
             llama_memory_clear(mem, true);
-        const int32_t rc = llama_encode(ctx, batch);
+        const int32_t rc = llama_encode(ctx.get(), batch);
         bool ok = rc == 0;
         if (!ok)
             qCWarning(lcEmbedder, "llama_encode failed: %d", rc);
         for (size_t i = begin; ok && i < end; ++i) {
-            const float *e = llama_get_embeddings_seq(ctx, llama_seq_id(i - begin));
+            const float *e = llama_get_embeddings_seq(ctx.get(), llama_seq_id(i - begin));
             if (!e) {
                 ok = false;
                 break;
@@ -172,15 +181,15 @@ std::unique_ptr<Embedder> Embedder::open(const QString &ggufPath, const Options 
     d->deviceName = gpu ? u"%1 (%2)"_s.arg(QString::fromUtf8(ggml_backend_dev_name(gpu)),
                                             QString::fromUtf8(ggml_backend_dev_description(gpu)))
                         : u"CPU"_s;
-    d->model = llama_model_load_from_file(ggufPath.toUtf8().constData(), mp);
+    d->model.reset(llama_model_load_from_file(ggufPath.toUtf8().constData(), mp));
     if (!d->model) {
         if (error)
             *error = u"cannot load the model %1"_s.arg(ggufPath);
         return nullptr;
     }
-    d->options.maxTokens = std::min(d->options.maxTokens, int(llama_model_n_ctx_train(d->model)));
-    d->vocab = llama_model_get_vocab(d->model);
-    d->dim = llama_model_n_embd(d->model);
+    d->options.maxTokens = std::min(d->options.maxTokens, int(llama_model_n_ctx_train(d->model.get())));
+    d->vocab = llama_model_get_vocab(d->model.get());
+    d->dim = llama_model_n_embd(d->model.get());
 
     llama_context_params cp = llama_context_default_params();
     cp.embeddings = true;
@@ -197,7 +206,7 @@ std::unique_ptr<Embedder> Embedder::open(const QString &ggufPath, const Options 
     cp.n_threads = d->threads;
     cp.n_threads_batch = d->threads;
     cp.op_offload = gpu != nullptr;
-    d->ctx = llama_init_from_model(d->model, cp);
+    d->ctx.reset(llama_init_from_model(d->model.get(), cp));
     if (!d->ctx) {
         if (error)
             *error = u"cannot create a llama.cpp context for %1"_s.arg(ggufPath);
@@ -248,21 +257,13 @@ QList<Vector> Embedder::embed(const QStringList &texts)
 QList<Vector> Embedder::embedQueries(const QStringList &queries)
 {
     d->useThreads(d->options.queryThreads);
-    QStringList texts;
-    texts.reserve(queries.size());
-    for (const QString &q : queries)
-        texts.append(u"query: "_s + q);
-    return embed(texts);
+    return embed(prefixed(u"query: "_s, queries));
 }
 
 QList<Vector> Embedder::embedPassages(const QStringList &passages)
 {
     d->useThreads(d->threads);
-    QStringList texts;
-    texts.reserve(passages.size());
-    for (const QString &p : passages)
-        texts.append(u"passage: "_s + p);
-    return embed(texts);
+    return embed(prefixed(u"passage: "_s, passages));
 }
 
 } // namespace brulion::semantic

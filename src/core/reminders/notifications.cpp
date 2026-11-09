@@ -20,11 +20,8 @@ using namespace reminders_detail;
 
 namespace {
 
-/// Largest horizon accepted by upcomingNotifications() (ten years).
-constexpr int MaxHorizonDays = 3660;
-
 /// " · termin: dziś 17:00" / " · due today 17:00" for the notification body.
-QString dueInfo(const DateSpec &due, dates::UiLocale locale, QDate day)
+QString dueInfo(DateSpec due, dates::UiLocale locale, QDate day)
 {
     const QString when = dates::formatHuman(due, locale, day);
     if (when.isEmpty())
@@ -40,7 +37,7 @@ struct Timed {
 };
 
 /// By time, then id (the order of every list here).
-bool earlier(const Timed &a, const Timed &b)
+bool earlier(Timed a, Timed b)
 {
     if (a.ms != b.ms)
         return a.ms < b.ms;
@@ -52,7 +49,7 @@ QList<ScheduledNotification> firstInTime(QList<Timed> &items, qsizetype max)
 {
     const qsizetype keep = max < 0 ? items.size() : std::min(max, items.size());
     if (keep < items.size())
-        std::partial_sort(items.begin(), items.begin() + keep, items.end(), earlier);
+        std::ranges::partial_sort(items, items.begin() + keep, earlier);
     else
         std::ranges::sort(items, earlier);
     QList<ScheduledNotification> out;
@@ -65,13 +62,8 @@ QList<ScheduledNotification> firstInTime(QList<Timed> &items, qsizetype max)
 /// notificationId() with the text already hashed (text::contentHash()).
 QString idOf(const VaultPath &path, const QDateTime &at, QStringView textHash)
 {
-    QString key = path;
-    key += u'|';
-    key += at.date().toString(u"yyyy-MM-dd"_s);
-    key += u'T';
-    key += at.time().toString(u"HH:mm"_s);
-    key += u'|';
-    key += textHash;
+    const QString key =
+            path + u'|' + at.date().toString(u"yyyy-MM-dd"_s) + u'T' + at.time().toString(u"HH:mm"_s) + u'|' + textHash;
     return text::fnv1a64Hex(key.toUtf8());
 }
 
@@ -84,7 +76,7 @@ public:
         : m_index(index)
         , m_path(ref.path)
         , m_block(ref.blockIndex)
-        , m_src(note ? sourceOf(note, ref) : sourceOf(index, ref))
+        , m_src(sourceOf(note ? note : index.note(ref.path), ref))
     { }
 
     bool isFor(const ReminderRef &ref) const { return ref.blockIndex == m_block && ref.path == m_path; }
@@ -140,7 +132,7 @@ void collectRefs(const VaultIndex &index, const ParsedNote *note, const QList<Re
                 continue;
             const QString id = idOf(ref.path, at, block->textHash());
             if (const auto it = byId.constFind(id); it != byId.cend()) {
-                out[*it].alarm = out[*it].alarm || ref.reminder.alarm;
+                out[*it].alarm |= ref.reminder.alarm;
                 continue;
             }
             ScheduledNotification n;
@@ -179,15 +171,11 @@ void collectNote(const VaultIndex &index, const VaultPath &path, const ParsedNot
 QString zoneKey(const QDateTime &dayStart, const QDateTime &dayEnd)
 {
 #if QT_CONFIG(timezone)
-    QString key = QString::fromUtf8(QTimeZone::systemTimeZoneId());
+    const QString zone = QString::fromUtf8(QTimeZone::systemTimeZoneId());
 #else
-    QString key;
+    const QString zone;
 #endif
-    key += u'|';
-    key += QString::number(dayStart.offsetFromUtc());
-    key += u'|';
-    key += QString::number(dayEnd.offsetFromUtc());
-    return key;
+    return zone + u'|' + QString::number(dayStart.offsetFromUtc()) + u'|' + QString::number(dayEnd.offsetFromUtc());
 }
 
 /// The occurrences of one note for the kept days.

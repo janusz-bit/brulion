@@ -33,7 +33,7 @@ qsizetype snapBack(QStringView s, qsizetype at)
     return at;
 }
 
-/// `text`'s lines around `range`: up to ContextBefore units before it and ContextAfter after it.
+/// `hit`'s match and its line around it: up to ContextBefore units before, ContextAfter after.
 void fillContext(ReplaceHit &hit, QStringView text, qsizetype lineStart, qsizetype lineEnd)
 {
     hit.matched = text.sliced(hit.start, hit.length).toString();
@@ -74,7 +74,7 @@ ReadKind kindOf(const DetachedRead &read)
 {
     if (!read.ok)
         return ReadKind::Unusable;
-    if (drawing::looksLikeExcalidrawMarkdown(QByteArrayView(read.bytes).first(std::min<qsizetype>(read.bytes.size(), 4096))))
+    if (drawing::looksLikeExcalidrawMarkdown(QByteArrayView(read.bytes).left(4096)))
         return ReadKind::Drawing;
     return read.bytes.size() <= ReplaceMaxFileBytes && validUtf8(read.bytes) ? ReadKind::Note : ReadKind::Unusable;
 }
@@ -117,10 +117,11 @@ ReplaceFile planFile(const VaultPath &path, QStringView text, QStringView query,
     file.hits.reserve(shown);
     int line = 0;
     qsizetype lineStart = 0;
+    qsizetype at = 0; // the text before it is counted: each unit is looked at once, not once per hit
     for (qsizetype i = 0; i < shown; ++i) {
         const text::TextRange range = ranges.at(i);
         // Forward to the match's line (queries have no line breaks: it stays on one).
-        for (qsizetype at = lineStart; at < range.start; ++at) {
+        for (; at < range.start; ++at) {
             const QChar c = text.at(at);
             if (c == u'\n' || (c == u'\r' && !(at + 1 < text.size() && text.at(at + 1) == u'\n'))) {
                 ++line;
@@ -171,15 +172,12 @@ ReplacedFile applyToFile(Vault &vault, const ReplaceFile &file, const ReplacePla
     out.path = file.path;
     const QString absolutePath = vault.absolutePath(file.path);
     const DetachedRead read = Vault::readDetached(file.path, absolutePath);
-    if (!read.ok) {
-        out.status = QFile::exists(absolutePath) ? ReplaceStatus::Failed : ReplaceStatus::Changed;
+    if (!read.ok || read.hash != file.hash) {
+        // Unreadable but there: failed; gone or not the bytes planned: changed.
+        out.status = !read.ok && QFile::exists(absolutePath) ? ReplaceStatus::Failed : ReplaceStatus::Changed;
         return out;
     }
-    if (read.hash != file.hash) {
-        out.status = ReplaceStatus::Changed;
-        return out;
-    }
-    QList<text::TextRange> ranges = text::findMatches(read.text, plan.query, plan.options);
+    const QList<text::TextRange> ranges = text::findMatches(read.text, plan.query, plan.options);
     QList<text::TextRange> chosen;
     chosen.reserve(ranges.size());
     for (qsizetype i = 0; i < ranges.size(); ++i) {
@@ -198,17 +196,10 @@ ReplacedFile applyToFile(Vault &vault, const ReplaceFile &file, const ReplacePla
     out.before = read.text;
     out.after = std::move(after);
     const HistoryReason reason(vault);
-    switch (vault.writeTextIfUnchanged(file.path, out.after, out.before, source)) {
-    case WriteOutcome::Written:
-        break;
-    case WriteOutcome::Changed:
-        out.status = ReplaceStatus::Changed;
+    const WriteOutcome written = vault.writeTextIfUnchanged(file.path, out.after, out.before, source);
+    if (written != WriteOutcome::Written) {
+        out.status = written == WriteOutcome::Changed ? ReplaceStatus::Changed : ReplaceStatus::Failed;
         out.replaced = 0;
-        break;
-    case WriteOutcome::Failed:
-        out.status = ReplaceStatus::Failed;
-        out.replaced = 0;
-        break;
     }
     return out;
 }
@@ -219,9 +210,7 @@ QList<ReplacedFile> applyReplace(Vault &vault, const ReplacePlan &plan, const QS
     QList<ReplacedFile> out;
     out.reserve(choices.size());
     for (const ReplaceChoice &choice : choices) {
-        const auto file = std::find_if(plan.files.cbegin(), plan.files.cend(),
-                                       [&](const ReplaceFile &f) { return f.path == choice.path; });
-        if (file != plan.files.cend())
+        if (const auto file = std::ranges::find(plan.files, choice.path, &ReplaceFile::path); file != plan.files.cend())
             out.append(applyToFile(vault, *file, plan, replacement, choice.excluded, source));
     }
     return out;
@@ -234,12 +223,9 @@ UndoReplaceStatus undoReplacedFile(Vault &vault, const ReplacedFile &file, Chang
         return UndoReplaceStatus::Changed;
     const HistoryReason reason(vault);
     switch (vault.writeTextIfUnchanged(file.path, file.before, file.after, source)) {
-    case WriteOutcome::Written:
-        return UndoReplaceStatus::Restored;
-    case WriteOutcome::Changed:
-        return UndoReplaceStatus::Changed;
-    case WriteOutcome::Failed:
-        break;
+    case WriteOutcome::Written: return UndoReplaceStatus::Restored;
+    case WriteOutcome::Changed: return UndoReplaceStatus::Changed;
+    case WriteOutcome::Failed: break;
     }
     return UndoReplaceStatus::Failed;
 }
@@ -268,9 +254,9 @@ struct ScanShared {
     std::atomic<qsizetype> next{0};
     std::atomic<bool> cancelled{false};
     QMutex mutex;
-    QList<ScanResult> results; ///< guarded by mutex
-    QObject *owner = nullptr;  ///< guarded by mutex; the scan, until it goes
-    bool notified = false;     ///< guarded by mutex
+    QList<ScanResult> results;    ///< guarded by mutex
+    ReplaceScan *owner = nullptr; ///< guarded by mutex; the scan, until it goes
+    bool notified = false;        ///< guarded by mutex
 
     ScanResult run(int job) const
     {
@@ -300,9 +286,7 @@ struct ReplaceScan::Private {
         ++plan.notesScanned;
         if (result.kind == ReadKind::Unusable)
             plan.skipped.append(result.file.path);
-        if (result.kind != ReadKind::Note)
-            return;
-        if (result.file.hitCount == 0)
+        if (result.kind != ReadKind::Note || result.file.hitCount == 0)
             return;
         ReplaceFile file = std::move(result.file);
         plan.totalHits += file.hitCount;
@@ -310,8 +294,7 @@ struct ReplaceScan::Private {
         if (file.hits.size() > room)
             file.hits.resize(room);
         plan.previewHits += int(file.hits.size());
-        const auto at = std::lower_bound(fileJobs.cbegin(), fileJobs.cend(), result.job);
-        const qsizetype row = std::distance(fileJobs.cbegin(), at);
+        const qsizetype row = std::ranges::lower_bound(std::as_const(fileJobs), result.job) - fileJobs.cbegin();
         fileJobs.insert(row, result.job);
         merged.append(file.path);
         plan.files.insert(row, std::move(file));
@@ -342,9 +325,7 @@ ReplaceScan::ReplaceScan(Vault &vault, WorkerPool pool, const QString &query, co
     const int workers = std::min<qsizetype>(d->pool.threads, d->shared->jobs.size());
     for (int i = 0; i < workers; ++i) {
         d->pool.start([shared = d->shared] {
-            for (;;) {
-                if (shared->cancelled.load())
-                    return;
+            while (!shared->cancelled.load()) {
                 const qsizetype job = shared->next.fetch_add(1);
                 if (job >= shared->jobs.size())
                     return;
@@ -353,7 +334,7 @@ ReplaceScan::ReplaceScan(Vault &vault, WorkerPool pool, const QString &query, co
                 shared->results.append(std::move(result));
                 if (shared->owner && !shared->notified) {
                     shared->notified = true;
-                    QMetaObject::invokeMethod(shared->owner, "resultsReady", Qt::QueuedConnection);
+                    QMetaObject::invokeMethod(shared->owner, &ReplaceScan::resultsReady, Qt::QueuedConnection);
                 }
             }
         });

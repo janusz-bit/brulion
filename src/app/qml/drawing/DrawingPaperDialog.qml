@@ -35,10 +35,7 @@ BDialog {
     }
 
     /// 12 neutrals, then 12 hues × 3 shades.
-    readonly property list<string> grid: dialog.paperColors()
-    function paperColors(): list<string> {
-        return dialog.canvas.paperColors()
-    }
+    readonly property list<string> grid: dialog.canvas.paperColors()
 
     objectName: "drawingPaperDialog"
     title: qsTr("Background colour")

@@ -89,9 +89,6 @@ public:
     /// Stops the scheduler (persisting its state).
     ~ReminderScheduler() override;
 
-    ReminderScheduler(const ReminderScheduler &) = delete;
-    ReminderScheduler &operator=(const ReminderScheduler &) = delete;
-
     // ---- settings (each refreshes a running scheduler) -------------------------------------
 
     /// Days ahead handed to the sink (0–3660, default 14).

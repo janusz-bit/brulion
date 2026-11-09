@@ -22,19 +22,31 @@ QString capitalised(const QString &word)
 
 bool hasLower(const QString &word)
 {
-    return std::any_of(word.cbegin(), word.cend(), [](QChar c) { return c.isLower(); });
+    return std::ranges::any_of(word, [](QChar c) { return c.isLower(); });
 }
 
 /// An acronym: two or more letters, none of them small ("PDF", "NASA").
 bool isAcronym(const QString &word)
 {
-    const auto letters = std::count_if(word.cbegin(), word.cend(), [](QChar c) { return c.isLetter(); });
+    const auto letters = std::ranges::count_if(word, [](QChar c) { return c.isLetter(); });
     return letters >= 2 && !hasLower(word);
 }
 
 QString withoutDot(const QString &word)
 {
     return word.endsWith(u'.') ? word.chopped(1) : word;
+}
+
+/// The words trimmed and normalised, empty ones left out.
+QSet<QString> normalizedSet(const QStringList &words)
+{
+    QSet<QString> out;
+    for (const QString &w : words) {
+        const QString n = normalizedWord(w.trimmed());
+        if (!n.isEmpty())
+            out.insert(n);
+    }
+    return out;
 }
 
 } // namespace
@@ -61,12 +73,10 @@ bool matchesWordList(const QSet<QString> &list, const QString &word)
     if (lowerFirst != word && !hasLower(word.left(1)) && list.contains(lowerFirst))
         return true;
     // "KOT" for "kot" and "Kot".
-    if (!hasLower(word)) {
-        const QString lower = word.toLower();
-        if (list.contains(lower) || list.contains(capitalised(lower)))
-            return true;
-    }
-    return false;
+    if (hasLower(word))
+        return false;
+    const QString lower = word.toLower();
+    return list.contains(lower) || list.contains(capitalised(lower));
 }
 
 int editDistance(const QString &a, const QString &b, int limit)
@@ -119,20 +129,17 @@ QStringList WordListBackend::suggest(const QString &word, int max)
 {
     m_asked.append(word);
     struct Candidate {
-        int distance;
-        qsizetype order;
+        int distance = 0;
         QString word;
     };
     QList<Candidate> found;
     const QString lower = word.toLower();
-    for (qsizetype i = 0; i < m_ordered.size(); ++i) {
-        const int d = editDistance(lower, m_ordered[i].toLower(), 2);
-        if (d <= 2)
-            found.append({d, i, m_ordered[i]});
+    for (const QString &known : std::as_const(m_ordered)) {
+        if (const int d = editDistance(lower, known.toLower(), 2); d <= 2)
+            found.append({d, known});
     }
-    std::ranges::stable_sort(found, [](const Candidate &x, const Candidate &y) {
-        return x.distance != y.distance ? x.distance < y.distance : x.order < y.order;
-    });
+    // Stable: words as near keep the list's order.
+    std::ranges::stable_sort(found, {}, &Candidate::distance);
     QStringList out;
     const bool capital = !word.isEmpty() && word.front().isUpper();
     for (const Candidate &c : std::as_const(found)) {
@@ -151,7 +158,7 @@ void SpellChecker::setBackends(std::vector<std::unique_ptr<SpellBackend>> backen
 {
     m_backends = std::move(backends);
     // (A language without a dictionary gives no backend: never one to call.)
-    std::erase_if(m_backends, [](const std::unique_ptr<SpellBackend> &b) { return !b; });
+    std::erase(m_backends, nullptr);
 }
 
 QStringList SpellChecker::languages() const
@@ -164,22 +171,12 @@ QStringList SpellChecker::languages() const
 
 void SpellChecker::setPersonalWords(const QStringList &words)
 {
-    m_personal.clear();
-    for (const QString &w : words) {
-        const QString n = normalizedWord(w.trimmed());
-        if (!n.isEmpty())
-            m_personal.insert(n);
-    }
+    m_personal = normalizedSet(words);
 }
 
 void SpellChecker::setIgnoredWords(const QStringList &words)
 {
-    m_ignored.clear();
-    for (const QString &w : words) {
-        const QString n = normalizedWord(w.trimmed());
-        if (!n.isEmpty())
-            m_ignored.insert(n);
-    }
+    m_ignored = normalizedSet(words);
 }
 
 bool SpellChecker::listed(const QString &word) const
@@ -189,21 +186,15 @@ bool SpellChecker::listed(const QString &word) const
 
 bool SpellChecker::knownByBackends(const QString &word)
 {
-    for (const auto &b : m_backends) {
-        if (b->check(word))
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(m_backends, [&word](const auto &b) { return b->check(word); });
 }
 
 bool SpellChecker::partsCorrect(const QString &word)
 {
     const QStringList parts = hyphenParts(word);
-    if (parts.size() < 2)
-        return false;
-    return std::all_of(parts.cbegin(), parts.cend(), [this](const QString &part) {
-        return isAcronym(part) || listed(part) || knownByBackends(part);
-    });
+    return parts.size() >= 2 && std::ranges::all_of(parts, [this](const QString &part) {
+               return isAcronym(part) || listed(part) || knownByBackends(part);
+           });
 }
 
 bool SpellChecker::isCorrect(const QString &input)
@@ -239,12 +230,14 @@ QList<bool> SpellChecker::checkAll(const QStringList &words)
         asked.append(word);
     }
     QList<bool> known(asked.size(), false);
+    QStringList still;
+    QList<qsizetype> where;
     for (const auto &b : m_backends) {
-        QStringList still;
-        QList<qsizetype> where;
+        still.clear();
+        where.clear();
         for (qsizetype k = 0; k < asked.size(); ++k) {
-            if (!known[k]) {
-                still.append(asked[k]);
+            if (!known.at(k)) {
+                still.append(asked.at(k));
                 where.append(k);
             }
         }
@@ -252,16 +245,16 @@ QList<bool> SpellChecker::checkAll(const QStringList &words)
             break;
         const QList<bool> answers = b->checkAll(still);
         for (qsizetype k = 0; k < where.size() && k < answers.size(); ++k) {
-            if (answers[k])
-                known[where[k]] = true;
+            if (answers.at(k))
+                known[where.at(k)] = true;
         }
     }
     for (qsizetype k = 0; k < open.size(); ++k) {
-        if (known[k])
+        if (known.at(k))
             continue;
-        const QString dotted = normalizedWord(words[open[k]]);
+        const QString dotted = normalizedWord(words.at(open.at(k)));
         const QString word = withoutDot(dotted);
-        result[open[k]] = (dotted != word && knownByBackends(dotted)) || partsCorrect(word);
+        result[open.at(k)] = (dotted != word && knownByBackends(dotted)) || partsCorrect(word);
     }
     return result;
 }
@@ -282,7 +275,7 @@ QStringList SpellChecker::suggestions(const QString &input, int max)
             if (rank >= list.size())
                 continue;
             any = true;
-            const QString s = list[rank];
+            const QString &s = list.at(rank);
             if (!s.isEmpty() && !seen.contains(s)) {
                 seen.insert(s);
                 out.append(s);

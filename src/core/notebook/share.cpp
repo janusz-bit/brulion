@@ -41,7 +41,7 @@ bool appendFile(QList<SharedFile> &files, SharedFile file, int &accepted)
         file.error = u"tooMany"_s;
         file.path.clear();
     }
-    files.append(file);
+    files.append(std::move(file));
     return true;
 }
 
@@ -243,13 +243,9 @@ SharedContent sharedContentFromJson(const QJsonObject &object)
     share.dir = stringValue(object, u"dir"_s);
     if (stringValue(object, u"source"_s) == u"open")
         share.source = u"open"_s;
-    const QJsonValue files = object.value(u"files"_s);
-    if (!files.isArray())
-        return share;
     int accepted = 0;
-    for (const QJsonValue &value : files.toArray()) {
-        if (share.files.size() >= SharedEntriesMax)
-            break;
+    // A const array (empty when "files" is none): a loop over a non-const one would copy it.
+    for (const QJsonArray files = object.value(u"files"_s).toArray(); const auto &value : files) {
         if (!value.isObject())
             continue;
         const QJsonObject entry = value.toObject();
@@ -257,11 +253,12 @@ SharedContent sharedContentFromJson(const QJsonObject &object)
         file.path = stringValue(entry, u"path"_s);
         file.name = stringValue(entry, u"name"_s);
         file.mime = stringValue(entry, u"mime"_s);
-        const QJsonValue size = entry.value(u"size"_s);
-        file.size = size.isDouble() ? qint64(size.toDouble()) : -1;
-        file.size = std::max<qint64>(file.size, -1);
+        // Unknown (-1) unless qint64 holds it: converting 2^63 or more (a forged share) is undefined.
+        const double size = entry.value(u"size"_s).toDouble(-1);
+        file.size = size > -1 && size < 0x1p63 ? qint64(size) : -1;
         file.error = stringValue(entry, u"error"_s);
-        appendFile(share.files, file, accepted);
+        if (!appendFile(share.files, std::move(file), accepted))
+            break;
     }
     return share;
 }
@@ -362,7 +359,7 @@ SharedContent openedFilesShare(const QStringList &arguments, const QString &work
         if (!path.isEmpty()) {
             if (QDir::isRelativePath(path))
                 path = base.absoluteFilePath(path);
-            path = QDir::cleanPath(QDir::fromNativeSeparators(path));
+            path = QDir::cleanPath(path); // native separators become "/" too
             file.path = path;
             file.name = lastSegment(path);
             key = path;
@@ -370,7 +367,7 @@ SharedContent openedFilesShare(const QStringList &arguments, const QString &work
         if (key.isEmpty() || seen.contains(key))
             continue;
         seen.insert(key);
-        if (!appendFile(share.files, file, accepted))
+        if (!appendFile(share.files, std::move(file), accepted))
             break;
     }
     return share;
@@ -544,8 +541,7 @@ QString sharedPageTitle(const QString &fileName, const QString &text, const QStr
         return paths::sanitizeFileName(trimmed);
     };
     // A display name may carry a folder ("Download/Lista.md" from some file managers).
-    QString base = fileName;
-    base = base.mid(std::max(base.lastIndexOf(u'/'), base.lastIndexOf(u'\\')) + 1);
+    const QString base = fileName.mid(std::max(fileName.lastIndexOf(u'/'), fileName.lastIndexOf(u'\\')) + 1);
     if (QString fromName = usable(withoutTextExtension(base)); !fromName.isEmpty())
         return fromName;
     for (const QString &line : withoutFrontmatter(splitLines(text))) {

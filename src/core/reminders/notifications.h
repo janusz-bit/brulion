@@ -63,7 +63,9 @@ struct ScheduledNotification {
 /// Android AlarmManager, the browser Notification API) and by fakes in tests.
 class NotificationSink {
 public:
+    NotificationSink() = default;
     virtual ~NotificationSink() = default;
+    Q_DISABLE_COPY_MOVE(NotificationSink)
 
     /// True when notifications given to schedule() fire by themselves, also while the app is
     /// closed (Android alarms). False when the app has to time them: ReminderScheduler then

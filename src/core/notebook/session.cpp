@@ -117,7 +117,6 @@ bool Notebook::open(const QString &rawRoot, const Options &options, QString *err
     m_indexStats = {};
     m_indexCache = options.indexCache;
     m_watch = options.watch;
-    m_cacheKeeper.reset();
     QObject::connect(m_vault.get(), &Vault::changed, m_vault.get(),
                      [this](const QList<VaultChange> &changes) { applyChanges(changes); });
     QObject::connect(m_vault.get(), &Vault::configChanged, m_vault.get(), [this] {
@@ -167,26 +166,27 @@ void Notebook::indexFile(const VaultPath &path)
 VaultIndex &Notebook::index()
 {
     Q_ASSERT(m_vault);
-    if (!m_index) {
-        m_index = std::make_unique<VaultIndex>(m_vault->config());
-        IndexLoader::Options options;
-        options.firstFolder = m_vault->config().journalsFolder;
-        options.cachePath = indexCachePath();
-        IndexLoader loader(*m_vault, *m_index, m_workers, options);
-        loader.start(m_vault->files());
-        loader.finish();
-        m_indexStats = loader.stats();
-        if (!m_indexCache && !m_stateDir.isEmpty())
-            m_indexStats.cache = u"disabled"_s;
-        if (!options.cachePath.isEmpty()) {
-            IndexCacheKeeper::Policy policy;
-            policy.minNotes = m_cacheMinNotes;
-            m_cacheKeeper =
-                    std::make_unique<IndexCacheKeeper>(*m_vault, *m_index, m_workers, options.cachePath, policy);
-            // Watch mode (MCP): saved after quiet changes like the app; else at close.
-            if (m_watch)
-                m_cacheKeeper->loaded(m_indexStats);
-        }
+    if (!m_index && !m_vault)
+        m_index = std::make_unique<VaultIndex>(); // no notebook open: an empty index, not a crash
+    if (m_index)
+        return *m_index;
+    m_index = std::make_unique<VaultIndex>(m_vault->config());
+    IndexLoader::Options options;
+    options.firstFolder = m_vault->config().journalsFolder;
+    options.cachePath = indexCachePath();
+    IndexLoader loader(*m_vault, *m_index, m_workers, options);
+    loader.start(m_vault->files());
+    loader.finish();
+    m_indexStats = loader.stats();
+    if (!m_indexCache && !m_stateDir.isEmpty())
+        m_indexStats.cache = u"disabled"_s;
+    if (!options.cachePath.isEmpty()) {
+        IndexCacheKeeper::Policy policy;
+        policy.minNotes = m_cacheMinNotes;
+        m_cacheKeeper = std::make_unique<IndexCacheKeeper>(*m_vault, *m_index, m_workers, options.cachePath, policy);
+        // Watch mode (MCP): saved after quiet changes like the app; else at close.
+        if (m_watch)
+            m_cacheKeeper->loaded(m_indexStats);
     }
     return *m_index;
 }
@@ -212,9 +212,7 @@ void Notebook::applyChanges(const QList<VaultChange> &changes)
         case ChangeType::Modified: indexFile(c.path); break;
         case ChangeType::Deleted: m_index->remove(c.path); break;
         case ChangeType::Renamed: {
-            QString content;
-            if (paths::isMarkdown(c.path))
-                content = m_vault->readText(c.path);
+            const QString content = paths::isMarkdown(c.path) ? m_vault->readText(c.path) : QString();
             if (paths::isIgnored(c.path))
                 m_index->remove(c.oldPath);
             else
@@ -317,16 +315,14 @@ Notebook::WriteResult Notebook::edit(const VaultPath &rawPath, const Edit &edit,
         if (m_beforeWrite)
             m_beforeWrite(path, attempt);
         // A file that appeared meanwhile is "changed" too: its text is not the empty expected one.
-        const QString expected = current.exists ? current.text : QString();
         if (!current.exists && QFileInfo::exists(m_vault->absolutePath(path)))
             continue;
-        switch (m_vault->writeTextIfUnchanged(path, next, expected, ChangeSource::User)) {
-        case WriteOutcome::Written: {
+        switch (m_vault->writeTextIfUnchanged(path, next, current.text, ChangeSource::User)) {
+        case WriteOutcome::Written:
             out.status = WriteResult::Written;
             out.created = !current.exists;
             out.hashAfter = read(path).hash;
             return out;
-        }
         case WriteOutcome::Changed: continue; // another program wrote it: apply the edit to its text
         case WriteOutcome::Failed:
             out.status = WriteResult::Failed;

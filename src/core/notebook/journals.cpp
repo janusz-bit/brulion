@@ -28,11 +28,12 @@ QString appLanguage(const QString &saved)
 
 VaultPath existingJournal(const Vault &vault, QDate date)
 {
-    const VaultConfig config = vault.config();
+    const VaultConfig &config = vault.config();
     const QString preferred = config.journalsFolder.isEmpty() ? QString() : config.journalsFolder + u'/';
     const auto inPreferred = [&](const QString &path) { return !preferred.isEmpty() && path.startsWith(preferred); };
     QString found;
-    for (const FileStat &f : vault.markdownFiles()) {
+    // (A const list: a range-for over the vault's shared list would detach it.)
+    for (const QList<FileStat> files = vault.markdownFiles(); const FileStat &f : files) {
         if (markdown::journalDateFromPath(f.path, config) != date)
             continue;
         // Several (e.g. "journals/" and "Journals/"): the configured spelling, else the first.
@@ -133,10 +134,9 @@ QString blockFromText(const QString &text)
         lines.removeLast();
     if (lines.isEmpty())
         return {};
-    QString first = lines.first().trimmed();
-    if (!listMarker.match(first).hasMatch())
-        first.prepend(u"- "_s);
-    QString block = first;
+    QString block = lines.first().trimmed();
+    if (!listMarker.match(block).hasMatch())
+        block.prepend(u"- "_s);
     for (qsizetype i = 1; i < lines.size(); ++i)
         block += u"\n  "_s + lines.at(i).trimmed();
     return block;

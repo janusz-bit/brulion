@@ -15,12 +15,14 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <chrono>
 #include <mutex>
 #include <utility>
 
 namespace brulion::notebook {
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 QString writeIndexCacheFile(const QString &path, const QByteArray &bytes)
 {
@@ -50,12 +52,15 @@ qint64 indexCacheBudget(qint64 usage, qint64 quota, qint64 replaced, qint64 cap)
 
 namespace {
 
-/// What a write job shares with its keeper (which may be gone when it ends).
+/// What a write job shares with its keeper: the receiver of its report, null once the keeper is gone.
 struct KeeperShared {
     std::mutex mutex;
-    bool cancelled = false;
     IndexCacheKeeper *receiver = nullptr;
 };
+
+/// How often, and how long each time, a save waits for the full-text index.
+constexpr int SearchWaits = 5;
+constexpr std::chrono::milliseconds SearchWait = 1s;
 
 } // namespace
 
@@ -79,7 +84,7 @@ struct IndexCacheKeeper::Private {
     bool savedOnce = false;
     int searchWaits = 0;
 
-    Private(IndexCacheKeeper *owner, Vault &v, VaultIndex &i, WorkerPool p, QString file, Policy pol)
+    Private(IndexCacheKeeper *owner, Vault &v, VaultIndex &i, WorkerPool p, QString file, const Policy &pol)
         : q(owner), vault(v), index(i), pool(std::move(p)), path(std::move(file)), policy(pol)
     { }
 
@@ -87,9 +92,10 @@ struct IndexCacheKeeper::Private {
 
     indexcache::StatFn statFn() const
     {
-        Vault *v = &vault;
-        return [v](const VaultPath &p) { return v->stat(p); };
+        return [v = &vault](const VaultPath &p) { return v->stat(p); };
     }
+
+    QString tooLarge() const { return u"larger than %1"_s.arg(logging::formatBytes(policy.maxBytes)); }
 
     void onIndexChanged()
     {
@@ -105,15 +111,15 @@ struct IndexCacheKeeper::Private {
     void startSave()
     {
         if (writer || writing || !dirty)
-            return;
+            return; // (busy: an aborted encoding and report() start the wait again)
         if (!bigEnough()) {
             dirty = false;
             return;
         }
         // Wait a little for the full-text index (the file is more useful with it).
-        if (index.pendingSearchDocuments() > 0 && searchWaits < 5) {
+        if (index.pendingSearchDocuments() > 0 && searchWaits < SearchWaits) {
             ++searchWaits;
-            quiet.start(1000);
+            quiet.start(SearchWait);
             return;
         }
         searchWaits = 0;
@@ -135,18 +141,15 @@ struct IndexCacheKeeper::Private {
             return;
         slices.stop();
         writer.reset();
+        QByteArray bytes = std::exchange(buffer, QByteArray());
         if (state == indexcache::Writer::State::Aborted) {
-            buffer = QByteArray();
             dirty = true;
             quiet.start(policy.quietMs);
-            return;
+        } else if (bytes.size() > policy.maxBytes) {
+            report(tooLarge(), 0);
+        } else {
+            write(std::move(bytes));
         }
-        if (buffer.size() > policy.maxBytes) {
-            buffer = QByteArray();
-            report(u"larger than %1"_s.arg(logging::formatBytes(policy.maxBytes)), 0);
-            return;
-        }
-        write(std::exchange(buffer, QByteArray()));
     }
 
     void write(QByteArray bytes)
@@ -160,17 +163,18 @@ struct IndexCacheKeeper::Private {
         pool.start([keeper = shared, file = path, bytes = std::move(bytes), size] {
             const QString error = writeIndexCacheFile(file, bytes);
             std::lock_guard lock(keeper->mutex);
-            if (keeper->cancelled || !keeper->receiver)
-                return;
-            IndexCacheKeeper *receiver = keeper->receiver;
-            QMetaObject::invokeMethod(
-                    receiver, [receiver, error, size] { receiver->d->report(error, size); }, Qt::QueuedConnection);
+            if (IndexCacheKeeper *receiver = keeper->receiver)
+                QMetaObject::invokeMethod(
+                        receiver, [receiver, error, size] { receiver->d->report(error, size); }, Qt::QueuedConnection);
         });
     }
 
     void report(const QString &error, qint64 size)
     {
         writing = false;
+        // Changes made meanwhile found the keeper busy (startSave()): they are saved once quiet.
+        if (dirty && !quiet.isActive())
+            quiet.start(policy.quietMs);
         if (!error.isEmpty()) {
             if (!failureLogged) {
                 failureLogged = true; // once per session (a read-only folder, a full disk)
@@ -195,7 +199,7 @@ IndexCacheKeeper::IndexCacheKeeper(Vault &vault, VaultIndex &index, WorkerPool p
     d->quiet.setSingleShot(true);
     connect(&d->quiet, &QTimer::timeout, this, [this] { d->startSave(); });
     // 1 ms, not 0: a repeating 0 ms timer stalls Qt's timers in the browser (docs/WEB.md).
-    d->slices.setInterval(1);
+    d->slices.setInterval(1ms);
     connect(&d->slices, &QTimer::timeout, this, [this] { d->slice(); });
     connect(&index, &VaultIndex::changed, this, [this] { d->onIndexChanged(); });
 }
@@ -203,7 +207,6 @@ IndexCacheKeeper::IndexCacheKeeper(Vault &vault, VaultIndex &index, WorkerPool p
 IndexCacheKeeper::~IndexCacheKeeper()
 {
     std::lock_guard lock(d->shared->mutex);
-    d->shared->cancelled = true;
     d->shared->receiver = nullptr;
 }
 
@@ -227,7 +230,7 @@ bool IndexCacheKeeper::saveNow()
     d->clock.start();
     const QByteArray bytes = indexcache::encode(d->index, d->identity(), d->statFn());
     if (bytes.size() > d->policy.maxBytes) {
-        d->report(u"larger than %1"_s.arg(logging::formatBytes(d->policy.maxBytes)), 0);
+        d->report(d->tooLarge(), 0);
         return false;
     }
     const QString error = writeIndexCacheFile(d->path, bytes);

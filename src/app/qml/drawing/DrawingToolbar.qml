@@ -173,7 +173,11 @@ Rectangle {
     /// Open the colours and widths (compact), the "More" menu (compact), the paper's menu or
     /// the background's (the "More" menu on phones) — route.open, screenshots.
     function openStyle(): void { stylePopup.open() }
-    function openShapes(): void { shapeMenu.popup(shapeButton, 0, bar.atBottom ? -shapeMenu.implicitHeight : shapeButton.height) }
+    /// A menu at its button: below it, above it in a bar at the bottom.
+    function openMenu(menu: BMenu, button: Item): void {
+        menu.popup(button, 0, bar.atBottom ? -menu.implicitHeight : button.height)
+    }
+    function openShapes(): void { bar.openMenu(shapeMenu, shapeButton) }
     function openMore(): void { moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight) }
     function openBackground(): void { backgroundMenu.popup(backgroundButton, 0, backgroundButton.height) }
     function openTheme(): void {
@@ -211,14 +215,16 @@ Rectangle {
         color: Theme.borderSubtle
     }
 
-    /// A width: a dot as wide as the stroke would look.
-    component WidthButton: T.AbstractButton {
-        id: widthButton
+    /// A width or a text size: a round button with a hover and a selected background.
+    component SizeButton: T.AbstractButton {
+        id: sizeButton
         required property real value
         required property string label
         property bool selected: false
-        implicitWidth: Math.max(Theme.controlHeight, Theme.touchUi ? Theme.touchTarget : 0)
+        implicitWidth: bar.slot
         implicitHeight: implicitWidth
+        // (parent is null while the tool's change takes the delegate away)
+        y: parent ? (parent.height - height) / 2 : 0
         focusPolicy: Qt.NoFocus
         hoverEnabled: !Theme.touchUi
         Accessible.role: Accessible.RadioButton
@@ -229,8 +235,18 @@ Rectangle {
             width: Theme.controlHeight
             height: width
             radius: Theme.radius
-            color: widthButton.selected ? Theme.bgSelected : widthButton.hovered ? Theme.bgHover : "transparent"
+            visible: sizeButton.selected || sizeButton.hovered
+            color: sizeButton.selected ? Theme.bgSelected : Theme.bgHover
         }
+        BToolTip {
+            visible: sizeButton.hovered
+            text: sizeButton.label
+        }
+    }
+
+    /// A width: a dot as wide as the stroke would look.
+    component WidthButton: SizeButton {
+        id: widthButton
         contentItem: Item {
             Rectangle {
                 anchors.centerIn: parent
@@ -242,45 +258,20 @@ Rectangle {
                 color: Theme.fg
             }
         }
-        BToolTip {
-            visible: widthButton.hovered
-            text: widthButton.label
-        }
     }
 
     /// A text size: "A" as large as the text would look.
-    component TextSizeButton: T.AbstractButton {
-        id: sizeButton
-        required property real value
-        required property string label
-        property bool selected: false
-        implicitWidth: Math.max(Theme.controlHeight, Theme.touchUi ? Theme.touchTarget : 0)
-        implicitHeight: implicitWidth
-        focusPolicy: Qt.NoFocus
-        hoverEnabled: !Theme.touchUi
-        Accessible.role: Accessible.RadioButton
-        Accessible.name: label
-        Accessible.checked: selected
-        background: Rectangle {
-            anchors.centerIn: parent
-            width: Theme.controlHeight
-            height: width
-            radius: Theme.radius
-            color: sizeButton.selected ? Theme.bgSelected : sizeButton.hovered ? Theme.bgHover : "transparent"
-        }
+    component TextSizeButton: SizeButton {
+        id: textSize
         contentItem: Item {
             Text {
                 anchors.centerIn: parent
                 text: "A"
                 font.family: Theme.fontUi
                 // 16 → 11 px … 36 → 22 px: the sizes told apart within the button.
-                font.pixelSize: Math.round(6 + sizeButton.value * 0.45)
+                font.pixelSize: Math.round(6 + textSize.value * 0.45)
                 color: Theme.fg
             }
-        }
-        BToolTip {
-            visible: sizeButton.hovered
-            text: sizeButton.label
         }
     }
 
@@ -289,6 +280,12 @@ Rectangle {
         height: Theme.controlHeight - 8
         y: parent ? (parent.height - height) / 2 : 0
         color: Theme.borderSubtle
+    }
+
+    /// A button of the rows, centred in its row.
+    component BarButton: BIconButton {
+        anchors.verticalCenter: parent.verticalCenter
+        focusPolicy: Qt.NoFocus
     }
 
     /// The corner caret of a tool with a menu behind its second click (Select, Shapes): a small
@@ -335,23 +332,19 @@ Rectangle {
                 height: parent ? parent.height : 0
                 spacing: bar.groupSpacing
 
-                BIconButton {
+                BarButton {
                     objectName: "drawingUndo"
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "undo-2"
                     label: qsTr("Undo")
                     shortcut: "Ctrl+Z"
-                    focusPolicy: Qt.NoFocus
                     enabled: bar.canvas.canUndo
                     onClicked: bar.canvas.undo()
                 }
-                BIconButton {
+                BarButton {
                     objectName: "drawingRedo"
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "redo-2"
                     label: qsTr("Redo")
                     shortcut: "Ctrl+Shift+Z"
-                    focusPolicy: Qt.NoFocus
                     enabled: bar.canvas.canRedo
                     onClicked: bar.canvas.redo()
                 }
@@ -364,66 +357,56 @@ Rectangle {
                 height: content.height
                 spacing: bar.groupSpacing
 
-                BIconButton {
+                BarButton {
                     objectName: "drawingPen"
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "pencil"
                     label: qsTr("Pen")
                     shortcut: "P"
-                    focusPolicy: Qt.NoFocus
                     checkable: true
                     checked: bar.canvas.tool === "pen"
                     onClicked: bar.canvas.tool = "pen"
                 }
-                BIconButton {
+                BarButton {
                     objectName: "drawingHighlighter"
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "highlighter"
                     label: qsTr("Highlighter")
                     shortcut: "H"
-                    focusPolicy: Qt.NoFocus
                     checkable: true
                     checked: bar.canvas.tool === "highlighter"
                     onClicked: bar.canvas.tool = "highlighter"
                 }
-                BIconButton {
+                BarButton {
                     objectName: "drawingEraser"
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "eraser"
                     label: qsTr("Eraser")
                     shortcut: "E"
-                    focusPolicy: Qt.NoFocus
                     checkable: true
                     checked: bar.canvas.tool === "eraser"
                     onClicked: bar.canvas.tool = "eraser"
                 }
-                BIconButton {
-                    objectName: "drawingSelect"
-                    anchors.verticalCenter: parent.verticalCenter
+                BarButton {
                     id: selectButton
+                    objectName: "drawingSelect"
                     iconName: bar.canvas.selectMode === "box" ? "square-dashed" : "lasso"
                     label: qsTr("Select")
                     shortcut: "V"
-                    focusPolicy: Qt.NoFocus
                     // (Not toggled by a click: a click on the active tool opens the choice.)
                     checked: bar.canvas.tool === "select"
                     onClicked: {
                         if (bar.canvas.tool === "select")
-                            selectMenu.popup(selectButton, 0, bar.atBottom ? -selectMenu.implicitHeight : selectButton.height)
+                            bar.openMenu(selectMenu, selectButton)
                         else
                             bar.canvas.tool = "select"
                     }
                     MenuCaret { button: selectButton }
                 }
                 // The last shape; clicked while a shape is the tool: the shapes' menu.
-                BIconButton {
+                BarButton {
                     id: shapeButton
                     objectName: "drawingShape"
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: bar.shapeIcon(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
                     label: qsTr("Shapes") + " — " + bar.shapeLabel(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
                     shortcut: bar.shapeKey(bar.shapeActive ? bar.canvas.tool : bar.shapeTool)
-                    focusPolicy: Qt.NoFocus
                     // (Not toggled by a click: a click on the active shape opens the menu.)
                     checked: bar.shapeActive
                     onClicked: {
@@ -434,13 +417,11 @@ Rectangle {
                     }
                     MenuCaret { button: shapeButton }
                 }
-                BIconButton {
+                BarButton {
                     objectName: "drawingText"
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "type"
                     label: qsTr("Text")
                     shortcut: "T"
-                    focusPolicy: Qt.NoFocus
                     checkable: true
                     checked: bar.textTool
                     onClicked: bar.canvas.tool = "text"
@@ -469,8 +450,6 @@ Rectangle {
                     model: !bar.compact && bar.drawingTool && !bar.textTool ? bar.widths : bar.noRows
                     delegate: WidthButton {
                         id: rowWidth
-                        // (parent is null while the tool's change takes the delegate away)
-                        y: parent ? (parent.height - height) / 2 : 0
                         selected: Math.abs(bar.canvas.penWidth - value) < 0.01
                         onClicked: bar.widthChosen(rowWidth.value)
                     }
@@ -480,7 +459,6 @@ Rectangle {
                     delegate: TextSizeButton {
                         id: rowSize
                         objectName: "drawingTextSize" + value
-                        y: parent ? (parent.height - height) / 2 : 0
                         selected: Math.abs(bar.canvas.fontSize - value) < 0.01
                         onClicked: bar.fontSizeChosen(rowSize.value)
                     }
@@ -495,7 +473,7 @@ Rectangle {
                     label: bar.textTool ? qsTr("Colour and size") : qsTr("Colour and thickness")
                     size: 26
                     focusPolicy: Qt.NoFocus
-                    onClicked: stylePopup.open()
+                    onClicked: bar.openStyle()
                 }
             }
 
@@ -509,58 +487,48 @@ Rectangle {
                 Separator { visible: !bar.compact }
 
                 // The paper.
-                BIconButton {
+                BarButton {
                     id: backgroundButton
                     objectName: "drawingBackground"
                     visible: !bar.compact
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: bar.backgroundIcon(bar.canvas.background)
                     label: qsTr("Paper")
-                    focusPolicy: Qt.NoFocus
-                    onClicked: backgroundMenu.popup(backgroundButton, 0, backgroundButton.height)
+                    onClicked: bar.openBackground()
                 }
                 // Light or dark paper: as the app, light, dark.
-                BIconButton {
+                BarButton {
                     id: themeButton
                     objectName: "drawingTheme"
                     visible: !bar.compact
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: bar.themeIcon(bar.canvas.theme)
                     label: qsTr("Drawing background")
-                    focusPolicy: Qt.NoFocus
                     enabled: bar.canvas.editable
-                    onClicked: themeMenu.popup(themeButton, 0, themeButton.height)
+                    onClicked: bar.openTheme()
                 }
-                BIconButton {
+                BarButton {
                     objectName: "drawingFinger"
                     visible: !bar.compact && Theme.touchUi
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "pointer"
                     label: qsTr("Draw with finger")
-                    focusPolicy: Qt.NoFocus
                     checkable: true
                     checked: bar.fingerDraws
                     onClicked: bar.fingerToggled()
                 }
-                BIconButton {
+                BarButton {
                     objectName: "drawingFit"
                     visible: !bar.compact
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "maximize"
                     label: qsTr("Show the whole drawing")
                     shortcut: "Ctrl+0"
-                    focusPolicy: Qt.NoFocus
                     onClicked: bar.fitRequested()
                 }
-                BIconButton {
+                BarButton {
                     id: moreButton
                     objectName: "drawingMore"
                     visible: bar.compact
-                    anchors.verticalCenter: parent.verticalCenter
                     iconName: "ellipsis"
                     label: qsTr("More")
-                    focusPolicy: Qt.NoFocus
-                    onClicked: moreMenu.popup(moreButton, 0, -moreMenu.implicitHeight)
+                    onClicked: bar.openMore()
                 }
             }
         }
@@ -596,6 +564,76 @@ Rectangle {
         iconName: bar.shapeIcon(tool)
         shortcut: bar.shapeKey(tool)
         onTriggered: bar.chooseShape(tool)
+    }
+
+    /// A paper of the paper's menus ("plain", "lines", "grid").
+    component PaperItem: BMenuItem {
+        required property string paper
+        iconName: bar.backgroundIcon(paper)
+        checkable: true
+        checked: bar.canvas.background === paper
+        onTriggered: bar.canvas.background = paper
+    }
+
+    /// A background of the background menus ("auto", "light", "dark").
+    component SchemeItem: BMenuItem {
+        required property string scheme
+        iconName: bar.themeIcon(scheme)
+        checkable: true
+        checked: bar.canvas.theme === scheme
+        onTriggered: bar.canvas.theme = scheme
+    }
+
+    component BackdropItem: BMenuItem {
+        text: qsTr("Backdrop from a picture or PDF…")
+        iconName: "image"
+        enabled: bar.canvas.editable
+        onTriggered: bar.backdropRequested()
+    }
+
+    /// An entry that is there while the backdrop is a PDF's page.
+    component PdfItem: BMenuItem {
+        visible: bar.backdropPdf
+        height: visible ? implicitHeight : 0
+    }
+
+    component AnotherPageItem: PdfItem {
+        text: qsTr("Another PDF page…")
+        iconName: "file-text"
+        onTriggered: bar.backdropPageRequested()
+    }
+
+    /// The drawing of the previous (-1) or the next (1) page of the backdrop's PDF.
+    component PageStepItem: PdfItem {
+        required property int step
+        enabled: step > 0 || bar.canvas.backdropPage > 1
+        text: step < 0 ? qsTr("Previous PDF page") : qsTr("Next PDF page")
+        iconName: step < 0 ? "chevron-left" : "chevron-right"
+        shortcut: step < 0 ? "PgUp" : "PgDown"
+        onTriggered: bar.pageStepRequested(step)
+    }
+
+    component PasteItem: BMenuItem {
+        text: qsTr("Paste")
+        iconName: "clipboard-paste"
+        shortcut: "Ctrl+V"
+        enabled: bar.canvas.editable
+        onTriggered: bar.pasteRequested()
+    }
+
+    // Deleting: last, set apart (the rule of BMenuItem's header).
+    component RemoveBackdropSeparator: BMenuSeparator {
+        visible: bar.canvas.hasBackdrop
+        height: visible ? implicitHeight : 0
+    }
+
+    component RemoveBackdropItem: BMenuItem {
+        visible: bar.canvas.hasBackdrop
+        height: visible ? implicitHeight : 0
+        text: qsTr("Remove backdrop")
+        iconName: "trash-2"
+        danger: true
+        onTriggered: bar.backdropRemoved()
     }
 
     BMenu {
@@ -644,114 +682,26 @@ Rectangle {
     BMenu {
         id: backgroundMenu
         objectName: "drawingBackgroundMenu"
-        BMenuItem {
-            text: qsTr("Plain")
-            iconName: "file"
-            checkable: true
-            checked: bar.canvas.background === "plain"
-            onTriggered: bar.canvas.background = "plain"
-        }
-        BMenuItem {
-            text: qsTr("Lines")
-            iconName: "rows-3"
-            checkable: true
-            checked: bar.canvas.background === "lines"
-            onTriggered: bar.canvas.background = "lines"
-        }
-        BMenuItem {
-            text: qsTr("Grid")
-            iconName: "grid-3x3"
-            checkable: true
-            checked: bar.canvas.background === "grid"
-            onTriggered: bar.canvas.background = "grid"
-        }
+        PaperItem { paper: "plain"; text: qsTr("Plain") }
+        PaperItem { paper: "lines"; text: qsTr("Lines") }
+        PaperItem { paper: "grid"; text: qsTr("Grid") }
         BMenuSeparator {}
-        BMenuItem {
-            objectName: "drawingBackdrop"
-            text: qsTr("Backdrop from a picture or PDF…")
-            iconName: "image"
-            enabled: bar.canvas.editable
-            onTriggered: bar.backdropRequested()
-        }
-        BMenuItem {
-            objectName: "drawingBackdropPage"
-            visible: bar.backdropPdf
-            height: visible ? implicitHeight : 0
-            text: qsTr("Another PDF page…")
-            iconName: "file-text"
-            onTriggered: bar.backdropPageRequested()
-        }
-        BMenuItem {
-            objectName: "drawingPreviousPage"
-            visible: bar.backdropPdf
-            height: visible ? implicitHeight : 0
-            enabled: bar.canvas.backdropPage > 1
-            text: qsTr("Previous PDF page")
-            iconName: "chevron-left"
-            shortcut: "PgUp"
-            onTriggered: bar.pageStepRequested(-1)
-        }
-        BMenuItem {
-            objectName: "drawingNextPage"
-            visible: bar.backdropPdf
-            height: visible ? implicitHeight : 0
-            text: qsTr("Next PDF page")
-            iconName: "chevron-right"
-            shortcut: "PgDown"
-            onTriggered: bar.pageStepRequested(1)
-        }
+        BackdropItem { objectName: "drawingBackdrop" }
+        AnotherPageItem { objectName: "drawingBackdropPage" }
+        PageStepItem { objectName: "drawingPreviousPage"; step: -1 }
+        PageStepItem { objectName: "drawingNextPage"; step: 1 }
         BMenuSeparator {}
-        BMenuItem {
-            objectName: "drawingPaste"
-            text: qsTr("Paste")
-            iconName: "clipboard-paste"
-            shortcut: "Ctrl+V"
-            enabled: bar.canvas.editable
-            onTriggered: bar.pasteRequested()
-        }
-        // Deleting: last, set apart (the rule of BMenuItem's header).
-        BMenuSeparator {
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-        }
-        BMenuItem {
-            objectName: "drawingBackdropRemove"
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-            text: qsTr("Remove backdrop")
-            iconName: "trash-2"
-            danger: true
-            onTriggered: bar.backdropRemoved()
-        }
+        PasteItem { objectName: "drawingPaste" }
+        RemoveBackdropSeparator {}
+        RemoveBackdropItem { objectName: "drawingBackdropRemove" }
     }
 
     BMenu {
         id: themeMenu
         objectName: "drawingThemeMenu"
-        BMenuItem {
-            objectName: "drawingThemeAuto"
-            text: qsTr("Like the app")
-            iconName: "sun-moon"
-            checkable: true
-            checked: bar.canvas.theme === "auto"
-            onTriggered: bar.canvas.theme = "auto"
-        }
-        BMenuItem {
-            objectName: "drawingThemeLight"
-            text: qsTr("Light")
-            iconName: "sun"
-            checkable: true
-            checked: bar.canvas.theme === "light"
-            onTriggered: bar.canvas.theme = "light"
-        }
-        BMenuItem {
-            objectName: "drawingThemeDark"
-            text: qsTr("Dark")
-            iconName: "moon"
-            checkable: true
-            checked: bar.canvas.theme === "dark"
-            onTriggered: bar.canvas.theme = "dark"
-        }
+        SchemeItem { objectName: "drawingThemeAuto"; scheme: "auto"; text: qsTr("Like the app") }
+        SchemeItem { objectName: "drawingThemeLight"; scheme: "light"; text: qsTr("Light") }
+        SchemeItem { objectName: "drawingThemeDark"; scheme: "dark"; text: qsTr("Dark") }
         BMenuSeparator {}
         BMenuItem {
             objectName: "drawingPaperColor"
@@ -763,51 +713,13 @@ Rectangle {
 
     BMenu {
         id: moreMenu
-        BMenuItem {
-            text: qsTr("Plain paper")
-            iconName: "file"
-            checkable: true
-            checked: bar.canvas.background === "plain"
-            onTriggered: bar.canvas.background = "plain"
-        }
-        BMenuItem {
-            text: qsTr("Lined paper")
-            iconName: "rows-3"
-            checkable: true
-            checked: bar.canvas.background === "lines"
-            onTriggered: bar.canvas.background = "lines"
-        }
-        BMenuItem {
-            text: qsTr("Squared paper")
-            iconName: "grid-3x3"
-            checkable: true
-            checked: bar.canvas.background === "grid"
-            onTriggered: bar.canvas.background = "grid"
-        }
+        PaperItem { paper: "plain"; text: qsTr("Plain paper") }
+        PaperItem { paper: "lines"; text: qsTr("Lined paper") }
+        PaperItem { paper: "grid"; text: qsTr("Squared paper") }
         BMenuSeparator {}
-        BMenuItem {
-            objectName: "drawingThemeAutoItem"
-            text: qsTr("Background like the app")
-            iconName: "sun-moon"
-            checkable: true
-            checked: bar.canvas.theme === "auto"
-            onTriggered: bar.canvas.theme = "auto"
-        }
-        BMenuItem {
-            text: qsTr("Light background")
-            iconName: "sun"
-            checkable: true
-            checked: bar.canvas.theme === "light"
-            onTriggered: bar.canvas.theme = "light"
-        }
-        BMenuItem {
-            objectName: "drawingThemeDarkItem"
-            text: qsTr("Dark background")
-            iconName: "moon"
-            checkable: true
-            checked: bar.canvas.theme === "dark"
-            onTriggered: bar.canvas.theme = "dark"
-        }
+        SchemeItem { objectName: "drawingThemeAutoItem"; scheme: "auto"; text: qsTr("Background like the app") }
+        SchemeItem { scheme: "light"; text: qsTr("Light background") }
+        SchemeItem { objectName: "drawingThemeDarkItem"; scheme: "dark"; text: qsTr("Dark background") }
         BMenuItem {
             objectName: "drawingPaperColorItem"
             text: qsTr("Background colour…")
@@ -816,48 +728,12 @@ Rectangle {
             onTriggered: bar.paperColorRequested()
         }
         BMenuSeparator {}
-        BMenuItem {
-            objectName: "drawingBackdropItem"
-            text: qsTr("Backdrop from a picture or PDF…")
-            iconName: "image"
-            enabled: bar.canvas.editable
-            onTriggered: bar.backdropRequested()
-        }
-        BMenuItem {
-            visible: bar.backdropPdf
-            height: visible ? implicitHeight : 0
-            text: qsTr("Another PDF page…")
-            iconName: "file-text"
-            onTriggered: bar.backdropPageRequested()
-        }
-        BMenuItem {
-            objectName: "drawingPreviousPageItem"
-            visible: bar.backdropPdf
-            height: visible ? implicitHeight : 0
-            enabled: bar.canvas.backdropPage > 1
-            text: qsTr("Previous PDF page")
-            iconName: "chevron-left"
-            shortcut: "PgUp"
-            onTriggered: bar.pageStepRequested(-1)
-        }
-        BMenuItem {
-            objectName: "drawingNextPageItem"
-            visible: bar.backdropPdf
-            height: visible ? implicitHeight : 0
-            text: qsTr("Next PDF page")
-            iconName: "chevron-right"
-            shortcut: "PgDown"
-            onTriggered: bar.pageStepRequested(1)
-        }
+        BackdropItem { objectName: "drawingBackdropItem" }
+        AnotherPageItem {}
+        PageStepItem { objectName: "drawingPreviousPageItem"; step: -1 }
+        PageStepItem { objectName: "drawingNextPageItem"; step: 1 }
         BMenuSeparator {}
-        BMenuItem {
-            objectName: "drawingPasteItem"
-            text: qsTr("Paste")
-            iconName: "clipboard-paste"
-            shortcut: "Ctrl+V"
-            enabled: bar.canvas.editable
-            onTriggered: bar.pasteRequested()
-        }
+        PasteItem { objectName: "drawingPasteItem" }
         BMenuSeparator {}
         BMenuItem {
             objectName: "drawingFingerItem"
@@ -872,20 +748,8 @@ Rectangle {
             iconName: "maximize"
             onTriggered: bar.fitRequested()
         }
-        // Deleting: last, set apart (the rule of BMenuItem's header).
-        BMenuSeparator {
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-        }
-        BMenuItem {
-            objectName: "drawingBackdropRemoveItem"
-            visible: bar.canvas.hasBackdrop
-            height: visible ? implicitHeight : 0
-            text: qsTr("Remove backdrop")
-            iconName: "trash-2"
-            danger: true
-            onTriggered: bar.backdropRemoved()
-        }
+        RemoveBackdropSeparator {}
+        RemoveBackdropItem { objectName: "drawingBackdropRemoveItem" }
     }
 
     // Compact: the colours and widths of the current tool, above the bar.

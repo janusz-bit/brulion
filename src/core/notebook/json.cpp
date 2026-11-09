@@ -306,12 +306,13 @@ QJsonObject dataviewRowJson(const VaultIndex &index, const dataview::Row &row)
     if (row.blockIndex >= 0)
         return queryItemJson(index, QueryItem{row.path, row.blockIndex, row.task, std::nullopt});
     const ParsedNote *note = row.path.isEmpty() ? nullptr : index.note(row.path);
-    QJsonObject o{{u"path"_s, row.path},
-                  {u"title"_s, note ? note->title : row.path.isEmpty() ? QString() : paths::pageTitle(row.path)},
-                  {u"folder"_s, paths::dirname(row.path)},
-                  {u"line"_s, 0},
-                  {u"cells"_s, QJsonArray::fromStringList(row.cells)}};
-    return o;
+    return {{u"path"_s, row.path},
+            {u"title"_s, note                 ? note->title
+                         : row.path.isEmpty() ? QString()
+                                              : paths::pageTitle(row.path)},
+            {u"folder"_s, paths::dirname(row.path)},
+            {u"line"_s, 0},
+            {u"cells"_s, QJsonArray::fromStringList(row.cells)}};
 }
 
 } // namespace

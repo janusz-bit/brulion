@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Window
 import Brulion
 
 // DrawingTextEditor — writing a text or a shape's label on a drawing (DrawingView; docs/UI.md

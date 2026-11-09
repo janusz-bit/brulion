@@ -22,7 +22,7 @@ namespace {
 std::optional<markdown::Token> reminderToken(const QString &line, const QList<Reminder> &onLine)
 {
     const auto parsed = [&onLine](const markdown::Token &t) {
-        return std::any_of(onLine.cbegin(), onLine.cend(), [&t](const Reminder &r) {
+        return std::ranges::any_of(onLine, [&t](const Reminder &r) {
             return r.alarm == t.alarm && r.at.date == t.date && (!t.time || r.at.time == t.time);
         });
     };
@@ -38,7 +38,7 @@ std::optional<markdown::Token> reminderToken(const QString &line, const QList<Re
 }
 
 /// One-off reminder: rewrite the token in place.
-QString replaceToken(const QString &content, const text::Line &line, const markdown::Token &token, const DateSpec &at)
+QString replaceToken(const QString &content, const text::Line &line, const markdown::Token &token, DateSpec at)
 {
     const QString replacement = token.kind == markdown::TokenKind::Reminder
                                         ? markdown::formatReminderToken(at, token.alarm)
@@ -50,7 +50,7 @@ QString replaceToken(const QString &content, const text::Line &line, const markd
 
 /// Recurring reminder: add a one-off `- ⏰ at` bullet as the first child of the block at `line`
 /// (or after a non-list block).
-QString insertOneOff(const QString &content, int line, const DateSpec &at, bool alarm)
+QString insertOneOff(const QString &content, int line, DateSpec at, bool alarm)
 {
     markdown::BlockDocument doc(content);
     const int i = doc.indexAtLine(line);
