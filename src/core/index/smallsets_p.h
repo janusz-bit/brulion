@@ -80,9 +80,7 @@ public:
 
     bool contains(const VaultPath &path) const
     {
-        if (!m_big.isEmpty())
-            return m_big.contains(path);
-        return std::binary_search(m_small.cbegin(), m_small.cend(), path);
+        return m_big.isEmpty() ? std::ranges::binary_search(m_small, path) : m_big.contains(path);
     }
     qsizetype size() const { return m_big.isEmpty() ? m_small.size() : m_big.size(); }
     bool isEmpty() const { return m_small.isEmpty() && m_big.isEmpty(); }
@@ -99,7 +97,7 @@ public:
 
     /// f(path) for every path, in any order.
     template<class F>
-    void forEach(F &&f) const
+    void forEach(F f) const
     {
         if (m_big.isEmpty()) {
             for (const VaultPath &p : m_small)
@@ -112,7 +110,7 @@ public:
 
     /// The path smallest by `less` (a strict weak order); empty when the set is empty.
     template<class Less>
-    VaultPath min(Less &&less) const
+    VaultPath min(Less less) const
     {
         const VaultPath *best = nullptr;
         forEach([&](const VaultPath &p) {
@@ -234,8 +232,7 @@ public:
     {
         if (!m_big.isEmpty())
             return m_big.value(path);
-        const auto pos = std::lower_bound(m_small.cbegin(), m_small.cend(), path,
-                                          [](const Item &i, const VaultPath &p) { return i.first < p; });
+        const auto pos = std::ranges::lower_bound(m_small, path, {}, &Item::first);
         return pos != m_small.cend() && pos->first == path ? pos->second : 0;
     }
     bool contains(const VaultPath &path) const { return value(path) > 0; }
@@ -255,14 +252,14 @@ public:
 
     /// f(path, count) for every path, in any order.
     template<class F>
-    void forEach(F &&f) const
+    void forEach(F f) const
     {
         if (m_big.isEmpty()) {
-            for (const Item &i : m_small)
-                f(i.first, i.second);
+            for (const auto &[path, count] : m_small)
+                f(path, count);
         } else {
-            for (auto it = m_big.cbegin(); it != m_big.cend(); ++it)
-                f(it.key(), it.value());
+            for (auto [path, count] : m_big.asKeyValueRange())
+                f(path, count);
         }
     }
 
@@ -353,9 +350,9 @@ private:
             return;
         m_small.clear();
         m_small.reserve(m_big.size());
-        for (auto it = m_big.cbegin(); it != m_big.cend(); ++it)
-            m_small.append(Item(it.key(), it.value()));
-        std::ranges::sort(m_small, [](const Item &a, const Item &b) { return a.first < b.first; });
+        for (auto [path, count] : std::as_const(m_big).asKeyValueRange())
+            m_small.append(Item(path, count));
+        std::ranges::sort(m_small, {}, &Item::first);
         m_big = {};
     }
 

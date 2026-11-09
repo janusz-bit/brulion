@@ -9,7 +9,7 @@ namespace brulion::io {
 
 QString clipboardHtml(const QString &markdown, const ClipboardHtmlOptions &options)
 {
-    if (markdown.trimmed().isEmpty())
+    if (QStringView(markdown).trimmed().isEmpty())
         return {};
     const ParsedNote note = markdown::parseNote(QString(), markdown, options.config);
     detail::HtmlLinks links;
@@ -18,7 +18,7 @@ QString clipboardHtml(const QString &markdown, const ClipboardHtmlOptions &optio
     // Notes and tags: their text (no link leads anywhere outside the notebook).
     links.attachment = [&](const QString &target) -> std::optional<QString> {
         const QString url = options.attachmentUrl ? options.attachmentUrl(target) : QString();
-        if (url.isEmpty() || url.startsWith(u"data:"_s, Qt::CaseInsensitive))
+        if (url.isEmpty() || url.startsWith(u"data:", Qt::CaseInsensitive))
             return std::nullopt;
         return url;
     };
@@ -29,7 +29,7 @@ QString clipboardHtml(const QString &markdown, const ClipboardHtmlOptions &optio
         return std::make_pair(QString(), text);
     };
     const detail::HtmlRenderer renderer(links);
-    return u"<meta charset=\"utf-8\">"_s + QString(ClipboardHtmlMarker) + renderer.renderNote(note);
+    return u"<meta charset=\"utf-8\">"_s + ClipboardHtmlMarker + renderer.renderNote(note);
 }
 
 } // namespace brulion::io

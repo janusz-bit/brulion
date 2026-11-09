@@ -27,25 +27,26 @@ FocusScope {
           description: qsTr("Every point is a block: indent, fold, zoom in.") }
     ]
 
+    /// The notebook's default mode for new pages.
+    readonly property string defaultMode: Workspace.config.pageMode === "outline" ? "outline" : "document"
+
+    // The owner holds the mode (`mode: dialog.mode`): writing `mode` here would remove that binding.
     function choose(value: string): void {
-        if (value !== root.mode) {
-            root.mode = value
+        if (value !== root.mode)
             root.activated(value)
-        }
     }
     function setting(key: string): string {
         return AppSettings.value(key, "")
     }
     /// The mode to preselect (see the file comment).
     function preferred(): string {
-        const fallback = Workspace.config.pageMode === "outline" ? "outline" : "document"
         const last = root.setting("ui/newPage/mode")
         const underDefault = root.setting("ui/newPage/modeDefault")
-        return (last === "document" || last === "outline") && underDefault === fallback ? last : fallback
+        return (last === "document" || last === "outline") && underDefault === root.defaultMode ? last : root.defaultMode
     }
     function remember(value: string): void {
         AppSettings.setValue("ui/newPage/mode", value)
-        AppSettings.setValue("ui/newPage/modeDefault", Workspace.config.pageMode === "outline" ? "outline" : "document")
+        AppSettings.setValue("ui/newPage/modeDefault", root.defaultMode)
     }
 
     implicitWidth: layout.implicitWidth
@@ -81,85 +82,80 @@ FocusScope {
             text: qsTr("Note mode")
             variant: "label"
         }
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: Theme.space2
+        Repeater {
+            model: root.options
+            delegate: Rectangle {
+                id: card
+                required property string value
+                required property string icon
+                required property string title
+                required property string hint
+                required property string description
+                readonly property bool selected: root.mode === value
+                Layout.fillWidth: true
+                implicitHeight: Math.max(Theme.touchUi ? Theme.touchTarget : 0, cardRow.implicitHeight + 2 * Theme.space2 + 2)
+                radius: Theme.radius
+                color: selected ? Theme.bgSelected : cardHover.hovered ? Theme.bgHover : "transparent"
+                border.width: selected ? 1.5 : 1
+                border.color: selected ? Theme.focusRing.alpha(0.7) : Theme.border
+                Accessible.role: Accessible.RadioButton
+                Accessible.name: title + " (" + hint + ")"
+                Accessible.description: description
+                Accessible.checked: selected
+                Accessible.onPressAction: root.choose(card.value)
 
-            Repeater {
-                model: root.options
-                delegate: Rectangle {
-                    id: card
-                    required property string value
-                    required property string icon
-                    required property string title
-                    required property string hint
-                    required property string description
-                    readonly property bool selected: root.mode === value
-                    Layout.fillWidth: true
-                    implicitHeight: Math.max(Theme.touchUi ? Theme.touchTarget : 0, cardRow.implicitHeight + 2 * Theme.space2 + 2)
-                    radius: Theme.radius
-                    color: selected ? Theme.bgSelected : cardHover.hovered ? Theme.bgHover : "transparent"
-                    border.width: selected ? 1.5 : 1
-                    border.color: selected ? Theme.focusRing.alpha(0.7) : Theme.border
-                    Accessible.role: Accessible.RadioButton
-                    Accessible.name: title + " (" + hint + ")"
-                    Accessible.description: description
-                    Accessible.checked: selected
-                    Accessible.onPressAction: root.choose(card.value)
-
-                    RowLayout {
-                        id: cardRow
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.space3
-                        anchors.rightMargin: Theme.space3
-                        spacing: Theme.space3
-                        BIcon {
-                            Layout.alignment: Qt.AlignVCenter
-                            name: card.icon
-                            size: Theme.iconSize
-                            color: card.selected ? Theme.link : Theme.fgMuted
-                        }
-                        ColumnLayout {
+                RowLayout {
+                    id: cardRow
+                    anchors.fill: parent
+                    anchors.leftMargin: Theme.space3
+                    anchors.rightMargin: Theme.space3
+                    spacing: Theme.space3
+                    BIcon {
+                        Layout.alignment: Qt.AlignVCenter
+                        name: card.icon
+                        size: Theme.iconSize
+                        color: card.selected ? Theme.link : Theme.fgMuted
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
                             Layout.fillWidth: true
-                            spacing: 2
-                            Text {
-                                Layout.fillWidth: true
-                                textFormat: Text.StyledText
-                                text: TextHelper.escapeHtml(card.title)
-                                      + " <font color=\"" + Theme.fgMuted.toString() + "\">(" + TextHelper.escapeHtml(card.hint) + ")</font>"
-                                font.family: Theme.fontUi
-                                font.pixelSize: Theme.textBase
-                                font.weight: Theme.weightMedium
-                                color: Theme.fg
-                                wrapMode: Text.Wrap
-                            }
-                            BText {
-                                Layout.fillWidth: true
-                                text: card.description
-                                variant: "muted"
-                                font.pixelSize: Theme.textSm
-                                wrapMode: Text.Wrap
-                            }
+                            textFormat: Text.StyledText
+                            text: TextHelper.escapeHtml(card.title)
+                                  + " <font color=\"" + Theme.fgMuted.toString() + "\">(" + TextHelper.escapeHtml(card.hint) + ")</font>"
+                            font.family: Theme.fontUi
+                            font.pixelSize: Theme.textBase
+                            font.weight: Theme.weightMedium
+                            color: Theme.fg
+                            wrapMode: Text.Wrap
                         }
-                        BIcon {
-                            Layout.alignment: Qt.AlignVCenter
-                            name: "check"
-                            size: Theme.iconSizeSm
-                            color: Theme.link
-                            opacity: card.selected ? 1 : 0
+                        BText {
+                            Layout.fillWidth: true
+                            text: card.description
+                            variant: "muted"
+                            font.pixelSize: Theme.textSm
+                            wrapMode: Text.Wrap
                         }
                     }
-                    HoverHandler { id: cardHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
-                    TapHandler {
-                        onTapped: {
-                            root.choose(card.value)
-                            root.forceActiveFocus()
-                        }
+                    BIcon {
+                        Layout.alignment: Qt.AlignVCenter
+                        name: "check"
+                        size: Theme.iconSizeSm
+                        color: Theme.link
+                        opacity: card.selected ? 1 : 0
                     }
-                    BFocusRing {
-                        visible: root.activeFocus && card.selected
-                        targetRadius: Theme.radius
+                }
+                HoverHandler { id: cardHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    onTapped: {
+                        root.choose(card.value)
+                        root.forceActiveFocus()
                     }
+                }
+                BFocusRing {
+                    visible: root.activeFocus && card.selected
+                    targetRadius: Theme.radius
                 }
             }
         }

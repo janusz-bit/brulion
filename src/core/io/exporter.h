@@ -63,7 +63,9 @@ struct ExportResult {
 /// One supported target format. Implementations are stateless and thread-safe.
 class Exporter {
 public:
+    Exporter() = default;
     virtual ~Exporter() = default;
+    Q_DISABLE_COPY_MOVE(Exporter)
 
     /// Stable identifier: "markdown-zip", "obsidian-zip", "logseq-zip", "html-site", "html-single",
     /// "pdf", "docx", "pandoc", "json", "ics", "opml", "tasks-csv".

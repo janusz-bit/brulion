@@ -22,7 +22,6 @@
 #include <QRegularExpression>
 #include <QXmlStreamWriter>
 
-#include <algorithm>
 #include <tuple>
 
 namespace brulion::io::detail {
@@ -36,18 +35,14 @@ namespace {
 using notebook::blockKindName;
 using notebook::linkKindName;
 using notebook::priorityName;
-
-QString statusName(TaskStatus s)
-{
-    return notebook::taskStatusName(s);
-}
+using notebook::taskStatusName;
 
 QString spec(const std::optional<DateSpec> &s)
 {
     return s ? s->toString() : QString();
 }
 
-QString date(const std::optional<QDate> &d)
+QString date(std::optional<QDate> d)
 {
     return d ? d->toString(u"yyyy-MM-dd"_s) : QString();
 }
@@ -154,7 +149,7 @@ private:
         for (const Task &t : p.tasks) {
             QJsonObject to;
             to.insert(u"line"_s, t.line);
-            to.insert(u"status"_s, statusName(t.status));
+            to.insert(u"status"_s, taskStatusName(t.status));
             to.insert(u"text"_s, t.text);
             insertIf(to, u"due"_s, spec(t.due));
             insertIf(to, u"scheduled"_s, spec(t.scheduled));
@@ -214,7 +209,7 @@ private:
     QHash<QString, int> m_seen;
 };
 
-void writeDate(ical::Writer &w, QStringView name, const DateSpec &s)
+void writeDate(ical::Writer &w, QStringView name, DateSpec s)
 {
     if (s.time)
         w.property(name, ical::formatLocalDateTime(s.date, *s.time));
@@ -224,6 +219,8 @@ void writeDate(ical::Writer &w, QStringView name, const DateSpec &s)
 
 QString rrule(const QString &rule)
 {
+    if (rule.isEmpty())
+        return {};
     const auto parsed = dates::parseRecurrence(rule);
     return parsed ? ical::formatRRule(*parsed) : QString();
 }
@@ -289,7 +286,7 @@ private:
         const QString title = summary(t.text.isEmpty() ? b.text : t.text, *n.parsed);
         const bool open =
                 t.status == TaskStatus::Todo || t.status == TaskStatus::Doing || t.status == TaskStatus::Deferred;
-        const QString rule = t.recurrence.isEmpty() ? QString() : rrule(t.recurrence);
+        const QString rule = rrule(t.recurrence);
         if (t.due) {
             w.begin(u"VTODO");
             common(w, uids.uid(n.path, b, u"task"_s), stamp, title, n, b);
@@ -346,10 +343,8 @@ private:
             common(w, uids.uid(n.path, b, u"reminder"_s), stamp, title, n, b);
             writeDate(w, u"DTSTART", rem.at);
             w.property(u"DURATION", u"PT15M");
-            if (!rem.recurrence.isEmpty()) {
-                if (const QString rule = rrule(rem.recurrence); !rule.isEmpty())
-                    w.property(u"RRULE", rule);
-            }
+            if (const QString rule = rrule(rem.recurrence); !rule.isEmpty())
+                w.property(u"RRULE", rule);
             w.begin(u"VALARM");
             w.property(u"ACTION", u"DISPLAY");
             w.text(u"DESCRIPTION", title);
@@ -415,14 +410,7 @@ public:
                                QLocale::c().toString(input.now.toUTC(), u"ddd, dd MMM yyyy HH:mm:ss 'GMT'"_s));
         x.writeEndElement();
         x.writeStartElement(u"body"_s);
-        QList<const ExportVault::Note *> pages;
-        QList<const ExportVault::Note *> journals;
-        for (const ExportVault::Note &n : vault.notes())
-            (n.journal ? journals : pages).append(&n);
-        std::ranges::stable_sort(journals, [](const ExportVault::Note *a, const ExportVault::Note *b) {
-            return *a->journal > *b->journal;
-        });
-        for (const ExportVault::Note *n : pages + journals)
+        for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes)
             writeNote(x, *n);
         x.writeEndElement();
         x.writeEndElement();
@@ -513,13 +501,12 @@ public:
                 if (!b.task)
                     continue;
                 const Task &t = *b.task;
-                QStringList tags;
-                for (const QString &tag : b.tags)
-                    tags.append(u'#' + tag);
+                const QString tags = b.tags.isEmpty() ? QString() : u'#' + b.tags.join(u" #"_s);
+                // A recurrence that does not parse is the note's own text: neutralised like the task's.
                 out += csvRow({csvSafeText(n.parsed->title), csvSafeText(n.path), QString::number(t.line + 1),
-                               statusName(t.status), csvSafeText(t.text), spec(t.due), spec(t.scheduled), spec(t.start),
-                               date(t.created), date(t.doneDate), date(t.cancelledDate), priorityName(t.priority),
-                               t.recurrence, tags.join(u' ')})
+                               taskStatusName(t.status), csvSafeText(t.text), spec(t.due), spec(t.scheduled),
+                               spec(t.start), date(t.created), date(t.doneDate), date(t.cancelledDate),
+                               priorityName(t.priority), csvSafeText(t.recurrence), tags})
                        + u"\r\n"_s;
             }
         }

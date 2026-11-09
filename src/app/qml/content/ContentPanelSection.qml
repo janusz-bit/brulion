@@ -85,6 +85,6 @@ ColumnLayout {
         active: section.expanded
         visible: section.expanded
         sourceComponent: section.content
-        Layout.preferredHeight: section.expanded && loader.item ? (loader.item as Item).implicitHeight : 0
+        Layout.preferredHeight: section.contentItem ? section.contentItem.implicitHeight : 0
     }
 }

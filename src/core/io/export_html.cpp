@@ -140,8 +140,7 @@ QString footerText(const ExportInput &input)
 /// Renders the notes of an export, building link callbacks for one output location.
 class Site {
 public:
-    /// `href(fromNote, toFile, fragment)`: URL of a vault file (note or attachment) as seen from
-    /// the output of note `fromNote`.
+    /// URL of note `toFile` (at `fragment` when it is not empty) from the output location.
     using HrefFn = std::function<QString(const VaultPath &toFile, const QString &fragment)>;
 
     Site(const ExportVault &vault, HrefFn noteHref,
@@ -292,41 +291,33 @@ public:
 
     QString backlinks(const ExportVault::Note &n) const
     {
-        QStringList items;
+        QString items;
         QSet<QString> seen;
-        for (const Backlink &b : m_vault.index().backlinks(n.path)) {
-            const QString key = b.path + u'#' + QString::number(b.blockIndex);
-            if (seen.contains(key))
-                continue;
-            seen.insert(key);
-            const ExportVault::Note *source = m_vault.note(b.path);
-            if (!source || !source->parsed)
-                continue;
-            const HtmlRenderer renderer(links(b.path, n.path, false));
-            items.append(u"<li><a href=\""_s + esc(m_noteHref(b.path, {})) + u"\">"_s + esc(source->parsed->title)
-                         + u"</a><span class=\"excerpt\">"_s
-                         + renderer.renderInline(blockText(*source->parsed, b.blockIndex)) + u"</span></li>"_s);
-        }
-        // Tags name pages too: the tagged blocks, and pages tagged as a whole (title only).
-        for (const TagReference &r : m_vault.index().tagReferences(n.path)) {
-            const QString key = r.path + u'#' + QString::number(r.blockIndex);
-            const ExportVault::Note *source = m_vault.note(r.path);
+        // An item for a block (-1: the page) of a note, once: its title, and the block's text when `excerpt`.
+        const auto add = [&](const VaultPath &path, int blockIndex, bool excerpt) {
+            const QString key = path + u'#' + QString::number(blockIndex);
+            const ExportVault::Note *source = m_vault.note(path);
             if (seen.contains(key) || !source || !source->parsed)
-                continue;
+                return;
             seen.insert(key);
-            const HtmlRenderer renderer(links(r.path, n.path, false));
-            const QString excerpt = r.blockIndex >= 0
-                                            ? u"<span class=\"excerpt\">"_s
-                                                      + renderer.renderInline(blockText(*source->parsed, r.blockIndex))
-                                                      + u"</span>"_s
-                                            : QString();
-            items.append(u"<li><a href=\""_s + esc(m_noteHref(r.path, {})) + u"\">"_s + esc(source->parsed->title)
-                         + u"</a>"_s + excerpt + u"</li>"_s);
-        }
+            items +=
+                    u"<li><a href=\""_s + esc(m_noteHref(path, {})) + u"\">"_s + esc(source->parsed->title) + u"</a>"_s;
+            if (excerpt) {
+                const HtmlRenderer renderer(links(path, n.path, false));
+                items += u"<span class=\"excerpt\">"_s + renderer.renderInline(blockText(*source->parsed, blockIndex))
+                         + u"</span>"_s;
+            }
+            items += u"</li>"_s;
+        };
+        for (const QList<Backlink> incoming = m_vault.index().backlinks(n.path); const Backlink &b : incoming)
+            add(b.path, b.blockIndex, true);
+        // Tags name pages too: the tagged blocks, and pages tagged as a whole (title only).
+        for (const QList<TagReference> tagged = m_vault.index().tagReferences(n.path); const TagReference &r : tagged)
+            add(r.path, r.blockIndex, r.blockIndex >= 0);
         if (items.isEmpty())
             return {};
         return u"<section class=\"backlinks\"><h2>"_s + esc(IoMessages::tr("Linked references")) + u"</h2><ul>"_s
-               + items.join(QString()) + u"</ul></section>"_s;
+               + items + u"</ul></section>"_s;
     }
 
 private:
@@ -368,11 +359,13 @@ public:
         PathClaims claims;
         claims.claim(u"index.html"_s);
         claims.claim(u"style.css"_s);
-        QHash<VaultPath, QString> htmlFiles;
+        // Attachments and made pictures keep their paths, except one the site's index.html or style.css took.
+        QHash<VaultPath, QString> files;
         for (const FileEntry &a : vault.attachments())
-            claims.claim(a.path);
+            files.insert(a.path, claims.claim(a.path));
         for (const FileEntry &a : vault.madePictures())
-            claims.claim(a.path);
+            files.insert(a.path, claims.claim(a.path));
+        QHash<VaultPath, QString> htmlFiles;
         for (const ExportVault::Note &n : vault.notes())
             htmlFiles.insert(n.path, claims.claim(paths::stripMarkdownExtension(n.path) + u".html"_s));
         const QList<TagCount> tags = vault.index().tags();
@@ -397,16 +390,16 @@ public:
             entries.append(FileEntry{root + path, copy->data});
             return path;
         };
-        for (const ExportVault::Note *n : orderedNotes(vault)) {
+        for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes) {
             const QString file = htmlFiles.value(n->path);
             const QString dir = paths::dirname(file);
-            const auto href = [&, dir](const QString &to) -> QString { return relativeHref(dir, to); };
+            const auto href = [dir](const QString &to) -> QString { return relativeHref(dir, to); };
             Site site(
                     vault,
                     [&, href](const VaultPath &to, const QString &fragment) -> QString {
                         return href(htmlFiles.value(to)) + (fragment.isEmpty() ? QString() : u'#' + fragment);
                     },
-                    [href](const VaultPath &to) -> std::optional<QString> { return href(to); },
+                    [&, href](const VaultPath &to) -> std::optional<QString> { return href(files.value(to, to)); },
                     [&, href](const QString &tag) -> QString {
                         const QString f = tagFiles.value(tag.toLower());
                         return f.isEmpty() ? QString() : href(f);
@@ -429,19 +422,17 @@ public:
         for (const TagCount &t : tags) {
             const QString file = tagFiles.value(t.tag);
             const QString dir = paths::dirname(file);
-            QStringList items;
+            QString items;
             for (const VaultPath &p : t.paths) {
-                const ExportVault::Note *n = vault.note(p);
-                if (!n)
-                    continue;
-                items.append(u"<li><a href=\""_s + esc(relativeHref(dir, htmlFiles.value(p))) + u"\">"_s
-                             + esc(n->parsed->title) + u"</a></li>"_s);
+                if (const ExportVault::Note *n = vault.note(p))
+                    items += u"<li><a href=\""_s + esc(relativeHref(dir, htmlFiles.value(p))) + u"\">"_s
+                             + esc(n->parsed->title) + u"</a></li>"_s;
             }
             const QString title = u'#' + t.display;
             const QString header = u"<a href=\""_s + esc(relativeHref(dir, u"index.html"_s)) + u"\">"_s
                                    + esc(vault.vaultName()) + u"</a>"_s;
-            const QString body = u"<article><h1 class=\"title\">"_s + esc(title) + u"</h1><ul>"_s
-                                 + items.join(QString()) + u"</ul></article>"_s;
+            const QString body =
+                    u"<article><h1 class=\"title\">"_s + esc(title) + u"</h1><ul>"_s + items + u"</ul></article>"_s;
             entries.append(FileEntry{root + file, pageHtml(title, vault.vaultName(), relativeHref(dir, u"style.css"_s),
                                                            header, body, footer)
                                                           .toUtf8()});
@@ -449,9 +440,9 @@ public:
         entries.append(FileEntry{root + u"index.html"_s, indexPage(vault, htmlFiles, tags, tagFiles, footer).toUtf8()});
         entries.append(FileEntry{root + u"style.css"_s, QByteArray(styleSheet())});
         for (const FileEntry &a : vault.attachments())
-            entries.append(FileEntry{root + a.path, a.data});
+            entries.append(FileEntry{root + files.value(a.path), a.data});
         for (const FileEntry &a : vault.madePictures())
-            entries.append(FileEntry{root + a.path, a.data});
+            entries.append(FileEntry{root + files.value(a.path), a.data});
         ExportResult r;
         r.files.append(ExportedFile{vault.fileName(u"html"_s, u".zip"_s), u"application/zip"_s, vault.zip(entries)});
         return r;
@@ -462,20 +453,19 @@ private:
                              const QList<TagCount> &tags, const QHash<QString, QString> &tagFiles,
                              const QString &footer)
     {
-        QStringList journals;
-        QStringList pages;
-        for (const ExportVault::Note *n : orderedNotes(vault)) {
+        QString journals;
+        QString pages;
+        for (const QList<const ExportVault::Note *> notes = orderedNotes(vault); const ExportVault::Note *n : notes) {
             const QString link = u"<li><a href=\""_s + esc(relativeHref({}, htmlFiles.value(n->path))) + u"\">"_s
                                  + esc(n->journal ? n->parsed->title : paths::stripMarkdownExtension(n->path))
                                  + u"</a></li>"_s;
-            (n->journal ? journals : pages).append(link);
+            (n->journal ? journals : pages) += link;
         }
         QString body = u"<article>\n<h1 class=\"title\">"_s + esc(vault.vaultName()) + u"</h1>\n"_s;
         if (!journals.isEmpty())
-            body += u"<h2>"_s + esc(IoMessages::tr("Journals")) + u"</h2>\n<ul>"_s + journals.join(QString())
-                    + u"</ul>\n"_s;
+            body += u"<h2>"_s + esc(IoMessages::tr("Journals")) + u"</h2>\n<ul>"_s + journals + u"</ul>\n"_s;
         if (!pages.isEmpty())
-            body += u"<h2>"_s + esc(IoMessages::tr("Pages")) + u"</h2>\n<ul>"_s + pages.join(QString()) + u"</ul>\n"_s;
+            body += u"<h2>"_s + esc(IoMessages::tr("Pages")) + u"</h2>\n<ul>"_s + pages + u"</ul>\n"_s;
         if (!tags.isEmpty()) {
             QStringList items;
             for (const TagCount &t : tags)
@@ -530,19 +520,18 @@ public:
                 return std::nullopt;
             return *webUris.insert(url, u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(copy->data.toBase64()));
         });
-        QStringList toc;
+        QString toc;
         QString sections;
         for (const ExportVault::Note *n : notes) {
             const QString anchor = anchors.value(n->path);
             const QString label = n->journal ? n->parsed->title : paths::stripMarkdownExtension(n->path);
-            toc.append(u"<li><a href=\"#"_s + anchor + u"\">"_s + esc(label) + u"</a></li>"_s);
+            toc += u"<li><a href=\"#"_s + anchor + u"\">"_s + esc(label) + u"</a></li>"_s;
             sections += u"<section class=\"note\" id=\""_s + anchor + u"\">\n<h1 class=\"title\">"_s
                         + esc(n->parsed->title) + u"</h1>\n"_s + site.tagsLine(*n) + site.renderNote(*n)
                         + u"\n</section>\n"_s;
         }
         const QString body = u"<h1>"_s + esc(vault.vaultName()) + u"</h1>\n<nav class=\"toc\"><h2>"_s
-                             + esc(IoMessages::tr("Contents")) + u"</h2><ul>"_s + toc.join(QString())
-                             + u"</ul></nav>\n"_s + sections;
+                             + esc(IoMessages::tr("Contents")) + u"</h2><ul>"_s + toc + u"</ul></nav>\n"_s + sections;
         ExportResult r;
         r.files.append(ExportedFile{
                 vault.fileName({}, u".html"_s), u"text/html"_s,

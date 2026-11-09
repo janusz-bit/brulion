@@ -128,6 +128,8 @@ void appendReminders(const Entry &e, QList<ReminderRef> &out);
 
 /// Journals first (newest first), then other notes by path.
 bool relevanceLess(const Entry &a, const Entry &b);
+/// Daily notes newest first, ties by path (VaultIndex::journals()).
+bool journalLess(const JournalRef &a, const JournalRef &b);
 
 /// A note's record from its text and parse (pure: any thread); `seq` 0.
 std::unique_ptr<Entry> makeEntry(const VaultPath &path, const QString &content, ParsedNote note);
@@ -173,6 +175,17 @@ struct IndexCaches {
 
     /// A list is read: patching the next changes in pays off again.
     void read() { unreadPatches = 0; }
+    /// read() `list`, built by `build()` first (counted in `builds`) when it is not there.
+    template<typename T, typename Build>
+    const T &read(std::optional<T> &list, int &builds, Build build)
+    {
+        read();
+        if (!list) {
+            ++builds;
+            list = build();
+        }
+        return *list;
+    }
 };
 
 struct VaultIndex::Private {
@@ -279,7 +292,9 @@ struct VaultIndex::Private {
     /// Remove a note from every map; returns it (nullptr when unknown). `countFolders` false
     /// leaves it in noteFolders, for a note put back at the same path.
     std::unique_ptr<Entry> detachNote(const VaultPath &path, bool discardSearch, bool countFolders = true);
-    QSet<QString> entryKeys(const Entry &e) const;
+    /// Forget the note or attachment at `path`: the link keys whose resolution in other notes may
+    /// change; nullopt when the index does not know `path`.
+    std::optional<QSet<QString>> forget(const VaultPath &path);
     void fileLink(const VaultPath &source, const index_detail::PathLink &link, bool add);
     void resolveLinks(Entry &e);
     void unlinkOutgoing(const Entry &e);

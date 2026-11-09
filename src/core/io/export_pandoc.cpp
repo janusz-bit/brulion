@@ -31,24 +31,22 @@ QString yamlString(const QString &text)
 
 class Document {
 public:
-    explicit Document(const ExportVault &vault) : m_vault(vault), m_notes(orderedNotes(vault))
+    explicit Document(const ExportVault &vault)
+        : m_vault(vault), m_notes(orderedNotes(vault)), m_single(m_notes.size() == 1)
     {
-        m_single = m_notes.size() == 1;
         for (qsizetype i = 0; i < m_notes.size(); ++i) {
-            const ExportVault::Note *n = m_notes[i];
-            m_prefixes.insert(n->path, u'n' + QString::number(i + 1) + u'-');
+            const ExportVault::Note *n = m_notes.at(i);
+            const QString anchor = u'n' + QString::number(i + 1);
+            m_prefixes.insert(n->path, anchor + u'-');
             if (!m_single)
-                m_anchors.insert(n->path, u'n' + QString::number(i + 1));
+                m_anchors.insert(n->path, anchor);
             // The first heading that repeats the title becomes the title (no heading twice).
-            for (int b = 0; b < n->parsed->blocks.size(); ++b) {
-                const Block &block = n->parsed->blocks[b];
-                if (block.parent >= 0 || block.kind == BlockKind::Frontmatter)
-                    continue;
-                if (block.kind == BlockKind::Heading && block.headingLevel == 1
-                    && block.text.trimmed().compare(n->parsed->title.trimmed(), Qt::CaseInsensitive) == 0)
-                    m_titleHeadings.insert(n->path, b);
-                break;
-            }
+            const QList<Block> &blocks = n->parsed->blocks;
+            const auto first = std::ranges::find_if(
+                    blocks, [](const Block &b) { return b.parent < 0 && b.kind != BlockKind::Frontmatter; });
+            if (first != blocks.end() && first->kind == BlockKind::Heading && first->headingLevel == 1
+                && first->text.trimmed().compare(n->parsed->title.trimmed(), Qt::CaseInsensitive) == 0)
+                m_titleHeadings.insert(n->path, int(first - blocks.begin()));
         }
     }
 
@@ -77,7 +75,7 @@ public:
             // An Obsidian Excalidraw plugin drawing: its picture, not the plugin's Markdown.
             const std::optional<VaultPath> picture = m_vault.drawingPicture(n->path);
             const QString body = picture ? drawingMarkdown(*n, *picture)
-                                         : PandocRenderer(links(*n, true, true)).renderNote(*n->parsed);
+                                         : PandocRenderer(links(*n, Copy::Original)).renderNote(*n->parsed);
             if (!body.isEmpty())
                 parts.append(body);
             if (!parts.isEmpty())
@@ -89,7 +87,7 @@ public:
     /// The attachments the document links to, sorted.
     QList<VaultPath> usedAttachments() const
     {
-        QList<VaultPath> out(m_used.begin(), m_used.end());
+        QList<VaultPath> out = m_used.values();
         std::ranges::sort(out);
         return out;
     }
@@ -170,13 +168,16 @@ private:
         return std::nullopt;
     }
 
-    PandocLinks links(const ExportVault::Note &note, bool ids, bool allowEmbeds) const
+    /// An embedded copy of a note has no identifiers (the original has them) and no nested embeds.
+    enum class Copy { Original, Embedded };
+
+    PandocLinks links(const ExportVault::Note &note, Copy copy) const
     {
         PandocLinks l;
         const VaultPath notePath = note.path;
         l.idPrefix = m_prefixes.value(notePath);
         l.footnotePrefix = l.idPrefix;
-        l.ids = ids;
+        l.ids = copy == Copy::Original;
         l.headingShift = m_single ? 0 : 1;
         l.skipBlock = m_titleHeadings.value(notePath, -1);
         l.page = [=, this](const QString &target, const QString &heading,
@@ -212,7 +213,7 @@ private:
                 return std::nullopt;
             return std::make_pair(destination(fragment(block->first, {}, id)), blockText(*n->parsed, block->second));
         };
-        if (allowEmbeds) {
+        if (copy == Copy::Original) {
             l.embed = [=, this](const QString &target, const QString &heading, const QString &blockId) -> QString {
                 const auto resolved = m_vault.resolve(target, notePath);
                 const ExportVault::Note *n = resolved ? m_vault.note(*resolved) : nullptr;
@@ -220,8 +221,7 @@ private:
                     return {};
                 if (const auto picture = m_vault.drawingPicture(*resolved))
                     return drawingMarkdown(*n, *picture);
-                // An embedded copy: no identifiers (the original has them), no nested embeds.
-                const PandocRenderer inner(links(*n, false, false));
+                const PandocRenderer inner(links(*n, Copy::Embedded));
                 QList<int> blocks;
                 if (!blockId.isEmpty()) {
                     if (const auto it = n->parsed->blockIds.constFind(blockId); it != n->parsed->blockIds.constEnd())

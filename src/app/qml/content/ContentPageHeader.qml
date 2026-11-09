@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
-import QtQuick.Window
 import Brulion
 
 // ContentPageHeader — the top of a page in PageView (the block editor's header, it scrolls with
@@ -112,6 +111,10 @@ Item {
     readonly property bool exists: controller ? controller.exists : false
     readonly property bool loaded: controller ? controller.loaded : false
     readonly property bool journal: journalDate !== ""
+    /// A daily note of today, yesterday or tomorrow says so ("" for the other days).
+    readonly property string relativeDay: journalDate === DatesHelper.today ? qsTr("Today")
+                                          : journalDate === DatesHelper.addDays(DatesHelper.today, -1) ? qsTr("Yesterday")
+                                          : journalDate === DatesHelper.addDays(DatesHelper.today, 1) ? qsTr("Tomorrow") : ""
     readonly property bool documentMode: controller ? controller.documentMode : false
     // Workspace.revision: the summary follows saves (frontmatter edits), renames — the tags naming
     // a renamed page are rewritten after it moved — and other devices. Workspace.indexing: a page
@@ -359,6 +362,7 @@ Item {
             Layout.bottomMargin: visible ? Theme.space2 : 0
             clip: true
             readonly property string coverState: AppController.routeText(header.cover, "state")
+            readonly property string coverError: AppController.routeText(header.cover, "error")
             readonly property bool ready: coverState === "ready" && coverImage.status === Image.Ready
 
             Rectangle {
@@ -398,10 +402,9 @@ Item {
                     visible: text !== ""
                     text: coverBand.coverState === "missing" ? qsTr("No picture “%1” in the notebook").arg(header.coverTarget)
                           : coverBand.coverState === "ask" ? qsTr("Cover from %1").arg(AppController.routeText(header.cover, "host"))
-                          : coverBand.coverState === "failed" ? (AppController.routeText(header.cover, "error") !== ""
-                                                                 ? AppController.routeText(header.cover, "error")
-                                                                 : qsTr("The picture could not be loaded"))
-                          : coverBand.coverState === "ready" && coverImage.status === Image.Error ? qsTr("The picture could not be loaded")
+                          : coverBand.coverState === "failed" && coverBand.coverError !== "" ? coverBand.coverError
+                          : coverBand.coverState === "failed" || (coverBand.coverState === "ready" && coverImage.status === Image.Error)
+                            ? qsTr("The picture could not be loaded")
                           : ""
                     variant: "muted"
                     wrapMode: Text.Wrap
@@ -678,11 +681,8 @@ Item {
 
         // ---- Relative day / "not created yet" ------------------------------------------------------
         BText {
-            visible: header.journal && (header.journalDate === DatesHelper.today
-                                        || header.journalDate === DatesHelper.addDays(DatesHelper.today, -1)
-                                        || header.journalDate === DatesHelper.addDays(DatesHelper.today, 1))
-            text: header.journalDate === DatesHelper.today ? qsTr("Today")
-                  : header.journalDate === DatesHelper.addDays(DatesHelper.today, -1) ? qsTr("Yesterday") : qsTr("Tomorrow")
+            visible: header.relativeDay !== ""
+            text: header.relativeDay
             variant: "label"
             color: Theme.accentText
         }

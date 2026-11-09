@@ -59,20 +59,18 @@ QString decodeEntities(const QString &s)
     for (auto it = re.globalMatch(s); it.hasNext();) {
         const auto m = it.next();
         out += QStringView(s).sliced(last, m.capturedStart() - last);
-        const QString e = m.captured(1);
+        const QStringView e = m.capturedView(1);
         if (e.startsWith(u'#')) {
             const bool hex = e.size() > 1 && (e[1] == u'x' || e[1] == u'X');
             bool ok = false;
             const uint cp = e.sliced(hex ? 2 : 1).toUInt(&ok, hex ? 16 : 10);
-            if (ok && cp > 0 && cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF)) {
-                const char32_t c = cp;
-                out += QString::fromUcs4(&c, 1);
-            }
+            if (ok && cp > 0 && cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF))
+                out += QStringView(QChar::fromUcs4(cp));
         } else {
             static const QHash<QString, QString> named = {{u"amp"_s, u"&"_s},  {u"lt"_s, u"<"_s},
                                                           {u"gt"_s, u">"_s},   {u"quot"_s, u"\""_s},
                                                           {u"apos"_s, u"'"_s}, {u"nbsp"_s, u"\u00A0"_s}};
-            out += named.value(e);
+            out += named.value(e.toString());
         }
         last = m.capturedEnd();
     }
@@ -84,12 +82,12 @@ QString decodeEntities(const QString &s)
 /// value), or nullopt. Attributes are read in order, so a name inside another attribute's quoted
 /// value (`alt="x src=y"`) is not taken for an attribute; the first occurrence wins, as in
 /// browsers.
-std::optional<QString> attribute(const QString &attrs, const QString &name)
+std::optional<QString> attribute(QStringView attrs, QStringView name)
 {
     static const QRegularExpression re(u"([^\\s\"'>/=]+)(?:\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+)))?"_s);
-    for (auto it = re.globalMatch(attrs); it.hasNext();) {
+    for (auto it = re.globalMatchView(attrs); it.hasNext();) {
         const auto m = it.next();
-        if (m.captured(1).compare(name, Qt::CaseInsensitive) != 0)
+        if (m.capturedView(1).compare(name, Qt::CaseInsensitive) != 0)
             continue;
         for (int g = 2; g <= 4; ++g) {
             if (m.capturedLength(g) > 0)
@@ -101,7 +99,7 @@ std::optional<QString> attribute(const QString &attrs, const QString &name)
 }
 
 template<typename F>
-QString replaceAll(const QString &s, const QRegularExpression &re, F &&replacement)
+QString replaceAll(const QString &s, const QRegularExpression &re, const F &replacement)
 {
     QString out;
     qsizetype last = 0;
@@ -147,7 +145,7 @@ qsizetype startTagEnd(const QString &html, qsizetype from)
 /// does not swallow the rest: the first '>' ends that tag, as for an unquoted value. Linear time
 /// (no regular expression rescanning the document from every '<').
 template<typename F>
-QString replaceTags(const QString &html, QStringView name, F &&fn)
+QString replaceTags(const QString &html, QStringView name, const F &fn)
 {
     QString out;
     qsizetype last = 0;
@@ -169,7 +167,7 @@ QString replaceTags(const QString &html, QStringView name, F &&fn)
         if (text.endsWith(u'/'))
             text.chop(1);
         out += QStringView(html).sliced(last, start - last);
-        out += fn(text.toString());
+        out += fn(text);
         last = end + 1;
         pos = end + 1;
     }
@@ -201,31 +199,31 @@ Prepared prepare(const QString &html)
     s = detail::limitNesting(s);
     for (const QStringView dropped : {u"link", u"meta", u"base", u"script", u"style", u"iframe", u"object", u"embed",
                                       u"source", u"track", u"param"})
-        s = replaceTags(s, dropped, [](const QString &) { return QString(); });
-    s = replaceTags(s, u"input", [](const QString &attrs) -> QString {
+        s = replaceTags(s, dropped, [](QStringView) { return QString(); });
+    s = replaceTags(s, u"input", [](QStringView attrs) -> QString {
         if (attribute(attrs, u"type"_s).value_or(QString()).compare(u"checkbox"_s, Qt::CaseInsensitive) != 0)
             return QString();
         return QString(QChar(attribute(attrs, u"checked"_s) ? CheckedBox : UncheckedBox)) + u' ';
     });
-    s = replaceTags(s, u"img", [&](const QString &attrs) -> QString {
+    s = replaceTags(s, u"img", [&](QStringView attrs) -> QString {
         p.images.append(HtmlImage{attribute(attrs, u"src"_s).value_or(QString()).trimmed(),
                                   attribute(attrs, u"alt"_s).value_or(QString()).trimmed()});
         return u"<img src=\""_s + ImageScheme + QString::number(p.images.size() - 1) + u"\">"_s;
     });
     // Quote levels are read back from the accumulated right margin (see quoteLevel()).
     const QString quoteTag = u"<blockquote style=\"margin-right:"_s + QString::number(QuoteMargin) + u"px\">"_s;
-    s = replaceTags(s, u"blockquote", [&](const QString &) { return quoteTag; });
-    s = replaceTags(s, u"mark", [](const QString &) { return u"<span style=\"background-color:#fff59d\">"_s; });
+    s = replaceTags(s, u"blockquote", [&](QStringView) { return quoteTag; });
+    s = replaceTags(s, u"mark", [](QStringView) { return u"<span style=\"background-color:#fff59d\">"_s; });
     s.replace(markClose, u"</span>"_s);
     s = replaceAll(s, preCode, [](const QRegularExpressionMatch &m) -> QString {
-        const QString cls = attribute(m.captured(1), u"class"_s).value_or(QString());
+        const QString cls = attribute(m.capturedView(1), u"class"_s).value_or(QString());
         const auto lm = language.match(cls);
         QString out = u"<pre><code>"_s;
         if (lm.hasMatch())
             out += QChar(LangOpen) + lm.captured(1) + QChar(LangClose);
         return out;
     });
-    p.html = s;
+    p.html = std::move(s);
     return p;
 }
 
@@ -259,7 +257,7 @@ enum class Element : quint8 {
     Dt,
     Dl,
     Body,
-    Head
+    Head,
 };
 
 struct ElementInfo {
@@ -381,7 +379,7 @@ public:
         }
         if (inserts.isEmpty())
             return r;
-        std::ranges::sort(inserts, [](const Insert &a, const Insert &b) { return a.from < b.from; });
+        std::ranges::sort(inserts, {}, &Insert::from);
         QString out;
         qsizetype last = 0;
         for (const Insert &in : std::as_const(inserts)) {
@@ -520,14 +518,8 @@ private:
                 lt = m_len;
             // Text goes to the node created last: a list's own text when nothing but comments
             // came after its start tag (QTextHtmlImporter then gives the list a block).
-            if (m_textList >= 0) {
-                for (qsizetype i = m_pos; i < lt; ++i) {
-                    if (!m_txt[i].isSpace()) {
-                        m_lists[m_textList].ownText = true;
-                        break;
-                    }
-                }
-            }
+            if (m_textList >= 0 && !QStringView(m_txt).sliced(m_pos, lt - m_pos).trimmed().isEmpty())
+                m_lists[m_textList].ownText = true;
             if (lt == m_len)
                 break;
             m_pos = lt + 1;
@@ -597,11 +589,8 @@ private:
         if (pre) {
             // Innermost first: the lists around a marked list are marked already (linear time).
             for (auto o = m_open.crbegin(); o != m_open.crend(); ++o) {
-                if (o->list < 0)
-                    continue;
-                if (m_lists[o->list].keepsWhiteSpace)
+                if (o->list >= 0 && std::exchange(m_lists[o->list].keepsWhiteSpace, true))
                     break;
-                m_lists[o->list].keepsWhiteSpace = true;
             }
         }
         Open node{name, info.element, info.block && !parentNone, info.none || parentNone, pre, -1};
@@ -655,12 +644,12 @@ private:
         // taken to keep white space like their parent).
         const bool pre = p >= 0 && m_open[p].pre;
         if (element == Element::Td && !hasAncestor(Element::Tr)) {
-            m_open.push_back(Open{u"table"_s, Element::Table, false, false, pre});
-            m_open.push_back(Open{u"tr"_s, Element::Tr, false, false, pre});
+            m_open.push_back(Open{.name = u"table"_s, .element = Element::Table, .pre = pre});
+            m_open.push_back(Open{.name = u"tr"_s, .element = Element::Tr, .pre = pre});
             p += 2;
         }
         if (element == Element::Tr && !hasAncestor(Element::Table)) {
-            m_open.push_back(Open{u"table"_s, Element::Table, false, false, pre});
+            m_open.push_back(Open{.name = u"table"_s, .element = Element::Table, .pre = pre});
             p += 1;
         }
         if (element == Element::P) {
@@ -685,6 +674,12 @@ private:
     int m_textList = -1; ///< the list whose start tag was the last tag (comments aside)
 };
 
+/// Number of the first item of a list (`<ol start="5">`; 1 when not given).
+qint64 listStart(const QTextListFormat &lf)
+{
+    return lf.hasProperty(QTextFormat::ListStart) ? lf.start() : 1;
+}
+
 /// Number of the first item of each part of a list that ListSplitter split (`split`): the parts
 /// continue the numbering of the list as QTextDocument counts its items.
 QHash<const QTextList *, qint64> listPartStarts(const QTextDocument &doc, const ListSplitter::Result &split)
@@ -705,8 +700,7 @@ QHash<const QTextList *, qint64> listPartStarts(const QTextDocument &doc, const 
         const int id = QStringView(prefix).sliced(split.prefix.size()).toInt(&ok);
         if (!ok || id < 0 || id >= split.parts)
             continue;
-        const auto it = next.constFind(id);
-        const qint64 start = it != next.cend() ? *it : (lf.hasProperty(QTextFormat::ListStart) ? lf.start() : 1);
+        const qint64 start = next.value(id, listStart(lf));
         starts.insert(list, start);
         next.insert(id, start + list->count());
     }
@@ -763,6 +757,8 @@ struct Run {
     int image = -1; ///< index into the prepared images (text is then empty)
 };
 
+/// A link or image destination as written in Markdown. Tabs and line breaks are dropped (browsers
+/// drop them too), so schemes are checked on the result: `java&#9;script:` is `javascript:`.
 QString encodeDestination(const QString &href)
 {
     QString out;
@@ -805,7 +801,7 @@ public:
             *taskState = takeCheckbox(runs);
         QString out;
         for (qsizetype i = 0; i < runs.size();) {
-            const QString href = runs[i].style.href;
+            const QString &href = runs[i].style.href;
             qsizetype j = i + 1;
             if (!href.isEmpty()) {
                 while (j < runs.size() && runs[j].style.href == href)
@@ -820,6 +816,7 @@ public:
         return out;
     }
 
+private:
     /// Append without doubling a space where a dropped element (an image) left two.
     static void appendCollapsed(QString &out, const QString &piece)
     {
@@ -829,7 +826,6 @@ public:
             out += piece;
     }
 
-private:
     QList<Run> collect(const QTextBlock &block, bool boldImplied) const
     {
         QList<Run> runs;
@@ -840,11 +836,11 @@ private:
             const QTextCharFormat cf = fragment.charFormat();
             const Style style = styleOf(cf, boldImplied);
             if (cf.isImageFormat()) {
+                // Identical images side by side share a fragment: a run for each of its characters.
                 const QString name = cf.toImageFormat().name();
-                int index = -1;
-                if (name.startsWith(ImageScheme))
-                    index = name.sliced(ImageScheme.size()).toInt();
-                for (qsizetype k = 0; k < fragment.text().size(); ++k)
+                const int index =
+                        name.startsWith(ImageScheme) ? QStringView(name).sliced(ImageScheme.size()).toInt() : -1;
+                for (int k = 0; k < fragment.length(); ++k)
                     runs.append(Run{style, QString(), index});
                 continue;
             }
@@ -862,15 +858,15 @@ private:
             if (r.image >= 0)
                 return std::nullopt;
             qsizetype i = 0;
-            while (i < r.text.size() && r.text[i].isSpace())
+            while (i < r.text.size() && r.text.at(i).isSpace())
                 ++i;
             if (i == r.text.size())
                 continue;
-            const QChar c = r.text[i];
+            const QChar c = r.text.at(i);
             if (c != QChar(UncheckedBox) && c != QChar(CheckedBox))
                 return std::nullopt;
             qsizetype end = i + 1;
-            while (end < r.text.size() && r.text[end] == u' ')
+            while (end < r.text.size() && r.text.at(end) == u' ')
                 ++end;
             r.text.remove(0, end);
             return c == QChar(CheckedBox);
@@ -884,8 +880,7 @@ private:
         if (run.image >= 0)
             return imageMarkdown(run.image);
         QString text = run.text;
-        text.replace(QChar(UncheckedBox), u"[ ]"_s).replace(QChar(CheckedBox), u"[x]"_s);
-        text.replace(QChar::Nbsp, u' ');
+        text.replace(QChar(UncheckedBox), u"[ ]"_s).replace(QChar(CheckedBox), u"[x]"_s).replace(QChar::Nbsp, u' ');
         const QStringList lines = text.split(QChar::LineSeparator);
         QStringList out;
         for (qsizetype k = 0; k < lines.size(); ++k)
@@ -932,10 +927,11 @@ private:
         const HtmlImage &image = m_images[index];
         if (m_options.image)
             return m_options.image(image);
-        const QString scheme = QUrl(image.src).scheme().toLower();
+        const QString destination = encodeDestination(image.src);
+        const QString scheme = QUrl(destination).scheme().toLower();
         if (image.src.isEmpty() || (!scheme.isEmpty() && scheme != u"http" && scheme != u"https"))
             return {};
-        return u"!["_s + escapeMarkdownText(image.alt, false, true) + u"]("_s + encodeDestination(image.src) + u')';
+        return u"!["_s + escapeMarkdownText(image.alt, false, true) + u"]("_s + destination + u')';
     }
 
     QString linkMarkdown(const QString &href, const QString &label) const
@@ -945,16 +941,17 @@ private:
                 return *custom;
         }
         const QString trimmedHref = href.trimmed();
-        const QString scheme = QUrl(trimmedHref).scheme().toLower();
+        const QString destination = encodeDestination(trimmedHref);
+        const QString scheme = QUrl(destination).scheme().toLower();
         if (trimmedHref.isEmpty() || trimmedHref.startsWith(u'#') || scheme == u"javascript" || scheme == u"vbscript"
             || scheme == u"data" || scheme == u"file")
             return label;
         const QString plainLabel = QString(label).remove(u'\\');
         if (label.trimmed().isEmpty() || plainLabel == trimmedHref
             || (scheme == u"mailto" && u"mailto:"_s + plainLabel == trimmedHref)) {
-            return scheme.isEmpty() ? label : u'<' + encodeDestination(trimmedHref) + u'>';
+            return scheme.isEmpty() ? label : u'<' + destination + u'>';
         }
-        return u'[' + label + u"]("_s + encodeDestination(trimmedHref) + u')';
+        return u'[' + label + u"]("_s + destination + u')';
     }
 
     const QList<HtmlImage> &m_images;
@@ -978,21 +975,18 @@ enum class Kind { Paragraph, Heading, List, Code, Table, Rule, Blank };
 
 struct OutBlock {
     Kind kind = Kind::Paragraph;
-    QStringList lines;
+    QStringList lines = {};
     int quote = 0;
     bool tightTop = false;    ///< no top margin (a <div> line)
     bool tightBottom = false; ///< no bottom margin
     bool codeEnd = false;     ///< a code block's last line had a bottom margin
-    QString lang;             ///< code blocks: language of the fence
+    QString lang = {};        ///< code blocks: language of the fence
 };
 
-OutBlock outBlock(Kind kind, int quote, QStringList lines = {})
+/// The marker of a task list item.
+QString taskMarker(bool checked)
 {
-    OutBlock b;
-    b.kind = kind;
-    b.quote = quote;
-    b.lines = std::move(lines);
-    return b;
+    return checked ? u"- [x] "_s : u"- [ ] "_s;
 }
 
 class BlockWriter {
@@ -1048,7 +1042,7 @@ public:
                 blockLines.append(f);
             }
             for (qsizetype k = 0; k < blockLines.size(); ++k) {
-                const QString &l = blockLines[k];
+                const QString &l = blockLines.at(k);
                 lines.append(Line{l.isEmpty() && !prefix.isEmpty() ? prefix.trimmed() : prefix + l,
                                   code && k > 0 && k + 1 < blockLines.size()});
             }
@@ -1060,10 +1054,10 @@ public:
         bool lastBlank = true;
         for (Line &l : lines) {
             if (!l.code) {
-                while (!l.text.isEmpty() && (l.text.back() == u' ' || l.text.back() == u'\t'))
+                while (l.text.endsWith(u' ') || l.text.endsWith(u'\t'))
                     l.text.chop(1);
                 if (out.isEmpty()) {
-                    while (!l.text.isEmpty() && l.text.front().isSpace())
+                    while (!l.text.isEmpty() && l.text.at(0).isSpace())
                         l.text.remove(0, 1);
                 }
                 const bool blank = l.text.isEmpty();
@@ -1075,7 +1069,7 @@ public:
             }
             out.append(l.text);
         }
-        while (!out.isEmpty() && out.last().isEmpty())
+        while (!out.isEmpty() && out.constLast().isEmpty())
             out.removeLast();
         return out.isEmpty() ? QString() : out.join(u'\n') + u'\n';
     }
@@ -1086,7 +1080,7 @@ private:
         const QTextBlockFormat bf = b.blockFormat();
         const int quote = quoteLevel(bf);
         if (bf.hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth)) {
-            add(outBlock(Kind::Rule, quote, {u"---"_s}));
+            add(OutBlock{.kind = Kind::Rule, .lines = {u"---"_s}, .quote = quote});
             return;
         }
         if (bf.nonBreakableLines()) {
@@ -1099,69 +1093,56 @@ private:
         }
         const int heading = bf.headingLevel();
         if (heading >= 1 && heading <= 6) {
-            QString text = m_inline.block(b, true).replace(u'\n', u' ').trimmed();
+            const QString text = m_inline.block(b, true).replace(u'\n', u' ').trimmed();
             if (text.isEmpty())
                 return;
-            add(outBlock(Kind::Heading, quote, {QString(heading, u'#') + u' ' + text}));
+            add(OutBlock{.kind = Kind::Heading, .lines = {QString(heading, u'#') + u' ' + text}, .quote = quote});
             return;
         }
         std::optional<bool> task;
         const QString text = m_inline.block(b, false, &task);
         if (task) {
-            OutBlock item = outBlock(Kind::List, quote);
-            appendItemLines(item, u"- ["_s + (*task ? u'x' : u' ') + u"] "_s, QString(), text);
-            add(item);
+            addItem(quote, QString(), taskMarker(*task), text);
             return;
         }
         if (text.trimmed().isEmpty()) {
-            add(outBlock(Kind::Blank, quote));
+            add(OutBlock{.kind = Kind::Blank, .quote = quote});
             return;
         }
-        OutBlock para = outBlock(Kind::Paragraph, quote, text.split(u'\n'));
-        para.tightTop = bf.topMargin() <= 0;
-        para.tightBottom = bf.bottomMargin() <= 0;
-        add(para);
+        add(OutBlock{.kind = Kind::Paragraph,
+                     .lines = text.split(u'\n'),
+                     .quote = quote,
+                     .tightTop = bf.topMargin() <= 0,
+                     .tightBottom = bf.bottomMargin() <= 0});
     }
 
-    static void appendItemLines(OutBlock &item, const QString &marker, const QString &indent, const QString &text)
+    /// A list item: `marker` before its first line, its other lines indented under it.
+    void addItem(int quote, const QString &indent, const QString &marker, const QString &text)
     {
+        OutBlock item{.kind = Kind::List, .quote = quote};
         const QStringList lines = text.split(u'\n');
-        for (qsizetype k = 0; k < lines.size(); ++k) {
-            if (k == 0)
-                item.lines.append(indent + marker + lines[k].trimmed());
-            else
-                item.lines.append(indent + u"  "_s + lines[k].trimmed());
-        }
+        for (qsizetype k = 0; k < lines.size(); ++k)
+            item.lines.append(indent + (k == 0 ? marker : u"  "_s) + lines[k].trimmed());
+        add(std::move(item));
     }
 
     void listItem(const QTextBlock &b, QTextList *list, int quote)
     {
         const QTextListFormat lf = list->format();
-        const int level = std::clamp(lf.indent(), 1, 16);
-        const QString indent(level - 1, u'\t');
         std::optional<bool> task;
         const QString text = m_inline.block(b, false, &task);
         QString marker;
-        const int style = int(lf.style());
         if (task) {
-            marker = u"- ["_s + (*task ? u'x' : u' ') + u"] "_s;
-        } else if (style <= int(QTextListFormat::ListDecimal)) {
+            marker = taskMarker(*task);
+        } else if (lf.style() <= QTextListFormat::ListDecimal) {
             // `<ol start="5">` counts from 5; the parts of a split list continue its numbering.
-            const auto part = m_listStarts.constFind(list);
-            const qint64 start = part != m_listStarts.cend()              ? *part
-                                 : lf.hasProperty(QTextFormat::ListStart) ? lf.start()
-                                                                          : 1;
-            marker = QString::number(list->itemNumber(b) + start) + u". "_s;
+            marker = QString::number(list->itemNumber(b) + m_listStarts.value(list, listStart(lf))) + u". "_s;
         } else {
             marker = u"- "_s;
         }
-        if (b.blockFormat().marker() == QTextBlockFormat::MarkerType::Checked)
-            marker = u"- [x] "_s;
-        else if (b.blockFormat().marker() == QTextBlockFormat::MarkerType::Unchecked)
-            marker = u"- [ ] "_s;
-        OutBlock item = outBlock(Kind::List, quote);
-        appendItemLines(item, marker, indent, text);
-        add(item);
+        if (const auto checkbox = b.blockFormat().marker(); checkbox != QTextBlockFormat::MarkerType::NoMarker)
+            marker = taskMarker(checkbox == QTextBlockFormat::MarkerType::Checked);
+        addItem(quote, QString(std::clamp(lf.indent(), 1, 16) - 1, u'\t'), marker, text);
     }
 
     void codeLine(const QTextBlock &b, const QTextBlockFormat &bf, int quote)
@@ -1177,19 +1158,19 @@ private:
                 text.remove(0, close + 1);
             }
         }
-        const bool continues = !m_blocks.isEmpty() && m_blocks.last().kind == Kind::Code
-                               && m_blocks.last().quote == quote && !(m_blocks.last().codeEnd && bf.topMargin() > 0)
-                               && lang.isEmpty();
-        if (continues) {
-            OutBlock &code = m_blocks.last();
-            code.lines.append(text.split(u'\n'));
-            code.codeEnd = bf.bottomMargin() > 0;
-            return;
+        if (!m_blocks.isEmpty() && lang.isEmpty()) {
+            OutBlock &last = m_blocks.last();
+            if (last.kind == Kind::Code && last.quote == quote && !(last.codeEnd && bf.topMargin() > 0)) {
+                last.lines.append(text.split(u'\n'));
+                last.codeEnd = bf.bottomMargin() > 0;
+                return;
+            }
         }
-        OutBlock code = outBlock(Kind::Code, quote, text.split(u'\n'));
-        code.codeEnd = bf.bottomMargin() > 0;
-        code.lang = lang;
-        add(code);
+        add(OutBlock{.kind = Kind::Code,
+                     .lines = text.split(u'\n'),
+                     .quote = quote,
+                     .codeEnd = bf.bottomMargin() > 0,
+                     .lang = lang});
     }
 
     void table(QTextTable *table)
@@ -1198,31 +1179,29 @@ private:
         const int cols = table->columns();
         if (rows <= 0 || cols <= 0)
             return;
-        OutBlock out = outBlock(Kind::Table, 0);
+        OutBlock out{.kind = Kind::Table};
         for (int r = 0; r < rows; ++r) {
-            QStringList cells;
+            QString row = u"|"_s;
             for (int c = 0; c < cols; ++c) {
                 const QTextTableCell cell = table->cellAt(r, c);
-                QString text;
+                QString text; // its paragraphs, joined by spaces
                 if (cell.isValid() && cell.row() == r && cell.column() == c) {
-                    QStringList parts;
                     for (auto it = cell.begin(); !it.atEnd(); ++it) {
                         const QTextBlock b = it.currentBlock();
                         if (!b.isValid())
                             continue;
                         const QString part = m_inline.block(b, r == 0).replace(u'\n', u' ').trimmed();
                         if (!part.isEmpty())
-                            parts.append(part);
+                            text += text.isEmpty() ? part : u' ' + part;
                     }
-                    text = parts.join(u' ');
                 }
-                cells.append(text.replace(u'|', u"\\|"_s));
+                row += u' ' + text.replace(u'|', u"\\|"_s) + u" |"_s;
             }
-            out.lines.append(u"| "_s + cells.join(u" | "_s) + u" |"_s);
+            out.lines.append(std::move(row));
             if (r == 0)
-                out.lines.append(u'|' + QStringList(cols, u" --- "_s).join(u'|') + u'|');
+                out.lines.append(u'|' + u" --- |"_s.repeated(cols));
         }
-        add(out);
+        add(std::move(out));
     }
 
     void add(OutBlock b) { m_blocks.append(std::move(b)); }
@@ -1265,14 +1244,14 @@ bool escapedAt(QStringView s, qsizetype i)
 /// dollars to escape in one round: the opening dollar(s) of each formula, or the closing one(s)
 /// when the opening ones must stay (`fixed(k)`: the dollar at k is not text: a URL's, a
 /// formula's the importer wrote); with `all`, every dollar that may change once any formula is
-/// left that has one. Appended to `out` with `offset` added.
+/// left that has one. With `offset` added.
 template<typename Fixed>
-void dollarsToEscape(QStringView masked, qsizetype offset, const Fixed &fixed, bool all, QList<qsizetype> &out)
+QList<qsizetype> dollarsToEscape(QStringView masked, qsizetype offset, const Fixed &fixed, bool all)
 {
-    if (!masked.contains(u'$'))
-        return;
     QList<qsizetype> found;
-    for (const markdown::MathSpan &s : markdown::findMathSpans(masked)) {
+    if (!masked.contains(u'$'))
+        return found;
+    for (const auto spans = markdown::findMathSpans(masked); const markdown::MathSpan &s : spans) {
         const qsizetype n = s.display ? 2 : 1;
         const qsizetype before = found.size();
         for (qsizetype k = 0; k < n; ++k) {
@@ -1286,17 +1265,16 @@ void dollarsToEscape(QStringView masked, qsizetype offset, const Fixed &fixed, b
             }
         }
     }
-    if (found.isEmpty())
-        return;
-    if (all) {
+    if (all && !found.isEmpty()) {
         found.clear();
         for (qsizetype k = 0; k < masked.size(); ++k) {
             if (masked[k] == u'$' && !fixed(k) && !escapedAt(masked, k))
                 found.append(k);
         }
     }
-    for (const qsizetype k : std::as_const(found))
-        out.append(offset + k);
+    for (qsizetype &k : found)
+        k += offset;
+    return found;
 }
 
 /// `text` with a backslash before each of the positions `at` (sorted, distinct).
@@ -1325,8 +1303,8 @@ QString escapeTextDollars(QString text)
         const QString masked = markdown::maskInlineCode(text);
         QList<bool> fixed(masked.size(), false);
         protectLinks(masked, fixed);
-        QList<qsizetype> at;
-        dollarsToEscape(masked, 0, [&fixed](qsizetype k) { return fixed[k]; }, round + 1 == MaxDollarRounds, at);
+        const QList<qsizetype> at =
+                dollarsToEscape(masked, 0, [&fixed](qsizetype k) { return fixed.at(k); }, round + 1 == MaxDollarRounds);
         if (at.isEmpty())
             break;
         text = withBackslashes(text, at);
@@ -1415,8 +1393,7 @@ void leaveOutLines(DollarScan &s, bool callout)
         if (fence) {
             blank = true;
             const QStringView t = content.trimmed();
-            if (t.size() >= fence->second
-                && std::all_of(t.cbegin(), t.cend(), [&](QChar ch) { return ch == fence->first; }))
+            if (t.size() >= fence->second && std::ranges::all_of(t, [&](QChar ch) { return ch == fence->first; }))
                 fence.reset();
         } else if (const auto open = fenceOpening(content)) {
             fence = open;
@@ -1563,7 +1540,7 @@ QList<qsizetype> strayDollarsOf(const QString &md, bool all)
                         const QString masked = markdown::maskInlineCode(cell);
                         QList<bool> fixed = s.fixed.mid(cellFrom, cellTo - cellFrom);
                         protectLinks(masked, fixed);
-                        dollarsToEscape(masked, cellFrom, [&fixed](qsizetype k) { return fixed[k]; }, all, local);
+                        local += dollarsToEscape(masked, cellFrom, [&fixed](qsizetype k) { return fixed.at(k); }, all);
                     }
                     cellFrom = cellTo + 1;
                 }
@@ -1573,10 +1550,10 @@ QList<qsizetype> strayDollarsOf(const QString &md, bool all)
             leaveOutLines(s, e.kind == BlockKind::Callout);
             const QString masked = markdown::maskInlineCode(s.text);
             protectLinks(masked, s.fixed);
-            dollarsToEscape(masked, 0, [&s](qsizetype k) { return s.fixed[k]; }, all, local);
+            local = dollarsToEscape(masked, 0, [&s](qsizetype k) { return s.fixed.at(k); }, all);
         }
         for (const qsizetype k : std::as_const(local))
-            out.append(s.source[k]);
+            out.append(s.source.at(k));
     }
     std::ranges::sort(out);
     out.erase(std::ranges::unique(out).begin(), out.end());
@@ -1636,16 +1613,12 @@ QString escapeMarkdownText(QStringView text, bool lineStart, bool linkLabel)
     static const QRegularExpression ruleLine(u"^(?:(?:-[ \\t]*){3,}|(?:_[ \\t]*){3,}|(?:\\\\\\*[ \\t]*){3,})$"_s);
     // Any one character in brackets is a task's checkbox (`[?]`, `[…]`: custom states).
     static const QRegularExpression checkbox(u"^\\[[^\\]\\r\\n]\\](?:\\s|$)"_s);
-    const QChar first = out.front();
-    if ((first == u'-' || first == u'+' || first == u'*') && (out.size() == 1 || at(out, 1).isSpace()))
-        return u'\\' + out;
-    if (first == u'#' && (out.size() == 1 || at(out, 1) == u'#' || at(out, 1).isSpace()))
-        return u'\\' + out;
-    if (first == u'>')
-        return u'\\' + out;
-    if (out.startsWith(u"~~~"))
-        return u'\\' + out;
-    if (ruleLine.match(out).hasMatch() || checkbox.match(out).hasMatch())
+    const QChar first = out.at(0);
+    const bool alone = out.size() == 1;
+    const bool bullet = (first == u'-' || first == u'+' || first == u'*') && (alone || at(out, 1).isSpace());
+    const bool heading = first == u'#' && (alone || at(out, 1) == u'#' || at(out, 1).isSpace());
+    if (bullet || heading || first == u'>' || out.startsWith(u"~~~") || ruleLine.match(out).hasMatch()
+        || checkbox.match(out).hasMatch())
         return u'\\' + out;
     if (const auto m = ordered.match(out); m.hasMatch())
         return m.captured(1) + u'\\' + out.sliced(m.capturedLength(1));
@@ -1770,13 +1743,8 @@ QString detail::limitNesting(const QString &html, int maxDepth)
             if (auto it = dropped.find(name); it != dropped.end() && *it > 0) {
                 drop = true;
                 --*it;
-            } else {
-                for (qsizetype j = open.size() - 1; j >= 0; --j) {
-                    if (open[j] == name) {
-                        open.resize(j);
-                        break;
-                    }
-                }
+            } else if (const qsizetype j = open.lastIndexOf(name); j >= 0) {
+                open.resize(j);
             }
         }
         if (drop) {

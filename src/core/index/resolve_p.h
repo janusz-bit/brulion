@@ -94,6 +94,8 @@ private:
     VaultPath lookupPath(const QString &path, bool attachmentFirst) const;
     /// lookupPath() of one key; `spelled` is the NFC path as written.
     VaultPath lookupExact(const QString &key, const QString &spelled) const;
+    /// lookupExact() of the note at `key` + `.md`, else at `key` + `.markdown`.
+    VaultPath lookupNote(const QString &key, const QString &spelled) const;
     VaultPath lookupName(const QString &lowerPath) const;
     VaultPath lookupAlias(const QString &target) const;
 

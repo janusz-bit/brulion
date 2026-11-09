@@ -66,11 +66,10 @@ QString csvField(QStringView value, QChar separator)
     const bool needsQuotes = value.contains(separator) || value.contains(u'"') || value.contains(u'\n')
                              || value.contains(u'\r')
                              || (!value.isEmpty() && (value.front().isSpace() || value.back().isSpace()));
-    if (!needsQuotes)
-        return value.toString();
     QString out = value.toString();
-    out.replace(u"\""_s, u"\"\""_s);
-    return u'"' + out + u'"';
+    if (!needsQuotes)
+        return out;
+    return u'"' + out.replace(u'"', u"\"\""_s) + u'"';
 }
 
 QString csvRow(const QStringList &fields, QChar separator)

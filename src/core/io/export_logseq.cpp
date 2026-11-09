@@ -21,6 +21,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <functional>
 
 namespace brulion::io::detail {
 
@@ -90,7 +91,7 @@ QString propertyValue(const QVariant &value, bool tags)
 {
     QStringList items;
     if (value.typeId() == QMetaType::QStringList || value.typeId() == QMetaType::QVariantList) {
-        for (const QVariant &v : value.toList()) {
+        for (const QVariantList list = value.toList(); const QVariant &v : list) {
             if (v.typeId() == QMetaType::QVariantMap || v.typeId() == QMetaType::QVariantList)
                 continue;
             items.append(v.toString().trimmed());
@@ -105,7 +106,8 @@ QString propertyValue(const QVariant &value, bool tags)
     items.removeAll(QString());
     if (tags) {
         for (QString &t : items) {
-            t.remove(QRegularExpression(u"^#"_s));
+            if (t.startsWith(u'#'))
+                t.remove(0, 1);
             if (t.contains(u' ') || t.contains(u','))
                 t = u"[["_s + t + u"]]"_s;
         }
@@ -123,9 +125,9 @@ QString withoutTaskMarker(const QString &line)
         return line;
     QString out = line;
     if (marker->to < out.size() && (out[marker->to] == u' ' || out[marker->to] == u'\t'))
-        out[marker->to] = QChar(0x00A0);
+        out[marker->to] = QChar::Nbsp;
     else
-        out.insert(marker->to, QChar(0x00A0));
+        out.insert(marker->to, QChar::Nbsp);
     return out;
 }
 
@@ -149,12 +151,12 @@ ConvertedLine convertFirstLine(QString content)
         out.text = content;
         return out;
     }
-    QString word = marker->kind == markdown::TaskMarker::Kind::Keyword ? marker->marker : keyword(marker->status);
+    const QString word = marker->kind == markdown::TaskMarker::Kind::Keyword ? marker->marker : keyword(marker->status);
     QString rest = content.sliced(marker->contentStart);
 
     struct Removal {
-        qsizetype from;
-        qsizetype to;
+        qsizetype from = 0;
+        qsizetype to = 0;
     };
     QList<Removal> removals;
     std::optional<DateSpec> due;
@@ -197,11 +199,10 @@ ConvertedLine convertFirstLine(QString content)
     // A repeater needs a date; without one the 🔁 token stays as text.
     if (!due && !scheduled && !repeater.isEmpty()) {
         repeater.clear();
-        removals.removeIf([&](const Removal &r) {
-            return QStringView(rest).sliced(r.from).startsWith(markdown::tokens::Recurrence);
-        });
+        removals.removeIf(
+                [&](Removal r) { return QStringView(rest).sliced(r.from).startsWith(markdown::tokens::Recurrence); });
     }
-    std::ranges::sort(removals, [](const Removal &a, const Removal &b) { return a.from > b.from; });
+    std::ranges::sort(removals, std::ranges::greater{}, &Removal::from);
     for (const Removal &r : std::as_const(removals)) {
         qsizetype from = r.from;
         if (from > 0 && rest[from - 1] == u' ')
@@ -235,7 +236,7 @@ public:
             QString rel = a.path;
             if (attachmentsPrefix.size() > 1 && rel.startsWith(attachmentsPrefix))
                 rel = rel.sliced(attachmentsPrefix.size());
-            ctx.assets.insert(a.path, claims.claim(u"assets/"_s + QString(rel).replace(u'/', u'_')));
+            ctx.assets.insert(a.path, claims.claim(u"assets/"_s + rel.replace(u'/', u'_')));
         }
         const QString root = paths::sanitizeFileName(vault.vaultName()) + u'/';
         QList<FileEntry> entries;
@@ -296,15 +297,13 @@ private:
 
     static void pageProperties(const ParsedNote &parsed, const QList<text::Line> &lines, QStringList &out)
     {
+        // Logseq-style page properties (frontmatter without "---"): already in the right syntax.
         for (const Block &b : parsed.blocks) {
-            if (b.kind != BlockKind::Frontmatter || b.parent >= 0)
+            if (b.kind != BlockKind::Frontmatter || b.parent >= 0 || b.raw.startsWith(u"---"))
                 continue;
-            if (!b.raw.startsWith(u"---"_s)) {
-                // Logseq-style page properties: already in the right syntax.
-                for (int l = b.line; l <= b.ownEndLine && l < lines.size(); ++l) {
-                    if (!lines[l].text.trimmed().isEmpty())
-                        out.append(lines[l].text.trimmed());
-                }
+            for (int l = b.line; l <= b.ownEndLine && l < lines.size(); ++l) {
+                if (const QString line = lines[l].text.trimmed(); !line.isEmpty())
+                    out.append(line);
             }
         }
         const QVariantMap &fm = parsed.frontmatter;
@@ -312,7 +311,7 @@ private:
         const auto order = [](const QString &k) {
             return k == u"aliases" || k == u"alias" ? 0 : k == u"tags" || k == u"tag" ? 1 : 2;
         };
-        std::ranges::stable_sort(keys, [&](const QString &a, const QString &b) { return order(a) < order(b); });
+        std::ranges::stable_sort(keys, {}, order);
         for (const QString &key : std::as_const(keys)) {
             const bool tags = key == u"tags" || key == u"tag";
             const QString name = key == u"aliases" || key == u"alias" ? u"alias"_s
@@ -449,9 +448,9 @@ private:
             if (!target || !target->parsed)
                 continue;
             const QString key = t.name.toLower();
-            const bool alias = std::any_of(
-                    target->parsed->aliases.cbegin(), target->parsed->aliases.cend(),
-                    [&](const QString &a) { return a.normalized(QString::NormalizationForm_C).toLower() == key; });
+            const bool alias = std::ranges::any_of(target->parsed->aliases, [&](const QString &a) {
+                return a.normalized(QString::NormalizationForm_C).toLower() == key;
+            });
             const QString name = pageName(vault, *page);
             if (alias || name.compare(t.name, Qt::CaseInsensitive) == 0 || markdown::tagSyntax(name).isEmpty())
                 continue;

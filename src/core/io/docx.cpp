@@ -85,76 +85,62 @@ public:
     QByteArray run()
     {
         QString body;
-        writeFrame(m_document.document()->rootFrame(), body);
-        const QSizeF page = m_options.paper == PaperSize::Letter ? QSizeF(12240, 15840) : QSizeF(11906, 16838);
+        writeItems(m_document.document()->rootFrame()->begin(), body);
+        const bool letter = m_options.paper == PaperSize::Letter; // else A4; the page's size in twips below
         const QString document =
                 uR"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>)"_s
-                + body + u"<w:sectPr><w:pgSz w:w=\""_s + num(qint64(page.width())) + u"\" w:h=\""_s
-                + num(qint64(page.height()))
+                + body + u"<w:sectPr><w:pgSz w:w=\""_s + num(letter ? 12240 : 11906) + u"\" w:h=\""_s
+                + num(letter ? 15840 : 16838)
                 + u"\"/><w:pgMar w:top=\"1134\" w:right=\"1134\" w:bottom=\"1134\" w:left=\"1134\" w:header=\"567\" "
                   u"w:footer=\"567\" w:gutter=\"0\"/></w:sectPr></w:body></w:document>"_s;
 
-        QList<FileEntry> entries;
-        entries.append(FileEntry{u"[Content_Types].xml"_s, contentTypes().toUtf8()});
-        entries.append(FileEntry{u"_rels/.rels"_s, packageRels().toUtf8()});
-        entries.append(FileEntry{u"docProps/core.xml"_s, coreProperties().toUtf8()});
-        entries.append(
-                FileEntry{u"docProps/app.xml"_s, QByteArray(R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Brulion</Application></Properties>)")});
-        entries.append(FileEntry{u"word/document.xml"_s, document.toUtf8()});
-        entries.append(FileEntry{u"word/styles.xml"_s, styles().toUtf8()});
-        entries.append(FileEntry{u"word/numbering.xml"_s, numbering().toUtf8()});
-        entries.append(
-                FileEntry{u"word/settings.xml"_s, QByteArray(R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>)")});
-        entries.append(FileEntry{u"word/_rels/document.xml.rels"_s, documentRels().toUtf8()});
+        QList<FileEntry> entries = {
+                {u"[Content_Types].xml"_s, contentTypes().toUtf8()},
+                {u"_rels/.rels"_s, packageRels().toUtf8()},
+                {u"docProps/core.xml"_s, coreProperties().toUtf8()},
+                {u"docProps/app.xml"_s, QByteArray(R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Brulion</Application></Properties>)")},
+                {u"word/document.xml"_s, document.toUtf8()},
+                {u"word/styles.xml"_s, styles().toUtf8()},
+                {u"word/numbering.xml"_s, numbering().toUtf8()},
+                {u"word/settings.xml"_s, QByteArray(R"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>)")},
+                {u"word/_rels/document.xml.rels"_s, documentRels().toUtf8()},
+        };
         entries.append(m_media);
-        ZipWriteOptions zip;
-        zip.modified = m_options.created;
         // Every entry deflated: LibreOffice refuses a package with stored entries that have data
         // descriptors (what the writer gives pictures it stores).
-        zip.storeCompressedFormats = false;
-        return writeZip(entries, zip);
+        return writeZip(entries, {.storeCompressedFormats = false, .modified = m_options.created});
     }
 
 private:
     // ---- Content ------------------------------------------------------------------------------
 
-    void writeFrame(QTextFrame *frame, QString &out)
+    /// The tables, frames and paragraphs from `it` on; true when the last of them is a paragraph.
+    bool writeItems(QTextFrame::iterator it, QString &out)
     {
-        for (QTextFrame::iterator it = frame->begin(); !it.atEnd(); ++it) {
+        bool endsWithParagraph = false;
+        for (; !it.atEnd(); ++it) {
             if (QTextFrame *child = it.currentFrame()) {
                 if (auto *table = qobject_cast<QTextTable *>(child))
                     writeTable(table, out);
                 else
-                    writeFrame(child, out);
+                    writeItems(child->begin(), out);
+                endsWithParagraph = false;
             } else if (it.currentBlock().isValid()) {
                 writeBlock(it.currentBlock(), out);
+                endsWithParagraph = true;
             }
         }
+        return endsWithParagraph;
     }
 
     void writeCell(const QTextTableCell &cell, QString &out)
     {
-        QString content;
-        bool endsWithParagraph = false;
-        for (QTextFrame::iterator it = cell.begin(); !it.atEnd(); ++it) {
-            if (QTextFrame *child = it.currentFrame()) {
-                if (auto *table = qobject_cast<QTextTable *>(child))
-                    writeTable(table, content);
-                else
-                    writeFrame(child, content);
-                endsWithParagraph = false;
-            } else if (it.currentBlock().isValid()) {
-                writeBlock(it.currentBlock(), content);
-                endsWithParagraph = true;
-            }
-        }
         // A cell ends with a paragraph (also after a table in it).
-        if (!endsWithParagraph)
-            content += u"<w:p/>"_s;
-        out += content;
+        if (!writeItems(cell.begin(), out))
+            out += u"<w:p/>"_s;
     }
 
     void writeTable(QTextTable *table, QString &out)
@@ -212,29 +198,35 @@ private:
         out += u"</w:tbl>"_s;
     }
 
-    int numberingOf(const QTextBlock &block, int *level)
+    struct Numbering {
+        int id = 0; ///< w:numId, 0 outside lists
+        int level = 0;
+    };
+
+    Numbering numberingOf(const QTextBlock &block)
     {
-        QTextList *list = block.textList();
+        const QTextList *list = block.textList();
         if (!list)
-            return 0;
-        *level = std::clamp(list->format().indent() - 1, 0, 8);
+            return {};
+        const QTextListFormat format = list->format();
+        const int level = std::clamp(format.indent() - 1, 0, 8);
         switch (block.blockFormat().marker()) {
-        case QTextBlockFormat::MarkerType::Checked: return CheckedNum;
-        case QTextBlockFormat::MarkerType::Unchecked: return UncheckedNum;
+        case QTextBlockFormat::MarkerType::Checked: return {CheckedNum, level};
+        case QTextBlockFormat::MarkerType::Unchecked: return {UncheckedNum, level};
         case QTextBlockFormat::MarkerType::NoMarker: break;
         }
-        const QTextListFormat::Style style = list->format().style();
+        const QTextListFormat::Style style = format.style();
         const bool ordered = style == QTextListFormat::ListDecimal || style == QTextListFormat::ListLowerAlpha
                              || style == QTextListFormat::ListUpperAlpha || style == QTextListFormat::ListLowerRoman
                              || style == QTextListFormat::ListUpperRoman;
         if (!ordered)
-            return BulletNum;
+            return {BulletNum, level};
         if (const auto it = m_orderedNums.constFind(list); it != m_orderedNums.constEnd())
-            return *it;
+            return {*it, level};
         const int id = FirstOrderedNum + int(m_ordered.size());
-        m_ordered.append({*level, std::max(0, list->format().start())});
+        m_ordered.append({level, std::max(1, format.start())});
         m_orderedNums.insert(list, id);
-        return id;
+        return {id, level};
     }
 
     void writeBlock(const QTextBlock &block, QString &out)
@@ -253,8 +245,7 @@ private:
             properties += u"<w:pStyle w:val=\""_s + style + u"\"/>"_s;
         if (bf.pageBreakPolicy() & QTextFormat::PageBreak_AlwaysBefore)
             properties += u"<w:pageBreakBefore/>"_s;
-        int level = 0;
-        if (const int id = numberingOf(block, &level))
+        if (const auto [id, level] = numberingOf(block); id != 0)
             properties += u"<w:numPr><w:ilvl w:val=\""_s + num(level) + u"\"/><w:numId w:val=\""_s + num(id)
                           + u"\"/></w:numPr>"_s;
         if (bf.hasProperty(QTextFormat::BlockTrailingHorizontalRulerWidth))
@@ -283,8 +274,8 @@ private:
     QString runProperties(const QTextCharFormat &cf, bool link, bool heading) const
     {
         QString out;
-        const bool mono = cf.fontFixedPitch() || cf.fontFamilies().toStringList().contains(m_mono)
-                          || cf.fontFamilies().toStringList().contains(u"Courier New"_s);
+        const QStringList families = cf.fontFamilies().toStringList();
+        const bool mono = cf.fontFixedPitch() || families.contains(m_mono) || families.contains(u"Courier New"_s);
         if (link)
             out += u"<w:rStyle w:val=\"Hyperlink\"/>"_s;
         else if (mono)
@@ -340,10 +331,7 @@ private:
             } else if (c == u'\t') {
                 flush();
                 runs += u"<w:r>"_s + rPr + u"<w:tab/></w:r>"_s;
-            } else if (c == QChar::ObjectReplacementCharacter || c == QChar::Nbsp) {
-                if (c == QChar::Nbsp)
-                    pending += c;
-            } else {
+            } else if (c != QChar::ObjectReplacementCharacter) {
                 pending += c;
             }
         }
@@ -387,8 +375,8 @@ private:
         }
         const QSizeF size =
                 format.width() > 0 && format.height() > 0 ? QSizeF(format.width(), format.height()) : it->size;
-        const QString cx = num(std::max<qint64>(1, qint64(std::llround(size.width() * EmuPerCssPixel))));
-        const QString cy = num(std::max<qint64>(1, qint64(std::llround(size.height() * EmuPerCssPixel))));
+        const QString cx = num(std::max<qint64>(1, std::llround(size.width() * EmuPerCssPixel)));
+        const QString cy = num(std::max<qint64>(1, std::llround(size.height() * EmuPerCssPixel)));
         const QString id = num(++m_drawings);
         return u"<w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\""_s + cx
                + u"\" cy=\""_s + cy + u"\"/><wp:docPr id=\""_s + id + u"\" name=\"Picture "_s + id + u"\" descr=\""_s
@@ -453,59 +441,49 @@ private:
                         + u"\"/></w:pPr><w:rPr><w:b/><w:color w:val=\"1F2430\"/><w:sz w:val=\""_s
                         + num(sizes[level - 1]) + u"\"/></w:rPr></w:style>"_s;
         }
-        const QString mono = xmlText(u"Consolas"_s);
         return uR"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="264" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="200"/></w:pPr><w:rPr><w:b/><w:sz w:val="44"/></w:rPr></w:style>)"_s
                + headings
-               + uR"(<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="DDD6C6"/></w:pBdr><w:ind w:left="360"/></w:pPr><w:rPr><w:color w:val="535A6A"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="SourceCode"><w:name w:val="Source Code"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="F3EEE2"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="MONO" w:hAnsi="MONO" w:cs="MONO"/><w:sz w:val="19"/></w:rPr></w:style><w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/></w:style><w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr><w:rFonts w:ascii="MONO" w:hAnsi="MONO" w:cs="MONO"/><w:sz w:val="20"/><w:shd w:val="clear" w:color="auto" w:fill="F3EEE2"/></w:rPr></w:style><w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr><w:color w:val="2C6AA3"/><w:u w:val="single"/></w:rPr></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style></w:styles>)"_s
-                         .replace(u"MONO"_s, mono);
+               + uR"(<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="DDD6C6"/></w:pBdr><w:ind w:left="360"/></w:pPr><w:rPr><w:color w:val="535A6A"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="SourceCode"><w:name w:val="Source Code"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="F3EEE2"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:sz w:val="19"/></w:rPr></w:style><w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/></w:style><w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:sz w:val="20"/><w:shd w:val="clear" w:color="auto" w:fill="F3EEE2"/></w:rPr></w:style><w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:rPr><w:color w:val="2C6AA3"/><w:u w:val="single"/></w:rPr></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style></w:styles>)"_s;
+    }
+
+    /// Abstract numbering `id`: nine levels of `format` ("bullet", "decimal") whose text is
+    /// `text(level)`, in font `font` (none: the paragraph's).
+    static QString abstractNum(int id, QStringView format, QString (*text)(int), const QString &font = {})
+    {
+        QString runFont;
+        if (!font.isEmpty())
+            runFont = u"<w:rPr><w:rFonts w:ascii=\""_s + font + u"\" w:hAnsi=\""_s + font + u"\" w:cs=\""_s + font
+                      + u"\"/></w:rPr>"_s;
+        QString out = u"<w:abstractNum w:abstractNumId=\""_s + num(id)
+                      + u"\"><w:multiLevelType w:val=\"hybridMultilevel\"/>"_s;
+        for (int i = 0; i < 9; ++i) {
+            out += u"<w:lvl w:ilvl=\""_s + num(i) + u"\"><w:start w:val=\"1\"/><w:numFmt w:val=\""_s + format
+                   + u"\"/><w:lvlText w:val=\""_s + text(i) + u"\"/><w:lvlJc w:val=\"left\"/><w:pPr><w:ind w:left=\""_s
+                   + num(720 * (i + 1)) + u"\" w:hanging=\"360\"/></w:pPr>"_s + runFont + u"</w:lvl>"_s;
+        }
+        return out + u"</w:abstractNum>"_s;
     }
 
     QString numbering() const
     {
-        const auto levels = [](const std::function<QString(int)> &level) {
-            QString out;
-            for (int i = 0; i < 9; ++i)
-                out += level(i);
-            return out;
-        };
-        const auto bulletLevel = [](const QString &text, const QString &font) {
-            return [text, font](int i) -> QString {
-                return u"<w:lvl w:ilvl=\""_s + num(i)
-                       + u"\"><w:start w:val=\"1\"/><w:numFmt w:val=\"bullet\"/><w:lvlText w:val=\""_s + text
-                       + u"\"/><w:lvlJc w:val=\"left\"/><w:pPr><w:ind w:left=\""_s + num(720 * (i + 1))
-                       + u"\" w:hanging=\"360\"/></w:pPr>"_s
-                       + (font.isEmpty() ? QString()
-                                         : u"<w:rPr><w:rFonts w:ascii=\""_s + font + u"\" w:hAnsi=\""_s + font
-                                                   + u"\" w:cs=\""_s + font + u"\"/></w:rPr>"_s)
-                       + u"</w:lvl>"_s;
-            };
-        };
-        static const QString bullets[] = {u"•"_s, u"◦"_s, u"▪"_s};
+        const QString symbols = u"Segoe UI Symbol"_s; // has the checkboxes
         QString out = uR"(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">)"_s;
-        out += u"<w:abstractNum w:abstractNumId=\"0\"><w:multiLevelType w:val=\"hybridMultilevel\"/>"_s
-               + levels([&](int i) { return bulletLevel(bullets[i % 3], QString())(i); }) + u"</w:abstractNum>"_s;
-        out += u"<w:abstractNum w:abstractNumId=\"1\"><w:multiLevelType w:val=\"hybridMultilevel\"/>"_s
-               + levels([](int i) {
-                     return u"<w:lvl w:ilvl=\""_s + num(i)
-                            + u"\"><w:start w:val=\"1\"/><w:numFmt w:val=\"decimal\"/><w:lvlText w:val=\"%"_s
-                            + num(i + 1) + u".\"/><w:lvlJc w:val=\"left\"/><w:pPr><w:ind w:left=\""_s
-                            + num(720 * (i + 1)) + u"\" w:hanging=\"360\"/></w:pPr></w:lvl>"_s;
-                 })
-               + u"</w:abstractNum>"_s;
-        out += u"<w:abstractNum w:abstractNumId=\"2\"><w:multiLevelType w:val=\"hybridMultilevel\"/>"_s
-               + levels(bulletLevel(u"☐"_s, u"Segoe UI Symbol"_s)) + u"</w:abstractNum>"_s;
-        out += u"<w:abstractNum w:abstractNumId=\"3\"><w:multiLevelType w:val=\"hybridMultilevel\"/>"_s
-               + levels(bulletLevel(u"☑"_s, u"Segoe UI Symbol"_s)) + u"</w:abstractNum>"_s;
+        out += abstractNum(0, u"bullet", [](int level) -> QString {
+            static const QString bullets[] = {u"•"_s, u"◦"_s, u"▪"_s};
+            return bullets[level % 3];
+        });
+        out += abstractNum(1, u"decimal", [](int level) -> QString { return u'%' + num(level + 1) + u'.'; });
+        out += abstractNum(2, u"bullet", [](int) { return u"☐"_s; }, symbols);
+        out += abstractNum(3, u"bullet", [](int) { return u"☑"_s; }, symbols);
         out += u"<w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num>"
                u"<w:num w:numId=\"2\"><w:abstractNumId w:val=\"2\"/></w:num>"
                u"<w:num w:numId=\"3\"><w:abstractNumId w:val=\"3\"/></w:num>"_s;
         for (qsizetype i = 0; i < m_ordered.size(); ++i) {
             out += u"<w:num w:numId=\""_s + num(FirstOrderedNum + i)
-                   + u"\"><w:abstractNumId w:val=\"1\"/><w:lvlOverride w:ilvl=\""_s + num(m_ordered[i].first)
-                   + u"\"><w:startOverride w:val=\""_s + num(std::max(1, m_ordered[i].second))
-                   + u"\"/></w:lvlOverride></w:num>"_s;
+                   + u"\"><w:abstractNumId w:val=\"1\"/><w:lvlOverride w:ilvl=\""_s + num(m_ordered[i].level)
+                   + u"\"><w:startOverride w:val=\""_s + num(m_ordered[i].start) + u"\"/></w:lvlOverride></w:num>"_s;
         }
         return out + u"</w:numbering>"_s;
     }
@@ -521,15 +499,18 @@ private:
     QList<FileEntry> m_media;
     int m_drawings = 0;
     QHash<const QTextList *, int> m_orderedNums;
-    QList<std::pair<int, int>> m_ordered; ///< level and start of each numbered list
+    struct OrderedList {
+        int level = 0;
+        int start = 1;
+    };
+    QList<OrderedList> m_ordered; ///< the numbered lists: w:numId FirstOrderedNum + index
 };
 
 } // namespace
 
 QByteArray writeDocx(const PaperDocument &document, const DocxOptions &options, QStringList *warnings)
 {
-    Writer writer(document, options, warnings);
-    return writer.run();
+    return Writer(document, options, warnings).run();
 }
 
 } // namespace brulion::io::detail

@@ -46,15 +46,12 @@ qsizetype safeCut(QStringView s, qsizetype i)
 qsizetype linePrefixLength(QStringView line)
 {
     const qsizetype n = line.size();
-    qsizetype i = 0;
-    while (i < n && isBlank(line[i]))
-        ++i;
-    const qsizetype indent = i;
-    auto skipBlanks = [&](qsizetype k) {
+    const auto skipBlanks = [&](qsizetype k) {
         while (k < n && isBlank(line[k]))
             ++k;
         return k;
     };
+    const qsizetype i = skipBlanks(0);
     // List marker (+ optional checkbox).
     qsizetype markerEnd = -1;
     if (i < n && (line[i] == u'-' || line[i] == u'*' || line[i] == u'+')) {
@@ -85,7 +82,7 @@ qsizetype linePrefixLength(QStringView line)
         if (q < n && isBlank(line[q]))
             ++q;
     }
-    return q > i ? q : indent;
+    return q;
 }
 
 /// Start of a trailing block id (` ^abc-123` incl. the blanks before it), or -1.
@@ -112,6 +109,11 @@ qsizetype trailingIdStart(QStringView line)
 QString nfc(QStringView s)
 {
     return isAscii(s) ? s.toString() : s.toString().normalized(QString::NormalizationForm_C);
+}
+
+QString nfc(const QString &s)
+{
+    return isAscii(s) ? s : s.normalized(QString::NormalizationForm_C);
 }
 
 QString lower(const QString &s)

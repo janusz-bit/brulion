@@ -42,28 +42,20 @@ TimeSummary summarizeTime(const VaultIndex &index, const QList<TaskRef> &tasks, 
 {
     TimeSummary out;
     QHash<QString, int> rowOf;
-    QHash<QString, QSet<QString>> tasksOf; // row key -> tasks counted in it
+    QList<QSet<QString>> counted; // per row: the tasks counted in it
     const auto add = [&](const QString &key, const QString &label, qint64 seconds, const QString &task,
                          const VaultPath &path, int line) {
         auto it = rowOf.constFind(key);
-        int r = 0;
         if (it == rowOf.constEnd()) {
-            r = int(out.rows.size());
-            rowOf.insert(key, r);
-            TimeSummaryRow row;
-            row.key = key;
-            row.label = label;
-            row.path = path;
-            row.line = line;
-            out.rows.append(row);
-        } else {
-            r = *it;
+            it = rowOf.insert(key, int(out.rows.size()));
+            out.rows.append(TimeSummaryRow{.key = key, .label = label, .path = path, .line = line});
+            counted.emplaceBack();
         }
-        out.rows[r].seconds += seconds;
-        QSet<QString> &counted = tasksOf[key];
-        if (!counted.contains(task)) {
-            counted.insert(task);
-            ++out.rows[r].tasks;
+        TimeSummaryRow &row = out.rows[*it];
+        row.seconds += seconds;
+        if (!counted[*it].contains(task)) {
+            counted[*it].insert(task);
+            ++row.tasks;
         }
     };
     for (const TaskRef &ref : tasks) {
@@ -77,13 +69,13 @@ TimeSummary summarizeTime(const VaultIndex &index, const QList<TaskRef> &tasks, 
         const QMap<QDate, qint64> days = markdown::clockedSecondsByDay(book.clocks, now);
         qint64 seconds = 0;
         const QString taskKey = ref.path + u':' + QString::number(block.line);
-        for (auto d = days.cbegin(); d != days.cend(); ++d) {
-            if ((from.isValid() && d.key() < from) || (to.isValid() && d.key() > to))
+        for (auto [day, daySeconds] : days.asKeyValueRange()) {
+            if ((from.isValid() && day < from) || (to.isValid() && day > to))
                 continue;
-            seconds += d.value();
+            seconds += daySeconds;
             if (group == TimeGroup::Day) {
-                const QString iso = d.key().toString(Qt::ISODate);
-                add(iso, iso, d.value(), taskKey, {}, -1);
+                const QString iso = day.toString(Qt::ISODate);
+                add(iso, iso, daySeconds, taskKey, {}, -1);
             }
         }
         if (seconds <= 0)
@@ -105,7 +97,7 @@ TimeSummary summarizeTime(const VaultIndex &index, const QList<TaskRef> &tasks, 
         }
     }
     if (group == TimeGroup::Day) {
-        std::ranges::sort(out.rows, [](const TimeSummaryRow &a, const TimeSummaryRow &b) { return a.key < b.key; });
+        std::ranges::sort(out.rows, {}, &TimeSummaryRow::key);
     } else {
         std::ranges::sort(out.rows, [](const TimeSummaryRow &a, const TimeSummaryRow &b) {
             if (a.seconds != b.seconds)

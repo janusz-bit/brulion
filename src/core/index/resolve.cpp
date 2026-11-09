@@ -3,9 +3,6 @@
 #include "index/textutil_p.h"
 #include "util/paths.h"
 
-#include <algorithm>
-#include <functional>
-
 namespace brulion::index_detail {
 
 using namespace Qt::StringLiterals;
@@ -15,6 +12,12 @@ namespace {
 bool isMarkdownExtension(QStringView ext)
 {
     return ext == u".md" || ext == u".markdown";
+}
+
+/// Does the lower-cased path `key` end with `.md` / `.markdown`?
+bool hasMarkdownSuffix(QStringView key)
+{
+    return key.endsWith(u".md") || key.endsWith(u".markdown");
 }
 
 /// Does `path` equal `suffix` or end with "/" + `suffix`?
@@ -30,13 +33,24 @@ bool betterPath(const VaultPath &a, const VaultPath &b)
     return a.size() < b.size() || (a.size() == b.size() && a < b);
 }
 
-VaultPath pickBestIf(const PathSet *set, const std::function<bool(const VaultPath &)> &accept)
+/// pathKey() without `.md`: what a note's name key and the folders of a target are compared with.
+QString notePathKey(const VaultPath &path)
+{
+    return paths::stripMarkdownExtension(pathKey(path));
+}
+
+/// pickBest() of `set` (the files filed under the base name of `name`, nullptr when none); for a
+/// `name` with folders only among the files whose `keyOf(path)` ends with its segments.
+template<class KeyOf>
+VaultPath pickBySuffix(const PathSet *set, const QString &name, KeyOf keyOf)
 {
     if (!set)
         return {};
+    if (!name.contains(u'/'))
+        return pickBest(*set);
     const VaultPath *best = nullptr;
     set->forEach([&](const VaultPath &p) {
-        if ((!best || betterPath(p, *best)) && accept(p))
+        if ((!best || betterPath(p, *best)) && endsWithSegments(keyOf(p), name))
             best = &p;
     });
     return best ? *best : VaultPath();
@@ -105,16 +119,14 @@ bool isAttachmentExtension(QStringView ext)
 bool isExternalTarget(QStringView target)
 {
     // ^[A-Za-z][A-Za-z0-9+.-]*:   but not a Windows drive (C:\ or C:/).
+    const auto isSchemeChar = [](QChar c) {
+        return c.unicode() < 0x80 && (c.isLetterOrNumber() || c == u'+' || c == u'.' || c == u'-');
+    };
     if (target.isEmpty() || !(target[0].isLetter() && target[0].unicode() < 0x80))
         return false;
     qsizetype i = 1;
-    while (i < target.size()) {
-        const QChar c = target[i];
-        const bool schemeChar = c.unicode() < 0x80 && (c.isLetterOrNumber() || c == u'+' || c == u'.' || c == u'-');
-        if (!schemeChar)
-            break;
+    while (i < target.size() && isSchemeChar(target[i]))
         ++i;
-    }
     if (i >= target.size() || target[i] != u':')
         return false;
     const bool drive = i == 1 && i + 1 < target.size() && (target[i + 1] == u'/' || target[i + 1] == u'\\');
@@ -243,20 +255,17 @@ VaultPath NameTable::resolve(const QString &target, const VaultPath &from, Targe
     const bool explicitRelative = t.startsWith(u"./") || t.startsWith(u"../");
     const QString fromDir = from.isEmpty() ? QString() : paths::dirname(paths::normalize(from));
     if (explicitRelative && !from.isEmpty()) {
-        const VaultPath hit = lookupPath(paths::join(fromDir, t), attachmentFirst);
-        if (!hit.isEmpty())
+        if (const VaultPath hit = lookupPath(paths::join(fromDir, t), attachmentFirst); !hit.isEmpty())
             return hit;
     }
     if (const VaultPath exact = lookupPath(norm, attachmentFirst); !exact.isEmpty())
         return exact;
     if (!fromDir.isEmpty() && !explicitRelative && !t.startsWith(u'/')) {
-        const VaultPath hit = lookupPath(paths::join(fromDir, t), attachmentFirst);
-        if (!hit.isEmpty())
+        if (const VaultPath hit = lookupPath(paths::join(fromDir, t), attachmentFirst); !hit.isEmpty())
             return hit;
     }
-    if (const VaultPath byName = lookupName(lower(norm)); !byName.isEmpty())
-        return byName;
-    return lookupAlias(t);
+    const VaultPath byName = lookupName(lower(norm));
+    return byName.isEmpty() ? lookupAlias(t) : byName;
 }
 
 VaultPath NameTable::resolveNote(const QString &target, TargetForm form) const
@@ -266,41 +275,27 @@ VaultPath NameTable::resolveNote(const QString &target, TargetForm form) const
     if (spelled.isEmpty())
         return {};
     const QString key = lower(spelled);
-    const bool md = key.endsWith(u".md") || key.endsWith(u".markdown");
+    const bool md = hasMarkdownSuffix(key);
     // 1) the note at exactly that vault path.
-    VaultPath hit = md ? lookupExact(key, spelled) : lookupExact(key + u".md"_s, spelled + u".md"_s);
-    if (hit.isEmpty() && !md)
-        hit = lookupExact(key + u".markdown"_s, spelled + u".markdown"_s);
-    if (!hit.isEmpty())
+    if (const VaultPath hit = md ? lookupExact(key, spelled) : lookupNote(key, spelled); !hit.isEmpty())
         return hit;
     // 2) base name, for a target with folders a path suffix (shortest path, then alphabetical).
     const QString stem = md ? paths::stripMarkdownExtension(key) : key;
-    if (const PathSet *set = find(&NameTable::m_noteNames, paths::basename(stem))) {
-        hit = !stem.contains(u'/') ? pickBest(*set) : pickBestIf(set, [&](const VaultPath &p) {
-            return endsWithSegments(paths::stripMarkdownExtension(pathKey(p)), stem);
-        });
-        if (!hit.isEmpty())
-            return hit;
-    }
+    const VaultPath byName = pickBySuffix(find(&NameTable::m_noteNames, paths::basename(stem)), stem, notePathKey);
     // 3) aliases.
-    return lookupAlias(t);
+    return byName.isEmpty() ? lookupAlias(t) : byName;
 }
 
 VaultPath NameTable::notePath(const QString &path) const
 {
     const QString spelled = nfc(path);
-    if (spelled.isEmpty())
-        return {};
-    const QString key = lower(spelled);
-    const VaultPath md = lookupExact(key + u".md"_s, spelled + u".md"_s);
-    return md.isEmpty() ? lookupExact(key + u".markdown"_s, spelled + u".markdown"_s) : md;
+    return spelled.isEmpty() ? VaultPath() : lookupNote(lower(spelled), spelled);
 }
 
 VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) const
 {
     const QString lowered = lower(nfc(target));
-    const QString ext = paths::extension(lowered);
-    const bool attachmentFirst = isAttachmentExtension(ext);
+    const bool attachmentFirst = isAttachmentExtension(paths::extension(lowered));
     // 1) the file at the vault root, 2) the file in the linking file's folder.
     if (const VaultPath hit = lookupPath(target, attachmentFirst); !hit.isEmpty())
         return hit;
@@ -308,77 +303,54 @@ VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) c
         if (const VaultPath hit = lookupPath(paths::join(fromDir, target), attachmentFirst); !hit.isEmpty())
             return hit;
     }
-    // 3) base name (shortest path, then alphabetical).
-    const bool md = isMarkdownExtension(ext);
-    const PathSet *notes = find(&NameTable::m_noteNames, md ? paths::stripMarkdownExtension(lowered) : lowered);
-    const PathSet *files = md ? nullptr : find(&NameTable::m_fileNames, lowered);
-    const VaultPath bestNote = notes ? pickBest(*notes) : VaultPath();
-    const VaultPath bestFile = files ? pickBest(*files) : VaultPath();
-    const VaultPath best =
-            attachmentFirst ? (bestFile.isEmpty() ? bestNote : bestFile) : (bestNote.isEmpty() ? bestFile : bestNote);
-    if (!best.isEmpty())
-        return best;
-    // 4) aliases.
-    return lookupAlias(target);
+    // 3) base name (shortest path, then alphabetical), 4) aliases.
+    const VaultPath byName = lookupName(lowered);
+    return byName.isEmpty() ? lookupAlias(target) : byName;
 }
 
 VaultPath NameTable::lookupPath(const QString &path, bool attachmentFirst) const
 {
     const QString spelled = nfc(path);
     const QString key = lower(spelled);
-    if (key.endsWith(u".md") || key.endsWith(u".markdown"))
+    if (hasMarkdownSuffix(key))
         return lookupExact(key, spelled);
-    auto asNote = [&] {
-        const VaultPath md = lookupExact(key + u".md"_s, spelled + u".md"_s);
-        return md.isEmpty() ? lookupExact(key + u".markdown"_s, spelled + u".markdown"_s) : md;
-    };
     if (attachmentFirst) {
         const VaultPath file = lookupExact(key, spelled);
-        return file.isEmpty() ? asNote() : file;
+        return file.isEmpty() ? lookupNote(key, spelled) : file;
     }
-    const VaultPath note = asNote();
+    const VaultPath note = lookupNote(key, spelled);
     return note.isEmpty() ? lookupExact(key, spelled) : note;
 }
 
 VaultPath NameTable::lookupExact(const QString &key, const QString &spelled) const
 {
     const PathSet *set = find(&NameTable::m_byPath, key);
-    if (!set || set->isEmpty())
+    if (!set)
         return {};
-    if (set->size() == 1)
-        return set->sorted().constFirst();
-    const VaultPath exact = set->min([&](const VaultPath &a, const VaultPath &b) {
+    return set->min([&](const VaultPath &a, const VaultPath &b) {
         const bool aExact = nfc(a) == spelled;
         return aExact != (nfc(b) == spelled) ? aExact : betterPath(a, b);
     });
-    return exact;
+}
+
+VaultPath NameTable::lookupNote(const QString &key, const QString &spelled) const
+{
+    const VaultPath md = lookupExact(key + u".md"_s, spelled + u".md"_s);
+    return md.isEmpty() ? lookupExact(key + u".markdown"_s, spelled + u".markdown"_s) : md;
 }
 
 VaultPath NameTable::lookupName(const QString &lowerPath) const
 {
     const QString ext = paths::extension(lowerPath);
     const bool md = isMarkdownExtension(ext);
-    const bool hasDir = lowerPath.contains(u'/');
-    auto notes = [&]() -> VaultPath {
+    const auto notes = [&] {
         const QString stem = md ? paths::stripMarkdownExtension(lowerPath) : lowerPath;
-        const PathSet *set = find(&NameTable::m_noteNames, hasDir ? paths::basename(stem) : stem);
-        if (!set)
-            return {};
-        if (!hasDir)
-            return pickBest(*set);
-        return pickBestIf(set, [&](const VaultPath &p) {
-            return endsWithSegments(paths::stripMarkdownExtension(pathKey(p)), stem);
-        });
+        return pickBySuffix(find(&NameTable::m_noteNames, paths::basename(stem)), stem, notePathKey);
     };
-    auto files = [&]() -> VaultPath {
+    const auto files = [&]() -> VaultPath {
         if (md || !hasAny(&NameTable::m_fileNames))
             return {};
-        const PathSet *set = find(&NameTable::m_fileNames, hasDir ? paths::basename(lowerPath) : lowerPath);
-        if (!set)
-            return {};
-        if (!hasDir)
-            return pickBest(*set);
-        return pickBestIf(set, [&](const VaultPath &p) { return endsWithSegments(pathKey(p), lowerPath); });
+        return pickBySuffix(find(&NameTable::m_fileNames, paths::basename(lowerPath)), lowerPath, pathKey);
     };
     if (isAttachmentExtension(ext)) {
         const VaultPath f = files();

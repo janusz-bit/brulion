@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ranges>
 
 namespace brulion {
 
@@ -26,27 +27,15 @@ int fuzzyDistance(qsizetype length)
     return length >= 8 ? 2 : (length >= 4 ? 1 : 0);
 }
 
-/// Visit the tokens of already folded text.
+/// Visit the tokens of already folded text: its words (forEachWord()) of up to MaxTokenLength.
 template<typename Visit>
-void forEachToken(QStringView folded, Visit &&visit)
+void forEachToken(QStringView folded, Visit visit)
 {
-    qsizetype start = -1;
-    auto flush = [&](qsizetype end) {
-        if (start >= 0 && end - start <= SearchIndex::MaxTokenLength)
-            visit(folded.sliced(start, end - start));
-        start = -1;
-    };
-    for (qsizetype i = 0; i < folded.size();) {
-        const auto [cp, len] = codePointAt(folded, i);
-        if (isTokenChar(cp)) {
-            if (start < 0)
-                start = i;
-        } else {
-            flush(i);
-        }
-        i += len;
-    }
-    flush(folded.size());
+    forEachWord(folded, [&](QStringView word) {
+        if (word.size() <= SearchIndex::MaxTokenLength)
+            visit(word);
+        return true;
+    });
 }
 
 } // namespace
@@ -81,8 +70,8 @@ SearchIndex::Document SearchIndex::prepare(QStringView title, const QStringList 
     addField(aliases.join(u'\n'), Aliases);
     addField(content, Content);
     out.terms.reserve(counts.size());
-    for (auto it = counts.cbegin(); it != counts.cend(); ++it)
-        out.terms.append({it.key(), it.value()});
+    for (auto [term, tf] : std::as_const(counts).asKeyValueRange())
+        out.terms.append({term, tf});
     return out;
 }
 
@@ -105,13 +94,9 @@ QStringList SearchIndex::ids() const
 void SearchIndex::set(const QString &id, Document document, quint64 contentKey)
 {
     remove(id);
-    int doc = 0;
-    if (!m_free.isEmpty()) {
-        doc = m_free.takeLast();
-    } else {
-        doc = int(m_docs.size());
+    const int doc = m_free.isEmpty() ? int(m_docs.size()) : m_free.takeLast();
+    if (doc == m_docs.size())
         m_docs.append(Doc());
-    }
     Doc &d = m_docs[doc];
     d.id = id;
     d.used = true;
@@ -123,12 +108,10 @@ void SearchIndex::set(const QString &id, Document document, quint64 contentKey)
         const auto entry = m_postings.try_emplace(term).first;
         PostingList &list = entry->second;
         const Posting posting{doc, tf};
-        if (list.isEmpty() || list.constLast().doc < doc) {
+        if (list.isEmpty() || list.constLast().doc < doc)
             list.append(posting);
-        } else {
-            const auto pos = std::ranges::lower_bound(list, doc, {}, &Posting::doc);
-            list.insert(pos, posting);
-        }
+        else
+            list.insert(std::ranges::lower_bound(list, doc, {}, &Posting::doc), posting);
         d.terms.append(&entry->first);
     }
     for (int f = 0; f < FieldCount; ++f)
@@ -172,7 +155,7 @@ void SearchIndex::clear()
 
 void SearchIndex::squeeze()
 {
-    for (auto &[term, list] : m_postings) {
+    for (PostingList &list : m_postings | std::views::values) {
         if (list.capacity() > list.size())
             list.squeeze();
     }
@@ -184,8 +167,7 @@ QList<SearchIndex::Expansion> SearchIndex::expand(const QString &term, bool pref
     QList<Expansion> out;
     QHash<const QString *, qsizetype> seen;
     auto add = [&](const std::pair<const QString, PostingList> &entry, double weight, bool fuzzy) {
-        const auto it = seen.constFind(&entry.first);
-        if (it != seen.constEnd()) {
+        if (const auto it = seen.constFind(&entry.first); it != seen.constEnd()) {
             Expansion &e = out[*it];
             e.weight = std::max(e.weight, weight);
             e.fuzzy = e.fuzzy && fuzzy;
@@ -218,7 +200,7 @@ QList<SearchIndex::Expansion> SearchIndex::expand(const QString &term, bool pref
     return out;
 }
 
-double SearchIndex::fieldScore(const Posting &posting, qsizetype df) const
+double SearchIndex::fieldScore(Posting posting, qsizetype df) const
 {
     const double docs = double(m_byId.size());
     const double idf = std::log(1.0 + (docs - double(df) + 0.5) / (double(df) + 0.5));
@@ -255,7 +237,8 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
     QList<int> literalTerms(docCount, 0);
     QList<QList<const QString *>> best(terms.size(), QList<const QString *>(docCount, nullptr));
     for (qsizetype t = 0; t < terms.size(); ++t) {
-        const QList<Expansion> expansions = expand(terms[t], t == terms.size() - 1);
+        const QList<Expansion> expansions = expand(terms.at(t), t == terms.size() - 1);
+        QList<const QString *> &bestTerm = best[t];
         QList<double> termScore(docCount, 0.0);
         QList<double> bestScore(docCount, 0.0);
         QList<bool> literal(docCount, false);
@@ -267,12 +250,13 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
                     literal[p.doc] = true;
                 if (s > bestScore[p.doc]) {
                     bestScore[p.doc] = s;
-                    best[t][p.doc] = e.term;
+                    bestTerm[p.doc] = e.term;
                 }
             }
         }
+        // Reads through at(): the list of a term without matches stays shared (not copied).
         for (qsizetype doc = 0; doc < docCount; ++doc) {
-            if (best[t][doc]) {
+            if (bestTerm.at(doc)) {
                 total[doc] += termScore[doc];
                 ++matchedTerms[doc];
                 if (literal[doc])
@@ -284,7 +268,7 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
     auto collect = [&](int required) {
         QList<int> docs;
         for (qsizetype doc = 0; doc < docCount; ++doc) {
-            if (m_docs[doc].used && matchedTerms[doc] >= required && matchedTerms[doc] > 0)
+            if (m_docs[doc].used && matchedTerms[doc] >= required)
                 docs.append(int(doc));
         }
         return docs;
@@ -309,8 +293,8 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
         Hit hit;
         hit.id = m_docs[doc].id;
         hit.score = total[doc];
-        for (qsizetype t = 0; t < terms.size(); ++t) {
-            if (const QString *term = best[t][doc]; term && !hit.terms.contains(*term))
+        for (const QList<const QString *> &bestTerm : std::as_const(best)) {
+            if (const QString *term = bestTerm.at(doc); term && !hit.terms.contains(*term))
                 hit.terms.append(*term);
         }
         hits.append(std::move(hit));

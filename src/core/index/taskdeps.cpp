@@ -6,8 +6,6 @@
 
 #include <QSet>
 
-#include <algorithm>
-
 namespace brulion {
 
 using namespace index_detail;
@@ -36,10 +34,8 @@ void VaultIndex::Private::forTasksWithId(const QString &id,
     const auto owners = taskIdOwners.constFind(id);
     if (owners == taskIdOwners.constEnd())
         return;
-    QList<VaultPath> paths;
-    owners->forEach([&](const VaultPath &p) { paths.append(p); });
-    std::ranges::sort(paths);
-    for (const VaultPath &p : std::as_const(paths)) {
+    const QList<VaultPath> paths = owners->sorted();
+    for (const VaultPath &p : paths) {
         const Entry *e = entry(p);
         if (!e)
             continue;
@@ -145,21 +141,17 @@ TaskDependencies VaultIndex::taskDependencies(const VaultPath &path, int blockIn
     }
     out.blocked = d->taskBlocked(*e, blockIndex);
 
-    if (!task.id.isEmpty()) {
-        const auto notes = d->taskDependents.constFind(task.id);
-        if (notes != d->taskDependents.constEnd()) {
-            QList<VaultPath> paths;
-            notes->forEach([&](const VaultPath &p) { paths.append(p); });
-            std::ranges::sort(paths);
-            for (const VaultPath &p : std::as_const(paths)) {
-                const Private::Entry *other = d->entry(p);
-                if (!other)
-                    continue;
-                for (const int i : other->taskBlocks()) {
-                    const Task &t = *other->note.blocks[i].task;
-                    if (!(other == e && i == blockIndex) && !isClosed(t.status) && t.dependsOn.contains(task.id))
-                        out.dependents.append(TaskRef{other->path, i, t});
-                }
+    const auto notes = d->taskDependents.constFind(task.id);
+    if (!task.id.isEmpty() && notes != d->taskDependents.constEnd()) {
+        const QList<VaultPath> paths = notes->sorted();
+        for (const VaultPath &p : paths) {
+            const Private::Entry *other = d->entry(p);
+            if (!other)
+                continue;
+            for (const int i : other->taskBlocks()) {
+                const Task &t = *other->note.blocks[i].task;
+                if (!(other == e && i == blockIndex) && !isClosed(t.status) && t.dependsOn.contains(task.id))
+                    out.dependents.append(TaskRef{other->path, i, t});
             }
         }
     }
@@ -195,7 +187,8 @@ TaskDependencies VaultIndex::taskDependencies(const VaultPath &path, int blockIn
 QList<TaskRef> VaultIndex::runningClocks() const
 {
     QList<TaskRef> out;
-    for (const TaskRef &t : tasks()) {
+    // A const list: tasks() shares the index's cached list, which a non-const loop would copy.
+    for (const QList<TaskRef> all = tasks(); const TaskRef &t : all) {
         if (t.task.clockStart.isValid())
             out.append(t);
     }

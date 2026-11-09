@@ -40,7 +40,7 @@ void blank(QString &s, qsizetype from, qsizetype to)
 /// sees (markdown::findTags: `#tag`, `#nested/tag`, `#[[tag name]]`).
 void maskTags(QString &line)
 {
-    for (const markdown::TagSpan &tag : markdown::findTags(line))
+    for (const QList<markdown::TagSpan> tags = markdown::findTags(line); const markdown::TagSpan &tag : tags)
         blank(line, tag.from, tag.to);
 }
 
@@ -148,13 +148,12 @@ QList<MentionMatcher> mentionMatchers(const QStringList &names)
         seen.insert(lower);
         // Unicode whitespace (also the no-break space common after Polish one-letter words).
         static const QRegularExpression space = text::unicodeRegex(u"\\s+"_s);
-        const QStringList parts = name.split(space, Qt::SkipEmptyParts);
-        QStringList escaped;
-        for (const QString &p : parts)
-            escaped.append(QRegularExpression::escape(p));
+        QStringList parts = name.split(space, Qt::SkipEmptyParts);
         MentionMatcher m;
-        m.firstWord = parts.isEmpty() ? lower : parts.first().toLower();
-        m.re = text::unicodeRegex(escaped.join(u"\\s+"_s), QRegularExpression::CaseInsensitiveOption);
+        m.firstWord = parts.isEmpty() ? lower : parts.constFirst().toLower();
+        for (QString &p : parts)
+            p = QRegularExpression::escape(p);
+        m.re = text::unicodeRegex(parts.join(u"\\s+"_s), QRegularExpression::CaseInsensitiveOption);
         m.length = name.size();
         out.append(std::move(m));
     }
@@ -177,15 +176,12 @@ QList<Mention> findMentions(const QString &content, const ParsedNote &note, cons
         const text::Line &l = lines[i];
         QString text = masked.mid(l.start, l.text.size());
         maskTags(text);
-        if (text.trimmed().isEmpty())
+        if (QStringView(text).trimmed().isEmpty())
             continue;
-        QString orig = l.text;
-        const QString normalized = nfc(orig);
-        if (normalized != orig) {
-            // Decomposed text (e.g. from macOS): compare in NFC; offsets only feed the excerpt.
-            orig = normalized;
+        // Decomposed text (e.g. from macOS) is compared in NFC; offsets only feed the excerpt.
+        const QString orig = nfc(l.text);
+        if (orig != l.text)
             text = nfc(text);
-        }
         const Span hit = firstMatch(text, matchers);
         if (hit.start >= 0)
             out.append(Mention{int(i), lineExcerpt(orig, hit.start, hit.end)});

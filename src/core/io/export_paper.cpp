@@ -76,11 +76,11 @@ QString paperFileName(const ExportInput &input, const QString &extension)
     return ExportVault(named).fileName({}, extension);
 }
 
-bool haveFonts(ExportResult *result)
+bool haveFonts(ExportResult &result)
 {
     if (qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
         return true;
-    result->warnings.append(IoMessages::tr("PDF and Word documents are made by the app (they need its fonts)."));
+    result.warnings.append(IoMessages::tr("PDF and Word documents are made by the app (they need its fonts)."));
     return false;
 }
 
@@ -93,14 +93,15 @@ public:
     ExportResult run(const ExportInput &input) const override
     {
         ExportResult r;
-        if (!haveFonts(&r))
+        if (!haveFonts(r))
             return r;
         const QPageLayout layout = paperLayout(paperSizeFromId(input.paperSize));
         PaperDocument document(input, layout);
         QByteArray pdf;
         {
             QBuffer buffer(&pdf);
-            buffer.open(QIODevice::WriteOnly);
+            if (!buffer.open(QIODevice::WriteOnly))
+                return r;
             QPdfWriter writer(&buffer);
             // CSS pixels: the document's sizes (pictures, margins) are laid out as on paper.
             writer.setResolution(96);
@@ -125,16 +126,13 @@ public:
     ExportResult run(const ExportInput &input) const override
     {
         ExportResult r;
-        if (!haveFonts(&r))
+        if (!haveFonts(r))
             return r;
         const PaperSize paper = paperSizeFromId(input.paperSize);
         PaperDocument document(input, paperLayout(paper));
         r.warnings += document.warnings();
-        DocxOptions options;
-        options.title = document.title();
-        options.created = input.now;
-        options.paper = paper;
-        const QByteArray docx = writeDocx(document, options, &r.warnings);
+        const QByteArray docx =
+                writeDocx(document, {.title = document.title(), .created = input.now, .paper = paper}, &r.warnings);
         r.files.append(ExportedFile{paperFileName(input, u".docx"_s),
                                     u"application/vnd.openxmlformats-officedocument.wordprocessingml.document"_s,
                                     docx});

@@ -22,7 +22,7 @@ using namespace Qt::StringLiterals;
 ExportVault::ExportVault(const ExportInput &input) : m_input(input), m_index(std::make_unique<VaultIndex>(input.config))
 {
     QList<FileEntry> files = input.files;
-    std::ranges::sort(files, [](const FileEntry &a, const FileEntry &b) { return a.path < b.path; });
+    std::ranges::sort(files, {}, &FileEntry::path);
     {
         VaultIndex::Batch batch(*m_index);
         for (const FileEntry &f : std::as_const(files)) {
@@ -60,7 +60,7 @@ ExportVault::ExportVault(const ExportInput &input) : m_input(input), m_index(std
                 continue;
             drawing::Drawing d =
                     drawing::editable(file->drawing) ? file->drawing : drawing::previewDrawing(file->drawing);
-            for (const drawing::EmbeddedFile &e : drawing::embeddedFiles(bytes)) {
+            for (const auto embedded = drawing::embeddedFiles(bytes); const drawing::EmbeddedFile &e : embedded) {
                 const std::optional<VaultPath> target =
                         d.files.contains(e.fileId) ? std::nullopt : resolve(e.link, n.path);
                 const FileEntry *a = target ? attachment(*target) : nullptr;
@@ -171,7 +171,7 @@ QString mimeForPath(const QString &path)
 QString mimeForPictureFormat(const QString &format)
 {
     const QString lower = format.toLower();
-    if (lower.isEmpty() || !std::all_of(lower.cbegin(), lower.cend(), [](QChar c) { return c.isLetterOrNumber(); }))
+    if (lower.isEmpty() || !std::ranges::all_of(lower, [](QChar c) { return c.isLetterOrNumber(); }))
         return {};
     const QString mime = mimeForPath(u"picture."_s + lower);
     return mime.startsWith(u"image/") ? mime : QString();
@@ -208,9 +208,9 @@ QString momentFormat(const QString &qtFormat)
         const QChar c = qtFormat[i];
         if (c == u'\'') {
             const qsizetype close = qtFormat.indexOf(u'\'', i + 1);
-            const QString literal = qtFormat.sliced(i + 1, (close < 0 ? qtFormat.size() : close) - i - 1);
-            out += u'[' + literal + u']';
-            i = close < 0 ? qtFormat.size() : close + 1;
+            const qsizetype end = close < 0 ? qtFormat.size() : close;
+            out += u'[' + qtFormat.sliced(i + 1, end - i - 1) + u']';
+            i = end + 1;
             continue;
         }
         qsizetype n = 1;
@@ -219,14 +219,12 @@ QString momentFormat(const QString &qtFormat)
         const QString run = qtFormat.sliced(i, n);
         if (c == u'y')
             out += n == 2 ? u"YY"_s : u"YYYY"_s;
-        else if (c == u'd')
-            out += n == 1 ? u"D"_s : n == 2 ? u"DD"_s : run; // ddd / dddd are the same in moment
-        else if (c == u'M')
-            out += run;
-        else if (c.isLetter())
+        else if (c == u'd' && n <= 2)
+            out += n == 1 ? u"D"_s : u"DD"_s;
+        else if (c.isLetter() && c != u'd' && c != u'M')
             out += u'[' + run + u']';
         else
-            out += run;
+            out += run; // M… and ddd / dddd are the same in moment
         i += n;
     }
     return out;

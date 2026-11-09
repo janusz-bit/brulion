@@ -28,8 +28,7 @@ public:
 
     explicit ExportVault(const ExportInput &input);
     ~ExportVault();
-    ExportVault(const ExportVault &) = delete;
-    ExportVault &operator=(const ExportVault &) = delete;
+    Q_DISABLE_COPY_MOVE(ExportVault)
 
     const ExportInput &input() const { return m_input; }
     const VaultConfig &config() const { return m_input.config; }

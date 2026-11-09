@@ -42,14 +42,14 @@ struct Excerpt {
     QString text;
 };
 
-/// First line of `content` at or after `fromLine` containing one of the folded `terms` as a
-/// whole token, with an excerpt around the earliest such term.
-std::optional<Excerpt> findExcerpt(const QString &content, const QStringList &terms, int fromLine)
+/// The first of `lines` from `from` up to `to` (exclusive) containing one of the folded `terms` as
+/// a whole token, with an excerpt around the earliest such term.
+std::optional<Excerpt> findExcerpt(const QList<text::Line> &lines, const QStringList &terms, qsizetype from,
+                                   qsizetype to)
 {
     if (terms.isEmpty())
         return std::nullopt;
-    const QList<text::Line> lines = text::splitLines(content);
-    for (qsizetype i = std::max(0, fromLine); i < lines.size(); ++i) {
+    for (qsizetype i = from; i < std::min(to, lines.size()); ++i) {
         const QString &line = lines[i].text;
         const text::FoldedText folded = text::foldKeyWithMap(line);
         qsizetype best = -1;
@@ -68,6 +68,76 @@ std::optional<Excerpt> findExcerpt(const QString &content, const QStringList &te
         return Excerpt{int(i), lineExcerpt(line, start, end)};
     }
     return std::nullopt;
+}
+
+/// A page suggestion with what suggestPages() orders it by.
+struct ScoredPage {
+    PageSuggestion s;
+    NameRank rank = NameRank::None;
+    bool alias = false; ///< an alias matched
+    QString name;       ///< the folded title, alias or path that matched
+    quint64 seq = 0;
+};
+
+/// Best rank first, titles before aliases, shorter names first, then the most recent.
+const auto scoredLess = [](const ScoredPage &a, const ScoredPage &b) {
+    if (a.rank != b.rank)
+        return a.rank > b.rank;
+    if (a.alias != b.alias)
+        return !a.alias;
+    if (a.name.size() != b.name.size())
+        return a.name.size() < b.name.size();
+    if (a.seq != b.seq)
+        return a.seq > b.seq;
+    if (const int c = compareNames(a.s.title, b.s.title); c != 0)
+        return c < 0;
+    return a.s.path < b.s.path;
+};
+
+/// Pages of one name: the one `[[name]]` resolves to (shortest path) first.
+const auto resolvesFirst = [](const ScoredPage &a, const ScoredPage &b) {
+    if (a.s.path.size() != b.s.path.size())
+        return a.s.path.size() < b.s.path.size();
+    if (const int c = compareNames(a.s.title, b.s.title); c != 0)
+        return c < 0;
+    return a.s.path < b.s.path;
+};
+
+/// Order `scored` by scoredLess(), then put the pages of each name among the first `count` in
+/// resolvesFirst() order into the places they got. One comparator cannot say both: a page that is
+/// more recent than one page of a name and less recent than another would order in a circle, and
+/// std::sort needs a strict weak order.
+void sortSuggestions(QList<ScoredPage> &scored, qsizetype count)
+{
+    std::ranges::sort(scored, scoredLess);
+    count = std::min(count, scored.size());
+    if (count == 0)
+        return;
+    // Pages of one name share rank, alias and name length: they lie before the end of the last
+    // listed page's run of those.
+    const ScoredPage &last = scored.at(count - 1);
+    qsizetype end = count;
+    while (end < scored.size() && scored.at(end).rank == last.rank && scored.at(end).alias == last.alias
+           && scored.at(end).name.size() == last.name.size())
+        ++end;
+    QHash<std::pair<bool, QString>, QList<qsizetype>> places; // the listed names -> where they are
+    for (qsizetype i = 0; i < count; ++i)
+        places.insert({scored.at(i).alias, scored.at(i).name}, {});
+    for (qsizetype i = 0; i < end; ++i) {
+        if (const auto it = places.find({scored.at(i).alias, scored.at(i).name}); it != places.end())
+            it->append(i);
+    }
+    for (const QList<qsizetype> &at : std::as_const(places)) {
+        if (at.size() < 2)
+            continue;
+        QList<ScoredPage> group;
+        group.reserve(at.size());
+        for (const qsizetype i : at)
+            group.append(std::move(scored[i]));
+        std::ranges::sort(group, resolvesFirst);
+        for (qsizetype k = 0; k < at.size(); ++k)
+            scored[at[k]] = std::move(group[k]);
+    }
 }
 
 } // namespace
@@ -102,7 +172,7 @@ QStringList pageLevelTags(const ParsedNote &note)
     }
     QSet<QString> fm;
     const QVariant fmTags = markdown::frontmatterGet(note.frontmatter, {u"tags"_s, u"tag"_s});
-    for (QString name : markdown::namesFrom(fmTags, true)) {
+    for (const QStringList names = markdown::namesFrom(fmTags, true); QString name : names) {
         name = name.trimmed();
         if (name.startsWith(u'#'))
             name.remove(0, 1);
@@ -131,24 +201,19 @@ VaultPath VaultIndex::Private::resolveTagPath(const QString &tag) const
 
 const QList<VaultPath> &VaultIndex::Private::queryNotes()
 {
-    cache.read();
-    if (!cache.queryNotes) {
-        ++builds.queryNotes;
+    return cache.read(cache.queryNotes, builds.queryNotes, [this] {
         QList<VaultPath> out;
         for (const Entry *e : sortedEntries()) {
             if (hasQueryBlocks(e->content, e->note))
                 out.append(e->path);
         }
-        cache.queryNotes = std::move(out);
-    }
-    return *cache.queryNotes;
+        return out;
+    });
 }
 
 const TagTargets &VaultIndex::Private::tagTargets()
 {
-    cache.read();
-    if (!cache.tagTargets) {
-        ++builds.tagTargets;
+    return cache.read(cache.tagTargets, builds.tagTargets, [this] {
         TagTargets t;
         for (auto it = tagIndex.cbegin(); it != tagIndex.cend(); ++it) {
             const VaultPath page = resolveTagPath(it.key());
@@ -159,9 +224,8 @@ const TagTargets &VaultIndex::Private::tagTargets()
         }
         for (QStringList &keys : t.byPage)
             std::ranges::sort(keys);
-        cache.tagTargets = std::move(t);
-    }
-    return *cache.tagTargets;
+        return t;
+    });
 }
 
 QStringList VaultIndex::Private::tagKeysFor(const VaultPath &path)
@@ -197,16 +261,13 @@ const ParsedNote *VaultIndex::note(const VaultPath &path) const
 
 QList<VaultPath> VaultIndex::paths() const
 {
-    d->cache.read();
-    if (!d->cache.paths) {
-        ++d->builds.paths;
+    return d->cache.read(d->cache.paths, d->builds.paths, [this] {
         QList<VaultPath> out;
         out.reserve(qsizetype(d->entries.size()));
         for (const Private::Entry *e : d->sortedEntries())
             out.append(e->path);
-        d->cache.paths = std::move(out);
-    }
-    return *d->cache.paths;
+        return out;
+    });
 }
 
 void VaultIndex::forEachNote(const std::function<void(const VaultPath &, const ParsedNote &)> &visit) const
@@ -219,14 +280,11 @@ void VaultIndex::forEachNote(const std::function<void(const VaultPath &, const P
 
 QList<VaultPath> VaultIndex::attachments() const
 {
-    d->cache.read();
-    if (!d->cache.attachments) {
-        ++d->builds.attachments;
+    return d->cache.read(d->cache.attachments, d->builds.attachments, [this] {
         QList<VaultPath> out(d->attachmentSet.cbegin(), d->attachmentSet.cend());
         std::ranges::sort(out);
-        d->cache.attachments = std::move(out);
-    }
-    return *d->cache.attachments;
+        return out;
+    });
 }
 
 QList<VaultPath> VaultIndex::notesWithQueries() const
@@ -290,7 +348,7 @@ std::optional<markdown::LinkPartTarget> VaultIndex::resolveLinkPart(const QStrin
             same = pathKey(segment) == pathKey(written[offset + k]);
         }
         if (same)
-            folder = written.mid(0, offset + part).join(u'/');
+            folder = written.first(offset + part).join(u'/');
     }
     if (!folder.isEmpty()) {
         if (const VaultPath beside = d->names.notePath(folder); !beside.isEmpty() && contains(beside))
@@ -336,44 +394,37 @@ QList<Backlink> VaultIndex::backlinks(const VaultPath &path) const
         const Link *link;
     };
     QList<Found> found;
-    if (!d->entry(path) && !d->attachmentSet.contains(path) && !path.isEmpty()) {
+    // The path-based links of the notes in `sources` (but `path` itself) that `match` accepts.
+    const auto collect = [&](const PathCounts &sources, const auto &match) {
+        sources.forEach([&](const VaultPath &source, int) {
+            const Private::Entry *src = source == path ? nullptr : d->entry(source);
+            if (!src)
+                return;
+            for (const PathLink &l : src->links) {
+                if (match(src->note.links[l.link], l))
+                    found.append(Found{src, &src->note.links[l.link]});
+            }
+        });
+    };
+    const Private::Entry *self = d->entry(path);
+    if (!self && !d->attachmentSet.contains(path) && !path.isEmpty()) {
         // A page that does not exist yet: the links that would resolve to it.
         const QString nameKey = noteNameKey(path);
         const QString key = pathKey(paths::stripMarkdownExtension(paths::normalize(path)));
         if (const auto un = d->unresolved.constFind(nameKey); un != d->unresolved.constEnd()) {
-            for (auto it = un->cbegin(); it != un->cend(); ++it) {
-                const Private::Entry *src = d->entry(it.key());
-                if (!src)
-                    continue;
-                for (const PathLink &l : src->links) {
-                    if (!l.target.isEmpty() || l.key != nameKey)
-                        continue;
-                    const QString &target = src->note.links[l.link].target;
-                    if (!isPageTarget(target, TargetForm::Parsed))
-                        continue;
-                    const QString written = pathKey(
-                            paths::stripMarkdownExtension(paths::normalize(cleanTarget(target, TargetForm::Parsed))));
-                    if (written == key || key.endsWith(u'/' + written))
-                        found.append(Found{src, &src->note.links[l.link]});
-                }
-            }
+            collect(*un, [&](const Link &link, const PathLink &l) {
+                if (!l.target.isEmpty() || l.key != nameKey || !isPageTarget(link.target, TargetForm::Parsed))
+                    return false;
+                const QString written = pathKey(
+                        paths::stripMarkdownExtension(paths::normalize(cleanTarget(link.target, TargetForm::Parsed))));
+                return written == key || key.endsWith(u'/' + written);
+            });
         }
     }
-    if (const auto in = d->incoming.constFind(path); in != d->incoming.constEnd()) {
-        for (auto it = in->cbegin(); it != in->cend(); ++it) {
-            if (it.key() == path)
-                continue;
-            const Private::Entry *src = d->entry(it.key());
-            if (!src)
-                continue;
-            for (const PathLink &l : src->links) {
-                if (l.target == path)
-                    found.append(Found{src, &src->note.links[l.link]});
-            }
-        }
-    }
-    if (const Private::Entry *e = d->entry(path)) {
-        for (auto id = e->note.blockIds.cbegin(); id != e->note.blockIds.cend(); ++id) {
+    if (const auto in = d->incoming.constFind(path); in != d->incoming.constEnd())
+        collect(*in, [&](const Link &, const PathLink &l) { return l.target == path; });
+    if (self) {
+        for (auto id = self->note.blockIds.cbegin(); id != self->note.blockIds.cend(); ++id) {
             if (d->blockOwner(id.key()) != path)
                 continue;
             const auto sources = d->blockRefSources.constFind(id.key());
@@ -390,7 +441,7 @@ QList<Backlink> VaultIndex::backlinks(const VaultPath &path) const
             }
         }
     }
-    std::ranges::sort(found, [](const Found &a, const Found &b) {
+    std::ranges::sort(found, [](Found a, Found b) {
         if (a.entry != b.entry)
             return relevanceLess(*a.entry, *b.entry);
         return a.link->from < b.link->from;
@@ -404,22 +455,17 @@ QList<Backlink> VaultIndex::backlinks(const VaultPath &path) const
 
 QList<VaultPath> VaultIndex::linksTo(const VaultPath &path) const
 {
-    QList<VaultPath> out;
     const auto in = d->incoming.constFind(path);
     if (in == d->incoming.constEnd())
-        return out;
-    for (auto it = in->cbegin(); it != in->cend(); ++it) {
-        if (it.key() == path) {
-            const Private::Entry *self = d->entry(path);
-            const bool byName = self && std::any_of(self->links.cbegin(), self->links.cend(), [&](const PathLink &l) {
-                                    return l.target == path && !l.key.isEmpty();
-                                });
-            if (!byName)
-                continue;
-        }
-        out.append(it.key());
-    }
-    std::ranges::sort(out);
+        return {};
+    QList<VaultPath> out = in->keys(); // sorted
+    // `path` itself only when it links to itself by name (a same-page `[[#…]]` has no key).
+    const Private::Entry *self = d->entry(path);
+    const bool byName = self && std::ranges::any_of(self->links, [&](const PathLink &l) {
+                            return l.target == path && !l.key.isEmpty();
+                        });
+    if (!byName)
+        out.removeOne(path);
     return out;
 }
 
@@ -436,9 +482,7 @@ QList<UnlinkedRef> VaultIndex::unlinkedReferences(const VaultPath &path) const
         if (other->path == path)
             continue;
         const QString &lower = other->lowerContent();
-        const bool candidate = std::any_of(matchers.cbegin(), matchers.cend(),
-                                           [&](const MentionMatcher &m) { return lower.contains(m.firstWord); });
-        if (!candidate)
+        if (std::ranges::none_of(matchers, [&](const MentionMatcher &m) { return lower.contains(m.firstWord); }))
             continue;
         const QList<Mention> mentions =
                 findMentions(other->content, other->note, matchers, MaxUnlinkedReferences - out.size());
@@ -452,40 +496,36 @@ QList<UnlinkedRef> VaultIndex::unlinkedReferences(const VaultPath &path) const
 
 QList<MissingPage> VaultIndex::missingPages() const
 {
-    d->cache.read();
-    if (d->cache.missing)
-        return *d->cache.missing;
-    ++d->builds.missing;
-    QList<MissingPage> out;
-    for (auto it = d->unresolved.cbegin(); it != d->unresolved.cend(); ++it) {
-        QList<VaultPath> sources = it->keys();
-        std::ranges::sort(sources);
-        // Spelling of the first unresolved link with this key (sources in path order).
-        QString name;
-        bool page = false;
-        for (const VaultPath &s : std::as_const(sources)) {
-            const Private::Entry *e = d->entry(s);
-            if (!e)
-                continue;
-            const auto l = std::find_if(e->links.cbegin(), e->links.cend(),
-                                        [&](const PathLink &pl) { return pl.key == it.key() && pl.target.isEmpty(); });
-            if (l == e->links.cend())
-                continue;
-            const QString &target = e->note.links[l->link].target;
-            page = isPageTarget(target, TargetForm::Parsed);
-            name = nfc(cleanTarget(target, TargetForm::Parsed));
-            break;
+    return d->cache.read(d->cache.missing, d->builds.missing, [this] {
+        QList<MissingPage> out;
+        for (auto it = d->unresolved.cbegin(); it != d->unresolved.cend(); ++it) {
+            const QList<VaultPath> sources = it->keys(); // sorted
+            // Spelling of the first unresolved link with this key (sources in path order).
+            QString name;
+            bool page = false;
+            for (const VaultPath &s : sources) {
+                const Private::Entry *e = d->entry(s);
+                if (!e)
+                    continue;
+                const auto l = std::ranges::find_if(
+                        e->links, [&](const PathLink &pl) { return pl.key == it.key() && pl.target.isEmpty(); });
+                if (l == e->links.cend())
+                    continue;
+                const QString &target = e->note.links[l->link].target;
+                page = isPageTarget(target, TargetForm::Parsed);
+                name = nfc(cleanTarget(target, TargetForm::Parsed));
+                break;
+            }
+            if (page && !name.isEmpty())
+                out.append(MissingPage{name, sources});
         }
-        if (page && !name.isEmpty())
-            out.append(MissingPage{name, sources});
-    }
-    std::ranges::sort(out, [](const MissingPage &a, const MissingPage &b) {
-        if (a.sources.size() != b.sources.size())
-            return a.sources.size() > b.sources.size();
-        return compareNames(a.name, b.name) < 0;
+        std::ranges::sort(out, [](const MissingPage &a, const MissingPage &b) {
+            if (a.sources.size() != b.sources.size())
+                return a.sources.size() > b.sources.size();
+            return compareNames(a.name, b.name) < 0;
+        });
+        return out;
     });
-    d->cache.missing = out;
-    return out;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -513,39 +553,33 @@ std::optional<BlockRef> VaultIndex::blockById(const QString &id) const
 
 QList<TagCount> VaultIndex::tags() const
 {
-    d->cache.read();
-    if (d->cache.tags)
-        return *d->cache.tags;
-    ++d->builds.tags;
-    QList<TagCount> out;
-    out.reserve(d->tagIndex.size());
-    for (auto it = d->tagIndex.cbegin(); it != d->tagIndex.cend(); ++it) {
-        TagCount t;
-        t.tag = it.key();
-        for (auto p = it->cbegin(); p != it->cend(); ++p) {
-            t.count += p.value();
-            t.paths.append(p.key());
-        }
-        std::ranges::sort(t.paths);
-        for (const VaultPath &p : std::as_const(t.paths)) {
-            const Private::Entry *e = d->entry(p);
-            const QString spelled = e ? e->tagSpellings().value(t.tag) : QString();
-            if (!spelled.isEmpty()) {
-                t.display = spelled;
-                break;
+    return d->cache.read(d->cache.tags, d->builds.tags, [this] {
+        QList<TagCount> out;
+        out.reserve(d->tagIndex.size());
+        for (auto it = d->tagIndex.cbegin(); it != d->tagIndex.cend(); ++it) {
+            TagCount t;
+            t.tag = it.key();
+            t.paths = it->keys(); // sorted
+            it->forEach([&t](const VaultPath &, int count) { t.count += count; });
+            for (const VaultPath &p : std::as_const(t.paths)) {
+                const Private::Entry *e = d->entry(p);
+                const QString spelled = e ? e->tagSpellings().value(t.tag) : QString();
+                if (!spelled.isEmpty()) {
+                    t.display = spelled;
+                    break;
+                }
             }
+            if (t.display.isEmpty())
+                t.display = t.tag;
+            out.append(std::move(t));
         }
-        if (t.display.isEmpty())
-            t.display = t.tag;
-        out.append(std::move(t));
-    }
-    std::ranges::sort(out, [](const TagCount &a, const TagCount &b) {
-        if (a.count != b.count)
-            return a.count > b.count;
-        return compareNames(a.tag, b.tag) < 0;
+        std::ranges::sort(out, [](const TagCount &a, const TagCount &b) {
+            if (a.count != b.count)
+                return a.count > b.count;
+            return compareNames(a.tag, b.tag) < 0;
+        });
+        return out;
     });
-    d->cache.tags = out;
-    return out;
 }
 
 std::optional<VaultPath> VaultIndex::resolveTag(const QString &tag) const
@@ -569,7 +603,7 @@ QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
         QString tag;
     };
     QList<Found> found;
-    for (const QString &key : d->tagKeysFor(path)) {
+    for (const QStringList keys = d->tagKeysFor(path); const QString &key : keys) {
         const auto notes = d->tagIndex.constFind(key);
         if (notes == d->tagIndex.constEnd())
             continue;
@@ -604,12 +638,9 @@ QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
 QList<VaultPath> VaultIndex::tagsTo(const VaultPath &path) const
 {
     QSet<VaultPath> files;
-    for (const QString &key : d->tagKeysFor(path)) {
-        const auto notes = d->tagIndex.constFind(key);
-        if (notes == d->tagIndex.constEnd())
-            continue;
-        for (auto it = notes->cbegin(); it != notes->cend(); ++it)
-            files.insert(it.key());
+    for (const QStringList keys = d->tagKeysFor(path); const QString &key : keys) {
+        if (const auto notes = d->tagIndex.constFind(key); notes != d->tagIndex.constEnd())
+            notes->forEach([&files](const VaultPath &p, int) { files.insert(p); });
     }
     QList<VaultPath> out(files.cbegin(), files.cend());
     std::ranges::sort(out);
@@ -618,28 +649,22 @@ QList<VaultPath> VaultIndex::tagsTo(const VaultPath &path) const
 
 QList<TaskRef> VaultIndex::tasks() const
 {
-    d->cache.read();
-    if (!d->cache.tasks) {
-        ++d->builds.tasks;
+    return d->cache.read(d->cache.tasks, d->builds.tasks, [this] {
         QList<TaskRef> out;
         for (const Private::Entry *e : d->sortedEntries())
             appendTasks(*e, out);
-        d->cache.tasks = std::move(out);
-    }
-    return *d->cache.tasks;
+        return out;
+    });
 }
 
 QList<ReminderRef> VaultIndex::reminders() const
 {
-    d->cache.read();
-    if (!d->cache.reminders) {
-        ++d->builds.reminders;
+    return d->cache.read(d->cache.reminders, d->builds.reminders, [this] {
         QList<ReminderRef> out;
         for (const Private::Entry *e : d->sortedEntries())
             appendReminders(*e, out);
-        d->cache.reminders = std::move(out);
-    }
-    return *d->cache.reminders;
+        return out;
+    });
 }
 
 QList<TaskRef> VaultIndex::tasksOf(const VaultPath &path) const
@@ -660,22 +685,15 @@ QList<ReminderRef> VaultIndex::remindersOf(const VaultPath &path) const
 
 QList<JournalRef> VaultIndex::journals() const
 {
-    d->cache.read();
-    if (d->cache.journals)
-        return *d->cache.journals;
-    ++d->builds.journals;
-    QList<JournalRef> out;
-    for (const auto &[path, e] : d->entries) {
-        if (e->note.journalDate)
-            out.append(JournalRef{*e->note.journalDate, path});
-    }
-    std::ranges::sort(out, [](const JournalRef &a, const JournalRef &b) {
-        if (a.date != b.date)
-            return a.date > b.date;
-        return a.path < b.path;
+    return d->cache.read(d->cache.journals, d->builds.journals, [this] {
+        QList<JournalRef> out;
+        for (const auto &[path, e] : d->entries) {
+            if (e->note.journalDate)
+                out.append(JournalRef{*e->note.journalDate, path});
+        }
+        std::ranges::sort(out, journalLess);
+        return out;
     });
-    d->cache.journals = out;
-    return out;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -688,21 +706,22 @@ QList<SearchHit> VaultIndex::search(const QString &query, int limit) const
     if (limit <= 0 || query.trimmed().isEmpty())
         return out;
     d->flushSearch();
-    for (const SearchIndex::Hit &raw : d->search.search(query, limit)) {
+    for (const QList<SearchIndex::Hit> hits = d->search.search(query, limit); const SearchIndex::Hit &raw : hits) {
         const Private::Entry *e = d->entry(raw.id);
         if (!e)
             continue;
         SearchHit hit{raw.id, e->note.title, raw.score, -1, {}};
         // Prefer a match in the body over one in the frontmatter (aliases, tags).
-        const int body = bodyStartLine(e->note);
-        std::optional<Excerpt> found = body > 0 ? findExcerpt(e->content, raw.terms, body) : std::nullopt;
+        const QList<text::Line> lines = text::splitLines(e->content);
+        const qsizetype body = bodyStartLine(e->note);
+        std::optional<Excerpt> found = findExcerpt(lines, raw.terms, body, lines.size());
         if (!found)
-            found = findExcerpt(e->content, raw.terms, 0);
+            found = findExcerpt(lines, raw.terms, 0, body);
         if (found) {
             hit.line = found->line;
             hit.excerpt = found->text;
         } else {
-            const auto first = std::find_if(e->note.blocks.cbegin(), e->note.blocks.cend(), suggestable);
+            const auto first = std::ranges::find_if(e->note.blocks, suggestable);
             if (first != e->note.blocks.cend())
                 hit.excerpt = excerptStart(first->text);
         }
@@ -728,14 +747,7 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
     const bool withPath = q.contains(u'/');
     const QStringList queryWords = words(q);
     const QString noAlias;
-    struct Scored {
-        PageSuggestion s;
-        NameRank rank;
-        bool alias;
-        QString name;
-        quint64 seq;
-    };
-    QList<Scored> scored;
+    QList<ScoredPage> scored;
     for (const auto &[path, e] : d->entries) {
         NameRank best = NameRank::None;
         const QString *bestName = nullptr;
@@ -758,29 +770,13 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
         }
         if (best == NameRank::None || !bestName)
             continue;
-        scored.append(Scored{PageSuggestion{path, e->note.title, *bestAlias}, best, !bestAlias->isEmpty(), *bestName,
-                             e->seq});
+        scored.append(ScoredPage{PageSuggestion{path, e->note.title, *bestAlias}, best, !bestAlias->isEmpty(),
+                                 *bestName, e->seq});
     }
-    std::ranges::sort(scored, [](const Scored &a, const Scored &b) {
-        if (a.rank != b.rank)
-            return a.rank > b.rank;
-        if (a.alias != b.alias)
-            return !a.alias;
-        if (a.name.size() != b.name.size())
-            return a.name.size() < b.name.size();
-        // Same name: the page `[[name]]` resolves to (shortest path) first; else most recent.
-        if (a.name == b.name) {
-            if (a.s.path.size() != b.s.path.size())
-                return a.s.path.size() < b.s.path.size();
-        } else if (a.seq != b.seq) {
-            return a.seq > b.seq;
-        }
-        if (const int c = compareNames(a.s.title, b.s.title); c != 0)
-            return c < 0;
-        return a.s.path < b.s.path;
-    });
+    // Same name: the page `[[name]]` resolves to (shortest path) first; else most recent.
+    sortSuggestions(scored, limit);
     for (qsizetype i = 0; i < std::min<qsizetype>(limit, scored.size()); ++i)
-        out.append(scored[i].s);
+        out.append(scored.at(i).s);
     return out;
 }
 
@@ -818,7 +814,7 @@ QList<TagSuggestion> VaultIndex::suggestTags(const QString &prefix, int limit) c
         if (out.size() >= limit)
             return out;
     }
-    for (const PageSuggestion &s : suggestPages(typed.toString(), limit)) {
+    for (const QList<PageSuggestion> pages = suggestPages(typed.toString(), limit); const PageSuggestion &s : pages) {
         // What was typed is in the name (no fuzzy matches among the tags).
         if (!key.isEmpty() && !text::foldKey(s.alias.isEmpty() ? s.title : s.alias).contains(key)
             && !text::foldKey(s.path).contains(key))
@@ -896,8 +892,7 @@ QList<BlockRef> VaultIndex::suggestBlocks(const QString &text, int limit) const
         for (qsizetype i = 0; i < blocks.size(); ++i) {
             // The word test first: it rejects almost every block, without touching the Block.
             const QString &f = folded[i];
-            const bool all = std::all_of(wordsOfQuery.cbegin(), wordsOfQuery.cend(),
-                                         [&](const QString &w) { return f.contains(w); });
+            const bool all = std::ranges::all_of(wordsOfQuery, [&](const QString &w) { return f.contains(w); });
             if (!all || !suggestable(blocks[i]))
                 continue;
             const int quality = f.startsWith(first) ? 2 : (indexOfWordStart(f, first) >= 0 ? 1 : 0);
@@ -925,7 +920,7 @@ GraphData VaultIndex::graph(bool includeTags, bool includeMissing) const
 {
     GraphData out;
     QHash<QString, qsizetype> nodeIndex;
-    QSet<QPair<QString, QString>> edgeSet;
+    QSet<std::pair<QString, QString>> edgeSet;
     QHash<QString, QString> missingIds; ///< lower-cased name -> node id
     auto addNode = [&](GraphNode node) {
         nodeIndex.insert(node.id, out.nodes.size());
@@ -934,7 +929,7 @@ GraphData VaultIndex::graph(bool includeTags, bool includeMissing) const
     auto addEdge = [&](const QString &source, const QString &target) {
         if (source == target)
             return;
-        const QPair<QString, QString> key{source, target};
+        const std::pair<QString, QString> key{source, target};
         if (edgeSet.contains(key))
             return;
         edgeSet.insert(key);

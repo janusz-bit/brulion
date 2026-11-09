@@ -8,6 +8,7 @@
 
 #include <QSet>
 
+#include <algorithm>
 #include <vector>
 
 namespace brulion::io {
@@ -48,11 +49,8 @@ const QList<const Exporter *> &exporters()
 
 const Exporter *exporterById(QStringView id)
 {
-    for (const Exporter *e : exporters()) {
-        if (e->id() == id)
-            return e;
-    }
-    return nullptr;
+    const auto it = std::ranges::find_if(exporters(), [id](const Exporter *e) { return e->id() == id; });
+    return it == exporters().cend() ? nullptr : *it;
 }
 
 ExportInput detail::cleanExportInput(const ExportInput &input)

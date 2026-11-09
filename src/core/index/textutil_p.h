@@ -17,6 +17,8 @@ inline constexpr qsizetype ExcerptLength = 120;
 
 /// NFC form of `s` (ASCII fast path).
 QString nfc(QStringView s);
+/// The same for a QString: an ASCII or already normalised `s` is shared, not copied.
+QString nfc(const QString &s);
 /// `s`.toLower() with a fast path for ASCII text (most names and paths; Qt converts every
 /// character after the first upper-case one through the Unicode tables).
 QString lower(const QString &s);
@@ -35,7 +37,7 @@ QStringList words(QStringView folded);
 /// Call `f(QStringView word)` for each word of words(folded), in order, without allocating;
 /// stops when `f` returns false. Returns false when stopped.
 template<typename F>
-bool forEachWord(QStringView folded, F &&f)
+bool forEachWord(QStringView folded, F f)
 {
     qsizetype start = -1;
     for (qsizetype i = 0; i < folded.size();) {

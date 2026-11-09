@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
-import QtQuick.Window
 import Brulion
 
 // ContentPdfView — a PDF of the notebook opened as a page (route "page" with a PDF's path; docs/UI.md
@@ -47,6 +46,10 @@ Item {
     property bool paneActive: true
     /// Renderer colours for the references (BlockEditor.rendererPalette).
     property var rendererPalette: ({})
+    /// The wide window's side panel lists the references (PageView sets it).
+    property bool refsInSidePanel: false
+    /// The page a right click was on (the selection menu's "Select the whole page").
+    property int contextPage: 0
 
     readonly property alias model: pdf
     readonly property string fileName: {
@@ -58,6 +61,8 @@ Item {
     /// Room for the full bar (else the narrow one: page "3/12", search, ⋯).
     readonly property bool wide: root.width >= Theme.compactBreakpoint && !root.inSidePanel
     readonly property bool ready: pdf.status === PdfViewModel.Ready
+    /// The page shown (1 while the model has none yet).
+    readonly property int shownPage: Math.max(1, pdf.currentPage)
     readonly property bool browser: Qt.platform.os === "wasm"
     readonly property string openElsewhereText: root.browser ? qsTr("Open in a new tab") : qsTr("Open in another app")
     property bool searchOpen: false
@@ -130,6 +135,39 @@ Item {
     }
 
     Component.onDestruction: if (root.drawJob !== 0) DrawingBackdrops.cancel(root.drawJob)
+
+    /// A hairline across its parent (under the bar, above the references).
+    component Rule: Rectangle {
+        width: parent.width
+        height: 1
+        color: Theme.borderSubtle
+    }
+    /// The viewer's small muted UI text; plain, since file names and PDF text come from anywhere
+    /// (sync, imports) and are no markup.
+    component UiText: Text {
+        textFormat: Text.PlainText
+        font.family: Theme.fontUi
+        font.pixelSize: Theme.textSm
+        color: Theme.fgMuted
+    }
+    /// A menu entry that takes no room while hidden.
+    component HidingMenuItem: BMenuItem {
+        height: visible ? implicitHeight : 0
+    }
+    /// The entry that opens the `slot`-th drawing of the page the note embeds already.
+    component ExistingDrawing: HidingMenuItem {
+        required property int slot
+        visible: root.existingDrawings.length > slot
+        //: "Draw on this page": a drawing of this page already in the note
+        text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(slot)) : ""
+        iconName: "pen-tool"
+        onTriggered: root.openExisting(slot)
+    }
+
+    //: The PDF viewer's page indicator ("Page 3 of 12"); a click jumps to a page
+    function pageOf(page: int): string {
+        return qsTr("Page %1 of %2").arg(page).arg(pdf.pageCount)
+    }
 
     Connections {
         target: Workspace
@@ -212,8 +250,7 @@ Item {
         if (key === root._scaled)
             return
         root._scaled = key
-        root._at = pdf.setScaleAround(scale / 100 * 96 / 72, Qt.point(flick.width / 2, 0))
-        root.moveToPoint(root._at)
+        root.moveToPoint(pdf.setScaleAround(scale / 100 * 96 / 72, Qt.point(flick.width / 2, 0)))
     }
     function applyRoutePage(): void {
         if (!root.ready || root._readyPath !== root.path)
@@ -284,8 +321,7 @@ Item {
         if (!root.ready)
             return
         const p = Math.max(1, Math.min(pdf.pageCount, page))
-        root._at = pdf.positionForPage(p, 0)
-        root.moveToPoint(root._at)
+        root.moveToPoint(pdf.positionForPage(p, 0))
         pdf.pinPage(p) // (named also when it cannot reach the view's top)
         pdf.settle()
     }
@@ -302,14 +338,12 @@ Item {
     function zoomByAt(factor: real, point: point): void {
         if (!root.ready)
             return
-        root._at = pdf.zoomAround(factor, point)
-        root.moveToPoint(root._at)
+        root.moveToPoint(pdf.zoomAround(factor, point))
     }
     function zoomTo(percent: real): void {
         if (!root.ready)
             return
-        root._at = pdf.setScaleAround(percent / 100 * 96 / 72, root.centre)
-        root.moveToPoint(root._at)
+        root.moveToPoint(pdf.setScaleAround(percent / 100 * 96 / 72, root.centre))
     }
     /// A double tap / click: fit width ↔ twice that, around `point` (in the view).
     function toggleZoomAt(point: point): void {
@@ -318,15 +352,13 @@ Item {
         if (pdf.fitWidth) {
             root.zoomByAt(2, point)
         } else {
-            root._at = pdf.fitToWidth(point)
-            root.moveToPoint(root._at)
+            root.moveToPoint(pdf.fitToWidth(point))
         }
     }
     function fitWidth(): void {
         if (!root.ready)
             return
-        root._at = pdf.fitToWidth(Qt.point(0, 0))
-        root.moveToPoint(root._at)
+        root.moveToPoint(pdf.fitToWidth(Qt.point(0, 0)))
     }
     /// The gesture's preview committed: one zoom around where it happened.
     function commitPreview(): void {
@@ -363,10 +395,7 @@ Item {
         root.forceActiveFocus()
     }
     function nextHit(backwards: bool): void {
-        if (backwards)
-            root._at = pdf.previousHit()
-        else
-            root._at = pdf.nextHit()
+        root._at = backwards ? pdf.previousHit() : pdf.nextHit()
         if (Js.isFinite(root._at.x))
             root.moveToPoint(root._at)
     }
@@ -386,7 +415,7 @@ Item {
     function drawOnPage(): void {
         if (!root.ready || root.drawJob !== 0)
             return
-        const page = Math.max(1, pdf.currentPage)
+        const page = root.shownPage
         const existing = root.drawingsOn(page)
         if (existing.length > 0) {
             root.existingDrawings = existing
@@ -490,7 +519,7 @@ Item {
     }
     function selectAllOnPage(): void {
         if (pdf.selectionAvailable && root.ready)
-            pdf.selectAll(Math.max(1, pdf.currentPage))
+            pdf.selectAll(root.shownPage)
     }
     /// A link of the PDF: a page of it (and a place there), or an address for the browser / mail.
     function followLink(url: string, page: int, top: real): void {
@@ -502,8 +531,7 @@ Item {
     function jumpToTarget(page: int, top: real): void {
         if (!root.ready || page < 1)
             return
-        root._at = pdf.positionForTarget(page, top)
-        root.moveToPoint(root._at)
+        root.moveToPoint(pdf.positionForTarget(page, top))
         pdf.pinPage(page)
         pdf.settle()
     }
@@ -593,14 +621,7 @@ Item {
         color: Theme.bg
         z: 2
 
-        Rectangle {
-            // A hairline under the bar.
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: Theme.borderSubtle
-        }
+        Rule { anchors.bottom: parent.bottom }
 
         RowLayout {
             id: barRow
@@ -619,17 +640,13 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
                 Layout.rightMargin: Theme.space1
             }
-            Text {
+            UiText {
                 objectName: "pdfName"
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignVCenter
                 text: root.fileName
-                textFormat: Text.PlainText // a file name from anywhere (sync, imports) is no markup
                 elide: Text.ElideMiddle
-                font.family: Theme.fontUi
-                font.pixelSize: Theme.textSm
-                color: Theme.fgMuted
             }
             BButton {
                 id: pageButton
@@ -637,10 +654,8 @@ Item {
                 visible: root.ready
                 size: "small"
                 variant: "ghost"
-                //: The PDF viewer's page indicator ("Page 3 of 12"); a click jumps to a page
-                text: root.wide ? qsTr("Page %1 of %2").arg(Math.max(1, pdf.currentPage)).arg(pdf.pageCount)
-                                : "%1/%2".arg(Math.max(1, pdf.currentPage)).arg(pdf.pageCount)
-                Accessible.name: qsTr("Page %1 of %2").arg(Math.max(1, pdf.currentPage)).arg(pdf.pageCount)
+                text: root.wide ? root.pageOf(root.shownPage) : "%1/%2".arg(root.shownPage).arg(pdf.pageCount)
+                Accessible.name: root.pageOf(root.shownPage)
                 Accessible.description: qsTr("Go to page")
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: root.openJump()
@@ -748,9 +763,8 @@ Item {
             checked: pdf.twoPages
             onTriggered: root.setTwoPages(!pdf.twoPages)
         }
-        BMenuItem {
+        HidingMenuItem {
             visible: pdf.twoPages
-            height: visible ? implicitHeight : 0
             text: qsTr("Cover page alone")
             checkable: true
             checked: pdf.coverAlone
@@ -760,49 +774,43 @@ Item {
 
     BMenu {
         id: moreMenu
-        BMenuItem {
+        HidingMenuItem {
             visible: root.ready && !root.wide
-            height: visible ? implicitHeight : 0
             text: qsTr("Zoom in")
             iconName: "zoom-in"
             onTriggered: root.zoomBy(1.25)
         }
-        BMenuItem {
+        HidingMenuItem {
             visible: root.ready && !root.wide
-            height: visible ? implicitHeight : 0
             text: qsTr("Zoom out")
             iconName: "zoom-out"
             onTriggered: root.zoomBy(0.8)
         }
-        BMenuItem {
+        HidingMenuItem {
             visible: root.ready && !root.wide
-            height: visible ? implicitHeight : 0
             text: qsTr("Fit width")
             iconName: "maximize"
             onTriggered: root.fitWidth()
         }
-        BMenuItem {
+        HidingMenuItem {
             objectName: "pdfMenuTwoPages"
             visible: root.ready && !root.wide
-            height: visible ? implicitHeight : 0
             text: qsTr("Two pages side by side")
             iconName: "columns-2"
             checkable: true
             checked: pdf.twoPages
             onTriggered: root.setTwoPages(!pdf.twoPages)
         }
-        BMenuItem {
+        HidingMenuItem {
             visible: root.ready && !root.wide && pdf.twoPages
-            height: visible ? implicitHeight : 0
             text: qsTr("Cover page alone")
             checkable: true
             checked: pdf.coverAlone
             onTriggered: root.setCoverAlone(!pdf.coverAlone)
         }
-        BMenuItem {
+        HidingMenuItem {
             objectName: "pdfMenuDraw"
             visible: root.ready && !root.wide && !pdf.unlocked
-            height: visible ? implicitHeight : 0
             text: qsTr("Draw on this page")
             iconName: "pen-tool"
             enabled: root.drawJob === 0
@@ -820,29 +828,9 @@ Item {
     BMenu {
         id: drawMenu
         objectName: "pdfDrawMenu"
-        BMenuItem {
-            objectName: "pdfDrawExisting"
-            visible: root.existingDrawings.length > 0
-            height: visible ? implicitHeight : 0
-            //: "Draw on this page": a drawing of this page already in the note
-            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(0)) : ""
-            iconName: "pen-tool"
-            onTriggered: root.openExisting(0)
-        }
-        BMenuItem {
-            visible: root.existingDrawings.length > 1
-            height: visible ? implicitHeight : 0
-            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(1)) : ""
-            iconName: "pen-tool"
-            onTriggered: root.openExisting(1)
-        }
-        BMenuItem {
-            visible: root.existingDrawings.length > 2
-            height: visible ? implicitHeight : 0
-            text: visible ? qsTr("Open the drawing “%1”").arg(root.existingName(2)) : ""
-            iconName: "pen-tool"
-            onTriggered: root.openExisting(2)
-        }
+        ExistingDrawing { objectName: "pdfDrawExisting"; slot: 0 }
+        ExistingDrawing { slot: 1 }
+        ExistingDrawing { slot: 2 }
         BMenuSeparator {}
         BMenuItem {
             objectName: "pdfDrawNew"
@@ -866,13 +854,7 @@ Item {
         color: Theme.bg
         z: 2
 
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: Theme.borderSubtle
-        }
+        Rule { anchors.bottom: parent.bottom }
 
         // The field, the status, ‹ › and ×; in the narrow bar (a phone, the side panel) a long status
         // takes the line under them instead (searchStatusBelow).
@@ -923,16 +905,12 @@ Item {
                     }
                 }
                 // (The status in every state, also while the line below shows it.)
-                Text {
+                UiText {
                     objectName: "pdfSearchStatus"
                     Layout.alignment: Qt.AlignVCenter
                     Layout.maximumWidth: root.width * 0.45
                     visible: text !== "" && !root.searchStatusBelow
                     elide: Text.ElideRight
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    color: Theme.fgMuted
                     Accessible.role: Accessible.StaticText
                     Accessible.name: text
                     text: root.searchStatus
@@ -966,15 +944,11 @@ Item {
                     onClicked: root.closeSearch()
                 }
             }
-            Text {
+            UiText {
                 objectName: "pdfSearchStatusLine"
                 Layout.fillWidth: true
                 visible: root.searchStatusBelow
                 wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                font.family: Theme.fontUi
-                font.pixelSize: Theme.textSm
-                color: Theme.fgMuted
                 Accessible.role: Accessible.StaticText
                 Accessible.name: text
                 text: root.searchStatus
@@ -993,10 +967,8 @@ Item {
         id: flick
 
         objectName: "pdfFlick"
-        anchors.top: searchBar.visible ? searchBar.bottom : bar.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
+        anchors.topMargin: bar.height + searchBar.height
         visible: root.ready
         clip: true
         contentWidth: Math.max(width, pdf.contentWidth)
@@ -1051,7 +1023,7 @@ Item {
                     border.width: 1
                     border.color: Theme.borderSubtle
                     Accessible.role: Accessible.Graphic
-                    Accessible.name: qsTr("Page %1 of %2").arg(page).arg(pdf.pageCount)
+                    Accessible.name: root.pageOf(page)
 
                     Image {
                         // The base picture: at most a screenful of pixels (PdfViewModel).
@@ -1129,7 +1101,7 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             Accessible.role: Accessible.Link
-                            Accessible.name: url !== "" ? url : qsTr("Page %1 of %2").arg(page).arg(pdf.pageCount)
+                            Accessible.name: url !== "" ? url : root.pageOf(page)
                             Accessible.onPressAction: root.followLink(linkArea.url, linkArea.page, linkArea.targetTop)
                             onClicked: root.followLink(linkArea.url, linkArea.page, linkArea.targetTop)
                             Loader {
@@ -1143,16 +1115,13 @@ Item {
                             }
                         }
                     }
-                    Text {
+                    UiText {
                         visible: pageItem.failed
                         anchors.centerIn: parent
                         width: parent.width - 2 * Theme.space4
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
                         text: qsTr("Page %1 cannot be shown.").arg(pageItem.page)
-                        textFormat: Text.PlainText
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
                         color: "#5f6368"
                     }
                 }
@@ -1213,8 +1182,7 @@ Item {
                     // (A finger's double tap: the TapHandler below.)
                     if (mouse.source !== Qt.MouseEventNotSynthesized)
                         return
-                    root._at = flick.mapFromItem(pagesMouse, mouse.x, mouse.y)
-                    root.toggleZoomAt(root._at)
+                    root.toggleZoomAt(flick.mapFromItem(pagesMouse, mouse.x, mouse.y))
                 }
             }
             PinchHandler {
@@ -1239,8 +1207,7 @@ Item {
                 id: touchTap
                 acceptedDevices: PointerDevice.TouchScreen
                 onDoubleTapped: (eventPoint) => {
-                    root._at = flick.mapFromItem(null, eventPoint.scenePosition.x, eventPoint.scenePosition.y)
-                    root.toggleZoomAt(root._at)
+                    root.toggleZoomAt(flick.mapFromItem(null, eventPoint.scenePosition.x, eventPoint.scenePosition.y))
                 }
                 onTapped: if (root.hasSelection) pdf.clearSelection()
                 onLongPressed: {
@@ -1289,7 +1256,7 @@ Item {
             }
         }
 
-        Text {
+        UiText {
             objectName: "pdfTooManyPages"
             visible: pdf.totalPages > pdf.pageCount
             x: Theme.space4
@@ -1297,10 +1264,6 @@ Item {
             width: flick.width - 2 * Theme.space4
             horizontalAlignment: Text.AlignHCenter
             text: qsTr("Showing the first %1 pages.").arg(pdf.pageCount)
-            textFormat: Text.PlainText
-            font.family: Theme.fontUi
-            font.pixelSize: Theme.textSm
-            color: Theme.fgMuted
         }
 
         // The notes that embed or link the PDF (not when the wide window's side panel shows them).
@@ -1316,18 +1279,9 @@ Item {
             compact: Theme.compact || root.inSidePanel
             showUnlinked: false
 
-            Rectangle {
-                y: -Theme.space4
-                width: parent.width
-                height: 1
-                color: Theme.borderSubtle
-            }
+            Rule { y: -Theme.space4 }
         }
     }
-    /// The wide window's side panel lists the references (PageView sets it).
-    property bool refsInSidePanel: false
-    /// The page a right click was on (the selection menu's "Select the whole page").
-    property int contextPage: 0
 
     BMenu {
         id: selectionMenu
@@ -1347,9 +1301,8 @@ Item {
             enabled: pdf.selectionAvailable && root.contextPage > 0
             onTriggered: pdf.selectAll(root.contextPage)
         }
-        BMenuItem {
+        HidingMenuItem {
             visible: pdf.outline.length > 0
-            height: visible ? implicitHeight : 0
             text: qsTr("Table of contents")
             iconName: "list"
             onTriggered: root.openOutline()
@@ -1402,37 +1355,29 @@ Item {
                     size: Theme.iconSizeLg * 1.5
                     color: Theme.fgMuted
                 }
-                Text {
+                UiText {
                     objectName: "pdfMessageName"
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
                     font.pixelSize: Theme.textLg
                     font.weight: Font.DemiBold
                     color: Theme.fg
                     text: root.fileName
                 }
-                Text {
+                UiText {
                     objectName: "pdfMessageSize"
                     width: parent.width
                     visible: text !== ""
                     horizontalAlignment: Text.AlignHCenter
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    color: Theme.fgMuted
                     text: root.revision >= 0 && root.path !== "" && messageFlick.visible
                           ? Workspace.fileSizeText(root.path) : ""
                 }
-                Text {
+                UiText {
                     objectName: "pdfMessageText"
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
                     font.pixelSize: Theme.textBase
                     color: Theme.fg
                     text: pdf.status === PdfViewModel.Failed ? pdf.error
@@ -1464,16 +1409,12 @@ Item {
                     enabled: passwordField.text !== ""
                     onClicked: root.submitPassword()
                 }
-                Text {
+                UiText {
                     objectName: "pdfPasswordNote"
                     visible: passwordField.visible
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    color: Theme.fgMuted
                     text: qsTr("Brulion does not remember the password: it is asked for each time the PDF is opened.")
                 }
                 BButton {
@@ -1500,19 +1441,13 @@ Item {
                     compact: Theme.compact || root.inSidePanel
                     showUnlinked: false
 
-                    Rectangle {
-                        y: -Theme.space4
-                        width: parent.width
-                        height: 1
-                        color: Theme.borderSubtle
-                    }
+                    Rule { y: -Theme.space4 }
                 }
             }
         }
     }
 
     // ---- Table of contents ----------------------------------------------------------------------
-
 
     BDialog {
         id: outlineDialog
@@ -1558,13 +1493,7 @@ Item {
                 leftPadding: Theme.space3 + Math.min(level, 6) * Theme.space4
                 selected: index === outlineDialog.current
                 enabled: page > 0
-                trailing: Text {
-                    text: entry.page > 0 ? "" + entry.page : ""
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    color: Theme.fgMuted
-                }
+                trailing: UiText { text: entry.page > 0 ? "" + entry.page : "" }
                 onClicked: {
                     outlineDialog.close()
                     root.jumpToTarget(entry.page, entry.targetTop)

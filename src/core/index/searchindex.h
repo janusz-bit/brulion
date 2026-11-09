@@ -111,7 +111,7 @@ private:
 
     struct Expansion;
     QList<Expansion> expand(const QString &term, bool prefix) const;
-    double fieldScore(const Posting &posting, qsizetype df) const;
+    double fieldScore(Posting posting, qsizetype df) const;
 
     std::map<QString, PostingList> m_postings; ///< ordered: prefix ranges via lower_bound
     QList<Doc> m_docs;
