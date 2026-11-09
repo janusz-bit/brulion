@@ -125,6 +125,14 @@ int main(int argc, char *argv[])
     if (qEnvironmentVariableIsSet("APPIMAGE") && !qEnvironmentVariableIsSet("QT_QPA_PLATFORMTHEME"))
         qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
 #endif
+    // The QML engine's garbage collector does a whole run at a time, as before Qt 6.8: Qt's
+    // incremental collector (seen with 6.11.2) can free the JS wrappers and the QML properties of
+    // live objects that a component creates while one of its runs is in progress — the drawing
+    // toolbar's buttons then read their labels as empty and lost every change of their colour
+    // ("Cannot find member data"). Read when the engine is created; the user's own value wins
+    // (docs/UI.md "The QML engine's garbage collector").
+    if (!qEnvironmentVariableIsSet("QV4_GC_TIMELIMIT"))
+        qputenv("QV4_GC_TIMELIMIT", "0");
 #ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
 #else

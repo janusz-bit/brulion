@@ -4097,6 +4097,27 @@ UI through the C++ helpers `DevEvents`, `DevTest`, `DevBlock`, `DevRecord`
 (`src/app/ui/devtesting.h`), C++ self-tests call typed QML functions through
 `uidriver::callQml()`, which converts each argument to the declared type.
 
+### The QML engine's garbage collector
+
+`main.cpp` sets `QV4_GC_TIMELIMIT=0` before the engine exists (a value the user set wins): the
+collector does a whole run at a time, as before Qt 6.8, instead of 5 ms steps between other work.
+Qt 6.11.2's incremental collector can free the JS wrappers and the storage of the QML properties
+of live objects when its steps fall into the creation of a component. That was seen in
+`DrawingView`'s top `DrawingToolbar`: its root has no parent until the whole file is created.
+It also needs that nothing reaches the objects from JavaScript at the time (an `id` used only in
+functions does not count). The objects stay on screen, but their properties read as empty
+(`label`, `iconName`). A written `color` or object property warns "Cannot find member data" and
+changes nothing: the pen kept its tint when another tool was chosen.
+
+It happens only under CPU load: on CI runners, or when the app shares the processor. In 32
+runs at a time on 16 cores, 5–18 % of the drawing's starts lost the property storage of 13
+toolbar objects and 67 wrappers. Qt's own check (`QV4_MM_CROSS_VALIDATE_INCREMENTAL_GC=1`)
+reports the same counts as missed by the incremental marking. With whole runs, none of 480
+starts warned.
+
+A whole run took 0.3–7 ms on the desktop with the sample notebook (logging category
+`qt.qml.gc.allocatorStats`). `QV4_GC_TIMELIMIT=5` brings back Qt's default, for a comparison.
+
 ## Dev tools, screenshots and UI tests
 
 Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appcontroller.h`,

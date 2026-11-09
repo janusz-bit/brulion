@@ -284,7 +284,9 @@ talk to the tray and the settings.
 
 `main.cpp` creates the `QApplication` (desktop: tray, `FilePicker`'s fallback dialog) /
 `QGuiApplication` (Android and the browser: no Qt Widgets there; the AppImage first asks for the
-XDG portal's platform theme — the desktop's own file pickers), the translator,
+XDG portal's platform theme — the desktop's own file pickers; on every platform the QML engine's
+garbage collector does whole runs, `QV4_GC_TIMELIMIT=0` — docs/UI.md "The QML engine's garbage
+collector"), the translator,
 the fallback fonts for emoji and symbols (`installFallbackFonts()`: always in the browser, whose
 Qt has only DejaVu Sans/Mono; on Linux only without a system emoji font, else just the symbol
 font for fontconfig's fallbacks; never on Android —
