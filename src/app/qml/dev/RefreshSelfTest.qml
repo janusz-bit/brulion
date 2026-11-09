@@ -93,8 +93,8 @@ QtObject {
         return false
     }
     function resultsStacked(): bool {
-        const list = resultList()
-        return list !== null && near(list.height, resultRowsHeight())
+        const column = resultList()
+        return column !== null && near(column.height, resultRowsHeight())
     }
 
     // ---- The embedded section ("Budżet na październik": ![[Budżet domowy#Październik]]) --------
@@ -142,14 +142,15 @@ QtObject {
     function dialog(): BReminderDialog { return dialogs().reminderDialog }
     function picker(): BDatePicker { return dialog() ? findItem(dialog().contentItem, "reminderDatePicker") as BDatePicker : null }
     function weekdays(): Item { return dialog() ? findItem(dialog().contentItem, "reminderWeekdays") : null }
-    /// The weekday buttons' names (`which`: shortNames, fullNames) joined by `separator`.
-    function names(which: string, separator: string): string {
-        const row = weekdays()
+    /// The entries of `item`'s list property `which` joined by `separator`.
+    function joinedAt(item: Item, which: string, separator: string): string {
         let out = ""
-        for (let i = 0; i < DevTest.lengthAt(row, which); ++i)
-            out += (i > 0 ? separator : "") + DevTest.valueAt(row, which + "." + i)
+        for (let i = 0; i < DevTest.lengthAt(item, which); ++i)
+            out += (i > 0 ? separator : "") + DevTest.valueAt(item, which + "." + i)
         return out
     }
+    /// The weekday buttons' names (`which`: shortNames, fullNames) joined by `separator`.
+    function names(which: string, separator: string): string { return joinedAt(weekdays(), which, separator) }
     function todayCell(): string {
         const p = picker()
         for (let i = 0; p && i < DevTest.lengthAt(p.cells, ""); ++i) {
@@ -174,13 +175,7 @@ QtObject {
     function capitalized(t: string): string { return Js.toUpperCase(Js.charAt(t, 0)) + Js.sliceFrom(t, 1) }
     function joined(names: list<string>): string { return names.join("|") }
     /// The picker's weekday labels joined by `separator`.
-    function pickerShown(separator: string): string {
-        const p = picker()
-        let out = ""
-        for (let i = 0; i < DevTest.lengthAt(p, "weekdayLabels"); ++i)
-            out += (i > 0 ? separator : "") + DevTest.valueAt(p, "weekdayLabels." + i)
-        return out
-    }
+    function pickerShown(separator: string): string { return joinedAt(picker(), "weekdayLabels", separator) }
     /// Everything the dialog shows in the language's own words, as computed now.
     function dialogInLanguage(): bool {
         const p = picker()

@@ -2,10 +2,11 @@
 
 #include "markdown/inline.h"
 #include "markdown/parse.h"
-#include "markdown/tokens.h"
+#include "markdown/tokens_p.h"
 #include "text/text.h"
 
 #include <QRandomGenerator>
+#include <QStringTokenizer>
 
 #include <algorithm>
 #include <optional>
@@ -13,14 +14,10 @@
 namespace brulion::markdown {
 
 using namespace Qt::StringLiterals;
+using detail::isSpaceOrTab;
+using detail::isTaskIdChar;
 
 namespace {
-
-bool isIdChar(QChar c)
-{
-    const char16_t u = c.unicode();
-    return (u >= u'a' && u <= u'z') || (u >= u'A' && u <= u'Z') || (u >= u'0' && u <= u'9') || u == u'_' || u == u'-';
-}
 
 /// Tokens that Obsidian Tasks writes after the description (Brulion's reminders too): a new 🆔
 /// or ⛔ goes before the first of them.
@@ -61,32 +58,20 @@ QString editFirstLine(const QString &content, int line, Edit edit)
     return text::joinLines(lines);
 }
 
-/// Where a new token goes in `line` (tokens found in its masked text): before the first layout
+/// `line` with `token` inserted (`tokens` found in its masked text): before the first layout
 /// token other than `skip` ("🆔 x " inserted there), else at the end before a block id and
-/// trailing blanks (" 🆔 x" there). `atToken` tells which.
-qsizetype insertionPoint(const QString &line, const QList<Token> &tokens, TokenKind skip, bool *atToken)
+/// trailing blanks (" 🆔 x" there).
+QString insertToken(const QString &line, const QList<Token> &tokens, TokenKind skip, const QString &token)
 {
     for (const Token &t : tokens) {
-        if (isLayoutToken(t.kind) && t.kind != skip) {
-            *atToken = true;
-            return t.from;
-        }
+        if (isLayoutToken(t.kind) && t.kind != skip)
+            return line.first(t.from) + token + u' ' + line.sliced(t.from);
     }
-    *atToken = false;
     qsizetype at = line.size();
     if (const auto id = blockIdAtEnd(line))
         at = id->from;
-    while (at > 0 && (line[at - 1] == u' ' || line[at - 1] == u'\t'))
+    while (at > 0 && isSpaceOrTab(line[at - 1]))
         --at;
-    return at;
-}
-
-QString insertToken(const QString &line, const QList<Token> &tokens, TokenKind skip, const QString &token)
-{
-    bool atToken = false;
-    const qsizetype at = insertionPoint(line, tokens, skip, &atToken);
-    if (atToken)
-        return line.first(at) + token + u' ' + line.sliced(at);
     return line.first(at) + u' ' + token + line.sliced(at);
 }
 
@@ -94,12 +79,12 @@ QString insertToken(const QString &line, const QList<Token> &tokens, TokenKind s
 QString removeRange(const QString &line, qsizetype from, qsizetype to)
 {
     qsizetype f = from;
-    while (f > 0 && (line[f - 1] == u' ' || line[f - 1] == u'\t'))
+    while (f > 0 && isSpaceOrTab(line[f - 1]))
         --f;
     if (f == 0) {
         // At the start: the blanks after it go instead.
         f = from;
-        while (to < line.size() && (line[to] == u' ' || line[to] == u'\t'))
+        while (to < line.size() && isSpaceOrTab(line[to]))
             ++to;
     }
     return line.first(f) + line.sliced(to);
@@ -108,9 +93,9 @@ QString removeRange(const QString &line, qsizetype from, qsizetype to)
 QStringList idsOf(QStringView value)
 {
     QStringList out;
-    for (QStringView part : value.split(u',')) {
+    for (QStringView part : value.tokenize(u',')) {
         part = part.trimmed();
-        if (!part.isEmpty() && !out.contains(part.toString()))
+        if (!part.isEmpty() && !out.contains(part))
             out.append(part.toString());
     }
     return out;
@@ -125,7 +110,7 @@ QList<Token> lineTokens(const QString &line)
 
 bool isValidTaskId(QStringView id)
 {
-    return !id.isEmpty() && std::ranges::all_of(id, isIdChar);
+    return !id.isEmpty() && std::ranges::all_of(id, isTaskIdChar);
 }
 
 QString generateTaskId(const std::function<bool(const QString &)> &isTaken)

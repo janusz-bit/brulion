@@ -90,7 +90,6 @@ QList<LineInfo> classifyLines(const Structure &st, const Node &node)
         case LineRole::Blank: info.cls = LineClass::Blank; break;
         case LineRole::Meta: info.cls = LineClass::Meta; break;
         case LineRole::Text: {
-            info.cls = LineClass::Text;
             const QStringView m = st.maskedText(l.view);
             if (drawers && (inDrawer || (k > 0 && m.contains(u':')))) {
                 const QStringView content = m.sliced(std::min(l.start, m.size()));
@@ -208,10 +207,9 @@ QList<MathSpan> cellFormulas(const ScannedText &scan)
         const qsizetype rowTo = k + 1 < scan.seg.pos.size() ? scan.seg.pos[k + 1] - 1 : masked.size();
         for (qsizetype from = rowFrom; from < rowTo;) {
             qsizetype to = from;
-            while (to < rowTo && masked[to] != u'|') {
+            while (to < rowTo && masked[to] != u'|')
                 to += masked[to] == u'\\' && to + 1 < rowTo ? 2 : 1;
-            }
-            const QStringView cell = masked.sliced(from, std::min(to, rowTo) - from);
+            const QStringView cell = masked.sliced(from, to - from);
             if (!cell.trimmed().startsWith(u'=')) {
                 for (MathSpan s : findMathSpans(cell)) {
                     s.from += from;
@@ -287,109 +285,86 @@ QString findBlockId(QList<LineInfo> &infos)
     return {};
 }
 
-/// Collected task metadata (first-line tokens and planning items).
-struct TaskMeta {
-    std::optional<DateSpec> due, scheduled, start;
-    std::optional<QDate> created, doneDate, cancelledDate;
-    QString recurrence;
-    Priority priority = Priority::None;
-    Priority logseqPriority = Priority::None;
-    QString repeater;
-    QString id;
-    QStringList dependsOn;
-};
-
-void taskMetaFromTokens(const QList<Token> &tokens, TaskMeta &meta)
-{
-    for (const Token &t : tokens) {
-        switch (t.kind) {
-        case TokenKind::Due:
-            if (!meta.due)
-                meta.due = t.spec();
-            break;
-        case TokenKind::Scheduled:
-            if (!meta.scheduled)
-                meta.scheduled = t.spec();
-            break;
-        case TokenKind::Start:
-            if (!meta.start)
-                meta.start = t.spec();
-            break;
-        case TokenKind::Created:
-            if (!meta.created)
-                meta.created = t.date;
-            break;
-        case TokenKind::Done:
-            if (!meta.doneDate)
-                meta.doneDate = t.date;
-            break;
-        case TokenKind::Cancelled:
-            if (!meta.cancelledDate)
-                meta.cancelledDate = t.date;
-            break;
-        case TokenKind::Recurrence:
-            if (meta.recurrence.isEmpty())
-                meta.recurrence = recurrenceOf(t);
-            break;
-        case TokenKind::Priority:
-            if (meta.priority == Priority::None)
-                meta.priority = t.priority;
-            break;
-        case TokenKind::LogseqPriority:
-            if (meta.logseqPriority == Priority::None)
-                meta.logseqPriority = t.priority;
-            break;
-        case TokenKind::TaskId:
-            if (meta.id.isEmpty())
-                meta.id = t.value;
-            break;
-        case TokenKind::DependsOn:
-            for (QStringView part : QStringView(t.value).split(u',')) {
-                const QString id = part.trimmed().toString();
-                if (!id.isEmpty() && !meta.dependsOn.contains(id))
-                    meta.dependsOn.append(id);
-            }
-            break;
-        default: break;
-        }
-    }
-}
-
-/// Logseq SCHEDULED: / DEADLINE: items (only fill fields not set by emoji tokens).
-void taskMetaFromPlanning(const QList<Token> &tokens, TaskMeta &meta)
-{
-    for (const Token &t : tokens) {
-        if (t.kind != TokenKind::Planning)
-            continue;
-        std::optional<DateSpec> &field = t.field == TokenKind::Due ? meta.due : meta.scheduled;
-        if (!field)
-            field = t.spec();
-        if (!t.repeater.isEmpty() && meta.repeater.isEmpty())
-            meta.repeater = t.repeater;
-    }
-}
-
-Task buildTask(const TaskMarker &marker, const TaskMeta &meta, const QString &text, int line)
+/// The task of a list item with `marker`: metadata from the first line's tokens, then the Logseq
+/// SCHEDULED: / DEADLINE: items of every line (they only fill the dates the tokens left unset).
+Task buildTask(const TaskMarker &marker, const QList<LineInfo> &infos, const QString &text, int line)
 {
     Task task;
     task.status = marker.status;
     task.marker = marker.marker;
     task.text = text;
     task.line = line;
-    task.due = meta.due;
-    task.scheduled = meta.scheduled;
-    task.start = meta.start;
-    task.created = meta.created;
-    task.doneDate = meta.doneDate;
-    task.cancelledDate = meta.cancelledDate;
-    task.recurrence = meta.recurrence;
-    if (task.recurrence.isEmpty() && !meta.repeater.isEmpty()) {
-        if (const auto rule = dates::repeaterToRule(meta.repeater))
+    Priority logseqPriority = Priority::None;
+    for (const Token &t : infos.constFirst().tokens) {
+        switch (t.kind) {
+        case TokenKind::Due:
+            if (!task.due)
+                task.due = t.spec();
+            break;
+        case TokenKind::Scheduled:
+            if (!task.scheduled)
+                task.scheduled = t.spec();
+            break;
+        case TokenKind::Start:
+            if (!task.start)
+                task.start = t.spec();
+            break;
+        case TokenKind::Created:
+            if (!task.created)
+                task.created = t.date;
+            break;
+        case TokenKind::Done:
+            if (!task.doneDate)
+                task.doneDate = t.date;
+            break;
+        case TokenKind::Cancelled:
+            if (!task.cancelledDate)
+                task.cancelledDate = t.date;
+            break;
+        case TokenKind::Recurrence:
+            if (task.recurrence.isEmpty())
+                task.recurrence = recurrenceOf(t);
+            break;
+        case TokenKind::Priority:
+            if (task.priority == Priority::None)
+                task.priority = t.priority;
+            break;
+        case TokenKind::LogseqPriority:
+            if (logseqPriority == Priority::None)
+                logseqPriority = t.priority;
+            break;
+        case TokenKind::TaskId:
+            if (task.id.isEmpty())
+                task.id = t.value;
+            break;
+        case TokenKind::DependsOn:
+            for (const QStringView part : QStringView(t.value).tokenize(u',')) {
+                const QString id = part.trimmed().toString();
+                if (!id.isEmpty() && !task.dependsOn.contains(id))
+                    task.dependsOn.append(id);
+            }
+            break;
+        default: break;
+        }
+    }
+    if (task.priority == Priority::None)
+        task.priority = logseqPriority;
+    QString repeater;
+    for (const LineInfo &info : infos) {
+        for (const Token &t : info.tokens) {
+            if (t.kind != TokenKind::Planning)
+                continue;
+            std::optional<DateSpec> &field = t.field == TokenKind::Due ? task.due : task.scheduled;
+            if (!field)
+                field = t.spec();
+            if (!t.repeater.isEmpty() && repeater.isEmpty())
+                repeater = t.repeater;
+        }
+    }
+    if (task.recurrence.isEmpty() && !repeater.isEmpty()) {
+        if (const auto rule = dates::repeaterToRule(repeater))
             task.recurrence = dates::formatRecurrence(*rule, dates::UiLocale::English);
     }
-    task.priority = meta.priority != Priority::None ? meta.priority : meta.logseqPriority;
-    task.id = meta.id;
-    task.dependsOn = meta.dependsOn;
     return task;
 }
 
@@ -452,17 +427,13 @@ QString cleanLine(const Structure &st, const LineInfo &info, qsizetype begin)
     }
     for (const Range &r : comments)
         ranges.append({r.first - begin, r.second - begin});
-    const QString removed = removeRanges(text.sliced(begin), ranges);
+    const QString removed = removeRanges(text.sliced(begin), std::move(ranges));
     return trimEnd(removed).toString();
 }
 
 bool isWhitespaceOnly(const QString &s)
 {
-    for (const QChar c : s) {
-        if (!c.isSpace())
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(s, [](QChar c) { return c.isSpace(); });
 }
 
 /// Drop leading/trailing empty lines and trim the outer whitespace.
@@ -586,6 +557,7 @@ LineScan readLines(const Structure &st, const Node &node, QList<LineInfo> &infos
                    const std::optional<TaskMarker> &marker, Properties &props, QString id)
 {
     LineScan out;
+    out.id = std::move(id);
     const bool propertyKinds =
             node.kind != BlockKind::Table && node.kind != BlockKind::Heading && node.kind != BlockKind::Callout;
     for (qsizetype k = 0; k < infos.size(); ++k) {
@@ -610,7 +582,7 @@ LineScan readLines(const Structure &st, const Node &node, QList<LineInfo> &infos
             const QStringView text = st.text(info.own->view);
             const qsizetype valueStart = begin + lead + pm->key.size() + 2;
             qsizetype valueEnd = text.size();
-            for (const Range &r : info.extra) {
+            for (const Range &r : std::as_const(info.extra)) {
                 if (r.first >= valueStart && r.first < valueEnd)
                     valueEnd = r.first;
             }
@@ -618,8 +590,8 @@ LineScan readLines(const Structure &st, const Node &node, QList<LineInfo> &infos
                     text.sliced(valueStart, std::max<qsizetype>(0, valueEnd - valueStart)).trimmed().toString();
             const QVariant value = parsePropertyValue(key, rawValue);
             props.insert(key, value);
-            if (key == u"id" && !rawValue.isEmpty() && id.isEmpty() && node.kind != BlockKind::Frontmatter)
-                id = rawValue;
+            if (key == u"id" && !rawValue.isEmpty() && out.id.isEmpty() && node.kind != BlockKind::Frontmatter)
+                out.id = rawValue;
             if (isTagKey(key) && value.typeId() == QMetaType::QStringList) {
                 out.extraTags.append(value.toStringList());
                 const qsizetype from = std::min(valueStart, valueEnd);
@@ -631,7 +603,6 @@ LineScan readLines(const Structure &st, const Node &node, QList<LineInfo> &infos
             info.cls = LineClass::Planning;
         }
     }
-    out.id = id;
     return out;
 }
 
@@ -640,10 +611,12 @@ struct BlockText {
     QString first;
 };
 
-/// Block text from its lines; also the cleaned first line (task text).
+/// Block text from its lines (a table's: tableText()); also the cleaned first line (task text).
 BlockText blockText(const Structure &st, const Node &node, const QList<LineInfo> &infos,
                     const std::optional<TaskMarker> &marker)
 {
+    if (node.kind == BlockKind::Table)
+        return {tableText(st, node), QString()};
     QStringList parts;
     BlockText out;
     for (qsizetype k = 0; k < infos.size(); ++k) {
@@ -670,7 +643,7 @@ BlockText blockText(const Structure &st, const Node &node, const QList<LineInfo>
             parts.append(line);
         }
     }
-    out.text = node.kind == BlockKind::Table ? tableText(st, node) : joinText(parts);
+    out.text = joinText(parts);
     return out;
 }
 
@@ -688,35 +661,37 @@ QStringList uniqueTagKeys(const QStringList &names)
     return out;
 }
 
+/// The recurrence of a block's reminders: its task's, else that of its first 🔁 token.
+QString reminderRecurrence(const QList<LineInfo> &infos, const Block &block)
+{
+    if (block.task && !block.task->recurrence.isEmpty())
+        return block.task->recurrence;
+    for (const LineInfo &info : infos) {
+        for (const Token &t : info.tokens) {
+            if (t.kind == TokenKind::Recurrence && !t.value.isEmpty()) {
+                if (QString rule = recurrenceOf(t); !rule.isEmpty())
+                    return rule;
+            }
+        }
+    }
+    return {};
+}
+
 /// Reminders of a block (any text line, including property lines).
 void blockReminders(const QList<LineInfo> &infos, Block &block, const Ctx &ctx)
 {
-    QString recurrence;
-    bool looked = false;
+    std::optional<QString> recurrence; // looked up at the first reminder
     for (const LineInfo &info : infos) {
         for (const Token &t : info.tokens) {
             if (t.kind != TokenKind::Reminder && t.kind != TokenKind::ReminderCompat)
                 continue;
-            if (!looked) {
-                looked = true;
-                if (block.task)
-                    recurrence = block.task->recurrence;
-                if (recurrence.isEmpty()) {
-                    for (const LineInfo &other : infos) {
-                        for (const Token &r : other.tokens) {
-                            if (r.kind == TokenKind::Recurrence && !r.value.isEmpty() && recurrence.isEmpty())
-                                recurrence = recurrenceOf(r);
-                        }
-                    }
-                }
-            }
-            Reminder rem;
-            rem.at = DateSpec{t.date, t.time.value_or(ctx.defaultTime)};
-            rem.alarm = t.alarm;
-            rem.recurrence = recurrence;
-            rem.text = block.text;
-            rem.line = info.own->view.line;
-            block.reminders.append(rem);
+            if (!recurrence)
+                recurrence = reminderRecurrence(infos, block);
+            block.reminders.append(Reminder{.at = DateSpec{t.date, t.time.value_or(ctx.defaultTime)},
+                                            .alarm = t.alarm,
+                                            .recurrence = *recurrence,
+                                            .text = block.text,
+                                            .line = info.own->view.line});
         }
     }
 }
@@ -784,11 +759,7 @@ Block buildBlock(const Node &node, Ctx &ctx)
     const BlockText text = blockText(st, node, infos, marker);
     block.text = text.text;
     if (marker) {
-        TaskMeta meta;
-        taskMetaFromTokens(infos.first().tokens, meta);
-        for (const LineInfo &info : std::as_const(infos))
-            taskMetaFromPlanning(info.tokens, meta);
-        block.task = buildTask(*marker, meta, text.first, node.line);
+        block.task = buildTask(*marker, infos, text.first, node.line);
         taskClockFromDrawers(st, infos, *block.task);
     }
     blockReminders(infos, block, ctx);
@@ -799,13 +770,9 @@ Block buildBlock(const Node &node, Ctx &ctx)
 QList<Link> frontmatterLinks(const FrontmatterBlock &fm)
 {
     const QString masked = maskInline(fm.yaml, MaskOptions{true, false});
-    const ScanResult res = scanInline(fm.yaml, masked, segmentsForText(fm.yaml, fm.yamlStart, 1));
-    QList<Link> out;
-    for (const Link &l : res.links) {
-        if (l.kind == LinkKind::Wiki || l.kind == LinkKind::Embed)
-            out.append(l);
-    }
-    return out;
+    QList<Link> links = scanInline(fm.yaml, masked, segmentsForText(fm.yaml, fm.yamlStart, 1)).links;
+    links.removeIf([](const Link &l) { return l.kind != LinkKind::Wiki && l.kind != LinkKind::Embed; });
+    return links;
 }
 
 QVariant firstOf(const Properties &props, const QString &a, const QString &b)
@@ -869,9 +836,9 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, 
             if (!node.own.isEmpty() && node.own.first().role == LineRole::Code) {
                 block.properties = fmProps;
             } else {
-                for (auto it = block.properties.constBegin(); it != block.properties.constEnd(); ++it) {
-                    logseqProps.insert(it.key(), it.value());
-                    note.properties.insert(it.key(), it.value());
+                for (const auto &[key, value] : std::as_const(block.properties).asKeyValueRange()) {
+                    logseqProps.insert(key, value);
+                    note.properties.insert(key, value);
                 }
             }
         }
@@ -898,7 +865,7 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, 
     note.tags = uniqueTagKeys(tags);
 
     note.links = std::move(ctx.links);
-    std::ranges::stable_sort(note.links, [](const Link &a, const Link &b) { return a.from < b.from; });
+    std::ranges::stable_sort(note.links, {}, &Link::from);
     note.journalDate = journalDateFromPath(path, config);
 
     // No growth slack in what the index keeps (docs/PERFORMANCE.md, L8).
@@ -917,30 +884,21 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, 
 
 int blockAtLine(const ParsedNote &note, int line)
 {
-    int best = -1;
     QList<int> roots;
     for (int i = 0; i < note.blocks.size(); ++i) {
         if (note.blocks[i].parent < 0)
             roots.append(i);
     }
+    // Down the blocks whose range holds `line`, to the innermost one.
+    int best = -1;
     const QList<int> *level = &roots;
     for (;;) {
-        int hit = -1;
-        for (int b : *level) {
-            if (note.blocks[b].line <= line && line <= note.blocks[b].endLine) {
-                hit = b;
-                break;
-            }
-        }
-        if (hit < 0)
+        const auto hit = std::ranges::find_if(
+                *level, [&](int b) { return note.blocks[b].line <= line && line <= note.blocks[b].endLine; });
+        if (hit == level->end())
             return best;
-        best = hit;
-        const Block &h = note.blocks[hit];
-        const bool inChild = std::ranges::any_of(
-                h.children, [&](int c) { return note.blocks[c].line <= line && line <= note.blocks[c].endLine; });
-        if (!inChild)
-            return hit;
-        level = &h.children;
+        best = *hit;
+        level = &note.blocks[best].children;
     }
 }
 

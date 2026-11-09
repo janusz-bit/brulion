@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <utility>
+#include <vector>
 
 namespace brulion::markdown {
 
@@ -26,6 +28,10 @@ namespace {
 
 /// Largest integer kept as a number (as the YAML parser does).
 constexpr qlonglong MaxSafeInteger = 9007199254740991LL;
+
+/// Most cells of lcsMatch()'s table (16 MB): a list of thousands of items in a note from anywhere
+/// must not take all the memory.
+constexpr qint64 MaxLcsCells = qint64(1) << 22;
 
 bool isListType(PropertyType t)
 {
@@ -72,6 +78,12 @@ QString nfcLower(const QString &s)
 bool sameName(const QString &a, const QString &b)
 {
     return nfcLower(a) == nfcLower(b);
+}
+
+/// The BOM `content` starts with, or "".
+QString bomOf(QStringView content)
+{
+    return startsWithBom(content) ? QString(QChar(ByteOrderMark)) : QString();
 }
 
 bool isReservedKey(QStringView key)
@@ -130,6 +142,16 @@ QString formatDateText(const DateText &d)
     if (d.hasTime)
         out += d.separator + d.time.toString(d.seconds ? u"HH:mm:ss"_s : u"HH:mm"_s);
     return out;
+}
+
+/// `d` as a datetime: a date alone at 00:00.
+DateText withTime(DateText d)
+{
+    if (!d.hasTime) {
+        d.hasTime = true;
+        d.time = QTime(0, 0);
+    }
+    return d;
 }
 
 /// `[[YYYY-MM-DD]]` (a Logseq journal link) → the date text, else nullopt.
@@ -194,15 +216,10 @@ std::optional<QString> yamlItemText(const QVariant &item)
 QStringList yamlListItems(const QVariant &value)
 {
     QStringList out;
-    if (!isListVariant(value)) {
-        if (const auto t = isEmptyVariant(value) ? std::nullopt : yamlItemText(value))
-            out.append(*t);
-        return out;
-    }
-    for (const QVariant &item : value.toList()) {
-        if (isEmptyVariant(item))
-            continue;
-        if (const auto t = yamlItemText(item))
+    // A scalar reads as a list of one.
+    const QVariantList items = isListVariant(value) ? value.toList() : QVariantList{value};
+    for (const QVariant &item : items) {
+        if (const auto t = isEmptyVariant(item) ? std::nullopt : yamlItemText(item))
             out.append(*t);
     }
     return out;
@@ -229,27 +246,46 @@ struct Intended {
     QStringList items; ///< List / Tags / Aliases
 };
 
-QStringList rawItems(const QVariant &value)
+/// `s` with its line breaks as "\n" and its ends trimmed (as typed text is kept).
+QString normalizedText(QString s)
+{
+    s.replace(u"\r\n"_s, u"\n"_s);
+    s.replace(u'\r', u'\n');
+    return s.trimmed();
+}
+
+/// `s` on one line: its line breaks as blanks, its ends trimmed.
+QString oneLine(QString s)
+{
+    return normalizedText(std::move(s)).replace(u'\n', u' ');
+}
+
+/// The items of a list value as typed, each on one line; blank items dropped.
+QStringList typedItems(const QVariant &value)
 {
     QStringList out;
     if (isListVariant(value)) {
-        for (const QVariant &v : value.toList())
-            out.append(v.toString());
+        for (const QVariantList items = value.toList(); const QVariant &v : items)
+            out.append(oneLine(v.toString()));
     } else if (!isEmptyVariant(value)) {
-        const QString s = value.toString();
-        if (!s.trimmed().isEmpty())
-            out.append(s);
+        out.append(oneLine(value.toString()));
     }
+    out.removeAll(QString());
     return out;
 }
 
-QString oneLine(const QString &s)
+/// `items` as names of `kind` (cleanListItem(); List items as they are), duplicates dropped
+/// case-insensitively; nullopt when an item can be no such name.
+std::optional<QStringList> listNames(PropertyType kind, QStringList items)
 {
-    QString out = s;
-    out.replace(u"\r\n"_s, u" "_s);
-    out.replace(u'\r', u' ');
-    out.replace(u'\n', u' ');
-    return out.trimmed();
+    if (kind != PropertyType::List) {
+        for (QString &item : items) {
+            item = cleanListItem(kind, item);
+            if (item.isEmpty())
+                return std::nullopt;
+        }
+    }
+    return uniqueCaseInsensitive(items);
 }
 
 /// `value` of `type` in its canonical form; nullopt when it is no such value (InvalidValue).
@@ -262,10 +298,7 @@ std::optional<Intended> intendedValue(const QVariant &value, PropertyType type, 
     case PropertyType::Text:
     case PropertyType::Unsupported: {
         out.type = PropertyType::Text;
-        QString s = isEmptyVariant(value) ? QString() : value.toString();
-        s.replace(u"\r\n"_s, u"\n"_s);
-        s.replace(u'\r', u'\n');
-        s = s.trimmed();
+        const QString s = normalizedText(isEmptyVariant(value) ? QString() : value.toString());
         out.empty = s.isEmpty();
         if (!out.empty)
             out.scalar = s;
@@ -327,12 +360,10 @@ std::optional<Intended> intendedValue(const QVariant &value, PropertyType type, 
         }
         if (const auto d = linkedDate(s))
             s = *d;
-        auto d = parseDateText(s);
-        if (!d)
+        const auto d = parseDateText(s);
+        if (!d || (type == PropertyType::Date && d->hasTime))
             return std::nullopt;
         if (type == PropertyType::Date) {
-            if (d->hasTime)
-                return std::nullopt;
             out.scalar = formatDateText(*d);
             return out;
         }
@@ -340,34 +371,21 @@ std::optional<Intended> intendedValue(const QVariant &value, PropertyType type, 
         // twice: GCC 12/13 at -O3 reports a false -Wmaybe-uninitialized on the optional's payload.
         const DateText before =
                 isEmptyVariant(old) ? DateText{} : parseDateText(old.toString().trimmed()).value_or(DateText{});
-        const bool typedSeconds = d->hasTime && d->seconds;
-        if (!d->hasTime) {
-            d->hasTime = true;
-            d->time = QTime(0, 0);
-        }
-        // New values: Obsidian's form (`T`); an existing datetime keeps its separator and seconds.
-        d->separator = before.hasTime ? before.separator : QChar(u'T');
-        d->seconds = typedSeconds || (before.hasTime && before.seconds);
-        out.scalar = formatDateText(*d);
+        // New values: Obsidian's form (`T`, a DateText's default); an existing datetime keeps its
+        // separator and seconds.
+        DateText dt = withTime(*d);
+        dt.separator = before.separator;
+        dt.seconds = dt.seconds || before.seconds;
+        out.scalar = formatDateText(dt);
         return out;
     }
     case PropertyType::List:
     case PropertyType::Tags:
     case PropertyType::Aliases: {
-        QStringList items;
-        for (const QString &raw : rawItems(value)) {
-            QString item = oneLine(raw);
-            if (type != PropertyType::List) {
-                if (item.isEmpty())
-                    continue;
-                item = cleanListItem(type, item);
-                if (item.isEmpty())
-                    return std::nullopt;
-            }
-            if (!item.isEmpty())
-                items.append(item);
-        }
-        out.items = uniqueCaseInsensitive(items);
+        const auto items = listNames(type, typedItems(value));
+        if (!items)
+            return std::nullopt;
+        out.items = *items;
         out.empty = out.items.isEmpty();
         return out;
     }
@@ -401,10 +419,7 @@ bool sameTrimmedText(const QVariant &old, const Intended &t)
 {
     if (t.type != PropertyType::Text || old.typeId() != QMetaType::QString)
         return false;
-    QString s = old.toString();
-    s.replace(u"\r\n"_s, u"\n"_s);
-    s.replace(u'\r', u'\n');
-    s = s.trimmed();
+    const QString s = normalizedText(old.toString());
     return t.empty ? s.isEmpty() : s == t.scalar.toString();
 }
 
@@ -449,12 +464,8 @@ std::optional<YamlDoc> yamlDoc(QStringView content)
         QSet<QString> placed;
         for (const FrontmatterEntry &e : std::as_const(doc.entries))
             placed.insert(e.key);
-        for (const QString &k : std::as_const(doc.keys)) {
-            if (!placed.contains(k)) {
-                doc.problem = u"indented"_s;
-                break;
-            }
-        }
+        if (std::ranges::any_of(std::as_const(doc.keys), [&](const QString &k) { return !placed.contains(k); }))
+            doc.problem = u"indented"_s;
     }
     return doc;
 }
@@ -488,8 +499,7 @@ bool verifyYaml(const QString &before, const FrontmatterBlock &fm, const QString
     const auto edited = findFrontmatter(after);
     if (!edited) {
         // The whole block went: only when nothing else was in it.
-        const QString bom = startsWithBom(before) ? QString(QChar(ByteOrderMark)) : QString();
-        return after == bom + body && canonicalWithout(beforeData, touched).isEmpty() && check({});
+        return after == bomOf(before) + body && canonicalWithout(beforeData, touched).isEmpty() && check({});
     }
     if (QStringView(after).sliced(edited->bodyStart) != body)
         return false;
@@ -511,23 +521,33 @@ QString joined(const QList<OutLine> &lines)
     return out;
 }
 
-/// Longest common subsequence of `a` and `b` as index pairs (small lists).
-QList<std::pair<int, int>> lcsPairs(const QStringList &a, const QStringList &b)
+/// For each item of `b`, the index of the item of `a` it keeps in a longest common subsequence of
+/// the two (-1: a new item). Quadratic, for the items of one list: past MaxLcsCells only the
+/// unchanged start and end are kept.
+QList<int> lcsMatch(const QStringList &a, const QStringList &b)
 {
     const int n = int(a.size());
     const int m = int(b.size());
+    QList<int> out(m, -1);
+    if (qint64(n + 1) * (m + 1) > MaxLcsCells) {
+        int p = 0;
+        for (; p < n && p < m && a[p] == b[p]; ++p)
+            out[p] = p;
+        for (int s = 1; s <= std::min(n, m) - p && a[n - s] == b[m - s]; ++s)
+            out[m - s] = n - s;
+        return out;
+    }
     std::vector<int> dp(size_t(n + 1) * size_t(m + 1), 0);
     const auto at = [&](int i, int j) -> int & { return dp[size_t(i) * size_t(m + 1) + size_t(j)]; };
     for (int i = n - 1; i >= 0; --i) {
         for (int j = m - 1; j >= 0; --j)
             at(i, j) = a[i] == b[j] ? at(i + 1, j + 1) + 1 : std::max(at(i + 1, j), at(i, j + 1));
     }
-    QList<std::pair<int, int>> out;
     int i = 0;
     int j = 0;
     while (i < n && j < m) {
         if (a[i] == b[j]) {
-            out.append({i, j});
+            out[j] = i;
             ++i;
             ++j;
         } else if (at(i + 1, j) >= at(i, j + 1)) {
@@ -542,12 +562,15 @@ QList<std::pair<int, int>> lcsPairs(const QStringList &a, const QStringList &b)
 /// The key of a list item for matching old items with new ones.
 QString itemMatchKey(const QVariant &itemValue, PropertyType type)
 {
-    if (type == PropertyType::List) {
-        const QStringList items = yamlListItems(QVariantList{itemValue});
-        return items.size() == 1 ? items.first() : QString(QChar(0)); // never matches a new item
-    }
-    const QStringList names = yamlNames(QVariantList{itemValue}, type);
-    return names.size() == 1 ? names.first() : QString(QChar(0));
+    const QVariantList one{itemValue};
+    const QStringList keys = type == PropertyType::List ? yamlListItems(one) : yamlNames(one, type);
+    return keys.size() == 1 ? keys.first() : QString(QChar(0)); // never matches a new item
+}
+
+/// The text after a line's indentation starts a block list item (`- a`, a bare `-`).
+bool isBlockItem(QStringView rest)
+{
+    return rest == u"-" || rest.startsWith(u"- ") || rest.startsWith(u"-\t");
 }
 
 /// The leading blanks of the frontmatter's block list items ("  " when it has none: Obsidian).
@@ -557,12 +580,42 @@ QString blockListIndent(const YamlDoc &doc)
         for (int i = e.first + 1; i < e.last; ++i) {
             const QStringView t = doc.lines[i].text;
             const Indent ind = indentOf(t);
-            const QStringView rest = t.sliced(ind.chars);
-            if (rest == u"-" || rest.startsWith(u"- ") || rest.startsWith(u"-\t"))
+            if (isBlockItem(t.sliced(ind.chars)))
                 return t.first(ind.chars).toString();
         }
     }
     return u"  "_s;
+}
+
+/// The items of a flow list between its brackets, as written: split on the commas outside quotes
+/// and brackets, trimmed, empty ones dropped.
+QStringList splitFlowItems(QStringView inner)
+{
+    QStringList out;
+    int depth = 0;
+    QChar quote;
+    qsizetype start = 0;
+    for (qsizetype i = 0; i <= inner.size(); ++i) {
+        const QChar c = i < inner.size() ? inner[i] : QChar(u',');
+        if (!quote.isNull()) {
+            if (c == quote)
+                quote = QChar();
+            continue;
+        }
+        if ((c == u'"' || c == u'\'') && inner.sliced(start, i - start).trimmed().isEmpty()) {
+            quote = c;
+        } else if (c == u'[' || c == u'{') {
+            ++depth;
+        } else if (c == u']' || c == u'}') {
+            --depth;
+        } else if (c == u',' && depth == 0) {
+            const QString item = inner.sliced(start, i - start).trimmed().toString();
+            if (!item.isEmpty())
+                out.append(item);
+            start = i + 1;
+        }
+    }
+    return out;
 }
 
 /// The lines of YAML entry `key` holding `t` (with terminators): `old` is the entry it replaces
@@ -669,42 +722,15 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
             text += u' ' + l;
         }
         QStringList oldRaw;
-        if (!commentsInside && text.endsWith(u']')) {
-            const QStringView inner = QStringView(text).sliced(1, text.size() - 2);
-            // Split on commas outside quotes and brackets.
-            int depth = 0;
-            QChar quote;
-            qsizetype start = 0;
-            for (qsizetype i = 0; i <= inner.size(); ++i) {
-                const QChar c = i < inner.size() ? inner[i] : QChar(u',');
-                if (!quote.isNull()) {
-                    if (c == quote)
-                        quote = QChar();
-                    continue;
-                }
-                if ((c == u'"' || c == u'\'') && QStringView(inner.sliced(start, i - start)).trimmed().isEmpty()) {
-                    quote = c;
-                } else if (c == u'[' || c == u'{') {
-                    ++depth;
-                } else if (c == u']' || c == u'}') {
-                    --depth;
-                } else if (c == u',' && depth == 0) {
-                    const QString item = inner.sliced(start, std::min(i, inner.size()) - start).trimmed().toString();
-                    if (!item.isEmpty())
-                        oldRaw.append(item);
-                    start = i + 1;
-                }
-            }
-        }
+        if (!commentsInside && text.endsWith(u']'))
+            oldRaw = splitFlowItems(QStringView(text).sliced(1, text.size() - 2));
         QStringList oldKeys;
         for (const QString &raw : std::as_const(oldRaw))
             oldKeys.append(itemMatchKey(yamlItemValue(raw), t.type));
+        const QList<int> kept = lcsMatch(oldKeys, t.items);
         QStringList parts;
-        QHash<int, int> keptOld; // new index -> old index
-        for (const auto &[o, n] : lcsPairs(oldKeys, t.items))
-            keptOld.insert(n, o);
         for (int k = 0; k < t.items.size(); ++k)
-            parts.append(keptOld.contains(k) ? oldRaw[keptOld.value(k)] : yamlFlowString(t.items[k]));
+            parts.append(kept[k] >= 0 ? oldRaw.at(kept[k]) : yamlFlowString(t.items[k]));
         const bool oneLineBefore = old->last == old->first + 1 || !keptComments.isEmpty();
         const QString line = keyPart + u" ["_s + parts.join(u", "_s) + u']';
         out.append({oneLineBefore ? withComment(line, true) : line, eol});
@@ -723,7 +749,7 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
     if (block) {
         Unit current;
         int itemIndent = -1;
-        for (int i = old->first + 1; i < old->last && simple; ++i) {
+        for (int i = old->first + 1; i < old->last; ++i) {
             const text::Line &l = doc.lines[i];
             const Indent ind = indentOf(l.text);
             const QStringView body = QStringView(l.text).sliced(ind.chars);
@@ -731,8 +757,7 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
                 current.lines.append({l.text, l.eol});
                 continue;
             }
-            const bool item = body == u"-" || body.startsWith(u"- ") || body.startsWith(u"-\t");
-            if (!item || (itemIndent >= 0 && ind.col != itemIndent)) {
+            if (!isBlockItem(body) || (itemIndent >= 0 && ind.col != itemIndent)) {
                 simple = false; // a multi-line item or a nested list: rewritten whole
                 break;
             }
@@ -744,29 +769,24 @@ QString yamlEntryText(const YamlDoc &doc, const FrontmatterEntry *old, const QSt
                 // `- ` / `-   ` / `-\t` as written; a bare `-` gives the usual `- `.
                 itemPrefix = v > ind.chars + 1 ? l.text.first(v) : l.text.first(ind.chars) + u"- "_s;
             }
-            QStringView itemText = body.sliced(1).trimmed();
             current.lines.append({l.text, l.eol});
-            current.key = itemMatchKey(yamlItemValue(itemText), t.type);
-            units.append(current);
-            current = Unit();
+            current.key = itemMatchKey(yamlItemValue(body.sliced(1).trimmed()), t.type);
+            units.append(std::exchange(current, {}));
         }
         trailing = current.lines;
     }
-    if (simple && block)
-        out.append({firstLine.toString(), doc.lines[old->first].eol});
-    else
-        out.append({withComment(keyPart, false), eol});
     QStringList oldKeys;
     if (simple) {
+        out.append({firstLine.toString(), doc.lines[old->first].eol});
         for (const Unit &u : std::as_const(units))
             oldKeys.append(u.key);
+    } else {
+        out.append({withComment(keyPart, false), eol});
     }
-    QHash<int, int> keptOld;
-    for (const auto &[o, n] : lcsPairs(oldKeys, t.items))
-        keptOld.insert(n, o);
+    const QList<int> kept = lcsMatch(oldKeys, t.items);
     for (int k = 0; k < t.items.size(); ++k) {
-        if (keptOld.contains(k))
-            out.append(units[keptOld.value(k)].lines);
+        if (kept[k] >= 0)
+            out.append(units.at(kept[k]).lines);
         else
             out.append({itemPrefix + yamlScalar(t.items[k]).value_or(yamlQuoted(t.items[k])), eol});
     }
@@ -807,13 +827,10 @@ std::optional<QString> writeYamlEntry(const QString &content, const YamlDoc &doc
 std::optional<QString> createFrontmatter(const QString &content, const QString &key, const Intended &t)
 {
     const QString eol = text::detectEol(content);
-    const bool bom = startsWithBom(content);
-    YamlDoc empty; // no entries: default styles
-    QString entry = yamlEntryText(empty, nullptr, key, t, eol, eol);
-    QString out = bom ? QString(QChar(ByteOrderMark)) : QString();
-    out += u"---"_s + eol + entry + u"---"_s + eol;
-    const QStringView body = QStringView(content).sliced(bom ? 1 : 0);
-    out += body;
+    const QString bom = bomOf(content);
+    const QStringView body = QStringView(content).sliced(bom.size());
+    const YamlDoc empty{}; // no entries: default styles
+    const QString out = bom + u"---"_s + eol + yamlEntryText(empty, nullptr, key, t, eol, eol) + u"---"_s + eol + body;
     const auto fm = findFrontmatter(out);
     if (!fm || QStringView(out).sliced(fm->bodyStart) != body)
         return std::nullopt;
@@ -825,6 +842,16 @@ std::optional<QString> createFrontmatter(const QString &content, const QString &
 }
 
 // ---- Logseq lines -------------------------------------------------------------------------------
+
+/// The top-level comma parts of `text` (splitTopLevelCommas()), trimmed, empty ones dropped.
+QStringList commaParts(QStringView text)
+{
+    QStringList parts = splitTopLevelCommas(text);
+    for (QString &p : parts)
+        p = p.trimmed();
+    parts.removeAll(QString());
+    return parts;
+}
 
 /// One `key:: value` line of the leading block; positions in the line's text.
 struct LogseqLine {
@@ -860,23 +887,16 @@ QList<LogseqLine> logseqLines(QStringView content, const QList<text::Line> &line
         if (!pm)
             break;
         const qsizetype skip = lines[j].text.size() - m.size();
-        LogseqLine l;
-        l.line = j;
-        l.key = pm->key;
-        l.keyFrom = skip;
-        l.afterColons = skip + pm->key.size() + 2;
-        l.valueFrom = skip + pm->valueFrom;
-        l.valueTo = skip + pm->valueTo;
-        QStringView value = QStringView(lines[j].text).sliced(l.valueFrom, l.valueTo - l.valueFrom);
-        const QStringView maskedValue = m.sliced(pm->valueFrom, pm->valueTo - pm->valueFrom);
-        for (qsizetype k = 0; k < value.size(); ++k) {
-            if (value[k] != maskedValue[k]) {
-                value = value.first(k);
-                break;
-            }
-        }
-        l.raw = value.trimmed().toString();
-        out.append(l);
+        const QStringView value = QStringView(lines[j].text).sliced(skip + pm->valueFrom, pm->valueTo - pm->valueFrom);
+        // The value ends where a `%%comment%%` (masked in `m`) starts.
+        const auto end = std::ranges::mismatch(value, m.sliced(pm->valueFrom, value.size())).in1;
+        out.append({.line = j,
+                    .key = pm->key,
+                    .keyFrom = skip,
+                    .afterColons = skip + pm->key.size() + 2,
+                    .valueFrom = skip + pm->valueFrom,
+                    .valueTo = skip + pm->valueTo,
+                    .raw = value.first(end - value.begin()).trimmed().toString()});
     }
     return out;
 }
@@ -908,11 +928,7 @@ PageProperty logseqProperty(const LogseqLine &l)
         }
         break;
     case PropertyType::List:
-        for (const QString &part : splitTopLevelCommas(l.raw)) {
-            const QString item = part.trimmed();
-            if (!item.isEmpty())
-                p.items.append(item);
-        }
+        p.items = commaParts(l.raw);
         p.value = p.items;
         break;
     case PropertyType::Tags:
@@ -926,8 +942,7 @@ PageProperty logseqProperty(const LogseqLine &l)
             p.value = l.raw;
         break;
     }
-    if (p.empty && !isListType(p.type))
-        p.value = QVariant();
+    // (An empty value reads as Text, Tags or Aliases: a scalar one stays an invalid QVariant.)
     if (isListType(p.type))
         p.text = p.items.join(u", "_s);
     return p;
@@ -943,14 +958,9 @@ PageProperty yamlProperty(const QString &key, const QVariant &v, int line, bool 
     p.empty = isEmptyVariant(v);
     switch (p.type) {
     case PropertyType::List:
-        p.items = yamlListItems(v);
-        p.value = p.items;
-        p.text = p.items.join(u", "_s);
-        p.empty = p.items.isEmpty();
-        break;
     case PropertyType::Tags:
     case PropertyType::Aliases:
-        p.items = yamlNames(v, p.type);
+        p.items = p.type == PropertyType::List ? yamlListItems(v) : yamlNames(v, p.type);
         p.value = p.items;
         p.text = p.items.join(u", "_s);
         p.empty = p.items.isEmpty();
@@ -966,9 +976,10 @@ PageProperty yamlProperty(const QString &key, const QVariant &v, int line, bool 
     case PropertyType::Unsupported: p.text = unsupportedText(v); break;
     default:
         if (!p.empty) {
-            p.value = v.toString();
-            p.multiline = p.value.toString().contains(u'\n');
-            p.text = oneLine(p.value.toString());
+            const QString s = v.toString();
+            p.value = s;
+            p.multiline = s.contains(u'\n');
+            p.text = oneLine(s);
         }
         break;
     }
@@ -992,32 +1003,28 @@ PageRead readPage(QStringView content)
     int from = 0;
     if (r.yaml) {
         const YamlDoc &doc = *r.yaml;
-        PagePropertyBlock block;
-        block.source = PropertySource::Yaml;
-        block.firstLine = 0;
-        block.lastLine = doc.fm.endLine;
-        block.problem = doc.problem;
-        block.editable = doc.problem.isEmpty();
+        const bool editable = doc.problem.isEmpty();
+        r.props.yaml = PagePropertyBlock{.source = PropertySource::Yaml,
+                                         .firstLine = 0,
+                                         .lastLine = doc.fm.endLine,
+                                         .editable = editable,
+                                         .problem = doc.problem};
         QHash<QString, int> lineOf;
-        for (const FrontmatterEntry &e : doc.entries) {
-            if (!lineOf.contains(e.key))
-                lineOf.insert(e.key, e.first);
-        }
+        for (const FrontmatterEntry &e : doc.entries)
+            lineOf.tryEmplace(e.key, e.first);
         for (const QString &key : doc.keys) {
-            if (key == NoteModeKey)
-                continue; // the page header's mode toggle stands for it
-            r.props.items.append(yamlProperty(key, doc.data.value(key), lineOf.value(key, -1), block.editable));
+            if (key != NoteModeKey) // the page header's mode toggle stands for it
+                r.props.items.append(yamlProperty(key, doc.data.value(key), lineOf.value(key, -1), editable));
         }
-        r.props.yaml = block;
         from = doc.fm.bodyStartLine;
     }
     r.logseq = logseqLines(content, r.lines, from);
     if (!r.logseq.isEmpty()) {
-        PagePropertyBlock block;
-        block.source = PropertySource::Logseq;
-        block.firstLine = r.logseq.first().line;
-        block.lastLine = r.logseq.last().line;
-        r.props.logseq = block;
+        r.props.logseq = PagePropertyBlock{.source = PropertySource::Logseq,
+                                           .firstLine = r.logseq.constFirst().line,
+                                           .lastLine = r.logseq.constLast().line,
+                                           .editable = true,
+                                           .problem = {}};
         for (const LogseqLine &l : std::as_const(r.logseq))
             r.props.items.append(logseqProperty(l));
     }
@@ -1080,12 +1087,10 @@ QString logseqValueText(const Intended &t, const LogseqLine *old)
         QHash<QString, QString> oldByName; // name -> part as written
         bool hash = false;
         if (old) {
-            for (const QString &part : splitTopLevelCommas(old->raw)) {
-                const QString p = part.trimmed();
+            for (const QStringList parts = commaParts(old->raw); const QString &p : parts) {
                 hash = hash || p.startsWith(u'#');
-                const QString name = cleanName(p);
-                if (!name.isEmpty() && !oldByName.contains(name))
-                    oldByName.insert(name, p);
+                if (const QString name = cleanName(p); !name.isEmpty())
+                    oldByName.tryEmplace(name, p);
             }
         }
         QStringList out;
@@ -1146,6 +1151,22 @@ PropertyEditResult changed(const QString &content)
     return {content, PropertyEditStatus::Changed};
 }
 
+/// The status of an edit with key `key` of `source` that checkPropertyKey() finds a problem with.
+std::optional<PropertyEditStatus> keyProblemStatus(QStringView key, PropertySource source)
+{
+    const QString problem = checkPropertyKey(key, source);
+    if (problem.isEmpty())
+        return std::nullopt;
+    return problem == u"reserved" ? PropertyEditStatus::Reserved : PropertyEditStatus::InvalidKey;
+}
+
+/// The index of the Logseq line of `key` (case-insensitive, NFC) in `lines`, or -1.
+qsizetype logseqIndex(const QList<LogseqLine> &lines, const QString &key)
+{
+    const auto it = std::ranges::find_if(lines, [&](const LogseqLine &l) { return sameName(l.key, key); });
+    return it == lines.end() ? -1 : it - lines.begin();
+}
+
 PropertyEditResult setLogseq(const QString &content, const PageRead &page, const QString &key, const QVariant &value,
                              PropertyType type)
 {
@@ -1153,18 +1174,11 @@ PropertyEditResult setLogseq(const QString &content, const PageRead &page, const
         return unchanged(content, PropertyEditStatus::InvalidKey);
     if (page.logseq.isEmpty())
         return unchanged(content, PropertyEditStatus::NotFound);
-    qsizetype found = -1;
-    for (qsizetype k = 0; k < page.logseq.size(); ++k) {
-        if (sameName(page.logseq[k].key, key)) {
-            found = k;
-            break;
-        }
-    }
+    const qsizetype found = logseqIndex(page.logseq, key);
     const LogseqLine *old = found >= 0 ? &page.logseq[found] : nullptr;
     if (!old && pageHasKey(page.props, key))
         return unchanged(content, PropertyEditStatus::KeyExists);
-    const QVariant oldValue = old ? QVariant(old->raw) : QVariant();
-    const auto t = intendedValue(value, type, oldValue);
+    const auto t = intendedValue(value, type, old ? QVariant(old->raw) : QVariant());
     if (!t)
         return unchanged(content, PropertyEditStatus::InvalidValue);
     const QString valueText = logseqValueText(*t, old);
@@ -1184,20 +1198,19 @@ PropertyEditResult setLogseq(const QString &content, const PageRead &page, const
         edited = replaceLine(page.lines, old->line, text);
         expected[found].second = valueText;
     } else {
+        // A new line after the last one (which gets a line break when it ends the document).
         const int last = page.logseq.last().line;
-        QList<text::Line> lines = page.lines;
         const QString newLine = key + u"::"_s + (valueText.isEmpty() ? QString() : QString(u' ' + valueText));
-        QString out;
-        for (int i = 0; i < lines.size(); ++i) {
-            out += lines[i].text;
-            if (i == last && lines[i].eol.isEmpty())
-                out += text::detectEol(content) + newLine;
+        for (int i = 0; i < page.lines.size(); ++i) {
+            const text::Line &l = page.lines[i];
+            edited += l.text;
+            if (i != last)
+                edited += l.eol;
+            else if (l.eol.isEmpty())
+                edited += text::detectEol(content) + newLine;
             else
-                out += lines[i].eol;
-            if (i == last && !lines[i].eol.isEmpty())
-                out += newLine + lines[i].eol;
+                edited += l.eol + newLine + l.eol;
         }
-        edited = out;
         expected.append({key, valueText});
     }
     if (!verifyLogseq(content, edited, expected))
@@ -1250,7 +1263,7 @@ PropertyEditResult removeLogseq(const QString &content, const PageRead &page, co
             out.prepend(QChar(ByteOrderMark));
         return out;
     };
-    QList<QString> tries;
+    QStringList tries;
     if (expected.isEmpty()) {
         // The block goes with the blank lines after it: the page gets back its old start. Unless
         // the body would then read differently (it starts with `---` and would become a
@@ -1275,13 +1288,7 @@ PropertyEditResult renameLogseq(const QString &content, const PageRead &page, co
 {
     if (!isLogseqKey(newKey))
         return unchanged(content, PropertyEditStatus::InvalidKey);
-    qsizetype found = -1;
-    for (qsizetype k = 0; k < page.logseq.size(); ++k) {
-        if (sameName(page.logseq[k].key, oldKey)) {
-            found = k;
-            break;
-        }
-    }
+    const qsizetype found = logseqIndex(page.logseq, oldKey);
     if (found < 0)
         return unchanged(content, PropertyEditStatus::NotFound);
     const LogseqLine &l = page.logseq[found];
@@ -1394,7 +1401,7 @@ PropertyType inferPropertyType(const QString &key, const QVariant &value, Proper
         if (isMapVariant(value))
             return PropertyType::Unsupported;
         if (isListVariant(value)) {
-            for (const QVariant &item : value.toList()) {
+            for (const QVariantList items = value.toList(); const QVariant &item : items) {
                 if (isMapVariant(item) || (isListVariant(item) && !yamlItemText(item)))
                     return PropertyType::Unsupported;
             }
@@ -1439,27 +1446,24 @@ QStringList propertyValueTexts(const QString &key, const QVariant &value, Proper
     const PropertyType type = inferPropertyType(key, value, source, PropertyType::Text);
     if (isEmptyVariant(value) || type == PropertyType::Unsupported)
         return {};
-    if (source == PropertySource::Logseq) {
-        if (isListVariant(value) || type == PropertyType::Tags || type == PropertyType::Aliases) {
-            QStringList out = isListVariant(value) ? value.toStringList()
-                                                   : parsePropertyValue(key.toLower(), value.toString()).toStringList();
-            out.removeAll(QString());
-            return out;
+    if (source == PropertySource::Yaml) {
+        switch (type) {
+        case PropertyType::List: return yamlListItems(value);
+        case PropertyType::Tags:
+        case PropertyType::Aliases: return yamlNames(value, type);
+        case PropertyType::Number: return {numberText(value)};
+        case PropertyType::Checkbox: return {value.toBool() ? u"true"_s : u"false"_s};
+        default: break;
         }
-        const QString raw = value.toString().trimmed();
-        return raw.isEmpty() ? QStringList() : QStringList{raw};
+    } else if (isListVariant(value) || type == PropertyType::Tags || type == PropertyType::Aliases) {
+        QStringList out = isListVariant(value) ? value.toStringList()
+                                               : parsePropertyValue(key.toLower(), value.toString()).toStringList();
+        out.removeAll(QString());
+        return out;
     }
-    switch (type) {
-    case PropertyType::List: return yamlListItems(value);
-    case PropertyType::Tags:
-    case PropertyType::Aliases: return yamlNames(value, type);
-    case PropertyType::Number: return {numberText(value)};
-    case PropertyType::Checkbox: return {value.toBool() ? u"true"_s : u"false"_s};
-    default: {
-        const QString s = value.toString().trimmed();
-        return s.isEmpty() ? QStringList() : QStringList{s};
-    }
-    }
+    // A scalar: its text.
+    const QString s = value.toString().trimmed();
+    return s.isEmpty() ? QStringList() : QStringList{s};
 }
 
 // ---- reading ------------------------------------------------------------------------------------
@@ -1535,11 +1539,8 @@ QString cleanListItem(PropertyType kind, const QString &item)
 PropertyEditResult setPageProperty(const QString &content, PropertySource source, const QString &key,
                                    const QVariant &value, PropertyType type)
 {
-    const QString keyProblem = checkPropertyKey(key, source);
-    if (keyProblem == u"reserved")
-        return unchanged(content, PropertyEditStatus::Reserved);
-    if (!keyProblem.isEmpty())
-        return unchanged(content, PropertyEditStatus::InvalidKey);
+    if (const auto bad = keyProblemStatus(key, source))
+        return unchanged(content, *bad);
     if (const auto fixed = fixedPropertyType(key))
         type = *fixed; // tags and aliases are lists of names whatever the caller says
     const PageRead page = readPage(content);
@@ -1565,15 +1566,11 @@ PropertyEditResult setPageProperty(const QString &content, PropertySource source
     const auto t = intendedValue(value, type, old);
     if (!t)
         return unchanged(content, PropertyEditStatus::InvalidValue);
-    if (entries.size() == 1 && sameTrimmedText(old, *t))
+    // Already so; a list keeps a form that reads the same (`tags: a, b`) — but an empty list of a
+    // type the key has nowhere else (`key:` set as a list) is written as `key: []`.
+    const bool emptyList = t->type == PropertyType::List && t->empty && !isListVariant(old);
+    if (entries.size() == 1 && (sameTrimmedText(old, *t) || (!emptyList && yamlReadsAs(old, *t))))
         return unchanged(content);
-    if (entries.size() == 1 && yamlReadsAs(old, *t)) {
-        // Already so; a list keeps a form that reads the same (`tags: a, b`) — but an empty list
-        // of a type the key has nowhere else (`key:` set as a list) is written as `key: []`.
-        const bool emptyList = t->type == PropertyType::List && t->empty && !isListVariant(old);
-        if (!emptyList)
-            return unchanged(content);
-    }
     const auto out = writeYamlEntry(content, doc, key, *t);
     if (!out)
         return unchanged(content, PropertyEditStatus::Unsafe);
@@ -1583,11 +1580,8 @@ PropertyEditResult setPageProperty(const QString &content, PropertySource source
 PropertyEditResult addPageProperty(const QString &content, PropertySource source, const QString &key,
                                    const QVariant &value, PropertyType type)
 {
-    const QString keyProblem = checkPropertyKey(key, source);
-    if (keyProblem == u"reserved")
-        return unchanged(content, PropertyEditStatus::Reserved);
-    if (!keyProblem.isEmpty())
-        return unchanged(content, PropertyEditStatus::InvalidKey);
+    if (const auto bad = keyProblemStatus(key, source))
+        return unchanged(content, *bad);
     if (pageHasKey(readPageProperties(content), key))
         return unchanged(content, PropertyEditStatus::KeyExists);
     return setPageProperty(content, source, key, value, type);
@@ -1618,8 +1612,7 @@ PropertyEditResult removePageProperty(const QString &content, PropertySource sou
     if (empty) {
         // Nothing but blank lines left: the whole block goes — unless the body would then start a
         // frontmatter of its own (then an empty block stays).
-        const QString bom = startsWithBom(content) ? QString(QChar(ByteOrderMark)) : QString();
-        const QString whole = bom + QStringView(content).sliced(doc.fm.bodyStart);
+        const QString whole = bomOf(content) + QStringView(content).sliced(doc.fm.bodyStart);
         if (verifyYaml(content, doc.fm, whole, {key}, absent))
             return changed(whole);
     }
@@ -1632,11 +1625,10 @@ PropertyEditResult removePageProperty(const QString &content, PropertySource sou
 PropertyEditResult renamePageProperty(const QString &content, PropertySource source, const QString &oldKey,
                                       const QString &newKey)
 {
-    const QString keyProblem = checkPropertyKey(newKey, source);
-    if (keyProblem == u"reserved" || (source == PropertySource::Yaml && isReservedKey(oldKey)))
+    if (source == PropertySource::Yaml && isReservedKey(oldKey))
         return unchanged(content, PropertyEditStatus::Reserved);
-    if (!keyProblem.isEmpty())
-        return unchanged(content, PropertyEditStatus::InvalidKey);
+    if (const auto bad = keyProblemStatus(newKey, source))
+        return unchanged(content, *bad);
     const PageRead page = readPage(content);
     if (source == PropertySource::Logseq)
         return renameLogseq(content, page, oldKey, newKey);
@@ -1679,10 +1671,8 @@ PropertyEditResult addPageListItem(const QString &content, PropertyType kind, co
     if (name.isEmpty())
         return unchanged(content, PropertyEditStatus::InvalidValue);
     const PageProperties props = readPageProperties(content);
-    for (const QString &have : pageListItems(props, kind)) {
-        if (sameName(have, name))
-            return unchanged(content);
-    }
+    if (std::ranges::any_of(pageListItems(props, kind), [&](const QString &have) { return sameName(have, name); }))
+        return unchanged(content);
     const PageProperty *holder = holderOf(props, PropertySource::Yaml, kind);
     if (!holder)
         holder = holderOf(props, PropertySource::Logseq, kind);
@@ -1727,11 +1717,8 @@ PropertyEditResult removePageListItem(const QString &content, PropertyType kind,
             break;
         if (!holder->editable)
             return unchanged(content, PropertyEditStatus::Unsafe);
-        QStringList items;
-        for (const QString &s : holder->items) {
-            if (!sameName(s, name))
-                items.append(s);
-        }
+        QStringList items = holder->items;
+        items.removeIf([&](const QString &s) { return sameName(s, name); });
         const PropertyEditResult r = items.isEmpty()
                                              ? removePageProperty(current, holder->source, holder->key)
                                              : setPageProperty(current, holder->source, holder->key, items, kind);
@@ -1771,13 +1758,10 @@ std::optional<QVariant> convertPropertyValue(const QVariant &value, PropertyType
     }
     switch (to) {
     case PropertyType::Text: return QVariant(text);
-    case PropertyType::Number: {
+    case PropertyType::Number:
         if (from == PropertyType::Checkbox || listFrom)
             return std::nullopt;
-        if (const auto n = parseNumberInput(text))
-            return *n;
-        return std::nullopt;
-    }
+        return parseNumberInput(text);
     case PropertyType::Checkbox: {
         const QString t = text.trimmed().toLower();
         if (t == u"true" || t == u"tak" || t == u"yes" || t == u"1")
@@ -1786,43 +1770,21 @@ std::optional<QVariant> convertPropertyValue(const QVariant &value, PropertyType
             return QVariant(false);
         return std::nullopt;
     }
-    case PropertyType::Date: {
+    case PropertyType::Date:
+    case PropertyType::DateTime: {
         const auto d = parseDateText(text.trimmed());
         if (!d)
             return std::nullopt;
-        return QVariant(d->date.toString(u"yyyy-MM-dd"_s));
-    }
-    case PropertyType::DateTime: {
-        auto d = parseDateText(text.trimmed());
-        if (!d)
-            return std::nullopt;
-        if (!d->hasTime) {
-            d->hasTime = true;
-            d->time = QTime(0, 0);
-        }
-        return QVariant(formatDateText(*d));
+        return QVariant(to == PropertyType::Date ? d->date.toString(u"yyyy-MM-dd"_s) : formatDateText(withTime(*d)));
     }
     case PropertyType::List:
     case PropertyType::Tags:
     case PropertyType::Aliases: {
-        if (!listFrom) {
-            for (const QString &part : splitTopLevelCommas(text)) {
-                const QString p = part.trimmed();
-                if (!p.isEmpty())
-                    items.append(p);
-            }
-        }
-        if (to != PropertyType::List) {
-            QStringList names;
-            for (const QString &s : std::as_const(items)) {
-                const QString n = cleanListItem(to, s);
-                if (n.isEmpty())
-                    return std::nullopt;
-                names.append(n);
-            }
-            items = names;
-        }
-        return QVariant(uniqueCaseInsensitive(items));
+        if (!listFrom)
+            items = commaParts(text);
+        if (const auto names = listNames(to, items))
+            return QVariant(*names);
+        return std::nullopt;
     }
     case PropertyType::Unsupported: break;
     }

@@ -2,6 +2,7 @@
 
 #include "markdown/inline.h"
 #include "markdown/inline_p.h"
+#include "markdown/lines_p.h"
 
 #include <QRegularExpression>
 #include <QTextBoundaryFinder>
@@ -16,6 +17,8 @@ namespace brulion::markdown {
 
 namespace {
 
+using detail::isAsciiDigit;
+
 bool isAsciiUpper(QChar c)
 {
     return c >= u'A' && c <= u'Z';
@@ -24,11 +27,6 @@ bool isAsciiUpper(QChar c)
 bool isAsciiLower(QChar c)
 {
     return c >= u'a' && c <= u'z';
-}
-
-bool isAsciiDigit(QChar c)
-{
-    return c >= u'0' && c <= u'9';
 }
 
 /// A value without the quotes a Logseq line may keep ("…" / '…').
@@ -45,13 +43,12 @@ std::optional<QString> emoji(QStringView v)
     if (v.isEmpty() || v.size() > 32)
         return std::nullopt;
     bool wide = false;
-    const QString s = v.toString();
-    for (qsizetype i = 0; i < s.size(); ++i) {
-        char32_t code = s[i].unicode();
-        if (s[i].isHighSurrogate() && i + 1 < s.size() && s[i + 1].isLowSurrogate()) {
-            code = QChar::surrogateToUcs4(s[i], s[i + 1]);
+    for (qsizetype i = 0; i < v.size(); ++i) {
+        char32_t code = v[i].unicode();
+        if (v[i].isHighSurrogate() && i + 1 < v.size() && v[i + 1].isLowSurrogate()) {
+            code = QChar::surrogateToUcs4(v[i], v[i + 1]);
             ++i;
-        } else if (s[i].isSurrogate()) {
+        } else if (v[i].isSurrogate()) {
             return std::nullopt; // a lone surrogate
         }
         if (QChar::isLetter(code) || QChar::isSpace(code) || code < 0x20 || (code >= 0x7F && code < 0xA0))
@@ -61,13 +58,13 @@ std::optional<QString> emoji(QStringView v)
     }
     if (!wide)
         return std::nullopt;
-    QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, s);
+    QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, v);
     int clusters = 0;
     while (graphemes.toNextBoundary() >= 0) {
         if (++clusters > 2)
             return std::nullopt;
     }
-    return s;
+    return v.toString();
 }
 
 /// `LiBookOpen` → "book-open"; nullopt when it is no Iconize Lucide name.
@@ -101,11 +98,7 @@ bool validAppName(QStringView name)
 {
     if (name.isEmpty() || name.size() > 64 || name.front() == u'-' || name.back() == u'-' || name.contains(u"--"))
         return false;
-    for (const QChar c : name) {
-        if (!isAsciiLower(c) && !isAsciiDigit(c) && c != u'-')
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(name, [](QChar c) { return isAsciiLower(c) || isAsciiDigit(c) || c == u'-'; });
 }
 
 bool isWebUrl(QStringView text)
@@ -213,12 +206,9 @@ PageCover parsePageCover(const QVariant &value)
         return coverOf(parts->target);
     }
     if (v.startsWith(u'[')) {
+        // The whole value is the one picture: markdownDestination() reads only a complete link.
         const MarkdownDestination dest = markdownDestination(v);
         if (dest.from < 0)
-            return {};
-        // The whole value must be the one picture.
-        const qsizetype close = v.lastIndexOf(u')');
-        if (close != v.size() - 1)
             return {};
         QString target = v.sliced(dest.from, dest.to - dest.from).toString();
         if (!isWebUrl(target))

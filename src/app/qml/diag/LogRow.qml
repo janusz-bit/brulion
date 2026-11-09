@@ -28,11 +28,12 @@ Item {
 
     signal copyRequested(int index)
 
-    readonly property bool problem: level === "error" || level === "fatal" || level === "warning"
-    readonly property color levelColor: level === "error" || level === "fatal" ? Theme.dangerText
+    readonly property bool isError: level === "error" || level === "fatal"
+    readonly property bool problem: isError || level === "warning"
+    readonly property color levelColor: isError ? Theme.dangerText
                                       : level === "warning" ? Theme.warningText
                                       : level === "debug" ? Theme.fgFaint : Theme.infoText
-    readonly property string levelIcon: level === "error" || level === "fatal" ? "circle-alert"
+    readonly property string levelIcon: isError ? "circle-alert"
                                       : level === "warning" ? "triangle-alert"
                                       : level === "debug" ? "" : "info"
     readonly property int pad: Theme.touchUi ? Theme.space2 : 3
@@ -50,7 +51,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: row.level === "error" || row.level === "fatal" ? Theme.dangerBg
+        color: row.isError ? Theme.dangerBg
              : row.level === "warning" ? Theme.warningBg
              : hover.hovered ? Theme.bgHover : "transparent"
         opacity: row.problem ? 0.6 : 1
@@ -81,9 +82,7 @@ Item {
         height: row.metaHeight
         verticalAlignment: Text.AlignVCenter
         text: row.letter
-        font.family: Theme.fontMono
-        font.pixelSize: Theme.textXs
-        font.weight: Theme.weightSemiBold
+        font { family: Theme.fontMono; pixelSize: Theme.textXs; weight: Theme.weightSemiBold }
         color: row.levelColor
     }
     Text {
@@ -132,7 +131,7 @@ Item {
         font.pixelSize: Theme.textSm
         color: row.earlier ? Theme.fgMuted : Theme.fg
         lineHeightMode: Text.FixedHeight
-        lineHeight: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight)
+        lineHeight: row.metaHeight
     }
 
     HoverHandler {

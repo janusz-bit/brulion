@@ -25,7 +25,7 @@ const QRegularExpression &guidPattern()
     return re;
 }
 
-/// Form encoding of one value (application/x-www-form-urlencoded).
+/// Form encoding of the fields (application/x-www-form-urlencoded).
 QByteArray form(const QList<std::pair<QString, QString>> &fields)
 {
     QByteArray out;
@@ -50,7 +50,8 @@ int aadstsCode(const QString &description, const QList<int> &codes)
 QList<int> errorCodes(const QJsonObject &o)
 {
     QList<int> out;
-    for (const QJsonValue &v : o.value(u"error_codes"_s).toArray())
+    const QJsonArray codes = o.value(u"error_codes"_s).toArray();
+    for (const auto &v : codes)
         out.append(v.toInt());
     return out;
 }
@@ -140,8 +141,7 @@ AuthError describeAuthError(const QString &error, const QString &description, co
     if (error == u"bad_verification_code")
         return {u"bad-code"_s, MsTodoMessages::tr("Microsoft did not accept the sign-in code. Sign in again.")};
     // Something else: the first sentence of Microsoft's own explanation (never a token).
-    QString detail = description.section(u"\r\n"_s, 0, 0).section(u'\n', 0, 0).trimmed();
-    detail = logging::redact(detail.left(300));
+    QString detail = logging::redact(description.section(u'\n', 0, 0).trimmed().left(300));
     if (detail.isEmpty())
         detail = error;
     return {u"server"_s, detail.isEmpty() ? MsTodoMessages::tr("Microsoft refused the sign-in.")
@@ -195,8 +195,7 @@ void DeviceCodeLogin::fail(const AuthError &error)
     Q_EMIT failed(error.code, error.message);
 }
 
-void DeviceCodeLogin::send(const QString &url, const QByteArray &body,
-                           std::function<void(const sync::HttpResponse &)> done)
+void DeviceCodeLogin::send(const QString &url, const QByteArray &body, sync::HttpCallback done)
 {
     sync::HttpRequest request;
     request.method = "POST";
@@ -237,8 +236,9 @@ void DeviceCodeLogin::requestCode()
              m_interval = std::clamp(o.value(u"interval"_s).toInt(5), 1, 60);
              m_expiresMs = qint64(expiresIn) * m_unitMs;
              m_started.start();
+             const int generation = m_generation;
              Q_EMIT codeReady(userCode, verificationUrl(o.value(u"verification_uri"_s).toString()), expiresIn);
-             if (m_active)
+             if (m_generation == generation) // a slot may cancel or restart the sign-in
                  m_pollTimer.start(m_interval * m_unitMs);
          });
 }
@@ -286,7 +286,7 @@ void DeviceCodeLogin::poll()
                  return;
              }
              if (error == u"slow_down") {
-                 m_interval = qMin(m_interval + 5, 60);
+                 m_interval = std::min(m_interval + 5, 60);
                  again();
                  return;
              }

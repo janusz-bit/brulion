@@ -114,7 +114,7 @@ QtObject {
     /// Steps: the block menu of cell (r, c): a right-click; on touch UIs a tap on the cell and the
     /// toolbar's "More".
     function openOn(r: int, c: int): void {
-        if (!window.touchRun) {
+        if (!test.window.touchRun) {
             if (test.window.at())
                 test.rightClickCell(r, c)
         } else {
@@ -185,7 +185,7 @@ QtObject {
     /// Keys in a cell: rows and columns move, the cell stays edited (desktop); on touch UIs the
     /// cell closed and the row taken back.
     function keySteps(): void {
-        if (window.touchRun) {
+        if (test.window.touchRun) {
             if (test.window.at())
                 test.closeCell()
             if (test.window.at())
@@ -221,7 +221,7 @@ QtObject {
     }
     /// A right-click on the cell being edited (desktop).
     function editedCellMenuSteps(): void {
-        if (window.touchRun)
+        if (test.window.touchRun)
             return
         // ---- A right-click on the cell being edited ---------------------------------------------
         if (test.window.at()) test.tapCell(0, 1)
@@ -312,9 +312,7 @@ QtObject {
         if (test.window.at())
             check(test.item("tableColumnMenu", "tableAlignCenter").checked && !test.item("tableColumnMenu", "tableAlignRight").checked,
                   "the new one is ticked")
-        if (test.window.at()) {
-            test.menu().close()
-        }
+        if (test.window.at()) test.menu().close()
         if (test.window.at()) test.window.waitStep(!test.menuOpen(), "closed")
         if (test.window.at()) test.closeCell()
         if (test.window.at()) test.undoes(1, "one undo step takes the alignment back")

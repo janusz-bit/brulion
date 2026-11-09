@@ -37,33 +37,17 @@ std::optional<QList<WeekToken>> weekTokens(const QString &format)
     };
     bool year = false;
     bool week = false;
-    for (qsizetype i = 0; i < format.size();) {
+    bool quoted = false;
+    for (qsizetype i = 0; i < format.size(); ++i) {
         const QChar c = format.at(i);
-        if (c == u'\'') {
-            if (i + 1 < format.size() && format.at(i + 1) == u'\'') { // '' outside quotes: a quote
-                literal(c);
-                i += 2;
-                continue;
-            }
-            qsizetype j = i + 1;
-            for (;;) {
-                if (j >= format.size())
-                    return std::nullopt; // unclosed
-                if (format.at(j) == u'\'') {
-                    if (j + 1 < format.size() && format.at(j + 1) == u'\'') {
-                        literal(u'\'');
-                        j += 2;
-                        continue;
-                    }
-                    break;
-                }
-                literal(format.at(j));
-                ++j;
-            }
-            i = j + 1;
-            continue;
-        }
-        if (c == u'y' || c == u'w') {
+        if (c == u'\'' && i + 1 < format.size() && format.at(i + 1) == u'\'') { // '': a quote, quoted or not
+            literal(c);
+            ++i;
+        } else if (c == u'\'') {
+            quoted = !quoted;
+        } else if (quoted || !c.isLetter()) {
+            literal(c);
+        } else if (c == u'y' || c == u'w') {
             qsizetype n = 1;
             while (i + n < format.size() && format.at(i + n) == c)
                 ++n;
@@ -76,15 +60,12 @@ std::optional<QList<WeekToken>> weekTokens(const QString &format)
             } else {
                 return std::nullopt;
             }
-            i += n;
-            continue;
+            i += n - 1;
+        } else {
+            return std::nullopt; // a letter that is no token
         }
-        if (c.isLetter())
-            return std::nullopt;
-        literal(c);
-        ++i;
     }
-    if (!year || !week)
+    if (quoted || !year || !week) // an unclosed quote, no year or no week
         return std::nullopt;
     return out;
 }
@@ -119,8 +100,8 @@ std::optional<QDate> parseWeekName(const QList<WeekToken> &tokens, const QString
     pattern += u"$"_s;
     // Compiled once per format and thread (a calendar asks for every note of a folder).
     thread_local QHash<QString, QRegularExpression> compiled;
-    auto it = compiled.constFind(pattern);
-    if (it == compiled.cend()) {
+    auto it = compiled.find(pattern);
+    if (it == compiled.end()) {
         if (compiled.size() > 16)
             compiled.clear();
         it = compiled.insert(pattern, QRegularExpression(pattern, QRegularExpression::CaseInsensitiveOption));
@@ -135,16 +116,11 @@ std::optional<QDate> parseWeekName(const QList<WeekToken> &tokens, const QString
     for (const WeekToken &t : tokens) {
         if (t.kind == WeekToken::Literal)
             continue;
-        const int value = m.captured(group++).toInt();
         int &field = t.kind == WeekToken::Year4 ? year4 : t.kind == WeekToken::Year2 ? year2 : week;
-        if (field >= 0 && field != value)
-            return std::nullopt; // "2026-W45 (2027)": the parts disagree
-        field = value;
+        field = m.captured(group++).toInt();
     }
-    if (year4 >= 0 && year2 >= 0 && year4 % 100 != year2)
-        return std::nullopt;
-    const int year = year4 >= 0 ? year4 : 2000 + year2;
-    const QDate start = isoWeekStart(year, week);
+    // Parts that disagree ("2026-W45 (2027)", "2026-W45-27") do not format back to the name.
+    const QDate start = isoWeekStart(year4 >= 0 ? year4 : 2000 + year2, week);
     if (!start.isValid() || formatWeek(tokens, isoWeek(start)).compare(name, Qt::CaseInsensitive) != 0)
         return std::nullopt;
     return start;
@@ -187,20 +163,38 @@ bool formatsBackTo(QDate d, const QString &format, const QString &text, const QL
     return false;
 }
 
-/// `text` with a month's standalone name (Polish "listopad") as the name Qt reads ("listopada").
-QString withFormatMonthNames(const QString &text, const QLocale &locale)
+using MonthWords = QList<std::pair<QRegularExpression, QString>>;
+
+/// `locale`'s standalone month names (Polish "listopad") that differ from the ones Qt reads
+/// ("listopada"), each as a whole word with the name Qt reads, by month. Compiled once per locale
+/// and thread.
+const MonthWords &standaloneMonthWords(const QLocale &locale)
 {
+    thread_local QHash<QLocale, MonthWords> cache;
+    auto it = cache.find(locale);
+    if (it != cache.end())
+        return *it;
+    it = cache.insert(locale, {});
     for (int m = 1; m <= 12; ++m) {
         for (const QLocale::FormatType type : {QLocale::LongFormat, QLocale::ShortFormat}) {
             const QString standalone = locale.standaloneMonthName(m, type);
             const QString name = locale.monthName(m, type);
             if (standalone == name || standalone.isEmpty())
                 continue;
-            const QRegularExpression word(u"(?<!\\w)"_s + QRegularExpression::escape(standalone) + u"(?!\\w)"_s,
-                                          QRegularExpression::CaseInsensitiveOption);
-            if (word.match(text).hasMatch())
-                return QString(text).replace(word, name);
+            it->append({QRegularExpression(u"(?<!\\w)"_s + QRegularExpression::escape(standalone) + u"(?!\\w)"_s,
+                                           QRegularExpression::CaseInsensitiveOption),
+                        name});
         }
+    }
+    return *it;
+}
+
+/// `text` with a month's standalone name (Polish "listopad") as the name Qt reads ("listopada").
+QString withFormatMonthNames(const QString &text, const QLocale &locale)
+{
+    for (const auto &[word, name] : standaloneMonthWords(locale)) {
+        if (word.match(text).hasMatch())
+            return QString(text).replace(word, name);
     }
     return text;
 }
@@ -249,8 +243,8 @@ bool safeRelativeName(const QString &name)
 {
     if (name.isEmpty() || name.startsWith(u'/') || name.endsWith(u'/') || name.contains(u'\\'))
         return false;
-    for (const QString &part : name.split(u'/')) {
-        if (part.trimmed().isEmpty() || part.startsWith(u'.') || part == u".."_s)
+    for (const QStringView part : name.tokenize(u'/')) {
+        if (part.trimmed().isEmpty() || part.startsWith(u'.')) // ".." too
             return false;
     }
     return true;
@@ -374,6 +368,19 @@ std::optional<QDate> explicitMonth(const QString &folded, QDate today)
     return QDate(year, month, 1);
 }
 
+/// `format` (trimmed) when usable, else the period's default.
+QString usableFormat(Period period, const QString &format)
+{
+    return isUsableFormat(period, format) ? format.trimmed() : defaultFileFormat(period);
+}
+
+/// The vault's file name format for a period as set: nameFor() and dateFromName() check it as
+/// fileFormat() does, once (a folder's every note may be asked about).
+const QString &formatSetting(Period period, const VaultConfig &config)
+{
+    return period == Period::Week ? config.weeklyFileFormat : config.monthlyFileFormat;
+}
+
 } // namespace
 
 QString periodName(Period period)
@@ -474,17 +481,13 @@ bool isUsableFormat(Period period, const QString &format)
         || name == c.toString(base.addMonths(1), f) || name == c.toString(base.addYears(1), f)
         || !safeRelativeName(name))
         return false;
-    for (const QDate d : {base, QDate(2026, 11, 1), QDate(1999, 12, 1)}) {
-        if (parseMonthStrict(c.toString(d, f), f, c) != d)
-            return false;
-    }
-    return true;
+    const auto readsBack = [&](QDate d) { return parseMonthStrict(c.toString(d, f), f, c) == d; };
+    return readsBack(base) && readsBack(QDate(2026, 11, 1)) && readsBack(QDate(1999, 12, 1));
 }
 
 QString fileFormat(Period period, const VaultConfig &config)
 {
-    const QString f = (period == Period::Week ? config.weeklyFileFormat : config.monthlyFileFormat).trimmed();
-    return isUsableFormat(period, f) ? f : defaultFileFormat(period);
+    return usableFormat(period, formatSetting(period, config));
 }
 
 QString folder(Period period, const VaultConfig &config)
@@ -502,7 +505,7 @@ QString nameFor(Period period, QDate date, const QString &format, const QLocale 
     const QDate start = periodStart(period, date);
     if (!start.isValid() || start.year() < 1 || start.year() > 9999)
         return {};
-    const QString f = isUsableFormat(period, format) ? format.trimmed() : defaultFileFormat(period);
+    const QString f = usableFormat(period, format);
     if (period == Period::Week) {
         const auto tokens = weekTokens(f);
         const IsoWeek w = isoWeek(start);
@@ -518,25 +521,24 @@ std::optional<QDate> dateFromName(Period period, const QString &name, const QStr
 {
     if (name.isEmpty() || (period == Period::Week && !containsDigit(name)))
         return std::nullopt;
-    const QString f = isUsableFormat(period, format) ? format.trimmed() : defaultFileFormat(period);
+    const QString f = usableFormat(period, format);
     if (period == Period::Week) {
         const auto tokens = weekTokens(f);
         return tokens ? parseWeekName(*tokens, name) : std::nullopt;
     }
-    QList<QLocale> locales{QLocale::c()};
-    if (containsLetter(name))
-        locales.append(QLocale(QLocale::Polish, QLocale::Poland));
-    for (const QLocale &locale : std::as_const(locales)) {
+    const auto parse = [&](const QLocale &locale) -> std::optional<QDate> {
         const QDate d = parseMonthStrict(name, f, locale);
-        if (d.isValid() && d.year() >= 1 && d.year() <= 9999)
-            return d;
-    }
-    return std::nullopt;
+        return d.isValid() && d.year() >= 1 && d.year() <= 9999 ? std::optional(d) : std::nullopt;
+    };
+    // English month names; Polish ones too when the name has letters.
+    if (const auto d = parse(QLocale::c()); d || !containsLetter(name))
+        return d;
+    return parse(QLocale(QLocale::Polish, QLocale::Poland));
 }
 
 VaultPath pathFor(Period period, QDate date, const VaultConfig &config)
 {
-    const QString name = nameFor(period, date, fileFormat(period, config));
+    const QString name = nameFor(period, date, formatSetting(period, config));
     if (name.isEmpty())
         return {};
     return paths::join(folder(period, config), name + u".md"_s);
@@ -547,7 +549,7 @@ std::optional<QDate> dateFromPath(Period period, const VaultPath &path, const Va
     const QString rel = relativeInFolder(path, folder(period, config));
     if (rel.isEmpty())
         return std::nullopt;
-    return dateFromName(period, rel, fileFormat(period, config));
+    return dateFromName(period, rel, formatSetting(period, config));
 }
 
 std::optional<PeriodicNote> periodicNoteFromPath(const VaultPath &path, const VaultConfig &config)
@@ -572,31 +574,22 @@ QString periodLabel(Period period, QDate date, dates::UiLocale locale)
         return month + u' ' + QString::number(start.year());
     }
     const QDate end = periodEnd(period, date);
-    const auto full = [&](QDate d) {
-        return pl ? u"%1 %2 %3"_s.arg(d.day())
-                               .arg(dates::monthName(d.month(), locale, dates::NameForm::Genitive))
-                               .arg(d.year())
-                  : u"%1 %2, %3"_s.arg(dates::monthName(d.month(), locale, dates::NameForm::Short))
-                               .arg(d.day())
-                               .arg(d.year());
+    const auto month = [&](QDate d) {
+        return dates::monthName(d.month(), locale, pl ? dates::NameForm::Genitive : dates::NameForm::Short);
+    };
+    const auto full = [&](QDate d) { // "2 listopada 2026" / "Nov 2, 2026"
+        return pl ? u"%1 %2 %3"_s.arg(d.day()).arg(month(d)).arg(d.year())
+                  : u"%1 %2, %3"_s.arg(month(d)).arg(d.day()).arg(d.year());
     };
     QString range;
     if (start.year() != end.year()) {
         range = full(start) + u" – "_s + full(end);
     } else if (start.month() != end.month()) {
-        range = pl ? u"%1 %2 – %3"_s.arg(start.day())
-                                .arg(dates::monthName(start.month(), locale, dates::NameForm::Genitive), full(end))
-                   : u"%1 %2 – %3 %4, %5"_s.arg(dates::monthName(start.month(), locale, dates::NameForm::Short))
-                                .arg(start.day())
-                                .arg(dates::monthName(end.month(), locale, dates::NameForm::Short))
-                                .arg(end.day())
-                                .arg(end.year());
+        range = pl ? u"%1 %2 – %3"_s.arg(start.day()).arg(month(start), full(end))
+                   : u"%1 %2 – %3"_s.arg(month(start)).arg(start.day()).arg(full(end));
     } else {
         range = pl ? u"%1–%2"_s.arg(start.day()).arg(full(end))
-                   : u"%1 %2–%3, %4"_s.arg(dates::monthName(start.month(), locale, dates::NameForm::Short))
-                                .arg(start.day())
-                                .arg(end.day())
-                                .arg(end.year());
+                   : u"%1 %2–%3, %4"_s.arg(month(start)).arg(start.day()).arg(end.day()).arg(end.year());
     }
     return (pl ? u"Tydzień %1 (%2)"_s : u"Week %1 (%2)"_s).arg(isoWeek(start).week).arg(range);
 }
@@ -608,14 +601,15 @@ std::optional<QDate> parsePeriodPhrase(Period period, QStringView text, const QD
     if (!today.isValid())
         return std::nullopt;
     const QString trimmed = text.trimmed().toString();
+    static const QRegularExpression spaces(u"\\s+"_s);
     QString folded = text::foldKey(trimmed);
-    folded.replace(QRegularExpression(u"\\s+"_s), u" "_s);
+    folded.replace(spaces, u" "_s);
     if (const auto offset = relativeOffset(period, folded))
         return shiftPeriod(period, today, *offset);
     if (const auto d = period == Period::Week ? explicitWeek(folded, today) : explicitMonth(folded, today))
         return d;
     if (config) {
-        if (const auto d = dateFromName(period, trimmed, fileFormat(period, *config)))
+        if (const auto d = dateFromName(period, trimmed, formatSetting(period, *config)))
             return d;
     }
     if (const auto iso = dates::parseIsoDate(trimmed))

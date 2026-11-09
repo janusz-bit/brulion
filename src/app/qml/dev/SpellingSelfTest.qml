@@ -193,10 +193,10 @@ QtObject {
         test.editBlock("psa ma")
         if (test.window.at())
             test.window.waitStep(test.marked("blabla", 0), "“blabla” is marked")
-        if (test.window.at()) { SpellCheck.enabled = false }
+        if (test.window.at()) SpellCheck.enabled = false
         if (test.window.at())
             check(!test.edit().spellChecked && !test.marked("blabla", 0), "switched off: nothing is marked")
-        if (test.window.at()) { SpellCheck.enabled = true }
+        if (test.window.at()) SpellCheck.enabled = true
         if (test.window.at())
             test.window.waitStep(test.marked("blabla", 0), "switched on again: “blabla” is marked again")
     }

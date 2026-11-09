@@ -127,12 +127,33 @@ QtObject {
         else
             events.mouseClick(item, item.width / 2, item.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
     }
-    /// A Ctrl+click on the text of `row` (picks it into or out of the selection).
-    function ctrlClick(row: int): void {
+    /// A click with `modifiers` held on the text of `row`.
+    function clickText(row: int, modifiers: int): void {
         const text = textOf(row)
         check(text !== null, "the text of row " + row)
         if (text)
-            events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ControlModifier, -1)
+            events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, modifiers, -1)
+    }
+    /// A Ctrl+click on the text of `row` (picks it into or out of the selection).
+    function ctrlClick(row: int): void { clickText(row, Qt.ControlModifier) }
+    /// A finger tap a third of the way into the text of `row`.
+    function tapText(row: int): void {
+        const text = textOf(row)
+        check(text !== null, "the text of row " + row)
+        if (text)
+            fingerTap(text, text.width / 3, text.height / 2)
+    }
+    /// `row` is the edited block and has the keys.
+    function editing(row: int): bool {
+        const e = edit()
+        return e !== null && e.activeFocus && e.row === row
+    }
+    /// Selects "Jadę" (the first four characters) of the edited text and right-clicks inside it.
+    function rightClickWord(): void {
+        const ed = edit()
+        ed.select(0, 4)
+        test.caret = ed.positionToRectangle(2)
+        rightClick(ed, test.caret.x, test.caret.y + test.caret.height / 2)
     }
     function rightClick(item: Item, x: real, y: real): void {
         if (item)
@@ -307,7 +328,6 @@ QtObject {
         }
         if (window.at()) window.waitStep(toolsMenuOpen(), "the floating tools' Więcej opens")
         if (window.at()) {
-            const tools = floatingTools()
             const up = menuItem(toolsMenu(), "selectionMoveUp")
             check(up !== null && "" + DevTest.property(up, "unavailable") === editor.gapReason && up.opacity < 1,
                   "its Przenieś w górę is shown disabled, with the reason")
@@ -324,8 +344,7 @@ QtObject {
         }
         if (window.at()) {
             check(page.selectedRow === rowOf("Ekipa może") && page.selectionCount === 3, "another one picked")
-            const text = textOf(rowOf("Położyć"))
-            events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
+            clickText(rowOf("Położyć"), Qt.ShiftModifier)
         }
         if (window.at()) check(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć"),
                     "Shift+click then selects a range from the block picked last: " + page.selectionAnchorRow + "–" + page.selectedRow)
@@ -338,8 +357,7 @@ QtObject {
         }
         if (window.at()) window.waitStep(edit() !== null && edit().activeFocus, "Zmierzyć is edited")
         if (window.at()) {
-            const text = textOf(rowOf("Wywieźć"))
-            events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
+            clickText(rowOf("Wywieźć"), Qt.ShiftModifier)
         }
         if (window.at()) {
             check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === rowOf("Wywieźć"),
@@ -406,7 +424,7 @@ QtObject {
             check(info(rowOf("Skuć")).depth === 2 && info(rowOf("Położyć")).depth === 2, "Tab indents the range")
             editor.startEditing(rowOf("Ekipa może"), -1) // another block edited meanwhile
         }
-        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === rowOf("Ekipa może"), "another block is edited")
+        if (window.at()) window.waitStep(editing(rowOf("Ekipa może")), "another block is edited")
         if (window.at()) editKey(Qt.Key_Z, Qt.ControlModifier)
         if (window.at()) {
             check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
@@ -433,8 +451,8 @@ QtObject {
         }
         if (window.at()) window.waitStep(window.pageText() === test.textBefore, "undone")
         // ---- One copied block pasted into an edited empty bullet: its text, no second marker --------
-        if (window.at()) { test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "") }
-        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === test.rowA, "a new empty bullet is edited")
+        if (window.at()) test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "")
+        if (window.at()) window.waitStep(editing(test.rowA), "a new empty bullet is edited")
         if (window.at()) editKey(Qt.Key_V, Qt.ControlModifier)
         if (window.at() && !window.waiting(info(test.rowA).taskStatus === "todo" && Js.indexOf(info(test.rowA).plainText, "Skuć stare płytki") === 0
                    && partsOf(window.pageText(), "\t- [ ] Skuć stare płytki 📅 2026-10-13\n").length === 3))
@@ -453,7 +471,7 @@ QtObject {
             center(window.viewRow("calc"))
             editor.startEditing(test.rowA, -1)
         }
-        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === test.rowA, "the heading Koszty is edited")
+        if (window.at()) window.waitStep(editing(test.rowA), "the heading Koszty is edited")
         if (window.at()) {
             const calc = window.findItem(delegateAt(window.viewRow("calc")), "calcInput") as Item
             check(calc !== null, "the calculation's lines")
@@ -474,10 +492,8 @@ QtObject {
                     "Shift+click on a table moves the selection's end there, no cell edited: " + page.selectedRow)
         if (window.at()) key(Qt.Key_Escape, 0)
         // ---- In-block Ctrl+C / Ctrl+X keep no-break spaces ------------------------------------------
-        if (window.at()) {
-            test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "Jadę w\u00a0góry z\u00a0Anią")
-        }
-        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === test.rowA, "a block with no-break spaces is edited")
+        if (window.at()) test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "Jadę w\u00a0góry z\u00a0Anią")
+        if (window.at()) window.waitStep(editing(test.rowA), "a block with no-break spaces is edited")
         if (window.at()) {
             edit().select(5, 13)
             editKey(Qt.Key_C, Qt.ControlModifier)
@@ -488,10 +504,7 @@ QtObject {
         if (window.at()) window.waitStep(Js.indexOf(window.pageText(), "- Jadę \u00a0Anią\n") > 0 && clip() === "w\u00a0góry z", "Ctrl+X cuts them")
         // ---- The edited text's menu -------------------------------------------------------------------
         if (window.at()) {
-            const ed = edit()
-            ed.select(0, 4)
-            test.caret = ed.positionToRectangle(2)
-            events.mouseClick(ed, test.caret.x, test.caret.y + test.caret.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+            rightClickWord()
         }
         if (window.at()) window.waitStep(textMenu() !== null && textMenu().opened, "a right-click in the edited text opens its menu")
         if (window.at()) {
@@ -504,10 +517,7 @@ QtObject {
         // ---- The same menu walked by keyboard: the highlighted item takes the keys inside the menu,
         //      Escape gives them back to the text, still selected ----------------------------------------
         if (window.at()) {
-            const ed = edit()
-            ed.select(0, 4)
-            test.caret = ed.positionToRectangle(2)
-            events.mouseClick(ed, test.caret.x, test.caret.y + test.caret.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+            rightClickWord()
         }
         if (window.at()) window.waitStep(textMenu() !== null && textMenu().opened, "the edited text's menu for the keys")
         if (window.at()) key(Qt.Key_Down, 0)
@@ -520,10 +530,7 @@ QtObject {
                                          "Escape closes it: the edited text has the keys again, still selected")
         // ---- Its "Highlight…" (docs/UI.md "Coloured highlights") -----------------------------------
         if (window.at()) {
-            const ed = edit()
-            ed.select(0, 4)
-            test.caret = ed.positionToRectangle(2)
-            events.mouseClick(ed, test.caret.x, test.caret.y + test.caret.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+            rightClickWord()
         }
         if (window.at()) window.waitStep(textMenu() !== null && textMenu().opened, "the edited text's menu again")
         if (window.at()) tap(window.menuItemNamed(textMenu(), "editTextHighlight"))
@@ -604,8 +611,7 @@ QtObject {
         if (window.at()) {
             check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
             check(page.selectedRow > rowOf("Notatki z rozmowy"), "and the selection follows the pointer: " + page.selectedRow)
-            const y = list.height - 4
-            events.mouseRelease(list, list.width / 2, y, Qt.LeftButton, Qt.NoModifier, -1)
+            events.mouseRelease(list, list.width / 2, list.height - 4, Qt.LeftButton, Qt.NoModifier, -1)
         }
         if (window.at()) {
             check(!editor.dragSelecting && page.editingRow < 0 && page.selectionAnchorRow === test.rowA,
@@ -671,7 +677,6 @@ QtObject {
         if (window.at()) tap(window.findShown(floatingTools(), "selectionMore"))
         if (window.at()) window.waitStep(toolsMenuOpen(), "the floating tools' Więcej opens")
         if (window.at()) {
-            const tools = floatingTools()
             const indent = menuItem(toolsMenu(), "selectionIndent")
             const outdent = menuItem(toolsMenu(), "selectionOutdent")
             check(indent !== null && !indent.visible && outdent !== null && !outdent.visible,
@@ -695,8 +700,7 @@ QtObject {
             check(page.editingRow < 0, "nothing is edited")
             check(shown(toolbar(), "toolbarSelectionTools") !== null, "the selection tools are docked")
             check(window.findShown(delegateAt(rowOf("Zadzwonić")), "selectionGripStart") !== null, "with grips")
-            const text = textOf(rowOf("Położyć"))
-            fingerTap(text, text.width / 3, text.height / 2)
+            tapText(rowOf("Położyć"))
         }
         if (window.at()) window.waitStep(page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Położyć")
                    && page.editingRow < 0 && editor.selectionMode, "a tap on another block extends the selection (no editing)")
@@ -712,17 +716,13 @@ QtObject {
         if (window.at()) window.waitStep(editor.pickMode && (shown(toolbar(), "selectionPickMode") as T.AbstractButton).checked, "a tap turns it on")
         if (window.at()) {
             check(window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") === null, "no grips while picking")
-            const text = textOf(rowOf("Zadzwonić"))
-            fingerTap(text, text.width / 3, text.height / 2)
+            tapText(rowOf("Zadzwonić"))
         }
         if (window.at() && !window.waiting(page.selectionPicked && page.editingRow < 0 && selected().indexOf(rowOf("Zadzwonić")) < 0
                    && selected().indexOf(rowOf("Wywieźć")) >= 0))
             window.checkWait("a tap on a selected block leaves it out, the rest stays: " + selectedText())
         if (window.at()) center(rowOf("Ekipa może"))
-        if (window.at()) {
-            const text = textOf(rowOf("Ekipa może"))
-            fingerTap(text, text.width / 3, text.height / 2)
-        }
+        if (window.at()) tapText(rowOf("Ekipa może"))
         if (window.at() && !window.waiting(!page.selectionContiguous && page.selectedRow === rowOf("Ekipa może")
                    && selected().indexOf(rowOf("Ekipa może")) >= 0 && selected().indexOf(rowOf("Notatki z rozmowy")) < 0))
             window.checkWait("a tap on another block picks it, with a gap: " + selectedText())
@@ -732,10 +732,7 @@ QtObject {
         if (window.at()) tap(shown(toolbar(), "selectionPickMode"))
         if (window.at()) window.waitStep(!editor.pickMode, "a second tap turns Pojedynczo off")
         if (window.at()) center(rowOf("Położyć"))
-        if (window.at()) {
-            const text = textOf(rowOf("Położyć"))
-            fingerTap(text, text.width / 3, text.height / 2)
-        }
+        if (window.at()) tapText(rowOf("Położyć"))
         if (window.at() && !window.waiting(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć")
                    && endGrip() !== null))
             window.checkWait("then a tap moves the selection's end again, from the block picked last (the grips are back): "
@@ -801,14 +798,14 @@ QtObject {
         if (window.at()) window.waitStep(!editor.selectionMode && page.selectionCount === 0 && editor.toolbarMode === "", "Back leaves the selection mode")
         // ---- A long press dragged to the view's edge: autoscroll ----------------------------------------
         if (window.at()) list.positionViewAtBeginning()
-        if (window.at()) { test.contentBefore = list.contentY }
+        if (window.at()) test.contentBefore = list.contentY
         if (window.at()) pressText(rowOf("Zmierzyć"))
         if (window.at()) window.waiting(editor.selectionMode && page.selectedRow === rowOf("Zmierzyć"))
         if (window.at()) {
-                check(editor.selectionMode, "the long press selected the block")
-                const text = textOf(rowOf("Kupić płytki"))
-                events.touchMove(text, text.width / 2, text.height / 2)
-            }
+            check(editor.selectionMode, "the long press selected the block")
+            const text = textOf(rowOf("Kupić płytki"))
+            events.touchMove(text, text.width / 2, text.height / 2)
+        }
         if (window.at() && !window.waiting(page.selectedRow === rowOf("Kupić płytki") && Math.abs(list.contentY - test.contentBefore) < 1))
             window.checkWait("moving the finger without lifting it extends the selection (no scrolling): " + page.selectedRow
                        + ", scrolled " + (list.contentY - test.contentBefore))
@@ -816,10 +813,10 @@ QtObject {
         // Held at the edge until the list has scrolled (a frame at a time: slow in sanitizer builds).
         if (window.at()) window.waiting(list.contentY > test.contentBefore + 100 && page.selectedRow > rowOf("Prace"))
         if (window.at()) {
-                check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
-                check(page.selectedRow > rowOf("Prace"), "the selection follows the finger: " + page.selectedRow)
-                events.touchRelease(list, list.width / 2, list.height - 6)
-            }
+            check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
+            check(page.selectedRow > rowOf("Prace"), "the selection follows the finger: " + page.selectedRow)
+            events.touchRelease(list, list.width / 2, list.height - 6)
+        }
         if (window.at()) window.waitStep(!editor.dragSelecting && editor.selectionMode && list.interactive
                    && page.selectionAnchorRow === rowOf("Zmierzyć"), "the lifted finger leaves the selection in the selection mode")
         if (window.at()) key(Qt.Key_Back, 0)
@@ -841,7 +838,7 @@ QtObject {
         if (window.at()) window.waitStep(!editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode")
         // ---- A keyboard on a touch UI: Esc and Shift+↓ give the selection its tools -------------------
         if (window.at()) editor.startEditing(rowOf("Skuć"), -1)
-        if (window.at()) window.waitStep(edit() !== null && edit().activeFocus && edit().row === rowOf("Skuć"), "Skuć is edited")
+        if (window.at()) window.waitStep(editing(rowOf("Skuć")), "Skuć is edited")
         if (window.at()) editKey(Qt.Key_Escape, 0)
         if (window.at()) window.waitStep(page.selectedRow === rowOf("Skuć") && page.editingRow < 0 && editor.selectionMode
                    && editor.toolbarMode === "selection", "Esc selects the block with the selection's tools")

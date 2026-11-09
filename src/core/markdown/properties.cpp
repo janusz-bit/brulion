@@ -23,6 +23,38 @@ bool isTagBodyChar(QChar c)
     return c.isLetterOrNumber() || c.isMark() || c == u'_' || c == u'-' || c == u'/' || c.isSurrogate();
 }
 
+/// splitTopLevelCommas() as views into `s` (the parser only reads the parts).
+QList<QStringView> commaParts(QStringView s)
+{
+    QList<QStringView> out;
+    int depth = 0;
+    bool quoted = false;
+    qsizetype start = 0;
+    for (qsizetype i = 0; i < s.size(); ++i) {
+        const QChar c = s[i];
+        if (quoted) {
+            if (c == u'"')
+                quoted = false;
+            continue;
+        }
+        const QChar next = charAt(s, i + 1);
+        if (c == u'"') {
+            quoted = true;
+        } else if ((c == u'[' && next == u'[') || (c == u'(' && next == u'(')) {
+            ++depth;
+            ++i;
+        } else if (((c == u']' && next == u']') || (c == u')' && next == u')')) && depth > 0) {
+            --depth;
+            ++i;
+        } else if (c == u',' && depth == 0) {
+            out.append(s.sliced(start, i - start));
+            start = i + 1;
+        }
+    }
+    out.append(s.sliced(start));
+    return out;
+}
+
 } // namespace
 
 std::optional<PropertyLine> matchPropertyLine(QStringView line)
@@ -55,31 +87,8 @@ namespace detail {
 QStringList splitTopLevelCommas(QStringView s)
 {
     QStringList out;
-    int depth = 0;
-    bool quoted = false;
-    qsizetype start = 0;
-    for (qsizetype i = 0; i < s.size(); ++i) {
-        const QChar c = s[i];
-        if (quoted) {
-            if (c == u'"')
-                quoted = false;
-            continue;
-        }
-        const QChar next = charAt(s, i + 1);
-        if (c == u'"') {
-            quoted = true;
-        } else if ((c == u'[' && next == u'[') || (c == u'(' && next == u'(')) {
-            ++depth;
-            ++i;
-        } else if (((c == u']' && next == u']') || (c == u')' && next == u')')) && depth > 0) {
-            --depth;
-            ++i;
-        } else if (c == u',' && depth == 0) {
-            out.append(s.sliced(start, i - start).toString());
-            start = i + 1;
-        }
-    }
-    out.append(s.sliced(start).toString());
+    for (const QStringView part : commaParts(s))
+        out.append(part.toString());
     return out;
 }
 
@@ -129,9 +138,8 @@ QVariant parsePropertyValue(const QString &key, QStringView raw)
     const QStringView value = raw.trimmed();
     if (isListKey(key)) {
         QStringList out;
-        for (const QString &part : splitTopLevelCommas(value)) {
-            const QString name = cleanName(part);
-            if (!name.isEmpty())
+        for (const QStringView part : commaParts(value)) {
+            if (const QString name = cleanName(part); !name.isEmpty())
                 out.append(name);
         }
         return out;
@@ -139,8 +147,8 @@ QVariant parsePropertyValue(const QString &key, QStringView raw)
     if (value.isEmpty())
         return QString();
     QStringList names;
-    for (const QString &part : splitTopLevelCommas(value)) {
-        const QStringView p = QStringView(part).trimmed();
+    for (const QStringView part : commaParts(value)) {
+        const QStringView p = part.trimmed();
         if (p.isEmpty())
             continue;
         const QString name = refName(p);
@@ -159,13 +167,11 @@ namespace {
 QVariant frontmatterValue(const QVariant &v)
 {
     switch (v.typeId()) {
-    case QMetaType::QString: return v.toString();
-    case QMetaType::Bool: return v.toBool() ? u"true"_s : u"false"_s;
+    case QMetaType::QString:
     case QMetaType::LongLong:
-    case QMetaType::Int:
-    case QMetaType::Double:
-        return v.typeId() == QMetaType::Double ? QString::number(v.toDouble(), 'g', QLocale::FloatingPointShortest)
-                                               : v.toString();
+    case QMetaType::Int: return v.toString();
+    case QMetaType::Bool: return v.toBool() ? u"true"_s : u"false"_s;
+    case QMetaType::Double: return QString::number(v.toDouble(), 'g', QLocale::FloatingPointShortest);
     case QMetaType::QVariantList:
     case QMetaType::QStringList: {
         QStringList out;
@@ -192,27 +198,27 @@ QVariant frontmatterValue(const QVariant &v)
 Properties frontmatterProperties(const QVariantMap &data)
 {
     Properties out;
-    for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
-        const QVariant pv = frontmatterValue(it.value());
-        if (pv.isValid())
-            out.insert(it.key().toLower(), pv);
+    for (const auto &[key, value] : data.asKeyValueRange()) {
+        if (const QVariant pv = frontmatterValue(value); pv.isValid())
+            out.insert(key.toLower(), pv);
     }
     return out;
 }
 
 QStringList namesFrom(const QVariant &value, bool splitWhitespace)
 {
+    static const QRegularExpression whitespace(u"\\s+"_s);
+    static const QRegularExpression severalTags(u"^#\\S+(\\s+#\\S+)+$"_s);
     QStringList out;
     const auto add = [&](QStringView s) {
-        const QString n = cleanName(s);
-        if (!n.isEmpty())
+        if (const QString n = cleanName(s); !n.isEmpty())
             out.append(n);
     };
     const auto addString = [&](QStringView s) {
-        for (const QString &part : splitTopLevelCommas(s)) {
-            const QString t = part.trimmed();
+        for (const QStringView part : commaParts(s)) {
+            const QStringView t = part.trimmed();
             if (splitWhitespace && !t.startsWith(u"[[") && !t.startsWith(u"#[[")) {
-                for (const QString &w : t.split(QRegularExpression(u"\\s+"_s), Qt::SkipEmptyParts))
+                for (const QStringView w : t.split(whitespace, Qt::SkipEmptyParts))
                     add(w);
             } else {
                 add(t);
@@ -230,7 +236,6 @@ QStringList namesFrom(const QVariant &value, bool splitWhitespace)
             if (item.typeId() == QMetaType::QString) {
                 const QString s = item.toString().trimmed();
                 // "#a #b" as one list item: several tags.
-                static const QRegularExpression severalTags(u"^#\\S+(\\s+#\\S+)+$"_s);
                 if (splitWhitespace && severalTags.match(s).hasMatch())
                     addString(s);
                 else
@@ -253,9 +258,9 @@ QStringList namesFrom(const QVariant &value, bool splitWhitespace)
 QVariant frontmatterGet(const QVariantMap &data, const QStringList &keys)
 {
     for (const QString &want : keys) {
-        for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
-            if (it.key().toLower() == want)
-                return it.value();
+        for (const auto &[key, value] : data.asKeyValueRange()) {
+            if (key.toLower() == want)
+                return value;
         }
     }
     return {};

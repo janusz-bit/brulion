@@ -18,6 +18,7 @@ FocusScope {
     readonly property bool hasWindow: routeMs("fromMs") > 0 || routeMs("toMs") > 0
     property bool windowCleared: false
     property bool following: true
+    readonly property int gutter: Theme.compact ? Theme.space3 : Theme.space6
     property int newCount: 0
     readonly property list<var> groups: [
         { value: "", text: qsTr("Everything") },
@@ -78,6 +79,12 @@ FocusScope {
     function has(action: string): bool {
         return Logs.actions.indexOf(action) >= 0
     }
+    /// Scrolling by hand ended: following the newest entries again only at the end.
+    function followIfAtEnd(): void {
+        root.following = list.atYEnd
+        if (root.following)
+            root.newCount = 0
+    }
 
     focus: true
 
@@ -132,13 +139,12 @@ FocusScope {
         // ---- Search and actions ---------------------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.compact ? Theme.space3 : Theme.space6
-            Layout.rightMargin: Theme.compact ? Theme.space3 : Theme.space6
+            Layout.leftMargin: root.gutter
+            Layout.rightMargin: root.gutter
             Layout.topMargin: Theme.compact ? Theme.space3 : Theme.space4
             spacing: Theme.space2
 
             BSearchField {
-                id: searchField
                 objectName: "logsSearch"
                 Layout.fillWidth: true
                 placeholderText: qsTr("Search the log…")
@@ -185,7 +191,6 @@ FocusScope {
 
         // ---- Filters -------------------------------------------------------------------------
         Flickable {
-            id: chipStrip
             Layout.fillWidth: true
             Layout.topMargin: Theme.space2
             Layout.preferredHeight: chipRow.implicitHeight
@@ -198,7 +203,7 @@ FocusScope {
             Accessible.name: qsTr("Areas")
             Row {
                 id: chipRow
-                x: Theme.compact ? Theme.space3 : Theme.space6
+                x: root.gutter
                 spacing: Theme.space2
                 Repeater {
                     model: root.groups
@@ -219,8 +224,8 @@ FocusScope {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.compact ? Theme.space3 : Theme.space6
-            Layout.rightMargin: Theme.compact ? Theme.space3 : Theme.space6
+            Layout.leftMargin: root.gutter
+            Layout.rightMargin: root.gutter
             Layout.topMargin: Theme.space2
             spacing: Theme.space2
             BSegmented {
@@ -245,9 +250,9 @@ FocusScope {
         // ---- Banners: a sync run's time window, the detailed mode ---------------------------------
         Flow {
             Layout.fillWidth: true
-            Layout.leftMargin: Theme.compact ? Theme.space3 : Theme.space6
-            Layout.rightMargin: Theme.compact ? Theme.space3 : Theme.space6
-            Layout.topMargin: visible ? Theme.space2 : 0
+            Layout.leftMargin: root.gutter
+            Layout.rightMargin: root.gutter
+            Layout.topMargin: Theme.space2
             visible: (root.hasWindow && !root.windowCleared) || Logs.detailed
             spacing: Theme.space2
             BChip {
@@ -296,18 +301,17 @@ FocusScope {
                 section.delegate: Item {
                     id: dayHeader
                     required property string section
+                    readonly property int textHeight: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight)
                     width: ListView.view.width
-                    height: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight) + Theme.space2 + Theme.space1
+                    height: textHeight + Theme.space2 + Theme.space1
                     Rectangle { anchors.fill: parent; color: Theme.bgSunken }
                     Text {
                         x: Theme.space3
                         y: Theme.space1
-                        height: Theme.lineHeightPx(Theme.textSm, Theme.lineHeight)
+                        height: dayHeader.textHeight
                         verticalAlignment: Text.AlignVCenter
                         text: DatesHelper.formatHuman(dayHeader.section)
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
-                        font.weight: Theme.weightMedium
+                        font { family: Theme.fontUi; pixelSize: Theme.textSm; weight: Theme.weightMedium }
                         color: Theme.fgMuted
                         Accessible.role: Accessible.Heading
                         Accessible.name: text
@@ -328,7 +332,7 @@ FocusScope {
                     height: earlierRow.visible ? earlierRow.implicitHeight + Theme.space2 : 0
                     BButton {
                         id: earlierRow
-                        x: Theme.compact ? Theme.space3 : Theme.space6
+                        x: root.gutter
                         y: Theme.space1
                         visible: Logs.hasEarlier
                         variant: "ghost"
@@ -346,7 +350,7 @@ FocusScope {
                     implicitHeight: footerColumn.implicitHeight + 2 * Theme.space4 + (Theme.narrow ? Theme.space16 : 0)
                     ColumnLayout {
                         id: footerColumn
-                        x: Theme.compact ? Theme.space3 : Theme.space6
+                        x: root.gutter
                         y: Theme.space4
                         width: Math.min(list.width - 2 * x, 760)
                         spacing: Theme.space2
@@ -377,16 +381,8 @@ FocusScope {
                     }
                 }
 
-                onMovementEnded: {
-                    root.following = list.atYEnd
-                    if (root.following)
-                        root.newCount = 0
-                }
-                onFlickEnded: {
-                    root.following = list.atYEnd
-                    if (root.following)
-                        root.newCount = 0
-                }
+                onMovementEnded: root.followIfAtEnd()
+                onFlickEnded: root.followIfAtEnd()
                 Component.onCompleted: toEndLater.restart()
             }
 
@@ -402,9 +398,11 @@ FocusScope {
 
             // New entries arrived while reading older ones.
             BButton {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: Theme.narrow ? Theme.space16 + Theme.space4 : Theme.space4
+                anchors {
+                    horizontalCenter: parent.horizontalCenter
+                    bottom: parent.bottom
+                    bottomMargin: Theme.narrow ? Theme.space16 + Theme.space4 : Theme.space4
+                }
                 visible: root.newCount > 0 && !root.following
                 text: qsTr("New entries (%n)", "", root.newCount)
                 iconName: "arrow-down"

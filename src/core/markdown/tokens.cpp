@@ -58,9 +58,9 @@ QString removeRanges(QStringView text, QList<Range> ranges)
     QString out;
     out.reserve(text.size());
     qsizetype last = 0;
-    for (const Range &r : ranges) {
-        qsizetype from = std::max(r.first, last);
-        qsizetype to = std::max(r.second, from);
+    for (const Range &r : std::as_const(ranges)) {
+        qsizetype from = std::clamp(r.first, last, text.size());
+        qsizetype to = std::clamp(r.second, from, text.size());
         if (to <= last)
             continue;
         while (from > last && isSpaceOrTab(text[from - 1]))
@@ -71,7 +71,7 @@ QString removeRanges(QStringView text, QList<Range> ranges)
                 ++to;
         }
         out += text.sliced(last, from - last);
-        last = std::min(to, text.size());
+        last = to;
     }
     out += text.sliced(last);
     return out;
@@ -103,6 +103,7 @@ constexpr char32_t CpDependsOn = 0x26D4;     // ⛔
 constexpr char32_t CpOnCompletion = 0x1F3C1; // 🏁
 constexpr char16_t VariationSelector16 = 0xFE0F;
 
+/// The kind of a date token's signifier (reminders included).
 std::optional<TokenKind> dateEmojiKind(char32_t cp)
 {
     switch (cp) {
@@ -115,6 +116,7 @@ std::optional<TokenKind> dateEmojiKind(char32_t cp)
     case CpCreated: return TokenKind::Created;
     case CpDone: return TokenKind::Done;
     case CpCancelled: return TokenKind::Cancelled;
+    case CpReminder: return TokenKind::Reminder;
     default: return std::nullopt;
     }
 }
@@ -134,18 +136,20 @@ Priority priorityOfEmoji(char32_t cp)
 /// Every code point that starts a token (used to stop recurrence rules).
 bool isSignifier(char32_t cp)
 {
-    return dateEmojiKind(cp) || priorityOfEmoji(cp) != Priority::None || cp == CpRecurrence || cp == CpReminder
-           || cp == CpTaskId || cp == CpDependsOn || cp == CpOnCompletion;
-}
-
-bool isIdChar(QChar c)
-{
-    return isAsciiLetter(c) || isAsciiDigit(c) || c == u'_' || c == u'-';
+    return dateEmojiKind(cp) || priorityOfEmoji(cp) != Priority::None || cp == CpRecurrence || cp == CpTaskId
+           || cp == CpDependsOn || cp == CpOnCompletion;
 }
 
 bool isBlockIdChar(QChar c)
 {
     return isAsciiLetter(c) || isAsciiDigit(c) || c == u'-';
+}
+
+/// Can a token start with `c`? Every signifier is at U+2000 or above.
+bool mayStartToken(QChar c)
+{
+    const char16_t u = c.unicode();
+    return u >= 0x2000 || u == u'(' || u == u'[' || u == u'S' || u == u'D';
 }
 
 qsizetype skipBlanks(QStringView s, qsizetype i)
@@ -276,14 +280,9 @@ qsizetype recurrenceStop(QStringView s, qsizetype from)
         case u'\t': {
             const QChar next = charAt(s, k + 1);
             if (next == u'#') {
-                const CodePoint cp = codePointAt(s, k + 2);
-                const QChar::Category cat = QChar::category(cp.value);
-                const bool letterOrNumber = cp.length > 0
-                                            && (cat == QChar::Letter_Uppercase || cat == QChar::Letter_Lowercase
-                                                || cat == QChar::Letter_Titlecase || cat == QChar::Letter_Modifier
-                                                || cat == QChar::Letter_Other || cat == QChar::Number_DecimalDigit
-                                                || cat == QChar::Number_Letter || cat == QChar::Number_Other);
-                if (letterOrNumber || cp.value == U'_' || cp.value == U'[')
+                // A tag: `#` and a letter or number (Letter_* / Number_* categories), `_` or `[`.
+                const char32_t cp = codePointAt(s, k + 2).value;
+                if (QChar::isLetterOrNumber(cp) || cp == U'_' || cp == U'[')
                     return k;
             } else if (next == u'^') {
                 qsizetype j = k + 2;
@@ -430,30 +429,14 @@ std::optional<Token> tokenAt(QStringView s, qsizetype i, qsizetype &next, ScanCa
     const CodePoint cp = codePointAt(s, i);
     const qsizetype afterEmoji = skipVariationSelector(s, i + cp.length);
     if (const auto kind = dateEmojiKind(cp.value)) {
-        const qsizetype dateFrom = skipBlanks(s, afterEmoji);
+        const bool alarm = kind == TokenKind::Reminder && charAt(s, afterEmoji) == u'!'; // ⏰!
+        const qsizetype dateFrom = skipBlanks(s, alarm ? afterEmoji + 1 : afterEmoji);
         const DateTimeMatch m = matchDateTime(s, dateFrom);
         if (m.end < 0)
             return std::nullopt;
         next = m.end;
         Token tok;
         tok.kind = *kind;
-        tok.from = i;
-        if (!fillDate(tok, s, dateFrom, m))
-            return std::nullopt;
-        return tok;
-    }
-    if (cp.value == CpReminder) {
-        qsizetype j = afterEmoji;
-        const bool alarm = charAt(s, j) == u'!';
-        if (alarm)
-            ++j;
-        const qsizetype dateFrom = skipBlanks(s, j);
-        const DateTimeMatch m = matchDateTime(s, dateFrom);
-        if (m.end < 0)
-            return std::nullopt;
-        next = m.end;
-        Token tok;
-        tok.kind = TokenKind::Reminder;
         tok.from = i;
         tok.alarm = alarm;
         if (!fillDate(tok, s, dateFrom, m))
@@ -481,7 +464,7 @@ std::optional<Token> tokenAt(QStringView s, qsizetype i, qsizetype &next, ScanCa
             while (isAsciiLetter(charAt(s, j)))
                 ++j;
         } else {
-            while (isIdChar(charAt(s, j)))
+            while (isTaskIdChar(charAt(s, j)))
                 ++j;
             if (cp.value == CpDependsOn && j > v) {
                 // (?:[ \t]*,[ \t]*ID)*
@@ -491,7 +474,7 @@ std::optional<Token> tokenAt(QStringView s, qsizetype i, qsizetype &next, ScanCa
                         break;
                     const qsizetype idStart = skipBlanks(s, comma + 1);
                     qsizetype idEnd = idStart;
-                    while (isIdChar(charAt(s, idEnd)))
+                    while (isTaskIdChar(charAt(s, idEnd)))
                         ++idEnd;
                     if (idEnd == idStart)
                         break;
@@ -516,17 +499,6 @@ std::optional<Token> tokenAt(QStringView s, qsizetype i, qsizetype &next, ScanCa
     return std::nullopt;
 }
 
-/// Cheap pre-check: can `s` contain any token at all?
-bool maybeHasToken(QStringView s)
-{
-    for (qsizetype i = 0; i < s.size(); ++i) {
-        const char16_t c = s[i].unicode();
-        if (c >= 0x2000 || c == u'(' || c == u'[' || c == u'S' || c == u'D')
-            return true;
-    }
-    return false;
-}
-
 } // namespace
 
 bool Token::hasDate() const
@@ -548,14 +520,11 @@ bool Token::hasDate() const
 QList<Token> findTokens(QStringView masked)
 {
     QList<Token> out;
-    if (!maybeHasToken(masked))
+    if (std::ranges::none_of(masked, mayStartToken)) // a cheap pre-check: most text has no token
         return out;
-    qsizetype i = 0;
-    const qsizetype n = masked.size();
     ScanCache cache;
-    while (i < n) {
-        const char16_t c = masked[i].unicode();
-        if (c < 0x2000 && c != u'(' && c != u'[' && c != u'S' && c != u'D') {
+    for (qsizetype i = 0; i < masked.size();) {
+        if (!mayStartToken(masked[i])) {
             ++i;
             continue;
         }
@@ -574,27 +543,22 @@ QString recurrenceOf(const Token &token)
 
 std::optional<LogseqTimestamp> parseLogseqTimestamp(QStringView inner)
 {
-    const QStringView s = inner;
-    const qsizetype start = [&] {
-        qsizetype k = 0;
-        while (k < s.size() && s[k].isSpace())
-            ++k;
-        return k;
-    }();
-    if (!isDateShapeAt(s, start))
+    // Trimmed: trailing whitespace changes no match below ((?=\s|$) holds either way).
+    const QStringView s = inner.trimmed();
+    if (!isDateShapeAt(s, 0))
         return std::nullopt;
-    const auto date = dates::parseIsoDate(s.sliced(start, 10));
+    const auto date = dates::parseIsoDate(s.first(10));
     if (!date)
         return std::nullopt;
     LogseqTimestamp out;
     out.date = *date;
-    const QString rest = s.sliced(start + 10).toString();
+    const QStringView rest = s.sliced(10);
     static const QRegularExpression timeRe(u"(?:^|\\s)(\\d{1,2}:\\d{2})(?:-\\d{1,2}:\\d{2})?(?=\\s|$)"_s);
-    if (const auto m = timeRe.match(rest); m.hasMatch())
+    if (const auto m = timeRe.matchView(rest); m.hasMatch())
         out.time = dates::parseClockTime(m.capturedView(1));
     static const QRegularExpression repeaterRe(u"(?:^|\\s)(\\.\\+|\\+\\+|\\+)(\\d+[hdwmy])(?=\\s|$)"_s,
                                                QRegularExpression::CaseInsensitiveOption);
-    if (const auto m = repeaterRe.match(rest); m.hasMatch())
+    if (const auto m = repeaterRe.matchView(rest); m.hasMatch())
         out.repeater = m.captured(1) + m.captured(2);
     return out;
 }
@@ -626,13 +590,7 @@ QString standaloneBlockId(QStringView line)
 
 bool isValidBlockId(QStringView id)
 {
-    if (id.isEmpty())
-        return false;
-    for (const QChar c : id) {
-        if (!isBlockIdChar(c))
-            return false;
-    }
-    return true;
+    return !id.isEmpty() && std::ranges::all_of(id, isBlockIdChar);
 }
 
 QString stripTokens(QStringView text)
@@ -647,7 +605,7 @@ QString stripTokens(QStringView text)
                 ranges.append({line.start + id->from, line.start + id->to});
         }
     }
-    const QString stripped = removeRanges(text, ranges);
+    const QString stripped = removeRanges(text, std::move(ranges));
     QString out;
     out.reserve(stripped.size());
     for (const text::Line &line : text::splitLines(stripped)) {

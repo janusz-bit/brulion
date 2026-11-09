@@ -55,17 +55,12 @@ qsizetype afterLastSlash(QStringView s)
     return std::max(s.lastIndexOf(u'/'), s.lastIndexOf(u'\\')) + 1;
 }
 
-QString baseName(const QString &path)
-{
-    return paths::basename(path);
-}
-
 /// New target for a path-qualified link to the renamed page.
 QString renamedPath(QStringView written, const RenameSpec &spec)
 {
     const QString target = spec.newNoExt.isEmpty() ? spec.newName : spec.newNoExt;
     if (spec.sameDir)
-        return written.first(afterLastSlash(written)).toString() + baseName(target);
+        return written.first(afterLastSlash(written)).toString() + paths::basename(target);
     return target;
 }
 
@@ -104,21 +99,19 @@ struct DestStyle {
 /// The style of `written` (a destination's path part as written).
 DestStyle destStyle(QStringView written, bool angle)
 {
-    DestStyle style;
-    style.angle = angle;
-    style.spaces = !angle || written.contains(u"%20"_s);
     static const QRegularExpression highByte(u"%[89a-fA-F][0-9a-fA-F]"_s);
     const QRegularExpressionMatch m = highByte.matchView(written);
-    style.nonAscii = m.hasMatch();
-    style.lowerHex = style.nonAscii && m.captured() != m.captured().toUpper();
-    return style;
+    return DestStyle{.angle = angle,
+                     .spaces = !angle || written.contains(u"%20"_s),
+                     .nonAscii = m.hasMatch(),
+                     .lowerHex = m.hasMatch() && m.captured() != m.captured().toUpper()};
 }
 
 /// Percent-encode what a Markdown link destination would read differently: '%' (escapes are
 /// decoded) and '#' (fragment) always; spaces and parentheses in a plain `(dest)`; '<' / '>' in
 /// an angle-bracket `<dest>`; spaces and letters beyond ASCII also where `style` says the
 /// destination was written so.
-QString encodeDest(QString path, const DestStyle &style)
+QString encodeDest(QString path, DestStyle style)
 {
     path.replace(u'%', u"%25"_s).replace(u'#', u"%23"_s);
     if (style.angle)
@@ -173,8 +166,10 @@ QString newMdTarget(const QString &target, const RenameSpec &spec)
     return {};
 }
 
-/// Rewrite one wiki link / embed source (`[[…]]`, `![[…]]`).
-QString rewriteWiki(QStringView src, const RenameSpec &spec)
+/// Rewrite one wiki link / embed source (`[[…]]`, `![[…]]`): its target, the part before `#` or
+/// `|` (a `\|` escaped in a table cell ends it too), becomes `newTarget(written target)`; a null
+/// QString leaves the link as it is. The blanks around the written target stay.
+QString rewriteWiki(QStringView src, const std::function<QString(QStringView written)> &newTarget)
 {
     const qsizetype open = src.startsWith(u'!') ? 3 : 2;
     const QStringView inner = src.sliced(open, src.size() - open - 2);
@@ -185,42 +180,82 @@ QString rewriteWiki(QStringView src, const RenameSpec &spec)
         end = hash;
     if (pipe >= 0 && pipe < end)
         end = pipe > 0 && inner[pipe - 1] == u'\\' ? pipe - 1 : pipe;
-    const QStringView targetPart = inner.first(end);
-    const QString target = newWikiTarget(targetPart, spec);
+    const QStringView written = inner.first(end);
+    const QString target = newTarget(written);
     if (target.isNull())
         return {};
     qsizetype lead = 0;
-    while (lead < targetPart.size() && targetPart[lead].isSpace())
+    while (lead < written.size() && written[lead].isSpace())
         ++lead;
     qsizetype trail = 0;
-    while (trail < targetPart.size() - lead && targetPart[targetPart.size() - 1 - trail].isSpace())
+    while (trail < written.size() - lead && written[written.size() - 1 - trail].isSpace())
         ++trail;
-    return src.first(open).toString() + targetPart.first(lead) + target + targetPart.last(trail) + inner.sliced(end)
-           + u"]]"_s;
+    return src.first(open + lead) + target + inner.sliced(end - trail) + u"]]"_s;
 }
 
-/// Rewrite one Markdown link source (`[x](dest)` / `![x](dest)`).
-QString rewriteMarkdown(QStringView src, const Link &link, const RenameSpec &spec)
+/// Rewrite one Markdown link source (`[x](dest)` / `![x](dest)`): the path of its destination
+/// becomes `newPath(written path, its style)`, a `#fragment` stays. Null when `src` is no link.
+QString rewriteMarkdown(QStringView src, const std::function<QString(QStringView written, DestStyle style)> &newPath)
+{
+    const auto parts = parseMdLink(src, src.startsWith(u'!') ? 1 : 0);
+    if (!parts)
+        return {};
+    const QStringView dest = src.sliced(parts->destFrom, parts->destTo - parts->destFrom);
+    const qsizetype hash = dest.indexOf(u'#');
+    const QStringView path = hash < 0 ? dest : dest.first(hash);
+    return src.first(parts->destFrom) + newPath(path, destStyle(path, parts->angle))
+           + src.sliced(parts->destFrom + path.size());
+}
+
+/// Rewrite one Markdown link to the renamed page (`[x](Old.md)`), or a null QString.
+QString renameMarkdown(QStringView src, const Link &link, const RenameSpec &spec)
 {
     if (hasUrlScheme(link.target))
         return {};
     const QString target = newMdTarget(link.target, spec);
     if (target.isNull())
         return {};
-    const auto parts = parseMdLink(src, src.startsWith(u'!') ? 1 : 0);
-    if (!parts)
-        return {};
-    const QStringView dest = src.sliced(parts->destFrom, parts->destTo - parts->destFrom);
-    const qsizetype hash = dest.indexOf(u'#');
-    const QStringView pathPart = hash < 0 ? dest : dest.first(hash);
-    const QStringView fragment = hash < 0 ? QStringView() : dest.sliced(hash);
-    const DestStyle style = destStyle(pathPart, parts->angle);
-    const auto encode = [&](const QString &p) { return encodeDest(p, style); };
-    // A plain rename (or a bare-name link) keeps the written folder prefix, e.g. "../x/".
-    const bool keepPrefix = spec.sameDir || afterLastSlash(pathPart) == 0;
-    const QString newPath = keepPrefix ? pathPart.first(afterLastSlash(pathPart)).toString() + encode(baseName(target))
-                                       : encode(target);
-    return src.first(parts->destFrom).toString() + newPath + fragment + src.sliced(parts->destTo);
+    return rewriteMarkdown(src, [&](QStringView written, DestStyle style) -> QString {
+        // A plain rename (or a bare-name link) keeps the written folder prefix, e.g. "../x/".
+        const qsizetype prefix = afterLastSlash(written);
+        if (spec.sameDir || prefix == 0)
+            return written.first(prefix) + encodeDest(paths::basename(target), style);
+        return encodeDest(target, style);
+    });
+}
+
+/// Whether a wiki link can be written with the target `t`.
+bool isWikiTarget(const QString &t)
+{
+    return !t.trimmed().isEmpty() && !t.contains(u"[["_s) && !t.contains(u"]]"_s) && !t.contains(u'|')
+           && !t.contains(u'#') && !t.contains(u'\n') && !t.contains(u'\r');
+}
+
+/// `content` with links rewritten: `rewrite(link, source)` gives a link's new source, a null
+/// QString (or the source itself) keeps it. A link that starts inside a rewritten one stays too;
+/// content without changes is returned as is.
+template<typename Rewrite>
+QString spliceLinks(const QString &content, const QList<Link> &links, const Rewrite &rewrite)
+{
+    QString out;
+    qsizetype last = 0;
+    bool changed = false;
+    for (const Link &link : links) {
+        if (link.from < last || link.to < link.from || link.to > content.size())
+            continue;
+        const QStringView src = QStringView(content).sliced(link.from, link.to - link.from);
+        const QString rewritten = rewrite(link, src);
+        if (rewritten.isNull() || rewritten == src)
+            continue;
+        out += QStringView(content).sliced(last, link.from - last);
+        out += rewritten;
+        last = link.to;
+        changed = true;
+    }
+    if (!changed)
+        return content;
+    out += QStringView(content).sliced(last);
+    return out;
 }
 
 // ---- Tags ------------------------------------------------------------------------------------
@@ -294,19 +329,22 @@ using TagRenamer = std::function<QString(const QString &written)>;
 TagRenamePlan planTags(const QString &content, const TagRenamer &rename)
 {
     TagRenamePlan plan;
-    const auto plan1 = [&](const NoteTag &t) {
+    // Plans the edit renaming tag `t`; false when it keeps its name or cannot be written so.
+    const auto planEdit = [&](const NoteTag &t) {
         const QString name = rename(t.name);
         if (name.isNull() || name == t.name)
-            return;
+            return false;
         const QString replacement = tagReplacement(t, name, content);
-        if (!replacement.isEmpty() && QStringView(content).sliced(t.from, t.to - t.from) != replacement)
-            plan.edits.append(TagEdit{t, replacement});
+        if (replacement.isEmpty() || QStringView(content).sliced(t.from, t.to - t.from) == replacement)
+            return false;
+        plan.edits.append(TagEdit{t, replacement});
+        return true;
     };
     QList<NoteTag> tags;
     detail::parseNoteWith(QString(), content, VaultConfig(), StructureOptions(), &tags);
-    std::ranges::stable_sort(tags, [](const NoteTag &a, const NoteTag &b) { return a.from < b.from; });
+    std::ranges::stable_sort(tags, {}, &NoteTag::from);
     for (const NoteTag &t : std::as_const(tags))
-        plan1(t);
+        planEdit(t);
     plan.frontmatter = frontmatterTagItems(content);
     if (plan.frontmatter.key.isEmpty())
         return plan;
@@ -315,14 +353,9 @@ TagRenamePlan planTags(const QString &content, const TagRenamer &rename)
     if (plan.frontmatter.complete) {
         // The items are namesFrom()'s names one to one.
         for (qsizetype i = 0; i < plan.frontmatter.items.size(); ++i) {
-            const FrontmatterTagItem &item = plan.frontmatter.items[i];
-            const QString name = rename(item.tag.name);
-            if (item.link || name.isNull() || name == item.tag.name)
-                continue;
-            const qsizetype before = plan.edits.size();
-            plan1(item.tag);
-            if (plan.edits.size() > before)
-                plan.frontmatterAfter[i] = plan.edits.last().replacement;
+            const FrontmatterTagItem &item = plan.frontmatter.items.at(i);
+            if (!item.link && planEdit(item.tag))
+                plan.frontmatterAfter[i] = plan.edits.constLast().replacement;
         }
     } else {
         for (QString &n : plan.frontmatterAfter) {
@@ -333,7 +366,7 @@ TagRenamePlan planTags(const QString &content, const TagRenamer &rename)
             }
         }
     }
-    std::ranges::stable_sort(plan.edits, [](const TagEdit &a, const TagEdit &b) { return a.tag.from < b.tag.from; });
+    std::ranges::stable_sort(plan.edits, {}, [](const TagEdit &e) { return e.tag.from; });
     return plan;
 }
 
@@ -418,29 +451,11 @@ QString renameLinks(const QString &content, const QString &oldName, const QStrin
         return content;
     const RenameSpec spec = makeSpec(oldName, newName, oldPath, newPath);
     const ParsedNote note = parseNote(QString(), content);
-    QString out;
-    qsizetype last = 0;
-    bool changed = false;
-    for (const Link &link : note.links) {
-        if (link.from < last)
-            continue;
-        const QStringView src = QStringView(content).sliced(link.from, link.to - link.from);
-        QString rewritten;
+    return spliceLinks(content, note.links, [&spec](const Link &link, QStringView src) {
         if (link.kind == LinkKind::Wiki || link.kind == LinkKind::Embed)
-            rewritten = rewriteWiki(src, spec);
-        else if (link.kind == LinkKind::Markdown)
-            rewritten = rewriteMarkdown(src, link, spec);
-        if (rewritten.isNull() || rewritten == src)
-            continue;
-        out += QStringView(content).sliced(last, link.from - last);
-        out += rewritten;
-        last = link.to;
-        changed = true;
-    }
-    if (!changed)
-        return content;
-    out += QStringView(content).sliced(last);
-    return out;
+            return rewriteWiki(src, [&spec](QStringView written) { return newWikiTarget(written, spec); });
+        return link.kind == LinkKind::Markdown ? renameMarkdown(src, link, spec) : QString();
+    });
 }
 
 QString retargetLinks(const QString &content, const QList<LinkEdit> &edits, const QList<Link> *links)
@@ -453,72 +468,26 @@ QString retargetLinks(const QString &content, const QList<LinkEdit> &edits, cons
         if (e.from >= 0 && e.to > e.from && e.to <= content.size())
             byStart.insert(e.from, &e);
     }
-    const auto validWiki = [](const QString &t) {
-        return !t.trimmed().isEmpty() && !t.contains(u"[["_s) && !t.contains(u"]]"_s) && !t.contains(u'|')
-               && !t.contains(u'#') && !t.contains(u'\n') && !t.contains(u'\r');
-    };
     std::optional<ParsedNote> parsed;
     if (!links) {
         parsed = parseNote(QString(), content);
         links = &parsed->links;
     }
-    QString out;
-    qsizetype last = 0;
-    bool changed = false;
-    for (const Link &link : *links) {
+    return spliceLinks(content, *links, [&byStart](const Link &link, QStringView src) -> QString {
         const LinkEdit *edit = byStart.value(link.from);
-        if (!edit || edit->to != link.to || link.from < last)
-            continue;
-        const QStringView src = QStringView(content).sliced(link.from, link.to - link.from);
-        QString rewritten;
+        if (!edit || edit->to != link.to)
+            return {};
         if (link.kind == LinkKind::Wiki || link.kind == LinkKind::Embed) {
-            if (!validWiki(edit->newTarget))
-                continue;
-            const qsizetype open = src.startsWith(u'!') ? 3 : 2;
-            const QStringView inner = src.sliced(open, src.size() - open - 2);
-            qsizetype end = inner.size();
-            const qsizetype hash = inner.indexOf(u'#');
-            const qsizetype pipe = inner.indexOf(u'|');
-            if (hash >= 0)
-                end = hash;
-            if (pipe >= 0 && pipe < end)
-                end = pipe > 0 && inner[pipe - 1] == u'\\' ? pipe - 1 : pipe;
-            const QStringView targetPart = inner.first(end);
-            qsizetype lead = 0;
-            while (lead < targetPart.size() && targetPart[lead].isSpace())
-                ++lead;
-            qsizetype trail = 0;
-            while (trail < targetPart.size() - lead && targetPart[targetPart.size() - 1 - trail].isSpace())
-                ++trail;
-            rewritten = src.first(open).toString() + targetPart.first(lead) + edit->newTarget + targetPart.last(trail)
-                        + inner.sliced(end) + u"]]"_s;
-        } else if (link.kind == LinkKind::Markdown) {
-            const QString target = edit->newTarget.trimmed();
-            if (target.isEmpty() || target.contains(u'\n') || target.contains(u'\r') || hasUrlScheme(link.target))
-                continue;
-            const auto parts = parseMdLink(src, src.startsWith(u'!') ? 1 : 0);
-            if (!parts)
-                continue;
-            const QStringView dest = src.sliced(parts->destFrom, parts->destTo - parts->destFrom);
-            const qsizetype hash = dest.indexOf(u'#');
-            const QStringView fragment = hash < 0 ? QStringView() : dest.sliced(hash);
-            const DestStyle style = destStyle(hash < 0 ? dest : dest.first(hash), parts->angle);
-            rewritten = src.first(parts->destFrom).toString() + encodeDest(target, style) + fragment
-                        + src.sliced(parts->destTo);
-        } else {
-            continue;
+            if (!isWikiTarget(edit->newTarget))
+                return {};
+            return rewriteWiki(src, [edit](QStringView) { return edit->newTarget; });
         }
-        if (rewritten == src)
-            continue;
-        out += QStringView(content).sliced(last, link.from - last);
-        out += rewritten;
-        last = link.to;
-        changed = true;
-    }
-    if (!changed)
-        return content;
-    out += QStringView(content).sliced(last);
-    return out;
+        const QString target = edit->newTarget.trimmed();
+        if (link.kind != LinkKind::Markdown || target.isEmpty() || target.contains(u'\n') || target.contains(u'\r')
+            || hasUrlScheme(link.target))
+            return {};
+        return rewriteMarkdown(src, [&target](QStringView, DestStyle style) { return encodeDest(target, style); });
+    });
 }
 
 } // namespace brulion::markdown

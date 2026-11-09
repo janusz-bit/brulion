@@ -228,24 +228,17 @@ int htmlStart(QStringView t, bool inParagraph)
     return 0;
 }
 
-bool isOrderedOne(const ListMarker &lm)
-{
-    return lm.number == 1;
-}
-
-/// True when line `t` starts a block that ends a paragraph (or a lazy continuation).
+/// True when line `t` starts a block that ends a paragraph (or a lazy continuation); a list item
+/// does unless it is empty or an ordered one that does not start at 1.
 bool interruptsParagraph(QStringView t, std::optional<QStringView> next)
 {
     if (matchAtxHeading(t) || isThematicBreak(t) || quoteMarkerLength(t) >= 0 || fenceOpen(t))
         return true;
     if (const auto lm = matchListMarker(t)) {
-        const bool empty = isBlank(t.sliced(lm->contentStart));
-        if (!empty && (!lm->ordered || isOrderedOne(*lm)))
+        if (!isBlank(t.sliced(lm->contentStart)) && (!lm->ordered || lm->number == 1))
             return true;
     }
-    if (htmlStart(t, true))
-        return true;
-    return isTableStart(t, next);
+    return htmlStart(t, true) != 0 || isTableStart(t, next);
 }
 
 LineView subView(const LineView &v, qsizetype n)
@@ -462,7 +455,7 @@ private:
                 return;
             }
             if (indentOf(t).col <= markerCol) {
-                m_pendingBlanks = blanks;
+                m_pendingBlanks = std::move(blanks);
                 return;
             }
             flush();
@@ -552,51 +545,43 @@ private:
 
     void parseQuote()
     {
-        struct QuoteLine {
-            LineView view;
-            qsizetype prefix;
-        };
-        QList<QuoteLine> lines;
+        QList<OwnLine> lines; // `start`: after the quote marker (a lazy line: after its indentation)
         bool lastHadContent = false;
         while (m_i < m_views.size()) {
             const LineView w = m_views[m_i];
             const QStringView u = m_st.maskedText(w);
             const qsizetype q = quoteMarkerLength(u);
             if (q >= 0) {
-                lines.append({w, q});
+                lines.append(OwnLine{w, q, LineRole::Text});
                 lastHadContent = !isBlank(u.sliced(q));
                 ++m_i;
                 continue;
             }
             if (isBlank(u) || !lastHadContent || interruptsParagraph(u, nextMasked()))
                 break;
-            lines.append({w, indentOf(u).chars}); // lazy continuation
+            lines.append(OwnLine{w, indentOf(u).chars, LineRole::Text}); // lazy continuation
             ++m_i;
         }
-        const QuoteLine first = lines.first();
-        const int lastLine = lines.last().view.line;
+        const OwnLine first = lines.constFirst();
+        const int lastLine = lines.constLast().view.line;
         if (m_nest < MaxNest) {
-            if (const auto ch = matchCalloutHeader(m_st.maskedText(first.view).sliced(first.prefix))) {
+            QList<LineView> sub; // the quote's content as the lines of a container
+            for (const OwnLine &l : std::as_const(lines))
+                sub.append(subView(l.view, l.start));
+            if (const auto ch = matchCalloutHeader(m_st.maskedText(first.view).sliced(first.start))) {
                 const int idx = newNode(BlockKind::Callout, first.view.line);
                 node(idx).calloutType = ch->type;
                 node(idx).calloutFold = ch->fold;
-                node(idx).own.append(OwnLine{first.view, first.prefix + ch->titleStart, LineRole::Text});
+                node(idx).own.append(OwnLine{first.view, first.start + ch->titleStart, LineRole::Text});
                 node(idx).endLine = lastLine;
-                QList<LineView> sub;
-                for (qsizetype k = 1; k < lines.size(); ++k)
-                    sub.append(subView(lines[k].view, lines[k].prefix));
-                const QList<int> children = ContainerParser(m_st, sub, m_depth + 1, m_nest + 1).run();
+                const QList<int> children = ContainerParser(m_st, sub.sliced(1), m_depth + 1, m_nest + 1).run();
                 node(idx).children = children;
                 m_roots.append(idx);
                 return;
             }
-            QList<LineView> sub;
-            for (const QuoteLine &l : std::as_const(lines))
-                sub.append(subView(l.view, l.prefix));
             const qsizetype arenaBefore = m_st.nodes.size();
-            const QList<int> children = ContainerParser(m_st, sub, m_depth + 1, m_nest + 1).run();
-            const bool structural = std::ranges::any_of(children, [&](int c) { return isStructural(m_st.nodes[c]); });
-            if (structural) {
+            const QList<int> children = ContainerParser(m_st, std::move(sub), m_depth + 1, m_nest + 1).run();
+            if (std::ranges::any_of(children, [this](int c) { return isStructural(node(c)); })) {
                 const int idx = newNode(BlockKind::Quote, first.view.line);
                 node(idx).container = true;
                 node(idx).endLine = lastLine;
@@ -607,8 +592,7 @@ private:
             m_st.nodes.resize(arenaBefore); // discard the trial parse
         }
         const int idx = newNode(BlockKind::Quote, first.view.line);
-        for (const QuoteLine &l : std::as_const(lines))
-            node(idx).own.append(OwnLine{l.view, l.prefix, LineRole::Text});
+        node(idx).own = std::move(lines);
         m_roots.append(idx);
     }
 
@@ -703,7 +687,7 @@ private:
     }
 
     Structure &m_st;
-    QList<LineView> m_views;
+    const QList<LineView> m_views; ///< const: reading it never detaches it from the caller's list
     int m_depth = 0;
     int m_nest = 0;
     qsizetype m_i = 0;
@@ -724,8 +708,7 @@ void finalize(Structure &st)
     while (!todo.isEmpty()) {
         const int n = todo.takeLast();
         order.append(n);
-        for (int c : std::as_const(st.nodes[n].children))
-            todo.append(c);
+        todo.append(st.nodes.at(n).children);
     }
     for (qsizetype k = order.size() - 1; k >= 0; --k) {
         Node &n = st.nodes[order[k]];
@@ -815,27 +798,16 @@ Structure parseStructure(const QString &content, StructureOptions options)
 
 int nodeAtLine(const Structure &st, int line)
 {
+    // Down the nodes whose range holds `line`, to the innermost one.
     int best = -1;
     const QList<int> *level = &st.roots;
     for (;;) {
-        int hit = -1;
-        for (int n : *level) {
-            const Node &node = st.nodes[n];
-            if (node.line <= line && line <= node.endLine) {
-                hit = n;
-                break;
-            }
-        }
-        if (hit < 0)
+        const auto hit = std::ranges::find_if(
+                *level, [&](int n) { return st.nodes[n].line <= line && line <= st.nodes[n].endLine; });
+        if (hit == level->end())
             return best;
-        best = hit;
-        const Node &h = st.nodes[hit];
-        const bool ownLine = std::ranges::any_of(h.own, [&](const OwnLine &l) { return l.view.line == line; });
-        const bool inChild = std::ranges::any_of(
-                h.children, [&](int c) { return st.nodes[c].line <= line && line <= st.nodes[c].endLine; });
-        if (ownLine && !inChild)
-            return hit;
-        level = &h.children;
+        best = *hit;
+        level = &st.nodes[best].children;
     }
 }
 

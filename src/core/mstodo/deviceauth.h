@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QUrl>
 
-#include <functional>
+#include <algorithm>
 
 namespace brulion::mstodo {
 
@@ -70,7 +70,7 @@ public:
     /// Current polling interval in seconds (the server's, +5 for every slow_down).
     int intervalSeconds() const { return m_interval; }
     /// Length of one "second" of the server's interval / expiry in ms (default 1000; tests).
-    void setTimeUnitMs(int ms) { m_unitMs = qMax(1, ms); }
+    void setTimeUnitMs(int ms) { m_unitMs = std::max(1, ms); }
     /// Request time limit in ms (default 30 s).
     void setTimeoutMs(int ms) { m_timeoutMs = ms; }
 
@@ -86,7 +86,7 @@ private:
     void requestCode();
     void poll();
     void fail(const AuthError &error);
-    void send(const QString &endpoint, const QByteArray &body, std::function<void(const sync::HttpResponse &)> done);
+    void send(const QString &url, const QByteArray &body, sync::HttpCallback done);
     QString endpoint(QStringView path) const;
 
     sync::HttpTransport *m_transport;

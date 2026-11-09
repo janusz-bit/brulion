@@ -21,4 +21,10 @@ struct CodePoint {
 };
 CodePoint codePointAt(QStringView s, qsizetype i);
 
+/// A character of an Obsidian Tasks id (`🆔 abc-1`, `⛔ abc,def`): [A-Za-z0-9_-].
+inline bool isTaskIdChar(QChar c)
+{
+    return isAsciiLetter(c) || isAsciiDigit(c) || c == u'_' || c == u'-';
+}
+
 } // namespace brulion::markdown::detail

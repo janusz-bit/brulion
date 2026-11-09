@@ -11,12 +11,13 @@
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
-#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
 
+#include <algorithm>
 #include <functional>
+#include <memory>
 
 namespace brulion::mstodo {
 
@@ -49,7 +50,7 @@ public:
 
     void setLimits(const DownloadLimits &limits) { m_limits = limits; }
     /// Length of one second of Retry-After in ms (default 1000; tests).
-    void setTimeUnitMs(int ms) { m_unitMs = qMax(1, ms); }
+    void setTimeUnitMs(int ms) { m_unitMs = std::max(1, ms); }
 
     /// Start with an access token from DeviceCodeLogin (cancels a running download). The token
     /// is kept in memory until the download ends.
@@ -73,7 +74,12 @@ private:
         bool incomplete = false;
     };
     using Json = std::function<void(const QJsonObject &)>;
-    using Failure = std::function<void(const sync::HttpResponse &)>;
+    using Failure = sync::HttpCallback;
+    using Next = std::function<void()>;
+    /// Downloads a task's steps, links or attachments, then calls `next` (not when that failed
+    /// the whole download).
+    using Job = std::function<void(const Next &next)>;
+    struct Attachments; ///< one task's, downloaded one after another (download.cpp)
 
     void get(const QUrl &url, Json ok, Failure failure = {}, int attempt = 0);
     void collect(const QUrl &url, QJsonArray items, std::function<void(QJsonArray, bool incomplete)> done,
@@ -81,17 +87,20 @@ private:
     void fetchList(qsizetype index);
     void fetchTasks(qsizetype index, bool expand);
     void queueTaskDetails(qsizetype index);
-    void runJobs(std::function<void()> then);
+    void fetchAttachments(const std::shared_ptr<Attachments> &attachments);
+    void runJobs(Next then);
+    /// Emits progress(); false when a slot cancelled or restarted the download meanwhile.
+    bool reportProgress(qsizetype listsDone);
     void finish();
     void fail(const QString &code, const QString &message);
     void failWith(const sync::HttpResponse &response);
-    /// Fails the download (true) when a step's, link's or attachment's request cannot succeed
-    /// later either: no network (a timed-out request too, unless `timeoutFatal` is false),
-    /// sign-in expired, no permission.
-    bool fatal(const sync::HttpResponse &response, bool timeoutFatal = true);
+    /// A failed request for a step, link or attachment: a warning and on with `next`, unless it
+    /// cannot succeed later either (no network — a timed-out request too, unless `timeoutFatal` is
+    /// false —, sign-in expired, no permission), which fails the download.
+    Failure skipping(Next next, bool timeoutFatal = true);
+    /// Whether an attachment of `bytes` still fits the size budget (a warning when not).
+    bool fitsBudget(qint64 bytes);
     void warn(const QString &message);
-    QUrl graph(const QString &path, const QString &query = {}) const;
-    bool isGraphUrl(const QUrl &url) const;
 
     sync::HttpTransport *m_transport;
     DownloadLimits m_limits;
@@ -99,7 +108,7 @@ private:
     QString m_token;
     logging::ScopedSecret m_secret;
     QList<ListData> m_lists;
-    QList<std::function<void(std::function<void()>)>> m_jobs;
+    QList<Job> m_jobs;
     QStringList m_warnings;
     int m_taskCount = 0;
     qint64 m_attachmentBytes = 0;

@@ -5,14 +5,19 @@
 #include "markdown/blockdocument.h"
 #include "markdown/inline.h"
 #include "markdown/journal.h"
+#include "markdown/lines_p.h"
 #include "util/paths.h"
 
 #include <QLocale>
 #include <QStringList>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::markdown {
+
+using detail::isSpaceOrTab;
 
 namespace {
 
@@ -37,6 +42,12 @@ bool isPriorityKind(TokenKind kind)
     return kind == TokenKind::Priority || kind == TokenKind::LogseqPriority;
 }
 
+/// A date token with a menu (the dates of Logseq planning lines have none).
+bool isMenuDate(const Token &t)
+{
+    return t.hasDate() && t.kind != TokenKind::Planning && t.valueFrom >= 0;
+}
+
 /// The kind a TokenRef names: reminders and priorities in all their spellings as one.
 TokenKind refKind(TokenKind kind)
 {
@@ -45,6 +56,30 @@ TokenKind refKind(TokenKind kind)
     if (isPriorityKind(kind))
         return TokenKind::Priority;
     return kind;
+}
+
+/// `t` (found in a slice of the body) with its positions moved by `by`.
+Token movedBy(Token t, qsizetype by)
+{
+    t.from += by;
+    t.to += by;
+    if (t.valueFrom >= 0) {
+        t.valueFrom += by;
+        t.valueTo += by;
+    }
+    return t;
+}
+
+/// The first token on the body's first line whose kind `accept` takes (tokens inside inline
+/// code are ignored), or nullopt.
+template<typename Accept>
+std::optional<Token> firstLineToken(const QString &body, Accept accept)
+{
+    for (const Token &t : findTokens(maskInlineCode(firstLineOf(body)))) {
+        if (accept(t.kind))
+            return t;
+    }
+    return std::nullopt;
 }
 
 /// A token with a menu and its chip range.
@@ -60,17 +95,11 @@ QList<MenuToken> menuTokens(const QString &body)
     QList<MenuToken> out;
     const QString masked = maskInlineCode(body);
     for (const Token &t : findTokens(masked)) {
-        if (t.hasDate()) {
-            if (t.kind == TokenKind::Planning || t.valueFrom < 0)
-                continue;
+        if (isMenuDate(t) || isPriorityKind(t.kind)) {
             out.append({t, t.from, t.to});
         } else if (t.kind == TokenKind::Recurrence) {
-            const auto rule = recurrencePrefix(masked, t);
-            if (!rule)
-                continue;
-            out.append({t, t.from, rule->second});
-        } else if (isPriorityKind(t.kind)) {
-            out.append({t, t.from, t.to});
+            if (const auto rule = recurrencePrefix(masked, t))
+                out.append({t, t.from, rule->second});
         }
     }
     return out;
@@ -89,8 +118,7 @@ bool refMatches(const TokenRef &ref, const Token &t)
 {
     if (refKind(t.kind) != ref.kind)
         return false;
-    const QString value = refValue(t);
-    if (value == ref.value)
+    if (refValue(t) == ref.value)
         return true;
     // The index gives a reminder without a time the default reminder time.
     return isReminderKind(t.kind) && !t.time && ref.defaultTime.isValid()
@@ -119,9 +147,8 @@ QString retargetedDay(const QString &target, QDate from, QDate to, const VaultCo
         ext = stem.right(3);
         stem.chop(3);
     }
-    QStringList formats;
     const QString own = config.journalFileFormat.isEmpty() ? u"yyyy-MM-dd"_s : config.journalFileFormat;
-    formats << own;
+    QStringList formats{own};
     if (own.contains(u'/'))
         formats << own.section(u'/', -1);
     formats << u"yyyy-MM-dd"_s << u"yyyy_MM_dd"_s;
@@ -133,19 +160,29 @@ QString retargetedDay(const QString &target, QDate from, QDate to, const VaultCo
         const QString next = c.toString(to, format);
         if (c.toDate(next, format) != to)
             continue; // a format that does not round-trip
-        return stem.left(stem.size() - written.size()) + next + ext;
+        return stem.chopped(written.size()) + next + ext;
     }
     return {};
 }
 
-/// Range of the first priority (emoji or Logseq) on the first line, or nullopt.
-std::optional<std::pair<qsizetype, qsizetype>> firstLinePriority(const QString &body)
+/// [start, end) of line `line` (0-based) of `content` without its line ending, when that line
+/// ends with `tail`; nullopt otherwise.
+std::optional<std::pair<qsizetype, qsizetype>> lineEndingWith(const QString &content, int line, QStringView tail)
 {
-    const auto emoji = findFirstLineToken(body, TokenKind::Priority);
-    const auto logseq = findFirstLineToken(body, TokenKind::LogseqPriority);
-    if (emoji && logseq)
-        return emoji->first < logseq->first ? emoji : logseq;
-    return emoji ? emoji : logseq;
+    qsizetype from = 0;
+    for (int n = 0; n < line; ++n) {
+        from = content.indexOf(u'\n', from) + 1;
+        if (from == 0)
+            return std::nullopt;
+    }
+    qsizetype to = content.indexOf(u'\n', from);
+    if (to < 0)
+        to = content.size();
+    if (to > from && content[to - 1] == u'\r')
+        --to;
+    if (!QStringView(content).sliced(from, to - from).endsWith(tail))
+        return std::nullopt;
+    return std::pair{from, to};
 }
 
 } // namespace
@@ -159,9 +196,9 @@ QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, con
     // Remove with one adjacent space.
     qsizetype a = from;
     qsizetype b = to;
-    if (a > 0 && (body[a - 1] == u' ' || body[a - 1] == u'\t'))
+    if (a > 0 && isSpaceOrTab(body[a - 1]))
         --a;
-    else if (b < body.size() && (body[b] == u' ' || body[b] == u'\t'))
+    else if (b < body.size() && isSpaceOrTab(body[b]))
         ++b;
     QString out = body.left(a) + body.mid(b);
     // Alone on a line below the first one: the line goes too — a whitespace-only line left behind
@@ -179,11 +216,8 @@ QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, con
 
 std::optional<std::pair<qsizetype, qsizetype>> findFirstLineToken(const QString &body, TokenKind kind)
 {
-    const QString masked = maskInlineCode(firstLineOf(body));
-    for (const Token &t : findTokens(masked)) {
-        if (t.kind == kind)
-            return std::pair{t.from, t.to};
-    }
+    if (const auto t = firstLineToken(body, [kind](TokenKind k) { return k == kind; }))
+        return std::pair{t->from, t->to};
     return std::nullopt;
 }
 
@@ -195,38 +229,32 @@ QString setFirstLineToken(const QString &body, TokenKind kind, const QString &to
     }
     if (token.isEmpty())
         return body;
-    const qsizetype nl = body.indexOf(u'\n');
-    const QString first = nl < 0 ? body : body.left(nl);
-    const QString rest = nl < 0 ? QString() : body.mid(nl);
+    const QStringView first = firstLineOf(body);
     qsizetype at = first.size();
     // Before a trailing block id (" ^abc").
     if (const auto id = blockIdAtEnd(first))
         at = id->from;
-    // Before trailing whitespace.
-    while (at > 0 && (first[at - 1] == u' ' || first[at - 1] == u'\t'))
+    // Before trailing whitespace: no blank before `at`, so the token gets a space before it (not
+    // at the line's start) and after it when the text after `at` does not start with a blank.
+    while (at > 0 && isSpaceOrTab(first[at - 1]))
         --at;
-    QString before = first.left(at);
-    const QString after = first.mid(at);
-    const bool needSpace = !before.isEmpty() && !before.endsWith(u' ') && !before.endsWith(u'\t');
-    QString line = before + (needSpace ? u" "_s : QString()) + token;
-    if (!after.isEmpty() && !after.startsWith(u' ') && !after.startsWith(u'\t'))
-        line += u' ';
-    line += after;
-    return line + rest;
+    QString out = body.left(at);
+    if (at > 0)
+        out += u' ';
+    out += token;
+    if (at < first.size() && !isSpaceOrTab(first[at]))
+        out += u' ';
+    out += QStringView(body).sliced(at);
+    return out;
 }
 
 std::optional<Token> dateTokenAt(const QString &body, qsizetype from, qsizetype to)
 {
     if (!validRange(body, from, to))
         return std::nullopt;
-    for (Token t : findTokens(QStringView(body).sliced(from, to - from))) {
-        if (!t.hasDate() || t.kind == TokenKind::Planning || t.valueFrom < 0)
-            continue;
-        t.from += from;
-        t.to += from;
-        t.valueFrom += from;
-        t.valueTo += from;
-        return t;
+    for (const Token &t : findTokens(QStringView(body).sliced(from, to - from))) {
+        if (isMenuDate(t))
+            return movedBy(t, from);
     }
     return std::nullopt;
 }
@@ -250,13 +278,7 @@ std::optional<Token> tokenAt(const QString &body, qsizetype from, qsizetype to)
         } else if (!isPriorityKind(t.kind)) {
             continue;
         }
-        t.from += from;
-        t.to += from;
-        if (t.valueFrom >= 0) {
-            t.valueFrom += from;
-            t.valueTo += from;
-        }
-        return t;
+        return movedBy(std::move(t), from);
     }
     return std::nullopt;
 }
@@ -282,11 +304,12 @@ DateSpec shiftedSpec(const DateSpec &spec, int days, int minutes, QTime defaultT
     DateSpec out = spec;
     out.date = spec.date.addDays(days);
     if (minutes != 0) {
+        constexpr int MinutesPerDay = 24 * 60;
         const QTime time = spec.time.value_or(defaultTime);
-        const int total = time.hour() * 60 + time.minute() + minutes;
-        const int dayShift = total >= 0 ? total / 1440 : -((-total + 1439) / 1440);
-        const int inDay = total - dayShift * 1440;
-        out.date = out.date.addDays(dayShift);
+        // In 64 bits (no overflow for any `minutes`): the time wraps into the day, whole days carry.
+        const qint64 total = time.hour() * 60 + time.minute() + qint64(minutes);
+        const int inDay = int((total % MinutesPerDay + MinutesPerDay) % MinutesPerDay);
+        out.date = out.date.addDays((total - inDay) / MinutesPerDay);
         out.time = QTime(inDay / 60, inDay % 60);
     }
     return out;
@@ -294,7 +317,7 @@ DateSpec shiftedSpec(const DateSpec &spec, int days, int minutes, QTime defaultT
 
 std::optional<std::pair<dates::RecurrenceRule, qsizetype>> recurrencePrefix(QStringView masked, const Token &tok)
 {
-    if (tok.valueFrom < 0 || tok.valueTo <= tok.valueFrom)
+    if (tok.valueFrom < 0 || tok.valueTo <= tok.valueFrom || tok.valueTo > masked.size())
         return std::nullopt;
     const QStringView value = masked.sliced(tok.valueFrom, tok.valueTo - tok.valueFrom);
     if (const auto rule = dates::parseRecurrence(value))
@@ -356,22 +379,18 @@ QString setBlockRecurrence(const QString &body, const QString &rule)
 
 QString blockRecurrence(const QString &body)
 {
-    const auto range = findFirstLineToken(body, TokenKind::Recurrence);
-    if (!range)
+    const auto token = firstLineToken(body, [](TokenKind kind) { return kind == TokenKind::Recurrence; });
+    if (!token)
         return {};
-    if (const auto t = tokenAt(body, range->first, range->second))
+    if (const auto t = tokenAt(body, token->from, token->to))
         return t->canonical;
-    const QString masked = maskInlineCode(body);
-    const QList<Token> all = findTokens(QStringView(masked).first(range->second));
-    return all.isEmpty() ? QString() : recurrenceOf(all.last());
+    return recurrenceOf(*token);
 }
 
 std::pair<Priority, bool> blockPriority(const QString &body)
 {
-    for (const Token &t : findTokens(maskInlineCode(firstLineOf(body)))) {
-        if (isPriorityKind(t.kind))
-            return {t.priority, t.kind == TokenKind::LogseqPriority};
-    }
+    if (const auto t = firstLineToken(body, isPriorityKind))
+        return {t->priority, t->kind == TokenKind::LogseqPriority};
     return {Priority::None, false};
 }
 
@@ -390,16 +409,10 @@ QString priorityName(Priority priority)
 
 Priority priorityFromName(QStringView name)
 {
-    if (name == u"highest")
-        return Priority::Highest;
-    if (name == u"high")
-        return Priority::High;
-    if (name == u"medium")
-        return Priority::Medium;
-    if (name == u"low")
-        return Priority::Low;
-    if (name == u"lowest")
-        return Priority::Lowest;
+    for (const Priority p : {Priority::Highest, Priority::High, Priority::Medium, Priority::Low, Priority::Lowest}) {
+        if (name == priorityName(p))
+            return p;
+    }
     return Priority::None;
 }
 
@@ -419,8 +432,8 @@ QString setPriorityAt(const QString &body, qsizetype from, qsizetype to, Priorit
 
 QString setBlockPriority(const QString &body, Priority priority)
 {
-    if (const auto range = firstLinePriority(body))
-        return setPriorityAt(body, range->first, range->second, priority);
+    if (const auto t = firstLineToken(body, isPriorityKind))
+        return setPriorityAt(body, t->from, t->to, priority);
     if (priority == Priority::None)
         return body;
     return setFirstLineToken(body, TokenKind::Priority, tokens::priorityEmoji(priority).toString());
@@ -435,10 +448,8 @@ std::optional<JournalLinkMatch> journalLinkAt(const QString &body, qsizetype fro
     for (const Link &link : scan.links) {
         if ((link.kind != LinkKind::Wiki && link.kind != LinkKind::Embed) || link.from < from || link.to > to)
             continue;
-        const auto day = journalDateFromLinkTarget(link.target, config);
-        if (!day)
-            continue;
-        return JournalLinkMatch{*day, link.from, link.to, link.target};
+        if (const auto day = journalDateFromLinkTarget(link.target, config))
+            return JournalLinkMatch{*day, link.from, link.to, link.target};
     }
     return std::nullopt;
 }
@@ -532,21 +543,17 @@ std::optional<TokenRef> tokenRefAt(const QString &body, qsizetype from, qsizetyp
     if (!t)
         return std::nullopt;
     const QList<MenuToken> all = menuTokens(body);
-    for (const MenuToken &m : all) {
-        if (m.from != t->from)
-            continue;
-        TokenRef ref;
-        ref.kind = refKind(m.token.kind);
-        ref.value = refValue(m.token);
-        for (const MenuToken &before : all) {
-            if (before.from >= m.from)
-                break;
-            if (refKind(before.token.kind) == ref.kind && refValue(before.token) == ref.value)
-                ++ref.ordinal;
-        }
-        return ref;
-    }
-    return std::nullopt;
+    const auto m = std::ranges::find(all, t->from, &MenuToken::from);
+    if (m == all.end())
+        return std::nullopt;
+    TokenRef ref;
+    ref.kind = refKind(m->token.kind);
+    ref.value = refValue(m->token);
+    // Which of the equal ones it is: the menu tokens are in order.
+    ref.ordinal = int(std::count_if(all.begin(), m, [&ref](const MenuToken &before) {
+        return refKind(before.token.kind) == ref.kind && refValue(before.token) == ref.value;
+    }));
+    return ref;
 }
 
 std::optional<std::pair<qsizetype, qsizetype>> findTokenRef(const QString &body, const TokenRef &ref)
@@ -593,34 +600,16 @@ QString editBlockToken(const QString &content, int line, const TokenRef &ref, co
     // its line ending.
     const QStringList oldLines = body.split(u'\n');
     const QStringList newLines = edited.split(u'\n');
-    // [start, end) of the file's line `k` of the block, without its line ending; false when the
-    // file line does not end with the body's line (cannot happen for tokens; kept safe).
-    const auto fileLine = [&](qsizetype row, qsizetype *start, qsizetype *end) {
-        const int docLine = doc.at(i).line + int(row);
-        qsizetype from = 0;
-        for (int n = 0; n < docLine && from >= 0; ++n) {
-            from = content.indexOf(u'\n', from);
-            if (from >= 0)
-                ++from;
-        }
-        if (from < 0)
-            return false;
-        qsizetype to = content.indexOf(u'\n', from);
-        if (to < 0)
-            to = content.size();
-        if (to > from && content[to - 1] == u'\r')
-            --to;
-        *start = from;
-        *end = to;
-        return QStringView(content).sliced(from, to - from).endsWith(oldLines.at(row));
-    };
-    qsizetype k = 0;
+    qsizetype k = 0; // the body's first changed line
     while (k < oldLines.size() && k < newLines.size() && oldLines.at(k) == newLines.at(k))
         ++k;
-    qsizetype ls = 0;
-    qsizetype le = 0;
-    if (oldLines.size() == newLines.size() && k < oldLines.size()
-        && oldLines.mid(k + 1) == newLines.mid(k + 1) && fileLine(k, &ls, &le)) {
+    const bool lineChanged =
+            oldLines.size() == newLines.size() && k < oldLines.size() && oldLines.mid(k + 1) == newLines.mid(k + 1);
+    const bool lineRemoved = newLines.size() == oldLines.size() - 1 && k > 0 && oldLines.mid(k + 1) == newLines.mid(k);
+    // The file's line of that body line: it ends with it (cannot fail for tokens; kept safe).
+    const auto span = (lineChanged || lineRemoved) ? lineEndingWith(content, doc.at(i).line + int(k), oldLines.at(k))
+                                                   : std::nullopt;
+    if (span && lineChanged) {
         const QString &before = oldLines.at(k);
         const QString &after = newLines.at(k);
         qsizetype p = 0;
@@ -631,15 +620,14 @@ QString editBlockToken(const QString &content, int line, const TokenRef &ref, co
                && before[before.size() - 1 - q] == after[after.size() - 1 - q]) {
             ++q;
         }
-        const qsizetype at = le - before.size() + p;
+        const qsizetype at = span->second - before.size() + p;
         return content.left(at) + after.mid(p, after.size() - p - q) + content.mid(at + before.size() - p - q);
     }
-    if (newLines.size() == oldLines.size() - 1 && k > 0 && oldLines.mid(k + 1) == newLines.mid(k)
-        && fileLine(k, &ls, &le)) {
-        if (const qsizetype nl = content.indexOf(u'\n', le); nl >= 0)
-            return content.left(ls) + content.mid(nl + 1);
+    if (span) { // lineRemoved
+        if (const qsizetype nl = content.indexOf(u'\n', span->second); nl >= 0)
+            return content.left(span->first) + content.mid(nl + 1);
         // The file's last line, without a line ending: the one before it goes instead.
-        qsizetype prev = ls - 1; // the previous line's '\n'
+        qsizetype prev = span->first - 1; // the previous line's '\n'
         if (prev > 0 && content[prev - 1] == u'\r')
             --prev;
         return content.left(prev);

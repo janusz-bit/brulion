@@ -169,8 +169,9 @@ std::optional<std::pair<qsizetype, qsizetype>> findTokenRef(const QString &body,
 
 /// applyTokenAction() on the token `ref` names in the block on `line` (0-based) of a whole file's
 /// `content`. Only the edited line changes, byte for byte apart from the token (its line ending,
-/// indentation and every other line kept); a line the token stood alone on goes as a whole. `content` unchanged when the line holds no block, the
-/// block has no such token or the action changes nothing.
+/// indentation and every other line kept); a line the token stood alone on goes as a whole.
+/// `content` unchanged when the line holds no block, the block has no such token or the action
+/// changes nothing.
 QString editBlockToken(const QString &content, int line, const TokenRef &ref, const QString &action, const QVariant &a,
                        const QVariant &b, const TokenEditContext &context);
 
