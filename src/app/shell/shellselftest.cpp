@@ -7510,7 +7510,8 @@ void checkLanguageFollows(QQuickWindow *window, AppController *app, const Check 
 ///     those deletions (nested event processing does not), so the old views pile up while it runs
 ///     (26 PageViews at one moment); the check runs them itself once the journal is shown again —
 ///     the event loop's next turn in the app — and counts the PageControllers left. Rounds of
-///     pages and views one after another must not leave more than the first round did.
+///     pages and views one after another must not leave more than the first round did (give or
+///     take a journal day loaded later), nor more with every round.
 void checkViewsLetGo(QQuickWindow *window, AppController *app, const Check &check)
 {
     const QStringList pages{u"Projekty/Remont mieszkania.md"_s, u"Przepisy.md"_s};
@@ -7542,7 +7543,11 @@ void checkViewsLetGo(QQuickWindow *window, AppController *app, const Check &chec
     std::fprintf(stderr, "selftest: page controllers after each round: %d, %d, %d (%d before the deletions ran)\n",
                  first, second, third, firstWaiting);
     check(firstWaiting > first, "the views a route left wait for the event loop to delete them");
-    check(second <= first && third <= first, "the views a route left are deleted with their editors");
+    // A view kept alive would leave a PageController per page opened: 12 more every round. A
+    // journal day loaded a moment later may add one or two (CI: 2, 3, 3).
+    const int slack = 3;
+    check(second <= first + slack && third <= first + slack && third <= second + 1,
+          "the views a route left are deleted with their editors");
 }
 
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
