@@ -7,6 +7,8 @@
 
 #include <QSet>
 
+#include <ranges>
+
 namespace brulion {
 
 std::function<std::optional<markdown::TaskDependencyView>(const QString &id)>
@@ -29,7 +31,7 @@ int stopTaskClocksElsewhere(EditorHost &host, const QDateTime &now, const QStrin
     if (!index)
         return 0;
     QSet<QString> files;
-    for (const notebook::TaskPlace &p : notebook::runningClockPlaces(*index)) {
+    for (const auto places = notebook::runningClockPlaces(*index); const notebook::TaskPlace &p : places) {
         if (p.path != exceptPath)
             files.insert(p.path);
     }
@@ -51,11 +53,9 @@ QString stopTaskClocksIn(const QString &content, const QDateTime &now, int keepL
     const ParsedNote note = markdown::parseNote(VaultPath(), content);
     QString out = content;
     // Bottom up: stopping a clock never moves the lines above it (one line rewritten in place).
-    for (qsizetype b = note.blocks.size() - 1; b >= 0; --b) {
-        const Block &block = note.blocks[b];
-        if (!block.task || !block.task->clockStart.isValid() || block.line == keepLine)
-            continue;
-        out = markdown::stopTaskClock(out, block.line, now);
+    for (const Block &block : std::views::reverse(note.blocks)) {
+        if (block.task && block.task->clockStart.isValid() && block.line != keepLine)
+            out = markdown::stopTaskClock(out, block.line, now);
     }
     return out;
 }

@@ -23,6 +23,9 @@ namespace brulion::ioviews {
 
 namespace {
 
+/// Everything a folder holds: hidden entries (".obsidian") and system files too.
+constexpr QDir::Filters AllEntries = QDir::Files | QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot | QDir::System;
+
 QString sizeText(qint64 bytes)
 {
     return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeTraditionalFormat);
@@ -43,45 +46,44 @@ QString safeSegment(QString name)
 /// (in any letter case) came already: two picked "Note.md" from different folders stay two.
 QString uniqueRelative(QSet<QString> &used, const QString &relative)
 {
-    if (!used.contains(relative.toCaseFolded())) {
-        used.insert(relative.toCaseFolded());
-        return relative;
-    }
     const qsizetype slash = relative.lastIndexOf(u'/');
     const qsizetype dot = relative.lastIndexOf(u'.');
-    const bool hasExt = dot > slash + 1;
-    const QString stem = hasExt ? relative.left(dot) : relative;
-    const QString ext = hasExt ? relative.mid(dot) : QString();
-    for (int n = 2;; ++n) {
-        const QString candidate = u"%1 %2%3"_s.arg(stem).arg(n).arg(ext);
-        if (!used.contains(candidate.toCaseFolded())) {
-            used.insert(candidate.toCaseFolded());
-            return candidate;
-        }
+    const qsizetype stemEnd = dot > slash + 1 ? dot : relative.size(); // the number goes before the extension
+    QString candidate = relative;
+    QString key = candidate.toCaseFolded();
+    for (int n = 2; used.contains(key); ++n) {
+        // Concatenated, not arg(): a "%1" in the name stays as it is.
+        candidate = relative.left(stemEnd) + u' ' + QString::number(n) + relative.mid(stemEnd);
+        key = candidate.toCaseFolded();
     }
+    used.insert(key);
+    return candidate;
 }
 
-/// Up to `maxBytes` + 1 bytes of an open file whose size may be unknown (read in pieces, never one
-/// allocation of `maxBytes`). `sizeHint` (from the listing, -1 = unknown) only reserves memory:
-/// asking a document for its size would be one more query of its provider.
-std::optional<QByteArray> readLimited(QFile &file, qint64 maxBytes, qint64 sizeHint, QString *error)
+/// Up to `maxBytes` + 1 bytes of the file at `path` (a local path, or a document's URI for Qt's
+/// engine) whose size may be unknown: read in pieces, never one allocation of `maxBytes`.
+/// `sizeHint` (from the listing, -1 = unknown) only reserves memory: asking a document for its
+/// size would be one more query of its provider.
+std::optional<QByteArray> readFile(const QString &path, qint64 maxBytes, qint64 sizeHint, QString *error)
 {
-    QByteArray data;
-    if (sizeHint > 0 && sizeHint <= maxBytes)
-        data.reserve(sizeHint);
-    constexpr qint64 Piece = 1 << 20;
-    while (data.size() <= maxBytes) {
-        const QByteArray piece = file.read(std::min(Piece, maxBytes + 1 - data.size()));
-        if (piece.isEmpty())
-            break;
-        data.append(piece);
+    QFile file(path);
+    if (file.open(QIODevice::ReadOnly)) {
+        QByteArray data;
+        if (sizeHint > 0 && sizeHint <= maxBytes)
+            data.reserve(sizeHint);
+        constexpr qint64 Piece = 1 << 20;
+        while (data.size() <= maxBytes) {
+            const QByteArray piece = file.read(std::min(Piece, maxBytes + 1 - data.size()));
+            if (piece.isEmpty())
+                break;
+            data.append(piece);
+        }
+        if (file.error() == QFileDevice::NoError)
+            return data;
     }
-    if (file.error() != QFileDevice::NoError) {
-        if (error)
-            *error = file.errorString();
-        return std::nullopt;
-    }
-    return data;
+    if (error)
+        *error = file.errorString();
+    return std::nullopt;
 }
 
 // ---- Qt's content file engine -------------------------------------------------------------------
@@ -108,8 +110,7 @@ public:
             return std::nullopt;
         }
         QList<Entry> out;
-        const QFileInfoList entries =
-                dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot | QDir::System);
+        const QFileInfoList entries = dir.entryInfoList(AllEntries);
         for (const QFileInfo &info : entries)
             out.append(entryOf(info));
         return out;
@@ -117,26 +118,16 @@ public:
 
     std::optional<QByteArray> read(const Entry &file, qint64 maxBytes, QString *error) const override
     {
-        QFile f(file.uri);
-        if (!f.open(QIODevice::ReadOnly)) {
-            if (error)
-                *error = f.errorString();
-            return std::nullopt;
-        }
-        return readLimited(f, maxBytes, file.size, error);
+        return readFile(file.uri, maxBytes, file.size, error);
     }
 
 private:
     static Entry entryOf(const QFileInfo &info)
     {
-        Entry e;
         // For a document the engine's path is its (document) URI; a tree URI as picked becomes
         // the URI of its root document.
-        e.uri = info.filePath();
-        e.name = info.fileName();
-        e.isDir = info.isDir();
-        e.size = e.isDir ? -1 : info.size();
-        return e;
+        const bool dir = info.isDir();
+        return Entry{.uri = info.filePath(), .name = info.fileName(), .isDir = dir, .size = dir ? -1 : info.size()};
     }
 };
 
@@ -232,7 +223,7 @@ QUrl urlFromUserInput(const QString &pathOrUrl)
     const QString text = pathOrUrl.trimmed();
     if (text.isEmpty())
         return {};
-    if (text.startsWith(u"content:"_s, Qt::CaseInsensitive) || text.startsWith(u"file:"_s, Qt::CaseInsensitive))
+    if (text.startsWith(u"content:", Qt::CaseInsensitive) || text.startsWith(u"file:", Qt::CaseInsensitive))
         return QUrl(text);
     return QUrl::fromLocalFile(text);
 }
@@ -252,10 +243,12 @@ QString nameInUri(const QUrl &url)
 
 QString displayNameOf(const QUrl &url)
 {
-    const QString fsPath = fileSystemPathOf(url);
-    QString name = QFileInfo(fsPath).fileName();
-    if (name.isEmpty() || name.contains(u'%') || name.contains(u':'))
-        name = nameInUri(url); // a content URI without a display name
+    QString name = QFileInfo(fileSystemPathOf(url)).fileName();
+    // A content URI without a display name gives (a piece of) itself. A local file's name stays,
+    // ':' and '%' included ("Meeting 10:30.md").
+    const bool local = url.isLocalFile() || url.scheme().isEmpty();
+    if (!local && (name.isEmpty() || name.contains(u'%') || name.contains(u':')))
+        name = nameInUri(url);
     return name.isEmpty() ? url.toString(QUrl::RemoveUserInfo) : name;
 }
 
@@ -279,22 +272,23 @@ bool writeToUrl(const QUrl &url, const QByteArray &data, QString *error)
     if (url.isLocalFile() || url.scheme().isEmpty()) {
         QDir().mkpath(QFileInfo(path).absolutePath());
         QSaveFile file(path);
-        if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
-            if (error)
-                *error = file.errorString();
-            return false;
-        }
-        return true;
-    }
-    // Android documents cannot be replaced by rename: write in place.
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(data) != data.size()) {
+        if (file.open(QIODevice::WriteOnly) && file.write(data) == data.size() && file.commit())
+            return true;
         if (error)
             *error = file.errorString();
         return false;
     }
-    file.close();
-    return true;
+    // Android documents cannot be replaced by rename: write in place. close() flushes what is
+    // still buffered and reports a failure there (the provider could not save) only in error().
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(data) == data.size()) {
+        file.close();
+        if (file.error() == QFileDevice::NoError)
+            return true;
+    }
+    if (error)
+        *error = file.errorString();
+    return false;
 }
 
 // ---- FileGatherer ---------------------------------------------------------------------------------
@@ -337,7 +331,7 @@ void FileGatherer::start(const QList<QUrl> &urls)
     const std::shared_ptr<const DocumentProvider> documents = m_documents;
     runInBackground<Listing>(
             this, [urls, limits, documents] { return list(urls, limits, documents); },
-            [this, generation](Listing listing) {
+            [this, generation](const Listing &listing) {
                 if (generation == m_generation && m_running)
                     listed(listing);
             });
@@ -373,7 +367,7 @@ FileGatherer::Listing FileGatherer::list(const QList<QUrl> &urls, const GatherLi
         p.relative = uniqueRelative(used, p.relative);
     if (urls.size() == 1 && isDocumentUrl(urls.first()) && !out.pending.isEmpty()) {
         // The document's display name ("Notion export.zip"), not the id in its URI.
-        const QString &first = out.pending.first().relative;
+        const QString &first = out.pending.constFirst().relative;
         out.sourceName = out.pending.size() == 1 ? first : first.section(u'/', 0, 0);
     }
     return out;
@@ -406,11 +400,9 @@ void FileGatherer::collectLocal(const QUrl &url, const GatherLimits &limits, Lis
         return !canonicalRoot.isEmpty() && !target.isEmpty() && target.startsWith(canonicalRoot + u'/');
     };
     QList<Dir> stack{ Dir{ root, displayNameOf(url) } };
-    bool tooMany = false;
-    while (!stack.isEmpty() && !tooMany) {
+    while (!stack.isEmpty()) {
         const Dir dir = stack.takeLast();
-        const QFileInfoList entries = QDir(dir.fsPath).entryInfoList(
-                QDir::Files | QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot | QDir::System, QDir::Name);
+        const QFileInfoList entries = QDir(dir.fsPath).entryInfoList(AllEntries, QDir::Name);
         for (const QFileInfo &entry : entries) {
             const QString relative = dir.relative + u'/' + entry.fileName();
             if (entry.isDir()) {
@@ -429,8 +421,7 @@ void FileGatherer::collectLocal(const QUrl &url, const GatherLimits &limits, Lis
             if (out.pending.size() >= limits.maxFiles) {
                 out.warnings.append(
                         tr("The folder has more than %n file(s); only the first ones were read.", "", limits.maxFiles));
-                tooMany = true;
-                break;
+                return;
             }
             out.pending.append(Pending{entry.filePath(), relative, entry.size(), false});
         }
@@ -470,16 +461,14 @@ void FileGatherer::collectDocument(const QUrl &url, const GatherLimits &limits, 
     constexpr int MaxDepth = 64;
     QSet<QString> seen{root->uri};
     QList<Dir> stack{Dir{*root, rootName, 0}};
-    bool tooMany = false;
-    while (!stack.isEmpty() && !tooMany) {
+    while (!stack.isEmpty()) {
         const Dir dir = stack.takeLast();
         std::optional<QList<DocumentProvider::Entry>> entries = documents.children(dir.entry, &error);
         if (!entries) {
             out.warnings.append(tr("The folder “%1” could not be read: %2").arg(dir.relative, error));
             continue;
         }
-        std::sort(entries->begin(), entries->end(),
-                  [](const DocumentProvider::Entry &a, const DocumentProvider::Entry &b) { return a.name < b.name; });
+        std::ranges::sort(*entries, {}, &DocumentProvider::Entry::name);
         for (const DocumentProvider::Entry &entry : std::as_const(*entries)) {
             const QString name = safeSegment(entry.name);
             if (name.isEmpty())
@@ -501,8 +490,7 @@ void FileGatherer::collectDocument(const QUrl &url, const GatherLimits &limits, 
             if (out.pending.size() >= limits.maxFiles) {
                 out.warnings.append(
                         tr("The folder has more than %n file(s); only the first ones were read.", "", limits.maxFiles));
-                tooMany = true;
-                break;
+                return;
             }
             out.pending.append(Pending{entry.uri, relative, entry.size, true});
         }
@@ -529,24 +517,10 @@ QList<FileGatherer::Read> FileGatherer::readBatch(const QList<Pending> &batch, q
     for (const Pending &p : batch) {
         Read r;
         if (p.document) {
-            DocumentProvider::Entry entry;
-            entry.uri = p.fsPath;
-            entry.name = p.relative.section(u'/', -1);
-            entry.size = p.size;
-            std::optional<QByteArray> data = documents->read(entry, maxFileBytes, &r.error);
-            r.ok = data.has_value();
-            if (data)
-                r.data = std::move(*data);
+            const DocumentProvider::Entry entry{.uri = p.fsPath, .name = p.relative.section(u'/', -1), .size = p.size};
+            r.data = documents->read(entry, maxFileBytes, &r.error);
         } else {
-            QFile file(p.fsPath);
-            if (file.open(QIODevice::ReadOnly)) {
-                std::optional<QByteArray> data = readLimited(file, maxFileBytes, p.size, &r.error);
-                r.ok = data.has_value();
-                if (data)
-                    r.data = std::move(*data);
-            } else {
-                r.error = file.errorString();
-            }
+            r.data = readFile(p.fsPath, maxFileBytes, p.size, &r.error);
         }
         reads.append(std::move(r));
     }
@@ -569,12 +543,13 @@ void FileGatherer::step()
             m_warnings.append(tooLargeWarning(p.relative, p.size));
             continue;
         }
-        if (m_bytes + batchBytes + qMax<qint64>(p.size, 0) > m_limits.maxTotalBytes) {
+        const qint64 known = std::max(p.size, qint64(0)); // -1: unknown
+        if (m_bytes + batchBytes + known > m_limits.maxTotalBytes) {
             stopForTotal(); // the files planned before still come
             break;
         }
         m_batch.append(p);
-        batchBytes += qMax<qint64>(p.size, 0);
+        batchBytes += known;
     }
     if (m_batch.isEmpty()) {
         merge({});
@@ -587,7 +562,7 @@ void FileGatherer::step()
     const std::shared_ptr<const DocumentProvider> documents = m_documents;
     runInBackground<QList<Read>>(
             this, [batch, maxFileBytes, documents] { return readBatch(batch, maxFileBytes, documents); },
-            [this, generation](QList<Read> reads) {
+            [this, generation](const QList<Read> &reads) {
                 if (generation != m_generation || !m_running)
                     return;
                 m_reading = false;
@@ -600,21 +575,22 @@ void FileGatherer::merge(const QList<Read> &reads)
     for (qsizetype i = 0; i < reads.size() && i < m_batch.size(); ++i) {
         const Pending &p = m_batch.at(i);
         const Read &r = reads.at(i);
-        if (!r.ok) {
+        if (!r.data) {
             m_warnings.append(tr("“%1” could not be read: %2").arg(p.relative, r.error));
             continue;
         }
         // Sizes the listing did not know (some document providers) are checked now.
-        if (r.data.size() > m_limits.maxFileBytes) {
-            m_warnings.append(tooLargeWarning(p.relative, r.data.size()));
+        const qint64 size = r.data->size();
+        if (size > m_limits.maxFileBytes) {
+            m_warnings.append(tooLargeWarning(p.relative, size));
             continue;
         }
-        if (m_bytes + r.data.size() > m_limits.maxTotalBytes) {
+        if (m_bytes + size > m_limits.maxTotalBytes) {
             stopForTotal();
             break;
         }
-        m_bytes += r.data.size();
-        m_files.append(io::InputFile{p.relative, r.data});
+        m_bytes += size;
+        m_files.append(io::InputFile{p.relative, *r.data});
     }
     m_batch.clear();
     Q_EMIT progress(int(m_next), int(m_pending.size()));

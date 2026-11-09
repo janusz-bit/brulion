@@ -15,12 +15,15 @@
 #include <QLocale>
 #include <QRegularExpression>
 
+#include <algorithm>
+
 #include "pickedfiles.h"
 #ifdef Q_OS_WASM
 #include "wasm/wasmfiles.h"
 #endif
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::ioviews {
 
@@ -48,14 +51,15 @@ QString sizeText(qint64 bytes)
 
 /// Every file and folder path of the vault, case-folded (ImportOptions::exists compares
 /// case-insensitively). Taken on the GUI thread; the importer reads the copy on its thread.
-QSet<QString> vaultPathSet(Vault *vault)
+QSet<QString> vaultPathSet(const Vault *vault)
 {
     QSet<QString> set;
     if (!vault)
         return set;
-    for (const FileStat &f : vault->files())
+    // Const lists: files() shares the vault's own list, which a non-const loop would copy.
+    for (const QList<FileStat> files = vault->files(); const FileStat &f : files)
         set.insert(f.path.toCaseFolded());
-    for (const FileStat &f : vault->folders())
+    for (const QList<FileStat> folders = vault->folders(); const FileStat &f : folders)
         set.insert(f.path.toCaseFolded());
     return set;
 }
@@ -85,6 +89,21 @@ Analysis analyzeImport(const QList<io::InputFile> &input, const QString &chosen,
     a.result = io::runImport(*importer, input, options);
     a.ran = true;
     return a;
+}
+
+/// The `importers` row of `importer` (ImportController::importers(), chosenImporter()).
+QVariantMap importerRow(const io::Importer &importer)
+{
+    const ImporterInfo info = ImportController::importerInfo(importer.id());
+    return {
+            {u"id"_s, importer.id()},
+            {u"name"_s, importer.name()},
+            {u"howTo"_s, info.howTo},
+            {u"phoneHowTo"_s, info.phoneHowTo},
+            {u"pick"_s, info.pick},
+            {u"icon"_s, info.icon},
+            {u"fileTypes"_s, importer.fileTypes()},
+    };
 }
 
 } // namespace
@@ -130,13 +149,11 @@ std::optional<QString> cleanTargetFolder(const QString &folder)
     QString unified = folder.trimmed().normalized(QString::NormalizationForm_C);
     unified.replace(u'\\', u'/');
     QStringList segments;
-    for (const QString &raw : unified.split(u'/')) {
+    for (const QStringList parts = unified.split(u'/'); const QString &raw : parts) {
         const QString seg = raw.trimmed();
         if (seg.isEmpty() || seg == u".")
             continue;
-        if (seg == u"..")
-            return std::nullopt;
-        if (paths::sanitizeFileName(seg) != seg)
+        if (seg == u".." || paths::sanitizeFileName(seg) != seg)
             return std::nullopt;
         segments.append(seg);
     }
@@ -152,7 +169,7 @@ ImportController::ImportController(QObject *parent)
     : QObject(parent)
 {
     m_analyzeTimer.setSingleShot(true);
-    m_analyzeTimer.setInterval(350);
+    m_analyzeTimer.setInterval(350ms);
     connect(&m_analyzeTimer, &QTimer::timeout, this, &ImportController::analyze);
     m_writeTimer.setSingleShot(true);
     m_writeTimer.setInterval(0);
@@ -170,8 +187,6 @@ ImportController::ImportController(QObject *parent)
     if (QCoreApplication *app = QCoreApplication::instance())
         app->installEventFilter(this);
 }
-
-ImportController::~ImportController() = default;
 
 bool ImportController::eventFilter(QObject *watched, QEvent *event)
 {
@@ -197,31 +212,16 @@ void ImportController::setWorkspace(shell::Workspace *workspace)
 QVariantList ImportController::importers() const
 {
     QVariantList out;
-    for (const io::Importer *importer : io::importers()) {
-        const ImporterInfo info = importerInfo(importer->id());
-        out.append(QVariantMap{
-                {u"id"_s, importer->id()},
-                {u"name"_s, importer->name()},
-                {u"howTo"_s, info.howTo},
-                {u"phoneHowTo"_s, info.phoneHowTo},
-                {u"pick"_s, info.pick},
-                {u"icon"_s, info.icon},
-                {u"fileTypes"_s, importer->fileTypes()},
-        });
-    }
+    for (const io::Importer *importer : io::importers())
+        out.append(importerRow(*importer));
     return out;
 }
 
 QVariantMap ImportController::chosenImporter() const
 {
-    if (m_importerId.isEmpty())
-        return {};
-    for (const QVariant &row : importers()) {
-        QVariantMap map = row.toMap();
-        if (map.value(u"id"_s).toString() == m_importerId)
-            return map;
-    }
-    return {};
+    // m_importerId is an importer's id or empty (setImporterId()).
+    const io::Importer *importer = io::importerById(m_importerId);
+    return importer ? importerRow(*importer) : QVariantMap();
 }
 
 bool ImportController::busy() const
@@ -248,21 +248,14 @@ QString ImportController::effectiveName() const
 
 QStringList ImportController::nameFilters() const
 {
-    QStringList filters;
-    if (const io::Importer *importer = io::importerById(m_importerId)) {
-        filters.append(u"%1 (%2)"_s.arg(importer->name(), importer->fileTypes().join(u' ')));
-    } else {
-        QStringList all;
-        for (const io::Importer *i : io::importers()) {
-            for (const QString &type : i->fileTypes()) {
-                if (!all.contains(type))
-                    all.append(type);
-            }
-        }
-        filters.append(tr("Exports of notes apps (%1)").arg(all.join(u' ')));
-    }
-    filters.append(tr("All files (*)"));
-    return filters;
+    const QString anyFile = tr("All files (*)");
+    if (const io::Importer *importer = io::importerById(m_importerId))
+        return {u"%1 (%2)"_s.arg(importer->name(), importer->fileTypes().join(u' ')), anyFile};
+    QStringList types; // of every importer, each once, in their order
+    for (const io::Importer *i : io::importers())
+        types.append(i->fileTypes());
+    types.removeDuplicates();
+    return {tr("Exports of notes apps (%1)").arg(types.join(u' ')), anyFile};
 }
 
 QString ImportController::inputSizeText() const
@@ -273,9 +266,7 @@ QString ImportController::inputSizeText() const
 void ImportController::setImporterId(const QString &id)
 {
     const QString clean = io::importerById(id) ? id : QString();
-    if (clean == m_importerId)
-        return;
-    if (m_state == u"importing")
+    if (clean == m_importerId || m_state == u"importing")
         return;
     m_importerId = clean;
     updateDefaultFolder();
@@ -447,13 +438,10 @@ void ImportController::clear()
 
 void ImportController::cancel()
 {
-    if (m_state == u"reading") {
+    if (m_state == u"reading" || m_state == u"analyzing")
         clear();
-    } else if (m_state == u"analyzing") {
-        clear();
-    } else if (m_state == u"importing") {
+    else if (m_state == u"importing")
         m_cancelRequested = true;
-    }
 }
 
 // ---- Dry run ---------------------------------------------------------------------------------------
@@ -477,7 +465,7 @@ void ImportController::analyze()
         return;
     }
     if (m_input.isEmpty()) {
-        setState(u"error"_s, m_readWarnings.isEmpty() ? tr("No files were read.") : m_readWarnings.first());
+        setState(u"error"_s, m_readWarnings.isEmpty() ? tr("No files were read.") : m_readWarnings.constFirst());
         return;
     }
     const std::optional<QString> folder = cleanTargetFolder(m_targetFolder);
@@ -498,10 +486,11 @@ void ImportController::analyze()
     const QString edited = folder.value_or(QString());
     const bool folderEdited = m_targetFolderEdited;
     runInBackground<Analysis>(
-            this, [input, chosen, edited, folderEdited, options] {
+            this,
+            [input, chosen, edited, folderEdited, options] {
                 return analyzeImport(input, chosen, edited, folderEdited, options);
             },
-            [this, generation](Analysis a) {
+            [this, generation](const Analysis &a) {
                 if (generation != m_generation)
                     return;
                 m_detectedId = a.detected;
@@ -525,10 +514,16 @@ void ImportController::applyPlan(int generation, const io::ImportResult &result,
 {
     if (generation != m_generation || !m_workspace || !m_workspace->vault())
         return;
-    Vault *vault = m_workspace->vault();
+    if (forImport) {
+        m_writeQueue = result.files;
+        m_writeWarnings = m_readWarnings + result.warnings;
+        return;
+    }
+    const Vault *vault = m_workspace->vault();
     const VaultConfig config = vault->config();
     // "Plan 2.md" next to an existing "Plan.md": renamed because the name is taken.
     static const QRegularExpression numbered(u"^(.*) \\d+(\\.[^./]*)?$"_s);
+    constexpr qsizetype ListedFiles = 200; // the preview lists the first files only
     int pages = 0, journals = 0, appended = 0, attachments = 0, renamed = 0;
     qint64 bytes = 0;
     QVariantList files;
@@ -551,31 +546,24 @@ void ImportController::applyPlan(int generation, const io::ImportResult &result,
             ++attachments;
         }
         bytes += f.data.size();
-        if (files.size() < 200)
+        if (files.size() < ListedFiles)
             files.append(QVariantMap{ { u"path"_s, f.path }, { u"kind"_s, kind }, { u"append"_s, appends },
                                       { u"size"_s, f.data.size() } });
     }
-    QStringList warnings = m_readWarnings;
-    warnings.append(result.warnings);
-    if (forImport) {
-        m_writeQueue = result.files;
-        m_writeWarnings = warnings;
-        return;
-    }
     const QString target = cleanTargetFolder(m_targetFolder).value_or(QString());
     m_preview = {
-        { u"pages"_s, pages },
-        { u"journals"_s, journals },
-        { u"journalsAppended"_s, appended },
-        { u"attachments"_s, attachments },
-        { u"renamed"_s, renamed },
-        { u"files"_s, files },
-        { u"fileCount"_s, int(result.files.size()) },
-        { u"bytes"_s, bytes },
-        { u"sizeText"_s, sizeText(bytes) },
-        { u"warnings"_s, warnings },
-        { u"folder"_s, target },
-        { u"folderExists"_s, !target.isEmpty() && vault->exists(target) },
+            {u"pages"_s, pages},
+            {u"journals"_s, journals},
+            {u"journalsAppended"_s, appended},
+            {u"attachments"_s, attachments},
+            {u"renamed"_s, renamed},
+            {u"files"_s, files},
+            {u"fileCount"_s, int(result.files.size())},
+            {u"bytes"_s, bytes},
+            {u"sizeText"_s, sizeText(bytes)},
+            {u"warnings"_s, m_readWarnings + result.warnings},
+            {u"folder"_s, target},
+            {u"folderExists"_s, !target.isEmpty() && vault->exists(target)},
     };
     Q_EMIT previewChanged();
     if (result.files.isEmpty()) {
@@ -614,7 +602,7 @@ void ImportController::startImport()
     const QList<io::InputFile> input = m_input;
     runInBackground<io::ImportResult>(
             this, [importer, input, options] { return io::runImport(*importer, input, options); },
-            [this, generation](io::ImportResult result) {
+            [this, generation](const io::ImportResult &result) {
                 if (generation != m_generation)
                     return;
                 applyPlan(generation, result, true);
@@ -630,7 +618,6 @@ void ImportController::writeStep()
         return;
     }
     const VaultConfig config = vault->config();
-    const auto count = [this](const QString &key) { m_writeCounts.insert(key, m_writeCounts.value(key).toInt() + 1); };
     const auto fail = [this, vault](const QString &path) {
         m_writeFailed.append(QVariantMap{ { u"path"_s, path }, { u"message"_s, vault->errorString() } });
     };
@@ -638,7 +625,6 @@ void ImportController::writeStep()
     while (m_writeIndex < m_writeQueue.size() && written < m_writeChunk && !m_cancelRequested) {
         const io::ImportedFile f = m_writeQueue.at(m_writeIndex++); // a copy: writing emits signals
         ++written;
-        const QString kind = importedKind(f.path, f.append, config);
         if (f.append && vault->exists(f.path)) {
             bool ok = false;
             const QByteArray existing = vault->readBinary(f.path, &ok);
@@ -651,8 +637,8 @@ void ImportController::writeStep()
                 fail(f.path);
                 continue;
             }
-            count(u"journals"_s);
-            count(u"appended"_s);
+            ++m_writeCounts[u"journals"_s];
+            ++m_writeCounts[u"appended"_s];
             continue;
         }
         // New files never replace anything: a path taken meanwhile gets a unique name.
@@ -663,17 +649,18 @@ void ImportController::writeStep()
         }
         // A folder existing in another letter case is used as spelled (Vault::create): no rename.
         if (used.compare(f.path, Qt::CaseInsensitive) != 0) {
-            count(u"renamed"_s);
+            ++m_writeCounts[u"renamed"_s];
             m_writeWarnings.append(tr("“%1” already existed; it was saved as “%2”.").arg(f.path, used));
         }
+        const QString kind = importedKind(f.path, f.append, config);
         if (kind == u"journal") {
-            count(u"journals"_s);
+            ++m_writeCounts[u"journals"_s];
         } else if (kind == u"page") {
-            count(u"pages"_s);
+            ++m_writeCounts[u"pages"_s];
             if (m_firstPage.isEmpty())
                 m_firstPage = used;
         } else {
-            count(u"attachments"_s);
+            ++m_writeCounts[u"attachments"_s];
         }
     }
     const qsizetype total = m_writeQueue.size();
@@ -689,25 +676,25 @@ void ImportController::writeStep()
 void ImportController::finishImport(bool cancelled)
 {
     m_writeTimer.stop();
-    const int written = int(m_writeIndex) - int(m_writeFailed.size());
+    const int written = std::max(0, int(m_writeIndex) - int(m_writeFailed.size()));
     m_report = {
-        { u"pages"_s, m_writeCounts.value(u"pages"_s).toInt() },
-        { u"journals"_s, m_writeCounts.value(u"journals"_s).toInt() },
-        { u"appended"_s, m_writeCounts.value(u"appended"_s).toInt() },
-        { u"attachments"_s, m_writeCounts.value(u"attachments"_s).toInt() },
-        { u"renamed"_s, m_writeCounts.value(u"renamed"_s).toInt() },
-        { u"written"_s, qMax(0, written) },
-        { u"total"_s, int(m_writeQueue.size()) },
-        { u"failed"_s, m_writeFailed },
-        { u"warnings"_s, m_writeWarnings },
-        { u"folder"_s, m_writeFolder },
-        { u"firstPage"_s, m_firstPage },
-        { u"source"_s, m_writeSource },
-        { u"cancelled"_s, cancelled },
+            {u"pages"_s, m_writeCounts.value(u"pages"_s)},
+            {u"journals"_s, m_writeCounts.value(u"journals"_s)},
+            {u"appended"_s, m_writeCounts.value(u"appended"_s)},
+            {u"attachments"_s, m_writeCounts.value(u"attachments"_s)},
+            {u"renamed"_s, m_writeCounts.value(u"renamed"_s)},
+            {u"written"_s, written},
+            {u"total"_s, int(m_writeQueue.size())},
+            {u"failed"_s, m_writeFailed},
+            {u"warnings"_s, m_writeWarnings},
+            {u"folder"_s, m_writeFolder},
+            {u"firstPage"_s, m_firstPage},
+            {u"source"_s, m_writeSource},
+            {u"cancelled"_s, cancelled},
     };
     qCInfo(logging::lcIo).noquote()
             << u"Import from %1 %2: %3 of %4 file(s) saved into %5, %6 failed, %7 warning(s)"_s.arg(
-                       m_writeSource, cancelled ? u"stopped"_s : u"finished"_s, QString::number(qMax(0, written)),
+                       m_writeSource, cancelled ? u"stopped"_s : u"finished"_s, QString::number(written),
                        QString::number(m_writeQueue.size()), m_writeFolder.isEmpty() ? u"(notebook)"_s : m_writeFolder,
                        QString::number(m_writeFailed.size()), QString::number(m_writeWarnings.size()));
     m_writeQueue.clear();
@@ -715,8 +702,8 @@ void ImportController::finishImport(bool cancelled)
     Q_EMIT reportChanged();
     setProgress(1);
     setState(u"done"_s);
-    Q_EMIT imported(cancelled ? tr("Import stopped: %n file(s) saved.", "", qMax(0, written))
-                              : tr("Import finished: %n file(s) saved.", "", qMax(0, written)));
+    Q_EMIT imported(cancelled ? tr("Import stopped: %n file(s) saved.", "", written)
+                              : tr("Import finished: %n file(s) saved.", "", written));
 }
 
 void ImportController::openTarget()

@@ -39,6 +39,7 @@
 #include "types.h"
 #include "workspace.h"
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QPointer>
@@ -49,6 +50,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 
@@ -84,7 +86,6 @@ struct ImporterInfo {
     /// system's picker.
     QString phoneHowTo;
 };
-ImporterInfo importerInfo(const QString &id);
 
 class ImportController : public QObject {
     Q_OBJECT
@@ -119,7 +120,6 @@ class ImportController : public QObject {
 
 public:
     explicit ImportController(QObject *parent = nullptr);
-    ~ImportController() override;
 
     shell::Workspace *workspace() const { return m_workspace; }
     void setWorkspace(shell::Workspace *workspace);
@@ -182,7 +182,7 @@ public:
     static ImporterInfo importerInfo(const QString &id);
 
     /// Files written per event loop turn while importing (default 20; tests).
-    void setWriteChunk(int files) { m_writeChunk = qMax(1, files); }
+    void setWriteChunk(int files) { m_writeChunk = std::max(1, files); }
     FileGatherer *gatherer() { return &m_gatherer; }
 
 Q_SIGNALS:
@@ -241,7 +241,7 @@ private:
     qsizetype m_writeIndex = 0;
     QString m_writeSource;
     QString m_writeFolder;
-    QVariantMap m_writeCounts;
+    QHash<QString, int> m_writeCounts; ///< "pages", "journals", "appended", "attachments", "renamed"
     QVariantList m_writeFailed;
     QStringList m_writeWarnings;
     QString m_firstPage;

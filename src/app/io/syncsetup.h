@@ -22,7 +22,7 @@
 //               a network failure is explained as CORS with the self-hosting options (docs/WEB.md)
 //
 // SyncthingSetup (QML: `SyncthingSetup { settings: AppSettings; workspace: Workspace }`)
-//   apiKey, url drafts for the REST status ("sync/syncthingApiKey", "sync/syncthingUrl"), the
+//   apiKey, url drafts for the REST status (shell::syncthingApiKey()'s owner-only file, "sync/syncthingUrl"), the
 //   recommended .stignore (sync::stignoreTemplate()) — stignoreState "missing" | "current" |
 //   "outdated" | "unavailable", writeStignore() creates it or appends the missing rules after the
 //   user's own (their order and meaning stay).
@@ -182,7 +182,11 @@ private:
     /// Another notebook syncs with the drafted folder (while switched on, on the same account).
     QString folderConflict() const;
     void setTestResult(const QVariantMap &result);
-    void finishTest(const QVariantMap &result);
+    /// Ends a test started as `generation`; its result shows unless an edit of the drafts or a
+    /// newer test left it behind.
+    void finishTest(int generation, const QVariantMap &result);
+    /// The first problem of the drafts that keeps a request from the server ("" when none).
+    QString formProblem(const QString &password) const;
 
     QPointer<shell::AppSettings> m_settings;
     sync::HttpTransport *m_transport = nullptr;

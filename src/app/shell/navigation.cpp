@@ -8,9 +8,11 @@ namespace brulion::shell {
 
 QStringList routeViews()
 {
-    return {u"journals"_s, u"journal"_s,  u"page"_s,    u"calendar"_s, u"tasks"_s, u"habits"_s,       u"graph"_s,
-            u"search"_s,   u"allPages"_s, u"tags"_s,    u"tag"_s,      u"sync"_s,  u"importExport"_s, u"history"_s,
-            u"trash"_s,    u"cleanup"_s,  u"replace"_s, u"settings"_s, u"logs"_s,  u"drawing"_s};
+    static const QStringList views{u"journals"_s, u"journal"_s, u"page"_s,         u"calendar"_s, u"tasks"_s,
+                                   u"habits"_s,   u"graph"_s,   u"search"_s,       u"allPages"_s, u"tags"_s,
+                                   u"tag"_s,      u"sync"_s,    u"importExport"_s, u"history"_s,  u"trash"_s,
+                                   u"cleanup"_s,  u"replace"_s, u"settings"_s,     u"logs"_s,     u"drawing"_s};
+    return views;
 }
 
 QVariantMap normalizeRoute(const QVariantMap &route)
@@ -22,22 +24,18 @@ QVariantMap normalizeRoute(const QVariantMap &route)
         return {};
     QVariantMap out;
     out.insert(u"view"_s, view);
-    for (auto it = route.constBegin(); it != route.constEnd(); ++it) {
-        if (it.key() == u"view")
+    for (auto [key, v] : route.asKeyValueRange()) {
+        if (key == u"view")
             continue;
-        if (it.key() == u"line") {
+        if (key == u"line") {
             bool ok = false;
-            const int line = it.value().toInt(&ok);
-            if (ok && line >= 0)
+            if (const int line = v.toInt(&ok); ok && line >= 0)
                 out.insert(u"line"_s, line);
             continue;
         }
-        const QVariant &v = it.value();
-        if (!v.isValid() || v.isNull())
+        if (!v.isValid() || v.isNull() || (v.typeId() == QMetaType::QString && v.toString().isEmpty()))
             continue;
-        if (v.typeId() == QMetaType::QString && v.toString().isEmpty())
-            continue;
-        out.insert(it.key(), v);
+        out.insert(key, v);
     }
     // Views that need a parameter.
     if ((view == u"page" || view == u"history" || view == u"drawing") && out.value(u"path"_s).toString().isEmpty())
@@ -57,12 +55,10 @@ bool sameRoute(const QVariantMap &a, const QVariantMap &b)
 {
     if (a.size() != b.size())
         return false;
-    for (auto it = a.constBegin(); it != a.constEnd(); ++it) {
-        const auto other = b.constFind(it.key());
-        if (other == b.constEnd())
-            return false;
+    for (auto [key, value] : a.asKeyValueRange()) {
+        const auto other = b.constFind(key);
         // Compare as strings: QML hands numbers over as double, C++ as int.
-        if (it.value().toString() != other.value().toString())
+        if (other == b.constEnd() || value.toString() != other->toString())
             return false;
     }
     return true;

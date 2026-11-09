@@ -39,14 +39,12 @@ inline int indexWorkerCount()
 /// A worker pool on `pool` (owned by the caller, outliving every loader that uses it).
 inline notebook::WorkerPool indexWorkerPool(QThreadPool *pool)
 {
-    notebook::WorkerPool out;
-    out.threads = indexWorkerCount();
-    if (out.threads <= 0 || !pool)
+    const int threads = indexWorkerCount();
+    if (threads <= 0 || !pool)
         return {};
-    pool->setMaxThreadCount(out.threads + 1);
+    pool->setMaxThreadCount(threads + 1);
     pool->setThreadPriority(QThread::LowPriority);
-    out.start = [pool](std::function<void()> job) { pool->start(std::move(job)); };
-    return out;
+    return {.threads = threads, .start = [pool](std::function<void()> job) { pool->start(std::move(job)); }};
 }
 #endif
 

@@ -26,6 +26,17 @@ BMenu {
         ++menu.checkRevision
     }
 
+    /// A "Type" entry: the row's type `kind`, checked while the row has it.
+    component TypeItem: BMenuItem {
+        required property string kind
+        objectName: "propertyType_" + kind
+        text: menu.row ? menu.row.typeName(kind) : ""
+        iconName: menu.row ? menu.row.typeIcon(kind) : ""
+        checkable: true
+        checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === kind
+        onTriggered: menu.choose(kind)
+    }
+
     /// The "Type" submenu.
     readonly property alias typeMenu: typeSubMenu
 
@@ -35,60 +46,12 @@ BMenu {
         title: qsTr("Type")
         iconName: "type"
         enabled: menu.editable && !menu.row.fixedType
-        BMenuItem {
-            id: typeText
-            objectName: "propertyType_text"
-            text: menu.row ? menu.row.typeName("text") : ""
-            iconName: menu.row ? menu.row.typeIcon("text") : ""
-            checkable: true
-            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "text"
-            onTriggered: menu.choose("text")
-        }
-        BMenuItem {
-            id: typeNumber
-            objectName: "propertyType_number"
-            text: menu.row ? menu.row.typeName("number") : ""
-            iconName: menu.row ? menu.row.typeIcon("number") : ""
-            checkable: true
-            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "number"
-            onTriggered: menu.choose("number")
-        }
-        BMenuItem {
-            id: typeCheckbox
-            objectName: "propertyType_checkbox"
-            text: menu.row ? menu.row.typeName("checkbox") : ""
-            iconName: menu.row ? menu.row.typeIcon("checkbox") : ""
-            checkable: true
-            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "checkbox"
-            onTriggered: menu.choose("checkbox")
-        }
-        BMenuItem {
-            id: typeDate
-            objectName: "propertyType_date"
-            text: menu.row ? menu.row.typeName("date") : ""
-            iconName: menu.row ? menu.row.typeIcon("date") : ""
-            checkable: true
-            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "date"
-            onTriggered: menu.choose("date")
-        }
-        BMenuItem {
-            id: typeDatetime
-            objectName: "propertyType_datetime"
-            text: menu.row ? menu.row.typeName("datetime") : ""
-            iconName: menu.row ? menu.row.typeIcon("datetime") : ""
-            checkable: true
-            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "datetime"
-            onTriggered: menu.choose("datetime")
-        }
-        BMenuItem {
-            id: typeList
-            objectName: "propertyType_list"
-            text: menu.row ? menu.row.typeName("list") : ""
-            iconName: menu.row ? menu.row.typeIcon("list") : ""
-            checkable: true
-            checked: menu.checkRevision >= 0 && menu.row !== null && menu.row.type === "list"
-            onTriggered: menu.choose("list")
-        }
+        TypeItem { kind: "text" }
+        TypeItem { kind: "number" }
+        TypeItem { kind: "checkbox" }
+        TypeItem { kind: "date" }
+        TypeItem { kind: "datetime" }
+        TypeItem { kind: "list" }
     }
     BMenuItem {
         objectName: "propertyEditAsText"

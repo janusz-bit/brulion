@@ -54,6 +54,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <functional>
 
 namespace brulion::ioviews {
@@ -121,7 +122,6 @@ class ExportController : public QObject {
 
 public:
     explicit ExportController(QObject *parent = nullptr);
-    ~ExportController() override;
 
     shell::Workspace *workspace() const { return m_workspace; }
     void setWorkspace(shell::Workspace *workspace);
@@ -180,10 +180,10 @@ public:
     /// The produced files (tests).
     QList<io::ExportedFile> result() const { return m_result; }
     /// Files read per event loop turn (default 64; tests).
-    void setReadChunk(int files) { m_readChunk = qMax(1, files); }
+    void setReadChunk(int files) { m_readChunk = std::max(1, files); }
     /// The most bytes of copies of pictures from the internet one export includes ("include";
     /// default 256 MB; tests). Past it the export keeps their addresses, with a warning.
-    void setWebCopiesLimit(qint64 bytes) { m_webLimit = qMax<qint64>(0, bytes); }
+    void setWebCopiesLimit(qint64 bytes) { m_webLimit = std::max<qint64>(0, bytes); }
     /// Clock for the export's time stamps (default: Workspace::now()).
     void setClock(std::function<QDateTime()> clock) { m_clock = std::move(clock); }
 
@@ -208,6 +208,8 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    /// `option` = `value`: a change forgets the produced file (discard()), then optionsChanged().
+    void setOption(QString &option, const QString &value);
     void setState(const QString &state, const QString &error = {});
     void setProgress(qreal value, const QString &text = {});
     void updateSummary();
@@ -229,7 +231,7 @@ private:
     void stopWebPictures();
     void runExporter();
     /// print(): the read files to the platform's printing.
-    void runPrint(io::ExportInput input);
+    void runPrint(const io::ExportInput &input);
     void finishPrint(bool ok, const QString &error, const QStringList &warnings);
     QString exportName() const;
     io::ExportInput exportInput();

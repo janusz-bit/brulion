@@ -12,6 +12,7 @@
 #include <algorithm>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::shell {
 
@@ -25,7 +26,7 @@ FolderTreeModel::FolderTreeModel(QObject *parent) : QAbstractListModel(parent)
 {
     // Coalesce bursts of vault changes (Syncthing delivering many files) into one refresh.
     m_refreshTimer.setSingleShot(true);
-    m_refreshTimer.setInterval(80);
+    m_refreshTimer.setInterval(80ms);
     connect(&m_refreshTimer, &QTimer::timeout, this, &FolderTreeModel::refresh);
 }
 
@@ -108,7 +109,7 @@ QVariant FolderTreeModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> FolderTreeModel::roleNames() const
 {
-    return {
+    static const QHash<int, QByteArray> names{
             {NameRole, "name"},
             {TitleRole, "title"},
             {PathRole, "path"},
@@ -120,6 +121,7 @@ QHash<int, QByteArray> FolderTreeModel::roleNames() const
             {SpecialRole, "special"},
             {JournalDateRole, "journalDate"},
     };
+    return names;
 }
 
 void FolderTreeModel::rebuildChildren()
@@ -130,12 +132,14 @@ void FolderTreeModel::rebuildChildren()
         return;
     const VaultConfig config = vault->config();
     m_journalsFolder = paths::normalize(config.journalsFolder);
+    const QString journalsPrefix = m_journalsFolder + u'/';
+    const QList<FileStat> files = vault->files(); // const: iterating it copies nothing
     // Folders that hold only attachments ("assets") are noise in a page tree; empty folders
     // stay (the user just created them).
     QSet<QString> withPages;
     QSet<QString> withAttachments;
     if (!m_showAttachments) {
-        for (const FileStat &f : vault->files()) {
+        for (const FileStat &f : files) {
             QSet<QString> &set = paths::isMarkdown(f.path) ? withPages : withAttachments;
             for (QString dir = paths::dirname(f.path); !dir.isEmpty(); dir = paths::dirname(dir))
                 set.insert(dir);
@@ -146,29 +150,28 @@ void FolderTreeModel::rebuildChildren()
             continue;
         m_children[paths::dirname(f.path)].append({paths::basename(f.path), f.path, true, {}});
     }
-    for (const FileStat &f : vault->files()) {
-        if (!m_showAttachments && !paths::isMarkdown(f.path))
-            continue;
-        if (paths::isConflictCopy(f.path))
-            continue; // surfaced in the sync center, not as pages
+    for (const FileStat &f : files) {
+        const bool page = paths::isMarkdown(f.path);
+        if ((!m_showAttachments && !page) || paths::isConflictCopy(f.path))
+            continue; // conflict copies: surfaced in the sync center, not as pages
         Entry e{paths::basename(f.path), f.path, false, {}};
         // Daily notes only in the journals folder (no date parsing for other pages).
-        if (!m_journalsFolder.isEmpty() && f.path.startsWith(m_journalsFolder + u'/') && paths::isMarkdown(f.path)) {
+        if (page && !m_journalsFolder.isEmpty() && f.path.startsWith(journalsPrefix)) {
             if (const auto date = markdown::journalDateFromPath(f.path, config))
                 e.journalDate = date->toString(Qt::ISODate);
         }
-        m_children[paths::dirname(f.path)].append(e);
+        m_children[paths::dirname(f.path)].append(std::move(e));
     }
-    const QString journals = m_journalsFolder;
-    for (auto it = m_children.begin(); it != m_children.end(); ++it) {
+    for (auto [folder, entries] : m_children.asKeyValueRange()) {
         // In the journals folder: the newest first (years and months as folders too).
-        const bool inJournals = !journals.isEmpty() && (it.key() == journals || it.key().startsWith(journals + u'/'));
-        std::sort(it->begin(), it->end(), [&](const Entry &a, const Entry &b) {
+        const bool inJournals =
+                !m_journalsFolder.isEmpty() && (folder == m_journalsFolder || folder.startsWith(journalsPrefix));
+        std::ranges::sort(entries, [&](const Entry &a, const Entry &b) {
             if (a.isDir != b.isDir)
                 return a.isDir;
             // The journals folder first among its siblings.
-            const bool ja = a.isDir && a.path == journals;
-            const bool jb = b.isDir && b.path == journals;
+            const bool ja = a.isDir && a.path == m_journalsFolder;
+            const bool jb = b.isDir && b.path == m_journalsFolder;
             if (ja != jb)
                 return ja;
             if (!a.journalDate.isEmpty() || !b.journalDate.isEmpty()) {
@@ -186,7 +189,8 @@ void FolderTreeModel::rebuildChildren()
 QList<FolderTreeModel::Row> FolderTreeModel::rowsUnder(const QString &folder, int depth) const
 {
     QList<Row> out;
-    for (const Entry &e : m_children.value(folder)) {
+    const QList<Entry> children = m_children.value(folder); // const: iterating it copies nothing
+    for (const Entry &e : children) {
         out.append({ e, depth });
         if (e.isDir && m_expanded.contains(e.path))
             out.append(rowsUnder(e.path, depth + 1));
@@ -204,7 +208,7 @@ void FolderTreeModel::refresh()
 
 void FolderTreeModel::applyRows(QList<Row> next)
 {
-    const auto key = [](const Row &r) { return (r.entry.isDir ? u"d:"_s : u"f:"_s) + r.entry.path; };
+    const auto key = [](const Row &r) -> QString { return (r.entry.isDir ? u"d:"_s : u"f:"_s) + r.entry.path; };
     const qsizetype before = m_rows.size();
     if (m_rows.isEmpty() || next.isEmpty()) {
         if (m_rows.isEmpty() && next.isEmpty())
@@ -341,11 +345,8 @@ void FolderTreeModel::collapseAll()
 
 int FolderTreeModel::indexOf(const QString &path) const
 {
-    for (qsizetype i = 0; i < m_rows.size(); ++i) {
-        if (m_rows.at(i).entry.path == path)
-            return int(i);
-    }
-    return -1;
+    const auto it = std::ranges::find(m_rows, path, [](const Row &r) -> const QString & { return r.entry.path; });
+    return it == m_rows.cend() ? -1 : int(it - m_rows.cbegin());
 }
 
 QVariantMap FolderTreeModel::get(int row) const
@@ -366,7 +367,7 @@ void FolderTreeModel::loadExpanded()
     if (!vault)
         return;
     const QJsonArray list = vault->store()->get(QString::fromLatin1(kExpandedKey)).toArray();
-    for (const QJsonValue &v : list) {
+    for (const auto &v : list) {
         if (v.isString())
             m_expanded.insert(v.toString());
     }
@@ -388,10 +389,11 @@ void FolderTreeModel::pruneExpanded()
 
 void FolderTreeModel::onFolderRenamed(const QString &oldPath, const QString &newPath)
 {
+    const QString prefix = oldPath + u'/';
     QSet<QString> rebased;
     bool changed = false;
     for (const QString &f : std::as_const(m_expanded)) {
-        if (f == oldPath || f.startsWith(oldPath + u'/')) {
+        if (f == oldPath || f.startsWith(prefix)) {
             rebased.insert(newPath + f.mid(oldPath.size()));
             changed = true;
         } else {
@@ -400,7 +402,7 @@ void FolderTreeModel::onFolderRenamed(const QString &oldPath, const QString &new
     }
     if (!changed)
         return;
-    m_expanded = rebased;
+    m_expanded = std::move(rebased);
     saveExpanded();
     m_refreshTimer.start();
 }

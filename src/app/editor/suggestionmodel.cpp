@@ -35,20 +35,22 @@ int SuggestionModel::rowCount(const QModelIndex &parent) const
 
 QHash<int, QByteArray> SuggestionModel::roleNames() const
 {
-    return {{TitleRole, "title"},     {SubtitleRole, "subtitle"}, {IconRole, "icon"},     {InsertTextRole, "insertText"},
-            {KindRole, "kind"},       {HintRole, "hint"},         {CommandRole, "command"}, {PathRole, "path"},
-            {LineRole, "line"},       {BlockIdRole, "blockId"}};
+    // Also the keys of an item's map (item()): data() reads them on every call.
+    static const QHash<int, QByteArray> names{
+            {TitleRole, "title"}, {SubtitleRole, "subtitle"}, {IconRole, "icon"},       {InsertTextRole, "insertText"},
+            {KindRole, "kind"},   {HintRole, "hint"},         {CommandRole, "command"}, {PathRole, "path"},
+            {LineRole, "line"},   {BlockIdRole, "blockId"}};
+    return names;
 }
 
 QVariant SuggestionModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_items.size())
         return {};
-    const QVariantMap m = m_items[index.row()].toMap();
     if (role == Qt::DisplayRole)
         role = TitleRole;
     const QByteArray name = roleNames().value(role);
-    return name.isEmpty() ? QVariant() : m.value(QString::fromLatin1(name));
+    return name.isEmpty() ? QVariant() : m_items.at(index.row()).toMap().value(QString::fromLatin1(name));
 }
 
 void SuggestionModel::setHost(EditorHost *host)
@@ -64,50 +66,39 @@ void SuggestionModel::setHost(EditorHost *host)
     refresh();
 }
 
+template<typename T>
+void SuggestionModel::setAndRefresh(T &member, const T &value, void (SuggestionModel::*changed)())
+{
+    if (member == value)
+        return;
+    member = value;
+    Q_EMIT(this->*changed)();
+    refresh();
+}
+
 void SuggestionModel::setMode(const QString &mode)
 {
-    if (m_mode == mode)
-        return;
-    m_mode = mode;
-    Q_EMIT modeChanged();
-    refresh();
+    setAndRefresh(m_mode, mode, &SuggestionModel::modeChanged);
 }
 
 void SuggestionModel::setFilter(const QString &filter)
 {
-    if (m_filter == filter)
-        return;
-    m_filter = filter;
-    Q_EMIT filterChanged();
-    refresh();
+    setAndRefresh(m_filter, filter, &SuggestionModel::filterChanged);
 }
 
 void SuggestionModel::setToken(const QString &token)
 {
-    if (m_token == token)
-        return;
-    m_token = token;
-    Q_EMIT tokenChanged();
-    refresh();
+    setAndRefresh(m_token, token, &SuggestionModel::tokenChanged);
 }
 
 void SuggestionModel::setLocale(const QString &locale)
 {
-    const bool english = locale == u"en";
-    if (english == m_english)
-        return;
-    m_english = english;
-    Q_EMIT localeChanged();
-    refresh();
+    setAndRefresh(m_english, locale == u"en", &SuggestionModel::localeChanged);
 }
 
 void SuggestionModel::setNow(const QString &now)
 {
-    if (m_fixedNow == now)
-        return;
-    m_fixedNow = now;
-    Q_EMIT nowChanged();
-    refresh();
+    setAndRefresh(m_fixedNow, now, &SuggestionModel::nowChanged);
 }
 
 void SuggestionModel::setCurrentPath(const QString &path)
@@ -120,12 +111,7 @@ void SuggestionModel::setCurrentPath(const QString &path)
 
 void SuggestionModel::setLimit(int limit)
 {
-    limit = std::max(1, limit);
-    if (m_limit == limit)
-        return;
-    m_limit = limit;
-    Q_EMIT limitChanged();
-    refresh();
+    setAndRefresh(m_limit, std::max(1, limit), &SuggestionModel::limitChanged);
 }
 
 QVariantMap SuggestionModel::detect(const QString &text, int cursor) const
@@ -138,12 +124,11 @@ void SuggestionModel::setTrigger(const QVariantMap &trigger)
     const QString mode = trigger.value(u"mode"_s).toString();
     const QString filter = trigger.value(u"filter"_s).toString();
     const QString token = trigger.value(u"token"_s).toString();
-    const bool changed = mode != m_mode || filter != m_filter || token != m_token;
-    if (!changed)
-        return;
     const bool modeChange = mode != m_mode;
     const bool filterChange = filter != m_filter;
     const bool tokenChange = token != m_token;
+    if (!modeChange && !filterChange && !tokenChange)
+        return;
     m_mode = mode;
     m_filter = filter;
     m_token = token;
@@ -179,17 +164,17 @@ void SuggestionModel::refresh()
     // "Create page" leads the list on top of `limit` matches; Enter takes the first match. The
     // slash commands are never capped: a fixed list of light rows (the popup builds only those in
     // view), each reachable by scrolling, a bare "/" included.
-    const bool create = !items.isEmpty() && items.first().toMap().value(u"kind"_s).toString() == u"create";
+    const bool create = !items.isEmpty() && items.constFirst().toMap().value(u"kind"_s).toString() == u"create";
     const int cap = m_limit + (create ? 1 : 0);
     if (m_mode != u"slash" && items.size() > cap)
-        items = items.mid(0, cap);
+        items.resize(cap);
     const int defaultIndex = create && items.size() > 1 ? 1 : 0;
     if (items == m_items && defaultIndex == m_defaultIndex)
         return;
-    const int oldCount = int(m_items.size());
+    const qsizetype oldCount = m_items.size();
     const bool defaultChange = defaultIndex != m_defaultIndex;
     beginResetModel();
-    m_items = items;
+    m_items = std::move(items);
     m_defaultIndex = defaultIndex;
     endResetModel();
     if (oldCount != m_items.size())
@@ -219,7 +204,7 @@ QVariantList SuggestionModel::pageItems() const
     // A link that already reaches a page or file ("Projekty/Remont kuchni", one ranked below the
     // limit) creates nothing either.
     bool exact = !typed.isEmpty() && !m_host->resolveLink(typed, m_currentPath).isEmpty();
-    for (const QVariant &v : m_host->suggestPages(typed, m_limit)) {
+    for (const QVariantList pages = m_host->suggestPages(typed, m_limit); const QVariant &v : pages) {
         const QVariantMap p = v.toMap();
         const QString title = p.value(u"title"_s).toString();
         const QString alias = p.value(u"alias"_s).toString();
@@ -252,7 +237,7 @@ QVariantList SuggestionModel::blockItems() const
     QVariantList out;
     if (!m_host)
         return out;
-    for (const QVariant &v : m_host->suggestBlocks(m_filter.trimmed(), m_limit)) {
+    for (const QVariantList blocks = m_host->suggestBlocks(m_filter.trimmed(), m_limit); const QVariant &v : blocks) {
         const QVariantMap b = v.toMap();
         const QString path = b.value(u"path"_s).toString();
         QString t = b.value(u"text"_s).toString().simplified();
@@ -275,7 +260,7 @@ QVariantList SuggestionModel::tagItems() const
     const QString typed = m_filter.trimmed().normalized(QString::NormalizationForm_C);
     // Tags in use and pages (a tag names a page, docs/SYNTAX.md §3); the one already typed out
     // (in any letter case) has nothing to complete.
-    for (const QVariant &v : m_host->suggestTags(m_filter.trimmed(), m_limit)) {
+    for (const QVariantList tags = m_host->suggestTags(m_filter.trimmed(), m_limit); const QVariant &v : tags) {
         const QVariantMap t = v.toMap();
         const QString tag = t.value(u"tag"_s).toString();
         if (tag.isEmpty() || tag.normalized(QString::NormalizationForm_C).compare(typed, Qt::CaseInsensitive) == 0)
@@ -293,7 +278,7 @@ QVariantList SuggestionModel::tagItems() const
             subtitle = count > 0 ? tr("%n block(s)", "", count) : QString();
             // The page the tag opens, when its name says something else (an alias, a folder).
             if (!title.isEmpty() && title.compare(paths::basename(tag), Qt::CaseInsensitive) != 0)
-                subtitle = subtitle.isEmpty() ? QString(u"→ "_s + title) : QString(subtitle + u" · → "_s + title);
+                subtitle += (subtitle.isEmpty() ? u"→ "_s : u" · → "_s) + title;
         }
         QVariantMap it = item(u"tag"_s, u"#"_s + tag, subtitle, icon, tag);
         it[u"path"_s] = path;
@@ -305,7 +290,7 @@ QVariantList SuggestionModel::tagItems() const
 QVariantList SuggestionModel::slashItems() const
 {
     QVariantList out;
-    for (const SlashCommand *c : filterSlashCommands(m_filter)) {
+    for (const auto commands = filterSlashCommands(m_filter); const SlashCommand *c : commands) {
         // Subtitle: what the command writes ("⏰ data godzina"), not the name in the other language.
         QVariantMap it = item(u"command"_s, m_english ? c->nameEn : c->namePl, m_english ? c->syntaxEn : c->syntaxPl,
                               c->icon, QString());
@@ -338,8 +323,7 @@ QVariantList SuggestionModel::dateItems() const
             QVariantMap j = item(u"journal"_s, journal, subtitle, u"book-open"_s, journal);
             j[u"hint"_s] = phrase;
             out.append(j);
-            QVariantMap d = item(u"date"_s, value, subtitle, u"calendar"_s, u"📅 "_s + value);
-            out.append(d);
+            out.append(item(u"date"_s, value, subtitle, u"calendar"_s, u"📅 "_s + value));
             if (spec.time)
                 out.append(item(u"reminder"_s, u"⏰ "_s + value, subtitle, u"bell"_s, u"⏰ "_s + value));
             return;
@@ -369,7 +353,7 @@ QVariantList SuggestionModel::dateItems() const
     for (const QString &p : phrases) {
         if (!key.isEmpty() && !text::foldKey(p).startsWith(key))
             continue;
-        if (!reminderToken && p.contains(u"2"_s))
+        if (!reminderToken && p.contains(u'2'))
             continue; // hours only make sense for reminders
         if (const auto found = dates::parseNaturalDate(p, now, config.weekStartsOn, locale))
             addSpec(found->spec, p);
@@ -383,13 +367,14 @@ QVariantList SuggestionModel::templateItems() const
     if (!m_host)
         return out;
     const QString key = text::foldKey(m_filter.trimmed());
-    for (const QVariant &v : m_host->templates()) {
+    for (const QVariantList templates = m_host->templates(); const QVariant &v : templates) {
         const QVariantMap t = v.toMap();
         const QString title = t.value(u"title"_s).toString();
         if (!key.isEmpty() && !text::foldKey(title).contains(key))
             continue;
-        QVariantMap it = item(u"template"_s, title, t.value(u"path"_s).toString(), u"sparkles"_s, QString());
-        it[u"path"_s] = t.value(u"path"_s).toString();
+        const QString path = t.value(u"path"_s).toString();
+        QVariantMap it = item(u"template"_s, title, path, u"sparkles"_s, QString());
+        it[u"path"_s] = path;
         out.append(it);
     }
     return out;

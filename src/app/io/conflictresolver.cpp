@@ -21,12 +21,9 @@ constexpr int MaxBaseCandidates = 30;
 
 QStringList nonBlankLines(const QString &text)
 {
-    QStringList out;
-    for (const QString &line : sync::splitText(text).lines) {
-        if (!line.trimmed().isEmpty())
-            out.append(line);
-    }
-    return out;
+    QStringList lines = sync::splitText(text).lines;
+    lines.removeIf([](const QString &line) { return QStringView(line).trimmed().isEmpty(); });
+    return lines;
 }
 
 QSet<QString> lineSet(const QString &text)
@@ -90,12 +87,9 @@ QVariantList mergeHunksForView(const sync::MergeResult &result, const QString &o
     const sync::SplitText merged = sync::splitText(result.text);
     const QString eol = !mine.eol.isEmpty() ? mine.eol : !other.eol.isEmpty() ? other.eol : u"\n"_s;
     const auto join = [&eol](const QStringList &lines, bool finalNewline) {
-        QString text;
-        for (qsizetype i = 0; i < lines.size(); ++i) {
-            text += lines.at(i);
-            if (i + 1 < lines.size() || finalNewline)
-                text += eol;
-        }
+        QString text = lines.join(eol);
+        if (finalNewline && !lines.isEmpty())
+            text += eol;
         return text;
     };
     // merge3 merges the final newline on its own (three-way): the last hunk ends like the merged
@@ -109,18 +103,14 @@ QVariantList mergeHunksForView(const sync::MergeResult &result, const QString &o
     QVariantList out;
     for (qsizetype i = 0; i < result.hunks.size(); ++i) {
         const sync::MergeHunk &h = result.hunks.at(i);
-        const bool isLast = i == last;
-        if (h.kind == sync::MergeHunk::Kind::Ok) {
-            if (h.lines.isEmpty())
-                continue;
-            out.append(QVariantMap{ { u"kind"_s, u"same"_s },
-                                    { u"text"_s, join(h.lines, !isLast || merged.finalNewline) },
-                                    { u"lines"_s, int(h.lines.size()) } });
-        } else {
-            out.append(QVariantMap{ { u"kind"_s, u"conflict"_s },
-                                    { u"ours"_s, join(h.local, !isLast || merged.finalNewline) },
-                                    { u"theirs"_s, join(h.remote, !isLast || merged.finalNewline) } });
-        }
+        const bool newline = i != last || merged.finalNewline;
+        if (h.kind == sync::MergeHunk::Kind::Conflict)
+            out.append(QVariantMap{{u"kind"_s, u"conflict"_s},
+                                   {u"ours"_s, join(h.local, newline)},
+                                   {u"theirs"_s, join(h.remote, newline)}});
+        else if (!h.lines.isEmpty())
+            out.append(QVariantMap{
+                    {u"kind"_s, u"same"_s}, {u"text"_s, join(h.lines, newline)}, {u"lines"_s, int(h.lines.size())}});
     }
     return out;
 }
@@ -145,9 +135,8 @@ void ConflictResolver::setWorkspace(shell::Workspace *workspace)
             if (m_copy.isEmpty() || !m_workspace)
                 return;
             const QVariantList list = m_workspace->sync()->conflicts();
-            const bool listed = std::any_of(list.cbegin(), list.cend(), [this](const QVariant &v) {
-                return v.toMap().value(u"copy"_s).toString() == m_copy;
-            });
+            const bool listed = std::ranges::any_of(
+                    list, [this](const QVariant &v) { return v.toMap().value(u"copy"_s).toString() == m_copy; });
             if (!listed)
                 setCopy(QString());
         });
@@ -166,78 +155,54 @@ void ConflictResolver::setCopy(const QString &copy)
 
 QString ConflictResolver::oursSizeText() const
 {
-    return loaded() ? sizeText(m_oursSize) : QString();
+    return loaded() ? sizeText(m_loaded.oursSize) : QString();
 }
 
 QString ConflictResolver::theirsSizeText() const
 {
-    return loaded() ? sizeText(m_theirsSize) : QString();
+    return loaded() ? sizeText(m_loaded.theirsSize) : QString();
 }
 
 void ConflictResolver::reload()
 {
-    m_conflict.clear();
-    m_ours.clear();
-    m_theirs.clear();
-    m_base.clear();
-    m_hasBase = false;
-    m_baseWhen.clear();
-    m_hunks.clear();
-    m_clean = false;
-    m_merged.clear();
-    m_collisions = 0;
-    m_identical = false;
-    m_copyIsOlder = false;
-    m_oursSize = m_theirsSize = 0;
-    m_canMergeDrawings = false;
-    m_oursBytes.clear();
-    m_theirsBytes.clear();
-    m_mergedBytes.clear();
-    m_drawingCounts.clear();
-    m_notesDiffer = m_notesOnly = false;
-    m_oursNotes.clear();
-    m_theirsNotes.clear();
+    m_loaded = {};
+    load();
+    Q_EMIT changed();
+}
+
+void ConflictResolver::load()
+{
     Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
-    if (!vault || m_copy.isEmpty()) {
-        Q_EMIT changed();
+    QVariantMap details = vault && !m_copy.isEmpty() ? m_workspace->sync()->conflictDetails(m_copy) : QVariantMap();
+    if (details.isEmpty())
         return;
-    }
-    QVariantMap details = m_workspace->sync()->conflictDetails(m_copy);
-    const QVariantMap texts = details;
-    if (details.isEmpty()) {
-        Q_EMIT changed();
-        return;
-    }
     const QString original = details.value(u"original"_s).toString();
     const QString copy = details.value(u"copy"_s).toString();
     if (!details.contains(u"originalExists"_s))
         details.insert(u"originalExists"_s, vault->exists(original));
+    const bool originalExists = details.value(u"originalExists"_s).toBool();
     if (const auto st = vault->stat(original))
-        m_oursSize = st->size;
+        m_loaded.oursSize = st->size;
     if (const auto st = vault->stat(copy))
-        m_theirsSize = st->size;
-    details.remove(u"ours"_s);
-    details.remove(u"theirs"_s);
-    m_conflict = details;
+        m_loaded.theirsSize = st->size;
+    const QString ours = details.take(u"ours"_s).toString();
+    const QString theirs = details.take(u"theirs"_s).toString();
+    m_loaded.conflict = std::move(details);
 
     if (isDrawing()) {
-        loadDrawings(original, copy, details.value(u"originalExists"_s).toBool());
-        Q_EMIT changed();
+        loadDrawings(original, copy, originalExists);
         return;
     }
     if (!isText()) {
-        if (m_oursSize == m_theirsSize && details.value(u"originalExists"_s).toBool())
-            m_identical = vault->readBinary(original) == vault->readBinary(copy);
-        Q_EMIT changed();
+        if (m_loaded.oursSize == m_loaded.theirsSize && originalExists)
+            m_loaded.identical = vault->readBinary(original) == vault->readBinary(copy);
         return;
     }
-    m_ours = texts.value(u"ours"_s).toString();
-    m_theirs = texts.value(u"theirs"_s).toString();
-    m_identical = sameText(m_ours, m_theirs);
-    if (m_identical) {
-        Q_EMIT changed();
+    m_loaded.ours = ours;
+    m_loaded.theirs = theirs;
+    m_loaded.identical = sameText(ours, theirs);
+    if (m_loaded.identical)
         return;
-    }
     // A common ancestor from this device's version history of the original.
     QStringList candidates;
     QList<QDateTime> times;
@@ -248,56 +213,56 @@ void ConflictResolver::reload()
                 break;
             bool ok = false;
             const QString text = history->read(entry.id, &ok);
-            if (!ok || sameText(text, m_ours))
+            if (!ok || sameText(text, ours))
                 continue;
-            if (sameText(text, m_theirs)) {
-                m_copyIsOlder = true; // "theirs" was this note on this device once
+            if (sameText(text, theirs)) {
+                m_loaded.copyIsOlder = true; // "theirs" was this note on this device once
                 continue;
             }
             candidates.append(text);
             times.append(entry.time);
         }
     }
-    if (const std::optional<qsizetype> index = pickMergeBase(candidates, m_ours, m_theirs)) {
-        m_hasBase = true;
-        m_base = candidates.at(*index);
-        m_baseWhen = times.at(*index).toString(u"yyyy-MM-dd HH:mm"_s);
-        const sync::MergeResult merged = sync::merge3(m_base, m_ours, m_theirs);
-        m_hunks = mergeHunksForView(merged, m_ours, m_theirs);
-        m_clean = merged.clean;
-        m_merged = merged.text;
-        for (const QVariant &h : std::as_const(m_hunks)) {
-            if (h.toMap().value(u"kind"_s).toString() == u"conflict")
-                ++m_collisions;
-        }
-    }
-    Q_EMIT changed();
+    const std::optional<qsizetype> index = pickMergeBase(candidates, ours, theirs);
+    if (!index)
+        return;
+    m_loaded.hasBase = true;
+    m_loaded.base = candidates.at(*index);
+    m_loaded.baseWhen = times.at(*index).toString(u"yyyy-MM-dd HH:mm"_s);
+    const sync::MergeResult merged = sync::merge3(m_loaded.base, ours, theirs);
+    m_loaded.hunks = mergeHunksForView(merged, ours, theirs);
+    m_loaded.clean = merged.clean;
+    m_loaded.merged = merged.text;
+    // (mergeHunksForView() shows each conflict hunk.)
+    m_loaded.collisions =
+            int(std::ranges::count(merged.hunks, sync::MergeHunk::Kind::Conflict, &sync::MergeHunk::kind));
 }
 
 void ConflictResolver::loadDrawings(const QString &original, const QString &copy, bool originalExists)
 {
     Vault *vault = m_workspace->vault();
-    m_oursBytes = originalExists ? vault->readBinary(original) : QByteArray();
-    m_theirsBytes = vault->readBinary(copy);
+    m_loaded.theirsBytes = vault->readBinary(copy);
     if (!originalExists)
         return; // "Restore from the copy"
-    m_identical = m_oursBytes == m_theirsBytes;
-    const std::optional<drawing::DrawingFile> mine = drawing::readDrawingFile(m_oursBytes);
-    const std::optional<drawing::DrawingFile> other = drawing::readDrawingFile(m_theirsBytes);
+    m_loaded.oursBytes = vault->readBinary(original);
+    m_loaded.identical = m_loaded.oursBytes == m_loaded.theirsBytes;
+    // (readDrawingFile() bounds what it parses: MaxSceneBytes, MaxSceneContainers.)
+    const std::optional<drawing::DrawingFile> mine = drawing::readDrawingFile(m_loaded.oursBytes);
+    const std::optional<drawing::DrawingFile> other = drawing::readDrawingFile(m_loaded.theirsBytes);
     if (!mine || !other)
         return; // a picture, a broken scene: keep one of them
     // An Obsidian plugin file is a note as well: the Markdown around its scene (frontmatter, the
     // back of the card, links) counts — a merge writes the original's, so the copy's must be in it.
     const bool keepsNotes = drawing::keepsMarkdownOf(*mine, *other);
-    if (!m_identical)
-        m_identical = drawing::sameDrawing(mine->drawing, other->drawing) && keepsNotes
-                      && drawing::keepsMarkdownOf(*other, *mine);
-    const bool contained = !m_identical && drawing::containsDrawing(mine->drawing, other->drawing);
-    m_copyIsOlder = contained && keepsNotes;
-    m_notesDiffer = !m_identical && !keepsNotes;
-    if (m_notesDiffer) {
-        m_oursNotes = QString::fromUtf8(drawing::markdownAroundScene(*mine));
-        m_theirsNotes = QString::fromUtf8(drawing::markdownAroundScene(*other));
+    if (!m_loaded.identical)
+        m_loaded.identical = drawing::sameDrawing(mine->drawing, other->drawing) && keepsNotes
+                             && drawing::keepsMarkdownOf(*other, *mine);
+    const bool contained = !m_loaded.identical && drawing::containsDrawing(mine->drawing, other->drawing);
+    m_loaded.copyIsOlder = contained && keepsNotes;
+    m_loaded.notesDiffer = !m_loaded.identical && !keepsNotes;
+    if (m_loaded.notesDiffer) {
+        m_loaded.oursNotes = QString::fromUtf8(drawing::markdownAroundScene(*mine));
+        m_loaded.theirsNotes = QString::fromUtf8(drawing::markdownAroundScene(*other));
     }
     const bool mergeable = mine->format == other->format && mine->writable && drawing::editable(mine->drawing)
                            && drawing::editable(other->drawing);
@@ -308,72 +273,68 @@ void ConflictResolver::loadDrawings(const QString &original, const QString &copy
     // Only the notes are left when the drawing would not change: the copy contained, or a union
     // that is the original as it is (the copy's paper, an element edited by hand at the same
     // version: never taken) — a merge offered again and again would never get to them.
-    m_notesOnly = m_notesDiffer && (contained || (mergeable && drawing::sameDrawing(merged, mine->drawing)));
-    if (m_notesOnly || !mergeable)
+    m_loaded.notesOnly =
+            m_loaded.notesDiffer && (contained || (mergeable && drawing::sameDrawing(merged, mine->drawing)));
+    if (m_loaded.notesOnly || !mergeable)
         return;
     // (The pictures of both together may be more than a file holds: then no merge is offered.)
     const qint64 now = m_workspace->now().toMSecsSinceEpoch();
     if (!drawing::readsBack(*mine, merged, now))
         return;
-    m_mergedBytes = drawing::writeDrawingFile(*mine, merged, now);
-    if (m_mergedBytes.isEmpty())
+    m_loaded.mergedBytes = drawing::writeDrawingFile(*mine, merged, now);
+    if (m_loaded.mergedBytes.isEmpty())
         return;
-    m_canMergeDrawings = true;
+    m_loaded.canMergeDrawings = true;
     const drawing::MergeCounts c = drawing::mergeCounts(mine->drawing, other->drawing, merged);
-    m_drawingCounts =
+    m_loaded.drawingCounts =
             QVariantMap{{u"ours"_s, c.ours},         {u"theirs"_s, c.theirs},         {u"common"_s, c.common},
                         {u"onlyOurs"_s, c.onlyOurs}, {u"onlyTheirs"_s, c.onlyTheirs}, {u"merged"_s, c.merged}};
 }
 
-void ConflictResolver::finish(bool ok, const QString &message)
+bool ConflictResolver::finish(bool ok, const QString &message)
 {
     if (!ok) {
         Q_EMIT failed(message);
-        return;
+        return false;
     }
     m_copy.clear();
     reload();
     Q_EMIT resolved(message);
+    return true;
 }
 
 bool ConflictResolver::keepMine()
 {
     if (!loaded())
         return false;
-    const QString title = m_conflict.value(u"title"_s).toString();
+    const QString title = m_loaded.conflict.value(u"title"_s).toString();
     const bool ok = m_workspace->sync()->discardConflictCopy(m_copy);
-    finish(ok, ok ? tr("Kept your version of “%1”. The copy is in the trash.").arg(title)
-                  : tr("The conflict copy could not be removed."));
-    return ok;
+    return finish(ok, ok ? tr("Kept your version of “%1”. The copy is in the trash.").arg(title)
+                         : tr("The conflict copy could not be removed."));
 }
 
-bool ConflictResolver::textsUnchanged()
+bool ConflictResolver::unchangedSinceLoaded()
 {
-    // The decision was made on the texts loaded earlier. When either file changed since (an edit
+    // The decision was made on the versions loaded earlier. When either file changed since (an edit
     // in another pane, a sync, Syncthing), writing now would silently drop that change: show the
     // conflict again instead.
-    const QVariantMap current = m_workspace->sync()->conflictDetails(m_copy);
-    if (!current.isEmpty() && current.value(u"ours"_s).toString() == m_ours
-        && current.value(u"theirs"_s).toString() == m_theirs)
+    bool unchanged = false;
+    if (!isDrawing()) {
+        const QVariantMap current = m_workspace->sync()->conflictDetails(m_copy);
+        unchanged = !current.isEmpty() && current.value(u"ours"_s).toString() == m_loaded.ours
+                    && current.value(u"theirs"_s).toString() == m_loaded.theirs;
+    } else if (Vault *vault = m_workspace->vault()) {
+        const bool existed = m_loaded.conflict.value(u"originalExists"_s).toBool();
+        bool readOurs = false;
+        bool readTheirs = false;
+        const QByteArray ours = vault->readBinary(m_loaded.conflict.value(u"original"_s).toString(), &readOurs);
+        const QByteArray theirs = vault->readBinary(m_copy, &readTheirs);
+        unchanged = readTheirs && theirs == m_loaded.theirsBytes && readOurs == existed
+                    && (!existed || ours == m_loaded.oursBytes);
+    }
+    if (unchanged)
         return true;
-    const QString title = m_conflict.value(u"title"_s).toString();
-    reload();
-    Q_EMIT failed(tr("“%1” has changed in the meantime. Look at both versions again before deciding.").arg(title));
-    return false;
-}
-
-bool ConflictResolver::drawingsUnchanged()
-{
-    Vault *vault = m_workspace->vault();
-    const QString original = m_conflict.value(u"original"_s).toString();
-    const bool existed = m_conflict.value(u"originalExists"_s).toBool();
-    bool readOurs = false;
-    bool readTheirs = false;
-    const QByteArray ours = vault ? vault->readBinary(original, &readOurs) : QByteArray();
-    const QByteArray theirs = vault ? vault->readBinary(m_copy, &readTheirs) : QByteArray();
-    if (vault && readTheirs && theirs == m_theirsBytes && readOurs == existed && (!existed || ours == m_oursBytes))
-        return true;
-    const QString title = m_conflict.value(u"title"_s).toString();
+    const QString title = m_loaded.conflict.value(u"title"_s).toString();
     reload();
     Q_EMIT failed(tr("“%1” has changed in the meantime. Look at both versions again before deciding.").arg(title));
     return false;
@@ -381,56 +342,45 @@ bool ConflictResolver::drawingsUnchanged()
 
 bool ConflictResolver::mergeDrawings()
 {
-    if (!loaded() || !isDrawing() || !m_canMergeDrawings)
+    if (!loaded() || !isDrawing() || !m_loaded.canMergeDrawings || !unchangedSinceLoaded())
         return false;
-    if (!drawingsUnchanged())
-        return false;
-    const QString original = m_conflict.value(u"original"_s).toString();
-    const QString title = m_conflict.value(u"title"_s).toString();
-    if (m_notesDiffer) {
+    const QString original = m_loaded.conflict.value(u"original"_s).toString();
+    const QString title = m_loaded.conflict.value(u"title"_s).toString();
+    if (m_loaded.notesDiffer) {
         // The copy's notes would be lost with it: it stays until they are carried over.
-        if (!m_workspace->sync()->resolveConflictBytes(original, m_copy, m_mergedBytes, false)) {
-            Q_EMIT failed(tr("The merged drawing could not be saved."));
-            return false;
-        }
+        if (!m_workspace->sync()->resolveConflictBytes(original, m_copy, m_loaded.mergedBytes, false))
+            return finish(false, tr("The merged drawing could not be saved."));
         reload();
         Q_EMIT updated(tr("Merged the drawing “%1”. The copy stays: its notes differ from yours.").arg(title));
         return true;
     }
-    const bool ok = m_workspace->sync()->resolveConflictBytes(original, m_copy, m_mergedBytes);
-    finish(ok, ok ? tr("Merged the drawing “%1”. Your previous version is in the history, the copy in the trash.")
-                               .arg(title)
-                  : tr("The merged drawing could not be saved."));
-    return ok;
+    const bool ok = m_workspace->sync()->resolveConflictBytes(original, m_copy, m_loaded.mergedBytes);
+    return finish(ok,
+                  ok ? tr("Merged the drawing “%1”. Your previous version is in the history, the copy in the trash.")
+                                  .arg(title)
+                     : tr("The merged drawing could not be saved."));
 }
 
 bool ConflictResolver::keepCopy()
 {
     if (!loaded())
         return false;
-    const QString original = m_conflict.value(u"original"_s).toString();
-    const QString title = m_conflict.value(u"title"_s).toString();
-    bool ok = false;
-    if (isDrawing()) {
-        // The copy's bytes as they are; the drawing they replace stays in the history.
-        if (!drawingsUnchanged())
+    const QString original = m_loaded.conflict.value(u"original"_s).toString();
+    const QString title = m_loaded.conflict.value(u"title"_s).toString();
+    if (isDrawing() || isText()) {
+        // A drawing: the copy's bytes as they are; the drawing they replace stays in the history.
+        if (!unchangedSinceLoaded())
             return false;
-        ok = m_workspace->sync()->resolveConflictBytes(original, m_copy, m_theirsBytes);
-        finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the history.").arg(title)
-                      : tr("The copy could not be applied."));
-        return ok;
-    }
-    if (isText()) {
-        if (!textsUnchanged())
-            return false;
-        ok = m_workspace->sync()->resolveConflict(original, m_copy, m_theirs);
-        finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the history.").arg(title)
-                      : tr("The copy could not be applied."));
-        return ok;
+        const bool ok = isDrawing() ? m_workspace->sync()->resolveConflictBytes(original, m_copy, m_loaded.theirsBytes)
+                                    : m_workspace->sync()->resolveConflict(original, m_copy, m_loaded.theirs);
+        return finish(ok,
+                      ok ? tr("“%1” now has the copy's content. Your previous version is in the history.").arg(title)
+                         : tr("The copy could not be applied."));
     }
     // A picture or another binary file: History keeps text only, so the original goes to the
     // trash (restorable) and the copy takes its place.
     Vault *vault = m_workspace->vault();
+    bool ok = false;
     QString error;
     if (vault) {
         const bool hadOriginal = vault->exists(original);
@@ -439,23 +389,19 @@ bool ConflictResolver::keepCopy()
         if (!ok)
             error = vault->errorString();
     }
-    finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the trash.").arg(title)
-                  : tr("The copy could not be applied: %1").arg(error));
-    return ok;
+    return finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the trash.").arg(title)
+                         : tr("The copy could not be applied: %1").arg(error));
 }
 
 bool ConflictResolver::applyMerged(const QString &text)
 {
-    if (!loaded() || !isText())
+    if (!loaded() || !isText() || !unchangedSinceLoaded())
         return false;
-    if (!textsUnchanged())
-        return false;
-    const QString original = m_conflict.value(u"original"_s).toString();
-    const QString title = m_conflict.value(u"title"_s).toString();
+    const QString original = m_loaded.conflict.value(u"original"_s).toString();
+    const QString title = m_loaded.conflict.value(u"title"_s).toString();
     const bool ok = m_workspace->sync()->resolveConflict(original, m_copy, text);
-    finish(ok, ok ? tr("Merged “%1”. Your previous version is in the history.").arg(title)
-                  : tr("The merged text could not be saved."));
-    return ok;
+    return finish(ok, ok ? tr("Merged “%1”. Your previous version is in the history.").arg(title)
+                         : tr("The merged text could not be saved."));
 }
 
 } // namespace brulion::ioviews

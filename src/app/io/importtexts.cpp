@@ -7,11 +7,6 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::ioviews {
 
-ImporterInfo importerInfo(const QString &id)
-{
-    return ImportController::importerInfo(id);
-}
-
 ImporterInfo ImportController::importerInfo(const QString &id)
 {
     if (id == u"obsidian")

@@ -68,6 +68,18 @@ Rectangle {
     /// The result row whose link menu is open (its link opens there: onLinkMenuOpenRequested).
     property int menuRow: -1
 
+    /// A small upper-case heading (a TABLE column, a group).
+    component HeadingText: Text {
+        textFormat: Text.PlainText
+        font.family: Theme.fontUi
+        font.pixelSize: Theme.textXs
+        font.weight: Theme.weightSemiBold
+        font.capitalization: Font.AllUppercase
+        font.letterSpacing: 0.4
+        color: Theme.fgMuted
+        elide: Text.ElideRight
+    }
+
     function filterLabel(key: string): string {
         switch (key) {
         case "type": return qsTr("type")
@@ -191,7 +203,6 @@ Rectangle {
             height: Math.max(queryLabel.implicitHeight, editQuery.implicitHeight, Theme.touchUi ? 32 : 22)
 
             RowLayout {
-                id: headerContent
                 anchors.fill: parent
                 spacing: Theme.space2
                 BIcon { name: "filter"; size: Theme.iconSizeSm; color: Theme.fgMuted }
@@ -349,20 +360,12 @@ Rectangle {
             height: visible ? Math.ceil(Theme.lineHeightPx(Theme.textXs, 1.4)) : 0
             Repeater {
                 model: results.columns
-                delegate: Text {
+                delegate: HeadingText {
                     required property int index
                     required property string modelData
                     x: index * root.columnWidth
                     width: root.columnWidth - Theme.space2
                     text: modelData
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textXs
-                    font.weight: Theme.weightSemiBold
-                    font.capitalization: Font.AllUppercase
-                    font.letterSpacing: 0.4
-                    color: Theme.fgMuted
-                    elide: Text.ElideRight
                 }
             }
         }
@@ -464,17 +467,7 @@ Rectangle {
                         active: row.group
                         y: row.index > 0 ? Theme.space3 : Theme.space1
                         width: parent.width
-                        sourceComponent: Text {
-                            text: row.label + "  ·  " + row.count
-                            textFormat: Text.PlainText
-                            font.family: Theme.fontUi
-                            font.pixelSize: Theme.textXs
-                            font.weight: Theme.weightSemiBold
-                            font.capitalization: Font.AllUppercase
-                            font.letterSpacing: 0.4
-                            color: Theme.fgMuted
-                            elide: Text.ElideRight
-                        }
+                        sourceComponent: HeadingText { text: row.label + "  ·  " + row.count }
                     }
 
                     Rectangle {

@@ -32,6 +32,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
@@ -77,6 +78,8 @@ public:
         qint64 size = -1;       ///< -1 = unknown
         bool isVirtual = false; ///< no bytes of its own (a Google Docs file in Drive): skipped
     };
+    DocumentProvider() = default;
+    Q_DISABLE_COPY_MOVE(DocumentProvider)
     virtual ~DocumentProvider();
     /// The picked document or tree; std::nullopt with `error` when it cannot be reached.
     virtual std::optional<Entry> stat(const QUrl &url, QString *error) const = 0;
@@ -102,7 +105,7 @@ public:
     void setLimits(const GatherLimits &limits) { m_limits = limits; }
     const GatherLimits &limits() const { return m_limits; }
     /// Files read per batch (default 32; also bounded by bytes per batch).
-    void setChunkSize(int files) { m_chunk = qMax(1, files); }
+    void setChunkSize(int files) { m_chunk = std::max(1, files); }
     /// How content:// URLs are read (default platformDocumentProvider(); tests: a fake).
     void setDocumentProvider(std::shared_ptr<const DocumentProvider> provider);
 
@@ -143,10 +146,9 @@ private:
         QStringList warnings;
         QString sourceName;
     };
-    /// One file of a batch, read off the GUI thread.
+    /// One file of a batch, read off the GUI thread: its bytes, or std::nullopt and `error`.
     struct Read {
-        bool ok = false;
-        QByteArray data;
+        std::optional<QByteArray> data;
         QString error;
     };
     static Listing list(const QList<QUrl> &urls, const GatherLimits &limits,

@@ -28,6 +28,7 @@
 #include <QString>
 #include <QTimer>
 
+#include <algorithm>
 #include <memory>
 
 namespace brulion::sync {
@@ -76,7 +77,7 @@ public:
     /// signIn(). Default: an own NetworkHttpTransport.
     void setTransport(sync::HttpTransport *transport);
     /// Length of one second of the sign-in's polling and of Retry-After in ms (tests).
-    void setTimeUnitMs(int ms) { m_unitMs = qMax(1, ms); }
+    void setTimeUnitMs(int ms) { m_unitMs = std::max(1, ms); }
 
     QString clientId() const { return m_clientId; }
     void setClientId(const QString &id);

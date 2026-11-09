@@ -4,7 +4,6 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "navigation.h"
-#include "uidriver.h"
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -31,9 +30,12 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::shell {
 
@@ -57,6 +59,29 @@ struct RemoteControl::Wait {
     ipc::ControlReply reply;
 };
 
+struct RemoteControl::ItemLookup {
+    QQuickItem *item = nullptr;
+    QString code; ///< without an item: not_found or stale_handle
+    QString message;
+};
+
+/// How a queued input answers: answering also lets the next input start.
+struct RemoteControl::Input {
+    ipc::ControlReply reply;
+    std::function<void()> finished;
+
+    void ok(const QJsonValue &result) const
+    {
+        reply.ok(result);
+        finished();
+    }
+    void fail(const QString &errorCode, const QString &message, const QJsonObject &details = {}) const
+    {
+        reply.fail(errorCode, message, details);
+        finished();
+    }
+};
+
 namespace {
 
 QString code(const char *errorCode)
@@ -64,15 +89,22 @@ QString code(const char *errorCode)
     return QString::fromLatin1(errorCode);
 }
 
+/// A coordinate in an answer: to a tenth of a pixel.
+double rounded(qreal v)
+{
+    return std::round(v * 10) / 10;
+}
+
 /// The text of a label as people read it: rich text without its tags and entities.
 QString plainText(const QString &label)
 {
     if (!label.contains(u'<') && !label.contains(u'&'))
         return label;
+    static const QRegularExpression breaks(u"<br\\s*/?>|</p>|</li>|</h[1-6]>"_s,
+                                           QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression tags(u"<[^>]*>"_s);
     QString out = label;
-    out.replace(QRegularExpression(u"<br\\s*/?>|</p>|</li>|</h[1-6]>"_s, QRegularExpression::CaseInsensitiveOption),
-                u"\n"_s);
+    out.replace(breaks, u"\n"_s);
     out.remove(tags);
     out.replace(u"&nbsp;"_s, u" "_s)
             .replace(u"&lt;"_s, u"<"_s)
@@ -101,13 +133,10 @@ QString shownText(const QQuickItem *item)
 /// gives its field the keyboard once it is (Popup.onOpened).
 bool popupsSettled(QQuickWindow *window)
 {
-    const QList<QObject *> popups = uidriver::openPopups(window);
-    for (QObject *popup : popups) {
+    return std::ranges::none_of(uidriver::openPopups(window), [](const QObject *popup) {
         const QVariant opened = popup->property("opened");
-        if (opened.isValid() && !opened.toBool())
-            return false;
-    }
-    return true;
+        return opened.isValid() && !opened.toBool();
+    });
 }
 
 /// The item's QML type (or one it is based on) is `name`: "BButton", "TasksRow", "QQuickText" —
@@ -115,24 +144,29 @@ bool popupsSettled(QQuickWindow *window)
 bool typeMatches(const QQuickItem *item, const QString &name)
 {
     for (const QMetaObject *m = item->metaObject(); m; m = m->superClass()) {
-        QString cls = QString::fromLatin1(m->className());
-        for (const QString &marker : {u"_QMLTYPE_"_s, u"_QML_"_s}) {
+        QLatin1StringView cls(m->className());
+        for (const QLatin1StringView marker : {"_QMLTYPE_"_L1, "_QML_"_L1}) {
             if (const qsizetype at = cls.indexOf(marker); at > 0)
                 cls.truncate(at);
         }
-        if (cls == name || (!name.startsWith(u'Q') && cls == u"QQuick"_s + name))
+        if (cls == name || (!name.startsWith(u'Q') && cls.startsWith("QQuick"_L1) && cls.sliced(6) == name))
             return true;
     }
     return false;
 }
 
+/// An item's rectangle in window coordinates.
+QRectF sceneRect(const QQuickItem *item)
+{
+    return item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+}
+
 QJsonObject rect(const QRectF &r)
 {
-    const auto round = [](qreal v) { return std::round(v * 10) / 10; };
-    return {{u"x"_s, round(r.x())},
-            {u"y"_s, round(r.y())},
-            {u"width"_s, round(r.width())},
-            {u"height"_s, round(r.height())}};
+    return {{u"x"_s, rounded(r.x())},
+            {u"y"_s, rounded(r.y())},
+            {u"width"_s, rounded(r.width())},
+            {u"height"_s, rounded(r.height())}};
 }
 
 /// What a request's parameters say in the event log: note text only by its length.
@@ -156,13 +190,32 @@ QJsonValue toJson(const QVariantMap &map)
     return map.isEmpty() ? QJsonValue() : QJsonValue(QJsonObject::fromVariantMap(map));
 }
 
+/// The selector fields of a request or a target: text, objectName, type, exact.
+QJsonObject selectorOf(const QJsonObject &object)
+{
+    QJsonObject out;
+    for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s, u"exact"_s}) {
+        if (object.contains(key))
+            out.insert(key, object.value(key));
+    }
+    return out;
+}
+
+/// A finger rather than the mouse: as the request's `device` says, else with --touch (the phone's
+/// UI) where `byDefault` allows it.
+bool usesTouch(const QJsonObject &params, bool byDefault)
+{
+    if (params.contains(u"device"_s))
+        return params.value(u"device"_s).toString() == u"touch";
+    return byDefault && QCoreApplication::arguments().contains(u"--touch"_s);
+}
+
 } // namespace
 
 RemoteControl::RemoteControl(QQmlApplicationEngine *engine, AppController *app, Options options, QObject *parent)
     : QObject(parent), m_engine(engine), m_app(app), m_options(std::move(options))
 {
-    m_server.setHandler(
-            [this](const ipc::ControlRequest &request, const ipc::ControlReply &reply) { handle(request, reply); });
+    m_server.setHandler(std::bind_front(&RemoteControl::handle, this));
     connect(&m_server, &ipc::ControlServer::refused, this, [](qint64 uid) {
         qCWarning(lcApp).noquote() << u"Remote control: refused a connection of another user (uid %1)"_s.arg(uid);
     });
@@ -183,7 +236,7 @@ RemoteControl::RemoteControl(QQmlApplicationEngine *engine, AppController *app, 
         connect(w, &QQuickWindow::frameSwapped, this, [this] { m_sinceFrame.restart(); });
     }
     m_sinceFrame.start();
-    m_waitTimer.setInterval(50);
+    m_waitTimer.setInterval(50ms);
     connect(&m_waitTimer, &QTimer::timeout, this, &RemoteControl::pollWaits);
     apply();
 }
@@ -233,9 +286,13 @@ void RemoteControl::prepareInput(QQuickWindow *window)
         window->requestActivate();
 }
 
-void RemoteControl::onToastShown(int toastId, const QString &text, const QString &kind)
+QString RemoteControl::language() const
 {
-    Q_UNUSED(toastId);
+    return m_options.language ? m_options.language() : m_app->settings()->language();
+}
+
+void RemoteControl::onToastShown(int /*toastId*/, const QString &text, const QString &kind)
+{
     m_toasts.append({text, kind, QDateTime::currentDateTime()});
     while (m_toasts.size() > 10)
         m_toasts.removeFirst();
@@ -243,7 +300,7 @@ void RemoteControl::onToastShown(int toastId, const QString &text, const QString
 
 // ---- Requests -----------------------------------------------------------------------------------
 
-void RemoteControl::handle(const ipc::ControlRequest &request, ipc::ControlReply reply)
+void RemoteControl::handle(const ipc::ControlRequest &request, const ipc::ControlReply &reply)
 {
     const QString &method = request.method;
     const QJsonObject &p = request.params;
@@ -257,10 +314,7 @@ void RemoteControl::handle(const ipc::ControlRequest &request, ipc::ControlReply
     } else if (method == u"open") {
         open(p, reply);
     } else if (method == u"commands") {
-        QJsonArray list;
-        for (const QVariant &c : m_app->commands()->commands())
-            list.append(QJsonObject::fromVariantMap(c.toMap()));
-        reply.ok(QJsonObject{{u"commands"_s, list}});
+        reply.ok(QJsonObject{{u"commands"_s, QJsonArray::fromVariantList(m_app->commands()->commands())}});
     } else if (method == u"command") {
         runCommand(p, reply);
     } else if (method == u"capture") {
@@ -369,12 +423,12 @@ QJsonObject RemoteControl::state()
                 {u"text"_s, t.text}, {u"kind"_s, t.kind}, {u"at"_s, t.at.toString(u"yyyy-MM-dd HH:mm:ss"_s)}});
     out.insert(u"lastToasts"_s, toasts);
     auto *theme = m_engine->singletonInstance<QObject *>("Brulion", "Theme");
-    out.insert(u"theme"_s, theme && theme->property("dark").toBool() ? u"dark"_s : u"light"_s);
+    const bool dark = theme && theme->property("dark").toBool();
+    out.insert(u"theme"_s, dark ? u"dark"_s : u"light"_s);
     out.insert(u"themeSetting"_s, m_app->settings()->themeMode());
     out.insert(u"touchUi"_s, theme && theme->property("touchUi").toBool());
     // What Theme shows now (the settings, or the --accent / --surface / --density overrides).
     if (theme) {
-        const bool dark = theme->property("dark").toBool();
         out.insert(u"appearance"_s,
                    QJsonObject{{u"accent"_s, theme->property("accentName").toString()},
                                {u"accentColor"_s, theme->property("accent").value<QColor>().name()},
@@ -386,7 +440,7 @@ QJsonObject RemoteControl::state()
                                {u"fontMono"_s, theme->property("fontMono").toString()},
                                {u"lineSpacing"_s, theme->property("lineSpacing").toString()}});
     }
-    out.insert(u"language"_s, m_options.language ? m_options.language() : m_app->settings()->language());
+    out.insert(u"language"_s, language());
     return out;
 }
 
@@ -423,6 +477,9 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
                 code(E::BadParams), u"Not a valid reference: %1"_s.arg(ref.left(200)),
                 {{u"examples"_s, QJsonArray{u"Projekty/Dom.md"_s, u"Dom"_s, u"today"_s, u"2026-10-15"_s,
                                             u"Dom.md#L12@3f9a01bc"_s, u"Dom.md#^abc123"_s, u"((abc123))"_s}}});
+    // The request names a place in the page itself (a line, a block or a heading).
+    const bool placeGiven =
+            params.contains(u"line"_s) || params.contains(u"blockId"_s) || params.contains(u"heading"_s);
     const auto pageRoute = [&](const VaultPath &path) {
         QVariantMap route{{u"view"_s, u"page"_s}, {u"path"_s, path}};
         if (item->hasBlock()) {
@@ -436,8 +493,7 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
     const auto dayRoute = [&](QDate day) {
         const QString date = day.toString(Qt::ISODate);
         const QString path = ws->journalFileFor(date);
-        const bool wantsPlace = item->hasLine() || item->hasBlock() || params.contains(u"line"_s)
-                                || params.contains(u"blockId"_s) || params.contains(u"heading"_s);
+        const bool wantsPlace = item->hasLine() || item->hasBlock() || placeGiven;
         if (wantsPlace && !path.isEmpty() && vault->exists(path))
             return pageRoute(path);
         QVariantMap route{{u"view"_s, u"journal"_s}, {u"date"_s, date}};
@@ -446,7 +502,6 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
         return route;
     };
     QVariantMap route;
-    QStringList candidates;
     if (item->page.isEmpty()) {
         // ^id / ((id)): the block anywhere in the notebook.
         const auto block = index->blockById(item->blockId);
@@ -455,7 +510,7 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
                               {{u"blockId"_s, item->blockId}});
         route = pageRoute(block->path);
     } else {
-        const QString name = item->page;
+        const QString &name = item->page;
         const QDateTime now = m_app->now();
         // 1. A page's path (with or without ".md", any letter case).
         QString cleaned = QDir::cleanPath(QString(name).replace(u'\\', u'/'));
@@ -487,12 +542,14 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
         if (route.isEmpty()) {
             const auto fold = [](const QString &s) { return s.normalized(QString::NormalizationForm_C).toLower(); };
             const QString key = fold(notebook::withoutMdExtension(name).trimmed());
+            const bool bySuffix = key.contains(u'/');
+            QStringList candidates;
             for (const FileStat &f : vault->markdownFiles()) {
                 if (paths::isConflictCopy(f.path))
                     continue;
-                const QString stem = fold(paths::stripMarkdownExtension(f.path));
-                if (key.contains(u'/') ? (stem == key || stem.endsWith(u'/' + key))
-                                       : fold(paths::pageTitle(f.path)) == key)
+                const QString folded =
+                        fold(bySuffix ? paths::stripMarkdownExtension(f.path) : paths::pageTitle(f.path));
+                if (folded == key || (bySuffix && folded.endsWith(u'/' + key)))
                     candidates.append(f.path);
             }
             if (candidates.size() > 1)
@@ -509,10 +566,7 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
         }
         // 5. A date phrase ("yesterday", "w piątek" — on Friday) when no page has that name.
         if (route.isEmpty() && !name.contains(u'/')) {
-            const dates::UiLocale locale =
-                    (m_options.language ? m_options.language() : m_app->settings()->language()) == u"en"
-                            ? dates::UiLocale::English
-                            : dates::UiLocale::Polish;
+            const dates::UiLocale locale = language() == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
             const auto found = dates::parseNaturalDate(name, now, vault->config().weekStartsOn, locale);
             if (found && name.left(found->start).trimmed().isEmpty() && name.mid(found->end()).trimmed().isEmpty())
                 route = dayRoute(found->spec.date);
@@ -526,12 +580,10 @@ void RemoteControl::open(const QJsonObject &params, const ipc::ControlReply &rep
         }
     }
     // Explicit places win over the ref's.
-    if (route.value(u"view"_s).toString() == u"page") {
-        if (params.contains(u"line"_s) || params.contains(u"blockId"_s) || params.contains(u"heading"_s)) {
-            route.remove(u"line"_s);
-            route.remove(u"blockId"_s);
-            route.remove(u"heading"_s);
-        }
+    if (placeGiven && route.value(u"view"_s).toString() == u"page") {
+        route.remove(u"line"_s);
+        route.remove(u"blockId"_s);
+        route.remove(u"heading"_s);
         if (params.contains(u"line"_s))
             route.insert(u"line"_s, params.value(u"line"_s).toInt());
         if (params.contains(u"blockId"_s))
@@ -580,18 +632,18 @@ void RemoteControl::capture(const QJsonObject &params, const ipc::ControlReply &
 
 void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlReply &reply)
 {
-    QString path = params.value(u"path"_s).toString().trimmed();
+    const QString path = params.value(u"path"_s).toString().trimmed();
     if (!path.isEmpty()) {
         // Written only where asked: an absolute .png path in a folder that exists.
         if (!QDir::isAbsolutePath(path))
             return reply.fail(code(E::BadParams), u"The path is absolute"_s, {{u"param"_s, u"path"_s}});
         if (!path.endsWith(u".png"_s, Qt::CaseInsensitive))
             return reply.fail(code(E::BadParams), u"The path ends with .png"_s, {{u"param"_s, u"path"_s}});
-        if (!QFileInfo(QFileInfo(path).absolutePath()).isDir())
-            return reply.fail(code(E::BadParams), u"The folder %1 does not exist"_s.arg(QFileInfo(path).absolutePath()),
+        if (const QString folder = QFileInfo(path).absolutePath(); !QFileInfo(folder).isDir())
+            return reply.fail(code(E::BadParams), u"The folder %1 does not exist"_s.arg(folder),
                               {{u"param"_s, u"path"_s}});
     }
-    enqueueInput(reply, [this, path, reply](const std::function<void()> &finished) {
+    enqueueInput(reply, [this, path](const Input &in) {
         QString file = path;
         if (file.isEmpty()) {
             // The user's private runtime folder, a folder of its own — never the shared temp
@@ -603,12 +655,10 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
 #else
             const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
 #endif
-            if (runtime.isEmpty()) {
-                reply.fail(code(E::BadParams), u"There is no private runtime folder ($XDG_RUNTIME_DIR): give a path"_s,
-                           {{u"param"_s, u"path"_s}});
-                finished();
-                return;
-            }
+            if (runtime.isEmpty())
+                return in.fail(code(E::BadParams),
+                               u"There is no private runtime folder ($XDG_RUNTIME_DIR): give a path"_s,
+                               {{u"param"_s, u"path"_s}});
             const QString dir = QDir(runtime).filePath(u"brulion-screenshots"_s);
             QDir().mkpath(dir);
             QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
@@ -617,22 +667,15 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
         }
         QQuickWindow *w = window();
         const QImage image = w ? w->grabWindow() : QImage();
-        if (image.isNull()) {
-            reply.fail(code(E::Failed), u"The window could not be captured"_s);
-            finished();
-            return;
-        }
+        if (image.isNull())
+            return in.fail(code(E::Failed), u"The window could not be captured"_s);
         QSaveFile out(file);
-        if (!out.open(QIODevice::WriteOnly) || !image.save(&out, "PNG") || !out.commit()) {
-            reply.fail(code(E::Failed), u"Could not write %1"_s.arg(file), {{u"path"_s, file}});
-            finished();
-            return;
-        }
-        reply.ok(QJsonObject{{u"path"_s, file},
-                             {u"width"_s, image.width()},
-                             {u"height"_s, image.height()},
-                             {u"devicePixelRatio"_s, image.devicePixelRatio()}});
-        finished();
+        if (!out.open(QIODevice::WriteOnly) || !image.save(&out, "PNG") || !out.commit())
+            return in.fail(code(E::Failed), u"Could not write %1"_s.arg(file), {{u"path"_s, file}});
+        in.ok(QJsonObject{{u"path"_s, file},
+                          {u"width"_s, image.width()},
+                          {u"height"_s, image.height()},
+                          {u"devicePixelRatio"_s, image.devicePixelRatio()}});
     });
 }
 
@@ -647,12 +690,8 @@ QString RemoteControl::handleFor(QQuickItem *item)
     }
     if (m_items.size() > 4096) {
         // Forget the handles of items that are gone.
-        for (auto it = m_items.begin(); it != m_items.end();) {
-            it = it.value() ? std::next(it) : m_items.erase(it);
-        }
-        for (auto it = m_handles.begin(); it != m_handles.end();) {
-            it = m_items.contains(it.value()) ? std::next(it) : m_handles.erase(it);
-        }
+        m_items.removeIf([](auto it) { return it.value().isNull(); });
+        m_handles.removeIf([this](auto it) { return !m_items.contains(it.value()); });
     }
     const quint64 id = m_nextHandle++;
     m_items.insert(id, item);
@@ -660,34 +699,24 @@ QString RemoteControl::handleFor(QQuickItem *item)
     return u"h%1"_s.arg(id);
 }
 
-QQuickItem *RemoteControl::itemFor(const QString &handle, QString *errorCode, QString *message)
+RemoteControl::ItemLookup RemoteControl::itemFor(const QString &handle) const
 {
     bool ok = false;
-    const quint64 id = handle.startsWith(u'h') ? handle.mid(1).toULongLong(&ok) : 0;
-    if (!ok || !m_items.contains(id)) {
-        *errorCode = code(E::NotFound);
-        *message = u"Unknown handle %1 (handles come from find and state)"_s.arg(handle);
-        return nullptr;
-    }
-    QQuickItem *item = m_items.value(id);
-    if (!item) {
-        *errorCode = code(E::StaleHandle);
-        *message = u"The item of %1 is gone: find it again"_s.arg(handle);
-        return nullptr;
-    }
-    return item;
+    const quint64 id = handle.startsWith(u'h') ? QStringView(handle).sliced(1).toULongLong(&ok) : 0;
+    const auto it = ok ? m_items.constFind(id) : m_items.cend();
+    if (it == m_items.cend())
+        return {nullptr, code(E::NotFound), u"Unknown handle %1 (handles come from find and state)"_s.arg(handle)};
+    if (!*it)
+        return {nullptr, code(E::StaleHandle), u"The item of %1 is gone: find it again"_s.arg(handle)};
+    return {*it, {}, {}};
 }
 
 QJsonObject RemoteControl::describe(QQuickItem *item)
 {
-    QJsonObject o{{u"handle"_s, handleFor(item)},
-                  {u"type"_s, uidriver::typeName(item)},
-                  {u"objectName"_s, item->objectName()},
-                  {u"text"_s, shownText(item).left(2000)},
-                  {u"geometry"_s, rect(item->mapRectToScene(QRectF(0, 0, item->width(), item->height())))},
-                  {u"visible"_s, uidriver::shown(item)},
-                  {u"enabled"_s, item->isEnabled()},
-                  {u"focus"_s, item->hasActiveFocus()}};
+    QJsonObject o{{u"handle"_s, handleFor(item)},         {u"type"_s, uidriver::typeName(item)},
+                  {u"objectName"_s, item->objectName()},  {u"text"_s, shownText(item).left(2000)},
+                  {u"geometry"_s, rect(sceneRect(item))}, {u"visible"_s, uidriver::shown(item)},
+                  {u"enabled"_s, item->isEnabled()},      {u"focus"_s, item->hasActiveFocus()}};
     if (QQuickWindow *w = item->window())
         o.insert(u"onScreen"_s, uidriver::onScreen(w, item));
     const QVariant checked = item->property("checked");
@@ -698,8 +727,15 @@ QJsonObject RemoteControl::describe(QQuickItem *item)
     return o;
 }
 
+QJsonValue RemoteControl::describeFocus()
+{
+    QQuickWindow *w = window();
+    QQuickItem *focus = w ? w->activeFocusItem() : nullptr;
+    return focus ? QJsonValue(describe(focus)) : QJsonValue();
+}
+
 QList<QQuickItem *> RemoteControl::select(QQuickWindow *window, const QJsonObject &selector, bool shownOnly,
-                                          QQuickItem *within)
+                                          QQuickItem *within) const
 {
     const QString text = selector.value(u"text"_s).toString();
     const QString objectName = selector.value(u"objectName"_s).toString();
@@ -732,10 +768,10 @@ void RemoteControl::find(const QJsonObject &params, const ipc::ControlReply &rep
         return reply.fail(code(E::NotReady), u"The window is not there yet"_s);
     QQuickItem *within = nullptr;
     if (params.contains(u"within"_s)) {
-        QString errorCode, message;
-        within = itemFor(params.value(u"within"_s).toString(), &errorCode, &message);
-        if (!within)
-            return reply.fail(errorCode, message, {{u"param"_s, u"within"_s}});
+        const ItemLookup lookup = itemFor(params.value(u"within"_s).toString());
+        if (!lookup.item)
+            return reply.fail(lookup.code, lookup.message, {{u"param"_s, u"within"_s}});
+        within = lookup.item;
     }
     const bool visibleOnly = params.value(u"visibleOnly"_s).toBool(true);
     const int limit = params.value(u"limit"_s).toInt(50);
@@ -755,17 +791,16 @@ bool RemoteControl::resolveTarget(QQuickWindow *window, const QJsonObject &objec
     const QString prefix = what.isEmpty() ? QString() : what + u": "_s;
     switch (ipc::targetKind(object)) {
     case ipc::TargetKind::Handle: {
-        QString errorCode, message;
-        QQuickItem *item = itemFor(object.value(u"handle"_s).toString(), &errorCode, &message);
-        if (!item) {
-            reply.fail(errorCode, prefix + message);
+        const ItemLookup lookup = itemFor(object.value(u"handle"_s).toString());
+        if (!lookup.item) {
+            reply.fail(lookup.code, prefix + lookup.message);
             return false;
         }
-        if (!uidriver::shown(item)) {
-            reply.fail(code(E::NotFound), prefix + u"The item is not shown"_s, {{u"item"_s, describe(item)}});
+        if (!uidriver::shown(lookup.item)) {
+            reply.fail(code(E::NotFound), prefix + u"The item is not shown"_s, {{u"item"_s, describe(lookup.item)}});
             return false;
         }
-        target->item = item;
+        target->item = lookup.item;
         target->isItem = true;
         return true;
     }
@@ -783,12 +818,7 @@ bool RemoteControl::resolveTarget(QQuickWindow *window, const QJsonObject &objec
     case ipc::TargetKind::Selector: {
         const QList<QQuickItem *> found = select(window, object, true);
         if (found.isEmpty()) {
-            QJsonObject selector;
-            for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s, u"exact"_s}) {
-                if (object.contains(key))
-                    selector.insert(key, object.value(key));
-            }
-            reply.fail(code(E::NotFound), prefix + u"No shown item matches"_s, {{u"selector"_s, selector}});
+            reply.fail(code(E::NotFound), prefix + u"No shown item matches"_s, {{u"selector"_s, selectorOf(object)}});
             return false;
         }
         target->item = found.first();
@@ -837,14 +867,19 @@ namespace {
 /// Where the content of each Flickable whose view holds a point is (contentX, contentY).
 using ContentPositions = QList<std::pair<QPointer<QQuickItem>, QPointF>>;
 
+/// Where a Flickable's content is: (contentX, contentY).
+QPointF contentPosition(const QQuickItem *flickable)
+{
+    return {flickable->property("contentX").toReal(), flickable->property("contentY").toReal()};
+}
+
 ContentPositions contentPositions(QQuickWindow *window, QPointF scenePos)
 {
     ContentPositions out;
-    for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
-        if (!item->inherits("QQuickFlickable"))
-            continue;
-        if (item->mapRectToScene(QRectF(0, 0, item->width(), item->height())).contains(scenePos))
-            out.append({item, QPointF(item->property("contentX").toReal(), item->property("contentY").toReal())});
+    const QList<QQuickItem *> items = uidriver::allItems(window->contentItem());
+    for (QQuickItem *item : items) {
+        if (item->inherits("QQuickFlickable") && sceneRect(item).contains(scenePos))
+            out.append({item, contentPosition(item)});
     }
     return out;
 }
@@ -857,52 +892,79 @@ QJsonObject scrolledSince(const ContentPositions &before)
     for (const auto &[flickable, was] : before) {
         if (!flickable)
             continue;
-        const QPointF moved =
-                QPointF(flickable->property("contentX").toReal(), flickable->property("contentY").toReal()) - was;
+        const QPointF moved = contentPosition(flickable) - was;
         if (std::hypot(moved.x(), moved.y()) > std::hypot(most.x(), most.y()))
             most = moved;
     }
-    return {{u"dx"_s, std::round(most.x() * 10) / 10}, {u"dy"_s, std::round(most.y() * 10) / 10}};
+    return {{u"dx"_s, rounded(most.x())}, {u"dy"_s, rounded(most.y())}};
 }
 
 } // namespace
 
 // ---- Input ------------------------------------------------------------------------------------
 
-void RemoteControl::enqueueInput(const ipc::ControlReply &reply, std::function<void(std::function<void()>)> job)
+void RemoteControl::enqueueInput(const ipc::ControlReply &reply, std::function<void(const Input &)> job)
 {
     m_inputQueue.append({reply, std::move(job)});
     if (!m_inputRunning)
         nextInput();
 }
 
+void RemoteControl::enqueueSettled(const ipc::ControlReply &reply, const QString &noWindow,
+                                   std::function<void(QQuickWindow *, const Input &)> start)
+{
+    enqueueInput(reply, [this, noWindow, start = std::move(start)](const Input &in) {
+        QQuickWindow *w = window();
+        if (!w)
+            return in.fail(code(E::NotReady), noWindow);
+        prepareInput(w);
+        // A popup that just opened gives its field the keyboard when its transition is over.
+        afterSettled(100, 2000, [this, in, start] {
+            if (QQuickWindow *settled = window())
+                start(settled, in);
+            else
+                in.fail(code(E::NotReady), u"The window is gone"_s);
+        });
+    });
+}
+
+void RemoteControl::playThenAnswer(QQuickWindow *window, const uidriver::Gesture &gesture, const Input &in,
+                                   std::function<QJsonObject()> answer, std::function<bool()> keepGoing)
+{
+    uidriver::play(
+            this, window, gesture,
+            [this, in, answer = std::move(answer)](bool completed) {
+                if (!completed)
+                    return in.fail(code(E::Failed), u"The window went away"_s);
+                afterSettled(100, 2000, [in, answer] { in.ok(answer()); });
+            },
+            std::move(keepGoing));
+}
+
 void RemoteControl::nextInput()
 {
     // Requests whose client has gone (a command line that gave up waiting) are dropped: nobody
     // wants that input any more.
-    while (!m_inputQueue.isEmpty() && !m_inputQueue.first().reply.connected()) {
+    while (!m_inputQueue.isEmpty() && !m_inputQueue.constFirst().reply.connected()) {
         qCDebug(lcApp) << "Remote control: dropped the input of a client that left";
         m_inputQueue.removeFirst();
     }
-    if (m_inputQueue.isEmpty()) {
-        m_inputRunning = false;
+    m_inputRunning = !m_inputQueue.isEmpty();
+    if (!m_inputRunning)
         return;
-    }
-    m_inputRunning = true;
-    const auto job = m_inputQueue.takeFirst().job;
+    const QueuedInput next = m_inputQueue.takeFirst();
+    // Its answer lets the next one start (once, from the event loop).
     auto once = std::make_shared<bool>(false);
-    job([this, once] {
-        if (*once)
-            return;
-        *once = true;
-        QTimer::singleShot(0, this, [this] { nextInput(); });
-    });
+    next.job(Input{next.reply, [this, once] {
+                       if (!std::exchange(*once, true))
+                           QTimer::singleShot(0, this, [this] { nextInput(); });
+                   }});
 }
 
 void RemoteControl::afterSettled(int quietMs, int maxMs, std::function<void()> then)
 {
     auto *timer = new QTimer(this);
-    timer->setInterval(20);
+    timer->setInterval(20ms);
     QElapsedTimer waited;
     waited.start();
     connect(timer, &QTimer::timeout, this, [this, timer, waited, quietMs, maxMs, then = std::move(then)] {
@@ -932,118 +994,82 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
         return;
     // A finger with --touch (the phone's UI), except for scrolling: the wheel scrolls whatever is
     // under it, a finger where nothing can scroll that way presses what it is on (as a real one).
-    const bool touchDefault = method != u"scroll" && QCoreApplication::arguments().contains(u"--touch"_s);
-    const bool touch = params.contains(u"device"_s) ? params.value(u"device"_s).toString() == u"touch" : touchDefault;
+    const bool touch = usesTouch(params, method != u"scroll");
     const Qt::MouseButton button = ipc::parseMouseButton(params.value(u"button"_s).toString()).value_or(Qt::LeftButton);
     const Qt::KeyboardModifiers modifiers = ipc::parseModifiers(params.value(u"modifiers"_s)).value_or(Qt::NoModifier);
     const int holdMs = params.value(u"ms"_s).toInt(800);
     const QPointF delta(params.value(u"dx"_s).toDouble(), params.value(u"dy"_s).toDouble());
-    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
-        QQuickWindow *w = window();
-        if (!w) {
-            reply.fail(code(E::NotReady), u"The window is gone"_s);
-            finished();
-            return;
-        }
-        prepareInput(w);
-        afterSettled(100, 2000, [=, this] {
-            QQuickWindow *settled = window();
-            if (!settled) {
-                reply.fail(code(E::NotReady), u"The window is gone"_s);
-                finished();
-                return;
+    enqueueSettled(reply, u"The window is gone"_s, [=, this](QQuickWindow *settled, const Input &in) {
+        reachTarget(settled, target, [=, this](QPointF point, const char *problem) {
+            QQuickWindow *reached = window();
+            if (!reached || (problem && qstrcmp(problem, E::StaleHandle) == 0))
+                return in.fail(code(E::StaleHandle), u"The item went away before it could be reached"_s);
+            if (problem) {
+                return in.fail(
+                        code(E::OffScreen),
+                        u"The item is outside the window, and scrolling cannot bring it in: nothing "
+                        u"was touched"_s,
+                        {{u"item"_s, describe(target.item)},
+                         {u"window"_s, QJsonObject{{u"width"_s, reached->width()}, {u"height"_s, reached->height()}}}});
             }
-            reachTarget(settled, target, [=, this](QPointF point, const char *problem) {
-                QQuickWindow *reached = window();
-                if (!reached || (problem && qstrcmp(problem, E::StaleHandle) == 0)) {
-                    reply.fail(code(E::StaleHandle), u"The item went away before it could be reached"_s);
-                    finished();
-                    return;
-                }
-                if (problem) {
-                    reply.fail(code(E::OffScreen),
-                               u"The item is outside the window, and scrolling cannot bring it in: nothing "
-                               u"was touched"_s,
-                               {{u"item"_s, describe(target.item)},
-                                {u"window"_s,
-                                 QJsonObject{{u"width"_s, reached->width()}, {u"height"_s, reached->height()}}}});
-                    finished();
-                    return;
-                }
-                const QJsonObject where{{u"x"_s, std::round(point.x() * 10) / 10},
-                                        {u"y"_s, std::round(point.y() * 10) / 10},
-                                        {u"device"_s, touch ? u"touch"_s : u"mouse"_s}};
-                ContentPositions contentBefore;
-                // The Flickable a finger would drag: the innermost under it that can move that way.
-                QQuickItem *dragged = nullptr;
-                if (method == u"scroll") {
-                    contentBefore = contentPositions(reached, point);
-                    for (QQuickItem *flickable : uidriver::flickablesAt(reached, point)) {
-                        if (!dragged && uidriver::canScroll(flickable, delta))
-                            dragged = flickable;
-                    }
-                    // A finger moves content only where some Flickable under it can move that way;
-                    // elsewhere a real one would press what it is on (a switch, a button) — not
-                    // done: nothing is touched, and the answer says nothing scrolled.
-                    if (touch && !dragged) {
-                        QJsonObject out = where;
-                        if (target.item)
-                            out.insert(u"item"_s, describe(target.item));
-                        out.insert(u"windowActive"_s, reached->isActive());
-                        out.insert(u"scrolled"_s, QJsonObject{{u"dx"_s, 0}, {u"dy"_s, 0}});
-                        out.insert(u"touched"_s, false);
-                        reply.ok(out);
-                        finished();
-                        return;
-                    }
-                }
-                uidriver::Gesture gesture;
-                if (method == u"click") {
-                    if (touch) {
-                        gesture = uidriver::touchTap(reached, point, 60, 200);
-                    } else {
-                        uidriver::ClickTiming timing;
-                        timing.afterMove = 20;
-                        timing.afterPress = 60;
-                        timing.afterRelease = 200;
-                        gesture = uidriver::mouseClick(reached, point, button, modifiers, timing);
-                    }
-                } else if (method == u"longPress") {
-                    gesture = touch ? uidriver::touchTap(reached, point, holdMs, 250)
-                                    : uidriver::mouseLongPress(reached, point, holdMs, button);
-                } else if (method == u"doubleClick") {
-                    gesture = touch ? uidriver::touchDoubleTap(reached, point)
-                                    : uidriver::mouseDoubleClick(reached, point, button, modifiers);
-                } else { // scroll
-                    if (touch) {
-                        // The content follows the finger past the drag threshold (only where it
-                        // can move: checked above).
-                        gesture = uidriver::touchScroll(reached, point, delta, !dragged->property("moving").toBool());
-                    } else {
-                        gesture = uidriver::wheel(reached, point, delta, modifiers);
-                    }
-                }
-                uidriver::play(this, reached, gesture, [=, this](bool completed) {
-                    if (!completed) {
-                        reply.fail(code(E::Failed), u"The window went away"_s);
-                        finished();
-                        return;
-                    }
-                    afterSettled(100, 2000, [=, this] {
-                        QJsonObject out = where;
-                        if (target.item)
-                            out.insert(u"item"_s, describe(target.item));
-                        if (QQuickWindow *after = window())
-                            out.insert(u"windowActive"_s, after->isActive());
-                        if (method == u"scroll") {
-                            out.insert(u"scrolled"_s, scrolledSince(contentBefore));
-                            if (touch)
-                                out.insert(u"touched"_s, true);
-                        }
-                        reply.ok(out);
-                        finished();
-                    });
+            const QJsonObject where{{u"x"_s, rounded(point.x())},
+                                    {u"y"_s, rounded(point.y())},
+                                    {u"device"_s, touch ? u"touch"_s : u"mouse"_s}};
+            // The answer: where, the item, whether the window is active.
+            const auto answer = [this, target, where] {
+                QJsonObject out = where;
+                if (target.item)
+                    out.insert(u"item"_s, describe(target.item));
+                if (QQuickWindow *after = window())
+                    out.insert(u"windowActive"_s, after->isActive());
+                return out;
+            };
+            ContentPositions contentBefore;
+            // The Flickable a finger would drag: the innermost under it that can move that way.
+            QQuickItem *dragged = nullptr;
+            if (method == u"scroll") {
+                contentBefore = contentPositions(reached, point);
+                const QList<QQuickItem *> flickables = uidriver::flickablesAt(reached, point);
+                const auto it = std::ranges::find_if(flickables, [&delta](const QQuickItem *flickable) {
+                    return uidriver::canScroll(flickable, delta);
                 });
+                dragged = it == flickables.cend() ? nullptr : *it;
+                // A finger moves content only where some Flickable under it can move that way;
+                // elsewhere a real one would press what it is on (a switch, a button) — not
+                // done: nothing is touched, and the answer says nothing scrolled.
+                if (touch && !dragged) {
+                    QJsonObject out = answer();
+                    out.insert(u"scrolled"_s, QJsonObject{{u"dx"_s, 0}, {u"dy"_s, 0}});
+                    out.insert(u"touched"_s, false);
+                    return in.ok(out);
+                }
+            }
+            uidriver::Gesture gesture;
+            if (method == u"click") {
+                gesture = touch ? uidriver::touchTap(reached, point, 60, 200)
+                                : uidriver::mouseClick(reached, point, button, modifiers,
+                                                       {.afterMove = 20, .afterPress = 60, .afterRelease = 200});
+            } else if (method == u"longPress") {
+                gesture = touch ? uidriver::touchTap(reached, point, holdMs, 250)
+                                : uidriver::mouseLongPress(reached, point, holdMs, button);
+            } else if (method == u"doubleClick") {
+                gesture = touch ? uidriver::touchDoubleTap(reached, point)
+                                : uidriver::mouseDoubleClick(reached, point, button, modifiers);
+            } else if (touch) {
+                // Scrolling: the content follows the finger past the drag threshold (only where it
+                // can move: checked above).
+                gesture = uidriver::touchScroll(reached, point, delta, !dragged->property("moving").toBool());
+            } else {
+                gesture = uidriver::wheel(reached, point, delta, modifiers);
+            }
+            playThenAnswer(reached, gesture, in, [=] {
+                QJsonObject out = answer();
+                if (method == u"scroll") {
+                    out.insert(u"scrolled"_s, scrolledSince(contentBefore));
+                    if (touch)
+                        out.insert(u"touched"_s, true);
+                }
+                return out;
             });
         });
     });
@@ -1059,61 +1085,32 @@ void RemoteControl::drag(const QJsonObject &params, const ipc::ControlReply &rep
     if (!resolveTarget(current, params.value(u"from"_s).toObject(), &from, reply, u"from"_s)
         || !resolveTarget(current, params.value(u"to"_s).toObject(), &to, reply, u"to"_s))
         return;
-    const bool touchDefault = QCoreApplication::arguments().contains(u"--touch"_s);
-    const bool touch = params.contains(u"device"_s) ? params.value(u"device"_s).toString() == u"touch" : touchDefault;
+    const bool touch = usesTouch(params, true);
     const Qt::MouseButton button = ipc::parseMouseButton(params.value(u"button"_s).toString()).value_or(Qt::LeftButton);
     const Qt::KeyboardModifiers modifiers = ipc::parseModifiers(params.value(u"modifiers"_s)).value_or(Qt::NoModifier);
     const int holdMs = params.value(u"holdMs"_s).toInt(0);
-    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
-        QQuickWindow *w = window();
-        if (!w) {
-            reply.fail(code(E::NotReady), u"The window is gone"_s);
-            finished();
-            return;
-        }
-        prepareInput(w);
-        afterSettled(100, 2000, [=, this] {
-            QQuickWindow *settled = window();
-            if (!settled) {
-                reply.fail(code(E::NotReady), u"The window is gone"_s);
-                finished();
-                return;
-            }
-            reachTarget(settled, from, [=, this](QPointF start, const char *problem) {
-                QQuickWindow *reached = window();
-                const QPointF end = to.isItem ? (to.item ? uidriver::pointIn(to.item) : QPointF(-1, -1)) : to.point;
-                if (!reached || (problem && qstrcmp(problem, E::StaleHandle) == 0) || end.x() < 0) {
-                    reply.fail(code(E::StaleHandle), u"An item went away before the drag"_s);
-                    finished();
-                    return;
-                }
-                // Both ends on screen (the start was scrolled into view; scrolling to the end
-                // now would move the start away).
-                if (problem || (to.isItem && !uidriver::onScreen(reached, to.item))) {
-                    QQuickItem *off = problem ? from.item.data() : to.item.data();
-                    reply.fail(code(E::OffScreen),
+    enqueueSettled(reply, u"The window is gone"_s, [=, this](QQuickWindow *settled, const Input &in) {
+        reachTarget(settled, from, [=, this](QPointF start, const char *problem) {
+            QQuickWindow *reached = window();
+            if (!reached || (problem && qstrcmp(problem, E::StaleHandle) == 0) || (to.isItem && !to.item))
+                return in.fail(code(E::StaleHandle), u"An item went away before the drag"_s);
+            // Both ends on screen (the start was scrolled into view; scrolling to the end
+            // now would move the start away).
+            if (problem || (to.isItem && !uidriver::onScreen(reached, to.item))) {
+                const QString which = problem ? u"from"_s : u"to"_s;
+                return in.fail(code(E::OffScreen),
                                u"The %1 item is outside the window, and scrolling cannot bring it in: nothing was "
-                               u"touched"_s.arg(problem ? u"from"_s : u"to"_s),
-                               {{u"param"_s, problem ? u"from"_s : u"to"_s}, {u"item"_s, describe(off)}});
-                    finished();
-                    return;
-                }
-                const uidriver::Gesture gesture =
-                        touch ? uidriver::touchDrag(reached, start, end - start, 16, 16, holdMs, 300)
-                              : uidriver::mouseDrag(reached, start, end, holdMs, false, button, modifiers);
-                uidriver::play(this, reached, gesture, [=, this](bool completed) {
-                    if (!completed) {
-                        reply.fail(code(E::Failed), u"The window went away"_s);
-                        finished();
-                        return;
-                    }
-                    afterSettled(100, 2000, [=] {
-                        reply.ok(QJsonObject{{u"from"_s, QJsonObject{{u"x"_s, start.x()}, {u"y"_s, start.y()}}},
-                                             {u"to"_s, QJsonObject{{u"x"_s, end.x()}, {u"y"_s, end.y()}}},
-                                             {u"device"_s, touch ? u"touch"_s : u"mouse"_s}});
-                        finished();
-                    });
-                });
+                               u"touched"_s.arg(which),
+                               {{u"param"_s, which}, {u"item"_s, describe(problem ? from.item : to.item)}});
+            }
+            const QPointF end = to.isItem ? uidriver::pointIn(to.item) : to.point;
+            const uidriver::Gesture gesture =
+                    touch ? uidriver::touchDrag(reached, start, end - start, 16, 16, holdMs, 300)
+                          : uidriver::mouseDrag(reached, start, end, holdMs, false, button, modifiers);
+            playThenAnswer(reached, gesture, in, [=] {
+                return QJsonObject{{u"from"_s, QJsonObject{{u"x"_s, start.x()}, {u"y"_s, start.y()}}},
+                                   {u"to"_s, QJsonObject{{u"x"_s, end.x()}, {u"y"_s, end.y()}}},
+                                   {u"device"_s, touch ? u"touch"_s : u"mouse"_s}};
             });
         });
     });
@@ -1122,44 +1119,15 @@ void RemoteControl::drag(const QJsonObject &params, const ipc::ControlReply &rep
 void RemoteControl::typeText(const QJsonObject &params, const ipc::ControlReply &reply)
 {
     const QString text = params.value(u"text"_s).toString();
-    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
-        QQuickWindow *w = window();
-        if (!w) {
-            reply.fail(code(E::NotReady), u"The window is not there yet"_s);
-            finished();
-            return;
-        }
-        prepareInput(w);
-        // A popup that just opened gives its field the keyboard when its transition is over.
-        afterSettled(100, 2000, [=, this] {
-            QQuickWindow *settled = window();
-            if (!settled) {
-                reply.fail(code(E::NotReady), u"The window is gone"_s);
-                finished();
-                return;
-            }
-            const QList<uidriver::KeyStroke> strokes = uidriver::strokesFor(text);
-            uidriver::Gesture gesture = uidriver::keyStrokes(settled, strokes, uidriver::KeyDelivery::System, 8);
-            // Typing stops when the client leaves (a command line interrupted).
-            uidriver::play(
-                    this, settled, gesture,
-                    [=, this](bool completed) {
-                        if (!completed) {
-                            reply.fail(code(E::Failed), u"The window went away"_s);
-                            finished();
-                            return;
-                        }
-                        afterSettled(100, 2000, [=, this] {
-                            QQuickWindow *after = window();
-                            QQuickItem *focus = after ? after->activeFocusItem() : nullptr;
-                            reply.ok(QJsonObject{
-                                    {u"keys"_s, strokes.size()},
-                                    {u"focusedItem"_s, focus ? QJsonValue(describe(focus)) : QJsonValue()}});
-                            finished();
-                        });
-                    },
-                    [reply] { return reply.connected(); });
-        });
+    enqueueSettled(reply, u"The window is not there yet"_s, [this, text](QQuickWindow *settled, const Input &in) {
+        const QList<uidriver::KeyStroke> strokes = uidriver::strokesFor(text);
+        // Typing stops when the client leaves (a command line interrupted).
+        playThenAnswer(
+                settled, uidriver::keyStrokes(settled, strokes, uidriver::KeyDelivery::System, 8), in,
+                [this, keys = strokes.size()] {
+                    return QJsonObject{{u"keys"_s, keys}, {u"focusedItem"_s, describeFocus()}};
+                },
+                [reply = in.reply] { return reply.connected(); });
     });
 }
 
@@ -1175,53 +1143,25 @@ void RemoteControl::pressKeys(const QJsonObject &params, const ipc::ControlReply
     QList<uidriver::KeyStroke> strokes;
     for (int i = 0; i < count; ++i)
         strokes += *parsed;
-    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
-        QQuickWindow *w = window();
-        if (!w) {
-            reply.fail(code(E::NotReady), u"The window is not there yet"_s);
-            finished();
-            return;
+    enqueueSettled(reply, u"The window is not there yet"_s, [this, strokes](QQuickWindow *settled, const Input &in) {
+        auto handled = std::make_shared<QList<bool>>();
+        uidriver::Gesture gesture;
+        for (const uidriver::KeyStroke &stroke : strokes) {
+            gesture.append(uidriver::Step{[settled, stroke, handled] {
+                                              handled->append(uidriver::deliverKey(settled, stroke,
+                                                                                   uidriver::KeyDelivery::System));
+                                          },
+                                          30, true});
         }
-        prepareInput(w);
-        afterSettled(100, 2000, [=, this] {
-            QQuickWindow *settled = window();
-            if (!settled) {
-                reply.fail(code(E::NotReady), u"The window is gone"_s);
-                finished();
-                return;
-            }
-            auto handled = std::make_shared<QList<bool>>();
-            uidriver::Gesture gesture;
-            for (const uidriver::KeyStroke &stroke : strokes) {
-                gesture.append(uidriver::Step{[settled, stroke, handled] {
-                                                  handled->append(uidriver::deliverKey(settled, stroke,
-                                                                                       uidriver::KeyDelivery::System));
-                                              },
-                                              30, true});
-            }
-            uidriver::play(
-                    this, settled, gesture,
-                    [=, this](bool completed) {
-                        if (!completed) {
-                            reply.fail(code(E::Failed), u"The window went away"_s);
-                            finished();
-                            return;
-                        }
-                        afterSettled(100, 2000, [=, this] {
-                            QJsonArray list;
-                            for (const bool h : std::as_const(*handled))
-                                list.append(h);
-                            QQuickWindow *after = window();
-                            QQuickItem *focus = after ? after->activeFocusItem() : nullptr;
-                            reply.ok(QJsonObject{
-                                    {u"keys"_s, strokes.size()},
-                                    {u"handled"_s, list},
-                                    {u"focusedItem"_s, focus ? QJsonValue(describe(focus)) : QJsonValue()}});
-                            finished();
-                        });
-                    },
-                    [reply] { return reply.connected(); });
-        });
+        playThenAnswer(
+                settled, gesture, in,
+                [this, handled, keys = strokes.size()] {
+                    QJsonArray list;
+                    for (const bool h : std::as_const(*handled))
+                        list.append(h);
+                    return QJsonObject{{u"keys"_s, keys}, {u"handled"_s, list}, {u"focusedItem"_s, describeFocus()}};
+                },
+                [reply = in.reply] { return reply.connected(); });
     });
 }
 
@@ -1231,10 +1171,7 @@ void RemoteControl::waitFor(const QJsonObject &params, const ipc::ControlReply &
 {
     auto wait = std::make_shared<Wait>();
     wait->route = params.value(u"route"_s);
-    for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s, u"exact"_s}) {
-        if (params.contains(key))
-            wait->selector.insert(key, params.value(key));
-    }
+    wait->selector = selectorOf(params);
     wait->handle = params.value(u"handle"_s).toString();
     wait->idle = params.value(u"idle"_s).toBool();
     wait->gone = params.value(u"gone"_s).toBool();
@@ -1243,15 +1180,12 @@ void RemoteControl::waitFor(const QJsonObject &params, const ipc::ControlReply &
     wait->since.start();
     if (!wait->handle.isEmpty()) {
         // An unknown handle never shows up; a gone item only satisfies `gone`.
-        QString errorCode, message;
-        if (!itemFor(wait->handle, &errorCode, &message)
-            && (errorCode == code(E::NotFound) || (errorCode == code(E::StaleHandle) && !wait->gone)))
-            return reply.fail(errorCode, message, {{u"param"_s, u"handle"_s}});
+        if (const ItemLookup lookup = itemFor(wait->handle);
+            !lookup.item && (lookup.code == code(E::NotFound) || !wait->gone))
+            return reply.fail(lookup.code, lookup.message, {{u"param"_s, u"handle"_s}});
     }
-    if (satisfied(*wait)) {
-        reply.ok(waitAnswer(*wait));
-        return;
-    }
+    if (satisfied(*wait))
+        return reply.ok(waitAnswer(*wait));
     m_waits.append(wait);
     if (!m_waitTimer.isActive())
         m_waitTimer.start();
@@ -1267,8 +1201,7 @@ QJsonObject RemoteControl::waitAnswer(const Wait &wait)
             if (QQuickWindow *w = window())
                 item = select(w, wait.selector, true).value(0);
         } else if (!wait.handle.isEmpty()) {
-            QString errorCode, message;
-            item = itemFor(wait.handle, &errorCode, &message);
+            item = itemFor(wait.handle).item;
         }
         if (item)
             out.insert(u"item"_s, describe(item));
@@ -1276,7 +1209,7 @@ QJsonObject RemoteControl::waitAnswer(const Wait &wait)
     return out;
 }
 
-bool RemoteControl::satisfied(const Wait &wait)
+bool RemoteControl::satisfied(const Wait &wait) const
 {
     if (!wait.route.isUndefined() && !ipc::routeMatches(QJsonObject::fromVariantMap(m_app->currentRoute()), wait.route))
         return false;
@@ -1287,18 +1220,15 @@ bool RemoteControl::satisfied(const Wait &wait)
             return false;
     }
     if (!wait.handle.isEmpty()) {
-        QString errorCode, message;
-        QQuickItem *item = itemFor(wait.handle, &errorCode, &message);
+        QQuickItem *item = itemFor(wait.handle).item;
         const bool there = item && uidriver::shown(item);
         if (there == wait.gone)
             return false;
     }
-    if (wait.idle && !idle())
-        return false;
-    return true;
+    return !wait.idle || idle();
 }
 
-QList<QObject *> RemoteControl::pageControllers()
+QList<QObject *> RemoteControl::pageControllers() const
 {
     QList<QObject *> out;
     QQuickWindow *w = window();
@@ -1314,21 +1244,22 @@ QList<QObject *> RemoteControl::pageControllers()
     return out;
 }
 
-QJsonArray RemoteControl::conflicts()
+QJsonArray RemoteControl::conflicts() const
 {
     QStringList pages;
-    for (const QObject *controller : pageControllers()) {
-        const QString page = controller->property("path").toString();
-        if (controller->property("conflict").toBool() && !pages.contains(page))
-            pages.append(page);
-    }
     QJsonArray out;
-    for (const QString &page : std::as_const(pages))
-        out.append(QJsonObject{{u"page"_s, page}});
+    const QList<QObject *> controllers = pageControllers();
+    for (const QObject *controller : controllers) {
+        const QString page = controller->property("path").toString();
+        if (controller->property("conflict").toBool() && !pages.contains(page)) {
+            pages.append(page);
+            out.append(QJsonObject{{u"page"_s, page}});
+        }
+    }
     return out;
 }
 
-bool RemoteControl::idle()
+bool RemoteControl::idle() const
 {
     const QString status = m_app->status();
     if (status == u"boot" || status == u"loading")
@@ -1345,11 +1276,9 @@ bool RemoteControl::idle()
         return false;
     // Unsaved edits: every block editor's page saved — none with a conflict waiting for the user
     // either (its text is not saved until they decide; another program's change not shown).
-    for (const QObject *controller : pageControllers()) {
-        if (controller->property("dirty").toBool() || controller->property("conflict").toBool())
-            return false;
-    }
-    return true;
+    return std::ranges::none_of(pageControllers(), [](const QObject *controller) {
+        return controller->property("dirty").toBool() || controller->property("conflict").toBool();
+    });
 }
 
 void RemoteControl::pollWaits()

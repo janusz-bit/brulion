@@ -9,7 +9,8 @@
 //   6. an Obsidian vault (Polish names) typed as a path → the preview counts it, nothing written
 //      yet → "Import" → the report → "Open the imported folder" → All pages in Import/Obsidian;
 //   7. the export tab: "Export…" → the file is produced → the save dialog opens with its name
-//      already set (Android's "Save as" takes the name when it opens) → cancelled.
+//      already set (Android's "Save as" takes the name when it opens) → cancelled;
+//   8. one page's export: PDF → "Save as file…" opens the save dialog with the PDF's name; "Print…".
 // Prints "selftest: PASS|FAIL <what>" lines; the exit code is the number of failures. Run by
 // ctest as tst_appio_import_qml* (tests/app/io/CMakeLists.txt). Desktop builds only (nested
 // event processing).

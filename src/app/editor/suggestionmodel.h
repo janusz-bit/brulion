@@ -117,6 +117,9 @@ Q_SIGNALS:
     void defaultIndexChanged();
 
 private:
+    /// `member` = `value`: a change emits `changed`, then the items follow (refresh()).
+    template<typename T>
+    void setAndRefresh(T &member, const T &value, void (SuggestionModel::*changed)());
     QDateTime currentDateTime() const;
     QVariantList pageItems() const;
     QVariantList blockItems() const;

@@ -36,9 +36,8 @@ Item {
     /// Reading mode (BlockEditor.readOnly): the values are shown, never edited, no add row.
     readonly property bool readOnly: editor !== null && editor.readOnly
     readonly property bool editable: !readOnly && (draft || panel.infoRec.map.editable !== false)
-    readonly property bool canAdd: readOnly ? false
-                                   : draft ? (panel.controller !== null && panel.controller.pageProperties.canAdd !== false)
-                                   : (editable && panel.infoRec.map.canAdd !== false)
+    readonly property bool canAdd: !readOnly && (draft ? panel.controller !== null && panel.controller.pageProperties.canAdd !== false
+                                                       : editable && panel.infoRec.map.canAdd !== false)
     /// The key above the value when the two columns (icon + key | value) would cut a key or
     /// squeeze the value: the widest key does not fit 40 % of the panel, or the value column
     /// beside it would be narrower than ~168 px (a narrow side panel). Short keys (tags, status,
@@ -207,18 +206,6 @@ Item {
         menu.bottomMargin = editor.menuBottomMargin()
         menu.popup(item, x, y)
     }
-    function typeIcon(t: string): string {
-        switch (t) {
-        case "number": return "sigma"
-        case "checkbox": return "square-check-big"
-        case "date": return "calendar"
-        case "datetime": return "calendar-clock"
-        case "list": return "list"
-        case "tags": return "tags"
-        case "aliases": return "bookmark"
-        default: return "type"
-        }
-    }
 
     // ---- rows: one per key, kept while the key stays ------------------------------------------------
     KeyListModel {
@@ -294,8 +281,9 @@ Item {
             Accessible.name: addLabel.text
             onClicked: panel.openAdd()
             background: Rectangle {
+                visible: addButton.hovered || addButton.down
                 radius: Theme.radiusSm
-                color: addButton.hovered || addButton.down ? Theme.bgHover : "transparent"
+                color: Theme.bgHover
             }
             contentItem: Item {
                 BIcon {
@@ -334,7 +322,6 @@ Item {
                 onSuggestionsRequested: (typed) => {
                     keyField.suggestions = BlockViews.propertyKeyRows(panel.controller.suggestPropertyKeys(typed, 8), true, false)
                 }
-                property bool done: false
                 Component.onCompleted: {
                     forceActiveFocus()
                     if (panel.controller && panel.controller.editingRow >= 0)

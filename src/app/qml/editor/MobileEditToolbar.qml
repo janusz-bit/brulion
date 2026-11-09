@@ -163,6 +163,11 @@ Rectangle {
             onClicked: { bar.commitComposition(); bar.controller.moveDown(bar.row) }
         }
     }
+    /// One tool set's Loader (made when its mode first comes, see showMode()).
+    component ToolSet: Loader {
+        height: parent.height
+        active: false
+    }
     /// Task, [[, #, /.
     component WritingTools: Row {
         // (Centred in the row; a binding to `undefined` anchors is not compiled.)
@@ -225,31 +230,23 @@ Rectangle {
 
             // One tool set at a time (the Loaders take their Row's width; hidden ones take no
             // room). Made when first needed (showMode()), then kept.
-            Loader {
+            ToolSet {
                 id: blockLoader
-                height: parent.height
-                active: false
                 visible: bar.shownMode === "block"
                 sourceComponent: blockTools
             }
-            Loader {
+            ToolSet {
                 id: cellLoader
-                height: parent.height
-                active: false
                 visible: bar.shownMode === "cell"
                 sourceComponent: cellTools
             }
-            Loader {
+            ToolSet {
                 id: sourceLoader
-                height: parent.height
-                active: false
                 visible: bar.shownMode === "source"
                 sourceComponent: sourceTools
             }
-            Loader {
+            ToolSet {
                 id: selectionLoader
-                height: parent.height
-                active: false
                 visible: bar.shownMode === "selection"
                 sourceComponent: SelectionToolbar {
                     objectName: "toolbarSelectionTools"

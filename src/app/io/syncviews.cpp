@@ -3,6 +3,8 @@
 #include "texthelper.h"
 #include "workspacesync.h"
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::ioviews {
@@ -72,12 +74,8 @@ IoLists::IoLists(QObject *parent) : QObject(parent) { }
 
 int IoLists::countWhere(const QVariantList &rows, const QString &key, const QString &value) const
 {
-    int n = 0;
-    for (const QVariant &row : rows) {
-        if (row.toMap().value(key).toString() == value)
-            ++n;
-    }
-    return n;
+    return static_cast<int>(std::ranges::count_if(
+            rows, [&key, &value](const QVariant &row) { return row.toMap().value(key).toString() == value; }));
 }
 
 QStringList IoLists::column(const QVariantList &rows, const QString &key) const
@@ -91,13 +89,14 @@ QStringList IoLists::column(const QVariantList &rows, const QString &key) const
 
 QVariantList IoLists::folderItems(const QString &query, const QStringList &folders, int limit) const
 {
+    // The ranking itself, not TextHelper::fuzzyRank()'s maps of it: this runs at every keystroke.
+    const QList<ui::FuzzyRanked> ranked = ui::fuzzyRankList(query, folders, limit, {});
     QVariantList out;
-    const ui::TextHelper text;
-    for (const QVariant &ranked : text.fuzzyRank(query, folders, limit)) {
-        const int index = ranked.toMap().value(u"index"_s).toInt();
-        if (index < 0 || index >= folders.size())
+    out.reserve(ranked.size());
+    for (const ui::FuzzyRanked &r : ranked) {
+        if (r.index < 0 || r.index >= folders.size())
             continue;
-        const QString &path = folders.at(index);
+        const QString &path = folders.at(r.index);
         const qsizetype slash = path.lastIndexOf(u'/');
         out.append(QVariantMap{
                 {u"title"_s, slash >= 0 ? path.mid(slash + 1) : path},

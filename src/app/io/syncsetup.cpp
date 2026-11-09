@@ -16,12 +16,23 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <type_traits>
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::ioviews {
 
 namespace {
+
+/// `member = value`; false when it already had that value.
+template<typename T>
+bool assign(T &member, const std::type_identity_t<T> &value)
+{
+    if (member == value)
+        return false;
+    member = value;
+    return true;
+}
 
 /// The server address as a URL (https:// added when no scheme is given).
 QUrl serverUrl(const QString &server)
@@ -44,24 +55,40 @@ bool isLocalHost(const QString &host)
 
 bool containsAny(const QString &text, std::initializer_list<QStringView> words)
 {
-    for (QStringView w : words) {
-        if (text.contains(w, Qt::CaseInsensitive))
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(words, [&text](QStringView w) { return text.contains(w, Qt::CaseInsensitive); });
 }
 
 /// Rules of a .stignore: lines that are neither comments nor blank, trimmed.
 QStringList stignoreRules(const QString &text)
 {
     QStringList out;
-    for (const QString &raw : text.split(u'\n')) {
-        const QString line = raw.trimmed();
-        if (line.isEmpty() || line.startsWith(u"//"_s) || line.startsWith(u'#'))
-            continue;
-        out.append(line);
+    for (const QStringView raw : text.tokenize(u'\n')) {
+        const QStringView line = raw.trimmed();
+        if (!line.isEmpty() && !line.startsWith(u"//") && !line.startsWith(u'#'))
+            out.append(line.toString());
     }
     return out;
+}
+
+/// The rules of `recommended` that `existing` lacks, in their order.
+QStringList missingRules(const QString &existing, const QString &recommended)
+{
+    const QStringList have = stignoreRules(existing);
+    const QSet<QString> haveSet(have.cbegin(), have.cend());
+    QStringList missing = stignoreRules(recommended);
+    missing.removeIf([&haveSet](const QString &rule) { return haveSet.contains(rule); });
+    return missing;
+}
+
+Vault *vaultOf(const shell::Workspace *workspace)
+{
+    return workspace ? workspace->vault() : nullptr;
+}
+
+/// The vault's .stignore (Syncthing reads it in the folder's root); "" without a vault.
+QString stignoreFile(const Vault *vault)
+{
+    return vault ? vault->rootPath() + u"/.stignore"_s : QString();
 }
 
 } // namespace
@@ -70,10 +97,11 @@ QStringList stignoreRules(const QString &text)
 
 QString validateServerUrl(const QString &url)
 {
+    static const QRegularExpression space(u"\\s"_s);
     const QString s = url.trimmed();
     if (s.isEmpty())
         return NextcloudSetup::tr("Enter the address of your Nextcloud server.");
-    if (s.contains(QRegularExpression(u"\\s"_s)))
+    if (s.contains(space))
         return NextcloudSetup::tr("The address cannot contain spaces.");
     const QUrl u = serverUrl(s);
     if (!u.isValid() || u.host().isEmpty())
@@ -101,13 +129,14 @@ QString validateUserName(const QString &user)
 
 QString validateServerFolder(const QString &folder)
 {
+    static const QRegularExpression forbidden(u"[\\\\:*?\"<>|]"_s);
     const QString s = folder.trimmed();
     if (s.isEmpty() || s == u"/" || s == u".")
         return NextcloudSetup::tr("Enter a folder for the notes – an empty one would sync all your Nextcloud files.");
-    for (const QString &seg : s.split(u'/', Qt::SkipEmptyParts)) {
+    for (const QStringView seg : s.tokenize(u'/', Qt::SkipEmptyParts)) {
         if (seg == u"..")
             return NextcloudSetup::tr("The folder cannot contain “..”.");
-        if (seg.contains(QRegularExpression(u"[\\\\:*?\"<>|]"_s)))
+        if (seg.contains(forbidden))
             return NextcloudSetup::tr("The folder name cannot contain \\ : * ? \" < > |.");
     }
     return {};
@@ -175,7 +204,7 @@ QVariantMap describeConnectionError(const sync::WebDavError &error, bool browser
         hint = NextcloudSetup::tr("This is a problem on the server side. Try again later.");
         break;
     case WebDavErrorCode::Network: {
-        const QString detail = error.message;
+        const QString &detail = error.message;
         if (browser) {
             code = u"cors"_s;
             title = NextcloudSetup::tr("The browser blocked the connection");
@@ -235,26 +264,14 @@ QString stignoreState(const QString &existing, bool exists, const QString &recom
 {
     if (!exists)
         return u"missing"_s;
-    const QStringList have = stignoreRules(existing);
-    const QSet<QString> haveSet(have.cbegin(), have.cend());
-    for (const QString &rule : stignoreRules(recommended)) {
-        if (!haveSet.contains(rule))
-            return u"outdated"_s;
-    }
-    return u"current"_s;
+    return missingRules(existing, recommended).isEmpty() ? u"current"_s : u"outdated"_s;
 }
 
 QString mergeStignore(const QString &existing, const QString &recommended)
 {
     if (existing.trimmed().isEmpty())
         return recommended;
-    const QStringList have = stignoreRules(existing);
-    const QSet<QString> haveSet(have.cbegin(), have.cend());
-    QStringList missing;
-    for (const QString &rule : stignoreRules(recommended)) {
-        if (!haveSet.contains(rule))
-            missing.append(rule);
-    }
+    const QStringList missing = missingRules(existing, recommended);
     if (missing.isEmpty())
         return existing;
     const QString eol = existing.contains(u"\r\n"_s) ? u"\r\n"_s : u"\n"_s;
@@ -314,75 +331,56 @@ void NextcloudSetup::reload()
 
 void NextcloudSetup::setEnabled(bool on)
 {
-    if (on == m_enabled)
-        return;
-    m_enabled = on;
-    Q_EMIT draftChanged();
+    if (assign(m_enabled, on))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setUrl(const QString &url)
 {
-    if (url == m_url)
-        return;
-    m_url = url;
-    Q_EMIT draftChanged();
+    if (assign(m_url, url))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setUser(const QString &user)
 {
-    if (user == m_user)
-        return;
-    m_user = user;
-    Q_EMIT draftChanged();
+    if (assign(m_user, user))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setPassword(const QString &password)
 {
-    if (password == m_password)
-        return;
-    m_password = password;
-    Q_EMIT draftChanged();
+    if (assign(m_password, password))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setFolder(const QString &folder)
 {
-    if (folder == m_folder)
-        return;
-    m_folder = folder;
-    Q_EMIT draftChanged();
+    if (assign(m_folder, folder))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setInterval(int minutes)
 {
-    const int clean = std::clamp(minutes, 0, 24 * 60);
-    if (clean == m_interval)
-        return;
-    m_interval = clean;
-    Q_EMIT draftChanged();
+    if (assign(m_interval, std::clamp(minutes, 0, 24 * 60)))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setDeviceName(const QString &name)
 {
-    if (name == m_deviceName)
-        return;
-    m_deviceName = name;
-    Q_EMIT draftChanged();
+    if (assign(m_deviceName, name))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setShowErrors(bool on)
 {
-    if (on == m_showErrors)
-        return;
-    m_showErrors = on;
-    Q_EMIT draftChanged();
+    if (assign(m_showErrors, on))
+        Q_EMIT draftChanged();
 }
 
 void NextcloudSetup::setBrowser(bool on)
 {
-    if (on == m_browser)
-        return;
-    m_browser = on;
-    Q_EMIT settingsChanged();
+    if (assign(m_browser, on))
+        Q_EMIT settingsChanged();
 }
 
 bool NextcloudSetup::hasStoredPassword() const
@@ -392,8 +390,7 @@ bool NextcloudSetup::hasStoredPassword() const
 
 bool NextcloudSetup::storedPasswordApplies() const
 {
-    return hasStoredPassword()
-        && shell::sameNextcloudAccount(m_url, m_user, m_settings->nextcloudUrl(), m_settings->nextcloudUser());
+    return hasStoredPassword() && sameAccount();
 }
 
 bool NextcloudSetup::configured() const
@@ -404,13 +401,12 @@ bool NextcloudSetup::configured() const
 
 bool NextcloudSetup::dirty() const
 {
-    if (!m_settings)
-        return false;
-    const QString savedFolder = m_settings->proposedNextcloudFolder();
-    return m_enabled != m_settings->nextcloudEnabled() || m_url.trimmed() != m_settings->nextcloudUrl()
-        || m_user.trimmed() != m_settings->nextcloudUser() || !m_password.isEmpty()
-        || m_folder.trimmed() != savedFolder || m_interval != m_settings->syncIntervalMinutes()
-        || m_deviceName.trimmed() != m_settings->value(u"sync/deviceName"_s, QString()).toString();
+    return m_settings
+           && (m_enabled != m_settings->nextcloudEnabled() || m_url.trimmed() != m_settings->nextcloudUrl()
+               || m_user.trimmed() != m_settings->nextcloudUser() || !m_password.isEmpty()
+               || m_folder.trimmed() != m_settings->proposedNextcloudFolder()
+               || m_interval != m_settings->syncIntervalMinutes()
+               || m_deviceName.trimmed() != m_settings->value(u"sync/deviceName"_s, QString()).toString());
 }
 
 QString NextcloudSetup::urlError() const
@@ -458,7 +454,7 @@ QString NextcloudSetup::folderConflict() const
 {
     // Shown at once, not only after a save attempt: the user should not find out from mixed notes.
     // Another account switches the other notebooks off when saved (save()).
-    if (!m_settings || !m_enabled || !sameAccount())
+    if (!m_enabled || !sameAccount())
         return {};
     const QString other = m_settings->nextcloudFolderUser(m_folder);
     if (other.isEmpty())
@@ -500,9 +496,9 @@ QVariantList NextcloudSetup::intervalOptions() const
 
 QString NextcloudSetup::intervalText() const
 {
-    for (const QVariant &option : intervalOptions()) {
-        const QVariantMap map = option.toMap();
-        if (map.value(u"value"_s).toInt() == m_interval)
+    const QVariantList options = intervalOptions();
+    for (const QVariant &option : options) {
+        if (const QVariantMap map = option.toMap(); map.value(u"value"_s).toInt() == m_interval)
             return map.value(u"text"_s).toString();
     }
     return tr("Every %n minute(s)", "", m_interval);
@@ -576,61 +572,64 @@ void NextcloudSetup::clearTestResult()
 
 void NextcloudSetup::setTestResult(const QVariantMap &result)
 {
-    if (result == m_testResult)
-        return;
-    m_testResult = result;
-    Q_EMIT testResultChanged();
+    if (assign(m_testResult, result))
+        Q_EMIT testResultChanged();
 }
 
-void NextcloudSetup::finishTest(const QVariantMap &result)
+void NextcloudSetup::finishTest(int generation, const QVariantMap &result)
 {
     --m_testing;
     Q_EMIT testingChanged();
-    setTestResult(result);
+    if (generation == m_testGeneration)
+        setTestResult(result);
+}
+
+QString NextcloudSetup::formProblem(const QString &password) const
+{
+    for (const QString &problem :
+         {validateServerUrl(m_url), validateUserName(m_user), validateServerFolder(m_folder)}) {
+        if (!problem.isEmpty())
+            return problem;
+    }
+    return password.isEmpty() ? tr("Enter an app password (Nextcloud: Settings → Security).") : QString();
 }
 
 void NextcloudSetup::testConnection()
 {
     setShowErrors(true);
-    const QString firstError = !validateServerUrl(m_url).isEmpty() ? validateServerUrl(m_url)
-                             : !validateUserName(m_user).isEmpty() ? validateUserName(m_user)
-                             : !validateServerFolder(m_folder).isEmpty() ? validateServerFolder(m_folder)
-                             : effectivePassword().isEmpty() ? tr("Enter an app password (Nextcloud: Settings → Security).")
-                                                             : QString();
+    const QString password = effectivePassword();
+    const QString problem = formProblem(password);
     const int generation = ++m_testGeneration;
-    if (!firstError.isEmpty()) {
-        setTestResult({ { u"ok"_s, false }, { u"code"_s, u"invalid"_s }, { u"title"_s, tr("Check the form") },
-                        { u"message"_s, firstError } });
+    if (!problem.isEmpty()) {
+        setTestResult({{u"ok"_s, false},
+                       {u"code"_s, u"invalid"_s},
+                       {u"title"_s, tr("Check the form")},
+                       {u"message"_s, problem}});
         return;
     }
     setTestResult({});
     const QString server = m_url.trimmed();
     const QString user = m_user.trimmed();
     const QString folder = m_folder.trimmed();
-    const QString password = effectivePassword();
     const bool browser = m_browser;
     ++m_testing;
     Q_EMIT testingChanged();
     auto *client = new sync::WebDavClient(sync::nextcloudDavUrl(server, user, folder), user, password, transport(), this);
     client->test([this, client, generation, server, user, folder, password, browser](const sync::WebDavTestResult &r) {
         client->deleteLater();
-        if (generation != m_testGeneration) {
-            --m_testing;
-            Q_EMIT testingChanged();
-            return;
-        }
         if (r.ok) {
-            finishTest({ { u"ok"_s, true },
-                         { u"code"_s, u"ok"_s },
-                         { u"title"_s, tr("Connected") },
-                         { u"message"_s, tr("The folder “%1” is ready for syncing.").arg(folder) } });
+            finishTest(generation, {{u"ok"_s, true},
+                                    {u"code"_s, u"ok"_s},
+                                    {u"title"_s, tr("Connected")},
+                                    {u"message"_s, tr("The folder “%1” is ready for syncing.").arg(folder)}});
             return;
         }
-        if (!r.error.is(sync::WebDavErrorCode::NotFound)) {
+        // (A test left behind by an edit or a newer test ends here: finishTest() drops its result.)
+        if (!r.error.is(sync::WebDavErrorCode::NotFound) || generation != m_testGeneration) {
             QVariantMap m = describeConnectionError(r.error, browser, server);
             if (m.value(u"code"_s).toString() == u"auth")
                 m.insert(u"securityUrl"_s, nextcloudSecurityUrl(server));
-            finishTest(m);
+            finishTest(generation, m);
             return;
         }
         // 404: is it the folder or the whole account? Ask for the user's root folder.
@@ -638,27 +637,25 @@ void NextcloudSetup::testConnection()
                                             transport(), this);
         root->test([this, root, generation, folder, user, server, browser](const sync::WebDavTestResult &rr) {
             root->deleteLater();
-            if (generation != m_testGeneration) {
-                --m_testing;
-                Q_EMIT testingChanged();
-                return;
-            }
             if (rr.ok) {
-                finishTest({ { u"ok"_s, false },
-                             { u"code"_s, u"no-folder"_s },
-                             { u"title"_s, tr("The folder does not exist yet") },
-                             { u"message"_s, tr("Your account works, but there is no folder “%1” on the server.").arg(folder) },
-                             { u"hint"_s, tr("Brulion can create it now. The first sync would create it as well.") },
-                             { u"canCreateFolder"_s, true } });
+                finishTest(generation,
+                           {{u"ok"_s, false},
+                            {u"code"_s, u"no-folder"_s},
+                            {u"title"_s, tr("The folder does not exist yet")},
+                            {u"message"_s,
+                             tr("Your account works, but there is no folder “%1” on the server.").arg(folder)},
+                            {u"hint"_s, tr("Brulion can create it now. The first sync would create it as well.")},
+                            {u"canCreateFolder"_s, true}});
             } else if (rr.error.is(sync::WebDavErrorCode::NotFound)) {
-                finishTest({ { u"ok"_s, false },
-                             { u"code"_s, u"no-user"_s },
-                             { u"title"_s, tr("Account not found") },
-                             { u"message"_s, tr("The server has no files for the user “%1”.").arg(user) },
-                             { u"hint"_s, tr("Use the user name shown in Nextcloud under Settings → Personal info – "
-                                             "it can differ from your e-mail address.") } });
+                finishTest(generation,
+                           {{u"ok"_s, false},
+                            {u"code"_s, u"no-user"_s},
+                            {u"title"_s, tr("Account not found")},
+                            {u"message"_s, tr("The server has no files for the user “%1”.").arg(user)},
+                            {u"hint"_s, tr("Use the user name shown in Nextcloud under Settings → Personal info – "
+                                           "it can differ from your e-mail address.")}});
             } else {
-                finishTest(describeConnectionError(rr.error, browser, server));
+                finishTest(generation, describeConnectionError(rr.error, browser, server));
             }
         });
     });
@@ -668,13 +665,12 @@ void NextcloudSetup::createFolder()
 {
     if (testing())
         return;
+    const QString password = effectivePassword();
+    if (!formProblem(password).isEmpty())
+        return;
     const QString server = m_url.trimmed();
     const QString user = m_user.trimmed();
     const QString folder = m_folder.trimmed();
-    const QString password = effectivePassword();
-    if (!validateServerUrl(server).isEmpty() || !validateUserName(user).isEmpty()
-        || !validateServerFolder(folder).isEmpty() || password.isEmpty())
-        return;
     const int generation = ++m_testGeneration;
     const bool browser = m_browser;
     ++m_testing;
@@ -682,28 +678,21 @@ void NextcloudSetup::createFolder()
     auto *client = new sync::WebDavClient(sync::nextcloudDavUrl(server, user, folder), user, password, transport(), this);
     client->ensureBase([this, client, generation, folder, server, browser](const sync::WebDavError &error) {
         client->deleteLater();
-        if (generation != m_testGeneration) {
-            --m_testing;
-            Q_EMIT testingChanged();
-            return;
-        }
         if (error.isError()) {
-            finishTest(describeConnectionError(error, browser, server));
+            finishTest(generation, describeConnectionError(error, browser, server));
             return;
         }
-        finishTest({ { u"ok"_s, true },
-                     { u"code"_s, u"created"_s },
-                     { u"title"_s, tr("Folder created") },
-                     { u"message"_s, tr("“%1” was created on the server and is ready for syncing.").arg(folder) } });
+        finishTest(generation,
+                   {{u"ok"_s, true},
+                    {u"code"_s, u"created"_s},
+                    {u"title"_s, tr("Folder created")},
+                    {u"message"_s, tr("“%1” was created on the server and is ready for syncing.").arg(folder)}});
     });
 }
 
 // ---- SyncthingSetup -------------------------------------------------------------------------------
 
-SyncthingSetup::SyncthingSetup(QObject *parent)
-    : QObject(parent)
-{
-}
+SyncthingSetup::SyncthingSetup(QObject *parent) : QObject(parent) { }
 
 void SyncthingSetup::setSettings(shell::AppSettings *settings)
 {
@@ -738,18 +727,14 @@ void SyncthingSetup::reload()
 
 void SyncthingSetup::setApiKey(const QString &key)
 {
-    if (key == m_apiKey)
-        return;
-    m_apiKey = key;
-    Q_EMIT draftChanged();
+    if (assign(m_apiKey, key))
+        Q_EMIT draftChanged();
 }
 
 void SyncthingSetup::setUrl(const QString &url)
 {
-    if (url == m_url)
-        return;
-    m_url = url;
-    Q_EMIT draftChanged();
+    if (assign(m_url, url))
+        Q_EMIT draftChanged();
 }
 
 QString SyncthingSetup::urlError() const
@@ -796,33 +781,28 @@ QString SyncthingSetup::stignoreTemplate() const
 
 QString SyncthingSetup::stignorePath() const
 {
-    Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
-    return vault ? QDir::toNativeSeparators(vault->rootPath() + u"/.stignore"_s) : QString();
+    return QDir::toNativeSeparators(stignoreFile(vaultOf(m_workspace)));
 }
 
 void SyncthingSetup::refreshStignore()
 {
-    Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
     QString state = u"unavailable"_s;
-    if (vault) {
-        const bool exists = QFileInfo::exists(vault->rootPath() + u"/.stignore"_s);
+    if (Vault *vault = vaultOf(m_workspace)) {
+        const bool exists = QFileInfo::exists(stignoreFile(vault));
         const QString text = exists ? vault->readText(u".stignore"_s) : QString();
         state = ioviews::stignoreState(text, exists, sync::stignoreTemplate());
     }
-    if (state == m_stignoreState)
-        return;
-    m_stignoreState = state;
-    Q_EMIT stignoreChanged();
+    if (assign(m_stignoreState, state))
+        Q_EMIT stignoreChanged();
 }
 
 bool SyncthingSetup::writeStignore()
 {
-    Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
+    Vault *vault = vaultOf(m_workspace);
     if (!vault)
         return false;
-    const bool exists = QFileInfo::exists(vault->rootPath() + u"/.stignore"_s);
     bool ok = true;
-    const QString existing = exists ? vault->readText(u".stignore"_s, &ok) : QString();
+    const QString existing = QFileInfo::exists(stignoreFile(vault)) ? vault->readText(u".stignore"_s, &ok) : QString();
     if (!ok) {
         Q_EMIT errorOccurred(tr("The existing .stignore could not be read: %1").arg(vault->errorString()));
         return false;

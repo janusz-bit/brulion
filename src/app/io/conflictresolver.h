@@ -121,33 +121,33 @@ public:
     QString copy() const { return m_copy; }
     void setCopy(const QString &copy);
 
-    bool loaded() const { return !m_conflict.isEmpty(); }
-    QVariantMap conflict() const { return m_conflict; }
-    bool isText() const { return m_conflict.value(QStringLiteral("text")).toBool() && !isDrawing(); }
-    bool isDrawing() const { return m_conflict.value(QStringLiteral("drawing")).toBool(); }
-    bool canMergeDrawings() const { return m_canMergeDrawings; }
-    QByteArray oursBytes() const { return m_oursBytes; }
-    QByteArray theirsBytes() const { return m_theirsBytes; }
-    QByteArray mergedBytes() const { return m_mergedBytes; }
-    int oursByteCount() const { return int(m_oursBytes.size()); }
-    int theirsByteCount() const { return int(m_theirsBytes.size()); }
-    int mergedByteCount() const { return int(m_mergedBytes.size()); }
-    QVariantMap drawingCounts() const { return m_drawingCounts; }
-    bool notesDiffer() const { return m_notesDiffer; }
-    bool notesOnly() const { return m_notesOnly; }
-    QString oursNotes() const { return m_oursNotes; }
-    QString theirsNotes() const { return m_theirsNotes; }
-    QString ours() const { return m_ours; }
-    QString theirs() const { return m_theirs; }
-    QString base() const { return m_base; }
-    bool hasBase() const { return m_hasBase; }
-    QString baseWhen() const { return m_baseWhen; }
-    QVariantList hunks() const { return m_hunks; }
-    bool clean() const { return m_clean; }
-    QString mergedText() const { return m_merged; }
-    int collisionCount() const { return m_collisions; }
-    bool identical() const { return m_identical; }
-    bool copyIsOlder() const { return m_copyIsOlder; }
+    bool loaded() const { return !m_loaded.conflict.isEmpty(); }
+    QVariantMap conflict() const { return m_loaded.conflict; }
+    bool isText() const { return m_loaded.conflict.value(QStringLiteral("text")).toBool() && !isDrawing(); }
+    bool isDrawing() const { return m_loaded.conflict.value(QStringLiteral("drawing")).toBool(); }
+    bool canMergeDrawings() const { return m_loaded.canMergeDrawings; }
+    QByteArray oursBytes() const { return m_loaded.oursBytes; }
+    QByteArray theirsBytes() const { return m_loaded.theirsBytes; }
+    QByteArray mergedBytes() const { return m_loaded.mergedBytes; }
+    int oursByteCount() const { return int(m_loaded.oursBytes.size()); }
+    int theirsByteCount() const { return int(m_loaded.theirsBytes.size()); }
+    int mergedByteCount() const { return int(m_loaded.mergedBytes.size()); }
+    QVariantMap drawingCounts() const { return m_loaded.drawingCounts; }
+    bool notesDiffer() const { return m_loaded.notesDiffer; }
+    bool notesOnly() const { return m_loaded.notesOnly; }
+    QString oursNotes() const { return m_loaded.oursNotes; }
+    QString theirsNotes() const { return m_loaded.theirsNotes; }
+    QString ours() const { return m_loaded.ours; }
+    QString theirs() const { return m_loaded.theirs; }
+    QString base() const { return m_loaded.base; }
+    bool hasBase() const { return m_loaded.hasBase; }
+    QString baseWhen() const { return m_loaded.baseWhen; }
+    QVariantList hunks() const { return m_loaded.hunks; }
+    bool clean() const { return m_loaded.clean; }
+    QString mergedText() const { return m_loaded.merged; }
+    int collisionCount() const { return m_loaded.collisions; }
+    bool identical() const { return m_loaded.identical; }
+    bool copyIsOlder() const { return m_loaded.copyIsOlder; }
     QString oursSizeText() const;
     QString theirsSizeText() const;
 
@@ -170,39 +170,46 @@ Q_SIGNALS:
     void updated(const QString &message);
 
 private:
-    void finish(bool ok, const QString &message);
-    /// Both files still hold the texts the user decided on; otherwise reload() and failed().
-    bool textsUnchanged();
-    /// The same for drawings: both files still hold the bytes shown.
-    bool drawingsUnchanged();
+    /// What reload() reads of the copy's conflict (reset there as a whole).
+    struct Loaded {
+        QVariantMap conflict;
+        QString ours;
+        QString theirs;
+        QString base;
+        bool hasBase = false;
+        QString baseWhen;
+        QVariantList hunks;
+        bool clean = false;
+        QString merged;
+        int collisions = 0;
+        bool identical = false;
+        bool copyIsOlder = false;
+        qint64 oursSize = 0;
+        qint64 theirsSize = 0;
+        bool canMergeDrawings = false;
+        QByteArray oursBytes;
+        QByteArray theirsBytes;
+        QByteArray mergedBytes;
+        QVariantMap drawingCounts;
+        bool notesDiffer = false;
+        bool notesOnly = false;
+        QString oursNotes;
+        QString theirsNotes;
+    };
+
+    /// reload() into the reset m_loaded (without the signal).
+    void load();
+    /// resolved() (the copy is gone, reload()) or failed() with `message`; returns `ok`.
+    bool finish(bool ok, const QString &message);
+    /// Both files still hold what the user decided on (the texts; drawings: the bytes shown);
+    /// otherwise reload() and failed().
+    bool unchangedSinceLoaded();
     /// Read both drawings and merge them (reload() of a drawing conflict).
     void loadDrawings(const QString &original, const QString &copy, bool originalExists);
 
     QPointer<shell::Workspace> m_workspace;
     QString m_copy;
-    QVariantMap m_conflict;
-    QString m_ours;
-    QString m_theirs;
-    QString m_base;
-    bool m_hasBase = false;
-    QString m_baseWhen;
-    QVariantList m_hunks;
-    bool m_clean = false;
-    QString m_merged;
-    int m_collisions = 0;
-    bool m_identical = false;
-    bool m_copyIsOlder = false;
-    qint64 m_oursSize = 0;
-    qint64 m_theirsSize = 0;
-    bool m_canMergeDrawings = false;
-    QByteArray m_oursBytes;
-    QByteArray m_theirsBytes;
-    QByteArray m_mergedBytes;
-    QVariantMap m_drawingCounts;
-    bool m_notesDiffer = false;
-    bool m_notesOnly = false;
-    QString m_oursNotes;
-    QString m_theirsNotes;
+    Loaded m_loaded;
 };
 
 } // namespace brulion::ioviews

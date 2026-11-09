@@ -69,9 +69,8 @@ Item {
     }
     /// Add what is typed (several items when it has commas); true when it was written.
     function add(text: string): bool {
-        if (root.splitItems(text).length === 0)
-            return true
-        return row.setValue(root.withItems(root.splitItems(text)))
+        const parts = root.splitItems(text)
+        return parts.length === 0 || row.setValue(root.withItems(parts))
     }
     /// Add what the field holds and close it (the field lost the keyboard, the page changes): what
     /// cannot be added is said in a toast.
@@ -92,18 +91,14 @@ Item {
     /// Open what the chip of `item` opens (a tag's page, a [[Page]]); false when it opens nothing.
     function openItem(item: string): bool {
         if (root.type === "tags") {
-            root.editor.activateLink(root.blockRow, root.encoded("tag:", item))
+            root.editor.activateLink(root.blockRow, "tag:" + Js.encodeURIComponent(item))
             return true
         }
         const target = root.type === "list" ? linkTarget(item) : ""
         if (target === "")
             return false
-        root.editor.activateLink(root.blockRow, root.encoded("page:", target))
+        root.editor.activateLink(root.blockRow, "page:" + Js.encodeURIComponent(target))
         return true
-    }
-    /// `prefix` and `text` URI-encoded (a tag: or page: link).
-    function encoded(prefix: string, text: string): string {
-        return prefix + Js.encodeURIComponent(text)
     }
     /// Remove item `i` from its menu: out of sight of an ×, so a toast says it, with "Undo".
     function removeFromMenu(i: int): void {

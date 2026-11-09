@@ -7,7 +7,10 @@
 #include <QClipboard>
 #include <QGuiApplication>
 
+#include <chrono>
+
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::ioviews {
 
@@ -20,7 +23,7 @@ const QString AuthorityKey = u"import/mstodo/authority"_s;
 
 MsTodoImport::MsTodoImport(QObject *parent) : QObject(parent), m_authority(mstodo::DefaultAuthority.toString())
 {
-    m_countdown.setInterval(1000);
+    m_countdown.setInterval(1s);
     connect(&m_countdown, &QTimer::timeout, this, [this] {
         if (m_secondsLeft <= 0) {
             m_countdown.stop();
@@ -135,10 +138,8 @@ bool MsTodoImport::busy() const
 
 QString MsTodoImport::verificationText() const
 {
-    QString text = m_verificationUrl;
-    if (text.startsWith(u"https://"))
-        text.remove(0, 8);
-    return text;
+    constexpr QStringView https = u"https://";
+    return m_verificationUrl.startsWith(https) ? m_verificationUrl.sliced(https.size()) : m_verificationUrl;
 }
 
 void MsTodoImport::setState(const QString &state, const QString &errorCode, const QString &errorText)

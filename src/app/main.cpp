@@ -83,9 +83,10 @@ QString argValue(const QStringList &args, const QString &option)
     const qsizetype i = args.indexOf(option);
     if (i >= 0 && i + 1 < args.size())
         return args.at(i + 1);
+    const QString prefix = option + u'=';
     for (const QString &arg : args) {
-        if (arg.startsWith(option + u'='))
-            return arg.mid(option.size() + 1);
+        if (arg.startsWith(prefix))
+            return arg.mid(prefix.size());
     }
     return {};
 }
@@ -204,7 +205,7 @@ int main(int argc, char *argv[])
             return 0;
         }
         if (singleInstance->listen()) {
-            QObject::connect(singleInstance.get(), &brulion::ipc::SingleInstance::refused, [](qint64 uid) {
+            QObject::connect(singleInstance.get(), &brulion::ipc::SingleInstance::refused, &app, [](qint64 uid) {
                 qCWarning(brulion::logging::lcApp).noquote()
                         << u"Single instance: refused a connection of another user (uid %1)"_s.arg(uid);
             });
@@ -237,12 +238,13 @@ int main(int argc, char *argv[])
     brulion::logging::LoggerOptions logOptions;
     // The developer tools (gallery, editor playground) log to memory only.
     logOptions.directory = mainUi ? brulion::platform::logDirectory() : QString();
-    // --now "2026-10-14 10:00" (screenshots): the log's clock starts there too.
-    if (const QDateTime fixedStart = QDateTime::fromString(argValue(args, u"--now"_s), u"yyyy-MM-dd HH:mm"_s);
-        fixedStart.isValid()) {
-        auto since = std::make_shared<QElapsedTimer>();
-        since->start();
-        logOptions.clock = [base = fixedStart.toMSecsSinceEpoch(), since] { return base + since->elapsed(); };
+    // --now "2026-10-14 10:00" (reproducible screenshots): the fixed clock of DatesHelper and of
+    // the event log page; the log's clock starts there too.
+    const QDateTime fixedNow = QDateTime::fromString(argValue(args, u"--now"_s), u"yyyy-MM-dd HH:mm"_s);
+    if (fixedNow.isValid()) {
+        QElapsedTimer since;
+        since.start();
+        logOptions.clock = [base = fixedNow.toMSecsSinceEpoch(), since] { return base + since.elapsed(); };
     }
     // (PDF: the renderer of drawings' PDF backdrops, src/platform/pdfpages.h.)
     const QString device = brulion::platform::deviceDescription();
@@ -378,10 +380,10 @@ int main(int argc, char *argv[])
         options.workingDirectory = QDir::currentPath();
         options.checkForUpdates = !args.contains(u"--selftest-shell"_s);
         controller = std::make_unique<AppController>(options);
-        // --now "2026-10-14 10:00": the same fixed clock as DatesHelper (reproducible screenshots).
-        const QDateTime fixedNow = QDateTime::fromString(argValue(args, u"--now"_s), u"yyyy-MM-dd HH:mm"_s);
-        if (fixedNow.isValid())
+        if (fixedNow.isValid()) {
             controller->setClock([fixedNow] { return fixedNow; });
+            logs.setClock([fixedNow] { return fixedNow; });
+        }
         // The saved UI language, unless --locale overrides it for this run.
         if (argValue(args, u"--locale"_s).isEmpty())
             devTools.setLanguage(controller->settings()->language());
@@ -418,8 +420,6 @@ int main(int argc, char *argv[])
                          [spell, settings] { spell->setPersonalWords(settings->spellingWords()); });
         QObject::connect(spell, &brulion::editor::SpellCheck::personalWordsEdited, settings,
                          [spell, settings] { settings->setSpellingWords(spell->personalWords()); });
-        if (fixedNow.isValid())
-            logs.setClock([fixedNow] { return fixedNow; });
         QObject::connect(controller.get(), &AppController::quitRequested, &app, &QCoreApplication::quit,
                          Qt::QueuedConnection);
 #ifdef BRULION_DESKTOP_INTEGRATION

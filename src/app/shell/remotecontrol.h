@@ -26,6 +26,7 @@
 #pragma once
 
 #include "controlserver.h"
+#include "uidriver.h"
 
 #include <QDateTime>
 #include <QElapsedTimer>
@@ -72,13 +73,17 @@ private Q_SLOTS:
 private:
     struct Target;
     struct Wait;
+    struct ItemLookup;
+    struct Input;
 
     /// Listen or stop, as the option and the setting say; report it to AppController.
     void apply();
-    void handle(const ipc::ControlRequest &request, ipc::ControlReply reply);
+    void handle(const ipc::ControlRequest &request, const ipc::ControlReply &reply);
     QQuickWindow *window() const;
     /// Bring the window up for input (shown, asked to be active).
     void prepareInput(QQuickWindow *window);
+    /// The UI language in use ("pl" | "en").
+    QString language() const;
 
     QJsonObject hello() const;
     QJsonObject state();
@@ -96,12 +101,14 @@ private:
 
     // ---- Items and targets
     QString handleFor(QQuickItem *item);
-    /// The item of a handle; nullptr with `problem` (not_found / stale_handle) set.
-    QQuickItem *itemFor(const QString &handle, QString *code, QString *message);
+    /// The item of a handle, or why there is none (not_found / stale_handle).
+    ItemLookup itemFor(const QString &handle) const;
     QJsonObject describe(QQuickItem *item);
+    /// describe() of the item with the keyboard focus; null without one.
+    QJsonValue describeFocus();
     /// Items matching a selector ({text, objectName, type, exact}), topmost first.
     QList<QQuickItem *> select(QQuickWindow *window, const QJsonObject &selector, bool shownOnly,
-                               QQuickItem *within = nullptr);
+                               QQuickItem *within = nullptr) const;
     /// Resolve a target object; false (and the reply failed) when it names nothing usable.
     bool resolveTarget(QQuickWindow *window, const QJsonObject &object, Target *target, const ipc::ControlReply &reply,
                        const QString &what = QString());
@@ -112,7 +119,16 @@ private:
                      std::function<void(QPointF point, const char *problem)> then);
 
     // ---- Input queue: one gesture at a time
-    void enqueueInput(const ipc::ControlReply &reply, std::function<void(std::function<void()> finished)> job);
+    /// Queue `job`: it runs once the inputs before it are answered, and answers through its Input.
+    void enqueueInput(const ipc::ControlReply &reply, std::function<void(const Input &input)> job);
+    /// Queue `start`: it runs with the window shown, active and settled (afterSettled()); without
+    /// a window the request fails with `noWindow`.
+    void enqueueSettled(const ipc::ControlReply &reply, const QString &noWindow,
+                        std::function<void(QQuickWindow *window, const Input &input)> start);
+    /// Play `gesture` (uidriver::play(), with its `keepGoing`), then answer with `answer()` once
+    /// the window settled.
+    void playThenAnswer(QQuickWindow *window, const uidriver::Gesture &gesture, const Input &input,
+                        std::function<QJsonObject()> answer, std::function<bool()> keepGoing = {});
     void nextInput();
     /// Call `then` once the window has shown no new frame for `quietMs` (transitions and
     /// animations are over: a popup that opened has given its field the keyboard), at most after
@@ -121,16 +137,16 @@ private:
 
     /// The page controllers of the block editors in the window (the main view, the side panel,
     /// every day of the journal stream).
-    QList<QObject *> pageControllers();
+    QList<QObject *> pageControllers() const;
     /// The pages shown with a conflict waiting for the user (changed here and elsewhere, not
     /// merged): [{page}], each page once.
-    QJsonArray conflicts();
+    QJsonArray conflicts() const;
 
     // ---- waitFor
-    bool satisfied(const Wait &wait);
+    bool satisfied(const Wait &wait) const;
     /// waitFor's answer: {waitedMs, route, item?}.
     QJsonObject waitAnswer(const Wait &wait);
-    bool idle();
+    bool idle() const;
     void pollWaits();
 
     QQmlApplicationEngine *m_engine;
@@ -151,7 +167,7 @@ private:
 
     struct QueuedInput {
         ipc::ControlReply reply; ///< not connected any more: dropped
-        std::function<void(std::function<void()>)> job;
+        std::function<void(const Input &)> job;
     };
     QList<QueuedInput> m_inputQueue;
     bool m_inputRunning = false;

@@ -22,6 +22,7 @@
 #include <QStandardPaths>
 
 #include <algorithm>
+#include <chrono>
 #include <utility>
 
 #ifdef Q_OS_WASM
@@ -37,6 +38,7 @@
 #endif
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::ioviews {
 
@@ -45,6 +47,14 @@ namespace {
 QString sizeText(qint64 bytes)
 {
     return QLocale().formattedDataSize(bytes, 1, QLocale::DataSizeTraditionalFormat);
+}
+
+qint64 totalBytes(const QList<io::ExportedFile> &files)
+{
+    qint64 bytes = 0;
+    for (const io::ExportedFile &f : files)
+        bytes += f.data.size();
+    return bytes;
 }
 
 bool isInFolder(const VaultPath &path, const QString &folder)
@@ -86,7 +96,7 @@ ExportSelection selectExportFiles(const QList<FileStat> &files, const QString &s
     }
     if (linkedFiles) {
         for (const VaultPath &p : std::as_const(pagesToFollow)) {
-            for (const VaultPath &target : linkedFiles(p)) {
+            for (const QList<VaultPath> targets = linkedFiles(p); const VaultPath &target : targets) {
                 if (!paths::isMarkdown(target) && byPath.contains(target))
                     chosen.insert(target);
             }
@@ -111,7 +121,7 @@ ExportController::ExportController(QObject *parent)
     : QObject(parent), m_paperSize(io::paperSizeId(io::paperSizeFor(QLocale::system())))
 {
     m_summaryTimer.setSingleShot(true);
-    m_summaryTimer.setInterval(150);
+    m_summaryTimer.setInterval(150ms);
     connect(this, &ExportController::formatsChanged, this, &ExportController::chosenFormatChanged);
     connect(this, &ExportController::optionsChanged, this, &ExportController::chosenFormatChanged);
     // Vault changes come in bursts (an import writes thousands of files): the summary and the
@@ -134,8 +144,6 @@ ExportController::ExportController(QObject *parent)
     if (QCoreApplication *app = QCoreApplication::instance())
         app->installEventFilter(this);
 }
-
-ExportController::~ExportController() = default;
 
 bool ExportController::eventFilter(QObject *watched, QEvent *event)
 {
@@ -222,7 +230,7 @@ QVariantList ExportController::formats() const
 
 QVariantMap ExportController::chosenFormat() const
 {
-    for (const QVariant &row : formats()) {
+    for (const QVariantList all = formats(); const QVariant &row : all) {
         QVariantMap map = row.toMap();
         if (map.value(u"id"_s).toString() == m_format)
             return map;
@@ -230,24 +238,25 @@ QVariantMap ExportController::chosenFormat() const
     return {};
 }
 
-void ExportController::setFormat(const QString &format)
+void ExportController::setOption(QString &option, const QString &value)
 {
-    // "markdown-file": the page's file as it is (page scope; no exporter of the notebook's).
-    if (format == m_format || (!io::exporterById(format) && format != u"markdown-file"))
+    if (value == option)
         return;
-    m_format = format;
+    option = value;
     discard();
     Q_EMIT optionsChanged();
 }
 
+void ExportController::setFormat(const QString &format)
+{
+    // "markdown-file": the page's file as it is (page scope; no exporter of the notebook's).
+    if (io::exporterById(format) || format == u"markdown-file")
+        setOption(m_format, format);
+}
+
 void ExportController::setWebPictures(const QString &mode)
 {
-    const QString clean = mode == u"include" ? mode : u"link"_s;
-    if (clean == m_webPictures)
-        return;
-    m_webPictures = clean;
-    discard();
-    Q_EMIT optionsChanged();
+    setOption(m_webPictures, mode == u"include" ? mode : u"link"_s);
 }
 
 bool ExportController::webPicturesApply() const
@@ -258,12 +267,7 @@ bool ExportController::webPicturesApply() const
 
 void ExportController::setPaperSize(const QString &paper)
 {
-    const QString clean = io::paperSizeId(io::paperSizeFromId(paper));
-    if (clean == m_paperSize)
-        return;
-    m_paperSize = clean;
-    discard();
-    Q_EMIT optionsChanged();
+    setOption(m_paperSize, io::paperSizeId(io::paperSizeFromId(paper)));
 }
 
 bool ExportController::printAvailable() const
@@ -282,32 +286,17 @@ void ExportController::setPrintToFile(const QString &pdfPath)
 
 void ExportController::setScope(const QString &scope)
 {
-    const QString clean = scope == u"folder" || scope == u"page" ? scope : u"vault"_s;
-    if (clean == m_scope)
-        return;
-    m_scope = clean;
-    discard();
-    Q_EMIT optionsChanged();
+    setOption(m_scope, scope == u"folder" || scope == u"page" ? scope : u"vault"_s);
 }
 
 void ExportController::setFolder(const QString &folder)
 {
-    const QString clean = paths::normalize(folder);
-    if (clean == m_folder)
-        return;
-    m_folder = clean;
-    discard();
-    Q_EMIT optionsChanged();
+    setOption(m_folder, paths::normalize(folder));
 }
 
 void ExportController::setPage(const QString &page)
 {
-    const QString clean = paths::normalize(page);
-    if (clean == m_page)
-        return;
-    m_page = clean;
-    discard();
-    Q_EMIT optionsChanged();
+    setOption(m_page, paths::normalize(page));
 }
 
 QString ExportController::pageTitle() const
@@ -319,7 +308,7 @@ QStringList ExportController::folders() const
 {
     QStringList out;
     if (Vault *vault = m_workspace ? m_workspace->vault() : nullptr) {
-        for (const FileStat &f : vault->folders())
+        for (const QList<FileStat> all = vault->folders(); const FileStat &f : all)
             out.append(f.path);
     }
     return out;
@@ -334,7 +323,7 @@ ExportSelection ExportController::currentSelection() const
     const auto linked = [index](const VaultPath &page) {
         QList<VaultPath> out;
         if (index) {
-            for (const ResolvedLink &l : index->outgoingLinks(page)) {
+            for (const QList<ResolvedLink> links = index->outgoingLinks(page); const ResolvedLink &l : links) {
                 if (!l.target.isEmpty())
                     out.append(l.target);
             }
@@ -346,7 +335,6 @@ ExportSelection ExportController::currentSelection() const
 
 void ExportController::updateSummary()
 {
-    QVariantMap s;
     Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
     QString error;
     if (!vault)
@@ -360,14 +348,14 @@ void ExportController::updateSummary()
     const ExportSelection sel = error.isEmpty() ? currentSelection() : ExportSelection();
     if (error.isEmpty() && sel.paths.isEmpty())
         error = tr("There is nothing to export yet.");
-    s = {
-        { u"files"_s, int(sel.paths.size()) },
-        { u"pages"_s, sel.pages },
-        { u"attachments"_s, sel.attachments },
-        { u"bytes"_s, sel.bytes },
-        { u"sizeText"_s, sizeText(sel.bytes) },
-        { u"valid"_s, error.isEmpty() },
-        { u"error"_s, error },
+    const QVariantMap s{
+            {u"files"_s, int(sel.paths.size())},
+            {u"pages"_s, sel.pages},
+            {u"attachments"_s, sel.attachments},
+            {u"bytes"_s, sel.bytes},
+            {u"sizeText"_s, sizeText(sel.bytes)},
+            {u"valid"_s, error.isEmpty()},
+            {u"error"_s, error},
     };
     if (s == m_summary)
         return;
@@ -398,10 +386,7 @@ QString ExportController::fileName() const
 
 QString ExportController::fileSizeText() const
 {
-    qint64 bytes = 0;
-    for (const io::ExportedFile &f : m_result)
-        bytes += f.data.size();
-    return m_result.isEmpty() ? QString() : sizeText(bytes);
+    return m_result.isEmpty() ? QString() : sizeText(totalBytes(m_result));
 }
 
 QUrl ExportController::defaultSaveFolder() const
@@ -531,7 +516,7 @@ void ExportController::collectWebPictures()
     // Parsing every note: off the GUI thread.
     runInBackground<QStringList>(
             this, [input] { return io::webPictureTargets(input); },
-            [this, generation](QStringList urls) {
+            [this, generation](const QStringList &urls) {
                 if (generation != m_generation || m_state != u"preparing")
                     return;
                 fetchWebPictures(urls);
@@ -669,9 +654,7 @@ void ExportController::stopWebPictures()
     m_webTimer.stop();
     m_webQueue.clear();
     m_webMissing.clear();
-    if (m_webConnection)
-        disconnect(m_webConnection);
-    m_webConnection = {};
+    disconnect(std::exchange(m_webConnection, {}));
     m_webPending.clear();
 }
 
@@ -701,10 +684,9 @@ void ExportController::runExporter()
     if (m_format == u"markdown-file") {
         // The page's file as it is.
         const io::ExportInput input = exportInput();
-        const auto page = std::find_if(input.files.cbegin(), input.files.cend(),
-                                       [this](const io::FileEntry &f) { return f.path == m_page; });
+        const auto page = std::ranges::find(input.files, m_page, &io::FileEntry::path);
         if (m_scope != u"page" || page == input.files.cend()) {
-            setState(u"error"_s, m_readWarnings.isEmpty() ? tr("Nothing was exported.") : m_readWarnings.first());
+            setState(u"error"_s, m_readWarnings.isEmpty() ? tr("Nothing was exported.") : m_readWarnings.constFirst());
             return;
         }
         m_result = {io::ExportedFile{paths::sanitizeFileName(pageTitle()) + u".md"_s, u"text/markdown"_s, page->data}};
@@ -718,22 +700,19 @@ void ExportController::runExporter()
         setState(u"error"_s, tr("This format is not available."));
         return;
     }
-    const io::ExportInput input = exportInput();
+    io::ExportInput input = exportInput();
     setProgress(-1, tr("Creating “%1”…").arg(exporter->name()));
     const int generation = m_generation;
     runInBackground<io::ExportResult>(
-            this, [exporter, input] { return io::runExport(*exporter, input); },
-            [this, generation](io::ExportResult result) {
+            this, [exporter, input = std::move(input)] { return io::runExport(*exporter, input); },
+            [this, generation](const io::ExportResult &result) {
                 if (generation != m_generation || m_state != u"preparing")
                     return;
                 m_result = result.files;
                 m_warnings = m_readWarnings + result.warnings;
                 setProgress(1);
-                qint64 bytes = 0;
-                for (const io::ExportedFile &f : m_result)
-                    bytes += f.data.size();
                 qCInfo(logging::lcIo).noquote() << u"Export as %1: %2 file(s), %3, %4 warning(s)"_s.arg(
-                        m_format, QString::number(m_result.size()), logging::formatBytes(bytes),
+                        m_format, QString::number(m_result.size()), logging::formatBytes(totalBytes(m_result)),
                         QString::number(m_warnings.size()));
                 if (m_result.isEmpty()) {
                     setState(u"error"_s, result.warnings.isEmpty() ? tr("Nothing was exported.") : result.warnings.first());
@@ -745,7 +724,7 @@ void ExportController::runExporter()
 
 // ---- Printing --------------------------------------------------------------------------------------
 
-void ExportController::runPrint(io::ExportInput input)
+void ExportController::runPrint(const io::ExportInput &input)
 {
     const QString title = exportName().isEmpty() ? u"Brulion"_s : exportName();
 #if defined(BRULION_PRINT_DIALOG)
@@ -765,8 +744,10 @@ void ExportController::runPrint(io::ExportInput input)
         dialog.setOptions(QAbstractPrintDialog::PrintToFile | QAbstractPrintDialog::PrintShowPageSize
                           | QAbstractPrintDialog::PrintCollateCopies);
         const int generation = m_generation;
+        // A nested event loop: the controller may be destroyed (deleteLater) while it runs.
+        const QPointer<ExportController> self(this);
         const bool accepted = dialog.exec() == QDialog::Accepted;
-        if (generation != m_generation || m_state != u"preparing")
+        if (!self || generation != m_generation || m_state != u"preparing")
             return;
         if (!accepted) {
             m_printing = false;
@@ -791,7 +772,7 @@ void ExportController::runPrint(io::ExportInput input)
     const int generation = m_generation;
     runInBackground<io::ExportResult>(
             this, [exporter, input] { return io::runExport(*exporter, input); },
-            [this, generation, title](io::ExportResult result) {
+            [this, generation, title](const io::ExportResult &result) {
                 if (generation != m_generation || m_state != u"preparing")
                     return;
                 if (result.files.isEmpty()) {
@@ -844,7 +825,7 @@ bool ExportController::saveTo(const QUrl &url)
     if (m_result.isEmpty() || !url.isValid() || url.isEmpty())
         return false;
     QString error;
-    if (!writeToUrl(url, m_result.first().data, &error)) {
+    if (!writeToUrl(url, m_result.constFirst().data, &error)) {
         setState(u"error"_s, tr("The file could not be saved: %1").arg(error));
         return false;
     }
@@ -873,7 +854,7 @@ bool ExportController::saveToExportFolder()
     {
         platform::AndroidBridge *bridge = platform::AndroidBridge::instance();
         const QMimeDatabase mimes;
-        const io::ExportedFile &first = m_result.first();
+        const io::ExportedFile &first = m_result.constFirst();
         const platform::DownloadResult download = bridge->saveToDownloads(
                 first.name, mimes.mimeTypeForFile(first.name, QMimeDatabase::MatchExtension).name(), first.data);
         if (!download.unsupported) {
@@ -897,7 +878,7 @@ bool ExportController::saveToExportFolder()
 #endif
     const QString dir = exportFolder();
     QDir().mkpath(dir);
-    QString name = m_result.first().name;
+    QString name = m_result.constFirst().name;
     const QString stem = QFileInfo(name).completeBaseName();
     const QString suffix = QFileInfo(name).suffix();
     for (int n = 2; QFileInfo::exists(dir + u'/' + name); ++n)
@@ -912,9 +893,9 @@ bool ExportController::saveInBrowser()
         return false;
     for (const io::ExportedFile &f : std::as_const(m_result))
         platform::wasm::saveFile(f.data, f.name);
-    m_savedTo = m_result.first().name;
+    m_savedTo = m_result.constFirst().name;
     setState(u"saved"_s);
-    Q_EMIT saved(tr("“%1” is being downloaded.").arg(m_result.first().name));
+    Q_EMIT saved(tr("“%1” is being downloaded.").arg(m_savedTo));
     return true;
 #else
     return false;

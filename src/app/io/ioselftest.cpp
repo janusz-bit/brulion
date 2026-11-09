@@ -17,9 +17,9 @@
 #include <QUrl>
 #include <qtestsupport_gui.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
-#include <memory>
 
 QT_BEGIN_NAMESPACE
 // QtGui's entry point for synthetic mouse input (what QtTest's mouse functions call).
@@ -37,7 +37,7 @@ namespace {
 /// Sanitizer builds run many times slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
 int slowdown()
 {
-    static const int factor = qMax(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
+    static const int factor = std::max(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
     return factor;
 }
 
@@ -69,7 +69,7 @@ void settle(int ms)
 void touchTap(QQuickWindow *window, QPointF scenePos)
 {
     // QTouchEventSequence's constructor is protected; QtTest's touchEvent() is a subclass too.
-    struct Sequence : QTest::QTouchEventSequence {
+    struct Sequence final : QTest::QTouchEventSequence {
         Sequence(QWindow *w, QPointingDevice *d) : QTest::QTouchEventSequence(w, d, false) { }
     };
     static QPointingDevice *device = QTest::createTouchDevice();
@@ -99,6 +99,28 @@ void mouseClick(QQuickWindow *window, QPointF scenePos)
 bool shown(const QQuickItem *item)
 {
     return item && item->isVisible() && item->width() > 0 && item->height() > 0;
+}
+
+/// A view's object (a controller, a dialog) whose view is on screen.
+bool parentShown(const QObject *object)
+{
+    return shown(qobject_cast<QQuickItem *>(object->parent()));
+}
+
+/// The first of `objects` that `accept` takes, or nullptr.
+template<typename T, typename Pred>
+T *firstOf(const QList<T *> &objects, Pred accept)
+{
+    const auto it = std::ranges::find_if(objects, accept);
+    return it != objects.cend() ? *it : nullptr;
+}
+
+/// The last of `objects` that `accept` takes, or nullptr.
+template<typename T, typename Pred>
+T *lastOf(const QList<T *> &objects, Pred accept)
+{
+    const auto it = std::ranges::find_if(objects.crbegin(), objects.crend(), accept);
+    return it != objects.crend() ? *it : nullptr;
 }
 
 /// Records a QML dialog's selectedFile when it becomes visible — inside open(), when a native
@@ -145,8 +167,8 @@ void ensureVisible(QQuickItem *item)
         // ListViews start above 0 (their header): contentY runs from originY.
         const qreal originY = p->property("originY").toReal();
         const qreal y = item->mapToItem(content, QPointF(0, item->height() / 2)).y();
-        const qreal maxY = originY + qMax<qreal>(0, p->property("contentHeight").toReal() - p->height());
-        p->setProperty("contentY", qBound<qreal>(originY, y - p->height() / 2, maxY));
+        const qreal maxY = originY + std::max<qreal>(0, p->property("contentHeight").toReal() - p->height());
+        p->setProperty("contentY", std::clamp<qreal>(y - p->height() / 2, originY, maxY));
         settle(150);
         return;
     }
@@ -206,22 +228,14 @@ private:
     QQuickItem *item(const char *name) const
     {
         const QList<QQuickItem *> found = m_window->findChildren<QQuickItem *>(QString::fromLatin1(name));
-        for (QQuickItem *i : found) {
-            if (shown(i))
-                return i;
-        }
-        return found.value(0);
+        QQuickItem *visible = firstOf(found, shown);
+        return visible ? visible : found.value(0);
     }
 
     /// The controller of the import view on screen (a new one with every visit of the view).
     QObject *importController() const
     {
-        const QList<QObject *> found = m_window->findChildren<QObject *>(u"importController"_s);
-        for (QObject *c : found) {
-            if (shown(qobject_cast<QQuickItem *>(c->parent())))
-                return c;
-        }
-        return nullptr;
+        return firstOf(m_window->findChildren<QObject *>(u"importController"_s), parentShown);
     }
 
     void tap(QQuickItem *target)
@@ -274,7 +288,7 @@ private:
         const auto bottom = [field] { return field->mapToScene(QPointF(0, field->height())).y(); };
         // Low on the screen, where the keyboard comes (as on a phone in portrait).
         const qreal low = m_window->height() - 120;
-        flick->setProperty("contentY", qMax<qreal>(0, flick->property("contentY").toReal() + bottom() - low));
+        flick->setProperty("contentY", std::max<qreal>(0, flick->property("contentY").toReal() + bottom() - low));
         settle(100);
         const qreal before = bottom();
         insets->setProperty("simulated", keyboard);
@@ -320,16 +334,8 @@ private:
             return;
         }
         QQuickItem *hint = item("journalsEmptyHint");
-        QQuickItem *button = nullptr;
-        if (hint) {
-            const QList<QQuickItem *> children = hint->findChildren<QQuickItem *>();
-            for (QQuickItem *c : children) {
-                if (c->inherits("QQuickAbstractButton") && shown(c)) {
-                    button = c;
-                    break;
-                }
-            }
-        }
+        const auto isButton = [](const QQuickItem *c) { return c->inherits("QQuickAbstractButton") && shown(c); };
+        QQuickItem *button = hint ? firstOf(hint->findChildren<QQuickItem *>(), isButton) : nullptr;
         check(shown(hint) && button, "the empty journal offers “Import notes”");
         if (!button)
             return;
@@ -370,14 +376,9 @@ private:
             return;
         }
         const QString moreLabel = QCoreApplication::translate("ShellTopBar", "More");
-        QQuickItem *more = nullptr;
-        const QList<QQuickItem *> items = m_window->findChildren<QQuickItem *>();
-        for (QQuickItem *i : items) {
-            if (i->property("label").toString() == moreLabel && shown(i)) {
-                more = i;
-                break;
-            }
-        }
+        QQuickItem *more = firstOf(m_window->findChildren<QQuickItem *>(), [&moreLabel](const QQuickItem *i) {
+            return i->property("label").toString() == moreLabel && shown(i);
+        });
         check(more != nullptr, "the top bar has “More”");
         if (!more)
             return;
@@ -386,14 +387,10 @@ private:
         const QString notebookTitle = QCoreApplication::translate("ShellTopBar", "Notebook");
         QQuickItem *notebook = nullptr;
         waitFor([&] {
-            const QList<QQuickItem *> all = m_window->findChildren<QQuickItem *>();
-            for (QQuickItem *i : all) {
-                if (i->inherits("QQuickMenuItem") && i->property("text").toString() == notebookTitle && shown(i)) {
-                    notebook = i;
-                    return true;
-                }
-            }
-            return false;
+            notebook = firstOf(m_window->findChildren<QQuickItem *>(), [&notebookTitle](const QQuickItem *i) {
+                return i->inherits("QQuickMenuItem") && i->property("text").toString() == notebookTitle && shown(i);
+            });
+            return notebook != nullptr;
         });
         check(notebook != nullptr, "the “More” menu has the “Notebook” submenu");
         if (!notebook)
@@ -492,11 +489,7 @@ private:
         QObject *dialog = nullptr;
         QQuickItem *button = nullptr;
         waitFor([&] {
-            controller = nullptr;
-            for (QObject *c : m_window->findChildren<QObject *>(u"exportController"_s)) {
-                if (shown(qobject_cast<QQuickItem *>(c->parent())))
-                    controller = c;
-            }
+            controller = lastOf(m_window->findChildren<QObject *>(u"exportController"_s), parentShown);
             dialog = controller ? controller->parent()->findChild<QObject *>(u"exportSaveDialog"_s) : nullptr;
             button = item("exportStartButton");
             return controller && dialog && shown(button) && button->isEnabled();
@@ -535,21 +528,14 @@ private:
         QObject *controller = nullptr;
         QQuickItem *pdf = nullptr;
         QQuickItem *save = nullptr;
+        const auto onPage = [&pagePath](const QObject *c) { return c->property("page").toString() == pagePath; };
+        const auto isPdf = [](const QQuickItem *tile) { return tile->objectName() == u"pageExportFormat_pdf"; };
         waitFor(
                 [&] {
-                    controller = nullptr;
-                    for (QObject *c : m_window->findChildren<QObject *>(u"pageExportController"_s)) {
-                        if (c->property("page").toString() == pagePath)
-                            controller = c;
-                    }
+                    controller = lastOf(m_window->findChildren<QObject *>(u"pageExportController"_s), onPage);
                     // The tiles of a Repeater: items of the grid, not its QObject children.
-                    pdf = nullptr;
-                    if (QQuickItem *grid = item("pageExportFormats")) {
-                        for (QQuickItem *tile : grid->childItems()) {
-                            if (tile->objectName() == u"pageExportFormat_pdf")
-                                pdf = tile;
-                        }
-                    }
+                    const QQuickItem *grid = item("pageExportFormats");
+                    pdf = grid ? lastOf(grid->childItems(), isPdf) : nullptr;
                     save = item("pageExportSave");
                     return controller && shown(pdf) && shown(save) && save->isEnabled();
                 },
@@ -610,11 +596,7 @@ private:
 void startImportSelfTest(QQmlApplicationEngine *engine, shell::AppController *app)
 {
     QTimer::singleShot(0, app, [engine, app] {
-        int failures = 0;
-        {
-            SelfTest test(engine, app);
-            failures = test.run();
-        }
+        const int failures = SelfTest(engine, app).run();
         std::fprintf(stderr, "selftest: %d failure(s)\n", failures);
         QCoreApplication::exit(failures);
     });

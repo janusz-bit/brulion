@@ -75,13 +75,14 @@ FocusScope {
     /// value's tap area covers it, so it is a touch target tall on touch UIs.
     readonly property real cellTop: stacked ? 0 : -valuePadding
     readonly property real cellHeight: height - valueY
+    /// The value when it is a list (chips), else null.
+    readonly property PropertyListValue listItem: valueLoader.item as PropertyListValue
     /// Beside the key, the space above (and below) the value: its line centred in the row's height —
     /// a text, number, date or checkbox line is rowHeight − 2 × space1; a list's chip line its
     /// tallest item (touch: the chips' 44 px, so none; desktop: the 28-px "+", so 2). Every
     /// one-line row is rowHeight high, a list row of two lines two chip lines and their spacing.
     readonly property real valuePadding: {
-        const list = valueLoader.item as PropertyListValue
-        return list ? Math.max(0, (rowHeight - list.lineHeight) / 2) : Theme.space1
+        return listItem ? Math.max(0, (rowHeight - listItem.lineHeight) / 2) : Theme.space1
     }
 
     /// The value is being edited in a field (text, number) / the key is being renamed.
@@ -148,8 +149,8 @@ FocusScope {
         const ok = result.map.ok === true
         error = ok ? "" : BlockViews.textAt(result.map, "reason")
         errorStatus = ok ? "" : BlockViews.textAt(result.map, "status")
-        if (!ok && result.map.status !== "invalidValue")
-            editor.notice(result.map.reason, "error", null)
+        if (!ok && errorStatus !== "invalidValue")
+            editor.notice(error, "error", null)
         return ok
     }
     function remove(): void {
@@ -261,8 +262,8 @@ FocusScope {
         case "list":
         case "tags":
         case "aliases":
-            if (valueLoader.item as PropertyListValue)
-                (valueLoader.item as PropertyListValue).openAdd()
+            if (listItem)
+                listItem.openAdd()
             break
         case "unsupported":
             break
@@ -338,8 +339,7 @@ FocusScope {
     /// A field of the row has the keyboard (its keys are its own; the ones it leaves are not the
     /// row's either: ← at a field's start must not start renaming).
     readonly property bool fieldOpen: editingValue || renaming
-                                      || ((valueLoader.item as PropertyListValue) !== null
-                                          && (valueLoader.item as PropertyListValue).adding)
+                                      || (listItem !== null && listItem.adding)
     Keys.onPressed: (event) => {
         if (row.fieldOpen)
             return
@@ -376,6 +376,11 @@ FocusScope {
     }
 
     // ---- look -------------------------------------------------------------------------------------
+    component UiText: Text {
+        textFormat: Text.PlainText
+        font.family: Theme.fontUi
+        font.pixelSize: Theme.textBase
+    }
     Rectangle {
         anchors.fill: parent
         radius: Theme.radiusSm
@@ -398,10 +403,9 @@ FocusScope {
         id: rowHold
         acceptedDevices: PointerDevice.TouchScreen
         onLongPressed: {
-            const list = valueLoader.item as PropertyListValue
-            if (list) {
-                row.pressAt = list.mapFromItem(row, rowHold.point.position.x, rowHold.point.position.y)
-                if (list.chipAt(row.pressAt.x, row.pressAt.y) !== null)
+            if (row.listItem) {
+                row.pressAt = row.listItem.mapFromItem(row, rowHold.point.position.x, rowHold.point.position.y)
+                if (row.listItem.chipAt(row.pressAt.x, row.pressAt.y) !== null)
                     return
             }
             row.openMenu(row, rowHold.point.position.x, rowHold.point.position.y)
@@ -436,7 +440,7 @@ FocusScope {
 
     // The key (a field while renaming). Its tap area is the whole key cell: the row's height
     // beside the value (the key's line when stacked), up to the value.
-    Text {
+    UiText {
         id: keyText
         objectName: "propertyKey"
         visible: !row.renaming
@@ -444,10 +448,7 @@ FocusScope {
         y: (row.keyLineHeight - height) / 2
         width: row.stacked ? row.width - x - Theme.space2 : row.panel.keyWidth - Theme.space1
         text: row.key
-        textFormat: Text.PlainText
         elide: Text.ElideRight
-        font.family: Theme.fontUi
-        font.pixelSize: Theme.textBase
         color: Theme.fgMuted
     }
     Item {
@@ -555,7 +556,7 @@ FocusScope {
             }
             implicitHeight: row.editingValue && fieldLoader.item ? (fieldLoader.item as Item).implicitHeight
                                                                   : Math.max(lineHeight, display.implicitHeight)
-            Text {
+            UiText {
                 id: display
                 objectName: "propertyValue"
                 visible: !row.editingValue
@@ -566,8 +567,6 @@ FocusScope {
                 wrapMode: Text.Wrap
                 maximumLineCount: row.present && row.entry.map.multiline === true ? 6 : 3
                 elide: Text.ElideRight
-                font.family: Theme.fontUi
-                font.pixelSize: Theme.textBase
                 font.italic: row.empty
                 color: row.empty || row.type === "unsupported" ? Theme.fgMuted : Theme.fg
                 linkColor: Theme.link
@@ -738,17 +737,14 @@ FocusScope {
             id: numberBox
             readonly property real lineHeight: row.rowHeight - 2 * Theme.space1
             implicitHeight: row.editingValue && numberLoader.item ? (numberLoader.item as Item).implicitHeight : lineHeight
-            Text {
+            UiText {
                 objectName: "propertyValue"
                 visible: !row.editingValue
                 width: parent.width
                 height: numberBox.lineHeight
                 verticalAlignment: Text.AlignVCenter
                 text: !row.present ? "" : row.empty ? qsTr("Empty") : row.valueText
-                textFormat: Text.PlainText
                 elide: Text.ElideRight
-                font.family: Theme.fontUi
-                font.pixelSize: Theme.textBase
                 font.italic: row.empty
                 font.features: { "tnum": 1 }
                 color: row.empty ? Theme.fgMuted : Theme.fg
@@ -916,7 +912,7 @@ FocusScope {
                         size: Theme.iconSizeSm
                         color: Theme.fgMuted
                     }
-                    Text {
+                    UiText {
                         id: dateLabel
                         x: dateIcon.x + dateIcon.width + Theme.space1
                         anchors.verticalCenter: parent.verticalCenter
@@ -928,10 +924,7 @@ FocusScope {
                             const shown = DatesHelper.formatShort(raw)
                             return shown !== "" ? shown : raw
                         }
-                        textFormat: Text.PlainText
                         elide: Text.ElideRight
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textBase
                         font.italic: row.empty
                         color: row.empty ? Theme.fgMuted : Theme.fg
                     }
