@@ -57,51 +57,16 @@ void ChartView::setFontFamily(const QString &family)
 
 void ChartView::setFontPixelSize(qreal size)
 {
-    if (qFuzzyCompare(m_fontPixelSize, size) || !(size > 0))
+    if (!(size > 0) || qFuzzyCompare(m_fontPixelSize, size))
         return;
     m_fontPixelSize = size;
     Q_EMIT fontChanged();
     relayout();
 }
 
-#define BRULION_CHART_COLOR_SETTER(name, member)                                                                       \
-    void ChartView::name(const QColor &c)                                                                              \
-    {                                                                                                                  \
-        if (member == c)                                                                                               \
-            return;                                                                                                    \
-        member = c;                                                                                                    \
-        Q_EMIT colorsChanged();                                                                                        \
-        update();                                                                                                      \
-    }
-BRULION_CHART_COLOR_SETTER(setTextColor, m_text)
-BRULION_CHART_COLOR_SETTER(setMutedColor, m_muted)
-BRULION_CHART_COLOR_SETTER(setBackgroundColor, m_background)
-BRULION_CHART_COLOR_SETTER(setBorderColor, m_border)
-BRULION_CHART_COLOR_SETTER(setAccentColor, m_accent)
-#undef BRULION_CHART_COLOR_SETTER
-
-void ChartView::setDark(bool dark)
-{
-    if (m_dark == dark)
-        return;
-    m_dark = dark;
-    Q_EMIT colorsChanged();
-    update();
-}
-
 QString ChartView::status() const
 {
     return m_message.isEmpty() ? u"ok"_s : u"error"_s;
-}
-
-QString ChartView::message() const
-{
-    return m_message;
-}
-
-QString ChartView::description() const
-{
-    return m_description;
 }
 
 QString ChartView::typeName() const
@@ -113,6 +78,8 @@ chart::Data ChartView::dataFromMap(const QVariantMap &map)
 {
     chart::Data out;
     out.labels = map.value(u"labels"_s).toStringList();
+    if (out.labels.size() > chart::limits::MaxPoints)
+        return {};
     out.labelsName = map.value(u"labelsName"_s).toString();
     const QVariantList series = map.value(u"series"_s).toList();
     for (qsizetype s = 0; s < series.size() && s < chart::limits::MaxSeries; ++s) {
@@ -120,16 +87,15 @@ chart::Data ChartView::dataFromMap(const QVariantMap &map)
         chart::Series serie;
         serie.name = m.value(u"name"_s).toString();
         const QVariantList values = m.value(u"values"_s).toList();
+        serie.values.reserve(out.labels.size());
         for (qsizetype i = 0; i < out.labels.size(); ++i) {
-            const QVariant v = i < values.size() ? values.at(i) : QVariant();
+            const QVariant v = values.value(i); // missing: a gap
             bool ok = false;
             const double d = v.isNull() ? 0 : v.toDouble(&ok);
             serie.values.append(ok && std::isfinite(d) ? d : std::numeric_limits<double>::quiet_NaN());
         }
         out.series.append(std::move(serie));
     }
-    if (out.labels.size() > chart::limits::MaxPoints)
-        return {};
     return out;
 }
 

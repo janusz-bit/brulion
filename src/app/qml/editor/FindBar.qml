@@ -137,6 +137,13 @@ Rectangle {
         event.accepted = true
     }
 
+    function closeOnBack(event: KeyEvent): void {
+        if (event.key === Qt.Key_Back) {
+            bar.closeRequested()
+            event.accepted = true
+        }
+    }
+
     implicitHeight: column.implicitHeight + Theme.space2 * 2
     color: Theme.bg
     z: 2
@@ -226,12 +233,7 @@ Rectangle {
                     field.lastModifiers = event.modifiers
                     bar.commonKey(event)
                 }
-                Keys.onReleased: (event) => {
-                    if (event.key === Qt.Key_Back) {
-                        bar.closeRequested()
-                        event.accepted = true
-                    }
-                }
+                Keys.onReleased: (event) => bar.closeOnBack(event)
             }
             Text {
                 objectName: "findStatus"
@@ -364,12 +366,7 @@ Rectangle {
                 onAccepted: bar.replaceOne(text)
                 Keys.priority: Keys.BeforeItem
                 Keys.onPressed: (event) => bar.commonKey(event)
-                Keys.onReleased: (event) => {
-                    if (event.key === Qt.Key_Back) {
-                        bar.closeRequested()
-                        event.accepted = true
-                    }
-                }
+                Keys.onReleased: (event) => bar.closeOnBack(event)
             }
             BButton {
                 objectName: "findReplaceOne"

@@ -15,6 +15,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <functional>
 
 using namespace Qt::StringLiterals;
 
@@ -58,22 +59,19 @@ std::optional<std::pair<QString, bool>> calloutHeader(QStringView line)
 
 bool allLinesQuoted(QStringView body)
 {
-    for (const text::Line &l : text::splitLines(body)) {
-        const QString t = l.text.trimmed();
-        if (!t.isEmpty() && !t.startsWith(u'>'))
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(text::splitLines(body), [](const text::Line &l) {
+        const QStringView t = QStringView(l.text).trimmed();
+        return t.isEmpty() || t.startsWith(u'>');
+    });
 }
 
 bool looksLikeTable(QStringView body)
 {
+    if (!body.contains(u'|'))
+        return false; // most list items: no lines to split
     const QList<text::Line> lines = text::splitLines(body);
-    if (lines.size() < 2)
-        return false;
-    if (!lines[0].text.trimmed().startsWith(u'|') && !lines[0].text.contains(u'|'))
-        return false;
-    return calc::parseDelimiterRow(lines[1].text).has_value() && calc::parseTable(body).has_value();
+    return lines.size() >= 2 && lines[0].text.contains(u'|') && calc::parseDelimiterRow(lines[1].text).has_value()
+           && calc::parseTable(body).has_value();
 }
 
 bool isImageExtension(QStringView target)
@@ -191,20 +189,40 @@ bool isSpaceOrTab(QChar c)
     return c == u' ' || c == u'\t';
 }
 
+/// Nothing but spaces and tabs (or nothing at all).
+bool isBlank(QStringView s)
+{
+    return std::ranges::all_of(s, isSpaceOrTab);
+}
+
+/// The index after the spaces and tabs `line` starts with.
+qsizetype indentEnd(QStringView line)
+{
+    qsizetype k = 0;
+    while (k < line.size() && isSpaceOrTab(line[k]))
+        ++k;
+    return k;
+}
+
+/// The length of the run of `marker` at index `from` of `line`.
+qsizetype markerRun(QStringView line, qsizetype from, QChar marker)
+{
+    qsizetype n = 0;
+    while (from + n < line.size() && line[from + n] == marker)
+        ++n;
+    return n;
+}
+
 /// An opening code fence line (markdown's fenceOpen()): 3+ backticks or tildes after any
 /// spaces and tabs; a backtick fence's info string has no backtick. Returns the fence character
 /// and the run length, or nullopt.
 std::optional<std::pair<QChar, int>> openingFence(QStringView line)
 {
-    qsizetype k = 0;
-    while (k < line.size() && isSpaceOrTab(line[k]))
-        ++k;
+    const qsizetype k = indentEnd(line);
     if (k >= line.size() || (line[k] != u'`' && line[k] != u'~'))
         return std::nullopt;
     const QChar marker = line[k];
-    qsizetype n = 0;
-    while (k + n < line.size() && line[k + n] == marker)
-        ++n;
+    const qsizetype n = markerRun(line, k, marker);
     if (n < 3 || (marker == u'`' && line.sliced(k + n).contains(u'`')))
         return std::nullopt;
     return std::pair{marker, int(n)};
@@ -215,19 +233,9 @@ std::optional<std::pair<QChar, int>> openingFence(QStringView line)
 /// other character makes it a code line), else 0.
 int closingFenceRun(QStringView line, QChar marker)
 {
-    qsizetype k = 0;
-    while (k < line.size() && isSpaceOrTab(line[k]))
-        ++k;
-    qsizetype run = 0;
-    while (k + run < line.size() && line[k + run] == marker)
-        ++run;
-    if (run < 3)
-        return 0;
-    for (qsizetype j = k + run; j < line.size(); ++j) {
-        if (!isSpaceOrTab(line[j]))
-            return 0;
-    }
-    return int(run);
+    const qsizetype k = indentEnd(line);
+    const qsizetype run = markerRun(line, k, marker);
+    return run >= 3 && isBlank(line.sliced(k + run)) ? int(run) : 0;
 }
 
 /// Lines a code block keeps hidden after its closing fence: blank lines, a standalone block id
@@ -236,10 +244,7 @@ int closingFenceRun(QStringView line, QChar marker)
 /// them: after a no-break space they are text.
 bool isMetadataLine(QStringView line)
 {
-    qsizetype k = 0;
-    while (k < line.size() && isSpaceOrTab(line[k]))
-        ++k;
-    const QStringView t = line.sliced(k);
+    const QStringView t = line.sliced(indentEnd(line));
     return t.isEmpty() || !markdown::standaloneBlockId(t).isEmpty() || markdown::matchPropertyLine(t).has_value();
 }
 
@@ -258,10 +263,7 @@ std::optional<Fence> parseFence(QStringView body)
     f.openLine = first;
     f.marker = open->first;
     f.length = open->second;
-    qsizetype k = 0;
-    while (k < first.size() && isSpaceOrTab(first[k]))
-        ++k;
-    const QString info = first.sliced(k + f.length).trimmed();
+    const QString info = first.sliced(indentEnd(first) + f.length).trimmed();
     f.lang = info.section(u' ', 0, 0, QString::SectionSkipEmpty).toLower();
     // Strip attribute braces of "{.lang}" style info strings.
     if (f.lang.startsWith(u'{'))
@@ -269,26 +271,22 @@ std::optional<Fence> parseFence(QStringView body)
     f.innerOffset = int(lines.size() > 1 ? lines[1].start : first.size());
     // The first closing line ends the block, as in the core parser: lines after it are not code
     // (a block id, properties or more text of a list item).
-    qsizetype close = -1;
-    for (qsizetype i = 1; i < lines.size() && close < 0; ++i) {
-        if (closingFenceRun(lines[i].text, f.marker) >= f.length)
-            close = i;
-    }
     QStringList inner;
-    const qsizetype end = close >= 0 ? close : lines.size();
-    for (qsizetype i = 1; i < end; ++i)
-        inner.append(lines[i].text);
-    f.inner = inner.join(u'\n');
-    if (close >= 0) {
-        f.closed = true;
-        f.closeLine = lines[close].text;
-        QStringList after;
-        for (qsizetype i = close + 1; i < lines.size(); ++i) {
-            after.append(lines[i].text);
-            f.onlyMetadataAfter = f.onlyMetadataAfter && isMetadataLine(lines[i].text);
+    QStringList after;
+    for (qsizetype i = 1; i < lines.size(); ++i) {
+        const QString &line = lines[i].text;
+        if (f.closed) {
+            after.append(line);
+            f.onlyMetadataAfter = f.onlyMetadataAfter && isMetadataLine(line);
+        } else if (closingFenceRun(line, f.marker) >= f.length) {
+            f.closed = true;
+            f.closeLine = line;
+        } else {
+            inner.append(line);
         }
-        f.after = after.join(u'\n');
     }
+    f.inner = inner.join(u'\n');
+    f.after = after.join(u'\n');
     return f;
 }
 
@@ -310,7 +308,7 @@ qsizetype displayMathEnd(const QList<text::Line> &lines, qsizetype k)
         return -1;
     for (qsizetype j = k + 1; j < lines.size(); ++j) {
         const QStringView t = lines[j].text;
-        if (std::all_of(t.cbegin(), t.cend(), isSpaceOrTab))
+        if (isBlank(t))
             return -1;
         if (t.trimmed() == u"$$")
             return j;
@@ -349,10 +347,9 @@ QString loneFenceClosed(const markdown::BlockEntry &e)
     if ((e.kind != BlockKind::Code && e.kind != BlockKind::ListItem) || e.body.contains(u'\n')
         || e.body.contains(u'\r'))
         return {};
-    const auto fence = parseFence(e.body);
-    if (!fence || fence->closed)
-        return {};
-    return e.body + u'\n' + QString(fence->length, fence->marker);
+    // One line: an opening fence there is never closed.
+    const auto open = openingFence(e.body);
+    return open ? e.body + u'\n' + QString(open->second, open->first) : QString();
 }
 
 bool loneFenceRunsOn(const markdown::BlockDocument &doc, int row)
@@ -364,15 +361,18 @@ bool loneFenceRunsOn(const markdown::BlockDocument &doc, int row)
 
 namespace {
 
+/// The views of fenced code (code, calc, query, math, mermaid, chart): their fence lines are hidden.
+bool isFencedView(BlockView view)
+{
+    return view == BlockView::Code || view == BlockView::Calc || view == BlockView::Query || view == BlockView::Math
+           || view == BlockView::Mermaid || view == BlockView::Chart;
+}
+
 /// A fence line rewritten to `length` markers, keeping its indentation and info string.
 QString fenceLineWithLength(QStringView line, QChar marker, int length)
 {
-    qsizetype start = 0;
-    while (start < line.size() && isSpaceOrTab(line[start]))
-        ++start;
-    qsizetype end = start;
-    while (end < line.size() && line[end] == marker)
-        ++end;
+    const qsizetype start = indentEnd(line);
+    const qsizetype end = start + markerRun(line, start, marker);
     return line.first(start).toString() + QString(length, marker) + line.sliced(end).toString();
 }
 
@@ -449,23 +449,18 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
         s.editSuffix = int(e.body.size() - f.innerOffset - f.inner.size());
     };
     // A lone opening fence ("```calc" being typed) stays text until Enter turns it into a block.
-    const auto blockFence = [&]() -> std::optional<Fence> {
-        auto f = parseFence(e.body);
-        if (f && !f->closed && !e.body.contains(u'\n'))
-            return std::nullopt;
-        return f;
-    };
+    const auto lone = [&](const Fence &f) { return !f.closed && !e.body.contains(u'\n'); };
     switch (e.kind) {
     case BlockKind::Heading:
         s.view = BlockView::Heading;
         return s;
     case BlockKind::Code:
-        if (const auto f = blockFence())
-            fenced(*f);
-        else if (parseFence(e.body))
+        if (const auto f = parseFence(e.body); !f)
+            s.view = BlockView::Code;
+        else if (lone(*f))
             s.view = BlockView::Text;
         else
-            s.view = BlockView::Code;
+            fenced(*f);
         return s;
     case BlockKind::Table: s.view = BlockView::Table; return s;
     case BlockKind::Quote: s.view = BlockView::Quote; return s;
@@ -505,7 +500,7 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
 
     // List items: the body may itself be a fence, a table, a heading, a quote or a callout
     // (Logseq writes everything inside list items).
-    if (const auto f = blockFence()) {
+    if (const auto f = parseFence(e.body); f && !lone(*f)) {
         fenced(*f);
         return s;
     }
@@ -544,9 +539,7 @@ QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)
     QString head = e.body.left(s.editOffset);
     QString tail = e.body.right(s.editSuffix);
     QString out;
-    if (s.view == BlockView::Code || s.view == BlockView::Calc || s.view == BlockView::Query
-        || s.view == BlockView::Math || s.view == BlockView::Mermaid || s.view == BlockView::Chart
-        || s.view == BlockView::Frontmatter) {
+    if (isFencedView(s.view) || s.view == BlockView::Frontmatter) {
         // The fence lines are hidden, so every line typed between them is code. A line that would
         // close the fence (``` alone on its line, say, when writing about fenced code) must not
         // end the block: widen the opening and closing fence past the longest such line. Keeping
@@ -614,17 +607,9 @@ QList<Heading> documentHeadings(const markdown::BlockDocument &doc, QList<int> *
 QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
 {
     const BlockShape s = shapeOf(e);
-    QString t;
-    switch (s.view) {
-    case BlockView::Code:
-    case BlockView::Calc:
-    case BlockView::Query:
-    case BlockView::Math:
-    case BlockView::Mermaid:
-    case BlockView::Chart: t = s.editText; break;
-    case BlockView::Rule: return u"―"_s;
-    default: t = markdown::stripTokens(s.editText); break;
-    }
+    if (s.view == BlockView::Rule)
+        return u"―"_s;
+    QString t = isFencedView(s.view) ? s.editText : markdown::stripTokens(s.editText);
     // Heading markers, quote markers; links, emphasis and code marks (markdown::stripInlineMarkup,
     // shared with "Copy as plain text"); property lines.
     static const QRegularExpression heading(u"^\\s{0,3}#{1,6}\\s+"_s);
@@ -644,39 +629,35 @@ QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
 
 QVariantMap queryInfo(QStringView source)
 {
+    static const QRegularExpression filterRe(u"^(-?)([A-Za-z]+):(.+)$"_s);
     QVariantList filters;
     QStringList terms;
-    QString current;
-    bool quoted = false;
-    QStringList words;
-    for (const QChar c : source) {
-        if (c == u'"') {
-            quoted = !quoted;
-            current += c;
-        } else if (!quoted && (c == u' ' || c == u'\t' || c == u'\n' || c == u'\r')) {
-            if (!current.isEmpty())
-                words.append(current);
-            current.clear();
-        } else {
-            current += c;
-        }
-    }
-    if (!current.isEmpty())
-        words.append(current);
-    static const QRegularExpression filterRe(u"^(-?)([A-Za-z]+):(.+)$"_s);
-    for (const QString &w : std::as_const(words)) {
-        const auto m = filterRe.match(w);
-        if (m.hasMatch()) {
+    const auto addWord = [&](QStringView w) {
+        if (w.isEmpty())
+            return;
+        if (const auto m = filterRe.matchView(w); m.hasMatch()) {
             filters.append(QVariantMap{{u"key"_s, m.captured(2).toLower()},
                                        {u"value"_s, m.captured(3)},
                                        {u"negated"_s, !m.capturedView(1).isEmpty()}});
+        } else if (w.size() >= 2 && w.startsWith(u'"') && w.endsWith(u'"')) {
+            terms.append(w.sliced(1, w.size() - 2).toString());
         } else {
-            QString t = w;
-            if (t.size() >= 2 && t.startsWith(u'"') && t.endsWith(u'"'))
-                t = t.sliced(1, t.size() - 2);
-            terms.append(t);
+            terms.append(w.toString());
+        }
+    };
+    // Words end at whitespace outside double quotes (a quoted phrase is one word, quotes included).
+    bool quoted = false;
+    qsizetype start = 0;
+    for (qsizetype i = 0; i < source.size(); ++i) {
+        const QChar c = source[i];
+        if (c == u'"') {
+            quoted = !quoted;
+        } else if (!quoted && (c == u' ' || c == u'\t' || c == u'\n' || c == u'\r')) {
+            addWord(source.sliced(start, i - start));
+            start = i + 1;
         }
     }
+    addWord(source.sliced(start));
     return {{u"source"_s, source.toString()}, {u"filters"_s, filters}, {u"terms"_s, terms}};
 }
 
@@ -755,9 +736,8 @@ QString retargetWebPicture(const QString &body, const QString &url, const QStrin
         default: encoded += c;
         }
     }
-    const markdown::InlineScan scan = markdown::extractInline(body);
-    QList<Link> links = scan.links;
-    std::ranges::sort(links, [](const Link &a, const Link &b) { return a.from > b.from; });
+    QList<Link> links = markdown::extractInline(body).links;
+    std::ranges::sort(links, std::ranges::greater{}, &Link::from);
     QString out = body;
     for (const Link &link : std::as_const(links)) {
         // The target as the parser read it (escapes removed), as embedsOf() names the picture.
@@ -847,12 +827,11 @@ bool onlyEmbeds(QStringView body, bool transclusions)
 {
     if (!body.contains(u"![") && !body.contains(u"!(("))
         return false; // no embed at all: no need to scan (called for every rendered block)
-    const markdown::InlineScan scan = markdown::extractInline(body);
     QString rest = body.toString();
     bool any = false;
     // Blank out the embeds from the end so offsets stay valid.
-    QList<Link> links = scan.links;
-    std::ranges::sort(links, [](const Link &a, const Link &b) { return a.from > b.from; });
+    QList<Link> links = markdown::extractInline(body).links;
+    std::ranges::sort(links, std::ranges::greater{}, &Link::from);
     for (const Link &link : std::as_const(links)) {
         const bool attachment =
                 (link.kind == LinkKind::Embed && (isAttachmentTarget(link.target) || webpicture::isWebUrl(link.target)))
@@ -953,14 +932,13 @@ std::optional<markdown::TokenRef> tokenRefFromMap(const QVariantMap &map)
 {
     bool ok = false;
     const int kind = map.value(u"kind"_s).toInt(&ok);
-    if (!ok || kind < 0 || kind > int(markdown::TokenKind::Planning) || map.value(u"value"_s).toString().isEmpty())
+    const QString value = map.value(u"value"_s).toString();
+    if (!ok || kind < 0 || kind > int(markdown::TokenKind::Planning) || value.isEmpty())
         return std::nullopt;
-    markdown::TokenRef ref;
-    ref.kind = markdown::TokenKind(kind);
-    ref.value = map.value(u"value"_s).toString();
-    ref.ordinal = std::max(0, map.value(u"ordinal"_s).toInt());
-    ref.defaultTime = QTime::fromString(map.value(u"defaultTime"_s).toString(), u"HH:mm"_s);
-    return ref;
+    return markdown::TokenRef{.kind = markdown::TokenKind(kind),
+                              .value = value,
+                              .ordinal = std::max(0, map.value(u"ordinal"_s).toInt()),
+                              .defaultTime = QTime::fromString(map.value(u"defaultTime"_s).toString(), u"HH:mm"_s)};
 }
 
 QString insertTokenAt(const QString &text, int cursor, const QString &token, int *newCursor)
@@ -986,21 +964,18 @@ QVariantMap CompletionTrigger::toMap() const
 
 CompletionTrigger CompletionTrigger::fromMap(const QVariantMap &map)
 {
-    CompletionTrigger t;
-    t.mode = map.value(u"mode"_s).toString();
-    t.filter = map.value(u"filter"_s).toString();
-    t.from = map.value(u"from"_s, -1).toInt();
-    t.to = map.value(u"to"_s, -1).toInt();
-    t.token = map.value(u"token"_s).toString();
-    t.closing = map.value(u"closing"_s).toString();
-    return t;
+    return {.mode = map.value(u"mode"_s).toString(),
+            .filter = map.value(u"filter"_s).toString(),
+            .from = map.value(u"from"_s, -1).toInt(),
+            .to = map.value(u"to"_s, -1).toInt(),
+            .token = map.value(u"token"_s).toString(),
+            .closing = map.value(u"closing"_s).toString()};
 }
 
 CompletionTrigger completionTriggerAt(QStringView text, int cursor)
 {
-    CompletionTrigger none;
     if (cursor < 0 || cursor > text.size())
-        return none;
+        return {};
     const qsizetype lineStart = text.first(cursor).lastIndexOf(u'\n') + 1;
     const QStringView before = text.sliced(lineStart, cursor - lineStart);
     qsizetype lineEnd = text.indexOf(u'\n', cursor);
@@ -1009,74 +984,60 @@ CompletionTrigger completionTriggerAt(QStringView text, int cursor)
     const QStringView after = text.sliced(cursor, lineEnd - cursor);
 
     // Nothing inside inline code: the masked line differs from the line at the cursor.
-    {
-        const QString lineText = text.sliced(lineStart, lineEnd - lineStart).toString();
-        const QString masked = markdown::maskInlineCode(lineText);
-        const qsizetype k = cursor - lineStart - 1;
-        if (k >= 0 && masked[k] != lineText[k])
-            return none;
-        if (k >= 0 && lineText.left(k + 1).count(u'`') % 2 == 1)
-            return none;
+    if (const qsizetype k = cursor - lineStart - 1; k >= 0) {
+        const QStringView line = text.sliced(lineStart, lineEnd - lineStart);
+        if (markdown::maskInlineCode(line).at(k) != line[k] || line.first(k + 1).count(u'`') % 2 == 1)
+            return {};
     }
 
     const auto result = [&](const QString &mode, qsizetype fromInLine, qsizetype filterStart, const QString &token) {
-        CompletionTrigger t;
-        t.mode = mode;
-        t.from = int(lineStart + fromInLine);
-        t.filter = before.sliced(filterStart).toString();
-        t.to = cursor;
-        t.token = token;
+        return CompletionTrigger{.mode = mode,
+                                 .filter = before.sliced(filterStart).toString(),
+                                 .from = int(lineStart + fromInLine),
+                                 .to = cursor,
+                                 .token = token,
+                                 .closing = {}};
+    };
+    // Pages and blocks: `m` captured the `!` of an embed and the target typed so far; the rest of
+    // the target after the cursor up to its closing `]]`, `|` or `))` (`rest`) is replaced too.
+    const auto target = [&](const QString &mode, const QRegularExpressionMatch &m, const QString &token,
+                            const QRegularExpression &rest) {
+        CompletionTrigger t = result(mode, m.capturedStart(2), m.capturedStart(2),
+                                     m.capturedView(1).isEmpty() ? token : u'!' + token);
+        if (const auto r = rest.matchView(after); r.hasMatch()) {
+            t.to = int(cursor + r.capturedLength(1));
+            t.closing = r.captured(2);
+        }
         return t;
     };
 
     // [[pages / ![[embeds
     {
         static const QRegularExpression re(u"(!?)\\[\\[([^\\[\\]|\\n]*)$"_s);
-        const auto m = re.matchView(before);
-        if (m.hasMatch()) {
-            CompletionTrigger t = result(u"pages"_s, m.capturedStart(2), m.capturedStart(2),
-                                         m.capturedView(1).isEmpty() ? u"[["_s : u"![["_s);
-            static const QRegularExpression rest(u"^([^\\[\\]|\\n]*)(\\]\\]|\\|)"_s);
-            const auto r = rest.matchView(after);
-            if (r.hasMatch()) {
-                t.to = int(cursor + r.capturedLength(1));
-                t.closing = r.captured(2);
-            }
-            return t;
-        }
+        static const QRegularExpression rest(u"^([^\\[\\]|\\n]*)(\\]\\]|\\|)"_s);
+        if (const auto m = re.matchView(before); m.hasMatch())
+            return target(u"pages"_s, m, u"[["_s, rest);
     }
     // ((block refs
     {
         static const QRegularExpression re(u"(!?)\\(\\(([^()\\n]*)$"_s);
-        const auto m = re.matchView(before);
-        if (m.hasMatch()) {
+        static const QRegularExpression rest(u"^([^()\\n]*)(\\)\\))"_s);
+        if (const auto m = re.matchView(before); m.hasMatch()) {
             const qsizetype open = m.capturedStart(0);
             const bool afterWord = open > 0 && text::isWordChar(before[open - 1]);
-            if (!afterWord || !m.capturedView(2).isEmpty()) {
-                CompletionTrigger t = result(u"blocks"_s, m.capturedStart(2), m.capturedStart(2),
-                                             m.capturedView(1).isEmpty() ? u"(("_s : u"!(("_s);
-                static const QRegularExpression rest(u"^([^()\\n]*)(\\)\\))"_s);
-                const auto r = rest.matchView(after);
-                if (r.hasMatch()) {
-                    t.to = int(cursor + r.capturedLength(1));
-                    t.closing = r.captured(2);
-                }
-                return t;
-            }
+            if (!afterWord || !m.capturedView(2).isEmpty())
+                return target(u"blocks"_s, m, u"(("_s, rest);
         }
     }
     // Natural-language dates after a date token.
     {
         static const QRegularExpression re = text::unicodeRegex(
                 u"(📅|⏳|🛫|⏰!?)\\x{FE0F}?[ \\t]+([^\\n📅⏳🛫⏰✅❌➕🔁]*)$"_s);
-        const auto m = re.matchView(before);
-        if (m.hasMatch()) {
-            static const QRegularExpression canonical(u"^\\d{4}-\\d{2}-\\d{2}"_s);
-            if (!canonical.matchView(m.capturedView(2)).hasMatch())
-                return result(u"date"_s, m.capturedStart(2), m.capturedStart(2), m.captured(1));
-            // A written date: what follows it on the line (a #tag, an @date, a /command) may
-            // still complete.
-        }
+        static const QRegularExpression canonical(u"^\\d{4}-\\d{2}-\\d{2}"_s);
+        // A written date: what follows it on the line (a #tag, an @date, a /command) may still
+        // complete.
+        if (const auto m = re.matchView(before); m.hasMatch() && !canonical.matchView(m.capturedView(2)).hasMatch())
+            return result(u"date"_s, m.capturedStart(2), m.capturedStart(2), m.captured(1));
     }
     // @date
     {
@@ -1098,13 +1059,12 @@ CompletionTrigger completionTriggerAt(QStringView text, int cursor)
     // #tags
     {
         static const QRegularExpression re = text::unicodeRegex(u"(?:^|[\\s(])#([\\p{L}\\p{N}\\p{M}_\\-/]*)$"_s);
-        const auto m = re.matchView(before);
-        if (m.hasMatch()) {
+        static const QRegularExpression rest = text::unicodeRegex(u"^[\\p{L}\\p{N}\\p{M}_\\-/]*"_s);
+        if (const auto m = re.matchView(before); m.hasMatch()) {
             const qsizetype hash = m.capturedStart(1) - 1;
             const bool atBlockStart = lineStart + hash == 0;
             if (!(atBlockStart && m.capturedLength(1) == 0)) {
                 CompletionTrigger t = result(u"tags"_s, m.capturedStart(1), m.capturedStart(1), u"#"_s);
-                static const QRegularExpression rest = text::unicodeRegex(u"^[\\p{L}\\p{N}\\p{M}_\\-/]*"_s);
                 t.to = int(cursor + rest.matchView(after).capturedLength(0));
                 return t;
             }
@@ -1113,49 +1073,41 @@ CompletionTrigger completionTriggerAt(QStringView text, int cursor)
     // /slash
     {
         static const QRegularExpression re = text::unicodeRegex(u"(?:^|\\s)/([\\p{L}\\p{N}\\p{M}]*)$"_s);
-        const auto m = re.matchView(before);
-        if (m.hasMatch())
+        if (const auto m = re.matchView(before); m.hasMatch())
             return result(u"slash"_s, m.capturedStart(1) - 1, m.capturedStart(1), u"/"_s);
     }
-    return none;
+    return {};
 }
 
 VaultConfig vaultConfigFromMap(const QVariantMap &m)
 {
     VaultConfig c;
-    if (m.contains(u"journalsFolder"_s))
-        c.journalsFolder = m.value(u"journalsFolder"_s).toString();
-    const QString fmt = m.value(u"journalFileFormat"_s).toString();
-    if (!fmt.isEmpty())
-        c.journalFileFormat = fmt;
-    if (m.contains(u"newPagesFolder"_s))
-        c.newPagesFolder = m.value(u"newPagesFolder"_s).toString();
-    const QString att = m.value(u"attachmentsFolder"_s).toString();
-    if (!att.isEmpty())
-        c.attachmentsFolder = att;
-    const QString templates = m.value(u"templatesFolder"_s).toString();
-    if (!templates.isEmpty())
-        c.templatesFolder = templates;
-    const QTime t = QTime::fromString(m.value(u"defaultReminderTime"_s).toString(), u"HH:mm"_s);
-    if (t.isValid())
+    // Texts a key sets (also to ""), then those only a non-empty value sets.
+    for (const auto &[key, field] :
+         {std::pair{u"journalsFolder"_s, &c.journalsFolder}, std::pair{u"newPagesFolder"_s, &c.newPagesFolder},
+          std::pair{u"weeklyFileFormat"_s, &c.weeklyFileFormat}, std::pair{u"weeklyTemplate"_s, &c.weeklyTemplate},
+          std::pair{u"monthlyFileFormat"_s, &c.monthlyFileFormat},
+          std::pair{u"monthlyTemplate"_s, &c.monthlyTemplate}}) {
+        if (m.contains(key))
+            *field = m.value(key).toString();
+    }
+    for (const auto &[key, field] : {std::pair{u"journalFileFormat"_s, &c.journalFileFormat},
+                                     std::pair{u"attachmentsFolder"_s, &c.attachmentsFolder},
+                                     std::pair{u"templatesFolder"_s, &c.templatesFolder}}) {
+        if (const QString value = m.value(key).toString(); !value.isEmpty())
+            *field = value;
+    }
+    if (const QTime t = QTime::fromString(m.value(u"defaultReminderTime"_s).toString(), u"HH:mm"_s); t.isValid())
         c.defaultReminderTime = t;
-    const int ws = m.value(u"weekStartsOn"_s).toInt();
-    if (ws >= 1 && ws <= 7)
+    if (const int ws = m.value(u"weekStartsOn"_s).toInt(); ws >= 1 && ws <= 7)
         c.weekStartsOn = Qt::DayOfWeek(ws);
     if (const auto mode = markdown::parseNoteMode(m.value(u"journalMode"_s).toString()))
         c.journalMode = *mode;
     if (const auto mode = markdown::parseNoteMode(m.value(u"pageMode"_s).toString()))
         c.pageMode = *mode;
     // Weekly and monthly notes (periodic/periodic.h): their folders follow the journals folder.
-    c.weeklyFolder = m.contains(u"weeklyFolder"_s) ? m.value(u"weeklyFolder"_s).toString() : c.journalsFolder;
-    c.monthlyFolder = m.contains(u"monthlyFolder"_s) ? m.value(u"monthlyFolder"_s).toString() : c.journalsFolder;
-    for (const auto &[key, field] :
-         {std::pair{u"weeklyFileFormat"_s, &c.weeklyFileFormat}, std::pair{u"weeklyTemplate"_s, &c.weeklyTemplate},
-          std::pair{u"monthlyFileFormat"_s, &c.monthlyFileFormat},
-          std::pair{u"monthlyTemplate"_s, &c.monthlyTemplate}}) {
-        if (m.contains(key))
-            *field = m.value(key).toString();
-    }
+    c.weeklyFolder = m.value(u"weeklyFolder"_s, c.journalsFolder).toString();
+    c.monthlyFolder = m.value(u"monthlyFolder"_s, c.journalsFolder).toString();
     return c;
 }
 
@@ -1309,40 +1261,35 @@ const SlashCommand *slashCommand(QStringView id)
 QList<const SlashCommand *> filterSlashCommands(QStringView filter)
 {
     const QString q = text::foldKey(filter).trimmed();
+    const QString wordStart = u' ' + q;
+    const QString partStart = u'-' + q;
+    constexpr int NoMatch = 100;
+    // How a name or keyword matches (folded): 0 at its start, 1 at a word's start, 2 anywhere; with
+    // no filter every command matches.
+    const auto rank = [&](const QString &name) {
+        if (q.isEmpty())
+            return 0;
+        const QString f = text::foldKey(name);
+        if (f.startsWith(q))
+            return 0;
+        if (f.contains(wordStart) || f.contains(partStart))
+            return 1;
+        return f.contains(q) ? 2 : NoMatch;
+    };
+    // Names before keywords, then the menu's order.
     QList<std::pair<int, const SlashCommand *>> ranked;
     int order = 0;
     for (const SlashCommand &c : slashCommands()) {
         ++order;
-        if (q.isEmpty()) {
-            ranked.append({order, &c});
-            continue;
-        }
-        int best = -1;
-        const auto consider = [&](const QString &name, int base) {
-            const QString f = text::foldKey(name);
-            int rank = -1;
-            if (f.startsWith(q))
-                rank = 0;
-            else if (f.contains(u' ' + q) || f.contains(u'-' + q))
-                rank = 1;
-            else if (f.contains(q))
-                rank = 2;
-            if (rank >= 0) {
-                rank += base;
-                if (best < 0 || rank < best)
-                    best = rank;
-            }
-        };
-        consider(c.namePl, 0);
-        consider(c.nameEn, 0);
-        consider(c.id, 0);
+        int best = std::min({rank(c.namePl), rank(c.nameEn), rank(c.id)});
         for (const QString &k : c.keywords)
-            consider(k, 3);
-        if (best >= 0)
+            best = std::min(best, rank(k) + 3);
+        if (best < NoMatch)
             ranked.append({best * 1000 + order, &c});
     }
     std::ranges::stable_sort(ranked, [](const auto &a, const auto &b) { return a.first < b.first; });
     QList<const SlashCommand *> out;
+    out.reserve(ranked.size());
     for (const auto &r : std::as_const(ranked))
         out.append(r.second);
     return out;
@@ -1440,7 +1387,7 @@ QString restoreLineEndings(const QString &original, const QString &edited, const
         QString out;
         out.reserve(middle.size() + middle.size() / 16);
         for (qsizetype i = 0; i < middle.size(); ++i) {
-            if (middle[i] == u'\n' && (i == 0 ? p == 0 || edited[p - 1] != u'\r' : middle[i - 1] != u'\r'))
+            if (middle[i] == u'\n' && (p + i == 0 || edited[p + i - 1] != u'\r'))
                 out += eol;
             else
                 out += middle[i];

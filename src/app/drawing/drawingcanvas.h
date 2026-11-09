@@ -101,6 +101,7 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <utility>
 
@@ -582,11 +583,10 @@ private:
     void beginShape(QPointF itemPos, const Pointer &p);
     void shapeTo(QPointF itemPos, const Pointer &p);
     void finishShape(QPointF itemPos, const Pointer &p);
+    /// A tap with the text tool (a drag with it: nothing).
     void finishTap(QPointF itemPos, const Pointer &p);
     /// A tap with the select tool (a double tap edits a text or a shape's label).
     void selectTap(QPointF itemPos, const Pointer &p);
-    /// A tap with the text tool.
-    void textTap(QPointF itemPos, const Pointer &p);
     /// The topmost unlocked element at `itemPos` (−1 none).
     qsizetype elementAt(QPointF itemPos, const Pointer &p) const;
     /// The topmost unlocked text, or shape whose inside holds `itemPos` (a label's place; −1 none).
@@ -596,6 +596,8 @@ private:
     void requestTextEdit(qsizetype index, QPointF scene);
     void endTextEdit();
     void setSelection(const QSet<QString> &ids);
+    /// The selected ids an action on the selection edits (none while a gesture is in progress).
+    QSet<QString> selectionToEdit() const { return busy() ? QSet<QString>() : m_selected; }
     /// The selection's frame in scene coordinates (empty: none).
     QRectF selectionSceneRect() const;
     drawing::EditStamp stamp() const;
@@ -625,6 +627,8 @@ private:
     QSet<QString> hiddenKeys() const;
     /// What the file's picture gets besides the drawing: a Dark drawing's backdrop dark.
     drawing::SvgOptions svgOptions() const;
+    /// m_embeddedLinks of a file read (embeddedFilesChanged() when they differ, or `always`).
+    void readEmbeddedLinks(const QByteArray &bytes, bool always);
 
     QTransform sceneToItem() const;
     void placeView();
@@ -633,7 +637,6 @@ private:
     /// Take the snapshot paint() draws (GUI thread, or the render thread while the GUI waits).
     void prepareSnapshot();
     void paintSnapshot(QPainter *painter, const QSizeF &size) const;
-    void clampZoom();
     /// The cached image of the committed strokes for the current view (GUI thread).
     void renderCache();
     void invalidateCache();
@@ -667,8 +670,6 @@ private:
     QVariantList m_embeddedLinks;
     QJsonObject m_embeddedFiles;
     QVariantMap m_textRequest;
-    /// m_embeddedLinks of a file read (embeddedFilesChanged() when they differ, or `always`).
-    void readEmbeddedLinks(const QByteArray &bytes, bool always);
     bool m_writable = true;
     bool m_modified = false;
     /// The drawing at the last load or save (takeExternal() merges against it).

@@ -49,6 +49,17 @@ QString typeIcon(const QString &type, bool unsupportedIcon)
     return u"type"_s;
 }
 
+/// An item DrawingBackdrops prepared without an error (`error` there and empty).
+bool preparedWithoutError(const QVariant &item)
+{
+    const QVariantMap map = item.toMap();
+    const auto it = map.constFind(u"error"_s);
+    return it != map.cend() && it->toString().isEmpty();
+}
+
+/// KeyListModel's role `key`.
+constexpr int KeyRole = Qt::UserRole + 1;
+
 } // namespace
 
 QList<int> BlockViews::tableShownRows(const QVariantMap &table, int editRow) const
@@ -66,10 +77,10 @@ QList<int> BlockViews::tableShownRows(const QVariantMap &table, int editRow) con
 
 int BlockViews::tableNextShownRow(const QVariantMap &table, int row, int step) const
 {
-    const QVariantList shown = table.value(u"shown"_s).toList();
-    const int rows = int(table.value(u"rows"_s).toList().size());
     if (step == 0)
         return row;
+    const QVariantList shown = table.value(u"shown"_s).toList();
+    const int rows = int(table.value(u"rows"_s).toList().size());
     for (int n = row + step; n >= 0 && n < rows; n += step) {
         if (rowShown(shown, n))
             return n;
@@ -100,7 +111,7 @@ QList<qreal> BlockViews::tableColumnWidths(const QVariantMap &table, const QFont
                     cell.contains(u"plain"_s) ? cell.value(u"plain"_s).toString() : cell.value(u"display"_s).toString();
             w = std::max(w, cellMetrics.horizontalAdvance(text));
         }
-        w = std::min<qreal>(280, std::max<qreal>(56, std::ceil(w) + 2 * padding));
+        w = std::clamp<qreal>(std::ceil(w) + 2 * padding, 56, 280);
         out.append(w);
         total += w;
     }
@@ -134,11 +145,8 @@ QVariantMap BlockViews::tableCell(const QVariantMap &table, int row, int column)
     if (row < 0 || row >= rows.size())
         return out;
     const QVariantList cells = rows.at(row).toList();
-    if (column >= cells.size())
-        return out;
-    const QVariantMap cell = cells.at(column).toMap();
-    for (auto it = cell.cbegin(); it != cell.cend(); ++it)
-        out.insert(it.key(), it.value());
+    if (column < cells.size())
+        out.insert(cells.at(column).toMap());
     return out;
 }
 
@@ -208,7 +216,7 @@ QStringList BlockViews::headerListKeys(const QVariantMap &pageProperties) const
 {
     QStringList out;
     for (const QString &list : {u"tags"_s, u"aliases"_s}) {
-        for (const QVariant &v : pageProperties.value(list).toList()) {
+        for (const QVariantList items = pageProperties.value(list).toList(); const QVariant &v : items) {
             const QVariantMap t = v.toMap();
             out.append(t.value(u"source"_s).toString() + u':' + t.value(u"property"_s).toString());
         }
@@ -234,7 +242,7 @@ QString BlockViews::valueText(const QVariant &value) const
     case QMetaType::QStringList: return value.toStringList().join(u',');
     case QMetaType::QVariantList: {
         QStringList parts;
-        for (const QVariant &v : value.toList())
+        for (const QVariantList items = value.toList(); const QVariant &v : items)
             parts.append(valueText(v));
         return parts.join(u',');
     }
@@ -249,19 +257,23 @@ QString BlockViews::textAt(const QVariantMap &map, const QString &key) const
 
 QStringList BlockViews::splitListItems(const QString &text) const
 {
-    QStringList parts;
+    QStringList out;
+    qsizetype start = 0;
+    // The item from `start` to `end`, trimmed (none when empty).
+    const auto take = [&](qsizetype end) {
+        if (const QStringView item = QStringView(text).sliced(start, end - start).trimmed(); !item.isEmpty())
+            out.append(item.toString());
+        start = end + 1;
+    };
     int depth = 0;
     bool quoted = false;
-    qsizetype start = 0;
     for (qsizetype i = 0; i < text.size(); ++i) {
         const QChar c = text.at(i);
         const QChar next = i + 1 < text.size() ? text.at(i + 1) : QChar();
         if (quoted) {
             if (c == u'"')
                 quoted = false;
-            continue;
-        }
-        if (c == u'"') {
+        } else if (c == u'"') {
             quoted = true;
         } else if (c == u'[' && next == u'[') {
             ++depth;
@@ -270,17 +282,10 @@ QStringList BlockViews::splitListItems(const QString &text) const
             --depth;
             ++i;
         } else if (c == u',' && depth == 0) {
-            parts.append(text.mid(start, i - start));
-            start = i + 1;
+            take(i);
         }
     }
-    parts.append(text.mid(start));
-    QStringList out;
-    for (const QString &p : std::as_const(parts)) {
-        const QString t = p.trimmed();
-        if (!t.isEmpty())
-            out.append(t);
-    }
+    take(text.size());
     return out;
 }
 
@@ -346,23 +351,15 @@ QVariantList BlockViews::propertyValueRows(const QVariantList &suggestions, bool
 
 QVariantList BlockViews::preparedItems(const QVariantList &items) const
 {
-    QVariantList out;
-    for (const QVariant &v : items) {
-        const QVariantMap item = v.toMap();
-        if (item.contains(u"error"_s) && item.value(u"error"_s).toString().isEmpty())
-            out.append(v);
-    }
+    QVariantList out = items;
+    out.removeIf([](const QVariant &v) { return !preparedWithoutError(v); });
     return out;
 }
 
 QString BlockViews::firstItemError(const QVariantList &items) const
 {
-    for (const QVariant &v : items) {
-        const QVariantMap item = v.toMap();
-        if (!item.contains(u"error"_s) || !item.value(u"error"_s).toString().isEmpty())
-            return item.value(u"error"_s).toString();
-    }
-    return {};
+    const auto it = std::ranges::find_if_not(items, preparedWithoutError);
+    return it != items.cend() ? it->toMap().value(u"error"_s).toString() : QString();
 }
 
 int BlockViews::transclusionTaskLine(const QVariantList &transclusions, const QString &path, const QString &html,
@@ -370,7 +367,7 @@ int BlockViews::transclusionTaskLine(const QVariantList &transclusions, const QS
 {
     int best = -1;
     for (const QVariant &f : transclusions) {
-        for (const QVariant &e : f.toMap().value(u"blocks"_s).toList()) {
+        for (const QVariantList blocks = f.toMap().value(u"blocks"_s).toList(); const QVariant &e : blocks) {
             const QVariantMap b = e.toMap();
             if (b.value(u"kind"_s).toString() == u"embed" || b.value(u"task"_s).toString().isEmpty()
                 || b.value(u"path"_s).toString() != path || b.value(u"html"_s).toString() != html)
@@ -407,43 +404,42 @@ void ChipFlow::setKeepWith(QQuickItem *item)
 
 ChipFlow::Layout ChipFlow::compute(qreal w) const
 {
-    QList<QQuickItem *> shown;
-    for (QQuickItem *c : childItems()) {
-        if (c->isVisible() && c->width() > 0)
-            shown.append(c);
-    }
+    QList<QQuickItem *> shown = childItems();
+    shown.removeIf([](const QQuickItem *c) { return !(c->isVisible() && c->width() > 0); });
+    // Read with at(): with nothing removed `shown` still shares the children's list.
     const qreal s = m_spacing;
     // The line each item starts: a break before index `forced` too.
     const auto lines = [&](qsizetype forced) {
         QList<qsizetype> starts;
         qreal x = 0;
         for (qsizetype i = 0; i < shown.size(); ++i) {
-            if (i == forced || (x > 0 && x + shown[i]->width() > w)) {
+            if (i == forced || (x > 0 && x + shown.at(i)->width() > w)) {
                 starts.append(i);
                 x = 0;
             } else if (i == 0) {
                 starts.append(0);
             }
-            x += shown[i]->width() + s;
+            x += shown.at(i)->width() + s;
         }
         return starts;
     };
     QList<qsizetype> starts = lines(-1);
     const qsizetype add = m_keepWith ? shown.indexOf(m_keepWith.data()) : -1;
     if (add > 1 && starts.indexOf(add) > 0 && !starts.contains(add - 1)
-        && shown[add - 1]->width() + s + m_keepWith->width() <= w)
+        && shown.at(add - 1)->width() + s + m_keepWith->width() <= w)
         starts = lines(add - 1);
     Layout out;
+    out.places.reserve(shown.size());
     qreal y = 0;
     for (qsizetype l = 0; l < starts.size(); ++l) {
-        const qsizetype first = starts[l];
-        const qsizetype last = l + 1 < starts.size() ? starts[l + 1] : shown.size();
+        const qsizetype last = l + 1 < starts.size() ? starts.at(l + 1) : shown.size();
         qreal x = 0;
         qreal line = 0;
-        for (qsizetype i = first; i < last; ++i) {
-            out.places.append({shown[i], x, y});
-            x += shown[i]->width() + s;
-            line = std::max(line, shown[i]->height());
+        for (qsizetype i = starts.at(l); i < last; ++i) {
+            QQuickItem *item = shown.at(i);
+            out.places.append({item, x, y});
+            x += item->width() + s;
+            line = std::max(line, item->height());
         }
         out.lineHeight = std::max(out.lineHeight, line);
         y += line + (l + 1 < starts.size() ? s : 0);
@@ -475,13 +471,9 @@ void ChipFlow::relayout()
     m_laying = true;
     const Layout layout = compute(width());
     // Hidden items keep their place at 0, 0 (as the bindings it replaces had them).
-    for (QQuickItem *c : childItems()) {
-        const auto it =
-                std::find_if(layout.places.cbegin(), layout.places.cend(), [c](const Place &p) { return p.item == c; });
-        if (it != layout.places.cend())
-            c->setPosition(QPointF(it->x, it->y));
-        else
-            c->setPosition(QPointF(0, 0));
+    for (const QList<QQuickItem *> children = childItems(); QQuickItem *c : children) {
+        const auto it = std::ranges::find(layout.places, c, &Place::item);
+        c->setPosition(it != layout.places.cend() ? QPointF(it->x, it->y) : QPointF(0, 0));
     }
     const bool changed = !qFuzzyCompare(layout.lineHeight + 1, m_lineHeight + 1)
                          || !qFuzzyCompare(layout.height + 1, m_contentHeight + 1);
@@ -515,7 +507,7 @@ void ChipFlow::geometryChange(const QRectF &newGeometry, const QRectF &oldGeomet
 void ChipFlow::componentComplete()
 {
     QQuickItem::componentComplete();
-    for (QQuickItem *c : childItems())
+    for (const QList<QQuickItem *> children = childItems(); QQuickItem *c : children)
         watch(c);
     relayout();
 }
@@ -567,16 +559,15 @@ int KeyListModel::rowCount(const QModelIndex &parent) const
 
 QVariant KeyListModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() >= m_keys.size())
+    if (!index.isValid() || index.row() >= m_keys.size() || (role != KeyRole && role != Qt::DisplayRole))
         return {};
-    if (role == Qt::UserRole + 1 || role == Qt::DisplayRole)
-        return m_keys.at(index.row());
-    return {};
+    return m_keys.at(index.row());
 }
 
 QHash<int, QByteArray> KeyListModel::roleNames() const
 {
-    return {{Qt::UserRole + 1, "key"}};
+    static const QHash<int, QByteArray> names{{KeyRole, "key"}};
+    return names;
 }
 
 } // namespace brulion::editor

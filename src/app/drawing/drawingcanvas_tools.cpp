@@ -81,14 +81,28 @@ QString alignName(drawing::TextAlign align)
     return u"left"_s;
 }
 
+/// `p` within drawing::CoordinateLimit (a drawing with anything beyond it is read back as one
+/// Brulion only shows).
+QPointF clampedToLimit(QPointF p)
+{
+    constexpr double L = drawing::CoordinateLimit;
+    return QPointF(std::clamp(p.x(), -L, L), std::clamp(p.y(), -L, L));
+}
+
+/// A new text's `box` moved, all of it, within drawing::CoordinateLimit; its corner in hundredths.
+QRectF boxWithinLimit(const QRectF &box)
+{
+    constexpr double L = drawing::CoordinateLimit;
+    const double x = std::clamp(box.x(), -L, std::max(-L, L - box.width()));
+    const double y = std::clamp(box.y(), -L, std::max(-L, L - box.height()));
+    return QRectF(std::round(x * 100) / 100, std::round(y * 100) / 100, box.width(), box.height());
+}
+
 } // namespace
 
 DrawingCanvas::Pointer DrawingCanvas::touchPointer()
 {
-    Pointer p;
-    p.touch = true;
-    p.modifiers = QGuiApplication::keyboardModifiers();
-    return p;
+    return {.touch = true, .modifiers = QGuiApplication::keyboardModifiers()};
 }
 
 drawing::EditStamp DrawingCanvas::stamp() const
@@ -162,11 +176,9 @@ void DrawingCanvas::select(const QStringList &ids)
 QRectF DrawingCanvas::selectionSceneRect() const
 {
     QRectF out;
-    for (qsizetype i = 0; i < m_prepared.size(); ++i) {
-        const Prepared &p = m_prepared.at(i);
-        if (!m_selected.contains(p.key) || p.bounds.isNull())
-            continue;
-        out = out.isNull() ? p.bounds : out.united(p.bounds);
+    for (const Prepared &p : m_prepared) {
+        if (m_selected.contains(p.key) && !p.bounds.isNull())
+            out |= p.bounds;
     }
     return out;
 }
@@ -191,9 +203,8 @@ DrawingCanvas::SelectionFrame DrawingCanvas::selectionFrame() const
     for (qsizetype i = 0; i < m_prepared.size(); ++i) {
         if (!m_selected.contains(m_prepared.at(i).key))
             continue;
-        const QRectF bounds = m_prepared.at(i).bounds;
-        if (!bounds.isNull())
-            all = all.isNull() ? bounds : all.united(bounds);
+        if (const QRectF bounds = m_prepared.at(i).bounds; !bounds.isNull())
+            all |= bounds;
         const drawing::Stroke &e = m_doc.strokes.at(i);
         // (A label goes with its shape or arrow.)
         if (e.type == drawing::ElementType::Text && m_selected.contains(e.containerId))
@@ -268,15 +279,15 @@ std::optional<QPointF> DrawingCanvas::rotateHandlePos(const SelectionFrame &fram
     if (!frame.rotates)
         return std::nullopt;
     const QRectF r = paddedFrame(frame);
-    const double middle = (r.left() + r.right()) / 2;
-    const QPointF above = toItem(drawing::rotatePoint(QPointF(middle, r.top() - RotateHandleDistance / m_zoom),
-                                                      frame.box.center(), frame.angle));
+    const auto at = [&](double y) {
+        return toItem(drawing::rotatePoint(QPointF((r.left() + r.right()) / 2, y), frame.box.center(), frame.angle));
+    };
+    const QPointF above = at(r.top() - RotateHandleDistance / m_zoom);
     // Under the frame when there is no room for it above (the topmost element as a drawing opens).
     const QRectF view = QRectF(0, 0, width(), height()).adjusted(8, 8, -8, -8);
     if (view.contains(above))
         return above;
-    const QPointF below = toItem(drawing::rotatePoint(QPointF(middle, r.bottom() + RotateHandleDistance / m_zoom),
-                                                      frame.box.center(), frame.angle));
+    const QPointF below = at(r.bottom() + RotateHandleDistance / m_zoom);
     return view.contains(below) ? below : above;
 }
 
@@ -296,7 +307,7 @@ int DrawingCanvas::frameHandleAt(const SelectionFrame &frame, QPointF itemPos, b
     }
     int best = -1;
     double bestDistance = reach;
-    for (const auto &[kind, at] : frameHandles(frame)) {
+    for (const auto handles = frameHandles(frame); const auto &[kind, at] : handles) {
         const double distance = QLineF(at, itemPos).length();
         if (distance <= bestDistance) {
             best = kind;
@@ -311,9 +322,9 @@ QRectF DrawingCanvas::selectionOuterRect() const
     const SelectionFrame frame = selectionFrame();
     if (!frame.valid)
         return {};
-    QPolygonF corners;
-    for (const QPointF &p : frameCorners(frame))
-        corners.append(toItem(p));
+    QPolygonF corners = frameCorners(frame);
+    for (QPointF &p : corners)
+        p = toItem(p);
     QRectF out = corners.boundingRect();
     if (const std::optional<QPointF> at = rotateHandlePos(frame))
         out = out.united(QRectF(*at, QSizeF(0, 0)).adjusted(-6, -6, 6, 6));
@@ -361,7 +372,8 @@ QVariantMap DrawingCanvas::selectionStyle() const
 
 void DrawingCanvas::styleSelection(const QVariantMap &change)
 {
-    if (m_selected.isEmpty() || busy())
+    const QSet<QString> ids = selectionToEdit();
+    if (ids.isEmpty())
         return;
     drawing::ElementStyle style;
     if (change.contains(u"fill"_s)) {
@@ -394,7 +406,6 @@ void DrawingCanvas::styleSelection(const QVariantMap &change)
         style.startArrowhead = arrowheadFromName(change.value(u"startHead"_s).toString());
     if (change.contains(u"endHead"_s))
         style.endArrowhead = arrowheadFromName(change.value(u"endHead"_s).toString());
-    const QSet<QString> ids = m_selected;
     const drawing::TextMetrics metrics = textMetrics();
     editElements([&](drawing::Drawing &doc) { drawing::styleElements(doc, ids, style, metrics, stamp()); });
 }
@@ -422,18 +433,14 @@ void DrawingCanvas::flipSelection(const QString &axis)
 
 void DrawingCanvas::groupSelection()
 {
-    if (m_selected.isEmpty() || busy())
-        return;
-    const QSet<QString> ids = m_selected;
-    editElements([&](drawing::Drawing &doc) { drawing::groupElements(doc, ids, stamp()); });
+    if (const QSet<QString> ids = selectionToEdit(); !ids.isEmpty())
+        editElements([&](drawing::Drawing &doc) { drawing::groupElements(doc, ids, stamp()); });
 }
 
 void DrawingCanvas::ungroupSelection()
 {
-    if (m_selected.isEmpty() || busy())
-        return;
-    const QSet<QString> ids = m_selected;
-    editElements([&](drawing::Drawing &doc) { drawing::ungroupElements(doc, ids, stamp()); });
+    if (const QSet<QString> ids = selectionToEdit(); !ids.isEmpty())
+        editElements([&](drawing::Drawing &doc) { drawing::ungroupElements(doc, ids, stamp()); });
 }
 
 QRectF DrawingCanvas::selectionRect() const
@@ -488,57 +495,40 @@ void DrawingCanvas::duplicateSelection()
 
 void DrawingCanvas::recolorSelection(const QColor &stored)
 {
-    if (m_selected.isEmpty() || !stored.isValid() || busy())
-        return;
-    const QSet<QString> ids = m_selected;
     const QString color = stored.name(QColor::HexRgb);
-    editElements([&](drawing::Drawing &doc) { drawing::recolorElements(doc, ids, color, stamp()); });
+    if (const QSet<QString> ids = selectionToEdit(); !ids.isEmpty() && stored.isValid())
+        editElements([&](drawing::Drawing &doc) { drawing::recolorElements(doc, ids, color, stamp()); });
 }
 
 void DrawingCanvas::reorderSelection(const QString &how)
 {
-    if (m_selected.isEmpty() || busy())
-        return;
     const drawing::Reorder order = how == u"forward"    ? drawing::Reorder::Forward
                                    : how == u"backward" ? drawing::Reorder::Backward
                                    : how == u"back"     ? drawing::Reorder::ToBack
                                                         : drawing::Reorder::ToFront;
-    const QSet<QString> ids = m_selected;
-    editElements([&](drawing::Drawing &doc) { drawing::reorderElements(doc, ids, order, stamp()); });
+    if (const QSet<QString> ids = selectionToEdit(); !ids.isEmpty())
+        editElements([&](drawing::Drawing &doc) { drawing::reorderElements(doc, ids, order, stamp()); });
 }
 
 void DrawingCanvas::alignSelection(const QString &how)
 {
-    if (m_selected.isEmpty() || busy())
-        return;
     using A = drawing::Align;
-    std::optional<A> align;
-    if (how == u"left")
-        align = A::Left;
-    else if (how == u"center")
-        align = A::Center;
-    else if (how == u"right")
-        align = A::Right;
-    else if (how == u"top")
-        align = A::Top;
-    else if (how == u"middle")
-        align = A::Middle;
-    else if (how == u"bottom")
-        align = A::Bottom;
-    if (!align)
-        return;
-    const QSet<QString> ids = m_selected;
-    editElements([&](drawing::Drawing &doc) { drawing::alignElements(doc, ids, *align, stamp()); });
+    static constexpr std::pair<QStringView, A> names[] = {{u"left", A::Left},     {u"center", A::Center},
+                                                          {u"right", A::Right},   {u"top", A::Top},
+                                                          {u"middle", A::Middle}, {u"bottom", A::Bottom}};
+    const auto named = std::ranges::find_if(names, [&how](const auto &name) { return name.first == how; });
+    if (const QSet<QString> ids = selectionToEdit(); !ids.isEmpty() && named != std::ranges::end(names))
+        editElements([&](drawing::Drawing &doc) { drawing::alignElements(doc, ids, named->second, stamp()); });
 }
 
 void DrawingCanvas::distributeSelection(const QString &axis)
 {
-    if (m_selected.isEmpty() || busy() || (axis != u"horizontal" && axis != u"vertical"))
+    if (axis != u"horizontal" && axis != u"vertical")
         return;
-    const QSet<QString> ids = m_selected;
     const drawing::Distribute along =
             axis == u"vertical" ? drawing::Distribute::Vertical : drawing::Distribute::Horizontal;
-    editElements([&](drawing::Drawing &doc) { drawing::distributeElements(doc, ids, along, stamp()); });
+    if (const QSet<QString> ids = selectionToEdit(); !ids.isEmpty())
+        editElements([&](drawing::Drawing &doc) { drawing::distributeElements(doc, ids, along, stamp()); });
 }
 
 bool DrawingCanvas::copySelection()
@@ -573,9 +563,7 @@ QVariantMap DrawingCanvas::pasteText(const QString &text)
     if (!m_editable || busy() || m_textEditing || text.trimmed().isEmpty())
         return out;
     // At the mouse pointer over the paper, else in the middle of the view.
-    QPointF at = m_pointer ? toScene(*m_pointer) : m_center;
-    at = QPointF(std::clamp(at.x(), -drawing::CoordinateLimit, drawing::CoordinateLimit),
-                 std::clamp(at.y(), -drawing::CoordinateLimit, drawing::CoordinateLimit));
+    const QPointF at = clampedToLimit(m_pointer ? toScene(*m_pointer) : m_center);
     if (const std::optional<drawing::ClipboardContent> content = drawing::parseClipboard(text.toUtf8())) {
         out.insert(u"skipped"_s, content->skipped);
         QStringList pasted;
@@ -591,18 +579,12 @@ QVariantMap DrawingCanvas::pasteText(const QString &text)
         return out;
     // Plain text: a new text, its middle there.
     const drawing::TextMetrics metrics = textMetrics();
-    drawing::TextStyle style;
-    style.color = m_color.name(QColor::HexRgb);
-    style.fontSize = m_fontSize;
+    const drawing::TextStyle style{.color = m_color.name(QColor::HexRgb), .fontSize = m_fontSize};
     QString id;
     editElements([&](drawing::Drawing &doc) {
-        drawing::Stroke t = drawing::newText(at, QString(text).remove(u'\r'), style, metrics, stamp());
+        drawing::Stroke t = drawing::newText(at, text, style, metrics, stamp());
         t.box.moveCenter(at);
-        // (Within CoordinateLimit, else the drawing would be read back as one Brulion only shows.)
-        const double L = drawing::CoordinateLimit;
-        const double x = std::clamp(t.box.x(), -L, std::max(-L, L - t.box.width()));
-        const double y = std::clamp(t.box.y(), -L, std::max(-L, L - t.box.height()));
-        t.box = QRectF(std::round(x * 100) / 100, std::round(y * 100) / 100, t.box.width(), t.box.height());
+        t.box = boxWithinLimit(t.box);
         id = t.id;
         doc.strokes.append(std::move(t));
     });
@@ -617,10 +599,8 @@ QVariantMap DrawingCanvas::pasteText(const QString &text)
 
 void DrawingCanvas::nudgeSelection(qreal dx, qreal dy)
 {
-    if (m_selected.isEmpty() || busy() || !std::isfinite(dx) || !std::isfinite(dy))
-        return;
-    const QSet<QString> ids = m_selected;
-    editElements([&](drawing::Drawing &doc) { drawing::moveElements(doc, ids, QPointF(dx, dy), stamp()); });
+    if (const QSet<QString> ids = selectionToEdit(); !ids.isEmpty() && std::isfinite(dx) && std::isfinite(dy))
+        editElements([&](drawing::Drawing &doc) { drawing::moveElements(doc, ids, QPointF(dx, dy), stamp()); });
 }
 
 bool DrawingCanvas::cancelGesture()
@@ -798,7 +778,7 @@ void DrawingCanvas::lassoTo(QPointF itemPos)
         update();
         return;
     }
-    const double step = QLineF(m_lasso.last(), itemPos).length();
+    const double step = QLineF(m_lasso.constLast(), itemPos).length();
     if (step < 2)
         return;
     m_lasso.append(itemPos);
@@ -975,7 +955,7 @@ void DrawingCanvas::updateSelectCursor(QPointF itemPos)
             // By where the handle lies as the frame is turned now.
             const QPointF centre = toItem(frame.box.center());
             double degrees = 0;
-            for (const auto &[kind, at] : frameHandles(frame)) {
+            for (const auto handles = frameHandles(frame); const auto &[kind, at] : handles) {
                 if (kind == handle)
                     degrees = std::atan2(at.y() - centre.y(), at.x() - centre.x()) * 180 / std::numbers::pi;
             }
@@ -1034,16 +1014,15 @@ void DrawingCanvas::selectTap(QPointF itemPos, const Pointer &p)
     const bool twice = m_lastTap.isValid() && m_lastTap.elapsed() < 450 && QLineF(m_lastTapPos, itemPos).length() < 12;
     m_lastTap.start();
     m_lastTapPos = itemPos;
-    const qsizetype i = elementAt(itemPos, p);
     const bool shift = p.modifiers & Qt::ShiftModifier;
     if (twice && !shift) {
-        const qsizetype target = textTargetAt(itemPos, p);
-        if (target >= 0) {
+        if (const qsizetype target = textTargetAt(itemPos, p); target >= 0) {
             m_lastTap.invalidate();
             requestTextEdit(target, toScene(itemPos));
             return;
         }
     }
+    const qsizetype i = elementAt(itemPos, p);
     if (i < 0) {
         if (!shift)
             setSelection({});
@@ -1072,20 +1051,15 @@ void DrawingCanvas::shapeTo(QPointF itemPos, const Pointer &p)
     if (m_gesture != Gesture::Shape)
         return;
     m_lastItemPos = itemPos;
-    const auto clamped = [this](QPointF item) {
-        const QPointF s = toScene(item);
-        return QPointF(std::clamp(s.x(), -drawing::CoordinateLimit, drawing::CoordinateLimit),
-                       std::clamp(s.y(), -drawing::CoordinateLimit, drawing::CoordinateLimit));
-    };
     drawing::EditStamp preview;
     preview.newId = [] { return u"~"_s; };
     const drawing::ShapeStyle style{m_color.name(QColor::HexRgb), std::clamp(m_penWidth * 2, 0.5, 40.0), true};
     const bool constrain = p.modifiers & Qt::ShiftModifier;
+    const QPointF from = clampedToLimit(toScene(m_gestureStart));
+    const QPointF to = clampedToLimit(toScene(itemPos));
     const std::optional<drawing::PolygonKind> polygon = drawing::polygonKindFromName(m_tool);
-    m_liveShape = polygon ? drawing::newPolygon(*polygon, clamped(m_gestureStart), clamped(itemPos), constrain, style,
-                                                preview)
-                          : drawing::newShape(shapeType(m_tool), clamped(m_gestureStart), clamped(itemPos), constrain,
-                                              style, preview);
+    m_liveShape = polygon ? drawing::newPolygon(*polygon, from, to, constrain, style, preview)
+                          : drawing::newShape(shapeType(m_tool), from, to, constrain, style, preview);
     m_liveShapeShown = QLineF(m_gestureStart, itemPos).length() >= MinShape;
     update();
 }
@@ -1103,20 +1077,14 @@ void DrawingCanvas::finishShape(QPointF, const Pointer &)
     shape.seed = int(s.random());
     shape.versionNonce = int(s.random());
     shape.updated = s.now;
-    editElements([&shape](drawing::Drawing &doc) { doc.strokes.append(shape); });
+    editElements([&shape](drawing::Drawing &doc) { doc.strokes.append(std::move(shape)); });
 }
 
 void DrawingCanvas::finishTap(QPointF itemPos, const Pointer &p)
 {
     setGesture(Gesture::None);
-    if (QLineF(m_gestureStart, itemPos).length() >= TapLength)
-        return; // a drag with the text tool: nothing
-    textTap(itemPos, p);
-}
-
-void DrawingCanvas::textTap(QPointF itemPos, const Pointer &p)
-{
-    requestTextEdit(textTargetAt(itemPos, p), toScene(itemPos));
+    if (QLineF(m_gestureStart, itemPos).length() < TapLength)
+        requestTextEdit(textTargetAt(itemPos, p), toScene(itemPos));
 }
 
 // --- Text -------------------------------------------------------------------------------------
@@ -1126,71 +1094,57 @@ void DrawingCanvas::requestTextEdit(qsizetype index, QPointF scene)
     if (!m_editable)
         return;
     endTextEdit();
-    const auto shown = [this](const QString &stored) { return displayColor(QColor(stored)); };
-    QVariantMap r;
-    const auto label = [&](const drawing::Stroke &shape, const drawing::Stroke *text) {
-        // As wide as the label wraps in its shape (narrower in an ellipse, a diamond or a polygon),
-        // centred.
-        const double width = std::max(1.0, drawing::labelMaxWidth(shape));
-        const QPointF centre = drawing::labelCenter(shape);
-        r.insert(u"id"_s, text ? text->id : QString());
-        r.insert(u"containerId"_s, shape.id);
-        r.insert(u"sceneX"_s, centre.x() - width / 2);
-        r.insert(u"sceneY"_s, centre.y());
-        r.insert(u"width"_s, width);
-        r.insert(u"text"_s, text ? drawing::editableText(*text) : QString());
-        r.insert(u"fontSize"_s, text ? text->fontSize : m_fontSize);
-        r.insert(u"fontFamily"_s, textFontFamily(text ? text->fontFamily : 2));
-        r.insert(u"color"_s, shown(text ? text->color : m_color.name(QColor::HexRgb)));
-        r.insert(u"storedColor"_s, text ? text->color : m_color.name(QColor::HexRgb));
-        r.insert(u"align"_s, u"center"_s);
-        r.insert(u"valign"_s, u"middle"_s);
-        m_textEditKey = text ? text->id : QString();
-    };
-    if (index < 0) {
-        // A new text: its first line's middle at the tap.
-        r.insert(u"id"_s, QString());
-        r.insert(u"containerId"_s, QString());
-        r.insert(u"sceneX"_s, scene.x());
-        r.insert(u"sceneY"_s, scene.y() - m_fontSize * drawing::NewTextLineHeight / 2);
-        r.insert(u"width"_s, 0);
-        r.insert(u"text"_s, QString());
-        r.insert(u"fontSize"_s, m_fontSize);
-        r.insert(u"fontFamily"_s, textFontFamily(2));
-        r.insert(u"color"_s, shown(m_color.name(QColor::HexRgb)));
-        r.insert(u"storedColor"_s, m_color.name(QColor::HexRgb));
-        r.insert(u"align"_s, u"left"_s);
-        r.insert(u"valign"_s, u"top"_s);
-    } else {
+    // The text edited (none: a new one) and the shape it is, or becomes, the label of.
+    const drawing::Stroke *text = nullptr;
+    const drawing::Stroke *shape = nullptr;
+    if (index >= 0) {
         const drawing::Stroke &e = m_doc.strokes.at(index);
         if (e.type == drawing::ElementType::Text) {
+            text = &e;
             const qsizetype c = drawing::indexOfElement(m_doc, e.containerId);
-            if (c >= 0 && drawing::holdsLabel(m_doc.strokes.at(c))) {
-                label(m_doc.strokes.at(c), &e);
-            } else {
-                r.insert(u"id"_s, e.id);
-                r.insert(u"containerId"_s, QString());
-                r.insert(u"sceneX"_s, e.box.left());
-                r.insert(u"sceneY"_s, e.box.top());
-                r.insert(u"width"_s, e.autoResize ? 0.0 : e.box.width());
-                r.insert(u"text"_s, drawing::editableText(e));
-                r.insert(u"fontSize"_s, e.fontSize);
-                r.insert(u"fontFamily"_s, textFontFamily(e.fontFamily));
-                r.insert(u"color"_s, shown(e.color));
-                r.insert(u"storedColor"_s, e.color);
-                r.insert(u"align"_s, alignName(e.textAlign));
-                r.insert(u"valign"_s, u"top"_s);
-                m_textEditKey = e.id;
-            }
+            if (c >= 0 && drawing::holdsLabel(m_doc.strokes.at(c)))
+                shape = &m_doc.strokes.at(c);
         } else {
-            const drawing::Stroke *existing = nullptr;
+            shape = &e;
             for (const drawing::Stroke &t : std::as_const(m_doc.strokes)) {
                 if (t.type == drawing::ElementType::Text && t.containerId == e.id && !e.id.isEmpty())
-                    existing = &t;
+                    text = &t;
             }
-            label(e, existing);
         }
     }
+    const QString stored = text ? text->color : m_color.name(QColor::HexRgb);
+    QVariantMap r{{u"id"_s, text ? text->id : QString()},
+                  {u"containerId"_s, shape ? shape->id : QString()},
+                  {u"text"_s, text ? drawing::editableText(*text) : QString()},
+                  {u"fontSize"_s, text ? text->fontSize : m_fontSize},
+                  {u"fontFamily"_s, textFontFamily(text ? text->fontFamily : 2)},
+                  {u"color"_s, displayColor(QColor(stored))},
+                  {u"storedColor"_s, stored}};
+    if (shape) {
+        // As wide as the label wraps in its shape (narrower in an ellipse, a diamond or a polygon),
+        // centred.
+        const double width = std::max(1.0, drawing::labelMaxWidth(*shape));
+        const QPointF centre = drawing::labelCenter(*shape);
+        r.insert({{u"sceneX"_s, centre.x() - width / 2},
+                  {u"sceneY"_s, centre.y()},
+                  {u"width"_s, width},
+                  {u"align"_s, u"center"_s},
+                  {u"valign"_s, u"middle"_s}});
+    } else if (text) {
+        r.insert({{u"sceneX"_s, text->box.left()},
+                  {u"sceneY"_s, text->box.top()},
+                  {u"width"_s, text->autoResize ? 0.0 : text->box.width()},
+                  {u"align"_s, alignName(text->textAlign)},
+                  {u"valign"_s, u"top"_s}});
+    } else {
+        // A new text: its first line's middle at the tap.
+        r.insert({{u"sceneX"_s, scene.x()},
+                  {u"sceneY"_s, scene.y() - m_fontSize * drawing::NewTextLineHeight / 2},
+                  {u"width"_s, 0},
+                  {u"align"_s, u"left"_s},
+                  {u"valign"_s, u"top"_s}});
+    }
+    m_textEditKey = text ? text->id : QString();
     m_textEditing = true;
     invalidateCache();
     Q_EMIT textEditingChanged();
@@ -1223,10 +1177,10 @@ void DrawingCanvas::commitText(const QVariantMap &request, const QString &text)
     const QString id = request.value(u"id"_s).toString();
     const QString containerId = request.value(u"containerId"_s).toString();
     const drawing::TextMetrics metrics = textMetrics();
-    drawing::TextStyle style;
-    const QString stored = request.value(u"storedColor"_s).toString();
-    style.color = QColor(stored).isValid() ? QColor(stored).name(QColor::HexRgb) : m_color.name(QColor::HexRgb);
-    style.fontSize = std::clamp(request.value(u"fontSize"_s, m_fontSize).toDouble(), 1.0, 1000.0);
+    const QColor stored(request.value(u"storedColor"_s).toString());
+    const drawing::TextStyle style{
+            .color = (stored.isValid() ? stored : m_color).name(QColor::HexRgb),
+            .fontSize = std::clamp(request.value(u"fontSize"_s, m_fontSize).toDouble(), 1.0, 1000.0)};
     if (!id.isEmpty()) {
         editElements([&](drawing::Drawing &doc) { drawing::setText(doc, id, text, metrics, stamp()); });
     } else if (!containerId.isEmpty()) {
@@ -1236,10 +1190,11 @@ void DrawingCanvas::commitText(const QVariantMap &request, const QString &text)
         const QPointF at(request.value(u"sceneX"_s).toDouble(), request.value(u"sceneY"_s).toDouble());
         if (!std::isfinite(at.x()) || !std::isfinite(at.y()))
             return;
-        const QPointF clamped(std::clamp(at.x(), -drawing::CoordinateLimit, drawing::CoordinateLimit),
-                              std::clamp(at.y(), -drawing::CoordinateLimit, drawing::CoordinateLimit));
         editElements([&](drawing::Drawing &doc) {
-            doc.strokes.append(drawing::newText(clamped, text, style, metrics, stamp()));
+            // (All of its box within CoordinateLimit, as pasteText() keeps it — not only its top left.)
+            drawing::Stroke t = drawing::newText(clampedToLimit(at), text, style, metrics, stamp());
+            t.box = boxWithinLimit(t.box);
+            doc.strokes.append(std::move(t));
         });
     }
 }

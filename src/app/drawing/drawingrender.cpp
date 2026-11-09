@@ -25,7 +25,8 @@ namespace brulion::drawingview {
 
 QColor toQColor(const drawing::Ink &ink)
 {
-    const drawing::Rgba c = drawing::parseColor(ink.color).value_or(*drawing::parseColor(drawing::FallbackInk));
+    static const drawing::Rgba fallback = *drawing::parseColor(drawing::FallbackInk);
+    const drawing::Rgba c = drawing::parseColor(ink.color).value_or(fallback);
     QColor color(c.r, c.g, c.b, c.a);
     color.setAlphaF(color.alphaF() * std::clamp(ink.opacity, 0, 100) / 100.0);
     return color;
@@ -155,6 +156,7 @@ Prepared prepare(const drawing::Stroke &e, qsizetype hatchLines)
         p.ink = strokePath(e);
         if (!transparentFill(e.fill) && e.points.size() >= 3) {
             QPolygonF polygon;
+            polygon.reserve(e.points.size());
             for (const drawing::StrokePoint &pt : e.points)
                 polygon.append(QPointF(pt.x, pt.y));
             p.area.addPolygon(polygon);
@@ -210,25 +212,13 @@ QString fileIdOfPictureKey(const QString &key)
     return separator < 0 ? key : key.left(separator);
 }
 
-QImage decodePicture(const QJsonObject &files, const QString &fileId, const QSize &atMost)
+QImage decodePicture(const QJsonObject &files, const QString &fileId, QSize atMost)
 {
     const QString url = drawing::safeDataUrl(files, fileId);
     if (url.isEmpty())
         return {};
     const qsizetype comma = url.indexOf(u',');
     const QByteArray bytes = QByteArray::fromBase64(QStringView(url).sliced(comma + 1).toLatin1());
-    if (atMost.isValid() && !atMost.isEmpty() && !url.startsWith(u"data:image/svg+xml"_s)) {
-        // At the size it is shown (a preview of a note full of slides decodes no full rasters).
-        QBuffer buffer;
-        buffer.setData(bytes);
-        buffer.open(QIODevice::ReadOnly);
-        QImageReader reader(&buffer);
-        reader.setAllocationLimit(256);
-        const QSize own = reader.size();
-        if (own.isValid() && (own.width() > atMost.width() || own.height() > atMost.height()))
-            reader.setScaledSize(own.scaled(atMost, Qt::KeepAspectRatio).expandedTo(QSize(1, 1)));
-        return reader.read();
-    }
     if (url.startsWith(u"data:image/svg+xml"_s)) {
         QSvgRenderer svg(bytes);
         if (!svg.isValid())
@@ -243,9 +233,22 @@ QImage decodePicture(const QJsonObject &files, const QString &fileId, const QSiz
         image.fill(Qt::transparent);
         QPainter painter(&image);
         svg.render(&painter);
+        painter.end();
         return image;
     }
-    return QImage::fromData(bytes);
+    if (atMost.isEmpty())
+        return QImage::fromData(bytes);
+    // At the size it is shown (a preview of a note full of slides decodes no full rasters).
+    QBuffer buffer;
+    buffer.setData(bytes);
+    if (!buffer.open(QIODevice::ReadOnly))
+        return {};
+    QImageReader reader(&buffer);
+    reader.setAllocationLimit(256);
+    const QSize own = reader.size();
+    if (own.isValid() && (own.width() > atMost.width() || own.height() > atMost.height()))
+        reader.setScaledSize(own.scaled(atMost, Qt::KeepAspectRatio).expandedTo(QSize(1, 1)));
+    return reader.read();
 }
 
 void paintElement(QPainter &painter, const drawing::Stroke &e, const Prepared &p, bool dark, const QJsonObject &files,
@@ -269,15 +272,14 @@ void paintElement(QPainter &painter, const drawing::Stroke &e, const Prepared &p
         painter.setPen(pen);
         painter.drawLines(p.hatch);
     }
-    QPen pen(color, std::max(0.05, e.width));
+    const double width = std::max(0.05, e.width);
+    QPen pen(color, width);
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
-    const QList<double> dashes = drawing::dashPattern(e);
-    if (!dashes.isEmpty()) {
-        QList<qreal> pattern;
-        for (const double d : dashes)
-            pattern.append(d / std::max(0.05, e.width)); // (QPen counts in pen widths)
-        pen.setDashPattern(pattern);
+    if (QList<qreal> dashes = drawing::dashPattern(e); !dashes.isEmpty()) {
+        for (qreal &d : dashes)
+            d /= width; // (QPen counts in pen widths)
+        pen.setDashPattern(dashes);
     }
     if (!p.outline.isEmpty())
         painter.strokePath(p.outline, pen);
@@ -299,7 +301,7 @@ void paintElement(QPainter &painter, const drawing::Stroke &e, const Prepared &p
         const QFontMetricsF metrics(font);
         painter.setFont(font);
         painter.setPen(color);
-        for (const drawing::TextLine &line : drawing::textLines(e)) {
+        for (const QList<drawing::TextLine> lines = drawing::textLines(e); const drawing::TextLine &line : lines) {
             if (line.text.isEmpty())
                 continue;
             const double w = metrics.horizontalAdvance(line.text);
@@ -351,7 +353,7 @@ void paintElement(QPainter &painter, const drawing::Stroke &e, const Prepared &p
 }
 
 void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, const QTransform &sceneToItem,
-                const QSizeF &size, qreal dpr)
+                QSizeF size, qreal dpr)
 {
     painter.save();
     painter.setCompositionMode(QPainter::CompositionMode_Source);

@@ -2833,13 +2833,13 @@ FocusScope {
         else
             blockMenu.popup()
     }
-    /// The block menu of a right-click at `scene` (scene coordinates) on `row`: the list's handler,
-    /// the rendered text's when the click was on no date chip. None for the page properties.
     /// The block menu of a right-click on the list at (x, y) of the scene: of the row there.
     function openBlockMenuAtScene(x: real, y: real): void {
         mapPoint(null, listContent, x, y)
         openBlockMenuAt(rowAt(mapped.x, mapped.y), Qt.point(x, y))
     }
+    /// The block menu of a right-click at `scene` (scene coordinates) on `row`: the list's handler,
+    /// the rendered text's when the click was on no date chip. None for the page properties.
     function openBlockMenuAt(row: int, scene: point): void {
         openCellBlockMenuAt(row, scene, -2, 0, 0, 0, "")
     }
@@ -3750,6 +3750,13 @@ FocusScope {
         textMenu.bottomMargin = menuBottomMargin()
         textMenu.popup(edit, x, y)
     }
+    /// Menu entries that take no room while hidden (the text menu's parts).
+    component HidingMenuItem: BMenuItem {
+        height: visible ? implicitHeight : 0
+    }
+    component HidingMenuSeparator: BMenuSeparator {
+        height: visible ? implicitHeight : 0
+    }
     Component {
         id: textMenuComponent
         BMenu {
@@ -3799,59 +3806,52 @@ FocusScope {
                 onObjectAdded: (index, object) => menu.insertItem(index, object as Item)
                 onObjectRemoved: (index, object) => menu.removeItem(object as Item)
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "spellNoSuggestions"
                 visible: menu.misspelled && menu.suggestions.length === 0
-                height: visible ? implicitHeight : 0
                 enabled: false
                 text: menu.suggesting ? qsTr("Looking for corrections…") : qsTr("No corrections")
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "spellAddWord"
                 visible: menu.misspelled
-                height: visible ? implicitHeight : 0
                 //: %1: the word, added to the personal dictionary of spell checking
                 text: qsTr("Add “%1” to dictionary").arg(textMenuSpelling.text())
                 iconName: "plus"
                 onTriggered: SpellCheck.addToDictionary(menu.word)
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "spellIgnore"
                 visible: menu.misspelled
-                height: visible ? implicitHeight : 0
                 text: qsTr("Ignore", "spelling")
                 iconName: "eye-off"
                 onTriggered: SpellCheck.ignore(menu.word)
             }
-            BMenuSeparator {
+            HidingMenuSeparator {
                 visible: menu.misspelled && menu.textItems
-                height: visible ? implicitHeight : 0
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "editTextCut"
                 visible: menu.textItems
-                height: visible ? implicitHeight : 0
                 text: qsTr("Cut")
                 iconName: "scissors"
                 shortcut: "Ctrl+X"
                 enabled: menu.hasSelection
                 onTriggered: editor.copyEditSelection(menu.edit, true)
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "editTextCopy"
                 visible: menu.textItems
-                height: visible ? implicitHeight : 0
                 text: qsTr("Copy")
                 iconName: "copy"
                 shortcut: "Ctrl+C"
                 enabled: menu.hasSelection
                 onTriggered: editor.copyEditSelection(menu.edit, false)
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "editTextPaste"
                 // Not in the browser: a page reads the clipboard only from a paste event (Ctrl+V).
                 visible: menu.textItems && DeviceInfo.platform !== "wasm"
-                height: visible ? implicitHeight : 0
                 text: qsTr("Paste")
                 iconName: "clipboard-paste"
                 shortcut: "Ctrl+V"
@@ -3862,45 +3862,29 @@ FocusScope {
                         menu.edit.paste()
                 }
             }
-            BMenuSeparator {
+            HidingMenuSeparator {
                 visible: menu.textItems
-                height: visible ? implicitHeight : 0
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "editTextHighlight"
                 visible: menu.textItems
-                height: visible ? implicitHeight : 0
                 text: qsTr("Highlight…")
                 iconName: "highlighter"
-                onTriggered: {
-                    if (menu.edit) {
-                        menuLater.edit = menu.edit
-                        menuLater.highlight = true
-                        menuLater.restart()
-                    }
-                }
+                onTriggered: editor.openAfterTextMenu(menu.edit, true)
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "editTextSelectAll"
                 visible: menu.textItems
-                height: visible ? implicitHeight : 0
                 text: qsTr("Select all")
                 shortcut: "Ctrl+A"
                 onTriggered: if (menu.edit) menu.edit.selectAll()
             }
-            BMenuItem {
+            HidingMenuItem {
                 objectName: "editTextBlockMenu"
                 visible: menu.textItems
-                height: visible ? implicitHeight : 0
                 text: qsTr("Block…")
                 iconName: "ellipsis"
-                onTriggered: {
-                    if (menu.edit) {
-                        menuLater.edit = menu.edit
-                        menuLater.highlight = false
-                        menuLater.restart()
-                    }
-                }
+                onTriggered: editor.openAfterTextMenu(menu.edit, false)
             }
             // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
             onClosed: if (edit && edit.active) edit.ensureFocus()
@@ -3917,6 +3901,13 @@ FocusScope {
     property InlineEditor highlightMenuEdit: null
     /// The text menu's "Highlight…" and "Block…" open their menus once it is closed: at the caret of
     /// `edit` (`highlight`: the colours, else the block menu).
+    function openAfterTextMenu(edit: InlineEditor, highlight: bool): void {
+        if (!edit)
+            return
+        menuLater.edit = edit
+        menuLater.highlight = highlight
+        menuLater.restart()
+    }
     Later {
         id: menuLater
         property InlineEditor edit: null

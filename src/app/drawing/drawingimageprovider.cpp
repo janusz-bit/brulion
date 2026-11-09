@@ -30,7 +30,7 @@ namespace {
 
 /// `natural` fitted into `requested` (both sides: within the box; one side: that side; none: as
 /// it is), at most MaxSide a side, at least one pixel.
-QSize fitted(const QSizeF &natural, const QSize &requested)
+QSize fitted(QSizeF natural, QSize requested)
 {
     if (natural.isEmpty() || !std::isfinite(natural.width()) || !std::isfinite(natural.height()))
         return {};
@@ -47,26 +47,23 @@ QSize fitted(const QSizeF &natural, const QSize &requested)
                  std::clamp(int(std::lround(natural.height() * k)), 1, DrawingImageProvider::MaxSide));
 }
 
-/// The file of a preview URL's id (the part after "image://drawing/"), refused when it is no
-/// drawing file: not absolute, a ".." segment, another kind of file.
-QString fileOf(const QString &id, bool *dark)
+/// An absolute path without NUL characters or ".." segments (the files a preview URL may name).
+bool safeAbsolutePath(const QString &path)
 {
-    const qsizetype q = id.indexOf(u'?');
-    // Qt hands the id over as its URL shows it (most escapes decoded, "%2F" and "%3F" not).
-    const QString path = QUrl::fromPercentEncoding((q < 0 ? id : id.left(q)).toUtf8());
-    *dark = QUrlQuery(q < 0 ? QString() : id.mid(q + 1)).queryItemValue(u"dark"_s) == u"1";
     if (path.isEmpty() || !QDir::isAbsolutePath(path) || path.contains(QChar(0)))
-        return {};
+        return false;
     const QString slashes = QDir::fromNativeSeparators(path);
-    const QList<QStringView> segments = QStringView(slashes).split(u'/');
-    if (std::any_of(segments.cbegin(), segments.cend(), [](QStringView segment) { return segment == u".."; }))
-        return {};
-    // (A `.md` file is read only when it is an Obsidian Excalidraw plugin drawing:
-    // drawing::readDrawingFile refuses any other.)
-    if (!path.endsWith(u".svg"_s, Qt::CaseInsensitive) && !path.endsWith(u".excalidraw"_s, Qt::CaseInsensitive)
-        && !path.endsWith(u".md"_s, Qt::CaseInsensitive))
-        return {};
-    return path;
+    return !QStringView(slashes).split(u'/').contains(u"..");
+}
+
+/// The file of a preview URL's id is one to read: a safeAbsolutePath() of a drawing file. (A `.md`
+/// file is read only when it is an Obsidian Excalidraw plugin drawing: drawing::readDrawingFile
+/// refuses any other.)
+bool isDrawingPath(const QString &path)
+{
+    return safeAbsolutePath(path)
+           && (path.endsWith(u".svg"_s, Qt::CaseInsensitive) || path.endsWith(u".excalidraw"_s, Qt::CaseInsensitive)
+               || path.endsWith(u".md"_s, Qt::CaseInsensitive));
 }
 
 /// The size an SVG drawing file's root names (what the editor's embeds, the picture view and the
@@ -86,7 +83,7 @@ QSize ownSize(const QByteArray &bytes)
 /// The part of the scene a preview shows: the file's own frame `own` around the picture
 /// `picture` (drawing::pictureRect), centred on it, the strokes at one unit a pixel — made
 /// smaller only when they do not fit.
-QRectF frameAround(const QRectF &picture, const QSize &own)
+QRectF frameAround(const QRectF &picture, QSize own)
 {
     const double k = std::min({1.0, own.width() / picture.width(), own.height() / picture.height()});
     const QSizeF scene(own.width() / k, own.height() / k);
@@ -123,24 +120,20 @@ bool looksDark(const QImage &picture)
 }
 
 /// The pictures an Excalidraw plugin file keeps in their own files ("## Embedded Files"), as the
-/// URL names them (`f=<fileId>:<absolute path>`, Workspace::drawingUrl resolved their links), put
-/// into the drawing to be shown (drawing::embeddedFileEntry): at most MaxEmbeddedPictures, each a
-/// picture file within MaxFileBytes; a missing one stays a placeholder.
-void addEmbeddedPictures(drawing::Drawing &d, const QString &id)
+/// URL's `query` names them (`f=<fileId>:<absolute path>`, Workspace::drawingUrl resolved their
+/// links), put into the drawing to be shown (drawing::embeddedFileEntry): at most
+/// MaxEmbeddedPictures, each a picture file within MaxFileBytes; a missing one stays a placeholder.
+void addEmbeddedPictures(drawing::Drawing &d, const QUrlQuery &query)
 {
-    const qsizetype q = id.indexOf(u'?');
-    if (q < 0)
-        return;
-    const QList<std::pair<QString, QString>> items = QUrlQuery(id.mid(q + 1)).queryItems(QUrl::FullyDecoded);
+    const QList<std::pair<QString, QString>> items = query.queryItems(QUrl::FullyDecoded);
     int taken = 0;
     for (const auto &[key, value] : items) {
-        if (key != u"f" || taken >= DrawingImageProvider::MaxEmbeddedPictures)
-            continue;
         const qsizetype colon = value.indexOf(u':');
-        const QString fileId = value.left(std::max<qsizetype>(colon, 0));
-        const QString path = colon < 0 ? QString() : value.mid(colon + 1);
-        if (fileId.isEmpty() || d.files.contains(fileId) || path.isEmpty() || !QDir::isAbsolutePath(path)
-            || path.contains(QChar(0)) || QDir::fromNativeSeparators(path).split(u'/').contains(u".."_s))
+        if (key != u"f" || colon <= 0 || taken >= DrawingImageProvider::MaxEmbeddedPictures)
+            continue;
+        const QString fileId = value.left(colon);
+        const QString path = value.mid(colon + 1);
+        if (d.files.contains(fileId) || !safeAbsolutePath(path))
             continue;
         ++taken;
         QFile f(path);
@@ -166,8 +159,8 @@ namespace {
 
 /// A drawing in the frame `rect` of the scene, as large as `size` (its own size), fitted into
 /// `requested`.
-QImage renderScene(const drawing::Drawing &d, bool appDark, const QSize &size, const QRectF &rect,
-                   const QSize &requested, QSize *natural)
+QImage renderScene(const drawing::Drawing &d, bool appDark, QSize size, const QRectF &rect, QSize requested,
+                   QSize *natural)
 {
     if (natural)
         *natural = size;
@@ -176,7 +169,7 @@ QImage renderScene(const drawing::Drawing &d, bool appDark, const QSize &size, c
 
 /// A picture file's own picture (an SVG Brulion does not draw, a PNG the Excalidraw plugin
 /// exported), in the dark with Excalidraw's dark colours — unless it is dark already.
-QImage ownPicture(const QByteArray &bytes, bool dark, const QSize &requested, QSize *natural)
+QImage ownPicture(const QByteArray &bytes, bool dark, QSize requested, QSize *natural)
 {
     if (bytes.startsWith("\x89PNG\r\n\x1a\n")) {
         // A raster picture (the plugin's PNG export).
@@ -232,7 +225,7 @@ QImage ownPicture(const QByteArray &bytes, bool dark, const QSize &requested, QS
 /// Excalidraw plugin's export beside a `.md` drawing (picturesize.h drawingExportOf), the preview
 /// of one Brulion does not draw.
 QImage pictureOf(const QByteArray &bytes, const std::optional<drawing::DrawingFile> &file, bool appDark,
-                 const QSize &requested, QSize *natural, const QString &exportFile)
+                 QSize requested, QSize *natural, const QString &exportFile)
 {
     if (natural)
         *natural = QSize();
@@ -272,7 +265,7 @@ QImage pictureOf(const QByteArray &bytes, const std::optional<drawing::DrawingFi
 
 } // namespace
 
-QImage DrawingImageProvider::picture(const QByteArray &bytes, bool appDark, const QSize &requested, QSize *natural)
+QImage DrawingImageProvider::picture(const QByteArray &bytes, bool appDark, QSize requested, QSize *natural)
 {
     return pictureOf(bytes, drawing::readDrawingFile(bytes), appDark, requested, natural, QString());
 }
@@ -281,14 +274,14 @@ QImage DrawingImageProvider::requestImage(const QString &id, QSize *size, const 
 {
     if (size)
         *size = QSize();
-    bool dark = false;
-    const QString path = fileOf(id, &dark);
-    if (path.isEmpty())
+    const qsizetype q = id.indexOf(u'?');
+    // Qt hands the id over as its URL shows it (most escapes decoded, "%2F" and "%3F" not).
+    const QString path = QUrl::fromPercentEncoding((q < 0 ? id : id.left(q)).toUtf8());
+    const QUrlQuery query(q < 0 ? QString() : id.mid(q + 1));
+    if (!isDrawingPath(path))
         return {};
     QFile file(path);
-    if (!QFileInfo(path).isFile() || !file.open(QIODevice::ReadOnly))
-        return {};
-    if (file.size() <= 0 || file.size() > MaxFileBytes)
+    if (!QFileInfo(path).isFile() || !file.open(QIODevice::ReadOnly) || file.size() <= 0 || file.size() > MaxFileBytes)
         return {};
     const QByteArray bytes = file.read(MaxFileBytes + 1);
     if (bytes.isEmpty() || bytes.size() > MaxFileBytes)
@@ -296,13 +289,12 @@ QImage DrawingImageProvider::requestImage(const QString &id, QSize *size, const 
     std::optional<drawing::DrawingFile> read = drawing::readDrawingFile(bytes);
     if (path.endsWith(u".md"_s, Qt::CaseInsensitive) && !read)
         return {}; // a note, not a drawing
-    if (read && read->format == drawing::FileFormat::ExcalidrawMarkdown)
-        addEmbeddedPictures(read->drawing, id);
-    const QString exportFile =
-            read && read->format == drawing::FileFormat::ExcalidrawMarkdown && !drawing::editable(read->drawing)
-                    ? editor::drawingExportOf(path)
-                    : QString();
-    return pictureOf(bytes, read, dark, requestedSize, size, exportFile);
+    const bool plugin = read && read->format == drawing::FileFormat::ExcalidrawMarkdown;
+    if (plugin)
+        addEmbeddedPictures(read->drawing, query);
+    const bool dark = query.queryItemValue(u"dark"_s) == u"1";
+    return pictureOf(bytes, read, dark, requestedSize, size,
+                     plugin && !drawing::editable(read->drawing) ? editor::drawingExportOf(path) : QString());
 }
 
 } // namespace brulion::drawingview

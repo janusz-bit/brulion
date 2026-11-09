@@ -54,7 +54,7 @@ public:
     /// The picture of a drawing file's bytes as the app's theme (`appDark`) shows it, fitted into
     /// `requested` (an empty side: from the other one; none: the natural size); `natural` gets
     /// the picture's own size. Null when the bytes are no picture.
-    static QImage picture(const QByteArray &bytes, bool appDark, const QSize &requested, QSize *natural = nullptr);
+    static QImage picture(const QByteArray &bytes, bool appDark, QSize requested, QSize *natural = nullptr);
 
     QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
 };

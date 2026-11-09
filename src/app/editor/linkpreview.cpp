@@ -20,16 +20,12 @@ namespace {
 
 QString colorString(const QVariant &v, const QString &fallback)
 {
-    if (!v.isValid())
-        return fallback;
-    QColor c;
-    if (v.metaType() == QMetaType::fromType<QColor>())
-        c = v.value<QColor>();
-    else
-        c = QColor::fromString(v.toString());
+    // (An invalid variant reads as "": no colour either.)
+    const QColor c =
+            v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
     if (!c.isValid())
         return fallback;
-    return c.alpha() == 255 ? c.name(QColor::HexRgb) : c.name(QColor::HexArgb);
+    return c.name(c.alpha() == 255 ? QColor::HexRgb : QColor::HexArgb);
 }
 
 } // namespace
@@ -37,27 +33,25 @@ QString colorString(const QVariant &v, const QString &fallback)
 markdown::Palette rendererPalette(const QVariantMap &map)
 {
     markdown::Palette p;
-    const auto get = [&map](const char *key, const QString &fallback) {
-        return colorString(map.value(QString::fromLatin1(key)), fallback);
+    const auto set = [&map](QString &colour, const QString &key) { colour = colorString(map.value(key), colour); };
+    set(p.link, u"link"_s);
+    set(p.unresolved, u"unresolved"_s);
+    set(p.muted, u"muted"_s);
+    set(p.codeBackground, u"codeBackground"_s);
+    set(p.highlightBackground, u"highlightBackground"_s);
+    const auto chip = [&set](markdown::ChipColors &c, const QString &name) {
+        set(c.foreground, name + u"Fg"_s);
+        set(c.background, name + u"Bg"_s);
     };
-    p.link = get("link", p.link);
-    p.unresolved = get("unresolved", p.unresolved);
-    p.muted = get("muted", p.muted);
-    p.codeBackground = get("codeBackground", p.codeBackground);
-    p.highlightBackground = get("highlightBackground", p.highlightBackground);
-    const auto chip = [&](const char *name, markdown::ChipColors &c) {
-        c.foreground = get(QByteArray(QByteArray(name) + "Fg").constData(), c.foreground);
-        c.background = get(QByteArray(QByteArray(name) + "Bg").constData(), c.background);
-    };
-    chip("tag", p.tag);
-    chip("due", p.due);
-    chip("overdue", p.overdue);
-    chip("scheduled", p.scheduled);
-    chip("reminder", p.reminder);
-    chip("alarm", p.alarm);
-    chip("recurrence", p.recurrence);
-    chip("done", p.done);
-    chip("neutral", p.neutral);
+    chip(p.tag, u"tag"_s);
+    chip(p.due, u"due"_s);
+    chip(p.overdue, u"overdue"_s);
+    chip(p.scheduled, u"scheduled"_s);
+    chip(p.reminder, u"reminder"_s);
+    chip(p.alarm, u"alarm"_s);
+    chip(p.recurrence, u"recurrence"_s);
+    chip(p.done, u"done"_s);
+    chip(p.neutral, u"neutral"_s);
     return p;
 }
 
@@ -151,12 +145,8 @@ void LinkPreview::update()
         return;
     QVariantMap out;
     if (m_host && isPreviewable(m_href)) {
-        QDate today = QDate::currentDate();
-        if (!m_now.isEmpty()) {
-            if (const auto spec = dates::parseDateSpec(m_now))
-                today = spec->toLocalDateTime().date();
-        }
-        m_model->setToday(today);
+        const auto fixed = dates::parseDateSpec(m_now); // nullopt for "": the real clock
+        m_model->setToday(fixed ? fixed->toLocalDateTime().date() : QDate::currentDate());
         // Read anew each time: the notes may have changed since the last preview.
         m_model->invalidateRendering();
         out = m_model->linkPreview(m_href, m_sourcePath);
@@ -172,7 +162,7 @@ bool LinkPreview::openLink(const QString &url, const QString &fromPath, bool new
     const qsizetype colon = url.indexOf(u':');
     if (colon <= 0 || !m_host)
         return false;
-    const QString scheme = url.left(colon);
+    const QStringView scheme = QStringView(url).left(colon);
     const QString rest = url.mid(colon + 1);
     if (scheme == u"ext") {
         m_host->openUrl(QUrl(rest));

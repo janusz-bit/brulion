@@ -171,7 +171,7 @@ public:
     /// The row of the `n`-th shown row (from 0); -1 when there is none.
     Q_INVOKABLE int visibleRowAt(int n) const;
     /// A few roles of `row` by name (view, kind, taskStatus, depth, hasChildren, collapsed,
-    /// visible, blockId, headingLevel, plainText, editText, listMarker); empty for an invalid row.
+    /// visible, blockId, headingLevel, plainText, editText, listMarker, html); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
     /// get(row)'s view, kind and taskStatus typed, for QML compiled ahead of time ("" for an
     /// invalid row).
@@ -353,6 +353,9 @@ private:
     QString renderHtml(int docIndex) const;
     /// The subtask progress of the list item at `docIndex` (its descendants' tasks, SYNTAX §5).
     markdown::SubtaskProgress subtaskProgressAt(int docIndex) const;
+    /// What every rendering of the editor shares: today, the language, the colours, journal
+    /// titles, links resolved from `path` through the host (its resolvers never hold the model).
+    markdown::RenderContext baseRenderContext(const QString &path) const;
     markdown::RenderContext renderContext(int docIndex) const;
     void ensureEmbeds(int row) const;
     /// The embeds role entry of a picture from the internet (EditorHost::webPicture).
@@ -374,13 +377,21 @@ private:
     bool replay(const QList<markdown::BlockChange> &changes, const QList<quint64> &finalUids);
     void invalidateContent(quint64 uid);
     /// Recompute structural state and derived data of all rows; emit dataChanged for rows that
-    /// differ. `contentChanged` recomputes calc/table results and page-dependent html.
+    /// differ (none inside resetContent()'s model reset). `contentChanged` recomputes calc/table
+    /// results and page-dependent html.
     void refresh(bool contentChanged);
     QVariantList computeCalcResults(int docIndex) const;
     QVariantMap computeTableData(int docIndex) const;
     QVariantMap computeChartData(int docIndex) const;
+    /// The table / the chart (of text `source`) of block `docIndex`, whose state is `st`,
+    /// computed again; whether it changed.
+    bool updateTable(RowState &st, int docIndex);
+    bool updateChart(RowState &st, int docIndex, const QString &source);
     /// The table of `row` computed again (its filters changed) and told to the views.
     void refreshTable(int row);
+    /// The rows whose computed embeds hold one that `shows` compute them again when asked for;
+    /// the views are told.
+    void invalidateEmbeds(const std::function<bool(const QVariantMap &embed)> &shows);
     void emitRowsChanged(const QList<int> &rows, const QList<int> &roles);
 
     // --- Calculations (docs/SYNTAX.md §9) ---------------------------------------------------------
@@ -417,6 +428,7 @@ private:
     bool m_foldingEnabled = true;
     int m_visibleCount = 0;
     QList<int> m_visibleRows; ///< the shown rows, in order
+    bool m_resetting = false; ///< inside resetContent()'s model reset: the views read every row after it
     quint64 m_editingUid = 0;
     QSet<quint64> m_selectedUids;
 

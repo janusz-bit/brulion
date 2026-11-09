@@ -95,7 +95,7 @@ Prepared prepare(const drawing::Stroke &element, qsizetype hatchLines = drawing:
 /// The picture of an image element: decoded from its data URL in `files` (null when it has none
 /// Brulion draws: drawing::safeDataUrl()); a larger raster than `atMost` (valid) decoded at that size,
 /// aspect kept (a preview's backdrop).
-QImage decodePicture(const QJsonObject &files, const QString &fileId, const QSize &atMost = QSize());
+QImage decodePicture(const QJsonObject &files, const QString &fileId, QSize atMost = QSize());
 /// Pictures already decoded, by fileId (a null image: none); a backdrop's dark twin under
 /// darkPictureKey().
 using PictureCache = QHash<QString, QImage>;
@@ -113,7 +113,7 @@ void paintElement(QPainter &painter, const drawing::Stroke &element, const Prepa
 /// at the scene's multiples of their spacing, one device pixel wide at the device pixel ratio `dpr`
 /// (none when they would be closer than 6 px), in drawing::displayRule.
 void paintPaper(QPainter &painter, const drawing::Drawing &drawing, bool dark, const QTransform &sceneToItem,
-                const QSizeF &size, qreal dpr);
+                QSizeF size, qreal dpr);
 /// The part `frame` of the scene (empty: the whole picture, drawing::pictureRect — what Brulion's
 /// SVG of it shows) fitted into an image of `pixels` with its aspect ratio kept, centred on the
 /// paper; the elements in the colours of the light or the dark theme. Null for an empty size.

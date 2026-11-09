@@ -32,10 +32,8 @@ QImage PdfPageImageProvider::requestImage(const QString &id, QSize *size, const 
         || !path.endsWith(u".pdf"_s, Qt::CaseInsensitive))
         return {};
     const QString slashes = QDir::fromNativeSeparators(path);
-    for (const QStringView segment : QStringView(slashes).split(u'/')) {
-        if (segment == u"..")
-            return {};
-    }
+    if (QStringView(slashes).split(u'/').contains(u".."))
+        return {};
     const int asked = std::max(requestedSize.width(), requestedSize.height());
     const QImage image = platform::renderPdfPage(path, page, std::clamp(asked > 0 ? asked : DefaultSide, 16, MaxSide));
     if (size)

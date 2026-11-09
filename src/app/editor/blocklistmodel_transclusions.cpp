@@ -16,6 +16,7 @@
 #include <QSet>
 #include <QUrl>
 
+#include <algorithm>
 #include <memory>
 
 using namespace Qt::StringLiterals;
@@ -34,12 +35,19 @@ QString withoutMd(const QString &path)
     return path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path;
 }
 
+/// Views of text (text, headings, quotes, callouts): their embeds of pages, sections and blocks
+/// are transclusions, and a transclusion shows them as rich text.
+bool isTextView(BlockView view)
+{
+    return view == BlockView::Text || view == BlockView::Heading || view == BlockView::Quote
+           || view == BlockView::Callout;
+}
+
 /// Rows [first, last] of a document shown by a transclusion; depths relative to baseDepth.
 struct Range {
     int first = 0;
     int last = -1;
     int baseDepth = 0;
-    bool isEmpty() const { return last < first; }
 };
 
 /// The section under the heading `heading` names (markdown::findHeading: also an Obsidian heading
@@ -50,37 +58,32 @@ std::optional<Range> sectionRange(const markdown::BlockDocument &doc, const QStr
 {
     QList<int> rows;
     const int found = markdown::findHeading(documentHeadings(doc, &rows), heading);
-    if (found >= 0) {
-        const int i = rows.at(found);
-        const markdown::BlockEntry &e = doc.at(i);
-        const BlockShape s = shapeOf(e);
-        if (e.kind == BlockKind::ListItem) {
-            const markdown::RowRange sub = doc.subtreeRange(i);
-            return Range{i + 1, sub.last(), e.depth + 1};
+    if (found < 0)
+        return std::nullopt;
+    const int i = rows.at(found);
+    const markdown::BlockEntry &e = doc.at(i);
+    if (e.kind == BlockKind::ListItem)
+        return Range{i + 1, doc.subtreeRange(i).last(), e.depth + 1};
+    const int level = shapeOf(e).headingLevel;
+    int last = i;
+    for (int k = i + 1; k < doc.count(); ++k) {
+        const markdown::BlockEntry &next = doc.at(k);
+        if (next.depth == 0) {
+            const BlockShape ns = shapeOf(next);
+            if (ns.view == BlockView::Heading && ns.headingLevel > 0 && ns.headingLevel <= level)
+                break;
         }
-        int last = i;
-        for (int k = i + 1; k < doc.count(); ++k) {
-            const markdown::BlockEntry &next = doc.at(k);
-            if (next.depth == 0) {
-                const BlockShape ns = shapeOf(next);
-                if (ns.view == BlockView::Heading && ns.headingLevel > 0 && ns.headingLevel <= s.headingLevel)
-                    break;
-            }
-            last = k;
-        }
-        return Range{i + 1, last, 0};
+        last = k;
     }
-    return std::nullopt;
+    return Range{i + 1, last, 0};
 }
 
 /// The block with id `id` and its children.
 std::optional<Range> blockRange(const markdown::BlockDocument &doc, const QString &id)
 {
     for (int i = 0; i < doc.count(); ++i) {
-        if (doc.at(i).blockId == id) {
-            const markdown::RowRange sub = doc.subtreeRange(i);
-            return Range{i, sub.last(), doc.at(i).depth};
-        }
+        if (doc.at(i).blockId == id)
+            return Range{i, doc.subtreeRange(i).last(), doc.at(i).depth};
     }
     return std::nullopt;
 }
@@ -102,16 +105,11 @@ Range pageRange(const markdown::BlockDocument &doc, const QString &path)
     return Range{first, doc.count() - 1, 0};
 }
 
-QString statusName(const BlockShape &s)
-{
-    return taskStatusName(s.task);
-}
-
-/// Builds the transclusions of one block.
+/// Builds the transclusions of one block of `model`'s page.
 class Builder {
 public:
-    Builder(const BlockListModel &model, EditorHost *host, const markdown::BlockDocument &own, const QString &ownPath)
-        : m_model(model), m_host(host), m_own(own), m_ownPath(ownPath)
+    explicit Builder(const BlockListModel &model)
+        : m_model(model), m_host(model.host()), m_own(model.document()), m_ownPath(model.path())
     {
     }
 
@@ -167,6 +165,13 @@ private:
         QString fallbackText; ///< `!((id))` whose page is unknown: the block's text
     };
 
+    /// Where a block is: the page holding it ("" unknown) and its text from the vault ("" for a
+    /// block of this page).
+    struct BlockPlace {
+        QString path;
+        QString text;
+    };
+
     static QString kindName(const Transclusion &t)
     {
         switch (t.kind) {
@@ -188,39 +193,38 @@ private:
         }
         if (const auto it = m_docs.constFind(path); it != m_docs.constEnd())
             return Source{path, it->first, it->second.get()};
-        if (!m_host)
+        // Only notes are read (never another file a link resolved to: a scene, a canvas).
+        if (!m_host || !paths::isMarkdown(path))
             return std::nullopt;
         bool ok = false;
         const QString content = m_host->read(path, &ok);
-        if (!ok || !paths::isMarkdown(path))
+        if (!ok)
             return std::nullopt;
         auto doc = std::make_shared<markdown::BlockDocument>(content);
         m_docs.insert(path, {content, doc});
         return Source{path, content, doc.get()};
     }
 
-    /// The page holding block `id` (this page first, then the vault through the host).
-    QString pathOfBlock(const QString &id, QString *text)
+    /// Where block `id` is (this page first, then the vault through the host).
+    BlockPlace placeOfBlock(const QString &id) const
     {
         for (int i = 0; i < m_own.count(); ++i) {
             if (m_own.at(i).blockId == id)
-                return m_ownPath;
+                return {m_ownPath, {}};
         }
-        if (!m_host)
-            return {};
-        *text = m_host->blockText(id);
-        if (text->isEmpty())
+        const QString text = m_host ? m_host->blockText(id) : QString();
+        if (text.isEmpty())
             return {};
         // EditorHost has no "where is this block": its block suggestions carry the ids.
-        QString query = text->section(u'\n', 0, 0).simplified();
-        if (query.size() > 80)
-            query = query.left(80);
-        for (const QVariant &v : m_host->suggestBlocks(query, 50)) {
+        QString query = text.section(u'\n', 0, 0).simplified();
+        query.truncate(80);
+        const QVariantList suggestions = m_host->suggestBlocks(query, 50);
+        for (const QVariant &v : suggestions) {
             const QVariantMap m = v.toMap();
             if (m.value(u"blockId"_s).toString() == id)
-                return m.value(u"path"_s).toString();
+                return {m.value(u"path"_s).toString(), text};
         }
-        return {};
+        return {{}, text};
     }
 
     Resolved resolve(const Transclusion &t, const QString &fromPath)
@@ -229,25 +233,16 @@ private:
         if (t.blockRef) {
             r.href = u"block:"_s + t.blockId;
             r.title = u"(("_s + t.blockId + u"))"_s;
-            QString text;
-            const QString path = pathOfBlock(t.blockId, &text);
-            if (path.isEmpty()) {
-                if (text.isEmpty()) {
-                    r.message = u"missingBlock"_s;
-                } else {
-                    r.found = true;
-                    r.fallbackText = text.simplified();
-                    r.key = u"^"_s + t.blockId;
-                }
-                return r;
-            }
-            const auto src = load(path);
+            const BlockPlace place = placeOfBlock(t.blockId);
+            const auto src = load(place.path);
             const auto range = src ? blockRange(*src->doc, t.blockId) : std::nullopt;
-            r.title = paths::pageTitle(path);
+            if (!place.path.isEmpty())
+                r.title = paths::pageTitle(place.path);
             if (!range) {
-                if (!text.isEmpty()) {
-                    r.found = true;
-                    r.fallbackText = text.simplified();
+                // Its page unknown, or the block gone from it: its text as the vault has it.
+                r.found = !place.text.isEmpty();
+                if (r.found) {
+                    r.fallbackText = place.text.simplified();
                     r.key = u"^"_s + t.blockId;
                 } else {
                     r.message = u"missingBlock"_s;
@@ -257,8 +252,8 @@ private:
             r.found = true;
             r.src = *src;
             r.range = *range;
-            r.path = path;
-            r.key = path + u"\n^"_s + t.blockId;
+            r.path = place.path;
+            r.key = place.path + u"\n^"_s + t.blockId;
             return r;
         }
 
@@ -335,18 +330,15 @@ private:
             if (s.view == BlockView::Frontmatter)
                 continue;
             const int depth = std::max(0, e.depth - r.range.baseDepth) + depthOffset;
-            const bool textLike = s.view == BlockView::Text || s.view == BlockView::Heading || s.view == BlockView::Quote
-                                  || s.view == BlockView::Callout;
+            const bool textLike = isTextView(s.view);
             const QList<Transclusion> nested = textLike ? transclusionsOf(e.body) : QList<Transclusion>();
             const bool onlyNested = !nested.isEmpty() && onlyEmbeds(e.body, true);
-            QString html;
+            QString html; // none for a rule
             QString view = viewName(s.view);
             if (textLike || s.view == BlockView::Html || s.view == BlockView::Math) {
                 const markdown::InlineRenderer renderer(m_model.renderContextFor(r.src.path, r.src.content, e.line));
                 html = detail::renderBodyHtml(e, s, renderer);
-            } else if (s.view == BlockView::Rule) {
-                html.clear();
-            } else {
+            } else if (s.view != BlockView::Rule) {
                 // Code, calculations, queries and tables: their source as preformatted text.
                 // Code-like blocks show the text their delegate shows (`editText`): the code
                 // without its fence lines and without a block id or properties after them.
@@ -354,7 +346,7 @@ private:
                 view = u"code"_s;
             }
             if (!onlyNested && (!html.isEmpty() || s.view == BlockView::Rule)) {
-                out.append(blockEntry(html, depth, view, s.headingLevel, statusName(s), r.src.path, e.line,
+                out.append(blockEntry(html, depth, view, s.headingLevel, taskStatusName(s.task), r.src.path, e.line,
                                       textLike ? doc.blockSource(i) : QString()));
                 --budget;
             }
@@ -364,21 +356,14 @@ private:
                 QVariantMap header{{u"kind"_s, u"embed"_s}, {u"title"_s, inner.title},   {u"href"_s, inner.href},
                                    {u"depth"_s, headerDepth},  {u"found"_s, inner.found}, {u"message"_s, inner.message},
                                    {u"path"_s, inner.path}};
-                if (inner.found && visited.contains(inner.key)) {
-                    header.insert(u"message"_s, u"cycle"_s);
-                    out.append(header);
-                    --budget;
-                    continue;
-                }
-                if (inner.found && level >= BlockListModel::MaxTransclusionDepth) {
-                    header.insert(u"message"_s, u"depth"_s);
-                    out.append(header);
-                    --budget;
-                    continue;
-                }
+                // Something already being shown (a cycle), or nested too deep: a note instead.
+                const bool cycle = inner.found && visited.contains(inner.key);
+                const bool tooDeep = inner.found && !cycle && level >= BlockListModel::MaxTransclusionDepth;
+                if (cycle || tooDeep)
+                    header.insert(u"message"_s, cycle ? u"cycle"_s : u"depth"_s);
                 out.append(header);
                 --budget;
-                if (!inner.found)
+                if (!inner.found || cycle || tooDeep)
                     continue;
                 if (!inner.fallbackText.isEmpty()) {
                     out.append(blockEntry(markdown::InlineRenderer::escape(inner.fallbackText), headerDepth + 1, u"text"_s, 0,
@@ -400,10 +385,6 @@ private:
     bool m_local = false;
     QHash<QString, std::pair<QString, std::shared_ptr<markdown::BlockDocument>>> m_docs;
 };
-
-} // namespace
-
-namespace {
 
 /// The embed a link of rendered text shows in its preview: page:Target[#Heading | #^id] as
 /// `![[Target…]]` (an empty target: the note the link is in), block:id as `!((id))`.
@@ -453,8 +434,7 @@ QVariantMap BlockListModel::linkPreview(const QString &url, const QString &fromP
         if (!path.isEmpty() && (!paths::isMarkdown(path) || (m_host && m_host->isDrawing(path))))
             return {};
     }
-    Builder builder(*this, m_host, m_doc, m_path);
-    return builder.build(*t, from);
+    return Builder(*this).build(*t, from);
 }
 
 void BlockListModel::ensureTransclusions(int row) const
@@ -468,19 +448,14 @@ void BlockListModel::ensureTransclusions(int row) const
     st.transclusionsValid = true;
     st.transclusionsLocal = false;
     st.transclusions.clear();
-    const markdown::BlockEntry &e = m_doc.at(i);
-    const BlockView view = cachedShape(row).view;
-    if (view != BlockView::Text && view != BlockView::Heading && view != BlockView::Quote && view != BlockView::Callout)
+    if (!isTextView(cachedShape(row).view))
         return;
-    const QList<Transclusion> list = transclusionsOf(e.body);
-    if (list.isEmpty())
-        return;
-    Builder builder(*this, m_host, m_doc, m_path);
+    const QList<Transclusion> list = transclusionsOf(m_doc.at(i).body);
+    Builder builder(*this);
     for (const Transclusion &t : list) {
         // (A page that is an Obsidian Excalidraw plugin drawing is an embed of its drawing.)
-        if (!drawingPageOf(t).isEmpty())
-            continue;
-        st.transclusions.append(builder.build(t));
+        if (drawingPageOf(t).isEmpty())
+            st.transclusions.append(builder.build(t));
     }
     st.transclusionsLocal = builder.usedOwnPage();
 }

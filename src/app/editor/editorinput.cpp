@@ -18,17 +18,26 @@ namespace brulion::editor {
 
 EditorInput::EditorInput(QObject *parent) : QObject(parent) {}
 
-void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList &ranges, const QString &replacement) const
+void EditorInput::replaceRanges(QQuickTextDocument *document, const QVariantList &ranges,
+                                const QString &replacement) const
 {
-    if (!document || !document->textDocument() || ranges.isEmpty())
+    QTextDocument *text = document ? document->textDocument() : nullptr;
+    if (!text || ranges.isEmpty())
         return;
-    QTextCursor cursor(document->textDocument());
+    // A stale range reaching past the text is skipped: the cursor would not move to it, and the
+    // replacement would take the text from wherever the cursor is instead.
+    const auto inside = [text](int position) { return position >= 0 && position < text->characterCount(); };
+    QTextCursor cursor(text);
     cursor.beginEditBlock();
     // From the end: the positions before stay right.
     for (qsizetype i = ranges.size() - 1; i >= 0; --i) {
         const QVariantMap range = ranges.at(i).toMap();
-        cursor.setPosition(range.value(QStringLiteral("from")).toInt());
-        cursor.setPosition(range.value(QStringLiteral("to")).toInt(), QTextCursor::KeepAnchor);
+        const int from = range.value(QStringLiteral("from")).toInt();
+        const int to = range.value(QStringLiteral("to")).toInt();
+        if (!inside(from) || !inside(to))
+            continue;
+        cursor.setPosition(from);
+        cursor.setPosition(to, QTextCursor::KeepAnchor);
         cursor.insertText(replacement);
     }
     cursor.endEditBlock();
@@ -69,7 +78,7 @@ bool EditorInput::commitPreedit(QQuickItem *item) const
 
 void EditorInput::sendKey(QQuickItem *item, int key, int modifiers, const QString &text) const
 {
-    QWindow *window = item && item->window() ? static_cast<QWindow *>(item->window()) : QGuiApplication::focusWindow();
+    QWindow *window = item && item->window() ? item->window() : QGuiApplication::focusWindow();
     if (!window)
         return;
     const auto mods = Qt::KeyboardModifiers(modifiers);
@@ -110,10 +119,7 @@ int EditorInput::childCount(QQuickItem *item) const
 
 QQuickItem *EditorInput::childAt(QQuickItem *item, int index) const
 {
-    if (!item)
-        return nullptr;
-    const QList<QQuickItem *> children = item->childItems();
-    return index >= 0 && index < children.size() ? children.at(index) : nullptr;
+    return item ? item->childItems().value(index) : nullptr; // value(): null out of range
 }
 
 } // namespace brulion::editor

@@ -101,8 +101,8 @@ TextEdit {
     Text {
         visible: edit.active && edit.length === 0 && edit.preeditText === "" && edit.placeholderText !== ""
         width: edit.width
-        textFormat: Text.RichText
-        text: TextHelper.escapeHtml(edit.placeholderText)
+        textFormat: Text.PlainText
+        text: edit.placeholderText
         font: edit.font
         lineHeightMode: Text.FixedHeight
         lineHeight: edit.lineHeightPx > 0 ? edit.lineHeightPx : 1
@@ -354,8 +354,8 @@ TextEdit {
     TapHandler {
         id: persistentTap
         enabled: !edit.active && edit.persistent
-        onTapped: (eventPoint, button) => edit.editor.editAtWith(edit.row, eventPoint.position.x, eventPoint.position.y,
-                                                                 persistentTap.point.modifiers)
+        onTapped: (eventPoint) => edit.editor.editAtWith(edit.row, eventPoint.position.x, eventPoint.position.y,
+                                                         persistentTap.point.modifiers)
     }
     TapHandler {
         enabled: !edit.active && edit.persistent && Theme.touchUi

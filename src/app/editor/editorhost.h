@@ -41,10 +41,11 @@ inline markdown::PageIcon availablePageIcon(markdown::PageIcon icon)
 /// A page icon for QML: { kind: "emoji" | "app" | "" (none), name }.
 inline QVariantMap pageIconMap(const markdown::PageIcon &icon)
 {
-    const QString kind = icon.kind == markdown::PageIcon::Kind::Emoji ? QStringLiteral("emoji")
-                                                                      : icon.kind == markdown::PageIcon::Kind::App
-            ? QStringLiteral("app")
-            : QString();
+    QString kind;
+    if (icon.kind == markdown::PageIcon::Kind::Emoji)
+        kind = QStringLiteral("emoji");
+    else if (icon.kind == markdown::PageIcon::Kind::App)
+        kind = QStringLiteral("app");
     return {{QStringLiteral("kind"), kind}, {QStringLiteral("name"), kind.isEmpty() ? QString() : icon.name}};
 }
 
@@ -106,11 +107,8 @@ public:
     /// Values written for page property `key` (case-insensitive): list of { value, count }, most
     /// used first; with `prefix` those starting with it, then those containing it (diacritics
     /// ignored; VaultIndex::propertyValues()). Default: none.
-    virtual QVariantList propertyValues(const QString &key, const QString &prefix, int limit = 20) const
+    virtual QVariantList propertyValues(const QString & /*key*/, const QString & /*prefix*/, int /*limit*/ = 20) const
     {
-        Q_UNUSED(key);
-        Q_UNUSED(prefix);
-        Q_UNUSED(limit);
         return {};
     }
     /// Resolve a wiki-link target seen from `fromPath`; "" when unresolved.
@@ -118,11 +116,7 @@ public:
     /// The icon of the note at `path` (docs/SYNTAX.md §4 "Page icon and cover": its `icon`
     /// property), shown in front of links to it; an app icon only when this build has it
     /// (editor::pageIconFor). Default: none.
-    virtual markdown::PageIcon pageIcon(const QString &path) const
-    {
-        Q_UNUSED(path);
-        return {};
-    }
+    virtual markdown::PageIcon pageIcon(const QString & /*path*/) const { return {}; }
     /// The shortest wiki-link target that reaches `path` from `fromPath` ("Dom", or "Projekty/Dom"
     /// when the title alone names another page) — what `[[` completion writes; "" when no link
     /// can. Default: the title when resolveLink() takes it to `path`, else the path without .md.
@@ -140,11 +134,8 @@ public:
     /// { kind: "page" | "folder" | "new", path, prefix } (linkPartToMap() below); {} when the
     /// target does not split. Never waits for the index (rendering asks). Default: {} (a host
     /// that does not know parts: every part is shown as a new page).
-    virtual QVariantMap linkPart(const QString &target, int part, const QString &fromPath) const
+    virtual QVariantMap linkPart(const QString & /*target*/, int /*part*/, const QString & /*fromPath*/) const
     {
-        Q_UNUSED(target)
-        Q_UNUSED(part)
-        Q_UNUSED(fromPath)
         return {};
     }
     /// Text of the block with this id (for ((id)) rendering); "" when unknown.
@@ -156,9 +147,8 @@ public:
     /// Text of the block a `[[Page#^id]]` link to the page at vault path `path` leads to: the
     /// page's block with that id, else — moved to another page — the vault's block with it (where
     /// the shell's route resolution opens it); "" when unknown. Default: blockText(blockId).
-    virtual QString linkedBlockText(const QString &path, const QString &blockId) const
+    virtual QString linkedBlockText(const QString & /*path*/, const QString &blockId) const
     {
-        Q_UNUSED(path)
         return blockText(blockId);
     }
     /// Complete the vault index now. Right after opening it is built in the background, and what
@@ -186,19 +176,11 @@ public:
     /// set to light or dark paper looks so whatever the app's theme. Default: assetUrl(), the
     /// file's own picture (tests, the playground); Workspace: the "drawing" image provider
     /// (src/app/drawing/drawingimageprovider.h).
-    virtual QUrl drawingUrl(const QString &path, bool dark) const
-    {
-        Q_UNUSED(dark);
-        return assetUrl(path);
-    }
+    virtual QUrl drawingUrl(const QString &path, bool /*dark*/) const { return assetUrl(path); }
     /// A picture attachment's pixel size when the host has it at hand (the browser: assetUrl()
     /// read the file for its data: URL); invalid otherwise — the editor then reads a local file's
     /// header itself (picturesize.h).
-    virtual QSize assetPixelSize(const QString &path) const
-    {
-        Q_UNUSED(path);
-        return {};
-    }
+    virtual QSize assetPixelSize(const QString & /*path*/) const { return {}; }
     /// This device can decode the picture at `path` (its format, picturesize.h): the editor's
     /// embeds name a format it cannot show (WebP, AVIF without Qt's image plugins) instead of
     /// failing to load it. Hosts (tests) may say less.
@@ -251,7 +233,7 @@ public:
     /// importAttachment() stored for it is removed again — only a copy it stored in this session
     /// and no later pick reused; a file of the notebook itself or an attachment it reused stays.
     /// Default: nothing.
-    virtual void discardImport(const QString &path) { Q_UNUSED(path) }
+    virtual void discardImport(const QString & /*path*/) { }
 
     // --- Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2) -------------------
     // The UI never loads them itself: the host fetches them (when the user allows it) into the
@@ -261,26 +243,16 @@ public:
     /// picture format as the cache stores it — "png", "svg", webpicture::sniffFormat() —, width,
     /// height when known) or "failed" (error: a sentence for the user) }. In the "always show" setting a
     /// picture not cached yet is fetched by asking ("loading"). Default: "ask" — nothing loads.
-    virtual QVariantMap webPicture(const QString &url) const
+    virtual QVariantMap webPicture(const QString & /*url*/) const
     {
-        Q_UNUSED(url);
         return {{QStringLiteral("state"), QStringLiteral("ask")}};
     }
     /// The user wants to see the picture (or store it: `forDownload`, also when pictures are not
     /// shown): fetch it unless cached; webPictureChanged(url) when it is ready or failed.
-    virtual void loadWebPicture(const QString &url, bool forDownload = false)
-    {
-        Q_UNUSED(url);
-        Q_UNUSED(forDownload);
-    }
+    virtual void loadWebPicture(const QString & /*url*/, bool /*forDownload*/ = false) { }
     /// The cached bytes of a ready picture and its format ("png", webpicture::sniffFormat());
     /// empty when not ready.
-    virtual QByteArray webPictureData(const QString &url, QString *format) const
-    {
-        Q_UNUSED(url);
-        Q_UNUSED(format);
-        return {};
-    }
+    virtual QByteArray webPictureData(const QString & /*url*/, QString * /*format*/) const { return {}; }
 
     // --- PDFs (docs/UI.md "PDF viewer") ----------------------------------------------------------
     /// The thumbnail of page `page` (1-based) of the PDF attachment at `path`: {state: "loading" |
@@ -288,10 +260,8 @@ public:
     /// height (its pixels), pages (the PDF's page count, 0 unknown), pageWidth, pageHeight (points),
     /// error (a sentence), locked}. pdfThumbnailChanged(path) follows a change. Default:
     /// unsupported (tests, the playground).
-    virtual QVariantMap pdfThumbnail(const QString &path, int page) const
+    virtual QVariantMap pdfThumbnail(const QString & /*path*/, int /*page*/) const
     {
-        Q_UNUSED(path);
-        Q_UNUSED(page);
         return {{QStringLiteral("state"), QStringLiteral("unsupported")}};
     }
     /// PDFs open in the app's own viewer here (a renderer is built in); else they are handed to
@@ -300,11 +270,7 @@ public:
     /// The attachment at `path` handed to another app — the system's PDF viewer, the browser's new
     /// tab; PDFs and the other kinds of platform/externalfiles.h. False when it could not be (the
     /// host told the user why).
-    virtual bool openInOtherApp(const QString &path)
-    {
-        Q_UNUSED(path);
-        return false;
-    }
+    virtual bool openInOtherApp(const QString & /*path*/) { return false; }
     /// The file name, without ".svg", of a new drawing on page `page` of the PDF `name` ("Lecture 3
     /// p. 4"), or on the picture `name` when `page` is 0 ("Plan (drawing)"): the editor's "Drawing on
     /// a picture or PDF…" and the PDF viewer's "Draw on this page" name them alike (translations
@@ -333,19 +299,10 @@ public:
     /// cannot render it (the clipboard then has the Markdown only). It should contain
     /// `<meta name="generator" content="Brulion">` (io::ClipboardHtmlMarker): a paste recognises
     /// its own copy by it and takes the Markdown text, not the HTML — also after a restart.
-    virtual QString renderHtml(const QString &markdown, const QString &fromPath) const
-    {
-        Q_UNUSED(markdown);
-        Q_UNUSED(fromPath);
-        return {};
-    }
+    virtual QString renderHtml(const QString & /*markdown*/, const QString & /*fromPath*/) const { return {}; }
     /// Pasted HTML (a browser, an office app) as Markdown; "" when the host cannot convert it (the
     /// clipboard's plain text is pasted then).
-    virtual QString htmlToMarkdown(const QString &html) const
-    {
-        Q_UNUSED(html);
-        return {};
-    }
+    virtual QString htmlToMarkdown(const QString & /*html*/) const { return {}; }
 
     // --- Navigation --------------------------------------------------------------------------
     /// Open a route ({view: "page", path, line?, blockId?} / {view: "tag", tag} — the page the

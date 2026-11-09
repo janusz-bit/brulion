@@ -32,6 +32,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 
 using namespace Qt::StringLiterals;
 
@@ -92,20 +93,50 @@ QByteArray sampleImagePng()
     p.end();
     QByteArray bytes;
     QBuffer buffer(&bytes);
-    buffer.open(QIODevice::WriteOnly);
-    img.save(&buffer, "PNG");
+    if (!buffer.open(QIODevice::WriteOnly) || !img.save(&buffer, "PNG"))
+        return {};
     return bytes;
 }
 
-} // namespace
-
-namespace {
-
-/// The shell's QueryHost item shape (editor/queryhost.h): the command line's JSON of an item, as
-/// the shell's Workspace gives it (notebook::queryItemJson).
-QVariantMap queryItemMap(const QueryItem &item, const VaultIndex &index)
+/// The shell's QueryHost item shapes (editor/queryhost.h): the command line's JSON of each item, as
+/// the shell's Workspace gives them (notebook::queryItemJson).
+QVariantList queryItemMaps(const QList<QueryItem> &items, const VaultIndex &index)
 {
-    return notebook::queryItemJson(index, item).toVariantMap();
+    QVariantList out;
+    out.reserve(items.size());
+    for (const QueryItem &item : items)
+        out.append(notebook::queryItemJson(index, item).toVariantMap());
+    return out;
+}
+
+/// A query's result `out` (nothing found yet) with the `error` that stopped it.
+QVariantMap failedQuery(QVariantMap out, const QString &error)
+{
+    out.insert(u"error"_s, error);
+    return out;
+}
+
+/// The fixed clock FakeEditorHost::now ("YYYY-MM-DD HH:mm") as local time; the real one when unset.
+QDateTime clockTime(const QString &now)
+{
+    if (const auto spec = dates::parseDateSpec(now))
+        return spec->toLocalDateTime();
+    return QDateTime::currentDateTime();
+}
+
+/// The aliases a note's frontmatter gives it (`aliases`, `alias`).
+QStringList aliasesOf(const QString &content)
+{
+    const markdown::FrontmatterResult fm = markdown::parseFrontmatter(content);
+    return markdown::namesFrom(markdown::frontmatterGet(fm.data, {u"aliases"_s, u"alias"_s}), false);
+}
+
+/// How the folded name `folded` matches the query `key`: 0 starts with it, 1 contains it, -1 not at all.
+int matchRank(const QString &folded, const QString &key)
+{
+    if (folded.startsWith(key))
+        return 0;
+    return folded.contains(key) ? 1 : -1;
 }
 
 } // namespace
@@ -131,10 +162,10 @@ const VaultIndex &FakeEditorHost::currentIndex() const
     if (!m_index || m_indexDirty) {
         m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(vaultConfig()));
         VaultIndex::Batch batch(*m_index);
-        for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it)
-            m_index->update(it.key(), it.value());
-        for (auto it = m_assets.constBegin(); it != m_assets.constEnd(); ++it)
-            m_index->update(it.key(), QString());
+        for (auto [path, content] : m_files.asKeyValueRange())
+            m_index->update(path, content);
+        for (auto it = m_assets.keyBegin(); it != m_assets.keyEnd(); ++it)
+            m_index->update(*it, QString());
         m_indexDirty = false;
     }
     return *m_index;
@@ -164,37 +195,26 @@ QVariantMap FakeEditorHost::runQuery(const QString &source, const QString &curre
     QVariantMap out{{u"ok"_s, false},        {u"error"_s, QString()},      {u"type"_s, u"blocks"_s},
                     {u"total"_s, 0},         {u"items"_s, QVariantList()}, {u"groups"_s, QVariantList()},
                     {u"complete"_s, true}};
-    if (m_queriesFail) {
-        out.insert(u"error"_s, u"No notebook is open."_s);
-        return out;
-    }
+    if (m_queriesFail)
+        return failedQuery(std::move(out), u"No notebook is open."_s);
     const std::variant<Query, QString> parsed = parseQuery(source);
-    if (const QString *error = std::get_if<QString>(&parsed)) {
-        out.insert(u"error"_s, *error);
-        return out;
-    }
+    if (const QString *error = std::get_if<QString>(&parsed))
+        return failedQuery(std::move(out), *error);
     const VaultIndex &index = currentIndex();
-    QDateTime current = QDateTime::currentDateTime();
-    if (const auto spec = dates::parseDateSpec(m_now))
-        current = spec->toLocalDateTime();
+    const QDateTime current = clockTime(m_now);
     QueryOptions options;
     options.currentPath = paths::normalize(currentPath);
     options.now = current.time();
     const QueryResult result = brulion::runQuery(std::get<Query>(parsed), index, current.date(), Qt::Monday, options);
-    QVariantList items;
-    for (const QueryItem &item : result.items)
-        items.append(queryItemMap(item, index));
     QVariantList groups;
     for (const QueryGroup &group : result.groups) {
-        QVariantList groupItems;
-        for (const QueryItem &item : group.items)
-            groupItems.append(queryItemMap(item, index));
-        groups.append(QVariantMap{{u"key"_s, group.key}, {u"label"_s, group.label}, {u"items"_s, groupItems}});
+        const QVariantList items = queryItemMaps(group.items, index);
+        groups.append(QVariantMap{{u"key"_s, group.key}, {u"label"_s, group.label}, {u"items"_s, items}});
     }
     out.insert(u"ok"_s, true);
     out.insert(u"type"_s, notebook::queryTypeName(result.type));
     out.insert(u"total"_s, result.total);
-    out.insert(u"items"_s, items);
+    out.insert(u"items"_s, queryItemMaps(result.items, index));
     out.insert(u"groups"_s, groups);
     return out;
 }
@@ -205,29 +225,19 @@ QVariantMap FakeEditorHost::runDataview(const QString &source, const QString &cu
     QVariantMap out{{u"ok"_s, false}, {u"error"_s, QString()},      {u"type"_s, u"list"_s},
                     {u"total"_s, 0},  {u"items"_s, QVariantList()}, {u"groups"_s, QVariantList()},
                     {u"columns"_s, QStringList()}, {u"complete"_s, true}};
-    if (m_queriesFail) {
-        out.insert(u"error"_s, u"No notebook is open."_s);
-        return out;
-    }
+    if (m_queriesFail)
+        return failedQuery(std::move(out), u"No notebook is open."_s);
     const std::variant<dataview::Query, QString> parsed = dataview::parseQuery(source);
-    if (const QString *error = std::get_if<QString>(&parsed)) {
-        out.insert(u"error"_s, *error);
-        return out;
-    }
+    if (const QString *error = std::get_if<QString>(&parsed))
+        return failedQuery(std::move(out), *error);
     const VaultIndex &index = currentIndex();
     dataview::Options options;
     options.currentPath = paths::normalize(currentPath);
-    options.now = QDateTime::currentDateTime();
-    if (const auto spec = dates::parseDateSpec(m_now))
-        options.now = spec->toLocalDateTime();
+    options.now = clockTime(m_now);
     const auto result = dataview::runQuery(std::get<dataview::Query>(parsed), index, options);
-    if (const QString *error = std::get_if<QString>(&result)) {
-        out.insert(u"error"_s, *error);
-        return out;
-    }
-    const QVariantMap json = notebook::dataviewResultJson(index, std::get<dataview::Result>(result)).toVariantMap();
-    for (auto it = json.constBegin(); it != json.constEnd(); ++it)
-        out.insert(it.key(), it.value());
+    if (const QString *error = std::get_if<QString>(&result))
+        return failedQuery(std::move(out), *error);
+    out.insert(notebook::dataviewResultJson(index, std::get<dataview::Result>(result)).toVariantMap());
     out.insert(u"ok"_s, true);
     return out;
 }
@@ -235,18 +245,15 @@ QVariantMap FakeEditorHost::runDataview(const QString &source, const QString &cu
 bool FakeEditorHost::setTaskStatus(const QString &path, int line, const QString &status)
 {
     const std::optional<TaskStatus> wanted = taskStatusFromName(status);
-    const auto it = m_files.find(path);
-    if ((!wanted && !status.isEmpty()) || line < 0 || it == m_files.end())
+    const auto it = m_files.constFind(path);
+    if ((!wanted && !status.isEmpty()) || line < 0 || it == m_files.constEnd())
         return false;
-    QDateTime now = QDateTime::currentDateTime();
-    if (const auto spec = dates::parseDateSpec(m_now))
-        now = spec->toLocalDateTime();
-    markdown::StatusLogOptions log{m_taskStatusHistory, now};
+    const markdown::StatusLogOptions log{.history = m_taskStatusHistory, .now = clockTime(m_now)};
     const QString edited =
             wanted ? markdown::setTaskStatusLogged(*it, line, *wanted, log) : markdown::removeTaskMarker(*it, line);
     if (edited == *it)
         return false;
-    *it = edited;
+    m_files.insert(path, edited);
     ++m_taskEdits;
     Q_EMIT taskEdited(path, line);
     Q_EMIT fileChanged(path);
@@ -293,32 +300,28 @@ QVariantList FakeEditorHost::suggestPages(const QString &prefix, int limit) cons
         QVariantMap item;
     };
     QList<Hit> hits;
-    QStringList paths = m_files.keys();
-    std::ranges::sort(paths);
-    for (const QString &path : std::as_const(paths)) {
-        if (!paths::isMarkdown(path) || path.startsWith(u"templates/"_s))
+    const QStringList all = files();
+    for (const QString &path : all) {
+        if (!paths::isMarkdown(path) || path.startsWith(u"templates/"))
             continue;
         const QString title = paths::pageTitle(path);
-        const QString folded = key.contains(u'/') ? text::foldKey(paths::stripMarkdownExtension(path))
-                                                  : text::foldKey(title);
-        const int rank = key.isEmpty() ? 1 : folded.startsWith(key) ? 0 : folded.contains(key) ? 1 : -1;
-        if (rank >= 0)
-            hits.append({rank, {{u"path"_s, path}, {u"title"_s, title}, {u"folder"_s, paths::dirname(path)}}});
-        const markdown::FrontmatterResult fm = markdown::parseFrontmatter(m_files.value(path));
-        for (const QString &alias : markdown::namesFrom(markdown::frontmatterGet(fm.data, {u"aliases"_s, u"alias"_s}), false)) {
-            const QString fa = text::foldKey(alias);
-            if (!key.isEmpty() && fa.contains(key))
-                hits.append({fa.startsWith(key) ? 0 : 1,
-                             {{u"path"_s, path}, {u"title"_s, title}, {u"alias"_s, alias}, {u"folder"_s, paths::dirname(path)}}});
+        const QString folder = paths::dirname(path);
+        const QString folded = text::foldKey(key.contains(u'/') ? paths::stripMarkdownExtension(path) : title);
+        if (const int rank = key.isEmpty() ? 1 : matchRank(folded, key); rank >= 0)
+            hits.append({rank, {{u"path"_s, path}, {u"title"_s, title}, {u"folder"_s, folder}}});
+        if (key.isEmpty())
+            continue; // aliases are offered for what is typed only
+        const QStringList aliases = aliasesOf(m_files.value(path));
+        for (const QString &alias : aliases) {
+            if (const int rank = matchRank(text::foldKey(alias), key); rank >= 0)
+                hits.append(
+                        {rank, {{u"path"_s, path}, {u"title"_s, title}, {u"alias"_s, alias}, {u"folder"_s, folder}}});
         }
     }
-    std::ranges::stable_sort(hits, [](const Hit &a, const Hit &b) { return a.rank < b.rank; });
+    std::ranges::stable_sort(hits, {}, &Hit::rank);
     QVariantList out;
-    for (const Hit &h : std::as_const(hits)) {
-        if (out.size() >= limit)
-            break;
-        out.append(h.item);
-    }
+    for (qsizetype i = 0; i < hits.size() && i < limit; ++i)
+        out.append(hits.at(i).item);
     return out;
 }
 
@@ -326,9 +329,8 @@ QVariantList FakeEditorHost::suggestBlocks(const QString &query, int limit) cons
 {
     const QString key = text::foldKey(query.trimmed());
     QVariantList out;
-    QStringList paths = m_files.keys();
-    std::ranges::sort(paths);
-    for (const QString &path : std::as_const(paths)) {
+    const QStringList all = files();
+    for (const QString &path : all) {
         if (!paths::isMarkdown(path))
             continue;
         const ParsedNote note = markdown::parseNote(path, m_files.value(path));
@@ -348,7 +350,8 @@ QVariantList FakeEditorHost::suggestBlocks(const QString &query, int limit) cons
 QVariantList FakeEditorHost::propertyKeys() const
 {
     QVariantList out;
-    for (const PropertyKeyInfo &k : currentIndex().propertyKeys())
+    const QList<PropertyKeyInfo> keys = currentIndex().propertyKeys();
+    for (const PropertyKeyInfo &k : keys)
         out.append(QVariantMap{{u"key"_s, k.key}, {u"count"_s, k.count}, {u"type"_s, k.type}});
     return out;
 }
@@ -356,7 +359,8 @@ QVariantList FakeEditorHost::propertyKeys() const
 QVariantList FakeEditorHost::propertyValues(const QString &key, const QString &prefix, int limit) const
 {
     QVariantList out;
-    for (const PropertyValueCount &v : currentIndex().propertyValues(key, prefix, limit))
+    const QList<PropertyValueCount> values = currentIndex().propertyValues(key, prefix, limit);
+    for (const PropertyValueCount &v : values)
         out.append(QVariantMap{{u"value"_s, v.value}, {u"count"_s, v.count}});
     return out;
 }
@@ -365,28 +369,29 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
 {
     QHash<QString, int> counts;
     QHash<QString, QString> spelling;
-    for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it) {
-        if (!paths::isMarkdown(it.key()))
+    for (auto [path, content] : m_files.asKeyValueRange()) {
+        if (!paths::isMarkdown(path))
             continue;
-        const ParsedNote note = markdown::parseNote(it.key(), it.value());
+        const ParsedNote note = markdown::parseNote(path, content);
         for (const Block &b : note.blocks) {
             for (const QString &t : b.tags) {
-                counts[t.toLower()] += 1;
-                spelling.insert(t.toLower(), t);
+                const QString lower = t.toLower();
+                ++counts[lower];
+                spelling.insert(lower, t);
             }
         }
         for (const QString &t : note.tags) {
-            if (!counts.contains(t.toLower())) {
-                counts[t.toLower()] = 1;
-                spelling.insert(t.toLower(), t);
+            if (const QString lower = t.toLower(); !counts.contains(lower)) {
+                counts.insert(lower, 1);
+                spelling.insert(lower, t);
             }
         }
     }
     const QString key = text::foldKey(prefix.trimmed());
     QList<std::pair<QString, int>> tags;
-    for (auto it = counts.constBegin(); it != counts.constEnd(); ++it) {
-        if (key.isEmpty() || text::foldKey(it.key()).contains(key))
-            tags.append({spelling.value(it.key()), it.value()});
+    for (auto [lower, count] : std::as_const(counts).asKeyValueRange()) {
+        if (key.isEmpty() || text::foldKey(lower).contains(key))
+            tags.append({spelling.value(lower), count});
     }
     std::ranges::sort(tags, [&key](const auto &a, const auto &b) {
         const bool pa = text::foldKey(a.first).startsWith(key);
@@ -415,15 +420,17 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
         seen.insert(tagKey(tag));
         out.append(m);
     }
-    for (const QVariant &v : suggestPages(prefix, limit)) {
+    const QVariantList pages = suggestPages(prefix, limit);
+    for (const QVariant &v : pages) {
         if (out.size() >= limit)
             break;
         const QVariantMap p = v.toMap();
-        const QString name = p.value(u"alias"_s).toString().isEmpty() ? p.value(u"title"_s).toString()
-                                                                      : p.value(u"alias"_s).toString();
-        if (seen.contains(tagKey(name)) || markdown::tagSyntax(name).isEmpty())
+        const QString alias = p.value(u"alias"_s).toString();
+        const QString name = alias.isEmpty() ? p.value(u"title"_s).toString() : alias;
+        const QString nameKey = tagKey(name);
+        if (seen.contains(nameKey) || markdown::tagSyntax(name).isEmpty())
             continue;
-        seen.insert(tagKey(name));
+        seen.insert(nameKey);
         out.append(QVariantMap{{u"tag"_s, name},
                                {u"count"_s, 0},
                                {u"kind"_s, u"page"_s},
@@ -440,14 +447,16 @@ QString FakeEditorHost::resolveLink(const QString &target, const QString &fromPa
     const QString t = paths::normalize(target);
     if (t.isEmpty())
         return {};
+    const auto named = [&t](const QString &name) { return name.compare(t, Qt::CaseInsensitive) == 0; };
     // Exact path (with or without .md), case-insensitive; assets too.
-    for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it) {
-        if (it.key().compare(t, Qt::CaseInsensitive) == 0 || it.key().compare(t + u".md"_s, Qt::CaseInsensitive) == 0)
-            return it.key();
+    const QString note = t + u".md"_s;
+    for (auto it = m_files.keyBegin(); it != m_files.keyEnd(); ++it) {
+        if (named(*it) || it->compare(note, Qt::CaseInsensitive) == 0)
+            return *it;
     }
-    for (auto it = m_assets.constBegin(); it != m_assets.constEnd(); ++it) {
-        if (it.key().compare(t, Qt::CaseInsensitive) == 0 || paths::basename(it.key()).compare(t, Qt::CaseInsensitive) == 0)
-            return it.key();
+    for (auto it = m_assets.keyBegin(); it != m_assets.keyEnd(); ++it) {
+        if (named(*it) || named(paths::basename(*it)))
+            return *it;
     }
     // Unique base name; then aliases.
     QStringList keys = m_files.keys();
@@ -455,17 +464,12 @@ QString FakeEditorHost::resolveLink(const QString &target, const QString &fromPa
         return a.size() != b.size() ? a.size() < b.size() : a < b;
     });
     for (const QString &path : std::as_const(keys)) {
-        if (paths::isMarkdown(path) && paths::pageTitle(path).compare(t, Qt::CaseInsensitive) == 0)
+        if (paths::isMarkdown(path) && named(paths::pageTitle(path)))
             return path;
     }
     for (const QString &path : std::as_const(keys)) {
-        if (!paths::isMarkdown(path))
-            continue;
-        const markdown::FrontmatterResult fm = markdown::parseFrontmatter(m_files.value(path));
-        for (const QString &alias : markdown::namesFrom(markdown::frontmatterGet(fm.data, {u"aliases"_s, u"alias"_s}), false)) {
-            if (alias.compare(t, Qt::CaseInsensitive) == 0)
-                return path;
-        }
+        if (paths::isMarkdown(path) && std::ranges::any_of(aliasesOf(m_files.value(path)), named))
+            return path;
     }
     return {};
 }
@@ -478,12 +482,11 @@ markdown::PageIcon FakeEditorHost::pageIcon(const QString &path) const
 
 QString FakeEditorHost::blockText(const QString &blockId) const
 {
-    for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it) {
-        if (!paths::isMarkdown(it.key()) || !it.value().contains(blockId))
+    for (auto [path, content] : m_files.asKeyValueRange()) {
+        if (!paths::isMarkdown(path) || !content.contains(blockId))
             continue;
-        const ParsedNote note = markdown::parseNote(it.key(), it.value());
-        const auto found = note.blockIds.constFind(blockId);
-        if (found != note.blockIds.constEnd())
+        const ParsedNote note = markdown::parseNote(path, content);
+        if (const auto found = note.blockIds.constFind(blockId); found != note.blockIds.constEnd())
             return note.blocks.at(*found).text.simplified();
     }
     return {};
@@ -504,9 +507,9 @@ bool FakeEditorHost::blockIdTaken(const QString &blockId) const
 {
     if (blockId.isEmpty())
         return false;
-    for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it) {
-        if (paths::isMarkdown(it.key()) && it.value().contains(blockId)
-            && markdown::parseNote(it.key(), it.value()).blockIds.contains(blockId))
+    for (auto [path, content] : m_files.asKeyValueRange()) {
+        if (paths::isMarkdown(path) && content.contains(blockId)
+            && markdown::parseNote(path, content).blockIds.contains(blockId))
             return true;
     }
     return false;
@@ -531,10 +534,9 @@ QString FakeEditorHost::ensureBlockId(const QString &path, int line)
 QVariantList FakeEditorHost::templates() const
 {
     QVariantList out;
-    QStringList keys = m_files.keys();
-    std::ranges::sort(keys);
-    for (const QString &path : std::as_const(keys)) {
-        if (path.startsWith(u"templates/"_s) && paths::isMarkdown(path))
+    const QStringList all = files();
+    for (const QString &path : all) {
+        if (path.startsWith(u"templates/") && paths::isMarkdown(path))
             out.append(QVariantMap{{u"path"_s, path}, {u"title"_s, paths::pageTitle(path)}});
     }
     return out;
@@ -600,10 +602,10 @@ QVariantMap FakeEditorHost::webPicture(const QString &url) const
 {
     const QString state = m_webStates.value(url);
     if (state.isEmpty() && m_webShown) {
-        // Asked for in the "always" setting: fetched (outside this const call).
-        QMetaObject::invokeMethod(
-                const_cast<FakeEditorHost *>(this),
-                [this, url] { const_cast<FakeEditorHost *>(this)->loadWebPicture(url); }, Qt::QueuedConnection);
+        // Asked for in the "always" setting: fetched outside this const call (of a host that is
+        // never a const object: QML's, a test's).
+        auto *self = const_cast<FakeEditorHost *>(this);
+        QMetaObject::invokeMethod(self, [self, url] { self->loadWebPicture(url); }, Qt::QueuedConnection);
         m_webStates.insert(url, u"loading"_s);
         return {{u"state"_s, u"loading"_s}};
     }
@@ -627,29 +629,29 @@ QVariantMap FakeEditorHost::webPicture(const QString &url) const
 void FakeEditorHost::loadWebPicture(const QString &url, bool forDownload)
 {
     Q_UNUSED(forDownload);
-    const QString state = m_webStates.value(url);
-    if (state == u"ready" || m_webInFlight.contains(url))
+    if (m_webStates.value(url) == u"ready" || m_webInFlight.contains(url))
         return;
     m_webStates.insert(url, u"loading"_s);
     m_webInFlight.insert(url);
     Q_EMIT webPictureChanged(url);
-    ++m_webFetches;
+    // Numbered now: fetches asked for in one turn of the event loop get files of their own.
+    const int fetch = ++m_webFetches;
     QMetaObject::invokeMethod(
             this,
-            [this, url] {
+            [this, url, fetch] {
                 m_webInFlight.remove(url);
                 const QByteArray data = m_webSources.value(url);
+                const QString format = webpicture::sniffFormat(data); // "" for no or unknown bytes
                 QString file;
-                if (!data.isEmpty()) {
+                if (!format.isEmpty()) {
                     if (!m_assetDir)
                         m_assetDir = std::make_unique<QTemporaryDir>();
-                    file = m_assetDir->filePath(u"web-"_s + QString::number(m_webFetches) + u'.'
-                                                + webpicture::sniffFormat(data));
+                    file = m_assetDir->filePath(u"web-"_s + QString::number(fetch) + u'.' + format);
                     QFile f(file);
                     if (!f.open(QIODevice::WriteOnly) || f.write(data) != data.size())
                         file.clear();
                 }
-                if (file.isEmpty() || webpicture::sniffFormat(data).isEmpty()) {
+                if (file.isEmpty()) {
                     m_webStates.insert(url, u"failed"_s);
                 } else {
                     m_webStates.insert(url, u"ready"_s);

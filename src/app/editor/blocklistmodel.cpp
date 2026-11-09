@@ -20,10 +20,12 @@
 
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QScopedValueRollback>
 #include <QSet>
 #include <QUrl>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 
@@ -92,6 +94,30 @@ bool hasBlockRef(const QString &text)
     return text.contains(u"((") || text.contains(u"#^");
 }
 
+/// The uids of the document's blocks, in order.
+QList<quint64> uidsOf(const markdown::BlockDocument &doc)
+{
+    QList<quint64> uids;
+    uids.reserve(doc.count());
+    for (int i = 0; i < doc.count(); ++i)
+        uids.append(doc.at(i).uid);
+    return uids;
+}
+
+/// What replaceContent() matches blocks by: kind, text and depth (a block whose kind changed
+/// with the same text — `key:: value` lines moved to the top become page properties — is
+/// another one).
+QStringList blockSources(const markdown::BlockDocument &doc)
+{
+    QStringList sources;
+    sources.reserve(doc.count());
+    for (int i = 0; i < doc.count(); ++i) {
+        const markdown::BlockEntry &e = doc.at(i);
+        sources.append(QString::number(int(e.kind)) + u'|' + e.prefix + e.body + u'|' + QString::number(e.depth));
+    }
+    return sources;
+}
+
 /// Longest common subsequence of two lists of strings as matched index pairs, with common
 /// prefix/suffix trimmed first; a middle part too large for the quadratic table is treated as
 /// completely replaced.
@@ -139,22 +165,41 @@ QList<std::pair<int, int>> matchBlocks(const QStringList &a, const QStringList &
     return pairs;
 }
 
+/// The end of the line of `s` that starts at `from`: lines as text::splitLines() and the
+/// BlockDocument count them ("\n", "\r\n", a lone "\r").
+qsizetype lineEnd(QStringView s, qsizetype from)
+{
+    while (from < s.size() && s[from] != u'\n' && s[from] != u'\r')
+        ++from;
+    return from;
+}
+
+/// The start of the line after the one of `s` that ends at `end` (lineEnd()).
+qsizetype nextLine(QStringView s, qsizetype end)
+{
+    return end + (end + 1 < s.size() && s[end] == u'\r' && s[end + 1] == u'\n' ? 2 : 1);
+}
+
+/// The text has fence characters (``` / ~~~).
+bool hasFence(QStringView s)
+{
+    return s.contains(u"```") || s.contains(u"~~~");
+}
+
 /// Whether text of a block can never change what calculations see, wherever the block sits
 /// outside calc fences and the frontmatter: no fence characters (``` / ~~~), no `key:: value`
 /// property and no line that could open or close frontmatter (--- / ... after whitespace). A
 /// superset of the lines calc::PageCalc reacts to there (fences, property lines, delimiters).
 bool calcInert(QStringView s)
 {
-    if (s.contains(u"```") || s.contains(u"~~~") || s.contains(u"::"))
+    if (hasFence(s) || s.contains(u"::"))
         return false;
     for (qsizetype start = 0; start <= s.size();) {
-        qsizetype end = start;
-        while (end < s.size() && s[end] != u'\n' && s[end] != u'\r')
-            ++end;
+        const qsizetype end = lineEnd(s, start);
         const QStringView line = s.sliced(start, end - start).trimmed();
         if (line.startsWith(u"---") || line.startsWith(u"..."))
             return false;
-        start = end + 1;
+        start = nextLine(s, end);
     }
     return true;
 }
@@ -229,6 +274,13 @@ QString renderBodyHtml(const markdown::BlockEntry &e, const BlockShape &s, const
 
 QString richTextToPlain(const QString &html)
 {
+    // The entities the renderer writes.
+    struct Entity {
+        QStringView name;
+        char16_t decoded;
+    };
+    static constexpr Entity Entities[] = {{u"nbsp", u'\u00a0'}, {u"amp", u'&'},  {u"lt", u'<'},
+                                          {u"gt", u'>'},        {u"quot", u'"'}, {u"#39", u'\''}};
     QString out;
     out.reserve(html.size());
     bool inTag = false;
@@ -248,21 +300,9 @@ QString richTextToPlain(const QString &html)
             const qsizetype semi = html.indexOf(u';', i);
             if (semi > i && semi - i <= 6) {
                 const QStringView entity = QStringView(html).sliced(i + 1, semi - i - 1);
-                QChar decoded;
-                if (entity == u"nbsp")
-                    decoded = QChar(0x00a0);
-                else if (entity == u"amp")
-                    decoded = u'&';
-                else if (entity == u"lt")
-                    decoded = u'<';
-                else if (entity == u"gt")
-                    decoded = u'>';
-                else if (entity == u"quot")
-                    decoded = u'"';
-                else if (entity == u"#39")
-                    decoded = u'\'';
-                if (!decoded.isNull()) {
-                    out += decoded;
+                const auto known = std::ranges::find(Entities, entity, &Entity::name);
+                if (known != std::ranges::end(Entities)) {
+                    out += QChar(known->decoded);
                     i = semi;
                     continue;
                 }
@@ -286,7 +326,8 @@ int BlockListModel::rowCount(const QModelIndex &parent) const
 
 QHash<int, QByteArray> BlockListModel::roleNames() const
 {
-    return {
+    // Built once: the views ask on every model reset, OutlineModel on every rebuild.
+    static const QHash<int, QByteArray> names{
             {RawRole, "raw"},
             {BodyRole, "body"},
             {EditTextRole, "editText"},
@@ -326,6 +367,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {PropertiesInfoRole, "propertiesInfo"},
             {ShownRole, "shown"},
     };
+    return names;
 }
 
 QString BlockListModel::text() const
@@ -395,9 +437,10 @@ QString BlockListModel::editTextAt(int row) const
 
 int BlockListModel::renderOffsetAt(int row) const
 {
-    if (docIndexOfRow(row) < 0)
+    const int i = docIndexOfRow(row);
+    if (i < 0)
         return 0;
-    (void)data(index(row), HtmlRole); // renders when needed
+    (void)renderHtml(i); // renders when needed
     return stateFor(m_rows[row]).renderOffset;
 }
 
@@ -416,39 +459,26 @@ void BlockListModel::resetContent(const QString &content)
     m_text = content;
     m_textValid = true;
     m_state.clear();
-    m_rows.clear();
-    for (int i = 0; i < m_doc.count(); ++i)
-        m_rows.append(m_doc.at(i).uid);
+    m_rows = uidsOf(m_doc);
     rebuildIndex();
     m_zoomUid = 0;
     m_collapsed.clear();
     m_editingUid = 0;
     m_selectedUids.clear();
     calcContentChanged();
-    refresh(true);
+    {
+        // The views read every row anew after the reset: no dataChanged inside it.
+        const QScopedValueRollback resetting(m_resetting, true);
+        refresh(true);
+    }
     endResetModel();
     Q_EMIT countChanged();
 }
 
 QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
 {
-    // Blocks are matched by kind, text and depth (a block whose kind changed with the same text —
-    // `key:: value` lines moved to the top become page properties — is another one).
-    const auto sourceOf = [](const markdown::BlockEntry &e) {
-        return QString::number(int(e.kind)) + u'|' + e.prefix + e.body + u'|' + QString::number(e.depth);
-    };
-    QStringList oldSources;
-    const QList<quint64> oldUids = m_rows;
-    oldSources.reserve(m_doc.count());
-    for (int i = 0; i < m_doc.count(); ++i)
-        oldSources.append(sourceOf(m_doc.at(i)));
-
     markdown::BlockDocument fresh(content, &m_doc); // unchanged blocks keep their parse
-    QStringList newSources;
-    newSources.reserve(fresh.count());
-    for (int i = 0; i < fresh.count(); ++i)
-        newSources.append(sourceOf(fresh.at(i)));
-    QList<std::pair<int, int>> pairs = matchBlocks(oldSources, newSources);
+    QList<std::pair<int, int>> pairs = matchBlocks(blockSources(m_doc), blockSources(fresh));
     // A leading frontmatter block whose text changed keeps its row (see the file comment): the
     // old and the new block at the same index (0 or 1: YAML, then `key::` lines) are both left
     // unmatched, are both frontmatter of the same form, and pairing them keeps the order.
@@ -479,32 +509,34 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
 
     // The kept blocks are the same blocks: they keep their uids (rows, cached state, folds, zoom,
     // editing and selection stay with them).
+    const int oldCount = int(m_rows.size());
+    const int newCount = fresh.count();
     QList<std::pair<int, quint64>> adopted;
     adopted.reserve(pairs.size());
-    QSet<int> keptOld;
-    QSet<int> keptNew;
+    QList<bool> keptOld(oldCount);
+    QList<bool> keptNew(newCount);
     QHash<quint64, quint64> mapping;
-    for (const auto &[o, n] : pairs) {
-        keptOld.insert(o);
-        keptNew.insert(n);
-        adopted.append({n, oldUids[o]});
-        mapping.insert(oldUids[o], oldUids[o]);
+    for (const auto &[o, n] : std::as_const(pairs)) {
+        const quint64 uid = m_rows.at(o);
+        keptOld[o] = true;
+        keptNew[n] = true;
+        adopted.append({n, uid});
+        mapping.insert(uid, uid);
     }
     fresh.adoptUids(adopted);
 
     // Remove rows of old blocks that are gone (from the end, so indices stay valid).
-    const int oldCount = int(m_rows.size());
     for (int r = oldCount - 1; r >= 0;) {
-        if (keptOld.contains(r)) {
+        if (keptOld.at(r)) {
             --r;
             continue;
         }
         int first = r;
-        while (first - 1 >= 0 && !keptOld.contains(first - 1))
+        while (first > 0 && !keptOld.at(first - 1))
             --first;
         beginRemoveRows({}, first, r);
         for (int k = first; k <= r; ++k)
-            m_state.remove(m_rows[k]);
+            m_state.remove(m_rows.at(k));
         m_rows.remove(first, r - first + 1);
         endRemoveRows();
         r = first - 1;
@@ -529,14 +561,13 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
     m_selectedUids.removeIf([this](quint64 uid) { return !m_docIndex.contains(uid); });
 
     // Insert rows for new blocks.
-    const int newCount = m_doc.count();
     for (int r = 0; r < newCount;) {
-        if (keptNew.contains(r)) {
+        if (keptNew.at(r)) {
             ++r;
             continue;
         }
         int last = r;
-        while (last + 1 < newCount && !keptNew.contains(last + 1))
+        while (last + 1 < newCount && !keptNew.at(last + 1))
             ++last;
         beginInsertRows({}, r, last);
         for (int k = r; k <= last; ++k)
@@ -552,7 +583,7 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
         Q_EMIT dataChanged(index(k), index(k));
         // For the caller the block is another one (its text changed): editing it, a selection
         // or a tracked handle on it end as before — an inline editor would hold the old text.
-        mapping.remove(m_rows[k]);
+        mapping.remove(m_rows.at(k));
     }
     return mapping;
 }
@@ -576,10 +607,7 @@ markdown::EditResult BlockListModel::apply(const std::function<markdown::EditRes
     m_textValid = false;
     m_pageCalc.reset();
     rebuildIndex();
-    QList<quint64> finalUids;
-    finalUids.reserve(m_doc.count());
-    for (int i = 0; i < m_doc.count(); ++i)
-        finalUids.append(m_doc.at(i).uid);
+    const QList<quint64> finalUids = uidsOf(m_doc);
     bool calcNeutral = replay(r.changes, finalUids);
     if (m_rows != finalUids) {
         // Should never happen (the changes describe the edit exactly); stay consistent anyway.
@@ -624,7 +652,7 @@ bool BlockListModel::replay(const QList<markdown::BlockChange> &changes, const Q
             neutral = neutral && c.first > 0;
             beginRemoveRows({}, c.first, c.first + c.count - 1);
             for (int k = 0; k < c.count; ++k) {
-                const quint64 uid = m_rows[c.first + k];
+                const quint64 uid = m_rows.at(c.first + k);
                 neutral = neutral && insensitive(uid);
                 m_calcFlags.remove(uid);
                 m_state.remove(uid);
@@ -638,7 +666,8 @@ bool BlockListModel::replay(const QList<markdown::BlockChange> &changes, const Q
                 return false;
             if (neutral) {
                 // Not inside a calc fence or the frontmatter: none continues after the block before.
-                const auto before = c.first > 0 ? m_calcFlags.constFind(m_rows[c.first - 1]) : m_calcFlags.constEnd();
+                const auto before =
+                        c.first > 0 ? m_calcFlags.constFind(m_rows.at(c.first - 1)) : m_calcFlags.constEnd();
                 neutral = before != m_calcFlags.constEnd() && !before->openAfter;
             }
             beginInsertRows({}, c.first, c.first + c.count - 1);
@@ -655,7 +684,7 @@ bool BlockListModel::replay(const QList<markdown::BlockChange> &changes, const Q
         }
         case Type::Moved: {
             neutral = false;
-            if (c.first < 0 || c.first + c.count > m_rows.size() || c.destination < 0
+            if (c.first < 0 || c.first + c.count > m_rows.size() || c.destination < 0 || c.destination > m_rows.size()
                 || (c.destination >= c.first && c.destination <= c.first + c.count))
                 return false;
             if (!beginMoveRows({}, c.first, c.first + c.count - 1, {}, c.destination))
@@ -673,7 +702,7 @@ bool BlockListModel::replay(const QList<markdown::BlockChange> &changes, const Q
                 return false;
             neutral = neutral && c.first > 0;
             for (int k = 0; k < c.count; ++k) {
-                const quint64 uid = m_rows[c.first + k];
+                const quint64 uid = m_rows.at(c.first + k);
                 neutral = neutral && insensitive(uid) && inertNow(uid);
                 invalidateContent(uid);
             }
@@ -701,7 +730,7 @@ void BlockListModel::invalidateContent(quint64 uid)
 
 void BlockListModel::emitRowsChanged(const QList<int> &rows, const QList<int> &roles)
 {
-    if (rows.isEmpty())
+    if (rows.isEmpty() || m_resetting)
         return;
     int start = rows.first();
     int prev = start;
@@ -731,12 +760,7 @@ void BlockListModel::refresh(bool contentChanged)
         zoomDepth = m_doc.at(zoomRow).depth;
     }
     // Forget folds of blocks that no longer exist.
-    for (auto it = m_collapsed.begin(); it != m_collapsed.end();) {
-        if (!m_docIndex.contains(*it))
-            it = m_collapsed.erase(it);
-        else
-            ++it;
-    }
+    m_collapsed.removeIf([this](quint64 uid) { return !m_docIndex.contains(uid); });
 
     QList<char> dirty(n, 0); // structural state changed
     QList<int> visibleRows;  // in order (selection edges)
@@ -813,8 +837,8 @@ void BlockListModel::refresh(bool contentChanged)
         // Results stay while the block and, when they read calc variables, everything its
         // calculations see are unchanged.
         const BlockShape &shape = cachedShape(row);
-        // A block that is no calc block or table any more (its text changed in place: an edit,
-        // undo) has no results.
+        // A block that is no calc block, table or chart any more (its text changed in place: an
+        // edit, undo) has no results.
         if (shape.view != BlockView::Calc && !st.calcResults.isEmpty()) {
             st.calcResults.clear();
             calcRows.append(row);
@@ -829,36 +853,27 @@ void BlockListModel::refresh(bool contentChanged)
             st.chartValid = false;
             chartRows.append(row);
         }
-        if (shape.view == BlockView::Chart) {
-            // A chart of a table or a calc block follows every change of the page; one of a query
-            // its own text (and the index: invalidateRendering()).
-            if (!st.chartValid || st.chartSource != shape.editText || !st.chartData.value(u"query"_s).toBool()) {
-                QVariantMap chart = computeChartData(i);
-                st.chartValid = true;
-                st.chartSource = shape.editText;
-                if (chart != st.chartData) {
-                    st.chartData = chart;
-                    chartRows.append(row);
-                }
-            }
-        }
+        // A chart of a table or a calc block follows every change of the page; one of a query
+        // its own text (and the index: invalidateRendering()).
+        const bool chartStale =
+                shape.view == BlockView::Chart
+                && (!st.chartValid || st.chartSource != shape.editText || !st.chartData.value(u"query"_s).toBool());
+        if (chartStale && updateChart(st, i, shape.editText))
+            chartRows.append(row);
         if (shape.view == BlockView::Calc || shape.view == BlockView::Table) {
             if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)
                 || (shape.view == BlockView::Table && st.resultsUseRefs)) {
-                st.resultsValid = true;
-                st.resultsEpoch = m_calcEpoch;
-                if (shape.view == BlockView::Calc) {
+                if (shape.view == BlockView::Table) {
+                    if (updateTable(st, i))
+                        tableRows.append(row);
+                } else {
                     QVariantList results = computeCalcResults(i);
+                    st.resultsValid = true;
+                    st.resultsEpoch = m_calcEpoch;
                     st.resultsUseScope = true;
                     if (results != st.calcResults) {
-                        st.calcResults = results;
+                        st.calcResults = std::move(results);
                         calcRows.append(row);
-                    }
-                } else {
-                    QVariantMap table = computeTableData(i); // sets resultsUseScope / resultsUseRefs
-                    if (table != st.tableData) {
-                        st.tableData = table;
-                        tableRows.append(row);
                     }
                 }
             }
@@ -947,17 +962,17 @@ QVariantList BlockListModel::computeCalcResults(int i) const
 QVariantMap BlockListModel::computeTableData(int i) const
 {
     const markdown::BlockEntry &e = m_doc.at(i);
+    RowState &st = stateFor(e.uid);
     const auto model = calc::parseTable(e.body);
     if (!model) {
-        stateFor(e.uid).resultsUseScope = false;
-        stateFor(e.uid).resultsUseRefs = false;
+        st.resultsUseScope = false;
+        st.resultsUseRefs = false;
         return {};
     }
     // Only formula cells read the variables above the table: no page scope for a table without.
-    const bool formulas = std::any_of(model->rows.cbegin(), model->rows.cend(), [](const QStringList &row) {
-        return std::any_of(row.cbegin(), row.cend(),
-                           [](const QString &cell) { return cell.trimmed().startsWith(u'='); });
-    });
+    const auto isFormula = [](const QString &cell) { return QStringView(cell).trimmed().startsWith(u'='); };
+    const bool formulas = std::ranges::any_of(
+            model->rows, [&isFormula](const QStringList &row) { return std::ranges::any_of(row, isFormula); });
     const calc::TableEval eval = formulas ? calc::evaluateTable(*model, calcLocale(), *scopeFor(i))
                                           : calc::evaluateTable(*model, calcLocale());
     // Cells are inline Markdown (bold, links, tags, chips): rendered like paragraphs, cached by
@@ -965,12 +980,11 @@ QVariantMap BlockListModel::computeTableData(int i) const
     // inline calculation also depends on the variables above the table: never cached, and the
     // table is recomputed when they may have changed (a new calc epoch). A cell with a block
     // reference shows that block's text: never cached, the table follows every page change.
-    RowState &st = stateFor(e.uid);
     st.resultsUseScope = formulas || hasInlineCalc(e.body);
     st.resultsUseRefs = hasBlockRef(e.body);
     std::optional<markdown::InlineRenderer> renderer;
     const auto cellHtml = [&](const QString &cell) -> QString {
-        if (cell.trimmed().isEmpty())
+        if (QStringView(cell).trimmed().isEmpty())
             return {};
         const bool live = hasInlineCalc(cell) || hasBlockRef(cell);
         const auto cached = live ? st.cellHtml.constEnd() : st.cellHtml.constFind(cell);
@@ -981,7 +995,7 @@ QVariantMap BlockListModel::computeTableData(int i) const
             ctx.hideTransclusions = false; // no embed frames in cells: placeholder links
             ctx.dateLinks = true;          // ranges in the cell's text (PageController::tableCellChip)
             ctx.dayLinks = false;          // [[2026-10-20]] stays a page link (its link menu)
-            renderer.emplace(ctx);
+            renderer.emplace(std::move(ctx));
         }
         const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
         if (!live)
@@ -995,17 +1009,15 @@ QVariantMap BlockListModel::computeTableData(int i) const
     for (const QString &h : model->header)
         headerHtml.append(cellHtml(h));
     QVariantList rows;
+    rows.reserve(model->rows.size());
     for (qsizetype r = 0; r < model->rows.size(); ++r) {
         QVariantList cells;
+        cells.reserve(model->header.size());
         for (qsizetype c = 0; c < model->header.size(); ++c) {
-            const QString cell = c < model->rows[r].size() ? model->rows[r][c] : QString();
-            const bool formula = cell.trimmed().startsWith(u'=');
-            QString display = cell;
-            QString error;
-            if (formula && r < eval.values.size() && c < eval.values[r].size())
-                display = eval.values[r][c];
-            if (r < eval.errors.size() && c < eval.errors[r].size())
-                error = eval.errors[r][c];
+            const QString cell = model->rows.at(r).value(c);
+            const bool formula = isFormula(cell);
+            const QString display = formula ? eval.values.value(r).value(c, cell) : cell;
+            const QString error = eval.errors.value(r).value(c);
             // Formula results (and errors) are values, not Markdown.
             const QString html = formula || !error.isEmpty() ? markdown::InlineRenderer::escape(display) : cellHtml(cell);
             cells.append(QVariantMap{{u"text"_s, cell},
@@ -1023,12 +1035,11 @@ QVariantMap BlockListModel::computeTableData(int i) const
     calc::TableSortOptions sortOptions;
     sortOptions.locale = calcLocale();
     sortOptions.today = m_today.isValid() ? m_today : QDate::currentDate();
+    const QList<bool> passing = calc::tableRowsShown(*model, eval, filters, sortOptions);
     QVariantList shown;
-    int shownCount = 0;
-    for (const bool passes : calc::tableRowsShown(*model, eval, filters, sortOptions)) {
+    shown.reserve(passing.size());
+    for (const bool passes : passing)
         shown.append(passes);
-        shownCount += passes ? 1 : 0;
-    }
     return {{u"header"_s, QVariant(QStringList(model->header))},
             {u"headerHtml"_s, headerHtml},
             {u"aligns"_s, aligns},
@@ -1036,7 +1047,7 @@ QVariantMap BlockListModel::computeTableData(int i) const
             {u"filters"_s, filters},
             {u"filtering"_s, st.tableFiltering},
             {u"shown"_s, shown},
-            {u"shownCount"_s, shownCount}};
+            {u"shownCount"_s, int(std::ranges::count(passing, true))}};
 }
 
 namespace {
@@ -1061,14 +1072,14 @@ chart::QueryCounts queryCounts(const QVariantMap &result)
         return out;
     }
     QHash<QString, qsizetype> at;
-    for (const QVariant &i : result.value(u"items"_s).toList()) {
-        const QString title = i.toMap().value(u"title"_s).toString();
-        const auto it = at.constFind(title);
-        if (it == at.constEnd()) {
+    const QVariantList items = result.value(u"items"_s).toList();
+    for (const QVariant &item : items) {
+        const QString title = item.toMap().value(u"title"_s).toString();
+        if (const auto it = at.constFind(title); it != at.constEnd()) {
+            out.groups[*it].second += 1;
+        } else {
             at.insert(title, out.groups.size());
             out.groups.append({title, 1.0});
-        } else {
-            out.groups[*it].second += 1;
         }
     }
     return out;
@@ -1117,26 +1128,40 @@ QVariantMap BlockListModel::computeChartData(int i) const
     return out;
 }
 
+bool BlockListModel::updateTable(RowState &st, int docIndex)
+{
+    QVariantMap table = computeTableData(docIndex); // sets resultsUseScope / resultsUseRefs
+    st.resultsValid = true;
+    st.resultsEpoch = m_calcEpoch;
+    if (table == st.tableData)
+        return false;
+    st.tableData = std::move(table);
+    return true;
+}
+
+bool BlockListModel::updateChart(RowState &st, int docIndex, const QString &source)
+{
+    QVariantMap chart = computeChartData(docIndex);
+    st.chartValid = true;
+    st.chartSource = source;
+    if (chart == st.chartData)
+        return false;
+    st.chartData = std::move(chart);
+    return true;
+}
+
 void BlockListModel::refreshTable(int row)
 {
     const int i = docIndexOfRow(row);
-    if (i < 0 || cachedShape(row).view != BlockView::Table)
-        return;
-    RowState &st = stateFor(m_rows[row]);
-    QVariantMap table = computeTableData(i);
-    st.resultsValid = true;
-    st.resultsEpoch = m_calcEpoch;
-    if (table != st.tableData) {
-        st.tableData = table;
+    if (i >= 0 && cachedShape(row).view == BlockView::Table && updateTable(stateFor(m_rows.at(row)), i))
         emitRowsChanged({row}, {TableDataRole});
-    }
 }
 
 void BlockListModel::setTableFilter(int row, int column, const QString &text)
 {
     if (row < 0 || row >= m_rows.size() || column < 0 || column > 1000)
         return;
-    RowState &st = stateFor(m_rows[row]);
+    RowState &st = stateFor(m_rows.at(row));
     if (st.tableFilters.size() <= column)
         st.tableFilters.resize(column + 1);
     if (st.tableFilters.at(column) == text && st.tableFiltering)
@@ -1150,7 +1175,7 @@ void BlockListModel::setTableFilterOpen(int row, bool open)
 {
     if (row < 0 || row >= m_rows.size())
         return;
-    RowState &st = stateFor(m_rows[row]);
+    RowState &st = stateFor(m_rows.at(row));
     if (st.tableFiltering == open && (open || st.tableFilters.isEmpty()))
         return;
     st.tableFiltering = open;
@@ -1203,7 +1228,7 @@ QString BlockListModel::linkUrlAt(int row, const QString &text, int position) co
     return markdown::InlineRenderer(renderContext(docIndex)).linkUrlAt(text, position);
 }
 
-markdown::RenderContext BlockListModel::renderContext(int docIndex) const
+markdown::RenderContext BlockListModel::baseRenderContext(const QString &path) const
 {
     markdown::RenderContext ctx;
     ctx.today = m_today;
@@ -1211,12 +1236,13 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     ctx.palette = m_palette;
     ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today); // [[2026-10-13]]: "Tue, Oct 13"
     ctx.taskCheckbox = false;
-    ctx.hideTransclusions = true; // the delegate shows them in frames (`transclusions`)
-    ctx.dateLinks = true;         // date, 🔁 and priority chips have a menu (PageController::dateChip)
-    ctx.dayLinks = true;          // so have links to days of the journal ([[2026-10-20]])
-    ctx.journalConfig = vaultConfig();
+    // Embedded pages, sections and blocks are shown in frames: the delegate's (`transclusions`),
+    // nested ones in rows of their transclusion.
+    ctx.hideTransclusions = true;
+    // Date, 🔁 and priority chips have a menu (PageController::dateChip, tokenChipIn: ranges in the
+    // block's body).
+    ctx.dateLinks = true;
     const QPointer<EditorHost> host = m_host;
-    const QString path = m_path;
     if (host) {
         ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {
             if (!host)
@@ -1230,6 +1256,16 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     ctx.resolveLinkPart = linkPartResolver(host, path);
     ctx.pageIcon = pageIconResolver(host, path);
     ctx.taskDependency = taskDependencyResolver(host ? host->taskIndex() : nullptr); // ⛔ id chips
+    return ctx;
+}
+
+markdown::RenderContext BlockListModel::renderContext(int docIndex) const
+{
+    markdown::RenderContext ctx = baseRenderContext(m_path);
+    ctx.dayLinks = true; // links to days of the journal ([[2026-10-20]]) have a menu too
+    ctx.journalConfig = vaultConfig();
+    const QPointer<EditorHost> host = m_host;
+    const QString path = m_path;
     ctx.blockText = [this, host](const QString &id) -> std::optional<QString> {
         for (int k = 0; k < m_doc.count(); ++k) {
             if (m_doc.at(k).blockId == id)
@@ -1275,27 +1311,9 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
 
 markdown::RenderContext BlockListModel::renderContextFor(const QString &path, const QString &content, int line) const
 {
-    markdown::RenderContext ctx;
-    ctx.today = m_today;
-    ctx.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
-    ctx.palette = m_palette;
-    ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today);
-    ctx.taskCheckbox = false;
-    ctx.hideTransclusions = true; // nested embeds get their own rows in a transclusion
-    ctx.dateLinks = true;         // token menus (PageController::tokenChipIn; ranges in the block's body)
+    markdown::RenderContext ctx = baseRenderContext(path);
     const QPointer<EditorHost> host = m_host;
-    ctx.resolveLinkPart = linkPartResolver(host, path);
-    ctx.pageIcon = pageIconResolver(host, path);
-    ctx.taskDependency = taskDependencyResolver(host ? host->taskIndex() : nullptr);
     if (host) {
-        ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {
-            if (!host)
-                return target;
-            const QString resolved = host->resolveLink(target, path);
-            if (resolved.isEmpty())
-                return std::nullopt;
-            return resolved;
-        };
         ctx.blockText = [host](const QString &id) -> std::optional<QString> {
             const QString t = host ? host->blockText(id) : QString();
             if (t.isEmpty())
@@ -1310,7 +1328,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
             return t.simplified();
         };
     }
-    const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
+    const calc::CalcLocale locale = calcLocale();
     auto scope = std::make_shared<std::optional<calc::Scope>>();
     ctx.inlineCalc = [scope, content, line, locale](const QString &expr) -> QString {
         if (!scope->has_value())
@@ -1427,39 +1445,32 @@ void BlockListModel::analyseCalc()
         if (!st.calcTextValid) {
             const QString own = m_doc.blockSource(i);
             st.calcInert = calcInert(own) && calcInert(m_doc.at(i).trailing);
-            st.calcFences = own.contains(u"```") || own.contains(u"~~~");
+            st.calcFences = hasFence(own);
             st.calcTextValid = true;
         }
         anyFences = anyFences || st.calcFences;
     }
-    // Lines as text::splitLines() and the BlockDocument count them ("\n", "\r\n", a lone "\r").
-    const auto lineEnd = [&](qsizetype from) {
-        while (from < all.size() && all[from] != u'\n' && all[from] != u'\r')
-            ++from;
-        return from;
-    };
-    const auto nextLine = [&](qsizetype end) {
-        return end + (end + 1 < all.size() && all[end] == u'\r' && all[end + 1] == u'\n' ? 2 : 1);
-    };
     // Regions whose every line matters to calc::PageCalc, in order, inclusive line ranges: the
     // frontmatter as PageCalc reads it ("---" on the first line up to the first "---" / "..."
     // line) and the calc fences of the body after it; a fence left open runs to the end (End).
     constexpr qsizetype End = std::numeric_limits<qsizetype>::max();
     struct Region {
-        qsizetype first;
-        qsizetype last;
+        qsizetype first = 0;
+        qsizetype last = 0;
     };
     QList<Region> regions;
     qsizetype bodyStart = 0;
-    if (all.first(lineEnd(0)).trimmed() == u"---") {
-        qsizetype n = 1;
-        for (qsizetype at = nextLine(lineEnd(0)); at <= all.size(); at = nextLine(lineEnd(at)), ++n) {
-            const QStringView l = all.sliced(at, lineEnd(at) - at);
+    const QStringView firstLine = all.first(lineEnd(all, 0));
+    if (firstLine.trimmed() == u"---") {
+        for (qsizetype at = nextLine(all, firstLine.size()), n = 1; at <= all.size(); ++n) {
+            const qsizetype end = lineEnd(all, at);
+            const QStringView l = all.sliced(at, end - at);
             if ((l.startsWith(u"---") || l.startsWith(u"...")) && l.sliced(3).trimmed().isEmpty()) {
                 regions.append({0, n});
                 bodyStart = n + 1;
                 break;
             }
+            at = nextLine(all, end);
         }
     }
     // The calc fences (calc::findCalcBlocks, the fences PageCalc reads) depend only on the lines
@@ -1474,20 +1485,19 @@ void BlockListModel::analyseCalc()
             const QString own = m_doc.blockSource(i);
             qsizetype n = m_doc.at(i).line;
             for (qsizetype at = 0; at <= own.size(); ++n) {
-                qsizetype end = at;
-                while (end < own.size() && own[end] != u'\n' && own[end] != u'\r')
-                    ++end;
-                const QStringView l = n == 0 ? all.first(lineEnd(0)) : QStringView(own).sliced(at, end - at);
-                if (n >= bodyStart && (l.contains(u"```") || l.contains(u"~~~"))) {
+                const qsizetype end = lineEnd(own, at);
+                const QStringView l = n == 0 ? firstLine : QStringView(own).sliced(at, end - at);
+                if (n >= bodyStart && hasFence(l)) {
                     if (!fenceLines.isEmpty())
                         fenceText += u'\n';
                     fenceText += l;
                     fenceLines.append(n);
                 }
-                at = end + (end + 1 < own.size() && own[end] == u'\r' && own[end + 1] == u'\n' ? 2 : 1);
+                at = nextLine(own, end);
             }
         }
-        for (const calc::CalcBlock &b : calc::findCalcBlocks(fenceText))
+        const QList<calc::CalcBlock> blocks = calc::findCalcBlocks(fenceText);
+        for (const calc::CalcBlock &b : blocks)
             regions.append({fenceLines.at(b.startLine), b.closed ? fenceLines.at(b.endLine) : End});
     }
     // Every block (its own lines and the blank lines after it) against the regions.
@@ -1530,10 +1540,12 @@ void BlockListModel::ensureEmbeds(int row) const
     // ".excalidraw" in their name): their drawings, after the attachments.
     QSet<qsizetype> pageDrawings;
     if (m_host && e.body.contains(u"![["_s)) {
-        for (const Transclusion &t : transclusionsOf(e.body)) {
+        const QList<Transclusion> pages = transclusionsOf(e.body);
+        for (const Transclusion &t : pages) {
             if (!drawingPageOf(t).isEmpty()) {
                 pageDrawings.insert(embeds.size());
-                embeds.append({t.target, t.display, false, false, {}});
+                embeds.append(
+                        Embed{.target = t.target, .alt = t.display, .image = false, .web = false, .fragment = {}});
             }
         }
     }
@@ -1659,18 +1671,20 @@ QString BlockListModel::drawingPageOf(const Transclusion &t) const
 
 void BlockListModel::attachmentChanged(const QString &path)
 {
+    invalidateEmbeds([&path](const QVariantMap &embed) { return embed.value(u"path"_s).toString() == path; });
+}
+
+void BlockListModel::invalidateEmbeds(const std::function<bool(const QVariantMap &)> &shows)
+{
+    const auto showsOne = [&shows](const QVariant &embed) { return shows(embed.toMap()); };
     QList<int> rows;
     for (int row = 0; row < m_rows.size(); ++row) {
-        RowState &st = stateFor(m_rows[row]);
-        if (!st.embedsValid)
-            continue; // computed when asked for
-        const bool shows = std::any_of(st.embeds.cbegin(), st.embeds.cend(), [&path](const QVariant &v) {
-            return v.toMap().value(u"path"_s).toString() == path;
-        });
-        if (!shows)
-            continue;
-        st.embedsValid = false;
-        rows.append(row);
+        RowState &st = stateFor(m_rows.at(row));
+        // (Embeds not computed yet are computed when asked for, with the new state.)
+        if (st.embedsValid && std::ranges::any_of(std::as_const(st.embeds), showsOne)) {
+            st.embedsValid = false;
+            rows.append(row);
+        }
     }
     emitRowsChanged(rows, {EmbedsRole});
 }
@@ -1712,25 +1726,10 @@ QVariantMap BlockListModel::webEmbed(const Embed &em) const
 
 void BlockListModel::webPictureChanged(const QString &url)
 {
-    QList<int> rows;
-    for (int row = 0; row < m_rows.size(); ++row) {
-        const int i = docIndexOfRow(row);
-        if (i < 0 || !m_doc.at(i).body.contains(u"!["))
-            continue;
-        RowState &st = stateFor(m_rows[row]);
-        if (!st.embedsValid)
-            continue; // computed when asked for, with the new state
-        // By the pictures the row shows (their targets as parsed: `a\_b.png` names `a_b.png`).
-        const bool names = std::any_of(st.embeds.cbegin(), st.embeds.cend(), [&url](const QVariant &v) {
-            const QVariantMap em = v.toMap();
-            return em.value(u"web"_s).toBool() && (url.isEmpty() || em.value(u"target"_s).toString() == url);
-        });
-        if (!names)
-            continue;
-        st.embedsValid = false;
-        rows.append(row);
-    }
-    emitRowsChanged(rows, {EmbedsRole});
+    // By the pictures the rows show (their targets as parsed: `a\_b.png` names `a_b.png`).
+    invalidateEmbeds([&url](const QVariantMap &embed) {
+        return embed.value(u"web"_s).toBool() && (url.isEmpty() || embed.value(u"target"_s).toString() == url);
+    });
 }
 
 QVariant BlockListModel::data(const QModelIndex &idx, int role) const
@@ -1827,17 +1826,18 @@ QVariantMap BlockListModel::get(int row) const
 
 QString BlockListModel::viewAt(int row) const
 {
-    return docIndexOfRow(row) < 0 ? QString() : data(index(row), ViewRole).toString();
+    return docIndexOfRow(row) < 0 ? QString() : viewName(cachedShape(row).view);
 }
 
 QString BlockListModel::kindAt(int row) const
 {
-    return docIndexOfRow(row) < 0 ? QString() : data(index(row), KindRole).toString();
+    const int i = docIndexOfRow(row);
+    return i < 0 ? QString() : kindName(m_doc.at(i).kind);
 }
 
 QString BlockListModel::taskStatusAt(int row) const
 {
-    return docIndexOfRow(row) < 0 ? QString() : data(index(row), TaskStatusRole).toString();
+    return docIndexOfRow(row) < 0 ? QString() : taskStatusName(cachedShape(row).task);
 }
 
 // --- View state ------------------------------------------------------------------------------
@@ -1958,10 +1958,10 @@ void BlockListModel::setEnglish(bool english)
         return;
     m_english = english;
     calcContentChanged(); // numbers and value words are read in the page's language
-    for (auto it = m_state.begin(); it != m_state.end(); ++it) {
-        it->calcResults.clear();
-        it->tableData.clear();
-        it->chartValid = false;
+    for (RowState &st : m_state) {
+        st.calcResults.clear();
+        st.tableData.clear();
+        st.chartValid = false;
     }
     invalidateRendering();
     refresh(true);
@@ -1989,82 +1989,67 @@ void BlockListModel::ensureProperties(int row) const
     st.propertiesInfo.clear();
     if (cachedShape(row).view != BlockView::Frontmatter)
         return;
-    RowState &state = stateFor(e.uid); // (cachedShape() may have created other states)
-    const QVariantList properties = frontmatterProperties(e.body);
-    state.propertiesInfo = frontmatterPropertiesInfo(e.body);
+    st.propertiesInfo = frontmatterPropertiesInfo(e.body);
     // Text values and list items are inline Markdown shown as rich text: links and tags work,
     // everything else is escaped (rendered like table cells).
     std::optional<markdown::InlineRenderer> renderer;
     const auto render = [&](const QString &text) -> QString {
-        if (text.trimmed().isEmpty())
+        if (QStringView(text).trimmed().isEmpty())
             return {};
         if (!renderer) {
             markdown::RenderContext ctx = renderContext(i);
             ctx.hideTransclusions = false;
             ctx.dateLinks = false;
             ctx.dayLinks = false;
-            renderer.emplace(ctx);
+            renderer.emplace(std::move(ctx));
         }
         return renderer->renderBlock(text, BlockKind::Paragraph);
     };
+    const QVariantList properties = frontmatterProperties(e.body);
     QVariantList out;
+    out.reserve(properties.size());
     for (const QVariant &v : properties) {
         QVariantMap p = v.toMap();
         const QString type = p.value(u"type"_s).toString();
-        if (type == u"text")
-            p.insert(u"html"_s, render(p.value(u"value"_s).toString()));
-        else
-            p.insert(u"html"_s, markdown::InlineRenderer::escape(p.value(u"value"_s).toString()));
+        const QString value = p.value(u"value"_s).toString();
+        p.insert(u"html"_s, type == u"text" ? render(value) : markdown::InlineRenderer::escape(value));
         if (type == u"list") {
+            const QStringList items = p.value(u"items"_s).toStringList();
             QStringList itemsHtml;
-            for (const QString &item : p.value(u"items"_s).toStringList())
+            itemsHtml.reserve(items.size());
+            for (const QString &item : items)
                 itemsHtml.append(render(item));
             p.insert(u"itemsHtml"_s, itemsHtml);
         }
         out.append(p);
     }
-    stateFor(e.uid).properties = out;
+    st.properties = std::move(out);
 }
 
 void BlockListModel::invalidateRendering()
 {
     m_config.reset(); // the journal file format may have changed (links to days)
-    for (auto it = m_state.begin(); it != m_state.end(); ++it) {
-        it->htmlValid = false;
-        it->embedsValid = false;
-        it->transclusionsValid = false;
-        it->propertiesValid = false; // links in values resolve differently
-        it->cellHtml.clear();
+    for (RowState &st : m_state) {
+        st.htmlValid = false;
+        st.embedsValid = false;
+        st.transclusionsValid = false;
+        st.propertiesValid = false; // links in values resolve differently
+        st.cellHtml.clear();
     }
-    // Table cells are rendered too (links resolve differently, other colours).
+    // Table cells are rendered too (links resolve differently, other colours); charts: the index
+    // may give a query other results, the language its messages.
     QList<int> tableRows;
-    for (int row = 0; row < m_rows.size(); ++row) {
-        const int i = docIndexOfRow(row);
-        if (i < 0 || cachedShape(row).view != BlockView::Table)
-            continue;
-        RowState &st = stateFor(m_rows[row]);
-        QVariantMap table = computeTableData(i);
-        st.resultsValid = true;
-        st.resultsEpoch = m_calcEpoch;
-        if (table != st.tableData) {
-            st.tableData = table;
-            tableRows.append(row);
-        }
-    }
-    // Charts: the index may give a query other results; the language its messages.
     QList<int> chartRows;
     for (int row = 0; row < m_rows.size(); ++row) {
         const int i = docIndexOfRow(row);
-        if (i < 0 || cachedShape(row).view != BlockView::Chart)
+        if (i < 0)
             continue;
-        RowState &st = stateFor(m_rows[row]);
-        QVariantMap chart = computeChartData(i);
-        st.chartValid = true;
-        st.chartSource = cachedShape(row).editText;
-        if (chart != st.chartData) {
-            st.chartData = chart;
+        const BlockShape &shape = cachedShape(row);
+        RowState &st = stateFor(m_rows.at(row));
+        if (shape.view == BlockView::Table && updateTable(st, i))
+            tableRows.append(row);
+        else if (shape.view == BlockView::Chart && updateChart(st, i, shape.editText))
             chartRows.append(row);
-        }
     }
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1),

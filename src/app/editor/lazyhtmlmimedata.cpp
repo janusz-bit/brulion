@@ -36,9 +36,7 @@ QStringList LazyHtmlMimeData::formats() const
 
 bool LazyHtmlMimeData::hasFormat(const QString &mimeType) const
 {
-    if (mimeType == HtmlMime && m_render)
-        return true;
-    return QMimeData::hasFormat(mimeType);
+    return (m_render && mimeType == HtmlMime) || QMimeData::hasFormat(mimeType);
 }
 
 void LazyHtmlMimeData::materialize() const

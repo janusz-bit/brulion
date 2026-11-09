@@ -30,10 +30,8 @@ QVariant BlockRowData::value(Role role, const char *name, void (BlockRowData::*c
     const QMetaProperty property = meta->property(index);
     if (!(m_connected & (1 << role))) {
         m_connected |= 1 << role;
-        if (property.hasNotifySignal()) {
-            auto *self = const_cast<BlockRowData *>(this);
-            connect(object, property.notifySignal(), self, QMetaMethod::fromSignal(changed));
-        }
+        if (property.hasNotifySignal())
+            connect(object, property.notifySignal(), this, QMetaMethod::fromSignal(changed));
     }
     return property.read(object);
 }
