@@ -2,15 +2,12 @@
 
 #include "sync/util_p.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace brulion::sync::detail {
 
-JobPool::JobPool(int limit, QObject *context)
-    : m_context(context)
-    , m_limit(qMax(1, limit))
-{
-}
+JobPool::JobPool(int limit, QObject *context) : m_context(context), m_limit(std::max(1, limit)) { }
 
 void JobPool::add(Job job)
 {

@@ -16,6 +16,7 @@
 #include <QUrl>
 
 #include <functional>
+#include <utility>
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -25,7 +26,7 @@ namespace brulion::sync {
 struct HttpRequest {
     QByteArray method; ///< "GET", "PUT", "PROPFIND", "MKCOL", …
     QUrl url;
-    QList<QPair<QByteArray, QByteArray>> headers;
+    QList<std::pair<QByteArray, QByteArray>> headers;
     QByteArray body;
     /// Time limit in ms for the whole exchange; 0 = none. Transports that support it abort
     /// the request when it expires; WebDavClient enforces it independently as well.

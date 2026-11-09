@@ -221,25 +221,15 @@ QList<CommPart> diffComm(const QStringList &a, const QStringList &b, qint64 budg
 {
     QList<CommPart> out;
     qsizetype pa = 0;
-    for (const DiffHunk &h : diffLines(a, b, budget)) {
-        if (h.aStart > pa) {
-            CommPart part;
-            part.common = true;
-            part.commonLines = a.mid(pa, h.aStart - pa);
-            out.append(part);
-        }
-        CommPart part;
-        part.a = a.mid(h.aStart, h.aLength);
-        part.b = b.mid(h.bStart, h.bLength);
-        out.append(part);
+    const QList<DiffHunk> hunks = diffLines(a, b, budget);
+    for (const DiffHunk &h : hunks) {
+        if (h.aStart > pa)
+            out.append(CommPart{.common = true, .commonLines = a.mid(pa, h.aStart - pa)});
+        out.append(CommPart{.a = a.mid(h.aStart, h.aLength), .b = b.mid(h.bStart, h.bLength)});
         pa = h.aStart + h.aLength;
     }
-    if (pa < a.size()) {
-        CommPart part;
-        part.common = true;
-        part.commonLines = a.mid(pa);
-        out.append(part);
-    }
+    if (pa < a.size())
+        out.append(CommPart{.common = true, .commonLines = a.mid(pa)});
     return out;
 }
 
@@ -251,7 +241,8 @@ QList<Diff3Region> diff3Regions(const QStringList &a, const QStringList &o, cons
     const Ids ib = intern(b, ids);
     const auto sideHunks = [&](bool fromA, const Ids &side, qsizetype length) {
         std::vector<SideHunk> out;
-        for (const DiffHunk &h : hunksFromMatches(matchIds(io, side, budget), o.size(), length))
+        const QList<DiffHunk> diff = hunksFromMatches(matchIds(io, side, budget), o.size(), length);
+        for (const DiffHunk &h : diff)
             out.push_back(SideHunk{fromA, h.aStart, h.aLength, h.bStart, h.bLength});
         return out;
     };
@@ -264,12 +255,9 @@ QList<Diff3Region> diff3Regions(const QStringList &a, const QStringList &o, cons
     QList<Diff3Region> regions;
     QStringList okBuffer;
     const auto flushOk = [&] {
-        if (!okBuffer.isEmpty()) {
-            Diff3Region region;
-            region.ok = std::move(okBuffer);
-            regions.append(std::move(region));
-        }
-        okBuffer = QStringList();
+        if (!okBuffer.isEmpty())
+            regions.append(Diff3Region{.ok = std::move(okBuffer)});
+        okBuffer.clear();
     };
     qsizetype current = 0;
     // Running (side index - base index) offsets after the hunks processed so far.
@@ -302,12 +290,8 @@ QList<Diff3Region> diff3Regions(const QStringList &a, const QStringList &o, cons
                 okBuffer += aContent;
             } else {
                 flushOk();
-                Diff3Region region;
-                region.conflict = true;
-                region.a = aContent;
-                region.o = slice(o, regionStart, regionEnd);
-                region.b = bContent;
-                regions.append(std::move(region));
+                regions.append(Diff3Region{
+                        .conflict = true, .a = aContent, .o = slice(o, regionStart, regionEnd), .b = bContent});
             }
         }
         current = regionEnd;

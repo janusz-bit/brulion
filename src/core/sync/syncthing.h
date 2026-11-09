@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QString>
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 
@@ -100,7 +101,7 @@ public:
     /// Home folder used to expand "~" in folder paths (else guessed from the path searched for).
     void setHome(const QString &home) { m_home = home; }
     /// Time limit per request in ms (default 10 000).
-    void setTimeout(int msec) { m_timeoutMs = qMax(0, msec); }
+    void setTimeout(int msec) { m_timeoutMs = std::max(0, msec); }
 
     /// True when the daemon answers /rest/system/ping with this API key.
     void ping(std::function<void(bool)> done);

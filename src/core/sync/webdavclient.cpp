@@ -13,14 +13,13 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::sync {
 
 namespace {
-
-using Header = QPair<QByteArray, QByteArray>;
 
 /// Downloads of unknown size get this many times the base timeout.
 constexpr int kUnknownSizeFactor = 10;
@@ -51,6 +50,15 @@ void stopPool(const std::weak_ptr<detail::JobPool> &pool)
 RemoteEntry entryFor(const VaultPath &path, const DavResource &res)
 {
     return RemoteEntry{path, res.isCollection, res.etag, res.mtime, res.isCollection ? 0 : res.size, res.fileId};
+}
+
+/// The normalised ETag of an answer: the `first` header, else `second` ("" when neither is sent).
+QString etagOf(const HttpResponse &response, QByteArrayView first, QByteArrayView second)
+{
+    QByteArray etag = response.header(first);
+    if (etag.isEmpty())
+        etag = response.header(second);
+    return normalizeEtag(QString::fromUtf8(etag));
 }
 
 } // namespace
@@ -90,17 +98,17 @@ QString WebDavClient::identity() const
 
 void WebDavClient::setTimeout(int msec)
 {
-    m_timeoutMs = qMax(0, msec);
+    m_timeoutMs = std::max(0, msec);
 }
 
 void WebDavClient::setMinBytesPerSecond(qint64 bytesPerSecond)
 {
-    m_minBytesPerSecond = qMax<qint64>(1, bytesPerSecond);
+    m_minBytesPerSecond = std::max<qint64>(1, bytesPerSecond);
 }
 
 void WebDavClient::setListConcurrency(int count)
 {
-    m_listConcurrency = qMax(1, count);
+    m_listConcurrency = std::max(1, count);
 }
 
 void WebDavClient::setLogTag(const QString &tag)
@@ -155,94 +163,90 @@ void WebDavClient::list(const ListOptions &options, ListCallback done)
     run->pool = pool;
     m_knownDirs.clear();
     m_remoteNames.clear();
+    listDir(run, QString(), true);
+    pool->start([this, run] {
+        ListResult result;
+        result.error = run->error;
+        if (!result.error.isError()) {
+            result.entries = run->entries;
+            std::ranges::sort(result.entries, {}, &RemoteEntry::path);
+        }
+        detail::post(this, [callback = std::move(run->done), result = std::move(result)] { callback(result); });
+    });
+}
 
-    // Adds the job listing one folder (recursively through the pool).
-    auto listFolder = std::make_shared<std::function<void(const QString &, bool)>>();
-    *listFolder = [this, run, weakList = std::weak_ptr(listFolder)](const QString &raw, bool isBase) {
-        const std::shared_ptr<detail::JobPool> folderPool = run->pool.lock();
-        if (!folderPool)
+void WebDavClient::listDir(const std::shared_ptr<ListRun> &run, const QString &raw, bool isBase)
+{
+    const std::shared_ptr<detail::JobPool> pool = run->pool.lock();
+    if (!pool)
+        return;
+    pool->add([this, run, raw, isBase](const detail::JobPool::Done &jobDone) {
+        if (run->error.isError()) {
+            jobDone();
             return;
-        folderPool->add([this, run, raw, isBase, weakList](detail::JobPool::Done jobDone) {
-            if (run->error.isError()) {
-                jobDone();
-                return;
-            }
-            if (run->options.cancelled && run->options.cancelled()) {
-                run->error = WebDavError::make(WebDavErrorCode::Cancelled, u"Listing cancelled"_s, m_baseUrl);
-                stopPool(run->pool);
-                jobDone();
-                return;
-            }
-            propfindRaw(raw, 1, [this, run, raw, isBase, weakList, jobDone](const WebDavError &error,
-                                                                             const QList<DavResource> &resources) {
-                if (error.isError()) {
-                    // A sub-folder deleted while we were listing: skip it.
-                    if (!(!isBase && error.is(WebDavErrorCode::NotFound))) {
+        }
+        if (run->options.cancelled && run->options.cancelled()) {
+            run->error = WebDavError::make(WebDavErrorCode::Cancelled, u"Listing cancelled"_s, m_baseUrl);
+            stopPool(run->pool);
+            jobDone();
+            return;
+        }
+        propfindRaw(
+                raw, 1,
+                [this, run, raw, isBase, jobDone](const WebDavError &error, const QList<DavResource> &resources) {
+                    if (!error.isError()) {
+                        addListing(run, raw, resources);
+                    } else if (isBase
+                               || !error.is(WebDavErrorCode::NotFound)) { // a sub-folder deleted meanwhile is skipped
                         if (!run->error.isError())
                             run->error = error;
                         stopPool(run->pool);
                     }
                     jobDone();
-                    return;
-                }
-                const VaultPath folder = paths::normalize(raw);
-                m_knownDirs.insert(folder);
-                ++run->foldersDone;
-                const QString requestUrl = joinUrl(m_baseUrl, raw, true);
-                const auto recurse = weakList.lock();
-                for (const DavResource &res : resources) {
-                    const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
-                    if (!rawRel)
-                        continue;
-                    const VaultPath path = paths::normalize(*rawRel);
-                    if (path.isEmpty() || path == folder || run->seen.contains(path))
-                        continue;
-                    run->seen.insert(path);
-                    if (*rawRel != path)
-                        m_remoteNames.insert(path, *rawRel);
-                    run->entries.append(entryFor(path, res));
-                    if (res.isCollection) {
-                        m_knownDirs.insert(path);
-                        if (recurse && !(run->options.skipDir && run->options.skipDir(path))) {
-                            ++run->foldersKnown;
-                            (*recurse)(*rawRel, false);
-                        }
-                    }
-                }
-                if (run->options.onProgress)
-                    run->options.onProgress(run->foldersDone, run->foldersKnown, int(run->entries.size()));
-                jobDone();
-            });
-        });
-    };
-    (*listFolder)(QString(), true);
-    pool->start([this, run, listFolder]() mutable {
-        ListResult result;
-        result.error = run->error;
-        if (!result.error.isError()) {
-            result.entries = run->entries;
-            std::ranges::sort(result.entries,
-                              [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
-        }
-        ListCallback callback = std::move(run->done);
-        listFolder.reset();
-        detail::post(this, [callback = std::move(callback), result = std::move(result)] { callback(result); });
+                });
     });
+}
+
+void WebDavClient::addListing(const std::shared_ptr<ListRun> &run, const QString &raw,
+                              const QList<DavResource> &resources)
+{
+    const VaultPath folder = paths::normalize(raw);
+    m_knownDirs.insert(folder);
+    ++run->foldersDone;
+    const QString requestUrl = joinUrl(m_baseUrl, raw, true);
+    for (const DavResource &res : resources) {
+        const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
+        if (!rawRel)
+            continue;
+        const VaultPath path = paths::normalize(*rawRel);
+        if (path.isEmpty() || path == folder || run->seen.contains(path))
+            continue;
+        run->seen.insert(path);
+        if (*rawRel != path)
+            m_remoteNames.insert(path, *rawRel);
+        run->entries.append(entryFor(path, res));
+        if (!res.isCollection)
+            continue;
+        m_knownDirs.insert(path);
+        if (!(run->options.skipDir && run->options.skipDir(path))) {
+            ++run->foldersKnown;
+            listDir(run, *rawRel, false);
+        }
+    }
+    if (run->options.onProgress)
+        run->options.onProgress(run->foldersDone, run->foldersKnown, int(run->entries.size()));
 }
 
 void WebDavClient::stat(const VaultPath &path, StatCallback done)
 {
     const VaultPath p = paths::normalize(path);
     propfind(p, 0, [p, done = std::move(done)](const WebDavError &error, const QList<DavResource> &resources) {
-        if (error.is(WebDavErrorCode::NotFound) || (!error.isError() && resources.isEmpty())) {
-            done(StatResult{});
-            return;
-        }
-        if (error.isError()) {
+        if (error.isError() && !error.is(WebDavErrorCode::NotFound))
             done(StatResult{std::nullopt, error});
-            return;
-        }
-        done(StatResult{entryFor(p, resources.first()), {}});
+        else if (resources.isEmpty()) // NotFound (propfindRaw passes no resources), or none listed
+            done(StatResult{});
+        else
+            done(StatResult{entryFor(p, resources.first()), {}});
     });
 }
 
@@ -255,10 +259,7 @@ void WebDavClient::get(const VaultPath &path, const GetOptions &options, GetCall
             done(GetResult{{}, {}, error});
             return;
         }
-        QByteArray etag = response.header("etag");
-        if (etag.isEmpty())
-            etag = response.header("oc-etag");
-        done(GetResult{response.body, normalizeEtag(QString::fromUtf8(etag)), {}});
+        done(GetResult{response.body, etagOf(response, "etag", "oc-etag"), {}});
     });
 }
 
@@ -276,10 +277,7 @@ void WebDavClient::put(const VaultPath &path, const QByteArray &data, const PutO
             (*callback)(PutResult{{}, error});
             return;
         }
-        QByteArray etag = response.header("oc-etag");
-        if (etag.isEmpty())
-            etag = response.header("etag");
-        (*callback)(PutResult{normalizeEtag(QString::fromUtf8(etag)), {}});
+        (*callback)(PutResult{etagOf(response, "oc-etag", "etag"), {}});
     };
     ensureParents(p, false, [this, p, data, options, finish, callback](const WebDavError &error) {
         if (error.isError()) {
@@ -312,9 +310,9 @@ void WebDavClient::remove(const VaultPath &path, const RemoveOptions &options, D
         return;
     }
     const QString url = urlFor(p);
-    QList<QPair<QByteArray, QByteArray>> headers;
+    Headers headers;
     if (!options.ifMatch.isEmpty())
-        headers.append(Header{"If-Match", quoteEtag(options.ifMatch).toUtf8()});
+        headers.emplaceBack("If-Match", quoteEtag(options.ifMatch).toUtf8());
     request("DELETE", url, headers, {}, m_timeoutMs, [this, p, url, done = std::move(done)](const HttpResponse &response) {
         if (response.status == 404) {
             done({});
@@ -351,7 +349,7 @@ void WebDavClient::move(const VaultPath &from, const VaultPath &to, const MoveOp
         const QString url = urlFor(p, options.folder);
         const QString spelledTo = serverName(q);
         const QString destination = joinUrl(m_baseUrl, spelledTo, options.folder);
-        const QList<QPair<QByteArray, QByteArray>> headers = {
+        const Headers headers = {
                 {"Destination", destination.toUtf8()},
                 {"Overwrite", options.overwrite ? "T" : "F"},
         };
@@ -376,32 +374,32 @@ void WebDavClient::listFolder(const VaultPath &path, ListCallback done)
             [this, folder, raw, done = std::move(done)](const WebDavError &error, const QList<DavResource> &resources) {
                 ListResult result;
                 result.error = error;
-                if (!error.isError()) {
-                    // Callers decide from this answer that a folder is empty (and DELETE it with
-                    // everything in it): an entry that cannot be named as a child of the folder
-                    // (an href elsewhere, a name such as "\" that collapses onto the folder) is not
-                    // skipped but fails the listing, and so does a second entry for the folder.
-                    const QString requestUrl = joinUrl(m_baseUrl, raw, true);
-                    bool self = false;
-                    for (const DavResource &res : resources) {
-                        const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
-                        const VaultPath child = rawRel ? paths::normalize(*rawRel) : QString();
-                        if (rawRel && child == folder && !std::exchange(self, true))
-                            continue; // the folder itself
-                        const bool isChild =
-                                rawRel && child != folder && (folder.isEmpty() || child.startsWith(folder + u'/'));
-                        if (!isChild) {
-                            const QString message = u"PROPFIND %1: an entry that is not a child of the folder (%2)"_s;
-                            result.error = WebDavError::make(WebDavErrorCode::Parse, message.arg(folder, res.href),
-                                                             requestUrl);
-                            result.entries.clear();
-                            break;
-                        }
-                        result.entries.append(entryFor(child, res));
-                    }
-                    std::ranges::sort(result.entries,
-                                      [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
+                if (error.isError()) {
+                    done(result);
+                    return;
                 }
+                // Callers decide from this answer that a folder is empty (and DELETE it with
+                // everything in it): an entry that cannot be named as a child of the folder
+                // (an href elsewhere, a name such as "\" that collapses onto the folder) is not
+                // skipped but fails the listing, and so does a second entry for the folder.
+                const QString requestUrl = joinUrl(m_baseUrl, raw, true);
+                const QString childPrefix = folder.isEmpty() ? QString() : folder + u'/';
+                bool self = false;
+                for (const DavResource &res : resources) {
+                    const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
+                    const VaultPath child = rawRel ? paths::normalize(*rawRel) : QString();
+                    if (rawRel && child == folder && !std::exchange(self, true))
+                        continue; // the folder itself
+                    if (!rawRel || child == folder || !child.startsWith(childPrefix)) {
+                        const QString message = u"PROPFIND %1: an entry that is not a child of the folder (%2)"_s;
+                        result.error =
+                                WebDavError::make(WebDavErrorCode::Parse, message.arg(folder, res.href), requestUrl);
+                        result.entries.clear();
+                        break;
+                    }
+                    result.entries.append(entryFor(child, res));
+                }
+                std::ranges::sort(result.entries, {}, &RemoteEntry::path);
                 done(result);
             });
 }
@@ -411,11 +409,9 @@ void WebDavClient::mkcol(const VaultPath &path, DoneCallback done)
     const VaultPath p = paths::normalize(path);
     const QString url = urlFor(p, true);
     request("MKCOL", url, {}, {}, m_timeoutMs, [this, p, url, done = std::move(done)](const HttpResponse &response) {
-        if (response.status != 405) {
-            if (const WebDavError error = check(response, "MKCOL", url, {200, 201}); error.isError()) {
-                done(error);
-                return;
-            }
+        if (const WebDavError error = mkcolResult(response, url); error.isError()) {
+            done(error);
+            return;
         }
         m_knownDirs.insert(p);
         done({});
@@ -472,21 +468,21 @@ std::optional<QString> WebDavClient::relativeRaw(const QString &href, const QStr
 int WebDavClient::unknownSizeTimeout() const
 {
     const qint64 ms = qint64(m_timeoutMs) * kUnknownSizeFactor;
-    return static_cast<int>(qMin<qint64>(ms, std::numeric_limits<int>::max()));
+    return static_cast<int>(std::min<qint64>(ms, std::numeric_limits<int>::max()));
 }
 
 int WebDavClient::timeoutFor(qint64 bytes) const
 {
     if (m_timeoutMs <= 0)
         return 0;
-    const double extra = std::ceil(static_cast<double>(qMax<qint64>(0, bytes)) * 1000.0
+    const double extra = std::ceil(static_cast<double>(std::max<qint64>(0, bytes)) * 1000.0
                                    / static_cast<double>(m_minBytesPerSecond));
     const double total = static_cast<double>(m_timeoutMs) + extra;
     return total >= std::numeric_limits<int>::max() ? std::numeric_limits<int>::max() : static_cast<int>(total);
 }
 
-void WebDavClient::request(const QByteArray &method, const QString &url, QList<QPair<QByteArray, QByteArray>> headers,
-                           const QByteArray &body, int timeoutMs, ResponseCallback done)
+void WebDavClient::request(const QByteArray &method, const QString &url, const Headers &headers, const QByteArray &body,
+                           int timeoutMs, ResponseCallback done)
 {
     HttpRequest req;
     req.method = method;
@@ -498,8 +494,7 @@ void WebDavClient::request(const QByteArray &method, const QString &url, QList<Q
     const quint64 id = ++m_nextRequestId;
     if (m_inFlight.isEmpty())
         m_lastActivity.start(); // idle time counts from the first open request
-    const QString shown = relativePath(req.url);
-    m_inFlight.insert(id, QString::fromLatin1(method) + u' ' + (shown.isEmpty() ? u"(base)"_s : shown));
+    m_inFlight.insert(id, shownRequest(method, req.url));
     req.onProgress = [self = QPointer<WebDavClient>(this)](qint64, qint64) {
         if (self)
             self->m_lastActivity.start();
@@ -512,11 +507,21 @@ void WebDavClient::request(const QByteArray &method, const QString &url, QList<Q
     });
 }
 
+QString WebDavClient::shownRequest(const QByteArray &method, const QUrl &url) const
+{
+    const QString path = relativePath(url);
+    return QString::fromLatin1(method) + u' ' + (path.isEmpty() ? u"(base)"_s : path);
+}
+
+QString WebDavClient::logPrefix() const
+{
+    return m_logTag.isEmpty() ? QString() : m_logTag + u' ';
+}
+
 void WebDavClient::logExchange(const HttpExchange &exchange) const
 {
-    const QString prefix = m_logTag.isEmpty() ? QString() : m_logTag + u' ';
-    const QString path = relativePath(exchange.url);
-    const QString what = QString::fromLatin1(exchange.method) + u' ' + (path.isEmpty() ? u"(base)"_s : path);
+    const QString prefix = logPrefix();
+    const QString what = shownRequest(exchange.method, exchange.url);
     if (exchange.status == 0) {
         if (exchange.timedOut) {
             qCWarning(detail::lcNet).noquote()
@@ -561,12 +566,17 @@ WebDavError WebDavClient::check(const HttpResponse &response, const QByteArray &
                                    url);
 }
 
+WebDavError WebDavClient::mkcolResult(const HttpResponse &response, const QString &url) const
+{
+    return response.status == 405 ? WebDavError() : check(response, "MKCOL", url, {200, 201});
+}
+
 void WebDavClient::propfindRaw(const QString &rawPath, int depth, PropfindCallback done)
 {
     const QString url = joinUrl(m_baseUrl, rawPath, true);
-    const QList<QPair<QByteArray, QByteArray>> headers = {
-        {"Depth", QByteArray::number(depth)},
-        {"Content-Type", "application/xml; charset=utf-8"},
+    const Headers headers = {
+            {"Depth", QByteArray::number(depth)},
+            {"Content-Type", "application/xml; charset=utf-8"},
     };
     request("PROPFIND", url, headers, propfindBody(), m_timeoutMs,
             [this, url, done = std::move(done)](const HttpResponse &response) {
@@ -576,12 +586,11 @@ void WebDavClient::propfindRaw(const QString &rawPath, int depth, PropfindCallba
                 }
                 const MultistatusResult parsed = parseMultistatus(response.body);
                 if (!parsed.ok()) {
-                    const QString path = relativePath(QUrl(url, QUrl::TolerantMode));
                     qCInfo(detail::lcNet).noquote()
-                            << u"%1PROPFIND %2 -> %3 %4: not a WebDAV answer (a login page? check the server address)"_s
-                                       .arg(m_logTag.isEmpty() ? QString() : m_logTag + u' ',
-                                            path.isEmpty() ? u"(base)"_s : path, QString::number(response.status),
-                                            QString::fromLatin1(response.header("content-type").left(60)));
+                            << u"%1%2 -> %3 %4: not a WebDAV answer (a login page? check the server address)"_s.arg(
+                                       logPrefix(), shownRequest("PROPFIND", QUrl(url, QUrl::TolerantMode)),
+                                       QString::number(response.status),
+                                       QString::fromLatin1(response.header("content-type").left(60)));
                     done(WebDavError{WebDavErrorCode::Parse, response.status, parsed.error, url}, {});
                     return;
                 }
@@ -597,13 +606,13 @@ void WebDavClient::propfind(const VaultPath &path, int depth, PropfindCallback d
 void WebDavClient::sendPut(const VaultPath &path, const QByteArray &data, const PutOptions &options,
                            ResponseCallback done)
 {
-    QList<QPair<QByteArray, QByteArray>> headers = {{"Content-Type", "application/octet-stream"}};
+    Headers headers = {{"Content-Type", "application/octet-stream"}};
     if (!options.ifMatch.isEmpty())
-        headers.append(Header{"If-Match", quoteEtag(options.ifMatch).toUtf8()});
+        headers.emplaceBack("If-Match", quoteEtag(options.ifMatch).toUtf8());
     if (options.ifNoneMatch)
-        headers.append(Header{"If-None-Match", "*"});
+        headers.emplaceBack("If-None-Match", "*");
     if (options.mtime)
-        headers.append(Header{"X-OC-MTime", QByteArray::number(static_cast<qint64>(std::floor(*options.mtime / 1000.0)))});
+        headers.emplaceBack("X-OC-MTime", QByteArray::number(static_cast<qint64>(std::floor(*options.mtime / 1000.0))));
     request("PUT", urlFor(path), headers, data, timeoutFor(data.size()), std::move(done));
 }
 
@@ -634,11 +643,9 @@ void WebDavClient::ensureParentsFrom(const QStringList &segments, int index, QSt
                     ensureParents(path, true, done);
                     return;
                 }
-                if (response.status != 405) { // 405: exists already
-                    if (const WebDavError error = check(response, "MKCOL", url, {200, 201}); error.isError()) {
-                        done(error);
-                        return;
-                    }
+                if (const WebDavError error = mkcolResult(response, url); error.isError()) {
+                    done(error);
+                    return;
                 }
                 m_knownDirs.insert(dir);
                 ensureParentsFrom(segments, index + 1, dir, force, path, done);
@@ -647,26 +654,24 @@ void WebDavClient::ensureParentsFrom(const QStringList &segments, int index, QSt
 
 void WebDavClient::mkcolUrl(const QString &url, int depth, DoneCallback done)
 {
-    request("MKCOL", url, {}, {}, m_timeoutMs, [this, url, depth, done = std::move(done)](const HttpResponse &response) {
-        if (response.status == 405 || response.status == 200 || response.status == 201) {
-            done({});
-            return;
-        }
-        const std::optional<QString> parent = response.status == 409 && depth < kMaxBaseDepth ? parentUrl(url) : std::nullopt;
-        if (!parent) {
-            done(check(response, "MKCOL", url, {200, 201}));
-            return;
-        }
-        mkcolUrl(*parent, depth + 1, [this, url, done](const WebDavError &error) {
-            if (error.isError()) {
-                done(error);
-                return;
-            }
-            request("MKCOL", url, {}, {}, m_timeoutMs, [this, url, done](const HttpResponse &retry) {
-                done(retry.status == 405 ? WebDavError() : check(retry, "MKCOL", url, {200, 201}));
+    request("MKCOL", url, {}, {}, m_timeoutMs,
+            [this, url, depth, done = std::move(done)](const HttpResponse &response) {
+                // 409: the parent is missing — create it first (bounded), then retry.
+                const std::optional<QString> parent =
+                        response.status == 409 && depth < kMaxBaseDepth ? parentUrl(url) : std::nullopt;
+                if (!parent) {
+                    done(mkcolResult(response, url));
+                    return;
+                }
+                mkcolUrl(*parent, depth + 1, [this, url, done](const WebDavError &error) {
+                    if (error.isError()) {
+                        done(error);
+                        return;
+                    }
+                    request("MKCOL", url, {}, {}, m_timeoutMs,
+                            [this, url, done](const HttpResponse &retry) { done(mkcolResult(retry, url)); });
+                });
             });
-        });
-    });
 }
 
 void WebDavClient::rebaseKnown(const VaultPath &from, const VaultPath &to, const QString &spelledTo)
@@ -678,13 +683,13 @@ void WebDavClient::rebaseKnown(const VaultPath &from, const VaultPath &to, const
         dirs.insert(within(dir) ? to + dir.mid(from.size()) : dir);
     m_knownDirs = dirs;
     QHash<VaultPath, QString> names;
-    for (auto it = m_remoteNames.cbegin(); it != m_remoteNames.cend(); ++it) {
-        if (!within(it.key())) {
-            names.insert(it.key(), it.value());
+    for (const auto &[path, spelledPath] : std::as_const(m_remoteNames).asKeyValueRange()) {
+        if (!within(path)) {
+            names.insert(path, spelledPath);
             continue;
         }
-        const VaultPath key = to + it.key().mid(from.size());
-        const QString spelled = spelledTo + it.value().mid(spelledFrom.size());
+        const VaultPath key = to + path.mid(from.size());
+        const QString spelled = spelledTo + spelledPath.mid(spelledFrom.size());
         if (spelled != key)
             names.insert(key, spelled);
     }

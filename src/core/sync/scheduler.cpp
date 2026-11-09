@@ -25,6 +25,9 @@ public:
         : m_owner(owner)
     {
     }
+    /// Pending timers must not fire into a destroyed instance (setTimers() replaces it).
+    ~QtSchedulerTimers() override { qDeleteAll(m_timers); }
+    Q_DISABLE_COPY_MOVE(QtSchedulerTimers)
 
     qint64 now() const override { return QDateTime::currentMSecsSinceEpoch(); }
 
@@ -137,37 +140,37 @@ SyncScheduler::~SyncScheduler()
 
 void SyncScheduler::setInterval(qint64 msec)
 {
-    m_interval = qMax<qint64>(1000, msec);
+    m_interval = std::max<qint64>(1000, msec);
 }
 
 void SyncScheduler::setDebounce(qint64 msec)
 {
-    m_debounce = qMax<qint64>(0, msec);
+    m_debounce = std::max<qint64>(0, msec);
 }
 
 void SyncScheduler::setRetryBase(qint64 msec)
 {
-    m_retryBase = qMax<qint64>(1000, msec);
+    m_retryBase = std::max<qint64>(1000, msec);
 }
 
 void SyncScheduler::setActiveSyncGap(qint64 msec)
 {
-    m_activeGap = qMax<qint64>(0, msec);
+    m_activeGap = std::max<qint64>(0, msec);
 }
 
 void SyncScheduler::setStallThreshold(qint64 msec)
 {
-    m_stallThreshold = qMax<qint64>(1000, msec);
+    m_stallThreshold = std::max<qint64>(1000, msec);
 }
 
 void SyncScheduler::setStallLimit(qint64 msec)
 {
-    m_stallLimit = qMax<qint64>(0, msec);
+    m_stallLimit = std::max<qint64>(0, msec);
 }
 
 void SyncScheduler::setStallPollInterval(qint64 msec)
 {
-    m_stallPoll = qMax<qint64>(100, msec);
+    m_stallPoll = std::max<qint64>(100, msec);
 }
 
 void SyncScheduler::setTimers(std::unique_ptr<SchedulerTimers> timers)
@@ -176,7 +179,9 @@ void SyncScheduler::setTimers(std::unique_ptr<SchedulerTimers> timers)
         return;
     cancelTimer(m_periodicTimer);
     cancelTimer(m_debounceTimer);
+    cancelTimer(m_stallTimer);
     m_timers = std::move(timers);
+    scheduleStallPoll(); // a running sync keeps its watchdog on the new timers
 }
 
 void SyncScheduler::setOnlineCheck(std::function<bool()> isOnline)
@@ -304,9 +309,7 @@ void SyncScheduler::notifyLocalChange()
 
 void SyncScheduler::notifyChanges(const QList<VaultChange> &changes)
 {
-    const bool local = std::any_of(changes.cbegin(), changes.cend(),
-                                   [](const VaultChange &c) { return c.source != ChangeSource::Sync; });
-    if (local)
+    if (std::ranges::any_of(changes, [](const VaultChange &c) { return c.source != ChangeSource::Sync; }))
         notifyLocalChange();
 }
 
@@ -343,7 +346,7 @@ void SyncScheduler::setAppActive(bool active)
         return;
     }
     const qint64 lastSync = m_status.lastSync.isValid() ? m_status.lastSync.toMSecsSinceEpoch() : 0;
-    if (m_timers->now() - qMax(lastSync, m_lastAttempt) >= m_activeGap)
+    if (m_timers->now() - std::max(lastSync, m_lastAttempt) >= m_activeGap)
         trigger(SyncTrigger::Foreground);
 }
 
@@ -453,8 +456,7 @@ void SyncScheduler::pollStall()
     if (activity.running) {
         const qint64 idle = activity.idleMs;
         if (idle >= m_stallThreshold) {
-            const bool first = !m_status.stalled;
-            if (first) {
+            if (!m_status.stalled) {
                 qCWarning(logging::lcSync).noquote() << u"%1no answer from the server for %2 (waiting for: %3)"_s.arg(
                         tag, seconds(idle),
                         activity.waitingFor.isEmpty() ? u"nothing; local work"_s : activity.waitingFor.join(u", "_s));
@@ -505,27 +507,27 @@ void SyncScheduler::onRunFinished(const SyncReport &report)
         s.waitingFor.clear();
         s.abandoning = false;
     };
-    const auto planRetry = [this](const QString &code) {
-        const int doublings = qMin(m_failures - 1, 30);
-        const qint64 delay = qMin(m_interval, m_retryBase * (qint64(1) << doublings));
+    // A failed run: error state, one more failure, retry with exponential back-off.
+    const auto failRun = [&](const QString &error, const QString &code, bool stalledRun) {
+        ++m_failures;
+        const bool online = isOnline();
+        updateStatus([&](SyncStatus &s) {
+            clearRun(s);
+            s.state = online ? SyncState::Error : SyncState::Offline;
+            s.lastError = error;
+            s.lastErrorCode = code;
+            s.failures = m_failures;
+        });
+        Q_EMIT runFinished(report, stalledRun);
+        const int doublings = std::min(m_failures - 1, 30);
+        const qint64 delay = std::min(m_interval, m_retryBase * (qint64(1) << doublings));
         qCInfo(logging::lcSync).noquote()
                 << u"retry in %1 after %2 failed run(s) (%3)"_s.arg(logging::formatMs(delay)).arg(m_failures).arg(code);
         schedulePeriodic(delay, true);
     };
     if (stalled && !cancelling) {
-        ++m_failures;
-        const bool online = isOnline();
-        const qint64 limit = m_stallLimit;
-        updateStatus([&](SyncStatus &s) {
-            clearRun(s);
-            s.state = online ? SyncState::Error : SyncState::Offline;
-            s.lastError =
-                    u"No answer or progress for %1; the run was stopped"_s.arg(seconds(qMax(limit, m_stalledSinceMs)));
-            s.lastErrorCode = u"stalled"_s;
-            s.failures = m_failures;
-        });
-        Q_EMIT runFinished(report, true);
-        planRetry(u"stalled"_s);
+        const QString idle = seconds(std::max(m_stallLimit, m_stalledSinceMs));
+        failRun(u"No answer or progress for %1; the run was stopped"_s.arg(idle), u"stalled"_s, true);
     } else if (report.cancelled || (cancelling && report.failed())) {
         updateStatus([&](SyncStatus &s) {
             clearRun(s);
@@ -534,17 +536,7 @@ void SyncScheduler::onRunFinished(const SyncReport &report)
         Q_EMIT runFinished(report, false);
         schedulePeriodic(m_interval);
     } else if (report.failed()) {
-        ++m_failures;
-        const bool online = isOnline();
-        updateStatus([&](SyncStatus &s) {
-            clearRun(s);
-            s.state = online ? SyncState::Error : SyncState::Offline;
-            s.lastError = logging::redact(report.failureMessage());
-            s.lastErrorCode = report.failureCode();
-            s.failures = m_failures;
-        });
-        Q_EMIT runFinished(report, false);
-        planRetry(report.failureCode());
+        failRun(logging::redact(report.failureMessage()), report.failureCode(), false);
     } else {
         m_failures = 0;
         QString errors = summarizeErrors(report);

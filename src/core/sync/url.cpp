@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::sync {
@@ -65,10 +67,10 @@ QStringList nonEmptySegments(const QString &path)
 
 QString encodePath(const QString &path)
 {
-    QStringList out;
-    for (const QString &segment : nonEmptySegments(path))
-        out.append(QString::fromLatin1(QUrl::toPercentEncoding(segment)));
-    return out.join(u'/');
+    QStringList segments = nonEmptySegments(path);
+    for (QString &segment : segments)
+        segment = QString::fromLatin1(QUrl::toPercentEncoding(segment));
+    return segments.join(u'/');
 }
 
 QString decodeSegment(const QString &segment)
@@ -122,12 +124,10 @@ QString urlPathname(const QString &url)
 {
     QString pathname = url;
     if (hasScheme(url)) {
-        const QUrl parsed(url, QUrl::TolerantMode);
-        if (parsed.isValid()) {
+        if (const QUrl parsed(url, QUrl::TolerantMode); parsed.isValid()) {
             pathname = parsed.adjusted(QUrl::NormalizePathSegments).path(QUrl::FullyEncoded);
         } else {
             static const QRegularExpression hostPart(u"^[^/]*"_s);
-            pathname = url;
             pathname.remove(schemeRe()).remove(hostPart);
         }
     }
@@ -151,22 +151,17 @@ std::optional<QString> relativeTo(const QString &pathname, const QString &basePa
     const QStringList b = nonEmptySegments(basePathname);
     if (p.size() < b.size())
         return std::nullopt;
-    const auto nfc = [](const QString &x) { return x.normalized(QString::NormalizationForm_C); };
-    bool exact = true;
-    bool folded = true;
-    for (qsizetype i = 0; i < b.size(); ++i) {
-        const QString pb = nfc(p.at(i));
-        const QString bb = nfc(b.at(i));
-        exact = exact && pb == bb;
-        folded = folded && pb.toLower() == bb.toLower();
-    }
-    if (!exact && !folded)
+    // Equal segments are also equal case-folded: one comparison covers both the exact match
+    // and the case-insensitive fallback.
+    const auto sameSegment = [](const QString &x, const QString &y) {
+        return x.normalized(QString::NormalizationForm_C).toLower()
+               == y.normalized(QString::NormalizationForm_C).toLower();
+    };
+    if (!std::ranges::equal(b, p.first(b.size()), sameSegment))
         return std::nullopt;
     const QStringList rest = p.mid(b.size());
-    for (const QString &segment : rest) {
-        if (segment == u"."_s || segment == u".."_s)
-            return std::nullopt;
-    }
+    if (std::ranges::any_of(rest, [](const QString &segment) { return segment == u"."_s || segment == u".."_s; }))
+        return std::nullopt;
     return rest.join(u'/');
 }
 

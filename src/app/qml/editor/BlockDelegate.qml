@@ -172,7 +172,6 @@ Item {
     width: ListView.view ? ListView.view.width : 0
     height: shown ? Math.ceil(bodyBottom + bottomPad) : 0
     visible: shown
-    clip: !shown
     // Title above the properties panel: the two delegates trade places on screen.
     transform: Translate {
         y: block.titleFirst ? -block.editor.propertiesHeight : block.propertiesAfterTitle ? block.editor.titleHeight : 0
@@ -197,47 +196,24 @@ Item {
     /// The first line's centre in the view loaded for the block's content (not a text view).
     readonly property real contentFirstLineCenter: {
         const item = content.item as Item
+        const fallback = editor.firstLineCenter(0)
         if (item === null)
-            return editor.firstLineCenter(0)
+            return fallback
         switch (view) {
-        case "code": {
-            const code = item as CodeBlockView
-            return code !== null ? code.firstLineCenter : editor.firstLineCenter(0)
-        }
-        case "calc": {
-            const calc = item as CalcBlockView
-            return calc !== null ? calc.firstLineCenter : editor.firstLineCenter(0)
-        }
-        case "query": {
-            const query = item as QueryBlockView
-            return query !== null ? query.firstLineCenter : editor.firstLineCenter(0)
-        }
-        case "math": {
-            const math = item as MathBlockView
-            return math !== null ? math.firstLineCenter : editor.firstLineCenter(0)
-        }
-        case "mermaid": {
-            const mermaid = item as MermaidBlockView
-            return mermaid !== null ? mermaid.firstLineCenter : editor.firstLineCenter(0)
-        }
-        case "chart": {
-            const chart = item as ChartBlockView
-            return chart !== null ? chart.firstLineCenter : editor.firstLineCenter(0)
-        }
-        case "table": {
-            const table = item as TableBlockView
-            return table !== null ? table.firstLineCenter : editor.firstLineCenter(0)
-        }
-        case "frontmatter": {
-            const frontmatter = item as FrontmatterView
-            return frontmatter !== null ? frontmatter.firstLineCenter : editor.firstLineCenter(0)
-        }
-        // (The frame's and the rule's own firstLineCenter, below: their components have no type.)
+        case "code": { const v = item as CodeBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "calc": { const v = item as CalcBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "query": { const v = item as QueryBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "math": { const v = item as MathBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "mermaid": { const v = item as MermaidBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "chart": { const v = item as ChartBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "table": { const v = item as TableBlockView; return v !== null ? v.firstLineCenter : fallback }
+        case "frontmatter": { const v = item as FrontmatterView; return v !== null ? v.firstLineCenter : fallback }
+        // (The quote / callout frame and the rule below are untyped components: computed here.)
         case "quote":
         case "callout": return (view === "callout" ? Theme.space3 : 0) + editor.firstLineCenter(shownHeadingLevel)
         case "rule": return item.height / 2
         }
-        return editor.firstLineCenter(0)
+        return fallback
     }
 
     HoverHandler { id: hover; enabled: !Theme.touchUi }
@@ -248,13 +224,14 @@ Item {
     readonly property string bandEdge: shown ? selectionEdge : ""
     readonly property bool bandStart: bandEdge === "single" || bandEdge === "first"
     readonly property bool bandEnd: bandEdge === "single" || bandEdge === "last"
+    /// The left edge of a band around this block alone, from its own level (the flash's too).
+    readonly property real ownBandX: doc ? (listItem ? levelX - editor.listIndent : levelX) - Theme.space2
+                                         : bulletX - editor.bulletColumn / 2 - 2
     /// The band's left edge: a block alone from its own level, a range from the editor's (one
     /// straight band over every level).
-    readonly property real bandX: bandEdge === "single"
-                                  ? (doc ? (listItem ? levelX - editor.listIndent : levelX) - Theme.space2
-                                         : bulletX - editor.bulletColumn / 2 - 2)
-                                  : (doc ? editor.contentX + editor.gutter - Theme.space2
-                                         : editor.contentX + editor.gutter - editor.bulletColumn - 2)
+    readonly property real bandX: bandEdge === "single" ? ownBandX
+                                  : doc ? editor.contentX + editor.gutter - Theme.space2
+                                        : editor.contentX + editor.gutter - editor.bulletColumn - 2
     readonly property real bandRight: contentRight + Theme.space2
     readonly property real bandTop: bandStart ? 1 : 0
     readonly property real bandBottom: bandEnd ? height - 1 : height
@@ -293,10 +270,9 @@ Item {
     }
     Loader {
         active: block.flashing && block.shown
-        x: block.doc ? (block.listItem ? block.levelX - block.editor.listIndent : block.levelX) - Theme.space2
-                     : block.bulletX - block.editor.bulletColumn / 2 - 2
+        x: block.ownBandX
         y: 1
-        width: block.contentRight - x + Theme.space2
+        width: block.bandRight - x
         height: Math.max(0, block.height - 2)
         sourceComponent: Rectangle {
             objectName: "blockFlash"
@@ -449,16 +425,7 @@ Item {
                 }
                 onLongPressed: block.openMenu(bullet, bullet.dotX, bullet.height)
             }
-            TapHandler {
-                // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so a tap on
-                // a phone zoomed in and opened the menu at once. Touch: the long press above.
-                // WithinBounds: the press is the bullet's, the editor's right-click on the block
-                // (menu at the pointer) does not open it a second time.
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-                acceptedButtons: Qt.RightButton
-                gesturePolicy: TapHandler.WithinBounds
-                onTapped: block.openMenu(bullet, bullet.dotX, bullet.height)
-            }
+            MenuTap { onTapped: block.openMenu(bullet, bullet.dotX, bullet.height) }
         }
     }
 
@@ -494,15 +461,10 @@ Item {
                 y: (number.height - height) / 2
                 TapHandler {
                     acceptedButtons: Qt.LeftButton
-                    onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, 0)
+                    onTapped: block.editOnTap(0)
                     onLongPressed: block.openMenu(number, 0, number.height)
                 }
-                TapHandler {
-                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
-                    acceptedButtons: Qt.RightButton
-                    gesturePolicy: TapHandler.WithinBounds // the number's press (as the bullet's)
-                    onTapped: block.openMenu(number, 0, number.height)
-                }
+                MenuTap { onTapped: block.openMenu(number, 0, number.height) }
             }
         }
     }
@@ -572,7 +534,7 @@ Item {
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + Js.encodeURIComponent(target), false)
         onDrawingClicked: (path) => block.controller.openDrawing(path)
         onPdfClicked: (path, page) => block.controller.openPdf(block.index, path, page)
-        onBackgroundClicked: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
+        onBackgroundClicked: block.editOnTap(-1)
         onBackgroundLongPressed: block.editor.longPressText(block.index)
         onShowWeb: (url) => block.controller.showWebPicture(url)
         onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
@@ -606,7 +568,6 @@ Item {
                 default: return Theme.info
                 }
             }
-            readonly property real firstLineCenter: inner.y + text.firstLineCenter
             implicitHeight: inner.implicitHeight + (callout ? 2 * Theme.space3 : 0)
             height: implicitHeight
             radius: callout ? Theme.radius : 0
@@ -619,7 +580,7 @@ Item {
             }
             Item {
                 id: inner
-                x: frame.callout ? Theme.space4 : Theme.space4
+                x: Theme.space4
                 y: frame.callout ? Theme.space3 : 0
                 width: parent.width - x - (frame.callout ? Theme.space3 : 0)
                 implicitHeight: text.implicitHeight
@@ -667,8 +628,6 @@ Item {
     Component {
         id: ruleComponent
         Item {
-            id: rule
-            readonly property real firstLineCenter: height / 2
             implicitHeight: block.editing ? ruleText.implicitHeight : block.editor.lineHeight
             height: implicitHeight
             Rectangle {
@@ -680,7 +639,7 @@ Item {
             }
             TapHandler {
                 enabled: !block.editing
-                onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
+                onTapped: block.editOnTap(-1)
             }
             BlockText {
                 id: ruleText
@@ -736,7 +695,23 @@ Item {
 
     // ---- Block menu ----------------------------------------------------------------------------
     /// The editor's block menu for this block (BlockMenu, one per editor, made when first opened).
-    function openMenu(item: Item, x: real, y: real) {
+    function openMenu(item: Item, x: real, y: real): void {
         block.editor.openBlockMenu(block.index, item, x, y)
+    }
+    /// A tap beside the text (a marker, a rule, a picture's margin) edits the block at `pos`
+    /// (-1: the end) — unless the editor took the tap (the touch selection mode moves its end).
+    function editOnTap(pos: int): void {
+        if (!editor.blockTapped(index))
+            editor.startEditing(index, pos)
+    }
+    /// A right-click on a marker opens the block menu. Mouse-like devices only: Qt gives a finger
+    /// (no buttons) to every TapHandler, so a tap on a phone zoomed in and opened the menu at
+    /// once (touch: the long press of the marker's own TapHandler). WithinBounds: the press is
+    /// the marker's, the editor's right-click on the block (menu at the pointer) does not open it
+    /// a second time.
+    component MenuTap: TapHandler {
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.WithinBounds
     }
 }

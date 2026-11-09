@@ -64,6 +64,9 @@ private:
         QString text;      ///< isText: the decoded content
         QByteArray bytes;  ///< raw content (empty when not read: unchanged binary file)
         bool hasBytes = false;
+
+        /// The text as a merge base (std::nullopt for a binary file).
+        std::optional<QString> textIfText() const { return isText ? std::optional<QString>(text) : std::nullopt; }
     };
 
     /// What one path's processing ended with.
@@ -161,6 +164,8 @@ private:
     }
 
     // Phases
+    /// start() cannot run: the report says why; finished from the event loop.
+    void refuse(SyncErrorCode code, const QString &message);
     void listRemote();
     void onListed(const QList<RemoteEntry> &entries);
     void checkRemoteIdentity();

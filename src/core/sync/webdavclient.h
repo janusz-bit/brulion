@@ -17,7 +17,9 @@
 #include <QString>
 
 #include <functional>
+#include <memory>
 #include <optional>
+#include <utility>
 
 namespace brulion::sync {
 
@@ -172,9 +174,14 @@ public:
 
 private:
     struct ListRun;
+    using Headers = QList<std::pair<QByteArray, QByteArray>>;
     using ResponseCallback = std::function<void(const HttpResponse &)>;
     using PropfindCallback = std::function<void(const WebDavError &, const QList<DavResource> &)>;
 
+    /// list(): queue the job listing one folder (its sub-folders follow through the pool).
+    void listDir(const std::shared_ptr<ListRun> &run, const QString &raw, bool isBase);
+    /// list(): record one folder's answer, queue its sub-folders.
+    void addListing(const std::shared_ptr<ListRun> &run, const QString &raw, const QList<DavResource> &resources);
     /// Relative path as the server spells it: the listed name, or for a path below a listed
     /// folder that folder's spelling plus the rest (NFD folders created by macOS clients).
     QString serverName(const VaultPath &normalizedPath) const;
@@ -182,10 +189,12 @@ private:
     std::optional<QString> relativeRaw(const QString &href, const QString &requestUrl) const;
     int timeoutFor(qint64 bytes) const;
     int unknownSizeTimeout() const;
-    void request(const QByteArray &method, const QString &url, QList<QPair<QByteArray, QByteArray>> headers,
-                 const QByteArray &body, int timeoutMs, ResponseCallback done);
+    void request(const QByteArray &method, const QString &url, const Headers &headers, const QByteArray &body,
+                 int timeoutMs, ResponseCallback done);
     WebDavError check(const HttpResponse &response, const QByteArray &method, const QString &url,
                       std::initializer_list<int> ok) const;
+    /// MKCOL: 405 (exists already), 200 and 201 are success.
+    WebDavError mkcolResult(const HttpResponse &response, const QString &url) const;
     void propfindRaw(const QString &rawPath, int depth, PropfindCallback done);
     void propfind(const VaultPath &path, int depth, PropfindCallback done);
     void sendPut(const VaultPath &path, const QByteArray &data, const PutOptions &options, ResponseCallback done);
@@ -199,6 +208,10 @@ private:
     void mkcolUrl(const QString &url, int depth, DoneCallback done);
     void fail(const WebDavError &error, DoneCallback done);
     void logExchange(const HttpExchange &exchange) const;
+    /// "METHOD path" for log lines, "(base)" for the base folder.
+    QString shownRequest(const QByteArray &method, const QUrl &url) const;
+    /// The log tag plus a space ("" without a tag).
+    QString logPrefix() const;
 
     QString m_baseUrl;
     QString m_username;

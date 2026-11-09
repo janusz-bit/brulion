@@ -133,11 +133,11 @@ bool mergeFinalNewline(const SplitText &o, const SplitText &a, const SplitText &
 
 std::optional<QJsonObject> parseObject(const QString &text)
 {
-    if (text.trimmed().isEmpty())
-        return QJsonObject();
-    QString json = text;
+    QStringView json = text;
     if (json.startsWith(QChar(0xFEFF)))
-        json.remove(0, 1);
+        json = json.mid(1);
+    if (json.trimmed().isEmpty())
+        return QJsonObject();
     QJsonParseError error;
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject())
@@ -149,20 +149,12 @@ std::optional<QJsonObject> parseObject(const QString &text)
 
 MergeHunk MergeHunk::ok(const QStringList &lines)
 {
-    MergeHunk h;
-    h.kind = Kind::Ok;
-    h.lines = lines;
-    return h;
+    return MergeHunk{.kind = Kind::Ok, .lines = lines};
 }
 
 MergeHunk MergeHunk::conflict(const QStringList &base, const QStringList &local, const QStringList &remote)
 {
-    MergeHunk h;
-    h.kind = Kind::Conflict;
-    h.base = base;
-    h.local = local;
-    h.remote = remote;
-    return h;
+    return MergeHunk{.kind = Kind::Conflict, .base = base, .local = local, .remote = remote};
 }
 
 SplitText splitText(const QString &text)
@@ -233,7 +225,8 @@ MergeResult merge3(const QString &base, const QString &local, const QString &rem
     const SplitText a = splitText(local);
     const SplitText b = splitText(remote);
     MergeResult result;
-    for (const Diff3Region &region : diff3Regions(a.lines, o.lines, b.lines)) {
+    const QList<Diff3Region> regions = diff3Regions(a.lines, o.lines, b.lines);
+    for (const Diff3Region &region : regions) {
         if (!region.conflict) {
             appendOk(result.hunks, region.ok);
             continue;
@@ -260,11 +253,8 @@ std::optional<QString> mergeJson3(const QString &base, const QString &local, con
     if (!l || !r)
         return std::nullopt;
     const QJsonObject o = parseObject(base).value_or(QJsonObject());
-    QStringList keys = l->keys();
-    for (const QString &key : r->keys()) {
-        if (!l->contains(key))
-            keys.append(key);
-    }
+    QStringList keys = l->keys() + r->keys();
+    keys.removeDuplicates(); // local keys first, then the keys only remote has
     QJsonObject out;
     for (const QString &key : std::as_const(keys)) {
         const bool inL = l->contains(key);

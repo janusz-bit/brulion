@@ -286,7 +286,9 @@ using SyncDoneCallback = std::function<void(const SyncReport &)>;
 /// What SyncScheduler drives: implemented by SyncEngine; tests use a fake.
 class SyncRunner {
 public:
+    SyncRunner() = default;
     virtual ~SyncRunner() = default;
+    Q_DISABLE_COPY_MOVE(SyncRunner)
     /// Start a run, or join the running one. `done` is called exactly once with the report,
     /// also when the run was cancelled or failed (SyncEngine calls it from the event loop;
     /// SyncScheduler also copes with runners that call it synchronously).

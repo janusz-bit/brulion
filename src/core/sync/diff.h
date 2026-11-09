@@ -31,8 +31,8 @@ QList<DiffHunk> diffLines(const QStringList &a, const QStringList &b, qint64 bud
 /// One part of a two-way comparison: lines common to both, or lines only in `a` / only in `b`.
 struct CommPart {
     bool common = false;
-    QStringList commonLines; ///< when `common`
-    QStringList a, b;        ///< otherwise (either may be empty)
+    QStringList commonLines = {}; ///< when `common`
+    QStringList a = {}, b = {};   ///< otherwise (either may be empty)
 
     friend bool operator==(const CommPart &, const CommPart &) = default;
 };
@@ -43,8 +43,8 @@ QList<CommPart> diffComm(const QStringList &a, const QStringList &b, qint64 budg
 /// One region of a three-way comparison of `a` (local) and `b` (remote) against `o` (base).
 struct Diff3Region {
     bool conflict = false;
-    QStringList ok;      ///< merged lines of a stable region
-    QStringList a, o, b; ///< the three versions of a conflicting region
+    QStringList ok = {};                ///< merged lines of a stable region
+    QStringList a = {}, o = {}, b = {}; ///< the three versions of a conflicting region
 
     friend bool operator==(const Diff3Region &, const Diff3Region &) = default;
 };

@@ -157,13 +157,9 @@ SyncRunRecord SyncRunRecord::fromReport(const SyncReport &report, bool stalled)
     r.filesMovedHere = report.filesMovedHere;
     r.phases = report.phases;
     r.stats = report.stats;
-    for (const SyncFileError &e : report.errors) {
-        if (r.errors.size() >= MaxErrors)
-            break;
-        SyncFileError copy = e;
-        copy.message = logging::redact(e.message);
-        r.errors.append(copy);
-    }
+    r.errors = report.errors.mid(0, MaxErrors);
+    for (SyncFileError &e : r.errors)
+        e.message = logging::redact(e.message);
     r.conflictPaths = report.conflicts.mid(0, MaxConflicts);
     return r;
 }
@@ -250,7 +246,8 @@ SyncStats statsFromJson(const QJsonObject &json)
     st.pathsChecked = intOf(json, u"paths"_s);
     st.longestStallMs = longOf(json, u"stall"_s);
     st.protocol = json.value(u"protocol"_s).toString().toLatin1();
-    for (const QJsonValue &v : json.value(u"slowest"_s).toArray()) {
+    const QJsonArray slowest = json.value(u"slowest"_s).toArray();
+    for (const auto &v : slowest) {
         const QJsonObject o = v.toObject();
         if (!o.value(u"m"_s).isString())
             continue;
@@ -345,7 +342,7 @@ std::optional<SyncRunRecord> SyncRunRecord::fromJson(const QJsonObject &json)
     r.trigger = syncTriggerFromName(json.value(u"trigger"_s).toString()).value_or(SyncTrigger::Unknown);
     r.started = started;
     r.finished = timeFrom(json.value(u"finished"_s));
-    r.durationMs = qMax<qint64>(0, longOf(json, u"ms"_s));
+    r.durationMs = std::max<qint64>(0, longOf(json, u"ms"_s));
     r.outcome = *outcome;
     r.errorCode = json.value(u"code"_s).toString();
     r.errorMessage = json.value(u"message"_s).toString();
@@ -359,28 +356,31 @@ std::optional<SyncRunRecord> SyncRunRecord::fromJson(const QJsonObject &json)
     r.fileErrors = intOf(json, u"fileErrors"_s);
     r.skipped = intOf(json, u"skipped"_s);
     r.pendingDeletions = intOf(json, u"pending"_s);
-    r.foldersCreated = qMax(0, intOf(json, u"foldersNew"_s));
-    r.foldersDeleted = qMax(0, intOf(json, u"foldersDel"_s));
-    r.foldersMoved = qMax(0, intOf(json, u"foldersMoved"_s));
-    r.foldersMovedHere = qMax(0, intOf(json, u"foldersMovedHere"_s));
-    r.filesMoved = qMax(0, intOf(json, u"filesMoved"_s));
-    r.filesMovedHere = qMax(0, intOf(json, u"filesMovedHere"_s));
-    for (const QJsonValue &v : json.value(u"phases"_s).toArray()) {
+    r.foldersCreated = std::max(0, intOf(json, u"foldersNew"_s));
+    r.foldersDeleted = std::max(0, intOf(json, u"foldersDel"_s));
+    r.foldersMoved = std::max(0, intOf(json, u"foldersMoved"_s));
+    r.foldersMovedHere = std::max(0, intOf(json, u"foldersMovedHere"_s));
+    r.filesMoved = std::max(0, intOf(json, u"filesMoved"_s));
+    r.filesMovedHere = std::max(0, intOf(json, u"filesMovedHere"_s));
+    const QJsonArray phases = json.value(u"phases"_s).toArray();
+    for (const auto &v : phases) {
         if (const std::optional<SyncPhaseTime> p = phaseTimeFromJson(v.toObject()))
             r.phases.append(*p);
     }
     r.stats = statsFromJson(json.value(u"stats"_s).toObject());
-    for (const QJsonValue &v : json.value(u"errors"_s).toArray()) {
+    const QJsonArray errors = json.value(u"errors"_s).toArray();
+    for (const auto &v : errors) {
         if (r.errors.size() >= MaxErrors)
             break;
         if (const std::optional<SyncFileError> e = fileErrorFromJson(v.toObject()))
             r.errors.append(*e);
     }
-    for (const QJsonValue &v : json.value(u"conflictPaths"_s).toArray()) {
+    const QJsonArray conflictPaths = json.value(u"conflictPaths"_s).toArray();
+    for (const auto &v : conflictPaths) {
         if (v.isString() && r.conflictPaths.size() < MaxConflicts)
             r.conflictPaths.append(v.toString());
     }
-    r.repeats = qMax(1, intOf(json, u"repeats"_s));
+    r.repeats = std::max(1, intOf(json, u"repeats"_s));
     if (r.repeats > 1)
         r.firstStarted = timeFrom(json.value(u"firstStarted"_s));
     return r;
@@ -389,11 +389,12 @@ std::optional<SyncRunRecord> SyncRunRecord::fromJson(const QJsonObject &json)
 // ---- SyncHistory --------------------------------------------------------------------------------
 
 SyncHistory::SyncHistory(LocalStore *store, int capacity, QObject *parent)
-    : QObject(parent), m_store(store), m_capacity(qMax(1, capacity))
+    : QObject(parent), m_store(store), m_capacity(std::max(1, capacity))
 {
     if (!m_store)
         return;
-    for (const QJsonValue &v : m_store->get(kRunsKey).toArray()) {
+    const QJsonArray runs = m_store->get(kRunsKey).toArray();
+    for (const auto &v : runs) {
         if (const std::optional<SyncRunRecord> r = SyncRunRecord::fromJson(v.toObject()))
             m_runs.append(*r);
         if (m_runs.size() >= m_capacity)
@@ -403,18 +404,15 @@ SyncHistory::SyncHistory(LocalStore *store, int capacity, QObject *parent)
 
 std::optional<SyncRunRecord> SyncHistory::run(int number) const
 {
-    for (const SyncRunRecord &r : m_runs) {
-        if (r.number == number)
-            return r;
-    }
-    return std::nullopt;
+    const auto it = std::ranges::find(m_runs, number, &SyncRunRecord::number);
+    return it != m_runs.cend() ? std::optional(*it) : std::nullopt;
 }
 
 int SyncHistory::nextNumber() const
 {
     int newest = 0;
     for (const SyncRunRecord &r : m_runs)
-        newest = qMax(newest, r.number);
+        newest = std::max(newest, r.number);
     return newest + 1;
 }
 
@@ -432,7 +430,7 @@ void SyncHistory::add(const SyncRunRecord &record)
         folded.repeats = previous.repeats + record.repeats;
         folded.firstStarted =
                 previous.repeats > 1 && previous.firstStarted.isValid() ? previous.firstStarted : previous.started;
-        folded.durationMs = qMax(previous.durationMs, record.durationMs);
+        folded.durationMs = std::max(previous.durationMs, record.durationMs);
         m_runs.first() = folded;
     } else {
         m_runs.prepend(record);

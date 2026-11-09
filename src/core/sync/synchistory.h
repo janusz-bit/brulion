@@ -98,7 +98,7 @@ public:
     /// `store` is not owned (nullptr: in memory only); loads the runs now.
     explicit SyncHistory(LocalStore *store, int capacity = DefaultCapacity, QObject *parent = nullptr);
 
-    QList<SyncRunRecord> runs() const { return m_runs; } ///< newest first
+    const QList<SyncRunRecord> &runs() const { return m_runs; } ///< newest first
     std::optional<SyncRunRecord> run(int number) const;
     /// Newest number + 1; 1 when empty.
     int nextNumber() const;

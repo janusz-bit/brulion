@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include <memory>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -38,23 +39,20 @@ struct PendingRequest {
         if (!context)
             return;
         if (observe) {
-            HttpExchange exchange;
-            exchange.method = method;
-            exchange.url = url.adjusted(QUrl::RemoveUserInfo);
-            exchange.status = response.status;
-            exchange.timedOut = response.timedOut;
-            exchange.networkError = response.networkError;
-            exchange.elapsedMs = elapsed.elapsed();
-            exchange.bytesSent = bytesSent;
-            exchange.bytesReceived = response.body.size();
-            exchange.contentType = response.header("content-type");
-            exchange.protocol = response.protocol;
-            observe(exchange);
+            observe(HttpExchange{.method = method,
+                                 .url = url.adjusted(QUrl::RemoveUserInfo),
+                                 .status = response.status,
+                                 .timedOut = response.timedOut,
+                                 .networkError = response.networkError,
+                                 .elapsedMs = elapsed.elapsed(),
+                                 .bytesSent = bytesSent,
+                                 .bytesReceived = response.body.size(),
+                                 .contentType = response.header("content-type"),
+                                 .protocol = response.protocol});
             if (!context)
                 return;
         }
-        const HttpCallback callback = std::move(done);
-        done = nullptr;
+        const HttpCallback callback = std::exchange(done, nullptr);
         callback(response);
     }
 };

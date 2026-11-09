@@ -237,17 +237,17 @@ QDateTime SyncEngine::now() const
 
 void SyncEngine::setConcurrency(int count)
 {
-    m_concurrency = qMax(1, count);
+    m_concurrency = std::max(1, count);
 }
 
 void SyncEngine::setMaxFileSize(qint64 bytes)
 {
-    m_maxFileSize = qMax<qint64>(0, bytes);
+    m_maxFileSize = std::max<qint64>(0, bytes);
 }
 
 void SyncEngine::setMaxBaseSize(qint64 bytes)
 {
-    m_maxBaseSize = qMax<qint64>(0, bytes);
+    m_maxBaseSize = std::max<qint64>(0, bytes);
 }
 
 bool SyncEngine::isSyncing() const
@@ -257,7 +257,7 @@ bool SyncEngine::isSyncing() const
 
 void SyncEngine::setNextRunNumber(int number)
 {
-    m_nextRunNumber = qMax(1, number);
+    m_nextRunNumber = std::max(1, number);
 }
 
 SyncActivity SyncEngine::activity() const

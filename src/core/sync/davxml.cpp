@@ -7,6 +7,7 @@
 #include <QTimeZone>
 #include <QXmlStreamReader>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace Qt::StringLiterals;
@@ -39,16 +40,15 @@ struct Props {
 
     void mergeFrom(const Props &other)
     {
-        if (other.etag)
-            etag = other.etag;
-        if (other.lastModified)
-            lastModified = other.lastModified;
-        if (other.contentLength)
-            contentLength = other.contentLength;
-        if (other.collection)
-            collection = other.collection;
-        if (other.fileId)
-            fileId = other.fileId;
+        const auto take = [](auto &mine, const auto &theirs) {
+            if (theirs)
+                mine = theirs;
+        };
+        take(etag, other.etag);
+        take(lastModified, other.lastModified);
+        take(contentLength, other.contentLength);
+        take(collection, other.collection);
+        take(fileId, other.fileId);
     }
 };
 
@@ -119,7 +119,7 @@ qint64 parseSize(const std::optional<QString> &text)
     bool ok = false;
     const qint64 exact = trimmed.toLongLong(&ok);
     if (ok)
-        return qMax<qint64>(0, exact);
+        return std::max<qint64>(0, exact);
     const double n = trimmed.toDouble(&ok);
     constexpr double kBeyondQint64 = 9223372036854775808.0; // 2^63
     return ok && std::isfinite(n) && n >= 0 && n < kBeyondQint64 ? static_cast<qint64>(std::floor(n)) : 0;
@@ -173,8 +173,9 @@ std::optional<int> zoneOffset(const QString &zone)
     digits.remove(u':');
     if (digits.size() != 4)
         return std::nullopt;
-    const int hours = digits.left(2).toInt();
-    const int minutes = digits.mid(2).toInt();
+    const QStringView view = digits;
+    const int hours = view.left(2).toInt();
+    const int minutes = view.mid(2).toInt();
     const int sign = zone.startsWith(u'-') ? -1 : 1;
     return sign * (hours * 3600 + minutes * 60);
 }

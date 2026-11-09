@@ -16,8 +16,8 @@ namespace brulion::sync {
 struct MergeHunk {
     enum class Kind { Ok, Conflict };
     Kind kind = Kind::Ok;
-    QStringList lines;               ///< Kind::Ok
-    QStringList base, local, remote; ///< Kind::Conflict
+    QStringList lines = {};                         ///< Kind::Ok
+    QStringList base = {}, local = {}, remote = {}; ///< Kind::Conflict
 
     static MergeHunk ok(const QStringList &lines);
     static MergeHunk conflict(const QStringList &base, const QStringList &local, const QStringList &remote);

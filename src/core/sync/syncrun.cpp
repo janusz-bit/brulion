@@ -20,7 +20,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLockFile>
-#include <QSet>
 
 #include <algorithm>
 
@@ -46,9 +45,9 @@ using logging::formatMs;
 
 bool isJsonObject(const QString &text)
 {
-    QString json = text;
+    QStringView json = text;
     if (json.startsWith(QChar(0xFEFF)))
-        json.remove(0, 1);
+        json = json.sliced(1);
     QJsonParseError error;
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &error);
     return error.error == QJsonParseError::NoError && doc.isObject();
@@ -90,6 +89,16 @@ int countWithoutConfig(const Map &files)
     return static_cast<int>(files.size()) - (files.contains(vaultConfigPath()) ? 1 : 0);
 }
 
+/// The value under `key`, if any.
+template<typename K, typename V>
+std::optional<V> lookup(const QHash<K, V> &hash, const K &key)
+{
+    const auto it = hash.constFind(key);
+    if (it == hash.cend())
+        return std::nullopt;
+    return *it;
+}
+
 } // namespace
 
 SyncRun::Outcome SyncRun::Outcome::fromError(const WebDavError &error)
@@ -123,7 +132,7 @@ SyncActivity SyncRun::activity() const
         a.requestsInFlight = c->requestsInFlight();
         a.waitingFor = c->inFlight(4);
         if (a.requestsInFlight > 0)
-            a.idleMs = qMin(a.idleMs, c->idleMs());
+            a.idleMs = std::min(a.idleMs, c->idleMs());
     }
     return a;
 }
@@ -160,7 +169,7 @@ void SyncRun::endPhase(int items)
 void SyncRun::onExchange(const HttpExchange &exchange)
 {
     // Time without any answer while requests were open (best effort: since the last activity).
-    m_report.stats.longestStallMs = qMax(m_report.stats.longestStallMs, m_activityTimer.elapsed());
+    m_report.stats.longestStallMs = std::max(m_report.stats.longestStallMs, m_activityTimer.elapsed());
     m_activityTimer.start();
     SyncStats &st = m_report.stats;
     ++st.requests;
@@ -292,8 +301,8 @@ QString SyncRun::summary() const
     const SyncStats &st = r.stats;
     if (st.requests > 0) {
         QStringList methods;
-        for (auto it = st.requestsByMethod.cbegin(); it != st.requestsByMethod.cend(); ++it)
-            methods.append(u"%1 %2"_s.arg(QString::fromLatin1(it.key())).arg(it.value()));
+        for (const auto &[method, count] : st.requestsByMethod.asKeyValueRange())
+            methods.append(u"%1 %2"_s.arg(QString::fromLatin1(method)).arg(count));
         QString requests = u" | %1 requests (%2), avg %3"_s.arg(st.requests)
                                    .arg(methods.join(u", "_s), formatMs(st.requestMs / st.requests));
         if (st.failedRequests > 0)
@@ -365,23 +374,17 @@ void SyncRun::start()
     m_report.started = now();
     qCInfo(lcSync).noquote() << u"%1 started (%2)"_s.arg(tag(), syncTriggerName(m_report.trigger));
     if (!vault() || !vault()->isOpen() || !client() || !store()) {
-        m_report.syncError = SyncError{SyncErrorCode::NotReady, u"Sync needs an open vault, a WebDAV client and a store"_s};
-        if (m_engine)
-            detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
+        refuse(SyncErrorCode::NotReady, u"Sync needs an open vault, a WebDAV client and a store"_s);
         return;
     }
     if (!vault()->isStorageAvailable()) {
         // An unmounted card or share: the vault's view of the folder cannot be trusted.
-        m_report.syncError =
-                SyncError{SyncErrorCode::VaultUnavailable,
-                          u"The vault folder is missing or on another storage: %1"_s.arg(vault()->rootPath())};
-        detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
+        refuse(SyncErrorCode::VaultUnavailable,
+               u"The vault folder is missing or on another storage: %1"_s.arg(vault()->rootPath()));
         return;
     }
     if (!lockStore()) {
-        m_report.syncError =
-                SyncError{SyncErrorCode::OtherProcess, u"Another process of this device is syncing this notebook"_s};
-        detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
+        refuse(SyncErrorCode::OtherProcess, u"Another process of this device is syncing this notebook"_s);
         return;
     }
     m_exchangeConnection = QObject::connect(client(), &WebDavClient::exchanged, m_engine,
@@ -395,6 +398,13 @@ void SyncRun::start()
     beginPhase(SyncPhase::ListRemote);
     progress(SyncProgress::Phase::Listing, 0, 1);
     listRemote();
+}
+
+void SyncRun::refuse(SyncErrorCode code, const QString &message)
+{
+    m_report.syncError = SyncError{code, message};
+    if (m_engine)
+        detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
 }
 
 bool SyncRun::lockStore()
@@ -448,7 +458,7 @@ void SyncRun::checkRemoteIdentity()
     // Reset the bookkeeping when the account / folder changed since the last sync.
     const QJsonValue meta = store()->get(SyncEngine::metaKey());
     const QString identity = client()->identity();
-    if (meta.toObject().value(u"remote"_s).toString() == identity && meta.isObject())
+    if (meta.isObject() && meta.toObject().value(u"remote"_s).toString() == identity)
         return;
     if (!meta.isUndefined()) {
         qCInfo(lcSync).noquote()
@@ -550,7 +560,8 @@ void SyncRun::listLocal()
     // a picture edited in place without a conflict copy.
     if (vault()->isWatching())
         vault()->rescan();
-    for (const FileStat &stat : vault()->files()) {
+    const QList<FileStat> files = vault()->files();
+    for (const FileStat &stat : files) {
         if (!stat.isDir && isSyncablePath(stat.path))
             m_local.insert(stat.path, stat);
     }
@@ -570,7 +581,8 @@ void SyncRun::loadStates()
             m_states.insert(path, *state);
     }
     const QString folderPrefix = SyncEngine::folderKey(QString());
-    for (const QString &key : store()->keys(folderPrefix)) {
+    const QStringList folderKeys = store()->keys(folderPrefix);
+    for (const QString &key : folderKeys) {
         const VaultPath path = key.mid(folderPrefix.size());
         if (isSyncablePath(path))
             m_folderStates.insert(path);
@@ -660,9 +672,9 @@ bool SyncRun::guardEmptySides()
         // New files of the same sizes on the server may be the moved ones: decided by their
         // content after the first pass (which downloads new files and deletes nothing).
         QHash<qint64, int> sizes;
-        for (auto it = m_remote.cbegin(); it != m_remote.cend(); ++it) {
-            if (!m_states.contains(it.key()))
-                ++sizes[it->size];
+        for (const auto &[path, entry] : std::as_const(m_remote).asKeyValueRange()) {
+            if (!m_states.contains(path))
+                ++sizes[entry.size];
         }
         int plausible = 0;
         for (const VaultPath &path : std::as_const(onlyLocal)) {
@@ -754,8 +766,8 @@ void SyncRun::guardMassDeletion()
                       || tripsMassDeletionGuard(remote, countWithoutConfig(m_remote)) || unprovenOnEmptySide;
     if (unprovenOnEmptySide) {
         qCInfo(lcSync).noquote() << u"%1 %2 had none of the files synced before under their names: %3 deletion(s) "
-                                    u"not proven to be moves held back for confirmation"_s.arg(tag())
-                                            .arg(m_localLookedEmpty ? u"this device"_s : u"the server"_s)
+                                    u"not proven to be moves held back for confirmation"_s
+                                            .arg(tag(), m_localLookedEmpty ? u"this device"_s : u"the server"_s)
                                             .arg(m_localLookedEmpty ? remote : local);
     } else if (m_holdDeletions) {
         qCInfo(lcSync).noquote()
@@ -791,15 +803,9 @@ void SyncRun::processAll()
         finish();
         return;
     }
-    QSet<VaultPath> all;
-    for (auto it = m_local.cbegin(); it != m_local.cend(); ++it)
-        all.insert(it.key());
-    for (auto it = m_remote.cbegin(); it != m_remote.cend(); ++it)
-        all.insert(it.key());
-    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it)
-        all.insert(it.key());
-    QStringList paths(all.cbegin(), all.cend());
+    QStringList paths = m_local.keys() + m_remote.keys() + m_states.keys();
     std::ranges::sort(paths);
+    paths.erase(std::ranges::unique(paths).begin(), paths.end());
     m_total = static_cast<int>(paths.size());
     m_report.stats.pathsChecked = m_total;
     progress(SyncProgress::Phase::Syncing, 0, m_total);
@@ -812,8 +818,7 @@ void SyncRun::processAll()
         [this](const VaultPath &p) { return m_remote.contains(p); });
     QList<QStringList> first;
     for (const QStringList &group : groups) {
-        const bool deletes = std::any_of(group.cbegin(), group.cend(),
-                                         [this](const VaultPath &p) { return isDeletionCandidate(p); });
+        const bool deletes = std::ranges::any_of(group, [this](const VaultPath &p) { return isDeletionCandidate(p); });
         (deletes ? m_laterGroups : first).append(group);
     }
     runPass(first, [this] { afterFirstPass(); });
@@ -862,9 +867,10 @@ void SyncRun::runGroup(const QStringList &group, qsizetype index, std::function<
         groupDone();
         return;
     }
-    const VaultPath path = group.at(index);
+    const VaultPath &path = group.at(index);
     m_active.append(path);
-    syncPath(path, guarded([this, group, index, groupDone, path](const Outcome &outcome) {
+    syncPath(path,
+             guarded([this, group, index, groupDone = std::move(groupDone), path](const Outcome &outcome) mutable {
                  m_active.removeOne(path);
                  switch (outcome.kind) {
                  case Outcome::Kind::Done:
@@ -895,7 +901,7 @@ void SyncRun::runGroup(const QStringList &group, qsizetype index, std::function<
                      groupDone();
                      return;
                  }
-                 runGroup(group, index + 1, groupDone);
+                 runGroup(group, index + 1, std::move(groupDone));
              }));
 }
 
@@ -910,13 +916,9 @@ void SyncRun::finish()
         m_pool.reset();
     }
     m_report.cancelled = m_cancelled;
-    std::ranges::sort(m_report.pendingDeletions,
-                      [](const SyncChange &a, const SyncChange &b) { return a.path < b.path; });
+    std::ranges::sort(m_report.pendingDeletions, {}, &SyncChange::path);
     m_report.needsConfirmation = !m_report.pendingDeletions.isEmpty();
-    if (m_phase && m_phase->phase == SyncPhase::Transfer)
-        endPhase(m_done);
-    else
-        endPhase(0);
+    endPhase(m_phase && m_phase->phase == SyncPhase::Transfer ? m_done : 0);
     if (store()) {
         beginPhase(SyncPhase::SaveState);
         progress(SyncProgress::Phase::Saving, m_done, m_total);
@@ -953,18 +955,14 @@ void SyncRun::syncPath(const VaultPath &path, Done done)
 {
     PathCtx ctx;
     ctx.path = path;
-    std::optional<FileStat> localStat;
-    if (const auto it = m_local.constFind(path); it != m_local.cend())
-        localStat = *it;
-    if (const auto it = m_remote.constFind(path); it != m_remote.cend())
-        ctx.remote = *it;
-    if (const auto it = m_states.constFind(path); it != m_states.cend())
-        ctx.state = *it;
+    const std::optional<FileStat> localStat = lookup(m_local, path);
+    ctx.remote = lookup(m_remote, path);
+    ctx.state = lookup(m_states, path);
 
     const qint64 maxSize = m_engine->maxFileSize();
     if ((localStat && localStat->size > maxSize) || (ctx.remote && ctx.remote->size > maxSize)) {
         m_report.skipped.append(path);
-        const qint64 size = qMax(localStat ? localStat->size : 0, ctx.remote ? ctx.remote->size : 0);
+        const qint64 size = std::max<qint64>(localStat ? localStat->size : 0, ctx.remote ? ctx.remote->size : 0);
         qCInfo(lcSync).noquote() << u"%1 skipped %2: %3 is above the %4 limit"_s.arg(tag(), path, formatBytes(size),
                                                                                      formatBytes(maxSize));
         done(Outcome::done());
@@ -1082,7 +1080,7 @@ std::optional<SyncRun::Outcome> SyncRun::checkLocalUnchanged(const VaultPath &pa
         // just created). Never overwrite it.
         if (QFileInfo::exists(vault()->absolutePath(path))) {
             const QList<FileStat> files = vault()->files();
-            const auto other = std::find_if(files.cbegin(), files.cend(), [&](const FileStat &f) {
+            const auto other = std::ranges::find_if(files, [&](const FileStat &f) {
                 return f.path != path && f.path.compare(path, Qt::CaseInsensitive) == 0;
             });
             if (other != files.cend()) {
@@ -1115,31 +1113,30 @@ void SyncRun::fetchRemote(const VaultPath &path, const std::optional<RemoteEntry
     GetOptions options;
     if (listed)
         options.size = listed->size;
-    client()->get(path, options, guarded([this, path, listed, done](const GetResult &result) {
-        RemoteContent content;
-        content.error = result.error;
-        if (result.error.isError()) {
-            done(content);
-            return;
-        }
-        content.data = result.data;
-        content.etag = !result.etag.isEmpty() ? result.etag : (listed ? listed->etag : QString());
-        // Servers without ETags in listings: keep the listing-based version scheme.
-        if (listed && listed->etag.isEmpty())
-            content.version = remoteVersion(*listed);
-        else if (!result.etag.isEmpty())
-            content.version = result.etag;
-        else if (listed)
-            content.version = remoteVersion(*listed);
-        if (!content.version.isEmpty()) {
-            done(content);
-            return;
-        }
-        versionAfterPut(path, {}, [content, done](const QString &version) mutable {
-            content.version = version;
-            done(content);
-        });
-    }));
+    client()->get(path, options, guarded([this, path, listed, done = std::move(done)](const GetResult &result) {
+                      RemoteContent content;
+                      content.error = result.error;
+                      if (result.error.isError()) {
+                          done(content);
+                          return;
+                      }
+                      content.data = result.data;
+                      content.etag = !result.etag.isEmpty() ? result.etag : (listed ? listed->etag : QString());
+                      // Servers without ETags in listings keep the listing-based version scheme; so does an
+                      // answer without one.
+                      if (listed && (listed->etag.isEmpty() || result.etag.isEmpty()))
+                          content.version = remoteVersion(*listed);
+                      else
+                          content.version = result.etag;
+                      if (!content.version.isEmpty()) {
+                          done(content);
+                          return;
+                      }
+                      versionAfterPut(path, {}, [content, done](const QString &version) mutable {
+                          content.version = version;
+                          done(content);
+                      });
+                  }));
 }
 
 void SyncRun::versionAfterPut(const VaultPath &path, const QString &etag, std::function<void(const QString &)> done)
@@ -1149,9 +1146,9 @@ void SyncRun::versionAfterPut(const VaultPath &path, const QString &etag, std::f
         done(etag);
         return;
     }
-    client()->stat(path, guarded([done](const StatResult &result) {
-        done(result.entry ? remoteVersion(*result.entry) : QString());
-    }));
+    client()->stat(path, guarded([done = std::move(done)](const StatResult &result) {
+                       done(result.entry ? remoteVersion(*result.entry) : QString());
+                   }));
 }
 
 void SyncRun::saveState(const VaultPath &path, const QString &hash, const QString &version,
@@ -1228,35 +1225,34 @@ void SyncRun::upload(const PathCtx &ctx, Done done)
         options.ifNoneMatch = true;
     else if (!ctx.remote->etag.isEmpty())
         options.ifMatch = ctx.remote->etag;
-    client()->put(ctx.path, *bytes, options, guarded([this, ctx, done](const PutResult &result) {
-        if (result.error.is(WebDavErrorCode::Precondition)) {
-            // Someone changed / created the remote file since we listed it: compare and merge.
-            notePreconditionRetry(ctx.path, 1);
-            PathCtx fresh = ctx;
-            fresh.remote.reset();
-            reconcile(fresh, 1, done);
-            return;
-        }
-        if (result.error.isError()) {
-            done(Outcome::fromError(result.error));
-            return;
-        }
-        noteRemoteWritten(ctx.path);
-        versionAfterPut(ctx.path, result.etag, [this, ctx, done](const QString &version) {
-            const LocalSnap &snap = *ctx.snap;
-            saveState(ctx.path, snap.hash, version, snap.isText ? std::optional<QString>(snap.text) : std::nullopt,
-                      snap.stat);
-            record(ctx.path, SyncAction::Upload);
-            if (!ctx.state)
-                ++m_uploadedNew[snap.hash]; // maybe moved here from a path deleted in this run
-            done(Outcome::done());
-        });
-    }));
+    client()->put(ctx.path, *bytes, options, guarded([this, ctx, done = std::move(done)](const PutResult &result) {
+                      if (result.error.is(WebDavErrorCode::Precondition)) {
+                          // Someone changed / created the remote file since we listed it: compare and merge.
+                          notePreconditionRetry(ctx.path, 1);
+                          PathCtx fresh = ctx;
+                          fresh.remote.reset();
+                          reconcile(fresh, 1, done);
+                          return;
+                      }
+                      if (result.error.isError()) {
+                          done(Outcome::fromError(result.error));
+                          return;
+                      }
+                      noteRemoteWritten(ctx.path);
+                      versionAfterPut(ctx.path, result.etag, [this, ctx, done](const QString &version) {
+                          const LocalSnap &snap = *ctx.snap;
+                          saveState(ctx.path, snap.hash, version, snap.textIfText(), snap.stat);
+                          record(ctx.path, SyncAction::Upload);
+                          if (!ctx.state)
+                              ++m_uploadedNew[snap.hash]; // maybe moved here from a path deleted in this run
+                          done(Outcome::done());
+                      });
+                  }));
 }
 
 void SyncRun::download(const PathCtx &ctx, Done done)
 {
-    fetchRemote(ctx.path, ctx.remote, [this, ctx, done](const RemoteContent &remote) {
+    fetchRemote(ctx.path, ctx.remote, [this, ctx, done = std::move(done)](const RemoteContent &remote) {
         if (remote.error.is(WebDavErrorCode::NotFound)) {
             done(Outcome::done()); // deleted on the server meanwhile: the next sync sees it
             return;
@@ -1296,7 +1292,7 @@ void SyncRun::reconcile(const PathCtx &ctx, int attempt, Done done)
                              u"%1 keeps changing on the server; will retry on the next sync"_s.arg(ctx.path)));
         return;
     }
-    fetchRemote(ctx.path, ctx.remote, [this, ctx, attempt, done](const RemoteContent &remote) {
+    fetchRemote(ctx.path, ctx.remote, [this, ctx, attempt, done = std::move(done)](const RemoteContent &remote) {
         if (remote.error.is(WebDavErrorCode::NotFound)) {
             // Gone on the server meanwhile: upload ours as a new file.
             PathCtx fresh = ctx;
@@ -1392,7 +1388,7 @@ void SyncRun::publishMerge(const PathCtx &ctx, const RemoteContent &remote, cons
     if (!remote.etag.isEmpty())
         options.ifMatch = remote.etag;
     client()->put(ctx.path, mergedBytes(ctx, merged), options,
-                  guarded([this, path = ctx.path, retry, finishMerge, done](const PutResult &result) {
+                  guarded([this, path = ctx.path, retry, finishMerge, done = std::move(done)](const PutResult &result) {
                       if (result.error.is(WebDavErrorCode::Precondition)) {
                           retry();
                           return;
@@ -1458,7 +1454,8 @@ void SyncRun::conflict(const PathCtx &ctx, const RemoteContent &remote, const Re
     if (!remote.etag.isEmpty())
         options.ifMatch = remote.etag;
     client()->put(ctx.path, *bytes, options,
-                  guarded([this, ctx, copy = *copy, created, data = remote.data, retry, done](const PutResult &result) {
+                  guarded([this, ctx, copy = *copy, created, data = remote.data, retry,
+                           done = std::move(done)](const PutResult &result) {
                       if (result.error.is(WebDavErrorCode::Precondition)) {
                           retry();
                           return;
@@ -1470,8 +1467,7 @@ void SyncRun::conflict(const PathCtx &ctx, const RemoteContent &remote, const Re
                       noteRemoteWritten(ctx.path);
                       versionAfterPut(ctx.path, result.etag, [this, ctx, copy, created, data, done](const QString &version) {
                           const LocalSnap &snap = *ctx.snap;
-                          saveState(ctx.path, snap.hash, version,
-                                    snap.isText ? std::optional<QString>(snap.text) : std::nullopt, snap.stat);
+                          saveState(ctx.path, snap.hash, version, snap.textIfText(), snap.stat);
                           record(ctx.path, SyncAction::Conflict);
                           qCInfo(lcSync).noquote()
                                   << u"%1 conflict in %2: the server's version kept as %3"_s.arg(tag(), ctx.path, copy);
@@ -1489,24 +1485,24 @@ void SyncRun::uploadConflictCopy(const VaultPath &copy, const QByteArray &data, 
 {
     PutOptions options;
     options.ifNoneMatch = true;
-    client()->put(copy, data, options, guarded([this, copy, data, done](const PutResult &result) {
-        if (result.error.isError()) {
-            if (result.error.isFatal()) {
-                done(Outcome::fromError(result.error));
-                return;
-            }
-            qCWarning(lcSync).noquote() << tag() << "the conflict copy" << copy
-                                        << "will be uploaded on the next sync:" << result.error.message;
-            done(Outcome::done());
-            return;
-        }
-        noteRemoteWritten(copy);
-        versionAfterPut(copy, result.etag, [this, copy, data, done](const QString &version) {
-            const Content content = classify(copy, data);
-            saveState(copy, content.hash, version, content.text, std::nullopt);
-            done(Outcome::done());
-        });
-    }));
+    client()->put(copy, data, options, guarded([this, copy, data, done = std::move(done)](const PutResult &result) {
+                      if (result.error.isError()) {
+                          if (result.error.isFatal()) {
+                              done(Outcome::fromError(result.error));
+                              return;
+                          }
+                          qCWarning(lcSync).noquote() << tag() << "the conflict copy" << copy
+                                                      << "will be uploaded on the next sync:" << result.error.message;
+                          done(Outcome::done());
+                          return;
+                      }
+                      noteRemoteWritten(copy);
+                      versionAfterPut(copy, result.etag, [this, copy, data, done](const QString &version) {
+                          const Content content = classify(copy, data);
+                          saveState(copy, content.hash, version, content.text, std::nullopt);
+                          done(Outcome::done());
+                      });
+                  }));
 }
 
 void SyncRun::deleteRemote(const PathCtx &ctx, Done done)
@@ -1514,25 +1510,25 @@ void SyncRun::deleteRemote(const PathCtx &ctx, Done done)
     RemoveOptions options;
     if (ctx.remote && !ctx.remote->etag.isEmpty())
         options.ifMatch = ctx.remote->etag;
-    client()->remove(ctx.path, options, guarded([this, ctx, done](const WebDavError &error) {
-        if (error.is(WebDavErrorCode::Precondition)) {
-            // Changed on the server since we listed it: the modification wins, restore it locally.
-            ++m_report.stats.preconditionRetries;
-            PathCtx fresh = ctx;
-            fresh.snap.reset();
-            fresh.remote.reset();
-            download(fresh, done);
-            return;
-        }
-        if (error.isError()) {
-            done(Outcome::fromError(error));
-            return;
-        }
-        noteRemoteDeleted(ctx.path);
-        forget(ctx.path);
-        record(ctx.path, SyncAction::DeleteRemote);
-        done(Outcome::done());
-    }));
+    client()->remove(ctx.path, options, guarded([this, ctx, done = std::move(done)](const WebDavError &error) {
+                         if (error.is(WebDavErrorCode::Precondition)) {
+                             // Changed on the server since we listed it: the modification wins, restore it locally.
+                             ++m_report.stats.preconditionRetries;
+                             PathCtx fresh = ctx;
+                             fresh.snap.reset();
+                             fresh.remote.reset();
+                             download(fresh, done);
+                             return;
+                         }
+                         if (error.isError()) {
+                             done(Outcome::fromError(error));
+                             return;
+                         }
+                         noteRemoteDeleted(ctx.path);
+                         forget(ctx.path);
+                         record(ctx.path, SyncAction::DeleteRemote);
+                         done(Outcome::done());
+                     }));
 }
 
 void SyncRun::deleteLocal(const PathCtx &ctx, Done done)
@@ -1598,7 +1594,8 @@ std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &
 std::optional<VaultPath> SyncRun::findConflictCopy(const VaultPath &path, const QByteArray &content)
 {
     const QString hash = text::fnv1a64Hex(content);
-    for (const FileStat &file : vault()->files()) {
+    const QList<FileStat> files = vault()->files();
+    for (const FileStat &file : files) {
         if (file.isDir || file.size != content.size())
             continue;
         const std::optional<BrulionConflict> parsed = parseBrulionConflict(file.path);

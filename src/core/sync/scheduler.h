@@ -58,7 +58,9 @@ struct SyncStatus {
 /// Clock and one-shot timers of the scheduler; injectable so tests control time.
 class SchedulerTimers {
 public:
+    SchedulerTimers() = default;
     virtual ~SchedulerTimers() = default;
+    Q_DISABLE_COPY_MOVE(SchedulerTimers)
     /// Current time, ms since epoch.
     virtual qint64 now() const = 0;
     /// Run `callback` once after `delayMs`; returns a handle (> 0) for cancel().

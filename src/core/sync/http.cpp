@@ -7,7 +7,9 @@
 #include <QNetworkRequest>
 #include <QTimer>
 
+#include <algorithm>
 #include <memory>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -15,14 +17,14 @@ namespace brulion::sync {
 
 namespace {
 
-template <typename Headers>
-QByteArray findHeader(const Headers &headers, QByteArrayView name)
+using Header = std::pair<QByteArray, QByteArray>;
+
+/// The first request header called `name` (any case), or nullptr.
+const Header *findHeader(const QList<Header> &headers, QByteArrayView name)
 {
-    for (const auto &[key, value] : headers) {
-        if (key.compare(name, Qt::CaseInsensitive) == 0)
-            return value;
-    }
-    return {};
+    const auto it = std::ranges::find_if(
+            headers, [name](const Header &h) { return h.first.compare(name, Qt::CaseInsensitive) == 0; });
+    return it == headers.cend() ? nullptr : &*it;
 }
 
 /// Per-request state shared by the reply's handlers.
@@ -37,16 +39,13 @@ struct ReplyState {
 
 QByteArray HttpRequest::header(QByteArrayView name) const
 {
-    return findHeader(headers, name);
+    const Header *found = findHeader(headers, name);
+    return found ? found->second : QByteArray();
 }
 
 bool HttpRequest::hasHeader(QByteArrayView name) const
 {
-    for (const auto &entry : headers) {
-        if (entry.first.compare(name, Qt::CaseInsensitive) == 0)
-            return true;
-    }
-    return false;
+    return findHeader(headers, name) != nullptr;
 }
 
 QByteArray HttpResponse::header(QByteArrayView name) const
@@ -82,7 +81,7 @@ QNetworkAccessManager *NetworkHttpTransport::manager() const
 
 void NetworkHttpTransport::setMaxRedirects(int count)
 {
-    m_maxRedirects = qMax(0, count);
+    m_maxRedirects = std::max(0, count);
 }
 
 void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)

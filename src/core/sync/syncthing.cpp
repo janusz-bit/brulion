@@ -11,6 +11,7 @@
 #include <QRegularExpression>
 #include <QUrl>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -53,7 +54,7 @@ qint64 jsonCount(const QJsonValue &value)
 int sumCounts(qint64 a, qint64 b)
 {
     const qint64 sum = a > std::numeric_limits<qint64>::max() - b ? std::numeric_limits<qint64>::max() : a + b;
-    return static_cast<int>(qMin<qint64>(sum, std::numeric_limits<int>::max()));
+    return static_cast<int>(std::min<qint64>(sum, std::numeric_limits<int>::max()));
 }
 
 } // namespace
@@ -67,9 +68,9 @@ double completionPercent(qint64 needBytes, qint64 globalBytes)
 {
     if (globalBytes <= 0)
         return needBytes > 0 ? 0.0 : 100.0;
-    const double pct = 100.0 * static_cast<double>(globalBytes - qMin(needBytes, globalBytes))
-        / static_cast<double>(globalBytes);
-    return qBound(0.0, std::floor(pct * 10.0) / 10.0, 100.0);
+    const double pct = 100.0 * static_cast<double>(globalBytes - std::min(needBytes, globalBytes))
+                       / static_cast<double>(globalBytes);
+    return std::clamp(std::floor(pct * 10.0) / 10.0, 0.0, 100.0);
 }
 
 QString normalizeFsPath(const QString &path, const QString &home)
@@ -220,7 +221,7 @@ void SyncthingClient::folders(std::function<void(const FoldersResult &)> done)
             result.error = SyncthingError{200, u"Unexpected /rest/config/folders response"_s};
         } else {
             const QJsonArray array = doc.array();
-            for (const QJsonValue &value : array) {
+            for (const auto &value : array) {
                 const QJsonObject o = value.toObject();
                 const QString id = o.value(u"id"_s).toString();
                 if (id.isEmpty())

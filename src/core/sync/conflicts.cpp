@@ -35,15 +35,14 @@ QString sanitizeDeviceName(const QString &device)
     static const QRegularExpression unsafe(u"[^\\p{L}\\p{N}_-]+"_s);
     static const QRegularExpression dashes(u"-{2,}"_s);
     static const QRegularExpression edgeDashes(u"^-+|-+$"_s);
-    static const QRegularExpression trailingDashes(u"-+$"_s);
     QString cleaned = device.normalized(QString::NormalizationForm_C);
     cleaned.replace(unsafe, u"-"_s);
     cleaned.replace(dashes, u"-"_s);
     cleaned.remove(edgeDashes);
-    cleaned = cleaned.left(40);
+    cleaned.truncate(40);
     if (!cleaned.isEmpty() && cleaned.back().isHighSurrogate())
         cleaned.chop(1); // never split a letter outside the BMP (a lone surrogate)
-    cleaned.remove(trailingDashes);
+    cleaned.remove(edgeDashes); // the cut may end in '-' again
     return cleaned.isEmpty() ? u"urzadzenie"_s : cleaned;
 }
 
