@@ -7,6 +7,17 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.1 — 9 listopada 2026
+
+**Uwaga**
+- Wersja 0.16.0 nie została opublikowana: jej testy nie przeszły na serwerach budujących. Autotest aplikacji klikał link na stronie, która jeszcze wracała do miejsca, w którym była przewinięta, a test edytora rysunków wykrył błąd poprawiony niżej. Wszystkie nowości 0.16.0, opisane niżej, są dostępne od tej wersji.
+
+**Zmiany**
+- **Widoki zostają gotowe** — Dziennik, Strony, Szukaj, Zadania i Kalendarz zostają w swojej karcie po pierwszym pokazaniu: powrót do nich jest natychmiastowy (budowanie od nowa trwało na telefonie 0,5–1 s) i wracają przewinięte tam, gdzie były. Widok opuszczony w ten sposób najpierw kończy edycję. Inne widoki nadal powstają od nowa przy otwarciu.
+
+**Poprawki**
+- Na zajętym urządzeniu przyciski świeżo otwartego widoku mogły tracić podpowiedzi i przestać zmieniać kolor: na pasku narzędzi rysunku pióro zostawało podświetlone po wybraniu innego narzędzia. Sprzątanie nieużywanej pamięci w Qt, robione od Qt 6.8 małymi krokami, mogło uznać je za nieużywane, gdy widok dopiero powstawał; Brulion każe mu teraz pracować za jednym razem, jak dawniej.
+
 ## 0.16.0 — 8 listopada 2026
 
 **Nowe**
