@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
@@ -47,16 +48,18 @@ Item {
     property PageController controller
     property string scenario: DevTools.editorScript
 
-    /// The item named `name` under `item` (depth first), or null.
-    function findItem(item: Item, name: string): Item {
-        return DevTest.findItem(item, name)
-    }
+    /// The item named `name` under `item` (depth first), or null (a typed function: its result
+    /// stays valid across the calls that follow it).
+    function findItem(item: Item, name: string): Item { return DevTest.findItem(item, name) }
 
     /// `en`, or `pl` when the UI (and so the sample notebook) is Polish.
     function say(en: string, pl: string): string {
         return DevTools.language === "pl" ? pl : en
     }
     readonly property string emptyPage: script.say("Empty page.md", "Pusta strona.md")
+    /// Blocks of the sample notebook's guide that the scenarios work on.
+    readonly property string listItem: script.say("Every list item", "Każdy punkt listy")
+    readonly property string callMom: script.say("Call Mom", "Zadzwonić do mamy")
 
     /// The fields of a block (BlockListModel.get()).
     property DevBlock block: DevBlock {}
@@ -83,15 +86,9 @@ Item {
         script.editor.ensureRowVisible(row)
         script.dialogs().createReminder(row, false)
     }
-    function dialogs(): EditorDialogs {
-        return script.editor.dialogs as EditorDialogs
-    }
-    function list(): ListView {
-        return script.editor.listView
-    }
-    function edit(): InlineEditor {
-        return script.editor.activeEditor
-    }
+    function dialogs(): EditorDialogs { return script.editor.dialogs as EditorDialogs }
+    function list(): ListView { return script.editor.listView }
+    function edit(): InlineEditor { return script.editor.activeEditor }
     /// The block the scenario works on (the second half of "toolbar-menu").
     property int scenarioRow: -1
     /// The second half of a scenario, a moment later (after the editor has its toolbar, the menu
@@ -146,18 +143,17 @@ Item {
         onTriggered: {
             switch (script.scenario) {
             case "editing":
-                script.editor.startEditing(script.rowOf(script.say("Every list item", "Każdy punkt listy")), -1)
+                script.editor.startEditing(script.rowOf(script.listItem), -1)
                 break
             case "editing-toast":
-                script.editor.startEditing(script.rowOf(script.say("Every list item", "Każdy punkt listy")), -1)
+                script.editor.startEditing(script.rowOf(script.listItem), -1)
                 later.run(1)
                 break
-            case "toolbar-menu": {
-                script.scenarioRow = script.rowOf(script.say("Every list item", "Każdy punkt listy"))
+            case "toolbar-menu":
+                script.scenarioRow = script.rowOf(script.listItem)
                 script.editor.startEditing(script.scenarioRow, -1)
                 later.run(1)
                 break
-            }
             case "suggest":
                 script.typeAfter(script.say("A link to a page", "Link do strony"),
                                  script.say("See also [[Rec", "Zobacz też [[Prze"))
@@ -167,15 +163,15 @@ Item {
                                  script.say("Buy paint #pro", "Kupić farbę #pro"))
                 break
             case "slash":
-                script.typeAfter(script.say("Call Mom", "Zadzwonić do mamy"),
+                script.typeAfter(script.callMom,
                                  script.say("Buy tickets /remi", "Kupić bilety /przy"))
                 break
             case "date":
-                script.typeAfter(script.say("Call Mom", "Zadzwonić do mamy"),
+                script.typeAfter(script.callMom,
                                  script.say("Pick up the parcel ⏰ tomorrow at 9", "Odebrać paczkę ⏰ jutro o 9"))
                 break
             case "reminder":
-                script.reminderFor(script.controller.insertBlockAfter(script.rowOf(script.say("Call Mom", "Zadzwonić do mamy")),
+                script.reminderFor(script.controller.insertBlockAfter(script.rowOf(script.callMom),
                                                                       script.say("Buy train tickets", "Kupić bilety na pociąg")))
                 break
             case "source":
@@ -244,10 +240,12 @@ Item {
         return Js.split(Js.substringFrom(script.scenario, 13), "..")
     }
     function rangeEnd(): string {
-        return script.ends().length > 1 ? script.ends()[1] : script.ends()[0]
+        const parts = script.ends()
+        return parts.length > 1 ? parts[1] : parts[0]
     }
     function editCaret(): int {
-        return script.editSpec().length > 1 ? Js.parseInt(script.editSpec()[1]) : -1
+        const parts = script.editSpec()
+        return parts.length > 1 ? Js.parseInt(parts[1]) : -1
     }
     function editSpec(): list<string> {
         return Js.split(Js.substringFrom(script.scenario, 5), "@")

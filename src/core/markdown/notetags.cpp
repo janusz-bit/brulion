@@ -82,6 +82,23 @@ QStringView slice(QStringView s, Range r)
     return s.sliced(r.first, r.second - r.first);
 }
 
+/// The tag `name` (NFC) at `range` of a text that starts at document offset `offset`.
+NoteTag noteTag(const QString &name, Range range, qsizetype offset, int line, TagForm form)
+{
+    return NoteTag{.name = name.normalized(QString::NormalizationForm_C),
+                   .from = offset + range.first,
+                   .to = offset + range.second,
+                   .line = line,
+                   .form = form};
+}
+
+/// The first character of a YAML value of a form the scan does not place: a flow mapping, a block
+/// scalar, an anchor, an alias or a tag.
+bool isUnplacedIndicator(QChar c)
+{
+    return QStringView(u"{|>&*!").contains(c);
+}
+
 // ---- The frontmatter's tag key ----------------------------------------------------------------
 
 /// A line of the YAML source with its offset in the document.
@@ -106,14 +123,6 @@ QList<YamlLine> yamlLines(QStringView yaml, qsizetype base, int firstLine)
     return out;
 }
 
-int yamlIndent(QStringView line)
-{
-    int n = 0;
-    while (n < line.size() && (line[n] == u' ' || line[n] == u'\t'))
-        ++n;
-    return n;
-}
-
 /// Collects the items of the tag key (namesFrom()'s rules) with their document ranges.
 class FrontmatterScan {
 public:
@@ -127,7 +136,7 @@ public:
         if (range.first == range.second)
             return true; // null item: namesFrom() skips it
         const QChar first = line.text[range.first];
-        if (first == u'{' || first == u'|' || first == u'>' || first == u'&' || first == u'*' || first == u'!')
+        if (isUnplacedIndicator(first))
             return false;
         if (first == u'[') // a nested list: `[[Dom]]` is the link [[Dom]] (namesFrom() reads "Dom")
             return linkItem(line, range);
@@ -150,7 +159,8 @@ public:
             return false;
         const Range inner = unquoted(line.text, range);
         const QStringView value = slice(line.text, inner);
-        for (const Range &part : topLevelCommaRanges(value)) {
+        const QList<Range> parts = topLevelCommaRanges(value);
+        for (const Range &part : parts) {
             const Range r = trimmed(value, part);
             const Range abs{inner.first + r.first, inner.first + r.second};
             const QStringView t = slice(line.text, abs);
@@ -161,6 +171,9 @@ public:
         }
         return true;
     }
+
+    /// The names of the items found so far, as namesFrom() reads them.
+    const QStringList &names() const { return m_names; }
 
 private:
     /// A quoted item must be closed and free of escapes (their offsets would not map).
@@ -234,19 +247,12 @@ private:
 
     void add(const YamlLine &line, Range r, const QString &cleaned, bool link)
     {
-        NoteTag tag;
-        tag.name = cleaned.normalized(QString::NormalizationForm_C);
-        tag.from = line.offset + r.first;
-        tag.to = line.offset + r.second;
-        tag.line = line.line;
-        tag.form = TagForm::Frontmatter;
+        const NoteTag tag = noteTag(cleaned, r, line.offset, line.line, TagForm::Frontmatter);
         m_out.items.append(FrontmatterTagItem{tag, link});
         m_names.append(cleaned);
     }
 
     FrontmatterTags &m_out;
-
-public:
     QStringList m_names;
 };
 
@@ -299,7 +305,8 @@ QList<NoteTag> propertyTagItems(QStringView value, qsizetype valueOffset, int li
                                 const std::function<bool(qsizetype)> &hashAt)
 {
     QList<NoteTag> out;
-    for (const Range &part : topLevelCommaRanges(value)) {
+    const QList<Range> parts = topLevelCommaRanges(value);
+    for (const Range &part : parts) {
         Range r = unquoted(value, trimmed(value, part));
         if (r.first >= r.second)
             continue;
@@ -311,15 +318,8 @@ QList<NoteTag> propertyTagItems(QStringView value, qsizetype valueOffset, int li
         if (slice(value, r).startsWith(u"[["))
             continue; // a [[link]]: renameLinks() rewrites it
         const QString name = cleanName(slice(value, part));
-        if (name.isEmpty() || slice(value, r) != name)
-            continue;
-        NoteTag tag;
-        tag.name = name.normalized(QString::NormalizationForm_C);
-        tag.from = valueOffset + r.first;
-        tag.to = valueOffset + r.second;
-        tag.line = line;
-        tag.form = TagForm::Property;
-        out.append(tag);
+        if (!name.isEmpty() && slice(value, r) == name)
+            out.append(noteTag(name, r, valueOffset, line, TagForm::Property));
     }
     return out;
 }
@@ -369,7 +369,7 @@ FrontmatterTags frontmatterTagItems(QStringView content)
         // A block list on the following lines (`- a`, also at the key's indentation).
         for (qsizetype k = keyLine + 1; k < lines.size() && ok; ++k) {
             const QStringView t = lines[k].text;
-            const int indent = yamlIndent(t);
+            const qsizetype indent = indentOf(t).chars;
             const QStringView rest = t.sliced(indent);
             if (rest.trimmed().isEmpty() || rest.startsWith(u'#'))
                 continue;
@@ -383,17 +383,16 @@ FrontmatterTags frontmatterTagItems(QStringView content)
         }
     } else if (value.startsWith(u'[')) {
         ok = scanFlow(lines, keyLine, v, scan);
-    } else if (value.startsWith(u'{') || value.startsWith(u'|') || value.startsWith(u'>') || value.startsWith(u'&')
-               || value.startsWith(u'*') || value.startsWith(u'!')) {
+    } else if (isUnplacedIndicator(value.front())) {
         ok = false;
     } else {
         ok = scan.scalar(line, {v, v + value.size()});
         // A plain scalar continued on the next (indented) line is not placed.
-        if (ok && keyLine + 1 < lines.size() && yamlIndent(lines[keyLine + 1].text) > 0
+        if (ok && keyLine + 1 < lines.size() && indentOf(lines[keyLine + 1].text).chars > 0
             && !lines[keyLine + 1].text.trimmed().isEmpty())
             ok = false;
     }
-    out.complete = ok && scan.m_names == expected;
+    out.complete = ok && scan.names() == expected;
     if (!out.complete)
         out.items.clear();
     return out;
@@ -405,11 +404,12 @@ QList<NoteTag> findNoteTags(QStringView content)
 {
     QList<NoteTag> tags;
     parseNoteWith(QString(), content, VaultConfig(), StructureOptions(), &tags);
-    for (const FrontmatterTagItem &item : frontmatterTagItems(content).items) {
+    const FrontmatterTags fm = frontmatterTagItems(content);
+    for (const FrontmatterTagItem &item : fm.items) {
         if (!item.link)
             tags.append(item.tag);
     }
-    std::ranges::stable_sort(tags, [](const NoteTag &a, const NoteTag &b) { return a.from < b.from; });
+    std::ranges::stable_sort(tags, {}, &NoteTag::from);
     return tags;
 }
 

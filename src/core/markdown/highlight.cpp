@@ -1,14 +1,20 @@
 #include "markdown/highlight.h"
 
 #include "markdown/inline.h"
+#include "markdown/lines_p.h"
+
+#include <QStringTokenizer>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::markdown {
+
+using namespace detail;
 
 namespace {
 
@@ -38,21 +44,6 @@ const Entry &entryOf(HighlightColor color)
     return Entries[std::size_t(color)];
 }
 
-bool isAsciiLetter(QChar c)
-{
-    return (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z');
-}
-
-bool isAsciiDigit(QChar c)
-{
-    return c >= u'0' && c <= u'9';
-}
-
-bool isBlank(QChar c)
-{
-    return c == u' ' || c == u'\t';
-}
-
 int hexValue(QChar c)
 {
     if (isAsciiDigit(c))
@@ -62,6 +53,14 @@ int hexValue(QChar c)
     if (c >= u'A' && c <= u'F')
         return c.unicode() - u'A' + 10;
     return -1;
+}
+
+/// The first position from `i` of `s` that is no blank (or the end).
+qsizetype skipBlanks(QStringView s, qsizetype i)
+{
+    while (i < s.size() && isSpaceOrTab(s[i]))
+        ++i;
+    return i;
 }
 
 struct Rgb {
@@ -192,7 +191,7 @@ std::optional<HighlightColor> colorAt(QStringView v, qsizetype i, qsizetype &end
         std::array<double, 3> c{};
         qsizetype k = j + 1;
         for (double &channel : c) {
-            while (k < close && (isBlank(v[k]) || v[k] == u','))
+            while (k < close && (isSpaceOrTab(v[k]) || v[k] == u','))
                 ++k;
             qsizetype d = k;
             while (d < close && (isAsciiDigit(v[d]) || v[d] == u'.'))
@@ -232,15 +231,15 @@ std::optional<HighlightColor> firstColor(QStringView value)
     return std::nullopt;
 }
 
-/// A run of exactly two '=' at [i, i + 2) of `s`: can it open / close a highlight (CommonMark's
-/// flanking rules, as the renderer applies them).
-void flanking(QStringView s, qsizetype i, bool &canOpen, bool &canClose)
+/// A run of exactly two '=' at [i, i + 2) of `s`: {can it open, can it close} a highlight
+/// (CommonMark's flanking rules, as the renderer applies them).
+std::pair<bool, bool> flanking(QStringView s, qsizetype i)
 {
     const QChar prev = i > 0 ? s[i - 1] : QChar(u' ');
     const QChar next = i + 2 < s.size() ? s[i + 2] : QChar(u' ');
     const auto punct = [](QChar c) { return c.isPunct() || c.isSymbol(); };
-    canOpen = !next.isSpace() && (!punct(next) || prev.isSpace() || punct(prev));
-    canClose = !prev.isSpace() && (!punct(prev) || next.isSpace() || punct(next));
+    return {!next.isSpace() && (!punct(next) || prev.isSpace() || punct(prev)),
+            !prev.isSpace() && (!punct(prev) || next.isSpace() || punct(next))};
 }
 
 } // namespace
@@ -275,7 +274,7 @@ HighlightColor highlightColorFromStyle(QStringView style)
 {
     // The last background declaration wins, as in CSS.
     std::optional<HighlightColor> found;
-    for (QStringView decl : style.split(u';')) {
+    for (QStringView decl : style.tokenize(u';')) {
         const qsizetype colon = decl.indexOf(u':');
         if (colon < 0)
             continue;
@@ -291,8 +290,8 @@ HighlightColor highlightColorFromStyle(QStringView style)
 
 HighlightColor highlightColorFromClass(QStringView classes)
 {
-    for (QStringView cls : classes.split(u' ', Qt::SkipEmptyParts)) {
-        if (cls.size() > 5 && cls.first(5).compare(u"hltr-", Qt::CaseInsensitive) == 0) {
+    for (QStringView cls : classes.tokenize(u' ', Qt::SkipEmptyParts)) {
+        if (cls.startsWith(u"hltr-", Qt::CaseInsensitive)) {
             if (const auto color = parseHighlightColorName(cls.sliced(5)))
                 return *color;
         }
@@ -302,24 +301,20 @@ HighlightColor highlightColorFromClass(QStringView classes)
 
 std::optional<MarkTag> markTagAt(QStringView text, qsizetype at)
 {
-    constexpr qsizetype MaxTag = 512;
-    const qsizetype limit = std::min(text.size(), at + MaxTag);
     if (at < 0 || at >= text.size() || text[at] != u'<')
         return std::nullopt;
-    qsizetype i = at + 1;
+    constexpr qsizetype MaxTag = 512;
+    const QStringView s = text.first(std::min(text.size(), at + MaxTag)); // where the tag has to end
     MarkTag tag;
     tag.from = at;
-    if (i < limit && text[i] == u'/') {
-        tag.closing = true;
-        ++i;
-    }
-    if (i + 4 > limit || text.sliced(i, 4).compare(u"mark", Qt::CaseInsensitive) != 0)
+    tag.closing = charAt(s, at + 1) == u'/';
+    qsizetype i = tag.closing ? at + 2 : at + 1;
+    if (i + 4 > s.size() || s.sliced(i, 4).compare(u"mark", Qt::CaseInsensitive) != 0)
         return std::nullopt;
     i += 4;
     if (tag.closing) {
-        while (i < limit && isBlank(text[i]))
-            ++i;
-        if (i >= limit || text[i] != u'>')
+        i = skipBlanks(s, i);
+        if (charAt(s, i) != u'>')
             return std::nullopt;
         tag.to = i + 1;
         return tag;
@@ -328,58 +323,48 @@ std::optional<MarkTag> markTagAt(QStringView text, qsizetype at)
     std::optional<QStringView> classes;
     while (true) {
         const qsizetype wsStart = i;
-        while (i < limit && isBlank(text[i]))
-            ++i;
-        if (i >= limit)
+        i = skipBlanks(s, i);
+        if (i >= s.size())
             return std::nullopt;
-        if (text[i] == u'>')
+        if (s[i] == u'>')
             break;
         // An attribute needs a blank before it (`<markx>` is another tag); no self-closing mark.
-        if (i == wsStart || !(isAsciiLetter(text[i]) || text[i] == u'_' || text[i] == u':'))
+        if (i == wsStart || !(isAsciiLetter(s[i]) || s[i] == u'_' || s[i] == u':'))
             return std::nullopt;
         const qsizetype nameFrom = i;
-        while (i < limit
-               && (isAsciiLetter(text[i]) || isAsciiDigit(text[i]) || text[i] == u'_' || text[i] == u'.'
-                   || text[i] == u':' || text[i] == u'-'))
+        while (i < s.size()
+               && (isAsciiLetter(s[i]) || isAsciiDigit(s[i]) || s[i] == u'_' || s[i] == u'.' || s[i] == u':'
+                   || s[i] == u'-'))
             ++i;
-        const QStringView name = text.sliced(nameFrom, i - nameFrom);
-        qsizetype j = i;
-        while (j < limit && isBlank(text[j]))
-            ++j;
-        if (j < limit && text[j] == u'=') {
-            ++j;
-            while (j < limit && isBlank(text[j]))
-                ++j;
-            if (j >= limit)
+        const QStringView name = s.sliced(nameFrom, i - nameFrom);
+        qsizetype j = skipBlanks(s, i);
+        if (charAt(s, j) != u'=')
+            continue; // an attribute without a value
+        j = skipBlanks(s, j + 1);
+        if (j >= s.size())
+            return std::nullopt;
+        QStringView value;
+        if (const QChar quote = s[j]; quote == u'"' || quote == u'\'') {
+            qsizetype k = j + 1;
+            while (k < s.size() && s[k] != quote && !isLineBreak(s[k]))
+                ++k;
+            if (charAt(s, k) != quote)
                 return std::nullopt;
-            qsizetype valueFrom = j;
-            qsizetype valueTo = j;
-            if (text[j] == u'"' || text[j] == u'\'') {
-                const QChar quote = text[j];
-                qsizetype k = j + 1;
-                while (k < limit && text[k] != quote && text[k] != u'\n' && text[k] != u'\r')
-                    ++k;
-                if (k >= limit || text[k] != quote)
-                    return std::nullopt;
-                valueFrom = j + 1;
-                valueTo = k;
-                i = k + 1;
-            } else {
-                static const QString forbidden = u"\"'=<>`"_s;
-                qsizetype k = j;
-                while (k < limit && !text[k].isSpace() && !forbidden.contains(text[k]))
-                    ++k;
-                if (k == j)
-                    return std::nullopt;
-                valueTo = k;
-                i = k;
-            }
-            const QStringView value = text.sliced(valueFrom, valueTo - valueFrom);
-            if (name.compare(u"style", Qt::CaseInsensitive) == 0 && !style)
-                style = value;
-            else if (name.compare(u"class", Qt::CaseInsensitive) == 0 && !classes)
-                classes = value;
+            value = s.sliced(j + 1, k - j - 1);
+            i = k + 1;
+        } else {
+            constexpr QStringView forbidden = u"\"'=<>`";
+            i = j;
+            while (i < s.size() && !s[i].isSpace() && !forbidden.contains(s[i]))
+                ++i;
+            if (i == j)
+                return std::nullopt;
+            value = s.sliced(j, i - j);
         }
+        if (!style && name.compare(u"style", Qt::CaseInsensitive) == 0)
+            style = value;
+        else if (!classes && name.compare(u"class", Qt::CaseInsensitive) == 0)
+            classes = value;
     }
     tag.to = i + 1;
     if (style)
@@ -421,30 +406,29 @@ QList<HighlightSpan> findHighlights(QStringView text)
 {
     const QString masked = maskInlineCode(text);
     QList<HighlightSpan> out;
-    for (const MarkPair &p : findMarkPairs(masked))
+    QList<Range> tags; // of the `<mark>` pairs: no `==` inside them
+    for (const QList<MarkPair> pairs = findMarkPairs(masked); const MarkPair &p : pairs) {
         out.append({p.open.from, p.open.to, p.close.from, p.close.to, true, p.open.color});
-    // `==` runs (exactly two), outside mark tags.
-    QList<std::pair<qsizetype, qsizetype>> tags;
-    for (const HighlightSpan &s : std::as_const(out)) {
-        tags.append({s.from, s.contentFrom});
-        tags.append({s.contentTo, s.to});
+        tags.append({p.open.from, p.open.to});
+        tags.append({p.close.from, p.close.to});
     }
+    // The tags never overlap: sorted, a cursor that only moves forward finds the one around `i`
+    // (asked for in increasing order).
+    std::ranges::sort(tags);
+    qsizetype tag = 0;
     const auto inTag = [&](qsizetype i) {
-        return std::any_of(tags.cbegin(), tags.cend(), [i](const auto &t) { return i >= t.first && i < t.second; });
+        while (tag < tags.size() && tags.at(tag).second <= i)
+            ++tag;
+        return tag < tags.size() && tags.at(tag).first <= i;
     };
+    // `==` runs (exactly two), outside mark tags.
     QList<qsizetype> openers;
-    for (qsizetype i = 0; i < masked.size();) {
-        if (masked[i] != u'=') {
-            ++i;
-            continue;
-        }
-        qsizetype j = i;
+    for (qsizetype i = masked.indexOf(u'='); i >= 0;) {
+        qsizetype j = i + 1;
         while (j < masked.size() && masked[j] == u'=')
             ++j;
         if (j - i == 2 && !inTag(i) && (i == 0 || masked[i - 1] != u'\\')) {
-            bool canOpen = false;
-            bool canClose = false;
-            flanking(masked, i, canOpen, canClose);
+            const auto [canOpen, canClose] = flanking(masked, i);
             if (canClose && !openers.isEmpty()) {
                 const qsizetype o = openers.takeLast();
                 out.append({o, o + 2, i, i + 2, false, HighlightColor::Default});
@@ -452,33 +436,33 @@ QList<HighlightSpan> findHighlights(QStringView text)
                 openers.append(i);
             }
         }
-        i = j;
+        i = masked.indexOf(u'=', j);
     }
-    std::ranges::sort(out, [](const HighlightSpan &a, const HighlightSpan &b) { return a.from < b.from; });
+    std::ranges::sort(out, {}, &HighlightSpan::from);
     return out;
 }
 
 namespace {
 
-/// `content` wrapped in the markers of `color` (Default: `==`, or `<mark>` where `==` would not
-/// pair there — after a letter before punctuation, "a==(b)==").
-QString wrapped(const QString &text, qsizetype from, qsizetype to, HighlightColor color, qsizetype &contentFrom,
-                qsizetype &contentTo)
+/// `text` with [from, to) wrapped in the markers of `color` (Default: `==`, or `<mark>` where `==`
+/// would not pair there — after a letter before punctuation, "a==(b)=="), the wrapped text selected.
+HighlightEdit wrapped(const QString &text, qsizetype from, qsizetype to, HighlightColor color)
 {
     const QStringView content = QStringView(text).sliced(from, to - from);
-    const auto build = [&](const QString &open, const QString &close) {
-        contentFrom = from + open.size();
-        contentTo = contentFrom + content.size();
-        return text.left(from) + open + content + close + text.sliced(to);
+    const auto build = [&](QStringView open, QStringView close) {
+        const qsizetype contentFrom = from + open.size();
+        return HighlightEdit{text.left(from) + open + content + close + text.sliced(to), contentFrom,
+                             contentFrom + content.size(), true};
     };
     if (color != HighlightColor::Default)
-        return build(markOpenTag(color), u"</mark>"_s);
-    const QString eq = build(u"=="_s, u"=="_s);
-    for (const HighlightSpan &s : findHighlights(eq)) {
-        if (!s.html && s.contentFrom == contentFrom && s.contentTo == contentTo)
-            return eq;
-    }
-    return build(u"<mark>"_s, u"</mark>"_s);
+        return build(markOpenTag(color), u"</mark>");
+    HighlightEdit eq = build(u"==", u"==");
+    const auto pairs = [&eq](const HighlightSpan &s) {
+        return !s.html && s.contentFrom == eq.from && s.contentTo == eq.to;
+    };
+    if (std::ranges::any_of(findHighlights(eq.text), pairs))
+        return eq;
+    return build(u"<mark>", u"</mark>");
 }
 
 } // namespace
@@ -489,42 +473,29 @@ HighlightEdit setHighlight(const QString &text, qsizetype from, qsizetype to, st
     to = std::clamp<qsizetype>(to, 0, text.size());
     if (from > to)
         std::swap(from, to);
-    HighlightEdit out{text, from, to, false};
     const QList<HighlightSpan> spans = findHighlights(text);
 
-    // The innermost highlight the selection is in (or exactly covers).
+    // The innermost highlight the selection is in (or exactly covers): the last one, `spans` being
+    // ordered by `from`.
     const HighlightSpan *around = nullptr;
     for (const HighlightSpan &s : spans) {
-        const bool inside = from >= s.contentFrom && to <= s.contentTo;
-        const bool whole = from == s.from && to == s.to;
-        if ((inside || whole) && (!around || s.from >= around->from))
+        if ((from >= s.contentFrom && to <= s.contentTo) || (from == s.from && to == s.to))
             around = &s;
     }
     if (around) {
-        const HighlightSpan s = *around;
+        const HighlightSpan &s = *around;
+        if (color && s.color == *color && (s.html || *color == HighlightColor::Default))
+            return {text, s.contentFrom, s.contentTo};
+        // The markers removed, or replaced (recoloured); the text between them kept.
         const QStringView content = QStringView(text).sliced(s.contentFrom, s.contentTo - s.contentFrom);
-        if (!color) {
-            out.text = text.left(s.from) + content + text.sliced(s.to);
-            out.from = s.from;
-            out.to = s.from + content.size();
-            out.changed = true;
-            return out;
-        }
-        if (s.color == *color && (s.html || *color == HighlightColor::Default)) {
-            out.from = s.contentFrom;
-            out.to = s.contentTo;
-            return out;
-        }
-        // Recoloured: the markers replaced, the text between them kept.
         const QString unwrapped = text.left(s.from) + content + text.sliced(s.to);
-        qsizetype cf = 0;
-        qsizetype ct = 0;
-        out.text = wrapped(unwrapped, s.from, s.from + content.size(), *color, cf, ct);
-        out.from = cf;
-        out.to = ct;
-        out.changed = out.text != text;
-        return out;
+        if (!color)
+            return {unwrapped, s.from, s.from + content.size(), true};
+        HighlightEdit edit = wrapped(unwrapped, s.from, s.from + content.size(), *color);
+        edit.changed = edit.text != text;
+        return edit;
     }
+    HighlightEdit out{text, from, to, false};
     if (!color)
         return out;
     const QStringView selected = QStringView(text).sliced(from, to - from);
@@ -536,8 +507,9 @@ HighlightEdit setHighlight(const QString &text, qsizetype from, qsizetype to, st
         ++from;
     while (to > from && text[to - 1].isSpace())
         --to;
-    // A highlight cut by the selection, or a caret inside a marker: refused.
-    QList<HighlightSpan> inner;
+    // A highlight cut by the selection, or a caret inside a marker: refused. Highlights inside the
+    // selection lose their markers (one colour for the whole text).
+    QList<Range> markers;
     for (const HighlightSpan &s : spans) {
         const bool overlaps = s.from < to && from < s.to;
         const bool contained = s.from >= from && s.to <= to;
@@ -546,29 +518,19 @@ HighlightEdit setHighlight(const QString &text, qsizetype from, qsizetype to, st
             out.refused = true;
             return out;
         }
-        if (overlaps && contained)
-            inner.append(s);
+        if (overlaps && contained) {
+            markers.append({s.from, s.contentFrom});
+            markers.append({s.contentTo, s.to});
+        }
     }
-    // Highlights inside the selection lose their markers (one colour for the whole text).
-    // Their markers never overlap: removed from the last one back, the earlier positions hold.
-    QList<std::pair<qsizetype, qsizetype>> markers;
-    for (const HighlightSpan &s : std::as_const(inner)) {
-        markers.append({s.from, s.contentFrom});
-        markers.append({s.contentTo, s.to});
-    }
+    // The markers never overlap: removed from the last one back, the earlier positions hold.
     std::ranges::sort(markers);
     QString base = text;
-    for (qsizetype k = markers.size() - 1; k >= 0; --k) {
-        base.remove(markers[k].first, markers[k].second - markers[k].first);
-        to -= markers[k].second - markers[k].first;
+    for (const auto &[markerFrom, markerTo] : std::as_const(markers) | std::views::reverse) {
+        base.remove(markerFrom, markerTo - markerFrom);
+        to -= markerTo - markerFrom;
     }
-    qsizetype cf = 0;
-    qsizetype ct = 0;
-    out.text = wrapped(base, from, to, *color, cf, ct);
-    out.from = cf;
-    out.to = ct;
-    out.changed = true;
-    return out;
+    return wrapped(base, from, to, *color);
 }
 
 } // namespace brulion::markdown

@@ -7,6 +7,9 @@
 #include <QSet>
 #include <QStringList>
 
+#include <algorithm>
+#include <utility>
+
 namespace brulion::markdown {
 
 using namespace Qt::StringLiterals;
@@ -32,6 +35,18 @@ struct Node {
 QString escaped(QStringView s)
 {
     return s.toString().toHtmlEscaped();
+}
+
+/// `html` in a <span> with the CSS `style`.
+QString styled(const QString &html, QStringView style)
+{
+    return u"<span style=\""_s + style + u"\">"_s + html + u"</span>"_s;
+}
+
+/// Whether `name` is one of `names`.
+bool isOneOf(QStringView name, std::initializer_list<QStringView> names)
+{
+    return std::ranges::find(names, name) != names.end();
 }
 
 /// Space between two neighbouring nodes: TeX's medium space around Bin/Rel, none around
@@ -202,21 +217,17 @@ void attachScript(QList<Node> &nodes, QChar which, const QString &html)
         return;
     if (nodes.isEmpty())
         nodes.append(Node{});
-    Node &n = nodes.last();
-    if (which == u'^') {
-        n.sup.isEmpty() ? n.sup = html : n.sup += html;
-    } else {
-        n.sub.isEmpty() ? n.sub = html : n.sub += html;
-    }
+    QString &script = which == u'^' ? nodes.last().sup : nodes.last().sub;
+    script += html;
 }
 
 /// Puts the combining mark of an accent on the last character of `html` (inside its tags:
 /// `<i>x</i>` + ̂ -> `<i>x̂</i>`).
-QString withCombining(QString html, QChar mark)
+QString withCombining(const QString &html, QChar mark)
 {
     if (html.endsWith(u'>')) {
         const qsizetype open = html.lastIndexOf(u'<');
-        if (open >= 0 && html[open + 1] == u'/')
+        if (open >= 0 && html.at(open + 1) == u'/')
             return html.left(open) + mark + html.mid(open);
     }
     return html + mark;
@@ -581,19 +592,17 @@ QString fractionHtml(const Arg &numerator, const Arg &denominator)
                                               {u"4/5"_s, u'⅘'}, {u"1/6"_s, u'⅙'}, {u"5/6"_s, u'⅚'}, {u"1/7"_s, u'⅐'},
                                               {u"1/8"_s, u'⅛'}, {u"3/8"_s, u'⅜'}, {u"5/8"_s, u'⅝'}, {u"7/8"_s, u'⅞'},
                                               {u"1/9"_s, u'⅑'}, {u"1/10"_s, u'⅒'}};
-    const auto digit = [](const QString &html) -> QString {
-        return html.size() == 1 && html[0].isDigit() ? html : QString();
-    };
-    const QString a = digit(numerator.html);
-    const QString b = digit(denominator.html);
-    if (!a.isEmpty() && !b.isEmpty()) {
-        const auto it = vulgar.constFind(a + u'/' + b);
+    const auto digit = [](const QString &html) { return html.size() == 1 && html.at(0).isDigit(); };
+    if (digit(numerator.html) && digit(denominator.html)) {
+        const auto it = vulgar.constFind(numerator.html + u'/' + denominator.html);
         if (it != vulgar.constEnd())
             return QString(*it);
     }
-    const QString top = scriptable(numerator) ? numerator.html : u'(' + numerator.html + u')';
-    const QString bottom = scriptable(denominator) ? denominator.html : u'(' + denominator.html + u')';
-    if (scriptable(numerator) && scriptable(denominator))
+    const bool scriptTop = scriptable(numerator);
+    const bool scriptBottom = scriptable(denominator);
+    const QString top = scriptTop ? numerator.html : u'(' + numerator.html + u')';
+    const QString bottom = scriptBottom ? denominator.html : u'(' + denominator.html + u')';
+    if (scriptTop && scriptBottom)
         return u"<sup>"_s + top + u"</sup>&#8260;<sub>"_s + bottom + u"</sub>"_s;
     return top + u"&#8260;"_s + bottom;
 }
@@ -609,7 +618,7 @@ QString radicalHtml(const QString &index, const QString &body)
         head = u"∜"_s;
     else
         head = u"√<sup>"_s + index + u"</sup>"_s;
-    return head + u"<span style=\"text-decoration:overline\">"_s + body + u"</span>"_s;
+    return head + styled(body, u"text-decoration:overline");
 }
 
 /// The rows of an environment's body and the cells of each row. Only the body's own `\\` and
@@ -627,8 +636,7 @@ QList<QList<QStringView>> environmentCells(QStringView body)
             const QChar next = body[i + 1];
             if (next == u'\\' && braces == 0 && environments == 0) {
                 cells.append(body.sliced(cellStart, i - cellStart));
-                rows.append(cells);
-                cells.clear();
+                rows.append(std::exchange(cells, {}));
                 i += 2;
                 cellStart = i;
                 continue;
@@ -666,51 +674,35 @@ QList<QList<QStringView>> environmentCells(QStringView body)
 
 /// `\begin{env} … \end{env}`: a matrix, `cases`, `aligned` or an `array` as plain rich text
 /// (cells separated by spaces, rows by "; "). No stacking — a formula is one line here.
-QString environmentHtml(QStringView body, const QString &env, bool display)
+QString environmentHtml(QStringView body, QStringView env, bool display)
 {
-    QString source = body.toString();
-    QString left;
-    QString right;
-    bool matrix = false;
-    if (env == u"matrix" || env == u"smallmatrix") {
-        matrix = true;
-    } else if (env == u"pmatrix") {
-        matrix = true;
-        left = u'(';
-        right = u')';
-    } else if (env == u"bmatrix") {
-        matrix = true;
-        left = u'[';
-        right = u']';
-    } else if (env == u"Bmatrix") {
-        matrix = true;
-        left = u'{';
-        right = u'}';
-    } else if (env == u"vmatrix") {
-        matrix = true;
-        left = u'|';
-        right = u'|';
-    } else if (env == u"Vmatrix") {
-        matrix = true;
-        left = u"‖"_s;
-        right = u"‖"_s;
-    } else if (env == u"array" || env == u"tabular") {
-        matrix = true;
-        // The column specification {ccc} is not part of the cells.
-        if (source.startsWith(u'{')) {
-            const qsizetype close = matchingBrace(source, 0);
-            if (close > 0)
-                source = source.mid(close + 1);
-        }
+    // The grids (matrices, arrays) with their delimiters.
+    struct Grid {
+        QStringView name;
+        QStringView left;
+        QStringView right;
+    };
+    static constexpr Grid grids[] = {{u"matrix", {}, {}},      {u"smallmatrix", {}, {}}, {u"pmatrix", u"(", u")"},
+                                     {u"bmatrix", u"[", u"]"}, {u"Bmatrix", u"{", u"}"}, {u"vmatrix", u"|", u"|"},
+                                     {u"Vmatrix", u"‖", u"‖"}, {u"array", {}, {}},       {u"tabular", {}, {}}};
+    const auto grid = std::ranges::find(grids, env, &Grid::name);
+    const bool matrix = grid != std::ranges::end(grids);
+    QStringView source = body;
+    // The column specification {ccc} of an array is not part of the cells.
+    if ((env == u"array" || env == u"tabular") && source.startsWith(u'{')) {
+        const qsizetype close = matchingBrace(source, 0);
+        if (close > 0)
+            source = source.sliced(close + 1);
     }
     // `aligned`, `gather`…: the alignment point (&) is where the rows line up — one space between
     // the cells reads "a = b", a grid (array, matrix) keeps its columns apart.
-    const bool aligned = env == u"aligned" || env == u"align" || env == u"alignedat" || env == u"gathered"
-                         || env == u"split" || env == u"multline";
+    const bool aligned = isOneOf(env, {u"aligned", u"align", u"alignedat", u"gathered", u"split", u"multline"});
     const QString separator = env == u"cases" ? u", "_s : aligned ? u" "_s : u"&nbsp;&nbsp;"_s;
     QStringList rows;
-    for (const QList<QStringView> &cells : environmentCells(source)) {
-        QStringList rendered;
+    QStringList rendered;
+    const QList<QList<QStringView>> cellRows = environmentCells(source);
+    for (const QList<QStringView> &cells : cellRows) {
+        rendered.clear();
         for (const QStringView cell : cells) {
             const QString html = assemble(parseRange(cell.trimmed(), false, display));
             if (!html.isEmpty())
@@ -719,20 +711,17 @@ QString environmentHtml(QStringView body, const QString &env, bool display)
         if (!rendered.isEmpty())
             rows.append(rendered.join(separator));
     }
-    const QString joined = rows.isEmpty() ? QString()
-                           : matrix       ? rows.join(u"; "_s)
-                           : display      ? rows.join(u"<br/>"_s)
-                                          : rows.join(u"; "_s);
+    const QString joined = rows.join(matrix || !display ? u"; "_s : u"<br/>"_s);
     if (env == u"cases")
         return u"{ "_s + joined + u" }"_s;
-    if (matrix && (!left.isEmpty() || !right.isEmpty()))
-        return left + u" "_s + joined + u" "_s + right;
+    if (matrix && !grid->left.isEmpty())
+        return grid->left.toString() + u' ' + joined + u' ' + grid->right;
     return joined;
 }
 
 /// Position of the `\end{env}` that closes an environment whose body starts at `from`, skipping
 /// nested `\begin{env}` … `\end{env}` pairs; -1 when the environment is not closed.
-qsizetype matchingEnd(QStringView s, qsizetype from, const QString &env)
+qsizetype matchingEnd(QStringView s, qsizetype from, QStringView env)
 {
     const QString begin = u"\\begin{"_s + env + u'}';
     const QString end = u"\\end{"_s + env + u'}';
@@ -840,7 +829,8 @@ QList<Node> parseRange(QStringView s, bool upright, bool display)
     qsizetype i = 0;
     while (i < s.size()) {
         const QChar c = s[i];
-        if (c.isSpace()) {
+        // Spaces, a stray `}` and `&` (alignment: a column break in cells, split before parsing them).
+        if (c.isSpace() || c == u'}' || c == u'&') {
             ++i;
             continue;
         }
@@ -848,25 +838,15 @@ QList<Node> parseRange(QStringView s, bool upright, bool display)
             const qsizetype close = matchingBrace(s, i);
             if (close < 0) {
                 push(nodes, escaped(s.sliced(i + 1)), Kind::Atom);
-                i = s.size();
-                continue;
+                break;
             }
             push(nodes, assemble(parseRange(s.sliced(i + 1, close - i - 1), upright, display)), Kind::Atom);
             i = close + 1;
             continue;
         }
-        if (c == u'}') {
-            ++i;
-            continue;
-        }
         if (c == u'^' || c == u'_') {
             ++i;
-            const Arg arg = parseArg(s, i, display);
-            attachScript(nodes, c, arg.html);
-            continue;
-        }
-        if (c == u'&') { // alignment: a column break in cells (split before parsing them)
-            ++i;
+            attachScript(nodes, c, parseArg(s, i, display).html);
             continue;
         }
         if (c == u'\'') {
@@ -882,88 +862,98 @@ QList<Node> parseRange(QStringView s, bool upright, bool display)
             continue;
         }
         if (c.isLetter()) {
-            QString run;
+            const qsizetype start = i;
             while (i < s.size() && s[i].isLetter())
-                run += s[i++];
-            push(nodes, upright ? escaped(run) : u"<i>"_s + escaped(run) + u"</i>"_s, Kind::Atom);
+                ++i;
+            const QString run = escaped(s.sliced(start, i - start));
+            push(nodes, upright ? run : u"<i>"_s + run + u"</i>"_s, Kind::Atom);
             continue;
         }
         if (c.isDigit()) {
-            QString run;
+            const qsizetype start = i;
             while (i < s.size() && (s[i].isDigit() || (s[i] == u'.' && i + 1 < s.size() && s[i + 1].isDigit())))
-                run += s[i++];
-            push(nodes, escaped(run), Kind::Atom);
+                ++i;
+            push(nodes, escaped(s.sliced(start, i - start)), Kind::Atom);
             continue;
         }
 
         // Operators, punctuation and plain characters.
         const bool unary = nodes.isEmpty() || nodes.last().kind == Kind::Open || nodes.last().kind == Kind::Bin
                            || nodes.last().kind == Kind::Rel || nodes.last().kind == Kind::Punct;
-        Kind kind = Kind::Atom;
-        QString html;
+        const Kind sign = unary ? Kind::Atom : Kind::Bin;
+        const qsizetype length = charLength(s, i);
         switch (c.unicode()) {
-        case u'+':
-            kind = unary ? Kind::Atom : Kind::Bin;
-            html = u"+"_s;
-            break;
-        case u'-':
-            kind = unary ? Kind::Atom : Kind::Bin;
-            html = u"−"_s;
-            break; // U+2212
-        case u'*':
-            kind = Kind::Bin;
-            html = u"∗"_s;
-            break;
-        case u'=':
-            kind = Kind::Rel;
-            html = u"="_s;
-            break;
-        case u'<':
-            kind = Kind::Rel;
-            html = u"&lt;"_s;
-            break;
-        case u'>':
-            kind = Kind::Rel;
-            html = u"&gt;"_s;
-            break;
+        case u'+': push(nodes, u"+"_s, sign); break;
+        case u'-': push(nodes, u"−"_s, sign); break; // U+2212
+        case u'*': push(nodes, u"∗"_s, Kind::Bin); break;
+        case u'=': push(nodes, u"="_s, Kind::Rel); break;
+        case u'<': push(nodes, u"&lt;"_s, Kind::Rel); break;
+        case u'>': push(nodes, u"&gt;"_s, Kind::Rel); break;
         case u',': {
             // A comma between digits is a decimal comma, not punctuation ("3,14").
             const bool decimal = i > 0 && s[i - 1].isDigit() && i + 1 < s.size() && s[i + 1].isDigit();
-            kind = decimal ? Kind::Atom : Kind::Punct;
-            html = u","_s;
+            push(nodes, u","_s, decimal ? Kind::Atom : Kind::Punct);
             break;
         }
-        case u';':
-            kind = Kind::Punct;
-            html = u";"_s;
-            break;
-        case u':':
-            kind = Kind::Rel;
-            html = u":"_s;
-            break;
-        case u'(':
-            kind = Kind::Open;
-            html = u"("_s;
-            break;
-        case u')':
-            kind = Kind::Close;
-            html = u")"_s;
-            break;
-        case u'[':
-            kind = Kind::Open;
-            html = u"["_s;
-            break;
-        case u']':
-            kind = Kind::Close;
-            html = u"]"_s;
-            break;
-        case u'~': html = u"&nbsp;"_s; break;
-        default: html = escaped(s.sliced(i, charLength(s, i))); break;
+        case u';': push(nodes, u";"_s, Kind::Punct); break;
+        case u':': push(nodes, u":"_s, Kind::Rel); break;
+        case u'(': push(nodes, u"("_s, Kind::Open); break;
+        case u')': push(nodes, u")"_s, Kind::Close); break;
+        case u'[': push(nodes, u"["_s, Kind::Open); break;
+        case u']': push(nodes, u"]"_s, Kind::Close); break;
+        case u'~': push(nodes, u"&nbsp;"_s, Kind::Atom); break;
+        default: push(nodes, escaped(s.sliced(i, length)), Kind::Atom); break;
         }
-        push(nodes, html, kind);
-        i += charLength(s, i);
+        i += length;
     }
     return nodes;
+}
+
+/// \left and \bigl… open, \right and \bigr… close; \middle, \big… are neither.
+Kind delimiterKind(QStringView command)
+{
+    if (command == u"left" || command.endsWith(u'l'))
+        return Kind::Open;
+    if (command == u"right" || command.endsWith(u'r'))
+        return Kind::Close;
+    return Kind::Atom;
+}
+
+/// \text{…} and its kin: `inner` keeps its own spaces ("\text{jeśli } x" separates the words), a
+/// line break inside becomes a space, and \{ \} \$ \& \% \# \_ are the characters.
+QString textHtml(QStringView command, QStringView inner)
+{
+    const QString html = escaped(textCharacters(inner)).replace(u'\n', u' ');
+    if (command == u"textbf")
+        return u"<b>"_s + html + u"</b>"_s;
+    if (command == u"textit")
+        return u"<i>"_s + html + u"</i>"_s;
+    if (command == u"texttt")
+        return styled(html, u"font-family:monospace");
+    if (command == u"textsc")
+        return styled(html, u"font-variant:small-caps");
+    return html;
+}
+
+/// \mathrm{…}, \mathbb{…} and the other math alphabets: the formula `inner` in that alphabet.
+QString alphabetHtml(QStringView command, QStringView inner, bool display)
+{
+    const bool upright = isOneOf(command, {u"mathrm", u"mathbf", u"mathsf", u"mathtt", u"mathbb"});
+    const QString html = assemble(parseRange(inner, upright, display));
+    if (command == u"mathbb" && html.size() == 1) {
+        // Letters with a Unicode double-struck form: ℝ, ℕ, ℤ, ℚ, ℂ, ℍ, ℙ.
+        static const QHash<QChar, QChar> doubleStruck{{u'C', u'ℂ'}, {u'H', u'ℍ'}, {u'N', u'ℕ'}, {u'P', u'ℙ'},
+                                                      {u'Q', u'ℚ'}, {u'R', u'ℝ'}, {u'Z', u'ℤ'}};
+        const auto it = doubleStruck.constFind(html.at(0));
+        return it != doubleStruck.constEnd() ? QString(*it) : html;
+    }
+    if (isOneOf(command, {u"mathbf", u"boldsymbol", u"bm"}))
+        return u"<b>"_s + html + u"</b>"_s;
+    if (command == u"mathsf")
+        return styled(html, u"font-family:sans-serif");
+    if (command == u"mathtt")
+        return styled(html, u"font-family:monospace");
+    return html;
 }
 
 qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool display, qsizetype &lastBracket)
@@ -991,24 +981,18 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
         }
         return i;
     }
-    QString name;
+    const qsizetype nameStart = i;
     while (i < s.size() && s[i].isLetter())
-        name += s[i++];
+        ++i;
+    const QString name = s.sliced(nameStart, i - nameStart).toString();
 
-    if (name == u"left" || name == u"right" || name == u"middle") {
-        const QString delim = delimiterAt(s, i);
-        if (!delim.isEmpty())
-            pushN(delim, name == u"left" ? Kind::Open : name == u"right" ? Kind::Close : Kind::Atom);
+    // Delimiters: \left( … \right), \bigl[ … \bigr], \middle|, \big|.
+    if (isOneOf(name, {u"left", u"right", u"middle"}) || isSizeCommand(name)) {
+        if (const QString delim = delimiterAt(s, i); !delim.isEmpty())
+            pushN(delim, delimiterKind(name));
         return i;
     }
-    if (isSizeCommand(name)) {
-        const QString delim = delimiterAt(s, i);
-        if (!delim.isEmpty())
-            pushN(delim, name.endsWith(u"l"_s) ? Kind::Open : name.endsWith(u"r"_s) ? Kind::Close : Kind::Atom);
-        return i;
-    }
-
-    if (name == u"frac" || name == u"dfrac" || name == u"tfrac" || name == u"cfrac" || name == u"sfrac") {
+    if (isOneOf(name, {u"frac", u"dfrac", u"tfrac", u"cfrac", u"sfrac"})) {
         if (i < s.size() && s[i] == u'[') { // \cfrac[l]{…}{…}
             const qsizetype close = optionalArgumentEnd(s, i, lastBracket);
             if (close > i)
@@ -1019,7 +1003,7 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
         pushN(fractionHtml(numerator, denominator), Kind::Atom);
         return i;
     }
-    if (name == u"binom" || name == u"dbinom" || name == u"tbinom") {
+    if (isOneOf(name, {u"binom", u"dbinom", u"tbinom"})) {
         const Arg top = parseArg(s, i, display);
         const Arg bottom = parseArg(s, i, display);
         pushN(u"("_s + fractionHtml(top, bottom) + u")"_s, Kind::Atom);
@@ -1040,81 +1024,43 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
     }
 
     // Text and math alphabets.
-    const bool rawText = name == u"text" || name == u"mbox" || name == u"textrm" || name == u"textnormal"
-                         || name == u"textup" || name == u"textsf" || name == u"texttt" || name == u"textsc"
-                         || name == u"textbf" || name == u"textit" || name == u"operatorname";
-    const bool mathAlphabet = name == u"mathrm" || name == u"mathnormal" || name == u"mathbf" || name == u"boldsymbol"
-                              || name == u"bm" || name == u"mathit" || name == u"mathsf" || name == u"mathtt"
-                              || name == u"mathbb" || name == u"mathcal" || name == u"mathfrak";
+    const bool rawText = isOneOf(name, {u"text", u"mbox", u"textrm", u"textnormal", u"textup", u"textsf", u"texttt",
+                                        u"textsc", u"textbf", u"textit", u"operatorname"});
+    const bool mathAlphabet = isOneOf(name, {u"mathrm", u"mathnormal", u"mathbf", u"boldsymbol", u"bm", u"mathit",
+                                             u"mathsf", u"mathtt", u"mathbb", u"mathcal", u"mathfrak"});
     if (rawText || mathAlphabet) {
-        if (i < s.size() && s[i] == u'{') {
-            const qsizetype close = matchingBrace(s, i);
-            if (close < 0) {
-                pushN(escaped(s.sliced(i + 1)), Kind::Atom);
-                i = s.size();
-                return i;
-            }
-            const QStringView inner = s.sliced(i + 1, close - i - 1);
-            i = close + 1;
-            if (rawText) {
-                // The text keeps its own spaces ("\text{jeśli } x" separates the words); a line
-                // break inside becomes a space, and \{ \} \$ \& \% \# \_ are the characters.
-                QString html = escaped(textCharacters(inner)).replace(u'\n', u' ');
-                if (name == u"textbf")
-                    html = u"<b>"_s + html + u"</b>"_s;
-                else if (name == u"textit")
-                    html = u"<i>"_s + html + u"</i>"_s;
-                else if (name == u"texttt")
-                    html = u"<span style=\"font-family:monospace\">"_s + html + u"</span>"_s;
-                else if (name == u"textsc")
-                    html = u"<span style=\"font-variant:small-caps\">"_s + html + u"</span>"_s;
-                pushN(html, name == u"operatorname" ? Kind::Func : Kind::Atom);
-                return i;
-            }
-            bool upright = name == u"mathrm" || name == u"mathbf" || name == u"mathsf" || name == u"mathtt"
-                           || name == u"mathbb";
-            QString html = assemble(parseRange(inner, upright, display));
-            if (name == u"mathbb" && html.size() == 1) {
-                // Letters with a Unicode double-struck form: ℝ, ℕ, ℤ, ℚ, ℂ, ℍ, ℙ.
-                static const QHash<QChar, QChar> doubleStruck{{u'C', u'ℂ'}, {u'H', u'ℍ'}, {u'N', u'ℕ'}, {u'P', u'ℙ'},
-                                                              {u'Q', u'ℚ'}, {u'R', u'ℝ'}, {u'Z', u'ℤ'}};
-                const auto it = doubleStruck.constFind(html[0]);
-                if (it != doubleStruck.constEnd())
-                    html = QString(*it);
-            }
-            if (name == u"mathbf" || name == u"boldsymbol" || name == u"bm")
-                html = u"<b>"_s + html + u"</b>"_s;
-            else if (name == u"mathsf")
-                html = u"<span style=\"font-family:sans-serif\">"_s + html + u"</span>"_s;
-            else if (name == u"mathtt")
-                html = u"<span style=\"font-family:monospace\">"_s + html + u"</span>"_s;
-            pushN(html, Kind::Atom);
+        const Kind kind = name == u"operatorname" ? Kind::Func : Kind::Atom;
+        if (i >= s.size() || s[i] != u'{') {
+            pushN(parseArg(s, i, display).html, kind);
             return i;
         }
-        const Arg arg = parseArg(s, i, display);
-        pushN(arg.html, name == u"operatorname" ? Kind::Func : Kind::Atom);
-        return i;
+        const qsizetype close = matchingBrace(s, i);
+        if (close < 0) {
+            pushN(escaped(s.sliced(i + 1)), Kind::Atom);
+            return s.size();
+        }
+        const QStringView inner = s.sliced(i + 1, close - i - 1);
+        pushN(rawText ? textHtml(name, inner) : alphabetHtml(name, inner, display), kind);
+        return close + 1;
     }
 
-    // Decorations over or under the argument.
-    if (name == u"overline" || name == u"underline" || name == u"widehat" || name == u"widetilde"
-        || name == u"overrightarrow" || name == u"overleftarrow" || name == u"overbrace" || name == u"underbrace") {
+    // Decorations over or under the argument (\widehat and \widetilde too: no accents here).
+    if (isOneOf(name, {u"overline", u"underline", u"widehat", u"widetilde", u"overrightarrow", u"overleftarrow",
+                       u"overbrace", u"underbrace"})) {
         const Arg arg = parseArg(s, i, display);
-        QString html = arg.html;
-        if (name != u"overbrace" && name != u"underbrace")
-            html = u"<span style=\"text-decoration:"_s + (name == u"underline" ? u"underline"_s : u"overline"_s)
-                   + u"\">"_s + html + u"</span>"_s;
-        pushN(html, Kind::Atom);
+        const bool brace = name == u"overbrace" || name == u"underbrace";
+        const QString decoration =
+                name == u"underline" ? u"text-decoration:underline"_s : u"text-decoration:overline"_s;
+        pushN(brace ? arg.html : styled(arg.html, decoration), Kind::Atom);
         return i;
     }
 
     // Accents: a combining mark on the last character of the argument.
     static const QHash<QString, QChar> accents{
-            {u"hat"_s, QChar(0x0302)},     {u"widehat"_s, QChar(0x0302)},   {u"bar"_s, QChar(0x0304)},
-            {u"tilde"_s, QChar(0x0303)},   {u"widetilde"_s, QChar(0x0303)}, {u"vec"_s, QChar(0x20D7)},
-            {u"dot"_s, QChar(0x0307)},     {u"ddot"_s, QChar(0x0308)},      {u"acute"_s, QChar(0x0301)},
-            {u"grave"_s, QChar(0x0300)},   {u"check"_s, QChar(0x030C)},     {u"breve"_s, QChar(0x0306)},
-            {u"mathring"_s, QChar(0x030A)}};
+            {u"hat"_s, QChar(0x0302)},   {u"bar"_s, QChar(0x0304)},     {u"tilde"_s, QChar(0x0303)},
+            {u"vec"_s, QChar(0x20D7)},   {u"dot"_s, QChar(0x0307)},     {u"ddot"_s, QChar(0x0308)},
+            {u"acute"_s, QChar(0x0301)}, {u"grave"_s, QChar(0x0300)},   {u"check"_s, QChar(0x030C)},
+            {u"breve"_s, QChar(0x0306)}, {u"mathring"_s, QChar(0x030A)}};
     if (const auto it = accents.constFind(name); it != accents.constEnd()) {
         const Arg arg = parseArg(s, i, display);
         pushN(withCombining(arg.html, *it), Kind::Atom);
@@ -1136,7 +1082,7 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
         pushN(u"&nbsp;(mod "_s + arg.html + u')', Kind::Atom);
         return i;
     }
-    if (name == u"overset" || name == u"underset" || name == u"stackrel") {
+    if (isOneOf(name, {u"overset", u"underset", u"stackrel"})) {
         const Arg over = parseArg(s, i, display);
         const Arg base = parseArg(s, i, display);
         Node node{base.html, Kind::Atom, {}, {}};
@@ -1148,22 +1094,20 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
         return i;
     }
     if (name == u"genfrac") {
-        parseArg(s, i, display); // left delimiter (ignored: the fraction keeps its own shape)
-        parseArg(s, i, display); // right delimiter
-        parseArg(s, i, display); // thickness
-        parseArg(s, i, display); // style
+        // The delimiters, the thickness and the style are ignored: the fraction keeps its own shape.
+        for (int skipped = 0; skipped < 4; ++skipped)
+            parseArg(s, i, display);
         const Arg numerator = parseArg(s, i, display);
         const Arg denominator = parseArg(s, i, display);
         pushN(fractionHtml(numerator, denominator), Kind::Atom);
         return i;
     }
     if (name == u"substack") {
-        const Arg arg = parseArg(s, i, display);
-        pushN(arg.html, Kind::Atom);
+        pushN(parseArg(s, i, display).html, Kind::Atom);
         return i;
     }
-    if (name == u"hspace" || name == u"phantom" || name == u"hphantom" || name == u"vphantom") {
-        const Arg arg = parseArg(s, i, display);
+    if (isOneOf(name, {u"hspace", u"phantom", u"hphantom", u"vphantom"})) {
+        parseArg(s, i, display);
         if (name != u"vphantom")
             pushN(u"&#8195;"_s, Kind::Atom);
         return i;
@@ -1174,47 +1118,37 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
     }
     if (name == u"textcolor") {
         parseArg(s, i, display);
-        const Arg arg = parseArg(s, i, display);
-        pushN(arg.html, Kind::Atom);
+        pushN(parseArg(s, i, display).html, Kind::Atom);
         return i;
     }
-    if (name == u"tag" || name == u"label") {
+    if (isOneOf(name, {u"tag", u"label"})) {
         if (i < s.size() && s[i] == u'{')
             parseArg(s, i, display);
         return i;
     }
-    if (name == u"mathop" || name == u"mathrel" || name == u"mathbin" || name == u"mathord" || name == u"mathopen"
-        || name == u"mathclose" || name == u"mathpunct") {
-        const Arg arg = parseArg(s, i, display);
-        const Kind kind = name == u"mathrel"     ? Kind::Rel
-                          : name == u"mathbin"   ? Kind::Bin
-                          : name == u"mathopen"  ? Kind::Open
-                          : name == u"mathclose" ? Kind::Close
-                          : name == u"mathpunct" ? Kind::Punct
-                                                 : Kind::Atom;
-        pushN(arg.html, kind);
+    // \mathrel{…} and the other math classes: the argument spaced as that class.
+    static const QHash<QString, Kind> classes{{u"mathord"_s, Kind::Atom},   {u"mathop"_s, Kind::Atom},
+                                              {u"mathrel"_s, Kind::Rel},    {u"mathbin"_s, Kind::Bin},
+                                              {u"mathopen"_s, Kind::Open},  {u"mathclose"_s, Kind::Close},
+                                              {u"mathpunct"_s, Kind::Punct}};
+    if (const auto it = classes.constFind(name); it != classes.constEnd()) {
+        pushN(parseArg(s, i, display).html, *it);
         return i;
     }
     if (name == u"begin") {
-        if (i < s.size() && s[i] == u'{') {
-            const qsizetype close = matchingBrace(s, i);
-            if (close > i) {
-                const QString env = s.sliced(i + 1, close - i - 1).toString();
-                i = close + 1;
-                const qsizetype end = matchingEnd(s, i, env);
-                const QStringView body = end < 0 ? s.sliced(i) : s.sliced(i, end - i);
-                i = end < 0 ? s.size() : end + (u"\\end{"_s + env + u'}').size();
-                pushN(environmentHtml(body, env, display), Kind::Atom);
-                return i;
-            }
-        }
-        return i;
+        const qsizetype close = i < s.size() && s[i] == u'{' ? matchingBrace(s, i) : -1;
+        if (close < 0)
+            return i;
+        const QStringView env = s.sliced(i + 1, close - i - 1);
+        const qsizetype end = matchingEnd(s, close + 1, env);
+        const QStringView body = end < 0 ? s.sliced(close + 1) : s.sliced(close + 1, end - close - 1);
+        pushN(environmentHtml(body, env, display), Kind::Atom);
+        return end < 0 ? s.size() : end + (u"\\end{"_s + env + u'}').size();
     }
 
     // Limits placement and math styles: nothing to show here, and the ^ / _ after them still
     // belong to the operator before (\sum\limits_{i=1}^n).
-    if (name == u"limits" || name == u"nolimits" || name == u"displaystyle" || name == u"textstyle"
-        || name == u"scriptstyle" || name == u"scriptscriptstyle")
+    if (isOneOf(name, {u"limits", u"nolimits", u"displaystyle", u"textstyle", u"scriptstyle", u"scriptscriptstyle"}))
         return i;
 
     const auto it = symbols().constFind(name);
@@ -1226,10 +1160,6 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
     pushN(escaped(QString(u'\\' + name)), Kind::Atom);
     return i;
 }
-
-} // namespace
-
-namespace {
 
 /// Whether a blank line (spaces or tabs only) follows the line break at `nl`.
 bool blankLineAfter(QStringView text, qsizetype nl)
@@ -1357,11 +1287,11 @@ QList<MathSpan> findMathSpans(QStringView text)
 
 QString renderMath(QStringView latex, bool display)
 {
-    const QString out = assemble(parseRange(latex, false, display));
-    if (out.isEmpty())
-        return out;
+    QString out = assemble(parseRange(latex, false, display));
     // A display formula keeps its own lines; an inline one joins them with a space.
-    return display ? out : QString(out).replace(u"<br/>"_s, u" "_s);
+    if (!display)
+        out.replace(u"<br/>"_s, u" "_s);
+    return out;
 }
 
 } // namespace brulion::markdown

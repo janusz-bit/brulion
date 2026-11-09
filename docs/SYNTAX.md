@@ -1096,8 +1096,8 @@ and written exactly as Logseq does:
   read too). The elapsed time is measured between the two local times, so a clock across a
   daylight-saving change counts the hours that really passed; the written `=>` duration is read
   only when the timestamps give none (the end before the start: an hour repeated when the clocks
-  go back). A line that does not read (bad date, end before start without `=>`) is ignored;
-  only the last clock without an end runs.
+  go back). A line that does not read (bad date, end before start without `=>`, a `=>` duration
+  of more than 100 years) is ignored; only the last clock without an end runs.
 * Totals: overlapping entries of one task count once; a running clock counts up to now in views
   that show live totals (the summaries), and its chip names its start ("⏱ 25 min + from 10:00").
   Summaries split entries at local midnight (a day of 23 or 25 hours on a daylight-saving change).

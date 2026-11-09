@@ -58,7 +58,8 @@ struct Logbook {
     QList<ClockEntry> clocks;
     QList<StatusChange> changes;
     /// `CLOCK:` / `State` lines that do not read: bad timestamps, an end before the start without a
-    /// `=>` duration, a running clock before the last one (only the last of them runs).
+    /// `=>` duration (or with one of more than 100 years), a running clock before the last one
+    /// (only the last of them runs).
     int malformed = 0;
 
     /// The running entry (the last one without an end), nullptr when none runs.

@@ -114,7 +114,10 @@
 //                  palette; any CSS colour mapped to its nearest), markTagAt, findMarkPairs,
 //                  findHighlights, setHighlight(text, from, to, color | nullopt) (the editor's
 //                  "Highlight…": wrap, recolour, remove)
-//   pagelook.h     a page's icon and cover (`icon` / `banner_icon`, `banner`, `banner_y`):
+//   math.h         LaTeX formulas (SYNTAX §11): findMathSpans(text) -> MathSpan{from, to,
+//                  contentFrom, contentTo, display} (`$…$`, `$$…$$`), renderMath(latex, display) ->
+//                  escaped Qt rich text (Unicode symbols, <sup> / <sub>, fractions, radicals)
+//   pagelook.h    a page's icon and cover (`icon` / `banner_icon`, `banner`, `banner_y`):
 //                  parsePageIcon (emoji, Iconize's `LiBookOpen`), parsePageCover (`![[file]]`,
 //                  a path, an http(s) URL), pageLook(properties), the values Brulion writes
 //   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
@@ -139,6 +142,7 @@
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
 #include "markdown/logbook.h"
+#include "markdown/math.h"
 #include "markdown/notemode.h"
 #include "markdown/pagelook.h"
 #include "markdown/pageprops.h"

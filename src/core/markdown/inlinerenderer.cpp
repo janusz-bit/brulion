@@ -39,6 +39,9 @@ constexpr int MaxDepth = 2;
 /// The block's text a `[[Page#^id]]` link shows after the page name, at most (… when cut).
 constexpr qsizetype MaxBlockLinkText = 60;
 
+/// The task's text a `⛔ id` chip shows, at most (… when cut).
+constexpr qsizetype MaxDependencyText = 40;
+
 /// `text` cut to at most `max` characters with "…" — never inside a character: not between a
 /// surrogate pair (📅), a letter and its combining mark, an emoji's ZWJ sequence.
 QString elided(const QString &text, qsizetype max)
@@ -55,9 +58,11 @@ QString elided(const QString &text, qsizetype max)
 struct Atom {
     qsizetype from = 0;
     qsizetype to = 0;
-    QString html;
+    QString html = {};
     /// The tags of a `<mark>` pair share a number (≥ 0): shown only when both are kept.
     int pair = -1;
+    /// A footnote reference `[^1]`: its html is made once it is kept (they may overlap a lot).
+    bool footnote = false;
 };
 
 QString esc(QStringView s)
@@ -158,17 +163,15 @@ QString escapeText(QStringView s)
     return out.replace(u'\n', u"<br/>"_s);
 }
 
-bool allowedExternal(QStringView url)
+/// The ext: href of an http(s) or mailto URL; "" for other schemes (such a URL stays text).
+QString externalHref(QStringView url)
 {
     const qsizetype colon = url.indexOf(u':');
     if (colon <= 0)
-        return false;
+        return {};
     const QString scheme = url.first(colon).toString().toLower();
-    return scheme == u"http" || scheme == u"https" || scheme == u"mailto";
-}
-
-QString externalHref(QStringView url)
-{
+    if (scheme != u"http" && scheme != u"https" && scheme != u"mailto")
+        return {};
     return u"ext:"_s + url.toString().replace(u' ', u"%20"_s);
 }
 
@@ -180,6 +183,32 @@ QString fragment(const QString &heading, const QString &blockId)
     if (!blockId.isEmpty())
         return u"#^"_s + percentEncoded(blockId);
     return {};
+}
+
+QString pageHref(const QString &target, const QString &heading, const QString &blockId)
+{
+    return u"page:"_s + percentEncoded(target) + fragment(heading, blockId);
+}
+
+QString tagHref(QStringView name)
+{
+    return u"tag:"_s + percentEncoded(name);
+}
+
+/// What a page link without an alias shows of its target (RenderContext::linkTitle).
+QString shownTarget(const RenderContext &ctx, const QString &target)
+{
+    if (target.isEmpty() || !ctx.linkTitle)
+        return target;
+    return ctx.linkTitle(target).value_or(target);
+}
+
+/// A wiki link to a day of the journal is a day: link with RenderContext::dayLinks; a fragment
+/// keeps it a page link.
+bool isDayLink(const RenderContext &ctx, const WikiParts &w)
+{
+    return ctx.dayLinks && w.heading.isEmpty() && w.blockId.isEmpty()
+           && journalDateFromLinkTarget(w.target, ctx.journalConfig).has_value();
 }
 
 QString taskGlyph(TaskStatus s)
@@ -206,13 +235,13 @@ struct Piece {
     Type type = Type::Text;
     qsizetype from = 0; ///< Text: range in the text
     qsizetype to = 0;
-    QString html; ///< Html
-    QChar ch;     ///< Delim: '*', '_', '~', '='
+    QString html = {}; ///< Html
+    QChar ch = {};     ///< Delim: '*', '_', '~', '='
     int remaining = 0;
     bool canOpen = false;
     bool canClose = false;
-    QString openTags;
-    QString closeTags;
+    QString openTags = {};
+    QString closeTags = {};
 };
 
 bool isDelimChar(QChar c)
@@ -243,32 +272,27 @@ QList<Piece> buildPieces(QStringView text, const QList<Atom> &atoms)
                 continue;
             }
             if (i > textStart)
-                pieces.append(Piece{Piece::Type::Text, textStart, i, {}, {}, 0, false, false, {}, {}});
+                pieces.append(Piece{.from = textStart, .to = i});
             const QChar prev = i > a ? text[i - 1] : before;
             const QChar next = j < b ? text[j] : after;
             const bool prevSpace = prev.isSpace();
             const bool nextSpace = next.isSpace();
             const bool left = !nextSpace && (!isPunctuation(next) || prevSpace || isPunctuation(prev));
             const bool right = !prevSpace && (!isPunctuation(prev) || nextSpace || isPunctuation(next));
-            Piece d;
-            d.type = Piece::Type::Delim;
-            d.from = i;
-            d.to = j;
-            d.ch = c;
-            d.remaining = int(len);
-            if (c == u'_') {
-                d.canOpen = left && (!right || isPunctuation(prev));
-                d.canClose = right && (!left || isPunctuation(next));
-            } else {
-                d.canOpen = left;
-                d.canClose = right;
-            }
-            pieces.append(d);
+            // Inside a word '_' opens or closes only next to punctuation (CommonMark).
+            const bool underscore = c == u'_';
+            pieces.append(Piece{.type = Piece::Type::Delim,
+                                .from = i,
+                                .to = j,
+                                .ch = c,
+                                .remaining = int(len),
+                                .canOpen = left && (!underscore || !right || isPunctuation(prev)),
+                                .canClose = right && (!underscore || !left || isPunctuation(next))});
             i = j;
             textStart = j;
         }
         if (b > textStart)
-            pieces.append(Piece{Piece::Type::Text, textStart, b, {}, {}, 0, false, false, {}, {}});
+            pieces.append(Piece{.from = textStart, .to = b});
     };
     const QChar space(u' ');
     const QChar letter(u'a');
@@ -276,7 +300,7 @@ QList<Piece> buildPieces(QStringView text, const QList<Atom> &atoms)
     QChar before = space;
     for (const Atom &atom : atoms) {
         addGap(pos, atom.from, before, atom.html.isEmpty() ? space : letter);
-        pieces.append(Piece{Piece::Type::Html, atom.from, atom.to, atom.html, {}, 0, false, false, {}, {}});
+        pieces.append(Piece{.type = Piece::Type::Html, .from = atom.from, .to = atom.to, .html = atom.html});
         pos = atom.to;
         before = atom.html.isEmpty() ? space : letter;
     }
@@ -415,14 +439,14 @@ QString assemble(QStringView text, const QList<Piece> &pieces)
 std::function<std::optional<QString>(const QString &)> journalLinkTitle(const VaultConfig &config,
                                                                         dates::UiLocale locale, QDate today)
 {
-    const std::optional<int> year = today.isValid() ? std::optional(today.year()) : std::nullopt;
+    // An invalid `today`: the year is always shown (0, a year no date has).
+    const int year = today.isValid() ? today.year() : 0;
     return [config, locale, year](const QString &target) -> std::optional<QString> {
         const auto day = journalDateFromLinkTarget(target, config);
         if (!day)
             return std::nullopt;
-        // An invalid `today`: the year is always shown (a year no date has). A date never
-        // breaks across lines: no-break spaces.
-        return dates::formatDateShort(*day, locale, year.value_or(0)).replace(u' ', QChar(0x00A0));
+        // A date never breaks across lines: no-break spaces.
+        return dates::formatDateShort(*day, locale, year).replace(u' ', QChar(0x00A0));
     };
 }
 
@@ -503,18 +527,14 @@ char32_t entityAt(QStringView html, qsizetype at, qsizetype &end)
         return 0;
     end = at + semicolon + 1;
     const QStringView name = html.sliced(at + 1, semicolon - 1);
-    if (name == u"amp")
-        return u'&';
-    if (name == u"lt")
-        return u'<';
-    if (name == u"gt")
-        return u'>';
-    if (name == u"quot")
-        return u'"';
-    if (name == u"apos")
-        return u'\'';
-    if (name == u"nbsp")
-        return 0xA0;
+    struct Named {
+        QStringView name;
+        char32_t character;
+    };
+    static constexpr Named entities[] = {{u"amp", u'&'},  {u"lt", u'<'},    {u"gt", u'>'},
+                                         {u"quot", u'"'}, {u"apos", u'\''}, {u"nbsp", 0xA0}};
+    if (const Named *e = std::ranges::find(entities, name, &Named::name); e != std::end(entities))
+        return e->character;
     if (name.startsWith(u'#')) {
         bool ok = false;
         const bool hex = name.size() > 1 && (name.at(1) == u'x' || name.at(1) == u'X');
@@ -595,7 +615,7 @@ QString InlineRenderer::withFindHighlight(QStringView html, QStringView query, b
         qsizetype first = match.start;
         while (first < match.end()) {
             qsizetype last = first;
-            while (last + 1 < match.end() && (to.at(last) == from.at(last + 1) || from.at(last + 1) == to.at(last)))
+            while (last + 1 < match.end() && to.at(last) == from.at(last + 1))
                 ++last;
             const qsizetype start = from.at(first);
             const qsizetype end = to.at(last);
@@ -626,11 +646,11 @@ QString InlineRenderer::render(QStringView text) const
 namespace {
 
 /// Position in the block body of position `p` of a text built from verbatim runs of it.
-qsizetype toBody(const QList<std::pair<qsizetype, qsizetype>> &runs, qsizetype p)
+qsizetype toBody(const QList<Range> &runs, qsizetype p)
 {
     if (runs.isEmpty())
         return p;
-    auto it = std::ranges::upper_bound(runs, p, {}, &std::pair<qsizetype, qsizetype>::first);
+    auto it = std::ranges::upper_bound(runs, p, {}, &Range::first);
     if (it != runs.begin())
         --it;
     return it->second + (p - it->first);
@@ -746,16 +766,16 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             atoms.append({marker->from, marker->contentStart, html});
         }
 
+        // "<from>-<to>": the UTF-16 range in the body that a link names (its menu changes it).
+        const auto bodyRange = [&](qsizetype from, qsizetype to) -> QString {
+            return QString::number(toBody(runs, from)) + u'-' + QString::number(toBody(runs, to));
+        };
+        // A page link's target exists (RenderContext::resolvePage; unset or no target: it does).
+        const auto resolves = [this](const QString &target) {
+            return target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(target).has_value();
+        };
         // Links, embeds, block references, URLs, tags. A page link shows its target as written,
         // or what RenderContext::linkTitle makes of it (daily notes by their date).
-        const auto shownTarget = [this](const QString &target) {
-            if (target.isEmpty() || !m_ctx.linkTitle)
-                return target;
-            return m_ctx.linkTitle(target).value_or(target);
-        };
-        const auto itemRange = [&](const InlineItem &item) {
-            return QString::number(toBody(runs, item.from)) + u'-' + QString::number(toBody(runs, item.to));
-        };
         lexInline(text, masked, [&](const InlineItem &item) {
             const QStringView source = text.sliced(item.from, item.to - item.from);
             QString html;
@@ -776,18 +796,14 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                                 fragLabel = elided(shown, MaxBlockLinkText);
                         }
                     }
-                    page = shownTarget(w.target);
+                    page = shownTarget(m_ctx, w.target);
                     label = page.isEmpty() ? fragLabel : fragLabel.isEmpty() ? page : page + u" › "_s + fragLabel;
                 }
-                const bool resolved =
-                        w.target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(w.target).has_value();
-                // A day of the journal with RenderContext::dayLinks: a day: link naming its range
-                // (its menu changes the date); a fragment keeps it a page link.
-                const bool day = m_ctx.dayLinks && w.heading.isEmpty() && w.blockId.isEmpty()
-                                 && journalDateFromLinkTarget(w.target, m_ctx.journalConfig).has_value();
-                const QString href =
-                        day ? QString(u"day:"_s + itemRange(item))
-                            : QString(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId));
+                const bool resolved = resolves(w.target);
+                // A day of the journal: a day: link naming its range (its menu changes the date).
+                const bool day = isDayLink(m_ctx, w);
+                const QString href = day ? QString(u"day:"_s + bodyRange(item.from, item.to))
+                                         : pageHref(w.target, w.heading, w.blockId);
                 // A page in a folder ([[Firma/Adam]]): every path part a link of its own, the
                 // parent parts part: links (docs/SYNTAX.md §2 "Path parts").
                 const QList<LinkPathPart> parts =
@@ -824,15 +840,12 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 if (!attachment && m_ctx.hideTransclusions
                     && (!w.target.isEmpty() || !w.heading.isEmpty() || !w.blockId.isEmpty()))
                     break; // shown next to the text by the caller
-                QString name = attachment ? w.target : shownTarget(w.target);
+                QString name = attachment ? w.target : shownTarget(m_ctx, w.target);
                 if (!w.heading.isEmpty())
                     name += u" › "_s + w.heading;
                 else if (!w.blockId.isEmpty())
                     name += u" › ^"_s + w.blockId;
-                const bool resolved =
-                        w.target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(w.target).has_value();
-                html = link(u"page:"_s + percentEncoded(w.target) + fragment(w.heading, w.blockId),
-                            resolved ? pal.link : pal.unresolved,
+                html = link(pageHref(w.target, w.heading, w.blockId), resolves(w.target) ? pal.link : pal.unresolved,
                             esc(QString((attachment ? u"📎 "_s : u"⧉ "_s) + name)));
                 break;
             }
@@ -846,17 +859,15 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 if (item.kind == InlineKind::Image)
                     label = u"🖼&nbsp;"_s + label;
                 if (hasUrlScheme(dest.target)) {
-                    html = allowedExternal(dest.target) ? link(externalHref(dest.target), pal.link, label)
-                                                        : escapeText(source);
-                } else {
-                    const bool resolved =
-                            dest.target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(dest.target).has_value();
-                    const QString href =
-                            u"page:"_s + percentEncoded(dest.target) + fragment(dest.heading, dest.blockId);
-                    if (resolved && item.kind == InlineKind::Markdown && !dest.target.isEmpty() && m_ctx.pageIcon)
-                        html = iconLink(href, pal.link, m_ctx.pageIcon(dest.target));
-                    html += link(href, resolved ? pal.link : pal.unresolved, label);
+                    const QString href = externalHref(dest.target);
+                    html = href.isEmpty() ? escapeText(source) : link(href, pal.link, label);
+                    break;
                 }
+                const bool resolved = resolves(dest.target);
+                const QString href = pageHref(dest.target, dest.heading, dest.blockId);
+                if (resolved && item.kind == InlineKind::Markdown && !dest.target.isEmpty() && m_ctx.pageIcon)
+                    html = iconLink(href, pal.link, m_ctx.pageIcon(dest.target));
+                html += link(href, resolved ? pal.link : pal.unresolved, label);
                 break;
             }
             case InlineKind::BlockRef:
@@ -873,10 +884,10 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             }
             case InlineKind::Url:
             case InlineKind::Autolink: {
-                const QString shown =
-                        item.kind == InlineKind::Url ? item.target : source.sliced(1, source.size() - 2).toString();
-                html = allowedExternal(item.target) ? link(externalHref(item.target), pal.link, esc(shown))
-                                                    : escapeText(source);
+                const QString href = externalHref(item.target);
+                const QStringView shown =
+                        item.kind == InlineKind::Url ? QStringView(item.target) : source.sliced(1, source.size() - 2);
+                html = href.isEmpty() ? escapeText(source) : link(href, pal.link, esc(shown));
                 break;
             }
             case InlineKind::Tag:
@@ -894,7 +905,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                     const QStringView target(item.target);
                     for (qsizetype k = 0; k < parts.size(); ++k) {
                         const bool last = k + 1 == parts.size();
-                        html += u"<a href=\"tag:"_s + percentEncoded(target.left(parts[k].to)) + u"\" "_s + tint
+                        html += u"<a href=\""_s + tagHref(target.left(parts[k].to)) + u"\" "_s + tint
                                 + (k == 0 ? u"&nbsp;#"_s : QString())
                                 + esc(target.sliced(parts[k].from, parts[k].to - parts[k].from))
                                 + (last ? u"&nbsp;"_s : QString()) + u"</a>"_s;
@@ -905,39 +916,33 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                     }
                     break;
                 }
-                html = u"<a href=\"tag:"_s + percentEncoded(item.target) + u"\" style=\"color:"_s
-                       + safeColor(pal.tag.foreground) + u";background-color:"_s + safeColor(pal.tag.background)
-                       + u";text-decoration:none\">&nbsp;#"_s + esc(item.target) + u"&nbsp;</a>"_s;
+                html = u"<a href=\""_s + tagHref(item.target) + u"\" style=\"color:"_s + safeColor(pal.tag.foreground)
+                       + u";background-color:"_s + safeColor(pal.tag.background) + u";text-decoration:none\">&nbsp;#"_s
+                       + esc(item.target) + u"&nbsp;</a>"_s;
                 break;
             }
             atoms.append({item.from, item.to, html});
         });
 
         // Metadata tokens as chips.
-        const auto human = [&](const DateSpec &spec) { return dates::formatHuman(spec, m_ctx.locale, m_ctx.today); };
+        const auto human = [&](const Token &t) { return dates::formatHuman(t.spec(), m_ctx.locale, m_ctx.today); };
         const bool open = taskStatus && isOpenStatus(*taskStatus);
-        const auto range = [&](const Token &tok) {
-            return QString::number(toBody(runs, tok.from)) + u'-' + QString::number(toBody(runs, tok.to));
-        };
-        const auto dueChip = [&](const DateSpec &spec) {
-            const bool overdue = open && m_ctx.today.isValid() && spec.date < m_ctx.today;
-            return chip(overdue ? pal.overdue : pal.due, u"📅 "_s + human(spec));
+        const auto overdue = [&](QDate date) { return open && m_ctx.today.isValid() && date < m_ctx.today; };
+        // With RenderContext::dateLinks a chip is a <scheme><from>-<to> link: its menu changes the token.
+        const auto menuChip = [&](QStringView scheme, qsizetype from, qsizetype to, const ChipColors &c,
+                                  const QString &label) {
+            return m_ctx.dateLinks ? linkChip(scheme + bodyRange(from, to), c, label) : chip(c, label);
         };
         // A date token's own chip: a date: link with RenderContext::dateLinks.
         const auto dateChip = [&](const Token &tok, const ChipColors &c, QStringView emoji) {
-            const QString label = emoji.toString() + u' ' + human(tok.spec());
-            return m_ctx.dateLinks ? linkChip(u"date:"_s + range(tok), c, label) : chip(c, label);
+            return menuChip(u"date:", tok.from, tok.to, c, emoji + u' ' + human(tok));
         };
         for (const Token &tok : findTokens(masked)) {
             const QStringView source = text.sliced(tok.from, tok.to - tok.from);
             QString html;
             qsizetype to = tok.to;
             switch (tok.kind) {
-            case TokenKind::Due: {
-                const bool overdue = open && m_ctx.today.isValid() && tok.date < m_ctx.today;
-                html = dateChip(tok, overdue ? pal.overdue : pal.due, u"📅");
-                break;
-            }
+            case TokenKind::Due: html = dateChip(tok, overdue(tok.date) ? pal.overdue : pal.due, u"📅"); break;
             case TokenKind::Scheduled: html = dateChip(tok, pal.scheduled, u"⏳"); break;
             case TokenKind::Start: html = dateChip(tok, pal.neutral, u"🛫"); break;
             case TokenKind::Created: html = dateChip(tok, pal.neutral, u"➕"); break;
@@ -946,36 +951,30 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             case TokenKind::Recurrence: {
                 // Only a rule that parses is a chip (the longest one at the start of the text
                 // after 🔁: "🔁 co tydzień kupić mleko" -> chip + text); anything else stays text.
+                // Its recur: link names the rule's range.
                 const auto rule = recurrencePrefix(masked, tok);
                 if (!rule)
                     continue;
-                {
-                    const QString label = u"🔁 "_s + dates::formatRecurrence(rule->first, m_ctx.locale);
-                    // With RenderContext::dateLinks a recur: link naming the rule's range (its menu).
-                    html = m_ctx.dateLinks ? linkChip(u"recur:"_s + QString::number(toBody(runs, tok.from)) + u'-'
-                                                              + QString::number(toBody(runs, rule->second)),
-                                                      pal.recurrence, label)
-                                           : chip(pal.recurrence, label);
-                }
+                html = menuChip(u"recur:", tok.from, rule->second, pal.recurrence,
+                                u"🔁 "_s + dates::formatRecurrence(rule->first, m_ctx.locale));
                 to = rule->second;
                 break;
             }
             case TokenKind::Reminder:
             case TokenKind::ReminderCompat:
                 // docs/UI.md: ⏰ reminders, a bell for alarms.
-                html = linkChip(u"reminder:"_s + range(tok), tok.alarm ? pal.alarm : pal.reminder,
-                                (tok.alarm ? u"🔔 "_s : u"⏰ "_s) + human(tok.spec()));
+                html = linkChip(u"reminder:"_s + bodyRange(tok.from, tok.to), tok.alarm ? pal.alarm : pal.reminder,
+                                (tok.alarm ? u"🔔 "_s : u"⏰ "_s) + human(tok));
                 break;
             case TokenKind::Priority:
                 // A prio: link with RenderContext::dateLinks, not underlined (the emoji looks the same).
-                html = m_ctx.dateLinks ? QString(u"<a href=\"prio:"_s + range(tok) + u"\" style=\"color:"_s
-                                                 + safeColor(pal.muted) + u";text-decoration:none\">"_s + esc(source)
-                                                 + u"</a>"_s)
+                html = m_ctx.dateLinks ? QString(u"<a href=\"prio:"_s + bodyRange(tok.from, tok.to)
+                                                 + u"\" style=\"color:"_s + safeColor(pal.muted)
+                                                 + u";text-decoration:none\">"_s + esc(source) + u"</a>"_s)
                                        : esc(source);
                 break;
             case TokenKind::LogseqPriority:
-                html = m_ctx.dateLinks ? linkChip(u"prio:"_s + range(tok), pal.neutral, source.sliced(2, 1).toString())
-                                       : chip(pal.neutral, source.sliced(2, 1).toString());
+                html = menuChip(u"prio:", tok.from, tok.to, pal.neutral, source.sliced(2, 1).toString());
                 break;
             case TokenKind::DependsOn:
                 if (m_ctx.taskDependency) {
@@ -992,23 +991,21 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                                                   u"⛔ "_s + id + u'?'));
                             continue;
                         }
-                        QString label = dep->text.simplified();
-                        if (label.size() > 40)
-                            label = label.first(39) + u'…';
-                        if (label.isEmpty())
-                            label = id;
-                        chips.append(linkChip(href, dep->open ? pal.overdue : pal.done, u"⛔ "_s + label));
+                        const QString label = dep->text.simplified();
+                        chips.append(linkChip(href, dep->open ? pal.overdue : pal.done,
+                                              u"⛔ "_s + (label.isEmpty() ? id : elided(label, MaxDependencyText))));
                     }
                     html = chips.join(u' ');
                     break;
                 }
-                html = muted(pal, esc(source));
-                break;
+                [[fallthrough]];
             case TokenKind::TaskId:
             case TokenKind::OnCompletion: html = muted(pal, esc(source)); break;
             case TokenKind::Planning:
-                html = tok.field == TokenKind::Due ? dueChip(tok.spec())
-                                                   : chip(pal.scheduled, u"⏳ "_s + human(tok.spec()));
+                if (tok.field == TokenKind::Due)
+                    html = chip(overdue(tok.date) ? pal.overdue : pal.due, u"📅 "_s + human(tok));
+                else
+                    html = chip(pal.scheduled, u"⏳ "_s + human(tok));
                 if (const auto rule = dates::repeaterToRule(tok.repeater))
                     html += u' ' + chip(pal.recurrence, u"🔁 "_s + dates::formatRecurrence(*rule, m_ctx.locale));
                 break;
@@ -1016,13 +1013,17 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             atoms.append({tok.from, to, html});
         }
 
-        // Footnote references [^1].
+        // Footnote references [^1]. The end found for one "[^" is the end of every later one before
+        // it, and only kept references get their html: hostile "[^[^[^…" stays linear.
+        qsizetype stop = 0; // the first ']' or space at or after the start of the last scan
         for (qsizetype i = masked.indexOf(u"[^"); i >= 0; i = masked.indexOf(u"[^", i + 2)) {
-            qsizetype j = i + 2;
-            while (j < masked.size() && masked[j] != u']' && !masked[j].isSpace())
-                ++j;
-            if (j > i + 2 && charAt(masked, j) == u']' && charAt(masked, j + 1) != u':')
-                atoms.append({i, j + 1, u"<sup>"_s + esc(QStringView(text).sliced(i + 2, j - i - 2)) + u"</sup>"_s});
+            if (stop < i + 2) {
+                stop = i + 2;
+                while (stop < masked.size() && masked.at(stop) != u']' && !masked.at(stop).isSpace())
+                    ++stop;
+            }
+            if (stop > i + 2 && charAt(masked, stop) == u']' && charAt(masked, stop + 1) != u':')
+                atoms.append({.from = i, .to = stop + 1, .footnote = true});
         }
     }
 
@@ -1054,7 +1055,9 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             ++markTags[a.pair];
     }
     for (Atom &a : kept) {
-        if (a.pair >= 0 && markTags.value(a.pair) != 2)
+        if (a.footnote) // [^1]: the text between "[^" and "]" as a superscript
+            a.html = u"<sup>"_s + esc(text.sliced(a.from + 2, a.to - a.from - 3)) + u"</sup>"_s;
+        else if (a.pair >= 0 && markTags.value(a.pair) != 2)
             a.html = escapeText(text.sliced(a.from, a.to - a.from));
     }
     QList<Piece> pieces = buildPieces(text, kept);
@@ -1174,33 +1177,21 @@ QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
         return {};
     // The text as renderInline() reads it: code spans and comments blanked, formulas first when
     // they start first.
-    QString masked = text.toString();
-    for (const InlineSpan &span : inlineSpans(text)) {
-        for (qsizetype i = span.from; i < span.to; ++i) {
-            if (!isLineBreak(masked[i]))
-                masked[i] = u' ';
-        }
-    }
-    const auto pageUrl = [](const QString &target, const QString &heading, const QString &blockId) {
-        return u"page:"_s + percentEncoded(target) + fragment(heading, blockId);
-    };
+    const QString masked = maskInline(text);
     const auto wikiUrl = [&](const InlineItem &item) -> QString {
         const WikiParts &w = item.wiki;
-        const QString page = pageUrl(w.target, w.heading, w.blockId);
-        const bool day = m_ctx.dayLinks && w.heading.isEmpty() && w.blockId.isEmpty()
-                         && journalDateFromLinkTarget(w.target, m_ctx.journalConfig).has_value();
-        const bool renamed =
-                m_ctx.linkTitle && !w.target.isEmpty() && m_ctx.linkTitle(w.target).value_or(w.target) != w.target;
-        if (item.kind != InlineKind::Wiki || !m_ctx.resolveLinkPart || day || renamed || !w.display.isEmpty()
-            || w.target.isEmpty())
+        const QString page = pageHref(w.target, w.heading, w.blockId);
+        // Path parts as render() links them: a wiki link without display text whose target is
+        // shown as written (not a day: link, not renamed by RenderContext::linkTitle).
+        if (item.kind != InlineKind::Wiki || !m_ctx.resolveLinkPart || !w.display.isEmpty() || w.target.isEmpty()
+            || isDayLink(m_ctx, w) || shownTarget(m_ctx, w.target) != w.target)
             return page;
         const QList<LinkPathPart> parts = linkPathParts(w.target);
         if (parts.size() < 2)
             return page;
         // Where the target is written: the inner text before '|' and '#', without the blanks
         // parseWikiInner() trimmed.
-        const qsizetype inner = item.from + 2;
-        qsizetype start = inner;
+        qsizetype start = item.from + 2;
         while (start < item.to && text[start].isSpace())
             ++start;
         for (qsizetype k = 0; k + 1 < parts.size(); ++k) {
@@ -1212,10 +1203,7 @@ QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
     // A tag at the caret: a parent part names the tag up to it, as a click on it does; "#" and "#[["
     // belong to the first part, the rest to the whole tag.
     const auto tagUrl = [&](const InlineItem &item) -> QString {
-        const QString whole = u"tag:"_s + percentEncoded(item.target);
         const QList<LinkPathPart> parts = linkPathParts(item.target);
-        if (parts.size() < 2)
-            return whole;
         qsizetype start = item.from + 1;
         if (text.sliced(start).startsWith(u"[["))
             start += 2;
@@ -1223,9 +1211,9 @@ QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
             ++start;
         for (qsizetype k = 0; k + 1 < parts.size(); ++k) {
             if (position <= start + parts[k].to)
-                return u"tag:"_s + percentEncoded(QStringView(item.target).left(parts[k].to));
+                return tagHref(QStringView(item.target).left(parts[k].to));
         }
-        return whole;
+        return tagHref(item.target);
     };
     QString url;
     lexInlineOutsideMath(text, masked, findMathSpans(masked), [&](const InlineItem &item) {
@@ -1237,15 +1225,13 @@ QString InlineRenderer::linkUrlAt(QStringView text, qsizetype position) const
         case InlineKind::Embed: found = wikiUrl(item); break;
         case InlineKind::Markdown:
         case InlineKind::Image:
-            if (hasUrlScheme(item.dest.target))
-                found = allowedExternal(item.dest.target) ? externalHref(item.dest.target) : QString();
-            else
-                found = pageUrl(item.dest.target, item.dest.heading, item.dest.blockId);
+            found = hasUrlScheme(item.dest.target) ? externalHref(item.dest.target)
+                                                   : pageHref(item.dest.target, item.dest.heading, item.dest.blockId);
             break;
         case InlineKind::BlockRef:
         case InlineKind::BlockEmbed: found = u"block:"_s + item.target; break;
         case InlineKind::Url:
-        case InlineKind::Autolink: found = allowedExternal(item.target) ? externalHref(item.target) : QString(); break;
+        case InlineKind::Autolink: found = externalHref(item.target); break;
         case InlineKind::Tag: found = tagUrl(item); break;
         }
         // In order: the construct starting at `position` comes after the one ending there.

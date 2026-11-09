@@ -2929,12 +2929,6 @@ ApplicationWindow {
             Theme.forceTouch = DevTools.touch
         }
     }
-    // ---- The task menu's timer and dependency (`--editor-script taskclock`, tst_editor_qml_taskclock*,
-    // docs/SYNTAX.md §5): "Start timer" writes a running CLOCK into the task's :LOGBOOK:
-    // (its chip "⏱ from 10:00"), "Stop timer" closes it, one undo step each; "Add dependency…"
-    // opens the picker, a search finds the task of the page, choosing it writes 🆔 / ⛔ and the
-    // ⛔ chip shows that task's text.
-    /// The rendered text of `row` with its no-break spaces as spaces (chips use them).
     function webImageBox(): BDialog {
         return window.dialogs().webImageDialog
     }
@@ -2956,15 +2950,17 @@ ApplicationWindow {
     function webUrls(): list<string> {
         return page.webPictureUrls()
     }
-    /// The target of a delegate's first embed ("-" without one), whether it is from the internet.
+    /// The target of a delegate's first embed ("-" without one).
     function embedTarget(item: BlockDelegate): string {
         if (!item || DevTest.lengthAt(item.embeds, "") === 0)
             return "-"
         return "" + DevTest.valueAt(item.embeds, "0.target")
     }
+    /// The first embed of a delegate failed to load.
     function embedFailed(item: BlockDelegate): bool {
         return item !== null && DevTest.lengthAt(item.embeds, "") > 0 && DevTest.valueAt(item.embeds, "0.state") === "failed"
     }
+    /// The first embed of a delegate is from the internet.
     function embedIsWeb(item: BlockDelegate): bool {
         return item !== null && DevTest.valueAt(item.embeds, "0.web") === true
     }
@@ -2975,12 +2971,13 @@ ApplicationWindow {
     function embedHeight(item: BlockDelegate): real {
         return item ? window.embedViewOf(item).height : 0
     }
-    /// An embedded picture has loaded into its frame; from the cache, with its shape (3:1).
+    /// An embedded picture has loaded into its frame.
     function pictureReady(frame: Item, img: Image): bool {
         if (frame === null || img === null || img.status !== Image.Ready)
             return false
         return frame.height > 0
     }
+    /// ... from the cache, with its shape (3:1).
     function cachedPicture(frame: Item, img: Image): bool {
         if (!window.pictureReady(frame, img) || Math.abs(frame.width / frame.height - 3) >= 0.1)
             return false
@@ -3022,9 +3019,15 @@ ApplicationWindow {
     function cellText(r: int, c: int): string {
         return editor.editingTable.rawText(r, c)
     }
+    /// The rendered text of `row` with its no-break spaces as spaces (chips use them).
     function rowHtml(row: int): string {
         return Js.replaceRegExp(info(row).html, "&nbsp;|\u00a0", "g", " ")
     }
+    // ---- The task menu's timer and dependency (`--editor-script taskclock`, tst_editor_qml_taskclock*,
+    // docs/SYNTAX.md §5): "Start timer" writes a running CLOCK into the task's :LOGBOOK:
+    // (its chip "⏱ from 10:00"), "Stop timer" closes it, one undo step each; "Add dependency…"
+    // opens the picker, a search finds the task of the page, choosing it writes 🆔 / ⛔ and the
+    // ⛔ chip shows that task's text.
     function taskClockTest(): void {
         window.taskOriginal = host.file(page.path)
         runSteps("taskclock")
@@ -3139,9 +3142,9 @@ ApplicationWindow {
     function textOfRendered(text: Item): string {
         return "" + DevTest.property(text, "text")
     }
-    /// A point of the rendered `text` on its link whose URL contains `url` (linkX, linkY), or false.
     property real linkX: 0
     property real linkY: 0
+    /// A point of the rendered `text` on its link whose URL contains `url` (linkX, linkY), or false.
     function linkPointIn(text: Item, url: string): bool {
         for (let y = 2; text && y < text.height; y += 3) {
             for (let x = 2; x < text.width; x += 4) {
@@ -3171,11 +3174,12 @@ ApplicationWindow {
     /// "More" then (blocklinks).
     property real menuTopBefore: 0
     property real menuGapBefore: 0
-    /// The y of (x, y) of `item` in the window, in `target`.
+    /// The y of (x, y) of `item` in the window.
     function windowY(item: Item, x: real, y: real): real {
         window.mapped2 = item.mapToItem(null, x, y)
         return window.mapped2.y
     }
+    /// The y of (x, y) of `item` in `target`.
     function mappedY(item: Item, target: Item, x: real, y: real): real {
         window.mapped2 = item.mapToItem(target, x, y)
         return window.mapped2.y
@@ -3208,6 +3212,17 @@ ApplicationWindow {
     function copySubmenu(): T.Menu {
         const entry = copyEntry()
         return entry ? entry.subMenu : null
+    }
+    /// Taps the link whose URL contains `url` in the rendered text of `row` (nothing without one).
+    function tapLinkIn(row: int, url: string): void {
+        const text = renderedOf(row)
+        if (linkPointIn(text, url))
+            tapPoint(text, window.linkX, window.linkY)
+    }
+    /// Scrolls the editing toolbar's tools to their end.
+    function scrollToolbarToEnd(): void {
+        const flick = findItem(editor, "editToolbarFlick") as Flickable
+        flick.contentX = Math.max(0, flick.contentWidth - flick.width)
     }
     /// Steps: open "Copy link", choose `name` there; the clipboard then holds `expected`
     /// (read on each of these steps) and the toast says so.
@@ -3271,7 +3286,7 @@ ApplicationWindow {
         const touch = window.touchRun
         const gesture = touch ? "a long press" : "a right-click"
         const doc = "Wyjazd w Tatry"
-        if (window.at()) { page.path = host.documentPath }
+        if (window.at()) page.path = host.documentPath
         if (window.at()) window.waitStep(page.loaded && page.documentMode && rowOf("Plan") > 0, "the document is open")
 
         if (!touch) {
@@ -3399,35 +3414,20 @@ ApplicationWindow {
             page.selectedRow = -1
             editor.listView.positionViewAtEnd()
         }
-        if (window.at()) {
-            const text = renderedOf(window.linkRow)
-            const p = linkPointIn(text, "#^" + window.copiedId)
-            if (p)
-                tapPoint(text, window.linkX, window.linkY)
-        }
+        if (window.at()) tapLinkIn(window.linkRow, "#^" + window.copiedId)
         if (window.at()) window.waitStep(page.selectedRow === window.targetRow, "the same link a second time, after scrolling away, goes there again")
         if (window.at()) window.waitStep(findShown(delegateAt(window.targetRow), "blockFlash") === null, "the flash fades away")
         if (window.at()) {
             check(delegateAt(window.targetRow).height > 0, "the flash changed no height")
             editor.listView.positionViewAtEnd()
         }
-        if (window.at()) {
-            const text = renderedOf(window.linkRow)
-            const p = linkPointIn(text, "#Plan")
-            if (p)
-                tapPoint(text, window.linkX, window.linkY)
-        }
+        if (window.at()) tapLinkIn(window.linkRow, "#Plan")
         if (window.at()) window.waitStep(page.selectedRow === rowOf("Plan"), "following [[Page#Heading]] selects the heading")
         if (window.at()) {
             editor.listView.positionViewAtEnd()
             window.lastNotice = ""
         }
-        if (window.at()) {
-            const text = renderedOf(window.linkRow)
-            const p = linkPointIn(text, "#Nieistniej")
-            if (p)
-                tapPoint(text, window.linkX, window.linkY)
-        }
+        if (window.at()) tapLinkIn(window.linkRow, "#Nieistniej")
         if (window.at() && !window.waiting(Js.indexOf(window.lastNotice, "Nieistniejący") >= 0 && window.lastNotice !== ""))
             window.checkWait("a missing heading is said: " + window.lastNotice)
         // ---- The touch toolbar's "More": the block menu above the bar ------------------------------
@@ -3446,10 +3446,7 @@ ApplicationWindow {
             T.Overlay.overlay.SafeArea.additionalMargins.top = 48
             KeyboardInsets.simulated = 336
         }
-        if (window.at()) {
-            const flick = findItem(editor, "editToolbarFlick") as Flickable
-            flick.contentX = Math.max(0, flick.contentWidth - flick.width)
-        }
+        if (window.at()) scrollToolbarToEnd()
         if (window.at()) tapItem(findItem(editor, "toolbarMore"))
         if (window.at()) window.waitStep(blockMenuOpen(), "“More” on the toolbar opens the block menu")
         if (window.at()) {
@@ -3466,8 +3463,7 @@ ApplicationWindow {
             const item = menuItemNamed(menu, "blockMenuCopyText")
             taskEvents.touchPress(item, item.width / 2, item.height / 2)
         }
-        if (window.at()) { KeyboardInsets.simulated = 0 }
-        if (window.at()) {}
+        if (window.at()) KeyboardInsets.simulated = 0
         if (window.at()) {
             const item = menuItemNamed(editor.blockMenu, "blockMenuCopyText")
             check(window.menuStayed(),
@@ -3487,7 +3483,7 @@ ApplicationWindow {
         if (window.at()) tapItem(findItem(editor, "toolbarMore"))
         if (window.at()) window.waitStep(blockMenuOpen() && !editor.blockMenu.touched, "“More” opens the block menu again")
         // The menu took the keys: the system hides the keyboard, the toolbar drops to the bottom.
-        if (window.at()) { KeyboardInsets.simulated = 0 }
+        if (window.at()) KeyboardInsets.simulated = 0
         if (window.at() && !window.waiting(window.menuFollowsToolbar()))
             window.checkWait("the untouched menu follows the toolbar down when the keyboard goes, right above it, every "
                   + "item shown (none scrolled away): " + menuGap() + " px above it (" + window.menuGapBefore
@@ -3507,7 +3503,7 @@ ApplicationWindow {
             Theme.forceTouch = DevTools.touch
         }
         // ---- An outline: the bullet's menu; a calc block's (desktop) ------------------------------
-        if (window.at()) { page.path = host.samplePath }
+        if (window.at()) page.path = host.samplePath
         if (window.at()) window.waitStep(page.loaded && !page.documentMode && rowOf("Kolejność") > 0, "the outline is open")
         if (window.at()) {
             // A list item without a checkbox (a task's box sits over its bullet on touch screens).
@@ -3533,10 +3529,7 @@ ApplicationWindow {
                 item.focusContent()
         }
         if (window.at()) window.waitStep(editor.toolbarMode === "cell" && findShown(findItem(editor, "editToolbarSlot"), "toolbarCellMore") !== null, "a table cell's toolbar has “More”")
-        if (window.at()) {
-            const flick = findItem(editor, "editToolbarFlick") as Flickable
-            flick.contentX = Math.max(0, flick.contentWidth - flick.width)
-        }
+        if (window.at()) scrollToolbarToEnd()
         if (window.at()) tapItem(findShown(findItem(editor, "editToolbarSlot"), "toolbarCellMore"))
         if (window.at()) window.waitStep(blockMenuOpen(), "“More” on the cell toolbar opens the block menu")
         if (window.at()) {
@@ -3595,7 +3588,7 @@ ApplicationWindow {
             if (window.at()) taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1)
             if (window.at()) window.waitStep(!blockMenuOpen(), "Escape closes it")
             // ---- The title drawn above the properties: the menu of the block drawn there ---------
-            if (window.at()) { page.path = host.recipePath }
+            if (window.at()) page.path = host.recipePath
             if (window.at()) window.waitStep(page.loaded && page.titleRow > 0 && editor.titleFirst && renderedOf(page.titleRow) !== null, "the recipe (properties, then its title) is open")
             if (window.at()) editor.listView.positionViewAtBeginning()
             if (window.at()) {
@@ -3932,13 +3925,13 @@ ApplicationWindow {
         if (window.at()) window.waitStep(!editor.toolbarVisible && editor.height > window.height - 400, "the keyboard and the toolbar are gone")
     }
 
-    /// The first line of `text` that contains `needle`, or "".
     function lines(text: string): list<string> {
         return window.splitText(text, "\n")
     }
     function splitText(text: string, separator: string): list<string> {
         return Js.split(text, separator)
     }
+    /// The first line of `text` that contains `needle`, or "".
     function fileLineOf(text: string, needle: string): string {
         return DevTest.lineWith(text, needle)
     }
@@ -4043,6 +4036,12 @@ ApplicationWindow {
             if (entry)
                 entry.triggered()
         }
+    }
+    /// Shows `row` in the middle and opens its menu `name` after the layout (scriptLater).
+    function scriptMenuAt(row: int, name: string): void {
+        editor.listView.positionViewAtIndex(row, ListView.Center)
+        window.scriptRow = row
+        scriptLater.run(name)
     }
     function runScript(name: string): void {
         switch (name) {
@@ -4149,81 +4148,51 @@ ApplicationWindow {
             break
         }
         case "copylink":
-        case "copylink-document": {
+        case "copylink-document":
             // The block menu with "Copy link" open on a heading (screenshots).
-            const row = rowOf(name === "copylink" ? "Koszty" : "Plan")
-            editor.listView.positionViewAtIndex(row, ListView.Center)
-            window.scriptRow = row
-            scriptLater.run(name)
+            scriptMenuAt(rowOf(name === "copylink" ? "Koszty" : "Plan"), name)
             break
-        }
-        case "task-menu": {
+        case "task-menu":
             // The status menu of a block's checkbox (screenshots).
-            const row = rowOf("Kupić płytki")
-            editor.listView.positionViewAtIndex(row, ListView.Center)
-            window.scriptRow = row
-            scriptLater.run(name)
+            scriptMenuAt(rowOf("Kupić płytki"), name)
             break
-        }
         case "recurrence-menu":
-        case "link-menu": {
+        case "link-menu":
             // The menu of a 🔁 rule / of a #tag (screenshots).
-            const row = rowOf(name === "link-menu" ? "Kupić płytki" : "Podlać kwiaty")
-            editor.listView.positionViewAtIndex(row, ListView.Center)
-            window.scriptRow = row
-            scriptLater.run(name)
+            scriptMenuAt(rowOf(name === "link-menu" ? "Kupić płytki" : "Podlać kwiaty"), name)
             break
-        }
         case "date-menu":
-        case "date-menu-reminder": {
+        case "date-menu-reminder":
             // The menu of a 📅 / ⏰ chip (screenshots).
-            const row = rowOf(name === "date-menu" ? "Kupić płytki" : "Zadzwonić do hydraulika")
-            editor.listView.positionViewAtIndex(row, ListView.Center)
-            window.scriptRow = row
-            scriptLater.run(name)
+            scriptMenuAt(rowOf(name === "date-menu" ? "Kupić płytki" : "Zadzwonić do hydraulika"), name)
             break
-        }
         case "task-menu-query":
             // The status menu of a query result's checkbox (screenshots).
             editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning)
             scriptLater.run(name)
             break
-        case "task-slash": {
-            const row = page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), "")
-            typeInto(row, "Odebrać płytki /zad")
+        case "task-slash":
+            typeInto(page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), ""), "Odebrać płytki /zad")
             break
-        }
-        case "editing": {
-            const row = rowOf("Kupić płytki")
-            editor.startEditing(row, -1)
+        case "editing":
+            editor.startEditing(rowOf("Kupić płytki"), -1)
             break
-        }
-        case "suggest": {
-            const row = page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), "")
-            typeInto(row, "Porównać z [[Re")
+        case "suggest":
+            typeInto(page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), ""), "Porównać z [[Re")
             break
-        }
-        case "tags": {
-            const row = page.insertBlockAfter(rowOf("Wywieźć gruz"), "")
-            typeInto(row, "Zamówić kontener #za")
+        case "tags":
+            typeInto(page.insertBlockAfter(rowOf("Wywieźć gruz"), ""), "Zamówić kontener #za")
             break
-        }
-        case "tag-pages": {
+        case "tag-pages":
             // `#` offers pages too (a tag names a page): pages no tag names yet, with their folder.
-            const row = page.insertBlockAfter(rowOf("Wywieźć gruz"), "")
-            typeInto(row, "Porównać z #rem")
+            typeInto(page.insertBlockAfter(rowOf("Wywieźć gruz"), ""), "Porównać z #rem")
             break
-        }
-        case "slash": {
-            const row = page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), "")
-            typeInto(row, "Zapytać o termin /")
+        case "slash":
+            typeInto(page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), ""), "Zapytać o termin /")
             break
-        }
-        case "date": {
-            const row = page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), "")
-            typeInto(row, "Odebrać płytki ⏰ jutro o 9")
+        case "date":
+            typeInto(page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), ""), "Odebrać płytki ⏰ jutro o 9")
             break
-        }
         case "zoom":
             page.zoomInto(rowOf("Przygotowanie"))
             break
@@ -4289,10 +4258,9 @@ ApplicationWindow {
         case "source":
             editor.toggleSourceMode()
             break
-        case "reminder": {
+        case "reminder":
             window.dialogs().createReminder(rowOf("Zadzwonić do hydraulika"), false)
             break
-        }
         case "recurrence":
             window.dialogs().pickRecurrence(rowOf("Podlać kwiaty"))
             break
@@ -4310,11 +4278,9 @@ ApplicationWindow {
             editor.startEditing(row, 0)
             break
         }
-        case "query": {
-            const row = viewRow("query")
-            editor.listView.positionViewAtIndex(row, ListView.Beginning)
+        case "query":
+            editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning)
             break
-        }
         case "dataview": {
             // ```dataview blocks (docs/SYNTAX.md §10 "Dataview queries"): a TABLE and a TASK query.
             const row = page.insertBlockAfter(viewRow("query"), "```dataview\nTABLE status, budżet AS \"Budżet\", "

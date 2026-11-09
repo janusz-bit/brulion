@@ -4,6 +4,8 @@
 #include <QHash>
 #include <QStringDecoder>
 
+#include <algorithm>
+
 namespace brulion::markdown::detail {
 
 Indent indentOf(QStringView s)
@@ -51,11 +53,7 @@ int columnsOf(QStringView whitespace)
 
 bool isBlank(QStringView s)
 {
-    for (const QChar c : s) {
-        if (!isSpaceOrTab(c))
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(s, isSpaceOrTab);
 }
 
 QStringView trimEndBlanks(QStringView s)
@@ -71,12 +69,8 @@ bool isDrawerStart(QStringView line)
     const QStringView t = trimEndBlanks(line.sliced(indentOf(line).chars));
     if (t.size() < 3 || t[0] != u':' || !t.endsWith(u':') || t[1] < u'A' || t[1] > u'Z')
         return false;
-    for (qsizetype i = 2; i + 1 < t.size(); ++i) {
-        const QChar c = t[i];
-        if (!((c >= u'A' && c <= u'Z') || c == u'_' || c == u'-'))
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(t.sliced(2, t.size() - 3),
+                               [](QChar c) { return (c >= u'A' && c <= u'Z') || c == u'_' || c == u'-'; });
 }
 
 bool isDrawerEnd(QStringView line)

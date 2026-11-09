@@ -4,6 +4,8 @@
 
 #include <QStringList>
 
+#include <algorithm>
+
 namespace brulion::markdown {
 
 using namespace Qt::StringLiterals;
@@ -61,20 +63,12 @@ QDate parseStrict(const QString &text, const QString &format, const QLocale &loc
 
 bool containsDigit(const QString &s)
 {
-    for (const QChar c : s) {
-        if (c.isDigit())
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(s, [](QChar c) { return c.isDigit(); });
 }
 
 bool containsLetter(const QString &s)
 {
-    for (const QChar c : s) {
-        if (c.isLetter())
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(s, [](QChar c) { return c.isLetter(); });
 }
 
 } // namespace

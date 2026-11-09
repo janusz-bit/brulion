@@ -11,6 +11,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <ranges>
 
 namespace brulion::markdown {
 
@@ -27,6 +28,12 @@ NoteMode sanitized(NoteMode mode, NoteMode fallback)
 QString entryLine(NoteMode mode)
 {
     return NoteModeKey.toString() + u": "_s + noteModeName(mode);
+}
+
+/// The byte order mark `content` starts with, if any.
+QString bomOf(QStringView content)
+{
+    return startsWithBom(content) ? QString(QChar(ByteOrderMark)) : QString();
 }
 
 std::optional<NoteMode> modeOfValue(const QVariant &value)
@@ -53,8 +60,7 @@ bool verifiedEdit(QStringView before, const FrontmatterBlock &fm, const QString 
     const auto edited = findFrontmatter(after);
     if (!edited) {
         // The whole block was removed: only legal when removing the key left nothing else.
-        const QString bom = startsWithBom(before) ? QString(QChar(ByteOrderMark)) : QString();
-        return !mode && after == bom + body && otherKeys(fm.yaml).isEmpty();
+        return !mode && after == bomOf(before) + body && otherKeys(fm.yaml).isEmpty();
     }
     if (QStringView(after).sliced(edited->bodyStart) != body || otherKeys(edited->yaml) != otherKeys(fm.yaml))
         return false;
@@ -132,55 +138,50 @@ QString setNoteModeKey(QStringView content, std::optional<NoteMode> mode)
         if (!mode)
             return content.toString();
         const QString eol = text::detectEol(content);
-        const bool bom = startsWithBom(content);
-        QString out = bom ? QString(QChar(ByteOrderMark)) : QString();
-        out += u"---"_s + eol + entryLine(*mode) + eol + u"---"_s + eol;
-        out += content.sliced(bom ? 1 : 0);
-        return out;
+        const QString bom = bomOf(content);
+        return bom + u"---"_s + eol + entryLine(*mode) + eol + u"---"_s + eol + content.sliced(bom.size());
     }
-    if (mode && modeOfValue(parseYaml(fm->yaml).value(NoteModeKey.toString())) == mode)
+    const QVariantMap data = parseYaml(fm->yaml);
+    const QString key = NoteModeKey.toString();
+    if (mode && modeOfValue(data.value(key)) == mode)
         return content.toString();
 
     const QList<text::Line> lines = text::splitLines(content);
-    const QList<FrontmatterEntry> entries = frontmatterEntries(lines, fm->endLine, NoteModeKey.toString());
-    QString edited;
+    const QList<FrontmatterEntry> entries = frontmatterEntries(lines, fm->endLine, key);
+    const auto verified = [&](const QString &edited) { return verifiedEdit(content, *fm, edited, mode); };
     if (mode) {
         const QString line = entryLine(*mode);
         if (!entries.isEmpty()) {
             // Replace the first entry in place (keeping its line ending), drop duplicates.
             const int at = entries.first().first;
-            edited = rebuildLines(lines, entries, at, line + lines[at].eol);
+            if (QString edited = rebuildLines(lines, entries, at, line + lines[at].eol); verified(edited))
+                return edited;
         }
-        if (entries.isEmpty() || !verifiedEdit(content, *fm, edited, mode)) {
-            // A new last entry before the closing delimiter, with the line ending of the line
-            // above it (always terminated) — only while the mapping has no `brulion` key: a
-            // second one (a key the line scan cannot place, e.g. in an indented root mapping)
-            // would leave YAML that other tools refuse (duplicate keys, mixed indentation).
-            // Nor into frontmatter that is no mapping (isMapping()).
-            if (parseYaml(fm->yaml).contains(NoteModeKey.toString()) || !isYamlMapping(fm->yaml))
-                return content.toString();
-            edited = rebuildLines(lines, {}, fm->endLine, line + lines[fm->endLine - 1].eol);
-        }
-    } else {
-        if (entries.isEmpty())
+        // A new last entry before the closing delimiter, with the line ending of the line above it
+        // (always terminated) — only while the mapping has no `brulion` key: a second one (a key
+        // the line scan cannot place, e.g. in an indented root mapping) would leave YAML that other
+        // tools refuse (duplicate keys, mixed indentation). Nor into frontmatter that is no mapping
+        // (isYamlMapping()).
+        if (data.contains(key) || !isYamlMapping(fm->yaml))
             return content.toString();
-        edited = rebuildLines(lines, entries, -1, QString());
-        bool empty = true;
-        for (int i = 1; i < fm->endLine && empty; ++i) {
-            const bool removed =
-                    std::ranges::any_of(entries, [i](const FrontmatterEntry &e) { return i >= e.first && i < e.last; });
-            empty = removed || isBlank(lines[i].text);
-        }
-        if (empty) {
-            // Nothing but blank lines left: drop the whole block — unless the body would then
-            // start a frontmatter of its own (an empty block is kept in that case).
-            const QString bom = startsWithBom(content) ? QString(QChar(ByteOrderMark)) : QString();
-            const QString whole = bom + content.sliced(fm->bodyStart);
-            if (verifiedEdit(content, *fm, whole, mode))
-                return whole;
-        }
+        QString edited = rebuildLines(lines, {}, fm->endLine, line + lines[fm->endLine - 1].eol);
+        return verified(edited) ? edited : content.toString();
     }
-    return verifiedEdit(content, *fm, edited, mode) ? edited : content.toString();
+    if (entries.isEmpty())
+        return content.toString();
+    // Nothing but blank lines left: drop the whole block — unless the body would then start a
+    // frontmatter of its own (an empty block is kept in that case).
+    const auto removedOrBlank = [&lines, &entries](int i) {
+        return isBlank(lines[i].text)
+               || std::ranges::any_of(entries, [i](const FrontmatterEntry &e) { return i >= e.first && i < e.last; });
+    };
+    if (std::ranges::all_of(std::views::iota(1, fm->endLine), removedOrBlank)) {
+        QString whole = bomOf(content) + content.sliced(fm->bodyStart);
+        if (verified(whole))
+            return whole;
+    }
+    QString edited = rebuildLines(lines, entries, -1, QString());
+    return verified(edited) ? edited : content.toString();
 }
 
 QString withNoteModeChoice(QStringView content, NoteMode chosen, bool isJournal, const VaultConfig &config)

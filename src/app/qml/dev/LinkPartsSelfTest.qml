@@ -163,6 +163,12 @@ QtObject {
         }
         return -1
     }
+    /// The mouse over the middle of the link of row `row` starting with `url`.
+    function hoverLink(url: string): void {
+        const t = textOf(row, "")
+        linkBox(t, url)
+        window.taskEvents.mouseMove(t, boxCx(), boxCy(), -1, Qt.NoButton, Qt.NoModifier)
+    }
     /// A tap (touch) or a left click at the centre of the link of `text` starting with `url`.
     function clickLink(text: Item, url: string): void {
         const found = linkBox(text, url)
@@ -294,11 +300,9 @@ QtObject {
         if (window.at()) {
             if (Theme.touchUi)
                 return
-            const t = textOf(row, "")
-            linkBox(t, "part:1:")
-            window.taskEvents.mouseMove(t, boxCx(), boxCy(), -1, Qt.NoButton, Qt.NoModifier)
+            hoverLink("part:1:")
         }
-        if (window.at()) window.waitStep(Theme.touchUi || (blockText(row).hoveredLink === partUrl), "the mouse over “Firma”: its link hovered")
+        if (window.at()) window.waitStep(Theme.touchUi || blockText(row).hoveredLink === partUrl, "the mouse over “Firma”: its link hovered")
         if (window.at()) {
             if (Theme.touchUi)
                 return
@@ -313,9 +317,7 @@ QtObject {
             if (Theme.touchUi)
                 return
             check(underlined(blockText(row).shownHtml) === 0, "and nothing underlined")
-            const t = textOf(row, "")
-            linkBox(t, "page:")
-            window.taskEvents.mouseMove(t, boxCx(), boxCy(), -1, Qt.NoButton, Qt.NoModifier)
+            hoverLink("page:")
         }
         if (window.at()) window.waitStep(Theme.touchUi || blockText(row).hoveredLink === pageUrl, "over “Adam cośtam” the page link")
         // ---- 2. clicks: the part, the page, the separator ---------------------------------------

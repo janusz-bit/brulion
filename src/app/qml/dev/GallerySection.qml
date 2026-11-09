@@ -29,16 +29,12 @@ ColumnLayout {
             Accessible.role: Accessible.Heading
             Accessible.name: text
         }
-        Text {
+        BText {
             Layout.fillWidth: true
             visible: section.description !== ""
             text: section.description
-            font.family: Theme.fontUi
-            font.pixelSize: Theme.textBase
-            color: Theme.fgMuted
+            variant: "muted"
             wrapMode: Text.Wrap
-            lineHeightMode: Text.FixedHeight
-            lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
         }
     }
 

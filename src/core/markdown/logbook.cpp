@@ -1,6 +1,7 @@
 #include "markdown/logbook.h"
 
 #include "markdown/edit.h"
+#include "markdown/lines_p.h"
 #include "markdown/parse.h"
 #include "markdown/tasks.h"
 #include "text/text.h"
@@ -11,25 +12,25 @@
 
 namespace brulion::markdown {
 
+using namespace detail;
 using namespace Qt::StringLiterals;
 
 namespace {
 
 constexpr QStringView DayNames[] = {u"Mon", u"Tue", u"Wed", u"Thu", u"Fri", u"Sat", u"Sun"};
 
-QStringView trimmedView(QStringView s)
-{
-    return s.trimmed();
-}
+/// A written `=> HH:MM:SS` of more hours than this (100 years) is no real clock: the line does not
+/// read (and the hours of a hostile note cannot overflow the count).
+constexpr qint64 MaxWrittenHours = 100 * 366 * 24;
 
 bool isLogbookStart(QStringView line)
 {
-    return trimmedView(line) == u":LOGBOOK:";
+    return line.trimmed() == u":LOGBOOK:";
 }
 
 bool isDrawerEndLine(QStringView line)
 {
-    return trimmedView(line) == u":END:";
+    return line.trimmed() == u":END:";
 }
 
 /// The inside of `[2026-11-03 Tue 10:00:00]`: a date, an optional day name (any word, also a
@@ -49,8 +50,36 @@ QDateTime parseStamp(QStringView inner)
     return QDateTime(date, time);
 }
 
+/// A match of the `CLOCK:` pattern as the entry of line `index`; nullopt when it does not read.
+std::optional<ClockEntry> clockEntry(const QRegularExpressionMatch &m, int index)
+{
+    if (!m.hasMatch())
+        return std::nullopt;
+    ClockEntry e;
+    e.line = index;
+    e.start = parseStamp(m.capturedView(1));
+    if (!e.start.isValid())
+        return std::nullopt;
+    if (m.capturedStart(2) < 0)
+        return e; // a running clock
+    e.end = parseStamp(m.capturedView(2));
+    if (!e.end.isValid())
+        return std::nullopt;
+    e.seconds = e.start.secsTo(e.end);
+    if (e.seconds >= 0)
+        return e;
+    // The timestamps give no duration (an hour repeated when the clocks went back, a hand edit):
+    // the written one, else the line does not count.
+    bool ok = false;
+    const qint64 hours = m.capturedView(3).toLongLong(&ok);
+    if (!ok || hours > MaxWrittenHours)
+        return std::nullopt;
+    e.seconds = hours * 3600 + m.capturedView(4).toInt() * 60 + m.capturedView(5).toInt();
+    return e;
+}
+
 /// One logbook line read into `out`.
-void readLine(QStringView line, int index, Logbook &out, QList<int> &runningLines)
+void readLine(QStringView line, int index, Logbook &out)
 {
     static const QRegularExpression clock(
             u"^[ \\t]*CLOCK:[ \\t]*\\[([^\\]\\r\\n]*)\\](?:[ \\t]*--[ \\t]*\\[([^\\]\\r\\n]*)\\]"
@@ -58,53 +87,21 @@ void readLine(QStringView line, int index, Logbook &out, QList<int> &runningLine
     static const QRegularExpression state(
             u"^[ \\t]*(?:[-+*][ \\t]+)?State[ \\t]+\"([^\"\\r\\n]*)\"(?:[ \\t]+from(?:[ \\t]+\"([^\"\\r\\n]*)\")?)?"
             "[ \\t]+\\[([^\\]\\r\\n]*)\\][ \\t]*(?:\\\\\\\\)?[ \\t]*$"_s);
-    const QStringView t = trimmedView(line);
+    const QStringView t = line.trimmed();
     if (t.startsWith(u"CLOCK:")) {
-        const QRegularExpressionMatch m = clock.matchView(line);
-        if (!m.hasMatch()) {
+        if (const auto entry = clockEntry(clock.matchView(line), index))
+            out.clocks.append(*entry);
+        else
             ++out.malformed;
-            return;
-        }
-        ClockEntry e;
-        e.line = index;
-        e.start = parseStamp(m.capturedView(1));
-        if (!e.start.isValid()) {
-            ++out.malformed;
-            return;
-        }
-        if (m.capturedLength(2) > 0 || m.capturedStart(2) >= 0) {
-            e.end = parseStamp(m.capturedView(2));
-            if (!e.end.isValid()) {
-                ++out.malformed;
-                return;
-            }
-            qint64 seconds = e.start.secsTo(e.end);
-            if (seconds < 0) {
-                // The timestamps give no duration (an hour repeated when the clocks went back, a
-                // hand edit): the written one, else the line does not count.
-                if (m.capturedStart(3) < 0) {
-                    ++out.malformed;
-                    return;
-                }
-                const qint64 written = m.capturedView(3).toLongLong() * 3600 + m.capturedView(4).toInt() * 60
-                                       + (m.capturedStart(5) >= 0 ? m.capturedView(5).toInt() : 0);
-                seconds = written;
-            }
-            e.seconds = seconds;
-        } else {
-            runningLines.append(int(out.clocks.size()));
-        }
-        out.clocks.append(e);
         return;
     }
     if (t.startsWith(u"State ") || t.startsWith(u"- State") || t.startsWith(u"+ State") || t.startsWith(u"* State")) {
         const QRegularExpressionMatch m = state.matchView(line);
         const QDateTime at = m.hasMatch() ? parseStamp(m.capturedView(3)) : QDateTime();
-        if (!at.isValid()) {
+        if (at.isValid())
+            out.changes.append(StatusChange{m.captured(1), m.captured(2), at, index});
+        else
             ++out.malformed;
-            return;
-        }
-        out.changes.append(StatusChange{m.captured(1), m.captured(2), at, index});
     }
 }
 
@@ -135,7 +132,7 @@ QList<std::pair<qint64, qint64>> mergedIntervals(const QList<ClockEntry> &clocks
 
 /// Where a task block's logbook is (or goes) in the file's lines.
 struct DrawerPlace {
-    int first = -1;    ///< the block's first line
+    int block = -1;    ///< the task's block (index into ParsedNote::blocks)
     int start = -1;    ///< the `:LOGBOOK:` line, -1 when there is none
     int end = -1;      ///< its `:END:` line
     int insertAt = -1; ///< where a new drawer goes (before this line index)
@@ -153,20 +150,17 @@ bool isPlanningOrProperty(QStringView line)
 /// marker ("- ", "12. ") as spaces.
 QString continuationIndent(QStringView first)
 {
-    qsizetype i = 0;
-    while (i < first.size() && (first[i] == u' ' || first[i] == u'\t'))
-        ++i;
-    QString indent = first.first(i).toString();
-    qsizetype j = i;
-    if (j < first.size() && (first[j] == u'-' || first[j] == u'*' || first[j] == u'+')) {
+    const QStringView indent = leadingWhitespace(first);
+    qsizetype j = indent.size();
+    if (const QChar c = charAt(first, j); c == u'-' || c == u'*' || c == u'+') {
         ++j;
     } else {
-        while (j < first.size() && first[j].isDigit())
+        while (charAt(first, j).isDigit())
             ++j;
-        if (j < first.size() && (first[j] == u'.' || first[j] == u')'))
+        if (charAt(first, j) == u'.' || charAt(first, j) == u')')
             ++j;
     }
-    return indent + QString(j - i + 1, u' ');
+    return indent + QString(j - indent.size() + 1, u' ');
 }
 
 std::optional<DrawerPlace> drawerPlace(const QList<text::Line> &lines, const ParsedNote &note, int line)
@@ -181,20 +175,19 @@ std::optional<DrawerPlace> drawerPlace(const QList<text::Line> &lines, const Par
     if (first.trimmed().startsWith(u'>'))
         return std::nullopt; // inside a quote: its prefixes are not written here
     DrawerPlace p;
-    p.first = block.line;
+    p.block = b;
     for (int l = block.line; l <= block.ownEndLine && l < lines.size(); ++l) {
-        const bool inChild = std::any_of(block.children.cbegin(), block.children.cend(), [&](int c) {
-            return note.blocks[c].line <= l && l <= note.blocks[c].endLine;
-        });
+        const bool inChild = std::ranges::any_of(
+                block.children, [&](int c) { return note.blocks[c].line <= l && l <= note.blocks[c].endLine; });
         if (!inChild)
             p.own.append(l);
     }
     for (qsizetype k = 1; k < p.own.size(); ++k) {
-        const QStringView t = lines[p.own[k]].text;
+        const QStringView t = lines[p.own.at(k)].text;
         if (p.start < 0 && isLogbookStart(t)) {
-            p.start = p.own[k];
+            p.start = p.own.at(k);
         } else if (p.start >= 0 && isDrawerEndLine(t)) {
-            p.end = p.own[k];
+            p.end = p.own.at(k);
             break;
         }
     }
@@ -202,22 +195,17 @@ std::optional<DrawerPlace> drawerPlace(const QList<text::Line> &lines, const Par
         return std::nullopt; // an unclosed drawer: left alone
     // The indentation: an existing continuation line's, else past the list marker.
     for (qsizetype k = 1; k < p.own.size() && p.indent.isEmpty(); ++k) {
-        const QStringView t = lines[p.own[k]].text;
-        if (t.trimmed().isEmpty())
-            continue;
-        qsizetype i = 0;
-        while (i < t.size() && (t[i] == u' ' || t[i] == u'\t'))
-            ++i;
-        if (i > 0)
-            p.indent = t.first(i).toString();
+        const QStringView t = lines[p.own.at(k)].text;
+        if (!t.trimmed().isEmpty())
+            p.indent = leadingWhitespace(t).toString();
     }
     if (p.indent.isEmpty())
         p.indent = continuationIndent(first);
     // A new drawer: after the first line and the planning / property lines right after it.
     qsizetype k = 1;
-    while (k < p.own.size() && p.own[k] == p.own[k - 1] + 1 && isPlanningOrProperty(lines[p.own[k]].text))
+    while (k < p.own.size() && p.own.at(k) == p.own.at(k - 1) + 1 && isPlanningOrProperty(lines[p.own.at(k)].text))
         ++k;
-    p.insertAt = p.own[k - 1] + 1;
+    p.insertAt = p.own.at(k - 1) + 1;
     return p;
 }
 
@@ -226,49 +214,29 @@ std::optional<DrawerPlace> drawerPlace(const QList<text::Line> &lines, const Par
 QString insertLines(QList<text::Line> lines, int at, const QStringList &newLines)
 {
     const QString eol = text::preferredEol(lines, std::max(0, at - 1));
-    if (at >= lines.size()) {
-        at = int(lines.size());
-    }
-    if (at > 0 && lines[at - 1].eol.isEmpty()) {
-        // The last line: it ends the document without a line break.
+    at = std::min(at, int(lines.size()));
+    // At the end of a document without a final line break, the new last line goes without one.
+    const bool atEnd = at > 0 && lines[at - 1].eol.isEmpty();
+    if (atEnd)
         lines[at - 1].eol = eol;
-        QList<text::Line> added;
-        for (qsizetype k = 0; k < newLines.size(); ++k)
-            added.append(text::Line{newLines[k], k + 1 < newLines.size() ? eol : QString(), 0});
-        lines.append(added);
-        return text::joinLines(lines);
-    }
-    QList<text::Line> added;
-    for (const QString &l : newLines)
-        added.append(text::Line{l, eol, 0});
-    lines.insert(at, added.size(), text::Line());
-    for (qsizetype k = 0; k < added.size(); ++k)
-        lines[at + k] = added[k];
+    for (qsizetype k = 0; k < newLines.size(); ++k)
+        lines.insert(at + k, text::Line{newLines[k], atEnd && k + 1 == newLines.size() ? QString() : eol, 0});
     return text::joinLines(lines);
 }
 
-/// Add `newLine` at the end of the task's logbook (a new drawer when it has none).
-QString appendToLogbook(const QString &content, int line, const QString &newLine)
+/// Add `newLine` at the end of the task's logbook at `place` (a new drawer when it has none).
+QString appendToLogbook(const QList<text::Line> &lines, const DrawerPlace &place, const QString &newLine)
 {
-    const ParsedNote note = parseNote(VaultPath(), content);
-    const QList<text::Line> lines = text::splitLines(content);
-    const auto place = drawerPlace(lines, note, line);
-    if (!place)
-        return content;
-    if (place->start >= 0) {
-        const QStringView startLine = lines[place->start].text;
-        qsizetype i = 0;
-        while (i < startLine.size() && (startLine[i] == u' ' || startLine[i] == u'\t'))
-            ++i;
-        const QString indent = startLine.first(i).toString();
-        return insertLines(lines, place->end, {indent + newLine});
-    }
-    return insertLines(lines, place->insertAt,
-                       {place->indent + u":LOGBOOK:"_s, place->indent + newLine, place->indent + u":END:"_s});
+    if (place.start >= 0)
+        return insertLines(lines, place.end, {leadingWhitespace(lines[place.start].text) + newLine});
+    return insertLines(lines, place.insertAt,
+                       {place.indent + u":LOGBOOK:"_s, place.indent + newLine, place.indent + u":END:"_s});
 }
 
-/// The own drawer lines of the task's logbook, with their line numbers in the file.
+/// The task's logbook as the file has it: where its drawer is, what it holds and the file line of
+/// each scanned line.
 struct FileLogbook {
+    DrawerPlace place;
     Logbook book;
     QList<int> fileLines; ///< file line of each scanned line (index = ClockEntry::line)
 };
@@ -279,6 +247,7 @@ std::optional<FileLogbook> fileLogbook(const QList<text::Line> &lines, const Par
     if (!place)
         return std::nullopt;
     FileLogbook out;
+    out.place = *place;
     if (place->start < 0)
         return out;
     QStringList scanned;
@@ -290,11 +259,6 @@ std::optional<FileLogbook> fileLogbook(const QList<text::Line> &lines, const Par
     }
     out.book = readLogbook(scanned.join(u'\n'));
     return out;
-}
-
-QString markerOf(const Block &block)
-{
-    return block.task ? block.task->marker : QString();
 }
 
 } // namespace
@@ -311,7 +275,6 @@ const ClockEntry *Logbook::running() const
 Logbook readLogbook(QStringView text)
 {
     Logbook out;
-    QList<int> running;
     bool inside = false;
     int index = 0;
     qsizetype from = 0;
@@ -330,17 +293,17 @@ Logbook readLogbook(QStringView text)
         } else if (isDrawerEndLine(line)) {
             inside = false;
         } else {
-            readLine(line, index, out, running);
+            readLine(line, index, out);
         }
         ++index;
         from = to + 1;
     }
-    // Only the last clock without an end runs; earlier ones were never closed.
-    if (running.size() > 1) {
-        for (qsizetype k = running.size() - 2; k >= 0; --k) {
-            out.clocks.removeAt(running[k]);
-            ++out.malformed;
-        }
+    // Only the last clock without an end runs; earlier ones were never closed (one pass: a drawer
+    // of a hostile note may hold thousands of them).
+    if (const ClockEntry *last = out.running()) {
+        const int keep = last->line;
+        const auto unclosed = [keep](const ClockEntry &c) { return c.running() && c.line != keep; };
+        out.malformed += int(out.clocks.removeIf(unclosed));
     }
     return out;
 }
@@ -348,15 +311,17 @@ Logbook readLogbook(QStringView text)
 qint64 clockedSeconds(const QList<ClockEntry> &clocks)
 {
     qint64 total = 0;
-    for (const auto &span : mergedIntervals(clocks, QDateTime()))
-        total += span.second - span.first;
+    const auto spans = mergedIntervals(clocks, QDateTime());
+    for (const auto &[s, e] : spans)
+        total += e - s;
     return total;
 }
 
 QMap<QDate, qint64> clockedSecondsByDay(const QList<ClockEntry> &clocks, const QDateTime &now)
 {
     QMap<QDate, qint64> out;
-    for (const auto &[s, e] : mergedIntervals(clocks, now)) {
+    const auto spans = mergedIntervals(clocks, now);
+    for (const auto &[s, e] : spans) {
         const QDateTime start = QDateTime::fromSecsSinceEpoch(s);
         const QDateTime end = QDateTime::fromSecsSinceEpoch(e);
         for (QDate day = start.date(); day.isValid() && day <= end.date(); day = day.addDays(1)) {
@@ -375,7 +340,7 @@ QString formatClockTimestamp(const QDateTime &local, bool seconds)
 {
     const QDate d = local.date();
     const QTime t = local.time();
-    return u'[' + d.toString(u"yyyy-MM-dd"_s) + u' ' + DayNames[d.dayOfWeek() - 1].toString() + u' '
+    return u'[' + d.toString(u"yyyy-MM-dd"_s) + u' ' + DayNames[d.dayOfWeek() - 1] + u' '
            + t.toString(seconds ? u"HH:mm:ss"_s : u"HH:mm"_s) + u']';
 }
 
@@ -421,8 +386,7 @@ QString formatSpentTime(qint64 seconds)
 
 Logbook taskLogbook(const QString &content, int line)
 {
-    const ParsedNote note = parseNote(VaultPath(), content);
-    const auto book = fileLogbook(text::splitLines(content), note, line);
+    const auto book = fileLogbook(text::splitLines(content), parseNote(VaultPath(), content), line);
     return book ? book->book : Logbook();
 }
 
@@ -437,30 +401,23 @@ int taskBlockLine(const QString &content, int line)
 
 QString startTaskClock(const QString &content, int line, const QDateTime &now)
 {
-    const ParsedNote note = parseNote(VaultPath(), content);
-    const auto book = fileLogbook(text::splitLines(content), note, line);
+    const QList<text::Line> lines = text::splitLines(content);
+    const auto book = fileLogbook(lines, parseNote(VaultPath(), content), line);
     if (!book || book->book.running() || !now.isValid())
         return content;
-    return appendToLogbook(content, line, formatClockLine(now));
+    return appendToLogbook(lines, book->place, formatClockLine(now));
 }
 
 QString stopTaskClock(const QString &content, int line, const QDateTime &now)
 {
-    const ParsedNote note = parseNote(VaultPath(), content);
     QList<text::Line> lines = text::splitLines(content);
-    const auto book = fileLogbook(lines, note, line);
-    if (!book || !now.isValid())
-        return content;
-    const ClockEntry *running = book->book.running();
-    if (!running)
-        return content;
-    const int fileLine = book->fileLines.value(running->line, -1);
-    if (fileLine < 0)
+    const auto book = fileLogbook(lines, parseNote(VaultPath(), content), line);
+    const ClockEntry *running = book ? book->book.running() : nullptr;
+    const int fileLine = running ? book->fileLines.value(running->line, -1) : -1;
+    if (fileLine < 0 || !now.isValid())
         return content;
     QString &text = lines[fileLine].text;
-    const qsizetype clock = text.indexOf(u"CLOCK:");
-    const QDateTime stop = now < running->start ? running->start : now;
-    text = text.first(clock) + formatClockLine(running->start, stop);
+    text = text.first(text.indexOf(u"CLOCK:")) + formatClockLine(running->start, std::max(now, running->start));
     return text::joinLines(lines);
 }
 
@@ -469,14 +426,14 @@ QString logStatusChange(const QString &content, int line, TaskStatus from, TaskS
     if (!now.isValid())
         return content;
     const ParsedNote note = parseNote(VaultPath(), content);
-    const int b = blockAtLine(note, line);
-    if (b < 0 || !note.blocks[b].task)
+    const QList<text::Line> lines = text::splitLines(content);
+    const auto place = drawerPlace(lines, note, line);
+    if (!place)
         return content;
-    const QString marker = markerOf(note.blocks[b]);
-    const bool keyword = statusFromKeyword(marker).has_value();
-    return appendToLogbook(
-            content, line,
-            formatStatusChange(keywordFor(to, keyword ? QStringView(marker) : QStringView()), keywordFor(from), now));
+    // The new keyword follows the workflow of the task's own one (LATER / NOW vs TODO / DOING).
+    const QString &marker = note.blocks[place->block].task->marker;
+    const QStringView previous = statusFromKeyword(marker) ? QStringView(marker) : QStringView();
+    return appendToLogbook(lines, *place, formatStatusChange(keywordFor(to, previous), keywordFor(from), now));
 }
 
 QString setTaskStatusLogged(const QString &content, int line, TaskStatus status, const StatusLogOptions &options)

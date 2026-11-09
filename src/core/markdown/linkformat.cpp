@@ -5,6 +5,8 @@
 #include "markdown/tokens.h"
 #include "text/text.h"
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::markdown {
@@ -18,11 +20,7 @@ constexpr qsizetype MaxFragment = 300;
 
 QStringView firstLineOf(QStringView s)
 {
-    for (qsizetype i = 0; i < s.size(); ++i) {
-        if (s[i] == u'\n' || s[i] == u'\r')
-            return s.first(i);
-    }
-    return s;
+    return s.first(std::ranges::find_if(s, isLineBreak) - s.begin());
 }
 
 /// The heading's text with links, Markdown links and tags as they are shown: a wiki link by its
@@ -211,7 +209,7 @@ QString uniqueHeadingFragment(const QList<Heading> &headings, int index)
     if (own.isEmpty() || own.size() > MaxFragment)
         return {};
     const QStringList keys = keysOf(headings);
-    const QString ownKey = keys.at(index);
+    const QString &ownKey = keys.at(index);
     if (keys.count(ownKey) == 1)
         return findHeadingWithKeys(headings, keys, own) == index ? own : QString();
     // A heading path through the enclosing headings, the nearest first: the shortest one that
@@ -241,7 +239,7 @@ QString uniqueHeadingFragment(const QList<Heading> &headings, int index)
 QString formatReference(ReferenceKind kind, QStringView pageTarget, QStringView fragment, QStringView blockId)
 {
     const QString page = pageTarget.toString();
-    const auto wiki = [&page](const QString &fragmentWithHash, bool embed) {
+    const auto wiki = [&page](const QString &fragmentWithHash, bool embed) -> QString {
         return (embed ? u"![["_s : u"[["_s) + page + fragmentWithHash + u"]]"_s;
     };
     const auto pageOnly = [&](bool embed) { return page.isEmpty() ? QString() : wiki(QString(), embed); };
@@ -277,18 +275,12 @@ int pdfFragmentPage(QStringView fragment)
             continue;
         const QStringView value = pair.sliced(eq + 1).trimmed();
         // ASCII digits only (QString::toInt would take "+3" and full-width digits), at most 7.
-        if (value.isEmpty() || value.size() > 7)
+        if (value.isEmpty() || value.size() > 7 || !std::ranges::all_of(value, isAsciiDigit))
             continue;
         int n = 0;
-        bool digits = true;
-        for (const QChar c : value) {
-            if (c < u'0' || c > u'9') {
-                digits = false;
-                break;
-            }
+        for (const QChar c : value)
             n = n * 10 + (c.unicode() - u'0');
-        }
-        if (digits && n >= 1 && n <= MaxPdfFragmentPage)
+        if (n >= 1 && n <= MaxPdfFragmentPage)
             page = n;
     }
     return page;

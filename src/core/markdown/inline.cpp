@@ -7,6 +7,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
+
 namespace brulion::markdown {
 
 using namespace detail;
@@ -95,11 +97,9 @@ qsizetype tagBodyEnd(QStringView s, qsizetype p)
 
 QString nfc(QStringView s)
 {
-    for (const QChar c : s) {
-        if (c.unicode() > 127)
-            return s.toString().normalized(QString::NormalizationForm_C);
-    }
-    return s.toString();
+    if (std::ranges::all_of(s, [](QChar c) { return c.unicode() <= 127; }))
+        return s.toString(); // ASCII is NFC already
+    return s.toString().normalized(QString::NormalizationForm_C);
 }
 
 /// Validate a `#tag` body; the cleaned name or an empty string.
@@ -316,12 +316,8 @@ qsizetype nextCached(QStringView s, qsizetype from, QStringView needle, qsizetyp
 qsizetype wikiCloseAt(QStringView s, qsizetype p, ScanState &st)
 {
     const qsizetype close = nextCached(s, p + 2, u"]]", st.wikiClose);
-    if (close < 0 || close - p > MaxLinkText)
+    if (close < 0 || close - p > MaxLinkText || std::ranges::any_of(s.sliced(p + 2, close - p - 2), isLineBreak))
         return -1;
-    for (qsizetype k = p + 2; k < close; ++k) {
-        if (isLineBreak(s[k]))
-            return -1;
-    }
     return close;
 }
 
@@ -346,7 +342,7 @@ std::optional<WikiParts> parseWikiInner(QStringView inner)
         return std::nullopt;
     WikiParts out;
     out.target = target.toString();
-    out.display = display;
+    out.display = std::move(display);
     if (frag.startsWith(u'^'))
         out.blockId = frag.sliced(1).trimmed().toString();
     else
@@ -466,11 +462,10 @@ MdDestination parseMdDestination(QStringView rawDest)
     if (hash >= 0) {
         out.hasFragment = true;
         const QString frag = safeDecode(raw.sliced(hash + 1));
-        if (frag.startsWith(u'^')) {
+        if (frag.startsWith(u'^'))
             out.blockId = frag.sliced(1);
-        } else {
+        else
             out.heading = frag;
-        }
     }
     return out;
 }
@@ -479,16 +474,23 @@ void lexInline(QStringView orig, QStringView masked, const std::function<void(co
 {
     const QStringView s = masked;
     const qsizetype n = s.size();
-    bool trigger = false;
-    for (const QChar c : s) {
-        if (c == u'[' || c == u'(' || c == u'<' || c == u'#' || c == u'h' || c == u'H') {
-            trigger = true;
-            break;
-        }
-    }
-    if (!trigger)
+    const auto opens = [](QChar c) {
+        return c == u'[' || c == u'(' || c == u'<' || c == u'#' || c == u'h' || c == u'H';
+    };
+    if (std::ranges::none_of(s, opens))
         return;
     ScanState st;
+
+    // Reports a construct with a `target` (all but wiki and Markdown links); returns its end.
+    const auto report = [&visit](InlineKind kind, qsizetype from, qsizetype to, QString target) {
+        InlineItem item;
+        item.kind = kind;
+        item.from = from;
+        item.to = to;
+        item.target = std::move(target);
+        visit(item);
+        return to;
+    };
 
     const auto wiki = [&](qsizetype p, qsizetype start, InlineKind kind) -> qsizetype {
         const qsizetype close = wikiCloseAt(s, p, st);
@@ -533,95 +535,41 @@ void lexInline(QStringView orig, QStringView masked, const std::function<void(co
 
     qsizetype i = 0;
     while (i < n) {
-        const QChar c = s[i];
         qsizetype end = -1;
-        switch (c.unicode()) {
+        switch (s[i].unicode()) {
         case u'\\': i += 2; continue;
-        case u'!': {
-            const QChar c1 = charAt(s, i + 1);
-            if (c1 == u'[') {
+        case u'!':
+            if (charAt(s, i + 1) == u'[')
                 end = charAt(s, i + 2) == u'[' ? wiki(i + 1, i, InlineKind::Embed) : mdLink(i + 1, i);
-            } else if (c1 == u'(' && charAt(s, i + 2) == u'(') {
-                const qsizetype e = blockRefEnd(s, i + 1);
-                if (e >= 0) {
-                    InlineItem item;
-                    item.kind = InlineKind::BlockEmbed;
-                    item.from = i;
-                    item.to = e;
-                    item.target = s.sliced(i + 3, e - i - 5).toString();
-                    visit(item);
-                    end = e;
-                }
-            }
+            else if (const qsizetype e = blockRefEnd(s, i + 1); e >= 0)
+                end = report(InlineKind::BlockEmbed, i, e, s.sliced(i + 3, e - i - 5).toString());
             break;
-        }
         case u'[': end = charAt(s, i + 1) == u'[' ? wiki(i, i, InlineKind::Wiki) : mdLink(i, i); break;
         case u'(':
-            if (charAt(s, i + 1) == u'(') {
-                const qsizetype e = blockRefEnd(s, i);
-                if (e >= 0) {
-                    InlineItem item;
-                    item.kind = InlineKind::BlockRef;
-                    item.from = i;
-                    item.to = e;
-                    item.target = s.sliced(i + 2, e - i - 4).toString();
-                    visit(item);
-                    end = e;
-                }
-            }
+            if (const qsizetype e = blockRefEnd(s, i); e >= 0)
+                end = report(InlineKind::BlockRef, i, e, s.sliced(i + 2, e - i - 4).toString());
             break;
-        case u'<': {
-            qsizetype e = autolinkEnd(s, i);
-            QString target;
-            if (e >= 0) {
-                target = orig.sliced(i + 1, e - i - 2).toString();
-            } else {
-                e = emailAutolinkEnd(s, i, st);
-                if (e >= 0)
-                    target = u"mailto:"_s + orig.sliced(i + 1, e - i - 2);
-            }
-            if (e >= 0) {
-                InlineItem item;
-                item.kind = InlineKind::Autolink;
-                item.from = i;
-                item.to = e;
-                item.target = target;
-                visit(item);
-                end = e;
-            }
+        case u'<':
+            if (const qsizetype e = autolinkEnd(s, i); e >= 0)
+                end = report(InlineKind::Autolink, i, e, orig.sliced(i + 1, e - i - 2).toString());
+            else if (const qsizetype m = emailAutolinkEnd(s, i, st); m >= 0)
+                end = report(InlineKind::Autolink, i, m, u"mailto:"_s + orig.sliced(i + 1, m - i - 2));
             break;
-        }
         case u'h':
         case u'H':
             if (i == 0 || isWs(s[i - 1]) || isUrlPreceder(s[i - 1])) {
-                const qsizetype e = bareUrlEnd(s, i);
-                if (e >= 0) {
-                    InlineItem item;
-                    item.kind = InlineKind::Url;
-                    item.from = i;
-                    item.to = e;
-                    item.target = orig.sliced(i, e - i).toString();
-                    visit(item);
-                    end = e;
-                }
+                if (const qsizetype e = bareUrlEnd(s, i); e >= 0)
+                    end = report(InlineKind::Url, i, e, orig.sliced(i, e - i).toString());
             }
             break;
         case u'#': {
             if (i != 0 && s[i - 1] != u'(' && !isWs(s[i - 1]))
                 break;
             if (charAt(s, i + 1) == u'[' && charAt(s, i + 2) == u'[') {
-                const qsizetype close = wikiCloseAt(s, i + 1, st);
-                if (close >= 0) {
+                if (const qsizetype close = wikiCloseAt(s, i + 1, st); close >= 0) {
                     const QStringView name = orig.sliced(i + 3, close - i - 3).trimmed();
-                    if (!name.isEmpty() && !name.contains(u'[') && !name.contains(u']') && !name.contains(u'|')) {
-                        InlineItem item;
-                        item.kind = InlineKind::Tag;
-                        item.from = i;
-                        item.to = close + 2;
-                        item.target = nfc(name);
-                        visit(item);
-                        end = close + 2;
-                    }
+                    if (!name.isEmpty() && !name.contains(u'[') && !name.contains(u']') && !name.contains(u'|'))
+                        end = report(InlineKind::Tag, i, close + 2, nfc(name));
                 }
                 break;
             }
@@ -637,18 +585,12 @@ void lexInline(QStringView orig, QStringView masked, const std::function<void(co
             qsizetype tagEnd = bodyEnd;
             while (tagEnd > i + 1 && s[tagEnd - 1] == u'/')
                 --tagEnd;
-            InlineItem item;
-            item.kind = InlineKind::Tag;
-            item.from = i;
-            item.to = tagEnd;
-            item.target = name;
-            visit(item);
-            end = tagEnd;
+            end = report(InlineKind::Tag, i, tagEnd, name);
             break;
         }
         default: break;
         }
-        i = end > i ? end : i + 1;
+        i = std::max(end, i + 1);
     }
 }
 
@@ -687,12 +629,10 @@ void lexInlineOutsideMath(QStringView orig, QStringView masked, const QList<Math
 Segments segmentsForText(QStringView text, qsizetype base, int line)
 {
     Segments seg;
-    int k = 0;
-    for (const text::Line &l : text::splitLines(text)) {
+    for (const QList<text::Line> lines = text::splitLines(text); const text::Line &l : lines) {
         seg.pos.append(l.start);
         seg.offset.append(base + l.start);
-        seg.line.append(line + k);
-        ++k;
+        seg.line.append(line++);
     }
     return seg;
 }
@@ -799,12 +739,9 @@ QString tagSyntax(QStringView name)
     QStringView n = name.trimmed();
     while (n.endsWith(u'/'))
         n = n.chopped(1).trimmed();
-    if (n.isEmpty())
+    const auto unfit = [](QChar c) { return c == u'[' || c == u']' || c == u'|' || isLineBreak(c); };
+    if (n.isEmpty() || std::ranges::any_of(n, unfit))
         return {};
-    for (const QChar c : n) {
-        if (c == u'[' || c == u']' || c == u'|' || c == u'\n' || c == u'\r')
-            return {};
-    }
     const QString normalized = nfc(n);
     // A simple tag reads back as exactly this name; anything else needs the bracket form.
     if (tagBodyEnd(normalized, 0) == normalized.size() && cleanTagBody(normalized) == normalized)
@@ -817,11 +754,10 @@ QStringList uniqueTags(const QStringList &names)
     QSet<QString> seen;
     QStringList out;
     for (const QString &name : names) {
-        const QString key = name.toLower();
-        if (seen.contains(key))
-            continue;
-        seen.insert(key);
-        out.append(name);
+        if (const QString key = name.toLower(); !seen.contains(key)) {
+            seen.insert(key);
+            out.append(name);
+        }
     }
     return out;
 }
@@ -830,7 +766,7 @@ QList<LinkPathPart> linkPathParts(QStringView target)
 {
     // A single name, a backslash (a Windows path), a URL or a Windows drive: one link.
     if (!target.contains(u'/') || target.contains(u'\\') || hasUrlScheme(target)
-        || (target.size() >= 2 && target[1] == u':' && target[0].unicode() < 0x80 && target[0].isLetter()))
+        || (charAt(target, 1) == u':' && isAsciiLetter(target[0])))
         return {};
     QList<LinkPathPart> parts;
     qsizetype start = 0;
@@ -890,13 +826,11 @@ InlineScan extractInline(QStringView text, qsizetype baseOffset, int line)
 {
     const QString masked = maskInline(text);
     ScanResult res = scanInline(text, masked, segmentsForText(text, baseOffset, line), findMathSpans(masked));
-    InlineScan out;
-    out.links = std::move(res.links);
     QStringList names;
-    for (const TagHit &t : res.tags)
+    names.reserve(res.tags.size());
+    for (const TagHit &t : std::as_const(res.tags))
         names.append(t.name);
-    out.tags = uniqueTags(names);
-    return out;
+    return {std::move(res.links), uniqueTags(names)};
 }
 
 } // namespace brulion::markdown

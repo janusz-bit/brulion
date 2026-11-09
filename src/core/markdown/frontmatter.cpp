@@ -44,7 +44,7 @@ qsizetype nextLineStart(QStringView s, qsizetype end)
 
 std::optional<FrontmatterBlock> findFrontmatter(QStringView content)
 {
-    const qsizetype start = !content.isEmpty() && content[0].unicode() == 0xfeff ? 1 : 0;
+    const qsizetype start = startsWithBom(content) ? 1 : 0;
     qsizetype end = lineEnd(content, start);
     if (trimEnd(content.sliced(start, end - start)) != u"---" || end >= content.size())
         return std::nullopt;
@@ -53,15 +53,12 @@ std::optional<FrontmatterBlock> findFrontmatter(QStringView content)
     for (int line = 1;; ++line) {
         end = lineEnd(content, pos);
         const QStringView text = trimEnd(content.sliced(pos, end - pos));
-        if (text == u"---" || text == u"...") {
-            FrontmatterBlock fm;
-            fm.endLine = line;
-            fm.yaml = content.sliced(yamlStart, pos - yamlStart).toString();
-            fm.yamlStart = yamlStart;
-            fm.bodyStart = nextLineStart(content, end);
-            fm.bodyStartLine = line + 1;
-            return fm;
-        }
+        if (text == u"---" || text == u"...")
+            return FrontmatterBlock{.endLine = line,
+                                    .yaml = content.sliced(yamlStart, pos - yamlStart).toString(),
+                                    .yamlStart = yamlStart,
+                                    .bodyStart = nextLineStart(content, end),
+                                    .bodyStartLine = line + 1};
         if (end >= content.size())
             return std::nullopt;
         pos = nextLineStart(content, end);
@@ -97,14 +94,8 @@ YLine toYLine(QStringView raw)
     YLine l;
     l.raw = raw;
     qsizetype i = 0;
-    for (; i < raw.size(); ++i) {
-        if (raw[i] == u' ')
-            ++l.indent;
-        else if (raw[i] == u'\t')
-            l.indent += 2;
-        else
-            break;
-    }
+    for (; i < raw.size() && isSpaceOrTab(raw[i]); ++i)
+        l.indent += raw[i] == u'\t' ? 2 : 1;
     l.content = trimEnd(raw.sliced(i));
     return l;
 }
@@ -117,14 +108,6 @@ bool isSkippable(const YLine &l)
 bool isSeqItem(QStringView content)
 {
     return content == u"-" || content.startsWith(u"- ") || content.startsWith(u"-\t");
-}
-
-QStringView trimStart(QStringView s)
-{
-    qsizetype i = 0;
-    while (i < s.size() && s[i].isSpace())
-        ++i;
-    return s.sliced(i);
 }
 
 int hexDigit(QChar c)
@@ -281,17 +264,12 @@ QVariant resolvePlain(QStringView s)
     if (t == u"false" || t == u"False" || t == u"FALSE")
         return false;
     if (isYamlNumber(t)) {
-        const bool floating = t.contains(u'.') || t.contains(u'e') || t.contains(u'E');
-        if (!floating) {
-            bool ok = false;
-            const qlonglong n = t.toLongLong(&ok);
-            if (ok && n <= MaxSafeInteger && n >= -MaxSafeInteger)
+        bool ok = false;
+        if (!t.contains(u'.') && !t.contains(u'e', Qt::CaseInsensitive)) {
+            if (const qlonglong n = t.toLongLong(&ok); ok && n <= MaxSafeInteger && n >= -MaxSafeInteger)
                 return n;
-        } else {
-            bool ok = false;
-            const double d = t.toDouble(&ok);
-            if (ok && std::isfinite(d))
-                return d;
+        } else if (const double d = t.toDouble(&ok); ok && std::isfinite(d)) {
+            return d;
         }
     }
     return t.toString();
@@ -312,6 +290,7 @@ QString stripComment(QStringView s)
 struct KeyValue {
     QString key;
     QStringView rest;
+    qsizetype colon = 0; ///< index of the colon after the key
 };
 
 /// Split `key: rest` (plain or quoted key); nullopt when the line is not a mapping entry.
@@ -332,7 +311,7 @@ std::optional<KeyValue> splitKey(QStringView content)
         const QChar after = charAt(content, j + 1);
         if (!after.isNull() && !isSpaceOrTab(after))
             return std::nullopt;
-        return KeyValue{q->value, content.sliced(j + 1).trimmed()};
+        return KeyValue{q->value, content.sliced(j + 1).trimmed(), j};
     }
     if (c0 == u'[' || c0 == u'{' || c0 == u'|' || c0 == u'>' || c0 == u'%' || c0 == u'@' || c0 == u'`')
         return std::nullopt;
@@ -346,7 +325,7 @@ std::optional<KeyValue> splitKey(QStringView content)
                 const QStringView key = content.first(k).trimmed();
                 if (key.isEmpty())
                     return std::nullopt;
-                return KeyValue{key.toString(), content.sliced(k + 1).trimmed()};
+                return KeyValue{key.toString(), content.sliced(k + 1).trimmed(), k};
             }
         } else if (isSpaceOrTab(c) && charAt(content, k + 1) == u'#') {
             return std::nullopt;
@@ -530,13 +509,9 @@ private:
 /// YAML line folding for `>` scalars: single breaks become spaces, blank lines newlines.
 QString foldLines(const QStringList &raw)
 {
-    QString body;
-    for (qsizetype k = 0; k < raw.size(); ++k) {
+    QString body = raw.value(0);
+    for (qsizetype k = 1; k < raw.size(); ++k) {
         const QString &cur = raw[k];
-        if (k == 0) {
-            body = cur;
-            continue;
-        }
         const QString &prev = raw[k - 1];
         if (cur.isEmpty())
             body += u'\n';
@@ -563,31 +538,29 @@ QStringView sliceIndent(QStringView raw, int n)
 
 class YamlParser {
 public:
+    /// The lines are read in place: `src` must outlive the parser.
     explicit YamlParser(QStringView src)
     {
-        QList<text::Line> lines = text::splitLines(src);
+        for (qsizetype pos = 0;;) {
+            const qsizetype end = lineEnd(src, pos);
+            m_lines.append(toYLine(src.sliced(pos, end - pos)));
+            if (end >= src.size())
+                break;
+            pos = nextLineStart(src, end);
+        }
         // The break ending the last line does not start another (blank) line (matters for `|+`).
-        if (lines.size() > 1 && lines.last().text.isEmpty())
-            lines.removeLast();
-        m_texts.reserve(lines.size());
-        for (const text::Line &l : lines)
-            m_texts.append(l.text);
-        for (const QString &t : std::as_const(m_texts))
-            m_lines.append(toYLine(t));
+        if (m_lines.size() > 1 && m_lines.constLast().raw.isEmpty())
+            m_lines.removeLast();
     }
 
     QVariantMap parseRoot(QStringList *keys)
     {
         QVariantMap root;
         while (const YLine *line = peek()) {
-            const qsizetype before = m_i;
-            if (isSeqItem(line->content) || !splitKey(line->content)) {
+            if (splitKey(line->content))
+                parseMapInto(root, line->indent, 0, keys);
+            else
                 ++m_i; // a top-level sequence/scalar is not frontmatter: skip
-                continue;
-            }
-            parseMapInto(root, line->indent, 0, keys);
-            if (m_i == before)
-                ++m_i;
         }
         return root;
     }
@@ -595,29 +568,23 @@ public:
 private:
     const YLine *peek()
     {
-        while (m_i < m_lines.size() && isSkippable(m_lines[m_i]))
+        while (m_i < m_lines.size() && isSkippable(m_lines.at(m_i)))
             ++m_i;
-        return m_i < m_lines.size() ? &m_lines[m_i] : nullptr;
+        return lineAt(m_i);
     }
 
     const YLine *lineAt(qsizetype i) const { return i < m_lines.size() ? &m_lines[i] : nullptr; }
 
     void parseMapInto(QVariantMap &obj, int indent, int depth, QStringList *keys = nullptr)
     {
-        for (;;) {
-            const YLine *line = peek();
-            if (!line || line->indent < indent)
+        while (const YLine *line = peek()) {
+            if (line->indent < indent)
                 return;
-            if (line->indent > indent) {
-                ++m_i; // unexpected deeper line (malformed): skip
-                continue;
-            }
-            const auto kv = splitKey(line->content);
-            if (!kv) {
-                ++m_i;
-                continue;
-            }
             ++m_i;
+            // A deeper line here (malformed) or a line that is no `key: value` entry is skipped.
+            const auto kv = line->indent == indent ? splitKey(line->content) : std::nullopt;
+            if (!kv)
+                continue;
             const QVariant value = parseValue(kv->rest, indent, depth + 1, true);
             if (keys && !obj.contains(kv->key))
                 keys->append(kv->key);
@@ -636,10 +603,9 @@ private:
         const QChar c = rest[0];
         if (c == u'|' || c == u'>') {
             static const QRegularExpression header(u"^([|>])([+-]?)(\\d?)([+-]?)[ \\t]*(?:#.*)?$"_s);
-            const auto m = header.matchView(rest);
-            if (m.hasMatch()) {
-                const QString chomp = !m.captured(2).isEmpty() ? m.captured(2) : m.captured(4);
-                return parseBlockScalar(m.captured(1) == u">", chomp, indent);
+            if (const auto m = header.matchView(rest); m.hasMatch()) {
+                const QStringView chomp = m.capturedView(2).isEmpty() ? m.capturedView(4) : m.capturedView(2);
+                return parseBlockScalar(c == u'>', chomp, indent);
             }
         }
         if (c == u'[' || c == u'{')
@@ -651,12 +617,8 @@ private:
 
     void skipDeeper(int indent)
     {
-        for (;;) {
-            const YLine *l = peek();
-            if (!l || l->indent <= indent)
-                return;
+        for (const YLine *l = peek(); l && l->indent > indent; l = peek())
             ++m_i;
-        }
     }
 
     QVariant parseNested(int indent, int depth, bool allowSameIndentSeq)
@@ -681,27 +643,24 @@ private:
             parseMapInto(obj, indent, depth);
             return obj;
         }
-        const QStringView content = line->content;
         ++m_i;
-        return parsePlainValue(content, indent - 1);
+        return parsePlainValue(line->content, indent - 1);
     }
 
     QVariant parseSeq(int indent, int depth)
     {
         QVariantList arr;
-        for (;;) {
-            const YLine *line = peek();
-            if (!line || line->indent != indent || !isSeqItem(line->content))
-                return arr;
+        while (const YLine *line = peek()) {
+            if (line->indent != indent || !isSeqItem(line->content))
+                break;
             ++m_i;
             const QStringView afterDash = line->content.sliced(1);
-            const QStringView rest = afterDash.trimmed();
-            std::optional<KeyValue> kv;
-            if (!rest.isEmpty() && rest[0] != u'"' && rest[0] != u'\'' && rest[0] != u'[' && rest[0] != u'{')
-                kv = splitKey(rest);
-            if (kv) {
+            const QStringView rest = afterDash.trimmed(); // the line has no trailing whitespace
+            // A quoted scalar here is a value, never a key.
+            const QChar lead = charAt(rest, 0);
+            if (const auto kv = lead == u'"' || lead == u'\'' ? std::nullopt : splitKey(rest)) {
                 // "- key: value" starts a mapping whose keys are aligned with "key".
-                const int itemIndent = indent + 1 + int(afterDash.size() - trimStart(afterDash).size());
+                const int itemIndent = indent + 1 + int(afterDash.size() - rest.size());
                 QVariantMap obj;
                 obj.insert(kv->key, parseValue(kv->rest, itemIndent, depth + 1, true));
                 parseMapInto(obj, itemIndent, depth + 1);
@@ -713,31 +672,27 @@ private:
                 arr.append(parseValue(rest, indent, depth + 1, false));
             }
         }
+        return arr;
     }
 
-    QVariant parseBlockScalar(bool folded, const QString &chomp, int indent)
+    QVariant parseBlockScalar(bool folded, QStringView chomp, int indent)
     {
         QStringList raw;
         int contentIndent = -1;
-        while (m_i < m_lines.size()) {
-            const YLine &l = m_lines[m_i];
+        for (; m_i < m_lines.size(); ++m_i) {
+            const YLine &l = m_lines.at(m_i);
             if (l.content.isEmpty()) {
                 raw.append(QString());
-                ++m_i;
                 continue;
             }
-            if (contentIndent < 0) {
-                if (l.indent <= indent)
-                    break;
-                contentIndent = l.indent;
-            }
-            if (l.indent < contentIndent)
+            if (contentIndent < 0 && l.indent > indent)
+                contentIndent = l.indent; // the first line with content sets the indentation
+            if (contentIndent < 0 || l.indent < contentIndent)
                 break;
             raw.append(sliceIndent(l.raw, contentIndent).toString());
-            ++m_i;
         }
         int trailing = 0;
-        while (!raw.isEmpty() && raw.last().isEmpty()) {
+        while (!raw.isEmpty() && raw.constLast().isEmpty()) {
             raw.removeLast();
             ++trailing;
         }
@@ -787,9 +742,7 @@ private:
             ++m_i;
             q = readQuoted(text, 0);
         }
-        if (!q)
-            return stripComment(text);
-        return q->value;
+        return q ? q->value : stripComment(text);
     }
 
     QVariant parsePlainValue(QStringView rest, int indent)
@@ -806,7 +759,6 @@ private:
         return resolvePlain(text);
     }
 
-    QStringList m_texts;
     QList<YLine> m_lines;
     qsizetype m_i = 0;
 };
@@ -815,18 +767,15 @@ private:
 
 QVariantMap parseYaml(QStringView yaml, QStringList *keys)
 {
-    YamlParser p(yaml);
-    return p.parseRoot(keys);
+    return YamlParser(yaml).parseRoot(keys);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Serializer
+// Serializer (its pieces are shared through frontmatter_p.h)
 // ---------------------------------------------------------------------------------------------
 
-namespace {
-
-/// JSON string literal (the double-quoted YAML form written by v1 via JSON.stringify).
-QString jsonQuote(QStringView s)
+/// The JSON string literal (the double-quoted YAML form written by v1 via JSON.stringify).
+QString detail::yamlQuoted(QStringView s)
 {
     QString out;
     out.reserve(s.size() + 2);
@@ -850,6 +799,8 @@ QString jsonQuote(QStringView s)
     out += u'"';
     return out;
 }
+
+namespace {
 
 bool needsQuotes(const QString &s)
 {
@@ -875,23 +826,49 @@ bool needsQuotes(const QString &s)
     return resolved.typeId() != QMetaType::QString || resolved.toString() != s;
 }
 
-QString formatString(const QString &s)
+} // namespace
+
+QString detail::yamlString(const QString &s)
 {
-    return needsQuotes(s) ? jsonQuote(s) : s;
+    return needsQuotes(s) ? yamlQuoted(s) : s;
 }
 
-/// A string inside a flow collection: also quoted when it holds a flow indicator.
-QString formatFlowString(const QString &s)
+QString detail::yamlFlowString(const QString &s)
 {
     static const QString flowIndicators = u",[]{}"_s;
     const bool flowUnsafe = std::ranges::any_of(s, [](QChar c) { return flowIndicators.contains(c); });
-    return flowUnsafe || needsQuotes(s) ? jsonQuote(s) : s;
+    return flowUnsafe || needsQuotes(s) ? yamlQuoted(s) : s;
 }
+
+std::optional<QStringList> detail::yamlBlockScalar(const QString &s, const QString &indent)
+{
+    if (isSpaceOrTab(charAt(s, 0)))
+        return std::nullopt;
+    for (const QChar c : s) {
+        const char16_t u = c.unicode();
+        if ((u < 0x20 && u != u'\n' && u != u'\t') || u == 0x7f) // also a '\r'
+            return std::nullopt;
+    }
+    QStringView body(s);
+    while (body.endsWith(u'\n'))
+        body.chop(1);
+    const qsizetype trailing = s.size() - body.size();
+    if (body.isEmpty())
+        return std::nullopt;
+    QStringList out{trailing == 0 ? u"|-"_s : trailing == 1 ? u"|"_s : u"|+"_s};
+    for (const QStringView l : body.split(u'\n'))
+        out.append(l.isEmpty() ? QString() : indent + l);
+    for (qsizetype k = 1; k < trailing; ++k)
+        out.append(QString());
+    return out;
+}
+
+namespace {
 
 QString formatDouble(double d)
 {
     if (!std::isfinite(d))
-        return jsonQuote(std::isnan(d) ? u"NaN"_s : d > 0 ? u"Infinity"_s : u"-Infinity"_s);
+        return yamlQuoted(std::isnan(d) ? u"NaN"_s : d > 0 ? u"Infinity"_s : u"-Infinity"_s);
     return QString::number(d, 'g', QLocale::FloatingPointShortest);
 }
 
@@ -912,7 +889,7 @@ std::optional<QString> formatScalar(const QVariant &v)
     case QMetaType::UShort: return v.toString();
     case QMetaType::Double:
     case QMetaType::Float: return formatDouble(v.toDouble());
-    case QMetaType::QString: return formatString(v.toString());
+    case QMetaType::QString: return yamlString(v.toString());
     case QMetaType::QDate: return v.toDate().toString(u"yyyy-MM-dd"_s);
     case QMetaType::QDateTime: {
         const QDateTime dt = v.toDateTime();
@@ -924,7 +901,7 @@ std::optional<QString> formatScalar(const QVariant &v)
     }
     default:
         if (v.canConvert<QString>())
-            return formatString(v.toString());
+            return yamlString(v.toString());
         return std::nullopt;
     }
 }
@@ -943,109 +920,71 @@ QString formatFlow(const QVariant &v)
 {
     if (isList(v)) {
         QStringList parts;
-        for (const QVariant &item : v.toList())
+        const QVariantList list = v.toList();
+        for (const QVariant &item : list)
             parts.append(formatFlow(item));
         return u'[' + parts.join(u", ") + u']';
     }
     if (isMap(v)) {
         QStringList parts;
-        const QVariantMap m = v.toMap();
-        for (auto it = m.constBegin(); it != m.constEnd(); ++it)
-            parts.append(formatFlowString(it.key()) + u": " + formatFlow(it.value()));
+        const QVariantMap map = v.toMap();
+        for (const auto &[key, value] : map.asKeyValueRange())
+            parts.append(yamlFlowString(key) + u": " + formatFlow(value));
         return u'{' + parts.join(u", ") + u'}';
     }
     // Inside a flow collection a comma or bracket anywhere in a plain string would end it.
     if (v.typeId() == QMetaType::QString)
-        return formatFlowString(v.toString());
+        return yamlFlowString(v.toString());
     return formatScalar(v).value_or(u"null"_s);
-}
-
-/// Block scalar lines (`|`, `|-`, `|+` header first) for a multi-line string, or nullopt when
-/// quoting is safer.
-std::optional<QStringList> blockScalar(const QString &s, const QString &indent)
-{
-    if (s.contains(u'\r') || isSpaceOrTab(charAt(s, 0)))
-        return std::nullopt;
-    for (const QChar c : s) {
-        const char16_t u = c.unicode();
-        if ((u < 0x20 && u != u'\n' && u != u'\t') || u == 0x7f)
-            return std::nullopt;
-    }
-    QString body = s;
-    int trailing = 0;
-    while (body.endsWith(u'\n')) {
-        body.chop(1);
-        ++trailing;
-    }
-    if (body.isEmpty())
-        return std::nullopt;
-    QStringList out{trailing == 0 ? u"|-"_s : trailing == 1 ? u"|"_s : u"|+"_s};
-    for (const QString &l : body.split(u'\n'))
-        out.append(l.isEmpty() ? QString() : indent + l);
-    for (int k = 1; k < trailing; ++k)
-        out.append(QString());
-    return out;
 }
 
 void emitSeq(const QVariantList &arr, int indent, QStringList &out);
 
 void emitEntry(const QString &key, const QVariant &value, int indent, QStringList &out)
 {
-    const QString pad(indent, u' ');
-    const QString k = formatString(key);
+    const QString head = QString(indent, u' ') + yamlString(key) + u':';
     if (isList(value)) {
         const QVariantList list = value.toList();
-        if (list.isEmpty()) {
-            out.append(pad + k + u": []");
-        } else {
-            out.append(pad + k + u':');
-            emitSeq(list, indent + 2, out);
-        }
+        out.append(list.isEmpty() ? head + u" []" : head);
+        emitSeq(list, indent + 2, out);
     } else if (isMap(value)) {
         const QVariantMap map = value.toMap();
-        if (map.isEmpty()) {
-            out.append(pad + k + u": {}");
-        } else {
-            out.append(pad + k + u':');
-            for (auto it = map.constBegin(); it != map.constEnd(); ++it)
-                emitEntry(it.key(), it.value(), indent + 2, out);
-        }
+        out.append(map.isEmpty() ? head + u" {}" : head);
+        for (const auto &[k, v] : map.asKeyValueRange())
+            emitEntry(k, v, indent + 2, out);
     } else if (!value.isValid() || value.isNull()) {
-        out.append(pad + k + u':');
+        out.append(head);
     } else if (value.typeId() == QMetaType::QString && value.toString().contains(u'\n')) {
         const QString s = value.toString();
-        if (const auto block = blockScalar(s, QString(indent + 2, u' '))) {
-            out.append(pad + k + u": " + block->first());
+        if (const auto block = yamlBlockScalar(s, QString(indent + 2, u' '))) {
+            out.append(head + u' ' + block->first());
             out.append(block->mid(1));
         } else {
-            out.append(pad + k + u": " + jsonQuote(s));
+            out.append(head + u' ' + yamlQuoted(s));
         }
     } else if (const auto s = formatScalar(value)) {
-        out.append(pad + k + u": " + *s);
+        out.append(head + u' ' + *s);
     }
 }
 
 void emitSeq(const QVariantList &arr, int indent, QStringList &out)
 {
-    const QString pad(indent, u' ');
+    const QString dash = QString(indent, u' ') + u"- ";
     for (const QVariant &item : arr) {
         if (isList(item)) {
-            out.append(pad + u"- " + formatFlow(item));
+            out.append(dash + formatFlow(item));
         } else if (isMap(item)) {
             QStringList inner;
             const QVariantMap map = item.toMap();
-            for (auto it = map.constBegin(); it != map.constEnd(); ++it)
-                emitEntry(it.key(), it.value(), indent + 2, inner);
-            if (inner.isEmpty()) {
-                out.append(pad + u"- {}");
-            } else {
-                out.append(pad + u"- " + inner.first().mid(indent + 2));
-                out.append(inner.mid(1));
-            }
+            for (const auto &[key, value] : map.asKeyValueRange())
+                emitEntry(key, value, indent + 2, inner);
+            // The first entry goes on the dash line (in place of its indentation).
+            out.append(dash + (inner.isEmpty() ? u"{}"_s : inner.constFirst().mid(indent + 2)));
+            out.append(inner.mid(1));
         } else if (item.typeId() == QMetaType::QString && item.toString().contains(u'\n')) {
-            out.append(pad + u"- " + jsonQuote(item.toString()));
+            out.append(dash + yamlQuoted(item.toString()));
         } else {
-            out.append(pad + u"- " + formatScalar(item).value_or(u"null"_s));
+            out.append(dash + formatScalar(item).value_or(u"null"_s));
         }
     }
 }
@@ -1087,55 +1026,6 @@ QString stringifyFrontmatter(const QVariantMap &data, const QStringList &keyOrde
 // Single-key edits
 // ---------------------------------------------------------------------------------------------
 
-namespace {
-
-/// Lines [first, last) of the top-level entry `key` inside the frontmatter (document lines).
-struct KeyLines {
-    int first = -1;
-    int last = -1;
-};
-
-KeyLines findKeyLines(const QList<text::Line> &lines, int yamlFirst, int yamlEnd, const QString &key)
-{
-    KeyLines out;
-    for (int i = yamlFirst; i < yamlEnd; ++i) {
-        const YLine l = toYLine(lines[i].text);
-        if (l.indent != 0 || isSkippable(l))
-            continue;
-        const auto kv = splitKey(l.content);
-        if (!kv || kv->key != key)
-            continue;
-        // The entry continues with deeper lines and with sequence items at indentation 0.
-        int last = i + 1;
-        for (int j = i + 1; j < yamlEnd; ++j) {
-            const YLine n = toYLine(lines[j].text);
-            if (n.content.isEmpty())
-                continue; // blank lines belong to the entry only when more of it follows
-            if (n.indent > 0 || isSeqItem(n.content))
-                last = j + 1;
-            else
-                break;
-        }
-        out = {i, last};
-    }
-    return out;
-}
-
-QString replaceLines(const QList<text::Line> &lines, int first, int last, const QStringList &replacement,
-                     const QString &eol)
-{
-    QString out;
-    for (int i = 0; i < first; ++i)
-        out += lines[i].text + lines[i].eol;
-    for (const QString &l : replacement)
-        out += l + eol;
-    for (int i = last; i < lines.size(); ++i)
-        out += lines[i].text + lines[i].eol;
-    return out;
-}
-
-} // namespace
-
 QString setFrontmatterValue(const QString &content, const QString &key, const QVariant &value)
 {
     if (key.isEmpty())
@@ -1145,17 +1035,16 @@ QString setFrontmatterValue(const QString &content, const QString &key, const QV
     const QString eol = text::detectEol(content);
     const auto fm = findFrontmatter(content);
     if (!fm) {
-        const bool bom = !content.isEmpty() && content[0].unicode() == 0xfeff;
-        QString out = bom ? QString(QChar(0xfeff)) : QString();
-        out += u"---"_s + eol + entry.join(eol) + eol + u"---"_s + eol;
-        out += bom ? content.sliced(1) : content;
-        return out;
+        const qsizetype bom = startsWithBom(content) ? 1 : 0;
+        return content.first(bom) + u"---"_s + eol + entry.join(eol) + eol + u"---"_s + eol + content.sliced(bom);
     }
+    // The key's last entry is replaced; a new key goes before the closing delimiter.
     const QList<text::Line> lines = text::splitLines(content);
-    const KeyLines found = findKeyLines(lines, 1, fm->endLine, key);
-    if (found.first >= 0)
-        return replaceLines(lines, found.first, found.last, entry, eol);
-    return replaceLines(lines, fm->endLine, fm->endLine, entry, eol);
+    const QList<FrontmatterEntry> found = frontmatterEntries(lines, fm->endLine, key);
+    const QString replacement = entry.isEmpty() ? QString() : entry.join(eol) + eol;
+    if (found.isEmpty())
+        return rebuildLines(lines, {}, fm->endLine, replacement);
+    return rebuildLines(lines, {found.last()}, found.last().first, replacement);
 }
 
 QString removeFrontmatterValue(const QString &content, const QString &key)
@@ -1164,10 +1053,8 @@ QString removeFrontmatterValue(const QString &content, const QString &key)
     if (!fm || key.isEmpty())
         return content;
     const QList<text::Line> lines = text::splitLines(content);
-    const KeyLines found = findKeyLines(lines, 1, fm->endLine, key);
-    if (found.first < 0)
-        return content;
-    return replaceLines(lines, found.first, found.last, {}, text::detectEol(content));
+    const QList<FrontmatterEntry> found = frontmatterEntries(lines, fm->endLine, key);
+    return found.isEmpty() ? content : rebuildLines(lines, {found.last()}, -1, QString());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1176,23 +1063,13 @@ QString removeFrontmatterValue(const QString &content, const QString &key)
 
 namespace detail {
 
-namespace {
-
-bool isSeqItemLine(QStringView line)
-{
-    const QStringView t = trimEndBlanks(line);
-    return t == u"-" || t.startsWith(u"- ") || t.startsWith(u"-\t");
-}
-
-} // namespace
-
 QList<FrontmatterEntry> frontmatterEntries(const QList<text::Line> &lines, int endLine)
 {
     QList<FrontmatterEntry> out;
-    endLine = std::min<int>(endLine, int(lines.size()));
+    endLine = std::min(endLine, int(lines.size()));
     for (int i = 1; i < endLine; ++i) {
         const QStringView t = lines[i].text;
-        if (isBlank(t) || isSpaceOrTab(t[0]) || t[0] == u'#' || isSeqItemLine(t))
+        if (isBlank(t) || isSpaceOrTab(t[0]) || t[0] == u'#' || isSeqItem(trimEndBlanks(t)))
             continue;
         QStringList keys;
         parseYaml(t, &keys);
@@ -1200,10 +1077,10 @@ QList<FrontmatterEntry> frontmatterEntries(const QList<text::Line> &lines, int e
             continue;
         int last = i + 1;
         for (int j = i + 1; j < endLine; ++j) {
-            const QStringView n = lines[j].text;
-            if (isBlank(n))
+            const QStringView n = trimEnd(lines[j].text); // as the parser reads it: any whitespace
+            if (n.isEmpty())
                 continue;
-            if (isSpaceOrTab(n[0]) || isSeqItemLine(n) || n[0] == u']' || n[0] == u'}')
+            if (isSpaceOrTab(n[0]) || isSeqItem(n) || n[0] == u']' || n[0] == u'}')
                 last = j + 1;
             else
                 break;
@@ -1216,11 +1093,8 @@ QList<FrontmatterEntry> frontmatterEntries(const QList<text::Line> &lines, int e
 
 QList<FrontmatterEntry> frontmatterEntries(const QList<text::Line> &lines, int endLine, const QString &key)
 {
-    QList<FrontmatterEntry> out;
-    for (const FrontmatterEntry &e : frontmatterEntries(lines, endLine)) {
-        if (e.key == key)
-            out.append(e);
-    }
+    QList<FrontmatterEntry> out = frontmatterEntries(lines, endLine);
+    out.removeIf([&key](const FrontmatterEntry &e) { return e.key != key; });
     return out;
 }
 
@@ -1243,14 +1117,10 @@ QString rebuildLines(const QList<text::Line> &lines, const QList<FrontmatterEntr
 
 bool isYamlMapping(QStringView yaml)
 {
-    if (!parseYaml(yaml).isEmpty())
-        return true;
-    for (const text::Line &l : text::splitLines(yaml)) {
+    return !parseYaml(yaml).isEmpty() || std::ranges::all_of(text::splitLines(yaml), [](const text::Line &l) {
         const QStringView t = QStringView(l.text).trimmed();
-        if (!t.isEmpty() && !t.startsWith(u'#'))
-            return false;
-    }
-    return true;
+        return t.isEmpty() || t.startsWith(u'#');
+    });
 }
 
 qsizetype yamlCommentStart(QStringView s, qsizetype from)
@@ -1273,48 +1143,12 @@ qsizetype yamlCommentStart(QStringView s, qsizetype from)
 
 std::optional<YamlKeyLine> splitYamlKeyLine(QStringView line)
 {
-    const QStringView content = trimEnd(line);
-    const auto kv = splitKey(content);
+    const auto kv = splitKey(trimEnd(line));
     if (!kv)
         return std::nullopt;
-    YamlKeyLine out;
-    out.key = kv->key;
-    qsizetype colon = -1;
-    const QChar c0 = content[0];
-    if (c0 == u'"' || c0 == u'\'') {
-        const auto q = readQuoted(content, 0);
-        if (!q)
-            return std::nullopt;
-        qsizetype j = q->end;
-        while (isSpaceOrTab(charAt(content, j)))
-            ++j;
-        colon = j;
-    } else {
-        for (qsizetype k = 0; k < content.size(); ++k) {
-            if (content[k] == u':' && (k + 1 >= content.size() || isSpaceOrTab(content[k + 1]))) {
-                colon = k;
-                break;
-            }
-        }
-    }
-    if (colon < 0 || content[colon] != u':')
-        return std::nullopt;
-    out.colon = colon;
-    qsizetype rest = colon + 1;
-    while (rest < line.size() && isSpaceOrTab(line[rest]))
-        ++rest;
-    out.rest = rest;
-    return out;
-}
-
-QString yamlString(const QString &s)
-{
-    return formatString(s);
-}
-
-QString yamlFlowString(const QString &s)
-{
-    return formatFlowString(s);
+    // The value starts after the blanks following the colon.
+    const qsizetype afterColon = kv->colon + 1;
+    return YamlKeyLine{kv->key, kv->colon, afterColon + indentOf(line.sliced(afterColon)).chars};
 }
 
 std::optional<QString> yamlScalar(const QVariant &v)
@@ -1322,16 +1156,6 @@ std::optional<QString> yamlScalar(const QVariant &v)
     if (isList(v) || isMap(v))
         return std::nullopt;
     return formatScalar(v);
-}
-
-std::optional<QStringList> yamlBlockScalar(const QString &s, const QString &indent)
-{
-    return blockScalar(s, indent);
-}
-
-QString yamlQuoted(QStringView s)
-{
-    return jsonQuote(s);
 }
 
 } // namespace detail

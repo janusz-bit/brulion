@@ -31,7 +31,7 @@ struct Edit {
 /// Apply non-overlapping edits (any order).
 QString applyEdits(QStringView text, QList<Edit> edits)
 {
-    std::ranges::sort(edits, [](const Edit &a, const Edit &b) { return a.from < b.from; });
+    std::ranges::sort(edits, {}, &Edit::from);
     QString out;
     qsizetype last = 0;
     for (const Edit &e : std::as_const(edits)) {
@@ -48,10 +48,7 @@ QString applyEdits(QStringView text, QList<Edit> edits)
 /// A removal of [from, to) that also swallows the whitespace before it.
 Edit removal(QStringView text, qsizetype from, qsizetype to)
 {
-    qsizetype f = from;
-    while (f > 0 && isSpaceOrTab(text[f - 1]))
-        --f;
-    return Edit{f, to, QString()};
+    return Edit{trimEndBlanks(text.first(from)).size(), to, QString()};
 }
 
 /// Replace document line `line` by `newLines` (joined with the line's terminator).
@@ -87,11 +84,8 @@ struct Target {
 
 const OwnLine *ownLineAt(const Node &node, int line)
 {
-    for (const OwnLine &l : node.own) {
-        if (l.view.line == line)
-            return &l;
-    }
-    return nullptr;
+    const auto it = std::ranges::find(node.own, line, [](const OwnLine &l) { return l.view.line; });
+    return it != node.own.end() ? &*it : nullptr;
 }
 
 bool isCodeLine(const Node &node, int line)
@@ -117,8 +111,7 @@ bool isStructuralLine(const Node &node, int line)
 /// Is the fenced code block closed by a fence line (not by the end of its container)?
 bool isClosedFence(const Node &node)
 {
-    return std::count_if(node.own.begin(), node.own.end(), [](const OwnLine &l) { return l.role == LineRole::Fence; })
-           >= 2;
+    return std::ranges::count(node.own, LineRole::Fence, &OwnLine::role) >= 2;
 }
 
 /// Is blank `line` part of an unclosed fenced code block (which runs to the end of its
@@ -194,14 +187,19 @@ qsizetype hiddenTailStart(const Target &t)
     for (const Range &r : t.st.comments) {
         if (r.first >= lineEnd)
             break;
-        if (r.first >= t.offset && r.second > lineEnd) {
-            qsizetype k = r.first - t.offset;
-            while (k > 0 && isSpaceOrTab(t.text[k - 1]))
-                --k;
-            return k;
-        }
+        if (r.first >= t.offset && r.second > lineEnd)
+            return trimEndBlanks(QStringView(t.text).first(r.first - t.offset)).size();
     }
     return t.text.size();
+}
+
+/// Document line `t.line` with the target's text before `tailAt` (hiddenTailStart()) replaced by
+/// `visible`; a space keeps it apart from the hidden comment after it.
+QString withHiddenTail(const Target &t, qsizetype tailAt, const QString &visible)
+{
+    const QStringView tail = QStringView(t.text).sliced(tailAt);
+    const bool glue = !tail.isEmpty() && !isSpaceOrTab(charAt(visible, visible.size() - 1)) && !isSpaceOrTab(tail[0]);
+    return t.st.lines[t.line].text.first(t.prefix) + visible + (glue ? u" "_s : QString()) + tail;
 }
 
 std::optional<TaskMarker> markerOf(const QString &text, const QString &masked)
@@ -214,11 +212,10 @@ std::optional<TaskMarker> markerOf(const QString &text, const QString &masked)
 /// Append a token at the end of a line, before a trailing block id.
 QString appendToken(const QString &text, const QString &token)
 {
-    if (const auto id = blockIdAtEnd(maskInline(text))) {
-        const QString before = trimEnd(QStringView(text).first(id->from)).toString();
-        return before + u' ' + token + u' ' + QStringView(text).sliced(id->from).trimmed().toString();
-    }
-    return trimEnd(text).toString() + u' ' + token;
+    const QStringView view(text);
+    if (const auto id = blockIdAtEnd(maskInline(text)))
+        return trimEnd(view.first(id->from)) + u' ' + token + u' ' + view.sliced(id->from).trimmed();
+    return trimEnd(view) + u' ' + token;
 }
 
 /// Rewriting a line normalises its 🔁 rule to the canonical English form (SYNTAX §7).
@@ -229,27 +226,27 @@ std::optional<Edit> canonicalRecurrenceEdit(const Token &t)
     return Edit{t.valueFrom, t.valueTo, t.canonical};
 }
 
-/// Remove / add ✅ and ❌ dates for a status change (and canonicalise the rule).
-QString updateCompletionDates(const QString &text, std::optional<TaskStatus> prev, TaskStatus status, QDate today)
+/// The ✅ / ❌ dates for a change to another status: the old ones go, becoming done or cancelled
+/// adds today's (and the rule is canonicalised).
+QString updateCompletionDates(const QString &text, TaskStatus status, QDate today)
 {
     QList<Edit> edits;
     for (const Token &t : findTokens(maskInline(text))) {
-        if (t.kind == TokenKind::Done && !(status == TaskStatus::Done && prev == TaskStatus::Done))
+        if (t.kind == TokenKind::Done || t.kind == TokenKind::Cancelled)
             edits.append(removal(text, t.from, t.to));
-        if (t.kind == TokenKind::Cancelled && !(status == TaskStatus::Cancelled && prev == TaskStatus::Cancelled))
-            edits.append(removal(text, t.from, t.to));
-        if (const auto e = canonicalRecurrenceEdit(t))
+        else if (const auto e = canonicalRecurrenceEdit(t))
             edits.append(*e);
     }
-    QString out = applyEdits(text, edits);
-    if (status == TaskStatus::Done && prev != TaskStatus::Done)
-        out = appendToken(out, tokens::Done.toString() + u' ' + isoDate(today));
-    if (status == TaskStatus::Cancelled && prev != TaskStatus::Cancelled)
-        out = appendToken(out, tokens::Cancelled.toString() + u' ' + isoDate(today));
+    const QString out = applyEdits(text, edits);
+    if (status == TaskStatus::Done)
+        return appendToken(out, tokens::Done + u' ' + isoDate(today));
+    if (status == TaskStatus::Cancelled)
+        return appendToken(out, tokens::Cancelled + u' ' + isoDate(today));
     return out;
 }
 
-/// Rewrite the marker of a line (or turn the line into a task) and update completion dates.
+/// Rewrite the marker of a line (or turn the line into a task) for a status other than the
+/// marker's, and update completion dates.
 QString rewriteStatus(const Target &t, const std::optional<TaskMarker> &marker, TaskStatus status, QDate today)
 {
     const QString &text = t.text;
@@ -269,8 +266,15 @@ QString rewriteStatus(const Target &t, const std::optional<TaskMarker> &marker, 
             out = text.first(t.insertAt) + sep + u"- "_s + box + text.sliced(t.insertAt);
         }
     }
-    return updateCompletionDates(out, marker ? std::optional(marker->status) : std::nullopt, status, today);
+    return updateCompletionDates(out, status, today);
 }
+
+/// A planning line (SCHEDULED: / DEADLINE:) of a list item with its planning tokens.
+struct PlanningLine {
+    int line = 0;
+    QString text;
+    QList<Token> tokens;
+};
 
 /// How a recurring task repeats.
 struct Repeat {
@@ -278,7 +282,7 @@ struct Repeat {
     bool catchUp = false; ///< Logseq `++` repeater: move on until the date is after today
 };
 
-std::optional<Repeat> recurrenceRuleOf(const QList<Token> &lineTokens, const QList<Token> &planning)
+std::optional<Repeat> recurrenceRuleOf(const QList<Token> &lineTokens, const QList<PlanningLine> &planning)
 {
     for (const Token &t : lineTokens) {
         if (t.kind == TokenKind::Recurrence && !t.value.isEmpty()) {
@@ -287,11 +291,11 @@ std::optional<Repeat> recurrenceRuleOf(const QList<Token> &lineTokens, const QLi
             return std::nullopt;
         }
     }
-    for (const Token &p : planning) {
-        if (p.repeater.isEmpty())
-            continue;
-        if (const auto rule = dates::repeaterToRule(p.repeater))
-            return Repeat{*rule, p.repeater.startsWith(u"++")};
+    for (const PlanningLine &p : planning) {
+        for (const Token &k : p.tokens) {
+            if (const auto rule = k.repeater.isEmpty() ? std::nullopt : dates::repeaterToRule(k.repeater))
+                return Repeat{*rule, k.repeater.startsWith(u"++")};
+        }
     }
     return std::nullopt;
 }
@@ -299,7 +303,7 @@ std::optional<Repeat> recurrenceRuleOf(const QList<Token> &lineTokens, const QLi
 /// Upper bound of catch-up steps (a daily `++1d` repeater ~27 years behind).
 constexpr int MaxCatchUp = 10'000;
 
-std::optional<DateSpec> nextDate(const Repeat &repeat, const DateSpec &from, QDate today)
+std::optional<DateSpec> nextDate(const Repeat &repeat, DateSpec from, QDate today)
 {
     auto next = dates::nextOccurrence(repeat.rule, from, today);
     for (int k = 0; repeat.catchUp && next && next->date <= today && k < MaxCatchUp; ++k) {
@@ -311,13 +315,7 @@ std::optional<DateSpec> nextDate(const Repeat &repeat, const DateSpec &from, QDa
     return next;
 }
 
-struct PlanningLine {
-    int line = 0;
-    QString text;
-    QList<Token> tokens;
-};
-
-/// Planning lines (SCHEDULED: / DEADLINE:) of a list item, with their planning tokens.
+/// Planning lines of the target's list item.
 QList<PlanningLine> planningLinesOf(const Target &t)
 {
     QList<PlanningLine> out;
@@ -329,48 +327,49 @@ QList<PlanningLine> planningLinesOf(const Target &t)
         const OwnLine &own = node.own[k];
         if (own.role != LineRole::Text)
             continue;
-        const QString docText = t.st.lines[own.view.line].text;
+        const QString &docText = t.st.lines[own.view.line].text;
         const QString masked = maskInline(docText);
         if (!re.match(masked).hasMatch())
             continue;
-        PlanningLine p{own.view.line, docText, {}};
-        for (const Token &tok : findTokens(masked)) {
-            if (tok.kind == TokenKind::Planning)
-                p.tokens.append(tok);
-        }
-        out.append(p);
+        PlanningLine p{own.view.line, docText, findTokens(masked)};
+        p.tokens.removeIf([](const Token &tok) { return tok.kind != TokenKind::Planning; });
+        out.append(std::move(p));
     }
     return out;
 }
 
-std::optional<DateSpec> shiftSpec(const DateSpec &spec, qint64 days)
+std::optional<DateSpec> shiftSpec(DateSpec spec, qint64 days)
 {
-    const QDate d = spec.date.addDays(days);
-    if (!dates::isSupportedDate(d))
+    spec.date = spec.date.addDays(days);
+    if (!dates::isSupportedDate(spec.date))
         return std::nullopt;
-    return DateSpec{d, spec.time};
+    return spec;
 }
 
-/// Shift the date inside a Logseq planning timestamp, updating an English weekday name.
-std::optional<Edit> shiftPlanning(const QString &text, const Token &tok, qint64 days)
+/// A planning line with the date inside each Logseq timestamp shifted by `days`, updating an
+/// English weekday name.
+QString shiftPlanning(const PlanningLine &p, qint64 days)
 {
-    if (tok.valueFrom < 0 || !tok.date.isValid())
-        return std::nullopt;
-    const auto shifted = shiftSpec(DateSpec{tok.date, std::nullopt}, days);
-    if (!shifted)
-        return std::nullopt;
-    QString inner = text.sliced(tok.valueFrom, tok.valueTo - tok.valueFrom);
-    const qsizetype at = inner.indexOf(tok.value);
-    if (at >= 0)
-        inner.replace(at, tok.value.size(), shifted->toString());
     static const QRegularExpression weekday(u"^(\\s*\\d{4}-\\d{2}-\\d{2}\\s+)(\\p{L}+\\.?)"_s);
-    const auto m = weekday.match(inner);
-    if (m.hasMatch()) {
-        const QString wd =
-                dates::weekdayName(shifted->date.dayOfWeek(), dates::UiLocale::English, dates::NameForm::Short);
-        inner.replace(m.capturedStart(2), m.capturedLength(2), wd);
+    QList<Edit> edits;
+    for (const Token &tok : p.tokens) {
+        if (tok.valueFrom < 0 || !tok.date.isValid())
+            continue;
+        const auto shifted = shiftSpec(DateSpec{tok.date, std::nullopt}, days);
+        if (!shifted)
+            continue;
+        QString inner = p.text.sliced(tok.valueFrom, tok.valueTo - tok.valueFrom);
+        const qsizetype at = inner.indexOf(tok.value);
+        if (at >= 0)
+            inner.replace(at, tok.value.size(), shifted->toString());
+        if (const auto m = weekday.match(inner); m.hasMatch()) {
+            const QString wd =
+                    dates::weekdayName(shifted->date.dayOfWeek(), dates::UiLocale::English, dates::NameForm::Short);
+            inner.replace(m.capturedStart(2), m.capturedLength(2), wd);
+        }
+        edits.append(Edit{tok.valueFrom, tok.valueTo, inner});
     }
-    return Edit{tok.valueFrom, tok.valueTo, inner};
+    return applyEdits(p.text, edits);
 }
 
 /// Next occurrence of a recurring task (Obsidian Tasks semantics): the reference date (due,
@@ -381,8 +380,7 @@ std::optional<QStringList> nextInstance(const Target &t, const QString &text, co
                                         const QList<PlanningLine> &planning, QDate today)
 {
     const QString masked = maskInline(text);
-    const auto lm = matchListMarker(masked);
-    const auto marker = lm ? matchTaskMarker(text, masked, lm->contentStart) : std::nullopt;
+    const auto marker = markerOf(text, text);
     const QList<Token> lineTokens = findTokens(masked);
     const auto first = [&](TokenKind kind) -> const Token * {
         for (const Token &k : lineTokens) {
@@ -445,16 +443,9 @@ std::optional<QStringList> nextInstance(const Target &t, const QString &text, co
     }
     if (const auto id = blockIdAtEnd(masked))
         edits.append(removal(text, id->from, id->to));
-    const QString docLine = t.st.lines[t.line].text;
-    QStringList out{docLine.first(t.prefix) + trimEnd(applyEdits(text, edits)).toString()};
-    for (const PlanningLine &p : planning) {
-        QList<Edit> pe;
-        for (const Token &tok : p.tokens) {
-            if (const auto e = shiftPlanning(p.text, tok, days))
-                pe.append(*e);
-        }
-        out.append(applyEdits(p.text, pe));
-    }
+    QStringList out{t.st.lines[t.line].text.first(t.prefix) + trimEnd(applyEdits(text, edits))};
+    for (const PlanningLine &p : planning)
+        out.append(shiftPlanning(p, days));
     return out;
 }
 
@@ -474,23 +465,14 @@ QString applyStatus(const QString &content, const Target &t, const std::optional
         return content;
     // Edit only the visible part of the line; a comment running past its end is kept as is.
     const qsizetype tailAt = hiddenTailStart(t);
-    const QString tail = t.text.sliced(tailAt);
     Target vt = t;
-    if (!tail.isEmpty()) {
-        vt.text = t.text.first(tailAt);
-        vt.masked = t.masked.first(tailAt);
-    }
+    vt.text.truncate(tailAt);
+    vt.masked.truncate(tailAt);
     const QString visible = rewriteStatus(vt, marker, status, today);
-    const bool glue = !tail.isEmpty() && !isSpaceOrTab(charAt(visible, visible.size() - 1)) && !isSpaceOrTab(tail[0]);
-    const QString docLine = t.st.lines[t.line].text;
-    QStringList out{docLine.first(t.prefix) + visible + (glue ? u" "_s : QString()) + tail};
-    if (status == TaskStatus::Done && (!marker || marker->status != TaskStatus::Done)) {
-        const QList<Token> lineTokens = findTokens(maskInline(vt.text));
+    QStringList out{withHiddenTail(t, tailAt, visible)};
+    if (status == TaskStatus::Done) {
         const QList<PlanningLine> planning = planningLinesOf(t);
-        QList<Token> planningTokens;
-        for (const PlanningLine &p : planning)
-            planningTokens.append(p.tokens);
-        if (const auto repeat = recurrenceRuleOf(lineTokens, planningTokens)) {
+        if (const auto repeat = recurrenceRuleOf(findTokens(maskInline(vt.text)), planning)) {
             // A line that only now became a task is copied in its converted form.
             if (const auto inst = nextInstance(t, marker ? vt.text : visible, *repeat, planning, today))
                 out = *inst + out;
@@ -537,8 +519,7 @@ QString removeTaskMarker(const QString &content, int line)
             // A date right after the marker: the whitespace before it is the marker's own (it
             // goes with the marker), so the whitespace after it goes with the date.
             e.from = marker->contentStart;
-            while (e.to < visible.size() && isSpaceOrTab(visible[e.to]))
-                ++e.to;
+            e.to += indentOf(QStringView(visible).sliced(e.to)).chars;
         }
         edits.append(e);
     }
@@ -550,11 +531,7 @@ QString removeTaskMarker(const QString &content, int line)
     const QStringView rest = QStringView(out).sliced(marker->from);
     if (fenceOpen(rest) || rest.trimmed() == u"$$")
         out.insert(marker->from + indentOf(rest).chars, u'\\');
-    const QString tail = t->text.sliced(tailAt);
-    const bool glue = !tail.isEmpty() && !isSpaceOrTab(charAt(out, out.size() - 1)) && !isSpaceOrTab(tail[0]);
-    const QString docLine = t->st.lines[t->line].text;
-    return replaceLine(content, t->st.lines, t->line,
-                       {docLine.first(t->prefix) + out + (glue ? u" "_s : QString()) + tail});
+    return replaceLine(content, t->st.lines, t->line, {withHiddenTail(*t, tailAt, out)});
 }
 
 QString generateBlockId()
@@ -577,35 +554,42 @@ QString outerPrefix(const QString &prefix)
 }
 
 /// Candidate documents with `^id` written for the block, in order of preference.
-QStringList idPlacements(const QString &content, const Structure &st, const Block &block, const QString &id)
+QStringList idPlacements(const QString &content, const Block &block, const QString &id)
 {
+    const Structure st = parseStructure(content);
     const QList<text::Line> &lines = st.lines;
     const int nodeIdx = nodeAtLine(st, block.line);
     const Node *node = nodeIdx >= 0 ? &st.nodes[nodeIdx] : nullptr;
-    const auto append = [&](int ln) {
-        return replaceLine(content, lines, ln, {trimEnd(lines[ln].text).toString() + u" ^"_s + id});
+    QStringList out;
+    const auto atLineEnd = [&](int ln) {
+        out.append(replaceLine(content, lines, ln, {trimEnd(lines[ln].text) + u" ^"_s + id}));
+    };
+    // At the end of line `preferred`, else of line `other`.
+    const auto atEitherEnd = [&](int preferred, int other) {
+        atLineEnd(preferred);
+        if (other != preferred)
+            atLineEnd(other);
     };
     // `^id` on its own line after line `last` (optionally after a blank line), then a blank
     // line before following text.
     const auto idLineAfter = [&](int last, const QString &prefix, bool blankBefore) {
         const QString blank = trimEnd(prefix).toString();
-        QStringList out{lines[last].text};
+        QStringList idLines{lines[last].text};
         if (blankBefore)
-            out.append(blank);
-        out.append(prefix + u'^' + id);
+            idLines.append(blank);
+        idLines.append(prefix + u'^' + id);
         if (last + 1 < lines.size()) {
             const QString next = lines[last + 1].text.trimmed();
             if (!next.isEmpty() && next != prefix.trimmed())
-                out.append(blank);
+                idLines.append(blank);
         }
-        return replaceLine(content, lines, last, out);
+        out.append(replaceLine(content, lines, last, idLines));
     };
     QString prefix;
     if (node && !node->own.isEmpty()) {
         const LineView &first = node->own.first().view;
         prefix = lines[first.line].text.first(first.offset - lines[first.line].start);
     }
-    QStringList out;
     switch (block.kind) {
     case BlockKind::ListItem:
         if (node && !node->own.isEmpty() && node->own.first().role == LineRole::Fence) {
@@ -616,41 +600,32 @@ QStringList idPlacements(const QString &content, const Structure &st, const Bloc
             out.append(replaceLine(content, lines, last, {docText, quotePrefix(docText) + indent + u'^' + id}));
             break;
         }
-        out.append(append(block.line));
-        if (block.ownEndLine != block.line)
-            out.append(append(block.ownEndLine));
+        atEitherEnd(block.line, block.ownEndLine);
         break;
     case BlockKind::Heading:
-    case BlockKind::Callout: out.append(append(block.line)); break;
+    case BlockKind::Callout: atLineEnd(block.line); break;
     case BlockKind::Quote:
         if (!block.children.isEmpty()) {
             // A line right after the quote would be a lazy continuation of its last block.
-            out.append(idLineAfter(block.endLine, outerPrefix(quotePrefix(lines[block.line].text)), true));
+            idLineAfter(block.endLine, outerPrefix(quotePrefix(lines[block.line].text)), true);
             break;
         }
-        out.append(append(block.ownEndLine));
-        if (block.ownEndLine != block.line)
-            out.append(append(block.line));
-        break;
-    case BlockKind::Paragraph:
-        out.append(append(block.ownEndLine));
-        if (block.ownEndLine != block.line)
-            out.append(append(block.line));
-        break;
+        [[fallthrough]];
+    case BlockKind::Paragraph: atEitherEnd(block.ownEndLine, block.line); break;
     case BlockKind::Html:
         // HTML blocks of CommonMark types 6/7 only end at a blank line.
-        out.append(idLineAfter(block.endLine, prefix, true));
+        idLineAfter(block.endLine, prefix, true);
         break;
     case BlockKind::Code:
         // An id line after an unclosed fence would be code.
         if (node && isClosedFence(*node))
-            out.append(idLineAfter(block.endLine, prefix, false));
+            idLineAfter(block.endLine, prefix, false);
         break;
     case BlockKind::Frontmatter: break;
     case BlockKind::Table:
     case BlockKind::Rule:
-        out.append(idLineAfter(block.endLine, prefix, false));
-        out.append(idLineAfter(block.endLine, prefix, true));
+        idLineAfter(block.endLine, prefix, false);
+        idLineAfter(block.endLine, prefix, true);
         break;
     }
     return out;
@@ -670,8 +645,7 @@ EnsuredBlockId ensureBlockId(const QString &content, int line, const std::functi
     QString id = generateBlockId();
     while (note.blockIds.contains(id) || (isTaken && isTaken(id)))
         id = generateBlockId();
-    const Structure st = parseStructure(content);
-    for (const QString &candidate : idPlacements(content, st, block, id)) {
+    for (const QString &candidate : idPlacements(content, block, id)) {
         const ParsedNote parsed = parseNote(QString(), candidate);
         const auto it = parsed.blockIds.constFind(id);
         if (it == parsed.blockIds.constEnd())
@@ -688,21 +662,16 @@ std::optional<TextRange> listItemRange(const QString &content, int line)
     const Structure st = parseStructure(content);
     if (line < 0 || line >= st.lines.size())
         return std::nullopt;
+    // The innermost list item on the path from a root down to the line.
+    const auto contains = [&](int n) { return st.nodes[n].line <= line && line <= st.nodes[n].endLine; };
     int item = -1;
-    const QList<int> *level = &st.roots;
-    for (;;) {
-        int hit = -1;
-        for (int n : *level) {
-            if (st.nodes[n].line <= line && line <= st.nodes[n].endLine) {
-                hit = n;
-                break;
-            }
-        }
-        if (hit < 0)
+    for (const QList<int> *level = &st.roots;;) {
+        const auto hit = std::ranges::find_if(*level, contains);
+        if (hit == level->end())
             break;
-        if (st.nodes[hit].kind == BlockKind::ListItem)
-            item = hit;
-        level = &st.nodes[hit].children;
+        if (st.nodes[*hit].kind == BlockKind::ListItem)
+            item = *hit;
+        level = &st.nodes[*hit].children;
     }
     if (item < 0)
         return std::nullopt;

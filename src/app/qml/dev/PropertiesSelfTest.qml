@@ -100,8 +100,7 @@ QtObject {
     function panelMenu(): PropertyMenu { return panel().menu }
     function panelMenuAt(blockRow: int): PropertyMenu { return panelAt(blockRow).menu }
     function menuOpenAt(blockRow: int): bool {
-        const p = panelAt(blockRow)
-        return p !== null && panelMenuAt(blockRow) !== null && panelMenuAt(blockRow).opened
+        return panelAt(blockRow) !== null && panelMenuAt(blockRow) !== null && panelMenuAt(blockRow).opened
     }
     function typeMenuOf(m: PropertyMenu): T.Menu { return m.typeMenu }
     function menuItemIn(m: T.Menu, name: string): T.MenuItem { return window.menuItemNamed(m, name) }
@@ -121,6 +120,20 @@ QtObject {
             EditorInput.sendKey(item, 0, 0, s[i])
     }
     function key(item: Item, k: int, modifiers: int): void { EditorInput.sendKey(item, k, modifiers, "") }
+    /// Type `s` into `item`, then Enter.
+    function typeEnter(item: Item, s: string): void {
+        type(item, s)
+        key(item, Qt.Key_Return, 0)
+    }
+    /// `list` with `item` appended, ", " between the items.
+    function joined(list: string, item: string): string { return list === "" ? item : list + ", " + item }
+    /// Steps: a tap on the value `value` of the row `key` opens its field `field` with the keyboard.
+    function tapOpens(key: string, value: string, field: string, what: string): void {
+        if (window.at())
+            window.tapItem(inRow(key, value))
+        if (window.at())
+            window.waitStep(focused(inRow(key, field)), what)
+    }
     /// The keyboard to a text input outside the editor (a tap elsewhere): fields lose the focus.
     property Item probe: null
     property Component probeComponent: Component {
@@ -138,19 +151,16 @@ QtObject {
     }
     /// The item of the row's menu named `name`.
     function menuItem(name: string): T.MenuItem {
-        const p = panel()
-        return p && panelMenu() ? menuItemIn(panelMenu(), name) : null
+        return panel() && panelMenu() ? menuItemIn(panelMenu(), name) : null
     }
     function menuOpen(): bool {
-        const p = panel()
-        return p !== null && panelMenu() !== null && panelMenu().opened
+        return panel() !== null && panelMenu() !== null && panelMenu().opened
     }
     function listValue(key: string): PropertyListValue { return inRow(key, "propertyListValue") as PropertyListValue }
     function chipMenuOf(key: string): PropertyChipMenu { return listValue(key).chipMenu }
     /// The chip menu of the list `key` is open.
     function chipMenuOpen(key: string): bool {
-        const list = listValue(key)
-        return list !== null && chipMenuOf(key) !== null && chipMenuOf(key).opened
+        return listValue(key) !== null && chipMenuOf(key) !== null && chipMenuOf(key).opened
     }
     /// Steps: the row's menu from its type icon (a tap or a click).
     function openMenu(key: string): void {
@@ -181,7 +191,7 @@ QtObject {
         for (let i = 0; i < test.longKeys.length; ++i) {
             const key = test.longKeys[i]
             if (keyCut(key))
-                cut += (cut === "" ? "" : ", ") + key
+                cut = joined(cut, key)
         }
         return cut
     }
@@ -192,8 +202,8 @@ QtObject {
         const p = panel()
         for (let i = 0; i < DevTest.lengthAt(p.properties, ""); ++i) {
             const key = "" + DevTest.valueAt(p.properties, i + ".key")
-            if ((inRow(key, "propertyKey") as Text).truncated)
-                cut += (cut === "" ? "" : ", ") + key
+            if (keyCut(key))
+                cut = joined(cut, key)
         }
         return cut
     }
@@ -306,11 +316,11 @@ QtObject {
             const fy = test.placeY
             const sameLine = Math.abs(ly - ay) < 0.5
             if (ax < 0.5 && ay > fy && lx > 0.5 && last.width + Theme.space1 + add.width <= w)
-                wrong += (wrong === "" ? "" : ", ") + w
+                wrong = joined(wrong, "" + w)
             if (!sameLine && ax > 0.5)
-                wrong += (wrong === "" ? "" : ", ") + w
+                wrong = joined(wrong, "" + w)
             if (ax + add.width > w + 0.5 || lx + last.width > w + 0.5)
-                wrong += (wrong === "" ? "" : ", ") + w
+                wrong = joined(wrong, "" + w)
             if (count > 1 && sameLine && lx < 0.5 && ly > fy)
                 pulled += 1
         }
@@ -389,11 +399,8 @@ QtObject {
             window.width = widthBefore
         }
         if (window.at()) window.waitStep(panel() !== null && !panel().stacked, "wide again: the key beside the value")
-        if (window.at()) {
-            // ---- text: real keys, only that line changes -----------------------------------------
-            window.tapItem(inRow("status", "propertyValue"))
-        }
-        if (window.at()) window.waitStep(focused(inRow("status", "propertyValueField")), "a tap on the text opens its field")
+        // ---- text: real keys, only that line changes -------------------------------------------
+        tapOpens("status", "propertyValue", "propertyValueField", "a tap on the text opens its field")
         if (window.at()) {
             const field = fieldIn("status", "propertyValueField")
             field.selectAll()
@@ -415,8 +422,7 @@ QtObject {
         if (window.at()) {
             const field = fieldIn("koszt", "propertyNumberField")
             field.selectAll()
-            type(field, "3,5")
-            key(field, Qt.Key_Return, 0)
+            typeEnter(field, "3,5")
         }
         if (window.at() && !window.waiting(line("koszt:") === "koszt: 3.5"))
             window.checkWait("“3,5” is written as 3.5: " + line("koszt:"))
@@ -426,13 +432,11 @@ QtObject {
         }
         if (window.at() && !window.waiting(line("koszt:") === "koszt: 1200"))
             window.checkWait("Ctrl+Z in the row undoes it: " + line("koszt:"))
-        if (window.at()) window.tapItem(inRow("koszt", "propertyValue"))
-        if (window.at()) window.waitStep(focused(inRow("koszt", "propertyNumberField")), "the number's field again")
+        tapOpens("koszt", "propertyValue", "propertyNumberField", "the number's field again")
         if (window.at()) {
             const field = fieldIn("koszt", "propertyNumberField")
             field.selectAll()
-            type(field, "abc")
-            key(field, Qt.Key_Return, 0)
+            typeEnter(field, "abc")
         }
         if (window.at()) {
             const field = fieldIn("koszt", "propertyNumberField")
@@ -458,12 +462,10 @@ QtObject {
         if (window.at()) window.waitStep(!dateDialog().opened, "the dialog closes")
         if (window.at()) check(line("termin:") === "termin: 2026-10-16", "“jutro” is written as a date: " + line("termin:"))
         // ---- list: Enter adds, Backspace in the empty field takes the last, × removes --------------
-        if (window.at()) window.tapItem(inRow("autorzy", "propertyListAdd"))
-        if (window.at()) window.waitStep(focused(inRow("autorzy", "propertyListField")), "“+” opens the list's field")
+        tapOpens("autorzy", "propertyListAdd", "propertyListField", "“+” opens the list's field")
         if (window.at()) {
             const field = fieldIn("autorzy", "propertyListField")
-            type(field, "Łucja")
-            key(field, Qt.Key_Return, 0)
+            typeEnter(field, "Łucja")
         }
         if (window.at() && !window.waiting(Js.indexOf(text(), "autorzy:\n  - \"[[Jan Kowalski]]\"\n  - Anna\n  - Łucja\n") > 0))
             window.checkWait("Enter adds the item, the others as written: " + splitText(text(), "---")[1])
@@ -526,15 +528,13 @@ QtObject {
         if (window.at()) {
             const field = fieldIn("koszt", "propertyRenameField")
             field.selectAll()
-            type(field, "status")
-            key(field, Qt.Key_Return, 0)
+            typeEnter(field, "status")
         }
         if (window.at()) {
             const field = fieldIn("koszt", "propertyRenameField")
             check(field !== null && field.errorText !== "", "an existing name is refused: " + (field ? field.errorText : "-"))
             field.selectAll()
-            type(field, "budżet")
-            key(field, Qt.Key_Return, 0)
+            typeEnter(field, "budżet")
         }
         if (window.at() && !window.waiting(line("budżet:") === "budżet: 1200" && line("koszt:") === ""))
             window.checkWait("renamed: " + line("budżet:"))
@@ -588,8 +588,7 @@ QtObject {
             window.checkWait("the key is written at once, its value has the keyboard: " + line("źródło:"))
         if (window.at()) {
             const field = fieldIn("źródło", "propertyValueField")
-            type(field, "Wikipedia")
-            key(field, Qt.Key_Return, 0)
+            typeEnter(field, "Wikipedia")
         }
         if (window.at() && !window.waiting(line("źródło:") === "źródło: Wikipedia"))
             window.checkWait("the value: " + line("źródło:"))
@@ -601,8 +600,7 @@ QtObject {
         if (window.at()) window.waitStep(focused(keyField()), "the key's field again")
         if (window.at()) {
             const f = keyField()
-            type(f, "status")
-            key(f, Qt.Key_Return, 0)
+            typeEnter(f, "status")
         }
         if (window.at()) {
             const f = keyField()
@@ -610,8 +608,7 @@ QtObject {
                   "a key the page has is refused in the field: " + (f ? f.errorText : "closed"))
             check(text() === original, "its value is kept: " + line("status:"))
             f.selectAll()
-            type(f, "TAGS")
-            key(f, Qt.Key_Return, 0)
+            typeEnter(f, "TAGS")
         }
         if (window.at()) {
             const f = keyField()
@@ -620,8 +617,7 @@ QtObject {
         }
         if (window.at()) window.waitStep(keyField() === null, "Escape closes the add field")
         // ---- a field keeps what is typed while the notebook changes ------------------------------------------
-        if (window.at()) window.tapItem(inRow("status", "propertyValue"))
-        if (window.at()) window.waitStep(focused(inRow("status", "propertyValueField")), "the text's field")
+        tapOpens("status", "propertyValue", "propertyValueField", "the text's field")
         if (window.at()) {
             const field = fieldIn("status", "propertyValueField")
             field.selectAll()
@@ -639,8 +635,7 @@ QtObject {
         }
         if (window.at()) window.waitStep(inRow("status", "propertyValueField") === null && text() === original, "Escape leaves the value as it was")
         // ---- another page shown while a field holds a value: it is written first --------------------------
-        if (window.at()) window.tapItem(inRow("status", "propertyValue"))
-        if (window.at()) window.waitStep(focused(inRow("status", "propertyValueField")), "the text's field once more")
+        tapOpens("status", "propertyValue", "propertyValueField", "the text's field once more")
         if (window.at()) {
             const field = fieldIn("status", "propertyValueField")
             field.selectAll()
@@ -658,8 +653,7 @@ QtObject {
         if (window.at()) window.waitStep(focused(draftKeyField()), "“Dodaj właściwość” (Ctrl+;) opens the draft above the blocks")
         if (window.at()) {
             const f = draftKeyField()
-            type(f, "status")
-            key(f, Qt.Key_Return, 0)
+            typeEnter(f, "status")
         }
         if (window.at() && !window.waiting(text() === "---\nstatus:\n---\n- pierwszy\n- drugi\n" && focused(inRow("status", "propertyValueField"))))
             window.checkWait("the first property writes the frontmatter, its value has the keyboard: " + Js.stringify(text()))
@@ -678,8 +672,7 @@ QtObject {
         if (window.at()) window.waitStep(focused(draftKeyField()), "“Dodaj właściwość” opens the draft (the frontmatter new keys go to is hidden)")
         if (window.at()) {
             const f = draftKeyField()
-            type(f, "etap")
-            key(f, Qt.Key_Return, 0)
+            typeEnter(f, "etap")
         }
         if (window.at() && !window.waiting(text() === "---\nbrulion: document\netap:\n---\nstatus:: w toku\n- a\n"
                    && focused(inRowAt(0, "etap", "propertyValueField"))))
@@ -736,8 +729,7 @@ QtObject {
         if (window.at()) {
             original = text()
             const field = fieldInAt(0, "aliases", "propertyListField")
-            type(field, "a|b")
-            key(field, Qt.Key_Return, 0)
+            typeEnter(field, "a|b")
         }
         if (window.at()) {
             const field = fieldInAt(0, "aliases", "propertyListField")
