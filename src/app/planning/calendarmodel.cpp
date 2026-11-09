@@ -164,8 +164,8 @@ QList<OverdueCache::Overdue> OverdueCache::tasks(const VaultIndex &index, QDate 
         for (const Overdue &o : list)
             all.append(&o);
     }
-    std::stable_sort(all.begin(), all.end(),
-                     [](const Overdue *a, const Overdue *b) { return dates::compareDateSpecs(a->due, b->due) < 0; });
+    std::ranges::stable_sort(
+            all, [](const Overdue *a, const Overdue *b) { return dates::compareDateSpecs(a->due, b->due) < 0; });
     if (total)
         *total = int(all.size());
     QList<Overdue> out;

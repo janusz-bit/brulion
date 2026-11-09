@@ -82,9 +82,8 @@ QStringList cleanNames(const QStringList &names)
         seen.insert(key);
         out.append(n);
     }
-    std::stable_sort(out.begin(), out.end(), [](const QString &a, const QString &b) {
-        return a.size() != b.size() ? a.size() > b.size() : a < b;
-    });
+    std::ranges::stable_sort(
+            out, [](const QString &a, const QString &b) { return a.size() != b.size() ? a.size() > b.size() : a < b; });
     return out;
 }
 
@@ -97,7 +96,7 @@ void markRange(QSet<int> &marks, qsizetype from, qsizetype to)
 QList<int> sortedMarks(const QSet<int> &marks)
 {
     QList<int> out(marks.cbegin(), marks.cend());
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 
@@ -267,7 +266,7 @@ QStringList searchTerms(const QString &query)
         out.append(folded);
     }
     // Longer terms first: "dom" must not hide the end of "domek".
-    std::stable_sort(out.begin(), out.end(), [](const QString &a, const QString &b) { return a.size() > b.size(); });
+    std::ranges::stable_sort(out, [](const QString &a, const QString &b) { return a.size() > b.size(); });
     return out;
 }
 

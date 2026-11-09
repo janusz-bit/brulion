@@ -132,8 +132,8 @@ QList<VaultChange> VaultPrivate::relocate(const VaultPath &from, const VaultPath
     } else if (const auto it = files.constFind(from); it != files.cend()) {
         movedFiles.append(*it);
     }
-    std::sort(movedFiles.begin(), movedFiles.end(), byPath);
-    std::sort(movedDirs.begin(), movedDirs.end(), byPath);
+    std::ranges::sort(movedFiles, byPath);
+    std::ranges::sort(movedDirs, byPath);
 
     // Stop watching the old locations while their on-disk names are still known.
     for (const FileStat &st : std::as_const(movedFiles))
@@ -363,7 +363,7 @@ QList<FileStat> Vault::trash() const
         const QFileInfo info = it.nextFileInfo();
         out.append(statOf(info, paths::join(vaultTrashFolder(), info.filePath().sliced(base.size() + 1))));
     }
-    std::sort(out.begin(), out.end(), byPath);
+    std::ranges::sort(out, byPath);
     return out;
 }
 

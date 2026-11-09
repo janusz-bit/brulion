@@ -11,6 +11,7 @@
 #include <QSet>
 #include <QStringList>
 #include <QUrl>
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -258,8 +259,7 @@ SharedContent sharedContentFromJson(const QJsonObject &object)
         file.mime = stringValue(entry, u"mime"_s);
         const QJsonValue size = entry.value(u"size"_s);
         file.size = size.isDouble() ? qint64(size.toDouble()) : -1;
-        if (file.size < -1)
-            file.size = -1;
+        file.size = std::max<qint64>(file.size, -1);
         file.error = stringValue(entry, u"error"_s);
         appendFile(share.files, file, accepted);
     }

@@ -40,7 +40,7 @@ public:
             m_big.insert(path);
             return m_big.size() != before;
         }
-        const auto pos = std::lower_bound(m_small.begin(), m_small.end(), path);
+        const auto pos = std::ranges::lower_bound(m_small, path);
         if (pos != m_small.end() && *pos == path)
             return false;
         if (m_small.size() < SmallLimit) {
@@ -64,12 +64,12 @@ public:
                 return false;
             if (m_big.size() <= SmallLimit / 2) {
                 m_small = QList<VaultPath>(m_big.cbegin(), m_big.cend());
-                std::sort(m_small.begin(), m_small.end());
+                std::ranges::sort(m_small);
                 m_big = {};
             }
             return true;
         }
-        const auto pos = std::lower_bound(m_small.begin(), m_small.end(), path);
+        const auto pos = std::ranges::lower_bound(m_small, path);
         if (pos == m_small.end() || *pos != path)
             return false;
         m_small.erase(pos);
@@ -93,7 +93,7 @@ public:
         if (m_big.isEmpty())
             return m_small;
         QList<VaultPath> out(m_big.cbegin(), m_big.cend());
-        std::sort(out.begin(), out.end());
+        std::ranges::sort(out);
         return out;
     }
 
@@ -147,8 +147,8 @@ public:
 
     private:
         friend class PathSet;
-        QList<VaultPath>::const_iterator m_list{};
-        QSet<VaultPath>::const_iterator m_set{};
+        QList<VaultPath>::const_iterator m_list;
+        QSet<VaultPath>::const_iterator m_set;
         bool m_big = false;
     };
     const_iterator begin() const { return makeIterator(true); }
@@ -249,7 +249,7 @@ public:
         out.reserve(size());
         forEach([&](const VaultPath &p, int) { out.append(p); });
         if (!m_big.isEmpty())
-            std::sort(out.begin(), out.end());
+            std::ranges::sort(out);
         return out;
     }
 
@@ -287,8 +287,8 @@ public:
 
     private:
         friend class PathCounts;
-        QList<std::pair<VaultPath, int>>::const_iterator m_list{};
-        QHash<VaultPath, int>::const_iterator m_hash{};
+        QList<std::pair<VaultPath, int>>::const_iterator m_list;
+        QHash<VaultPath, int>::const_iterator m_hash;
         bool m_big = false;
     };
     const_iterator begin() const { return makeIterator(true); }
@@ -321,8 +321,7 @@ private:
 
     QList<Item>::iterator lowerBound(const VaultPath &path)
     {
-        return std::lower_bound(m_small.begin(), m_small.end(), path,
-                                [](const Item &i, const VaultPath &p) { return i.first < p; });
+        return std::ranges::lower_bound(m_small, path, {}, &Item::first);
     }
 
     void adjust(const VaultPath &path, int count, bool replace)
@@ -356,7 +355,7 @@ private:
         m_small.reserve(m_big.size());
         for (auto it = m_big.cbegin(); it != m_big.cend(); ++it)
             m_small.append(Item(it.key(), it.value()));
-        std::sort(m_small.begin(), m_small.end(), [](const Item &a, const Item &b) { return a.first < b.first; });
+        std::ranges::sort(m_small, [](const Item &a, const Item &b) { return a.first < b.first; });
         m_big = {};
     }
 

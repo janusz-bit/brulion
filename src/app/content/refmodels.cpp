@@ -64,7 +64,7 @@ void sortNotes(QList<QString> &list, const VaultIndex *idx)
         const ParsedNote *n = idx->note(p);
         return n && n->journalDate ? *n->journalDate : QDate();
     };
-    std::stable_sort(list.begin(), list.end(), [&](const QString &a, const QString &b) {
+    std::ranges::stable_sort(list, [&](const QString &a, const QString &b) {
         const QDate da = journal(a);
         const QDate db = journal(b);
         if (da.isValid() != db.isValid())
@@ -458,7 +458,7 @@ QList<GroupedRefsModel::Group> BacklinksModel::collectLinked()
             const ParsedNote *n = idx->note(p);
             return n && n->journalDate ? *n->journalDate : QDate();
         };
-        std::stable_sort(groups.begin(), groups.end(), [&](const Group &a, const Group &b) {
+        std::ranges::stable_sort(groups, [&](const Group &a, const Group &b) {
             const QDate da = journal(a.path);
             const QDate db = journal(b.path);
             if (da.isValid() != db.isValid())
@@ -468,7 +468,7 @@ QList<GroupedRefsModel::Group> BacklinksModel::collectLinked()
             return a.path < b.path;
         });
         for (Group &g : groups)
-            std::stable_sort(g.refs.begin(), g.refs.end(), [](const Ref &a, const Ref &b) { return a.line < b.line; });
+            std::ranges::stable_sort(g.refs, [](const Ref &a, const Ref &b) { return a.line < b.line; });
     }
     if (m_taggedCount != tagged.size()) {
         m_taggedCount = int(tagged.size());

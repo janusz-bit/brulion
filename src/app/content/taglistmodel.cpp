@@ -60,7 +60,7 @@ void TagListModel::refresh()
         }
         if (m_sortKey == u"name") {
             // Segment by segment, so "praca/projekt" sorts right after "praca" (not after "praca-dom").
-            std::stable_sort(next.begin(), next.end(), [](const Tag &a, const Tag &b) {
+            std::ranges::stable_sort(next, [](const Tag &a, const Tag &b) {
                 const QStringList sa = a.display.split(u'/');
                 const QStringList sb = b.display.split(u'/');
                 for (qsizetype i = 0; i < std::min(sa.size(), sb.size()); ++i) {

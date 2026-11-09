@@ -37,7 +37,7 @@ QList<DayPlanEntry> dayPlan(const QList<CalendarItem> &items, QDate day)
         entry.alarm = entry.alarm || item.alarm;
         entry.recurring = entry.recurring || item.recurring;
     }
-    std::stable_sort(out.begin(), out.end(), [](const DayPlanEntry &a, const DayPlanEntry &b) {
+    std::ranges::stable_sort(out, [](const DayPlanEntry &a, const DayPlanEntry &b) {
         if (a.time.has_value() != b.time.has_value())
             return a.time.has_value();
         return a.time && *a.time < *b.time;

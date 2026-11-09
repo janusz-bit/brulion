@@ -97,7 +97,7 @@ PdfThumbnails::PdfThumbnails(const QString &cacheDir, QObject *parent, Renderer 
                         total += f.size();
                     if (total <= cap)
                         return;
-                    std::sort(files.begin(), files.end(), [](const QFileInfo &a, const QFileInfo &b) {
+                    std::ranges::sort(files, [](const QFileInfo &a, const QFileInfo &b) {
                         return a.lastModified() < b.lastModified();
                     });
                     for (const QFileInfo &f : std::as_const(files)) {

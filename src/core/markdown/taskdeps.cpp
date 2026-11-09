@@ -7,6 +7,7 @@
 
 #include <QRandomGenerator>
 
+#include <algorithm>
 #include <optional>
 
 namespace brulion::markdown {
@@ -124,7 +125,7 @@ QList<Token> lineTokens(const QString &line)
 
 bool isValidTaskId(QStringView id)
 {
-    return !id.isEmpty() && std::all_of(id.begin(), id.end(), isIdChar);
+    return !id.isEmpty() && std::ranges::all_of(id, isIdChar);
 }
 
 QString generateTaskId(const std::function<bool(const QString &)> &isTaken)

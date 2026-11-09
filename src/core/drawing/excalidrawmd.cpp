@@ -529,7 +529,7 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
         }
     }
     edits.append({layout.sceneFrom, layout.sceneTo, block});
-    std::stable_sort(edits.begin(), edits.end(), [](const Edit &a, const Edit &b) { return a.from < b.from; });
+    std::ranges::stable_sort(edits, [](const Edit &a, const Edit &b) { return a.from < b.from; });
     QByteArray out;
     out.reserve(layout.bytes.size() - (layout.sceneTo - layout.sceneFrom) + block.size() + 64);
     qsizetype at = 0;

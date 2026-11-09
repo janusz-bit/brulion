@@ -406,8 +406,7 @@ QList<MarkPair> findMarkPairs(QStringView masked)
         }
         i = tag->to;
     }
-    std::sort(pairs.begin(), pairs.end(),
-              [](const MarkPair &a, const MarkPair &b) { return a.open.from < b.open.from; });
+    std::ranges::sort(pairs, [](const MarkPair &a, const MarkPair &b) { return a.open.from < b.open.from; });
     return pairs;
 }
 
@@ -455,7 +454,7 @@ QList<HighlightSpan> findHighlights(QStringView text)
         }
         i = j;
     }
-    std::sort(out.begin(), out.end(), [](const HighlightSpan &a, const HighlightSpan &b) { return a.from < b.from; });
+    std::ranges::sort(out, [](const HighlightSpan &a, const HighlightSpan &b) { return a.from < b.from; });
     return out;
 }
 
@@ -557,7 +556,7 @@ HighlightEdit setHighlight(const QString &text, qsizetype from, qsizetype to, st
         markers.append({s.from, s.contentFrom});
         markers.append({s.contentTo, s.to});
     }
-    std::sort(markers.begin(), markers.end());
+    std::ranges::sort(markers);
     QString base = text;
     for (qsizetype k = markers.size() - 1; k >= 0; --k) {
         base.remove(markers[k].first, markers[k].second - markers[k].first);

@@ -140,7 +140,7 @@ QList<PropertyKeyInfo> VaultIndex::propertyKeys() const
             info.type = markdown::propertyTypeName(markdown::PropertyType(best));
         out.append(info);
     }
-    std::stable_sort(out.begin(), out.end(), [](const PropertyKeyInfo &a, const PropertyKeyInfo &b) {
+    std::ranges::stable_sort(out, [](const PropertyKeyInfo &a, const PropertyKeyInfo &b) {
         if (a.count != b.count)
             return a.count > b.count;
         return compareNames(a.key, b.key) < 0;
@@ -188,7 +188,7 @@ QList<PropertyValueCount> VaultIndex::propertyValues(const QString &key, const Q
         all.reserve(order.size());
         for (const QString &vk : std::as_const(order))
             all.append({mostUsed(acc[vk].spellings), acc[vk].count});
-        std::stable_sort(all.begin(), all.end(), [](const PropertyValueCount &a, const PropertyValueCount &b) {
+        std::ranges::stable_sort(all, [](const PropertyValueCount &a, const PropertyValueCount &b) {
             if (a.count != b.count)
                 return a.count > b.count;
             return compareNames(a.value, b.value) < 0;

@@ -630,8 +630,7 @@ qsizetype toBody(const QList<std::pair<qsizetype, qsizetype>> &runs, qsizetype p
 {
     if (runs.isEmpty())
         return p;
-    auto it = std::upper_bound(runs.begin(), runs.end(), p,
-                               [](qsizetype v, const std::pair<qsizetype, qsizetype> &r) { return v < r.first; });
+    auto it = std::ranges::upper_bound(runs, p, {}, &std::pair<qsizetype, qsizetype>::first);
     if (it != runs.begin())
         --it;
     return it->second + (p - it->first);
@@ -1038,8 +1037,8 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
     }
 
     // The earliest (then longest) atom wins; atoms overlapping a kept one are dropped.
-    std::sort(atoms.begin(), atoms.end(),
-              [](const Atom &a, const Atom &b) { return a.from != b.from ? a.from < b.from : a.to > b.to; });
+    std::ranges::sort(atoms,
+                      [](const Atom &a, const Atom &b) { return a.from != b.from ? a.from < b.from : a.to > b.to; });
     QList<Atom> kept;
     qsizetype end = 0;
     for (Atom &a : atoms) {

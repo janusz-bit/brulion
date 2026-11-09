@@ -208,7 +208,7 @@ bool endsWithEol(QStringView s)
 /// Only spaces, tabs and line breaks (blank lines).
 bool isBlankLines(QStringView s)
 {
-    return std::all_of(s.begin(), s.end(), [](QChar c) { return c == u'\n' || c == u'\r' || isSpaceOrTab(c); });
+    return std::ranges::all_of(s, [](QChar c) { return c == u'\n' || c == u'\r' || isSpaceOrTab(c); });
 }
 
 int countLineBreaks(QStringView s)
@@ -423,8 +423,8 @@ void BlockDocument::setContent(const QString &content, const BlockDocument *reus
             starts.append(node.line);
         }
     }
-    std::sort(starts.begin(), starts.end());
-    starts.erase(std::unique(starts.begin(), starts.end()), starts.end());
+    std::ranges::sort(starts);
+    starts.erase(std::ranges::unique(starts).begin(), starts.end());
 
     // Lines before the first block: blank lines are kept aside; text there (a comment) becomes
     // a paragraph block so it stays editable.
@@ -536,7 +536,7 @@ QList<BlankBlock> BlockDocument::blankBlocks() const
 int BlockDocument::restoreBlankBlocks(const QList<BlankBlock> &blocks)
 {
     QList<BlankBlock> wanted = blocks;
-    std::sort(wanted.begin(), wanted.end(), [](const BlankBlock &x, const BlankBlock &y) { return x.line < y.line; });
+    std::ranges::sort(wanted, [](const BlankBlock &x, const BlankBlock &y) { return x.line < y.line; });
     int made = 0;
     for (const BlankBlock &b : std::as_const(wanted)) {
         if (b.line < 0 || b.lines < 1)
@@ -1296,14 +1296,12 @@ void BlockDocument::renumberChildren(int parent, quint64 restartUid)
             numbers.append(next->number);
         }
         k = j;
-        const bool lazy = run.size() >= 2
-                          && std::all_of(numbers.begin(), numbers.end(), [&](int n) { return n == numbers.first(); });
+        const bool lazy = run.size() >= 2 && std::ranges::all_of(numbers, [&](int n) { return n == numbers.first(); });
         if (lazy)
             continue;
         // A run that an operation has just started (its first item is `restartUid`) counts from 1.
         // Otherwise the run keeps its smallest number as start (a moved first item keeps "1.").
-        const int start =
-                restartUid && at(run.first()).uid == restartUid ? 1 : *std::min_element(numbers.begin(), numbers.end());
+        const int start = restartUid && at(run.first()).uid == restartUid ? 1 : *std::ranges::min_element(numbers);
         for (qsizetype r = 0; r < run.size(); ++r) {
             const int want = start + int(r);
             if (numbers[r] == want)

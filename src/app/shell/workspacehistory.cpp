@@ -175,7 +175,7 @@ QVariantList Workspace::trashItems() const
                                  { u"deletedAt"_s, isoOf(info.deletedAt) },
                                  { u"when"_s, humanOf(info.deletedAt, m_language, today) } });
     }
-    std::stable_sort(list.begin(), list.end(), [](const QVariantMap &a, const QVariantMap &b) {
+    std::ranges::stable_sort(list, [](const QVariantMap &a, const QVariantMap &b) {
         const QString ta = a.value(u"deletedAt"_s).toString();
         const QString tb = b.value(u"deletedAt"_s).toString();
         if (ta != tb)

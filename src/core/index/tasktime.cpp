@@ -105,10 +105,9 @@ TimeSummary summarizeTime(const VaultIndex &index, const QList<TaskRef> &tasks, 
         }
     }
     if (group == TimeGroup::Day) {
-        std::sort(out.rows.begin(), out.rows.end(),
-                  [](const TimeSummaryRow &a, const TimeSummaryRow &b) { return a.key < b.key; });
+        std::ranges::sort(out.rows, [](const TimeSummaryRow &a, const TimeSummaryRow &b) { return a.key < b.key; });
     } else {
-        std::sort(out.rows.begin(), out.rows.end(), [](const TimeSummaryRow &a, const TimeSummaryRow &b) {
+        std::ranges::sort(out.rows, [](const TimeSummaryRow &a, const TimeSummaryRow &b) {
             if (a.seconds != b.seconds)
                 return a.seconds > b.seconds;
             if (a.label != b.label)

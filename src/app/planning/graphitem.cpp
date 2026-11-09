@@ -974,13 +974,13 @@ std::vector<GraphItem::PlacedLabel> GraphItem::labelsFor(const Frame &f, bool sp
             return 2;
         return 3;
     };
-    std::stable_sort(candidates.begin(), candidates.end(), [&](int a, int b) {
+    std::ranges::stable_sort(candidates, [&](int a, int b) {
         const int pa = priority(a), pb = priority(b);
         if (pa != pb)
             return pa < pb;
         return nodes.at(a).degree > nodes.at(b).degree;
     });
-    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+    candidates.erase(std::ranges::unique(candidates).begin(), candidates.end());
 
     std::vector<geometry::LabelCandidate> ordered;
     ordered.reserve(candidates.size());

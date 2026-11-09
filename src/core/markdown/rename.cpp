@@ -304,7 +304,7 @@ TagRenamePlan planTags(const QString &content, const TagRenamer &rename)
     };
     QList<NoteTag> tags;
     detail::parseNoteWith(QString(), content, VaultConfig(), StructureOptions(), &tags);
-    std::stable_sort(tags.begin(), tags.end(), [](const NoteTag &a, const NoteTag &b) { return a.from < b.from; });
+    std::ranges::stable_sort(tags, [](const NoteTag &a, const NoteTag &b) { return a.from < b.from; });
     for (const NoteTag &t : std::as_const(tags))
         plan1(t);
     plan.frontmatter = frontmatterTagItems(content);
@@ -333,8 +333,7 @@ TagRenamePlan planTags(const QString &content, const TagRenamer &rename)
             }
         }
     }
-    std::stable_sort(plan.edits.begin(), plan.edits.end(),
-                     [](const TagEdit &a, const TagEdit &b) { return a.tag.from < b.tag.from; });
+    std::ranges::stable_sort(plan.edits, [](const TagEdit &a, const TagEdit &b) { return a.tag.from < b.tag.from; });
     return plan;
 }
 

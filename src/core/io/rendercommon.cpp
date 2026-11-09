@@ -168,7 +168,7 @@ void processEmphasis(QList<Piece> &pieces, const EmphasisMarks &marks)
 
 QString renderAtoms(QStringView text, QList<InlineAtom> atoms, const EmphasisMarks &marks, const TextOutput &plain)
 {
-    std::sort(atoms.begin(), atoms.end(), [](const InlineAtom &a, const InlineAtom &b) {
+    std::ranges::sort(atoms, [](const InlineAtom &a, const InlineAtom &b) {
         return a.from != b.from ? a.from < b.from : a.to > b.to;
     });
     QList<InlineAtom> kept;

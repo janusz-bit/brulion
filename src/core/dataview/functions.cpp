@@ -509,21 +509,19 @@ Value fSort(const Args &a, Context &ctx)
     if (a.size() > 1 && isFn(a.at(1))) {
         const Function &f = a.at(1).asFunction();
         if (f.params.size() >= 2) {
-            std::stable_sort(items.begin(), items.end(), [&](const Value &x, const Value &y) {
-                return num(callFunction(f, {x, y}, ctx)) < 0;
-            });
+            std::ranges::stable_sort(
+                    items, [&](const Value &x, const Value &y) { return num(callFunction(f, {x, y}, ctx)) < 0; });
         } else {
             QList<std::pair<Value, Value>> keyed;
             for (const Value &v : std::as_const(items))
                 keyed.append({callFunction(f, {v}, ctx), v});
-            std::stable_sort(keyed.begin(), keyed.end(),
-                             [](const auto &x, const auto &y) { return compare(x.first, y.first) < 0; });
+            std::ranges::stable_sort(keyed, [](const auto &x, const auto &y) { return compare(x.first, y.first) < 0; });
             items.clear();
             for (const auto &k : std::as_const(keyed))
                 items.append(k.second);
         }
     } else {
-        std::stable_sort(items.begin(), items.end(), [](const Value &x, const Value &y) { return compare(x, y) < 0; });
+        std::ranges::stable_sort(items, [](const Value &x, const Value &y) { return compare(x, y) < 0; });
     }
     return Value::list(items);
 }
@@ -532,13 +530,13 @@ Value fReverse(const Args &a, Context &)
 {
     if (a.at(0).is(T::String)) {
         QString s = a.at(0).asString();
-        std::reverse(s.begin(), s.end());
+        std::ranges::reverse(s);
         return Value::string(s);
     }
     if (!a.at(0).is(T::List))
         return a.at(0);
     ValueList items = a.at(0).asList();
-    std::reverse(items.begin(), items.end());
+    std::ranges::reverse(items);
     return Value::list(items);
 }
 

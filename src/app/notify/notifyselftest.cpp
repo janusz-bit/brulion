@@ -233,8 +233,8 @@ private:
             if (c->inherits("QQuickAbstractButton") && shown(c))
                 buttons.append(c);
         }
-        std::sort(buttons.begin(), buttons.end(),
-                  [](QQuickItem *a, QQuickItem *b) { return a->mapToScene({}).x() < b->mapToScene({}).x(); });
+        std::ranges::sort(buttons,
+                          [](QQuickItem *a, QQuickItem *b) { return a->mapToScene({}).x() < b->mapToScene({}).x(); });
         return buttons.value(index);
     }
 

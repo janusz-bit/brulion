@@ -90,7 +90,7 @@ QStringList filesBelow(const QHash<VaultPath, SyncFileState> &states, const Vaul
         if (it.key() != folder && isWithin(it.key(), folder) && it.key() != vaultConfigPath())
             files.append(it.key());
     }
-    std::sort(files.begin(), files.end(), [](const VaultPath &a, const VaultPath &b) {
+    std::ranges::sort(files, [](const VaultPath &a, const VaultPath &b) {
         const qsizetype da = depthOf(a);
         const qsizetype db = depthOf(b);
         return da != db ? da < db : a < b;
@@ -242,7 +242,7 @@ QList<SyncRun::FolderMove> SyncRun::findFolderMoves()
         return remote != m_remoteAll.cend() && remote->isDir;
     };
     QStringList sortedKnown(known.cbegin(), known.cend());
-    std::sort(sortedKnown.begin(), sortedKnown.end());
+    std::ranges::sort(sortedKnown);
     QStringList queue;
     for (const VaultPath &folder : std::as_const(sortedKnown)) {
         if (vanished(folder) && !vanished(paths::dirname(folder)))
@@ -264,7 +264,7 @@ QList<SyncRun::FolderMove> SyncRun::findFolderMoves()
         }
     }
     // A move into a folder another move creates comes after it.
-    std::sort(moves.begin(), moves.end(), [](const FolderMove &a, const FolderMove &b) { return a.to < b.to; });
+    std::ranges::sort(moves, [](const FolderMove &a, const FolderMove &b) { return a.to < b.to; });
     for (const FolderMove &move : std::as_const(moves))
         qCDebug(lcSync).noquote() << u"%1 folder renamed here: %2 -> %3"_s.arg(tag(), move.from, move.to);
     return moves;
@@ -474,7 +474,7 @@ QList<SyncRun::FolderMove> SyncRun::findFileMoves()
                 moves.append(FolderMove{from, same.first()});
         }
     }
-    std::sort(moves.begin(), moves.end(), [](const FolderMove &a, const FolderMove &b) { return a.to < b.to; });
+    std::ranges::sort(moves, [](const FolderMove &a, const FolderMove &b) { return a.to < b.to; });
     for (const FolderMove &move : std::as_const(moves))
         qCDebug(lcSync).noquote() << u"%1 file renamed here: %2 -> %3"_s.arg(tag(), move.from, move.to);
     return moves;
@@ -609,7 +609,7 @@ void SyncRun::adoptCaseOnlyFolderRenames()
         renamed = false;
         const QSet<VaultPath> known = knownFolders();
         QStringList folders(known.cbegin(), known.cend());
-        std::sort(folders.begin(), folders.end());
+        std::ranges::sort(folders);
         for (const VaultPath &from : std::as_const(folders)) {
             if (from.isEmpty() || !isSyncablePath(from) || m_remoteAll.contains(from))
                 continue;
@@ -740,7 +740,7 @@ void SyncRun::adoptRemoteFolderMoves()
             return here && here->isDir;
         };
         QStringList sortedKnown(known.cbegin(), known.cend());
-        std::sort(sortedKnown.begin(), sortedKnown.end());
+        std::ranges::sort(sortedKnown);
         QStringList queue;
         for (const VaultPath &folder : std::as_const(sortedKnown)) {
             if (vanished(folder) && !vanished(paths::dirname(folder)))
@@ -866,7 +866,7 @@ void SyncRun::adoptRemoteFileMoves()
             gone.append(it.key());
         }
     }
-    std::sort(gone.begin(), gone.end());
+    std::ranges::sort(gone);
     // Synced versions by ETag: one that several synced files had (a server whose ETags are mtime
     // and size on coarse storage) tells neither apart.
     QHash<QString, int> syncedEtags;
@@ -1035,15 +1035,15 @@ void SyncRun::syncFolders(std::function<void()> done)
             all.insert(folder);
     }
     QStringList sorted(all.cbegin(), all.cend());
-    std::sort(sorted.begin(), sorted.end());
+    std::ranges::sort(sorted);
 
     QList<FolderOp> ops;
     // Deletions first, deepest first: a folder emptied by its subfolders' deletion goes too, and
     // on case-insensitive storage the old spelling goes before the new one is created.
     if (!m_holdDeletions) {
         QStringList deepest = sorted;
-        std::stable_sort(deepest.begin(), deepest.end(),
-                         [](const VaultPath &a, const VaultPath &b) { return depthOf(a) > depthOf(b); });
+        std::ranges::stable_sort(deepest,
+                                 [](const VaultPath &a, const VaultPath &b) { return depthOf(a) > depthOf(b); });
         for (const VaultPath &folder : std::as_const(deepest)) {
             if (!known.contains(folder))
                 continue;

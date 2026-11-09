@@ -63,7 +63,7 @@ QList<DemoFile> guideFiles(const QString &language)
         const QString path = it.filePath().mid(root.size());
         out.append({ path, QString::fromUtf8(file.readAll()) });
     }
-    std::sort(out.begin(), out.end(), [](const DemoFile &a, const DemoFile &b) { return a.path < b.path; });
+    std::ranges::sort(out, [](const DemoFile &a, const DemoFile &b) { return a.path < b.path; });
     return out;
 }
 
@@ -868,7 +868,7 @@ const QString kDocsRecordKey = u"docs/written"_s;
 struct LegacyPage {
     QStringView path;
     QStringView hash;
-    quint8 releases;
+    quint8 releases = 0;
 };
 constexpr quint8 kAllLegacyReleases = 0x3f;
 constexpr LegacyPage kLegacyPages[] = {

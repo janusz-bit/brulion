@@ -183,7 +183,7 @@ struct RelocationPlan::Private {
             list.reserve(allPaths.size());
             for (const VaultPath &file : allPaths)
                 list.append({text::foldKey(file), file});
-            std::sort(list.begin(), list.end());
+            std::ranges::sort(list);
             foldedPaths = std::move(list);
         }
         return *foldedPaths;
@@ -196,7 +196,7 @@ struct RelocationPlan::Private {
             list.reserve(moved.size());
             for (auto it = moved.cbegin(); it != moved.cend(); ++it)
                 list.append({text::foldKey(it.value()), it.key()});
-            std::sort(list.begin(), list.end());
+            std::ranges::sort(list);
             foldedTargets = std::move(list);
         }
         return *foldedTargets;

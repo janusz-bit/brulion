@@ -815,9 +815,7 @@ void AppSettings::addRecentVault(const QString &rawPath)
     if (path.isEmpty())
         return;
     QVariantList list = recentVaults();
-    list.erase(std::remove_if(list.begin(), list.end(),
-                              [&](const QVariant &v) { return v.toMap().value(u"path"_s).toString() == path; }),
-               list.end());
+    list.removeIf([&](const QVariant &v) { return v.toMap().value(u"path"_s).toString() == path; });
     QVariantMap entry;
     entry.insert(u"path"_s, path);
     entry.insert(u"name"_s, QFileInfo(path).fileName());
@@ -835,9 +833,7 @@ void AppSettings::forgetRecentVault(const QString &rawPath)
     const QString path = cleanPath(rawPath);
     QVariantList list = recentVaults();
     const auto before = list.size();
-    list.erase(std::remove_if(list.begin(), list.end(),
-                              [&](const QVariant &v) { return v.toMap().value(u"path"_s).toString() == path; }),
-               list.end());
+    list.removeIf([&](const QVariant &v) { return v.toMap().value(u"path"_s).toString() == path; });
     if (list.size() == before)
         return;
     m_settings->setValue(key(kRecentVaults), list);

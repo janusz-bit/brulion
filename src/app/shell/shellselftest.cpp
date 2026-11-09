@@ -6111,7 +6111,7 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
         });
         check(entries.size() == 2, "the tab switcher lists both tabs");
         if (!entries.isEmpty()) {
-            std::sort(entries.begin(), entries.end(), [](QQuickItem *a, QQuickItem *b) {
+            std::ranges::sort(entries, [](QQuickItem *a, QQuickItem *b) {
                 return a->mapToScene(QPointF()).y() < b->mapToScene(QPointF()).y();
             });
             // The tab shown checked, as the notebook switcher checks the notebook open.
@@ -6287,7 +6287,7 @@ void checkTabs(QQuickWindow *window, AppController *app, const Check &check)
             if (item->objectName() == u"shellTab" && shown(item))
                 out.append(item);
         }
-        std::sort(out.begin(), out.end(), [](QQuickItem *a, QQuickItem *b) {
+        std::ranges::sort(out, [](QQuickItem *a, QQuickItem *b) {
             return a->mapToScene(QPointF()).x() < b->mapToScene(QPointF()).x();
         });
         return out;
@@ -6463,7 +6463,7 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
         }
         return false;
     };
-    check(month && !titles.isEmpty() && waitFor([&] { return std::all_of(titles.begin(), titles.end(), listed); }),
+    check(month && !titles.isEmpty() && waitFor([&] { return std::ranges::all_of(titles, listed); }),
           "a day's tasks and reminders are listed");
 
     sendKey(popup, Qt::Key_Escape);

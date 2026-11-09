@@ -82,7 +82,7 @@ QList<ConflictCopy> findConflicts(const QList<FileStat> &files)
         if (const std::optional<BrulionConflict> own = parseBrulionConflict(file.path))
             out.append(ConflictCopy{own->original, file.path, own->time, own->device, ConflictCopy::Source::Brulion});
     }
-    std::stable_sort(out.begin(), out.end(), [](const ConflictCopy &a, const ConflictCopy &b) {
+    std::ranges::stable_sort(out, [](const ConflictCopy &a, const ConflictCopy &b) {
         return a.original != b.original ? a.original < b.original : a.time < b.time;
     });
     return out;

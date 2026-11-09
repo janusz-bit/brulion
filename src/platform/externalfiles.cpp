@@ -13,9 +13,9 @@ namespace {
 enum class Check { Pdf, Ooxml, OpenDocument, Epub, Ole2, Rtf, Mp3, IsoMedia, Ogg, Wav, Flac, Matroska, Text };
 
 struct Entry {
-    const char *extension;
-    const char *mimeType;
-    const char *kind;
+    const char *extension = nullptr;
+    const char *mimeType = nullptr;
+    const char *kind = nullptr;
     Check check;
     /// Ooxml: the folder of its main part ("word/"); OpenDocument: its own MIME type.
     const char *detail = nullptr;

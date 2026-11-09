@@ -158,8 +158,7 @@ QList<MentionMatcher> mentionMatchers(const QStringList &names)
         m.length = name.size();
         out.append(std::move(m));
     }
-    std::stable_sort(out.begin(), out.end(),
-                     [](const MentionMatcher &a, const MentionMatcher &b) { return a.length > b.length; });
+    std::ranges::stable_sort(out, [](const MentionMatcher &a, const MentionMatcher &b) { return a.length > b.length; });
     return out;
 }
 

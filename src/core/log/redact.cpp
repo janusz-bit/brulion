@@ -124,8 +124,9 @@ void rebuildForms(Registry &r)
                 forms.append(form);
         }
     }
-    std::sort(forms.begin(), forms.end(),
-              [](const QString &a, const QString &b) { return a.size() != b.size() ? a.size() > b.size() : a < b; });
+    std::ranges::sort(forms, [](const QString &a, const QString &b) {
+        return a.size() != b.size() ? a.size() > b.size() : a < b;
+    });
     r.forms = forms;
 }
 

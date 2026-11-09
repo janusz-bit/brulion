@@ -38,7 +38,7 @@ void VaultIndex::Private::forTasksWithId(const QString &id,
         return;
     QList<VaultPath> paths;
     owners->forEach([&](const VaultPath &p) { paths.append(p); });
-    std::sort(paths.begin(), paths.end());
+    std::ranges::sort(paths);
     for (const VaultPath &p : std::as_const(paths)) {
         const Entry *e = entry(p);
         if (!e)
@@ -150,7 +150,7 @@ TaskDependencies VaultIndex::taskDependencies(const VaultPath &path, int blockIn
         if (notes != d->taskDependents.constEnd()) {
             QList<VaultPath> paths;
             notes->forEach([&](const VaultPath &p) { paths.append(p); });
-            std::sort(paths.begin(), paths.end());
+            std::ranges::sort(paths);
             for (const VaultPath &p : std::as_const(paths)) {
                 const Private::Entry *other = d->entry(p);
                 if (!other)

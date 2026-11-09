@@ -115,7 +115,7 @@ void SearchResultModel::refresh()
     QList<std::pair<QString, int>> sorted;
     for (auto it = folderCounts.cbegin(); it != folderCounts.cend(); ++it)
         sorted.append({ it.key(), it.value() });
-    std::sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) {
+    std::ranges::sort(sorted, [](const auto &a, const auto &b) {
         return a.second != b.second ? a.second > b.second : compareNames(a.first, b.first) < 0;
     });
     for (const auto &[folder, count] : sorted)

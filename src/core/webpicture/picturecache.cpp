@@ -135,7 +135,7 @@ void PictureCache::prune(qint64 maxBytes)
         const QDateTime read = f.lastRead();
         return read.isValid() ? std::max(read, f.lastModified()) : f.lastModified();
     };
-    std::sort(files.begin(), files.end(), [&](const QFileInfo &a, const QFileInfo &b) { return used(a) < used(b); });
+    std::ranges::sort(files, [&](const QFileInfo &a, const QFileInfo &b) { return used(a) < used(b); });
     for (const QFileInfo &f : std::as_const(files)) {
         if (total <= maxBytes)
             break;

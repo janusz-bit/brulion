@@ -175,7 +175,7 @@ const std::array<UnitDef, UnitCount> kUnits = {{
 
 struct Alias {
     QStringView name;
-    int unit;
+    int unit = 0;
 };
 
 const Alias kAliases[] = {

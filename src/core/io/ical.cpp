@@ -413,8 +413,8 @@ std::optional<dates::RecurrenceRule> parseRRule(QStringView value, QStringList *
                 return std::nullopt; // "2TU", "-1FR": nth weekday of the month
             days.append(*day);
         }
-        std::sort(days.begin(), days.end());
-        days.erase(std::unique(days.begin(), days.end()), days.end());
+        std::ranges::sort(days);
+        days.erase(std::ranges::unique(days).begin(), days.end());
         const QList<int> workdays = {1, 2, 3, 4, 5};
         if (rule.freq == dates::RecurrenceRule::Freq::Week) {
             rule.weekdays = days;

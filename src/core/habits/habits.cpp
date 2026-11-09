@@ -218,7 +218,7 @@ QString habitName(QStringView text)
         }
         cuts.append({link.from, link.to, label});
     }
-    std::sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) { return a.from < b.from; });
+    std::ranges::sort(cuts, [](const Cut &a, const Cut &b) { return a.from < b.from; });
     QString out;
     qsizetype at = 0;
     for (const Cut &cut : std::as_const(cuts)) {

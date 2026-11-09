@@ -467,7 +467,7 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
             continue;
         QList<std::pair<int, int>> paired = pairs;
         paired.append({k, k});
-        std::sort(paired.begin(), paired.end());
+        std::ranges::sort(paired);
         bool ordered = true;
         for (qsizetype q = 1; q < paired.size() && ordered; ++q)
             ordered = paired[q].second > paired[q - 1].second;

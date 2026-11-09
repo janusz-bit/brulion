@@ -176,7 +176,7 @@ QList<QQuickItem *> matching(QQuickWindow *window, const std::function<bool(QQui
         ranked.append({item, score, i});
     }
     // Popups first, then on screen, then the last one painted.
-    std::stable_sort(ranked.begin(), ranked.end(), [](const Ranked &a, const Ranked &b) {
+    std::ranges::stable_sort(ranked, [](const Ranked &a, const Ranked &b) {
         return a.score != b.score ? a.score > b.score : a.order > b.order;
     });
     QList<QQuickItem *> out;
@@ -270,8 +270,7 @@ QString itemsAt(QQuickWindow *window, QPointF scenePos)
     QQuickItem *item = window->contentItem();
     while (item) {
         QList<QQuickItem *> children = item->childItems();
-        std::stable_sort(children.begin(), children.end(),
-                         [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
+        std::ranges::stable_sort(children, [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
         QQuickItem *next = nullptr;
         for (auto it = children.crbegin(); it != children.crend(); ++it) {
             QQuickItem *c = *it;
@@ -400,8 +399,7 @@ QQuickItem *pressTargetUnder(QQuickItem *item, QPointF scenePos)
     if (item->clip() && !QRectF(0, 0, item->width(), item->height()).contains(local))
         return nullptr; // nothing of it there, its children clipped too
     QList<QQuickItem *> children = item->childItems();
-    std::stable_sort(children.begin(), children.end(),
-                     [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
+    std::ranges::stable_sort(children, [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
     for (auto it = children.crbegin(); it != children.crend(); ++it) {
         if (QQuickItem *found = pressTargetUnder(*it, scenePos))
             return found;

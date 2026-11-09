@@ -147,7 +147,7 @@ const QHash<QString, Adverb> &adverbs()
 
 bool isAsciiDigits(QStringView s)
 {
-    return !s.isEmpty() && std::all_of(s.begin(), s.end(), [](QChar c) { return c >= u'0' && c <= u'9'; });
+    return !s.isEmpty() && std::ranges::all_of(s, [](QChar c) { return c >= u'0' && c <= u'9'; });
 }
 
 /// Interval word: digits (optionally with an English ordinal suffix, "2nd"), number words
@@ -203,7 +203,7 @@ QList<int> weekdayListFolded(QStringView folded)
         if (!days.contains(word->day))
             days.append(word->day);
     }
-    std::sort(days.begin(), days.end());
+    std::ranges::sort(days);
     return days;
 }
 
@@ -585,7 +585,7 @@ RecurrenceRule normalizeRule(const RecurrenceRule &rule)
             if (d >= Qt::Monday && d <= Qt::Sunday && !out.weekdays.contains(d))
                 out.weekdays.append(d);
         }
-        std::sort(out.weekdays.begin(), out.weekdays.end());
+        std::ranges::sort(out.weekdays);
     }
     if (rule.freq == Freq::Month) {
         if (rule.lastDayOfMonth)

@@ -276,7 +276,7 @@ QVariantList GraphModel::find(const QString &query, int limit) const
         if (rank >= 0)
             hits.append({i, rank});
     }
-    std::stable_sort(hits.begin(), hits.end(), [this](const Hit &a, const Hit &b) {
+    std::ranges::stable_sort(hits, [this](const Hit &a, const Hit &b) {
         if (a.rank != b.rank)
             return a.rank < b.rank;
         return m_nodes.at(a.node).degree > m_nodes.at(b.node).degree;
@@ -718,7 +718,7 @@ void GraphModel::rebuild()
             if (keep[i])
                 order.append(i);
         }
-        std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+        std::ranges::stable_sort(order, [&](int a, int b) {
             if ((a == focus) != (b == focus))
                 return a == focus;
             return adj.at(a).size() > adj.at(b).size();

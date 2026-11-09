@@ -436,8 +436,7 @@ RowEdges RowScroll::edges() const
     }
     // Keeps e.rows sorted and without duplicates (the edges' rows and their neighbours).
     const auto add = [&e](const RowSpan &s) {
-        const auto it = std::lower_bound(e.rows.begin(), e.rows.end(), s.index,
-                                         [](const RowSpan &r, int index) { return r.index < index; });
+        const auto it = std::ranges::lower_bound(e.rows, s.index, {}, &RowSpan::index);
         if (it == e.rows.end() || it->index != s.index)
             e.rows.insert(it, s);
     };

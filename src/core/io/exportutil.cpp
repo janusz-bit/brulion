@@ -22,7 +22,7 @@ using namespace Qt::StringLiterals;
 ExportVault::ExportVault(const ExportInput &input) : m_input(input), m_index(std::make_unique<VaultIndex>(input.config))
 {
     QList<FileEntry> files = input.files;
-    std::sort(files.begin(), files.end(), [](const FileEntry &a, const FileEntry &b) { return a.path < b.path; });
+    std::ranges::sort(files, [](const FileEntry &a, const FileEntry &b) { return a.path < b.path; });
     {
         VaultIndex::Batch batch(*m_index);
         for (const FileEntry &f : std::as_const(files)) {
@@ -278,8 +278,8 @@ QList<const ExportVault::Note *> orderedNotes(const ExportVault &vault)
     QList<const ExportVault::Note *> journals;
     for (const ExportVault::Note &n : vault.notes())
         (n.journal ? journals : pages).append(&n);
-    std::stable_sort(journals.begin(), journals.end(),
-                     [](const ExportVault::Note *a, const ExportVault::Note *b) { return *a->journal > *b->journal; });
+    std::ranges::stable_sort(
+            journals, [](const ExportVault::Note *a, const ExportVault::Note *b) { return *a->journal > *b->journal; });
     return pages + journals;
 }
 

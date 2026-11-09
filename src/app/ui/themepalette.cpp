@@ -352,8 +352,8 @@ QStringList filterFontFamilies(const QStringList &families)
     QCollator collator{QLocale(QLocale::Polish, QLocale::Poland)};
     collator.setCaseSensitivity(Qt::CaseInsensitive);
     collator.setNumericMode(true);
-    std::stable_sort(out.begin(), out.end(),
-                     [&collator](const QString &a, const QString &b) { return collator.compare(a, b) < 0; });
+    std::ranges::stable_sort(out,
+                             [&collator](const QString &a, const QString &b) { return collator.compare(a, b) < 0; });
     return out;
 }
 

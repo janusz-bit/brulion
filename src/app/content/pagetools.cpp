@@ -349,7 +349,7 @@ QVariantMap PageTools::summary(const QString &rawPath) const
         if (!keys.contains(it.key()))
             keys.append(it.key());
     }
-    std::sort(keys.begin(), keys.end());
+    std::ranges::sort(keys);
     for (const QString &k : std::as_const(keys)) {
         if (shown.contains(k.toLower()))
             continue;

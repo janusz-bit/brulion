@@ -34,7 +34,7 @@ bool entryByPath(const DiskEntry &a, const DiskEntry &b)
 
 QList<DiskEntry> sortedEntries(QList<DiskEntry> entries)
 {
-    std::sort(entries.begin(), entries.end(), entryByPath);
+    std::ranges::sort(entries, entryByPath);
     return entries;
 }
 
@@ -244,8 +244,8 @@ ScanDiff VaultPrivate::diff(const DiskListing &listing) const
         if (!dirs.contains(it.key()))
             out.appearedDirs.append(it.value());
     }
-    std::sort(out.vanishedFiles.begin(), out.vanishedFiles.end(), byPath);
-    std::sort(out.vanishedDirs.begin(), out.vanishedDirs.end());
+    std::ranges::sort(out.vanishedFiles, byPath);
+    std::ranges::sort(out.vanishedDirs);
     out.modifiedFiles = sortedEntries(out.modifiedFiles);
     out.appearedFiles = sortedEntries(out.appearedFiles);
     out.appearedDirs = sortedEntries(out.appearedDirs);
@@ -562,7 +562,7 @@ void VaultPrivate::noteListing(const DiskListing &listing, bool full)
     if (!folders.isEmpty()) {
         status.state = VaultScanStatus::State::Unreadable;
         status.unreadableFolders = QList<VaultPath>(folders.cbegin(), folders.cend());
-        std::sort(status.unreadableFolders.begin(), status.unreadableFolders.end());
+        std::ranges::sort(status.unreadableFolders);
         QStringList shown;
         for (const VaultPath &folder : std::as_const(status.unreadableFolders))
             shown.append(folder.isEmpty() ? u"(vault folder)"_s : folder);

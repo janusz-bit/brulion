@@ -4,6 +4,7 @@
 
 #include <QSet>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace Qt::StringLiterals;
@@ -161,7 +162,7 @@ public:
         QString css = u"<style>@media (prefers-color-scheme:dark){"_s;
         const auto rules = [&](const QSet<int> &set, QStringView kind, QStringView prop) {
             QList<int> roles(set.cbegin(), set.cend());
-            std::sort(roles.begin(), roles.end());
+            std::ranges::sort(roles);
             for (const int r : std::as_const(roles)) {
                 const auto rgba = detail::parseHex((*m_dark)[Role(r)]);
                 if (!rgba)

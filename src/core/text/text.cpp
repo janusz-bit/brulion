@@ -35,7 +35,7 @@ char32_t codePointBefore(QStringView s, qsizetype i)
 
 bool isAscii(QStringView s)
 {
-    return std::all_of(s.begin(), s.end(), [](QChar c) { return c.unicode() < 0x80; });
+    return std::ranges::all_of(s, [](QChar c) { return c.unicode() < 0x80; });
 }
 
 void appendCodePoint(QString &out, char32_t cp)
@@ -291,7 +291,7 @@ QString regexAlternation(const QStringList &words)
             unique.append(w);
         }
     }
-    std::sort(unique.begin(), unique.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(unique, [](const QString &a, const QString &b) {
         return a.size() != b.size() ? a.size() > b.size() : a < b;
     });
     QStringList escaped;
@@ -353,9 +353,8 @@ QString joinLines(const QList<Line> &lines)
 
 QString detectEol(QStringView content)
 {
-    const qsizetype i = std::find_if(content.begin(), content.end(),
-                                     [](QChar c) { return c == u'\n' || c == u'\r'; })
-                        - content.begin();
+    const qsizetype i =
+            std::ranges::find_if(content, [](QChar c) { return c == u'\n' || c == u'\r'; }) - content.begin();
     if (i >= content.size())
         return u"\n"_s;
     if (content.at(i) == u'\n')

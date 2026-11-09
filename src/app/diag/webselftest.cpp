@@ -465,7 +465,7 @@ QJsonArray LinkPartsSelfTest::linkBoxes(QQuickItem *text)
             QMetaObject::invokeMethod(text, "linkAt", qReturnArg(link), x, y);
             if (link.isEmpty())
                 continue;
-            auto it = std::find_if(boxes.begin(), boxes.end(), [&](const auto &b) { return b.first == link; });
+            auto it = std::ranges::find_if(boxes, [&](const auto &b) { return b.first == link; });
             if (it == boxes.end()) {
                 boxes.append({link, Box{x, y, x, y}});
             } else {

@@ -241,8 +241,8 @@ QList<int> topRows(const BlockDocument &doc, const QList<int> &rows)
         if (r >= 0 && r < doc.count() && doc.at(r).kind != BlockKind::Frontmatter)
             sorted.append(r);
     }
-    std::sort(sorted.begin(), sorted.end());
-    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    std::ranges::sort(sorted);
+    sorted.erase(std::ranges::unique(sorted).begin(), sorted.end());
     const QSet<int> in(sorted.cbegin(), sorted.cend());
     QList<int> out;
     for (const int r : std::as_const(sorted)) {
@@ -387,7 +387,7 @@ QString stripInlineMarkup(const QString &text)
             tags.append({p.open.from, p.open.to});
             tags.append({p.close.from, p.close.to});
         }
-        std::sort(tags.begin(), tags.end());
+        std::ranges::sort(tags);
         for (qsizetype k = tags.size() - 1; k >= 0; --k)
             t.remove(tags[k].first, tags[k].second - tags[k].first);
     }

@@ -267,8 +267,8 @@ QString formatPageRanges(const QList<int> &pages)
         if (p >= 1)
             sorted.append(p);
     }
-    std::sort(sorted.begin(), sorted.end());
-    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    std::ranges::sort(sorted);
+    sorted.erase(std::ranges::unique(sorted).begin(), sorted.end());
     QStringList parts;
     for (qsizetype i = 0; i < sorted.size();) {
         qsizetype j = i;

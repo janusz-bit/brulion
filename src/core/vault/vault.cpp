@@ -169,7 +169,7 @@ void ContentCache::evict()
     order.reserve(m_items.size());
     for (auto it = m_items.cbegin(); it != m_items.cend(); ++it)
         order.append({it->tick, it.key()});
-    std::sort(order.begin(), order.end());
+    std::ranges::sort(order);
     for (const auto &entry : std::as_const(order)) {
         if (m_bytes <= m_limit / 4 * 3)
             break;
@@ -293,7 +293,7 @@ void VaultPrivate::rebaseDiskNames(const VaultPath &from, const VaultPath &to)
         }
         it = diskNames.erase(it);
     }
-    std::sort(moved.begin(), moved.end()); // parents before children
+    std::ranges::sort(moved); // parents before children
     for (const auto &entry : std::as_const(moved))
         rememberDiskName(entry.first, diskRel(to) + entry.second);
 }
@@ -313,7 +313,7 @@ void VaultPrivate::respell(const VaultPath &path, const QString &rel)
         it = diskNames.erase(it);
     }
     rememberDiskName(path, rel);
-    std::sort(below.begin(), below.end()); // parents before children
+    std::ranges::sort(below); // parents before children
     for (const auto &entry : std::as_const(below))
         rememberDiskName(entry.first, rel + entry.second);
 }
@@ -326,8 +326,7 @@ void VaultPrivate::adoptSpellings(const DiskListing &listing)
         if (dirs.contains(entry.stat.path) && diskRel(entry.stat.path) != entry.diskRel)
             respelled.append(entry);
     }
-    std::sort(respelled.begin(), respelled.end(),
-              [](const DiskEntry &a, const DiskEntry &b) { return a.stat.path < b.stat.path; });
+    std::ranges::sort(respelled, [](const DiskEntry &a, const DiskEntry &b) { return a.stat.path < b.stat.path; });
     for (const DiskEntry &entry : std::as_const(respelled)) {
         if (diskRel(entry.stat.path) != entry.diskRel) // a parent's respelling may have fixed it
             respell(entry.stat.path, entry.diskRel);
@@ -571,7 +570,7 @@ QList<VaultChange> VaultPrivate::forgetTree(const VaultPath &path, ChangeSource 
                 goneDirs.append(it.key());
         }
     }
-    std::sort(goneFiles.begin(), goneFiles.end());
+    std::ranges::sort(goneFiles);
     QList<VaultChange> out;
     for (const VaultPath &file : std::as_const(goneFiles)) {
         unwatch(file);
@@ -1135,7 +1134,7 @@ QList<FileStat> Vault::markdownFiles() const
 QList<FileStat> Vault::folders() const
 {
     QList<FileStat> out = d->dirs.values();
-    std::sort(out.begin(), out.end(), byPath);
+    std::ranges::sort(out, byPath);
     return out;
 }
 

@@ -277,7 +277,7 @@ QList<QLineF> clipLine(QPointF origin, QPointF dir, const QList<QList<QPointF>> 
                 ts.append(t);
         }
     }
-    std::sort(ts.begin(), ts.end());
+    std::ranges::sort(ts);
     QList<QLineF> out;
     for (qsizetype i = 0; i + 1 < ts.size(); i += 2) {
         if (ts.at(i + 1) - ts.at(i) > 1e-9)

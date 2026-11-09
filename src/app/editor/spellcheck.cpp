@@ -51,11 +51,11 @@ namespace {
 QStringList sortedUnique(QStringList words)
 {
     words.removeAll(QString());
-    std::sort(words.begin(), words.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(words, [](const QString &a, const QString &b) {
         const int c = QString::compare(a, b, Qt::CaseInsensitive);
         return c != 0 ? c < 0 : a < b;
     });
-    words.erase(std::unique(words.begin(), words.end()), words.end());
+    words.erase(std::ranges::unique(words).begin(), words.end());
     return words;
 }
 

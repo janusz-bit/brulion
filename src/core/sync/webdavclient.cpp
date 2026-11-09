@@ -221,8 +221,8 @@ void WebDavClient::list(const ListOptions &options, ListCallback done)
         result.error = run->error;
         if (!result.error.isError()) {
             result.entries = run->entries;
-            std::sort(result.entries.begin(), result.entries.end(),
-                      [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
+            std::ranges::sort(result.entries,
+                              [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
         }
         ListCallback callback = std::move(run->done);
         listFolder.reset();
@@ -399,8 +399,8 @@ void WebDavClient::listFolder(const VaultPath &path, ListCallback done)
                         }
                         result.entries.append(entryFor(child, res));
                     }
-                    std::sort(result.entries.begin(), result.entries.end(),
-                              [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
+                    std::ranges::sort(result.entries,
+                                      [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
                 }
                 done(result);
             });
@@ -554,7 +554,7 @@ WebDavError WebDavClient::check(const HttpResponse &response, const QByteArray &
         return WebDavError{WebDavErrorCode::Network, 0,
                            u"%1 %2 failed: %3"_s.arg(QString::fromLatin1(method), url, reason), url};
     }
-    if (std::find(ok.begin(), ok.end(), response.status) != ok.end())
+    if (std::ranges::find(ok, response.status) != ok.end())
         return {};
     return WebDavError::fromStatus(response.status,
                                    u"%1 %2 failed: HTTP %3"_s.arg(QString::fromLatin1(method), url, QString::number(response.status)),

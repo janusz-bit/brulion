@@ -958,7 +958,7 @@ QList<std::pair<qsizetype, qsizetype>> queryBodies(const QString &content, const
             ln = close; // past the closing fence (code is not looked into)
         }
     }
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 
@@ -1129,8 +1129,7 @@ QString retargetQueryNames(const QString &content, const QList<QueryNameEdit> &e
             continue;
         replacements.append({e.from, e.to, written});
     }
-    std::sort(replacements.begin(), replacements.end(),
-              [](const Replacement &a, const Replacement &b) { return a.from < b.from; });
+    std::ranges::sort(replacements, [](const Replacement &a, const Replacement &b) { return a.from < b.from; });
     QString out;
     qsizetype pos = 0;
     int count = 0;

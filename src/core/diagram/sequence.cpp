@@ -385,7 +385,7 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
             texts[k] = layoutText(m, e.text.isEmpty() ? QString() : u'[' + e.text + u']', fs * 0.9, false, textMax);
         }
     }
-    std::stable_sort(needs.begin(), needs.end(), [](const Need &x, const Need &y) { return x.b - x.a < y.b - y.a; });
+    std::ranges::stable_sort(needs, [](const Need &x, const Need &y) { return x.b - x.a < y.b - y.a; });
     for (const Need &n : std::as_const(needs)) {
         if (n.a < 0 || n.b >= P || n.a >= n.b)
             continue;

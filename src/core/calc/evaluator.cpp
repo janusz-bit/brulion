@@ -1047,7 +1047,7 @@ Value aggregateBuiltin(Builtin id, const std::vector<Value> &args, WorkBudget *b
         return r;
     }
     if (id == Builtin::Median) {
-        std::sort(values.begin(), values.end(), [](const Value *a, const Value *b) { return a->si() < b->si(); });
+        std::ranges::sort(values, [](const Value *a, const Value *b) { return a->si() < b->si(); });
         const std::size_t mid = values.size() / 2;
         if (values.size() % 2 == 1)
             return *values[mid];
@@ -1057,9 +1057,8 @@ Value aggregateBuiltin(Builtin id, const std::vector<Value> &args, WorkBudget *b
         return r;
     }
     const bool wantMax = id == Builtin::Max;
-    return **std::max_element(values.begin(), values.end(), [&](const Value *a, const Value *b) {
-        return wantMax ? a->si() < b->si() : a->si() > b->si();
-    });
+    return **std::ranges::max_element(
+            values, [&](const Value *a, const Value *b) { return wantMax ? a->si() < b->si() : a->si() > b->si(); });
 }
 
 Value concatBuiltin(const std::vector<Value> &args, CalcLocale locale, WorkBudget *budget, CalcError &err)

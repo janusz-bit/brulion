@@ -477,8 +477,7 @@ struct Note {
     }
     bool hasLabel(QStringView key) const
     {
-        return std::any_of(attributes.begin(), attributes.end(),
-                           [&](const Attribute &a) { return !a.relation && a.name == key; });
+        return std::ranges::any_of(attributes, [&](const Attribute &a) { return !a.relation && a.name == key; });
     }
 };
 
@@ -711,8 +710,8 @@ private:
                 n.kind = hasChildren ? Kind::Folder : Kind::Skip;
                 continue;
             }
-            if (std::any_of(n.attributes.begin(), n.attributes.end(),
-                            [](const Attribute &a) { return !a.relation && isContainerLabel(a.name); })) {
+            if (std::ranges::any_of(n.attributes,
+                                    [](const Attribute &a) { return !a.relation && isContainerLabel(a.name); })) {
                 // Calendar, year, month … notes: folders unless they have content.
                 n.kind = hasContent(n) ? Kind::Page : Kind::Folder;
                 continue;
@@ -921,7 +920,7 @@ private:
 
     bool hasUserAttributes(const Note &n) const
     {
-        return std::any_of(n.attributes.begin(), n.attributes.end(), [](const Attribute &a) {
+        return std::ranges::any_of(n.attributes, [](const Attribute &a) {
             return a.relation ? !isSystemRelation(a.name) : !isSystemLabel(a.name);
         });
     }

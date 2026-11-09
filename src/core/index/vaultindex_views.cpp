@@ -158,7 +158,7 @@ const TagTargets &VaultIndex::Private::tagTargets()
             t.byPage[page].append(it.key());
         }
         for (QStringList &keys : t.byPage)
-            std::sort(keys.begin(), keys.end());
+            std::ranges::sort(keys);
         cache.tagTargets = std::move(t);
     }
     return *cache.tagTargets;
@@ -181,7 +181,7 @@ QStringList VaultIndex::Private::tagKeysFor(const VaultPath &path)
         if (!targets.byTag.contains(tag) && (key == tag || key.endsWith(u'/' + tag)))
             out.append(tag);
     }
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 
@@ -223,7 +223,7 @@ QList<VaultPath> VaultIndex::attachments() const
     if (!d->cache.attachments) {
         ++d->builds.attachments;
         QList<VaultPath> out(d->attachmentSet.cbegin(), d->attachmentSet.cend());
-        std::sort(out.begin(), out.end());
+        std::ranges::sort(out);
         d->cache.attachments = std::move(out);
     }
     return *d->cache.attachments;
@@ -324,8 +324,8 @@ QList<ResolvedLink> VaultIndex::outgoingLinks(const VaultPath &path) const
         const Link &link = e->note.links[r];
         out.append(ResolvedLink{link, d->blockOwner(link.blockId)});
     }
-    std::stable_sort(out.begin(), out.end(),
-                     [](const ResolvedLink &a, const ResolvedLink &b) { return a.link.from < b.link.from; });
+    std::ranges::stable_sort(out,
+                             [](const ResolvedLink &a, const ResolvedLink &b) { return a.link.from < b.link.from; });
     return out;
 }
 
@@ -390,7 +390,7 @@ QList<Backlink> VaultIndex::backlinks(const VaultPath &path) const
             }
         }
     }
-    std::sort(found.begin(), found.end(), [](const Found &a, const Found &b) {
+    std::ranges::sort(found, [](const Found &a, const Found &b) {
         if (a.entry != b.entry)
             return relevanceLess(*a.entry, *b.entry);
         return a.link->from < b.link->from;
@@ -419,7 +419,7 @@ QList<VaultPath> VaultIndex::linksTo(const VaultPath &path) const
         }
         out.append(it.key());
     }
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 
@@ -459,7 +459,7 @@ QList<MissingPage> VaultIndex::missingPages() const
     QList<MissingPage> out;
     for (auto it = d->unresolved.cbegin(); it != d->unresolved.cend(); ++it) {
         QList<VaultPath> sources = it->keys();
-        std::sort(sources.begin(), sources.end());
+        std::ranges::sort(sources);
         // Spelling of the first unresolved link with this key (sources in path order).
         QString name;
         bool page = false;
@@ -479,7 +479,7 @@ QList<MissingPage> VaultIndex::missingPages() const
         if (page && !name.isEmpty())
             out.append(MissingPage{name, sources});
     }
-    std::sort(out.begin(), out.end(), [](const MissingPage &a, const MissingPage &b) {
+    std::ranges::sort(out, [](const MissingPage &a, const MissingPage &b) {
         if (a.sources.size() != b.sources.size())
             return a.sources.size() > b.sources.size();
         return compareNames(a.name, b.name) < 0;
@@ -526,7 +526,7 @@ QList<TagCount> VaultIndex::tags() const
             t.count += p.value();
             t.paths.append(p.key());
         }
-        std::sort(t.paths.begin(), t.paths.end());
+        std::ranges::sort(t.paths);
         for (const VaultPath &p : std::as_const(t.paths)) {
             const Private::Entry *e = d->entry(p);
             const QString spelled = e ? e->tagSpellings().value(t.tag) : QString();
@@ -539,7 +539,7 @@ QList<TagCount> VaultIndex::tags() const
             t.display = t.tag;
         out.append(std::move(t));
     }
-    std::sort(out.begin(), out.end(), [](const TagCount &a, const TagCount &b) {
+    std::ranges::sort(out, [](const TagCount &a, const TagCount &b) {
         if (a.count != b.count)
             return a.count > b.count;
         return compareNames(a.tag, b.tag) < 0;
@@ -586,7 +586,7 @@ QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
             }
         }
     }
-    std::stable_sort(found.begin(), found.end(), [](const Found &a, const Found &b) {
+    std::ranges::stable_sort(found, [](const Found &a, const Found &b) {
         if (a.entry != b.entry)
             return relevanceLess(*a.entry, *b.entry);
         return a.block < b.block;
@@ -612,7 +612,7 @@ QList<VaultPath> VaultIndex::tagsTo(const VaultPath &path) const
             files.insert(it.key());
     }
     QList<VaultPath> out(files.cbegin(), files.cend());
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 
@@ -669,7 +669,7 @@ QList<JournalRef> VaultIndex::journals() const
         if (e->note.journalDate)
             out.append(JournalRef{*e->note.journalDate, path});
     }
-    std::sort(out.begin(), out.end(), [](const JournalRef &a, const JournalRef &b) {
+    std::ranges::sort(out, [](const JournalRef &a, const JournalRef &b) {
         if (a.date != b.date)
             return a.date > b.date;
         return a.path < b.path;
@@ -719,8 +719,8 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
     const QString q = foldQuery(prefix);
     if (q.isEmpty()) {
         QList<const Private::Entry *> recent = d->sortedEntries();
-        std::stable_sort(recent.begin(), recent.end(),
-                         [](const Private::Entry *a, const Private::Entry *b) { return a->seq > b->seq; });
+        std::ranges::stable_sort(recent,
+                                 [](const Private::Entry *a, const Private::Entry *b) { return a->seq > b->seq; });
         for (qsizetype i = 0; i < std::min<qsizetype>(limit, recent.size()); ++i)
             out.append(PageSuggestion{recent[i]->path, recent[i]->note.title, {}});
         return out;
@@ -761,7 +761,7 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
         scored.append(Scored{PageSuggestion{path, e->note.title, *bestAlias}, best, !bestAlias->isEmpty(), *bestName,
                              e->seq});
     }
-    std::sort(scored.begin(), scored.end(), [](const Scored &a, const Scored &b) {
+    std::ranges::sort(scored, [](const Scored &a, const Scored &b) {
         if (a.rank != b.rank)
             return a.rank > b.rank;
         if (a.alias != b.alias)
@@ -860,8 +860,8 @@ QList<BlockRef> VaultIndex::suggestBlocks(const QString &text, int limit) const
         return out;
     const QStringList wordsOfQuery = foldQuery(text).split(u' ', Qt::SkipEmptyParts);
     QList<const Private::Entry *> byRecency = d->sortedEntries();
-    std::stable_sort(byRecency.begin(), byRecency.end(),
-                     [](const Private::Entry *a, const Private::Entry *b) { return a->seq > b->seq; });
+    std::ranges::stable_sort(byRecency,
+                             [](const Private::Entry *a, const Private::Entry *b) { return a->seq > b->seq; });
     if (wordsOfQuery.isEmpty()) {
         QList<BlockRef> rest;
         for (const Private::Entry *e : std::as_const(byRecency)) {
@@ -905,7 +905,7 @@ QList<BlockRef> VaultIndex::suggestBlocks(const QString &text, int limit) const
             scored.append(Scored{BlockRef{e->path, int(i)}, score, rank, blocks[i].line});
         }
     }
-    std::stable_sort(scored.begin(), scored.end(), [](const Scored &a, const Scored &b) {
+    std::ranges::stable_sort(scored, [](const Scored &a, const Scored &b) {
         if (a.score != b.score)
             return a.score > b.score;
         if (a.rank != b.rank)

@@ -801,7 +801,7 @@ bool TaskListModel::applyQuery(const QString &query)
             break;
         case QueryFilterKind::Status: {
             QList<TaskStatus> s = f.statuses;
-            std::sort(s.begin(), s.end());
+            std::ranges::sort(s);
             if (s == QList<TaskStatus>{TaskStatus::Todo, TaskStatus::Doing})
                 status = u"open"_s;
             else if (s.size() == 1)
@@ -871,7 +871,7 @@ QVariantList TaskListModel::tagChoices(int limit) const
     QList<std::pair<QString, int>> list;
     for (auto it = counts.cbegin(); it != counts.cend(); ++it)
         list.append({it.key(), it.value()});
-    std::sort(list.begin(), list.end(), [](const auto &a, const auto &b) {
+    std::ranges::sort(list, [](const auto &a, const auto &b) {
         return a.second != b.second ? a.second > b.second : compareNames(a.first, b.first) < 0;
     });
     for (const auto &[tag, count] : list) {
@@ -899,8 +899,7 @@ QVariantList TaskListModel::folderChoices(int limit) const
     QList<std::pair<QString, int>> list;
     for (auto it = counts.cbegin(); it != counts.cend(); ++it)
         list.append({it.key(), it.value()});
-    std::sort(list.begin(), list.end(),
-              [](const auto &a, const auto &b) { return compareNames(a.first, b.first) < 0; });
+    std::ranges::sort(list, [](const auto &a, const auto &b) { return compareNames(a.first, b.first) < 0; });
     for (const auto &[folder, count] : list) {
         if (limit > 0 && out.size() >= limit)
             break;
@@ -920,7 +919,7 @@ QVariantList TaskListModel::pageChoices(int limit) const
     QList<std::pair<QString, int>> list;
     for (auto it = counts.cbegin(); it != counts.cend(); ++it)
         list.append({it.key(), it.value()});
-    std::sort(list.begin(), list.end(), [](const auto &a, const auto &b) {
+    std::ranges::sort(list, [](const auto &a, const auto &b) {
         return a.second != b.second ? a.second > b.second : compareNames(a.first, b.first) < 0;
     });
     for (const auto &[path, count] : list) {
@@ -1049,7 +1048,7 @@ void TaskListModel::rankTitles(QList<Item> &items)
     }
     QList<qsizetype> order(titles.size());
     std::iota(order.begin(), order.end(), 0);
-    std::sort(order.begin(), order.end(), [&](qsizetype a, qsizetype b) {
+    std::ranges::sort(order, [&](qsizetype a, qsizetype b) {
         const int c = keys[size_t(a)].compare(keys[size_t(b)]);
         return c != 0 ? c < 0 : QString::compare(titles[a], titles[b]) < 0;
     });
@@ -1168,8 +1167,7 @@ void TaskListModel::rebuild()
             // Through a permutation: an item is too big to move around n log n times.
             QList<qsizetype> order(items.size());
             std::iota(order.begin(), order.end(), 0);
-            std::sort(order.begin(), order.end(),
-                      [&](qsizetype x, qsizetype y) { return itemLess(items[x], items[y]); });
+            std::ranges::sort(order, [&](qsizetype x, qsizetype y) { return itemLess(items[x], items[y]); });
             QList<Item> sorted;
             sorted.reserve(items.size());
             for (const qsizetype i : std::as_const(order))
@@ -1178,7 +1176,7 @@ void TaskListModel::rebuild()
         } else if (!changed.isEmpty()) {
             m_items.removeIf([&](const Item &item) { return changed.contains(item.ref.path); });
             if (!fresh.isEmpty()) {
-                std::sort(fresh.begin(), fresh.end(), less);
+                std::ranges::sort(fresh, less);
                 QList<Item> merged;
                 merged.reserve(m_items.size() + fresh.size());
                 std::merge(std::make_move_iterator(m_items.begin()), std::make_move_iterator(m_items.end()),
@@ -1241,7 +1239,7 @@ void TaskListModel::layoutTasks()
             // it is more urgent than that. Ancestors first (a parent's block index is smaller).
             QList<int> order(n);
             std::iota(order.begin(), order.end(), 0);
-            std::sort(order.begin(), order.end(), [&](int a, int b) {
+            std::ranges::sort(order, [&](int a, int b) {
                 const TaskRef &x = m_items.at(a).ref;
                 const TaskRef &y = m_items.at(b).ref;
                 return x.path != y.path ? x.path < y.path : x.blockIndex < y.blockIndex;
@@ -1266,9 +1264,8 @@ void TaskListModel::layoutTasks()
             children[parentOf[i]].append(i);
     }
     for (QList<int> &list : children) {
-        std::sort(list.begin(), list.end(), [&](int a, int b) {
-            return m_items.at(a).ref.blockIndex < m_items.at(b).ref.blockIndex;
-        });
+        std::ranges::sort(list,
+                          [&](int a, int b) { return m_items.at(a).ref.blockIndex < m_items.at(b).ref.blockIndex; });
     }
     m_layout.clear();
     m_layout.reserve(n);

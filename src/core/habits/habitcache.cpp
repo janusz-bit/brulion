@@ -94,7 +94,7 @@ QStringList HabitCache::undefinedKeys() const
         if (!m_byKey.contains(it.key()))
             out.append(it.key());
     }
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 

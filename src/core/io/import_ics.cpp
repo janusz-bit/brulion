@@ -59,9 +59,9 @@ public:
     {
         // Only calendars: certain. A calendar among notes (an attachment of a vault or an
         // export) loses against the importers of the notes.
-        if (files.isEmpty() || !std::any_of(files.begin(), files.end(), isCalendarFile))
+        if (files.isEmpty() || !std::ranges::any_of(files, isCalendarFile))
             return 0;
-        return std::all_of(files.begin(), files.end(), isCalendarFile) ? 100 : 15;
+        return std::ranges::all_of(files, isCalendarFile) ? 100 : 15;
     }
 
     ImportResult run(const QList<InputFile> &files, const ImportOptions &options) const override
@@ -117,8 +117,7 @@ private:
         }
         for (auto it = days.begin(); it != days.end(); ++it) {
             auto &events = it.value();
-            std::stable_sort(events.begin(), events.end(),
-                             [](const auto &a, const auto &b) { return a.first < b.first; });
+            std::ranges::stable_sort(events, [](const auto &a, const auto &b) { return a.first < b.first; });
             QStringList texts;
             for (const auto &e : std::as_const(events))
                 texts.append(e.second);

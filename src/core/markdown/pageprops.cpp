@@ -83,8 +83,8 @@ bool isLogseqKey(QStringView key)
 {
     if (key.isEmpty())
         return false;
-    return std::all_of(key.begin(), key.end(),
-                       [](QChar c) { return isAsciiLetter(c) || isAsciiDigit(c) || c == u'_' || c == u'-'; });
+    return std::ranges::all_of(key,
+                               [](QChar c) { return isAsciiLetter(c) || isAsciiDigit(c) || c == u'_' || c == u'-'; });
 }
 
 QString numberText(const QVariant &v)
@@ -1228,7 +1228,7 @@ PropertyEditResult removeLogseq(const QString &content, const PageRead &page, co
     const auto without = [&](const QSet<int> &dropped, bool blank) {
         QString out;
         int lastKept = -1;
-        const int firstDropped = *std::min_element(dropped.begin(), dropped.end());
+        const int firstDropped = *std::ranges::min_element(dropped);
         for (int i = 0; i < page.lines.size(); ++i) {
             if (blank && i == firstDropped) {
                 out += page.lines[i].eol;
@@ -1611,8 +1611,8 @@ PropertyEditResult removePageProperty(const QString &content, PropertySource sou
     const auto absent = [&](const QVariantMap &data) { return !data.contains(key); };
     bool empty = true;
     for (int i = 1; i < doc.fm.endLine && empty; ++i) {
-        const bool removed = std::any_of(entries.begin(), entries.end(),
-                                         [i](const FrontmatterEntry &e) { return i >= e.first && i < e.last; });
+        const bool removed =
+                std::ranges::any_of(entries, [i](const FrontmatterEntry &e) { return i >= e.first && i < e.last; });
         empty = removed || isBlank(doc.lines[i].text);
     }
     if (empty) {
@@ -1717,7 +1717,7 @@ PropertyEditResult removePageListItem(const QString &content, PropertyType kind,
             const QString id = propertySourceName(p.source) + u':' + p.key;
             if (done.contains(id) || fixedPropertyType(p.key) != kind || p.type != kind)
                 continue;
-            if (std::any_of(p.items.begin(), p.items.end(), [&](const QString &s) { return sameName(s, name); })) {
+            if (std::ranges::any_of(p.items, [&](const QString &s) { return sameName(s, name); })) {
                 holder = &p;
                 done.insert(id);
                 break;

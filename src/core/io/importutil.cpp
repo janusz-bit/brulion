@@ -343,7 +343,7 @@ std::optional<QString> SourceTree::resolve(const QString &target, const QString 
     const auto best = [](const QStringList &candidates) -> std::optional<QString> {
         if (candidates.isEmpty())
             return std::nullopt;
-        return *std::min_element(candidates.begin(), candidates.end(), [](const QString &a, const QString &b) {
+        return *std::ranges::min_element(candidates, [](const QString &a, const QString &b) {
             return a.size() != b.size() ? a.size() < b.size() : a < b;
         });
     };
@@ -583,7 +583,7 @@ QString titleFromText(const QString &text, int maxLength)
 
 bool anyPath(const QList<InputFile> &files, const std::function<bool(const QString &)> &pred)
 {
-    return std::any_of(files.begin(), files.end(), [&](const InputFile &f) { return pred(f.path); });
+    return std::ranges::any_of(files, [&](const InputFile &f) { return pred(f.path); });
 }
 
 QList<InputFile> stripCommonRoot(const QList<InputFile> &files, const std::function<bool(const QString &)> &keep)

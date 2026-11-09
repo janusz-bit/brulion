@@ -31,7 +31,7 @@ struct Edit {
 /// Apply non-overlapping edits (any order).
 QString applyEdits(QStringView text, QList<Edit> edits)
 {
-    std::sort(edits.begin(), edits.end(), [](const Edit &a, const Edit &b) { return a.from < b.from; });
+    std::ranges::sort(edits, [](const Edit &a, const Edit &b) { return a.from < b.from; });
     QString out;
     qsizetype last = 0;
     for (const Edit &e : std::as_const(edits)) {

@@ -197,14 +197,11 @@ ConvertedLine convertFirstLine(QString content)
     // A repeater needs a date; without one the 🔁 token stays as text.
     if (!due && !scheduled && !repeater.isEmpty()) {
         repeater.clear();
-        removals.erase(std::remove_if(removals.begin(), removals.end(),
-                                      [&](const Removal &r) {
-                                          return QStringView(rest).sliced(r.from).startsWith(
-                                                  markdown::tokens::Recurrence);
-                                      }),
-                       removals.end());
+        removals.removeIf([&](const Removal &r) {
+            return QStringView(rest).sliced(r.from).startsWith(markdown::tokens::Recurrence);
+        });
     }
-    std::sort(removals.begin(), removals.end(), [](const Removal &a, const Removal &b) { return a.from > b.from; });
+    std::ranges::sort(removals, [](const Removal &a, const Removal &b) { return a.from > b.from; });
     for (const Removal &r : std::as_const(removals)) {
         qsizetype from = r.from;
         if (from > 0 && rest[from - 1] == u' ')
@@ -315,8 +312,7 @@ private:
         const auto order = [](const QString &k) {
             return k == u"aliases" || k == u"alias" ? 0 : k == u"tags" || k == u"tag" ? 1 : 2;
         };
-        std::stable_sort(keys.begin(), keys.end(),
-                         [&](const QString &a, const QString &b) { return order(a) < order(b); });
+        std::ranges::stable_sort(keys, [&](const QString &a, const QString &b) { return order(a) < order(b); });
         for (const QString &key : std::as_const(keys)) {
             const bool tags = key == u"tags" || key == u"tag";
             const QString name = key == u"aliases" || key == u"alias" ? u"alias"_s

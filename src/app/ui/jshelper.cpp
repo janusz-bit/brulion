@@ -655,7 +655,7 @@ QVariantList JsHelper::insertedAt(const QVariantList &list, int index, const QVa
 QVariantList JsHelper::reversed(const QVariantList &list) const
 {
     QVariantList out = list;
-    std::reverse(out.begin(), out.end());
+    std::ranges::reverse(out);
     return out;
 }
 
@@ -697,7 +697,7 @@ QStringList JsHelper::sortedStrings(const QStringList &list) const
 {
     QStringList out = list;
     // QString's operator< compares UTF-16 code units, like Array.prototype.sort().
-    std::stable_sort(out.begin(), out.end());
+    std::ranges::stable_sort(out);
     return out;
 }
 
@@ -717,7 +717,7 @@ QStringList JsHelper::uniqueStrings(const QStringList &list) const
 QStringList JsHelper::reversedStrings(const QStringList &list) const
 {
     QStringList out = list;
-    std::reverse(out.begin(), out.end());
+    std::ranges::reverse(out);
     return out;
 }
 

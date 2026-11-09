@@ -153,7 +153,7 @@ QString phraseAlternation(const QStringList &phrases)
     // Escape each word on its own, then join the words of a phrase with `\s+`.
     QStringList unique = phrases;
     unique.removeDuplicates();
-    std::sort(unique.begin(), unique.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(unique, [](const QString &a, const QString &b) {
         return a.size() != b.size() ? a.size() > b.size() : a < b;
     });
     QStringList parts;

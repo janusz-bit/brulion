@@ -107,15 +107,15 @@ bool isValidOwner(QStringView owner)
 {
     if (owner.isEmpty() || owner.size() > 39 || owner.startsWith(u'-'))
         return false;
-    return std::all_of(owner.begin(), owner.end(),
-                       [](QChar c) { return (c.unicode() < 0x80 && c.isLetterOrNumber()) || c == u'-' || c == u'_'; });
+    return std::ranges::all_of(
+            owner, [](QChar c) { return (c.unicode() < 0x80 && c.isLetterOrNumber()) || c == u'-' || c == u'_'; });
 }
 
 bool isValidRepoName(QStringView name)
 {
     if (name.isEmpty() || name.size() > 100 || name == u"." || name == u"..")
         return false;
-    return std::all_of(name.begin(), name.end(), [](QChar c) {
+    return std::ranges::all_of(name, [](QChar c) {
         return (c.unicode() < 0x80 && c.isLetterOrNumber()) || c == u'-' || c == u'_' || c == u'.';
     });
 }
@@ -146,7 +146,7 @@ std::optional<QString> normalizeFolder(const QString &folder)
     const QString text = folder.trimmed().normalized(QString::NormalizationForm_C);
     for (const QString &segment : text.split(u'/', Qt::SkipEmptyParts)) {
         if (segment == u"."_s || segment == u".."_s || segment.contains(u'\\')
-            || std::any_of(segment.begin(), segment.end(), isAsciiControl)) {
+            || std::ranges::any_of(segment, isAsciiControl)) {
             return std::nullopt;
         }
         kept.append(segment);

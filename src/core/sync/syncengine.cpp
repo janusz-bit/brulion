@@ -110,7 +110,7 @@ QList<QStringList> groupByCase(const QStringList &sortedPaths, const std::functi
     const auto rank = [&](const VaultPath &p) { return isLocal(p) && !isRemote(p) ? 0 : 1; };
     for (QStringList &group : groups) {
         if (group.size() > 1) {
-            std::stable_sort(group.begin(), group.end(), [&](const VaultPath &a, const VaultPath &b) {
+            std::ranges::stable_sort(group, [&](const VaultPath &a, const VaultPath &b) {
                 const int ra = rank(a);
                 const int rb = rank(b);
                 return ra != rb ? ra < rb : a < b;

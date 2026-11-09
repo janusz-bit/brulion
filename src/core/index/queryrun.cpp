@@ -694,7 +694,7 @@ void Runner::sort(QList<QueryMatch> &matches) const
     // Through a permutation: a match is too big to move around n log n times.
     QList<qsizetype> order(matches.size());
     std::iota(order.begin(), order.end(), 0);
-    std::sort(order.begin(), order.end(), [&](qsizetype x, qsizetype y) { return less(matches[x], matches[y]); });
+    std::ranges::sort(order, [&](qsizetype x, qsizetype y) { return less(matches[x], matches[y]); });
     QList<QueryMatch> sorted;
     sorted.reserve(matches.size());
     for (const qsizetype i : std::as_const(order))
@@ -795,7 +795,7 @@ QList<QueryGroup> Runner::buildGroups(const QList<QueryItem> &items, const QList
         for (const GroupInfo &g : std::as_const(infos))
             nameKeys.append(nameSortKey(g.order));
     }
-    std::stable_sort(order.begin(), order.end(), [&](qsizetype a, qsizetype b) {
+    std::ranges::stable_sort(order, [&](qsizetype a, qsizetype b) {
         const GroupInfo &x = infos[a];
         const GroupInfo &y = infos[b];
         if (x.rank != y.rank)

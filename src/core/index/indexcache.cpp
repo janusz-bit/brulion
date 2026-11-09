@@ -1150,7 +1150,7 @@ std::shared_ptr<const Reader> Reader::open(QByteArray file, const Identity &expe
     }
     if (!dir.atEnd())
         return reject(u"directory"_s);
-    std::sort(spans.begin(), spans.end());
+    std::ranges::sort(spans);
     for (qsizetype i = 1; i < spans.size(); ++i) {
         if (spans[i].first < spans[i - 1].second)
             return reject(u"overlapping records"_s);

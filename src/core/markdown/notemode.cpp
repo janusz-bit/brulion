@@ -167,8 +167,8 @@ QString setNoteModeKey(QStringView content, std::optional<NoteMode> mode)
         edited = rebuildLines(lines, entries, -1, QString());
         bool empty = true;
         for (int i = 1; i < fm->endLine && empty; ++i) {
-            const bool removed = std::any_of(entries.begin(), entries.end(),
-                                             [i](const FrontmatterEntry &e) { return i >= e.first && i < e.last; });
+            const bool removed =
+                    std::ranges::any_of(entries, [i](const FrontmatterEntry &e) { return i >= e.first && i < e.last; });
             empty = removed || isBlank(lines[i].text);
         }
         if (empty) {

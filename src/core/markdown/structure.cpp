@@ -595,8 +595,7 @@ private:
                 sub.append(subView(l.view, l.prefix));
             const qsizetype arenaBefore = m_st.nodes.size();
             const QList<int> children = ContainerParser(m_st, sub, m_depth + 1, m_nest + 1).run();
-            const bool structural =
-                    std::any_of(children.begin(), children.end(), [&](int c) { return isStructural(m_st.nodes[c]); });
+            const bool structural = std::ranges::any_of(children, [&](int c) { return isStructural(m_st.nodes[c]); });
             if (structural) {
                 const int idx = newNode(BlockKind::Quote, first.view.line);
                 node(idx).container = true;
@@ -831,11 +830,9 @@ int nodeAtLine(const Structure &st, int line)
             return best;
         best = hit;
         const Node &h = st.nodes[hit];
-        const bool ownLine =
-                std::any_of(h.own.begin(), h.own.end(), [&](const OwnLine &l) { return l.view.line == line; });
-        const bool inChild = std::any_of(h.children.begin(), h.children.end(), [&](int c) {
-            return st.nodes[c].line <= line && line <= st.nodes[c].endLine;
-        });
+        const bool ownLine = std::ranges::any_of(h.own, [&](const OwnLine &l) { return l.view.line == line; });
+        const bool inChild = std::ranges::any_of(
+                h.children, [&](int c) { return st.nodes[c].line <= line && line <= st.nodes[c].endLine; });
         if (ownLine && !inChild)
             return hit;
         level = &h.children;

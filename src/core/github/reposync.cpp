@@ -423,7 +423,7 @@ QList<LocalChange> RepoSync::localChanges()
     for (auto it = local.cbegin(); it != local.cend(); ++it)
         all.insert(it.key());
     QStringList sorted(all.cbegin(), all.cend());
-    std::sort(sorted.begin(), sorted.end());
+    std::ranges::sort(sorted);
     for (const VaultPath &path : sorted) {
         const QString base = state.files.value(path);
         const auto here = local.constFind(path);
@@ -722,7 +722,7 @@ void RepoSync::planPull(std::shared_ptr<Run> run, const QList<TreeEntry> &entrie
     for (auto it = state.files.cbegin(); it != state.files.cend(); ++it)
         all.insert(it.key());
     QStringList sorted(all.cbegin(), all.cend());
-    std::sort(sorted.begin(), sorted.end());
+    std::ranges::sort(sorted);
     for (const VaultPath &path : sorted) {
         if (run->unknown.contains(path))
             continue; // cannot be read here: left as it is
@@ -784,7 +784,7 @@ void RepoSync::planPull(std::shared_ptr<Run> run, const QList<TreeEntry> &entrie
         added.local = gone.local;
         dropped.append(removed.first());
     }
-    std::sort(dropped.begin(), dropped.end(), std::greater<qsizetype>());
+    std::ranges::sort(dropped, std::greater<qsizetype>());
     for (const qsizetype i : std::as_const(dropped))
         run->jobs.removeAt(i);
     // The names and executable bits of the files as GitHub has them now.
@@ -1058,7 +1058,7 @@ void RepoSync::pruneEmptyFolders(const QSet<QString> &folders)
         }
     }
     sorted = QStringList(candidates.cbegin(), candidates.cend());
-    std::sort(sorted.begin(), sorted.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(sorted, [](const QString &a, const QString &b) {
         return a.count(u'/') > b.count(u'/') || (a.count(u'/') == b.count(u'/') && a < b);
     });
     for (const QString &folder : std::as_const(sorted)) {

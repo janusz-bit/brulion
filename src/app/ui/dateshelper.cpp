@@ -500,7 +500,7 @@ QList<int> DatesHelper::toggledWeekday(const QList<int> &days, int day) const
     } else {
         out.append(day);
     }
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 

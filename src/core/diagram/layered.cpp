@@ -50,7 +50,7 @@ QList<qreal> isotonic(const QList<qreal> &desired, const QList<qreal> &weights, 
 /// Crossings between the segments from one layer to the next (positions of their ends).
 qint64 crossings(QList<std::pair<int, int>> &pairs, int lowerSize)
 {
-    std::sort(pairs.begin(), pairs.end());
+    std::ranges::sort(pairs);
     QList<int> tree(lowerSize + 1, 0); // Fenwick tree over the lower layer's positions
     qint64 count = 0;
     qint64 seen = 0;
@@ -267,8 +267,7 @@ std::optional<LayerResult> layered(const QList<LayerNode> &nodes, const QList<La
                 movable.append({sum / nb.size(), layer[i]});
                 slots.append(i);
             }
-            std::stable_sort(movable.begin(), movable.end(),
-                             [](const auto &a, const auto &b) { return a.first < b.first; });
+            std::ranges::stable_sort(movable, [](const auto &a, const auto &b) { return a.first < b.first; });
             for (qsizetype k = 0; k < slots.size(); ++k)
                 layer[slots[k]] = movable[k].second;
             for (qsizetype i = 0; i < layer.size(); ++i)
@@ -361,7 +360,7 @@ std::optional<LayerResult> layered(const QList<LayerNode> &nodes, const QList<La
         for (qsizetype k = 1; k + 1 < chain.size(); ++k)
             bends.append(center(chain[k]));
         if (reversed[e])
-            std::reverse(bends.begin(), bends.end());
+            std::ranges::reverse(bends);
         if (labelNode[e] >= 0)
             result.labels[e] = center(labelNode[e]);
     }

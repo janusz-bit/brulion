@@ -181,8 +181,7 @@ void SyncRun::onExchange(const HttpExchange &exchange)
         st.protocol = exchange.protocol;
     const SyncRequestTime request{exchange.method, client() ? client()->relativePath(exchange.url) : QString(),
                                   exchange.status, exchange.elapsedMs, exchange.bytesSent + exchange.bytesReceived};
-    const auto at = std::find_if(st.slowest.begin(), st.slowest.end(),
-                                 [&](const SyncRequestTime &r) { return r.ms < request.ms; });
+    const auto at = std::ranges::find_if(st.slowest, [&](const SyncRequestTime &r) { return r.ms < request.ms; });
     if (at != st.slowest.end() || st.slowest.size() < kSlowestKept) {
         st.slowest.insert(at, request);
         if (st.slowest.size() > kSlowestKept)
@@ -800,7 +799,7 @@ void SyncRun::processAll()
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it)
         all.insert(it.key());
     QStringList paths(all.cbegin(), all.cend());
-    std::sort(paths.begin(), paths.end());
+    std::ranges::sort(paths);
     m_total = static_cast<int>(paths.size());
     m_report.stats.pathsChecked = m_total;
     progress(SyncProgress::Phase::Syncing, 0, m_total);
@@ -911,8 +910,8 @@ void SyncRun::finish()
         m_pool.reset();
     }
     m_report.cancelled = m_cancelled;
-    std::sort(m_report.pendingDeletions.begin(), m_report.pendingDeletions.end(),
-              [](const SyncChange &a, const SyncChange &b) { return a.path < b.path; });
+    std::ranges::sort(m_report.pendingDeletions,
+                      [](const SyncChange &a, const SyncChange &b) { return a.path < b.path; });
     m_report.needsConfirmation = !m_report.pendingDeletions.isEmpty();
     if (m_phase && m_phase->phase == SyncPhase::Transfer)
         endPhase(m_done);

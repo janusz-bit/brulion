@@ -371,7 +371,7 @@ void ReminderScheduler::processDue(const QDateTime &now)
     if (handledChanged)
         saveHandled();
     if (missedAdded) {
-        std::stable_sort(m_missed.begin(), m_missed.end(), byTime);
+        std::ranges::stable_sort(m_missed, byTime);
         if (m_missed.size() > MaxMissed)
             m_missed.remove(0, m_missed.size() - MaxMissed);
         assignNativeIds(m_missed);
@@ -459,7 +459,7 @@ void ReminderScheduler::loadState(const QDateTime &now)
             if (auto n = fromJson(v))
                 m_missed.append(std::move(*n));
         }
-        std::stable_sort(m_missed.begin(), m_missed.end(), byTime);
+        std::ranges::stable_sort(m_missed, byTime);
         applyRingMinutes(m_missed);
         assignNativeIds(m_missed);
         if (m_missed != before)
@@ -475,7 +475,7 @@ void ReminderScheduler::pruneHandled(const QDateTime &now)
     qsizetype removed = m_handled.removeIf([&limit](const Iterator &it) { return it.value() < limit; });
     if (m_handled.size() > MaxHandled) {
         QList<QDateTime> times = m_handled.values();
-        std::sort(times.begin(), times.end());
+        std::ranges::sort(times);
         const QDateTime cutoff = times.at(times.size() - MaxHandled);
         removed += m_handled.removeIf([&cutoff](const Iterator &it) { return it.value() < cutoff; });
     }

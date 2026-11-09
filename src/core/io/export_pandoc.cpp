@@ -90,7 +90,7 @@ public:
     QList<VaultPath> usedAttachments() const
     {
         QList<VaultPath> out(m_used.begin(), m_used.end());
-        std::sort(out.begin(), out.end());
+        std::ranges::sort(out);
         return out;
     }
 

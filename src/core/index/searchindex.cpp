@@ -126,8 +126,7 @@ void SearchIndex::set(const QString &id, Document document, quint64 contentKey)
         if (list.isEmpty() || list.constLast().doc < doc) {
             list.append(posting);
         } else {
-            const auto pos = std::lower_bound(list.begin(), list.end(), doc,
-                                              [](const Posting &p, int value) { return p.doc < value; });
+            const auto pos = std::ranges::lower_bound(list, doc, {}, &Posting::doc);
             list.insert(pos, posting);
         }
         d.terms.append(&entry->first);
@@ -150,8 +149,7 @@ void SearchIndex::remove(const QString &id)
         if (it == m_postings.end())
             continue;
         PostingList &list = it->second;
-        const auto pos = std::lower_bound(list.begin(), list.end(), doc,
-                                          [](const Posting &p, int value) { return p.doc < value; });
+        const auto pos = std::ranges::lower_bound(list, doc, {}, &Posting::doc);
         if (pos != list.end() && pos->doc == doc)
             list.erase(pos);
         if (list.isEmpty())
@@ -297,7 +295,7 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
     // What the user typed comes first: documents containing more of the query terms as typed
     // (exactly or as a prefix — "zolw" in "żółwia") rank above those found only through typo
     // tolerance ("zolw" ~ "żółć"), whatever the relevance score; then by score.
-    std::sort(docs.begin(), docs.end(), [&](int a, int b) {
+    std::ranges::sort(docs, [&](int a, int b) {
         if (literalTerms[a] != literalTerms[b])
             return literalTerms[a] > literalTerms[b];
         if (total[a] != total[b])

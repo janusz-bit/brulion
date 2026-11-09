@@ -110,7 +110,7 @@ std::optional<qint64> dateOf(QStringView value, const TableSortOptions &options)
     if (const std::optional<DateSpec> iso = dates::parseDateSpec(v))
         return minutes(*iso);
     // Only explicit dates: words like "jutro" or "piątek" in a table are text.
-    if (!options.today.isValid() || std::none_of(v.begin(), v.end(), [](QChar c) { return c.isDigit(); }))
+    if (!options.today.isValid() || std::ranges::none_of(v, [](QChar c) { return c.isDigit(); }))
         return std::nullopt;
     const dates::UiLocale locale =
             options.locale == CalcLocale::English ? dates::UiLocale::English : dates::UiLocale::Polish;

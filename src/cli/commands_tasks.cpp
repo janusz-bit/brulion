@@ -188,7 +188,7 @@ Result taskAdd(Call &call)
             line += u' ' + markdown::tokens::priorityEmoji(*p).toString();
     }
     const struct {
-        const char *arg;
+        const char *arg = nullptr;
         QStringView token;
     } dated[] = {{"start", markdown::tokens::Start},
                  {"scheduled", markdown::tokens::Scheduled},

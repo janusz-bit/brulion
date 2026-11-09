@@ -113,9 +113,7 @@ QStringList DeviceInfo::fontFamilies(bool fixedOnly) const
     if (cache.isEmpty()) {
         QStringList all = QFontDatabase::families();
         if (fixedOnly) {
-            all.erase(std::remove_if(all.begin(), all.end(),
-                                     [](const QString &f) { return !QFontDatabase::isFixedPitch(f); }),
-                      all.end());
+            all.removeIf([](const QString &f) { return !QFontDatabase::isFixedPitch(f); });
             // Some systems report their fixed font without the fixed-pitch flag.
             const QString fixed = fixedFontFamily();
             if (!fixed.isEmpty() && !all.contains(fixed))

@@ -113,7 +113,7 @@ QVariantList dependencyCandidates(const VaultIndex &index, const QString &text, 
             continue;
         found.append({*place, !query.isEmpty() && folded.startsWith(query), text::nameSortKey(titleOf(index, t.path))});
     }
-    std::stable_sort(found.begin(), found.end(), [](const Candidate &a, const Candidate &b) {
+    std::ranges::stable_sort(found, [](const Candidate &a, const Candidate &b) {
         if (a.starts != b.starts)
             return a.starts;
         if (a.titleKey != b.titleKey)

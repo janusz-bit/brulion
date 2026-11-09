@@ -787,7 +787,7 @@ QList<std::pair<double, double>> chords(const QList<StrokePoint> &points, double
         if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y))
             xs.append(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y));
     }
-    std::sort(xs.begin(), xs.end());
+    std::ranges::sort(xs);
     QList<std::pair<double, double>> out;
     for (qsizetype i = 0; i + 1 < xs.size(); i += 2)
         out.append({xs.at(i), xs.at(i + 1)});
@@ -1471,8 +1471,8 @@ void distributeElements(Drawing &d, const QSet<QString> &ids, Distribute axis, c
     const auto end = [x](const QRectF &r) { return x ? r.right() : r.bottom(); };
     const auto mid = [x](const QRectF &r) { return x ? r.center().x() : r.center().y(); };
     const auto extent = [x](const QRectF &r) { return x ? r.width() : r.height(); };
-    std::stable_sort(units.begin(), units.end(),
-                     [&mid](const ArrangeUnit &a, const ArrangeUnit &b) { return mid(a.box) < mid(b.box); });
+    std::ranges::stable_sort(units,
+                             [&mid](const ArrangeUnit &a, const ArrangeUnit &b) { return mid(a.box) < mid(b.box); });
     QRectF all;
     double span = 0;
     for (const ArrangeUnit &u : units) {
@@ -1598,7 +1598,7 @@ void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward, c
     QList<qsizetype> dropIndices;
     for (const auto &[i, e] : drop)
         dropIndices.append(i);
-    std::sort(dropIndices.begin(), dropIndices.end());
+    std::ranges::sort(dropIndices);
     for (auto it = dropIndices.crbegin(); it != dropIndices.crend(); ++it) {
         if (*it >= 0 && *it < elements.size())
             elements.removeAt(*it);
@@ -1638,7 +1638,7 @@ void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward, c
         elements = std::move(sorted);
     }
     QList<std::pair<qsizetype, Stroke>> adds = insert;
-    std::stable_sort(adds.begin(), adds.end(), [](const auto &x, const auto &y) { return x.first < y.first; });
+    std::ranges::stable_sort(adds, [](const auto &x, const auto &y) { return x.first < y.first; });
     for (auto &[i, e] : adds) {
         stampBack(e, 0);
         elements.insert(std::clamp<qsizetype>(i, 0, elements.size()), e);

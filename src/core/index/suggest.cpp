@@ -93,7 +93,7 @@ NameRank rankName(QStringView name, QStringView q, const QStringList &queryWords
     // the quick switcher.
     // Multi-word query: every query word starts a word of the name ("dom ja" -> "Dom Jana").
     if (queryWords.size() > 1) {
-        const bool all = std::all_of(queryWords.begin(), queryWords.end(), [&](const QString &qw) {
+        const bool all = std::ranges::all_of(queryWords, [&](const QString &qw) {
             return !forEachWord(name, [&](QStringView w) { return !w.startsWith(qw); });
         });
         if (all)

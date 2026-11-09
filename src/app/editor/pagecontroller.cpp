@@ -529,7 +529,7 @@ QVariantList PageController::foldState() const
         if (row >= 0)
             lines.append(m_model->document().at(row).line);
     }
-    std::sort(lines.begin(), lines.end());
+    std::ranges::sort(lines);
     QVariantList out;
     for (const int l : std::as_const(lines))
         out.append(l);

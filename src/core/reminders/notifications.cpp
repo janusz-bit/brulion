@@ -54,7 +54,7 @@ QList<ScheduledNotification> firstInTime(QList<Timed> &items, qsizetype max)
     if (keep < items.size())
         std::partial_sort(items.begin(), items.begin() + keep, items.end(), earlier);
     else
-        std::sort(items.begin(), items.end(), earlier);
+        std::ranges::sort(items, earlier);
     QList<ScheduledNotification> out;
     out.reserve(keep);
     for (qsizetype i = 0; i < keep; ++i)

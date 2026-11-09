@@ -122,7 +122,7 @@ QList<std::pair<qint64, qint64>> mergedIntervals(const QList<ClockEntry> &clocks
             spans.append({s, s + c.seconds});
         }
     }
-    std::sort(spans.begin(), spans.end());
+    std::ranges::sort(spans);
     QList<std::pair<qint64, qint64>> merged;
     for (const auto &span : std::as_const(spans)) {
         if (!merged.isEmpty() && span.first <= merged.last().second)

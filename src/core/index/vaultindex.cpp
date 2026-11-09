@@ -422,7 +422,7 @@ const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::sortedEntr
         list.reserve(qsizetype(entries.size()));
         for (const auto &[path, e] : entries)
             list.append(e.get());
-        std::sort(list.begin(), list.end(), [](const Entry *a, const Entry *b) { return a->path < b->path; });
+        std::ranges::sort(list, [](const Entry *a, const Entry *b) { return a->path < b->path; });
         cache.sorted = std::move(list);
     }
     return *cache.sorted;
@@ -434,8 +434,7 @@ const QList<const VaultIndex::Private::Entry *> &VaultIndex::Private::entriesByR
     if (!cache.byRelevance) {
         ++builds.byRelevance;
         QList<const Entry *> list = sortedEntries();
-        std::stable_sort(list.begin(), list.end(),
-                         [](const Entry *a, const Entry *b) { return relevanceLess(*a, *b); });
+        std::ranges::stable_sort(list, [](const Entry *a, const Entry *b) { return relevanceLess(*a, *b); });
         cache.byRelevance = std::move(list);
     }
     return *cache.byRelevance;
@@ -660,8 +659,7 @@ void VaultIndex::Private::countNoteFolders(const VaultPath &path, int delta)
                     f.spelled = folder;
                 continue;
             }
-            const auto o = std::find_if(f.others.begin(), f.others.end(),
-                                        [&](const auto &other) { return other.first == folder; });
+            const auto o = std::ranges::find_if(f.others, [&](const auto &other) { return other.first == folder; });
             if (o != f.others.end())
                 ++o->second;
             else
@@ -685,8 +683,8 @@ void VaultIndex::Private::countNoteFolders(const VaultPath &path, int delta)
             f.spelled = best->first;
             f.notes = best->second;
             f.others.removeAt(best - f.others.cbegin());
-        } else if (const auto o = std::find_if(f.others.begin(), f.others.end(),
-                                               [&](const auto &other) { return other.first == folder; });
+        } else if (const auto o =
+                           std::ranges::find_if(f.others, [&](const auto &other) { return other.first == folder; });
                    o != f.others.end() && --o->second <= 0) {
             f.others.erase(o);
         }
@@ -889,7 +887,7 @@ void VaultIndex::setConfig(const VaultConfig &config)
     QList<VaultPath> all;
     for (const auto &[path, e] : d->entries)
         all.append(path);
-    std::sort(all.begin(), all.end());
+    std::ranges::sort(all);
     for (const VaultPath &p : std::as_const(all)) {
         const Private::Entry *e = d->entry(p);
         const QString content = e->content;
@@ -1157,7 +1155,7 @@ IndexChanges VaultIndex::changesSince(int version) const
         out.names = out.names || it->names;
     }
     out.notes = QList<VaultPath>(notes.cbegin(), notes.cend());
-    std::sort(out.notes.begin(), out.notes.end());
+    std::ranges::sort(out.notes);
     return out;
 }
 

@@ -419,7 +419,7 @@ public:
         QList<const ExportVault::Note *> journals;
         for (const ExportVault::Note &n : vault.notes())
             (n.journal ? journals : pages).append(&n);
-        std::stable_sort(journals.begin(), journals.end(), [](const ExportVault::Note *a, const ExportVault::Note *b) {
+        std::ranges::stable_sort(journals, [](const ExportVault::Note *a, const ExportVault::Note *b) {
             return *a->journal > *b->journal;
         });
         for (const ExportVault::Note *n : pages + journals)

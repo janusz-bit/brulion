@@ -189,7 +189,7 @@ void markCodeSpans(QStringView text, QList<CharRole> &roles)
 void markEmphasis(QStringView text, QList<CharRole> &roles)
 {
     static constexpr std::array<char16_t, 4> Markers = {u'*', u'_', u'~', u'='};
-    std::array<qsizetype, Markers.size()> open;
+    std::array<qsizetype, Markers.size()> open{};
     open.fill(-1);
     const auto spaceAt = [&text](qsizetype i) { return i < 0 || i >= text.size() || text.at(i).isSpace(); };
     const auto wordAt = [&text](qsizetype i) { return i >= 0 && i < text.size() && text.at(i).isLetterOrNumber(); };

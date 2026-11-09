@@ -93,7 +93,7 @@ QList<RowData> initialRows(const Query &q, Context &ctx)
     if (q.from) {
         const PathSet set = select(*q.from, ctx);
         pages = QList<VaultPath>(set.cbegin(), set.cend());
-        std::sort(pages.begin(), pages.end());
+        std::ranges::sort(pages);
     } else {
         pages = ctx.index().paths();
     }
@@ -147,7 +147,7 @@ void apply(const Command &cmd, QList<RowData> &rows, Context &ctx)
             keyed.append({keys, i});
         }
         ctx.step(rows.size());
-        std::stable_sort(keyed.begin(), keyed.end(), [&](const auto &a, const auto &b) {
+        std::ranges::stable_sort(keyed, [&](const auto &a, const auto &b) {
             for (qsizetype k = 0; k < cmd.sort.size(); ++k) {
                 const int c = compare(a.first.at(k), b.first.at(k));
                 if (c != 0)
@@ -166,15 +166,14 @@ void apply(const Command &cmd, QList<RowData> &rows, Context &ctx)
         QList<std::pair<Value, QList<RowData>>> groups;
         for (const RowData &row : std::as_const(rows)) {
             const Value key = evaluate(*cmd.expr, ctx, rowObject(row));
-            auto it = std::find_if(groups.begin(), groups.end(), [&](const auto &g) { return equals(g.first, key); });
+            auto it = std::ranges::find_if(groups, [&](const auto &g) { return equals(g.first, key); });
             ctx.step(groups.size() / 8 + 1);
             if (it == groups.end())
                 groups.append({key, {row}});
             else
                 it->second.append(row);
         }
-        std::stable_sort(groups.begin(), groups.end(),
-                         [](const auto &a, const auto &b) { return compare(a.first, b.first) < 0; });
+        std::ranges::stable_sort(groups, [](const auto &a, const auto &b) { return compare(a.first, b.first) < 0; });
         QList<RowData> out;
         for (const auto &[key, members] : std::as_const(groups)) {
             RowData g;

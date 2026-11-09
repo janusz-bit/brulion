@@ -89,7 +89,7 @@ QByteArray notesOf(const ExcalidrawMarkdown &m)
     QList<Cut> cuts{{m.sceneFrom, m.sceneTo}};
     for (const ExcalidrawMarkdown::TextEntry &e : m.textEntries)
         cuts.append({e.from, e.end});
-    std::sort(cuts.begin(), cuts.end(), [](const Cut &a, const Cut &b) { return a.from < b.from; });
+    std::ranges::sort(cuts, [](const Cut &a, const Cut &b) { return a.from < b.from; });
     QByteArray out;
     qsizetype at = 0;
     for (const Cut &c : std::as_const(cuts)) {

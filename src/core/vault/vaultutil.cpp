@@ -10,9 +10,7 @@
 
 using namespace Qt::StringLiterals;
 
-namespace brulion {
-
-namespace vaultutil {
+namespace brulion::vaultutil {
 
 QString configFolder()
 {
@@ -130,5 +128,4 @@ QString decodeUtf8(const QByteArray &bytes)
     return QString::fromUtf8(bytes);
 }
 
-} // namespace vaultutil
-} // namespace brulion
+} // namespace brulion::vaultutil

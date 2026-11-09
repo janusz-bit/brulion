@@ -94,7 +94,7 @@ ExportSelection selectExportFiles(const QList<FileStat> &files, const QString &s
     }
     ExportSelection out;
     out.paths = QList<VaultPath>(chosen.cbegin(), chosen.cend());
-    std::sort(out.paths.begin(), out.paths.end());
+    std::ranges::sort(out.paths);
     for (const VaultPath &p : std::as_const(out.paths)) {
         if (paths::isMarkdown(p))
             ++out.pages;

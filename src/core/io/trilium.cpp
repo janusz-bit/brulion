@@ -373,8 +373,7 @@ QStringList classesOf(const QString &attributes)
 bool hasClass(const QString &attributes, QStringView cls)
 {
     const QStringList classes = classesOf(attributes);
-    return std::any_of(classes.begin(), classes.end(),
-                       [&](const QString &c) { return c.compare(cls, Qt::CaseInsensitive) == 0; });
+    return std::ranges::any_of(classes, [&](const QString &c) { return c.compare(cls, Qt::CaseInsensitive) == 0; });
 }
 
 std::optional<Element> firstElement(const QString &html, QStringView name, QStringView cls)
@@ -1166,8 +1165,7 @@ private:
             all.append(List{std::move(e), false});
         for (Element &e : outermostElements(html, u"ol"))
             all.append(List{std::move(e), true});
-        std::sort(all.begin(), all.end(),
-                  [](const List &a, const List &b) { return a.element.start < b.element.start; });
+        std::ranges::sort(all, [](const List &a, const List &b) { return a.element.start < b.element.start; });
         const QList<Element> tables = outermostElements(html, u"table");
         QString out;
         qsizetype last = 0;

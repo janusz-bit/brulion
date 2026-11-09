@@ -973,7 +973,7 @@ QVariantList Workspace::templates() const
             found.append(f.path);
     }
     // By title as people read them, not by code units ("journal" before "Spotkanie").
-    std::sort(found.begin(), found.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(found, [](const QString &a, const QString &b) {
         return QString::compare(paths::pageTitle(a), paths::pageTitle(b), Qt::CaseInsensitive) < 0;
     });
     for (const QString &path : std::as_const(found))
@@ -1547,7 +1547,7 @@ QStringList Workspace::periodicNoteStarts(const QString &period, const QString &
             out.append(start->toString(Qt::ISODate));
     }
     out.removeDuplicates();
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 
@@ -1819,7 +1819,7 @@ void Workspace::setFoldState(const QString &rawPath, const QVariantList &lines)
         if (ok && line >= 0 && !sorted.contains(line))
             sorted.append(line);
     }
-    std::sort(sorted.begin(), sorted.end());
+    std::ranges::sort(sorted);
     if (sorted.isEmpty()) {
         m_vault->store()->remove(foldStateKey(path));
         return;

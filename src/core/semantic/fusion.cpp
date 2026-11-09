@@ -43,7 +43,7 @@ QList<ScoredId> fuseConvex(const QList<ScoredId> &lexical, const QList<ScoredId>
         std::partial_sort(out.begin(), out.begin() + limit, out.end(), better);
         out.resize(limit);
     } else {
-        std::sort(out.begin(), out.end(), better);
+        std::ranges::sort(out, better);
     }
     return out;
 }

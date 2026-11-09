@@ -174,7 +174,7 @@ RuleResult recurrenceRule(const QJsonObject &recurrence)
             if (const auto n = weekdayNumber(d.toString()); n && !rule.weekdays.contains(*n))
                 rule.weekdays.append(*n);
         }
-        std::sort(rule.weekdays.begin(), rule.weekdays.end());
+        std::ranges::sort(rule.weekdays);
         if (rule.interval == 1 && rule.weekdays == QList<int>{1, 2, 3, 4, 5}) {
             // To Do's "Weekdays".
             rule.freq = dates::RecurrenceRule::Freq::Day;
@@ -391,7 +391,7 @@ private:
         if (items.isEmpty())
             return false;
         // Open tasks in the list's order, then the completed ones, the most recent first.
-        std::stable_sort(items.begin(), items.end(), [](const Item &a, const Item &b) {
+        std::ranges::stable_sort(items, [](const Item &a, const Item &b) {
             if (a.done != b.done)
                 return !a.done;
             if (!a.done)

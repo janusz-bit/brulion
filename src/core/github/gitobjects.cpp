@@ -20,7 +20,7 @@ QString blobSha(QByteArrayView content)
 
 bool isSha(QStringView text)
 {
-    return text.size() == 40 && std::all_of(text.begin(), text.end(), [](QChar c) {
+    return text.size() == 40 && std::ranges::all_of(text, [](QChar c) {
                const char16_t u = c.unicode();
                return (u >= u'0' && u <= u'9') || (u >= u'a' && u <= u'f') || (u >= u'A' && u <= u'F');
            });

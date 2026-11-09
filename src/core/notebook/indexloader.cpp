@@ -495,7 +495,7 @@ void IndexLoader::start(const QList<FileStat> &files)
         else
             d->attachments.append(f.path);
     }
-    std::sort(notes.begin(), notes.end());
+    std::ranges::sort(notes);
     const quint64 base = d->index.reserveSequence(notes.size());
     // Merge order: the first folder (journals) newest first, then the rest by path.
     const QString first = d->options.firstFolder.isEmpty() ? QString() : d->options.firstFolder + u'/';
@@ -508,7 +508,7 @@ void IndexLoader::start(const QList<FileStat> &files)
         else
             rest.append(std::move(item));
     }
-    std::reverse(firstItems.begin(), firstItems.end());
+    std::ranges::reverse(firstItems);
     d->s->items = firstItems + rest;
     d->s->config = d->index.config();
     d->s->cachePath = d->options.cachePath;

@@ -196,7 +196,7 @@ QStringList folderPaths(const Vault &vault)
             out.append(f.path);
     }
     // Polish order segment by segment: "Projekty" before "Projekty 2" and "Projekty/Dom".
-    std::sort(out.begin(), out.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(out, [](const QString &a, const QString &b) {
         const QStringList sa = a.split(u'/');
         const QStringList sb = b.split(u'/');
         for (qsizetype i = 0; i < std::min(sa.size(), sb.size()); ++i) {

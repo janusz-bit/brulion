@@ -130,7 +130,7 @@ QStringList WordListBackend::suggest(const QString &word, int max)
         if (d <= 2)
             found.append({d, i, m_ordered[i]});
     }
-    std::stable_sort(found.begin(), found.end(), [](const Candidate &x, const Candidate &y) {
+    std::ranges::stable_sort(found, [](const Candidate &x, const Candidate &y) {
         return x.distance != y.distance ? x.distance < y.distance : x.order < y.order;
     });
     QStringList out;

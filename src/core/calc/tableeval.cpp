@@ -156,7 +156,7 @@ struct EdgeCursor {
 
 std::size_t lowerBound(const std::vector<int> &rows, int value)
 {
-    return static_cast<std::size_t>(std::lower_bound(rows.begin(), rows.end(), value) - rows.begin());
+    return static_cast<std::size_t>(std::ranges::lower_bound(rows, value) - rows.begin());
 }
 
 /// Next dependency (a formula id) of `f`, or -1 when there are no more.

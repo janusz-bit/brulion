@@ -142,7 +142,7 @@ QList<BackupFile> listBackups(const QString &folder, const QString &notebookName
                                   manifest.valid && manifest.complete});
         }
     }
-    std::stable_sort(out.begin(), out.end(), [](const BackupFile &a, const BackupFile &b) { return a.time > b.time; });
+    std::ranges::stable_sort(out, [](const BackupFile &a, const BackupFile &b) { return a.time > b.time; });
     return out;
 }
 
@@ -248,7 +248,7 @@ Sources collectSources(const Vault &vault)
     QList<FileStat> files = vault.files();
     if (const std::optional<FileStat> config = vault.stat(vaultConfigPath()); config && !config->isDir)
         files.append(*config);
-    std::sort(files.begin(), files.end(), [](const FileStat &a, const FileStat &b) { return a.path < b.path; });
+    std::ranges::sort(files, [](const FileStat &a, const FileStat &b) { return a.path < b.path; });
     out.files.reserve(files.size());
     QSet<QString> nonEmpty;
     const auto markParents = [&nonEmpty](const QString &path) {

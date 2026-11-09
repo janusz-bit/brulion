@@ -168,7 +168,7 @@ QString convertMacros(const QString &line)
     }
     if (hits.isEmpty())
         return line;
-    std::sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) { return a.from < b.from; });
+    std::ranges::sort(hits, [](const Hit &a, const Hit &b) { return a.from < b.from; });
     QString out;
     qsizetype last = 0;
     for (const Hit &h : std::as_const(hits)) {

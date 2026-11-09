@@ -15,6 +15,7 @@
 
 #include <QDateTime>
 #include <QFileInfo>
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -141,7 +142,7 @@ Result pageList(Call &call)
     QList<FileStat> files = v->markdownFiles();
     files.removeIf([&](const FileStat &f) { return !folder.isEmpty() && !f.path.startsWith(folder + u'/'); });
     const QString sort = call.has(u"sort"_s) ? call.str(u"sort"_s) : u"title"_s;
-    std::stable_sort(files.begin(), files.end(), [&](const FileStat &a, const FileStat &b) {
+    std::ranges::stable_sort(files, [&](const FileStat &a, const FileStat &b) {
         if (sort == u"modified")
             return a.mtime > b.mtime;
         if (sort == u"path")

@@ -757,7 +757,7 @@ QString retargetWebPicture(const QString &body, const QString &url, const QStrin
     }
     const markdown::InlineScan scan = markdown::extractInline(body);
     QList<Link> links = scan.links;
-    std::sort(links.begin(), links.end(), [](const Link &a, const Link &b) { return a.from > b.from; });
+    std::ranges::sort(links, [](const Link &a, const Link &b) { return a.from > b.from; });
     QString out = body;
     for (const Link &link : std::as_const(links)) {
         // The target as the parser read it (escapes removed), as embedsOf() names the picture.
@@ -852,7 +852,7 @@ bool onlyEmbeds(QStringView body, bool transclusions)
     bool any = false;
     // Blank out the embeds from the end so offsets stay valid.
     QList<Link> links = scan.links;
-    std::sort(links.begin(), links.end(), [](const Link &a, const Link &b) { return a.from > b.from; });
+    std::ranges::sort(links, [](const Link &a, const Link &b) { return a.from > b.from; });
     for (const Link &link : std::as_const(links)) {
         const bool attachment =
                 (link.kind == LinkKind::Embed && (isAttachmentTarget(link.target) || webpicture::isWebUrl(link.target)))
@@ -1341,7 +1341,7 @@ QList<const SlashCommand *> filterSlashCommands(QStringView filter)
         if (best >= 0)
             ranked.append({best * 1000 + order, &c});
     }
-    std::stable_sort(ranked.begin(), ranked.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+    std::ranges::stable_sort(ranked, [](const auto &a, const auto &b) { return a.first < b.first; });
     QList<const SlashCommand *> out;
     for (const auto &r : std::as_const(ranked))
         out.append(r.second);

@@ -259,8 +259,7 @@ QList<Diff3Region> diff3Regions(const QStringList &a, const QStringList &o, cons
     const std::vector<SideHunk> remote = sideHunks(false, ib, b.size());
     hunks.insert(hunks.end(), remote.begin(), remote.end());
     // Stable: for equal starts the local hunk comes first (like node-diff3).
-    std::stable_sort(hunks.begin(), hunks.end(),
-                     [](const SideHunk &x, const SideHunk &y) { return x.oStart < y.oStart; });
+    std::ranges::stable_sort(hunks, [](const SideHunk &x, const SideHunk &y) { return x.oStart < y.oStart; });
 
     QList<Diff3Region> regions;
     QStringList okBuffer;

@@ -211,9 +211,9 @@ QList<FuzzyRanked> fuzzyRankList(const QString &query, const QStringList &texts,
                                  const QStringList &secondary)
 {
     struct Ranked {
-        int index;
-        int score;
-        qsizetype length;
+        int index = 0;
+        int score = 0;
+        qsizetype length = 0;
         QList<int> positions;
     };
     QList<Ranked> ranked;
@@ -233,7 +233,7 @@ QList<FuzzyRanked> fuzzyRankList(const QString &query, const QStringList &texts,
             ranked.append({i, match.score, texts.at(i).size(), match.positions});
     }
     if (!emptyQuery) {
-        std::stable_sort(ranked.begin(), ranked.end(), [](const Ranked &a, const Ranked &b) {
+        std::ranges::stable_sort(ranked, [](const Ranked &a, const Ranked &b) {
             if (a.score != b.score)
                 return a.score > b.score;
             return a.length < b.length;

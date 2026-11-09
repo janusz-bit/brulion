@@ -272,9 +272,7 @@ bool scanFlow(const QList<YamlLine> &lines, qsizetype k, qsizetype open, Frontma
                     start = i + 1;
             } else if (c == u']') {
                 if (--depth == 0) {
-                    if (start >= 0 && !scan.listItem(line, {start, i}))
-                        return false;
-                    return true;
+                    return start < 0 || scan.listItem(line, {start, i});
                 }
             } else if (c == u',' && depth == 1) {
                 if (start < 0 || !scan.listItem(line, {start, i}))
@@ -411,7 +409,7 @@ QList<NoteTag> findNoteTags(QStringView content)
         if (!item.link)
             tags.append(item.tag);
     }
-    std::stable_sort(tags.begin(), tags.end(), [](const NoteTag &a, const NoteTag &b) { return a.from < b.from; });
+    std::ranges::stable_sort(tags, [](const NoteTag &a, const NoteTag &b) { return a.from < b.from; });
     return tags;
 }
 

@@ -381,7 +381,7 @@ public:
         }
         if (inserts.isEmpty())
             return r;
-        std::sort(inserts.begin(), inserts.end(), [](const Insert &a, const Insert &b) { return a.from < b.from; });
+        std::ranges::sort(inserts, [](const Insert &a, const Insert &b) { return a.from < b.from; });
         QString out;
         qsizetype last = 0;
         for (const Insert &in : std::as_const(inserts)) {
@@ -745,7 +745,7 @@ Style styleOf(const QTextCharFormat &cf, bool boldImplied)
     s.code = cf.fontFixedPitch();
     if (!s.code) {
         const QStringList families = cf.fontFamilies().toStringList();
-        s.code = std::any_of(families.begin(), families.end(), isMonospaceFamily);
+        s.code = std::ranges::any_of(families, isMonospaceFamily);
     }
     const QBrush bg = cf.background();
     if (bg.style() != Qt::NoBrush) {
@@ -1578,8 +1578,8 @@ QList<qsizetype> strayDollarsOf(const QString &md, bool all)
         for (const qsizetype k : std::as_const(local))
             out.append(s.source[k]);
     }
-    std::sort(out.begin(), out.end());
-    out.erase(std::unique(out.begin(), out.end()), out.end());
+    std::ranges::sort(out);
+    out.erase(std::ranges::unique(out).begin(), out.end());
     return out;
 }
 
@@ -1729,8 +1729,7 @@ QString detail::limitNesting(const QString &html, int maxDepth)
     static const QSet<QString> implied = {u"p"_s,  u"li"_s,    u"dt"_s,    u"dd"_s,    u"tr"_s,       u"td"_s,
                                           u"th"_s, u"thead"_s, u"tbody"_s, u"tfoot"_s, u"option"_s,   u"optgroup"_s,
                                           u"rb"_s, u"rt"_s,    u"rp"_s,    u"rtc"_s,   u"colgroup"_s, u"caption"_s};
-    if (maxDepth < 1)
-        maxDepth = 1;
+    maxDepth = std::max(maxDepth, 1);
     QStringList open;
     QHash<QString, int> dropped; // start tags removed, per name, not matched by an end tag yet
     QString out;

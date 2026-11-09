@@ -282,7 +282,7 @@ public:
         const auto isEnex = [](const QString &p) { return paths::extension(p) == u".enex"; };
         if (!anyPath(files, isEnex))
             return 0;
-        return std::all_of(files.begin(), files.end(), [&](const InputFile &f) { return isEnex(f.path); }) ? 100 : 15;
+        return std::ranges::all_of(files, [&](const InputFile &f) { return isEnex(f.path); }) ? 100 : 15;
     }
 
     ImportResult run(const QList<InputFile> &files, const ImportOptions &options) const override

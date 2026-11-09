@@ -1,6 +1,7 @@
 #include "logexport.h"
 
 #include <QCoreApplication>
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -79,8 +80,7 @@ QString capForClipboard(const QString &text, qint64 maxBytes)
         if (cut < utf8.size() && utf8.at(cut) != '\t')
             break;
     }
-    if (cut < head.size())
-        cut = head.size();
+    cut = std::max(cut, head.size());
     return QString::fromUtf8(head + note + utf8.mid(cut));
 }
 

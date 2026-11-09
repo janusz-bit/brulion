@@ -236,12 +236,12 @@ QDate parseMonthStrict(const QString &text, const QString &format, const QLocale
 
 bool containsDigit(QStringView s)
 {
-    return std::any_of(s.begin(), s.end(), [](QChar c) { return c.isDigit(); });
+    return std::ranges::any_of(s, [](QChar c) { return c.isDigit(); });
 }
 
 bool containsLetter(QStringView s)
 {
-    return std::any_of(s.begin(), s.end(), [](QChar c) { return c.isLetter(); });
+    return std::ranges::any_of(s, [](QChar c) { return c.isLetter(); });
 }
 
 /// A name may not leave its folder or hide itself.

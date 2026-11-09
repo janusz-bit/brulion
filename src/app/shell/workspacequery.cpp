@@ -149,7 +149,7 @@ QStringList Workspace::journalDates(const QString &from, const QString &to) cons
             out.append(j.date.toString(Qt::ISODate));
     }
     out.removeDuplicates();
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 

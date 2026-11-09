@@ -898,8 +898,7 @@ ParsedNote detail::parseNoteWith(const VaultPath &path, const QString &content, 
     note.tags = uniqueTagKeys(tags);
 
     note.links = std::move(ctx.links);
-    std::stable_sort(note.links.begin(), note.links.end(),
-                     [](const Link &a, const Link &b) { return a.from < b.from; });
+    std::ranges::stable_sort(note.links, [](const Link &a, const Link &b) { return a.from < b.from; });
     note.journalDate = journalDateFromPath(path, config);
 
     // No growth slack in what the index keeps (docs/PERFORMANCE.md, L8).
@@ -937,9 +936,8 @@ int blockAtLine(const ParsedNote &note, int line)
             return best;
         best = hit;
         const Block &h = note.blocks[hit];
-        const bool inChild = std::any_of(h.children.begin(), h.children.end(), [&](int c) {
-            return note.blocks[c].line <= line && line <= note.blocks[c].endLine;
-        });
+        const bool inChild = std::ranges::any_of(
+                h.children, [&](int c) { return note.blocks[c].line <= line && line <= note.blocks[c].endLine; });
         if (!inChild)
             return hit;
         level = &h.children;

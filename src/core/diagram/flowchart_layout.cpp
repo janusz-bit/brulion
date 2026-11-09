@@ -244,7 +244,7 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
     for (int c = 0; c < C; ++c)
         children[chart.clusters[c].parent + 1].append({true, c, chart.clusters[c].line});
     for (auto &list : children)
-        std::stable_sort(list.begin(), list.end(), [](const Child &a, const Child &b) { return a.line < b.line; });
+        std::ranges::stable_sort(list, [](const Child &a, const Child &b) { return a.line < b.line; });
     QList<int> depth(C, 0);
     for (int c = 0; c < C; ++c)
         for (int p = chart.clusters[c].parent; p >= 0; p = chart.clusters[p].parent)
@@ -324,7 +324,7 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
     QList<int> levels;
     for (int c = 0; c < C; ++c)
         levels.append(c);
-    std::stable_sort(levels.begin(), levels.end(), [&](int a, int b) { return depth[a] > depth[b]; });
+    std::ranges::stable_sort(levels, [&](int a, int b) { return depth[a] > depth[b]; });
     levels.append(-1);
     int layoutNodes = 0;
     for (const int c : std::as_const(levels)) {
@@ -424,7 +424,7 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
     L.clusters.resize(C);
     QList<int> outward = levels;
     outward.removeLast();
-    std::reverse(outward.begin(), outward.end());
+    std::ranges::reverse(outward);
     for (const int c : std::as_const(outward)) {
         const QPointF o = origin[chart.clusters[c].parent + 1];
         const QSizeF s = clusterSize[c];
@@ -549,7 +549,7 @@ Scene drawFlowchart(const Flowchart &chart, const FlowLayout &L, const Metrics &
             ++d;
         return d;
     };
-    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return depthOf(a) < depthOf(b); });
+    std::ranges::stable_sort(order, [&](int a, int b) { return depthOf(a) < depthOf(b); });
     QList<Item> titles;
     for (const int c : std::as_const(order)) {
         const FlowCluster &cl = chart.clusters[c];

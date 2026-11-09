@@ -125,7 +125,7 @@ double percentile(QList<double> values, double p)
 {
     if (values.isEmpty())
         return 0;
-    std::sort(values.begin(), values.end());
+    std::ranges::sort(values);
     const auto i = qsizetype(std::clamp(p * double(values.size() - 1), 0.0, double(values.size() - 1)));
     return values.at(i);
 }
@@ -867,8 +867,8 @@ private:
         QQuickItem *found = nullptr;
         while (item) {
             QList<QQuickItem *> children = item->childItems();
-            std::stable_sort(children.begin(), children.end(),
-                             [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
+            std::ranges::stable_sort(children,
+                                     [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
             QQuickItem *next = nullptr;
             for (auto it = children.crbegin(); it != children.crend(); ++it) {
                 QQuickItem *c = *it;
@@ -1053,8 +1053,7 @@ private:
         events += moves;
         if (layoutChanged && current.size() <= 40) {
             QList<DelegateState> order = current.values();
-            std::sort(order.begin(), order.end(),
-                      [](const DelegateState &a, const DelegateState &b) { return a.y < b.y; });
+            std::ranges::sort(order, [](const DelegateState &a, const DelegateState &b) { return a.y < b.y; });
             QStringList parts;
             for (const DelegateState &d : std::as_const(order))
                 parts.append(u"%1@%2+%3"_s.arg(d.index).arg(d.y, 0, 'f', 0).arg(d.height, 0, 'f', 0));
@@ -1409,13 +1408,13 @@ private:
                            .arg(f->events);
         };
         QList<const Frame *> worstJumps = jumps;
-        std::sort(worstJumps.begin(), worstJumps.end(),
-                  [](const Frame *a, const Frame *b) { return std::abs(a->unexplained) > std::abs(b->unexplained); });
+        std::ranges::sort(worstJumps, [](const Frame *a, const Frame *b) {
+            return std::abs(a->unexplained) > std::abs(b->unexplained);
+        });
         for (qsizetype i = 0; i < std::min<qsizetype>(12, worstJumps.size()); ++i)
             line(u"  jump "_s + describe(worstJumps.at(i)));
         QList<const Frame *> worstStutter = stutter;
-        std::sort(worstStutter.begin(), worstStutter.end(),
-                  [](const Frame *a, const Frame *b) { return a->interval > b->interval; });
+        std::ranges::sort(worstStutter, [](const Frame *a, const Frame *b) { return a->interval > b->interval; });
         for (qsizetype i = 0; i < std::min<qsizetype>(12, worstStutter.size()); ++i)
             line(u"  stutter "_s + describe(worstStutter.at(i)));
         for (qsizetype i = 0; i < std::min<qsizetype>(8, other.size()); ++i)

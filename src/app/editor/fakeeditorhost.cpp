@@ -294,7 +294,7 @@ QVariantList FakeEditorHost::suggestPages(const QString &prefix, int limit) cons
     };
     QList<Hit> hits;
     QStringList paths = m_files.keys();
-    std::sort(paths.begin(), paths.end());
+    std::ranges::sort(paths);
     for (const QString &path : std::as_const(paths)) {
         if (!paths::isMarkdown(path) || path.startsWith(u"templates/"_s))
             continue;
@@ -312,7 +312,7 @@ QVariantList FakeEditorHost::suggestPages(const QString &prefix, int limit) cons
                              {{u"path"_s, path}, {u"title"_s, title}, {u"alias"_s, alias}, {u"folder"_s, paths::dirname(path)}}});
         }
     }
-    std::stable_sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) { return a.rank < b.rank; });
+    std::ranges::stable_sort(hits, [](const Hit &a, const Hit &b) { return a.rank < b.rank; });
     QVariantList out;
     for (const Hit &h : std::as_const(hits)) {
         if (out.size() >= limit)
@@ -327,7 +327,7 @@ QVariantList FakeEditorHost::suggestBlocks(const QString &query, int limit) cons
     const QString key = text::foldKey(query.trimmed());
     QVariantList out;
     QStringList paths = m_files.keys();
-    std::sort(paths.begin(), paths.end());
+    std::ranges::sort(paths);
     for (const QString &path : std::as_const(paths)) {
         if (!paths::isMarkdown(path))
             continue;
@@ -388,7 +388,7 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
         if (key.isEmpty() || text::foldKey(it.key()).contains(key))
             tags.append({spelling.value(it.key()), it.value()});
     }
-    std::sort(tags.begin(), tags.end(), [&key](const auto &a, const auto &b) {
+    std::ranges::sort(tags, [&key](const auto &a, const auto &b) {
         const bool pa = text::foldKey(a.first).startsWith(key);
         const bool pb = text::foldKey(b.first).startsWith(key);
         if (pa != pb)
@@ -451,7 +451,7 @@ QString FakeEditorHost::resolveLink(const QString &target, const QString &fromPa
     }
     // Unique base name; then aliases.
     QStringList keys = m_files.keys();
-    std::sort(keys.begin(), keys.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(keys, [](const QString &a, const QString &b) {
         return a.size() != b.size() ? a.size() < b.size() : a < b;
     });
     for (const QString &path : std::as_const(keys)) {
@@ -532,7 +532,7 @@ QVariantList FakeEditorHost::templates() const
 {
     QVariantList out;
     QStringList keys = m_files.keys();
-    std::sort(keys.begin(), keys.end());
+    std::ranges::sort(keys);
     for (const QString &path : std::as_const(keys)) {
         if (path.startsWith(u"templates/"_s) && paths::isMarkdown(path))
             out.append(QVariantMap{{u"path"_s, path}, {u"title"_s, paths::pageTitle(path)}});
@@ -781,7 +781,7 @@ QString FakeEditorHost::file(const QString &path) const
 QStringList FakeEditorHost::files() const
 {
     QStringList keys = m_files.keys();
-    std::sort(keys.begin(), keys.end());
+    std::ranges::sort(keys);
     return keys;
 }
 

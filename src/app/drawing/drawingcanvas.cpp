@@ -1181,8 +1181,7 @@ QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
         // popup item's QObject parent is the popup) — and where an item put there takes input
         // (a toast, not the window-wide host of the toasts).
         QList<QQuickItem *> children = item->childItems();
-        std::stable_sort(children.begin(), children.end(),
-                         [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
+        std::ranges::stable_sort(children, [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
         for (auto it = children.crbegin(); it != children.crend(); ++it) {
             QQuickItem *child = *it;
             if (!child->isVisible())
@@ -1201,7 +1200,7 @@ QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
     if (item->clip() && !item->contains(local))
         return nullptr;
     QList<QQuickItem *> children = item->childItems();
-    std::stable_sort(children.begin(), children.end(), [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
+    std::ranges::stable_sort(children, [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
     for (auto it = children.crbegin(); it != children.crend(); ++it) {
         if (QQuickItem *hit = topInputItem(*it, scenePos))
             return hit;

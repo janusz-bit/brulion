@@ -16,7 +16,7 @@ namespace {
 
 bool isAscii(QStringView s)
 {
-    return std::all_of(s.begin(), s.end(), [](QChar c) { return c.unicode() < 0x80; });
+    return std::ranges::all_of(s, [](QChar c) { return c.unicode() < 0x80; });
 }
 
 bool isBlank(QChar c)

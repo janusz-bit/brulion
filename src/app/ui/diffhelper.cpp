@@ -75,7 +75,7 @@ bool myers(const int *a, int n, const int *b, int m, int aOff, int bOff, int max
         --x;
         --y;
     }
-    std::reverse(reversed.begin(), reversed.end());
+    std::ranges::reverse(reversed);
     out.append(reversed);
     return true;
 }

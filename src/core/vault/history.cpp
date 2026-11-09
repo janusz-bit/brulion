@@ -164,7 +164,7 @@ QStringList History::paths() const
         if (const auto index = loadFile(it.next()); index && !index->entries.isEmpty())
             out.append(index->path);
     }
-    std::sort(out.begin(), out.end());
+    std::ranges::sort(out);
     return out;
 }
 
@@ -178,7 +178,7 @@ bool History::rename(const VaultPath &from, const VaultPath &to)
     if (moving.isEmpty())
         return true;
     QList<Stored> merged = load(b) + moving;
-    std::stable_sort(merged.begin(), merged.end(), [](const Stored &x, const Stored &y) { return x.time < y.time; });
+    std::ranges::stable_sort(merged, [](const Stored &x, const Stored &y) { return x.time < y.time; });
     return save(b, merged) && save(a, {});
 }
 

@@ -197,7 +197,7 @@ void PageListModel::refresh()
         };
         const bool desc = m_descending;
         const QString key = m_sortKey;
-        std::stable_sort(next.begin(), next.end(), [&](const Page &a, const Page &b) {
+        std::ranges::stable_sort(next, [&](const Page &a, const Page &b) {
             int c = 0;
             if (key == u"folder")
                 c = compareNames(a.folder, b.folder);

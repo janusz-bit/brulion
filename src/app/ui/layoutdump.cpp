@@ -281,8 +281,7 @@ public:
             childClip = clip.intersected(item->mapRectToScene(item->clipRect()));
 
         QList<QQuickItem *> children = item->childItems();
-        std::stable_sort(children.begin(), children.end(),
-                         [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
+        std::ranges::stable_sort(children, [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
         auto it = children.cbegin();
         // Negative z: painted before the item itself.
         for (; it != children.cend() && (*it)->z() < 0; ++it) {

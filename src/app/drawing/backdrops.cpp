@@ -95,7 +95,7 @@ QString DrawingBackdrops::formatPages(const QList<int> &pages) const
 QList<int> DrawingBackdrops::sortedPages(const QList<int> &pages) const
 {
     QList<int> out = pages;
-    std::stable_sort(out.begin(), out.end());
+    std::ranges::stable_sort(out);
     return out;
 }
 

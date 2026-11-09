@@ -884,7 +884,7 @@ QString formatString(const QString &s)
 QString formatFlowString(const QString &s)
 {
     static const QString flowIndicators = u",[]{}"_s;
-    const bool flowUnsafe = std::any_of(s.begin(), s.end(), [](QChar c) { return flowIndicators.contains(c); });
+    const bool flowUnsafe = std::ranges::any_of(s, [](QChar c) { return flowIndicators.contains(c); });
     return flowUnsafe || needsQuotes(s) ? jsonQuote(s) : s;
 }
 

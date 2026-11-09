@@ -85,8 +85,8 @@ void ForceLayout::reset(int nodeCount, const QList<std::pair<int, int>> &edges, 
             continue;
         m_edges.emplace_back(std::min(a, b), std::max(a, b));
     }
-    std::sort(m_edges.begin(), m_edges.end());
-    m_edges.erase(std::unique(m_edges.begin(), m_edges.end()), m_edges.end());
+    std::ranges::sort(m_edges);
+    m_edges.erase(std::ranges::unique(m_edges).begin(), m_edges.end());
 
     std::vector<int> count(n, 0);
     for (const auto &[a, b] : m_edges) {
@@ -131,8 +131,8 @@ void ForceLayout::setPositions(const std::vector<double> &xs, const std::vector<
         return;
     m_x = xs;
     m_y = ys;
-    std::fill(m_vx.begin(), m_vx.end(), 0.0);
-    std::fill(m_vy.begin(), m_vy.end(), 0.0);
+    std::ranges::fill(m_vx, 0.0);
+    std::ranges::fill(m_vy, 0.0);
     for (size_t i = 0; i < m_x.size(); ++i) {
         if (m_fixed[i]) {
             m_fx[i] = m_x[i];

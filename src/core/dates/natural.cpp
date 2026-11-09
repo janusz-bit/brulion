@@ -169,7 +169,7 @@ QList<Token> collectTokens(const Ctx &ctx)
                 all.append(Token{*value, m.capturedStart(), m.capturedEnd(), prio});
         }
     }
-    std::sort(all.begin(), all.end(), [](const Token &a, const Token &b) {
+    std::ranges::sort(all, [](const Token &a, const Token &b) {
         const qsizetype la = a.end - a.start;
         const qsizetype lb = b.end - b.start;
         if (la != lb)
@@ -184,7 +184,7 @@ QList<Token> collectTokens(const Ctx &ctx)
         taken.fill(true, t.start, t.end);
         picked.append(t);
     }
-    std::sort(picked.begin(), picked.end(), [](const Token &a, const Token &b) { return a.start < b.start; });
+    std::ranges::sort(picked, [](const Token &a, const Token &b) { return a.start < b.start; });
     return picked;
 }
 

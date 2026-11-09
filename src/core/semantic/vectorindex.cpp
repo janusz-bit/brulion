@@ -131,7 +131,7 @@ QList<VectorIndex::Hit> VectorIndex::search(const Vector &query, int limit, bool
         std::partial_sort(hits.begin(), hits.begin() + limit, hits.end(), better);
         hits.resize(limit);
     } else {
-        std::sort(hits.begin(), hits.end(), better);
+        std::ranges::sort(hits, better);
     }
     return hits;
 }

@@ -157,8 +157,7 @@ QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *
         }
         // Archives inside an archive are unpacked only when it holds no notes of its own (Notion's
         // multi-part export: a ZIP of ZIPs); in a vault or an export of notes they are attachments.
-        const bool unpackNested =
-                std::none_of(entries.begin(), entries.end(), [](const FileEntry &e) { return isNote(e.path); });
+        const bool unpackNested = std::ranges::none_of(entries, [](const FileEntry &e) { return isNote(e.path); });
         const QString folder = paths::dirname(file.path);
         for (qsizetype k = entries.size() - 1; k >= 0; --k) {
             const FileEntry &e = entries[k];

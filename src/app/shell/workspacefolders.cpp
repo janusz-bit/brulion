@@ -131,7 +131,7 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
             && (pages.contains(f.path) || !withAttachments.contains(f.path)))
             children.append(f.path);
     }
-    std::sort(children.begin(), children.end(), [](const QString &a, const QString &b) {
+    std::ranges::sort(children, [](const QString &a, const QString &b) {
         return text::compareNames(paths::basename(a), paths::basename(b)) < 0;
     });
     for (const QString &c : std::as_const(children))

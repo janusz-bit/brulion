@@ -54,7 +54,7 @@ QString removeRanges(QStringView text, QList<Range> ranges)
 {
     if (ranges.isEmpty())
         return text.toString();
-    std::sort(ranges.begin(), ranges.end());
+    std::ranges::sort(ranges);
     QString out;
     out.reserve(text.size());
     qsizetype last = 0;

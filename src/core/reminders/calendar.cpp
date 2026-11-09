@@ -61,7 +61,7 @@ public:
     {
         QList<qsizetype> order(items.size());
         std::iota(order.begin(), order.end(), 0);
-        std::sort(order.begin(), order.end(), [&items](qsizetype x, qsizetype y) {
+        std::ranges::sort(order, [&items](qsizetype x, qsizetype y) {
             const CalendarItem &a = *items[x];
             const CalendarItem &b = *items[y];
             if (a.date != b.date)

@@ -925,7 +925,7 @@ void PdfViewModel::searchBatch(int job, const QList<Hit> &hits, int searched, bo
     if (job != m_searchJob)
         return; // an older text's
     for (const Hit &hit : hits) {
-        const auto at = std::upper_bound(m_hits.begin(), m_hits.end(), hit, [](const Hit &a, const Hit &b) {
+        const auto at = std::ranges::upper_bound(m_hits, hit, [](const Hit &a, const Hit &b) {
             return a.page != b.page ? a.page < b.page : a.start < b.start;
         });
         m_hits.insert(at, hit);
