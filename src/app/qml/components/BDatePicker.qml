@@ -129,18 +129,12 @@ T.Control {
     function applyNatural(): void {
         if (!naturalResult.map.ok || !DatesHelper.isValidDate(naturalResult.map.date))
             return
-        const date = control.naturalDate()
+        const date = "" + naturalResult.map.date
         focusDate = date
         showMonthOf(date)
-        commit(date, naturalResult.map.hasTime && withTime ? control.naturalTime()
+        commit(date, naturalResult.map.hasTime && withTime ? "" + naturalResult.map.time
                                                            : withTime && time === "" && timeRequired ? defaultTime : time)
         naturalField.clear()
-    }
-    function naturalDate(): string {
-        return naturalResult.map.date
-    }
-    function naturalTime(): string {
-        return naturalResult.map.time
     }
     function focusGrid(): void {
         grid.forceActiveFocus(Qt.TabFocusReason)
@@ -213,6 +207,10 @@ T.Control {
 
     contentItem: ColumnLayout {
         id: column
+        // The shown month's name, e.g. "listopad 2026" (the header capitalises it). (`locale` read
+        // for real: monthTitle() is a method call, not tracked.)
+        readonly property string monthTitle: DatesHelper.locale !== ""
+                                             ? DatesHelper.monthTitle(control.displayYear, control.displayMonth) : ""
         spacing: Theme.space3
 
         // ---- Natural-language input + preview ------------------------------------------
@@ -254,7 +252,8 @@ T.Control {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - (naturalResult.map.ok ? 0 : 20) - (enterHint.visible ? enterHint.width + 6 : 0)
+                        // Beside the icon (not recognised) or the Enter hint (recognised).
+                        width: parent.width - 6 - (naturalResult.map.ok ? enterHint.width : Theme.iconSizeSm)
                         // "→ Thu, Oct 15 09:00 · tomorrow" (relative word only for yesterday…tomorrow)
                         text: naturalResult.map.ok ? "→ " + naturalResult.map.display
                                                    + (naturalResult.map.relative ? "  ·  " + naturalResult.map.relativeWord : "")
@@ -288,16 +287,7 @@ T.Control {
                 objectName: "datePickerMonthTitle"
                 Layout.fillWidth: true
                 Layout.leftMargin: 4
-                // (`locale` read for real: monthTitle() is a method call, not tracked.)
-                text: {
-                    const year = control.displayYear
-                    const month = control.displayMonth
-                    // ("" +: a plain string, passed on to two calls.)
-                    const t = "" + (DatesHelper.locale !== "" ? DatesHelper.monthTitle(year, month) : "")
-                    const first = Js.toUpperCase(Js.charAt(t, 0))
-                    const rest = Js.sliceFrom(t, 1)
-                    return first + rest
-                }
+                text: Js.toUpperCase(Js.charAt(column.monthTitle, 0)) + Js.sliceFrom(column.monthTitle, 1)
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textMd
                 font.weight: Theme.weightSemiBold
@@ -358,7 +348,7 @@ T.Control {
                 activeFocusOnTab: true
 
                 Accessible.role: Accessible.Table
-                Accessible.name: DatesHelper.monthTitle(control.displayYear, control.displayMonth)
+                Accessible.name: column.monthTitle
 
                 Keys.onPressed: (event) => {
                     const f = control.focusDate
@@ -513,7 +503,6 @@ T.Control {
                 inputMethodHints: Qt.ImhPreferNumbers | Qt.ImhNoPredictiveText
                 maximumLength: 5
                 font.features: { "tnum": 1 }
-                errorText: ""
                 property bool invalid: false
                 /// Normalise and apply the typed time (Enter, Done, leaving the field, OK);
                 /// false when it is no time (then it stays, with the hint below).

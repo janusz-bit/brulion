@@ -15,6 +15,7 @@ import Brulion
 // Changed line pairs get word-level highlights. Unchanged runs longer than 2 × `context`
 // lines collapse into "⋯ N unchanged lines" rows (click to show everything).
 // Data: DiffHelper (C++, Myers). Line terminators are ignored for comparison.
+// The labels are plain text (a sync conflict's quotes a device's name, from a file name).
 Item {
     id: control
 
@@ -49,7 +50,8 @@ Item {
                                                                    Theme.diffDelStrong.b, Theme.diffDelStrong.a)
     readonly property string addStrongText: ThemePalette.colorText(Theme.diffAddStrong.r, Theme.diffAddStrong.g,
                                                                    Theme.diffAddStrong.b, Theme.diffAddStrong.a)
-    readonly property real gutterWidth: mono.advanceWidth("0") * Math.max(2, lineDigits) + 14
+    // (`mono.height` read for real: advanceWidth() is a method call, not tracked; fonts are settings.)
+    readonly property real gutterWidth: (mono.height > 0 ? mono.advanceWidth("0") : 0) * Math.max(2, lineDigits) + 14
 
     readonly property list<var> layoutChoices: [
         { value: "split", text: qsTr("Side by side"), icon: "columns-2" },
@@ -82,26 +84,21 @@ Item {
             Row {
                 spacing: 6
                 Layout.alignment: Qt.AlignVCenter
-                Text {
+                Sign {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "+" + control.addedCount
                     color: Theme.diffAddFg
-                    font.family: Theme.fontMono
-                    font.pixelSize: Theme.textSm
-                    font.weight: Theme.weightSemiBold
                 }
-                Text {
+                Sign {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "−" + control.removedCount
                     color: Theme.diffDelFg
-                    font.family: Theme.fontMono
-                    font.pixelSize: Theme.textSm
-                    font.weight: Theme.weightSemiBold
                 }
             }
             Text {
                 Layout.fillWidth: true
                 text: control.oldLabel + "  →  " + control.newLabel
+                textFormat: Text.PlainText
                 color: Theme.fgMuted
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
@@ -168,6 +165,7 @@ Item {
                             anchors.rightMargin: 10
                             verticalAlignment: Text.AlignVCenter
                             text: columnHeader.modelData
+                            textFormat: Text.PlainText
                             color: Theme.fgMuted
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textXs
@@ -192,6 +190,7 @@ Item {
                 anchors.margins: 1
                 anchors.topMargin: 1 + splitHeader.height
                 clip: true
+                TouchFlick.enabled: true
                 model: control.rows
                 boundsBehavior: Flickable.StopAtBounds
                 reuseItems: true
@@ -210,7 +209,6 @@ Item {
     // ---- Row components -----------------------------------------------------------------
     /// A row of the diff (the delegate): its row's keys, read by the row it loads (its parent).
     component RowLoader: Loader {
-        required property int index
         /// "equal" | "delete" | "insert" | "change" | "skip"
         required property string kind
         required property int oldNo
@@ -229,8 +227,8 @@ Item {
 
     component LineText: Text {
         property list<var> segments
-        property bool deleted: false
-        textFormat: segments && segments.length > 0 ? Text.RichText : Text.PlainText
+        height: Math.max(1, implicitHeight) // rich text grown from 0 is laid out again (docs/UI.md)
+        textFormat: segments.length > 0 ? Text.RichText : Text.PlainText
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         font.family: Theme.fontMono
         font.pixelSize: Theme.textSm
@@ -248,12 +246,18 @@ Item {
         color: Theme.fgFaint
     }
 
+    component Sign: Text {
+        font.family: Theme.fontMono
+        font.pixelSize: Theme.textSm
+        font.weight: Theme.weightSemiBold
+    }
+
+    // The rows below take the list's width from their RowLoader (a Loader sizes its item).
     Component {
         id: skipRow
         T.AbstractButton {
             id: skip
             readonly property RowLoader row: parent as RowLoader
-            width: list.width
             implicitHeight: Theme.touchUi ? Theme.touchTarget : 28
             hoverEnabled: !Theme.touchUi
             focusPolicy: Qt.StrongFocus
@@ -295,7 +299,6 @@ Item {
             readonly property string kind: row ? row.kind : ""
             readonly property bool del: kind === "delete"
             readonly property bool ins: kind === "insert"
-            width: list.width
             implicitHeight: Math.ceil(Math.max(lineText.implicitHeight + 6, 22))
             color: del ? Theme.diffDelBg : ins ? Theme.diffAddBg : "transparent"
             Accessible.role: Accessible.StaticText
@@ -305,14 +308,11 @@ Item {
                 id: gutters
                 Gutter { text: urow.row && urow.row.oldNo > 0 ? "" + urow.row.oldNo : "" }
                 Gutter { text: urow.row && urow.row.newNo > 0 ? "" + urow.row.newNo : "" }
-                Text {
+                Sign {
                     width: 16
                     topPadding: 3
                     text: urow.del ? "−" : urow.ins ? "+" : ""
                     color: urow.del ? Theme.diffDelFg : Theme.diffAddFg
-                    font.family: Theme.fontMono
-                    font.pixelSize: Theme.textSm
-                    font.weight: Theme.weightSemiBold
                 }
             }
             LineText {
@@ -339,7 +339,6 @@ Item {
             readonly property bool leftChanged: kind === "delete" || kind === "change"
             readonly property bool rightChanged: kind === "insert" || kind === "change"
             readonly property real half: width / 2
-            width: list.width
             implicitHeight: Math.ceil(Math.max(leftText.implicitHeight, rightText.implicitHeight, 16) + 6)
             Accessible.role: Accessible.StaticText
             Accessible.name: kind === "equal" ? leftLine : qsTr("Before: %1. After: %2").arg(leftLine).arg(rightLine)
@@ -355,12 +354,7 @@ Item {
                 height: parent.height
                 color: srow.rightChanged ? Theme.diffAddBg : srow.kind === "delete" ? Theme.bgSunken : "transparent"
             }
-            Rectangle {
-                x: srow.half - 1
-                width: 1
-                height: parent.height
-                color: Theme.border
-            }
+            Rectangle { x: srow.half - 1; width: 1; height: parent.height; color: Theme.border }
 
             Gutter {
                 id: leftNo

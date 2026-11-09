@@ -19,6 +19,7 @@
 #include <cstring>
 #include <mutex>
 #include <new>
+#include <utility>
 
 namespace brulion::backup {
 
@@ -47,14 +48,17 @@ bool isCompressedFormat(const QString &path)
     return dot >= 0 && extensions.contains(path.sliced(dot + 1).toLower());
 }
 
+bool isControl(QChar c)
+{
+    return c.unicode() < 0x20 || c.unicode() == 0x7f;
+}
+
 /// A name for the log: a hostile entry's control characters never reach a log line.
 QString printable(QString name)
 {
-    for (QChar &c : name) {
-        if (c.unicode() < 0x20 || c.unicode() == 0x7f)
-            c = u'?';
-    }
-    return name.left(300);
+    name.truncate(300);
+    std::ranges::replace_if(name, isControl, u'?');
+    return name;
 }
 
 /// DOS timestamps cover 1980 … 2107; miniz would overflow its fields otherwise.
@@ -83,7 +87,9 @@ public:
     qreal progress() const
     {
         const qint64 total = m_sources.totalBytes;
-        return total > 0 ? qMin(1.0, qreal(m_doneBytes.load()) / qreal(total)) : (m_finished.load() ? 1.0 : 0.0);
+        if (total <= 0)
+            return m_finished.load() ? 1.0 : 0.0;
+        return std::min<qreal>(1.0, qreal(m_doneBytes.load()) / qreal(total));
     }
     const WriteResult &result() const { return m_result; }
 
@@ -101,11 +107,14 @@ private:
     };
     enum class Added { Done, Retry, Skip, Fatal };
 
-    bool open();
+    void open();
     void addFolder(const QString &folder);
     void addFile(const SourceFile &source);
     Added addOnce(const SourceFile &source);
-    bool finishArchive();
+    void finishArchive();
+    /// miniz gave up: the run fails if a callback knows why (cancelled, the size limit, a failed
+    /// write); true then.
+    bool failForCallbacks();
     void fail(WriteError error, const QString &detail);
     void closeArchive();
 
@@ -135,16 +144,12 @@ private:
 size_t WriteTask::writeCallback(void *opaque, mz_uint64 offset, const void *buffer, size_t n)
 {
     auto *task = static_cast<WriteTask *>(opaque);
-    if (task->m_options.maxBytes > 0 && qint64(offset + n) > task->m_options.maxBytes) {
+    if (task->m_options.maxBytes > 0 && qint64(offset) + qint64(n) > task->m_options.maxBytes) {
         task->m_tooLarge = true;
         return 0;
     }
-    if (qint64(offset) != task->m_file->pos() && !task->m_file->seek(qint64(offset))) {
-        task->m_writeFailed = true;
-        return 0;
-    }
-    const qint64 written = task->m_file->write(static_cast<const char *>(buffer), qint64(n));
-    if (written != qint64(n)) {
+    if ((qint64(offset) != task->m_file->pos() && !task->m_file->seek(qint64(offset)))
+        || task->m_file->write(static_cast<const char *>(buffer), qint64(n)) != qint64(n)) {
         task->m_writeFailed = true;
         return 0;
     }
@@ -189,18 +194,18 @@ size_t WriteTask::readCallback(void *opaque, mz_uint64 offset, void *buffer, siz
     return size_t(got);
 }
 
-bool WriteTask::open()
+void WriteTask::open()
 {
     const QFileInfo target(m_options.targetPath);
     const QString folder = target.absolutePath();
     if (!QFileInfo(folder).isDir()) {
         if (!m_options.createFolder) {
             fail(WriteError::FolderMissing, u"no folder %1"_s.arg(folder));
-            return false;
+            return;
         }
         if (!QDir().mkpath(folder)) {
             fail(WriteError::FolderUnwritable, u"cannot create %1"_s.arg(folder));
-            return false;
+            return;
         }
     }
     if (m_options.workFolder.isEmpty()) {
@@ -212,16 +217,13 @@ bool WriteTask::open()
     m_file = std::make_unique<QSaveFile>(m_workPath);
     if (!m_file->open(QIODevice::WriteOnly)) {
         fail(WriteError::FolderUnwritable, m_file->errorString());
-        return false;
+        return;
     }
     m_zip.m_pWrite = &WriteTask::writeCallback;
     m_zip.m_pIO_opaque = this;
-    if (!mz_zip_writer_init_v2(&m_zip, 0, 0)) {
+    m_zipOpen = mz_zip_writer_init_v2(&m_zip, 0, 0);
+    if (!m_zipOpen)
         fail(WriteError::WriteFailed, u"cannot start the archive"_s);
-        return false;
-    }
-    m_zipOpen = true;
-    return true;
 }
 
 void WriteTask::addFolder(const QString &folder)
@@ -232,15 +234,10 @@ void WriteTask::addFolder(const QString &folder)
     }
     const QByteArray name = folder.toUtf8() + '/';
     MZ_TIME_T time = entryTime(0);
-    if (!mz_zip_writer_add_mem_ex_v2(&m_zip, name.constData(), nullptr, 0, nullptr, 0, 0, 0, 0, &time, nullptr, 0,
-                                     nullptr, 0)) {
-        if (m_tooLarge)
-            fail(WriteError::TooLarge, u"above the limit"_s);
-        else if (m_cancel.load())
-            fail(WriteError::Cancelled, {});
-        else
-            fail(WriteError::WriteFailed, m_file->errorString());
-    }
+    const bool added = mz_zip_writer_add_mem_ex_v2(&m_zip, name.constData(), nullptr, 0, nullptr, 0, 0, 0, 0, &time,
+                                                   nullptr, 0, nullptr, 0);
+    if (!added && !failForCallbacks())
+        fail(WriteError::WriteFailed, m_file->errorString());
 }
 
 WriteTask::Added WriteTask::addOnce(const SourceFile &source)
@@ -255,36 +252,23 @@ WriteTask::Added WriteTask::addOnce(const SourceFile &source)
         m_result.skipped.append(source.path);
         return Added::Skip;
     }
-    Reading reading;
-    reading.task = this;
-    reading.source = &source;
-    reading.file = &file;
-    reading.size = info.size();
-    reading.mtime = info.lastModified().toMSecsSinceEpoch();
+    Reading reading{.task = this,
+                    .source = &source,
+                    .file = &file,
+                    .size = info.size(),
+                    .mtime = info.lastModified().toMSecsSinceEpoch()};
 
-    int level = m_options.compressionLevel;
-    if (isCompressedFormat(source.path) || (m_inline && reading.size > m_options.inlineDeflateLimit))
-        level = 0;
+    const bool store = isCompressedFormat(source.path) || (m_inline && reading.size > m_options.inlineDeflateLimit);
+    const mz_uint flags = mz_uint(store ? 0 : m_options.compressionLevel) | MZ_ZIP_FLAG_WRITE_HEADER_SET_SIZE;
     const QByteArray name = source.path.toUtf8();
     const MZ_TIME_T time = entryTime(reading.mtime);
-    const mz_uint flags = mz_uint(level) | MZ_ZIP_FLAG_WRITE_HEADER_SET_SIZE;
     if (mz_zip_writer_add_read_buf_callback(&m_zip, name.constData(), &WriteTask::readCallback, &reading,
                                             mz_uint64(reading.size), &time, nullptr, 0, flags, nullptr, 0, nullptr, 0))
         return Added::Done;
 
     m_doneBytes.fetch_sub(reading.counted);
-    if (m_cancel.load()) {
-        fail(WriteError::Cancelled, {});
+    if (failForCallbacks())
         return Added::Fatal;
-    }
-    if (m_tooLarge) {
-        fail(WriteError::TooLarge, u"above the limit of %1 bytes"_s.arg(m_options.maxBytes));
-        return Added::Fatal;
-    }
-    if (m_writeFailed) {
-        fail(WriteError::WriteFailed, m_file->errorString());
-        return Added::Fatal;
-    }
     if (reading.changed)
         return Added::Retry;
     if (reading.readFailed) {
@@ -316,46 +300,52 @@ void WriteTask::addFile(const SourceFile &source)
     m_result.skipped.append(source.path); // it keeps changing; the next run takes it
 }
 
-bool WriteTask::finishArchive()
+void WriteTask::finishArchive()
 {
     if (m_archivedNotebookFiles == 0) {
         // The storage went, or nothing could be read: this is no copy of the notebook.
         fail(WriteError::NothingArchived, u"none of %1 files could be read"_s.arg(m_sources.notebookFileCount()));
-        return false;
+        return;
     }
     if (!mz_zip_writer_finalize_archive(&m_zip)) {
-        fail(m_tooLarge ? WriteError::TooLarge : WriteError::WriteFailed, m_file->errorString());
-        return false;
+        if (!failForCallbacks())
+            fail(WriteError::WriteFailed, m_file->errorString());
+        return;
     }
-    // An entry given up may have reached further than the archive's end.
-    qint64 size = qint64(m_zip.m_archive_size);
+    const qint64 end = qint64(m_zip.m_archive_size);
     closeArchive();
     // The manifest: the ZIP's comment follows the end-of-directory record, whose last field is its
     // length (miniz writes none). Everything is known only now, whether anything was left out too.
     const QByteArray manifest = backupManifest(
             m_options.notebookId, m_result.skipped.isEmpty() && m_result.vanished.isEmpty(), m_result.files);
     const char length[2] = {char(manifest.size() & 0xff), char((manifest.size() >> 8) & 0xff)};
-    if (!m_file->seek(size - 2) || m_file->write(length, 2) != 2 || m_file->write(manifest) != manifest.size()) {
+    // Cut after the manifest: an entry given up may have reached further than the archive's end.
+    const qint64 size = end + manifest.size();
+    if (!m_file->seek(end - 2) || m_file->write(length, 2) != 2 || m_file->write(manifest) != manifest.size()
+        || !m_file->resize(size) || !m_file->commit()) {
         fail(WriteError::WriteFailed, m_file->errorString());
-        return false;
-    }
-    size += manifest.size();
-    if (!m_file->resize(size)) {
-        fail(WriteError::WriteFailed, m_file->errorString());
-        return false;
-    }
-    if (!m_file->commit()) {
-        fail(WriteError::WriteFailed, m_file->errorString());
-        return false;
+        return;
     }
     m_file.reset();
     if (m_workPath != m_options.targetPath && !QFile::rename(m_workPath, m_options.targetPath)) {
         QFile::remove(m_workPath);
         fail(WriteError::WriteFailed, u"cannot move the archive to %1"_s.arg(m_options.targetPath));
-        return false;
+        return;
     }
     m_result.path = m_options.targetPath;
     m_result.bytes = size;
+}
+
+bool WriteTask::failForCallbacks()
+{
+    if (m_cancel.load())
+        fail(WriteError::Cancelled, {});
+    else if (m_tooLarge)
+        fail(WriteError::TooLarge, u"above the limit of %1 bytes"_s.arg(m_options.maxBytes));
+    else if (m_writeFailed)
+        fail(WriteError::WriteFailed, m_file->errorString());
+    else
+        return false;
     return true;
 }
 
@@ -382,13 +372,11 @@ bool WriteTask::step(int budgetMs)
 {
     if (m_finished.load())
         return true;
-    if (!m_started) {
-        m_started = true;
-        if (m_cancel.load()) {
+    if (!std::exchange(m_started, true)) {
+        if (m_cancel.load())
             fail(WriteError::Cancelled, {});
-        } else {
+        else
             open();
-        }
     }
     QElapsedTimer clock;
     clock.start();
@@ -422,8 +410,7 @@ BackupWriter::BackupWriter(const notebook::WorkerPool &pool, QObject *parent)
 
 BackupWriter::~BackupWriter()
 {
-    if (m_task)
-        m_task->cancel();
+    cancel();
 }
 
 void BackupWriter::start(const Sources &sources, const WriteOptions &options)
@@ -475,25 +462,16 @@ FolderWork::~FolderWork()
 
 void FolderWork::run(std::function<void()> work, std::function<void()> done)
 {
-    const auto finish = [shared = m_shared, done = std::move(done)] {
+    auto job = [work = std::move(work), shared = m_shared, done = std::move(done)] {
+        work();
         std::lock_guard lock(shared->mutex);
         if (shared->receiver && done)
             QMetaObject::invokeMethod(shared->receiver, done, Qt::QueuedConnection);
     };
-    if (m_start) {
-        m_start([work = std::move(work), finish] {
-            work();
-            finish();
-        });
-        return;
-    }
-    QMetaObject::invokeMethod(
-            this,
-            [work = std::move(work), finish] {
-                work();
-                finish();
-            },
-            Qt::QueuedConnection);
+    if (m_start)
+        m_start(std::move(job));
+    else
+        QMetaObject::invokeMethod(this, std::move(job), Qt::QueuedConnection);
 }
 
 // ---- Reading ----------------------------------------------------------------------------------
@@ -504,18 +482,12 @@ EntryPath checkEntryPath(const QString &path)
         return EntryPath::Unsafe;
     if (path.size() >= 2 && path.at(1) == u':' && path.at(0).isLetter())
         return EntryPath::Unsafe;
-    if (path.normalized(QString::NormalizationForm_C) != path)
+    if (std::ranges::any_of(path, isControl) || path.normalized(QString::NormalizationForm_C) != path)
         return EntryPath::Unsafe;
-    for (const QChar c : path) {
-        if (c.unicode() < 0x20 || c.unicode() == 0x7f)
-            return EntryPath::Unsafe;
-    }
-    const QStringList segments = path.split(u'/');
-    for (const QString &segment : segments) {
-        // Windows drops trailing dots and spaces: "..  " is "..".
-        const bool onlyDotsAndSpaces =
-                std::all_of(segment.cbegin(), segment.cend(), [](QChar c) { return c == u'.' || c == u' '; });
-        if (segment.isEmpty() || onlyDotsAndSpaces)
+    // No segment empty or only dots and spaces (Windows drops trailing ones: "..  " is "..").
+    const auto dotOrSpace = [](QChar c) { return c == u'.' || c == u' '; };
+    for (const QStringView segment : path.tokenize(u'/')) {
+        if (std::ranges::all_of(segment, dotOrSpace))
             return EntryPath::Unsafe;
     }
     if (path != vaultConfigPath() && paths::isIgnored(path))
@@ -558,6 +530,31 @@ struct ArchiveReader::Private {
         if (decoder.hasError())
             return std::nullopt;
         return name;
+    }
+
+    /// Inflate the entry into `out` (nullptr: keep nothing), checksum compared: false when it is
+    /// damaged, gives other than exactly its size or `cancel` is set.
+    bool extract(const ArchiveEntry &entry, char *out, const std::atomic_bool *cancel)
+    {
+        struct Sink {
+            char *out;
+            qint64 left;
+            const std::atomic_bool *cancel;
+        } sink{out, entry.size, cancel};
+        const auto write = [](void *opaque, mz_uint64, const void *data, size_t n) -> size_t {
+            auto *s = static_cast<Sink *>(opaque);
+            if ((s->cancel && s->cancel->load()) || qint64(n) > s->left)
+                return 0;
+            if (s->out) {
+                std::memcpy(s->out, data, n);
+                s->out += n;
+            }
+            s->left -= qint64(n);
+            return n;
+        };
+        // miniz succeeds without a byte for an entry it takes for a folder (a DOS attribute, no "/")
+        // or one without compressed bytes: only the whole claimed size counts.
+        return mz_zip_reader_extract_to_callback(&zip, mz_uint(entry.index), write, &sink, 0) && sink.left == 0;
     }
 };
 
@@ -608,9 +605,7 @@ ArchiveInfo ArchiveReader::readEntries(const ArchiveLimits &limits)
         case EntryPath::Ignored:
             return refuse(ArchiveProblem::IgnoredPath, u"ignored entry “%1”"_s.arg(printable(*rawName)));
         }
-        if (stat.m_is_encrypted || !stat.m_is_supported)
-            return refuse(ArchiveProblem::Unsupported, u"entry “%1”"_s.arg(printable(path)));
-        if (stat.m_method != 0 && stat.m_method != MZ_DEFLATED)
+        if (stat.m_is_encrypted || !stat.m_is_supported || (stat.m_method != 0 && stat.m_method != MZ_DEFLATED))
             return refuse(ArchiveProblem::Unsupported, u"entry “%1”"_s.arg(printable(path)));
         const quint64 size = stat.m_uncomp_size;
         const quint64 compressed = stat.m_comp_size;
@@ -626,14 +621,12 @@ ArchiveInfo ArchiveReader::readEntries(const ArchiveLimits &limits)
         if (folder ? folders.contains(path) : files.contains(path))
             return refuse(ArchiveProblem::Duplicate, u"“%1” twice"_s.arg(printable(path)));
         (folder ? folders : files).insert(path);
-        ArchiveEntry entry;
-        entry.path = path;
-        entry.index = int(i);
-        entry.folder = folder;
-        entry.size = qint64(size);
-        entry.compressedSize = qint64(compressed);
-        entry.crc32 = stat.m_crc32;
-        out.entries.append(entry);
+        out.entries.append(ArchiveEntry{.path = std::move(path),
+                                        .index = int(i),
+                                        .folder = folder,
+                                        .size = qint64(size),
+                                        .compressedSize = qint64(compressed),
+                                        .crc32 = stat.m_crc32});
     }
     // A file used as a folder ("a" and "a/b") could not be written back whole.
     for (const ArchiveEntry &entry : std::as_const(out.entries)) {
@@ -651,18 +644,7 @@ bool ArchiveReader::verify(const ArchiveEntry &entry, const std::atomic_bool *ca
 {
     if (!d->open || entry.folder)
         return d->open;
-    struct Sink {
-        qint64 left;
-        const std::atomic_bool *cancel;
-    } sink{entry.size, cancel};
-    const auto write = [](void *opaque, mz_uint64, const void *, size_t n) -> size_t {
-        auto *s = static_cast<Sink *>(opaque);
-        if ((s->cancel && s->cancel->load()) || qint64(n) > s->left)
-            return 0;
-        s->left -= qint64(n);
-        return n;
-    };
-    return mz_zip_reader_extract_to_callback(&d->zip, mz_uint(entry.index), write, &sink, 0);
+    return d->extract(entry, nullptr, cancel);
 }
 
 std::optional<QByteArray> ArchiveReader::read(const ArchiveEntry &entry)
@@ -679,20 +661,7 @@ std::optional<QByteArray> ArchiveReader::read(const ArchiveEntry &entry)
     } catch (const std::bad_alloc &) {
         return std::nullopt;
     }
-    struct Sink {
-        char *out;
-        qint64 left;
-    } sink{bytes.data(), entry.size};
-    const auto write = [](void *opaque, mz_uint64, const void *data, size_t n) -> size_t {
-        auto *s = static_cast<Sink *>(opaque);
-        if (qint64(n) > s->left)
-            return 0;
-        std::memcpy(s->out, data, n);
-        s->out += n;
-        s->left -= qint64(n);
-        return n;
-    };
-    if (!mz_zip_reader_extract_to_callback(&d->zip, mz_uint(entry.index), write, &sink, 0) || sink.left != 0)
+    if (!d->extract(entry, bytes.data(), nullptr))
         return std::nullopt;
     return bytes;
 }

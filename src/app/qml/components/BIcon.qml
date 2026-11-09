@@ -37,7 +37,6 @@ Item {
             source: "qrc:/icons/" + icon.name + ".svg"
             color: icon.color
             fillMode: Image.PreserveAspectFit
-            smooth: true
         }
     }
 }

@@ -23,7 +23,6 @@ T.AbstractButton {
     implicitHeight: implicitWidth
     focusPolicy: Qt.StrongFocus
     hoverEnabled: !Theme.touchUi
-    checkable: false
 
     Accessible.role: Accessible.RadioButton
     Accessible.name: label
@@ -49,19 +48,18 @@ T.AbstractButton {
             radius: width / 2
             color: control.color
             border.width: 1
-            border.color: Theme.alpha(Theme.fg, 0.18)
+            border.color: Theme.fg.alpha(0.18)
             scale: control.pressed ? 0.92 : 1
             Behavior on scale { NumberAnimation { duration: Theme.durationInstant } }
             BIcon {
                 anchors.centerIn: parent
-                visible: control.selected || control.iconName !== ""
-                name: control.iconName !== "" ? control.iconName : "check"
+                // (No name, so no image, on an unselected swatch without an icon: a grid of them.)
+                name: control.iconName !== "" ? control.iconName : control.selected ? "check" : ""
                 size: Theme.iconSizeSm
                 color: control.lightColor ? "#1f2430" : "#ffffff"
             }
         }
         BFocusRing {
-            target: control
             visible: control.visualFocus
             targetRadius: control.width / 2
         }

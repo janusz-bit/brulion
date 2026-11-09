@@ -97,11 +97,16 @@ T.AbstractButton {
         readonly property bool labelShown: chipLabel.width > 0 && chipLabel.height > 0
         readonly property real labelX: iconShown ? chipIcon.width + spacing : 0
         readonly property real removeX: labelShown ? labelX + chipLabel.width + spacing : labelX
-        implicitWidth: control.removable ? removeX + removeButton.width
+        // The × circle stays small; on touch UIs its hit area is a full touch target (taller than
+        // the chip's visual part, which is fine: it is inside the chip's own touch-sized hit area).
+        readonly property real removeCircle: control.visualHeight - 6
+        readonly property real removeWidth: Theme.touchUi ? Theme.touchTarget : removeCircle
+        readonly property real removeHeight: Theme.touchUi ? control.hitHeight : removeCircle
+        implicitWidth: control.removable ? removeX + removeWidth
                        : labelShown ? labelX + chipLabel.width
                        : iconShown ? chipIcon.width : 0
         implicitHeight: Math.max(iconShown ? chipIcon.height : 0, labelShown ? chipLabel.height : 0,
-                                 control.removable ? removeButton.height : 0)
+                                 control.removable ? removeHeight : 0)
 
         BIcon {
             id: chipIcon
@@ -121,28 +126,24 @@ T.AbstractButton {
             elide: Text.ElideRight
             width: Math.min(implicitWidth, 280)
         }
-        T.AbstractButton {
-            id: removeButton
+        // The × button: created for removable chips only (most chips in lists are not).
+        Loader {
             x: chipContent.removeX
-            visible: control.removable
             anchors.verticalCenter: parent.verticalCenter
-            // The × circle stays small; on touch UIs the hit area is a full touch target
-            // (taller than the chip's visual part, which is fine: it is inside the chip's
-            // own touch-sized hit area).
-            readonly property real circle: control.visualHeight - 6
-            width: Theme.touchUi ? Theme.touchTarget : circle
-            height: Theme.touchUi ? control.hitHeight : circle
-            focusPolicy: Qt.NoFocus
-            hoverEnabled: !Theme.touchUi
-            Accessible.role: Accessible.Button
-            Accessible.name: qsTr("Remove %1").arg(control.text)
-            onClicked: control.removeClicked()
-            background: Item {}
-            contentItem: Item {
+            width: chipContent.removeWidth
+            height: chipContent.removeHeight
+            active: control.removable
+            sourceComponent: T.AbstractButton {
+                id: removeButton
+                focusPolicy: Qt.NoFocus
+                hoverEnabled: !Theme.touchUi
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Remove %1").arg(control.text)
+                onClicked: control.removeClicked()
                 Rectangle {
                     anchors.centerIn: parent
-                    width: removeButton.circle
-                    height: removeButton.circle
+                    width: chipContent.removeCircle
+                    height: width
                     radius: width / 2
                     color: removeButton.hovered || removeButton.down
                            ? control.fgColor.alpha(0.16) : "transparent"
@@ -161,7 +162,6 @@ T.AbstractButton {
         id: chipBackground
         implicitHeight: control.visualHeight
         radius: height / 2
-        antialiasing: true
         color: control.selected && control.variant === "neutral" ? Theme.primary
              : control.outlined ? Theme.bgElevated
              : control.variantBg

@@ -3,7 +3,6 @@
 #include "calc/table.h"
 
 #include "calc/blocks_p.h"
-#include "calc/parser_p.h"
 #include "calc/util_p.h"
 
 #include "text/text.h"
@@ -53,24 +52,11 @@ std::optional<QList<TableAlign>> tableHead(QStringView header, QStringView delim
     return aligns;
 }
 
-QStringList fitRow(QStringList cells, qsizetype n)
-{
-    if (cells.size() > n)
-        cells.resize(n);
-    while (cells.size() < n)
-        cells.append(QString());
-    return cells;
-}
-
 // --- display width -------------------------------------------------------------------------
 
 bool inRanges(char32_t cp, std::initializer_list<std::pair<char32_t, char32_t>> ranges)
 {
-    for (const auto &[from, to] : ranges) {
-        if (cp >= from && cp <= to)
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(ranges, [cp](const auto &range) { return cp >= range.first && cp <= range.second; });
 }
 
 bool isWide(char32_t cp)
@@ -129,11 +115,7 @@ int graphemeWidth(QStringView g)
 
 bool isPrintableAscii(QStringView s)
 {
-    for (const QChar c : s) {
-        if (c.unicode() < 0x20 || c.unicode() > 0x7e)
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(s, [](QChar c) { return c.unicode() >= 0x20 && c.unicode() <= 0x7e; });
 }
 
 // --- serialisation -------------------------------------------------------------------------
@@ -192,14 +174,8 @@ bool isThematicBreak(QStringView t)
 {
     if (t.isEmpty() || (t.front() != u'-' && t.front() != u'*' && t.front() != u'_'))
         return false;
-    int count = 0;
-    for (const QChar c : t) {
-        if (c == t.front())
-            ++count;
-        else if (!c.isSpace())
-            return false;
-    }
-    return count >= 3;
+    const QChar marker = t.front();
+    return std::ranges::all_of(t, [marker](QChar c) { return c == marker || c.isSpace(); }) && t.count(marker) >= 3;
 }
 
 /// Lines that start another block and therefore end a table (markdown-it terminators).
@@ -281,21 +257,11 @@ QStringList splitTableRow(QStringView line)
 std::optional<QList<TableAlign>> parseDelimiterRow(QStringView line)
 {
     const QStringView t = line.trimmed();
-    if (t.size() < 2)
-        return std::nullopt;
     const auto isDelimiterChar = [](QChar c) { return c == u'|' || c == u'-' || c == u':'; };
-    const QChar first = t.at(0);
-    const QChar second = t.at(1);
-    if (!isDelimiterChar(first))
+    // `^[-:|][-:|\s]+$`, but not "- …" (a list item).
+    if (t.size() < 2 || !isDelimiterChar(t.front()) || (t.front() == u'-' && t.at(1).isSpace())
+        || !std::ranges::all_of(t, [&](QChar c) { return isDelimiterChar(c) || c.isSpace(); }))
         return std::nullopt;
-    if (!isDelimiterChar(second) && !second.isSpace())
-        return std::nullopt;
-    if (first == u'-' && second.isSpace())
-        return std::nullopt;
-    for (const QChar c : t) {
-        if (!isDelimiterChar(c) && !c.isSpace())
-            return std::nullopt;
-    }
     const QList<QStringView> columns = t.split(u'|');
     QList<TableAlign> aligns;
     for (qsizetype i = 0; i < columns.size(); ++i) {
@@ -335,74 +301,60 @@ std::optional<TableModel> parseTable(QStringView markdown)
         const QString &line = lines.at(i).text;
         if (QStringView(line).trimmed().isEmpty())
             break;
-        model.rows.append(fitRow(splitTableRow(line), aligns->size()));
+        QStringList cells = splitTableRow(line);
+        cells.resize(aligns->size()); // as wide as the header: short rows padded, long ones cut
+        model.rows.append(std::move(cells));
     }
     return model;
 }
 
 QString serializeTable(const TableModel &model)
 {
-    qsizetype cols = model.header.size();
-    for (const QStringList &r : model.rows)
-        cols = std::max(cols, r.size());
+    const qsizetype cols = detail::tableColumnCount(model);
     if (cols == 0)
         return {};
-    QStringList header;
-    for (const QString &h : model.header)
-        header.append(escapeCell(h));
-    header = fitRow(header, cols);
+    // The header and the body rows escaped and as wide as the widest, with their cells' display
+    // widths; the columns as wide as their widest cell (at least 3).
     QList<QStringList> rows;
-    rows.reserve(model.rows.size());
-    for (const QStringList &r : model.rows) {
-        QStringList cells;
-        cells.reserve(cols);
-        for (const QString &c : r)
-            cells.append(escapeCell(c));
-        rows.append(fitRow(cells, cols));
-    }
-    QList<TableAlign> aligns;
-    for (qsizetype c = 0; c < cols; ++c)
-        aligns.append(c < model.aligns.size() ? model.aligns.at(c) : TableAlign::None);
-
-    QList<int> headerWidths;
-    QList<int> widths;
-    for (qsizetype c = 0; c < cols; ++c) {
-        headerWidths.append(displayWidth(header.at(c)));
-        widths.append(std::max(3, headerWidths.last()));
-    }
-    QList<QList<int>> cellWidths;
-    cellWidths.reserve(rows.size());
-    for (const QStringList &r : rows) {
-        QList<int> w;
-        w.reserve(cols);
-        for (qsizetype c = 0; c < cols; ++c) {
-            w.append(displayWidth(r.at(c)));
-            widths[c] = std::max(widths.at(c), w.last());
+    QList<QList<int>> textWidths;
+    rows.reserve(model.rows.size() + 1);
+    textWidths.reserve(model.rows.size() + 1);
+    QList<int> widths(cols, 3);
+    const auto addRow = [&](const QStringList &cells) {
+        QStringList escaped(cols);
+        QList<int> w(cols);
+        for (qsizetype c = 0; c < cells.size(); ++c) {
+            escaped[c] = escapeCell(cells.at(c));
+            w[c] = displayWidth(escaped.at(c));
+            widths[c] = std::max(widths.at(c), w.at(c));
         }
-        cellWidths.append(std::move(w));
-    }
+        rows.append(std::move(escaped));
+        textWidths.append(std::move(w));
+    };
+    addRow(model.header);
+    for (const QStringList &r : model.rows)
+        addRow(r);
+    const auto align = [&model](qsizetype c) { return model.aligns.value(c, TableAlign::None); };
+    QStringList delimiter;
+    for (qsizetype c = 0; c < cols; ++c)
+        delimiter.append(delimiterCell(widths.at(c), align(c)));
 
     QString out;
-    const auto appendRow = [&](const QStringList &cells, const QList<int> &textWidths) {
+    const auto appendRow = [&](const QStringList &cells, const QList<int> &cellWidths) {
         out += QStringLiteral("| ");
         for (qsizetype c = 0; c < cols; ++c) {
             if (c > 0)
                 out += QStringLiteral(" | ");
-            appendPadded(out, cells.at(c), textWidths.at(c), widths.at(c), aligns.at(c));
+            appendPadded(out, cells.at(c), cellWidths.at(c), widths.at(c), align(c));
         }
         out += QStringLiteral(" |");
     };
-    appendRow(header, headerWidths);
-    out += QStringLiteral("\n| ");
-    for (qsizetype c = 0; c < cols; ++c) {
-        if (c > 0)
-            out += QStringLiteral(" | ");
-        out += delimiterCell(widths.at(c), aligns.at(c));
-    }
-    out += QStringLiteral(" |");
-    for (qsizetype r = 0; r < rows.size(); ++r) {
+    appendRow(rows.at(0), textWidths.at(0));
+    out += u'\n';
+    appendRow(delimiter, widths); // its cells are as wide as their columns
+    for (qsizetype r = 1; r < rows.size(); ++r) {
         out += u'\n';
-        appendRow(rows.at(r), cellWidths.at(r));
+        appendRow(rows.at(r), textWidths.at(r));
     }
     return out;
 }
@@ -447,13 +399,11 @@ QList<TableSpan> findTables(QStringView content)
                 break;
             end = j;
         }
-        TableSpan span;
-        span.from = lines.at(i).start + start->offset;
-        span.to = lines.at(end).start + lines.at(end).text.size();
-        span.startLine = static_cast<int>(i);
-        span.endLine = static_cast<int>(end);
-        span.indent = leadingWhitespace(next).toString();
-        found.append(span);
+        found.append({.startLine = static_cast<int>(i),
+                      .endLine = static_cast<int>(end),
+                      .from = lines.at(i).start + start->offset,
+                      .to = lines.at(end).start + lines.at(end).text.size(),
+                      .indent = leadingWhitespace(next).toString()});
         i = end;
     }
     return found;
@@ -536,6 +486,14 @@ int columnIndex(QStringView letters)
 QString cellName(int row, int column)
 {
     return columnName(column) + QString::number(qint64(row) + 1);
+}
+
+qsizetype detail::tableColumnCount(const TableModel &model)
+{
+    qsizetype columns = model.header.size();
+    for (const QStringList &row : model.rows)
+        columns = std::max(columns, row.size());
+    return columns;
 }
 
 } // namespace brulion::calc

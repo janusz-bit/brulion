@@ -98,6 +98,8 @@ BDialog {
         clip: true
         model: dialog.rows
         currentIndex: -1
+        // A new model makes its first row current (ListView): rows come anew as the dialog opens.
+        onModelChanged: currentIndex = -1
         keyNavigationEnabled: true
         boundsBehavior: Flickable.StopAtBounds
         T.ScrollBar.vertical: BScrollBar {}
@@ -114,7 +116,7 @@ BDialog {
             text: modelData === "" ? dialog.defaultLabel : modelData
             font.family: modelData === "" ? dialog.defaultFamily : modelData
             font.pixelSize: Theme.textMd
-            iconName: modelData === dialog.current ? "check" : ""
+            iconName: selected ? "check" : ""
             selected: modelData === dialog.current
             onClicked: dialog.choose(fontRow.modelData)
         }

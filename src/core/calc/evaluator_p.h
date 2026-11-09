@@ -26,7 +26,8 @@ inline constexpr qsizetype kMaxListLength = 20000;
 
 /// Deterministic work budget, so that a note from anywhere (imports, sync) cannot freeze the app
 /// with one expression: every evaluated node, list element, aggregated line result and table
-/// dependency costs one unit, and so does every kStringChunk characters copied or compared.
+/// dependency costs one unit, and so does every kStringChunk characters copied, compared, parsed
+/// as a number or searched for a non-blank character.
 struct WorkBudget {
     static constexpr qint64 kExpressionLimit = 1'000'000; ///< per expression
     static constexpr qint64 kTotalLimit = 5'000'000;      ///< per public call (block, table, page)
@@ -66,30 +67,31 @@ struct EvalEnv {
     Scope *scope = nullptr;
     WorkBudget *budget = nullptr;
     /// Running aggregate of a calc block (`suma`, `avg`); unset elsewhere.
-    std::function<Value(AggregateKind, CalcError &)> aggregate;
+    std::function<Value(AggregateKind, CalcError &)> aggregate = {};
     /// Value of a table reference (index into ParsedProgram::refs); unset outside tables.
-    std::function<Value(int, CalcError &)> reference;
+    std::function<Value(int, CalcError &)> reference = {};
     /// When set, collects the names assigned in `scope` (page scopes record what changed).
     QSet<QString> *assigned = nullptr;
 };
 
 /// Evaluates expression trees. Errors never throw: the first error is kept and every further
-/// evaluation returns a None value until clearError().
+/// evaluation returns a None value.
 class Evaluator {
 public:
     explicit Evaluator(EvalEnv env);
 
-    Value evaluate(const Node &node);
+    Value evaluate(const Node &node) { return eval(node); }
     const CalcError &error() const { return m_error; }
     bool failed() const { return m_error.isError(); }
-    void clearError() { m_error = {}; }
 
     IdentKind classify(const QString &name) const;
     const EvalEnv &env() const { return m_env; }
 
 private:
     Value fail(CalcErrorCode code, const QString &arg = {});
-    Value check(Value v, CalcError &err);
+    Value check(Value v, const CalcError &err);
+    /// ops::truthy(), with the work of looking into a string charged to the budget.
+    bool truthy(const Value &v);
 
     Value eval(const Node &node);
     Value evalIdent(const QString &name);
@@ -139,15 +141,16 @@ RunResult runProgram(ParsedProgram &program, Evaluator &evaluator);
 
 namespace ops {
 
-/// Number view of a value: Bool -> 0/1, numeric strings parsed; nullopt + error otherwise.
-std::optional<Value> toNumber(const Value &v, CalcLocale locale, CalcError &err);
+/// Number view of a value: Bool -> 0/1, numeric strings parsed in `env.locale` (charged to
+/// `env.budget`); nullopt + error otherwise.
+std::optional<Value> toNumber(const Value &v, const EvalEnv &env, CalcError &err);
 /// a + b; with `percentSugar`, `x + 10%` means x · 1.1 (and `10% + 5%` = 15%).
 Value add(const Value &a, const Value &b, CalcError &err, bool percentSugar = true);
 Value subtract(const Value &a, const Value &b, CalcError &err, bool percentSugar = true);
 Value multiply(const Value &a, const Value &b, CalcError &err);
 Value divide(const Value &a, const Value &b, CalcError &err);
 /// Sum of numeric values (no percent sugar); 0 for an empty list.
-Value sum(const std::vector<Value> &values, CalcError &err);
+Value sum(const std::vector<const Value *> &values, CalcError &err);
 bool truthy(const Value &v);
 
 } // namespace ops

@@ -2,9 +2,12 @@
 
 #include <QMetaObject>
 
+#include <chrono>
 #include <utility>
 
 namespace brulion::backup::detail {
+
+using namespace std::chrono_literals;
 
 namespace {
 constexpr int InlineSliceMs = 8;
@@ -16,8 +19,8 @@ TaskRunner::TaskRunner(notebook::WorkerPool pool, QObject *parent)
 {
     m_shared->receiver = this;
     // 1 ms, not 0: a repeating 0 ms timer stalls Qt's timers in the browser (docs/WEB.md).
-    m_slices.setInterval(1);
-    connect(&m_slices, &QTimer::timeout, this, [this] { slice(); });
+    m_slices.setInterval(1ms);
+    connect(&m_slices, &QTimer::timeout, this, &TaskRunner::slice);
 }
 
 TaskRunner::~TaskRunner()
@@ -44,11 +47,7 @@ void TaskRunner::start(std::shared_ptr<Task> task, std::function<void()> done)
 
 void TaskRunner::slice()
 {
-    if (!m_task) {
-        m_slices.stop();
-        return;
-    }
-    if (!m_task->step(InlineSliceMs))
+    if (m_task && !m_task->step(InlineSliceMs))
         return;
     m_slices.stop();
     m_task.reset();

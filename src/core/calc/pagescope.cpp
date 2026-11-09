@@ -27,10 +27,38 @@ struct OpenBlock {
 
 QStringList lineTexts(QStringView content)
 {
+    const QList<text::Line> lines = text::splitLines(content);
     QStringList out;
-    for (const text::Line &line : text::splitLines(content))
+    out.reserve(lines.size());
+    for (const text::Line &line : lines)
         out.append(line.text);
     return out;
+}
+
+/// Walks `lines` from `from` through code fences: `calcBlock(start, end, source, closed)` for every
+/// calc fence (an unclosed one ends at the last line), `outside(line, text)` for each line outside
+/// fences.
+template<typename CalcBlockFn, typename OutsideFn>
+void scanFences(const QStringList &lines, qsizetype from, CalcBlockFn calcBlock, OutsideFn outside)
+{
+    std::optional<OpenBlock> open;
+    for (qsizetype i = from; i < lines.size(); ++i) {
+        const QString &line = lines.at(i);
+        if (!open) {
+            if (const std::optional<FenceOpen> f = parseFenceOpen(line))
+                open = OpenBlock{*f, static_cast<int>(i), {}};
+            else
+                outside(static_cast<int>(i), line);
+        } else if (isFenceClose(line, open->fence)) {
+            if (open->isCalc())
+                calcBlock(open->start, static_cast<int>(i), open->lines.join(u'\n'), true);
+            open.reset();
+        } else if (open->isCalc()) {
+            open->lines.append(dedent(line, open->fence.indent).toString());
+        }
+    }
+    if (open && open->isCalc())
+        calcBlock(open->start, static_cast<int>(lines.size() - 1), open->lines.join(u'\n'), false);
 }
 
 struct NumericProperty {
@@ -53,7 +81,7 @@ std::optional<NumericProperty> propertyVariable(QStringView key, QStringView raw
     Value v = parsed->percent ? Value::percent(parsed->value) : Value::number(parsed->value);
     if (parsed->currency.isValid())
         v.setCurrency(parsed->currency);
-    return NumericProperty{name, v};
+    return NumericProperty{name, std::move(v)};
 }
 
 /// `key: value` of a YAML frontmatter line: `^([^\s:#][^:]*):\s+(.+)$`.
@@ -110,28 +138,13 @@ std::optional<std::pair<QStringView, QStringView>> propertyLine(QStringView line
 
 QList<CalcBlock> findCalcBlocks(QStringView content)
 {
-    const QStringList lines = lineTexts(content);
     QList<CalcBlock> blocks;
-    std::optional<OpenBlock> open;
-    for (qsizetype i = 0; i < lines.size(); ++i) {
-        const QString &line = lines.at(i);
-        if (open) {
-            if (isFenceClose(line, open->fence)) {
-                if (open->isCalc())
-                    blocks.append({open->start, static_cast<int>(i), open->start + 1, open->lines.join(u'\n'), true});
-                open.reset();
-            } else if (open->isCalc()) {
-                open->lines.append(dedent(line, open->fence.indent).toString());
-            }
-            continue;
-        }
-        if (const std::optional<FenceOpen> f = parseFenceOpen(line))
-            open = OpenBlock{*f, static_cast<int>(i), {}};
-    }
-    if (open && open->isCalc()) {
-        blocks.append({open->start, static_cast<int>(lines.size() - 1), open->start + 1, open->lines.join(u'\n'),
-                       false});
-    }
+    scanFences(
+            lineTexts(content), 0,
+            [&blocks](int start, int end, QString source, bool closed) {
+                blocks.append({start, end, start + 1, std::move(source), closed});
+            },
+            [](int, QStringView) {});
     return blocks;
 }
 
@@ -165,18 +178,15 @@ PageCalc::PageCalc(QStringView content, CalcLocale locale)
     // Frontmatter (only when terminated).
     qsizetype bodyStart = 0;
     if (!lines.isEmpty() && lines.front().trimmed() == u"---") {
-        qsizetype end = -1;
-        for (qsizetype i = 1; i < lines.size() && end < 0; ++i) {
-            if (isFrontmatterEnd(lines.at(i)))
-                end = i;
-        }
-        if (end > 0) {
+        qsizetype end = 1;
+        while (end < lines.size() && !isFrontmatterEnd(lines.at(end)))
+            ++end;
+        if (end < lines.size()) {
             for (qsizetype i = 1; i < end; ++i) {
-                const auto entry = frontmatterEntry(lines.at(i));
-                if (!entry)
-                    continue;
-                if (const auto v = propertyVariable(entry->first, entry->second, locale))
-                    scope.set(v->name, v->value);
+                if (const auto entry = frontmatterEntry(lines.at(i))) {
+                    if (const auto v = propertyVariable(entry->first, entry->second, locale))
+                        scope.set(v->name, v->value);
+                }
             }
             bodyStart = end + 1;
             record(-1, scope.names());
@@ -210,28 +220,15 @@ PageCalc::PageCalc(QStringView content, CalcLocale locale)
         return QStringList(assigned.cbegin(), assigned.cend());
     };
 
-    std::optional<OpenBlock> open;
-    for (qsizetype i = bodyStart; i < lines.size(); ++i) {
-        const QString &line = lines.at(i);
-        if (open) {
-            if (isFenceClose(line, open->fence)) {
-                if (open->isCalc())
-                    record(static_cast<int>(i), evaluateBlock(open->lines.join(u'\n')));
-                open.reset();
-            } else if (open->isCalc()) {
-                open->lines.append(dedent(line, open->fence.indent).toString());
-            }
-            continue;
-        }
-        if (const std::optional<FenceOpen> f = parseFenceOpen(line)) {
-            open = OpenBlock{*f, static_cast<int>(i), {}};
-            continue;
-        }
-        if (const auto prop = propertyLine(line))
-            record(static_cast<int>(i), setProperty(prop->first, prop->second));
-    }
-    if (open && open->isCalc())
-        record(INT_MAX, evaluateBlock(open->lines.join(u'\n')));
+    scanFences(
+            lines, bodyStart,
+            [&](int, int end, const QString &source, bool closed) {
+                record(closed ? end : INT_MAX, evaluateBlock(source));
+            },
+            [&](int i, QStringView line) {
+                if (const auto prop = propertyLine(line))
+                    record(i, setProperty(prop->first, prop->second));
+            });
 }
 
 Scope PageCalc::scopeAt(int uptoLine) const
@@ -251,7 +248,7 @@ Scope PageCalc::scopeAt(int uptoLine) const
 namespace {
 
 struct CacheEntry {
-    CalcLocale locale;
+    CalcLocale locale = CalcLocale::Polish;
     QString content;
     std::shared_ptr<const PageCalc> calc;
 };
@@ -270,9 +267,8 @@ Scope pageScope(QStringView content, int uptoLine, CalcLocale locale)
         const QMutexLocker lock(&mutex);
         for (qsizetype i = 0; i < cache.size(); ++i) {
             if (cache.at(i).locale == locale && cache.at(i).content == content) {
-                CacheEntry entry = cache.takeAt(i);
-                calc = entry.calc;
-                cache.prepend(std::move(entry));
+                calc = cache.at(i).calc;
+                cache.move(i, 0);
                 break;
             }
         }

@@ -62,36 +62,32 @@ std::optional<CompareOp> compareOp(const Token *t)
     return std::nullopt;
 }
 
+bool isUpperLetter(QChar c)
+{
+    return c >= u'A' && c <= u'Z';
+}
+
 bool isUpperLetters(QStringView s, qsizetype maxLength)
 {
-    if (s.isEmpty() || s.size() > maxLength)
-        return false;
-    for (const QChar c : s) {
-        if (c < u'A' || c > u'Z')
-            return false;
-    }
-    return true;
+    return !s.isEmpty() && s.size() <= maxLength && std::ranges::all_of(s, isUpperLetter);
 }
 
 /// `^[A-Z]{1,3}[1-9]\d{0,8}$` -> (row, column), both 0-based.
 std::optional<std::pair<int, int>> parseCellRef(QStringView s)
 {
     qsizetype letters = 0;
-    while (letters < s.size() && s.at(letters) >= u'A' && s.at(letters) <= u'Z')
+    while (letters < s.size() && isUpperLetter(s.at(letters)))
         ++letters;
-    const QStringView digits = s.mid(letters);
-    if (letters < 1 || letters > 3 || digits.isEmpty() || digits.size() > 9 || digits.front() == u'0')
+    const QStringView digits = s.sliced(letters);
+    if (letters < 1 || letters > 3 || digits.isEmpty() || digits.size() > 9 || digits.front() == u'0'
+        || !std::ranges::all_of(digits, detail::isAsciiDigit))
         return std::nullopt;
-    for (const QChar c : digits) {
-        if (!detail::isAsciiDigit(c))
-            return std::nullopt;
-    }
-    return std::pair<int, int>(digits.toInt() - 1, columnIndexOf(s.left(letters)));
+    return std::pair(digits.toInt() - 1, columnIndexOf(s.first(letters)));
 }
 
-std::optional<TableRef::Direction> directionWord(QStringView word)
+std::optional<TableRef::Direction> directionWord(const QString &word)
 {
-    const QString lower = word.toString().toLower();
+    const QString lower = word.toLower();
     if (lower == u"above" || lower == u"powyżej")
         return TableRef::Direction::Above;
     if (lower == u"below" || lower == u"poniżej")
@@ -101,11 +97,6 @@ std::optional<TableRef::Direction> directionWord(QStringView word)
     if (lower == u"right")
         return TableRef::Direction::Right;
     return std::nullopt;
-}
-
-bool isReservedName(QStringView name)
-{
-    return isOperatorWord(name);
 }
 
 class Parser {
@@ -125,7 +116,7 @@ public:
             if (m_error)
                 break;
             program.statements.push_back(std::move(statement));
-            if (m_options.statements && peek() && peek()->kind == TokenKind::Semicolon) {
+            if (m_options.statements && peekKind(TokenKind::Semicolon)) {
                 ++m_pos;
                 continue;
             }
@@ -133,7 +124,7 @@ public:
                 failUnexpected(*peek());
             break;
         }
-        program.refs = m_refs;
+        program.refs = std::move(m_refs);
         program.error = m_error;
         if (m_error)
             program.statements.clear();
@@ -195,6 +186,7 @@ private:
         return node;
     }
 
+    /// Never null: a leaf is never too deep.
     NodePtr makeLeaf(NodeKind kind, QString text = {}, double number = 0)
     {
         NodePtr node = make(kind);
@@ -228,29 +220,22 @@ private:
     {
         Statement s;
         if (m_options.statements && peekKind(TokenKind::Ident)) {
+            qsizetype head = 0; // tokens before the expression: `name =` or `name(params) =`
             if (peekOperator(u"=", 1)) {
                 s.kind = Statement::Kind::Assignment;
-                s.name = peek()->text;
-                if (isReservedName(s.name)) {
-                    fail(CalcErrorCode::CannotAssign, s.name);
-                    return s;
-                }
-                m_pos += 2;
-                s.expr = parseExpression(0);
-                return s;
-            }
-            if (const std::optional<QStringList> params = functionDefinitionParams()) {
+                head = 2;
+            } else if (std::optional<QStringList> params = functionDefinitionParams()) {
                 s.kind = Statement::Kind::FunctionDefinition;
+                head = 4 + std::max<qsizetype>(0, 2 * params->size() - 1); // name ( params ) =
+                s.params = std::move(*params);
+            }
+            if (head > 0) {
                 s.name = peek()->text;
-                s.params = *params;
-                if (isReservedName(s.name)) {
+                if (isOperatorWord(s.name)) {
                     fail(CalcErrorCode::CannotAssign, s.name);
                     return s;
                 }
-                m_pos += 3 + std::max<qsizetype>(0, 2 * params->size() - 1); // name ( params ) =
-                ++m_pos;
-                s.expr = parseExpression(0);
-                return s;
+                m_pos += head;
             }
         }
         s.expr = parseExpression(0);
@@ -263,27 +248,19 @@ private:
         if (!peekKind(TokenKind::LParen, 1))
             return std::nullopt;
         QStringList params;
-        qsizetype i = 2;
-        if (peekKind(TokenKind::RParen, i)) {
-            ++i;
-        } else {
+        qsizetype i = 2; // after `name (`
+        if (!peekKind(TokenKind::RParen, i)) {
             while (true) {
-                const Token *p = peek(i);
-                if (!p || p->kind != TokenKind::Ident)
+                if (!peekKind(TokenKind::Ident, i))
                     return std::nullopt;
-                params.append(p->text);
+                params.append(peek(i)->text);
                 ++i;
-                if (peekKind(TokenKind::Comma, i) || peekKind(TokenKind::Semicolon, i)) {
-                    ++i;
-                    continue;
-                }
-                if (!peekKind(TokenKind::RParen, i))
-                    return std::nullopt;
+                if (!peekKind(TokenKind::Comma, i) && !peekKind(TokenKind::Semicolon, i))
+                    break;
                 ++i;
-                break;
             }
         }
-        if (!peekOperator(u"=", i))
+        if (!peekKind(TokenKind::RParen, i) || !peekOperator(u"=", i + 1))
             return std::nullopt;
         return params;
     }
@@ -447,7 +424,7 @@ private:
         return implicit;
     }
 
-    NodePtr parseInfix(NodePtr left, const InfixRule &rule)
+    NodePtr parseInfix(NodePtr left, InfixRule rule)
     {
         switch (rule.kind) {
         case Infix::Binary: {
@@ -500,7 +477,7 @@ private:
         }
         NodePtr node = make(NodeKind::Compare, std::move(operands));
         if (node)
-            node->ops = ops;
+            node->ops = std::move(ops);
         return node;
     }
 
@@ -512,11 +489,8 @@ private:
         --m_ternaries.last();
         if (!then)
             return nullptr;
-        if (!peekOperator(u":")) {
-            if (atEnd())
-                return fail(CalcErrorCode::UnexpectedEnd);
-            return failUnexpected(*peek());
-        }
+        if (!peekOperator(u":"))
+            return atEnd() ? fail(CalcErrorCode::UnexpectedEnd) : failUnexpected(*peek());
         ++m_pos;
         NodePtr otherwise = parseExpression(kTernaryBp - 1);
         if (!otherwise)
@@ -626,38 +600,42 @@ private:
         return makeLeaf(NodeKind::Ident, t.text);
     }
 
-    NodePtr parseCall(const QString &name)
+    /// The items of a call or list after its opening bracket: expressions separated by ',' or ';'
+    /// up to the `close` bracket. Incomplete after an error (m_error).
+    std::vector<NodePtr> parseItems(TokenKind close)
     {
-        const bool ambiguousComma = peek() && peek()->ambiguousComma;
-        ++m_pos; // (
         m_ternaries.append(0);
-        std::vector<NodePtr> args;
-        if (peekKind(TokenKind::RParen)) {
+        std::vector<NodePtr> items;
+        if (peekKind(close)) {
             ++m_pos;
         } else {
-            while (true) {
-                NodePtr arg = parseExpression(0);
-                if (!arg) {
-                    m_ternaries.removeLast();
-                    return nullptr;
-                }
-                args.push_back(std::move(arg));
+            while (NodePtr item = parseExpression(0)) {
+                items.push_back(std::move(item));
                 if (peekKind(TokenKind::Comma) || peekKind(TokenKind::Semicolon)) {
                     ++m_pos;
                     continue;
                 }
-                if (peekKind(TokenKind::RParen)) {
+                if (peekKind(close))
                     ++m_pos;
-                    break;
-                }
-                m_ternaries.removeLast();
-                if (atEnd())
-                    return fail(CalcErrorCode::ParenExpected, QStringLiteral(")"));
-                return failUnexpected(*peek());
+                else if (!atEnd())
+                    failUnexpected(*peek());
+                else if (close == TokenKind::RParen)
+                    fail(CalcErrorCode::ParenExpected, QStringLiteral(")"));
+                else
+                    fail(CalcErrorCode::ParenExpected, QStringLiteral("]"));
+                break;
             }
         }
         m_ternaries.removeLast();
-        NodePtr node = make(NodeKind::Call, std::move(args));
+        return items;
+    }
+
+    NodePtr parseCall(const QString &name)
+    {
+        const bool ambiguousComma = peek() && peek()->ambiguousComma;
+        ++m_pos; // (
+        std::vector<NodePtr> args = parseItems(TokenKind::RParen);
+        NodePtr node = m_error ? nullptr : make(NodeKind::Call, std::move(args));
         if (node) {
             node->text = name;
             node->ambiguousComma = ambiguousComma;
@@ -670,44 +648,17 @@ private:
         if (NodePtr header = parseHeaderRef())
             return header;
         ++m_pos; // [
-        m_ternaries.append(0);
-        std::vector<NodePtr> items;
-        if (peekKind(TokenKind::RBracket)) {
-            ++m_pos;
-        } else {
-            while (true) {
-                NodePtr item = parseExpression(0);
-                if (!item) {
-                    m_ternaries.removeLast();
-                    return nullptr;
-                }
-                items.push_back(std::move(item));
-                if (peekKind(TokenKind::Comma) || peekKind(TokenKind::Semicolon)) {
-                    ++m_pos;
-                    continue;
-                }
-                if (peekKind(TokenKind::RBracket)) {
-                    ++m_pos;
-                    break;
-                }
-                m_ternaries.removeLast();
-                if (atEnd())
-                    return fail(CalcErrorCode::ParenExpected, QStringLiteral("]"));
-                return failUnexpected(*peek());
-            }
-        }
-        m_ternaries.removeLast();
-        return make(NodeKind::List, std::move(items));
+        std::vector<NodePtr> items = parseItems(TokenKind::RBracket);
+        return m_error ? nullptr : make(NodeKind::List, std::move(items));
     }
 
     // --- table references -------------------------------------------------------------------
 
     NodePtr refNode(TableRef ref)
     {
+        NodePtr node = makeLeaf(NodeKind::Ref, ref.text);
+        node->ref = int(m_refs.size());
         m_refs.append(std::move(ref));
-        NodePtr node = makeLeaf(NodeKind::Ref, m_refs.last().text);
-        if (node)
-            node->ref = int(m_refs.size() - 1);
         return node;
     }
 
@@ -723,56 +674,46 @@ private:
         if (peekKind(TokenKind::LParen, 1))
             return nullptr; // a function call (LOG10(…))
         if (t.text == u"REF" && peekOperator(u"!", 1)) {
-            TableRef ref;
-            ref.kind = TableRef::Kind::Deleted;
-            ref.text = t.text + u'!';
             m_pos += 2;
-            return refNode(std::move(ref));
+            return refNode({.kind = TableRef::Kind::Deleted, .text = t.text + u'!'});
         }
         if (const auto cell = parseCellRef(t.text)) {
-            TableRef ref;
-            ref.pos = t.pos;
-            if (rangeColonFollows()) {
-                if (const auto end = parseCellRef(peek(2)->text)) {
-                    ref.kind = TableRef::Kind::Range;
-                    ref.row1 = cell->first;
-                    ref.col1 = cell->second;
-                    ref.row2 = end->first;
-                    ref.col2 = end->second;
-                    ref.text = t.text + u':' + peek(2)->text;
-                    ref.length = peek(2)->pos + peek(2)->length - t.pos;
-                    m_pos += 3;
-                    return refNode(std::move(ref));
-                }
+            const Token *last = rangeColonFollows() ? peek(2) : nullptr;
+            if (const auto end = last ? parseCellRef(last->text) : std::nullopt) {
+                m_pos += 3;
+                return refNode({.kind = TableRef::Kind::Range,
+                                .row1 = cell->first,
+                                .col1 = cell->second,
+                                .row2 = end->first,
+                                .col2 = end->second,
+                                .text = t.text + u':' + last->text,
+                                .pos = t.pos,
+                                .length = last->pos + last->length - t.pos});
             }
-            ref.kind = TableRef::Kind::Cell;
-            ref.row1 = ref.row2 = cell->first;
-            ref.col1 = ref.col2 = cell->second;
-            ref.text = t.text;
-            ref.length = t.length;
             ++m_pos;
-            return refNode(std::move(ref));
+            return refNode({.kind = TableRef::Kind::Cell,
+                            .row1 = cell->first,
+                            .col1 = cell->second,
+                            .row2 = cell->first,
+                            .col2 = cell->second,
+                            .text = t.text,
+                            .pos = t.pos,
+                            .length = t.length});
         }
         if (isUpperLetters(t.text, 3) && rangeColonFollows() && isUpperLetters(peek(2)->text, 3)) {
-            TableRef ref;
-            ref.kind = TableRef::Kind::Range;
-            ref.pos = t.pos;
-            ref.length = peek(2)->pos + peek(2)->length - t.pos;
-            ref.row1 = 0;
-            ref.row2 = INT_MAX;
-            ref.col1 = columnIndexOf(t.text);
-            ref.col2 = columnIndexOf(peek(2)->text);
-            ref.text = t.text + u':' + peek(2)->text;
+            const Token &last = *peek(2);
             m_pos += 3;
-            return refNode(std::move(ref));
+            return refNode({.kind = TableRef::Kind::Range,
+                            .col1 = columnIndexOf(t.text),
+                            .row2 = INT_MAX,
+                            .col2 = columnIndexOf(last.text),
+                            .text = t.text + u':' + last.text,
+                            .pos = t.pos,
+                            .length = last.pos + last.length - t.pos});
         }
         if (const auto dir = directionWord(t.text)) {
-            TableRef ref;
-            ref.kind = TableRef::Kind::Direction;
-            ref.direction = *dir;
-            ref.text = t.text;
             ++m_pos;
-            return refNode(std::move(ref));
+            return refNode({.kind = TableRef::Kind::Direction, .direction = *dir, .text = t.text});
         }
         return nullptr;
     }
@@ -814,12 +755,11 @@ private:
             return nullptr;
         const Token &open = m_tokens.at(m_pos);
         const Token &close = m_tokens.at(match->close);
-        TableRef ref;
-        ref.kind = TableRef::Kind::Header;
-        ref.col1 = ref.col2 = match->column;
-        ref.text = m_source.mid(open.pos, close.pos + close.length - open.pos).toString();
         m_pos = match->close + 1;
-        return refNode(std::move(ref));
+        return refNode({.kind = TableRef::Kind::Header,
+                        .col1 = match->column,
+                        .col2 = match->column,
+                        .text = m_source.mid(open.pos, close.pos + close.length - open.pos).toString()});
     }
 
     const QList<Token> &m_tokens;

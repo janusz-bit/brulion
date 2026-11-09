@@ -55,29 +55,17 @@ ColumnLayout {
         }
     }
 
-    Text {
-        Layout.fillWidth: true
-        visible: root.title !== ""
+    Line {
         text: root.title
-        textFormat: Text.PlainText
-        horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
-        wrapMode: Text.Wrap
-        font.family: Theme.fontUi
         font.pixelSize: root.compact ? Theme.textMd : Theme.textLg
         font.weight: Theme.weightSemiBold
         color: Theme.fg
     }
 
-    Text {
-        Layout.fillWidth: true
-        visible: root.description !== ""
+    Line {
         text: root.description
-        textFormat: Text.PlainText
-        horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
-        wrapMode: Text.Wrap
         lineHeightMode: Text.FixedHeight
         lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
-        font.family: Theme.fontUi
         font.pixelSize: root.compact ? Theme.textSm : Theme.textBase
         color: Theme.fgMuted
     }
@@ -102,5 +90,15 @@ ColumnLayout {
             variant: "ghost"
             onClicked: root.secondaryActionTriggered()
         }
+    }
+
+    /// The title and the description.
+    component Line: Text {
+        Layout.fillWidth: true
+        visible: text !== ""
+        textFormat: Text.PlainText
+        horizontalAlignment: root.alignStart ? Text.AlignLeft : Text.AlignHCenter
+        wrapMode: Text.Wrap
+        font.family: Theme.fontUi
     }
 }

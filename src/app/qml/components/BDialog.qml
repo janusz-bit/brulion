@@ -67,7 +67,7 @@ T.Dialog {
 
     signal acceptRequested()
 
-    function tryAccept() {
+    function tryAccept(): void {
         // A word the on-screen keyboard is still composing in a field becomes its text first: the
         // handlers read `text` (BTextField.typedText).
         const focused = control.contentItem ? control.contentItem.Window.activeFocusItem : null
@@ -121,21 +121,17 @@ T.Dialog {
         onActivated: control.tryAccept()
     }
 
-    header: Item {
-        implicitWidth: headerColumn.implicitWidth
-        implicitHeight: headerColumn.implicitHeight
-
-        // Drag the sheet down to dismiss it.
+    header: Column {
+        // Drag the sheet down to dismiss it (a new drag takes the sheet from a settling one).
         DragHandler {
-            id: sheetDrag
             enabled: control.sheet
             target: null
             xAxis.enabled: false
             onTranslationChanged: control.dragOffset = Math.max(0, translation.y)
             onActiveChanged: {
                 if (active)
-                    return
-                if (control.dragOffset > Math.min(140, control.height * 0.3) || centroid.velocity.y > 900)
+                    settle.stop()
+                else if (control.dragOffset > Math.min(140, control.height * 0.3) || centroid.velocity.y > 900)
                     control.reject()
                 else
                     settle.start()
@@ -150,74 +146,69 @@ T.Dialog {
             easing.type: Theme.easing
         }
 
-        Column {
-            id: headerColumn
+        Item {
+            visible: control.sheet
             width: parent.width
+            height: 20
+            Rectangle {
+                anchors.centerIn: parent
+                width: 36
+                height: 4
+                radius: 2
+                color: Theme.borderStrong
+            }
+        }
 
-            Item {
-                visible: control.sheet
-                width: parent.width
-                height: 20
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 36
-                    height: 4
-                    radius: 2
-                    color: Theme.borderStrong
+        RowLayout {
+            width: parent.width - 2 * control.leftPadding + (control.showCloseButton ? control.leftPadding - 8 : 0)
+            x: control.leftPadding
+            spacing: Theme.space3
+            visible: control.title !== "" || control.showCloseButton
+
+            BIcon {
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: (control.sheet ? 8 : 20) + Math.max(0, (titleText.lineHeightPx - height) / 2)
+                name: control.iconName
+                size: Theme.iconSizeLg
+                color: control.iconColor
+                visible: name !== ""
+            }
+            Column {
+                Layout.fillWidth: true
+                Layout.topMargin: control.sheet ? 8 : 20
+                Layout.bottomMargin: 2
+                spacing: 2
+                Text {
+                    id: titleText
+                    readonly property real lineHeightPx: font.pixelSize * 1.3
+                    width: parent.width
+                    text: control.title
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textLg
+                    font.weight: Theme.weightSemiBold
+                    color: Theme.fg
+                    wrapMode: Text.Wrap
+                }
+                Text {
+                    width: parent.width
+                    visible: control.subtitle !== ""
+                    text: control.subtitle
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    color: Theme.fgMuted
+                    wrapMode: Text.Wrap
                 }
             }
-
-            RowLayout {
-                width: parent.width - 2 * control.leftPadding + (control.showCloseButton ? control.leftPadding - 8 : 0)
-                x: control.leftPadding
-                spacing: Theme.space3
-                visible: control.title !== "" || control.showCloseButton
-
-                BIcon {
-                    Layout.alignment: Qt.AlignTop
-                    Layout.topMargin: (control.sheet ? 8 : 20) + Math.max(0, (titleText.lineHeightPx - height) / 2)
-                    name: control.iconName
-                    size: Theme.iconSizeLg
-                    color: control.iconColor
-                    visible: name !== ""
-                }
-                Column {
-                    Layout.fillWidth: true
-                    Layout.topMargin: control.sheet ? 8 : 20
-                    Layout.bottomMargin: 2
-                    spacing: 2
-                    Text {
-                        id: titleText
-                        readonly property real lineHeightPx: font.pixelSize * 1.3
-                        width: parent.width
-                        text: control.title
-                        textFormat: Text.PlainText
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textLg
-                        font.weight: Theme.weightSemiBold
-                        color: Theme.fg
-                        wrapMode: Text.Wrap
-                    }
-                    Text {
-                        width: parent.width
-                        visible: control.subtitle !== ""
-                        text: control.subtitle
-                        textFormat: Text.PlainText
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
-                        color: Theme.fgMuted
-                        wrapMode: Text.Wrap
-                    }
-                }
-                BIconButton {
-                    Layout.alignment: Qt.AlignTop
-                    Layout.topMargin: control.sheet ? 2 : 12
-                    visible: control.showCloseButton
-                    iconName: "x"
-                    label: qsTr("Close")
-                    shortcut: "Esc"
-                    onClicked: control.reject()
-                }
+            BIconButton {
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: control.sheet ? 2 : 12
+                visible: control.showCloseButton
+                iconName: "x"
+                label: qsTr("Close")
+                shortcut: "Esc"
+                onClicked: control.reject()
             }
         }
     }
@@ -283,7 +274,7 @@ T.Dialog {
             }
             BButton {
                 Layout.preferredWidth: control.sheet ? footerRow.sheetButtonWidth : implicitWidth
-                Layout.leftMargin: rejectButton.visible || (control.sheet && footerRow.hasLeading) ? Theme.space2 : 0
+                Layout.leftMargin: control.showReject || (control.sheet && footerRow.hasLeading) ? Theme.space2 : 0
                 text: control.acceptText
                 variant: control.acceptVariant
                 enabled: control.acceptEnabled
@@ -316,18 +307,15 @@ T.Dialog {
         Behavior on opacity { NumberAnimation { duration: Theme.duration } }
     }
 
+    // (A transition runs its animations in parallel.)
     enter: Transition {
-        ParallelAnimation {
-            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: control.sheet ? Theme.durationFast : Theme.duration; easing.type: Theme.easing }
-            NumberAnimation { property: "scale"; from: control.sheet ? 1 : 0.96; to: 1; duration: Theme.duration; easing.type: Theme.easingEnter }
-            NumberAnimation { property: "dragOffset"; from: control.sheet ? control.height * 0.6 : 0; to: 0; duration: Theme.durationSlow; easing.type: Theme.easingEnter }
-        }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: control.sheet ? Theme.durationFast : Theme.duration; easing.type: Theme.easing }
+        NumberAnimation { property: "scale"; from: control.sheet ? 1 : 0.96; to: 1; duration: Theme.duration; easing.type: Theme.easingEnter }
+        NumberAnimation { property: "dragOffset"; from: control.sheet ? control.height * 0.6 : 0; to: 0; duration: Theme.durationSlow; easing.type: Theme.easingEnter }
     }
     exit: Transition {
-        ParallelAnimation {
-            NumberAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durationFast; easing.type: Theme.easingExit }
-            NumberAnimation { property: "scale"; from: 1; to: control.sheet ? 1 : 0.98; duration: Theme.durationFast }
-            NumberAnimation { property: "dragOffset"; to: control.sheet ? control.height * 0.5 : 0; duration: Theme.duration; easing.type: Theme.easingExit }
-        }
+        NumberAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durationFast; easing.type: Theme.easingExit }
+        NumberAnimation { property: "scale"; from: 1; to: control.sheet ? 1 : 0.98; duration: Theme.durationFast }
+        NumberAnimation { property: "dragOffset"; to: control.sheet ? control.height * 0.5 : 0; duration: Theme.duration; easing.type: Theme.easingExit }
     }
 }

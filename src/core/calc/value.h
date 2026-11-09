@@ -121,7 +121,7 @@ public:
     /// The previous result (`ans`), when there is one.
     std::optional<Value> ans() const;
 
-    friend bool operator==(const Scope &a, const Scope &b) { return a.m_values == b.m_values; }
+    friend bool operator==(const Scope &, const Scope &) = default;
 
 private:
     QHash<QString, Value> m_values;

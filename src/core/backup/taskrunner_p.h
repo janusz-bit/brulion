@@ -17,12 +17,17 @@ namespace brulion::backup::detail {
 /// Work that can stop between steps. The object is used by one thread at a time.
 class Task {
 public:
+    Task() = default;
     virtual ~Task() = default;
+    Q_DISABLE_COPY_MOVE(Task)
+
     /// Work for about `budgetMs` (a single file may take longer). True when finished.
     virtual bool step(int budgetMs) = 0;
 };
 
 class TaskRunner : public QObject {
+    Q_OBJECT
+
 public:
     explicit TaskRunner(notebook::WorkerPool pool, QObject *parent = nullptr);
     /// `done` is never called after this; a pool job still running finishes on its own (it holds

@@ -30,10 +30,7 @@ struct Currency {
     bool prefix = false; ///< written before the number ("$12", "€5")
 
     bool isValid() const { return !code.isEmpty(); }
-    friend bool operator==(const Currency &a, const Currency &b)
-    {
-        return a.code == b.code && a.symbol == b.symbol && a.prefix == b.prefix;
-    }
+    friend bool operator==(const Currency &, const Currency &) = default;
 };
 
 /// ISO code of a currency symbol or code ("zł" -> "PLN", "€" -> "EUR"), empty when unknown.

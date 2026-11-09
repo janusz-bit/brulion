@@ -66,7 +66,6 @@ T.Pane {
             id: cardRect
             anchors.fill: parent
             radius: control.radius
-            antialiasing: true
             color: {
                 switch (control.tone) {
                 case "sunken": return Theme.bgSunken

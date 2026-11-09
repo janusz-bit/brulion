@@ -1,6 +1,6 @@
 #include "calc/numbers.h"
 
-#include <QStringList>
+#include "calc/util_p.h"
 
 #include <algorithm>
 #include <array>
@@ -10,22 +10,13 @@ namespace brulion::calc {
 
 namespace {
 
-constexpr QChar kMinusSign = QChar(0x2212); // "−"
+using detail::isAsciiDigit;
 
-bool isAsciiDigit(QChar c)
-{
-    return c >= u'0' && c <= u'9';
-}
+constexpr QChar kMinusSign = QChar(0x2212); // "−"
 
 bool allDigits(QStringView s)
 {
-    if (s.isEmpty())
-        return false;
-    for (const QChar c : s) {
-        if (!isAsciiDigit(c))
-            return false;
-    }
-    return true;
+    return !s.isEmpty() && std::ranges::all_of(s, isAsciiDigit);
 }
 
 QChar decimalSeparator(CalcLocale locale)
@@ -119,11 +110,7 @@ int leadingZeros(double a)
 
 bool isZeroText(QStringView plain)
 {
-    for (const QChar c : plain) {
-        if (c != u'0' && c != u'.' && c != u'-')
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(plain, [](QChar c) { return c == u'0' || c == u'.' || c == u'-'; });
 }
 
 /// JavaScript Math.round: halves round towards +infinity.
@@ -152,18 +139,6 @@ constexpr std::array<CurrencyName, 9> kCurrencies = {{
     {u"£", u"GBP"},
 }};
 
-void skipLeadingSpaces(QStringView &v)
-{
-    while (!v.isEmpty() && v.front().isSpace())
-        v = v.mid(1);
-}
-
-void skipTrailingSpaces(QStringView &v)
-{
-    while (!v.isEmpty() && v.back().isSpace())
-        v.chop(1);
-}
-
 bool isMinus(QChar c)
 {
     return c == u'-' || c == kMinusSign;
@@ -172,116 +147,70 @@ bool isMinus(QChar c)
 /// "1.234.567" with `separator` '.' -> true: 1-3 digits, then groups of exactly three.
 bool isGrouped(QStringView s, QChar separator)
 {
-    const QList<QStringView> parts = s.split(separator);
-    if (parts.size() < 2)
-        return false;
-    for (qsizetype i = 0; i < parts.size(); ++i) {
-        const QStringView part = parts.at(i);
-        if (!allDigits(part))
+    qsizetype groups = 0;
+    for (const QStringView part : s.tokenize(separator)) {
+        if (!allDigits(part) || part.size() > 3 || (groups > 0 && part.size() != 3))
             return false;
-        if (i == 0 ? part.size() > 3 : part.size() != 3)
-            return false;
+        ++groups;
     }
-    return true;
-}
-
-QString withoutChar(QStringView s, QChar c)
-{
-    QString out;
-    out.reserve(s.size());
-    for (const QChar ch : s) {
-        if (ch != c)
-            out += ch;
-    }
-    return out;
+    return groups >= 2;
 }
 
 /// "12 345" / "1 234 567,5": groups separated by single whitespace characters.
 std::optional<QString> mergeSpaceGroups(QStringView body)
 {
-    qsizetype fractionAt = -1;
-    for (qsizetype i = 0; i < body.size(); ++i) {
-        if (body.at(i) == u'.' || body.at(i) == u',') {
-            fractionAt = i;
-            break;
-        }
-    }
-    const QStringView groups = fractionAt < 0 ? body : body.left(fractionAt);
-    if (fractionAt >= 0 && !allDigits(body.mid(fractionAt + 1)))
+    const qsizetype markAt = std::ranges::find_if(body, [](QChar c) { return c == u'.' || c == u','; }) - body.begin();
+    if (markAt < body.size() && !allDigits(body.sliced(markAt + 1)))
         return std::nullopt;
-    QString digits;
-    qsizetype partStart = 0;
-    int partIndex = 0;
-    for (qsizetype i = 0; i <= groups.size(); ++i) {
-        if (i < groups.size() && !groups.at(i).isSpace())
-            continue;
-        const QStringView part = groups.mid(partStart, i - partStart);
-        if (!allDigits(part) || (partIndex == 0 ? part.size() > 3 : part.size() != 3))
-            return std::nullopt;
-        digits += part;
-        ++partIndex;
-        partStart = i + 1;
-    }
-    if (partIndex < 2)
+    QString digits = body.toString(); // whitespace only between the groups, before the decimal mark
+    std::ranges::replace_if(digits, [](QChar c) { return c.isSpace(); }, QChar(u' '));
+    if (!isGrouped(QStringView(digits).first(markAt), u' '))
         return std::nullopt;
-    if (fractionAt >= 0)
-        digits += body.mid(fractionAt);
-    return digits;
+    return digits.remove(u' ');
 }
 
 /// Interpret the separators of an unsigned digit string with '.', ',' and spaces; returns a
 /// plain "1234.5" string or nullopt.
 std::optional<QString> normaliseDigits(QStringView body, CalcLocale locale)
 {
-    QString text = body.toString();
-    bool hasSpace = false;
-    for (const QChar c : body)
-        hasSpace = hasSpace || c.isSpace();
-    if (hasSpace) {
-        const std::optional<QString> merged = mergeSpaceGroups(body);
+    std::optional<QString> merged;
+    if (std::ranges::any_of(body, [](QChar c) { return c.isSpace(); })) {
+        merged = mergeSpaceGroups(body);
         if (!merged)
             return std::nullopt;
-        text = *merged;
     }
+    QString text = merged ? std::move(*merged) : body.toString();
     const qsizetype dots = text.count(u'.');
     const qsizetype commas = text.count(u',');
     if (dots > 0 && commas > 0) {
-        const QChar decimal = text.lastIndexOf(u',') > text.lastIndexOf(u'.') ? QLatin1Char(',') : QLatin1Char('.');
-        const QChar group = decimal == u',' ? QLatin1Char('.') : QLatin1Char(',');
-        if (text.count(decimal) != 1)
+        // The decimal mark is the later one: written once, after every group separator.
+        const bool commaDecimal = text.lastIndexOf(u',') > text.lastIndexOf(u'.');
+        const QChar decimal = commaDecimal ? u',' : u'.';
+        const QChar group = commaDecimal ? u'.' : u',';
+        if (text.count(decimal) != 1 || !isGrouped(QStringView(text).first(text.indexOf(decimal)), group))
             return std::nullopt;
-        const qsizetype at = text.indexOf(decimal);
-        const QStringView integer = QStringView(text).left(at);
-        if (!isGrouped(integer, group))
-            return std::nullopt;
-        return QString(withoutChar(integer, group) + u'.' + QStringView(text).mid(at + 1));
+        return text.remove(group).replace(decimal, u'.');
     }
     if (commas > 0) {
-        const bool englishThousands = locale == CalcLocale::English && isGrouped(text, QLatin1Char(','));
-        if (commas == 1 && !englishThousands)
+        if (commas == 1 && !(locale == CalcLocale::English && isGrouped(text, u',')))
             return text.replace(u',', u'.');
-        if (isGrouped(text, QLatin1Char(',')))
-            return withoutChar(text, QLatin1Char(','));
-        return std::nullopt;
+        if (!isGrouped(text, u','))
+            return std::nullopt;
+        return text.remove(u',');
     }
-    if (dots > 1)
-        return isGrouped(text, QLatin1Char('.')) ? std::optional<QString>(withoutChar(text, QLatin1Char('.'))) : std::nullopt;
+    if (dots > 1) {
+        if (!isGrouped(text, u'.'))
+            return std::nullopt;
+        text.remove(u'.');
+    }
     return text;
 }
 
 /// `^\d*\.?\d+$|^\d+\.?$`
 bool isPlainDecimal(QStringView s)
 {
-    if (s.isEmpty() || s == u".")
-        return false;
-    int dots = 0;
-    for (const QChar c : s) {
-        if (c == u'.')
-            ++dots;
-        else if (!isAsciiDigit(c))
-            return false;
-    }
-    return dots <= 1;
+    return !s.isEmpty() && s != u"." && s.count(u'.') <= 1
+           && std::ranges::all_of(s, [](QChar c) { return c == u'.' || isAsciiDigit(c); });
 }
 
 /// Length of a trailing exponent "e-3" / "E12" in `s`, 0 when none.
@@ -305,25 +234,17 @@ bool looksNumeric(QStringView s)
     if (s.isEmpty())
         return false;
     if (s.front() == u'.' || s.front() == u',')
-        return allDigits(s.mid(1));
-    if (!isAsciiDigit(s.front()))
-        return false;
-    for (const QChar c : s) {
-        if (!isAsciiDigit(c) && !c.isSpace() && c != u'.' && c != u',')
-            return false;
-    }
-    return true;
+        return allDigits(s.sliced(1));
+    return isAsciiDigit(s.front())
+           && std::ranges::all_of(s, [](QChar c) { return isAsciiDigit(c) || c.isSpace() || c == u'.' || c == u','; });
 }
 
 } // namespace
 
 QString currencyCode(QStringView symbol)
 {
-    for (const CurrencyName &c : kCurrencies) {
-        if (c.name == symbol)
-            return c.code.toString();
-    }
-    return {};
+    const auto it = std::ranges::find(kCurrencies, symbol, &CurrencyName::name);
+    return it == kCurrencies.end() ? QString() : it->code.toString();
 }
 
 QString formatNumber(double value, CalcLocale locale, NumberFormatOptions options)
@@ -406,23 +327,18 @@ QString stripInlineMarkup(QStringView text)
 
 std::optional<ParsedNumber> parseLocaleNumber(QStringView text, CalcLocale locale)
 {
-    const QString stripped = stripInlineMarkup(text.toString().normalized(QString::NormalizationForm_C));
-    QStringView v(stripped);
+    const QString stripped = stripInlineMarkup(detail::toNfc(text));
+    QStringView v(stripped); // trimmed, and trimmed again after each part taken off below
     if (v.isEmpty())
         return std::nullopt;
     ParsedNumber out;
-    double sign = 1;
-    if (isMinus(v.front()) || v.front() == u'+') {
-        if (v.front() != u'+')
-            sign = -1;
-        v = v.mid(1);
-        skipLeadingSpaces(v);
-    }
+    double sign = isMinus(v.front()) ? -1.0 : 1.0;
+    if (sign < 0 || v.front() == u'+')
+        v = v.sliced(1).trimmed();
     for (const CurrencyName &c : kCurrencies) {
         if (v.startsWith(c.name)) {
             out.currency = {c.code.toString(), c.name.toString(), true};
-            v = v.mid(c.name.size());
-            skipLeadingSpaces(v);
+            v = v.sliced(c.name.size()).trimmed();
             break;
         }
     }
@@ -430,24 +346,20 @@ std::optional<ParsedNumber> parseLocaleNumber(QStringView text, CalcLocale local
         for (const CurrencyName &c : kCurrencies) {
             if (v.endsWith(c.name)) {
                 out.currency = {c.code.toString(), c.name.toString(), false};
-                v.chop(c.name.size());
-                skipTrailingSpaces(v);
+                v = v.chopped(c.name.size()).trimmed();
                 break;
             }
         }
     } else if (sign > 0 && !v.isEmpty() && isMinus(v.front())) {
         sign = -1; // "$-5"
-        v = v.mid(1);
-        skipLeadingSpaces(v);
+        v = v.sliced(1).trimmed();
     }
     if (!out.currency.isValid() && v.endsWith(u'%')) {
         out.percent = true;
-        v.chop(1);
-        skipTrailingSpaces(v);
+        v = v.chopped(1).trimmed();
     }
     const qsizetype expLength = exponentSuffixLength(v);
-    const QStringView exponent = v.right(expLength);
-    QString mantissa = v.left(v.size() - expLength).toString();
+    QString mantissa = v.chopped(expLength).toString();
     if (!looksNumeric(mantissa))
         return std::nullopt;
     if (mantissa.startsWith(u','))
@@ -456,13 +368,12 @@ std::optional<ParsedNumber> parseLocaleNumber(QStringView text, CalcLocale local
     if (!digits || !isPlainDecimal(*digits))
         return std::nullopt;
     bool ok = false;
-    double value = QString(*digits + exponent).toDouble(&ok);
+    const double value = QString(*digits + v.last(expLength)).toDouble(&ok);
     if (!ok || !std::isfinite(value))
         return std::nullopt;
-    value *= sign;
+    out.value = sign * value;
     if (out.percent)
-        value /= 100;
-    out.value = value;
+        out.value /= 100;
     return out;
 }
 

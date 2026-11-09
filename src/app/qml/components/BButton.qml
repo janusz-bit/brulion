@@ -44,19 +44,19 @@ T.Button {
     /// The width it takes unfilled (its implicit width, which `fill` never changes): what
     /// ShellSettingRow measures to put it beside its text.
     readonly property real naturalWidth: implicitWidth
+    /// The padding beside the text (2 less on the icon's side).
+    readonly property int sidePadding: size === "small" ? 10 : size === "large" ? 18 : 14
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: hitHeight
     topInset: (hitHeight - visualHeight) / 2
-    bottomInset: (hitHeight - visualHeight) / 2
+    bottomInset: topInset
     // Icon-only: square visual, hit area at least a touch target wide (like BIconButton).
-    leftInset: iconOnly ? (hitHeight - visualHeight) / 2 : 0
+    leftInset: iconOnly ? topInset : 0
     rightInset: leftInset
-    leftPadding: iconOnly ? leftInset + (visualHeight - iconItem.size) / 2
-                          : (size === "small" ? 10 : size === "large" ? 18 : 14) - (iconName !== "" && !iconRight ? 2 : 0)
-    rightPadding: iconOnly ? leftPadding
-                           : (size === "small" ? 10 : size === "large" ? 18 : 14) - (iconName !== "" && iconRight ? 2 : 0)
+    leftPadding: iconOnly ? leftInset + (visualHeight - iconItem.size) / 2 : sidePadding - (iconName !== "" && !iconRight ? 2 : 0)
+    rightPadding: iconOnly ? leftPadding : sidePadding - (iconName !== "" && iconRight ? 2 : 0)
     topPadding: topInset
     bottomPadding: bottomInset
 
@@ -77,7 +77,6 @@ T.Button {
     }
     MouseArea {
         anchors.fill: parent
-        enabled: control.busy
         visible: control.busy
         acceptedButtons: Qt.AllButtons
         cursorShape: Qt.BusyCursor
@@ -101,7 +100,7 @@ T.Button {
             Item {
                 width: iconItem.width
                 height: iconItem.height
-                visible: control.iconName !== "" || control.busy
+                visible: content.hasIcon
                 anchors.verticalCenter: parent.verticalCenter
 
                 BIcon {
@@ -138,7 +137,6 @@ T.Button {
         implicitWidth: control.iconOnly ? control.visualHeight : 64
         implicitHeight: control.visualHeight
         radius: Theme.radius
-        antialiasing: true
         color: {
             switch (control.variant) {
             case "primary":

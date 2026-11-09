@@ -34,9 +34,7 @@ bool isNewerVersion(const QString &candidate, const QString &current)
 {
     const QString newer = normalizedVersion(candidate);
     const QString base = normalizedVersion(current);
-    if (newer.isEmpty() || base.isEmpty())
-        return false;
-    return QVersionNumber::fromString(newer) > QVersionNumber::fromString(base);
+    return !newer.isEmpty() && !base.isEmpty() && QVersionNumber::fromString(newer) > QVersionNumber::fromString(base);
 }
 
 QString versionFromRelease(const QByteArray &json)

@@ -37,6 +37,21 @@ private:
     int &m_depth;
 };
 
+/// Report `code` through `err` and return no value.
+Value failWith(CalcError &err, CalcErrorCode code, const QString &arg = {})
+{
+    err = {code, arg};
+    return {};
+}
+
+/// Work linear in the length of a string (parsing it as a number, looking for a non-blank
+/// character) costs a unit of `budget` per kStringChunk characters, like copies and comparisons:
+/// one long string used many times cannot freeze the app. False once the budget is exhausted.
+bool chargeString(const Value &v, WorkBudget *budget)
+{
+    return !v.isString() || !budget || budget->charge(v.text().size() / WorkBudget::kStringChunk);
+}
+
 bool nearlyEqual(double a, double b)
 {
     if (a == b)
@@ -81,10 +96,8 @@ Value addOrSubtract(const Value &a, const Value &b, CalcError &err, bool percent
             err = {CalcErrorCode::TooBig, {}};
         return r;
     }
-    if (a.unit().dimension() != b.unit().dimension()) {
-        err = {CalcErrorCode::UnitsMismatch, {}};
-        return {};
-    }
+    if (a.unit().dimension() != b.unit().dimension())
+        return failWith(err, CalcErrorCode::UnitsMismatch);
     const double si = a.si() + sign * b.si();
     Value r = Value::quantity(si, a.hasUnit() ? a.unit() : b.unit());
     r.setPercent(a.isPercent() && b.isPercent());
@@ -101,10 +114,8 @@ Value modulo(const Value &a, const Value &b, CalcError &err)
     Value r = a;
     r.setPercent(false);
     if (b.hasUnit()) {
-        if (a.unit().dimension() != b.unit().dimension()) {
-            err = {CalcErrorCode::UnitsMismatch, {}};
-            return {};
-        }
+        if (a.unit().dimension() != b.unit().dimension())
+            return failWith(err, CalcErrorCode::UnitsMismatch);
         r.setSi(a.si() - b.si() * std::floor(a.si() / b.si()));
     } else {
         const double m = a.magnitude();
@@ -114,42 +125,33 @@ Value modulo(const Value &a, const Value &b, CalcError &err)
     return r;
 }
 
-/// `unit` raised to the integer `n` keeps every base-unit power within ±kMaxUnitPower
-/// (`(m^99)^99` would otherwise grow without bound and overflow an int).
-bool unitPowerFits(const Unit &unit, int n)
+/// `unit` can be raised to `e`: an integer of at most kMaxUnitPower keeping every base-unit power
+/// within ±kMaxUnitPower (`(m^99)^99` would otherwise grow without bound and overflow an int).
+bool unitPowerFits(const Unit &unit, double e)
 {
-    for (const UnitFactor &f : unit.factors()) {
-        const qint64 p = qint64(f.power) * f.def->power * n; // km² is km^2
-        if (std::abs(static_cast<double>(p)) > kMaxUnitPower)
-            return false;
-    }
-    return true;
+    if (e != std::trunc(e) || std::abs(e) > kMaxUnitPower)
+        return false;
+    return std::ranges::all_of(unit.factors(), [e](const UnitFactor &f) {
+        return std::abs(f.power * f.def->power * e) <= kMaxUnitPower; // km² is km^2
+    });
 }
 
 Value power(const Value &a, const Value &b, CalcError &err)
 {
-    if (b.hasUnit()) {
-        err = {CalcErrorCode::UnitsMismatch, {}};
-        return {};
-    }
+    if (b.hasUnit())
+        return failWith(err, CalcErrorCode::UnitsMismatch);
     const double e = b.si();
     Unit unit;
     if (a.hasUnit()) {
-        if (e != std::trunc(e) || std::abs(e) > kMaxUnitPower || !unitPowerFits(a.unit(), static_cast<int>(e))) {
-            err = {CalcErrorCode::UnitsMismatch, {}};
-            return {};
-        }
+        if (!unitPowerFits(a.unit(), e))
+            return failWith(err, CalcErrorCode::UnitsMismatch);
         unit = a.unit().power(static_cast<int>(e));
     }
     const double si = std::pow(a.si(), e);
-    if (std::isnan(si) && !std::isnan(a.si()) && !std::isnan(e)) {
-        err = {CalcErrorCode::Domain, QStringLiteral("^")};
-        return {};
-    }
-    if (overflowed(si, a.si(), e) && a.si() != 0) {
-        err = {CalcErrorCode::TooBig, {}};
-        return {};
-    }
+    if (std::isnan(si) && !std::isnan(a.si()) && !std::isnan(e))
+        return failWith(err, CalcErrorCode::Domain, QStringLiteral("^"));
+    if (overflowed(si, a.si(), e) && a.si() != 0)
+        return failWith(err, CalcErrorCode::TooBig);
     Value r = Value::quantity(si, unit);
     if (e == 1) {
         r.copyCurrency(a);
@@ -308,25 +310,6 @@ std::vector<const Value *> numericArguments(const std::vector<Value> &args)
     return out;
 }
 
-/// Sum of numeric values (no percent sugar); 0 for none.
-Value sumOf(const std::vector<const Value *> &values, CalcError &err)
-{
-    if (values.empty())
-        return Value::number(0);
-    Value acc = *values.front();
-    for (std::size_t i = 1; i < values.size() && !err; ++i)
-        acc = ops::add(acc, *values[i], err, false);
-    return acc;
-}
-
-double factorial(double n)
-{
-    double r = 1;
-    for (int i = 2; i <= static_cast<int>(n); ++i)
-        r *= i;
-    return r;
-}
-
 std::optional<double> constantValue(const QString &name)
 {
     if (name == u"pi" || name == u"π")
@@ -352,22 +335,43 @@ Currency currencyFor(const QString &symbol, bool prefix)
     return Currency{currencyCode(symbol), symbol, prefix};
 }
 
-/// Report `code` through `err` and return no value.
-Value failWith(CalcError &err, CalcErrorCode code, const QString &arg = {})
+/// `x!` / factorial(x) of a non-negative integer without a unit; `name` for errors.
+Value factorialOf(const Value &x, const QString &name, CalcError &err)
 {
-    err = {code, arg};
-    return {};
+    const double n = x.si();
+    if (x.hasUnit() || n < 0 || n != std::trunc(n))
+        return failWith(err, CalcErrorCode::Domain, name);
+    if (n > kMaxFactorial)
+        return failWith(err, CalcErrorCode::TooBig);
+    double r = 1;
+    for (int i = 2; i <= static_cast<int>(n); ++i)
+        r *= i;
+    return Value::number(r);
+}
+
+/// The square root (`√x`, sqrt) or cube root (cbrt) of a value and of its unit (m² -> m).
+Value rootOf(const Value &x, bool square, const QString &name, CalcError &err)
+{
+    if (square && x.si() < 0)
+        return failWith(err, CalcErrorCode::Domain, name);
+    const std::optional<Unit> rootUnit = x.unit().root(square ? 2 : 3);
+    if (!rootUnit)
+        return failWith(err, CalcErrorCode::UnitsMismatch);
+    return Value::quantity(square ? std::sqrt(x.si()) : std::cbrt(x.si()), *rootUnit);
 }
 
 // The helpers applying operators and builtins are never inlined into the recursive evaluator
 // functions: their locals would otherwise sit on the stack of every level of a deep evaluation.
 
 /// A unary operator (`-`, `+`, `not`, `!`, `%`, `√`) applied to its evaluated operand.
-Q_NEVER_INLINE Value applyUnary(NodeKind kind, const Value &operand, CalcLocale locale, CalcError &err)
+Q_NEVER_INLINE Value applyUnary(NodeKind kind, const Value &operand, const EvalEnv &env, CalcError &err)
 {
-    if (kind == NodeKind::Not)
+    if (kind == NodeKind::Not) {
+        if (!chargeString(operand, env.budget))
+            return failWith(err, CalcErrorCode::TooComplex);
         return Value::boolean(!ops::truthy(operand));
-    std::optional<Value> n = ops::toNumber(operand, locale, err);
+    }
+    std::optional<Value> n = ops::toNumber(operand, env, err);
     if (!n)
         return {};
     switch (kind) {
@@ -380,34 +384,21 @@ Q_NEVER_INLINE Value applyUnary(NodeKind kind, const Value &operand, CalcLocale 
         if (n->hasUnit())
             return failWith(err, CalcErrorCode::UnitsMismatch);
         return Value::percent(n->magnitude() / 100);
-    case NodeKind::Factorial: {
-        const double x = n->si();
-        if (n->hasUnit() || x < 0 || x != std::trunc(x))
-            return failWith(err, CalcErrorCode::Domain, QStringLiteral("!"));
-        if (x > kMaxFactorial)
-            return failWith(err, CalcErrorCode::TooBig);
-        return Value::number(factorial(x));
-    }
-    case NodeKind::Sqrt: {
-        if (n->si() < 0)
-            return failWith(err, CalcErrorCode::Domain, QStringLiteral("√"));
-        const std::optional<Unit> root = n->unit().root(2);
-        if (!root)
-            return failWith(err, CalcErrorCode::UnitsMismatch);
-        return Value::quantity(std::sqrt(n->si()), *root);
-    }
+    case NodeKind::Factorial: return factorialOf(*n, QStringLiteral("!"), err);
+    case NodeKind::Sqrt: return rootOf(*n, true, QStringLiteral("√"), err);
     default:
         return failWith(err, CalcErrorCode::Generic);
     }
 }
 
 /// A binary operator applied to evaluated operands.
-Q_NEVER_INLINE Value combineBinary(NodeKind kind, const Value &left, const Value &right, CalcLocale locale, CalcError &err)
+Q_NEVER_INLINE Value combineBinary(NodeKind kind, const Value &left, const Value &right, const EvalEnv &env,
+                                   CalcError &err)
 {
-    const std::optional<Value> a = ops::toNumber(left, locale, err);
+    const std::optional<Value> a = ops::toNumber(left, env, err);
     if (!a)
         return {};
-    const std::optional<Value> b = ops::toNumber(right, locale, err);
+    const std::optional<Value> b = ops::toNumber(right, env, err);
     if (!b)
         return {};
     switch (kind) {
@@ -437,8 +428,8 @@ Q_NEVER_INLINE Value combineBinary(NodeKind kind, const Value &left, const Value
 
 /// One comparison of a (chained) comparison: strings compare as text, numbers with a relative
 /// tolerance, two temperatures as absolute temperatures. nullopt + `err` on error.
-Q_NEVER_INLINE std::optional<bool> compareValues(CompareOp op, const Value &left, const Value &right, CalcLocale locale,
-                                                 CalcError &err)
+Q_NEVER_INLINE std::optional<bool> compareValues(CompareOp op, const Value &left, const Value &right,
+                                                 const EvalEnv &env, CalcError &err)
 {
     if (left.isString() && right.isString()) {
         const int c = QString::compare(left.text(), right.text());
@@ -452,8 +443,8 @@ Q_NEVER_INLINE std::optional<bool> compareValues(CompareOp op, const Value &left
         }
         return false;
     }
-    const std::optional<Value> a = ops::toNumber(left, locale, err);
-    const std::optional<Value> b = a ? ops::toNumber(right, locale, err) : std::nullopt;
+    const std::optional<Value> a = ops::toNumber(left, env, err);
+    const std::optional<Value> b = a ? ops::toNumber(right, env, err) : std::nullopt;
     if (!a || !b)
         return std::nullopt;
     if (a->unit().dimension() != b->unit().dimension()) {
@@ -481,10 +472,10 @@ Q_NEVER_INLINE std::optional<bool> compareValues(CompareOp op, const Value &left
 }
 
 /// `value to <unit>` / `value to <currency>`; affine only between two temperatures.
-Q_NEVER_INLINE Value convertValue(const Value &value, const Unit &unit, const Currency &currency, CalcLocale locale,
+Q_NEVER_INLINE Value convertValue(const Value &value, const Unit &unit, const Currency &currency, const EvalEnv &env,
                                   CalcError &err)
 {
-    std::optional<Value> n = ops::toNumber(value, locale, err);
+    std::optional<Value> n = ops::toNumber(value, env, err);
     if (!n)
         return {};
     Value r = *n;
@@ -512,13 +503,13 @@ Q_NEVER_INLINE Value convertValue(const Value &value, const Unit &unit, const Cu
 
 /// `20% of x`: x scaled by the percentage, keeping x's unit and currency. Only a percentage may
 /// precede the word (`word` as written): "5 z 10" is not 50.
-Q_NEVER_INLINE Value percentOf(const Value &percentage, const Value &baseValue, const QString &word, CalcLocale locale,
+Q_NEVER_INLINE Value percentOf(const Value &percentage, const Value &baseValue, const QString &word, const EvalEnv &env,
                                CalcError &err)
 {
     if (!percentage.isPercent())
         return failWith(err, CalcErrorCode::UnexpectedPart, word);
-    const std::optional<Value> p = ops::toNumber(percentage, locale, err);
-    const std::optional<Value> base = p ? ops::toNumber(baseValue, locale, err) : std::nullopt;
+    const std::optional<Value> p = ops::toNumber(percentage, env, err);
+    const std::optional<Value> base = p ? ops::toNumber(baseValue, env, err) : std::nullopt;
     if (!p || !base)
         return {};
     Value r = *base;
@@ -532,14 +523,14 @@ Q_NEVER_INLINE Value percentOf(const Value &percentage, const Value &baseValue, 
 /// `$12` / `PLN 12`; `rate` is the variable named like a written currency code (`EUR = 4,30`
 /// makes `EUR 100` an exchange), nullptr when there is none.
 Q_NEVER_INLINE Value currencyPrefixed(const Value &operand, const QString &symbol, bool codeForm, const Value *rate,
-                                      CalcLocale locale, CalcError &err)
+                                      const EvalEnv &env, CalcError &err)
 {
-    const std::optional<Value> n = ops::toNumber(operand, locale, err);
+    const std::optional<Value> n = ops::toNumber(operand, env, err);
     if (!n)
         return {};
     Value tag = Value::money(1, currencyFor(symbol, !codeForm));
     if (rate) {
-        const std::optional<Value> number = ops::toNumber(*rate, locale, err);
+        const std::optional<Value> number = ops::toNumber(*rate, env, err);
         if (!number)
             return {};
         tag = *number;
@@ -561,7 +552,7 @@ std::optional<std::pair<int, int>> builtinArity(const QString &name)
 
 namespace ops {
 
-std::optional<Value> toNumber(const Value &v, CalcLocale locale, CalcError &err)
+std::optional<Value> toNumber(const Value &v, const EvalEnv &env, CalcError &err)
 {
     switch (v.type()) {
     case Value::Type::Number:
@@ -569,7 +560,11 @@ std::optional<Value> toNumber(const Value &v, CalcLocale locale, CalcError &err)
     case Value::Type::Bool:
         return Value::number(v.boolValue() ? 1 : 0);
     case Value::Type::String: {
-        const std::optional<ParsedNumber> parsed = parseLocaleNumber(v.text(), locale);
+        if (!chargeString(v, env.budget)) {
+            err = {CalcErrorCode::TooComplex, {}};
+            return std::nullopt;
+        }
+        const std::optional<ParsedNumber> parsed = parseLocaleNumber(v.text(), env.locale);
         if (!parsed) {
             err = {CalcErrorCode::NotANumber, v.text()};
             return std::nullopt;
@@ -624,13 +619,13 @@ Value divide(const Value &a, const Value &b, CalcError &err)
     return r;
 }
 
-Value sum(const std::vector<Value> &values, CalcError &err)
+Value sum(const std::vector<const Value *> &values, CalcError &err)
 {
     if (values.empty())
         return Value::number(0);
-    Value acc = values.front();
+    Value acc = *values.front();
     for (std::size_t i = 1; i < values.size() && !err; ++i)
-        acc = add(acc, values[i], err, false);
+        acc = add(acc, *values[i], err, false);
     return acc;
 }
 
@@ -641,8 +636,7 @@ bool truthy(const Value &v)
         return v.boolValue();
     case Value::Type::Number:
         return v.si() != 0 && !std::isnan(v.si());
-    case Value::Type::String:
-        return !v.text().trimmed().isEmpty();
+    case Value::Type::String: return !QStringView(v.text()).trimmed().isEmpty();
     case Value::Type::List:
         return !v.items().empty();
     case Value::Type::Function:
@@ -679,18 +673,18 @@ Value Evaluator::fail(CalcErrorCode code, const QString &arg)
     return {};
 }
 
-Value Evaluator::check(Value v, CalcError &err)
+Value Evaluator::check(Value v, const CalcError &err)
 {
     if (err)
         return fail(err.code, err.arg);
     return v;
 }
 
-Value Evaluator::evaluate(const Node &node)
+bool Evaluator::truthy(const Value &v)
 {
-    if (failed())
-        return {};
-    return eval(node);
+    if (!chargeString(v, m_env.budget))
+        fail(CalcErrorCode::TooComplex);
+    return ops::truthy(v);
 }
 
 const Value *Evaluator::lookupVariable(const QString &name) const
@@ -781,12 +775,10 @@ Value Evaluator::evalIdent(const QString &name)
 {
     if (const Value *v = lookupVariable(name))
         return *v;
-    if (m_env.aggregate) {
-        if (const std::optional<AggregateKind> kind = aggregateWord(name)) {
-            CalcError err;
-            Value v = m_env.aggregate(*kind, err);
-            return check(std::move(v), err);
-        }
+    if (const std::optional<AggregateKind> kind = m_env.aggregate ? aggregateWord(name) : std::nullopt) {
+        CalcError err;
+        Value v = m_env.aggregate(*kind, err);
+        return check(std::move(v), err);
     }
     if (const std::optional<double> c = constantValue(name))
         return Value::number(*c);
@@ -794,15 +786,14 @@ Value Evaluator::evalIdent(const QString &name)
         return Value::boolean(*b);
     if (const UnitDef *def = findUnit(name))
         return Value::quantity(def->factor, Unit(def));
-    const QString code = currencyCode(name);
-    if (!code.isEmpty())
+    if (const QString code = currencyCode(name); !code.isEmpty())
         return Value::money(1, Currency{code, name, false});
     return fail(CalcErrorCode::UndefinedSymbol, name);
 }
 
 Value Evaluator::evalTernary(const Node &node)
 {
-    const bool condition = ops::truthy(eval(*node.children[0]));
+    const bool condition = truthy(eval(*node.children[0]));
     if (failed())
         return {};
     return eval(*node.children[condition ? 1 : 2]);
@@ -825,7 +816,7 @@ Value Evaluator::evalUnary(const Node &node)
     if (failed())
         return {};
     CalcError err;
-    Value result = applyUnary(node.kind, operand, m_env.locale, err);
+    Value result = applyUnary(node.kind, operand, m_env, err);
     return check(std::move(result), err);
 }
 
@@ -859,27 +850,23 @@ Value Evaluator::applyBinary(const Node &node, const Value &left)
     if (failed())
         return {};
     CalcError err;
-    Value result = combineBinary(node.kind, left, right, m_env.locale, err);
+    Value result = combineBinary(node.kind, left, right, m_env, err);
     return check(std::move(result), err);
 }
 
 Value Evaluator::evalLogical(const Node &node)
 {
-    const Value a = eval(*node.children[0]);
+    const bool left = truthy(eval(*node.children[0]));
     if (failed())
         return {};
-    const bool left = ops::truthy(a);
     if (node.kind == NodeKind::And && !left)
         return Value::boolean(false);
     if (node.kind == NodeKind::Or && left)
         return Value::boolean(true);
-    const Value b = eval(*node.children[1]);
+    const bool right = truthy(eval(*node.children[1]));
     if (failed())
         return {};
-    const bool right = ops::truthy(b);
-    if (node.kind == NodeKind::Xor)
-        return Value::boolean(left != right);
-    return Value::boolean(right);
+    return Value::boolean(node.kind == NodeKind::Xor ? left != right : right);
 }
 
 Value Evaluator::evalCompare(const Node &node)
@@ -895,7 +882,7 @@ Value Evaluator::evalCompare(const Node &node)
             && !m_env.budget->charge(std::min(left.text().size(), right.text().size()) / WorkBudget::kStringChunk))
             return fail(CalcErrorCode::TooComplex);
         CalcError err;
-        const std::optional<bool> result = compareValues(node.ops.at(i), left, right, m_env.locale, err);
+        const std::optional<bool> result = compareValues(node.ops.at(i), left, right, m_env, err);
         if (!result)
             return fail(err.code, err.arg);
         if (!*result)
@@ -962,9 +949,7 @@ std::optional<Evaluator::UnitTarget> Evaluator::unitTarget(const Node &node)
         if (!base)
             return std::nullopt;
         const Node &exponent = *node.children[1];
-        if (exponent.kind != NodeKind::Number || exponent.number != std::trunc(exponent.number)
-            || std::abs(exponent.number) > kMaxUnitPower
-            || !unitPowerFits(base->unit, static_cast<int>(exponent.number))) {
+        if (exponent.kind != NodeKind::Number || !unitPowerFits(base->unit, exponent.number)) {
             fail(CalcErrorCode::UnitsMismatch);
             return std::nullopt;
         }
@@ -990,7 +975,7 @@ Value Evaluator::evalConvert(const Node &node)
     if (!target)
         return {};
     CalcError err;
-    Value result = convertValue(value, target->unit, target->currency, m_env.locale, err);
+    Value result = convertValue(value, target->unit, target->currency, m_env, err);
     return check(std::move(result), err);
 }
 
@@ -1003,7 +988,7 @@ Value Evaluator::evalPercentOf(const Node &node)
     if (failed())
         return {};
     CalcError err;
-    Value result = percentOf(percentage, base, node.text, m_env.locale, err);
+    Value result = percentOf(percentage, base, node.text, m_env, err);
     return check(std::move(result), err);
 }
 
@@ -1015,13 +1000,21 @@ Value Evaluator::evalCurrencyPrefix(const Node &node)
         return {};
     const Value *rate = codeForm ? lookupVariable(node.text) : nullptr; // EUR = 4,30
     CalcError err;
-    Value result = currencyPrefixed(operand, node.text, codeForm, rate, m_env.locale, err);
+    Value result = currencyPrefixed(operand, node.text, codeForm, rate, m_env, err);
     return check(std::move(result), err);
 }
 
 namespace {
 
 // --- builtin implementations (pure functions of evaluated arguments, never recursive) --------
+
+/// `total` / `count`, a percentage when `total` is one (average, median of an even count).
+Value meanOf(const Value &total, double count, CalcError &err)
+{
+    Value r = ops::divide(total, Value::number(count), err);
+    r.setPercent(total.isPercent());
+    return r;
+}
 
 /// sum avg min max count median over the numeric arguments (lists flattened, text skipped).
 Value aggregateBuiltin(Builtin id, const std::vector<Value> &args, WorkBudget *budget, CalcError &err)
@@ -1032,33 +1025,24 @@ Value aggregateBuiltin(Builtin id, const std::vector<Value> &args, WorkBudget *b
     if (id == Builtin::Count)
         return Value::number(static_cast<double>(values.size()));
     if (id == Builtin::Sum)
-        return sumOf(values, err);
+        return ops::sum(values, err);
     if (values.empty())
         return failWith(err, CalcErrorCode::NoValues);
     const Dimension dim = values.front()->unit().dimension();
-    for (const Value *v : values) {
-        if (v->unit().dimension() != dim)
-            return failWith(err, CalcErrorCode::UnitsMismatch);
-    }
-    if (id == Builtin::Avg) {
-        const Value total = sumOf(values, err);
-        Value r = ops::divide(total, Value::number(static_cast<double>(values.size())), err);
-        r.setPercent(total.isPercent());
-        return r;
-    }
+    if (std::ranges::any_of(values, [&dim](const Value *v) { return v->unit().dimension() != dim; }))
+        return failWith(err, CalcErrorCode::UnitsMismatch);
+    if (id == Builtin::Avg)
+        return meanOf(ops::sum(values, err), static_cast<double>(values.size()), err);
     if (id == Builtin::Median) {
-        std::ranges::sort(values, [](const Value *a, const Value *b) { return a->si() < b->si(); });
+        std::ranges::sort(values, {}, &Value::si);
         const std::size_t mid = values.size() / 2;
         if (values.size() % 2 == 1)
             return *values[mid];
-        const Value total = ops::add(*values[mid - 1], *values[mid], err, false);
-        Value r = ops::divide(total, Value::number(2), err);
-        r.setPercent(total.isPercent());
-        return r;
+        return meanOf(ops::add(*values[mid - 1], *values[mid], err, false), 2, err);
     }
-    const bool wantMax = id == Builtin::Max;
-    return **std::ranges::max_element(
-            values, [&](const Value *a, const Value *b) { return wantMax ? a->si() < b->si() : a->si() > b->si(); });
+    if (id == Builtin::Max)
+        return **std::ranges::max_element(values, {}, &Value::si);
+    return **std::ranges::min_element(values, {}, &Value::si);
 }
 
 Value concatBuiltin(const std::vector<Value> &args, CalcLocale locale, WorkBudget *budget, CalcError &err)
@@ -1071,7 +1055,7 @@ Value concatBuiltin(const std::vector<Value> &args, CalcLocale locale, WorkBudge
     }
     if (budget && !budget->charge(text.size() / WorkBudget::kStringChunk))
         return failWith(err, CalcErrorCode::TooComplex);
-    return Value::string(text);
+    return Value::string(std::move(text));
 }
 
 /// A plain number from a math function: NaN from a finite argument is a domain error, an
@@ -1096,16 +1080,6 @@ Value roundBuiltin(const std::vector<Value> &nums, const QString &name, CalcErro
         digits = static_cast<int>(std::clamp(std::trunc(nums[1].si()), -15.0, 15.0));
     }
     return mapMagnitude(nums.front(), [digits](double m) { return roundDecimal(m, digits); });
-}
-
-Value rootBuiltin(const Value &x, bool square, const QString &name, CalcError &err)
-{
-    if (square && x.si() < 0)
-        return failWith(err, CalcErrorCode::Domain, name);
-    const std::optional<Unit> root = x.unit().root(square ? 2 : 3);
-    if (!root)
-        return failWith(err, CalcErrorCode::UnitsMismatch);
-    return Value::quantity(square ? std::sqrt(x.si()) : std::cbrt(x.si()), *root);
 }
 
 Value logarithmBuiltin(Builtin id, const std::vector<Value> &nums, const QString &name, CalcError &err)
@@ -1165,20 +1139,14 @@ Value numericBuiltin(Builtin id, const std::vector<Value> &nums, const QString &
     case Builtin::Sign:
         return Value::number(x.si() > 0 ? 1 : x.si() < 0 ? -1 : 0);
     case Builtin::Sqrt:
-    case Builtin::Cbrt:
-        return rootBuiltin(x, id == Builtin::Sqrt, name, err);
+    case Builtin::Cbrt: return rootOf(x, id == Builtin::Sqrt, name, err);
     case Builtin::Pow:
         return power(x, nums[1], err);
     case Builtin::Mod:
         if (nums[1].hasUnit() && x.unit().dimension() != nums[1].unit().dimension())
             return failWith(err, CalcErrorCode::UnitsMismatch);
         return modulo(x, nums[1], err);
-    case Builtin::Factorial:
-        if (x.hasUnit() || x.si() < 0 || x.si() != std::trunc(x.si()))
-            return failWith(err, CalcErrorCode::Domain, name);
-        if (x.si() > kMaxFactorial)
-            return failWith(err, CalcErrorCode::TooBig);
-        return Value::number(factorial(x.si()));
+    case Builtin::Factorial: return factorialOf(x, name, err);
     case Builtin::Atan2:
         if (x.unit().dimension() != nums[1].unit().dimension())
             return failWith(err, CalcErrorCode::UnitsMismatch);
@@ -1222,8 +1190,8 @@ Q_NEVER_INLINE QHash<QString, Value> parameterFrame(const FunctionDef &def, cons
 }
 
 /// A builtin other than `if` applied to its evaluated arguments.
-Q_NEVER_INLINE Value callBuiltin(Builtin id, const QString &name, const std::vector<Value> &args, CalcLocale locale,
-                  WorkBudget *budget, CalcError &err)
+Q_NEVER_INLINE Value callBuiltin(Builtin id, const QString &name, const std::vector<Value> &args, const EvalEnv &env,
+                                 CalcError &err)
 {
     switch (id) {
     case Builtin::Sum:
@@ -1231,17 +1199,15 @@ Q_NEVER_INLINE Value callBuiltin(Builtin id, const QString &name, const std::vec
     case Builtin::Min:
     case Builtin::Max:
     case Builtin::Count:
-    case Builtin::Median:
-        return aggregateBuiltin(id, args, budget, err);
-    case Builtin::Concat:
-        return concatBuiltin(args, locale, budget, err);
+    case Builtin::Median: return aggregateBuiltin(id, args, env.budget, err);
+    case Builtin::Concat: return concatBuiltin(args, env.locale, env.budget, err);
     default:
         break;
     }
     std::vector<Value> nums;
     nums.reserve(args.size());
     for (const Value &a : args) {
-        std::optional<Value> n = ops::toNumber(a, locale, err);
+        std::optional<Value> n = ops::toNumber(a, env, err);
         if (!n)
             return {};
         nums.push_back(std::move(*n));
@@ -1265,7 +1231,7 @@ bool Evaluator::evaluateArguments(const Node &call, std::vector<Value> &args)
 /// `if(cond, a[, b])`: only the chosen branch is evaluated.
 Value Evaluator::evalIf(const Node &call)
 {
-    const bool condition = ops::truthy(eval(*call.children[0]));
+    const bool condition = truthy(eval(*call.children[0]));
     if (failed())
         return {};
     if (condition)
@@ -1300,7 +1266,7 @@ Value Evaluator::evalCall(const Node &node)
     if (!evaluateArguments(node, args))
         return {};
     CalcError err;
-    Value result = callBuiltin(info->id, name, args, m_env.locale, m_env.budget, err);
+    Value result = callBuiltin(info->id, name, args, m_env, err);
     return check(std::move(result), err);
 }
 
@@ -1325,11 +1291,13 @@ RunResult runProgram(ParsedProgram &program, Evaluator &evaluator)
 {
     RunResult result;
     const EvalEnv &env = evaluator.env();
-    const auto assign = [&env](const QString &name, const Value &value) {
+    const auto assign = [&env, &result](const QString &name, Value value) {
         if (env.scope)
             env.scope->set(name, value);
         if (env.assigned)
             env.assigned->insert(name);
+        result.value = std::move(value);
+        result.assigned = name;
     };
     for (Statement &s : program.statements) {
         result.aggregate = false;
@@ -1362,20 +1330,12 @@ RunResult runProgram(ParsedProgram &program, Evaluator &evaluator)
                 result.value = {};
                 return result;
             }
-            assign(s.name, v);
-            result.value = std::move(v);
-            result.assigned = s.name;
+            assign(s.name, std::move(v));
             break;
         }
         case Statement::Kind::FunctionDefinition: {
-            auto def = std::make_shared<FunctionDef>();
-            def->name = s.name;
-            def->params = s.params;
-            def->body = std::move(s.expr);
-            Value v = Value::function(std::move(def));
-            assign(s.name, v);
-            result.value = std::move(v);
-            result.assigned = s.name;
+            FunctionDef def{.name = s.name, .params = s.params, .body = std::move(s.expr)};
+            assign(s.name, Value::function(std::make_shared<const FunctionDef>(std::move(def))));
             break;
         }
         }

@@ -8,6 +8,8 @@
 
 #include "text/text.h"
 
+#include <algorithm>
+
 namespace brulion::calc {
 
 namespace {
@@ -39,13 +41,12 @@ std::optional<LabelSplit> splitLabel(const QList<Token> &tokens, QStringView sou
     if (first.kind != TokenKind::Ident || first.text.isEmpty()
         || !QChar::isLetter(detail::codePointAt(first.text, 0, &length))) // 𝒜 is a surrogate pair
         return std::nullopt;
-    for (qsizetype i = 0; i < colon; ++i) {
-        const Token &t = tokens.at(i);
-        if (t.kind == TokenKind::String)
-            return std::nullopt;
-        if (t.kind == TokenKind::Operator && (t.text.contains(u'=') || t.text == u"?"))
-            return std::nullopt;
-    }
+    const auto notLabel = [](const Token &t) {
+        return t.kind == TokenKind::String
+               || (t.kind == TokenKind::Operator && (t.text.contains(u'=') || t.text == u"?"));
+    };
+    if (std::ranges::any_of(tokens.cbegin(), tokens.cbegin() + colon, notLabel))
+        return std::nullopt;
     return LabelSplit{source.left(tokens.at(colon).pos).trimmed().toString(), colon + 1};
 }
 
@@ -58,38 +59,32 @@ Value aggregateGroup(AggregateKind kind, const std::vector<Value> &group, WorkBu
         err = {CalcErrorCode::TooComplex, {}};
         return {};
     }
-    std::vector<Value> usable;
+    std::vector<const Value *> values;
     for (const Value &v : group) {
         if (v.isNumber() && !v.isPercent())
-            usable.push_back(v);
+            values.push_back(&v);
     }
-    if (usable.empty()) {
+    if (values.empty()) {
         if (kind == AggregateKind::Sum)
             return Value::number(0);
         err = {CalcErrorCode::NoValues, {}};
         return {};
     }
     CalcError sumError;
-    Value total = ops::sum(usable, sumError);
-    std::size_t count = usable.size();
+    Value total = ops::sum(values, sumError);
     if (sumError) {
-        std::vector<Value> plain;
-        for (const Value &v : usable) {
-            if (!v.hasUnit())
-                plain.push_back(v);
-        }
-        if (plain.empty()) {
+        std::erase_if(values, [](const Value *v) { return v->hasUnit(); });
+        if (values.empty()) {
             err = sumError;
             return {};
         }
-        total = ops::sum(plain, err);
-        count = plain.size();
+        total = ops::sum(values, err);
         if (err)
             return {};
     }
     if (kind == AggregateKind::Sum)
         return total;
-    return ops::divide(total, Value::number(static_cast<double>(count)), err);
+    return ops::divide(total, Value::number(static_cast<double>(values.size())), err);
 }
 
 struct LineState {
@@ -149,15 +144,14 @@ void evaluateLine(QStringView line, CalcLineResult &res, LineState &state)
         res.error = program.error.message(state.locale);
         return;
     }
-    EvalEnv env;
-    env.locale = state.locale;
-    env.scope = &state.scope;
-    env.budget = &state.budget;
-    env.aggregate = [&state](AggregateKind kind, CalcError &err) {
+    const auto aggregate = [&state](AggregateKind kind, CalcError &err) {
         return aggregateGroup(kind, state.group, state.budget, err);
     };
-    env.assigned = state.assigned;
-    Evaluator evaluator(std::move(env));
+    Evaluator evaluator({.locale = state.locale,
+                         .scope = &state.scope,
+                         .budget = &state.budget,
+                         .aggregate = aggregate,
+                         .assigned = state.assigned});
     const RunResult run = runProgram(program, evaluator);
     if (run.error) {
         res.error = run.error.message(state.locale);
@@ -221,11 +215,7 @@ CalcLineResult evaluateInline(QStringView expression, const Scope &scope, CalcLo
     }
     Scope local = scope; // assignments stay local
     WorkBudget budget;
-    EvalEnv env;
-    env.locale = locale;
-    env.scope = &local;
-    env.budget = &budget;
-    Evaluator evaluator(std::move(env));
+    Evaluator evaluator({.locale = locale, .scope = &local, .budget = &budget});
     const RunResult run = runProgram(program, evaluator);
     if (run.error) {
         res.error = run.error.message(locale);

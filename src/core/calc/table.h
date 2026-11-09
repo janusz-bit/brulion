@@ -23,10 +23,7 @@ struct TableModel {
     QList<TableAlign> aligns;
     QList<QStringList> rows;
 
-    friend bool operator==(const TableModel &a, const TableModel &b)
-    {
-        return a.header == b.header && a.aligns == b.aligns && a.rows == b.rows;
-    }
+    friend bool operator==(const TableModel &, const TableModel &) = default;
 };
 
 /// Where a table is in a document. `content.mid(from, to - from)` is the table text (parseable
@@ -39,11 +36,7 @@ struct TableSpan {
     qsizetype to = 0;   ///< offset just past the last row (before its line break)
     QString indent;     ///< leading whitespace of the rows after the header ("  " in a list item)
 
-    friend bool operator==(const TableSpan &a, const TableSpan &b)
-    {
-        return a.startLine == b.startLine && a.endLine == b.endLine && a.from == b.from && a.to == b.to
-               && a.indent == b.indent;
-    }
+    friend bool operator==(const TableSpan &, const TableSpan &) = default;
 };
 
 /// Cells of a table row: trimmed, outer pipes optional, `\|` unescaped.

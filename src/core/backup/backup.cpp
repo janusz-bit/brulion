@@ -21,7 +21,7 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
-const QString StampFormat = u"yyyy-MM-dd-HHmmss"_s;
+constexpr QStringView StampFormat = u"yyyy-MM-dd-HHmmss";
 
 /// The nearest existing folder at or above `path`, canonical, plus what does not exist yet.
 QString canonicalAsFarAsItExists(const QString &path)
@@ -55,13 +55,9 @@ QByteArray backupManifest(const QString &notebookId, bool complete, int files)
 
 BackupManifest readBackupManifest(const QString &path)
 {
-    BackupManifest out;
     QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return out;
-    const qint64 start = std::max<qint64>(0, file.size() - ManifestTailBytes);
-    if (!file.seek(start))
-        return out;
+    if (!file.open(QIODevice::ReadOnly) || !file.seek(std::max<qint64>(0, file.size() - ManifestTailBytes)))
+        return {};
     const QByteArray tail = file.read(ManifestTailBytes);
     // The end-of-directory record whose comment reaches exactly to the end of the file.
     static const QByteArray signature("PK\x05\x06", 4);
@@ -73,16 +69,16 @@ BackupManifest readBackupManifest(const QString &path)
         const qsizetype length = qsizetype(low) | (qsizetype(high) << 8);
         if (at + EndOfDirectorySize + length != tail.size())
             continue;
-        const QJsonObject json = QJsonDocument::fromJson(tail.sliced(at + EndOfDirectorySize)).object();
-        if (json.value(u"brulionBackup"_s).toInt() == 1) {
-            out.valid = true;
-            out.notebookId = json.value(u"notebook"_s).toString();
-            out.complete = json.value(u"complete"_s).toBool();
-            out.files = json.value(u"files"_s).toInt();
-        }
-        return out;
+        const QJsonDocument document = QJsonDocument::fromJson(tail.sliced(at + EndOfDirectorySize));
+        const QJsonObject json = document.object();
+        if (!document.isObject() || json.value(u"brulionBackup"_s).toInt() != 1)
+            return {};
+        return {.valid = true,
+                .notebookId = json.value(u"notebook"_s).toString(),
+                .complete = json.value(u"complete"_s).toBool(),
+                .files = json.value(u"files"_s).toInt()};
     }
-    return out;
+    return {};
 }
 
 QString notebookFilePart(const QString &notebookName)
@@ -108,10 +104,9 @@ std::optional<QDateTime> backupFileTime(const QString &fileName, const QString &
     const QString stamp = name.sliced(prefix.size(), name.size() - prefix.size() - 4);
     if (!stampShape.match(stamp).hasMatch())
         return std::nullopt;
-    const QDateTime time = QDateTime::fromString(stamp, StampFormat);
-    if (!time.isValid())
-        return std::nullopt;
-    return time;
+    if (const QDateTime time = QDateTime::fromString(stamp, StampFormat); time.isValid())
+        return time;
+    return std::nullopt;
 }
 
 QString freeBackupPath(const QString &folder, const QString &notebookName, const QDateTime &now)
@@ -142,7 +137,7 @@ QList<BackupFile> listBackups(const QString &folder, const QString &notebookName
                                   manifest.valid && manifest.complete});
         }
     }
-    std::ranges::stable_sort(out, [](const BackupFile &a, const BackupFile &b) { return a.time > b.time; });
+    std::ranges::stable_sort(out, std::ranges::greater{}, &BackupFile::time);
     return out;
 }
 
@@ -176,8 +171,9 @@ QStringList pruneBackups(const QString &folder, const QString &notebookName, int
 {
     QStringList removed;
     const QDir dir(folder);
-    for (const QString &name :
-         backupsToPrune(listBackups(folder, notebookName), keep, notebookId, protect, pruneComplete)) {
+    const QStringList names =
+            backupsToPrune(listBackups(folder, notebookName), keep, notebookId, protect, pruneComplete);
+    for (const QString &name : names) {
         if (QFile::remove(dir.filePath(name)))
             removed.append(name);
         else if (failed)
@@ -239,7 +235,7 @@ bool isCaseInsensitiveFolder(const QString &folder)
 
 qsizetype Sources::notebookFileCount() const
 {
-    return std::count_if(files.cbegin(), files.cend(), [](const SourceFile &f) { return f.path != vaultConfigPath(); });
+    return std::ranges::count_if(files, [](const SourceFile &f) { return f.path != vaultConfigPath(); });
 }
 
 Sources collectSources(const Vault &vault)
@@ -248,7 +244,7 @@ Sources collectSources(const Vault &vault)
     QList<FileStat> files = vault.files();
     if (const std::optional<FileStat> config = vault.stat(vaultConfigPath()); config && !config->isDir)
         files.append(*config);
-    std::ranges::sort(files, [](const FileStat &a, const FileStat &b) { return a.path < b.path; });
+    std::ranges::sort(files, {}, &FileStat::path);
     out.files.reserve(files.size());
     QSet<QString> nonEmpty;
     const auto markParents = [&nonEmpty](const QString &path) {

@@ -2,7 +2,6 @@
 #include "calc/tablesort.h"
 
 #include "calc/evaluator_p.h"
-#include "calc/lexer_p.h"
 #include "calc/numbers.h"
 #include "calc/parser_p.h"
 #include "calc/util_p.h"
@@ -15,9 +14,9 @@
 #include <QRegularExpression>
 
 #include <algorithm>
-#include <climits>
 #include <cmath>
 #include <numeric>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -35,23 +34,18 @@ FormulaReach formulaReach(QStringView cell, const QStringList &headers)
 {
     FormulaReach out;
     const QStringView trimmed = cell.trimmed();
-    if (!detail::isTableFormula(trimmed) || trimmed.size() > kMaxExpressionLength)
+    const QStringView expression = trimmed.mid(1);
+    if (!detail::isTableFormula(trimmed) || expression.size() > kMaxExpressionLength) // as evaluateTable()
         return out;
-    const QString source = detail::toNfc(trimmed.mid(1));
-    QList<Token> tokens = lex(source);
-    normalizeNumbers(tokens, source, CalcLocale::Polish);
-    ParseOptions options;
-    options.statements = false;
-    options.tableRefs = true;
-    options.headers = headers;
-    const ParsedProgram program = parseProgram(tokens, source, options);
+    // The references are no numbers: any locale reads them alike.
+    const ParsedProgram program = detail::parseTableFormula(detail::toNfc(expression), headers, CalcLocale::Polish);
     for (const TableRef &ref : program.refs) {
         if (ref.kind == TableRef::Kind::Direction) {
             if (ref.direction == TableRef::Direction::Above)
                 out.above = true;
             else if (ref.direction == TableRef::Direction::Below)
                 out.below = true;
-        } else if (ref.kind == TableRef::Kind::Range && (ref.row2 == INT_MAX || ref.row1 != ref.row2)) {
+        } else if (ref.kind == TableRef::Kind::Range && ref.row1 != ref.row2) { // B:B too: rows 0..INT_MAX
             out.above = true;
         }
     }
@@ -63,25 +57,24 @@ QString plainCell(QStringView cell)
 {
     if (cell.isEmpty())
         return {};
-    QString s = cell.toString();
-    if (s.contains(u'[') || s.contains(u'<')) {
-        static const QRegularExpression wiki(u"!?\\[\\[([^\\]|]*)(?:\\|([^\\]]*))?\\]\\]"_s);
-        static const QRegularExpression link(u"!?\\[([^\\]]*)\\]\\([^)]*\\)"_s);
-        static const QRegularExpression br(u"<br\\s*/?>"_s, QRegularExpression::CaseInsensitiveOption);
-        QString out;
-        qsizetype last = 0;
-        for (auto it = wiki.globalMatch(s); it.hasNext();) {
-            const auto m = it.next();
-            out += QStringView(s).mid(last, m.capturedStart() - last);
-            out += m.capturedLength(2) > 0 ? m.captured(2) : m.captured(1);
-            last = m.capturedEnd();
-        }
-        out += QStringView(s).mid(last);
-        s = std::move(out);
-        s.replace(link, u"\\1"_s);
-        s.replace(br, u" "_s);
+    if (!cell.contains(u'[') && !cell.contains(u'<'))
+        return stripInlineMarkup(cell);
+    static const QRegularExpression wiki(u"!?\\[\\[([^\\]|]*)(?:\\|([^\\]]*))?\\]\\]"_s);
+    static const QRegularExpression link(u"!?\\[([^\\]]*)\\]\\([^)]*\\)"_s);
+    static const QRegularExpression br(u"<br\\s*/?>"_s, QRegularExpression::CaseInsensitiveOption);
+    const QString s = cell.toString();
+    QString out;
+    qsizetype last = 0;
+    for (auto it = wiki.globalMatch(s); it.hasNext();) {
+        const auto m = it.next();
+        out += QStringView(s).mid(last, m.capturedStart() - last);
+        out += m.capturedLength(2) > 0 ? m.captured(2) : m.captured(1);
+        last = m.capturedEnd();
     }
-    return stripInlineMarkup(s);
+    out += QStringView(s).mid(last);
+    out.replace(link, u"\\1"_s);
+    out.replace(br, u" "_s);
+    return stripInlineMarkup(out);
 }
 
 std::optional<double> numberOf(QStringView value, CalcLocale locale)
@@ -96,14 +89,14 @@ std::optional<double> numberOf(QStringView value, CalcLocale locale)
 
 /// A date (and time) written in a form Brulion reads: minutes since the epoch's day 0, so dates
 /// with and without a time compare in one order.
-std::optional<qint64> dateOf(QStringView value, const TableSortOptions &options)
+std::optional<qint64> dateOf(QStringView value, TableSortOptions options)
 {
     if (value.isEmpty() || value.size() > 80)
         return std::nullopt;
     QStringView v = value;
     if (v.startsWith(u"[[") && v.endsWith(u"]]")) // a link to a day (stripped already when shown)
         v = v.mid(2, v.size() - 4).trimmed();
-    const auto minutes = [](const DateSpec &spec) {
+    const auto minutes = [](DateSpec spec) {
         const QTime t = spec.time.value_or(QTime(0, 0));
         return spec.date.toJulianDay() * 1440 + t.hour() * 60 + t.minute();
     };
@@ -131,34 +124,19 @@ QStringList columnValues(const TableModel &model, const TableEval &eval, int col
     return out;
 }
 
-SortKind kindOf(const QStringList &values, qsizetype from, qsizetype to, const TableSortOptions &options)
+SortKind kindOf(const QStringList &values, qsizetype from, qsizetype to, TableSortOptions options)
 {
-    bool any = false;
-    bool numbers = true;
-    for (qsizetype i = from; i < to && numbers; ++i) {
-        if (values.at(i).isEmpty())
-            continue;
-        any = true;
-        numbers = numberOf(values.at(i), options.locale).has_value();
-    }
-    if (!any)
+    const auto cells = std::ranges::subrange(values.begin() + from, values.begin() + to);
+    const auto allValues = [&cells](const auto &isKind) { // empty cells do not count
+        return std::ranges::all_of(cells, [&isKind](const QString &v) { return v.isEmpty() || isKind(v); });
+    };
+    if (std::ranges::all_of(cells, [](const QString &v) { return v.isEmpty(); }))
         return SortKind::Text;
-    if (numbers)
+    if (allValues([&](const QString &v) { return numberOf(v, options.locale).has_value(); }))
         return SortKind::Number;
-    for (qsizetype i = from; i < to; ++i) {
-        if (!values.at(i).isEmpty() && !dateOf(values.at(i), options))
-            return SortKind::Text;
-    }
-    return SortKind::Date;
-}
-
-QStringList normalizedHeaders(const TableModel &model)
-{
-    QStringList headers;
-    headers.reserve(model.header.size());
-    for (const QString &h : model.header)
-        headers.append(normalizeHeader(h));
-    return headers;
+    if (allValues([&](const QString &v) { return dateOf(v, options).has_value(); }))
+        return SortKind::Date;
+    return SortKind::Text;
 }
 
 /// A filter's operator and what it is followed by.
@@ -166,7 +144,7 @@ enum class Op { None, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
 
 Op takeOperator(QStringView &filter)
 {
-    static const std::pair<QStringView, Op> ops[] = {
+    static constexpr std::pair<QStringView, Op> ops[] = {
             {u">=", Op::GreaterEqual}, {u"<=", Op::LessEqual}, {u"!=", Op::NotEqual}, {u"<>", Op::NotEqual},
             {u"≥", Op::GreaterEqual},  {u"≤", Op::LessEqual},  {u"≠", Op::NotEqual},  {u">", Op::Greater},
             {u"<", Op::Less},          {u"=", Op::Equal},
@@ -204,11 +182,10 @@ int threeWay(T a, T b)
 
 TableSummaryRows tableSummaryRows(const TableModel &model)
 {
-    TableSummaryRows out;
     const qsizetype n = model.rows.size();
     if (n == 0)
-        return out;
-    const QStringList headers = normalizedHeaders(model);
+        return {};
+    const QStringList headers = detail::normalizedHeaders(model.header);
     const auto reach = [&](qsizetype r) {
         FormulaReach all;
         for (const QString &cell : model.rows.at(r)) {
@@ -224,9 +201,7 @@ TableSummaryRows tableSummaryRows(const TableModel &model)
     qsizetype first = 0;
     while (first < last && reach(first).below)
         ++first;
-    out.leading = int(first);
-    out.trailing = int(n - last);
-    return out;
+    return {.leading = int(first), .trailing = int(n - last)};
 }
 
 QString tableCellValue(const TableModel &model, const TableEval &eval, int row, int column)
@@ -234,11 +209,11 @@ QString tableCellValue(const TableModel &model, const TableEval &eval, int row, 
     if (row < 0 || row >= model.rows.size() || column < 0)
         return {};
     const QStringList &cells = model.rows.at(row);
-    const QString cell = column < cells.size() ? cells.at(column) : QString();
-    if (detail::isTableFormula(QStringView(cell).trimmed()) && row < eval.values.size()
-        && column < eval.values.at(row).size() && !eval.values.at(row).at(column).isNull())
+    const QStringView cell = column < cells.size() ? QStringView(cells.at(column)).trimmed() : QStringView();
+    if (detail::isTableFormula(cell) && row < eval.values.size() && column < eval.values.at(row).size()
+        && !eval.values.at(row).at(column).isNull())
         return eval.values.at(row).at(column).trimmed();
-    return plainCell(QStringView(cell).trimmed());
+    return plainCell(cell);
 }
 
 SortKind tableColumnKind(const TableModel &model, const TableEval &eval, int column, const TableSortOptions &options)
@@ -329,25 +304,15 @@ std::optional<QString> sortTableText(QStringView table, int column, SortOrder or
     for (qsizetype i = 0; i < n && formulasKept; ++i)
         formulasKept = moved.rows.at(i) == model->rows.at(sorted.at(i));
     if (formulasKept) {
-        QStringList texts;
-        texts.reserve(n);
-        for (const int old : sorted)
-            texts.append(lines.at(body + old).text);
+        const QList<text::Line> before = lines;
         for (qsizetype i = 0; i < n; ++i)
-            lines[body + i].text = texts.at(i);
+            lines[body + i].text = before.at(body + sorted.at(i)).text;
         return text::joinLines(lines);
     }
     // The references followed their rows: the table written anew, in the text's line ending.
-    const QString eol = lines.at(header).eol.isEmpty() ? u"\n"_s : lines.at(header).eol;
-    QString out;
-    for (qsizetype i = 0; i < header; ++i)
-        out += lines.at(i).text + lines.at(i).eol;
-    out += serializeTable(moved).replace(u'\n', eol);
-    const qsizetype last = body + n - 1;
-    out += lines.at(last).eol;
-    for (qsizetype i = last + 1; i < lines.size(); ++i)
-        out += lines.at(i).text + lines.at(i).eol;
-    return out;
+    const text::Line &last = lines.at(body + n - 1);
+    const TableSpan span = {.from = lines.at(header).start, .to = last.start + last.text.size(), .indent = {}};
+    return replaceTable(table, span, moved);
 }
 
 bool tableValueMatches(QStringView value, QStringView filter, const TableSortOptions &options)
@@ -365,29 +330,24 @@ bool tableValueMatches(QStringView value, QStringView filter, const TableSortOpt
         }
         return text::foldKey(value).contains(text::foldKey(filter));
     }
-    if (operand.isEmpty()) {
-        if (op == Op::Equal)
-            return value.isEmpty();
-        if (op == Op::NotEqual)
-            return !value.isEmpty();
-        return true; // an operator still being typed
+    const bool equality = op == Op::Equal || op == Op::NotEqual;
+    // `=` alone: empty cells, `!=` alone: cells with text; another operator is still being typed.
+    if (operand.isEmpty())
+        return !equality || value.isEmpty() == (op == Op::Equal);
+    const std::optional<double> number = numberOf(operand, options.locale);
+    if (number) {
+        if (const std::optional<double> a = numberOf(value, options.locale))
+            return compares(op, threeWay(*a, *number));
     }
-    if (const auto b = numberOf(operand, options.locale)) {
-        if (const auto a = numberOf(value, options.locale))
-            return compares(op, threeWay(*a, *b));
+    const std::optional<qint64> date = dateOf(operand, options);
+    if (date) {
+        if (const std::optional<qint64> a = dateOf(value, options))
+            return compares(op, threeWay(*a, *date));
     }
-    if (const auto b = dateOf(operand, options)) {
-        if (const auto a = dateOf(value, options))
-            return compares(op, threeWay(*a, *b));
-        if (op != Op::Equal && op != Op::NotEqual)
-            return false;
-    } else if (numberOf(operand, options.locale) && op != Op::Equal && op != Op::NotEqual) {
-        return false; // `> 100` on a cell that is no number
-    }
-    if (op == Op::Equal || op == Op::NotEqual)
+    if (equality)
         return (text::foldKey(value) == text::foldKey(operand)) == (op == Op::Equal);
-    if (value.isEmpty())
-        return false;
+    if (number || date || value.isEmpty())
+        return false; // `> 100` on a cell that is no number
     return compares(op, text::compareNames(value.toString(), operand.toString()));
 }
 
@@ -397,15 +357,13 @@ QList<bool> tableRowsShown(const TableModel &model, const TableEval &eval, const
     const qsizetype n = model.rows.size();
     QList<bool> shown(n, true);
     const qsizetype columns = std::min(filters.size(), model.header.size());
-    bool any = false;
-    for (qsizetype c = 0; c < columns; ++c)
-        any = any || !QStringView(filters.at(c)).trimmed().isEmpty();
-    if (!any)
+    const auto active = [&filters](qsizetype c) { return !QStringView(filters.at(c)).trimmed().isEmpty(); };
+    if (std::ranges::none_of(std::views::iota(qsizetype(0), columns), active))
         return shown;
     const TableSummaryRows summary = tableSummaryRows(model);
     for (qsizetype r = summary.leading; r < n - summary.trailing; ++r) {
         for (qsizetype c = 0; c < columns && shown.at(r); ++c) {
-            if (!QStringView(filters.at(c)).trimmed().isEmpty())
+            if (active(c))
                 shown[r] = tableValueMatches(tableCellValue(model, eval, int(r), int(c)), filters.at(c), options);
         }
     }

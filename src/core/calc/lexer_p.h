@@ -39,9 +39,7 @@ struct Token {
     /// well as an argument separator, and the function takes both counts (normalizeNumbers()).
     bool ambiguousComma = false;
 
-    bool is(TokenKind k) const { return kind == k; }
     bool isOperator(QStringView op) const { return kind == TokenKind::Operator && text == op; }
-    bool isIdent(QStringView name) const { return kind == TokenKind::Ident && text == name; }
 };
 
 /// Split an NFC-normalised expression into tokens; a `#` or `//` outside strings starts a

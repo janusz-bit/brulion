@@ -116,11 +116,7 @@ struct CalcBlock {
     QString source;           ///< content with the fence indentation removed, joined by '\n'
     bool closed = true;
 
-    friend bool operator==(const CalcBlock &a, const CalcBlock &b)
-    {
-        return a.startLine == b.startLine && a.endLine == b.endLine && a.contentStartLine == b.contentStartLine
-               && a.source == b.source && a.closed == b.closed;
-    }
+    friend bool operator==(const CalcBlock &a, const CalcBlock &b) = default;
 };
 
 /// Locate ```calc and ~~~calc blocks (info string case-insensitive; fences may be indented or

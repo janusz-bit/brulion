@@ -232,20 +232,20 @@ const Alias kAliases[] = {
     {u"rad", Rad}, {u"deg", Deg}, {u"°", Deg},
 };
 
+const UnitDef *unitAt(int index)
+{
+    return &kUnits[static_cast<std::size_t>(index)];
+}
+
 const QHash<QString, const UnitDef *> &unitIndex()
 {
     static const QHash<QString, const UnitDef *> index = [] {
         QHash<QString, const UnitDef *> h;
         for (const Alias &a : kAliases)
-            h.insert(a.name.toString(), &kUnits[static_cast<std::size_t>(a.unit)]);
+            h.insert(a.name.toString(), unitAt(a.unit));
         return h;
     }();
     return index;
-}
-
-const UnitDef *unitAt(int index)
-{
-    return &kUnits[static_cast<std::size_t>(index)];
 }
 
 /// Unit powers saturate at ±2^20, so even absurd input cannot overflow an int (the evaluator
@@ -263,17 +263,13 @@ void addDimension(Dimension &acc, const Dimension &d, int power)
 }
 
 /// Replace km², cm³, ... by powers of their base unit so they can merge with plain lengths.
-QList<UnitFactor> expandPowers(const QList<UnitFactor> &factors)
+QList<UnitFactor> expandPowers(QList<UnitFactor> factors)
 {
-    QList<UnitFactor> out;
-    out.reserve(factors.size());
-    for (const UnitFactor &f : factors) {
+    for (UnitFactor &f : factors) {
         if (f.def->powerOf >= 0)
-            out.append({unitAt(f.def->powerOf), saturatedPower(qint64(f.def->power) * f.power)});
-        else
-            out.append(f);
+            f = {unitAt(f.def->powerOf), saturatedPower(qint64(f.def->power) * f.power)};
     }
-    return out;
+    return factors;
 }
 
 /// Merge equal units and units of the same dimension into the first occurrence.
@@ -281,18 +277,14 @@ QList<UnitFactor> mergeFactors(const QList<UnitFactor> &factors)
 {
     QList<UnitFactor> out;
     for (const UnitFactor &f : factors) {
-        bool merged = false;
-        for (UnitFactor &g : out) {
-            if (g.def == f.def || g.def->dimension == f.def->dimension) {
-                g.power = saturatedPower(qint64(g.power) + f.power);
-                merged = true;
-                break;
-            }
-        }
-        if (!merged)
+        const auto same = std::ranges::find_if(
+                out, [&f](UnitFactor g) { return g.def == f.def || g.def->dimension == f.def->dimension; });
+        if (same != out.end())
+            same->power = saturatedPower(qint64(same->power) + f.power);
+        else
             out.append(f);
     }
-    out.removeIf([](const UnitFactor &f) { return f.power == 0; });
+    out.removeIf([](UnitFactor f) { return f.power == 0; });
     return out;
 }
 
@@ -301,23 +293,21 @@ std::optional<UnitFactor> compoundAlias(const QList<UnitFactor> &factors)
 {
     if (factors.size() != 2 || factors.at(0).power != 1 || factors.at(1).power != 1)
         return std::nullopt;
-    struct Rule {
-        int power;
-        int result;
-    };
-    static constexpr Rule kRules[] = {{W, Wh}, {KW, KWh}, {MW, MWh}};
+    static constexpr std::pair<UnitIndex, UnitIndex> kRules[] = {{W, Wh}, {KW, KWh}, {MW, MWh}}; // power · h
+    const UnitDef *a = factors.at(0).def;
+    const UnitDef *b = factors.at(1).def;
     const UnitDef *hour = unitAt(H);
-    for (const Rule &r : kRules) {
-        const UnitDef *p = unitAt(r.power);
-        if ((factors.at(0).def == p && factors.at(1).def == hour) || (factors.at(0).def == hour && factors.at(1).def == p))
-            return UnitFactor{unitAt(r.result), 1};
+    for (const auto &[power, energy] : kRules) {
+        const UnitDef *p = unitAt(power);
+        if ((a == p && b == hour) || (a == hour && b == p))
+            return UnitFactor{unitAt(energy), 1};
     }
     return std::nullopt;
 }
 
-QString factorText(const UnitFactor &f, int power, CalcLocale locale)
+QString factorText(const UnitDef *def, int power, CalcLocale locale)
 {
-    QString s = f.def->displaySymbol(locale).toString();
+    QString s = def->displaySymbol(locale).toString();
     if (power != 1)
         s += superscript(power);
     return s;
@@ -332,7 +322,7 @@ bool UnitDef::isTemperature() const
 
 const UnitDef *findUnit(QStringView name)
 {
-    return unitIndex().value(name.toString(), nullptr);
+    return unitIndex().value(name); // heterogeneous lookup: no QString built
 }
 
 const UnitDef *findQuantityUnit(QStringView name)
@@ -380,15 +370,15 @@ QString Unit::toString(CalcLocale locale) const
     QStringList denominator;
     for (const UnitFactor &f : m_factors) {
         if (f.power > 0)
-            numerator.append(factorText(f, f.power, locale));
+            numerator.append(factorText(f.def, f.power, locale));
         else if (f.power < 0)
-            denominator.append(factorText(f, -f.power, locale));
+            denominator.append(factorText(f.def, -f.power, locale));
     }
     const QString dot = QStringLiteral("·");
     if (numerator.isEmpty()) {
         QStringList parts;
         for (const UnitFactor &f : m_factors)
-            parts.append(factorText(f, f.power, locale));
+            parts.append(factorText(f.def, f.power, locale));
         return parts.join(dot);
     }
     QString out = numerator.join(dot);
@@ -401,24 +391,21 @@ QString Unit::toString(CalcLocale locale) const
 
 Unit Unit::simplified(QList<UnitFactor> factors)
 {
-    QList<UnitFactor> merged = mergeFactors(expandPowers(factors));
-    Dimension d = kNone;
-    for (const UnitFactor &f : merged)
-        addDimension(d, f.def->dimension, f.power);
-    if (d == kNone)
-        merged.clear(); // e.g. mph·h/km: the SI value already holds the plain number
-    if (const std::optional<UnitFactor> alias = compoundAlias(merged))
-        merged = {*alias};
-    if (merged.size() >= 3) {
+    Unit u;
+    u.m_factors = mergeFactors(expandPowers(std::move(factors)));
+    const Dimension d = u.dimension();
+    if (d == kNone) {
+        u.m_factors.clear(); // e.g. mph·h/km: the SI value already holds the plain number
+    } else if (const std::optional<UnitFactor> alias = compoundAlias(u.m_factors)) {
+        u.m_factors = {*alias};
+    } else if (u.m_factors.size() >= 3) {
         for (const int derived : {N, J, W, Pa}) {
             if (unitAt(derived)->dimension == d) {
-                merged = {UnitFactor{unitAt(derived), 1}};
+                u.m_factors = {UnitFactor{unitAt(derived), 1}};
                 break;
             }
         }
     }
-    Unit u;
-    u.m_factors = std::move(merged);
     return u;
 }
 
@@ -439,9 +426,9 @@ Unit Unit::power(int n) const
 {
     if (n == 1 || isEmpty())
         return *this;
-    QList<UnitFactor> factors;
-    for (const UnitFactor &f : m_factors)
-        factors.append({f.def, saturatedPower(qint64(f.power) * n)});
+    QList<UnitFactor> factors = m_factors;
+    for (UnitFactor &f : factors)
+        f.power = saturatedPower(qint64(f.power) * n);
     return simplified(std::move(factors));
 }
 
@@ -449,11 +436,11 @@ std::optional<Unit> Unit::root(int n) const
 {
     if (n <= 0)
         return std::nullopt;
-    QList<UnitFactor> factors;
-    for (const UnitFactor &f : expandPowers(m_factors)) {
+    QList<UnitFactor> factors = expandPowers(m_factors);
+    for (UnitFactor &f : factors) {
         if (f.power % n != 0)
             return std::nullopt;
-        factors.append({f.def, f.power / n});
+        f.power /= n;
     }
     return simplified(std::move(factors));
 }

@@ -166,7 +166,6 @@ private:
     qsizetype m_nextTrash = 0;
     std::shared_ptr<ReadBatch> m_batch;
     std::shared_ptr<ArchiveReader> m_reader;
-    QString m_archivePath;
     bool m_readerChecked = false;
     bool m_running = false;
     std::shared_ptr<std::atomic_bool> m_cancel = std::make_shared<std::atomic_bool>(false);

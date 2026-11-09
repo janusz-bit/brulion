@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <vector>
 
+using namespace Qt::StringLiterals;
+
 namespace brulion::calc {
 
 namespace {
@@ -69,8 +71,8 @@ public:
     const Value &plainValue(int r, int c)
     {
         const qsizetype k = key(r, c);
-        auto it = m_plain.find(k);
-        if (it == m_plain.end()) {
+        auto it = m_plain.constFind(k);
+        if (it == m_plain.cend()) {
             const QString &t = text(r, c);
             Value v;
             if (!t.isEmpty()) {
@@ -82,7 +84,7 @@ public:
                     v = Value::string(stripInlineMarkup(t));
                 }
             }
-            it = m_plain.insert(k, v);
+            it = m_plain.insert(k, std::move(v));
         }
         return *it;
     }
@@ -141,8 +143,8 @@ bool isSingle(const TableRef &ref)
 struct Formula {
     int r = 0;
     int c = 0;
-    ParsedProgram program;
-    CalcError error;
+    ParsedProgram program = {};
+    CalcError error = {};
 };
 
 /// Lazily enumerates the formula cells a formula depends on.
@@ -202,21 +204,16 @@ public:
     TableEvaluator(const TableModel &model, CalcLocale locale, const Scope &scope)
         : m_locale(locale)
         , m_scope(scope)
-        , m_grid(model, columnCount(model), locale)
+        , m_grid(model, static_cast<int>(detail::tableColumnCount(model)), locale)
+        , m_headers(detail::normalizedHeaders(model.header))
     {
     }
 
-    TableEval run(const TableModel &model)
+    TableEval run()
     {
-        const int cols = m_grid.cols();
-        for (int c = 0; c < cols; ++c)
-            m_headers.append(normalizeHeader(c < model.header.size() ? QStringView(model.header.at(c)) : QStringView()));
-        m_result.values.reserve(m_grid.rows());
-        m_result.errors.reserve(m_grid.rows());
-        for (int r = 0; r < m_grid.rows(); ++r) {
-            m_result.values.append(QStringList(cols, QString()));
-            m_result.errors.append(QStringList(cols, QString()));
-        }
+        // Null strings everywhere: the rows share their cells until a formula's are written.
+        m_result.values = QList<QStringList>(m_grid.rows(), QStringList(m_grid.cols()));
+        m_result.errors = m_result.values;
         parseFormulas();
         m_states.assign(m_formulas.size(), CellState::Pending);
         m_values.resize(m_formulas.size());
@@ -225,40 +222,21 @@ public:
     }
 
 private:
-    static int columnCount(const TableModel &model)
-    {
-        qsizetype cols = model.header.size();
-        for (const QStringList &r : model.rows)
-            cols = std::max(cols, r.size());
-        return static_cast<int>(cols);
-    }
-
     void parseFormulas()
     {
-        ParseOptions options;
-        options.statements = false;
-        options.tableRefs = true;
-        options.headers = m_headers;
         for (const qsizetype k : m_grid.formulaKeys()) {
-            Formula f;
-            f.r = m_grid.rowOf(k);
-            f.c = m_grid.colOf(k);
+            Formula f{.r = m_grid.rowOf(k), .c = m_grid.colOf(k)};
             const QStringView text = QStringView(m_grid.text(f.r, f.c)).mid(1);
             if (text.size() > kMaxExpressionLength) {
                 f.error = {CalcErrorCode::TooLong, {}};
             } else {
-                const QString source = detail::toNfc(text);
-                QList<Token> tokens = lex(source);
-                normalizeNumbers(tokens, source, m_locale);
-                f.program = parseProgram(tokens, source, options);
+                f.program = detail::parseTableFormula(detail::toNfc(text), m_headers, m_locale);
                 f.error = f.program.error;
                 if (!f.error && f.program.statements.empty())
                     f.error = {CalcErrorCode::ValueExpected, {}};
-                for (const TableRef &ref : f.program.refs) {
-                    if (f.error)
-                        break;
-                    areaOf(ref, f.r, f.c, m_grid, f.error); // references outside the table
-                }
+                // References outside the table.
+                for (qsizetype i = 0; !f.error && i < f.program.refs.size(); ++i)
+                    areaOf(f.program.refs.at(i), f.r, f.c, m_grid, f.error);
             }
             m_formulas.push_back(std::move(f));
         }
@@ -275,8 +253,9 @@ private:
         std::vector<bool> onStack(n, false);
         std::vector<bool> selfLoop(n, false);
         std::vector<int> stack;
+        std::vector<int> component;
         struct Frame {
-            int v;
+            int v = 0;
             EdgeCursor cursor;
         };
         std::vector<Frame> work;
@@ -314,7 +293,7 @@ private:
                 }
                 work.pop_back();
                 if (low[vi] == index[vi]) {
-                    std::vector<int> component;
+                    component.clear();
                     int x = -1;
                     do {
                         x = stack.back();
@@ -356,21 +335,22 @@ private:
                 continue;
             }
             m_states[i] = CellState::Ok;
-            value = v.isNone() ? QStringLiteral("") : v.format(m_locale);
+            value = v.isNone() ? u""_s : v.format(m_locale); // empty, never null: a formula's cell
             m_values[i] = std::move(v);
         }
     }
 
-    /// Value of a referenced cell: plain value, or the result of an evaluated formula.
-    std::optional<Value> cellValue(int r, int c, CalcError &err)
+    /// Value of a referenced cell: plain value, or the result of an evaluated formula; nullptr (and
+    /// `err`) for a formula without one. Valid until the next call (plain values are cached).
+    const Value *cellValue(int r, int c, CalcError &err)
     {
         const int id = m_grid.formulaId(r, c);
         if (id < 0)
-            return m_grid.plainValue(r, c);
+            return &m_grid.plainValue(r, c);
         if (m_states[static_cast<std::size_t>(id)] == CellState::Ok)
-            return m_values[static_cast<std::size_t>(id)];
+            return &m_values[static_cast<std::size_t>(id)];
         err = {CalcErrorCode::RefError, cellName(r, c)};
-        return std::nullopt;
+        return nullptr;
     }
 
     Value resolve(const Formula &f, int refIndex, CalcError &err)
@@ -380,7 +360,7 @@ private:
         if (!area)
             return {};
         if (isSingle(ref)) {
-            const std::optional<Value> v = cellValue(area->r1, area->c1, err);
+            const Value *v = cellValue(area->r1, area->c1, err);
             if (!v)
                 return {};
             return v->isNone() ? Value::number(0) : *v;
@@ -394,7 +374,7 @@ private:
             for (int c = area->c1; c <= area->c2; ++c) {
                 if (m_grid.key(r, c) == area->skip)
                     continue;
-                const std::optional<Value> v = cellValue(r, c, err);
+                const Value *v = cellValue(r, c, err);
                 if (!v)
                     return {};
                 if (v->isNumber())
@@ -408,18 +388,16 @@ private:
     {
         m_budget.startExpression();
         Scope scope = m_scope; // formulas cannot assign; a copy keeps the caller's scope const
-        EvalEnv env;
-        env.locale = m_locale;
-        env.scope = &scope;
-        env.budget = &m_budget;
-        env.reference = [this, &f](int refIndex, CalcError &e) { return resolve(f, refIndex, e); };
-        Evaluator evaluator(std::move(env));
+        Evaluator evaluator({.locale = m_locale,
+                             .scope = &scope,
+                             .budget = &m_budget,
+                             .reference = [this, &f](int refIndex, CalcError &e) { return resolve(f, refIndex, e); }});
         RunResult run = runProgram(f.program, evaluator);
         if (run.error) {
             err = run.error;
             return {};
         }
-        return run.value;
+        return std::move(run.value);
     }
 
     CalcLocale m_locale;
@@ -437,7 +415,23 @@ private:
 
 TableEval evaluateTable(const TableModel &model, CalcLocale locale, const Scope &scope)
 {
-    return TableEvaluator(model, locale, scope).run(model);
+    return TableEvaluator(model, locale, scope).run();
+}
+
+QStringList detail::normalizedHeaders(const QStringList &header)
+{
+    QStringList headers;
+    headers.reserve(header.size());
+    for (const QString &h : header)
+        headers.append(normalizeHeader(h));
+    return headers;
+}
+
+ParsedProgram detail::parseTableFormula(const QString &expression, const QStringList &headers, CalcLocale locale)
+{
+    QList<Token> tokens = lex(expression);
+    normalizeNumbers(tokens, expression, locale);
+    return parseProgram(tokens, expression, {.statements = false, .tableRefs = true, .headers = headers});
 }
 
 } // namespace brulion::calc

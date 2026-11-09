@@ -62,10 +62,7 @@ struct UnitFactor {
     const UnitDef *def = nullptr;
     int power = 1;
 
-    friend bool operator==(const UnitFactor &a, const UnitFactor &b)
-    {
-        return a.def == b.def && a.power == b.power;
-    }
+    friend bool operator==(const UnitFactor &, const UnitFactor &) = default;
 };
 
 /// A compound unit: a product of unit powers. Empty = dimensionless.
@@ -97,7 +94,7 @@ public:
     /// The n-th root, when every power is divisible by n (m² -> m), else nullopt.
     std::optional<Unit> root(int n) const;
 
-    friend bool operator==(const Unit &a, const Unit &b) { return a.m_factors == b.m_factors; }
+    friend bool operator==(const Unit &, const Unit &) = default;
 
 private:
     static Unit simplified(QList<UnitFactor> factors);

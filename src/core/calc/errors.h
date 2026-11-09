@@ -55,10 +55,7 @@ struct CalcError {
     /// Short, user-facing message ("Nieznana zmienna: x" / "Unknown variable: x").
     QString message(CalcLocale locale) const;
 
-    friend bool operator==(const CalcError &a, const CalcError &b)
-    {
-        return a.code == b.code && a.arg == b.arg;
-    }
+    friend bool operator==(const CalcError &a, const CalcError &b) = default;
 };
 
 /// The localised word for a boolean value ("prawda"/"fałsz", "true"/"false").

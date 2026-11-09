@@ -52,11 +52,7 @@ ApplicationWindow {
     Binding { target: Theme; property: "editorFontSize"; value: AppSettings.editorFontSize }
     Binding { target: Theme; property: "reducedMotion"; value: AppSettings.reducedMotion || DevTools.reducedMotion }
     Binding { target: DatesHelper; property: "locale"; value: DevTools.language }
-    Binding {
-        target: DatesHelper
-        property: "weekStart"
-        value: Workspace.config.weekStartsOn !== undefined ? Workspace.config.weekStartsOn : 1
-    }
+    Binding { target: DatesHelper; property: "weekStart"; value: Workspace.config.weekStartsOn !== undefined ? Workspace.config.weekStartsOn : 1 }
     Binding { target: AppController; property: "sidePanelAllowed"; value: !Theme.narrow }
 
     // A popup that closes hands the focus back to what had it when it opened. When it opened
@@ -102,26 +98,13 @@ ApplicationWindow {
         }
     }
 
-    Component {
-        id: shellComponent
-        AppShell { toasts: toastHost }
-    }
-    Component {
-        id: introComponent
-        IntroView {}
-    }
-    Component {
-        id: onboardingComponent
-        OnboardingView {}
-    }
-    Component {
-        id: splashComponent
-        ShellSplash {}
-    }
+    Component { id: shellComponent; AppShell { toasts: toastHost } }
+    Component { id: introComponent; IntroView {} }
+    Component { id: onboardingComponent; OnboardingView {} }
+    Component { id: splashComponent; ShellSplash {} }
     Component {
         id: errorComponent
-        Rectangle {
-            color: Theme.bg
+        Item {
             BEmptyState {
                 anchors.centerIn: parent
                 maximumWidth: 460
@@ -162,16 +145,10 @@ ApplicationWindow {
         if (!popup)
             return
         const reopen = AppController.trayPopupShouldReopen()
-        if (popup.visible) {
-            if (toggle)
-                popup.hide()
-            else
-                popup.open()
-            return
-        }
-        if (toggle && !reopen)
-            return
-        popup.open()
+        if (popup.visible && toggle)
+            popup.hide()
+        else if (popup.visible || !toggle || reopen)
+            popup.open()
     }
 
     // The focused form field (settings, onboarding, dialogs) above the on-screen keyboard.
@@ -202,7 +179,6 @@ ApplicationWindow {
         z: 2000
         active: KeyboardInsets.source === "simulated" && KeyboardInsets.overlap > 0
         // (At the overlay's bottom, as wide as it.)
-        x: 0
         y: parent ? parent.height - height : 0
         width: parent ? parent.width : 0
         height: KeyboardInsets.overlap
@@ -210,13 +186,8 @@ ApplicationWindow {
     }
 
     // Toasts with a button (AppController.toastWithAction, toastRestore, toastAction): shown
-    // here, their button reported back by id (no function in QML: compiled).
-    Connections {
-        target: AppController
-        function onToastWithActionRequested(id: int, text: string, kind: string, actionText: string) {
-            AppController.setToastHostId(id, toastHost.showToast(text, kind, actionText, -1))
-        }
-    }
+    // here (onToastWithActionRequested below), their button reported back by id (no function in
+    // QML: compiled).
     Connections {
         target: toastHost
         function onActionTriggered(toastId: int) {
@@ -230,6 +201,9 @@ ApplicationWindow {
     Connections {
         target: AppController
 
+        function onToastWithActionRequested(id: int, text: string, kind: string, actionText: string) {
+            AppController.setToastHostId(id, toastHost.showToast(text, kind, actionText, -1))
+        }
         function onToastRequested(text: string, kind: string) {
             // Errors (a note could not be saved, storage is missing) stay until closed.
             toastHost.showToast(text, kind, "", kind === "error" ? 0 : -1)
@@ -274,8 +248,7 @@ ApplicationWindow {
             const intro = stage.item as IntroView
             if (intro && intro.backStep())
                 return
-            const shell = stage.item as AppShell
-            if (shell && shell.viewStepBack())
+            if (window.shell && window.shell.viewStepBack())
                 return
             if (AppController.status !== "ready" || !AppController.handleBackKey())
                 AppController.moveToBackground()

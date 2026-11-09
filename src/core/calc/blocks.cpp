@@ -2,6 +2,8 @@
 
 #include "calc/util_p.h"
 
+#include <algorithm>
+
 namespace brulion::calc {
 
 namespace {
@@ -21,21 +23,23 @@ qsizetype markerLength(QStringView s, qsizetype maxDigits)
     return s.at(digits) == u'.' || s.at(digits) == u')' ? digits + 1 : 0;
 }
 
+/// The first index from `i` on that is not whitespace (QChar::isSpace()).
+qsizetype skipSpaces(QStringView line, qsizetype i)
+{
+    while (i < line.size() && line.at(i).isSpace())
+        ++i;
+    return i;
+}
+
 } // namespace
 
 std::optional<FenceOpen> parseFenceOpen(QStringView line)
 {
-    qsizetype i = 0;
-    while (i < line.size() && line.at(i).isSpace())
-        ++i;
+    qsizetype i = skipSpaces(line, 0);
     // Optional list marker followed by whitespace.
     const qsizetype marker = markerLength(line.mid(i), 1000);
-    if (marker > 0 && i + marker < line.size() && line.at(i + marker).isSpace()) {
-        qsizetype j = i + marker;
-        while (j < line.size() && line.at(j).isSpace())
-            ++j;
-        i = j;
-    }
+    if (marker > 0 && i + marker < line.size() && line.at(i + marker).isSpace())
+        i = skipSpaces(line, i + marker);
     if (i >= line.size() || (line.at(i) != u'`' && line.at(i) != u'~'))
         return std::nullopt;
     const QChar fenceChar = line.at(i);
@@ -50,12 +54,7 @@ std::optional<FenceOpen> parseFenceOpen(QStringView line)
     qsizetype wordEnd = 0;
     while (wordEnd < info.size() && !info.at(wordEnd).isSpace())
         ++wordEnd;
-    FenceOpen open;
-    open.marker = fenceChar;
-    open.length = run;
-    open.indent = i;
-    open.lang = info.left(wordEnd).toString().toLower();
-    return open;
+    return FenceOpen{.marker = fenceChar, .length = run, .indent = i, .lang = info.left(wordEnd).toString().toLower()};
 }
 
 bool isFenceClose(QStringView line, const FenceOpen &open)
@@ -63,28 +62,20 @@ bool isFenceClose(QStringView line, const FenceOpen &open)
     const QStringView t = line.trimmed();
     if (t.size() < open.length || t.size() < 3)
         return false;
-    for (const QChar c : t) {
-        if (c != open.marker)
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(t, [&open](QChar c) { return c == open.marker; });
 }
 
 qsizetype listItemPrefixLength(QStringView line)
 {
-    qsizetype i = 0;
-    while (i < line.size() && (line.at(i) == u' ' || line.at(i) == u'\t'))
-        ++i;
-    const qsizetype marker = markerLength(line.mid(i), 9);
+    const qsizetype indent = leadingWhitespace(line).size();
+    const qsizetype marker = markerLength(line.mid(indent), 9);
     if (marker == 0)
         return -1;
-    qsizetype j = i + marker;
-    const qsizetype afterMarker = j;
-    while (j < line.size() && (line.at(j) == u' ' || line.at(j) == u'\t'))
-        ++j;
-    if (j == afterMarker || j >= line.size() || line.at(j).isSpace())
+    const qsizetype gap = leadingWhitespace(line.mid(indent + marker)).size();
+    const qsizetype end = indent + marker + gap;
+    if (gap == 0 || end >= line.size() || line.at(end).isSpace())
         return -1;
-    return j;
+    return end;
 }
 
 int columnWidth(QStringView prefix)
@@ -105,10 +96,7 @@ QStringView leadingWhitespace(QStringView line)
 
 QStringView dedent(QStringView line, qsizetype n)
 {
-    qsizetype i = 0;
-    while (i < n && i < line.size() && (line.at(i) == u' ' || line.at(i) == u'\t'))
-        ++i;
-    return line.mid(i);
+    return line.mid(std::min(n, leadingWhitespace(line).size()));
 }
 
 } // namespace brulion::calc

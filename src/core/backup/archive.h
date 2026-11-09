@@ -97,6 +97,8 @@ private:
 /// Short file operations off the owner's thread: a folder may be on a slow or unplugged drive. With
 /// a pool on one of its threads, without one on a later turn of the owner's event loop.
 class FolderWork : public QObject {
+    Q_OBJECT
+
 public:
     explicit FolderWork(const notebook::WorkerPool &pool, QObject *parent = nullptr);
     /// `done` is never called after this; `work` holds no reference to the owner.

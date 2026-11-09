@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// BBadge — small pill with a count or a short label, or a dot.
+// BBadge — small pill with a count or a short label (plain text), or a dot.
 //
 //   BBadge { count: 12 }                    BBadge { text: qsTr("New"); variant: "accent" }
 //   BBadge { dot: true; variant: "warning" }
@@ -58,7 +58,6 @@ Rectangle {
     implicitWidth: dot ? 8 : Math.max(implicitHeight, labelText.implicitWidth + 12)
     radius: height / 2
     color: dot ? (variant === "accent" ? Theme.accent : strong) : solid ? strong : softBg
-    antialiasing: true
 
     Accessible.role: Accessible.StaticText
     Accessible.name: label
@@ -68,6 +67,7 @@ Rectangle {
         visible: !badge.dot
         anchors.centerIn: parent
         text: badge.label
+        textFormat: Text.PlainText
         // On solid fills: the accent's own text colour (white, dark ink on the dark mode's
         // coral), white on the dark fills (danger, light-theme success/info/neutral), ink on the
         // light ones (amber, and the pale dark-theme tints).

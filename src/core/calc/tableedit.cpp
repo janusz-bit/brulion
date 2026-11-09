@@ -4,12 +4,13 @@
 #include "calc/table.h"
 
 #include "calc/evaluator_p.h"
-#include "calc/lexer_p.h"
 #include "calc/parser_p.h"
 #include "calc/util_p.h"
 
 #include <algorithm>
 #include <climits>
+#include <ranges>
+#include <tuple>
 #include <utility>
 
 namespace brulion::calc {
@@ -71,34 +72,26 @@ enum class Axis { Rows, Columns };
 /// `ref` after the edit; empty when the edit does not change it.
 QString rewrittenRef(const TableRef &ref, const AxisEdit &edit, Axis axis)
 {
-    const QString deleted = QStringLiteral("REF!");
-    if (ref.kind == TableRef::Kind::Cell) {
-        const int before = axis == Axis::Rows ? ref.row1 : ref.col1;
-        const std::optional<int> p = edit.point(before);
-        if (!p)
-            return deleted;
-        if (*p == before)
-            return {};
-        return axis == Axis::Rows ? cellName(*p, ref.col1) : cellName(ref.row1, *p);
-    }
-    if (ref.kind != TableRef::Kind::Range)
+    const bool cell = ref.kind == TableRef::Kind::Cell; // a range of one: row1 == row2, col1 == col2
+    if (!cell && ref.kind != TableRef::Kind::Range)
         return {};
-
-    const bool wholeColumns = ref.row2 == INT_MAX;
+    const bool wholeColumns = !cell && ref.row2 == INT_MAX;
     if (wholeColumns && axis == Axis::Rows)
         return {}; // B:B holds whatever rows there are
     int r1 = std::min(ref.row1, ref.row2);
     int r2 = std::max(ref.row1, ref.row2);
     int c1 = std::min(ref.col1, ref.col2);
     int c2 = std::max(ref.col1, ref.col2);
-    const bool byRow = axis == Axis::Rows;
-    const std::optional<std::pair<int, int>> moved = byRow ? edit.span(r1, r2) : edit.span(c1, c2);
+    int &first = axis == Axis::Rows ? r1 : c1;
+    int &last = axis == Axis::Rows ? r2 : c2;
+    const std::optional<std::pair<int, int>> moved = edit.span(first, last);
     if (!moved)
-        return deleted;
-    if (*moved == (byRow ? std::pair(r1, r2) : std::pair(c1, c2)))
+        return QStringLiteral("REF!");
+    if (*moved == std::pair(first, last))
         return {};
-    (byRow ? r1 : c1) = moved->first;
-    (byRow ? r2 : c2) = moved->second;
+    std::tie(first, last) = *moved;
+    if (cell)
+        return cellName(r1, c1);
     if (wholeColumns)
         return columnName(c1) + u':' + columnName(c2);
     return cellName(r1, c1) + u':' + cellName(r2, c2);
@@ -112,18 +105,11 @@ QString rewrittenFormula(const QString &text, const QStringList &headers, const 
     if (expression.size() > kMaxExpressionLength)
         return text;
     const QString source = detail::toNfc(expression);
-    QList<Token> tokens = lex(source);
-    normalizeNumbers(tokens, source, CalcLocale::Polish); // the references are no numbers
-    ParseOptions options;
-    options.statements = false;
-    options.tableRefs = true;
-    options.headers = headers;
-    const ParsedProgram program = parseProgram(tokens, source, options);
-
+    // The references are no numbers: any locale reads them alike.
+    const ParsedProgram program = detail::parseTableFormula(source, headers, CalcLocale::Polish);
     QString out = source;
     bool changed = false;
-    for (qsizetype i = program.refs.size() - 1; i >= 0; --i) { // from the end: offsets stay right
-        const TableRef &ref = program.refs.at(i);
+    for (const TableRef &ref : std::views::reverse(program.refs)) { // from the end: offsets stay right
         const QString replacement = rewrittenRef(ref, edit, axis);
         if (replacement.isEmpty())
             continue;
@@ -133,35 +119,24 @@ QString rewrittenFormula(const QString &text, const QStringList &headers, const 
     return changed ? u'=' + out : text;
 }
 
-qsizetype columnCount(const TableModel &model)
-{
-    qsizetype columns = model.header.size();
-    for (const QStringList &row : model.rows)
-        columns = std::max(columns, row.size());
-    return columns;
-}
-
 /// Every row and alignment as wide as the header, the header as wide as the widest row (a model
 /// from anywhere; parseTable()'s already is).
 void squared(TableModel &model)
 {
-    const qsizetype columns = columnCount(model);
-    while (model.header.size() < columns)
-        model.header.append(QString());
-    while (model.aligns.size() < columns)
-        model.aligns.append(TableAlign::None);
+    const qsizetype columns = detail::tableColumnCount(model);
+    if (model.header.size() < columns)
+        model.header.resize(columns);
+    if (model.aligns.size() < columns)
+        model.aligns.resize(columns, TableAlign::None);
     for (QStringList &row : model.rows) {
-        while (row.size() < columns)
-            row.append(QString());
+        if (row.size() < columns)
+            row.resize(columns);
     }
 }
 
 void followReferences(TableModel &model, const AxisEdit &edit, Axis axis)
 {
-    QStringList headers;
-    headers.reserve(model.header.size());
-    for (const QString &header : model.header)
-        headers.append(normalizeHeader(header));
+    const QStringList headers = detail::normalizedHeaders(model.header);
     for (QStringList &row : model.rows) {
         for (QString &cell : row) {
             if (detail::isTableFormula(QStringView(cell).trimmed()))
@@ -178,7 +153,7 @@ bool insertTableRow(TableModel &model, int at)
         return false;
     squared(model);
     followReferences(model, {AxisEdit::Kind::Insert, at}, Axis::Rows);
-    model.rows.insert(at, QStringList(model.header.size(), QString()));
+    model.rows.insert(at, QStringList(model.header.size()));
     return true;
 }
 
@@ -219,9 +194,7 @@ bool permuteTableRows(TableModel &model, const QList<int> &order)
     if (!changed)
         return false;
     squared(model);
-    AxisEdit edit{AxisEdit::Kind::Permute};
-    edit.newPositions = &newPositions;
-    followReferences(model, edit, Axis::Rows);
+    followReferences(model, {.kind = AxisEdit::Kind::Permute, .newPositions = &newPositions}, Axis::Rows);
     QList<QStringList> rows;
     rows.reserve(n);
     for (const int old : order)
@@ -232,9 +205,9 @@ bool permuteTableRows(TableModel &model, const QList<int> &order)
 
 bool insertTableColumn(TableModel &model, int at, const QString &header)
 {
-    squared(model);
-    if (at < 0 || at > model.header.size())
+    if (at < 0 || at > detail::tableColumnCount(model))
         return false;
+    squared(model);
     followReferences(model, {AxisEdit::Kind::Insert, at}, Axis::Columns);
     model.header.insert(at, header);
     model.aligns.insert(at, TableAlign::None);
@@ -245,9 +218,10 @@ bool insertTableColumn(TableModel &model, int at, const QString &header)
 
 bool removeTableColumn(TableModel &model, int column)
 {
-    squared(model);
-    if (column < 0 || column >= model.header.size() || model.header.size() < 2)
+    const qsizetype columns = detail::tableColumnCount(model);
+    if (column < 0 || column >= columns || columns < 2)
         return false;
+    squared(model);
     // The headers of before: a formula's [Header] is read before its column goes.
     followReferences(model, {AxisEdit::Kind::Remove, column}, Axis::Columns);
     model.header.removeAt(column);
@@ -259,10 +233,10 @@ bool removeTableColumn(TableModel &model, int column)
 
 bool moveTableColumn(TableModel &model, int from, int to)
 {
-    squared(model);
-    const qsizetype columns = model.header.size();
+    const qsizetype columns = detail::tableColumnCount(model);
     if (from < 0 || from >= columns || to < 0 || to >= columns || from == to)
         return false;
+    squared(model);
     followReferences(model, {AxisEdit::Kind::Move, from, to}, Axis::Columns);
     model.header.move(from, to);
     model.aligns.move(from, to);

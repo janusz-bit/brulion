@@ -8,7 +8,8 @@ import Brulion
 //   BCheckBox { text: qsTr("Show completed"); checked: settings.showDone }
 //   BCheckBox { tristate: true; checkState: Qt.PartiallyChecked }   // "some selected"
 //
-// Keyboard: Space toggles; visible focus ring around the box.
+// Keyboard: Space toggles; visible focus ring around the box. `text` and `description` are plain
+// text (page titles and paths from anywhere — sync, imports — must never turn into markup).
 T.CheckBox {
     id: control
 
@@ -43,12 +44,12 @@ T.CheckBox {
         color: control.checkState !== Qt.Unchecked ? Theme.link : Theme.bgElevated
         border.width: control.checkState !== Qt.Unchecked ? 0 : 1.5
         border.color: control.hovered ? Theme.fgMuted : Theme.borderControl
-        antialiasing: true
         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
         BIcon {
             anchors.centerIn: parent
-            name: control.checkState === Qt.PartiallyChecked ? "minus" : "check"
+            // (No image for an unchecked box: rows of them in lists.)
+            name: control.checkState === Qt.Unchecked ? "" : control.checkState === Qt.PartiallyChecked ? "minus" : "check"
             size: box.boxSize - 4
             color: Theme.dark ? Theme.bg : "#ffffff"
             visible: control.checkState !== Qt.Unchecked
@@ -79,6 +80,7 @@ T.CheckBox {
                 id: titleText
                 width: parent.width
                 text: control.text
+                textFormat: Text.PlainText
                 font: control.font
                 color: Theme.fg
                 wrapMode: Text.Wrap
@@ -88,6 +90,7 @@ T.CheckBox {
                 width: parent.width
                 visible: control.description !== ""
                 text: control.description
+                textFormat: Text.PlainText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
                 color: Theme.fgMuted

@@ -15,7 +15,6 @@
 namespace brulion::calc {
 
 struct CalcLineResult;
-class Scope;
 
 /// An opening code fence: "```calc", "~~~", "- ```calc" (Logseq list item).
 struct FenceOpen {

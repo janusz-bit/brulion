@@ -1,9 +1,17 @@
 // Internal helpers of the calc module (not part of its public API).
 #pragma once
 
+#include "calc/calclocale.h"
+
 #include <QChar>
 #include <QString>
+#include <QStringList>
 #include <QStringView>
+
+namespace brulion::calc {
+struct ParsedProgram;
+struct TableModel;
+} // namespace brulion::calc
 
 namespace brulion::calc::detail {
 
@@ -58,5 +66,16 @@ bool isIdentifier(QStringView name);
 /// Turn an arbitrary key ("due-date", "cena netto", "2026") into an identifier ("due_date",
 /// "cena_netto", "_2026"); empty when nothing usable remains.
 QString sanitizeIdentifier(QStringView key);
+
+// --- tables (table*.cpp) ---------------------------------------------------------------------
+
+/// Columns of a table: as many as its header or its longest row has, whichever is more.
+qsizetype tableColumnCount(const TableModel &model);
+/// normalizeHeader() of every header cell: the names [Header] references match.
+QStringList normalizedHeaders(const QStringList &header);
+/// The expression of a table formula (the trimmed cell after its '=', NFC) parsed as one
+/// expression with table references, [Header] matching `headers` (normalizedHeaders()) and
+/// numbers read in `locale`.
+ParsedProgram parseTableFormula(const QString &expression, const QStringList &headers, CalcLocale locale);
 
 } // namespace brulion::calc::detail

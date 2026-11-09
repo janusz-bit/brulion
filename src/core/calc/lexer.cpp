@@ -2,6 +2,7 @@
 
 #include "calc/util_p.h"
 
+#include <algorithm>
 #include <array>
 
 namespace brulion::calc {
@@ -11,19 +12,13 @@ namespace detail {
 bool isIdentifier(QStringView name)
 {
     const QString s = toNfc(name);
-    if (s.isEmpty())
-        return false;
-    qsizetype i = 0;
-    bool first = true;
-    while (i < s.size()) {
-        qsizetype len = 1;
+    qsizetype len = 1;
+    for (qsizetype i = 0; i < s.size(); i += len) {
         const char32_t cp = codePointAt(s, i, &len);
-        if (first ? !isIdentStart(cp) : !isIdentPart(cp))
+        if (i == 0 ? !isIdentStart(cp) : !isIdentPart(cp))
             return false;
-        first = false;
-        i += len;
     }
-    return true;
+    return !s.isEmpty();
 }
 
 QString sanitizeIdentifier(QStringView key)
@@ -31,19 +26,15 @@ QString sanitizeIdentifier(QStringView key)
     const QString s = toNfc(key).trimmed();
     QString out;
     bool gap = false;
-    qsizetype i = 0;
-    while (i < s.size()) {
-        qsizetype len = 1;
-        const char32_t cp = codePointAt(s, i, &len);
-        if (isIdentPart(cp)) {
-            if (gap)
-                out += u'_';
-            gap = false;
-            out += s.mid(i, len);
-        } else {
+    qsizetype len = 1;
+    for (qsizetype i = 0; i < s.size(); i += len) {
+        if (!isIdentPart(codePointAt(s, i, &len))) {
             gap = true;
+            continue;
         }
-        i += len;
+        if (std::exchange(gap, false))
+            out += u'_';
+        out += QStringView(s).sliced(i, len);
     }
     qsizetype start = 0;
     qsizetype end = out.size();
@@ -54,7 +45,6 @@ QString sanitizeIdentifier(QStringView key)
     out = out.mid(start, end - start);
     if (out.isEmpty())
         return {};
-    qsizetype len = 1;
     if (!isIdentStart(codePointAt(out, 0, &len)))
         out.prepend(u'_');
     return out;
@@ -66,42 +56,57 @@ namespace {
 
 using detail::isAsciiDigit;
 
-struct OperatorSpelling {
+/// A bracket, separator or operator as written and the token it gives (`canonical` = its text).
+struct Symbol {
     QStringView spelling;
     QStringView canonical;
+    TokenKind kind = TokenKind::Operator;
 };
 
-// Longest spellings first.
-constexpr std::array<OperatorSpelling, 25> kOperators = {{
-    {u"**", u"^"}, {u"==", u"=="}, {u"!=", u"!="}, {u"<>", u"!="}, {u"<=", u"<="}, {u">=", u">="},
-    {u"&&", u"and"}, {u"||", u"or"},
-    {u"+", u"+"}, {u"-", u"-"}, {u"*", u"*"}, {u"/", u"/"}, {u"^", u"^"}, {u"%", u"%"}, {u"!", u"!"},
-    {u"=", u"="}, {u"<", u"<"}, {u">", u">"}, {u"?", u"?"}, {u":", u":"},
-    {u"×", u"*"}, {u"·", u"*"}, {u"÷", u"/"}, {u"−", u"-"}, {u"√", u"√"},
+// Brackets and separators first (the most frequent), then the operators: a longer spelling before
+// the shorter ones it starts with.
+constexpr std::array<Symbol, 39> kSymbols = {{
+        {u"(", u"(", TokenKind::LParen},
+        {u")", u")", TokenKind::RParen},
+        {u"[", u"[", TokenKind::LBracket},
+        {u"]", u"]", TokenKind::RBracket},
+        {u",", u",", TokenKind::Comma},
+        {u";", u";", TokenKind::Semicolon},
+        {u"**", u"^"},
+        {u"==", u"=="},
+        {u"!=", u"!="},
+        {u"<>", u"!="},
+        {u"<=", u"<="},
+        {u">=", u">="},
+        {u"&&", u"and"},
+        {u"||", u"or"},
+        {u"+", u"+"},
+        {u"-", u"-"},
+        {u"*", u"*"},
+        {u"/", u"/"},
+        {u"^", u"^"},
+        {u"%", u"%"},
+        {u"!", u"!"},
+        {u"=", u"="},
+        {u"<", u"<"},
+        {u">", u">"},
+        {u"?", u"?"},
+        {u":", u":"},
+        {u"×", u"*"},
+        {u"·", u"*"},
+        {u"÷", u"/"},
+        {u"−", u"-"},
+        {u"√", u"√"},
+        // ⋅ ∙ ✕ ∶ – ≤ ≥ ≠
+        {u"\u22c5", u"*"},
+        {u"\u2219", u"*"},
+        {u"\u2715", u"*"},
+        {u"\u2236", u"/"},
+        {u"\u2013", u"-"},
+        {u"\u2264", u"<="},
+        {u"\u2265", u">="},
+        {u"\u2260", u"!="},
 }};
-
-/// Unicode operators not in kOperators: ⋅ ∙ ✕ ∶ – ≤ ≥ ≠.
-QStringView unicodeOperator(QChar c)
-{
-    switch (c.unicode()) {
-    case 0x22c5: // ⋅
-    case 0x2219: // ∙
-    case 0x2715: // ✕
-        return u"*";
-    case 0x2236: // ∶
-        return u"/";
-    case 0x2013: // –
-        return u"-";
-    case 0x2264: // ≤
-        return u"<=";
-    case 0x2265: // ≥
-        return u">=";
-    case 0x2260: // ≠
-        return u"!=";
-    default:
-        return {};
-    }
-}
 
 /// Superscript digit/minus value: '²' -> 2, '⁻' -> -1 (as a marker), -2 for none.
 int superscriptValue(QChar c)
@@ -131,13 +136,7 @@ bool isCurrencySymbol(QChar c)
 
 bool allDigits(QStringView s)
 {
-    if (s.isEmpty())
-        return false;
-    for (const QChar c : s) {
-        if (!isAsciiDigit(c))
-            return false;
-    }
-    return true;
+    return !s.isEmpty() && std::ranges::all_of(s, isAsciiDigit);
 }
 
 /// `^\d{3}(\.\d+)?$` on a canonical number text.
@@ -199,13 +198,14 @@ private:
 
     void push(TokenKind kind, QString text, qsizetype start, qsizetype length, double number = 0)
     {
-        Token t;
-        t.kind = kind;
-        t.text = std::move(text);
-        t.pos = start;
-        t.length = length;
-        t.number = number;
-        m_tokens.append(std::move(t));
+        m_tokens.append({.kind = kind, .text = std::move(text), .pos = start, .length = length, .number = number});
+    }
+
+    /// A token of the next `length` characters, which it consumes.
+    void take(TokenKind kind, QString text, qsizetype length)
+    {
+        push(kind, std::move(text), m_pos, length);
+        m_pos += length;
     }
 
     void readString(QChar quote)
@@ -213,22 +213,20 @@ private:
         const qsizetype start = m_pos++;
         QString content;
         bool closed = false;
-        while (m_pos < m_src.size()) {
-            const QChar c = m_src.at(m_pos);
-            if (c == u'\\' && m_pos + 1 < m_src.size()) {
-                content += m_src.at(m_pos + 1);
-                m_pos += 2;
-                continue;
-            }
-            ++m_pos;
-            if (c == quote) {
+        while (m_pos < m_src.size() && !closed) {
+            const QChar c = m_src.at(m_pos++);
+            if (c == u'\\' && m_pos < m_src.size())
+                content += m_src.at(m_pos++);
+            else if (c == quote)
                 closed = true;
-                break;
-            }
-            content += c;
+            else
+                content += c;
         }
-        push(TokenKind::String, content, start, m_pos - start);
-        m_tokens.last().unterminated = !closed;
+        m_tokens.append({.kind = TokenKind::String,
+                         .text = std::move(content),
+                         .pos = start,
+                         .length = m_pos - start,
+                         .unterminated = !closed});
     }
 
     void readNumber()
@@ -241,74 +239,53 @@ private:
             while (isAsciiDigit(peekChar(0)))
                 ++m_pos;
         }
-        const QChar e = peekChar(0);
-        if (e == u'e' || e == u'E') {
-            qsizetype digitsAt = 1;
-            if (peekChar(1) == u'+' || peekChar(1) == u'-')
-                digitsAt = 2;
+        if (const QChar e = peekChar(0); e == u'e' || e == u'E') {
+            const qsizetype digitsAt = (peekChar(1) == u'+' || peekChar(1) == u'-') ? 2 : 1;
             if (isAsciiDigit(peekChar(digitsAt))) {
                 m_pos += digitsAt;
                 while (isAsciiDigit(peekChar(0)))
                     ++m_pos;
             }
         }
-        const QString text = m_src.mid(start, m_pos - start).toString();
-        push(TokenKind::Number, text, start, m_pos - start, text.toDouble());
+        QString text = m_src.sliced(start, m_pos - start).toString();
+        const double number = text.toDouble();
+        push(TokenKind::Number, std::move(text), start, m_pos - start, number);
     }
 
     /// Identifiers, degree signs, superscripts, currencies, brackets and operators.
     bool readSymbol(QChar c)
     {
         qsizetype len = 1;
-        const char32_t cp = detail::codePointAt(m_src, m_pos, &len);
-        if (detail::isIdentStart(cp)) {
+        if (detail::isIdentStart(detail::codePointAt(m_src, m_pos, &len))) {
             readIdentifier();
-            return true;
-        }
-        if (superscriptValue(c) != -2) {
+        } else if (superscriptValue(c) != -2) {
             readSuperscript();
-            return true;
-        }
-        if (c == QChar(0x00b0)) { // °, °C, °F
+        } else if (c == QChar(0x00b0)) { // °, °C, °F
             const QChar next = peekChar(1);
-            qsizetype nextLen = 1;
-            const bool unitFollows = (next == u'C' || next == u'F')
-                                     && (m_pos + 2 >= m_src.size()
-                                         || !detail::isIdentPart(detail::codePointAt(m_src, m_pos + 2, &nextLen)));
+            const bool unitFollows =
+                    (next == u'C' || next == u'F')
+                    && (m_pos + 2 >= m_src.size() || !detail::isIdentPart(detail::codePointAt(m_src, m_pos + 2, &len)));
             const qsizetype length = unitFollows ? 2 : 1;
-            push(TokenKind::Ident, m_src.mid(m_pos, length).toString(), m_pos, length);
-            m_pos += length;
-            return true;
+            take(TokenKind::Ident, m_src.sliced(m_pos, length).toString(), length);
+        } else if (c == QChar(0x2103) || c == QChar(0x2109)) { // ℃ ℉
+            take(TokenKind::Ident, c == QChar(0x2103) ? QStringLiteral("°C") : QStringLiteral("°F"), 1);
+        } else if (c == QChar(0x221e)) { // ∞
+            take(TokenKind::Ident, QStringLiteral("∞"), 1);
+        } else if (isCurrencySymbol(c)) {
+            take(TokenKind::Currency, QString(c), 1);
+        } else {
+            return readPunctuation(c);
         }
-        if (c == QChar(0x2103) || c == QChar(0x2109)) { // ℃ ℉
-            push(TokenKind::Ident, c == QChar(0x2103) ? QStringLiteral("°C") : QStringLiteral("°F"), m_pos, 1);
-            ++m_pos;
-            return true;
-        }
-        if (c == QChar(0x221e)) { // ∞
-            push(TokenKind::Ident, QStringLiteral("∞"), m_pos, 1);
-            ++m_pos;
-            return true;
-        }
-        if (isCurrencySymbol(c)) {
-            push(TokenKind::Currency, QString(c), m_pos, 1);
-            ++m_pos;
-            return true;
-        }
-        return readPunctuation(c);
+        return true;
     }
 
     void readIdentifier()
     {
         const qsizetype start = m_pos;
-        while (m_pos < m_src.size()) {
-            qsizetype len = 1;
-            const char32_t cp = detail::codePointAt(m_src, m_pos, &len);
-            if (!detail::isIdentPart(cp))
-                break;
+        qsizetype len = 1;
+        while (m_pos < m_src.size() && detail::isIdentPart(detail::codePointAt(m_src, m_pos, &len)))
             m_pos += len;
-        }
-        push(TokenKind::Ident, m_src.mid(start, m_pos - start).toString(), start, m_pos - start);
+        push(TokenKind::Ident, m_src.sliced(start, m_pos - start).toString(), start, m_pos - start);
     }
 
     void readSuperscript()
@@ -321,54 +298,28 @@ private:
             const int v = superscriptValue(m_src.at(m_pos));
             if (v == -2 || (v == -1 && (any || negative)))
                 break;
-            if (v == -1)
+            if (v == -1) {
                 negative = true;
-            else {
+            } else {
                 value = value * 10 + v;
                 any = true;
             }
             ++m_pos;
         }
-        push(any ? TokenKind::Superscript : TokenKind::Unknown, m_src.mid(start, m_pos - start).toString(), start,
+        push(any ? TokenKind::Superscript : TokenKind::Unknown, m_src.sliced(start, m_pos - start).toString(), start,
              m_pos - start, negative ? -value : value);
     }
 
+    /// Brackets, separators and operators (kSymbols).
     bool readPunctuation(QChar c)
     {
-        switch (c.unicode()) {
-        case u'(':
-            push(TokenKind::LParen, QStringLiteral("("), m_pos++, 1);
-            return true;
-        case u')':
-            push(TokenKind::RParen, QStringLiteral(")"), m_pos++, 1);
-            return true;
-        case u'[':
-            push(TokenKind::LBracket, QStringLiteral("["), m_pos++, 1);
-            return true;
-        case u']':
-            push(TokenKind::RBracket, QStringLiteral("]"), m_pos++, 1);
-            return true;
-        case u',':
-            push(TokenKind::Comma, QStringLiteral(","), m_pos++, 1);
-            return true;
-        case u';':
-            push(TokenKind::Semicolon, QStringLiteral(";"), m_pos++, 1);
-            return true;
-        default:
-            break;
-        }
-        const QStringView rest = m_src.mid(m_pos);
-        for (const OperatorSpelling &op : kOperators) {
-            if (rest.startsWith(op.spelling)) {
-                push(TokenKind::Operator, op.canonical.toString(), m_pos, op.spelling.size());
-                m_pos += op.spelling.size();
+        const QStringView rest = m_src.sliced(m_pos);
+        for (const Symbol &s : kSymbols) {
+            if (s.spelling.front() == c && rest.startsWith(s.spelling)) {
+                // The token text shares the literal's static data: no allocation per token.
+                take(s.kind, QString::fromRawData(s.canonical.data(), s.canonical.size()), s.spelling.size());
                 return true;
             }
-        }
-        const QStringView unicode = unicodeOperator(c);
-        if (!unicode.isEmpty()) {
-            push(TokenKind::Operator, unicode.toString(), m_pos++, 1);
-            return true;
         }
         return false;
     }
@@ -377,8 +328,7 @@ private:
     {
         qsizetype len = 1;
         detail::codePointAt(m_src, m_pos, &len);
-        push(TokenKind::Unknown, m_src.mid(m_pos, len).toString(), m_pos, len);
-        m_pos += len;
+        take(TokenKind::Unknown, m_src.sliced(m_pos, len).toString(), len);
     }
 
     QStringView m_src;
@@ -392,11 +342,32 @@ struct Frame {
     TokenKind kind = TokenKind::LParen;
     bool call = false;
     bool semicolon = false;
-    qsizetype open = -1;  ///< index of the opening bracket
-    int commas = 0;       ///< ',' directly inside
-    int glued = 0;        ///< of them: between digits without spaces ("2,5")
-    bool chained = false; ///< two of those in a row ("1,2,3"): a list of numbers, not decimals
-    bool decimal = false; ///< a call whose glued commas are decimal commas (decided by arity)
+    qsizetype open = -1;    ///< index of the opening bracket
+    int commas = 0;         ///< ',' directly inside
+    int glued = 0;          ///< of them: between digits without spaces ("2,5")
+    bool chained = false;   ///< two of those in a row ("1,2,3"): a list of numbers, not decimals
+    bool decimal = false;   ///< a call whose glued commas are decimal commas (decided by arity)
+    bool ambiguous = false; ///< a call whose glued commas fit its function both ways (`round(2,5)`)
+};
+
+/// The bracket frames of a token list.
+struct BracketFrames {
+    QList<Frame> frames;
+    /// Innermost frame of each token (-1 = top level); a bracket belongs to the frame it delimits.
+    QList<int> frameOf;
+
+    /// The frame opened by the bracket at token `i`.
+    const Frame &openedAt(qsizetype i) const { return frames.at(frameOf.at(i)); }
+
+    /// A ',' between digits at token `i` is a decimal comma (not an argument or item separator).
+    bool commaIsDecimal(qsizetype i) const
+    {
+        const int f = frameOf.at(i);
+        if (f < 0)
+            return true;
+        const Frame &frame = frames.at(f);
+        return frame.kind == TokenKind::LParen && (!frame.call || frame.semicolon || frame.decimal);
+    }
 };
 
 /// An identifier directly before '(' that names a function (`max(`, `mod(`), not an operator
@@ -413,43 +384,46 @@ bool adjacent(const Token &a, const Token &b)
     return a.pos + a.length == b.pos;
 }
 
-/// A ',' at `i` written between digits without spaces ("2,5"): a decimal comma or a separator.
-bool gluedComma(const QList<Token> &tokens, qsizetype i)
+/// A ',' at `i` written between digits without spaces ("2,5", "1,000.5").
+bool commaBetweenDigits(const QList<Token> &tokens, qsizetype i)
 {
     if (i < 1 || i + 1 >= tokens.size() || tokens.at(i).kind != TokenKind::Comma)
         return false;
     const Token &before = tokens.at(i - 1);
     const Token &after = tokens.at(i + 1);
     return before.kind == TokenKind::Number && allDigits(before.text) && after.kind == TokenKind::Number
-           && isAsciiDigit(after.text.front()) && !after.text.contains(u'.') && adjacent(before, tokens.at(i))
-           && adjacent(tokens.at(i), after);
+           && isAsciiDigit(after.text.front()) && adjacent(before, tokens.at(i)) && adjacent(tokens.at(i), after);
 }
 
-/// Innermost bracket frame of each token (-1 = top level); frames record ';' and ',' inside them,
-/// and calls without ';' with commas between digits learn which reading their function takes.
-QList<int> computeFrames(const QList<Token> &tokens, QList<Frame> &frames)
+/// Such a comma without a decimal point after it ("2,5"): a decimal comma or a separator.
+bool gluedComma(const QList<Token> &tokens, qsizetype i)
 {
-    QList<int> frameOf(tokens.size(), -1);
+    return commaBetweenDigits(tokens, i) && !tokens.at(i + 1).text.contains(u'.');
+}
+
+/// The bracket frames of `tokens`: they record ';' and ',' inside them, and calls without ';' with
+/// commas between digits learn which reading their function takes.
+BracketFrames computeFrames(const QList<Token> &tokens)
+{
+    BracketFrames out;
+    out.frameOf.reserve(tokens.size());
     QList<int> stack;
     for (qsizetype i = 0; i < tokens.size(); ++i) {
         const Token &t = tokens.at(i);
-        const int top = stack.isEmpty() ? -1 : stack.last();
-        frameOf[i] = top;
         if (t.kind == TokenKind::LParen || t.kind == TokenKind::LBracket) {
-            Frame f;
-            f.kind = t.kind;
-            f.call = t.kind == TokenKind::LParen && i > 0 && isCallTarget(tokens.at(i - 1));
-            f.open = i;
-            frames.append(f);
-            stack.append(int(frames.size() - 1));
-        } else if (t.kind == TokenKind::RParen || t.kind == TokenKind::RBracket) {
+            const bool call = t.kind == TokenKind::LParen && i > 0 && isCallTarget(tokens.at(i - 1));
+            out.frames.append({.kind = t.kind, .call = call, .open = i});
+            stack.append(int(out.frames.size() - 1));
+        }
+        const int top = stack.isEmpty() ? -1 : stack.last();
+        out.frameOf.append(top);
+        if (t.kind == TokenKind::RParen || t.kind == TokenKind::RBracket) {
             if (!stack.isEmpty())
                 stack.removeLast();
-            frameOf[i] = stack.isEmpty() ? -1 : stack.last();
         } else if (t.kind == TokenKind::Semicolon && top >= 0) {
-            frames[top].semicolon = true;
+            out.frames[top].semicolon = true;
         } else if (t.kind == TokenKind::Comma && top >= 0) {
-            Frame &f = frames[top];
+            Frame &f = out.frames[top];
             ++f.commas;
             if (gluedComma(tokens, i)) {
                 ++f.glued;
@@ -457,77 +431,48 @@ QList<int> computeFrames(const QList<Token> &tokens, QList<Frame> &frames)
             }
         }
     }
-    // `sqrt(2,25)` is sqrt(2.25): two arguments would be too many. `pow(2,5)` keeps two.
-    for (Frame &f : frames) {
+    // `sqrt(2,25)` is sqrt(2.25): two arguments would be too many. `pow(2,5)` keeps two, and
+    // `round(2,5)` fits both readings.
+    for (Frame &f : out.frames) {
         if (!f.call || f.semicolon || f.glued == 0 || f.chained)
             continue;
         const std::optional<std::pair<int, int>> arity = builtinArity(tokens.at(f.open - 1).text);
         if (!arity) // a function of the notebook (or an unknown one): the arguments as written
             continue;
-        const auto fits = [&](int count) {
+        const auto fits = [&arity](int count) {
             return count >= arity->first && (arity->second < 0 || count <= arity->second);
         };
-        const int separated = f.commas + 1;
-        const int decimal = separated - f.glued;
-        f.decimal = fits(decimal) && !fits(separated);
+        const bool decimalFits = fits(f.commas + 1 - f.glued);
+        const bool separatedFits = fits(f.commas + 1);
+        f.decimal = decimalFits && !separatedFits;
+        f.ambiguous = decimalFits && separatedFits;
     }
-    return frameOf;
-}
-
-/// A call whose commas between digits fit its function both as decimal commas and as separators.
-bool ambiguousCall(const Frame &f, const QList<Token> &tokens)
-{
-    if (!f.call || f.semicolon || f.glued == 0 || f.chained || f.decimal)
-        return false;
-    const std::optional<std::pair<int, int>> arity = builtinArity(tokens.at(f.open - 1).text);
-    if (!arity)
-        return false;
-    const auto fits = [&](int count) { return count >= arity->first && (arity->second < 0 || count <= arity->second); };
-    return fits(f.commas + 1 - f.glued) && fits(f.commas + 1);
+    return out;
 }
 
 Token mergedNumber(const Token &first, const Token &last, QString code)
 {
-    Token t;
-    t.kind = TokenKind::Number;
-    t.pos = first.pos;
-    t.length = last.pos + last.length - first.pos;
-    t.number = code.toDouble();
-    t.text = std::move(code);
-    return t;
+    const double number = code.toDouble();
+    return {.kind = TokenKind::Number,
+            .text = std::move(code),
+            .pos = first.pos,
+            .length = last.pos + last.length - first.pos,
+            .number = number};
 }
 
 QList<Token> mergeDecimalCommas(const QList<Token> &tokens, CalcLocale locale)
 {
-    QList<Frame> frames;
-    const QList<int> frameOf = computeFrames(tokens, frames);
-    const auto commaIsDecimal = [&](qsizetype commaIndex) {
-        const int f = frameOf.at(commaIndex);
-        if (f < 0)
-            return true;
-        const Frame &frame = frames.at(f);
-        return frame.kind == TokenKind::LParen && (!frame.call || frame.semicolon || frame.decimal);
-    };
-    QList<qsizetype> ambiguousOpen;
-    for (const Frame &f : frames) {
-        if (ambiguousCall(f, tokens))
-            ambiguousOpen.append(f.open);
-    }
+    const BracketFrames brackets = computeFrames(tokens);
     QList<Token> out;
     out.reserve(tokens.size());
     for (qsizetype i = 0; i < tokens.size(); ++i) {
         const Token &t = tokens.at(i);
-        if (t.kind == TokenKind::LParen && ambiguousOpen.contains(i)) {
+        if (t.kind == TokenKind::LParen && brackets.openedAt(i).ambiguous) {
             out.append(t);
             out.last().ambiguousComma = true;
             continue;
         }
-        const bool candidate = t.kind == TokenKind::Number && allDigits(t.text) && i + 2 < tokens.size()
-                               && tokens.at(i + 1).kind == TokenKind::Comma
-                               && tokens.at(i + 2).kind == TokenKind::Number
-                               && isAsciiDigit(tokens.at(i + 2).text.front()) && adjacent(t, tokens.at(i + 1))
-                               && adjacent(tokens.at(i + 1), tokens.at(i + 2)) && commaIsDecimal(i + 1);
-        if (!candidate) {
+        if (!commaBetweenDigits(tokens, i + 1) || !brackets.commaIsDecimal(i + 1)) {
             out.append(t);
             continue;
         }
@@ -544,16 +489,14 @@ QList<Token> mergeDecimalCommas(const QList<Token> &tokens, CalcLocale locale)
                 if (digits.contains(u'.'))
                     break;
             }
-            out.append(mergedNumber(t, tokens.at(j - 1), digits));
+            out.append(mergedNumber(t, tokens.at(j - 1), std::move(digits)));
             i = j - 1;
-            continue;
-        }
-        if (next.text.contains(u'.')) {
+        } else if (next.text.contains(u'.')) {
             out.append(t);
-            continue;
+        } else {
+            out.append(mergedNumber(t, next, t.text + u'.' + next.text));
+            i += 2;
         }
-        out.append(mergedNumber(t, next, t.text + u'.' + next.text));
-        i += 2;
     }
     return out;
 }
@@ -584,7 +527,7 @@ QList<Token> mergeSpaceGroups(const QList<Token> &tokens, QStringView source)
                     break;
             }
             if (j > i + 1) {
-                out.append(mergedNumber(t, tokens.at(j - 1), code));
+                out.append(mergedNumber(t, tokens.at(j - 1), std::move(code)));
                 i = j - 1;
                 continue;
             }
@@ -609,11 +552,7 @@ void normalizeNumbers(QList<Token> &tokens, QStringView source, CalcLocale local
 bool isOperatorWord(QStringView word)
 {
     static constexpr std::array<QStringView, 6> kWords = {u"to", u"mod", u"and", u"or", u"xor", u"not"};
-    for (const QStringView w : kWords) {
-        if (word.compare(w, Qt::CaseInsensitive) == 0)
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(kWords, [word](QStringView w) { return word.compare(w, Qt::CaseInsensitive) == 0; });
 }
 
 bool isOfWord(QStringView word)

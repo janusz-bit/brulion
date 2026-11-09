@@ -60,10 +60,9 @@ BDialog {
             RowLayout {
                 id: subjectRow
                 anchors.fill: parent
+                anchors.margins: Theme.space2
                 anchors.leftMargin: Theme.space3
                 anchors.rightMargin: Theme.space3
-                anchors.topMargin: Theme.space2
-                anchors.bottomMargin: Theme.space2
                 spacing: Theme.space2
                 BIcon {
                     // On the first line's middle, also when a long name wraps.
@@ -93,17 +92,11 @@ BDialog {
                 }
             }
         }
-        Text {
+        BText {
             Layout.fillWidth: true
             visible: control.message !== ""
             text: control.message
-            textFormat: Text.PlainText
             wrapMode: Text.Wrap
-            lineHeightMode: Text.FixedHeight
-            lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeight)
-            font.family: Theme.fontUi
-            font.pixelSize: Theme.textBase
-            color: Theme.fg
         }
         Text {
             Layout.fillWidth: true

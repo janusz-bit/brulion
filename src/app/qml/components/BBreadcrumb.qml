@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQml
 import QtQuick.Templates as T
 import Brulion
 
@@ -90,9 +89,9 @@ Item {
                 height: row.height
                 spacing: 2
 
+                // (No name on the first part: no size, and the Row leaves it out.)
                 BIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    visible: part.index > 0
                     name: part.index > 0 ? "chevron-right" : ""
                     size: 14
                     color: Theme.fgFaint
@@ -100,7 +99,6 @@ Item {
 
                 T.AbstractButton {
                     id: crumb
-                    anchors.verticalCenter: parent.verticalCenter
                     height: parent.height
                     enabled: !part.last
                     focusPolicy: part.last ? Qt.NoFocus : Qt.StrongFocus

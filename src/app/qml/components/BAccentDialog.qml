@@ -23,15 +23,18 @@ BDialog {
 
     function openWith(color: string): void {
         const c = ThemePalette.normalizeColor(color)
-        value = c !== "" ? c : ThemePalette.accentSwatch(Theme.accentName, Theme.customAccent, Theme.dark,
-                                                         Theme.dark ? Theme.darkSurface : Theme.lightSurface)
-        field.text = value
-        field.errorText = ""
+        showColor(c !== "" ? c : ThemePalette.accentSwatch(Theme.accentName, Theme.customAccent, Theme.dark,
+                                                           Theme.dark ? Theme.darkSurface : Theme.lightSurface))
         open()
     }
+    /// `color` ("#rrggbb") in the field and the preview.
+    function showColor(color: string): void {
+        value = color
+        field.text = color
+        field.errorText = ""
+    }
 
-    /// What Theme would use with this colour.
-    readonly property var preview: previewColors.map
+    // What Theme would use with this colour.
     ThemeColors {
         id: previewColors
         dark: Theme.dark
@@ -40,6 +43,7 @@ BDialog {
         accentName: "custom"
         customAccent: dialog.value
     }
+    // (A colour: ThemeColors' tokens are "#rrggbb" text.)
     readonly property color previewAccent: previewColors.accent
     /// 12 hues × 3 shades: Qt.hsla(h / 12, 0.68, l, 1) for l = 0.36, 0.5, 0.64 and h = 0 … 11.
     readonly property list<string> grid: [
@@ -58,12 +62,10 @@ BDialog {
 
     // One row per shade when 12 fit, else two (the hues stay in columns).
     Grid {
-        id: swatchGrid
         objectName: "accentDialogGrid"
         Layout.fillWidth: true
         readonly property real cell: Theme.touchUi ? Theme.touchTarget : 28
         columns: width >= 12 * cell ? 12 : 6
-        spacing: 0
         Repeater {
             model: dialog.grid
             delegate: BColorSwatch {
@@ -72,11 +74,7 @@ BDialog {
                 color: modelData
                 label: modelData
                 selected: dialog.value === modelData
-                onClicked: {
-                    dialog.value = modelData
-                    field.text = modelData
-                    field.errorText = ""
-                }
+                onClicked: dialog.showColor(modelData)
             }
         }
     }
@@ -176,8 +174,7 @@ BDialog {
         objectName: "accentDialogNote"
         Layout.fillWidth: true
         text: qsTr("Brulion uses lighter or darker shades of this colour where it would be hard to read.")
-        variant: "muted"
-        font.pixelSize: Theme.textSm
+        variant: "caption"
         wrapMode: Text.Wrap
     }
 }
