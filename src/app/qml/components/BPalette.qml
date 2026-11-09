@@ -49,7 +49,7 @@ T.Popup {
         const source = filter.sourceIndex(row)
         if (source >= 0)
             return items[source]
-        if (source < 0 && -1 - source < extraResults.length)
+        if (-1 - source < extraResults.length)
             return extraResults[-1 - source]
         return undefined
     }
@@ -105,7 +105,6 @@ T.Popup {
         list.positionViewAtIndex(currentIndex, ListView.Contain)
     }
 
-
     readonly property real overlayWidth: parent ? parent.width : Theme.windowWidth
     readonly property real overlayHeight: parent ? parent.height : Theme.windowHeight
     readonly property bool fullScreen: Theme.compact
@@ -145,9 +144,10 @@ T.Popup {
         const all = list.contentHeight + 12
         if (fullScreen || all <= _listRoom || list.count === 0)
             return Math.min(all, 420)
-        const created = _rowsCreated
+        if (_rowsCreated <= 0)
+            return 12
         let known = 0
-        for (let i = 0; i < list.count && created > 0 && known <= 0; ++i) {
+        for (let i = 0; i < list.count && known <= 0; ++i) {
             const row = list.itemAtIndex(i)
             if (row)
                 known = row.height
@@ -216,19 +216,20 @@ T.Popup {
                 Keys.onUpPressed: control.move(-1)
                 Keys.onDownPressed: control.move(1)
                 Keys.onPressed: (event) => {
-                    if (event.key === Qt.Key_PageDown) {
-                        control.move(Math.max(1, Math.floor(list.height / 44)))
-                        event.accepted = true
-                    } else if (event.key === Qt.Key_PageUp) {
-                        control.move(-Math.max(1, Math.floor(list.height / 44)))
-                        event.accepted = true
-                    } else if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_N || event.key === Qt.Key_J)) {
+                    const key = event.key
+                    const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+                    const page = Math.max(1, Math.floor(list.height / 44))
+                    if (key === Qt.Key_PageDown)
+                        control.move(page)
+                    else if (key === Qt.Key_PageUp)
+                        control.move(-page)
+                    else if (ctrl && (key === Qt.Key_N || key === Qt.Key_J))
                         control.move(1)
-                        event.accepted = true
-                    } else if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_P || event.key === Qt.Key_K)) {
+                    else if (ctrl && (key === Qt.Key_P || key === Qt.Key_K))
                         control.move(-1)
-                        event.accepted = true
-                    }
+                    else
+                        return
+                    event.accepted = true
                 }
                 onAccepted: control.activate(control.currentIndex)
             }

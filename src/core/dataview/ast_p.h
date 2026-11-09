@@ -36,7 +36,8 @@ struct Expr {
     QStringList params;
     QList<ExprPtr> args;
     /// The expression as written (a column's header, FLATTEN's and GROUP BY's default name); for a
-    /// chain of plain fields (`file.name`) also what a FLATTEN of it is named.
+    /// chain of plain fields (`file.name`) also what a FLATTEN of it is named. Set on the outermost
+    /// node of an operator or field chain only: inner nodes of a chain have none.
     QString text;
 };
 

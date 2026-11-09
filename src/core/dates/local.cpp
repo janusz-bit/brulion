@@ -1,5 +1,7 @@
 #include "dates/local.h"
 
+#include <algorithm>
+
 namespace brulion::dates {
 
 namespace {
@@ -10,6 +12,7 @@ bool isAsciiDigit(QChar c)
 }
 
 /// Value of `count` ASCII digits at `pos`, or -1 when they are not all digits / out of range.
+/// For short fixed-width fields only: the value must fit an int.
 int digitsAt(QStringView s, qsizetype pos, qsizetype count)
 {
     if (pos < 0 || pos + count > s.size())
@@ -52,8 +55,9 @@ std::optional<QTime> lenientTime(QStringView s)
         if (rest.size() < 3 || rest.at(0) != u':' || digitsAt(rest, 1, 2) < 0)
             return std::nullopt;
         rest = rest.sliced(3);
+        // Any number of fraction digits: only checked to be digits (their value could overflow).
         if (!rest.isEmpty()) {
-            if (rest.size() < 2 || rest.at(0) != u'.' || digitsAt(rest, 1, rest.size() - 1) < 0)
+            if (rest.size() < 2 || rest.at(0) != u'.' || !std::ranges::all_of(rest.sliced(1), isAsciiDigit))
                 return std::nullopt;
         }
     }
@@ -76,21 +80,16 @@ std::optional<DateSpec> parseDateSpec(QStringView text)
     if (s.size() == 10)
         return DateSpec{date, std::nullopt};
 
+    // "T" or whitespace before the time (`s` is trimmed: trimmed() only drops the leading run).
     QStringView rest = s.sliced(10);
-    if (rest.at(0) == u'T') {
+    if (rest.front() == u'T')
         rest = rest.sliced(1);
-    } else if (rest.at(0).isSpace()) {
-        qsizetype i = 0;
-        while (i < rest.size() && rest.at(i).isSpace())
-            ++i;
-        rest = rest.sliced(i);
-    } else {
+    else if (rest.front().isSpace())
+        rest = rest.trimmed();
+    else
         return std::nullopt;
-    }
     const auto time = lenientTime(rest);
-    if (!time)
-        return std::nullopt;
-    return DateSpec{date, time};
+    return time ? std::optional<DateSpec>(DateSpec{date, time}) : std::nullopt;
 }
 
 std::optional<QDate> parseIsoDate(QStringView text)

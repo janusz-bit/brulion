@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <numbers>
@@ -46,7 +47,7 @@ QList<QStringView> splitAtSemicolons(QStringView line)
         } else if (c == u';' && depth == 0) {
             // `#quot;`-style entities end in ';' too.
             qsizetype j = i - 1;
-            while (j >= from && (line[j].isLetterOrNumber()))
+            while (j >= from && line[j].isLetterOrNumber())
                 --j;
             if (j >= from && line[j] == u'#' && j < i - 1)
                 continue;
@@ -100,7 +101,7 @@ QList<Statement> statements(QStringView source, bool splitSemicolons, QString *t
             out.append({l.toString(), int(i + 1)});
             continue;
         }
-        for (QStringView part : splitAtSemicolons(l)) {
+        for (const QList<QStringView> parts = splitAtSemicolons(l); QStringView part : parts) {
             part = part.trimmed();
             if (!part.isEmpty())
                 out.append({part.toString(), int(i + 1)});
@@ -147,8 +148,7 @@ QString decodeEntities(QStringView s)
                     // Characters XML forbids (controls, surrogates) stay out.
                     if (ok && code >= 0x20 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) && code != 0xfffe
                         && code != 0xffff) {
-                        const char32_t cp = code;
-                        out += QString::fromUcs4(&cp, 1);
+                        out += QChar::fromUcs4(code);
                         i = j;
                         continue;
                     }
@@ -162,6 +162,14 @@ QString decodeEntities(QStringView s)
         out += c;
     }
     return out;
+}
+
+/// The first `n` characters of `text` and "…" (a surrogate pair is never split).
+QString cutTo(QStringView text, qsizetype n)
+{
+    if (text[n - 1].isHighSurrogate())
+        --n;
+    return text.first(n) + u'…';
 }
 
 } // namespace
@@ -193,7 +201,7 @@ QString cleanLabel(QStringView raw)
     t = decodeEntities(t);
     // Lines trimmed, tabs as spaces.
     t.replace(u'\t', u' ');
-    t.replace(u'\r', QString());
+    t.remove(u'\r');
     QStringList lines = t.split(u'\n');
     for (QString &l : lines)
         l = l.trimmed();
@@ -202,12 +210,7 @@ QString cleanLabel(QStringView raw)
 
 QString capLength(const QString &text)
 {
-    if (text.size() <= limits::MaxLabelLength)
-        return text;
-    qsizetype n = limits::MaxLabelLength - 1;
-    if (text.at(n - 1).isHighSurrogate())
-        --n;
-    return text.left(n) + u'…';
+    return text.size() <= limits::MaxLabelLength ? text : cutTo(text, limits::MaxLabelLength - 1);
 }
 
 qreal lineHeightOf(const Metrics &m, qreal pixelSize)
@@ -229,7 +232,7 @@ TextBlock layoutText(const Metrics &m, const QString &text, qreal pixelSize, boo
         width = std::max(width, w);
     };
     bool cut = false;
-    for (const QString &para : text.split(u'\n')) {
+    for (const QStringList paras = text.split(u'\n'); const QString &para : paras) {
         if (out.lines.size() >= limits::MaxLabelLines) {
             cut = true;
             break;
@@ -248,7 +251,7 @@ TextBlock layoutText(const Metrics &m, const QString &text, qreal pixelSize, boo
                 cut = true;
                 break;
             }
-            qreal w = m.measure(word, pixelSize, bold).width();
+            const qreal w = m.measure(word, pixelSize, bold).width();
             if (!line.isEmpty() && lineW + space + w <= maxWidth) {
                 line += u' ';
                 line += word;
@@ -265,29 +268,24 @@ TextBlock layoutText(const Metrics &m, const QString &text, qreal pixelSize, boo
                 lineW = w;
                 continue;
             }
-            // A word wider than a line: broken between characters.
-            QString part;
-            qreal partW = 0;
+            // A word wider than a line: broken between characters (the last piece stays in `line`).
             for (qsizetype i = 0; i < word.size(); ++i) {
                 const qsizetype n = word[i].isHighSurrogate() && i + 1 < word.size() ? 2 : 1;
                 const QStringView ch = word.sliced(i, n);
                 const qreal cw = m.measure(ch, pixelSize, bold).width();
-                if (!part.isEmpty() && partW + cw > maxWidth) {
+                if (!line.isEmpty() && lineW + cw > maxWidth) {
                     if (out.lines.size() >= limits::MaxLabelLines) {
                         cut = true;
                         break;
                     }
-                    push(part, partW);
-                    part.clear();
-                    partW = 0;
+                    push(line, lineW);
+                    line.clear();
+                    lineW = 0;
                 }
-                part += ch;
-                partW += cw;
+                line += ch;
+                lineW += cw;
                 i += n - 1;
             }
-            line = part;
-            lineW = partW;
-            w = partW;
         }
         if (!line.isEmpty() && out.lines.size() < limits::MaxLabelLines)
             push(line, lineW);
@@ -327,6 +325,7 @@ QList<PathOp> rectPath(const QRectF &r)
 QList<PathOp> polygonPath(const QList<QPointF> &points)
 {
     QList<PathOp> p;
+    p.reserve(points.size() + 1);
     for (qsizetype i = 0; i < points.size(); ++i)
         p.append({i == 0 ? PathOp::Type::Move : PathOp::Type::Line, points[i], {}, {}});
     if (!points.isEmpty())
@@ -413,7 +412,7 @@ qreal headInset(Head h, qreal lineWidth)
     return 0;
 }
 
-QPointF unitVector(const QPointF &a, const QPointF &b, const QPointF &fallback)
+QPointF unitVector(QPointF a, QPointF b, QPointF fallback)
 {
     const QPointF d = b - a;
     const qreal len = std::hypot(d.x(), d.y());
@@ -425,36 +424,30 @@ void addHead(QList<Item> &items, Head h, const QPointF &tip, const QPointF &dir,
     const QPointF d = unitVector(QPointF(), dir);
     const QPointF n(-d.y(), d.x());
     const qreal s = headSize(lineWidth);
+    const QPointF base = tip - d * s * 1.3, wing = n * s * 0.5; // an arrow's base and half its width
     switch (h) {
-    case Head::Arrow: {
-        const QPointF base = tip - d * s * 1.3;
-        items.append(pathItem(polygonPath({tip, base + n * s * 0.5, base - n * s * 0.5}), color, Paint{}, 0));
+    case Head::Arrow:
+        items.append(pathItem(polygonPath({tip, base + wing, base - wing}), std::move(color), Paint{}, 0));
         return;
-    }
-    case Head::Open: {
-        const QPointF base = tip - d * s * 1.3;
-        QList<PathOp> p;
-        p.append({PathOp::Type::Move, base + n * s * 0.5, {}, {}});
-        p.append({PathOp::Type::Line, tip, {}, {}});
-        p.append({PathOp::Type::Line, base - n * s * 0.5, {}, {}});
-        items.append(pathItem(p, Paint{}, color, std::max<qreal>(1, lineWidth)));
+    case Head::Open:
+        items.append(pathItem({{PathOp::Type::Move, base + wing, {}, {}},
+                               {PathOp::Type::Line, tip, {}, {}},
+                               {PathOp::Type::Line, base - wing, {}, {}}},
+                              Paint{}, std::move(color), std::max<qreal>(1, lineWidth)));
         return;
-    }
     case Head::Circle: {
         const qreal r = s / 2;
-        items.append(pathItem(ellipsePath(tip - d * r, r, r), color, Paint{}, 0));
+        items.append(pathItem(ellipsePath(tip - d * r, r, r), std::move(color), Paint{}, 0));
         return;
     }
     case Head::Cross: {
         const qreal r = s * 0.55;
-        const QPointF c = tip - d * r;
-        QList<PathOp> p;
-        const QPointF a = (d + n) * r * 0.7071, b = (d - n) * r * 0.7071;
-        p.append({PathOp::Type::Move, c - a, {}, {}});
-        p.append({PathOp::Type::Line, c + a, {}, {}});
-        p.append({PathOp::Type::Move, c - b, {}, {}});
-        p.append({PathOp::Type::Line, c + b, {}, {}});
-        items.append(pathItem(p, Paint{}, color, std::max<qreal>(1.5, lineWidth)));
+        const QPointF c = tip - d * r, a = (d + n) * r * 0.7071, b = (d - n) * r * 0.7071;
+        items.append(pathItem({{PathOp::Type::Move, c - a, {}, {}},
+                               {PathOp::Type::Line, c + a, {}, {}},
+                               {PathOp::Type::Move, c - b, {}, {}},
+                               {PathOp::Type::Line, c + b, {}, {}}},
+                              Paint{}, std::move(color), std::max<qreal>(1.5, lineWidth)));
         return;
     }
     case Head::None: break;
@@ -517,10 +510,10 @@ Style parseStyle(QStringView text)
             if (ok && std::isfinite(w) && w >= 0)
                 s.strokeWidth = std::min(w, 12.0);
         } else if (key == u"stroke-dasharray") {
-            const QString v = value.toString();
-            s.dash = v == u"0" || v == u"none"                                    ? Dash::Solid
-                     : v.split(u' ', Qt::SkipEmptyParts).value(0).toDouble() <= 3 ? Dash::Dotted
-                                                                                  : Dash::Dashed;
+            if (value == u"0" || value == u"none")
+                s.dash = Dash::Solid;
+            else
+                s.dash = value.split(u' ', Qt::SkipEmptyParts).value(0).toDouble() <= 3 ? Dash::Dotted : Dash::Dashed;
         } else if (key == u"font-weight") {
             s.bold = value == u"bold" || value.toInt() >= 600;
         }
@@ -530,41 +523,24 @@ Style parseStyle(QStringView text)
 
 std::optional<Rgba> parseHex(QStringView hex)
 {
-    if (!hex.startsWith(u'#'))
+    // "#rgb" and "#rgba" (one digit a channel, doubled), "#rrggbb" and "#rrggbbaa".
+    const qsizetype n = hex.size() - 1;
+    if (!hex.startsWith(u'#') || (n != 3 && n != 4 && n != 6 && n != 8))
         return std::nullopt;
-    const QStringView h = hex.sliced(1);
-    const auto digit = [](QChar c) -> int {
-        const char16_t u = c.unicode();
+    std::array<int, 8> d = {};
+    for (qsizetype i = 0; i < n; ++i) {
+        const char16_t u = hex[i + 1].unicode();
         if (u >= u'0' && u <= u'9')
-            return u - u'0';
-        if (u >= u'a' && u <= u'f')
-            return u - u'a' + 10;
-        if (u >= u'A' && u <= u'F')
-            return u - u'A' + 10;
-        return -1;
-    };
-    QList<int> d;
-    for (const QChar c : h) {
-        const int v = digit(c);
-        if (v < 0)
+            d[i] = u - u'0';
+        else if (u >= u'a' && u <= u'f')
+            d[i] = u - u'a' + 10;
+        else if (u >= u'A' && u <= u'F')
+            d[i] = u - u'A' + 10;
+        else
             return std::nullopt;
-        d.append(v);
     }
-    Rgba c;
-    if (d.size() == 3 || d.size() == 4) {
-        c.r = (d[0] * 17) / 255.0;
-        c.g = (d[1] * 17) / 255.0;
-        c.b = (d[2] * 17) / 255.0;
-        c.a = d.size() == 4 ? (d[3] * 17) / 255.0 : 1;
-    } else if (d.size() == 6 || d.size() == 8) {
-        c.r = (d[0] * 16 + d[1]) / 255.0;
-        c.g = (d[2] * 16 + d[3]) / 255.0;
-        c.b = (d[4] * 16 + d[5]) / 255.0;
-        c.a = d.size() == 8 ? (d[6] * 16 + d[7]) / 255.0 : 1;
-    } else {
-        return std::nullopt;
-    }
-    return c;
+    const auto channel = [&](int k) { return (n <= 4 ? d[k] * 17 : d[2 * k] * 16 + d[2 * k + 1]) / 255.0; };
+    return Rgba{channel(0), channel(1), channel(2), n == 4 || n == 8 ? channel(3) : 1};
 }
 
 QString toHex(const Rgba &c, bool withAlpha)
@@ -603,7 +579,7 @@ QString textOn(const QString &fill, const QString &dark, const QString &light)
 QString excerpt(QStringView text)
 {
     constexpr qsizetype Max = 60;
-    return text.size() <= Max ? text.toString() : text.first(Max - 1).toString() + u'…';
+    return text.size() <= Max ? text.toString() : cutTo(text, Max - 1);
 }
 
 } // namespace detail
@@ -622,14 +598,14 @@ QString parseCssColor(QStringView text)
     static const QRegularExpression rgb(
             u"^rgba?\\(\\s*(\\d{1,3})\\s*[, ]\\s*(\\d{1,3})\\s*[, ]\\s*(\\d{1,3})\\s*(?:[,/]\\s*([0-9.]+)(%?)\\s*)?\\)$"_s);
     if (const auto m = rgb.match(t); m.hasMatch()) {
-        detail::Rgba c{std::min(255, m.captured(1).toInt()) / 255.0, std::min(255, m.captured(2).toInt()) / 255.0,
-                       std::min(255, m.captured(3).toInt()) / 255.0, 1};
-        if (m.hasCaptured(4) && !m.captured(4).isEmpty()) {
+        const auto channel = [&m](int n) { return std::min(255, m.capturedView(n).toInt()) / 255.0; };
+        detail::Rgba c{channel(1), channel(2), channel(3), 1};
+        if (const QStringView alpha = m.capturedView(4); !alpha.isEmpty()) {
             bool ok = false;
-            double a = m.captured(4).toDouble(&ok);
+            double a = alpha.toDouble(&ok);
             if (!ok || !std::isfinite(a))
                 return {};
-            if (!m.captured(5).isEmpty())
+            if (!m.capturedView(5).isEmpty())
                 a /= 100;
             c.a = std::clamp(a, 0.0, 1.0);
         }
@@ -741,12 +717,11 @@ Result render(QStringView source, const Metrics &metricsIn)
     }
     r.kind = detectKind(source, &r.typeName);
     switch (r.kind) {
-    case Kind::Unknown:
-        r.error = detail::makeError(source.trimmed().isEmpty() || detail::statements(source, false).isEmpty()
-                                            ? Error::Code::Empty
-                                            : Error::Code::UnknownType,
-                                    detail::statements(source, false).value(0).line);
+    case Kind::Unknown: {
+        const QList<detail::Statement> st = detail::statements(source, false);
+        r.error = detail::makeError(st.isEmpty() ? Error::Code::Empty : Error::Code::UnknownType, st.value(0).line);
         return r;
+    }
     case Kind::Unsupported: r.error = detail::makeError(Error::Code::Unsupported, 0, r.typeName); return r;
     case Kind::Flowchart: {
         auto parsed = detail::parseFlowchart(source);

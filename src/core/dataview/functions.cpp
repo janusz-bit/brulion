@@ -23,42 +23,14 @@ using Args = ValueList;
 // ---- helpers ---------------------------------------------------------------------------------------
 
 /// The values a function of "a list or many values" works on: min(1, 2, 3) or min(list).
-ValueList spread(const Args &a)
+const ValueList &spread(const Args &a)
 {
-    if (a.size() == 1 && a.first().is(T::List))
-        return a.first().asList();
-    return a;
-}
-
-Value mapList(const Value &v, Value (*f)(const Value &, Context &), Context &ctx)
-{
-    if (!v.is(T::List))
-        return f(v, ctx);
-    ValueList out;
-    for (const Value &item : v.asList())
-        out.append(mapList(item, f, ctx));
-    return Value::list(out);
+    return a.size() == 1 && a.first().is(T::List) ? a.first().asList() : a;
 }
 
 bool callPredicate(const Value &fn, const Value &item, Context &ctx)
 {
     return callFunction(fn.asFunction(), {item}, ctx).truthy();
-}
-
-bool isFn(const Value &v)
-{
-    return v.is(T::Function);
-}
-
-double num(const Value &v, double fallback = 0)
-{
-    return v.is(T::Number) ? v.asNumber() : fallback;
-}
-
-/// The plain (Markdown-free) text of a value, for string functions given a link or a number.
-QString str(const Value &v, Context &ctx)
-{
-    return v.is(T::String) ? v.asString() : toText(v, ctx);
 }
 
 int intArg(const Value &v, int fallback)
@@ -68,31 +40,26 @@ int intArg(const Value &v, int fallback)
     return int(std::clamp(v.asNumber(), -1e9, 1e9));
 }
 
-bool containsImpl(const Value &hay, const Value &needle, bool caseInsensitive, bool exact, Context &ctx)
+Value dateOrNull(const std::optional<DateValue> &d)
+{
+    return d ? Value::date(*d) : Value();
+}
+
+/// contains() / icontains(): a substring of a string or of a link's path, an element of a list
+/// (or a value containing it), a field of an object; else equality.
+bool containsImpl(const Value &hay, const Value &needle, Qt::CaseSensitivity cs, Context &ctx)
 {
     ctx.step();
     switch (hay.type()) {
-    case T::String:
-        if (!needle.is(T::String))
-            return false;
-        return hay.asString().contains(needle.asString(), caseInsensitive ? Qt::CaseInsensitive : Qt::CaseSensitive);
+    case T::String: return needle.is(T::String) && hay.asString().contains(needle.asString(), cs);
     case T::List:
-        for (const Value &item : hay.asList()) {
-            if (exact ? equals(item, needle) : containsImpl(item, needle, caseInsensitive, false, ctx))
-                return true;
-            if (exact && caseInsensitive && item.is(T::String) && needle.is(T::String)
-                && item.asString().compare(needle.asString(), Qt::CaseInsensitive) == 0)
-                return true;
-        }
-        return false;
-    case T::Object:
-        return needle.is(T::String) && hay.asObject().field(canonicalKey(needle.asString())).has_value();
+        return std::ranges::any_of(hay.asList(),
+                                   [&](const Value &item) { return containsImpl(item, needle, cs, ctx); });
+    case T::Object: return needle.is(T::String) && hay.asObject().field(canonicalKey(needle.asString())).has_value();
     case T::Link:
         if (needle.is(T::Link))
             return equals(hay, needle);
-        if (needle.is(T::String))
-            return hay.asLink().path.contains(needle.asString(), caseInsensitive ? Qt::CaseInsensitive : Qt::CaseSensitive);
-        return false;
+        return needle.is(T::String) && hay.asLink().path.contains(needle.asString(), cs);
     default: return equals(hay, needle);
     }
 }
@@ -103,13 +70,16 @@ QString formatLuxon(const DateValue &d, const QString &fmt)
     const QLocale c = QLocale::c();
     const QDate day = d.at.date();
     const QTime t = d.at.time();
+    int weekYear = 0;
+    const int week = day.weekNumber(&weekYear);
+    const auto pad = [](int v, qsizetype w) { return QString::number(v).rightJustified(w, u'0'); };
     QString out;
     qsizetype i = 0;
     while (i < fmt.size()) {
         const QChar ch = fmt.at(i);
         if (ch == u'\'') {
             const qsizetype end = fmt.indexOf(u'\'', i + 1);
-            out += fmt.mid(i + 1, end < 0 ? -1 : end - i - 1);
+            out += QStringView(fmt).mid(i + 1, end < 0 ? -1 : end - i - 1);
             i = end < 0 ? fmt.size() : end + 1;
             continue;
         }
@@ -121,34 +91,31 @@ QString formatLuxon(const DateValue &d, const QString &fmt)
         qsizetype n = 1;
         while (i + n < fmt.size() && fmt.at(i + n) == ch)
             ++n;
-        const auto pad = [](int v, int w) { return QString::number(v).rightJustified(w, u'0'); };
-        int weekYear = 0;
-        const int week = day.weekNumber(&weekYear);
         switch (ch.unicode()) {
-        case 'y': out += n == 2 ? pad(day.year() % 100, 2) : pad(day.year(), int(std::max<qsizetype>(n, 1))); break;
+        case 'y': out += n == 2 ? pad(day.year() % 100, 2) : pad(day.year(), n); break;
         case 'M':
         case 'L':
-            out += n >= 4 ? c.monthName(day.month(), QLocale::LongFormat)
+            out += n >= 4   ? c.monthName(day.month(), QLocale::LongFormat)
                    : n == 3 ? c.monthName(day.month(), QLocale::ShortFormat)
-                            : pad(day.month(), int(n));
+                            : pad(day.month(), n);
             break;
-        case 'd': out += pad(day.day(), int(n)); break;
+        case 'd': out += pad(day.day(), n); break;
         case 'E':
         case 'c':
             out += n >= 4 ? c.dayName(day.dayOfWeek(), QLocale::LongFormat)
                    : n == 3 ? c.dayName(day.dayOfWeek(), QLocale::ShortFormat)
                             : QString::number(day.dayOfWeek());
             break;
-        case 'H': out += pad(t.hour(), int(n)); break;
-        case 'h': out += pad(t.hour() % 12 == 0 ? 12 : t.hour() % 12, int(n)); break;
-        case 'm': out += pad(t.minute(), int(n)); break;
-        case 's': out += pad(t.second(), int(n)); break;
+        case 'H': out += pad(t.hour(), n); break;
+        case 'h': out += pad(t.hour() % 12 == 0 ? 12 : t.hour() % 12, n); break;
+        case 'm': out += pad(t.minute(), n); break;
+        case 's': out += pad(t.second(), n); break;
         case 'S': out += pad(t.msec(), 3); break;
         case 'a': out += t.hour() < 12 ? u"AM"_s : u"PM"_s; break;
-        case 'W': out += pad(week, int(n)); break;
-        case 'k': out += pad(weekYear, int(n)); break;
+        case 'W': out += pad(week, n); break;
+        case 'k': out += pad(weekYear, n); break;
         case 'q': out += QString::number((day.month() - 1) / 3 + 1); break;
-        case 'o': out += pad(day.dayOfYear(), int(n)); break;
+        case 'o': out += pad(day.dayOfYear(), n); break;
         default: out += QString(n, ch); break;
         }
         i += n;
@@ -179,7 +146,7 @@ std::optional<DateValue> parseWithFormat(const QString &text, const QString &fmt
         case 'a': qt += u"AP"_s; break;
         case '\'': {
             const qsizetype end = fmt.indexOf(u'\'', i + 1);
-            qt += fmt.mid(i, end < 0 ? -1 : end - i + 1);
+            qt += QStringView(fmt).mid(i, end < 0 ? -1 : end - i + 1);
             n = (end < 0 ? fmt.size() : end + 1) - i;
             break;
         }
@@ -203,24 +170,22 @@ Value toDate(const Value &v, Context &ctx)
     case T::Date: return v;
     case T::String: {
         const QString s = v.asString().trimmed();
-        if (isDateWord(s.toLower())) {
-            if (const auto d = dateWord(s.toLower(), ctx.options()))
-                return Value::date(*d);
-        }
-        if (const auto d = parseDate(s))
+        if (const auto d = dateWord(s.toLower(), ctx.options()))
             return Value::date(*d);
-        return Value();
+        return dateOrNull(parseDate(s));
     }
     case T::Link: {
         // A link to a daily note (or a page named by a date): its day.
         const Value day = fieldOf(fieldOf(v, u"file"_s, ctx), u"day"_s, ctx);
-        if (day.is(T::Date))
-            return day;
-        if (const auto d = parseDate(paths::pageTitle(v.asLink().path)))
-            return Value::date(*d);
-        return Value();
+        return day.is(T::Date) ? day : dateOrNull(parseDate(paths::pageTitle(v.asLink().path)));
     }
-    case T::Number: return Value::date(DateValue{QDateTime::fromMSecsSinceEpoch(qint64(v.asNumber())), true});
+    case T::Number: {
+        // Milliseconds since the epoch; converting NaN or a value beyond qint64 (2^63) is undefined.
+        const double ms = v.asNumber();
+        if (std::isnan(ms) || std::fabs(ms) >= 0x1p63)
+            return Value();
+        return Value::date(DateValue{QDateTime::fromMSecsSinceEpoch(qint64(ms)), true});
+    }
     default: return Value();
     }
 }
@@ -231,7 +196,7 @@ Value fObject(const Args &a, Context &ctx)
 {
     QList<std::pair<QString, Value>> fields;
     for (qsizetype i = 0; i + 1 < a.size(); i += 2)
-        fields.append({canonicalKey(str(a.at(i), ctx)), a.at(i + 1)});
+        fields.append({canonicalKey(toText(a.at(i), ctx)), a.at(i + 1)});
     return Value::map(fields);
 }
 
@@ -242,13 +207,11 @@ Value fList(const Args &a, Context &)
 
 Value fDate(const Args &a, Context &ctx)
 {
-    if (a.size() == 2) {
-        if (!a.at(0).is(T::String) || !a.at(1).is(T::String))
-            return Value();
-        const auto d = parseWithFormat(a.at(0).asString(), a.at(1).asString());
-        return d ? Value::date(*d) : Value();
-    }
-    return toDate(a.at(0), ctx);
+    if (a.size() < 2)
+        return toDate(a.at(0), ctx);
+    if (!a.at(0).is(T::String) || !a.at(1).is(T::String))
+        return Value();
+    return dateOrNull(parseWithFormat(a.at(0).asString(), a.at(1).asString()));
 }
 
 Value fDur(const Args &a, Context &)
@@ -288,13 +251,11 @@ Value makeLink(const Args &a, Context &ctx, bool embed)
     if (v.is(T::Link)) {
         l = v.asLink();
     } else if (v.is(T::String)) {
-        QString target = v.asString();
-        QString subpath;
-        if (const qsizetype hash = target.indexOf(u'#'); hash >= 0) {
-            subpath = target.mid(hash + 1);
-            target = target.left(hash);
-        }
-        l = ctx.resolveLink(target, QString(), subpath, false, ctx.options().currentPath);
+        // "Page#Heading": the subpath after '#' (left(-1) is the whole text).
+        const QString &target = v.asString();
+        const qsizetype hash = target.indexOf(u'#');
+        l = ctx.resolveLink(target.left(hash), QString(), hash < 0 ? QString() : target.mid(hash + 1), false,
+                            ctx.options().currentPath);
     } else {
         return Value();
     }
@@ -311,17 +272,15 @@ Value fLink(const Args &a, Context &ctx)
 
 Value fEmbed(const Args &a, Context &ctx)
 {
-    if (a.size() > 1 && !a.at(1).truthy())
-        return makeLink({a.at(0)}, ctx, false);
-    return makeLink({a.at(0)}, ctx, true);
+    return makeLink({a.at(0)}, ctx, a.size() < 2 || a.at(1).truthy());
 }
 
 Value fElink(const Args &a, Context &ctx)
 {
-    const QString url = str(a.at(0), ctx).trimmed();
+    const QString url = toText(a.at(0), ctx).trimmed();
     if (url.isEmpty() || url.contains(u' ') || url.contains(u')'))
         return Value();
-    QString display = a.size() > 1 ? str(a.at(1), ctx) : url;
+    QString display = a.size() > 1 ? toText(a.at(1), ctx) : url;
     display.remove(u'[').remove(u']');
     return Value::string(u'[' + display + u"]("_s + url + u')');
 }
@@ -357,18 +316,14 @@ Value fCeil(const Args &a, Context &)
     return a.at(0).is(T::Number) ? Value::number(std::ceil(a.at(0).asNumber())) : Value();
 }
 
+/// min() / max(): the smallest (sign -1) or largest (sign 1) value that is not null.
 Value extreme(const Args &a, Context &ctx, int sign)
 {
     Value best;
-    bool any = false;
     for (const Value &v : spread(a)) {
         ctx.step();
-        if (v.isNull())
-            continue;
-        if (!any || sign * compare(v, best) > 0) {
+        if (!v.isNull() && (best.isNull() || sign * compare(v, best) > 0))
             best = v;
-            any = true;
-        }
     }
     return best;
 }
@@ -383,38 +338,56 @@ Value fMax(const Args &a, Context &ctx)
     return extreme(a, ctx, 1);
 }
 
-Value fold(const ValueList &items, const QString &op, Context &ctx);
+/// The values (not empty) combined as the expression `a op b` does: reduce(list, "+"), sum(),
+/// product(), average(). Null for an operator reduce() does not know.
+Value fold(const ValueList &items, const QString &op, Context &ctx)
+{
+    Expr bin;
+    bin.kind = Expr::Kind::Binary;
+    if (op == u"&")
+        bin.name = u"and"_s;
+    else if (op == u"|")
+        bin.name = u"or"_s;
+    else if (op == u"+" || op == u"-" || op == u"*" || op == u"/")
+        bin.name = op;
+    else
+        return Value();
+    const auto lhs = std::make_shared<Expr>();
+    const auto rhs = std::make_shared<Expr>();
+    bin.args = {lhs, rhs};
+    Value acc = items.first();
+    for (qsizetype i = 1; i < items.size(); ++i) {
+        lhs->value = acc;
+        rhs->value = items.at(i);
+        acc = evaluate(bin, ctx, Value());
+    }
+    return acc;
+}
 
 Value fSum(const Args &a, Context &ctx)
 {
-    const ValueList items = spread(a);
-    if (items.isEmpty())
-        return Value::number(0);
-    return fold(items, u"+"_s, ctx);
+    const ValueList &items = spread(a);
+    return items.isEmpty() ? Value::number(0) : fold(items, u"+"_s, ctx);
 }
 
 Value fProduct(const Args &a, Context &ctx)
 {
-    const ValueList items = spread(a);
-    if (items.isEmpty())
-        return Value::number(1);
-    return fold(items, u"*"_s, ctx);
+    const ValueList &items = spread(a);
+    return items.isEmpty() ? Value::number(1) : fold(items, u"*"_s, ctx);
 }
 
 Value fAverage(const Args &a, Context &ctx)
 {
-    const ValueList items = spread(a);
+    const ValueList &items = spread(a);
     if (items.isEmpty())
         return Value();
     const Value total = fold(items, u"+"_s, ctx);
-    if (total.is(T::Number))
-        return Value::number(total.asNumber() / double(items.size()));
-    return Value();
+    return total.is(T::Number) ? Value::number(total.asNumber() / double(items.size())) : Value();
 }
 
 Value byKey(const Args &a, Context &ctx, int sign)
 {
-    if (!a.at(0).is(T::List) || !isFn(a.at(1)))
+    if (!a.at(0).is(T::List) || !a.at(1).is(T::Function))
         return Value();
     Value best, bestKey;
     bool any = false;
@@ -446,7 +419,7 @@ Value fReduce(const Args &a, Context &ctx)
     const ValueList &items = a.at(0).asList();
     if (a.at(1).is(T::String))
         return fold(items, a.at(1).asString().trimmed(), ctx);
-    if (!isFn(a.at(1)))
+    if (!a.at(1).is(T::Function))
         return Value();
     Value acc = items.first();
     for (qsizetype i = 1; i < items.size(); ++i)
@@ -458,17 +431,21 @@ Value fReduce(const Args &a, Context &ctx)
 
 Value fContains(const Args &a, Context &ctx)
 {
-    return Value::boolean(containsImpl(a.at(0), a.at(1), false, false, ctx));
+    return Value::boolean(containsImpl(a.at(0), a.at(1), Qt::CaseSensitive, ctx));
 }
 
 Value fIcontains(const Args &a, Context &ctx)
 {
-    return Value::boolean(containsImpl(a.at(0), a.at(1), true, false, ctx));
+    return Value::boolean(containsImpl(a.at(0), a.at(1), Qt::CaseInsensitive, ctx));
 }
 
+/// econtains(): a list holds the value itself (not a value containing it); else as contains().
 Value fEcontains(const Args &a, Context &ctx)
 {
-    return Value::boolean(containsImpl(a.at(0), a.at(1), false, true, ctx));
+    if (!a.at(0).is(T::List))
+        return fContains(a, ctx);
+    ctx.step();
+    return Value::boolean(std::ranges::any_of(a.at(0).asList(), [&](const Value &v) { return equals(v, a.at(1)); }));
 }
 
 Value fContainsword(const Args &a, Context &ctx)
@@ -494,7 +471,7 @@ Value fExtract(const Args &a, Context &ctx)
 {
     QList<std::pair<QString, Value>> fields;
     for (qsizetype i = 1; i < a.size(); ++i) {
-        const QString key = canonicalKey(str(a.at(i), ctx));
+        const QString key = canonicalKey(toText(a.at(i), ctx));
         fields.append({key, fieldOf(a.at(0), key, ctx)});
     }
     return Value::map(fields);
@@ -506,22 +483,26 @@ Value fSort(const Args &a, Context &ctx)
         return a.at(0);
     ValueList items = a.at(0).asList();
     ctx.step(items.size());
-    if (a.size() > 1 && isFn(a.at(1))) {
+    const auto less = [](const Value &x, const Value &y) { return compare(x, y) < 0; };
+    if (a.size() > 1 && a.at(1).is(T::Function)) {
         const Function &f = a.at(1).asFunction();
         if (f.params.size() >= 2) {
-            std::ranges::stable_sort(
-                    items, [&](const Value &x, const Value &y) { return num(callFunction(f, {x, y}, ctx)) < 0; });
+            // A comparator: x comes first when it gives a negative number.
+            std::ranges::stable_sort(items, [&](const Value &x, const Value &y) {
+                const Value order = callFunction(f, {x, y}, ctx);
+                return order.is(T::Number) && order.asNumber() < 0;
+            });
         } else {
             QList<std::pair<Value, Value>> keyed;
             for (const Value &v : std::as_const(items))
                 keyed.append({callFunction(f, {v}, ctx), v});
-            std::ranges::stable_sort(keyed, [](const auto &x, const auto &y) { return compare(x.first, y.first) < 0; });
+            std::ranges::stable_sort(keyed, less, &std::pair<Value, Value>::first);
             items.clear();
             for (const auto &k : std::as_const(keyed))
                 items.append(k.second);
         }
     } else {
-        std::ranges::stable_sort(items, [](const Value &x, const Value &y) { return compare(x, y) < 0; });
+        std::ranges::stable_sort(items, less);
     }
     return Value::list(items);
 }
@@ -587,7 +568,7 @@ Value fSlice(const Args &a, Context &)
 
 Value fFilter(const Args &a, Context &ctx)
 {
-    if (!a.at(0).is(T::List) || !isFn(a.at(1)))
+    if (!a.at(0).is(T::List) || !a.at(1).is(T::Function))
         return Value();
     ValueList out;
     for (const Value &v : a.at(0).asList()) {
@@ -599,7 +580,7 @@ Value fFilter(const Args &a, Context &ctx)
 
 Value fMap(const Args &a, Context &ctx)
 {
-    if (!a.at(0).is(T::List) || !isFn(a.at(1)))
+    if (!a.at(0).is(T::List) || !a.at(1).is(T::Function))
         return Value();
     ValueList out;
     for (const Value &v : a.at(0).asList())
@@ -607,52 +588,40 @@ Value fMap(const Args &a, Context &ctx)
     return Value::list(out);
 }
 
-/// any / all / none: (list, predicate), (list) or values.
-Value quantifier(const Args &a, Context &ctx, int kind)
+/// any / all / none: how many of the values — (list, predicate), (list) or values — pass, of how many.
+std::pair<qsizetype, qsizetype> passing(const Args &a, Context &ctx)
 {
-    ValueList items;
-    Value fn;
-    if (a.size() == 2 && isFn(a.at(1)) && a.at(0).is(T::List)) {
-        items = a.at(0).asList();
-        fn = a.at(1);
-    } else {
-        items = spread(a);
-    }
-    int hits = 0;
-    for (const Value &v : std::as_const(items)) {
+    const bool predicate = a.size() == 2 && a.at(1).is(T::Function) && a.at(0).is(T::List);
+    const ValueList &items = predicate ? a.at(0).asList() : spread(a);
+    qsizetype hits = 0;
+    for (const Value &v : items) {
         ctx.step();
-        if (fn.isNull() ? v.truthy() : callPredicate(fn, v, ctx))
+        if (predicate ? callPredicate(a.at(1), v, ctx) : v.truthy())
             ++hits;
     }
-    switch (kind) {
-    case 0: return Value::boolean(hits > 0);                  // any
-    case 1: return Value::boolean(hits == int(items.size())); // all
-    default: return Value::boolean(hits == 0);                // none
-    }
+    return {hits, items.size()};
 }
 
 Value fAny(const Args &a, Context &ctx)
 {
-    return quantifier(a, ctx, 0);
+    return Value::boolean(passing(a, ctx).first > 0);
 }
 
 Value fAll(const Args &a, Context &ctx)
 {
-    return quantifier(a, ctx, 1);
+    const auto [hits, total] = passing(a, ctx);
+    return Value::boolean(hits == total);
 }
 
 Value fNone(const Args &a, Context &ctx)
 {
-    return quantifier(a, ctx, 2);
+    return Value::boolean(passing(a, ctx).first == 0);
 }
 
 Value fNonnull(const Args &a, Context &)
 {
-    ValueList out;
-    for (const Value &v : spread(a)) {
-        if (!v.isNull())
-            out.append(v);
-    }
+    ValueList out = spread(a);
+    out.removeIf([](const Value &v) { return v.isNull(); });
     return Value::list(out);
 }
 
@@ -667,9 +636,9 @@ Value fFirstvalue(const Args &a, Context &)
 
 Value fJoin(const Args &a, Context &ctx)
 {
-    const QString sep = a.size() > 1 ? str(a.at(1), ctx) : u", "_s;
     if (!a.at(0).is(T::List))
         return Value::string(toText(a.at(0), ctx));
+    const QString sep = a.size() > 1 ? toText(a.at(1), ctx) : u", "_s;
     QStringList parts;
     for (const Value &v : a.at(0).asList()) {
         ctx.step();
@@ -685,7 +654,6 @@ Value fLength(const Args &a, Context &)
     case T::List: return Value::number(double(v.asList().size()));
     case T::String: return Value::number(double(v.asString().size()));
     case T::Object: return Value::number(double(v.asObject().keys().size()));
-    case T::Null: return Value::number(0);
     default: return Value::number(0);
     }
 }
@@ -718,38 +686,37 @@ Value fChoice(const Args &a, Context &)
 
 // ---- strings ---------------------------------------------------------------------------------------
 
-Value lowerOne(const Value &v, Context &)
+/// lower() / upper(): a string converted, the strings of a list (and of lists in it) too.
+Value convertStrings(const Value &v, QString (*convert)(const QString &))
 {
-    return v.is(T::String) ? Value::string(v.asString().toLower()) : v;
+    if (v.is(T::String))
+        return Value::string(convert(v.asString()));
+    if (!v.is(T::List))
+        return v;
+    ValueList out;
+    for (const Value &item : v.asList())
+        out.append(convertStrings(item, convert));
+    return Value::list(out);
 }
 
-Value upperOne(const Value &v, Context &)
+Value fLower(const Args &a, Context &)
 {
-    return v.is(T::String) ? Value::string(v.asString().toUpper()) : v;
+    return convertStrings(a.at(0), [](const QString &s) { return s.toLower(); });
 }
 
-Value fLower(const Args &a, Context &ctx)
+Value fUpper(const Args &a, Context &)
 {
-    return mapList(a.at(0), lowerOne, ctx);
-}
-
-Value fUpper(const Args &a, Context &ctx)
-{
-    return mapList(a.at(0), upperOne, ctx);
+    return convertStrings(a.at(0), [](const QString &s) { return s.toUpper(); });
 }
 
 Value fStartswith(const Args &a, Context &ctx)
 {
-    if (a.at(0).isNull())
-        return Value::boolean(false);
-    return Value::boolean(str(a.at(0), ctx).startsWith(str(a.at(1), ctx)));
+    return Value::boolean(!a.at(0).isNull() && toText(a.at(0), ctx).startsWith(toText(a.at(1), ctx)));
 }
 
 Value fEndswith(const Args &a, Context &ctx)
 {
-    if (a.at(0).isNull())
-        return Value::boolean(false);
-    return Value::boolean(str(a.at(0), ctx).endsWith(str(a.at(1), ctx)));
+    return Value::boolean(!a.at(0).isNull() && toText(a.at(0), ctx).endsWith(toText(a.at(1), ctx)));
 }
 
 Value fReplace(const Args &a, Context &ctx)
@@ -757,10 +724,10 @@ Value fReplace(const Args &a, Context &ctx)
     if (!a.at(0).is(T::String))
         return a.at(0);
     QString s = a.at(0).asString();
-    const QString from = str(a.at(1), ctx);
+    const QString from = toText(a.at(1), ctx);
     if (from.isEmpty())
         return a.at(0);
-    const QString to = str(a.at(2), ctx);
+    const QString to = toText(a.at(2), ctx);
     if (s.size() / from.size() * std::max<qsizetype>(1, to.size()) > 1000000)
         return a.at(0);
     return Value::string(s.replace(from, to));
@@ -770,19 +737,19 @@ Value fSplit(const Args &a, Context &ctx)
 {
     if (!a.at(0).is(T::String))
         return Value();
-    const QString sep = str(a.at(1), ctx);
-    QStringList parts = sep.isEmpty() ? QStringList() : a.at(0).asString().split(sep);
-    if (sep.isEmpty()) {
-        for (const QChar c : a.at(0).asString())
-            parts.append(QString(c));
-    }
-    if (a.size() > 2) {
-        const int limit = std::max(0, intArg(a.at(2), int(parts.size())));
-        parts = parts.mid(0, limit);
-    }
+    const QString &s = a.at(0).asString();
+    const QString sep = toText(a.at(1), ctx);
     ValueList out;
-    for (const QString &p : std::as_const(parts))
-        out.append(Value::string(p));
+    if (sep.isEmpty()) {
+        for (const QChar c : s)
+            out.append(Value::string(QString(c)));
+    } else {
+        const QStringList parts = s.split(sep);
+        for (const QString &p : parts)
+            out.append(Value::string(p));
+    }
+    if (a.size() > 2)
+        out.resize(std::clamp<qsizetype>(intArg(a.at(2), int(out.size())), 0, out.size()));
     return Value::list(out);
 }
 
@@ -801,15 +768,13 @@ Value fSubstring(const Args &a, Context &)
 
 Value pad(const Args &a, Context &ctx, bool left)
 {
-    const QString s = str(a.at(0), ctx);
+    const QString s = toText(a.at(0), ctx);
     const int width = std::clamp(intArg(a.at(1), 0), 0, 10000);
-    const QString with = a.size() > 2 ? str(a.at(2), ctx) : u" "_s;
+    const QString with = a.size() > 2 ? toText(a.at(2), ctx) : u" "_s;
     if (with.isEmpty() || s.size() >= width)
         return Value::string(s);
-    QString fill;
-    while (fill.size() < width - s.size())
-        fill += with;
-    fill.truncate(width - s.size());
+    const qsizetype missing = width - s.size();
+    const QString fill = with.repeated(missing / with.size() + 1).left(missing);
     return Value::string(left ? QString(fill + s) : QString(s + fill));
 }
 
@@ -829,9 +794,9 @@ Value fTruncate(const Args &a, Context &ctx)
         return a.at(0);
     const QString &s = a.at(0).asString();
     const int width = std::max(0, intArg(a.at(1), int(s.size())));
-    const QString suffix = a.size() > 2 ? str(a.at(2), ctx) : u"..."_s;
     if (s.size() <= width)
         return a.at(0);
+    const QString suffix = a.size() > 2 ? toText(a.at(2), ctx) : u"..."_s;
     return Value::string(s.left(std::max<qsizetype>(0, width - suffix.size())) + suffix);
 }
 
@@ -872,32 +837,6 @@ Value fLocaltime(const Args &a, Context &)
 Value fDisplay(const Args &a, Context &)
 {
     return Value::string(toPlainText(a.at(0)));
-}
-
-Value fold(const ValueList &items, const QString &op, Context &ctx)
-{
-    // The operators of reduce(list, "+"): what the expression `a op b` does.
-    Value acc = items.first();
-    Expr lhs, rhs, bin;
-    lhs.kind = rhs.kind = Expr::Kind::Literal;
-    bin.kind = Expr::Kind::Binary;
-    if (op == u"&")
-        bin.name = u"and"_s;
-    else if (op == u"|")
-        bin.name = u"or"_s;
-    else if (QStringList{u"+"_s, u"-"_s, u"*"_s, u"/"_s}.contains(op))
-        bin.name = op;
-    else
-        return Value();
-    auto l = std::make_shared<Expr>(lhs);
-    auto r = std::make_shared<Expr>(rhs);
-    for (qsizetype i = 1; i < items.size(); ++i) {
-        l->value = acc;
-        r->value = items.at(i);
-        bin.args = {l, r};
-        acc = evaluate(bin, ctx, Value());
-    }
-    return acc;
 }
 
 const QHash<QString, Builtin> &builtins()

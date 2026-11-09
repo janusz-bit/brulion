@@ -107,14 +107,12 @@ BDialog {
         const in10 = DatesHelper.addMinutes(now, 10)
         const in60 = DatesHelper.addMinutes(now, 60)
         const tonightLater = DatesHelper.compare(tonight, now) > 0
-        const labels = [qsTr("in 10 min"), qsTr("in an hour"), qsTr("today 19:00"), qsTr("tomorrow 8:00"),
-                        qsTr("Monday 9:00")]
         quickPicks = [
-            { label: labels[0], at: in10, enabled: true },
-            { label: labels[1], at: in60, enabled: true },
-            { label: labels[2], at: tonight, enabled: tonightLater },
-            { label: labels[3], at: tomorrow + " 08:00", enabled: true },
-            { label: labels[4], at: monday + " 09:00", enabled: true }
+            { label: qsTr("in 10 min"), at: in10, enabled: true },
+            { label: qsTr("in an hour"), at: in60, enabled: true },
+            { label: qsTr("today 19:00"), at: tonight, enabled: tonightLater },
+            { label: qsTr("tomorrow 8:00"), at: tomorrow + " 08:00", enabled: true },
+            { label: qsTr("Monday 9:00"), at: monday + " 09:00", enabled: true }
         ]
     }
 
@@ -434,7 +432,6 @@ BDialog {
                     Layout.fillWidth: true
                     visible: control.repeatKind === "weekly" || (control.repeatKind === "custom" && control.repeatUnit === "week")
                     spacing: 4
-                    readonly property list<int> effective: control.effectiveWeekdays
                     readonly property list<string> shortNames: DatesHelper.weekdayNames("short", DatesHelper.locale)
                     readonly property list<string> fullNames: DatesHelper.weekdayNames("full", DatesHelper.locale)
                     readonly property real buttonSize: Math.min(Theme.touchUi ? 44 : 36, (width - 6 * spacing) / 7)
@@ -447,7 +444,7 @@ BDialog {
                             id: dayButton
                             required property int index
                             readonly property int day: ((DatesHelper.weekStart - 1 + index) % 7) + 1
-                            readonly property bool on: weekdayRow.effective.indexOf(day) >= 0
+                            readonly property bool on: control.effectiveWeekdays.indexOf(day) >= 0
                             width: weekdayRow.buttonSize
                             implicitHeight: Math.max(weekdayRow.buttonSize, Theme.touchUi ? Theme.touchTarget : 0)
                             leftPadding: 0

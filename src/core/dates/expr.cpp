@@ -1,6 +1,7 @@
 #include "dates/expr.h"
 
 #include "dates/local.h"
+#include "dates/vocabulary_p.h"
 #include "text/text.h"
 
 #include <QHash>
@@ -12,6 +13,8 @@ using namespace Qt::StringLiterals;
 namespace brulion::dates {
 
 namespace {
+
+using detail::lookup;
 
 enum class Period { Week, Month, Year };
 enum class OffsetUnit { Day, Week, Month, Year };
@@ -123,13 +126,9 @@ std::optional<DateRange> parseOffset(const QString &s, QDate today)
     const QString unitWord = m.captured(3);
     if (sign.isEmpty() && unitWord.isEmpty())
         return std::nullopt; // a bare number is not a date
-    OffsetUnit unit = OffsetUnit::Day;
-    if (!unitWord.isEmpty()) {
-        const auto it = offsetUnits().constFind(unitWord);
-        if (it == offsetUnits().cend())
-            return std::nullopt;
-        unit = *it;
-    }
+    const auto unit = unitWord.isEmpty() ? std::optional<OffsetUnit>(OffsetUnit::Day) : lookup(offsetUnits(), unitWord);
+    if (!unit)
+        return std::nullopt;
     bool ok = false;
     qint64 n = m.capturedView(2).toLongLong(&ok);
     // Anything beyond ~10 000 years cannot land in the supported range (and could overflow).
@@ -137,7 +136,7 @@ std::optional<DateRange> parseOffset(const QString &s, QDate today)
         return std::nullopt;
     if (sign == u"-")
         n = -n;
-    switch (unit) {
+    switch (*unit) {
     case OffsetUnit::Day:
         return single(today.addDays(n));
     case OffsetUnit::Week:
@@ -155,39 +154,19 @@ std::optional<DateRange> parsePeriod(const QString &s, QDate today, Qt::DayOfWee
 {
     const QStringList parts = s.split(u'-', Qt::SkipEmptyParts);
     if (parts.size() == 1) {
-        const auto period = periodWords().constFind(parts.first());
-        if (period == periodWords().cend())
-            return std::nullopt;
-        return periodRange(*period, 0, today, weekStart);
+        const auto period = lookup(periodWords(), parts.first());
+        return period ? periodRange(*period, 0, today, weekStart) : std::nullopt;
     }
     if (parts.size() != 2)
         return std::nullopt;
     // Both word orders: "this-week" and Polish "tydzien-ten" / "tydzien-nastepny".
     const QString &a = parts.at(0);
     const QString &b = parts.at(1);
-    const auto which = whichWords().contains(a) ? whichWords().constFind(a) : whichWords().constFind(b);
-    const auto period = periodWords().contains(b) ? periodWords().constFind(b) : periodWords().constFind(a);
-    if (which == whichWords().cend() || period == periodWords().cend())
+    const auto which = lookup(whichWords(), whichWords().contains(a) ? a : b);
+    const auto period = lookup(periodWords(), periodWords().contains(b) ? b : a);
+    if (!which || !period)
         return std::nullopt;
     return periodRange(*period, *which, today, weekStart);
-}
-
-std::optional<DateRange> resolveSingle(const QString &s, QDate today, Qt::DayOfWeek weekStart)
-{
-    const auto day = dayWords().constFind(s);
-    if (day != dayWords().cend())
-        return single(today.addDays(*day));
-    // "2026-10-15", also a date-time ("2026-10-15t09:00", or "-" where a space was) -> its date.
-    static const QRegularExpression iso =
-        text::unicodeRegex(uR"(^([0-9]{4}-[0-9]{2}-[0-9]{2})(?:[t-][0-9]{1,2}:[0-9]{2})?\z)"_s);
-    const auto m = iso.match(s);
-    if (m.hasMatch()) {
-        const auto date = parseIsoDate(m.capturedView(1));
-        return date ? single(*date) : std::nullopt;
-    }
-    if (auto offset = parseOffset(s, today))
-        return offset;
-    return parsePeriod(s, today, weekStart);
 }
 
 /// Trimmed, with every run of whitespace or '_' replaced by '-' ("this week" -> "this-week").
@@ -208,6 +187,25 @@ QString normalizeExpr(QStringView s)
     return out;
 }
 
+/// One side of an expression, before normalizeExpr().
+std::optional<DateRange> resolveSingle(QStringView side, QDate today, Qt::DayOfWeek weekStart)
+{
+    const QString s = normalizeExpr(side);
+    if (const auto day = lookup(dayWords(), s))
+        return single(today.addDays(*day));
+    // "2026-10-15", also a date-time ("2026-10-15t09:00", or "-" where a space was) -> its date.
+    static const QRegularExpression iso =
+            text::unicodeRegex(uR"(^([0-9]{4}-[0-9]{2}-[0-9]{2})(?:[t-][0-9]{1,2}:[0-9]{2})?\z)"_s);
+    const auto m = iso.match(s);
+    if (m.hasMatch()) {
+        const auto date = parseIsoDate(m.capturedView(1));
+        return date ? single(*date) : std::nullopt;
+    }
+    if (auto offset = parseOffset(s, today))
+        return offset;
+    return parsePeriod(s, today, weekStart);
+}
+
 } // namespace
 
 std::optional<DateExpr> resolveDateExpr(QStringView expr, QDate today, Qt::DayOfWeek weekStart)
@@ -220,28 +218,19 @@ std::optional<DateExpr> resolveDateExpr(QStringView expr, QDate today, Qt::DayOf
     if (sides.size() > 2)
         return std::nullopt;
     if (sides.size() == 1) {
-        const auto keyword = keywords().constFind(normalizeExpr(folded));
-        if (keyword != keywords().cend())
+        if (const auto keyword = lookup(keywords(), normalizeExpr(folded)))
             return DateExpr{*keyword};
     }
     if (!isSupportedDate(today))
         return std::nullopt;
     const Qt::DayOfWeek start = sanitizeWeekStart(int(weekStart));
-    QList<DateRange> ranges;
-    for (const QString &side : sides) {
-        const QString normalized = normalizeExpr(side);
-        if (normalized.isEmpty())
-            return std::nullopt;
-        const auto range = resolveSingle(normalized, today, start);
-        if (!range)
-            return std::nullopt;
-        ranges.append(*range);
-    }
-    if (ranges.size() == 1)
-        return DateExpr{ranges.first()};
-    const DateRange &a = ranges.at(0);
-    const DateRange &b = ranges.at(1);
-    return DateExpr{a.from <= b.to ? DateRange{a.from, b.to} : DateRange{b.from, a.to}};
+    // "A..B" runs from the start of A to the end of B (swapped when A starts after B ends); a single
+    // side is its own range.
+    const auto a = resolveSingle(sides.first(), today, start);
+    const auto b = sides.size() == 2 ? resolveSingle(sides.last(), today, start) : a;
+    if (!a || !b)
+        return std::nullopt;
+    return DateExpr{a->from <= b->to ? DateRange{a->from, b->to} : DateRange{b->from, a->to}};
 }
 
 } // namespace brulion::dates

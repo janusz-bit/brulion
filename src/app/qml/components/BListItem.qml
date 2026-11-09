@@ -76,10 +76,10 @@ T.ItemDelegate {
 
     contentItem: Item {
         implicitHeight: Math.max(textColumn.implicitHeight, icon.height)
-        implicitWidth: (icon.width > 0 ? icon.width + control.spacing : 0)
+        implicitWidth: textColumn.x
                        + (textColumn.inline ? titleLabel.implicitWidth + Theme.space2 + subtitleLabel.implicitWidth
                                             : Math.max(titleLabel.implicitWidth, subtitleLabel.implicitWidth))
-                       + (trailingSlot.width > 0 ? trailingSlot.width + 8 : 0)
+                       + trailingSlot.room
 
         BIcon {
             id: icon
@@ -109,7 +109,7 @@ T.ItemDelegate {
             readonly property bool inline: control.subtitleInline && control.subtitle !== ""
             anchors.verticalCenter: parent.verticalCenter
             x: icon.width > 0 ? icon.width + control.spacing : 0
-            width: parent.width - x - (trailingSlot.width > 0 ? trailingSlot.width + 8 : 0)
+            width: parent.width - x - trailingSlot.room
             implicitHeight: titleLabel.implicitHeight
                             + (subtitleLabel.visible && !inline ? 1 + subtitleLabel.implicitHeight : 0)
             height: implicitHeight
@@ -149,10 +149,11 @@ T.ItemDelegate {
         Item {
             id: trailingSlot
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
             height: parent.height
             width: control.trailing && control.trailing.visible ? control.trailing.implicitWidth
                  : countBadge.visible ? countBadge.width : 0
+            /// What the slot takes of the row (with the gap before it).
+            readonly property real room: width > 0 ? width + 8 : 0
 
             BBadge {
                 id: countBadge
@@ -175,8 +176,7 @@ T.ItemDelegate {
 
         Rectangle {
             visible: control.selected && control.selectionBar
-            x: 0
-            anchors.verticalCenter: parent.verticalCenter
+            y: 6
             width: 3
             height: parent.height - 12
             radius: 1.5

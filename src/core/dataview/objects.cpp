@@ -8,6 +8,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::dataview {
@@ -16,25 +18,47 @@ namespace {
 
 using Fields = QList<std::pair<QString, Value>>;
 
+/// The value of `key` in `fields`, or nullopt.
+std::optional<Value> fieldIn(const Fields &fields, const QString &key)
+{
+    const auto it = std::ranges::find(fields, key, &Fields::value_type::first);
+    if (it == fields.cend())
+        return std::nullopt;
+    return it->second;
+}
+
 /// Add `value` under `key`; a key written again holds a list of every value.
 void addField(Fields &fields, const QString &key, const Value &value)
 {
-    for (auto &[k, v] : fields) {
-        if (k != key)
-            continue;
-        ValueList items;
-        if (v.is(Value::Type::List))
-            items = v.asList();
-        else
-            items.append(v);
-        if (value.is(Value::Type::List))
-            items.append(value.asList());
-        else
-            items.append(value);
-        v = Value::list(items);
+    const auto it = std::ranges::find(fields, key, &Fields::value_type::first);
+    if (it == fields.end()) {
+        fields.append({key, value});
         return;
     }
-    fields.append({key, value});
+    ValueList items = it->second.is(Value::Type::List) ? it->second.asList() : ValueList{it->second};
+    if (value.is(Value::Type::List))
+        items.append(value.asList());
+    else
+        items.append(value);
+    it->second = Value::list(std::move(items));
+}
+
+/// Keys whose text values are names: tags (written with '#') and aliases.
+bool isNamesKey(const QString &key)
+{
+    const QString k = canonicalKey(key);
+    return k == u"tags" || k == u"tag" || k == u"aliases" || k == u"alias";
+}
+
+/// `[[Page]]` written without quotes, which YAML reads as a list holding a list holding "Page".
+std::optional<Value> bareLink(const QVariant &v, const LinkResolver &resolve)
+{
+    if (v.typeId() != QMetaType::QVariantList)
+        return std::nullopt;
+    const QVariantList inner = v.toList();
+    if (inner.size() != 1 || inner.first().typeId() != QMetaType::QString)
+        return std::nullopt;
+    return Value::link(resolve(inner.first().toString(), QString(), QString(), false));
 }
 
 /// A frontmatter value as Dataview reads it: strings may be links or dates, `[[Page]]` written
@@ -54,43 +78,37 @@ Value fromYaml(const QString &key, const QVariant &v, const LinkResolver &resolv
     case QMetaType::QStringList: {
         const QVariantList list = v.toList();
         // `up: [[Dom]]` is a list holding a list holding "Dom".
-        if (list.size() == 1 && list.first().typeId() == QMetaType::QVariantList) {
-            const QVariantList inner = list.first().toList();
-            if (inner.size() == 1 && inner.first().typeId() == QMetaType::QString)
-                return Value::link(resolve(inner.first().toString(), QString(), QString(), false));
+        if (list.size() == 1) {
+            if (auto link = bareLink(list.first(), resolve))
+                return *std::move(link);
         }
+        // `tags: [a, b]` is one list of names (each string item reads as a list of its names).
+        const bool names = isNamesKey(key);
         ValueList items;
         for (const QVariant &item : list) {
-            if (item.typeId() == QMetaType::QVariantList) {
-                const QVariantList inner = item.toList();
-                if (inner.size() == 1 && inner.first().typeId() == QMetaType::QString) {
-                    items.append(Value::link(resolve(inner.first().toString(), QString(), QString(), false)));
-                    continue;
-                }
+            if (auto link = bareLink(item, resolve)) {
+                items.append(*std::move(link));
+                continue;
             }
-            items.append(fromYaml(key, item, resolve, depth + 1));
-        }
-        const QString k = canonicalKey(key);
-        if (k == u"tags" || k == u"tag") {
-            for (Value &item : items) {
-                if (item.is(Value::Type::String) && !item.asString().startsWith(u'#'))
-                    item = Value::string(u'#' + item.asString());
-            }
+            const Value value = fromYaml(key, item, resolve, depth + 1);
+            if (names && value.is(Value::Type::List))
+                items.append(value.asList());
+            else
+                items.append(value);
         }
         return Value::list(items);
     }
     case QMetaType::QVariantMap: {
         Fields fields;
         const QVariantMap map = v.toMap();
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
-            fields.append({canonicalKey(it.key()), fromYaml(it.key(), it.value(), resolve, depth + 1)});
+        for (auto [name, value] : map.asKeyValueRange())
+            fields.append({canonicalKey(name), fromYaml(name, value, resolve, depth + 1)});
         return Value::map(fields);
     }
     default: break;
     }
     const QString s = v.toString();
-    const QString k = canonicalKey(key);
-    if (k == u"tags" || k == u"tag" || k == u"aliases" || k == u"alias")
+    if (isNamesKey(key))
         return parseFieldValue(key, s, resolve);
     if (const auto link = parseLinkText(s, resolve))
         return *link;
@@ -119,7 +137,9 @@ Fields inlineFields(const Block &block, const LinkResolver &resolve)
         return out;
     if (!raw.contains(u"::"))
         return out;
-    static const QRegularExpression whole(u"^([^\\s:\\[\\]()][^:\\[\\]()]{0,80}?)::(?:\\s+(.*?))?\\s*$"_s);
+    // (The value keeps its trailing blanks, parseFieldValue() trims it: a lazy value before `\s*$`
+    // would make a long run of blanks inside a line quadratic.)
+    static const QRegularExpression whole(u"^([^\\s:\\[\\]()][^:\\[\\]()]{0,80}?)::(?:\\s+(.*))?$"_s);
     // (Values bounded: a long line of "[a:: " synced from anywhere stays linear.)
     static const QRegularExpression bracket(
             u"\\[([^\\[\\]:]{1,80}?)::\\s*([^\\]\\n]{0,500}?)\\s*\\]|\\(([^()\\[\\]:]{1,80}?)::\\s*([^)\\n]{0,500}?)\\s*\\)"_s);
@@ -166,17 +186,16 @@ ValueList linksIn(Context &ctx, const VaultPath &path, int from, int to)
 {
     ValueList out;
     QSet<QString> seen;
-    for (const ResolvedLink &l : ctx.index().outgoingLinks(path)) {
+    for (const QList<ResolvedLink> links = ctx.index().outgoingLinks(path); const ResolvedLink &l : links) {
         if (from >= 0 && (l.link.line < from || l.link.line > to))
             continue;
         LinkValue v;
         v.resolved = !l.target.isEmpty();
         v.path = v.resolved ? l.target : l.link.target;
         v.display = l.link.kind == LinkKind::Markdown ? QString() : l.link.display;
-        v.subpath = !l.link.blockId.isEmpty() ? u'^' + l.link.blockId : l.link.heading;
+        const bool toBlock = l.link.kind == LinkKind::BlockRef || !l.link.blockId.isEmpty();
+        v.subpath = toBlock ? u'^' + l.link.blockId : l.link.heading;
         v.embed = l.link.kind == LinkKind::Embed || l.link.kind == LinkKind::BlockEmbed;
-        if (l.link.kind == LinkKind::BlockRef)
-            v.subpath = u'^' + l.link.blockId;
         const QString key = v.path + u'#' + v.subpath;
         if (seen.contains(key))
             continue;
@@ -192,14 +211,27 @@ std::optional<QDate> dateInName(const QString &name)
     static const QRegularExpression dashed(u"(\\d{4})-(\\d{2})-(\\d{2})"_s);
     static const QRegularExpression compact(u"(?<!\\d)(\\d{4})(\\d{2})(\\d{2})(?!\\d)"_s);
     for (const QRegularExpression *re : {&dashed, &compact}) {
-        const QRegularExpressionMatch m = re->match(name);
-        if (m.hasMatch()) {
-            const QDate d(m.captured(1).toInt(), m.captured(2).toInt(), m.captured(3).toInt());
+        if (const QRegularExpressionMatch m = re->match(name); m.hasMatch()) {
+            const QDate d(m.capturedView(1).toInt(), m.capturedView(2).toInt(), m.capturedView(3).toInt());
             if (d.isValid())
                 return d;
         }
     }
     return std::nullopt;
+}
+
+/// The item objects of the blocks of `path` that `keep` accepts, in document order.
+template<typename Keep>
+ValueList itemsOf(Context &ctx, const VaultPath &path, Keep keep)
+{
+    ValueList out;
+    if (const ParsedNote *note = ctx.index().note(path)) {
+        for (qsizetype i = 0; i < note->blocks.size(); ++i) {
+            if (keep(note->blocks.at(i)))
+                out.append(ctx.item(path, int(i)));
+        }
+    }
+    return out;
 }
 
 // ---- file ------------------------------------------------------------------------------------------
@@ -247,12 +279,9 @@ private:
             return Value::string(m_path);
         if (key == u"folder")
             return Value::string(paths::dirname(m_path));
-        if (key == u"ext")
-        {
-            QString ext = paths::extension(m_path);
-            if (ext.startsWith(u'.'))
-                ext.remove(0, 1);
-            return Value::string(ext);
+        if (key == u"ext") {
+            const QString ext = paths::extension(m_path);
+            return Value::string(ext.startsWith(u'.') ? ext.sliced(1) : ext);
         }
         if (key == u"link")
             return Value::link(LinkValue{m_path, QString(), QString(), false, true});
@@ -281,27 +310,26 @@ private:
         if (key == u"tags" || key == u"etags") {
             ValueList out;
             QSet<QString> seen;
+            const auto add = [&](const QString &form) {
+                if (seen.contains(form))
+                    return;
+                seen.insert(form);
+                out.append(Value::string(tagValue(ctx, form)));
+            };
             for (const QString &tag : m_note->tags) {
-                QStringList forms{tag};
+                // `tags`: a nested tag with its parents (#a/b/c: #a, #a/b, #a/b/c).
                 if (key == u"tags") {
-                    forms.clear();
-                    const QStringList parts = tag.split(u'/');
-                    for (qsizetype i = 1; i <= parts.size(); ++i)
-                        forms.append(parts.first(i).join(u'/'));
+                    for (qsizetype i = tag.indexOf(u'/'); i >= 0; i = tag.indexOf(u'/', i + 1))
+                        add(tag.first(i));
                 }
-                for (const QString &form : forms) {
-                    if (seen.contains(form))
-                        continue;
-                    seen.insert(form);
-                    out.append(Value::string(tagValue(ctx, form)));
-                }
+                add(tag);
             }
             return Value::list(out);
         }
         if (key == u"inlinks") {
             ValueList out;
             QSet<VaultPath> seen;
-            for (const Backlink &b : ctx.index().backlinks(m_path)) {
+            for (const QList<Backlink> backlinks = ctx.index().backlinks(m_path); const Backlink &b : backlinks) {
                 if (seen.contains(b.path))
                     continue;
                 seen.insert(b.path);
@@ -361,13 +389,9 @@ public:
         if (key == u"file") {
             if (!m_file)
                 m_file = Value::object(std::make_shared<FileObject>(m_ctx, m_path, m_note, m_self));
-            return *m_file;
+            return m_file;
         }
-        for (const auto &[k, v] : fields()) {
-            if (k == key)
-                return v;
-        }
-        return std::nullopt;
+        return fieldIn(fields(), key);
     }
 
 private:
@@ -377,18 +401,16 @@ private:
             return *m_fields;
         Fields out;
         const LinkResolver resolve = resolverFor(m_ctx, m_path);
-        for (auto it = m_note->frontmatter.constBegin(); it != m_note->frontmatter.constEnd(); ++it) {
-            const QString key = canonicalKey(it.key());
-            if (!key.isEmpty())
-                addField(out, key, fromYaml(it.key(), it.value(), resolve));
+        for (auto [name, value] : m_note->frontmatter.asKeyValueRange()) {
+            if (const QString key = canonicalKey(name); !key.isEmpty())
+                addField(out, key, fromYaml(name, value, resolve));
         }
         for (const Block &b : m_note->blocks) {
             m_ctx->step();
-            for (const auto &[k, v] : inlineFields(b, resolve))
+            for (const Fields own = inlineFields(b, resolve); const auto &[k, v] : own)
                 addField(out, k, v);
         }
-        m_fields = std::move(out);
-        return *m_fields;
+        return m_fields.emplace(std::move(out));
     }
 
     Context *m_ctx;
@@ -421,16 +443,14 @@ public:
 
     std::optional<Value> field(const QString &key) const override
     {
+        if (auto v = fieldIn(own(), key))
+            return v;
         const Block &b = block();
-        for (const auto &[k, v] : own()) {
-            if (k == key)
-                return v;
-        }
         const Task *t = b.task ? &*b.task : nullptr;
         const auto spec = [](const std::optional<DateSpec> &d) {
             return d ? Value::date(DateValue{d->toLocalDateTime(), d->hasTime()}) : Value();
         };
-        const auto day = [](const std::optional<QDate> &d) { return d ? Value::date(*d) : Value(); };
+        const auto day = [](std::optional<QDate> d) { return d ? Value::date(*d) : Value(); };
         if (key == u"status")
             return t ? Value::string(t->marker) : Value();
         if (key == u"checked")
@@ -516,11 +536,8 @@ private:
             return false;
         if (!b.task && index == m_index)
             return false;
-        for (const int c : b.children) {
-            if (c >= 0 && c < m_note->blocks.size() && !fullyCompleted(c))
-                return false;
-        }
-        return true;
+        const auto done = [this](int c) { return c < 0 || c >= m_note->blocks.size() || fullyCompleted(c); };
+        return std::ranges::all_of(b.children, done);
     }
 
     LinkValue section() const
@@ -557,9 +574,8 @@ Value Context::page(const VaultPath &path)
 {
     if (const auto it = m_pages.constFind(path); it != m_pages.constEnd())
         return *it;
-    const ParsedNote *note = m_index.note(path);
     Value v;
-    if (note) {
+    if (const ParsedNote *note = m_index.note(path)) {
         auto obj = std::make_shared<PageObject>(this, path, note);
         obj->setSelf(obj);
         v = Value::object(obj);
@@ -602,20 +618,21 @@ QString Context::linkTarget(const VaultPath &path) const
 
 QString Context::tagDisplay(const QString &tag)
 {
+    const auto spelling = [](const TagCount &t) { return t.display.isEmpty() ? t.tag : t.display; };
     if (!m_tagDisplay) {
-        QHash<QString, QString> map;
-        for (const TagCount &t : m_index.tags())
-            map.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
-        m_tagDisplay = std::move(map);
+        m_tagDisplay.emplace();
+        for (const QList<TagCount> tags = m_index.tags(); const TagCount &t : tags)
+            m_tagDisplay->insert(t.tag, spelling(t));
     }
     if (const auto it = m_tagDisplay->constFind(tag); it != m_tagDisplay->constEnd())
         return *it;
-    // A parent of a nested tag: the parent part of a nested tag's spelling (kept for the next ask).
-    const qsizetype parts = tag.count(u'/') + 1;
+    // A parent of a nested tag: the parent part of the spelling of the most used tag under it (in
+    // the index's order, not the hash's: the same on every run; kept for the next ask).
+    const QString prefix = tag + u'/';
     QString display = tag;
-    for (auto it = m_tagDisplay->constBegin(); it != m_tagDisplay->constEnd(); ++it) {
-        if (it.key().startsWith(tag + u'/')) {
-            display = it.value().section(u'/', 0, int(parts) - 1);
+    for (const QList<TagCount> tags = m_index.tags(); const TagCount &t : tags) {
+        if (t.tag.startsWith(prefix)) {
+            display = spelling(t).section(u'/', 0, int(tag.count(u'/')));
             break;
         }
     }
@@ -638,28 +655,12 @@ Value Context::item(const VaultPath &path, int blockIndex)
 
 ValueList Context::tasksOf(const VaultPath &path)
 {
-    ValueList out;
-    const ParsedNote *note = m_index.note(path);
-    if (!note)
-        return out;
-    for (qsizetype i = 0; i < note->blocks.size(); ++i) {
-        if (note->blocks.at(i).task)
-            out.append(item(path, int(i)));
-    }
-    return out;
+    return itemsOf(*this, path, [](const Block &b) { return b.task.has_value(); });
 }
 
 ValueList Context::listsOf(const VaultPath &path)
 {
-    ValueList out;
-    const ParsedNote *note = m_index.note(path);
-    if (!note)
-        return out;
-    for (qsizetype i = 0; i < note->blocks.size(); ++i) {
-        if (note->blocks.at(i).kind == BlockKind::ListItem)
-            out.append(item(path, int(i)));
-    }
-    return out;
+    return itemsOf(*this, path, [](const Block &b) { return b.kind == BlockKind::ListItem; });
 }
 
 } // namespace brulion::dataview

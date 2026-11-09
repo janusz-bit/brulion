@@ -279,8 +279,8 @@ Item {
             readonly property int hunkIndex: hunk ? hunk.index : -1
             readonly property int conflict: control.conflictIndexes.indexOf(hunkIndex)
             /// The conflict's choice and manual text (control.choiceKinds / choiceTexts).
-            readonly property string choice: conflict >= 0 && conflict < control.choiceKinds.length ? control.choiceKinds[conflict] : ""
-            readonly property string choiceText: conflict >= 0 && conflict < control.choiceTexts.length ? control.choiceTexts[conflict] : ""
+            readonly property string choice: control.choiceOf(conflict)
+            readonly property string choiceText: control.choiceTextOf(conflict)
             readonly property string oursText: hunk ? hunk.ours : ""
             readonly property string theirsText: hunk ? hunk.theirs : ""
             /// The two sides: { side, label, body }.

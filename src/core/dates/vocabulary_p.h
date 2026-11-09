@@ -40,6 +40,14 @@ const QHash<QString, int> &ordinalWords();
 std::optional<WeekdayWord> lookupWeekday(QStringView folded);
 std::optional<MonthWord> lookupMonth(QStringView folded);
 
+/// The value stored under `key` in a word table, or nullopt.
+template<typename T>
+std::optional<T> lookup(const QHash<QString, T> &map, const QString &key)
+{
+    const auto it = map.constFind(key);
+    return it == map.cend() ? std::nullopt : std::optional<T>(*it);
+}
+
 /// Regex alternation of folded phrases, longest first; a space inside a phrase matches any
 /// run of whitespace (`\s+`).
 QString phraseAlternation(const QStringList &phrases);

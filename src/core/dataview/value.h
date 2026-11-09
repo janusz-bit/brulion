@@ -54,7 +54,10 @@ using ValueList = QList<Value>;
 /// asked (dataview/objects.cpp); a map object holds them.
 class Object {
 public:
+    Object() = default;
     virtual ~Object() = default;
+    Q_DISABLE_COPY_MOVE(Object)
+
     /// The field `key` (a canonical key: lower-case, blanks as '-'), or nullopt.
     virtual std::optional<Value> field(const QString &key) const = 0;
     /// The field names, in the order they are shown (object values rendered as text, `extract`).
@@ -68,18 +71,18 @@ public:
     enum class Type { Null, Boolean, Number, String, Date, Duration, Link, List, Object, Function };
 
     Value() = default;
-    static Value boolean(bool b);
-    static Value number(double n);
-    static Value string(const QString &s);
-    static Value date(const DateValue &d);
-    static Value date(QDate d);
-    static Value duration(const Duration &d);
-    static Value link(const LinkValue &l);
-    static Value list(ValueList items);
-    static Value object(std::shared_ptr<const Object> o);
+    static Value boolean(bool b) { return of(b); }
+    static Value number(double n) { return of(n); }
+    static Value string(const QString &s) { return of(s); }
+    static Value date(const DateValue &d) { return of(d); }
+    static Value date(QDate d) { return of(DateValue{QDateTime(d, QTime(0, 0)), false}); }
+    static Value duration(const Duration &d) { return of(d); }
+    static Value link(const LinkValue &l) { return of(l); }
+    static Value list(ValueList items) { return of(std::make_shared<const ValueList>(std::move(items))); }
+    static Value object(std::shared_ptr<const Object> o) { return o ? of(std::move(o)) : Value(); }
     /// A map object (keys canonical, shown in the order given).
     static Value map(const QList<std::pair<QString, Value>> &fields);
-    static Value function(std::shared_ptr<const Function> f);
+    static Value function(std::shared_ptr<const Function> f) { return f ? of(std::move(f)) : Value(); }
 
     Type type() const { return Type(m.index()); }
     bool isNull() const { return m.index() == 0; }
@@ -105,6 +108,15 @@ public:
     QString typeName() const;
 
 private:
+    /// A value holding `data` (one of the alternatives of `m`).
+    template<typename T>
+    static Value of(T &&data)
+    {
+        Value v;
+        v.m = std::forward<T>(data);
+        return v;
+    }
+
     std::variant<std::monostate, bool, double, QString, DateValue, Duration, LinkValue,
                  std::shared_ptr<const ValueList>, std::shared_ptr<const Object>, std::shared_ptr<const Function>>
             m;

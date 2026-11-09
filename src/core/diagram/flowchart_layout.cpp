@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -60,6 +62,7 @@ bool isHorizontal(Direction d)
 QList<PathOp> bumpCurve(const QList<QPointF> &pts, bool vertical)
 {
     QList<PathOp> p;
+    p.reserve(pts.size());
     p.append({PathOp::Type::Move, pts.front(), {}, {}});
     for (qsizetype i = 0; i + 1 < pts.size(); ++i) {
         const QPointF a = pts[i], b = pts[i + 1];
@@ -83,6 +86,37 @@ qreal lineWidthOf(const FlowEdge &e)
     if (e.style.strokeWidth >= 0)
         return std::max<qreal>(0.5, e.style.strokeWidth);
     return e.stroke == LinkStroke::Thick ? 3.2 : 1.5;
+}
+
+/// How many subgraphs subgraph `c` is inside.
+int depthOf(const Flowchart &chart, int c)
+{
+    int d = 0;
+    for (int p = chart.clusters[c].parent; p >= 0; p = chart.clusters[p].parent)
+        ++d;
+    return d;
+}
+
+/// The rectangle of `size` centred on `center`.
+QRectF centered(QPointF center, QSizeF size)
+{
+    return QRectF(center - QPointF(size.width() / 2, size.height() / 2), size);
+}
+
+/// A style's colour `color` when it has one, else the theme's `role`.
+Paint paintOf(const QString &color, Role role)
+{
+    return color.isEmpty() ? Paint{role, {}} : Paint{Role::None, color};
+}
+
+/// A label's colour: the style's `color`, else one readable on its `fill`, else the theme's `role`.
+Paint textPaint(const Style &style, Role role)
+{
+    if (!style.color.isEmpty())
+        return {Role::None, style.color};
+    if (!style.fill.isEmpty())
+        return {Role::None, textOn(style.fill, u"#1f2430"_s, u"#f3f1ec"_s)};
+    return {role, {}};
 }
 
 } // namespace
@@ -129,6 +163,7 @@ QList<PathOp> shapePath(NodeShape shape, const QRectF &r, QList<PathOp> *decorat
     constexpr qreal pi = std::numbers::pi;
     const qreal l = r.left(), t = r.top(), rt = r.right(), b = r.bottom();
     const qreal cx = r.center().x(), cy = r.center().y(), h = r.height();
+    const qreal k = h * 0.5, q = h * 0.25; // the slants; the flag's notch and the hexagon's points
     switch (shape) {
     case NodeShape::Rect: return rectPath(r);
     case NodeShape::Rounded: return roundedRectPath(r, std::min<qreal>(6, h / 4));
@@ -161,31 +196,13 @@ QList<PathOp> shapePath(NodeShape shape, const QRectF &r, QList<PathOp> *decorat
         if (decorations)
             decorations->append(ellipsePath(r.center(), r.width() / 2 - 5, h / 2 - 5));
         return ellipsePath(r.center(), r.width() / 2, h / 2);
-    case NodeShape::Asymmetric: {
-        const qreal n = h * 0.25;
-        return polygonPath({{l, t}, {rt, t}, {rt, b}, {l, b}, {l + n, cy}});
-    }
+    case NodeShape::Asymmetric: return polygonPath({{l, t}, {rt, t}, {rt, b}, {l, b}, {l + q, cy}});
     case NodeShape::Rhombus: return polygonPath({{cx, t}, {rt, cy}, {cx, b}, {l, cy}});
-    case NodeShape::Hexagon: {
-        const qreal m = h * 0.25;
-        return polygonPath({{l, cy}, {l + m, t}, {rt - m, t}, {rt, cy}, {rt - m, b}, {l + m, b}});
-    }
-    case NodeShape::Parallelogram: {
-        const qreal k = h * 0.5;
-        return polygonPath({{l + k, t}, {rt, t}, {rt - k, b}, {l, b}});
-    }
-    case NodeShape::ParallelogramAlt: {
-        const qreal k = h * 0.5;
-        return polygonPath({{l, t}, {rt - k, t}, {rt, b}, {l + k, b}});
-    }
-    case NodeShape::Trapezoid: {
-        const qreal k = h * 0.5;
-        return polygonPath({{l + k, t}, {rt - k, t}, {rt, b}, {l, b}});
-    }
-    case NodeShape::TrapezoidAlt: {
-        const qreal k = h * 0.5;
-        return polygonPath({{l, t}, {rt, t}, {rt - k, b}, {l + k, b}});
-    }
+    case NodeShape::Hexagon: return polygonPath({{l, cy}, {l + q, t}, {rt - q, t}, {rt, cy}, {rt - q, b}, {l + q, b}});
+    case NodeShape::Parallelogram: return polygonPath({{l + k, t}, {rt, t}, {rt - k, b}, {l, b}});
+    case NodeShape::ParallelogramAlt: return polygonPath({{l, t}, {rt - k, t}, {rt, b}, {l + k, b}});
+    case NodeShape::Trapezoid: return polygonPath({{l + k, t}, {rt - k, t}, {rt, b}, {l, b}});
+    case NodeShape::TrapezoidAlt: return polygonPath({{l, t}, {rt, t}, {rt - k, b}, {l + k, b}});
     }
     return rectPath(r);
 }
@@ -224,19 +241,19 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
     L.nodeText.reserve(N);
     for (int n = 0; n < N; ++n) {
         L.nodeText.append(layoutText(m, chart.nodes[n].label, fs, chart.nodes[n].style.bold, labelMax));
-        nodeSize[n] = shapeSize(chart.nodes[n].shape, L.nodeText[n].size, fs);
+        nodeSize[n] = shapeSize(chart.nodes[n].shape, L.nodeText.constLast().size, fs);
     }
     for (int c = 0; c < C; ++c)
         L.clusterText.append(layoutText(m, chart.clusters[c].title, fs, false, labelMax * 1.5));
     const auto titleSpace = [&](int c) {
-        return chart.clusters[c].title.isEmpty() ? 0.0 : L.clusterText[c].size.height() + 4;
+        return chart.clusters[c].title.isEmpty() ? 0.0 : L.clusterText.at(c).size.height() + 4;
     };
 
     // The items of each level (index c + 1; 0 the whole chart), in the order they are written.
     struct Child {
-        bool cluster;
-        int index;
-        int line;
+        bool cluster = false;
+        int index = 0;
+        int line = 0;
     };
     QList<QList<Child>> children(C + 1);
     for (int n = 0; n < N; ++n)
@@ -244,11 +261,7 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
     for (int c = 0; c < C; ++c)
         children[chart.clusters[c].parent + 1].append({true, c, chart.clusters[c].line});
     for (auto &list : children)
-        std::ranges::stable_sort(list, [](const Child &a, const Child &b) { return a.line < b.line; });
-    QList<int> depth(C, 0);
-    for (int c = 0; c < C; ++c)
-        for (int p = chart.clusters[c].parent; p >= 0; p = chart.clusters[p].parent)
-            ++depth[c];
+        std::ranges::stable_sort(list, {}, &Child::line);
     const auto directionOf = [&](int c) {
         for (; c >= 0; c = chart.clusters[c].parent)
             if (chart.clusters[c].direction)
@@ -257,7 +270,7 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
     };
 
     // Each link's level (the innermost subgraph holding both ends) and the items it joins there.
-    const auto chainOf = [&](const FlowEnd &end) {
+    const auto chainOf = [&](FlowEnd end) {
         QList<int> chain;
         for (int c = end.cluster ? end.index : chart.nodes[end.index].cluster; c >= 0; c = chart.clusters[c].parent)
             chain.prepend(c);
@@ -278,7 +291,7 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
             ++p;
         Link &k = links[e];
         k.level = p > 0 ? a[p - 1] : -1;
-        const auto item = [&](const FlowEnd &end, const QList<int> &chain) -> std::optional<Child> {
+        const auto item = [&](FlowEnd end, const QList<int> &chain) -> std::optional<Child> {
             if (p < chain.size())
                 return Child{true, chain[p], 0};
             if (end.cluster)
@@ -297,12 +310,11 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
         k.to = *t;
     }
     L.edges.resize(E);
-    for (int e = 0; e < E; ++e) {
+    for (int e = 0; e < E; ++e)
         if (!chart.edges[e].label.isEmpty())
             L.edges[e].labelText = layoutText(m, chart.edges[e].label, fs * 0.93, false, labelMax);
-    }
     const auto labelBox = [&](int e) {
-        const QSizeF s = L.edges[e].labelText.size;
+        const QSizeF s = L.edges.at(e).labelText.size;
         return QSizeF(s.width() + 10, s.height() + 4);
     };
     // Room for self-loops beside their node (right of it; below it in LR / RL levels).
@@ -324,16 +336,16 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
     QList<int> levels;
     for (int c = 0; c < C; ++c)
         levels.append(c);
-    std::ranges::stable_sort(levels, [&](int a, int b) { return depth[a] > depth[b]; });
+    std::ranges::stable_sort(levels, std::ranges::greater{}, [&](int c) { return depthOf(chart, c); });
     levels.append(-1);
     int layoutNodes = 0;
     for (const int c : std::as_const(levels)) {
-        const QList<Child> &items = children[c + 1];
+        const QList<Child> &items = children.at(c + 1);
         const Direction dir = directionOf(c);
         const bool horizontal = isHorizontal(dir);
         QList<LayerNode> ln;
         QHash<qint64, int> local; // (cluster?, index) → layer node
-        const auto key = [](const Child &k) { return (qint64(k.cluster) << 32) | quint32(k.index); };
+        const auto key = [](Child k) { return (qint64(k.cluster) << 32) | quint32(k.index); };
         for (const Child &k : items) {
             const QSizeF s = k.cluster ? clusterSize[k.index] : nodeSize[k.index];
             LayerNode n;
@@ -381,7 +393,7 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
         for (const auto &bends : result->bends)
             layoutNodes += int(bends.size());
         const qreal W = result->size.width(), H = result->size.height();
-        const auto turn = [&](const QPointF &p) {
+        const auto turn = [&](QPointF p) {
             switch (dir) {
             case Direction::TB: return p;
             case Direction::BT: return QPointF(p.x(), H - p.y());
@@ -407,47 +419,36 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
                 labelRel[e] = turn(*result->labels[i]);
         }
         if (c >= 0) {
-            const qreal w = std::max(content.width(), L.clusterText[c].size.width()) + 2 * ClusterPad;
+            const qreal w = std::max(content.width(), L.clusterText.at(c).size.width()) + 2 * ClusterPad;
             const qreal h = content.height() + 2 * ClusterPad + titleSpace(c);
             clusterSize[c] = QSizeF(std::max(w, 2 * ClusterPad + 20), std::max(h, 2 * ClusterPad + 10));
         }
     }
 
     // Absolute positions, from the outside in.
-    QString chartTitle = chart.title;
-    const TextBlock title = layoutText(m, chartTitle, fs * 1.15, true, 0);
-    const qreal titleH = chartTitle.isEmpty() ? 0 : title.size.height() + 8;
+    const TextBlock title = layoutText(m, chart.title, fs * 1.15, true, 0);
+    const qreal titleH = chart.title.isEmpty() ? 0 : title.size.height() + 8;
     const QSizeF root = contentSize[0];
-    const qreal width = std::max(root.width(), chartTitle.isEmpty() ? 0 : title.size.width()) + 2 * Margin;
+    const qreal width = std::max(root.width(), chart.title.isEmpty() ? 0 : title.size.width()) + 2 * Margin;
     QList<QPointF> origin(C + 1);
     origin[0] = QPointF((width - root.width()) / 2, Margin + titleH);
     L.clusters.resize(C);
-    QList<int> outward = levels;
-    outward.removeLast();
-    std::ranges::reverse(outward);
-    for (const int c : std::as_const(outward)) {
-        const QPointF o = origin[chart.clusters[c].parent + 1];
-        const QSizeF s = clusterSize[c];
-        const QRectF r(o + clusterRel[c] - QPointF(s.width() / 2, s.height() / 2), s);
+    // The subgraphs, the outer ones first: `levels` reversed, without the whole chart.
+    for (const int c : std::as_const(levels) | std::views::reverse | std::views::drop(1)) {
+        const QRectF r = centered(origin[chart.clusters[c].parent + 1] + clusterRel[c], clusterSize[c]);
         L.clusters[c] = r;
         origin[c + 1] =
                 QPointF(r.left() + (r.width() - contentSize[c + 1].width()) / 2, r.top() + ClusterPad + titleSpace(c));
     }
     L.nodes.resize(N);
-    for (int n = 0; n < N; ++n) {
-        const QSizeF s = nodeSize[n];
-        L.nodes[n] =
-                QRectF(origin[chart.nodes[n].cluster + 1] + nodeRel[n] - QPointF(s.width() / 2, s.height() / 2), s);
-    }
+    for (int n = 0; n < N; ++n)
+        L.nodes[n] = centered(origin[chart.nodes[n].cluster + 1] + nodeRel[n], nodeSize[n]);
     L.size = QSizeF(width, root.height() + 2 * Margin + titleH);
 
     // Links.
-    const auto outlineOf = [&](const FlowEnd &end) {
-        return end.cluster ? flatten(rectPath(L.clusters[end.index]))
-                           : shapeOutline(chart.nodes[end.index].shape, L.nodes[end.index]);
-    };
-    const auto centerOf = [&](const FlowEnd &end) {
-        return end.cluster ? L.clusters[end.index].center() : L.nodes[end.index].center();
+    const auto boundsOf = [&](FlowEnd end) { return end.cluster ? L.clusters.at(end.index) : L.nodes.at(end.index); };
+    const auto outlineOf = [&](FlowEnd end) {
+        return shapeOutline(end.cluster ? NodeShape::Rect : chart.nodes[end.index].shape, boundsOf(end));
     };
     for (int e = 0; e < E; ++e) {
         const FlowEdge &edge = chart.edges[e];
@@ -457,43 +458,42 @@ Outcome<FlowLayout> layoutFlowchart(const Flowchart &chart, const Metrics &m)
             continue;
         g.drawn = edge.stroke != LinkStroke::Invisible;
         const QPointF o = origin[links[e].level + 1];
+        const QPointF a = boundsOf(edge.from).center(), b = boundsOf(edge.to).center();
         QList<QPointF> pts;
-        const QPointF a = centerOf(edge.from), b = centerOf(edge.to);
+        pts.reserve(bendsRel[e].size() + 2);
         pts.append(a);
         for (const QPointF &p : std::as_const(bendsRel[e]))
             pts.append(o + p);
         pts.append(b);
         pts.front() = outlineExit(outlineOf(edge.from), a, pts[1]);
         pts.back() = outlineExit(outlineOf(edge.to), b, pts[pts.size() - 2]);
-        const bool vertical = !isHorizontal(directionOf(links[e].level));
-        g.path = bumpCurve(pts, vertical);
+        g.path = bumpCurve(pts, !isHorizontal(directionOf(links[e].level)));
         g.start = pts.front();
         g.end = pts.back();
-        PathOp &first = g.path[1];
-        PathOp &last = g.path.last();
-        g.startDir = unitVector(first.c1, g.start, unitVector(pts[1], pts[0]));
-        g.endDir = unitVector(last.c2, g.end, unitVector(pts[pts.size() - 2], pts.back()));
+        g.startDir = unitVector(g.path.at(1).c1, g.start, unitVector(pts[1], pts[0]));
+        g.endDir = unitVector(g.path.constLast().c2, g.end, unitVector(pts[pts.size() - 2], pts.back()));
         g.lineStart = g.start - g.startDir * headInset(edge.startHead, g.width);
         g.lineEnd = g.end - g.endDir * headInset(edge.endHead, g.width);
         g.path.front().p = g.lineStart;
-        last.p = g.lineEnd;
-        if (labelRel[e]) {
-            const QSizeF s = labelBox(e);
-            g.label = QRectF(o + *labelRel[e] - QPointF(s.width() / 2, s.height() / 2), s);
-        }
+        g.path.back().p = g.lineEnd;
+        if (labelRel[e])
+            g.label = centered(o + *labelRel[e], labelBox(e));
     }
     // Self-loops beside their node.
     for (int n = 0; n < N; ++n) {
+        const QList<int> &selfLoops = loops.at(n);
+        if (selfLoops.isEmpty())
+            continue;
         const bool horizontal = isHorizontal(directionOf(chart.nodes[n].cluster));
-        const QRectF r = L.nodes[n];
+        const QRectF r = L.nodes.at(n);
+        const QPointF c = r.center();
         const QList<QPointF> outline = shapeOutline(chart.nodes[n].shape, r);
-        for (qsizetype k = 0; k < loops[n].size(); ++k) {
-            const int e = loops[n][k];
+        for (qsizetype k = 0; k < selfLoops.size(); ++k) {
+            const int e = selfLoops[k];
             const FlowEdge &edge = chart.edges[e];
             FlowLayout::Edge &g = L.edges[e];
             g.drawn = edge.stroke != LinkStroke::Invisible;
             const qreal reach = 20 + 8.0 * k;
-            const QPointF c = r.center();
             QPointF p0, p1, c1, c2;
             if (!horizontal) {
                 const qreal dy = std::min<qreal>(r.height() / 4, 10);
@@ -543,83 +543,63 @@ Scene drawFlowchart(const Flowchart &chart, const FlowLayout &L, const Metrics &
     QList<int> order;
     for (qsizetype c = 0; c < chart.clusters.size(); ++c)
         order.append(int(c));
-    const auto depthOf = [&](int c) {
-        int d = 0;
-        for (int p = chart.clusters[c].parent; p >= 0; p = chart.clusters[p].parent)
-            ++d;
-        return d;
-    };
-    std::ranges::stable_sort(order, [&](int a, int b) { return depthOf(a) < depthOf(b); });
+    std::ranges::stable_sort(order, {}, [&](int c) { return depthOf(chart, c); });
     QList<Item> titles;
     for (const int c : std::as_const(order)) {
         const FlowCluster &cl = chart.clusters[c];
         const QRectF r = L.clusters[c];
-        const Paint fill = cl.style.fill.isEmpty() ? Paint{Role::ClusterFill, {}} : Paint{Role::None, cl.style.fill};
-        const Paint stroke =
-                cl.style.stroke.isEmpty() ? Paint{Role::ClusterStroke, {}} : Paint{Role::None, cl.style.stroke};
+        const Paint fill = paintOf(cl.style.fill, Role::ClusterFill);
+        const Paint stroke = paintOf(cl.style.stroke, Role::ClusterStroke);
         items.append(pathItem(roundedRectPath(r, 4), fill, stroke, cl.style.strokeWidth >= 0 ? cl.style.strokeWidth : 1,
                               cl.style.dash.value_or(Dash::Solid)));
         if (!cl.title.isEmpty()) {
             const TextBlock &t = L.clusterText[c];
-            Paint color{Role::ClusterText, {}};
-            if (!cl.style.color.isEmpty())
-                color = {Role::None, cl.style.color};
-            else if (!cl.style.fill.isEmpty())
-                color = {Role::None, textOn(cl.style.fill, u"#1f2430"_s, u"#f3f1ec"_s)};
             // Over the links entering the subgraph, on its own fill.
             const qreal w = std::min(t.size.width() + 8, r.width() - 2);
-            Item title =
-                    textItem(t, QRectF(r.center().x() - w / 2, r.top() + ClusterPad - 4, w, t.size.height()), color);
+            Item title = textItem(t, QRectF(r.center().x() - w / 2, r.top() + ClusterPad - 4, w, t.size.height()),
+                                  textPaint(cl.style, Role::ClusterText));
             title.background = fill;
-            titles.append(title);
+            titles.append(std::move(title));
         }
     }
     // Links, then their labels.
+    QList<Item> labels;
     for (qsizetype e = 0; e < chart.edges.size(); ++e) {
         const FlowEdge &edge = chart.edges[e];
         const FlowLayout::Edge &g = L.edges[e];
         if (!g.drawn)
             continue;
-        const Paint color = edge.style.stroke.isEmpty() ? Paint{Role::Line, {}} : Paint{Role::None, edge.style.stroke};
+        const Paint color = paintOf(edge.style.stroke, Role::Line);
         const Dash dash = edge.style.dash.value_or(edge.stroke == LinkStroke::Dotted ? Dash::Dotted : Dash::Solid);
         items.append(pathItem(g.path, Paint{}, color, g.width, dash));
         addHead(items, edge.endHead, g.end, g.endDir, color, g.width);
         addHead(items, edge.startHead, g.start, g.startDir, color, g.width);
+        if (!g.label.isEmpty()) {
+            Item t = textItem(g.labelText, g.label, paintOf(edge.style.color, Role::LineText));
+            t.background = Paint{Role::LabelBackground, {}};
+            labels.append(std::move(t));
+        }
     }
-    for (qsizetype e = 0; e < chart.edges.size(); ++e) {
-        const FlowEdge &edge = chart.edges[e];
-        const FlowLayout::Edge &g = L.edges[e];
-        if (!g.drawn || g.label.isEmpty())
-            continue;
-        Item t = textItem(g.labelText, g.label,
-                          edge.style.color.isEmpty() ? Paint{Role::LineText, {}} : Paint{Role::None, edge.style.color});
-        t.background = Paint{Role::LabelBackground, {}};
-        items.append(t);
-    }
-    items.append(titles);
+    items.append(std::move(labels));
+    items.append(std::move(titles));
     // Nodes.
     for (qsizetype n = 0; n < chart.nodes.size(); ++n) {
         const FlowNode &node = chart.nodes[n];
         const QRectF r = L.nodes[n];
         const Style &st = node.style;
-        const Paint fill = st.fill.isEmpty() ? Paint{Role::NodeFill, {}} : Paint{Role::None, st.fill};
-        const Paint stroke = st.stroke.isEmpty() ? Paint{Role::NodeStroke, {}} : Paint{Role::None, st.stroke};
+        const Paint fill = paintOf(st.fill, Role::NodeFill);
+        const Paint stroke = paintOf(st.stroke, Role::NodeStroke);
         const qreal width = st.strokeWidth >= 0 ? st.strokeWidth : 1.2;
         QList<PathOp> deco;
         items.append(pathItem(shapePath(node.shape, r, &deco), fill, stroke, width, st.dash.value_or(Dash::Solid)));
         if (!deco.isEmpty())
-            items.append(pathItem(deco, Paint{}, stroke, width));
-        Paint color{Role::NodeText, {}};
-        if (!st.color.isEmpty())
-            color = {Role::None, st.color};
-        else if (!st.fill.isEmpty())
-            color = {Role::None, textOn(st.fill, u"#1f2430"_s, u"#f3f1ec"_s)};
+            items.append(pathItem(std::move(deco), Paint{}, stroke, width));
         QRectF box = r;
         if (node.shape == NodeShape::Cylinder)
             box.setTop(r.top() + cylinderRy(r.width(), r.height()));
         else if (node.shape == NodeShape::Asymmetric)
             box.setLeft(r.left() + r.height() * 0.25);
-        items.append(textItem(L.nodeText[n], box, color));
+        items.append(textItem(L.nodeText[n], box, textPaint(st, Role::NodeText)));
     }
     return scene;
 }

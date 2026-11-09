@@ -149,16 +149,16 @@ std::optional<Fraction> fractionValue(const QString &word, Unit unit)
     const bool pol = word == u"pol";
     if (unit == Unit::Hour) {
         if (pol || word == u"half an")
-            return Fraction{30, 0};
+            return Fraction{.minutes = 30};
         if (word == u"poltorej" || word == u"poltora")
-            return Fraction{90, 0};
+            return Fraction{.minutes = 90};
     } else if (unit == Unit::Year) {
         if (pol || word == u"half a")
-            return Fraction{0, 6};
+            return Fraction{.months = 6};
         if (word == u"poltora")
-            return Fraction{0, 18};
+            return Fraction{.months = 18};
     } else if (unit == Unit::Day && (pol || word == u"half a")) {
-        return Fraction{720, 0};
+        return Fraction{.minutes = 720};
     }
     return std::nullopt;
 }
@@ -171,20 +171,12 @@ struct DaypartEntry {
 
 DaypartEntry daypartEntry(Daypart part, Weakness weak = Weakness::None, bool today = false)
 {
-    DaypartEntry e;
-    e.spec.daypart = part;
-    e.weak = weak;
-    e.today = today;
-    return e;
+    return {.spec = {.daypart = part}, .weak = weak, .today = today};
 }
 
 DaypartEntry clockEntry(int hour, bool midnight = false)
 {
-    DaypartEntry e;
-    e.spec.hour = hour;
-    e.spec.minute = 0;
-    e.spec.midnight = midnight;
-    return e;
+    return {.spec = {.hour = hour, .minute = 0, .midnight = midnight}};
 }
 
 const QHash<QString, DaypartEntry> &dayparts()
@@ -252,18 +244,12 @@ std::optional<QString> optionalCap(const Match &m, int n)
 
 TokenValue dateToken(QDate date, Weakness weak = Weakness::None)
 {
-    TokenValue v;
-    v.date = date;
-    v.weak = weak;
-    return v;
+    return {.date = date, .weak = weak};
 }
 
 TokenValue timeToken(const TimeSpec &spec, Weakness weak = Weakness::None)
 {
-    TokenValue v;
-    v.time = spec;
-    v.weak = weak;
-    return v;
+    return {.time = spec, .weak = weak};
 }
 
 std::optional<TokenValue> optionalDateToken(std::optional<QDate> date, Weakness weak = Weakness::None)
@@ -320,6 +306,13 @@ int fullYear(QStringView digits)
     return digits.size() == 2 ? 2000 + digits.toInt() : digits.toInt();
 }
 
+/// A day and month in the year of group `yearGroup` when that matched, else the next such day.
+std::optional<TokenValue> dayMonthToken(const Match &m, int yearGroup, int month, int day, const Ctx &ctx)
+{
+    return optionalDateToken(m.hasCaptured(yearGroup) ? explicitDate(fullYear(m.capturedView(yearGroup)), month, day)
+                                                      : yearless(month, day, ctx));
+}
+
 /// Next date (today or later) with the given day of month.
 std::optional<QDate> nextMonthDay(int day, const Ctx &ctx)
 {
@@ -346,8 +339,7 @@ std::optional<int> parseCount(const std::optional<QString> &word)
         return n;
     if (*word == u"a" || *word == u"an")
         return 1;
-    const auto it = detail::numberWords().constFind(*word);
-    return it == detail::numberWords().cend() ? std::nullopt : std::optional<int>(*it);
+    return lookup(detail::numberWords(), *word);
 }
 
 TokenValue exactAfterMinutes(qint64 minutes, const Ctx &ctx)
@@ -386,8 +378,8 @@ TokenValue offsetValue(Unit unit, int n, const Ctx &ctx)
 std::optional<TokenValue> relativeValue(const std::optional<QString> &count, const QString &unitWord, int sign,
                                         const QSet<QString> &bare, const Ctx &ctx)
 {
-    const auto unit = units().constFind(unitWord);
-    if (unit == units().cend())
+    const auto unit = lookup(units(), unitWord);
+    if (!unit)
         return std::nullopt;
     std::optional<int> n = parseCount(count);
     if (!n) {
@@ -426,9 +418,7 @@ std::optional<TimeSpec> timeSpec(QStringView hour, QStringView minute, QStringVi
     const int min = minute.isEmpty() ? 0 : minute.toInt();
     if (min > 59)
         return std::nullopt;
-    TimeSpec spec;
-    spec.hour = h;
-    spec.minute = min;
+    TimeSpec spec{.hour = h, .minute = min};
     if (!meridiem.isEmpty()) {
         if (h < 1 || h > 12)
             return std::nullopt;
@@ -473,18 +463,18 @@ bool numericDateOk(const Match &m, const Ctx &ctx)
 /// "o 15 sie …": the folded text before `start` ends with the hour preposition "o"/"at" + space.
 bool precededByHourPreposition(const Ctx &ctx, qsizetype start)
 {
-    const QString &t = ctx.foldedText();
+    const QStringView t = ctx.foldedText();
     qsizetype i = start;
     while (i > 0 && t.at(i - 1).isSpace())
         --i;
     if (i == start)
         return false;
-    for (const QStringView word : {QStringView(u"o"), QStringView(u"at")}) {
-        const qsizetype w = i - word.size();
-        if (w >= 0 && QStringView(t).sliced(w, word.size()) == word && (w == 0 || !t.at(w - 1).isLetterOrNumber()))
-            return true;
-    }
-    return false;
+    const QStringView head = t.first(i);
+    const auto endsWithWord = [head](QStringView word) {
+        const qsizetype w = head.size() - word.size();
+        return head.endsWith(word) && (w == 0 || !head.at(w - 1).isLetterOrNumber());
+    };
+    return endsWithWord(u"o") || endsWithWord(u"at");
 }
 
 /// Whitespace followed by a letter at `pos` ("o 15 sie spotkamy").
@@ -511,18 +501,16 @@ bool monthWordCollides(const Match &m, const Ctx &ctx)
 }
 
 // =============================================================================================
-// Token builders (one per matcher; group numbers refer to the matcher's pattern)
+// Token builders (group numbers refer to the matchers' patterns)
 // =============================================================================================
 
 std::optional<TokenValue> buildDayWord(const Match &m, const Ctx &ctx)
 {
     const QString word = capKey(m, 2);
-    if (needsPreposition(word) && !m.hasCaptured(1))
+    const auto days = lookup(dayWords(), word);
+    if (!days || (needsPreposition(word) && !m.hasCaptured(1)))
         return std::nullopt;
-    const auto it = dayWords().constFind(word);
-    if (it == dayWords().cend())
-        return std::nullopt;
-    return dateToken(ctx.today.addDays(*it));
+    return dateToken(ctx.today.addDays(*days));
 }
 
 std::optional<TokenValue> buildWeekday(const Match &m, const Ctx &ctx)
@@ -571,16 +559,14 @@ std::optional<TokenValue> buildWeekend(const Match &m, const Ctx &ctx)
 
 std::optional<TokenValue> buildRelative(const Match &m, const Ctx &ctx)
 {
-    const std::optional<QString> count = m.hasCaptured(2) ? optionalCap(m, 2) : optionalCap(m, 3);
+    const std::optional<QString> count = optionalCap(m, m.hasCaptured(2) ? 2 : 3);
     return relativeValue(count, m.captured(4), 1, bareUnitsAfter(capKey(m, 1)), ctx);
 }
 
 std::optional<TokenValue> buildFraction(const Match &m, const Ctx &ctx)
 {
-    const auto unit = units().constFind(m.captured(2));
-    if (unit == units().cend())
-        return std::nullopt;
-    const auto frac = fractionValue(capKey(m, 1), *unit);
+    const auto unit = lookup(units(), m.captured(2));
+    const auto frac = unit ? fractionValue(capKey(m, 1), *unit) : std::nullopt;
     if (!frac)
         return std::nullopt;
     if (frac->minutes > 0)
@@ -590,7 +576,7 @@ std::optional<TokenValue> buildFraction(const Match &m, const Ctx &ctx)
 
 std::optional<TokenValue> buildAgo(const Match &m, const Ctx &ctx)
 {
-    const std::optional<QString> count = m.hasCaptured(1) ? optionalCap(m, 1) : optionalCap(m, 2);
+    const std::optional<QString> count = optionalCap(m, m.hasCaptured(1) ? 1 : 2);
     return relativeValue(count, m.captured(3), -1, bareUnitsAccusative(), ctx);
 }
 
@@ -600,12 +586,8 @@ std::optional<TokenValue> buildIsoDate(const Match &m, const Ctx &)
     if (!date)
         return std::nullopt;
     TokenValue v = dateToken(*date);
-    if (m.hasCaptured(5)) {
-        TimeSpec spec;
-        spec.hour = m.capturedView(5).toInt();
-        spec.minute = m.capturedView(6).toInt();
-        v.time = spec;
-    }
+    if (m.hasCaptured(5))
+        v.time = TimeSpec{.hour = m.capturedView(5).toInt(), .minute = m.capturedView(6).toInt()};
     return v;
 }
 
@@ -616,8 +598,7 @@ std::optional<TokenValue> buildDayMonthNumeric(const Match &m, const Ctx &ctx)
     const QStringView a = m.capturedView(1);
     const QStringView b = m.capturedView(3);
     const QChar sep = m.capturedView(2).at(0);
-    const bool hasYear = m.hasCaptured(4);
-    if (!hasYear) {
+    if (!m.hasCaptured(4)) {
         // Without a year require two-digit months ("15.10", not decimals like "12.5"), and for
         // slashes two-digit parts (not fractions like "1/2" or scores like "8/10").
         if (sep == u'.' && b.size() != 2)
@@ -630,8 +611,7 @@ std::optional<TokenValue> buildDayMonthNumeric(const Match &m, const Ctx &ctx)
     // Slashes: "10/15" can only be month/day; ambiguous ones follow the locale.
     if (sep == u'/' && ((ctx.locale == UiLocale::English && day <= 12 && month <= 12) || (month > 12 && day <= 12)))
         std::swap(day, month);
-    return optionalDateToken(hasYear ? explicitDate(fullYear(m.capturedView(4)), month, day)
-                                     : yearless(month, day, ctx));
+    return dayMonthToken(m, 4, month, day, ctx);
 }
 
 std::optional<TokenValue> buildDashDate(const Match &m, const Ctx &ctx)
@@ -647,19 +627,13 @@ std::optional<TokenValue> buildDayMonthName(const Match &m, const Ctx &ctx)
     const auto word = detail::lookupMonth(m.capturedView(2));
     if (!word || monthWordCollides(m, ctx))
         return std::nullopt;
-    const int day = m.capturedView(1).toInt();
-    return optionalDateToken(m.hasCaptured(3) ? explicitDate(m.capturedView(3).toInt(), word->month, day)
-                                              : yearless(word->month, day, ctx));
+    return dayMonthToken(m, 3, word->month, m.capturedView(1).toInt(), ctx);
 }
 
 std::optional<TokenValue> buildMonthDay(const Match &m, const Ctx &ctx)
 {
     const auto word = detail::lookupMonth(m.capturedView(1));
-    if (!word)
-        return std::nullopt;
-    const int day = m.capturedView(2).toInt();
-    return optionalDateToken(m.hasCaptured(3) ? explicitDate(m.capturedView(3).toInt(), word->month, day)
-                                              : yearless(word->month, day, ctx));
+    return word ? dayMonthToken(m, 3, word->month, m.capturedView(2).toInt(), ctx) : std::nullopt;
 }
 
 std::optional<TokenValue> buildOrdinalDay(const Match &m, const Ctx &ctx)
@@ -689,8 +663,8 @@ std::optional<TokenValue> buildHourDaypart(const Match &m, const Ctx &)
     if (m.capturedView(3) == u"." && !m.hasCaptured(1))
         return std::nullopt;
     auto spec = timeSpec(m.capturedView(2), m.capturedView(4), {});
-    const auto entry = dayparts().constFind(capKey(m, 5));
-    if (!spec || entry == dayparts().cend() || !entry->spec.daypart)
+    const auto entry = lookup(dayparts(), capKey(m, 5));
+    if (!spec || !entry || !entry->spec.daypart)
         return std::nullopt;
     const Daypart part = *entry->spec.daypart;
     if ((part == Daypart::Morning || part == Daypart::Forenoon) && *spec->hour > 12)
@@ -699,13 +673,8 @@ std::optional<TokenValue> buildHourDaypart(const Match &m, const Ctx &)
     return timeToken(*spec);
 }
 
-std::optional<TokenValue> buildHourWord(const Match &m, const Ctx &)
-{
-    const auto spec = timeSpec(m.capturedView(1), m.capturedView(2), {});
-    return spec ? std::optional<TokenValue>(timeToken(*spec)) : std::nullopt;
-}
-
-std::optional<TokenValue> buildClockOrMeridiem(const Match &m, const Ctx &)
+/// Groups: 1 = hour, 2 = minutes, 3 = am/pm (the last two optional, or not in the pattern at all).
+std::optional<TokenValue> buildClock(const Match &m, const Ctx &)
 {
     const auto spec = timeSpec(m.capturedView(1), m.capturedView(2), m.capturedView(3));
     return spec ? std::optional<TokenValue>(timeToken(*spec)) : std::nullopt;
@@ -713,8 +682,8 @@ std::optional<TokenValue> buildClockOrMeridiem(const Match &m, const Ctx &)
 
 std::optional<TokenValue> buildDaypart(const Match &m, const Ctx &ctx)
 {
-    const auto entry = dayparts().constFind(capKey(m, 1));
-    if (entry == dayparts().cend())
+    const auto entry = lookup(dayparts(), capKey(m, 1));
+    if (!entry)
         return std::nullopt;
     TokenValue v = timeToken(entry->spec, entry->weak);
     if (entry->today)
@@ -741,93 +710,95 @@ QList<Matcher> buildMatchers()
     const QString weekdayPrep = u"w|we|na|do|od|on|by|until|till|for"_s;
 
     QStringList singularWeekdays;
-    for (auto it = detail::weekdayWords().cbegin(); it != detail::weekdayWords().cend(); ++it) {
-        if (!it->plural)
-            singularWeekdays.append(it.key());
+    for (const auto &[word, info] : detail::weekdayWords().asKeyValueRange()) {
+        if (!info.plural)
+            singularWeekdays.append(word);
     }
     QStringList englishMonths;
-    for (auto it = detail::monthWords().cbegin(); it != detail::monthWords().cend(); ++it) {
-        if (it->english)
-            englishMonths.append(it.key());
+    for (const auto &[word, info] : detail::monthWords().asKeyValueRange()) {
+        if (info.english)
+            englishMonths.append(word);
     }
     const QString numberAlt = text::regexAlternation(detail::numberWords().keys() + QStringList{u"an"_s, u"a"_s});
     const QString unitAlt = text::regexAlternation(units().keys());
 
     const auto re = [](const QString &pattern) { return text::unicodeRegex(pattern); };
     return {
-        // dziś / jutro / pojutrze / wczoraj / today / tomorrow (+ "na", "do", "on", …)
-        {re(uR"(%1(?:(na|do|od|on|by|for|until|till)\s+)?(%2)%3)"_s.arg(L, phraseAlternation(dayWords().keys()), R)),
-         buildDayWord},
-        // Weekdays: "w piątek", "we wtorek", "w przyszłą środę", "next friday", "pt"
-        {re(uR"(%1(?:(%2)\s+)?(?:(%3)\s+)?(%4)%5)"_s.arg(L, weekdayPrep, phraseAlternation(weekdayModes().keys()),
-                                                           text::regexAlternation(singularWeekdays), R)),
-         buildWeekday},
-        // "w przyszłym tygodniu", "w następnym miesiącu", "w przyszłym roku"
-        {re(uR"(%1(?:w|we)\s+(przyszlym|nastepnym|kolejnym)\s+(tygodniu|miesiacu|roku)%2)"_s.arg(L, R)),
-         buildPeriodStartIn},
-        // "przyszły tydzień", "do przyszłego tygodnia", "next week/month/year"
-        {re(uR"(%1(?:(?:na|do|od|by|until)\s+)?(?:przyszly|nastepny|przyszlego|nastepnego|next)\s+(tydzien|tygodnia|miesiac|miesiaca|rok|roku|week|month|year)%2)"_s
-                .arg(L, R)),
-         buildPeriodStartNext},
-        // "koniec miesiąca", "do końca tygodnia", "end of the month", "end of next week"
-        {re(uR"(%1(?:(?:na|do|w|przed|by|at|until|till|before)\s+)?(?:the\s+)?(?:koniec|konca|koncu|koncem|end\s+of)\s+(?:(tego|biezacego|przyszlego|nastepnego|the|this|next)\s+)?(tygodnia|miesiaca|roku|week|month|year)%2)"_s
-                .arg(L, R)),
-         buildPeriodEnd},
-        // Weekend: "w weekend", "na weekend", "this weekend", "w przyszły weekend"
-        {re(uR"(%1(?:(w|we|na|on|over|at)\s+)?(?:(the|ten|this|przyszly|nastepny|najblizszy|next)\s+)?(weekend|weekendzie|weekendu)%2)"_s
-                .arg(L, R)),
-         buildWeekend},
-        // Relative: "za 2 dni", "za tydzień", "za 3 godziny", "w ciągu godziny", "in 2 weeks", "in an hour"
-        {re(uR"(%1(za|w\s+ciagu|in|within)\s+(?:([0-9]{1,4})\s*|(%2)\s+)?(%3)%4)"_s.arg(L, numberAlt, unitAlt, R)),
-         buildRelative},
-        // Fractions: "za pół godziny", "za półtorej godziny", "in half an hour", "za pół roku"
-        {re(uR"(%1(?:za|w\s+ciagu|in|within)\s+(%2)\s+(godziny|godzine|hour|roku|year|dnia|day)%3)"_s.arg(
-             L, phraseAlternation(fractionWords()), R)),
-         buildFraction},
-        // Ago: "2 dni temu", "tydzień temu", "3 weeks ago"
-        {re(uR"(%1(?:([0-9]{1,4})\s*|(%2)\s+)?(%3)\s+(?:temu|ago)%4)"_s.arg(L, numberAlt, unitAlt, R)), buildAgo},
-        // ISO: "2026-10-15", "2026/10/15", "2026-10-15T18:30"
-        {re(uR"(%1(?:(?:%2)\s+)?([0-9]{4})([-/.])([0-9]{1,2})\2([0-9]{1,2})(?:t([0-9]{1,2}):([0-9]{2}))?%3)"_s.arg(
-             NL, datePrep, NR)),
-         buildIsoDate},
-        // Day.month[.year]: "15.10", "15.10.2026", "15/10", "15.10.26r."
-        {re(uR"(%1(?:(?:%2)\s+)?([0-9]{1,2})([./])([0-9]{1,2})(?:\2([0-9]{4}|[0-9]{2})(?:\s?r\.?(?![\p{L}]))?)?%3)"_s
-                .arg(NL, datePrep, NR)),
-         buildDayMonthNumeric},
-        // Day-month-year with dashes: "15-10-2026"
-        {re(uR"(%1(?:(?:%2)\s+)?([0-9]{1,2})-([0-9]{1,2})-([0-9]{4})%3)"_s.arg(NL, datePrep, NR)), buildDashDate},
-        // Day + month name: "15 października", "15 paź 2026", "1st of October", "15th Oct"
-        {re(uR"(%1(?:(?:%2)\s+)?([0-9]{1,2})(?:\.|-go|-ego|-tego|st|nd|rd|th)?(?:\s+of)?\s*(%3)(?![\p{L}])(?:\.?,?\s+([0-9]{4})(?![\p{N}])(?:\s?r\.?(?![\p{L}]))?)?)"_s
-                .arg(L, datePrep, text::regexAlternation(detail::monthWords().keys()))),
-         buildDayMonthName},
-        // English month first: "Oct 15", "October 15th, 2026", "on May 3"
-        {re(uR"(%1(?:(?:on|by|until|till)\s+)?(%2)\.?\s+([0-9]{1,2})(?:st|nd|rd|th)?(?![\p{L}\p{N}])(?:,?\s+([0-9]{4})(?![\p{N}]))?)"_s
-                .arg(L, text::regexAlternation(englishMonths))),
-         buildMonthDay},
-        // Day of month only: "the 15th", "on the 3rd", "by the 15th", "15-go", "do 20-tego"
-        {re(uR"(%1(?:(on|by|until|till|na|do|od|dnia)\s+)?(?:the\s+([0-9]{1,2})(?:st|nd|rd|th)|([0-9]{1,2})-(?:go|ego|tego))%2)"_s
-                .arg(L, R)),
-         buildOrdinalDay},
-        // "o 9", "o 9:30", "o 18.30", "o godz. 9", "at 9", "at 6pm", "o 18h", "o 9h30"
-        {re(uR"(%1(o|at)\s+(?:(godz\.?|godzinie|godzina)\s*)?([0-9]{1,2})(?:[:.]([0-9]{2}))?(?![\p{N}])(?![:.]\p{N})(?:\s*(%2)(?![\p{L}]))?(?:\s*(h(?:[0-9]{2})?|godz\.?)(?![\p{L}\p{N}]))?(?![\p{L}]))"_s
-                .arg(L, meridiem)),
-         buildAtHour},
-        // Hour + time of day: "7 rano", "o 7 rano", "8 wieczorem", "6:30 rano", "7 in the morning"
-        {re(uR"(%1(?:(o|at)\s+(?:(?:godz\.?|godzinie|godzina)\s*)?)?([0-9]{1,2})(?:([:.])([0-9]{2}))?(?![\p{N}])\s+(%2)%3)"_s
-                .arg(NL, phraseAlternation(hourDayparts()), R)),
-         buildHourDaypart},
-        // "godz. 18", "godzina 9:30"
-        {re(uR"(%1(?:godz\.?|godzina|godzinie)\s*([0-9]{1,2})(?:[:.]([0-9]{2}))?(?![\p{N}])(?![:.]\p{N}))"_s.arg(L)),
-         buildHourWord},
-        // "9:30", "18:30", "6:30pm"
-        {re(uR"(%1([0-9]{1,2}):([0-9]{2})(?![\p{N}])(?!:\p{N})(?:\s*(%2)(?![\p{L}]))?)"_s.arg(NL, meridiem)),
-         buildClockOrMeridiem},
-        // "6pm", "6 pm", "6.30 p.m."
-        {re(uR"(%1([0-9]{1,2})(?:[.]([0-9]{2}))?\s*(%2)(?![\p{L}]))"_s.arg(NL, meridiem)), buildClockOrMeridiem},
-        // "6 o'clock"
-        {re(uR"(%1([0-9]{1,2})\s*o['’]?clock%2)"_s.arg(NL, R)), buildHourWord},
-        // Times of day: "rano", "wieczorem", "w południe", "po południu", "in the evening", "noon", "tonight"
-        {re(uR"(%1(%2)%3)"_s.arg(L, phraseAlternation(dayparts().keys()), R)), buildDaypart},
+            // dziś / jutro / pojutrze / wczoraj / today / tomorrow (+ "na", "do", "on", …)
+            {re(uR"(%1(?:(na|do|od|on|by|for|until|till)\s+)?(%2)%3)"_s.arg(L, phraseAlternation(dayWords().keys()),
+                                                                            R)),
+             buildDayWord},
+            // Weekdays: "w piątek", "we wtorek", "w przyszłą środę", "next friday", "pt"
+            {re(uR"(%1(?:(%2)\s+)?(?:(%3)\s+)?(%4)%5)"_s.arg(L, weekdayPrep, phraseAlternation(weekdayModes().keys()),
+                                                             text::regexAlternation(singularWeekdays), R)),
+             buildWeekday},
+            // "w przyszłym tygodniu", "w następnym miesiącu", "w przyszłym roku"
+            {re(uR"(%1(?:w|we)\s+(przyszlym|nastepnym|kolejnym)\s+(tygodniu|miesiacu|roku)%2)"_s.arg(L, R)),
+             buildPeriodStartIn},
+            // "przyszły tydzień", "do przyszłego tygodnia", "next week/month/year"
+            {re(uR"(%1(?:(?:na|do|od|by|until)\s+)?(?:przyszly|nastepny|przyszlego|nastepnego|next)\s+(tydzien|tygodnia|miesiac|miesiaca|rok|roku|week|month|year)%2)"_s
+                        .arg(L, R)),
+             buildPeriodStartNext},
+            // "koniec miesiąca", "do końca tygodnia", "end of the month", "end of next week"
+            {re(uR"(%1(?:(?:na|do|w|przed|by|at|until|till|before)\s+)?(?:the\s+)?(?:koniec|konca|koncu|koncem|end\s+of)\s+(?:(tego|biezacego|przyszlego|nastepnego|the|this|next)\s+)?(tygodnia|miesiaca|roku|week|month|year)%2)"_s
+                        .arg(L, R)),
+             buildPeriodEnd},
+            // Weekend: "w weekend", "na weekend", "this weekend", "w przyszły weekend"
+            {re(uR"(%1(?:(w|we|na|on|over|at)\s+)?(?:(the|ten|this|przyszly|nastepny|najblizszy|next)\s+)?(weekend|weekendzie|weekendu)%2)"_s
+                        .arg(L, R)),
+             buildWeekend},
+            // Relative: "za 2 dni", "za tydzień", "za 3 godziny", "w ciągu godziny", "in 2 weeks", "in an hour"
+            {re(uR"(%1(za|w\s+ciagu|in|within)\s+(?:([0-9]{1,4})\s*|(%2)\s+)?(%3)%4)"_s.arg(L, numberAlt, unitAlt, R)),
+             buildRelative},
+            // Fractions: "za pół godziny", "za półtorej godziny", "in half an hour", "za pół roku"
+            {re(uR"(%1(?:za|w\s+ciagu|in|within)\s+(%2)\s+(godziny|godzine|hour|roku|year|dnia|day)%3)"_s.arg(
+                     L, phraseAlternation(fractionWords()), R)),
+             buildFraction},
+            // Ago: "2 dni temu", "tydzień temu", "3 weeks ago"
+            {re(uR"(%1(?:([0-9]{1,4})\s*|(%2)\s+)?(%3)\s+(?:temu|ago)%4)"_s.arg(L, numberAlt, unitAlt, R)), buildAgo},
+            // ISO: "2026-10-15", "2026/10/15", "2026-10-15T18:30"
+            {re(uR"(%1(?:(?:%2)\s+)?([0-9]{4})([-/.])([0-9]{1,2})\2([0-9]{1,2})(?:t([0-9]{1,2}):([0-9]{2}))?%3)"_s.arg(
+                     NL, datePrep, NR)),
+             buildIsoDate},
+            // Day.month[.year]: "15.10", "15.10.2026", "15/10", "15.10.26r."
+            {re(uR"(%1(?:(?:%2)\s+)?([0-9]{1,2})([./])([0-9]{1,2})(?:\2([0-9]{4}|[0-9]{2})(?:\s?r\.?(?![\p{L}]))?)?%3)"_s
+                        .arg(NL, datePrep, NR)),
+             buildDayMonthNumeric},
+            // Day-month-year with dashes: "15-10-2026"
+            {re(uR"(%1(?:(?:%2)\s+)?([0-9]{1,2})-([0-9]{1,2})-([0-9]{4})%3)"_s.arg(NL, datePrep, NR)), buildDashDate},
+            // Day + month name: "15 października", "15 paź 2026", "1st of October", "15th Oct"
+            {re(uR"(%1(?:(?:%2)\s+)?([0-9]{1,2})(?:\.|-go|-ego|-tego|st|nd|rd|th)?(?:\s+of)?\s*(%3)(?![\p{L}])(?:\.?,?\s+([0-9]{4})(?![\p{N}])(?:\s?r\.?(?![\p{L}]))?)?)"_s
+                        .arg(L, datePrep, text::regexAlternation(detail::monthWords().keys()))),
+             buildDayMonthName},
+            // English month first: "Oct 15", "October 15th, 2026", "on May 3"
+            {re(uR"(%1(?:(?:on|by|until|till)\s+)?(%2)\.?\s+([0-9]{1,2})(?:st|nd|rd|th)?(?![\p{L}\p{N}])(?:,?\s+([0-9]{4})(?![\p{N}]))?)"_s
+                        .arg(L, text::regexAlternation(englishMonths))),
+             buildMonthDay},
+            // Day of month only: "the 15th", "on the 3rd", "by the 15th", "15-go", "do 20-tego"
+            {re(uR"(%1(?:(on|by|until|till|na|do|od|dnia)\s+)?(?:the\s+([0-9]{1,2})(?:st|nd|rd|th)|([0-9]{1,2})-(?:go|ego|tego))%2)"_s
+                        .arg(L, R)),
+             buildOrdinalDay},
+            // "o 9", "o 9:30", "o 18.30", "o godz. 9", "at 9", "at 6pm", "o 18h", "o 9h30"
+            {re(uR"(%1(o|at)\s+(?:(godz\.?|godzinie|godzina)\s*)?([0-9]{1,2})(?:[:.]([0-9]{2}))?(?![\p{N}])(?![:.]\p{N})(?:\s*(%2)(?![\p{L}]))?(?:\s*(h(?:[0-9]{2})?|godz\.?)(?![\p{L}\p{N}]))?(?![\p{L}]))"_s
+                        .arg(L, meridiem)),
+             buildAtHour},
+            // Hour + time of day: "7 rano", "o 7 rano", "8 wieczorem", "6:30 rano", "7 in the morning"
+            {re(uR"(%1(?:(o|at)\s+(?:(?:godz\.?|godzinie|godzina)\s*)?)?([0-9]{1,2})(?:([:.])([0-9]{2}))?(?![\p{N}])\s+(%2)%3)"_s
+                        .arg(NL, phraseAlternation(hourDayparts()), R)),
+             buildHourDaypart},
+            // "godz. 18", "godzina 9:30"
+            {re(uR"(%1(?:godz\.?|godzina|godzinie)\s*([0-9]{1,2})(?:[:.]([0-9]{2}))?(?![\p{N}])(?![:.]\p{N}))"_s.arg(
+                     L)),
+             buildClock},
+            // "9:30", "18:30", "6:30pm"
+            {re(uR"(%1([0-9]{1,2}):([0-9]{2})(?![\p{N}])(?!:\p{N})(?:\s*(%2)(?![\p{L}]))?)"_s.arg(NL, meridiem)),
+             buildClock},
+            // "6pm", "6 pm", "6.30 p.m."
+            {re(uR"(%1([0-9]{1,2})(?:[.]([0-9]{2}))?\s*(%2)(?![\p{L}]))"_s.arg(NL, meridiem)), buildClock},
+            // "6 o'clock"
+            {re(uR"(%1([0-9]{1,2})\s*o['’]?clock%2)"_s.arg(NL, R)), buildClock},
+            // Times of day: "rano", "wieczorem", "w południe", "po południu", "in the evening", "noon", "tonight"
+            {re(uR"(%1(%2)%3)"_s.arg(L, phraseAlternation(dayparts().keys()), R)), buildDaypart},
     };
 }
 

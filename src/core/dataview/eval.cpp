@@ -3,7 +3,6 @@
 #include "dataview/messages_p.h"
 
 #include "dates/local.h"
-#include "util/paths.h"
 
 #include <cmath>
 
@@ -13,17 +12,26 @@ namespace brulion::dataview {
 
 namespace {
 
-using Bound = QList<std::pair<QString, Value>>;
+/// The value `name` was bound to last, or nullptr.
+const Value *latest(const Bound &names, const QString &name)
+{
+    for (auto it = names.crbegin(); it != names.crend(); ++it) {
+        if (it->first == name)
+            return &it->second;
+    }
+    return nullptr;
+}
 
 /// A row seen as an object: FLATTEN / GROUP BY names first (the latest wins), then the base.
-class RowObject : public Object {
+class RowObject final : public Object {
 public:
     RowObject(Bound extra, Value base) : m_extra(std::move(extra)), m_base(std::move(base)) { }
+    Q_DISABLE_COPY_MOVE(RowObject)
 
     std::optional<Value> field(const QString &key) const override
     {
-        if (const auto v = extra(key))
-            return v;
+        if (const Value *v = extra(key))
+            return *v;
         if (m_base.is(Value::Type::Object))
             return m_base.asObject().field(key);
         return std::nullopt;
@@ -37,15 +45,8 @@ public:
         }
         return out;
     }
-    /// A name FLATTEN or GROUP BY set (also dotted ones: `FLATTEN file.tasks`).
-    std::optional<Value> extra(const QString &name) const
-    {
-        for (qsizetype i = m_extra.size() - 1; i >= 0; --i) {
-            if (m_extra.at(i).first == name)
-                return m_extra.at(i).second;
-        }
-        return std::nullopt;
-    }
+    /// A name FLATTEN or GROUP BY set (also dotted ones: `FLATTEN file.tasks`), or nullptr.
+    const Value *extra(const QString &name) const { return latest(m_extra, name); }
 
 private:
     Bound m_extra;
@@ -68,12 +69,18 @@ QString chainName(const Expr &e)
     return chainName(*e.args.first()) + u'.' + e.name;
 }
 
-DateValue shifted(const DateValue &d, const Duration &dur, int sign)
+/// a + sign × b. Past qint64 (absurd durations from a note) the parts wrap around instead of
+/// overflowing, which would be undefined behaviour.
+Duration sum(Duration a, Duration b, int sign)
 {
-    DateValue out = d;
-    out.at = d.at.addMonths(int(sign * dur.months)).addMSecs(sign * dur.ms);
-    out.hasTime = d.hasTime || dur.ms % 86400000 != 0;
-    return out;
+    const auto part = [sign](qint64 x, qint64 y) { return qint64(quint64(x) + quint64(sign) * quint64(y)); };
+    return {part(a.months, b.months), part(a.ms, b.ms)};
+}
+
+/// The date `dur` after `d`.
+DateValue shifted(const DateValue &d, Duration dur)
+{
+    return {d.at.addMonths(int(dur.months)).addMSecs(dur.ms), d.hasTime || dur.ms % 86400000 != 0};
 }
 
 Value arithmetic(const QString &op, const Value &a, const Value &b, Context &ctx)
@@ -87,11 +94,11 @@ Value arithmetic(const QString &op, const Value &a, const Value &b, Context &ctx
         if (a.is(T::String) || b.is(T::String))
             return Value::string(toText(a, ctx) + toText(b, ctx));
         if (a.is(T::Date) && b.is(T::Duration))
-            return Value::date(shifted(a.asDate(), b.asDuration(), 1));
+            return Value::date(shifted(a.asDate(), b.asDuration()));
         if (a.is(T::Duration) && b.is(T::Date))
-            return Value::date(shifted(b.asDate(), a.asDuration(), 1));
+            return Value::date(shifted(b.asDate(), a.asDuration()));
         if (a.is(T::Duration) && b.is(T::Duration))
-            return Value::duration({a.asDuration().months + b.asDuration().months, a.asDuration().ms + b.asDuration().ms});
+            return Value::duration(sum(a.asDuration(), b.asDuration(), 1));
         if (a.is(T::List) && b.is(T::List))
             return Value::list(a.asList() + b.asList());
         return Value();
@@ -100,18 +107,18 @@ Value arithmetic(const QString &op, const Value &a, const Value &b, Context &ctx
         if (a.is(T::Number) && b.is(T::Number))
             return Value::number(a.asNumber() - b.asNumber());
         if (a.is(T::Date) && b.is(T::Duration))
-            return Value::date(shifted(a.asDate(), b.asDuration(), -1));
+            return Value::date(shifted(a.asDate(), sum({}, b.asDuration(), -1)));
         if (a.is(T::Date) && b.is(T::Date))
             return Value::duration({0, b.asDate().at.msecsTo(a.asDate().at)});
         if (a.is(T::Duration) && b.is(T::Duration))
-            return Value::duration({a.asDuration().months - b.asDuration().months, a.asDuration().ms - b.asDuration().ms});
+            return Value::duration(sum(a.asDuration(), b.asDuration(), -1));
         return Value();
     }
     if (op == u"*") {
         if (a.is(T::Number) && b.is(T::Number))
             return Value::number(a.asNumber() * b.asNumber());
-        const auto scale = [](const Duration &d, double n) {
-            return Value::duration({qint64(std::llround(double(d.months) * n)), qint64(std::llround(double(d.ms) * n))});
+        const auto scale = [](Duration d, double n) {
+            return Value::duration({std::llround(double(d.months) * n), std::llround(double(d.ms) * n)});
         };
         if (a.is(T::Duration) && b.is(T::Number))
             return scale(a.asDuration(), b.asNumber());
@@ -123,17 +130,14 @@ Value arithmetic(const QString &op, const Value &a, const Value &b, Context &ctx
         if (a.is(T::Number) && b.is(T::Number))
             return b.asNumber() == 0 ? Value() : Value::number(a.asNumber() / b.asNumber());
         if (a.is(T::Duration) && b.is(T::Number) && b.asNumber() != 0) {
+            const Duration d = a.asDuration();
             const double n = b.asNumber();
-            return Value::duration({qint64(std::llround(double(a.asDuration().months) / n)),
-                                    qint64(std::llround(double(a.asDuration().ms) / n))});
+            return Value::duration({std::llround(double(d.months) / n), std::llround(double(d.ms) / n)});
         }
         return Value();
     }
-    if (op == u"%") {
-        if (a.is(T::Number) && b.is(T::Number) && b.asNumber() != 0)
-            return Value::number(std::fmod(a.asNumber(), b.asNumber()));
-        return Value();
-    }
+    if (op == u"%" && a.is(T::Number) && b.is(T::Number) && b.asNumber() != 0)
+        return Value::number(std::fmod(a.asNumber(), b.asNumber()));
     return Value();
 }
 
@@ -173,10 +177,8 @@ Value dateField(const DateValue &d, const QString &key)
         return Value::number(time.msec());
     if (key == u"weekday")
         return Value::number(day.dayOfWeek());
-    if (key == u"week" || key == u"weeknumber") {
-        int year = 0;
-        return Value::number(day.weekNumber(&year));
-    }
+    if (key == u"week" || key == u"weeknumber")
+        return Value::number(day.weekNumber());
     if (key == u"weekyear") {
         int year = 0;
         day.weekNumber(&year);
@@ -191,7 +193,7 @@ Value dateField(const DateValue &d, const QString &key)
     return Value();
 }
 
-Value durationField(const Duration &d, const QString &key)
+Value durationField(Duration d, const QString &key)
 {
     const double days = double(d.months) * 30.0 + double(d.ms) / 86400000.0;
     if (key == u"years")
@@ -213,7 +215,22 @@ Value durationField(const Duration &d, const QString &key)
     return Value();
 }
 
+/// The values of `exprs` (a call's arguments, a list's items).
+ValueList evaluateAll(const QList<ExprPtr> &exprs, Context &ctx, const Value &row, const Bound &bound)
+{
+    ValueList out;
+    out.reserve(exprs.size());
+    for (const ExprPtr &x : exprs)
+        out.append(evaluate(*x, ctx, row, bound));
+    return out;
+}
+
 } // namespace
+
+void Context::throwTooDeep()
+{
+    throw EvalError{messages::tooDeep()};
+}
 
 Value rowObject(const RowData &row)
 {
@@ -263,9 +280,10 @@ Value fieldOf(const Value &value, const QString &key, Context &ctx)
 
 Value callFunction(const Function &f, const ValueList &args, Context &ctx)
 {
+    const auto call = ctx.enterCall();
     Bound bound = f.bound;
     for (qsizetype i = 0; i < f.params.size(); ++i)
-        bound.append({f.params.at(i), i < args.size() ? args.at(i) : Value()});
+        bound.append({f.params.at(i), args.value(i)});
     return evaluate(*f.body, ctx, f.row, bound);
 }
 
@@ -283,10 +301,8 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
         return Value::link(ctx.resolveLink(e.name, display, e.raw, !e.params.isEmpty(), ctx.options().currentPath));
     }
     case Expr::Kind::Variable: {
-        for (qsizetype i = bound.size() - 1; i >= 0; --i) {
-            if (bound.at(i).first == e.name)
-                return bound.at(i).second;
-        }
+        if (const Value *v = latest(bound, e.name))
+            return *v;
         if (e.name == u"this")
             return ctx.thisPage();
         if (e.name == u"row")
@@ -296,7 +312,7 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
     case Expr::Kind::Field: {
         if (isNameChain(e) && row.is(Value::Type::Object)) {
             if (const auto *r = dynamic_cast<const RowObject *>(&row.asObject())) {
-                if (const auto v = r->extra(chainName(e)))
+                if (const Value *v = r->extra(chainName(e)))
                     return *v;
             }
         }
@@ -322,7 +338,7 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
         if (v.is(Value::Type::Number))
             return Value::number(-v.asNumber());
         if (v.is(Value::Type::Duration))
-            return Value::duration({-v.asDuration().months, -v.asDuration().ms});
+            return Value::duration(sum({}, v.asDuration(), -1));
         return Value();
     }
     case Expr::Kind::Binary: {
@@ -344,12 +360,8 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
         return arithmetic(e.name, a, b, ctx);
     }
     case Expr::Kind::Call: {
-        const Builtin *b = findBuiltin(e.name);
-        ValueList args;
-        args.reserve(e.args.size());
-        for (const ExprPtr &arg : e.args)
-            args.append(evaluate(*arg, ctx, row, bound));
-        if (b)
+        const ValueList args = evaluateAll(e.args, ctx, row, bound);
+        if (const Builtin *b = findBuiltin(e.name))
             return b->call(args, ctx);
         // A name holding a lambda.
         const Value f = fieldOf(row, e.name, ctx);
@@ -357,20 +369,9 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
             return callFunction(f.asFunction(), args, ctx);
         throw EvalError{messages::notAFunction(e.name)};
     }
-    case Expr::Kind::List: {
-        ValueList items;
-        for (const ExprPtr &arg : e.args)
-            items.append(evaluate(*arg, ctx, row, bound));
-        return Value::list(items);
-    }
-    case Expr::Kind::Lambda: {
-        auto f = std::make_shared<Function>();
-        f->params = e.params;
-        f->body = e.args.at(0);
-        f->row = row;
-        f->bound = bound;
-        return Value::function(f);
-    }
+    case Expr::Kind::List: return Value::list(evaluateAll(e.args, ctx, row, bound));
+    case Expr::Kind::Lambda:
+        return Value::function(std::make_shared<Function>(Function{e.params, e.args.at(0), row, bound}));
     }
     return Value();
 }
@@ -396,32 +397,28 @@ QString formatDate(const DateValue &d)
     return d.at.toString(t.second() != 0 ? u"yyyy-MM-dd HH:mm:ss"_s : u"yyyy-MM-dd HH:mm"_s);
 }
 
-QString formatDuration(const Duration &d)
+QString formatDuration(Duration d)
 {
     if (d.months == 0 && d.ms == 0)
         return messages::seconds(0);
-    const bool negative = d.months < 0 || (d.months == 0 && d.ms < 0);
-    qint64 months = std::abs(d.months);
-    qint64 ms = std::abs(d.ms);
+    // Magnitudes in unsigned arithmetic: std::abs(INT64_MIN) would overflow.
+    const auto magnitude = [](qint64 v) { return v < 0 ? 0 - quint64(v) : quint64(v); };
+    const quint64 months = magnitude(d.months);
+    const quint64 ms = magnitude(d.ms);
     QStringList parts;
-    if (const qint64 y = months / 12)
-        parts.append(messages::years(int(y)));
-    if (const qint64 m = months % 12)
-        parts.append(messages::months(int(m)));
-    const qint64 days = ms / 86400000;
-    ms %= 86400000;
-    if (days)
-        parts.append(messages::days(int(days)));
-    if (const qint64 h = ms / 3600000)
-        parts.append(messages::hours(int(h)));
-    ms %= 3600000;
-    if (const qint64 m = ms / 60000)
-        parts.append(messages::minutes(int(m)));
-    ms %= 60000;
-    if (const qint64 s = ms / 1000)
-        parts.append(messages::seconds(int(s)));
-    if (const qint64 rest = ms % 1000; rest && parts.isEmpty())
-        parts.append(messages::milliseconds(int(rest)));
+    const auto add = [&parts](quint64 n, QString (*words)(int)) {
+        if (n)
+            parts.append(words(int(n)));
+    };
+    add(months / 12, messages::years);
+    add(months % 12, messages::months);
+    add(ms / 86400000, messages::days);
+    add(ms / 3600000 % 24, messages::hours);
+    add(ms / 60000 % 60, messages::minutes);
+    add(ms / 1000 % 60, messages::seconds);
+    if (parts.isEmpty())
+        add(ms % 1000, messages::milliseconds);
+    const bool negative = d.months < 0 || (d.months == 0 && d.ms < 0);
     return (negative ? u"-"_s : QString()) + parts.join(u", "_s);
 }
 
@@ -450,7 +447,8 @@ QString toText(const Value &value, Context &ctx)
     case Value::Type::Object: {
         QStringList parts;
         const Object &o = value.asObject();
-        for (const QString &k : o.keys())
+        const QStringList keys = o.keys();
+        for (const QString &k : keys)
             parts.append(k + u": "_s + toText(o.field(k).value_or(Value()), ctx));
         return u"{ "_s + parts.join(u", "_s) + u" }"_s;
     }

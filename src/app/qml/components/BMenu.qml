@@ -97,9 +97,7 @@ T.Menu {
         }
     }
 
-    T.Overlay.modal: Rectangle {
-        color: "transparent"
-    }
+    T.Overlay.modal: Item {}
 
     enter: Transition {
         ParallelAnimation {

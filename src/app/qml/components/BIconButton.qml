@@ -70,7 +70,6 @@ T.Button {
     }
 
     background: Rectangle {
-        id: backgroundRect
         radius: Theme.radius
         antialiasing: true
         color: {
@@ -91,11 +90,12 @@ T.Button {
         border.color: control.hovered ? Theme.borderControl : Theme.borderStrong
         Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
+        // The state tint of an outlined button (its own colour is the fixed elevated one).
         Rectangle {
             anchors.fill: parent
-            radius: backgroundRect.radius
-            visible: control.variant === "secondary"
-            color: control.checked ? Theme.bgSelected : control.down ? Theme.bgPressed : control.hovered ? Theme.bgHover : "transparent"
+            radius: Theme.radius
+            visible: control.variant === "secondary" && (control.checked || control.down || control.hovered)
+            color: control.checked ? Theme.bgSelected : control.down ? Theme.bgPressed : Theme.bgHover
         }
 
         BFocusRing {

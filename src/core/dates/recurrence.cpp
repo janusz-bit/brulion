@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <array>
 
 using namespace Qt::StringLiterals;
 
@@ -17,6 +18,7 @@ namespace {
 
 using Freq = RecurrenceRule::Freq;
 using detail::collapseSpaces;
+using detail::lookup;
 
 /// Month-day spec value meaning "the last day of the month".
 constexpr int LastDay = 0;
@@ -46,6 +48,14 @@ QRegularExpression anchored(const QString &pattern)
 {
     return text::unicodeRegex(u"^(?:"_s + pattern + uR"()\z)"_s);
 }
+
+/// Unit letters of Logseq repeaters ("+1w").
+struct RepeaterUnit {
+    char16_t letter = u'd';
+    Freq freq = Freq::Day;
+};
+constexpr std::array<RepeaterUnit, 4> RepeaterUnits = {
+        {{u'd', Freq::Day}, {u'w', Freq::Week}, {u'm', Freq::Month}, {u'y', Freq::Year}}};
 
 // =============================================================================================
 // Parsing
@@ -122,8 +132,8 @@ const QHash<QString, Freq> &unitWords()
 }
 
 struct Adverb {
-    Freq freq;
-    int interval;
+    Freq freq = Freq::Day;
+    int interval = 1;
 };
 
 /// Single-word rules ("daily", "codziennie", "kwartalnie").
@@ -164,19 +174,15 @@ std::optional<int> parseCount(QStringView word, bool present)
             break;
         }
     }
-    qint64 n = -1;
     if (isAsciiDigits(digits)) {
         bool ok = false;
-        n = digits.toLongLong(&ok);
-        if (!ok)
-            return std::nullopt;
-    } else {
-        const QString key = word.toString();
-        n = detail::numberWords().value(key, detail::ordinalWords().value(key, -1));
-        if (n < 0)
-            return std::nullopt;
+        const qint64 n = digits.toLongLong(&ok);
+        return ok && n <= MaxRecurrenceInterval ? std::optional<int>(int(n)) : std::nullopt;
     }
-    return n <= MaxRecurrenceInterval ? std::optional<int>(int(n)) : std::nullopt;
+    // Number and ordinal words are all far below MaxRecurrenceInterval.
+    const QString key = word.toString();
+    const int n = detail::numberWords().value(key, detail::ordinalWords().value(key, -1));
+    return n >= 0 ? std::optional<int>(n) : std::nullopt;
 }
 
 QList<int> weekdayListFolded(QStringView folded)
@@ -192,13 +198,14 @@ QList<int> weekdayListFolded(QStringView folded)
     if (s.isEmpty())
         return {};
     QList<int> days;
-    for (const QString &raw : s.split(separators)) {
+    const QStringList items = s.split(separators);
+    for (const QString &raw : items) {
         QString item = raw.trimmed();
         item.remove(itemPrep);
         if (item.endsWith(u'.'))
             item.chop(1);
         const auto word = detail::lookupWeekday(item);
-        if (item.isEmpty() || !word)
+        if (!word)
             return {};
         if (!days.contains(word->day))
             days.append(word->day);
@@ -207,36 +214,31 @@ QList<int> weekdayListFolded(QStringView folded)
     return days;
 }
 
-struct MonthDayTail {
-    bool last = false;
-    int day = 0;
-};
-
-/// The "on the 15th" / "15." / "ostatniego" tail of a monthly rule.
-std::optional<MonthDayTail> parseMonthDayTail(QStringView tail)
+/// The "on the 15th" / "15." / "ostatniego" tail of a monthly rule: the day of month, or LastDay.
+std::optional<int> parseMonthDayTail(QStringView tail)
 {
     static const QRegularExpression lastRe = anchored(
         uR"((?:(?:on|w)\s+)?(?:the\s+)?(?:ostatni(?:ego|m)?|last)(?:\s+(?:day|dnia|dzien|dniu))?(?:\s+(?:of the month|miesiaca))?)"_s);
     static const QRegularExpression dayRe = anchored(
         uR"((?:on\s+)?(?:the\s+)?(?:(?:dnia|w dniu)\s+)?([0-9]{1,2})(?:st|nd|rd|th|\.|-go|-ego|-tego)?(?:\s+(?:dnia|day))?(?:\s+(?:of the month|miesiaca))?)"_s);
-    const QString t = tail.trimmed().toString();
-    if (lastRe.match(t).hasMatch())
-        return MonthDayTail{true, 0};
-    const auto m = dayRe.match(t);
+    const QStringView t = tail.trimmed();
+    if (lastRe.matchView(t).hasMatch())
+        return LastDay;
+    const auto m = dayRe.matchView(t);
     if (!m.hasMatch())
         return std::nullopt;
     const int n = m.capturedView(1).toInt();
-    return n >= 1 && n <= 31 ? std::optional<MonthDayTail>(MonthDayTail{false, n}) : std::nullopt;
+    return n >= 1 && n <= 31 ? std::optional<int>(n) : std::nullopt;
 }
 
 /// A rule from a base frequency and an optional tail (weekday list / month day).
 std::optional<RecurrenceRule> withTail(Freq freq, int interval, QStringView rawTail)
 {
+    if (interval < 1)
+        return std::nullopt;
     QStringView tail = rawTail.trimmed();
     if (tail.startsWith(u','))
         tail = tail.sliced(1).trimmed();
-    if (interval < 1)
-        return std::nullopt;
     RecurrenceRule rule;
     rule.freq = freq;
     rule.interval = interval;
@@ -247,13 +249,13 @@ std::optional<RecurrenceRule> withTail(Freq freq, int interval, QStringView rawT
         return rule.weekdays.isEmpty() ? std::nullopt : std::optional<RecurrenceRule>(rule);
     }
     if (freq == Freq::Month) {
-        const auto md = parseMonthDayTail(tail);
-        if (!md)
+        const auto day = parseMonthDayTail(tail);
+        if (!day)
             return std::nullopt;
-        if (md->last)
+        if (*day == LastDay)
             rule.lastDayOfMonth = true;
         else
-            rule.monthDay = md->day;
+            rule.monthDay = day;
         return rule;
     }
     return std::nullopt;
@@ -283,7 +285,7 @@ std::optional<RecurrenceRule> parseWorkdays(const QString &s)
     RecurrenceRule rule;
     rule.freq = Freq::Day;
     rule.weekdaysOnly = true;
-    if (std::any_of(fixed.cbegin(), fixed.cend(), [&s](const QRegularExpression &re) { return re.match(s).hasMatch(); }))
+    if (std::ranges::any_of(fixed, [&s](const QRegularExpression &re) { return re.match(s).hasMatch(); }))
         return rule;
     const auto m = interval.match(s);
     if (m.hasMatch()) {
@@ -322,9 +324,9 @@ std::optional<RecurrenceRule> parseBody(const QString &s)
 
     auto m = unitRule.match(s);
     if (m.hasMatch()) {
-        const auto freq = unitWords().constFind(m.captured(2));
+        const auto freq = lookup(unitWords(), m.captured(2));
         const auto n = parseCount(m.capturedView(1), m.hasCaptured(1));
-        if (freq != unitWords().cend() && n)
+        if (freq && n)
             return withTail(*freq, *n, m.capturedView(3));
     }
     m = quarterRule.match(s);
@@ -338,14 +340,12 @@ std::optional<RecurrenceRule> parseBody(const QString &s)
         return withTail(Freq::Month, 6, m.capturedView(1));
     m = eachRule.match(s);
     if (m.hasMatch()) {
-        const auto freq = unitWords().constFind(m.captured(1));
-        if (freq != unitWords().cend())
+        if (const auto freq = lookup(unitWords(), m.captured(1)))
             return withTail(*freq, 1, m.capturedView(2));
     }
     m = adverbRule.match(s);
     if (m.hasMatch()) {
-        const auto adverb = adverbs().constFind(m.captured(1));
-        if (adverb != adverbs().cend())
+        if (const auto adverb = lookup(adverbs(), m.captured(1)))
             return withTail(adverb->freq, adverb->interval, m.capturedView(2));
     }
     m = weekdayRule.match(s);
@@ -454,7 +454,7 @@ SeriesContext contextOf(QDate date)
     return {date.day(), date.month()};
 }
 
-int monthDaySpec(const RecurrenceRule &r, const SeriesContext &ctx)
+int monthDaySpec(const RecurrenceRule &r, SeriesContext ctx)
 {
     return r.lastDayOfMonth ? LastDay : r.monthDay.value_or(ctx.day);
 }
@@ -487,7 +487,7 @@ QDate addBusinessDays(QDate date, int n)
 }
 
 /// The next date of the series strictly after `date`.
-std::optional<QDate> step(const RecurrenceRule &r, QDate date, const SeriesContext &ctx)
+std::optional<QDate> step(const RecurrenceRule &r, QDate date, SeriesContext ctx)
 {
     const int n = r.interval;
     switch (r.freq) {
@@ -498,7 +498,7 @@ std::optional<QDate> step(const RecurrenceRule &r, QDate date, const SeriesConte
         if (days.isEmpty())
             return date.addDays(7LL * n);
         const int dow = date.dayOfWeek();
-        const auto later = std::find_if(days.cbegin(), days.cend(), [dow](int d) { return d > dow; });
+        const auto later = std::ranges::find_if(days, [dow](int d) { return d > dow; });
         if (later != days.cend())
             return date.addDays(*later - dow);
         const QDate nextWeekMonday = date.addDays(1 - dow + 7LL * n);
@@ -526,7 +526,7 @@ std::optional<QDate> step(const RecurrenceRule &r, QDate date, const SeriesConte
 }
 
 /// step(), or nullopt when the next date is outside the supported years.
-std::optional<QDate> safeStep(const RecurrenceRule &r, QDate date, const SeriesContext &ctx)
+std::optional<QDate> safeStep(const RecurrenceRule &r, QDate date, SeriesContext ctx)
 {
     const auto next = step(r, date, ctx);
     return next && isSupportedDate(*next) ? next : std::nullopt;
@@ -534,8 +534,7 @@ std::optional<QDate> safeStep(const RecurrenceRule &r, QDate date, const SeriesC
 
 /// Business-day series: after the first step every occurrence is a weekday, and 5 steps of n
 /// business days are exactly n calendar weeks, so whole blocks of 7·n days can be skipped.
-std::optional<QDate> fastForwardBusinessDays(const RecurrenceRule &r, QDate anchor, QDate from,
-                                             const SeriesContext &ctx)
+std::optional<QDate> fastForwardBusinessDays(const RecurrenceRule &r, QDate anchor, QDate from, SeriesContext ctx)
 {
     const auto first = safeStep(r, anchor, ctx);
     if (!first || *first >= from)
@@ -548,7 +547,7 @@ std::optional<QDate> fastForwardBusinessDays(const RecurrenceRule &r, QDate anch
 /// Jump close to `from` for long series so old anchors don't iterate for years. Returns a series
 /// position (not necessarily an occurrence) strictly before `from`, or nullopt to start at the
 /// anchor. Only shifts by whole periods, which keeps the series identical.
-std::optional<QDate> fastForward(const RecurrenceRule &r, QDate anchor, QDate from, const SeriesContext &ctx)
+std::optional<QDate> fastForward(const RecurrenceRule &r, QDate anchor, QDate from, SeriesContext ctx)
 {
     if (r.freq == Freq::Day && r.weekdaysOnly)
         return fastForwardBusinessDays(r, anchor, from, ctx);
@@ -639,25 +638,17 @@ QList<int> parseWeekdayList(QStringView input)
 std::optional<RecurrenceRule> repeaterToRule(QStringView repeater)
 {
     static const QRegularExpression re = anchored(uR"((\.\+|\+\+|\+)([0-9]+)([A-Za-z]))"_s);
-    const auto m = re.match(repeater.trimmed().toString());
+    const auto m = re.matchView(repeater.trimmed());
     if (!m.hasMatch())
         return std::nullopt;
     bool ok = false;
     const qint64 interval = m.capturedView(2).toLongLong(&ok);
-    if (!ok || interval < 1 || interval > MaxRecurrenceInterval)
+    const char16_t letter = m.capturedView(3).at(0).toLower().unicode();
+    const auto unit = std::ranges::find(RepeaterUnits, letter, &RepeaterUnit::letter);
+    if (!ok || interval < 1 || interval > MaxRecurrenceInterval || unit == RepeaterUnits.end())
         return std::nullopt;
     RecurrenceRule rule;
-    const QChar unit = m.capturedView(3).at(0).toLower();
-    if (unit == u'd')
-        rule.freq = Freq::Day;
-    else if (unit == u'w')
-        rule.freq = Freq::Week;
-    else if (unit == u'm')
-        rule.freq = Freq::Month;
-    else if (unit == u'y')
-        rule.freq = Freq::Year;
-    else
-        return std::nullopt;
+    rule.freq = unit->freq;
     rule.interval = int(interval);
     rule.whenDone = m.capturedView(1) == u".+";
     return rule;
@@ -670,14 +661,8 @@ QString ruleToRepeater(const RecurrenceRule &rule)
     const RecurrenceRule r = normalizeRule(rule);
     if (!r.weekdays.isEmpty() || r.monthDay || r.lastDayOfMonth || r.weekdaysOnly)
         return {};
-    QChar unit = u'y';
-    if (r.freq == Freq::Day)
-        unit = u'd';
-    else if (r.freq == Freq::Week)
-        unit = u'w';
-    else if (r.freq == Freq::Month)
-        unit = u'm';
-    return (r.whenDone ? u".+"_s : u"+"_s) + QString::number(r.interval) + unit;
+    const auto unit = std::ranges::find(RepeaterUnits, r.freq, &RepeaterUnit::freq); // found: hasKnownFreq()
+    return (r.whenDone ? u".+"_s : u"+"_s) + QString::number(r.interval) + QChar(unit->letter);
 }
 
 std::optional<DateSpec> nextOccurrence(const RecurrenceRule &rule, const DateSpec &from,
@@ -702,13 +687,11 @@ QList<DateSpec> occurrencesBetween(const RecurrenceRule &rule, const DateSpec &a
     const RecurrenceRule r = normalizeRule(rule);
     const SeriesContext ctx = contextOf(anchor.date);
     QList<DateSpec> out;
+    QDate cur = anchor.date;
     if (anchor.date >= from)
         out.append(anchor);
-    QDate cur = anchor.date;
-    if (anchor.date < from) {
-        if (const auto ahead = fastForward(r, anchor.date, from, ctx))
-            cur = *ahead;
-    }
+    else if (const auto ahead = fastForward(r, anchor.date, from, ctx))
+        cur = *ahead;
     for (int i = 0; i < MaxSteps && out.size() < max; ++i) {
         const auto next = safeStep(r, cur, ctx);
         if (!next || *next > to || *next <= cur)

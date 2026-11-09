@@ -69,7 +69,6 @@ T.MenuItem {
         implicitHeight: Math.max(menuIcon.height, menuLabel.implicitHeight)
 
         Row {
-            id: row
             anchors.verticalCenter: parent.verticalCenter
             spacing: control.spacing
             width: parent.width - (trailing.width > 0 ? trailing.width + 16 : 0)

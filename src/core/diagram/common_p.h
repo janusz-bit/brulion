@@ -58,7 +58,7 @@ void addHead(QList<Item> &items, Head h, const QPointF &tip, const QPointF &dir,
 /// How far before the tip of head `h` its line stops (under the head's base).
 qreal headInset(Head h, qreal lineWidth);
 /// The unit vector from `a` to `b` (`fallback` when they are the same point).
-QPointF unitVector(const QPointF &a, const QPointF &b, const QPointF &fallback = QPointF(0, 1));
+QPointF unitVector(QPointF a, QPointF b, QPointF fallback = QPointF(0, 1));
 
 /// A node's or link's style (`style`, `classDef`, `linkStyle`): colours already validated.
 struct Style {

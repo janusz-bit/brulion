@@ -7,9 +7,9 @@ import Brulion
 // LinkPreviews: the page, section or block a [[link]] or ((reference)) opens, read-only and
 // rendered like an embed (LinkPreview: InlineRenderer's escaped rich text in BRichText — never a
 // note's own HTML), scrollable. The header names it (a click opens it; a Ctrl+click or a middle
-// click in a new tab — OpenIn); a click on a link inside follows that link (in a new tab alike). A page that does not exist yet says so (a
-// click on the header creates it). It never takes the keyboard focus: the note being written
-// keeps it.
+// click in a new tab — OpenIn); a click on a link inside follows that link (in a new tab alike).
+// A page that does not exist yet says so (a click on the header creates it). It never takes the
+// keyboard focus: the note being written keeps it.
 //
 //   BLinkPreview { href: "page:Home"; fromPath: "Plan.md"; host: Workspace
 //                  onActivated: (url, path, newPane) => … }
@@ -20,10 +20,9 @@ T.Popup {
     property string href
     property string fromPath
     property EditorHost host: null
+    property string shownKey
     /// The pointer is over the popup.
     readonly property bool pointerInside: popupHover.hovered
-    /// The previewed text (LinkPreview.preview).
-    readonly property var info: preview.preview
     /// Its rows, each with every key the delegate reads (embed headers and blocks differ).
     readonly property list<var> entries: UiModels.withDefaults(UiModels.field(preview.preview, "blocks"), {
         kind: "", view: "", task: "", headingLevel: 0, depth: 0, title: "", html: "", raw: "", path: ""
@@ -56,9 +55,10 @@ T.Popup {
     /// Opens (or moves) the preview at the pointer (x, y) of its parent: under it, above it when
     /// there is no room below. Nothing opens for a link without a preview (an attachment).
     function show(px: real, py: real): void {
-        if (shownKey === href + "\n" + fromPath)
+        const key = href + "\n" + fromPath
+        if (shownKey === key)
             preview.refresh() // (the same link again: the note may have changed)
-        shownKey = href + "\n" + fromPath
+        shownKey = key
         if (!preview.available) {
             close()
             return
@@ -74,7 +74,6 @@ T.Popup {
                                                                      : above
         open()
     }
-    property string shownKey
     function openLink(url: string, path: string, newPane: bool): bool {
         return preview.openLink(url, path, newPane)
     }
@@ -271,10 +270,9 @@ T.Popup {
                             readonly property bool nested: kind === "embed"
                             readonly property bool rule: view === "rule"
                             readonly property bool isTask: !nested && task !== ""
-                            readonly property int level: headingLevel
                             readonly property bool code: view === "code"
-                            readonly property int fontSize: code ? Theme.textSm : popup.headingSize(level)
-                            readonly property real lineHeightPx: Theme.lineHeightPx(fontSize, level > 0 ? 1.35 : 1.5)
+                            readonly property int fontSize: code ? Theme.textSm : popup.headingSize(headingLevel)
+                            readonly property real lineHeightPx: Theme.lineHeightPx(fontSize, headingLevel > 0 ? 1.35 : 1.5)
                             readonly property real indent: Math.min(6, depth) * 16
                             property string hoveredLink: ""
                             function trackLink(x: real, y: real): void {
@@ -283,7 +281,7 @@ T.Popup {
                                     entry.hoveredLink = link
                             }
                             width: entryColumn.width
-                            height: nested ? 24 : rule ? Theme.space3 : text.height + (level > 0 ? Theme.space1 : 2)
+                            height: nested ? 24 : rule ? Theme.space3 : text.height + (headingLevel > 0 ? Theme.space1 : 2)
 
                             Rectangle {
                                 visible: entry.rule
@@ -324,7 +322,7 @@ T.Popup {
                                 hoveredLink: entry.hoveredLink
                                 font.family: entry.code ? Theme.fontMono : Theme.fontEditor
                                 font.pixelSize: entry.fontSize
-                                font.weight: entry.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
+                                font.weight: entry.headingLevel > 0 ? Theme.weightSemiBold : Theme.weightNormal
                                 font.strikeout: entry.task === "cancelled"
                                 lineHeight: entry.lineHeightPx
                                 color: entry.task === "done" || entry.task === "cancelled" ? Theme.fgFaint
@@ -332,7 +330,6 @@ T.Popup {
                                 accessibleName: entry.raw
                             }
                             HoverHandler {
-                                id: entryHover
                                 cursorShape: entry.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onPointChanged: entry.trackLink(point.position.x, point.position.y)
                                 onHoveredChanged: if (!hovered) entry.hoveredLink = ""

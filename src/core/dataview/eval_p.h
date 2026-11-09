@@ -6,7 +6,7 @@
 #include "dataview/dataview.h"
 
 #include <QHash>
-#include <QMap>
+#include <QScopeGuard>
 #include <QString>
 
 #include <memory>
@@ -14,10 +14,13 @@
 
 namespace brulion::dataview {
 
-/// Thrown when an evaluation must stop (too costly, too many rows): caught by runQuery().
+/// Thrown when an evaluation must stop (too costly, too deep, too many rows): caught by runQuery().
 struct EvalError {
     QString message;
 };
+
+/// Names and their values, the latest last: lambda parameters, FLATTEN and GROUP BY names.
+using Bound = QList<std::pair<QString, Value>>;
 
 /// What every evaluation of one run shares: the index, the options, the objects made so far.
 class Context {
@@ -26,7 +29,6 @@ public:
 
     const VaultIndex &index() const { return m_index; }
     const Options &options() const { return m_options; }
-    QDate today() const { return m_options.now.date(); }
 
     /// One step of work; throws EvalError past Options::maxSteps.
     void step(qint64 n = 1)
@@ -34,6 +36,16 @@ public:
         m_steps += n;
         if (m_steps > m_options.maxSteps)
             throwTooCostly();
+    }
+    /// Starts a lambda call, which ends with the returned guard. Past MaxCallDepth calls inside
+    /// one another (a lambda applied to itself never stops) it throws EvalError instead of
+    /// overflowing the stack.
+    [[nodiscard]] auto enterCall()
+    {
+        if (m_callDepth >= MaxCallDepth)
+            throwTooDeep();
+        ++m_callDepth;
+        return qScopeGuard([this] { --m_callDepth; });
     }
 
     /// The page object of a note (made once per run); null Value for a path that is no note.
@@ -55,11 +67,14 @@ public:
     Value item(const VaultPath &path, int blockIndex);
 
 private:
+    static constexpr int MaxCallDepth = 64;
     [[noreturn]] static void throwTooCostly();
+    [[noreturn]] static void throwTooDeep(); // eval.cpp
 
     const VaultIndex &m_index;
     const Options &m_options;
     qint64 m_steps = 0;
+    int m_callDepth = 0;
     QHash<VaultPath, Value> m_pages;
     QHash<QString, Value> m_items; ///< "path\x1fblock"
     std::optional<QHash<QString, QString>> m_tagDisplay;
@@ -70,11 +85,11 @@ private:
 struct RowData {
     VaultPath path;
     int blockIndex = -1;
-    Value base;                          ///< page / task object, or a group object
-    QList<std::pair<QString, Value>> extra; ///< names set by FLATTEN / GROUP BY (latest last)
+    Value base;  ///< page / task object, or a group object
+    Bound extra; ///< names set by FLATTEN / GROUP BY (latest last)
     bool group = false;
-    Value key;                           ///< group rows: the key
-    QList<RowData> rows;                 ///< group rows: the rows grouped
+    Value key;           ///< group rows: the key
+    QList<RowData> rows; ///< group rows: the rows grouped
 };
 
 /// The row as an object: its `extra` names first, then the base object.
@@ -84,19 +99,19 @@ Value rowObject(const RowData &row);
 struct Function {
     QStringList params;
     ExprPtr body;
-    Value row;                              ///< the row it was written in
-    QList<std::pair<QString, Value>> bound; ///< parameters of enclosing lambdas
+    Value row;   ///< the row it was written in
+    Bound bound; ///< parameters of enclosing lambdas
 };
 
 /// Evaluate `expr` for a row object (`row`; null outside rows) with `bound` names in scope.
-Value evaluate(const Expr &expr, Context &ctx, const Value &row, const QList<std::pair<QString, Value>> &bound = {});
+Value evaluate(const Expr &expr, Context &ctx, const Value &row, const Bound &bound = {});
 /// Call a function value with arguments.
 Value callFunction(const Function &f, const ValueList &args, Context &ctx);
 /// A field of a value: an object's field, a link's page field, a date's or duration's part, a
 /// list's elements' fields (flattened one level). Null when missing.
 Value fieldOf(const Value &value, const QString &key, Context &ctx);
 
-/// A built-in function: its canonical name, its arity, its body.
+/// A built-in function: its arity and its body (its canonical name is its key in the table).
 struct Builtin {
     int minArgs = 0;
     int maxArgs = 0; ///< -1: any number
@@ -112,7 +127,7 @@ bool isUnsupportedFunction(const QString &name);
 QString toText(const Value &value, Context &ctx);
 QString formatNumber(double n);
 QString formatDate(const DateValue &d);
-QString formatDuration(const Duration &d);
+QString formatDuration(Duration d);
 
 /// Date words of date(…): today, now, tomorrow, yesterday, sow, eow, som, eom, soy, eoy.
 bool isDateWord(const QString &word);

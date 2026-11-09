@@ -28,6 +28,10 @@ Item {
 
     visible: false
 
+    /// Places in keepVisible() (a method's point result is read through a typed property).
+    property point _at
+    property rect _caret
+
     function schedule(): void {
         if (field && KeyboardInsets.shown && !KeyboardInsets.animating)
             later.restart()
@@ -37,10 +41,6 @@ Item {
         id: later
         onTriggered: keeper.keepVisible()
     }
-    /// Places in keepVisible() (a method's point result is read through a typed property).
-    property point _at
-    property rect _caret
-
     /// Scroll the Flickables around the focused field, innermost first, until it is above the
     /// keyboard and below their top edges.
     function keepVisible(): void {

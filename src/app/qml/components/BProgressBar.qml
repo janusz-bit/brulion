@@ -51,15 +51,13 @@ T.ProgressBar {
             radius: height / 2
             color: control.fillColor
 
-            SequentialAnimation on x {
+            NumberAnimation on x {
                 running: control.indeterminate && control.visible && !Theme.reducedMotion
                 loops: Animation.Infinite
-                NumberAnimation {
-                    from: -runner.width
-                    to: control.width
-                    duration: 1300
-                    easing.type: Easing.InOutQuad
-                }
+                from: -runner.width
+                to: control.width
+                duration: 1300
+                easing.type: Easing.InOutQuad
             }
             SequentialAnimation on opacity {
                 running: control.indeterminate && control.visible && Theme.reducedMotion

@@ -184,7 +184,7 @@ QList<Token> collectTokens(const Ctx &ctx)
         taken.fill(true, t.start, t.end);
         picked.append(t);
     }
-    std::ranges::sort(picked, [](const Token &a, const Token &b) { return a.start < b.start; });
+    std::ranges::sort(picked, {}, &Token::start);
     return picked;
 }
 
@@ -201,16 +201,14 @@ struct Group {
 
 Group newGroup(const Token &t)
 {
-    Group g;
-    g.start = t.start;
-    g.end = t.end;
-    g.tokenCount = 1;
-    g.weak = t.value.weak;
-    g.date = t.value.date;
-    g.hasTime = t.value.time.has_value();
-    g.time = t.value.time.value_or(TimeSpec{});
-    g.exact = t.value.exact;
-    return g;
+    return {.start = t.start,
+            .end = t.end,
+            .tokenCount = 1,
+            .weak = t.value.weak,
+            .date = t.value.date,
+            .time = t.value.time.value_or(TimeSpec{}),
+            .hasTime = t.value.time.has_value(),
+            .exact = t.value.exact};
 }
 
 /// What may separate merged tokens: whitespace with at most one ",", ":" or dash
@@ -363,23 +361,19 @@ bool isNonContent(QChar c)
 
 Ctx makeContext(QStringView input, const QDateTime &now, Qt::DayOfWeek weekStart, UiLocale locale)
 {
-    Ctx ctx;
-    ctx.folded = text::foldKeyWithMap(input);
-    ctx.original = input;
-    ctx.now = now;
-    ctx.today = now.date();
-    ctx.nowMinute = QTime(now.time().hour(), now.time().minute());
-    ctx.weekStart = sanitizeWeekStart(int(weekStart));
-    ctx.locale = locale;
+    Ctx ctx{.folded = text::foldKeyWithMap(input),
+            .original = input,
+            .now = now,
+            .today = now.date(),
+            .nowMinute = QTime(now.time().hour(), now.time().minute()),
+            .weekStart = sanitizeWeekStart(int(weekStart)),
+            .locale = locale};
     const QString &s = ctx.foldedText();
-    qsizetype first = 0;
-    while (first < s.size() && isNonContent(s.at(first)))
-        ++first;
-    qsizetype end = s.size();
-    while (end > first && isNonContent(s.at(end - 1)))
-        --end;
-    ctx.firstContent = first;
-    ctx.contentEnd = end;
+    while (ctx.firstContent < s.size() && isNonContent(s.at(ctx.firstContent)))
+        ++ctx.firstContent;
+    ctx.contentEnd = s.size();
+    while (ctx.contentEnd > ctx.firstContent && isNonContent(s.at(ctx.contentEnd - 1)))
+        --ctx.contentEnd;
     return ctx;
 }
 
@@ -460,8 +454,9 @@ QList<NaturalDate> findNaturalDates(QStringView input, const QDateTime &now, Qt:
     if (input.isEmpty() || !now.isValid() || !isSupportedDate(now.date()))
         return {};
     const Ctx ctx = makeContext(input, now, weekStart, locale);
+    const QList<Group> groups = groupTokens(collectTokens(ctx), ctx);
     QList<NaturalDate> out;
-    for (const Group &g : groupTokens(collectTokens(ctx), ctx)) {
+    for (const Group &g : groups) {
         if (!groupValid(g, ctx))
             continue;
         const auto spec = finalize(g, ctx);

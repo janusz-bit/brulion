@@ -36,11 +36,9 @@ Row {
             // A slightly heavier bottom edge reads as a key cap.
             Rectangle {
                 visible: !kbd.inverse
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.leftMargin: 1
-                anchors.rightMargin: 1
+                x: 1
+                y: cap.height - 1
+                width: cap.width - 2
                 height: 1
                 color: Theme.borderStrong
             }

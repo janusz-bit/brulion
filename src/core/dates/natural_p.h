@@ -23,18 +23,19 @@ enum class Meridiem { Am, Pm };
 /// no date when a noun follows ("the 2nd bug").
 enum class Weakness { None, Alone, Hour, Ordinal };
 
+// Every member has a default initializer: the token builders use designated initializers.
 struct TimeSpec {
-    std::optional<int> hour;
-    std::optional<int> minute;
-    std::optional<Meridiem> meridiem;
-    std::optional<Daypart> daypart;
+    std::optional<int> hour = {};
+    std::optional<int> minute = {};
+    std::optional<Meridiem> meridiem = {};
+    std::optional<Daypart> daypart = {};
     bool midnight = false; ///< a midnight word: with a named day it means the end of that day
 };
 
 struct TokenValue {
-    std::optional<QDate> date;
-    std::optional<TimeSpec> time;
-    std::optional<DateSpec> exact; ///< exact date-time of "za 3 godziny"; never merged
+    std::optional<QDate> date = {};
+    std::optional<TimeSpec> time = {};
+    std::optional<DateSpec> exact = {}; ///< exact date-time of "za 3 godziny"; never merged
     Weakness weak = Weakness::None;
 };
 

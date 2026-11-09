@@ -5,7 +5,7 @@
 
 #include "util/paths.h"
 
-#include <QRegularExpression>
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -18,9 +18,9 @@ constexpr int MaxDepth = 64;
 struct Token {
     enum class Kind { End, Ident, Number, String, Link, Tag, Op, Literal };
     Kind kind = Kind::End;
-    QString text;  ///< identifier, string contents, link inside, tag, operator
+    QString text = {}; ///< identifier, string contents, link inside, tag, operator
     double number = 0;
-    Value value;   ///< Literal: a date or duration written in date(…) / dur(…); DateWord in `text`
+    Value value = {};   ///< Literal: a date or duration written in date(…) / dur(…); DateWord in `text`
     bool embed = false; ///< Link: written ![[…]]
     int line = 1;
     qsizetype from = 0, to = 0;
@@ -55,9 +55,7 @@ public:
         QList<Token> out;
         while (true) {
             skipBlank();
-            Token t;
-            t.line = line;
-            t.from = at;
+            Token t{.line = line, .from = at};
             if (at >= s.size()) {
                 t.to = at;
                 out.append(t);
@@ -75,7 +73,7 @@ public:
                     ++at;
                 t.kind = Token::Kind::Tag;
                 t.text = s.sliced(start, at - start);
-            } else if (s.sliced(at).startsWith(u"[[") || s.sliced(at).startsWith(u"![[")) {
+            } else if (ahead(u"[[") || ahead(u"![[")) {
                 lexLink(t);
             } else if (isIdentStart(c)) {
                 const qsizetype start = at;
@@ -86,20 +84,20 @@ public:
                     --at;
                 t.kind = Token::Kind::Ident;
                 t.text = s.sliced(start, at - start);
-                t.to = at;
-                out.append(t);
-                if (lexRawArgument(t, out))
-                    continue;
-                continue;
             } else {
                 lexOperator(t);
             }
             t.to = at;
             out.append(t);
+            if (t.kind == Token::Kind::Ident)
+                lexRawArgument(t, out);
         }
     }
 
 private:
+    /// The text at the current position starts with `text` (a view: no copy of the rest).
+    bool ahead(QStringView text) const { return QStringView(s).sliced(at).startsWith(text); }
+
     void skipBlank()
     {
         while (at < s.size()) {
@@ -162,8 +160,8 @@ private:
         }
         at += 2;
         const qsizetype end = s.indexOf(u"]]", at);
-        const qsizetype newline = s.indexOf(u'\n', at);
-        if (end < 0 || (newline >= 0 && newline < end))
+        // (A newline inside the link only: searching the rest of the text for one per link is quadratic.)
+        if (end < 0 || QStringView(s).sliced(at, end - at).contains(u'\n'))
             throw ParseError{messages::unclosedLink(), t.line};
         t.kind = Token::Kind::Link;
         t.text = s.sliced(at, end - at);
@@ -172,83 +170,63 @@ private:
 
     void lexOperator(Token &t)
     {
-        static const char *const two[] = {"!=", "<=", ">=", "=>", "==", "&&", "||"};
-        for (const char *op : two) {
-            if (at + 1 < s.size() && s.at(at) == QLatin1Char(op[0]) && s.at(at + 1) == QLatin1Char(op[1])) {
-                t.kind = Token::Kind::Op;
-                t.text = QString::fromLatin1(op);
-                at += 2;
-                return;
-            }
-        }
-        const QChar c = s.at(at);
-        if (QStringView(u"()[]{},.+-*/%=<>!&|").contains(c)) {
-            t.kind = Token::Kind::Op;
-            t.text = QString(c);
-            ++at;
-            return;
-        }
-        throw ParseError{messages::unexpected(QString(c)), t.line};
+        static constexpr QStringView two[] = {u"!=", u"<=", u">=", u"=>", u"==", u"&&", u"||"};
+        qsizetype length = 1;
+        if (std::ranges::any_of(two, [this](QStringView op) { return ahead(op); }))
+            length = 2;
+        else if (!QStringView(u"()[]{},.+-*/%=<>!&|").contains(s.at(at)))
+            throw ParseError{messages::unexpected(QString(s.at(at))), t.line};
+        t.kind = Token::Kind::Op;
+        t.text = s.sliced(at, length);
+        at += length;
     }
 
     /// date(today), date(2026-10-15), date(2026-10-15T09:30), dur(3 days): the argument is a
-    /// literal, not an expression. Appends "(", the literal and ")" and returns true then.
-    bool lexRawArgument(const Token &name, QList<Token> &out)
+    /// literal, not an expression. Appends "(", the literal and ")" then.
+    void lexRawArgument(const Token &name, QList<Token> &out)
     {
-        const QString fn = name.text.toLower();
-        if (fn != u"date" && fn != u"dur")
-            return false;
-        qsizetype i = at;
-        while (i < s.size() && s.at(i).isSpace() && s.at(i) != u'\n')
-            ++i;
-        if (i >= s.size() || s.at(i) != u'(')
-            return false;
-        const qsizetype close = s.indexOf(u')', i + 1);
-        const qsizetype newline = s.indexOf(u'\n', i + 1);
-        if (close < 0 || (newline >= 0 && newline < close))
-            return false;
-        const QString raw = s.sliced(i + 1, close - i - 1).trimmed();
-        if (raw.isEmpty() || raw.contains(u'(') || raw.contains(u'"') || raw.contains(u','))
-            return false;
-        Token lit;
-        lit.kind = Token::Kind::Literal;
-        lit.line = line;
-        lit.from = i + 1;
-        lit.to = close;
-        if (fn == u"date") {
-            if (isDateWord(raw.toLower())) {
-                lit.text = raw.toLower();
+        const bool isDate = name.text.compare(u"date", Qt::CaseInsensitive) == 0;
+        if (!isDate && name.text.compare(u"dur", Qt::CaseInsensitive) != 0)
+            return;
+        qsizetype paren = at;
+        while (paren < s.size() && s.at(paren).isSpace() && s.at(paren) != u'\n')
+            ++paren;
+        if (paren >= s.size() || s.at(paren) != u'(')
+            return;
+        // Up to the first ')' of the line, with no '(', '"' or ',' before it (else a call); a scan
+        // that stops there keeps `date(date(date(…` linear.
+        qsizetype close = paren + 1;
+        while (close < s.size() && !QStringView(u")(\n\",").contains(s.at(close)))
+            ++close;
+        if (close >= s.size() || s.at(close) != u')')
+            return;
+        const QString raw = s.sliced(paren + 1, close - paren - 1).trimmed();
+        if (raw.isEmpty())
+            return;
+        Token lit{.kind = Token::Kind::Literal, .line = line, .from = paren + 1, .to = close};
+        if (isDate) {
+            if (const QString word = raw.toLower(); isDateWord(word)) {
+                lit.text = word;
             } else if (raw.front().isDigit()) {
                 const auto date = parseDate(raw);
                 if (!date)
                     throw ParseError{messages::badDate(raw), line};
                 lit.value = Value::date(*date);
             } else {
-                return false;
+                return;
             }
         } else {
             if (!raw.front().isDigit())
-                return false;
+                return;
             const auto dur = parseDuration(raw);
             if (!dur)
                 throw ParseError{messages::badDuration(raw), line};
             lit.value = Value::duration(*dur);
         }
-        Token open;
-        open.kind = Token::Kind::Op;
-        open.text = u"("_s;
-        open.line = line;
-        open.from = i;
-        open.to = i + 1;
-        Token closing = open;
-        closing.text = u")"_s;
-        closing.from = close;
-        closing.to = close + 1;
-        out.append(open);
+        out.append(Token{.kind = Token::Kind::Op, .text = u"("_s, .line = line, .from = paren, .to = paren + 1});
         out.append(lit);
-        out.append(closing);
+        out.append(Token{.kind = Token::Kind::Op, .text = u")"_s, .line = line, .from = close, .to = close + 1});
         at = close + 1;
-        return true;
     }
 
     const QString &s;
@@ -301,12 +279,7 @@ public:
         } else if (q.type == QueryType::Table && !atCommandOrEnd()) {
             while (true) {
                 const ExprPtr e = expression();
-                QString header = e->text;
-                if (isKeyword(peek(), u"as")) {
-                    next();
-                    header = name(u"AS"_s);
-                }
-                q.columns.append({e, header});
+                q.columns.append({e, alias(e->text)});
                 if (!isOp(u","))
                     break;
                 next();
@@ -346,20 +319,12 @@ public:
                 next();
                 cmd->kind = Command::Kind::GroupBy;
                 cmd->expr = expression();
-                cmd->name = cmd->expr->text;
-                if (isKeyword(peek(), u"as")) {
-                    next();
-                    cmd->name = name(u"AS"_s);
-                }
+                cmd->name = alias(cmd->expr->text);
             } else if (isKeyword(c, u"flatten")) {
                 next();
                 cmd->kind = Command::Kind::Flatten;
                 cmd->expr = expression();
-                cmd->name = cmd->expr->text;
-                if (isKeyword(peek(), u"as")) {
-                    next();
-                    cmd->name = name(u"AS"_s);
-                }
+                cmd->name = alias(cmd->expr->text);
             } else if (isKeyword(c, u"limit")) {
                 next();
                 cmd->kind = Command::Kind::Limit;
@@ -380,11 +345,7 @@ public:
     }
 
 private:
-    const Token &peek(int ahead = 0) const
-    {
-        const qsizetype i = std::min(pos + ahead, t.size() - 1);
-        return t.at(i);
-    }
+    const Token &peek(int ahead = 0) const { return t.at(std::min(pos + ahead, t.size() - 1)); }
     const Token &next()
     {
         const Token &cur = t.at(pos);
@@ -421,28 +382,37 @@ private:
         next();
     }
 
-    /// The name after AS: an identifier or a "string".
-    QString name(const QString &after)
+    /// The name after AS (an identifier or a "string"), `fallback` without AS.
+    QString alias(const QString &fallback)
     {
+        if (!isKeyword(peek(), u"as"))
+            return fallback;
+        next();
         const Token &k = peek();
         if (k.kind != Token::Kind::Ident && k.kind != Token::Kind::String)
-            throw ParseError{messages::expectedName(after), k.line};
+            throw ParseError{messages::expectedName(u"AS"_s), k.line};
         next();
         return k.text;
     }
 
     // ---- sources --------------------------------------------------------------------------------
 
+    static std::shared_ptr<const Source> combined(Source::Kind kind, std::shared_ptr<const Source> a,
+                                                  std::shared_ptr<const Source> b = nullptr)
+    {
+        auto out = std::make_shared<Source>();
+        out->kind = kind;
+        out->a = std::move(a);
+        out->b = std::move(b);
+        return out;
+    }
+
     std::shared_ptr<const Source> sourceOr()
     {
         auto a = sourceAnd();
         while (isKeyword(peek(), u"or") || isOp(u"|") || isOp(u"||")) {
             next();
-            auto s2 = std::make_shared<Source>();
-            s2->kind = Source::Kind::Or;
-            s2->a = a;
-            s2->b = sourceAnd();
-            a = s2;
+            a = combined(Source::Kind::Or, a, sourceAnd());
         }
         return a;
     }
@@ -452,30 +422,23 @@ private:
         auto a = sourceNot();
         while (isKeyword(peek(), u"and") || isOp(u"&") || isOp(u"&&")) {
             next();
-            auto s2 = std::make_shared<Source>();
-            s2->kind = Source::Kind::And;
-            s2->a = a;
-            s2->b = sourceNot();
-            a = s2;
+            a = combined(Source::Kind::And, a, sourceNot());
         }
         return a;
     }
 
     std::shared_ptr<const Source> sourceNot()
     {
-        if (isOp(u"-") || isOp(u"!")) {
-            next();
-            auto n = std::make_shared<Source>();
-            n->kind = Source::Kind::Not;
-            n->a = sourceNot();
-            return n;
-        }
-        return sourceAtom();
+        Depth d(*this); // negations and parentheses nest
+        if (!isOp(u"-") && !isOp(u"!"))
+            return sourceAtom();
+        next();
+        return combined(Source::Kind::Not, sourceNot());
     }
 
     std::shared_ptr<const Source> sourceAtom()
     {
-        const Token k = peek();
+        const Token &k = peek();
         auto out = std::make_shared<Source>();
         if (k.kind == Token::Kind::Tag) {
             next();
@@ -486,12 +449,12 @@ private:
         if (k.kind == Token::Kind::String) {
             next();
             out->kind = Source::Kind::Folder;
-            QString path = k.text.trimmed();
+            QStringView path = QStringView(k.text).trimmed();
             while (path.startsWith(u'/'))
-                path.remove(0, 1);
+                path = path.sliced(1);
             while (path.endsWith(u'/'))
                 path.chop(1);
-            out->value = path.isEmpty() ? QString() : paths::normalize(path);
+            out->value = path.isEmpty() ? QString() : paths::normalize(path.toString());
             return out;
         }
         if (k.kind == Token::Kind::Link) {
@@ -504,7 +467,7 @@ private:
         if (isKeyword(k, u"outgoing") && isOp(u"(", 1)) {
             next();
             next();
-            const Token l = peek();
+            const Token &l = peek();
             if (l.kind != Token::Kind::Link)
                 throw ParseError{messages::badSource(describe(l)), l.line};
             next();
@@ -525,12 +488,7 @@ private:
     }
 
     /// The page of a [[link]] (no display, no heading); "" for [[]] / [[#]] (this page).
-    static QString linkTarget(const QString &inner)
-    {
-        QString target = inner.section(u'|', 0, 0);
-        target = target.section(u'#', 0, 0).trimmed();
-        return target;
-    }
+    static QString linkTarget(const QString &inner) { return inner.section(u'|', 0, 0).section(u'#', 0, 0).trimmed(); }
 
     // ---- expressions ----------------------------------------------------------------------------
 
@@ -544,11 +502,19 @@ private:
         Parser &parser;
     };
 
-    std::shared_ptr<Expr> make(Expr::Kind kind, qsizetype from)
+    /// The query from `from` to the end of the last token read, blanks simplified.
+    QString textFrom(qsizetype from) const
+    {
+        return s.sliced(from, std::max<qsizetype>(0, lastEnd - from)).simplified();
+    }
+
+    /// A node of `kind` with its text from `from` (none for from < 0: see binaryLoop()).
+    std::shared_ptr<Expr> make(Expr::Kind kind, qsizetype from = -1)
     {
         auto e = std::make_shared<Expr>();
         e->kind = kind;
-        e->text = s.sliced(from, std::max<qsizetype>(0, lastEnd - from)).simplified();
+        if (from >= 0)
+            e->text = textFrom(from);
         return e;
     }
 
@@ -558,124 +524,113 @@ private:
         return orExpr();
     }
 
-    ExprPtr binaryLoop(ExprPtr (Parser::*operand)(), std::initializer_list<QStringView> ops,
-                       std::initializer_list<std::pair<QStringView, QStringView>> words)
+    /// `operand (op operand)…`, left-associative. With a `word` (and, or) that word is an operator
+    /// too and names them all, else an operator is named as written ("==" as "=").
+    ExprPtr binaryLoop(ExprPtr (Parser::*operand)(), std::initializer_list<QStringView> ops, QStringView word = {})
     {
         const qsizetype from = peek().from;
         ExprPtr left = (this->*operand)();
+        // Only the whole chain gets its text: nothing reads the texts of its inner nodes, and those
+        // (`a + b`, `a + b + c`, …) would grow with the square of its length.
+        std::shared_ptr<Expr> chain;
         while (true) {
-            QString op;
-            for (const QStringView o : ops) {
-                if (isOp(o)) {
-                    op = o.toString();
-                    break;
-                }
-            }
-            if (op.isEmpty()) {
-                for (const auto &[word, name] : words) {
-                    if (isKeyword(peek(), word)) {
-                        op = name.toString();
-                        break;
-                    }
-                }
-            }
-            if (op.isEmpty())
+            const auto op = std::ranges::find_if(ops, [this](QStringView o) { return isOp(o); });
+            if (op == ops.end() && (word.isEmpty() || !isKeyword(peek(), word))) {
+                if (chain)
+                    chain->text = textFrom(from);
                 return left;
+            }
             next();
-            if (op == u"==")
-                op = u"="_s;
-            else if (op == u"&&" || op == u"&")
-                op = u"and"_s;
-            else if (op == u"||" || op == u"|")
-                op = u"or"_s;
-            ExprPtr right = (this->*operand)();
-            auto e = make(Expr::Kind::Binary, from);
-            e->name = op;
-            e->args = {left, right};
-            left = e;
+            chain = make(Expr::Kind::Binary);
+            chain->name = word.isEmpty() ? op->toString() : word.toString();
+            if (chain->name == u"==")
+                chain->name = u"="_s;
+            chain->args = {left, (this->*operand)()};
+            left = chain;
         }
     }
 
-    ExprPtr orExpr() { return binaryLoop(&Parser::andExpr, {u"||", u"|"}, {{u"or", u"or"}}); }
-    ExprPtr andExpr() { return binaryLoop(&Parser::compareExpr, {u"&&", u"&"}, {{u"and", u"and"}}); }
-    ExprPtr compareExpr()
-    {
-        return binaryLoop(&Parser::addExpr, {u"!=", u"<=", u">=", u"==", u"=", u"<", u">"}, {});
-    }
-    ExprPtr addExpr() { return binaryLoop(&Parser::mulExpr, {u"+", u"-"}, {}); }
-    ExprPtr mulExpr() { return binaryLoop(&Parser::unaryExpr, {u"*", u"/", u"%"}, {}); }
+    ExprPtr orExpr() { return binaryLoop(&Parser::andExpr, {u"||", u"|"}, u"or"); }
+    ExprPtr andExpr() { return binaryLoop(&Parser::compareExpr, {u"&&", u"&"}, u"and"); }
+    ExprPtr compareExpr() { return binaryLoop(&Parser::addExpr, {u"!=", u"<=", u">=", u"==", u"=", u"<", u">"}); }
+    ExprPtr addExpr() { return binaryLoop(&Parser::mulExpr, {u"+", u"-"}); }
+    ExprPtr mulExpr() { return binaryLoop(&Parser::unaryExpr, {u"*", u"/", u"%"}); }
 
     ExprPtr unaryExpr()
     {
         Depth d(*this);
         const qsizetype from = peek().from;
-        if (isOp(u"-") || isOp(u"!")) {
-            const QString op = next().text;
-            ExprPtr operand = unaryExpr();
-            // -3 is a number.
-            if (op == u"-" && operand->kind == Expr::Kind::Literal && operand->value.is(Value::Type::Number)) {
-                auto e = make(Expr::Kind::Literal, from);
-                e->value = Value::number(-operand->value.asNumber());
-                return e;
-            }
-            auto e = make(Expr::Kind::Unary, from);
-            e->name = op;
-            e->args = {operand};
+        if (!isOp(u"-") && !isOp(u"!"))
+            return postfixExpr();
+        const QString op = next().text;
+        ExprPtr operand = unaryExpr();
+        // -3 is a number.
+        if (op == u"-" && operand->kind == Expr::Kind::Literal && operand->value.is(Value::Type::Number)) {
+            auto e = make(Expr::Kind::Literal, from);
+            e->value = Value::number(-operand->value.asNumber());
             return e;
         }
-        return postfixExpr();
+        auto e = make(Expr::Kind::Unary, from);
+        e->name = op;
+        e->args = {operand};
+        return e;
     }
 
     ExprPtr postfixExpr()
     {
         const qsizetype from = peek().from;
         ExprPtr e = primary();
+        std::shared_ptr<Expr> chain; // only the whole chain gets its text, see binaryLoop()
         while (true) {
             if (isOp(u".")) {
                 next();
-                const Token k = peek();
+                const Token &k = peek();
                 if (k.kind != Token::Kind::Ident)
                     throw ParseError{messages::expectedName(u"."_s), k.line};
                 next();
-                auto f = make(Expr::Kind::Field, from);
-                f->name = canonicalKey(k.text);
-                f->args = {e};
-                e = f;
-            } else if (isOp(u"[") && peek().kind == Token::Kind::Op) {
+                chain = make(Expr::Kind::Field);
+                chain->name = canonicalKey(k.text);
+                chain->args = {e};
+            } else if (isOp(u"[")) {
                 next();
-                ExprPtr index = expression();
+                chain = make(Expr::Kind::Index);
+                chain->args = {e, expression()};
                 expectOp(u"]");
-                auto f = make(Expr::Kind::Index, from);
-                f->args = {e, index};
-                e = f;
             } else if (isOp(u"(")) {
                 if (e->kind != Expr::Kind::Variable)
                     throw ParseError{messages::unexpected(u"("_s), peek().line};
                 next();
-                QList<ExprPtr> args;
-                if (!isOp(u")")) {
-                    while (true) {
-                        args.append(expression());
-                        if (!isOp(u","))
-                            break;
-                        next();
-                    }
-                }
-                expectOp(u")");
-                auto c = make(Expr::Kind::Call, from);
-                c->name = e->name;
-                c->args = args;
-                checkCall(*c, peek().line);
-                e = c;
+                chain = make(Expr::Kind::Call);
+                chain->name = e->name;
+                chain->args = expressionList(u")");
+                checkCall(*chain, peek().line);
             } else {
+                if (chain)
+                    chain->text = textFrom(from);
                 return e;
             }
+            e = chain;
         }
     }
 
-    void checkCall(Expr &call, int line)
+    /// Expressions separated by commas, then `closing`: a call's arguments, a list's items.
+    QList<ExprPtr> expressionList(QStringView closing)
     {
-        const QString name = call.name;
+        QList<ExprPtr> out;
+        if (!isOp(closing)) {
+            out.append(expression());
+            while (isOp(u",")) {
+                next();
+                out.append(expression());
+            }
+        }
+        expectOp(closing);
+        return out;
+    }
+
+    static void checkCall(const Expr &call, int line)
+    {
+        const QString &name = call.name;
         if (isUnsupportedFunction(name))
             throw ParseError{messages::unsupportedFunction(name), line};
         const Builtin *b = findBuiltin(name);
@@ -710,7 +665,7 @@ private:
     ExprPtr primary()
     {
         Depth d(*this);
-        const Token k = peek();
+        const Token &k = peek();
         const qsizetype from = k.from;
         switch (k.kind) {
         case Token::Kind::Number: {
@@ -735,16 +690,16 @@ private:
         case Token::Kind::Link: {
             next();
             auto e = make(Expr::Kind::Link, from);
-            QString inner = k.text;
+            QStringView inner = k.text;
             if (const qsizetype bar = inner.indexOf(u'|'); bar >= 0) {
-                e->value = Value::string(inner.sliced(bar + 1).trimmed());
+                e->value = Value::string(inner.sliced(bar + 1).trimmed().toString());
                 inner = inner.first(bar);
             }
             if (const qsizetype hash = inner.indexOf(u'#'); hash >= 0) {
-                e->raw = inner.sliced(hash + 1).trimmed();
+                e->raw = inner.sliced(hash + 1).trimmed().toString();
                 inner = inner.first(hash);
             }
-            e->name = inner.trimmed();
+            e->name = inner.trimmed().toString();
             e->params = k.embed ? QStringList{u"embed"_s} : QStringList();
             return e;
         }
@@ -761,10 +716,8 @@ private:
             }
             next();
             auto e = make(Expr::Kind::Variable, from);
-            e->name = canonicalKey(k.text);
             // A function name keeps its spelling for messages; built-ins are found lower-case.
-            if (isOp(u"("))
-                e->name = k.text.toLower();
+            e->name = isOp(u"(") ? k.text.toLower() : canonicalKey(k.text);
             return e;
         }
         case Token::Kind::Op:
@@ -792,18 +745,9 @@ private:
             }
             if (isOp(u"[")) {
                 next();
-                QList<ExprPtr> items;
-                if (!isOp(u"]")) {
-                    while (true) {
-                        items.append(expression());
-                        if (!isOp(u","))
-                            break;
-                        next();
-                    }
-                }
-                expectOp(u"]");
+                QList<ExprPtr> items = expressionList(u"]");
                 auto e = make(Expr::Kind::List, from);
-                e->args = items;
+                e->args = std::move(items);
                 return e;
             }
             break;

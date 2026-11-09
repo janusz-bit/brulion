@@ -5,7 +5,9 @@
 #include "text/text.h"
 
 #include <QRegularExpression>
+#include <QtNumeric>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace Qt::StringLiterals;
@@ -14,79 +16,9 @@ namespace brulion::dataview {
 
 // ---- Value -----------------------------------------------------------------------------------------
 
-Value Value::boolean(bool b)
-{
-    Value v;
-    v.m = b;
-    return v;
-}
-
-Value Value::number(double n)
-{
-    Value v;
-    v.m = n;
-    return v;
-}
-
-Value Value::string(const QString &s)
-{
-    Value v;
-    v.m = s;
-    return v;
-}
-
-Value Value::date(const DateValue &d)
-{
-    Value v;
-    v.m = d;
-    return v;
-}
-
-Value Value::date(QDate d)
-{
-    return date(DateValue{QDateTime(d, QTime(0, 0)), false});
-}
-
-Value Value::duration(const Duration &d)
-{
-    Value v;
-    v.m = d;
-    return v;
-}
-
-Value Value::link(const LinkValue &l)
-{
-    Value v;
-    v.m = l;
-    return v;
-}
-
-Value Value::list(ValueList items)
-{
-    Value v;
-    v.m = std::make_shared<const ValueList>(std::move(items));
-    return v;
-}
-
-Value Value::object(std::shared_ptr<const Object> o)
-{
-    Value v;
-    if (o)
-        v.m = std::move(o);
-    return v;
-}
-
 Value Value::map(const QList<std::pair<QString, Value>> &fields)
 {
     return object(std::make_shared<MapObject>(fields));
-}
-
-Value Value::function(std::shared_ptr<const Function> f)
-{
-    Value v;
-    if (f)
-        v.m = std::move(f);
-    return v;
 }
 
 const ValueList &Value::asList() const
@@ -134,11 +66,10 @@ MapObject::MapObject(QList<std::pair<QString, Value>> fields) : m_fields(std::mo
 
 std::optional<Value> MapObject::field(const QString &key) const
 {
-    for (const auto &[k, v] : m_fields) {
-        if (k == key)
-            return v;
-    }
-    return std::nullopt;
+    const auto it = std::ranges::find(m_fields, key, &std::pair<QString, Value>::first);
+    if (it == m_fields.cend())
+        return std::nullopt;
+    return it->second;
 }
 
 QStringList MapObject::keys() const
@@ -179,7 +110,7 @@ int cmp(const T &a, const T &b)
 }
 
 /// A duration's length in milliseconds (a month as 30 days) — for ordering only.
-double approxMs(const Duration &d)
+double approxMs(Duration d)
 {
     return double(d.months) * 30.0 * 86400000.0 + double(d.ms);
 }
@@ -274,10 +205,10 @@ QString canonicalKey(QStringView key)
 
 namespace {
 
-/// Milliseconds per unit word (lower-case, diacritics folded); months as -1, years as -12.
-qint64 unitMs(QStringView word, bool *ok)
+/// Milliseconds per unit word (lower-case, diacritics folded), months as -1, years as -12;
+/// nullopt for a word that is no unit.
+std::optional<qint64> unitMs(QStringView word)
 {
-    *ok = true;
     static const QHash<QString, qint64> units = [] {
         QHash<QString, qint64> u;
         const qint64 s = 1000, m = 60 * s, h = 60 * m, d = 24 * h, w = 7 * d;
@@ -299,12 +230,9 @@ qint64 unitMs(QStringView word, bool *ok)
             u.insert(QString::fromLatin1(k), -12);
         return u;
     }();
-    const auto it = units.constFind(text::foldKey(word));
-    if (it == units.constEnd()) {
-        *ok = false;
-        return 0;
-    }
-    return *it;
+    if (const auto it = units.constFind(text::foldKey(word)); it != units.constEnd())
+        return *it;
+    return std::nullopt;
 }
 
 } // namespace
@@ -313,27 +241,27 @@ std::optional<Duration> parseDuration(QStringView text)
 {
     // "3 days", "1h 30m", "2 weeks, 1 day", "1.5 hours".
     static const QRegularExpression part(u"\\G[\\s,]*(?:and\\s+|i\\s+)?(\\d+(?:[.,]\\d+)?)\\s*(\\p{L}+)"_s);
-    const QString s = text.trimmed().toString();
+    const QStringView s = text.trimmed();
     if (s.isEmpty() || s.size() > 200)
         return std::nullopt;
     Duration out;
     qsizetype at = 0;
     bool any = false;
     while (at < s.size()) {
-        const QRegularExpressionMatch m = part.match(s, at);
+        const QRegularExpressionMatch m = part.matchView(s, at);
         if (!m.hasMatch() || m.capturedLength() == 0)
             break;
-        bool ok = false;
-        const qint64 unit = unitMs(m.capturedView(2), &ok);
-        if (!ok)
+        const std::optional<qint64> unit = unitMs(m.capturedView(2));
+        if (!unit)
             return std::nullopt;
         const double n = m.captured(1).replace(u',', u'.').toDouble();
         if (n > 1e9)
             return std::nullopt;
-        if (unit < 0)
-            out.months += qint64(std::llround(n * double(-unit)));
-        else
-            out.ms += qint64(std::llround(n * double(unit)));
+        // (Each part fits; a text of many "999999999 weeks" would overflow the sum.)
+        const bool months = *unit < 0;
+        qint64 &total = months ? out.months : out.ms;
+        if (qAddOverflow(total, qint64(std::llround(n * double(months ? -*unit : *unit))), &total))
+            return std::nullopt;
         at = m.capturedEnd();
         any = true;
     }
@@ -354,19 +282,17 @@ std::optional<DateValue> parseDate(QStringView text)
     // With seconds or a zone: "2026-10-15T09:30:15", "…Z", "…+02:00" (the wall-clock part is kept).
     static const QRegularExpression full(
             u"^(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:?\\d{2})?$"_s);
-    const QRegularExpressionMatch m = full.matchView(s);
-    if (m.hasMatch()) {
+    if (const QRegularExpressionMatch m = full.matchView(s); m.hasMatch()) {
         const auto day = dates::parseIsoDate(m.capturedView(1));
-        const QTime time(m.captured(2).toInt(), m.captured(3).toInt(), m.captured(4).toInt());
+        const QTime time(m.capturedView(2).toInt(), m.capturedView(3).toInt(), m.capturedView(4).toInt());
         if (day && time.isValid())
             return DateValue{QDateTime(*day, time), true};
         return std::nullopt;
     }
     // "2026-10": the first of the month.
     static const QRegularExpression month(u"^(\\d{4})-(\\d{2})$"_s);
-    const QRegularExpressionMatch mm = month.matchView(s);
-    if (mm.hasMatch()) {
-        const QDate d(mm.captured(1).toInt(), mm.captured(2).toInt(), 1);
+    if (const QRegularExpressionMatch m = month.matchView(s); m.hasMatch()) {
+        const QDate d(m.capturedView(1).toInt(), m.capturedView(2).toInt(), 1);
         if (d.isValid())
             return DateValue{QDateTime(d, QTime(0, 0)), false};
     }
@@ -407,7 +333,7 @@ Value parseFieldValue(const QString &key, QStringView raw, const LinkResolver &r
     if (k == u"tags" || k == u"tag" || k == u"aliases" || k == u"alias") {
         ValueList items;
         const bool tags = k.startsWith(u"tag");
-        for (const QString &name : markdown::namesFrom(s.toString(), tags))
+        for (const QStringList names = markdown::namesFrom(s.toString(), tags); const QString &name : names)
             items.append(Value::string(tags ? u'#' + name : name));
         return Value::list(items);
     }
@@ -419,7 +345,7 @@ Value parseFieldValue(const QString &key, QStringView raw, const LinkResolver &r
         return Value::date(*date);
     static const QRegularExpression number(u"^-?\\d+(?:\\.\\d+)?$"_s);
     if (number.matchView(s).hasMatch())
-        return Value::number(s.toString().toDouble());
+        return Value::number(s.toDouble());
     if (s.compare(u"true", Qt::CaseInsensitive) == 0)
         return Value::boolean(true);
     if (s.compare(u"false", Qt::CaseInsensitive) == 0)
@@ -430,9 +356,8 @@ Value parseFieldValue(const QString &key, QStringView raw, const LinkResolver &r
     }
     // "[[a]], [[b]]": a list of links.
     if (s.contains(u',') && s.contains(u"[[")) {
-        const QStringList parts = markdown::detail::splitTopLevelCommas(s);
         ValueList links;
-        for (const QString &part : parts) {
+        for (const QStringList parts = markdown::detail::splitTopLevelCommas(s); const QString &part : parts) {
             const auto link = parseLinkText(part, resolve);
             if (!link)
                 return Value::string(s.toString());

@@ -11,7 +11,7 @@ namespace brulion::dates::detail {
 namespace {
 
 struct WeekdayForms {
-    int day;
+    int day = 0;
     QStringList singular; ///< all grammatical cases
     QStringList plural;
     QStringList abbreviations;
@@ -46,7 +46,7 @@ QHash<QString, WeekdayWord> buildWeekdayWords()
 }
 
 struct MonthForms {
-    int month;
+    int month = 0;
     QStringList polish;
     QStringList english;
 };
@@ -81,35 +81,6 @@ QHash<QString, MonthWord> buildMonthWords()
     return map;
 }
 
-QHash<QString, int> buildNumberWords()
-{
-    return {
-        {u"jeden"_s, 1},       {u"jedna"_s, 1},        {u"jedno"_s, 1},         {u"jednego"_s, 1},
-        {u"jednej"_s, 1},      {u"dwa"_s, 2},          {u"dwie"_s, 2},          {u"dwoch"_s, 2},
-        {u"trzy"_s, 3},        {u"cztery"_s, 4},       {u"piec"_s, 5},          {u"szesc"_s, 6},
-        {u"siedem"_s, 7},      {u"osiem"_s, 8},        {u"dziewiec"_s, 9},      {u"dziesiec"_s, 10},
-        {u"jedenascie"_s, 11}, {u"dwanascie"_s, 12},   {u"pietnascie"_s, 15},   {u"dwadziescia"_s, 20},
-        {u"trzydziesci"_s, 30}, {u"czterdziesci"_s, 40}, {u"one"_s, 1},          {u"two"_s, 2},
-        {u"three"_s, 3},       {u"four"_s, 4},         {u"five"_s, 5},          {u"six"_s, 6},
-        {u"seven"_s, 7},       {u"eight"_s, 8},        {u"nine"_s, 9},          {u"ten"_s, 10},
-        {u"eleven"_s, 11},     {u"twelve"_s, 12},      {u"fifteen"_s, 15},      {u"twenty"_s, 20},
-        {u"thirty"_s, 30},     {u"forty"_s, 40},
-    };
-}
-
-QHash<QString, int> buildOrdinalWords()
-{
-    return {
-        {u"drugi"_s, 2},    {u"druga"_s, 2},    {u"drugie"_s, 2},    {u"drugiego"_s, 2},
-        {u"trzeci"_s, 3},   {u"trzecia"_s, 3},  {u"trzecie"_s, 3},   {u"trzeciego"_s, 3},
-        {u"czwarty"_s, 4},  {u"czwarta"_s, 4},  {u"czwarte"_s, 4},   {u"czwartego"_s, 4},
-        {u"piaty"_s, 5},    {u"piata"_s, 5},    {u"piate"_s, 5},     {u"piatego"_s, 5},
-        {u"szosty"_s, 6},   {u"szosta"_s, 6},   {u"szoste"_s, 6},    {u"szostego"_s, 6},
-        {u"other"_s, 2},    {u"second"_s, 2},   {u"third"_s, 3},     {u"fourth"_s, 4},
-        {u"fifth"_s, 5},    {u"sixth"_s, 6},
-    };
-}
-
 } // namespace
 
 const QHash<QString, WeekdayWord> &weekdayWords()
@@ -126,26 +97,42 @@ const QHash<QString, MonthWord> &monthWords()
 
 const QHash<QString, int> &numberWords()
 {
-    static const QHash<QString, int> words = buildNumberWords();
+    static const QHash<QString, int> words = {
+            {u"jeden"_s, 1},        {u"jedna"_s, 1},         {u"jedno"_s, 1},       {u"jednego"_s, 1},
+            {u"jednej"_s, 1},       {u"dwa"_s, 2},           {u"dwie"_s, 2},        {u"dwoch"_s, 2},
+            {u"trzy"_s, 3},         {u"cztery"_s, 4},        {u"piec"_s, 5},        {u"szesc"_s, 6},
+            {u"siedem"_s, 7},       {u"osiem"_s, 8},         {u"dziewiec"_s, 9},    {u"dziesiec"_s, 10},
+            {u"jedenascie"_s, 11},  {u"dwanascie"_s, 12},    {u"pietnascie"_s, 15}, {u"dwadziescia"_s, 20},
+            {u"trzydziesci"_s, 30}, {u"czterdziesci"_s, 40}, {u"one"_s, 1},         {u"two"_s, 2},
+            {u"three"_s, 3},        {u"four"_s, 4},          {u"five"_s, 5},        {u"six"_s, 6},
+            {u"seven"_s, 7},        {u"eight"_s, 8},         {u"nine"_s, 9},        {u"ten"_s, 10},
+            {u"eleven"_s, 11},      {u"twelve"_s, 12},       {u"fifteen"_s, 15},    {u"twenty"_s, 20},
+            {u"thirty"_s, 30},      {u"forty"_s, 40},
+    };
     return words;
 }
 
 const QHash<QString, int> &ordinalWords()
 {
-    static const QHash<QString, int> words = buildOrdinalWords();
+    static const QHash<QString, int> words = {
+            {u"drugi"_s, 2},   {u"druga"_s, 2},     {u"drugie"_s, 2},    {u"drugiego"_s, 2}, {u"trzeci"_s, 3},
+            {u"trzecia"_s, 3}, {u"trzecie"_s, 3},   {u"trzeciego"_s, 3}, {u"czwarty"_s, 4},  {u"czwarta"_s, 4},
+            {u"czwarte"_s, 4}, {u"czwartego"_s, 4}, {u"piaty"_s, 5},     {u"piata"_s, 5},    {u"piate"_s, 5},
+            {u"piatego"_s, 5}, {u"szosty"_s, 6},    {u"szosta"_s, 6},    {u"szoste"_s, 6},   {u"szostego"_s, 6},
+            {u"other"_s, 2},   {u"second"_s, 2},    {u"third"_s, 3},     {u"fourth"_s, 4},   {u"fifth"_s, 5},
+            {u"sixth"_s, 6},
+    };
     return words;
 }
 
 std::optional<WeekdayWord> lookupWeekday(QStringView folded)
 {
-    const auto it = weekdayWords().constFind(folded.toString());
-    return it == weekdayWords().cend() ? std::nullopt : std::optional<WeekdayWord>(*it);
+    return lookup(weekdayWords(), folded.toString());
 }
 
 std::optional<MonthWord> lookupMonth(QStringView folded)
 {
-    const auto it = monthWords().constFind(folded.toString());
-    return it == monthWords().cend() ? std::nullopt : std::optional<MonthWord>(*it);
+    return lookup(monthWords(), folded.toString());
 }
 
 QString phraseAlternation(const QStringList &phrases)
