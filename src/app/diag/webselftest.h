@@ -25,7 +25,6 @@
 #pragma once
 
 #include <QElapsedTimer>
-#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -36,6 +35,7 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <utility>
 
 class QQmlApplicationEngine;
 class QQuickItem;
@@ -107,7 +107,6 @@ public:
 
     WebPicturesSelfTest(shell::Workspace *workspace, Options options, PublishFn publish, QQuickWindow *window = nullptr,
                         QObject *parent = nullptr);
-    ~WebPicturesSelfTest() override;
 
     void start();
     /// The last results published (tests).
@@ -124,6 +123,17 @@ private:
     void startExport();
     void exportStateChanged();
     void publishExport(const QString &state);
+    void stopTimer();
+    void finish();
+    /// From now on every step `slot` (a member or a functor); the phase clock restarts.
+    template<typename Slot>
+    void runTimer(Slot &&slot)
+    {
+        stopTimer();
+        connect(&m_timer, &QTimer::timeout, this, std::forward<Slot>(slot));
+        m_phase.start();
+        m_timer.start();
+    }
 
     QPointer<shell::Workspace> m_workspace;
     Options m_options;

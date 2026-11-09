@@ -7,6 +7,9 @@
 #include "vault/vault.h"
 #include "workspace.h"
 
+#include <algorithm>
+#include <functional>
+
 namespace brulion::content {
 
 using namespace Qt::StringLiterals;
@@ -41,14 +44,6 @@ void HistoryModel::setToday(const QString &today)
     Q_EMIT todayChanged();
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1));
-}
-
-QDate HistoryModel::effectiveToday() const
-{
-    const QDate fixed = parseIsoDate(m_today);
-    if (fixed.isValid())
-        return fixed;
-    return workspace() ? workspace()->now().date() : QDate::currentDate();
 }
 
 QString HistoryModel::reasonLabel(const QString &reason)
@@ -100,11 +95,13 @@ void HistoryModel::refresh()
         exists = ws->exists(m_path);
         current = exists ? ws->readFile(m_path) : QString();
         if (history) {
-            for (const HistoryEntry &e : history->list(m_path))
+            const QList<HistoryEntry> entries = history->list(m_path);
+            next.reserve(entries.size());
+            for (const HistoryEntry &e : entries)
                 next.append(Version{ e.id, e.time, e.size, e.reason });
         }
     }
-    applyRows(m_rows, next, [](const Version &v) { return v.id; }, [](const Version &a, const Version &b) { return a == b; });
+    applyRows(m_rows, next, [](const Version &v) { return v.id; }, std::equal_to<>{});
     // "newest" moves with new versions.
     if (!m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(std::min<int>(1, int(m_rows.size()) - 1)), { NewestRole });
@@ -121,25 +118,27 @@ QVariant HistoryModel::data(const QModelIndex &index, int role) const
         return {};
     const Version &v = m_rows.at(index.row());
     const QDateTime local = v.time.toLocalTime();
-    const dates::UiLocale locale = uiLocale(m_locale);
-    const QDate today = effectiveToday();
     switch (role) {
     case IdRole: return v.id;
     case TimeRole: return local.isValid() ? local.toString(u"yyyy-MM-ddTHH:mm:ss"_s) : QString();
-    case WhenRole: return local.isValid() ? humanTime(v.time.toMSecsSinceEpoch(), today, locale) : QString();
+    case WhenRole:
+        if (!local.isValid())
+            return QString();
+        return humanTime(v.time.toMSecsSinceEpoch(), effectiveToday(m_today, workspace()), uiLocale(m_locale));
     case ClockRole: return local.isValid() ? local.toString(u"HH:mm"_s) : QString();
     case DayRole: {
         if (!local.isValid())
             return QString();
         const QDate d = local.date();
+        const QDate today = effectiveToday(m_today, workspace());
         if (d == today)
             return tr("Today");
         if (d == today.addDays(-1))
             return tr("Yesterday");
-        return dates::formatDateShort(d, locale, today.year());
+        return dates::formatDateShort(d, uiLocale(m_locale), today.year());
     }
     case SizeRole: return v.size;
-    case SizeLabelRole: return humanSize(v.size, locale);
+    case SizeLabelRole: return humanSize(v.size, uiLocale(m_locale));
     case ReasonRole: return v.reason;
     case ReasonLabelRole: return reasonLabel(v.reason);
     case ReasonIconRole: return reasonIcon(v.reason);
@@ -150,10 +149,18 @@ QVariant HistoryModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> HistoryModel::roleNames() const
 {
-    return { { IdRole, "id" },       { TimeRole, "time" },     { WhenRole, "when" },
-             { ClockRole, "clock" }, { DayRole, "day" },       { SizeRole, "size" },
-             { SizeLabelRole, "sizeLabel" }, { ReasonRole, "reason" }, { ReasonLabelRole, "reasonLabel" },
-             { ReasonIconRole, "reasonIcon" }, { NewestRole, "newest" } };
+    static const QHash<int, QByteArray> names{{IdRole, "id"},
+                                              {TimeRole, "time"},
+                                              {WhenRole, "when"},
+                                              {ClockRole, "clock"},
+                                              {DayRole, "day"},
+                                              {SizeRole, "size"},
+                                              {SizeLabelRole, "sizeLabel"},
+                                              {ReasonRole, "reason"},
+                                              {ReasonLabelRole, "reasonLabel"},
+                                              {ReasonIconRole, "reasonIcon"},
+                                              {NewestRole, "newest"}};
+    return names;
 }
 
 QVariantMap HistoryModel::get(int row) const
@@ -162,8 +169,8 @@ QVariantMap HistoryModel::get(int row) const
     if (row < 0 || row >= m_rows.size())
         return out;
     const QHash<int, QByteArray> names = roleNames();
-    for (auto it = names.cbegin(); it != names.cend(); ++it)
-        out.insert(QString::fromLatin1(it.value()), data(index(row), it.key()));
+    for (const auto &[role, name] : names.asKeyValueRange())
+        out.insert(QString::fromLatin1(name), data(index(row), role));
     return out;
 }
 
@@ -185,11 +192,7 @@ bool HistoryModel::restore(int row)
 
 int HistoryModel::rowOf(const QString &id) const
 {
-    for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows.at(i).id == id)
-            return i;
-    }
-    return -1;
+    return rowIndex(m_rows, std::ranges::find(m_rows, id, &Version::id));
 }
 
 } // namespace brulion::content

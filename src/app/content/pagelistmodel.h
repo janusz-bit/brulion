@@ -116,7 +116,8 @@ private:
 
         friend bool operator==(const Page &, const Page &) = default;
     };
-    QDate effectiveToday() const;
+    /// By sortKey / descending, ties by title (daily notes by date).
+    void sortPages(QList<Page> &pages) const;
 
     QList<Page> m_rows;
     QString m_filter;

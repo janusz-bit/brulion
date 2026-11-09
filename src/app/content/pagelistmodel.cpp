@@ -10,10 +10,43 @@
 #include <QSet>
 
 #include <algorithm>
+#include <compare>
 
 namespace brulion::content {
 
 using namespace Qt::StringLiterals;
+
+namespace {
+
+/// Backlinks: distinct other pages linking to each page or carrying a tag that names it
+/// (docs/SYNTAX.md §3), one walk over all links and tags.
+QHash<QString, int> backlinkCounts(const VaultIndex &idx, const QList<VaultPath> &all)
+{
+    QHash<QString, int> backlinks;
+    QHash<QString, QString> tagTargets; // tag -> page it names ("" when none)
+    for (const VaultPath &source : all) {
+        QSet<QString> targets;
+        const QList<ResolvedLink> links = idx.outgoingLinks(source);
+        for (const ResolvedLink &l : links) {
+            if (!l.target.isEmpty() && l.target != source)
+                targets.insert(l.target);
+        }
+        if (const ParsedNote *note = idx.note(source)) {
+            for (const QString &tag : note->tags) {
+                auto it = tagTargets.find(tag);
+                if (it == tagTargets.end())
+                    it = tagTargets.insert(tag, idx.resolveTag(tag).value_or(QString()));
+                if (!it->isEmpty() && *it != source)
+                    targets.insert(*it);
+            }
+        }
+        for (const QString &t : std::as_const(targets))
+            ++backlinks[t];
+    }
+    return backlinks;
+}
+
+} // namespace
 
 PageListModel::PageListModel(QObject *parent) : WorkspaceListModel(parent)
 {
@@ -101,14 +134,6 @@ void PageListModel::setToday(const QString &today)
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), { ModifiedLabelRole });
 }
 
-QDate PageListModel::effectiveToday() const
-{
-    const QDate fixed = parseIsoDate(m_today);
-    if (fixed.isValid())
-        return fixed;
-    return workspace() ? workspace()->now().date() : QDate::currentDate();
-}
-
 void PageListModel::refresh()
 {
     QList<Page> next;
@@ -124,35 +149,16 @@ void PageListModel::refresh()
                              || m_folder.startsWith(journalsFolder + u'/', Qt::CaseInsensitive));
         const bool withJournals = m_includeJournals || journalsListed;
         QHash<QString, FileStat> stats;
-        for (const FileStat &f : ws->vault()->markdownFiles())
+        const QList<FileStat> files = ws->vault()->markdownFiles();
+        stats.reserve(files.size());
+        for (const FileStat &f : files)
             stats.insert(f.path, f);
         QHash<QString, QString> tagDisplay;
-        for (const TagCount &t : idx->tags())
+        const QList<TagCount> tags = idx->tags();
+        for (const TagCount &t : tags)
             tagDisplay.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
         const QList<VaultPath> all = idx->paths();
-
-        // Backlinks: distinct other pages linking to each page or carrying a tag that names it
-        // (docs/SYNTAX.md §3), one walk over all links and tags.
-        QHash<QString, int> backlinks;
-        QHash<QString, QString> tagTargets; // tag -> page it names ("" when none)
-        for (const VaultPath &source : all) {
-            QSet<QString> targets;
-            for (const ResolvedLink &l : idx->outgoingLinks(source)) {
-                if (!l.target.isEmpty() && l.target != source)
-                    targets.insert(l.target);
-            }
-            if (const ParsedNote *note = idx->note(source)) {
-                for (const QString &tag : note->tags) {
-                    auto it = tagTargets.find(tag);
-                    if (it == tagTargets.end())
-                        it = tagTargets.insert(tag, idx->resolveTag(tag).value_or(QString()));
-                    if (!it->isEmpty() && *it != source)
-                        targets.insert(*it);
-                }
-            }
-            for (const QString &t : std::as_const(targets))
-                backlinks[t] += 1;
-        }
+        const QHash<QString, int> backlinks = backlinkCounts(*idx, all);
 
         const QStringList terms = searchTerms(m_filter);
         for (const VaultPath &path : all) {
@@ -184,34 +190,12 @@ void PageListModel::refresh()
                 p.tags.append(tagDisplay.value(t, t));
             if (journal)
                 p.journalDate = isoDate(*note->journalDate);
-            for (const int pos : matchPositions(p.title, terms, false))
+            const QList<int> positions = matchPositions(p.title, terms, false);
+            for (const int pos : positions)
                 p.titleMatches.append(pos);
-            next.append(p);
+            next.append(std::move(p));
         }
-
-        const auto byTitle = [](const Page &a, const Page &b) {
-            // Daily notes in date order, whatever their file name format ("16.05.2026").
-            const int c = !a.journalDate.isEmpty() && !b.journalDate.isEmpty() ? a.journalDate.compare(b.journalDate)
-                                                                               : compareNames(a.title, b.title);
-            return c != 0 ? c < 0 : a.path < b.path;
-        };
-        const bool desc = m_descending;
-        const QString key = m_sortKey;
-        std::ranges::stable_sort(next, [&](const Page &a, const Page &b) {
-            int c = 0;
-            if (key == u"folder")
-                c = compareNames(a.folder, b.folder);
-            else if (key == u"modified")
-                c = a.modified < b.modified ? -1 : a.modified > b.modified ? 1 : 0;
-            else if (key == u"backlinks")
-                c = a.backlinks - b.backlinks;
-            else if (key == u"tags")
-                c = int(a.tags.size()) - int(b.tags.size());
-            if (c != 0)
-                return desc ? c > 0 : c < 0;
-            // Ties (and the title sort itself) by title; reversed only when sorting by title.
-            return key == u"title" && desc ? byTitle(b, a) : byTitle(a, b);
-        });
+        sortPages(next);
     }
 
     if (m_resetNext) {
@@ -232,6 +216,34 @@ void PageListModel::refresh()
     }
 }
 
+void PageListModel::sortPages(QList<Page> &pages) const
+{
+    const auto byTitle = [](const Page &a, const Page &b) {
+        // Daily notes in date order, whatever their file name format ("16.05.2026").
+        const int c = !a.journalDate.isEmpty() && !b.journalDate.isEmpty() ? a.journalDate.compare(b.journalDate)
+                                                                           : compareNames(a.title, b.title);
+        return c != 0 ? c < 0 : a.path < b.path;
+    };
+    const auto byKey = [this](const Page &a, const Page &b) -> std::strong_ordering {
+        if (m_sortKey == u"folder")
+            return compareNames(a.folder, b.folder) <=> 0;
+        if (m_sortKey == u"modified")
+            return a.modified <=> b.modified;
+        if (m_sortKey == u"backlinks")
+            return a.backlinks <=> b.backlinks;
+        if (m_sortKey == u"tags")
+            return a.tags.size() <=> b.tags.size();
+        return std::strong_ordering::equal;
+    };
+    const bool reverseTitle = m_descending && m_sortKey == u"title";
+    std::ranges::stable_sort(pages, [&](const Page &a, const Page &b) {
+        if (const auto c = byKey(a, b); c != 0)
+            return m_descending ? c > 0 : c < 0;
+        // Ties (and the title sort itself) by title; reversed only when sorting by title.
+        return reverseTitle ? byTitle(b, a) : byTitle(a, b);
+    });
+}
+
 QVariant PageListModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size())
@@ -243,7 +255,7 @@ QVariant PageListModel::data(const QModelIndex &index, int role) const
     case FolderRole: return p.folder;
     case AliasesRole: return p.aliases;
     case ModifiedRole: return p.modified;
-    case ModifiedLabelRole: return humanTime(p.modified, effectiveToday(), uiLocale(m_locale));
+    case ModifiedLabelRole: return humanTime(p.modified, effectiveToday(m_today, workspace()), uiLocale(m_locale));
     case SizeRole: return p.size;
     case BacklinksRole: return p.backlinks;
     case TagsRole: return p.tags;
@@ -256,10 +268,19 @@ QVariant PageListModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> PageListModel::roleNames() const
 {
-    return { { PathRole, "path" },           { TitleRole, "title" },       { FolderRole, "folder" },
-             { AliasesRole, "aliases" },     { ModifiedRole, "modified" }, { ModifiedLabelRole, "modifiedLabel" },
-             { SizeRole, "size" },           { BacklinksRole, "backlinks" }, { TagsRole, "tags" },
-             { TagCountRole, "tagCount" },   { JournalDateRole, "journalDate" }, { TitleMatchesRole, "titleMatches" } };
+    static const QHash<int, QByteArray> names{{PathRole, "path"},
+                                              {TitleRole, "title"},
+                                              {FolderRole, "folder"},
+                                              {AliasesRole, "aliases"},
+                                              {ModifiedRole, "modified"},
+                                              {ModifiedLabelRole, "modifiedLabel"},
+                                              {SizeRole, "size"},
+                                              {BacklinksRole, "backlinks"},
+                                              {TagsRole, "tags"},
+                                              {TagCountRole, "tagCount"},
+                                              {JournalDateRole, "journalDate"},
+                                              {TitleMatchesRole, "titleMatches"}};
+    return names;
 }
 
 QVariantMap PageListModel::get(int row) const
@@ -268,18 +289,14 @@ QVariantMap PageListModel::get(int row) const
     if (row < 0 || row >= m_rows.size())
         return out;
     const QHash<int, QByteArray> names = roleNames();
-    for (auto it = names.cbegin(); it != names.cend(); ++it)
-        out.insert(QString::fromLatin1(it.value()), data(index(row), it.key()));
+    for (const auto &[role, name] : names.asKeyValueRange())
+        out.insert(QString::fromLatin1(name), data(index(row), role));
     return out;
 }
 
 int PageListModel::rowOf(const QString &path) const
 {
-    for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows.at(i).path == path)
-            return i;
-    }
-    return -1;
+    return rowIndex(m_rows, std::ranges::find(m_rows, path, &Page::path));
 }
 
 } // namespace brulion::content

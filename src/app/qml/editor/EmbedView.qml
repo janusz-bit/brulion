@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Window
 import Brulion
 
 // EmbedView — attachments embedded in a block (`![[photo.png]]`, `![alt](assets/a.png)`):
@@ -70,6 +69,13 @@ Column {
                 h += item.height + (i > 0 ? spacing : 0)
         }
         return h
+    }
+
+    component MutedText: Text {
+        textFormat: Text.PlainText
+        font.family: Theme.fontUi
+        font.pixelSize: Theme.textSm
+        color: Theme.fgMuted
     }
 
     Repeater {
@@ -222,7 +228,7 @@ Column {
                         color: Theme.fgMuted
                     }
                     // The alt text, or why the picture could not be fetched.
-                    Text {
+                    MutedText {
                         objectName: "webPictureText"
                         visible: text !== ""
                         width: parent.width
@@ -231,22 +237,14 @@ Column {
                         maximumLineCount: placeholder.failed ? 3 : 2
                         elide: Text.ElideRight
                         text: placeholder.failed ? embed.rec.map.error || "" : embed.alt
-                        textFormat: Text.PlainText
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
-                        color: Theme.fgMuted
                     }
                     // The site: what "Show" would contact, never elided away by a long alt text.
-                    Text {
+                    MutedText {
                         objectName: "webPictureHost"
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideMiddle
                         text: qsTr("Picture from %1").arg(embed.host)
-                        textFormat: Text.PlainText
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
-                        color: Theme.fgMuted
                     }
                     // Side by side when both fit, else one under the other — centred either way.
                     Grid {
@@ -274,7 +272,7 @@ Column {
                         }
                     }
                 }
-                Text {
+                MutedText {
                     objectName: "embedMessage" // (the shell's self-test)
                     visible: !embed.webPending && (!embed.decodable || img.status === Image.Error)
                     anchors.centerIn: parent
@@ -287,10 +285,6 @@ Column {
                             + qsTranslate("ContentPictureView", "Pictures in the %1 format cannot be shown on this device.")
                               .arg(embed.format)
                           : qsTr("Cannot load %1").arg(embed.name)
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    color: Theme.fgMuted
                 }
                 TapHandler {
                     id: pictureTap

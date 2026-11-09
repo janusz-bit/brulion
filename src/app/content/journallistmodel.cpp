@@ -7,6 +7,8 @@
 #include <QHash>
 #include <QRegularExpression>
 
+#include <algorithm>
+
 namespace brulion::content {
 
 using namespace Qt::StringLiterals;
@@ -17,11 +19,8 @@ namespace {
 bool isBlankNote(const QString &content)
 {
     static const QRegularExpression blankLine(u"^\\s*(?:[-*+](?:\\s+\\[ \\])?)?\\s*$"_s);
-    for (const QStringView line : QStringView(content).split(u'\n')) {
-        if (!blankLine.matchView(line).hasMatch())
-            return false;
-    }
-    return true;
+    const QList<QStringView> lines = QStringView(content).split(u'\n');
+    return std::ranges::all_of(lines, [](QStringView line) { return blankLine.matchView(line).hasMatch(); });
 }
 
 } // namespace
@@ -48,10 +47,7 @@ void JournalListModel::setIncludeEmpty(bool on)
 
 QDate JournalListModel::effectiveToday() const
 {
-    const QDate fixed = parseIsoDate(m_todayText);
-    if (fixed.isValid())
-        return fixed;
-    return workspace() ? workspace()->now().date() : QDate::currentDate();
+    return content::effectiveToday(m_todayText, workspace());
 }
 
 QString JournalListModel::todayPath() const
@@ -77,11 +73,12 @@ void JournalListModel::refresh()
     QList<Day> next;
     shell::Workspace *ws = workspace();
     const VaultIndex *idx = vaultIndex();
+    const QDate today = effectiveToday();
     if (ws && idx && ws->isOpen()) {
-        const QDate today = effectiveToday();
         QHash<QDate, QString> chosen;
         QList<QDate> order;
-        for (const JournalRef &j : idx->journals()) { // newest first
+        const QList<JournalRef> journals = idx->journals();
+        for (const JournalRef &j : journals) { // newest first
             if (j.date > today)
                 continue;
             const auto it = chosen.constFind(j.date);
@@ -109,7 +106,6 @@ void JournalListModel::refresh()
         [](const Day &a, const Day &b) { return a.path == b.path && a.exists == b.exists; });
     // Midnight while the app runs: the kept days' isToday / daysAgo are relative to today (the
     // rows themselves stay, so a day being edited keeps its delegate).
-    const QDate today = effectiveToday();
     if (m_lastToday.isValid() && today != m_lastToday && !m_rows.isEmpty())
         Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), { IsTodayRole, DaysAgoRole });
     m_lastToday = today;
@@ -141,8 +137,12 @@ QVariant JournalListModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> JournalListModel::roleNames() const
 {
-    return { { DateRole, "date" }, { PathRole, "path" }, { ExistsRole, "exists" },
-             { IsTodayRole, "isToday" }, { DaysAgoRole, "daysAgo" } };
+    static const QHash<int, QByteArray> names{{DateRole, "date"},
+                                              {PathRole, "path"},
+                                              {ExistsRole, "exists"},
+                                              {IsTodayRole, "isToday"},
+                                              {DaysAgoRole, "daysAgo"}};
+    return names;
 }
 
 int JournalListModel::rowOfDate(const QString &date) const
@@ -152,21 +152,13 @@ int JournalListModel::rowOfDate(const QString &date) const
         return -1;
     if (!d.isValid())
         return 0;
-    for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows.at(i).date <= d)
-            return i;
-    }
-    return int(m_rows.size()) - 1;
+    const auto it = std::ranges::find_if(m_rows, [d](const Day &day) { return day.date <= d; });
+    return it == m_rows.cend() ? int(m_rows.size()) - 1 : int(it - m_rows.cbegin());
 }
 
 int JournalListModel::exactRowOfDate(const QString &date) const
 {
-    const QDate d = parseIsoDate(date);
-    for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows.at(i).date == d)
-            return i;
-    }
-    return -1;
+    return rowIndex(m_rows, std::ranges::find(m_rows, parseIsoDate(date), &Day::date));
 }
 
 QVariantMap JournalListModel::get(int row) const

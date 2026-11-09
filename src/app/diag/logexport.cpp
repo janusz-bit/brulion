@@ -1,6 +1,8 @@
 #include "logexport.h"
 
+#include <QByteArrayView>
 #include <QCoreApplication>
+
 #include <algorithm>
 
 using namespace Qt::StringLiterals;
@@ -8,6 +10,9 @@ using namespace Qt::StringLiterals;
 namespace brulion::diag {
 
 namespace {
+
+/// Ends the header of an export (LogController::copy, Logger::exportText).
+constexpr QByteArrayView kHeaderEnd = "\n----\n";
 
 QString utcOffset(const QDateTime &time)
 {
@@ -60,14 +65,14 @@ QString capForClipboard(const QString &text, qint64 maxBytes)
     const QByteArray utf8 = text.toUtf8();
     if (utf8.size() <= maxBytes)
         return text;
-    const qsizetype separator = utf8.indexOf("\n----\n");
-    const QByteArray head = separator >= 0 ? utf8.left(separator + 6) : QByteArray();
+    const qsizetype separator = utf8.indexOf(kHeaderEnd);
+    const QByteArray head = separator >= 0 ? utf8.left(separator + kHeaderEnd.size()) : QByteArray();
     const QByteArray note =
             QCoreApplication::translate("brulion::diag::LogExport",
                                         "(older entries left out — use “Save” or “Share” for the whole log)")
                     .toUtf8()
             + '\n';
-    const qint64 room = qMax<qint64>(0, maxBytes - head.size() - note.size());
+    const qint64 room = std::max<qint64>(0, maxBytes - head.size() - note.size());
     qsizetype cut = utf8.size() - room;
     // Start at an entry: after a newline, not at a continuation line ("\t…").
     while (cut < utf8.size()) {

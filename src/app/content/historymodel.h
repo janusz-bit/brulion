@@ -89,8 +89,6 @@ private:
 
         friend bool operator==(const Version &, const Version &) = default;
     };
-    QDate effectiveToday() const;
-
     QList<Version> m_rows;
     QString m_path;
     QString m_locale = QStringLiteral("pl");

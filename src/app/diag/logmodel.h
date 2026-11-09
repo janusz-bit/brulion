@@ -56,7 +56,6 @@ public:
     };
 
     explicit LogModel(QObject *parent = nullptr);
-    ~LogModel() override;
 
     /// The logger to show (default: Logger::instance()); tests pass their own.
     void setLogger(logging::Logger *logger);
@@ -102,7 +101,11 @@ private:
 
     static Item makeItem(const logging::Entry &entry, bool earlier);
     bool matches(const Item &item) const;
+    /// m_rows from m_all again (no signals).
+    void refilter();
+    /// The filter changed: refilter() as a model reset, countChanged() and filterChanged().
     void rebuild();
+    void updateRepeat(const logging::Entry &entry);
     void onAppended();
     void onCleared();
 

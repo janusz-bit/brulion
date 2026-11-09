@@ -13,9 +13,7 @@
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
-#include <QLibraryInfo>
 #include <QPointer>
-
 #include <QStandardPaths>
 
 #ifdef Q_OS_ANDROID
@@ -38,6 +36,12 @@ QPointer<LogController> s_instance;
 
 constexpr qint64 kNormalFileBytes = 1024 * 1024;
 constexpr qint64 kDetailedFileBytes = 3 * 1024 * 1024;
+
+/// The clipboard; nullptr in a QCoreApplication (tests, tools).
+QClipboard *clipboard()
+{
+    return qobject_cast<QGuiApplication *>(QCoreApplication::instance()) ? QGuiApplication::clipboard() : nullptr;
+}
 
 } // namespace
 
@@ -172,15 +176,14 @@ QUrl LogController::suggestedSaveFile() const
 
 QStringList LogController::exportHeader() const
 {
-    ExportInfo info;
-    info.version = QCoreApplication::applicationVersion();
-    info.device = platform::deviceDescription();
-    info.qtVersion = QString::fromLatin1(qVersion());
-    info.created = now();
-    info.detailed = detailed();
-    if (m_recentSyncs)
-        info.recentSyncs = m_recentSyncs();
-    return diag::exportHeader(info);
+    return diag::exportHeader(ExportInfo{
+            .version = QCoreApplication::applicationVersion(),
+            .device = platform::deviceDescription(),
+            .qtVersion = QString::fromLatin1(qVersion()),
+            .created = now(),
+            .detailed = detailed(),
+            .recentSyncs = m_recentSyncs ? m_recentSyncs() : QStringList(),
+    });
 }
 
 QString LogController::exportText() const
@@ -200,13 +203,13 @@ bool LogController::copy(QObject *model)
         text = exportHeader().join(u'\n') + u"\n----\n"_s + logModel->visibleText();
     else
         text = exportText();
-    auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
-    if (!app || !QGuiApplication::clipboard()) {
+    QClipboard *board = clipboard();
+    if (!board) {
         Q_EMIT failed(tr("The clipboard is not available."));
         return false;
     }
     const QString capped = capForClipboard(text);
-    QGuiApplication::clipboard()->setText(capped);
+    board->setText(capped);
     Q_EMIT done(capped.size() < text.size() ? tr("Copied the newest part of the event log.")
                                             : tr("Copied the event log."));
     return true;
@@ -214,9 +217,10 @@ bool LogController::copy(QObject *model)
 
 bool LogController::copyText(const QString &text)
 {
-    if (!qobject_cast<QGuiApplication *>(QCoreApplication::instance()) || !QGuiApplication::clipboard())
+    QClipboard *board = clipboard();
+    if (!board)
         return false;
-    QGuiApplication::clipboard()->setText(capForClipboard(text));
+    board->setText(capForClipboard(text));
     return true;
 }
 

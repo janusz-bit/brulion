@@ -11,6 +11,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <utility>
 
 namespace brulion::content {
 
@@ -57,20 +58,30 @@ QString highlightHtml(const QString &text, const QList<int> &positions, const QS
     return out;
 }
 
-/// Journals newest first, then other pages by title (Polish collation), then path.
-void sortNotes(QList<QString> &list, const VaultIndex *idx)
+/// The journal date of the note `path` (invalid for a page).
+QDate journalOf(const VaultIndex *idx, const QString &path)
 {
-    const auto journal = [idx](const QString &p) -> QDate {
-        const ParsedNote *n = idx->note(p);
-        return n && n->journalDate ? *n->journalDate : QDate();
-    };
-    std::ranges::stable_sort(list, [&](const QString &a, const QString &b) {
-        const QDate da = journal(a);
-        const QDate db = journal(b);
-        if (da.isValid() != db.isValid())
-            return da.isValid();
-        if (da.isValid() && da != db)
-            return da > db;
+    const ParsedNote *n = idx->note(path);
+    return n && n->journalDate ? *n->journalDate : QDate();
+}
+
+/// Journals newest first, then other pages: < 0 / > 0 when that orders `a` and `b`, 0 for two
+/// pages or two journals of one day.
+int compareJournals(QDate a, QDate b)
+{
+    if (a.isValid() != b.isValid())
+        return a.isValid() ? -1 : 1;
+    if (a.isValid() && a != b)
+        return a > b ? -1 : 1;
+    return 0;
+}
+
+/// Journals newest first, then other pages by title (Polish collation), then path.
+void sortNotes(QStringList &list, const VaultIndex *idx)
+{
+    std::ranges::stable_sort(list, [idx](const QString &a, const QString &b) {
+        if (const int j = compareJournals(journalOf(idx, a), journalOf(idx, b)); j != 0)
+            return j < 0;
         const int c = compareNames(paths::pageTitle(a), paths::pageTitle(b));
         return c != 0 ? c < 0 : a < b;
     });
@@ -135,9 +146,7 @@ void GroupedRefsModel::setLimit(int limit)
 void GroupedRefsModel::toggleCollapsed(const QString &path)
 {
     QStringList paths = m_collapsed;
-    if (paths.contains(path))
-        paths.removeAll(path);
-    else
+    if (paths.removeAll(path) == 0)
         paths.append(path);
     setCollapsedPaths(paths);
     refreshNow();
@@ -145,10 +154,7 @@ void GroupedRefsModel::toggleCollapsed(const QString &path)
 
 QDate GroupedRefsModel::effectiveToday() const
 {
-    const QDate fixed = parseIsoDate(m_today);
-    if (fixed.isValid())
-        return fixed;
-    return workspace() ? workspace()->now().date() : QDate::currentDate();
+    return content::effectiveToday(m_today, workspace());
 }
 
 dates::UiLocale GroupedRefsModel::uiLocaleValue() const
@@ -158,10 +164,10 @@ dates::UiLocale GroupedRefsModel::uiLocaleValue() const
 
 GroupedRefsModel::Group GroupedRefsModel::groupFor(const QString &path) const
 {
-    Group g;
-    g.path = path;
     const VaultIndex *idx = vaultIndex();
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
+    Group g;
+    g.path = path;
     g.title = note ? note->title : paths::pageTitle(path);
     g.folder = paths::dirname(path);
     if (note && note->journalDate)
@@ -171,9 +177,9 @@ GroupedRefsModel::Group GroupedRefsModel::groupFor(const QString &path) const
 
 GroupedRefsModel::Ref GroupedRefsModel::refForBlock(const QString &path, int blockIndex) const
 {
-    Ref r;
     const VaultIndex *idx = vaultIndex();
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
+    Ref r;
     if (!note || blockIndex < 0 || blockIndex >= note->blocks.size())
         return r;
     r.line = note->blocks.at(blockIndex).line;
@@ -185,8 +191,7 @@ void GroupedRefsModel::fillRef(Ref &r, const QString &path) const
 {
     if (r.pendingBlock < 0)
         return;
-    const int blockIndex = r.pendingBlock;
-    r.pendingBlock = -1;
+    const int blockIndex = std::exchange(r.pendingBlock, -1);
     const VaultIndex *idx = vaultIndex();
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
     if (!note || blockIndex >= note->blocks.size())
@@ -206,8 +211,7 @@ void GroupedRefsModel::fillRef(Ref &r, const QString &path) const
     std::shared_ptr<markdown::BlockDocument> &doc = m_docs[path];
     if (!doc)
         doc = std::make_shared<markdown::BlockDocument>(idx->content(path));
-    const int i = doc->indexAtLine(block.line);
-    if (i >= 0) {
+    if (const int i = doc->indexAtLine(block.line); i >= 0) {
         const markdown::BlockEntry &entry = doc->at(i);
         markdown::RenderContext ctx = renderContext(idx, path, effectiveToday(), uiLocaleValue(), m_palette);
         // The row draws the editor's checkbox for tasks (ContentRefRow), not a text glyph.
@@ -230,9 +234,18 @@ GroupedRefsModel::Ref GroupedRefsModel::refForLine(const QString &path, int line
     return r;
 }
 
+GroupedRefsModel::Row GroupedRefsModel::rowFor(const Group &g)
+{
+    Row row;
+    row.path = g.path;
+    row.title = g.title;
+    row.folder = g.folder;
+    row.journalDate = g.journalDate;
+    return row;
+}
+
 void GroupedRefsModel::refresh()
 {
-    m_docs.clear();
     QList<Group> groups;
     if (workspace() && vaultIndex() && workspace()->isOpen())
         groups = collect();
@@ -253,12 +266,8 @@ void GroupedRefsModel::refresh()
             hidden += (collapsed ? 0 : int(g.refs.size())) + whole;
             continue;
         }
-        Row h;
+        Row h = rowFor(g);
         h.header = true;
-        h.path = g.path;
-        h.title = g.title;
-        h.folder = g.folder;
-        h.journalDate = g.journalDate;
         h.count = int(g.refs.size());
         h.pageLevel = g.pageLevel;
         h.collapsed = collapsed;
@@ -266,9 +275,9 @@ void GroupedRefsModel::refresh()
         if (keys.contains(h.key))
             continue;
         keys.insert(h.key);
-        next.append(h);
         refs += h.count + whole;
-        if (h.collapsed)
+        next.append(std::move(h));
+        if (collapsed)
             continue;
         for (const Ref &r : g.refs) {
             if (m_limit > 0 && shown >= m_limit) {
@@ -276,18 +285,15 @@ void GroupedRefsModel::refresh()
                 continue;
             }
             ++shown;
-            Row row;
-            row.path = g.path;
-            row.title = g.title;
-            row.folder = g.folder;
-            row.journalDate = g.journalDate;
+            Row row = rowFor(g);
             row.ref = r;
             fillRef(row.ref, g.path); // only the listed rows are rendered
-            row.key = u"r\n"_s + g.path + u'\n' + QString::number(r.line);
+            const QString base = u"r\n"_s + g.path + u'\n' + QString::number(r.line);
+            row.key = base;
             for (int n = 2; keys.contains(row.key); ++n)
-                row.key = u"r\n"_s + g.path + u'\n' + QString::number(r.line) + u'#' + QString::number(n);
+                row.key = base + u'#' + QString::number(n);
             keys.insert(row.key);
-            next.append(row);
+            next.append(std::move(row));
         }
     }
     applyRows(m_rows, next, [](const Row &r) { return r.key; }, [](const Row &a, const Row &b) { return a == b; });
@@ -327,43 +333,52 @@ QVariant GroupedRefsModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> GroupedRefsModel::roleNames() const
 {
-    return { { RowTypeRole, "rowType" },     { PathRole, "path" },         { TitleRole, "title" },
-             { FolderRole, "folder" },       { JournalDateRole, "journalDate" }, { CountRole, "count" },
-             { CollapsedRole, "collapsed" }, { PageLevelRole, "pageLevel" }, { LineRole, "line" },
-             { HtmlRole, "html" },           { TextRole, "text" },         { BlockIdRole, "blockId" },
-             { BreadcrumbRole, "breadcrumb" }, { TaskStatusRole, "taskStatus" }, { DepthRole, "depth" } };
+    static const QHash<int, QByteArray> names{{RowTypeRole, "rowType"},
+                                              {PathRole, "path"},
+                                              {TitleRole, "title"},
+                                              {FolderRole, "folder"},
+                                              {JournalDateRole, "journalDate"},
+                                              {CountRole, "count"},
+                                              {CollapsedRole, "collapsed"},
+                                              {PageLevelRole, "pageLevel"},
+                                              {LineRole, "line"},
+                                              {HtmlRole, "html"},
+                                              {TextRole, "text"},
+                                              {BlockIdRole, "blockId"},
+                                              {BreadcrumbRole, "breadcrumb"},
+                                              {TaskStatusRole, "taskStatus"},
+                                              {DepthRole, "depth"}};
+    return names;
 }
 
 QVariantMap GroupedRefsModel::get(int row) const
 {
-    QVariantMap out;
-    if (row < 0 || row >= m_rows.size())
-        return out;
-    const QHash<int, QByteArray> names = roleNames();
-    for (auto it = names.cbegin(); it != names.cend(); ++it)
-        out.insert(QString::fromLatin1(it.value()), data(index(row), it.key()));
-    return out;
+    return rowMap(row);
+}
+
+const GroupedRefsModel::Row *GroupedRefsModel::taskRow(int row) const
+{
+    if (row < 0 || row >= m_rows.size() || !workspace())
+        return nullptr;
+    const Row &r = m_rows.at(row);
+    return r.header || r.ref.taskStatus.isEmpty() ? nullptr : &r;
 }
 
 bool GroupedRefsModel::toggleTask(int row)
 {
-    if (row < 0 || row >= m_rows.size() || m_rows.at(row).header || !workspace())
+    const Row *r = taskRow(row);
+    if (!r)
         return false;
-    const Row &r = m_rows.at(row);
-    if (r.ref.taskStatus.isEmpty())
-        return false;
-    const bool closed = r.ref.taskStatus == u"done" || r.ref.taskStatus == u"cancelled";
-    return workspace()->setTaskStatus(r.path, r.ref.line, closed ? u"todo"_s : u"done"_s);
+    const bool closed = r->ref.taskStatus == u"done" || r->ref.taskStatus == u"cancelled";
+    return workspace()->setTaskStatus(r->path, r->ref.line, closed ? u"todo"_s : u"done"_s);
 }
 
 bool GroupedRefsModel::setTaskStatus(int row, const QString &status)
 {
-    if (row < 0 || row >= m_rows.size() || m_rows.at(row).header || !workspace())
+    const Row *r = taskRow(row);
+    if (!r || r->ref.taskStatus == status)
         return false;
-    const Row &r = m_rows.at(row);
-    if (r.ref.taskStatus.isEmpty() || r.ref.taskStatus == status)
-        return false;
-    return workspace()->setTaskStatus(r.path, r.ref.line, status);
+    return workspace()->setTaskStatus(r->path, r->ref.line, status);
 }
 
 // ---- BacklinksModel ---------------------------------------------------------------------------------
@@ -410,25 +425,27 @@ QList<GroupedRefsModel::Group> BacklinksModel::collect()
     return m_mode == u"unlinked" ? collectUnlinked() : collectLinked();
 }
 
+GroupedRefsModel::Group &BacklinksModel::groupIn(Groups &groups, const QString &path) const
+{
+    qsizetype gi = groups.indexOf.value(path, -1);
+    if (gi < 0) {
+        gi = groups.list.size();
+        groups.list.append(groupFor(path));
+        groups.indexOf.insert(path, gi);
+    }
+    return groups.list[gi];
+}
+
 QList<GroupedRefsModel::Group> BacklinksModel::collectLinked()
 {
     const VaultIndex *idx = vaultIndex();
     const QString path = paths::normalize(m_path);
-    QList<Group> groups;
-    QHash<QString, qsizetype> groupOf;
-    const auto group = [&](const QString &source) -> Group & {
-        qsizetype gi = groupOf.value(source, -1);
-        if (gi < 0) {
-            groups.append(groupFor(source));
-            gi = groups.size() - 1;
-            groupOf.insert(source, gi);
-        }
-        return groups[gi];
-    };
+    Groups groups;
     // One row per referencing block (a block may link several times, and also carry a tag).
     QSet<QString> seen;
-    for (const Backlink &b : idx->backlinks(path)) {
-        Group &g = group(b.path);
+    const QList<Backlink> backlinks = idx->backlinks(path);
+    for (const Backlink &b : backlinks) {
+        Group &g = groupIn(groups, b.path);
         const QString key = b.path + u'\n'
                             + (b.blockIndex >= 0 ? QString::number(b.blockIndex) : u"L"_s + QString::number(b.link.line));
         if (seen.contains(key))
@@ -440,7 +457,7 @@ QList<GroupedRefsModel::Group> BacklinksModel::collectLinked()
     // tagged as a whole marks its group ("whole page").
     const QList<TagReference> tagged = idx->tagReferences(path);
     for (const TagReference &r : tagged) {
-        Group &g = group(r.path);
+        Group &g = groupIn(groups, r.path);
         if (r.blockIndex < 0) {
             g.pageLevel = true;
             continue;
@@ -454,49 +471,34 @@ QList<GroupedRefsModel::Group> BacklinksModel::collectLinked()
     if (!tagged.isEmpty()) {
         // Journals first (newest first), then the other pages by path — the order of both lists —
         // and the references of a page in document order.
-        const auto journal = [idx](const QString &p) {
-            const ParsedNote *n = idx->note(p);
-            return n && n->journalDate ? *n->journalDate : QDate();
-        };
-        std::ranges::stable_sort(groups, [&](const Group &a, const Group &b) {
-            const QDate da = journal(a.path);
-            const QDate db = journal(b.path);
-            if (da.isValid() != db.isValid())
-                return da.isValid();
-            if (da.isValid() && da != db)
-                return da > db;
-            return a.path < b.path;
+        std::ranges::stable_sort(groups.list, [idx](const Group &a, const Group &b) {
+            const int j = compareJournals(journalOf(idx, a.path), journalOf(idx, b.path));
+            return j != 0 ? j < 0 : a.path < b.path;
         });
-        for (Group &g : groups)
-            std::ranges::stable_sort(g.refs, [](const Ref &a, const Ref &b) { return a.line < b.line; });
+        for (Group &g : groups.list)
+            std::ranges::stable_sort(g.refs, {}, &Ref::line);
     }
     if (m_taggedCount != tagged.size()) {
         m_taggedCount = int(tagged.size());
         Q_EMIT taggedCountChanged();
     }
-    return groups;
+    return groups.list;
 }
 
 QList<GroupedRefsModel::Group> BacklinksModel::collectUnlinked()
 {
     const VaultIndex *idx = vaultIndex();
     const QStringList pageNames = names();
-    QList<Group> groups;
-    QHash<QString, qsizetype> groupOf;
-    for (const UnlinkedRef &u : idx->unlinkedReferences(paths::normalize(m_path))) {
-        qsizetype gi = groupOf.value(u.path, -1);
-        if (gi < 0) {
-            groups.append(groupFor(u.path));
-            gi = groups.size() - 1;
-            groupOf.insert(u.path, gi);
-        }
+    Groups groups;
+    const QList<UnlinkedRef> mentions = idx->unlinkedReferences(paths::normalize(m_path));
+    for (const UnlinkedRef &u : mentions) {
         Ref r;
         r.line = u.line;
         r.text = u.excerpt;
         r.html = highlightHtml(u.excerpt, mentionPositions(u.excerpt, pageNames), rendererPalette().highlightBackground);
-        groups[gi].refs.append(r);
+        groupIn(groups, u.path).refs.append(std::move(r));
     }
-    return groups;
+    return groups.list;
 }
 
 QString BacklinksModel::linkedContent(const QString &source, const QString &content, int line) const
@@ -536,7 +538,8 @@ int BacklinksModel::linkAll()
         return 0;
     QHash<QString, QList<int>> lines;
     QStringList order;
-    for (const UnlinkedRef &u : idx->unlinkedReferences(paths::normalize(m_path))) {
+    const QList<UnlinkedRef> mentions = idx->unlinkedReferences(paths::normalize(m_path));
+    for (const UnlinkedRef &u : mentions) {
         if (!lines.contains(u.path))
             order.append(u.path);
         lines[u.path].append(u.line);
@@ -598,18 +601,19 @@ QList<GroupedRefsModel::Group> TagBlocksModel::collect()
     const QString prefix = m_tag + u'/';
     const auto matches = [&](const QString &t) { return t == m_tag || t.startsWith(prefix); };
     QSet<QString> notes;
-    for (const TagCount &tc : idx->tags()) {
-        if (tc.tag == m_tag) {
+    const QList<TagCount> all = idx->tags();
+    for (const TagCount &tc : all) {
+        const bool exact = tc.tag == m_tag;
+        if (!exact && !tc.tag.startsWith(prefix))
+            continue;
+        if (exact)
             m_display = tc.display.isEmpty() ? tc.tag : tc.display;
-            for (const QString &p : tc.paths)
-                notes.insert(p);
-        } else if (tc.tag.startsWith(prefix)) {
+        else
             m_subTags.append(QVariantMap{ { u"tag"_s, tc.tag }, { u"display"_s, tc.display }, { u"count"_s, tc.count } });
-            for (const QString &p : tc.paths)
-                notes.insert(p);
-        }
+        for (const QString &p : tc.paths)
+            notes.insert(p);
     }
-    QList<QString> ordered(notes.cbegin(), notes.cend());
+    QStringList ordered = notes.values();
     sortNotes(ordered, idx);
     for (const QString &path : std::as_const(ordered)) {
         const ParsedNote *note = idx->note(path);
@@ -617,13 +621,11 @@ QList<GroupedRefsModel::Group> TagBlocksModel::collect()
             continue;
         Group g = groupFor(path);
         for (int i = 0; i < note->blocks.size(); ++i) {
-            const QStringList &tags = note->blocks.at(i).tags;
-            if (std::any_of(tags.cbegin(), tags.cend(), matches))
+            if (std::ranges::any_of(note->blocks.at(i).tags, matches))
                 g.refs.append(refForBlock(path, i));
         }
-        const QStringList own = pageTags(*note);
-        g.pageLevel = std::any_of(own.cbegin(), own.cend(), matches) || g.refs.isEmpty();
-        groups.append(g);
+        g.pageLevel = std::ranges::any_of(pageTags(*note), matches) || g.refs.isEmpty();
+        groups.append(std::move(g));
     }
     return groups;
 }

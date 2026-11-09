@@ -174,6 +174,11 @@ private:
 
         friend bool operator==(const Row &, const Row &) = default;
     };
+    /// A row of group `g` with its page's path, title, folder and journal date.
+    static Row rowFor(const Group &g);
+    /// The ref row `row` when it is a task and there is a workspace to change it in, else null.
+    const Row *taskRow(int row) const;
+
     QList<Row> m_rows;
     /// Parsed documents of the notes rendered during one refresh.
     mutable QHash<QString, std::shared_ptr<markdown::BlockDocument>> m_docs;
@@ -226,6 +231,13 @@ protected:
     QList<Group> collect() override;
 
 private:
+    /// Groups in the order their pages were first seen.
+    struct Groups {
+        QList<Group> list;
+        QHash<QString, qsizetype> indexOf;
+    };
+    /// The group of `path` in `groups`, added (groupFor()) when it is not there yet.
+    Group &groupIn(Groups &groups, const QString &path) const;
     QList<Group> collectLinked();
     QList<Group> collectUnlinked();
     /// Link the first mention on `line` of `content` (from `source`). Returns the new content

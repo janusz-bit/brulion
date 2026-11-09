@@ -8,6 +8,7 @@
 #include "markdown/inline.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "workspace.h"
 
 #include <QColor>
 #include <QDateTime>
@@ -33,6 +34,13 @@ QString isoDate(QDate date)
     return date.isValid() ? date.toString(u"yyyy-MM-dd"_s) : QString();
 }
 
+QDate effectiveToday(const QString &isoToday, const shell::Workspace *workspace)
+{
+    if (const QDate fixed = parseIsoDate(isoToday); fixed.isValid())
+        return fixed;
+    return workspace ? workspace->now().date() : QDate::currentDate();
+}
+
 dates::UiLocale uiLocale(const QString &locale)
 {
     return locale.startsWith(u"en"_s, Qt::CaseInsensitive) ? dates::UiLocale::English : dates::UiLocale::Polish;
@@ -44,11 +52,8 @@ QString colorString(const QVariant &v, const QString &fallback)
 {
     if (!v.isValid())
         return fallback;
-    QColor c;
-    if (v.metaType() == QMetaType::fromType<QColor>())
-        c = v.value<QColor>();
-    else
-        c = QColor::fromString(v.toString());
+    const QColor c =
+            v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
     if (!c.isValid())
         return fallback;
     return c.alpha() == 255 ? c.name(QColor::HexRgb) : c.name(QColor::HexArgb);
@@ -100,6 +105,35 @@ QList<int> sortedMarks(const QSet<int> &marks)
     return out;
 }
 
+/// Calls `found(from, to)` for the whole-word occurrences of `names` in `text`, longest name first;
+/// `false` from it skips the rest of that name's occurrences.
+template<typename Found>
+void forEachMention(const QString &text, const QStringList &names, Found found)
+{
+    const QStringList clean = cleanNames(names);
+    for (const QString &name : clean) {
+        const QRegularExpression re = nameRegex(name);
+        auto it = re.globalMatch(text);
+        while (it.hasNext()) {
+            const QRegularExpressionMatch m = it.next();
+            if (!found(m.capturedStart(), m.capturedEnd()))
+                break;
+        }
+    }
+}
+
+/// The text of the block with id `id` anywhere in the notebook.
+std::optional<QString> blockTextById(const VaultIndex &index, const QString &id)
+{
+    const auto ref = index.blockById(id);
+    if (!ref)
+        return std::nullopt;
+    const ParsedNote *note = index.note(ref->path);
+    if (!note || ref->blockIndex < 0 || ref->blockIndex >= note->blocks.size())
+        return std::nullopt;
+    return note->blocks.at(ref->blockIndex).text;
+}
+
 } // namespace
 
 markdown::Palette paletteFromMap(const QVariantMap &map)
@@ -146,18 +180,9 @@ markdown::RenderContext renderContext(const VaultIndex *index, const VaultPath &
             const auto p = index->resolveLinkPart(target, part, fromPath);
             return p ? p->kind : markdown::LinkPartTarget::Kind::New;
         };
-        ctx.blockText = [index](const QString &id) -> std::optional<QString> {
-            const auto ref = index->blockById(id);
-            if (!ref)
-                return std::nullopt;
-            const ParsedNote *note = index->note(ref->path);
-            if (!note || ref->blockIndex < 0 || ref->blockIndex >= note->blocks.size())
-                return std::nullopt;
-            return note->blocks.at(ref->blockIndex).text;
-        };
+        ctx.blockText = [index](const QString &id) { return blockTextById(*index, id); };
         // [[Page#^id]]: the block of that page, else (moved) the notebook's block with the id.
-        ctx.linkedBlockText = [index, fromPath, byId = ctx.blockText](const QString &target,
-                                                                      const QString &id) -> std::optional<QString> {
+        ctx.linkedBlockText = [index, fromPath](const QString &target, const QString &id) -> std::optional<QString> {
             const std::optional<QString> path =
                     target.isEmpty() ? std::optional<QString>(fromPath) : index->resolveLink(target, fromPath);
             const ParsedNote *note = path ? index->note(*path) : nullptr;
@@ -165,7 +190,7 @@ markdown::RenderContext renderContext(const VaultIndex *index, const VaultPath &
                 return std::nullopt;
             if (const int i = note->blockIds.value(id, -1); i >= 0 && i < note->blocks.size())
                 return note->blocks.at(i).text;
-            return byId(id);
+            return blockTextById(*index, id);
         };
     }
     ctx.today = today;
@@ -199,25 +224,20 @@ QString plainText(const QString &markdown, const VaultIndex *index)
         switch (link.kind) {
         case LinkKind::Wiki:
         case LinkKind::Embed:
+        case LinkKind::Markdown:
             shown = link.display.trimmed();
             if (shown.isEmpty()) {
                 shown = link.target;
-                if (!link.heading.isEmpty())
+                if (link.kind != LinkKind::Markdown && !link.heading.isEmpty())
                     shown += (shown.isEmpty() ? QString() : u" › "_s) + link.heading;
             }
-            break;
-        case LinkKind::Markdown:
-            shown = link.display.trimmed().isEmpty() ? link.target : link.display.trimmed();
             break;
         case LinkKind::BlockRef:
         case LinkKind::BlockEmbed: {
             const QString id = link.blockId.isEmpty() ? link.target : link.blockId;
             if (index) {
-                if (const auto ref = index->blockById(id)) {
-                    const ParsedNote *note = index->note(ref->path);
-                    if (note && ref->blockIndex >= 0 && ref->blockIndex < note->blocks.size())
-                        shown = note->blocks.at(ref->blockIndex).text.simplified();
-                }
+                if (const std::optional<QString> text = blockTextById(*index, id))
+                    shown = text->simplified();
             }
             if (shown.isEmpty())
                 shown = u"(("_s + id + u"))"_s;
@@ -246,21 +266,18 @@ QString oneLine(const QString &text, int max)
 
 QStringList searchTerms(const QString &query)
 {
+    static const QRegularExpression whitespace(u"\\s+"_s);
     QStringList out;
     QString q = query;
     q.replace(u'"', u' ');
-    for (const QString &part : q.split(QRegularExpression(u"\\s+"_s), Qt::SkipEmptyParts)) {
-        QString word = part;
+    const QStringList parts = q.split(whitespace, Qt::SkipEmptyParts);
+    for (const QString &part : parts) {
         // Search operators ("-wyklucz", "tag:") are not highlighted as typed.
-        if (word.startsWith(u'-') && word.size() > 1)
+        if (part.startsWith(u'-') && part.size() > 1)
             continue;
-        const qsizetype colon = word.indexOf(u':');
-        if (colon > 0 && colon + 1 < word.size())
-            word = word.mid(colon + 1);
-        const QString folded = text::foldKey(word);
-        bool hasWordChar = false;
-        for (const QChar c : folded)
-            hasWordChar = hasWordChar || text::isWordChar(c);
+        const qsizetype colon = part.indexOf(u':');
+        const QString folded = text::foldKey(colon > 0 && colon + 1 < part.size() ? part.mid(colon + 1) : part);
+        const bool hasWordChar = std::ranges::any_of(folded, [](QChar c) { return text::isWordChar(c); });
         if (!hasWordChar || out.contains(folded))
             continue;
         out.append(folded);
@@ -297,20 +314,16 @@ bool containsAll(const QString &text, const QStringList &terms)
     if (terms.isEmpty())
         return true;
     const QString folded = text::foldKey(text);
-    return std::all_of(terms.cbegin(), terms.cend(), [&folded](const QString &t) { return folded.contains(t); });
+    return std::ranges::all_of(terms, [&folded](const QString &t) { return folded.contains(t); });
 }
 
 QList<int> mentionPositions(const QString &text, const QStringList &names)
 {
     QSet<int> marks;
-    for (const QString &name : cleanNames(names)) {
-        const QRegularExpression re = nameRegex(name);
-        auto it = re.globalMatch(text);
-        while (it.hasNext()) {
-            const QRegularExpressionMatch m = it.next();
-            markRange(marks, m.capturedStart(), m.capturedEnd());
-        }
-    }
+    forEachMention(text, names, [&marks](qsizetype from, qsizetype to) {
+        markRange(marks, from, to);
+        return true;
+    });
     return sortedMarks(marks);
 }
 
@@ -337,7 +350,8 @@ MentionEdit linkMention(const QString &content, int line, const QStringList &nam
     const markdown::InlineScan scan = markdown::extractInline(lineText);
     for (const Link &link : scan.links)
         mask(link.from, link.to);
-    for (const markdown::TagSpan &tag : markdown::findTags(lineText))
+    const QList<markdown::TagSpan> tags = markdown::findTags(lineText);
+    for (const markdown::TagSpan &tag : tags)
         mask(tag.from, tag.to);
     const auto free = [&masked](qsizetype from, qsizetype to) {
         for (qsizetype i = from; i < to; ++i) {
@@ -349,23 +363,16 @@ MentionEdit linkMention(const QString &content, int line, const QStringList &nam
 
     qsizetype bestFrom = -1;
     qsizetype bestTo = -1;
-    for (const QString &name : cleanNames(names)) {
-        const QRegularExpression re = nameRegex(name);
-        auto it = re.globalMatch(lineText);
-        while (it.hasNext()) {
-            const QRegularExpressionMatch m = it.next();
-            const qsizetype from = m.capturedStart();
-            const qsizetype to = m.capturedEnd();
-            if (!free(from, to))
-                continue;
-            // Earliest wins; names come longest first, so a later name at the same start is shorter.
-            if (bestFrom < 0 || from < bestFrom) {
-                bestFrom = from;
-                bestTo = to;
-            }
-            break;
+    forEachMention(lineText, names, [&](qsizetype from, qsizetype to) {
+        if (!free(from, to))
+            return true; // the name's next occurrence
+        // Earliest wins; names come longest first, so a later name at the same start is shorter.
+        if (bestFrom < 0 || from < bestFrom) {
+            bestFrom = from;
+            bestTo = to;
         }
-    }
+        return false; // a name's first free occurrence is its earliest
+    });
     if (bestFrom < 0)
         return edit;
 
@@ -406,7 +413,7 @@ QString humanTime(qint64 msecsSinceEpoch, QDate today, dates::UiLocale locale)
 {
     if (msecsSinceEpoch <= 0)
         return {};
-    const QDateTime t = QDateTime::fromMSecsSinceEpoch(msecsSinceEpoch).toLocalTime();
+    const QDateTime t = QDateTime::fromMSecsSinceEpoch(msecsSinceEpoch);
     return dates::formatHuman(DateSpec{ t.date(), QTime(t.time().hour(), t.time().minute()) }, locale, today);
 }
 
@@ -428,7 +435,8 @@ QStringList pageTags(const ParsedNote &note)
         if (value.metaType() == QMetaType::fromType<QStringList>())
             names = value.toStringList();
         else if (value.metaType() == QMetaType::fromType<QVariantList>()) {
-            for (const QVariant &v : value.toList())
+            const QVariantList list = value.toList();
+            for (const QVariant &v : list)
                 names.append(v.toString());
         } else if (value.isValid())
             names = value.toString().split(u',');

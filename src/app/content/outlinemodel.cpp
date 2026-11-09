@@ -24,13 +24,13 @@ void OutlineModel::setSource(QAbstractItemModel *source)
     if (m_source) {
         const auto changed = [this] { schedule(); };
         m_connections = {
-            connect(m_source, &QAbstractItemModel::dataChanged, this, changed),
-            connect(m_source, &QAbstractItemModel::rowsInserted, this, changed),
-            connect(m_source, &QAbstractItemModel::rowsRemoved, this, changed),
-            connect(m_source, &QAbstractItemModel::rowsMoved, this, changed),
-            connect(m_source, &QAbstractItemModel::modelReset, this, changed),
-            connect(m_source, &QAbstractItemModel::layoutChanged, this, changed),
-            connect(m_source, &QObject::destroyed, this, [this] { schedule(); }),
+                connect(m_source, &QAbstractItemModel::dataChanged, this, changed),
+                connect(m_source, &QAbstractItemModel::rowsInserted, this, changed),
+                connect(m_source, &QAbstractItemModel::rowsRemoved, this, changed),
+                connect(m_source, &QAbstractItemModel::rowsMoved, this, changed),
+                connect(m_source, &QAbstractItemModel::modelReset, this, changed),
+                connect(m_source, &QAbstractItemModel::layoutChanged, this, changed),
+                connect(m_source, &QObject::destroyed, this, changed),
         };
     }
     Q_EMIT sourceChanged();
@@ -47,22 +47,15 @@ void OutlineModel::rebuild()
 {
     m_timer.stop();
     QList<Entry> next;
+    int minLevel = 6;
     if (m_source) {
         const QHash<int, QByteArray> roles = m_source->roleNames();
-        const auto roleOf = [&roles](const QByteArray &name) {
-            for (auto it = roles.cbegin(); it != roles.cend(); ++it) {
-                if (it.value() == name)
-                    return it.key();
-            }
-            return -1;
-        };
-        const int levelRole = roleOf("headingLevel");
-        const int textRole = roleOf("plainText");
-        const int viewRole = roleOf("view");
-        const int lineRole = roleOf("line");
+        const int levelRole = roles.key(QByteArrayLiteral("headingLevel"), -1);
+        const int textRole = roles.key(QByteArrayLiteral("plainText"), -1);
+        const int viewRole = roles.key(QByteArrayLiteral("view"), -1);
+        const int lineRole = roles.key(QByteArrayLiteral("line"), -1);
         if (levelRole >= 0 && textRole >= 0) {
-            const int n = m_source->rowCount();
-            for (int i = 0; i < n; ++i) {
+            for (int i = 0, n = m_source->rowCount(); i < n; ++i) {
                 const QModelIndex idx = m_source->index(i, 0);
                 const int level = m_source->data(idx, levelRole).toInt();
                 if (level <= 0)
@@ -72,13 +65,12 @@ void OutlineModel::rebuild()
                 const QString text = m_source->data(idx, textRole).toString().simplified();
                 if (text.isEmpty())
                     continue;
-                next.append(Entry{ i, level, 0, text, lineRole >= 0 ? m_source->data(idx, lineRole).toInt() : -1 });
+                const int line = lineRole >= 0 ? m_source->data(idx, lineRole).toInt() : -1;
+                next.append(Entry{.row = i, .level = level, .text = text, .line = line});
+                minLevel = std::min(minLevel, level);
             }
         }
     }
-    int minLevel = 6;
-    for (const Entry &e : std::as_const(next))
-        minLevel = std::min(minLevel, e.level);
     for (Entry &e : next)
         e.depth = std::max(0, e.level - minLevel);
     if (next == m_rows)
@@ -98,10 +90,8 @@ void OutlineModel::rebuild()
 
 int OutlineModel::entryForSourceRow(int sourceRow) const
 {
-    int found = -1;
-    for (int i = 0; i < m_rows.size() && m_rows.at(i).row <= sourceRow; ++i)
-        found = i;
-    return found;
+    // The rows are in source order: the last heading at or above sourceRow.
+    return int(std::ranges::upper_bound(m_rows, sourceRow, {}, &Entry::row) - m_rows.cbegin()) - 1;
 }
 
 int OutlineModel::rowCount(const QModelIndex &parent) const
@@ -126,7 +116,9 @@ QVariant OutlineModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> OutlineModel::roleNames() const
 {
-    return { { RowRole, "row" }, { LevelRole, "level" }, { DepthRole, "depth" }, { TextRole, "text" }, { LineRole, "line" } };
+    static const QHash<int, QByteArray> names{
+            {RowRole, "row"}, {LevelRole, "level"}, {DepthRole, "depth"}, {TextRole, "text"}, {LineRole, "line"}};
+    return names;
 }
 
 } // namespace brulion::content

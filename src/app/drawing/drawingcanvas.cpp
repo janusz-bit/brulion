@@ -12,7 +12,6 @@
 #include "drawing/svgwrite.h"
 
 #include <QDateTime>
-#include <QGuiApplication>
 #include <QNativeGestureEvent>
 #include <QPainter>
 #include <QPointingDevice>
@@ -21,19 +20,36 @@
 #include <QTabletEvent>
 
 #include <algorithm>
-#include <climits>
+#include <chrono>
 #include <cmath>
 #include <utility>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::drawingview {
 
 namespace {
 
-drawing::Background backgroundOf(const QString &name)
+/// How many undo steps are kept.
+constexpr qsizetype MaxUndoSteps = 500;
+/// The room (px) left around the elements when the view is placed on them.
+constexpr double ViewMargin = 24;
+
+/// The pointer's look over the paper: a hand while it moves the paper, else the tool's.
+Qt::CursorShape cursorFor(bool panMode, const QString &tool)
 {
-    return drawing::backgroundFromName(name);
+    if (panMode)
+        return Qt::OpenHandCursor;
+    if (tool == u"select")
+        return Qt::ArrowCursor;
+    return tool == u"text" ? Qt::IBeamCursor : Qt::CrossCursor;
+}
+
+/// Excalidraw's seed and versionNonce: a random positive int.
+int randomNonce()
+{
+    return int(QRandomGenerator::global()->bounded(1, 2147483647));
 }
 
 const QStringList &tools()
@@ -56,7 +72,7 @@ DrawingCanvas::DrawingCanvas(QQuickItem *parent) : QQuickPaintedItem(parent)
     setOpaquePainting(true);
     setCursor(Qt::CrossCursor);
     m_settle.setSingleShot(true);
-    m_settle.setInterval(160);
+    m_settle.setInterval(160ms);
     connect(&m_settle, &QTimer::timeout, this, &DrawingCanvas::endViewGesture);
     // The selection's frame on screen moves with the view.
     connect(this, &DrawingCanvas::viewChanged, this, [this] {
@@ -102,10 +118,7 @@ void DrawingCanvas::setTool(const QString &tool)
     // (The selection belongs to the select tool: another tool draws on.)
     if (t != u"select")
         clearSelection();
-    setCursor(m_panMode        ? Qt::OpenHandCursor
-              : t == u"select" ? Qt::ArrowCursor
-              : t == u"text"   ? Qt::IBeamCursor
-                               : Qt::CrossCursor);
+    setCursor(cursorFor(m_panMode, t));
     update();
     Q_EMIT toolChanged();
 }
@@ -145,7 +158,7 @@ void DrawingCanvas::setColor(const QColor &color)
 void DrawingCanvas::setPenWidth(qreal width)
 {
     width = std::clamp(width, 0.1, 40.0);
-    if (qFuzzyCompare(width, m_penWidth))
+    if (!std::isfinite(width) || qFuzzyCompare(width, m_penWidth))
         return;
     m_penWidth = width;
     Q_EMIT penWidthChanged();
@@ -158,7 +171,7 @@ QString DrawingCanvas::background() const
 
 void DrawingCanvas::setBackground(const QString &name)
 {
-    const drawing::Background b = backgroundOf(name);
+    const drawing::Background b = drawing::backgroundFromName(name);
     if (b == m_doc.background || !m_editable)
         return;
     Op op;
@@ -266,15 +279,18 @@ QString DrawingCanvas::displayColorName(const QString &stored, bool highlighter)
 
 QStringList DrawingCanvas::paperColors() const
 {
-    QStringList out{u"#ffffff"_s, u"#fbf7ee"_s, u"#f5f0e1"_s, u"#f1f3f5"_s, u"#dee2e6"_s, u"#adb5bd"_s,
-                    u"#868e96"_s, u"#495057"_s, u"#343a40"_s, u"#1f2430"_s, u"#121212"_s, u"#000000"_s};
-    // (Saturation, lightness) of each shade, as Qt.hsla() made them.
-    static constexpr float Shades[3][2] = {{0.9f, 0.93f}, {0.75f, 0.82f}, {0.5f, 0.25f}};
-    for (const auto &shade : Shades) {
-        for (int h = 0; h < 12; ++h)
-            out.append(QColor::fromHslF(float(double(h) / 12), shade[0], shade[1], 1).name());
-    }
-    return out;
+    static const QStringList all = [] {
+        QStringList out{u"#ffffff"_s, u"#fbf7ee"_s, u"#f5f0e1"_s, u"#f1f3f5"_s, u"#dee2e6"_s, u"#adb5bd"_s,
+                        u"#868e96"_s, u"#495057"_s, u"#343a40"_s, u"#1f2430"_s, u"#121212"_s, u"#000000"_s};
+        // (Saturation, lightness) of each shade, as Qt.hsla() made them.
+        constexpr float Shades[3][2] = {{0.9f, 0.93f}, {0.75f, 0.82f}, {0.5f, 0.25f}};
+        for (const auto &shade : Shades) {
+            for (int h = 0; h < 12; ++h)
+                out.append(QColor::fromHslF(float(double(h) / 12), shade[0], shade[1], 1).name());
+        }
+        return out;
+    }();
+    return all;
 }
 
 void DrawingCanvas::setFingerDraws(bool on)
@@ -290,10 +306,7 @@ void DrawingCanvas::setPanMode(bool on)
     if (on == m_panMode)
         return;
     m_panMode = on;
-    setCursor(on                    ? Qt::OpenHandCursor
-              : m_tool == u"select" ? Qt::ArrowCursor
-              : m_tool == u"text"   ? Qt::IBeamCursor
-                                    : Qt::CrossCursor);
+    setCursor(cursorFor(on, m_tool));
     Q_EMIT panModeChanged();
 }
 
@@ -314,10 +327,7 @@ void DrawingCanvas::setInteractive(bool on)
         ungrabTouchPoints();
         unsetCursor();
     } else {
-        setCursor(m_panMode             ? Qt::OpenHandCursor
-                  : m_tool == u"select" ? Qt::ArrowCursor
-                  : m_tool == u"text"   ? Qt::IBeamCursor
-                                        : Qt::CrossCursor);
+        setCursor(cursorFor(m_panMode, m_tool));
     }
     setAcceptedMouseButtons(on ? Qt::LeftButton | Qt::RightButton | Qt::MiddleButton : Qt::NoButton);
     setAcceptTouchEvents(on);
@@ -360,7 +370,8 @@ void DrawingCanvas::syncPrepared()
     // Reused while the element's key, version, versionNonce and `updated` stay (another device's
     // edit of the same version differs in them); elements sharing all of them (a duplicated id)
     // take the prepared ones of their kind in order.
-    const auto stampOf = [](const QString &key, int version, int nonce, qint64 updated) {
+    // (A QString, not the builder: its parts are temporaries of this expression.)
+    const auto stampOf = [](const QString &key, int version, int nonce, qint64 updated) -> QString {
         return key + QChar(0x1f) + QString::number(version) + QChar(0x1f) + QString::number(nonce) + QChar(0x1f)
                + QString::number(updated);
     };
@@ -380,7 +391,7 @@ void DrawingCanvas::syncPrepared()
         const auto it = old.find(stampOf(key, s.version, s.versionNonce, s.updated));
         if (it != old.end() && !it->isEmpty()) {
             m_prepared.append(std::move(previous[it->takeFirst()]));
-            reusedHatch += m_prepared.last().hatch.size();
+            reusedHatch += m_prepared.constLast().hatch.size();
         } else {
             fresh.append(m_prepared.size());
             m_prepared.append(Prepared());
@@ -415,7 +426,8 @@ void DrawingCanvas::readEmbeddedLinks(const QByteArray &bytes, bool always)
 {
     QVariantList links;
     if (m_formatKnown && m_format == drawing::FileFormat::ExcalidrawMarkdown) {
-        for (const drawing::EmbeddedFile &f : drawing::embeddedFiles(bytes))
+        const QList<drawing::EmbeddedFile> files = drawing::embeddedFiles(bytes);
+        for (const drawing::EmbeddedFile &f : files)
             links.append(QVariantMap{{u"fileId"_s, f.fileId}, {u"link"_s, f.link}});
     }
     if (always || links != m_embeddedLinks) {
@@ -426,7 +438,7 @@ void DrawingCanvas::readEmbeddedLinks(const QByteArray &bytes, bool always)
 
 bool DrawingCanvas::provideEmbeddedFile(const QString &fileId, const QByteArray &bytes)
 {
-    const bool listed = std::any_of(m_embeddedLinks.cbegin(), m_embeddedLinks.cend(), [&fileId](const QVariant &v) {
+    const bool listed = std::ranges::any_of(std::as_const(m_embeddedLinks), [&fileId](const QVariant &v) {
         return v.toMap().value(u"fileId"_s).toString() == fileId;
     });
     if (!listed)
@@ -514,15 +526,15 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
     m_formatKnown = true;
     m_markdown = file->markdown;
     m_writable = true;
-    std::optional<drawing::Drawing> theirs = std::move(file->drawing);
+    drawing::Drawing theirs = std::move(file->drawing);
     // A gesture in progress goes on (a stroke is added when it ends, on top of the new elements);
     // the elements an erasing gesture has touched so far stay touched (by their keys).
-    const drawing::MergeBase taken = drawing::mergeBase(*theirs);
+    const drawing::MergeBase taken = drawing::mergeBase(theirs);
     if (m_modified)
-        *theirs = drawing::merge(m_base, m_doc, std::move(*theirs));
+        theirs = drawing::merge(m_base, m_doc, std::move(theirs));
     const QSet<QString> erasing = m_erasing;
     readEmbeddedLinks(bytes, false);
-    setDocument(std::move(*theirs));
+    setDocument(std::move(theirs));
     m_erasing = erasing;
     m_base = taken;
     m_known = bytes;
@@ -569,18 +581,17 @@ drawing::SvgOptions DrawingCanvas::svgOptions() const
     if (backdrop < 0 || m_doc.theme != drawing::PaperTheme::Dark)
         return options;
     const QString fileId = m_doc.strokes.at(backdrop).fileId;
-    auto it = m_darkBackdrops.find(fileId);
-    if (it == m_darkBackdrops.end()) {
+    if (!m_darkBackdrops.contains(fileId)) {
         // Once per backdrop: the dark twin painted already when there is one, else made now.
         QImage dark = m_pictures.value(darkPictureKey(fileId));
         if (dark.isNull())
             dark = darkImage(m_pictures.contains(fileId) ? m_pictures.value(fileId)
                                                          : decodePicture(m_doc.files, fileId));
         const drawing::BackdropImage encoded = encodeBackdrop(dark);
-        it = m_darkBackdrops.insert(fileId, encoded.bytes.isEmpty() ? QString() : drawing::dataUrl(encoded));
+        m_darkBackdrops.insert(fileId, encoded.bytes.isEmpty() ? QString() : drawing::dataUrl(encoded));
     }
-    if (!it->isEmpty())
-        options.pictureImages.insert(fileId, *it);
+    if (const QString url = m_darkBackdrops.value(fileId); !url.isEmpty())
+        options.pictureImages.insert(fileId, url);
     return options;
 }
 
@@ -693,7 +704,7 @@ void DrawingCanvas::prunePictures()
 void DrawingCanvas::push(Op op)
 {
     m_undo.append(std::move(op));
-    if (m_undo.size() > 500)
+    if (m_undo.size() > MaxUndoSteps)
         m_undo.removeFirst();
     m_redo.clear();
     Q_EMIT historyChanged();
@@ -779,7 +790,6 @@ void DrawingCanvas::placeView()
 {
     if (m_viewSet || width() <= 0 || height() <= 0)
         return;
-    constexpr double margin = 24;
     const QRectF b = contentBounds();
     if (b.isNull()) {
         m_zoom = 1;
@@ -787,8 +797,8 @@ void DrawingCanvas::placeView()
     } else {
         // From the top left of the strokes, at zoom 1 — or as wide as the view (notes are read
         // down the page: a tall page is scrolled, not shrunk).
-        m_zoom = std::clamp(std::min(1.0, (width() - 2 * margin) / std::max(1.0, b.width())), MinZoom, MaxZoom);
-        m_center = b.topLeft() + (QPointF(width() / 2, height() / 2) - QPointF(margin, margin)) / m_zoom;
+        m_zoom = std::clamp(std::min(1.0, (width() - 2 * ViewMargin) / std::max(1.0, b.width())), MinZoom, MaxZoom);
+        m_center = b.topLeft() + (QPointF(width() / 2, height() / 2) - QPointF(ViewMargin, ViewMargin)) / m_zoom;
     }
     m_viewSet = true;
     invalidateCache();
@@ -802,13 +812,12 @@ void DrawingCanvas::fitAll()
         m_zoom = 1;
         m_center = QPointF(width() / 2, height() / 2);
     } else {
-        constexpr double margin = 24;
-        const double z = std::min({(width() - 2 * margin) / std::max(1.0, b.width()),
-                                   (height() - 2 * margin) / std::max(1.0, b.height()), 1.0});
+        const double z = std::min({(width() - 2 * ViewMargin) / std::max(1.0, b.width()),
+                                   (height() - 2 * ViewMargin) / std::max(1.0, b.height()), 1.0});
         m_zoom = std::clamp(z, MinZoom, MaxZoom);
         // Centred across, from the top down (room left over stays below, where writing goes on);
         // a preview, where nothing is written, centred both ways.
-        m_center = m_interactive ? QPointF(b.center().x(), b.top() - margin / m_zoom + height() / (2 * m_zoom))
+        m_center = m_interactive ? QPointF(b.center().x(), b.top() - ViewMargin / m_zoom + height() / (2 * m_zoom))
                                  : b.center();
     }
     viewMoved(false);
@@ -1169,21 +1178,28 @@ bool eraserDevice(QPointingDevice::PointerType type)
     return type == QPointingDevice::PointerType::Eraser || int(type) == 3;
 }
 
+/// An item's children from the topmost down: by z, the later sibling first among equals.
+QList<QQuickItem *> childrenTopDown(QQuickItem *item)
+{
+    QList<QQuickItem *> children = item->childItems();
+    std::ranges::stable_sort(children, {}, &QQuickItem::z);
+    std::ranges::reverse(children);
+    return children;
+}
+
 /// The topmost visible, enabled item under `scenePos` that takes mouse or touch input.
 QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
 {
     if (!item->isVisible() || !item->isEnabled() || qFuzzyIsNull(item->opacity()))
         return nullptr;
+    const QList<QQuickItem *> children = childrenTopDown(item);
     if (item->inherits("QQuickOverlay")) {
         // Qt Quick Controls' popup layer: visible over the whole window whenever a Drawer exists
         // or any item is put there (the shell's toasts), and it takes every button. It lies over
         // the canvas only where an open popup is — or everywhere while a modal one is open (the
         // popup item's QObject parent is the popup) — and where an item put there takes input
         // (a toast, not the window-wide host of the toasts).
-        QList<QQuickItem *> children = item->childItems();
-        std::ranges::stable_sort(children, [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
-        for (auto it = children.crbegin(); it != children.crend(); ++it) {
-            QQuickItem *child = *it;
+        for (QQuickItem *child : children) {
             if (!child->isVisible())
                 continue;
             if (child->parent() && child->parent()->inherits("QQuickPopup")) {
@@ -1199,10 +1215,8 @@ QQuickItem *topInputItem(QQuickItem *item, QPointF scenePos)
     const QPointF local = item->mapFromScene(scenePos);
     if (item->clip() && !item->contains(local))
         return nullptr;
-    QList<QQuickItem *> children = item->childItems();
-    std::ranges::stable_sort(children, [](QQuickItem *a, QQuickItem *b) { return a->z() < b->z(); });
-    for (auto it = children.crbegin(); it != children.crend(); ++it) {
-        if (QQuickItem *hit = topInputItem(*it, scenePos))
+    for (QQuickItem *child : children) {
+        if (QQuickItem *hit = topInputItem(child, scenePos))
             return hit;
     }
     if (item->contains(local) && (item->acceptedMouseButtons() != Qt::NoButton || item->acceptTouchEvents()))
@@ -1286,7 +1300,7 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
             // pixel beside the last move (it resamples moves): the line ends with the pressure it
             // had, a stylus pressing one pressure stays without pressure.
             Pointer up = p;
-            up.pressure = m_live.points.last().pressure;
+            up.pressure = m_live.points.constLast().pressure;
             endToolGesture(pos, up);
             return true;
         }
@@ -1316,8 +1330,7 @@ DrawingCanvas::Pointer DrawingCanvas::pointerOf(const QPointerEvent *event) cons
         p.eraser = eraserDevice(device->pointerType());
         p.touch = device->type() == QInputDevice::DeviceType::TouchScreen;
     }
-    if (const auto *mouse = dynamic_cast<const QSinglePointEvent *>(event))
-        p.modifiers = mouse->modifiers();
+    p.modifiers = event->modifiers();
     return p;
 }
 
@@ -1625,11 +1638,12 @@ void DrawingCanvas::extendStroke(QPointF itemPos, const Pointer &p)
 {
     if (m_gesture != Gesture::Draw)
         return;
-    const QPointF scene(std::clamp(toScene(itemPos).x(), -drawing::CoordinateLimit, drawing::CoordinateLimit),
-                        std::clamp(toScene(itemPos).y(), -drawing::CoordinateLimit, drawing::CoordinateLimit));
+    constexpr double L = drawing::CoordinateLimit;
+    const QPointF at = toScene(itemPos);
+    const QPointF scene(std::clamp(at.x(), -L, L), std::clamp(at.y(), -L, L));
     const double pressure = m_live.tool == drawing::Tool::Highlighter || !m_liveStylus ? 0.5 : p.pressure;
     if (!m_live.points.isEmpty()) {
-        const drawing::StrokePoint &last = m_live.points.last();
+        const drawing::StrokePoint &last = m_live.points.constLast();
         if (std::hypot(scene.x() - last.x, scene.y() - last.y) * m_zoom < 0.75)
             return; // too close to show
     }
@@ -1661,8 +1675,8 @@ void DrawingCanvas::finishStroke()
     }
     drawing::normalizeStroke(s);
     s.id = drawing::newElementId();
-    s.seed = int(QRandomGenerator::global()->bounded(1, 2147483647));
-    s.versionNonce = int(QRandomGenerator::global()->bounded(1, 2147483647));
+    s.seed = randomNonce();
+    s.versionNonce = randomNonce();
     s.version = 1;
     s.updated = m_clock ? m_clock() : 0;
     // The fast path: one element on top, drawn into the cached image as it is.

@@ -9,16 +9,9 @@ WorkspaceListModel::WorkspaceListModel(QObject *parent) : QAbstractListModel(par
     m_timer.setSingleShot(true);
     connect(&m_timer, &QTimer::timeout, this, &WorkspaceListModel::refreshNow);
     // Row counts change through every kind of model signal: one place tells QML.
-    const auto counted = [this] {
-        const int n = rows();
-        if (n != m_lastCount) {
-            m_lastCount = n;
-            Q_EMIT countChanged();
-        }
-    };
-    connect(this, &QAbstractItemModel::rowsInserted, this, counted);
-    connect(this, &QAbstractItemModel::rowsRemoved, this, counted);
-    connect(this, &QAbstractItemModel::modelReset, this, counted);
+    connect(this, &QAbstractItemModel::rowsInserted, this, &WorkspaceListModel::publishCount);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &WorkspaceListModel::publishCount);
+    connect(this, &QAbstractItemModel::modelReset, this, &WorkspaceListModel::publishCount);
 }
 
 WorkspaceListModel::~WorkspaceListModel() = default;
@@ -92,12 +85,28 @@ void WorkspaceListModel::refreshNow()
 {
     m_timer.stop();
     refresh();
-    const int n = rows();
-    if (n != m_lastCount) {
-        m_lastCount = n;
-        Q_EMIT countChanged();
-    }
+    publishCount();
     Q_EMIT refreshed();
+}
+
+void WorkspaceListModel::publishCount()
+{
+    const int n = rows();
+    if (n == m_lastCount)
+        return;
+    m_lastCount = n;
+    Q_EMIT countChanged();
+}
+
+QVariantMap WorkspaceListModel::rowMap(int row) const
+{
+    QVariantMap out;
+    if (row < 0 || row >= rows())
+        return out;
+    const QHash<int, QByteArray> names = roleNames();
+    for (const auto &[role, name] : names.asKeyValueRange())
+        out.insert(QString::fromLatin1(name), data(index(row), role));
+    return out;
 }
 
 } // namespace brulion::content

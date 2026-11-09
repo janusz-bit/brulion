@@ -14,7 +14,9 @@
 #include <QHash>
 #include <QList>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
+#include <QVariantMap>
 
 #include <algorithm>
 
@@ -68,6 +70,8 @@ protected:
     void setRefreshDelay(int ms) { m_refreshDelay = ms; }
     /// Called when the workspace changes or a vault opens/closes (before the refresh).
     virtual void workspaceReset() { }
+    /// Every role of row `row` by name ({} for a bad row): the subclasses' get().
+    QVariantMap rowMap(int row) const;
 
     /// Replace `rows` by `next` with fine-grained model signals. `key(row)` identifies rows
     /// (unique in each list); `same(a, b)` decides whether a kept row changed its data.
@@ -76,6 +80,8 @@ protected:
 
 private:
     void connectWorkspace();
+    /// countChanged() when the row count differs from the last one told.
+    void publishCount();
 
     QPointer<shell::Workspace> m_workspace;
     QTimer m_timer;
@@ -117,10 +123,10 @@ void WorkspaceListModel::applyRows(QList<Row> &rows, QList<Row> next, KeyFn key,
     }
 
     // Walk the wanted order: keep, move up, or insert.
-    QHash<Key, bool> present;
+    QSet<Key> present;
     present.reserve(rows.size());
     for (const Row &r : std::as_const(rows))
-        present.insert(key(r), true);
+        present.insert(key(r));
     constexpr int MaxMoves = 64;
     int moves = 0;
     for (int i = 0; i < next.size(); ++i) {

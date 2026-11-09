@@ -8,6 +8,7 @@
 #include <QHash>
 
 #include <algorithm>
+#include <utility>
 
 namespace brulion::content {
 
@@ -17,11 +18,7 @@ namespace {
 
 QVariantList toVariantList(const QList<int> &list)
 {
-    QVariantList out;
-    out.reserve(list.size());
-    for (const int v : list)
-        out.append(v);
-    return out;
+    return QVariantList(list.cbegin(), list.cend());
 }
 
 } // namespace
@@ -93,18 +90,18 @@ void SearchResultModel::refresh()
                 continue;
             if (next.size() >= m_limit)
                 continue;
-            Hit h;
-            h.path = hit.path;
-            h.title = hit.title.isEmpty() ? paths::pageTitle(hit.path) : hit.title;
-            h.folder = folder;
-            h.line = hit.line;
+            const QString title = hit.title.isEmpty() ? paths::pageTitle(hit.path) : hit.title;
             // Readable text: [[Page|text]] shows as "text" (positions are computed on this).
-            h.excerpt = oneLine(plainText(hit.excerpt, idx), 260);
-            h.excerptMatches = toVariantList(matchPositions(h.excerpt, terms));
-            h.titleMatches = toVariantList(matchPositions(h.title, terms));
-            h.journalDate = journal ? isoDate(*note->journalDate) : QString();
-            h.score = hit.score;
-            next.append(h);
+            const QString excerpt = oneLine(plainText(hit.excerpt, idx), 260);
+            next.append(Hit{.path = hit.path,
+                            .title = title,
+                            .folder = folder,
+                            .line = hit.line,
+                            .excerpt = excerpt,
+                            .excerptMatches = toVariantList(matchPositions(excerpt, terms)),
+                            .titleMatches = toVariantList(matchPositions(title, terms)),
+                            .journalDate = journal ? isoDate(*note->journalDate) : QString(),
+                            .score = hit.score});
         }
     }
     // Hits come in the index's order: what the user typed (also as a prefix, diacritics ignored:
@@ -113,8 +110,9 @@ void SearchResultModel::refresh()
 
     QVariantList folders;
     QList<std::pair<QString, int>> sorted;
-    for (auto it = folderCounts.cbegin(); it != folderCounts.cend(); ++it)
-        sorted.append({ it.key(), it.value() });
+    sorted.reserve(folderCounts.size());
+    for (const auto &[folder, count] : std::as_const(folderCounts).asKeyValueRange())
+        sorted.emplaceBack(folder, count);
     std::ranges::sort(sorted, [](const auto &a, const auto &b) {
         return a.second != b.second ? a.second > b.second : compareNames(a.first, b.first) < 0;
     });
@@ -149,22 +147,21 @@ QVariant SearchResultModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> SearchResultModel::roleNames() const
 {
-    return { { PathRole, "path" },           { TitleRole, "title" },
-             { FolderRole, "folder" },       { LineRole, "line" },
-             { ExcerptRole, "excerpt" },     { ExcerptMatchesRole, "excerptMatches" },
-             { TitleMatchesRole, "titleMatches" }, { JournalDateRole, "journalDate" },
-             { ScoreRole, "score" } };
+    static const QHash<int, QByteArray> names{{PathRole, "path"},
+                                              {TitleRole, "title"},
+                                              {FolderRole, "folder"},
+                                              {LineRole, "line"},
+                                              {ExcerptRole, "excerpt"},
+                                              {ExcerptMatchesRole, "excerptMatches"},
+                                              {TitleMatchesRole, "titleMatches"},
+                                              {JournalDateRole, "journalDate"},
+                                              {ScoreRole, "score"}};
+    return names;
 }
 
 QVariantMap SearchResultModel::get(int row) const
 {
-    QVariantMap out;
-    if (row < 0 || row >= m_rows.size())
-        return out;
-    const QHash<int, QByteArray> names = roleNames();
-    for (auto it = names.cbegin(); it != names.cend(); ++it)
-        out.insert(QString::fromLatin1(it.value()), data(index(row), it.key()));
-    return out;
+    return rowMap(row);
 }
 
 } // namespace brulion::content

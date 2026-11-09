@@ -79,6 +79,7 @@ Item {
     /// "Drawing on a picture or PDF…": the browser's pick and a picture being prepared (0 none).
     property int backdropPick: 0
     property int backdropJob: 0
+    readonly property list<int> noPages: []
     /// The picked file's vault path until a drawing uses it: abandoned, its copy goes again
     /// (PageController.discardBackdropSource).
     property string backdropImport: ""
@@ -231,18 +232,9 @@ Item {
         field = which
         mode = "token"
         answer.map = controller.blockDates(r)
-        const current = BlockViews.textAt(answer.map, which)
-        parts.map = DatesHelper.splitSpec(current)
-        const ok = parts.map.ok === true
-        dateTitle = which === "scheduled" ? qsTr("Scheduled") : which === "start" ? qsTr("Start date") : qsTr("Due date")
-        dateIcon = which === "scheduled" ? "hourglass" : "calendar"
-        dateSelected = ok ? BlockViews.textAt(parts.map, "date") : DatesHelper.addDays(DatesHelper.today, 1)
-        dateTime = ok ? BlockViews.textAt(parts.map, "time") : ""
-        dateWithTime = true
-        dateTimeRequired = false
-        dateRemovable = current !== ""
-        dateRemoveText = qsTr("Remove")
-        datePopup().open()
+        const current = root.answerText(which)
+        showDate(dateKindTitle(which), dateKindIcon(which), current, tomorrow(), true, false, current !== "",
+                 qsTr("Remove"))
     }
     function pickDateAt(r: int, f: int, t: int, kind: string, at: string): void {
         remember(r)
@@ -258,17 +250,8 @@ Item {
     function pickPropertyDate(target: string, title: string, at: string, withTime: bool): void {
         applyTarget = target
         mode = "apply"
-        parts.map = DatesHelper.splitSpec(at)
-        const ok = parts.map.ok === true
-        dateTitle = title
-        dateIcon = withTime ? "calendar-clock" : "calendar"
-        dateSelected = ok ? BlockViews.textAt(parts.map, "date") : DatesHelper.today
-        dateTime = ok && withTime ? BlockViews.textAt(parts.map, "time") : ""
-        dateWithTime = withTime
-        dateTimeRequired = false
-        dateRemovable = at !== ""
-        dateRemoveText = qsTr("Clear")
-        datePopup().open()
+        showDate(title, withTime ? "calendar-clock" : "calendar", at, DatesHelper.today, withTime, false,
+                 at !== "", qsTr("Clear"))
     }
     /// The date dialog for a date token (or day link) elsewhere: applied(target, "set", value) /
     /// (target, "remove").
@@ -279,33 +262,55 @@ Item {
     }
     function openDateDialog(kind: string, at: string): void {
         const day = kind === "day"
-        parts.map = DatesHelper.splitSpec(at)
-        const ok = parts.map.ok === true
-        dateTitle = day ? qsTr("Link to a day") : kind === "scheduled" ? qsTr("Scheduled")
-                  : kind === "start" ? qsTr("Start date") : kind === "created" ? qsTr("Created")
-                  : kind === "done" ? qsTr("Done date") : kind === "cancelled" ? qsTr("Cancelled date")
-                  : kind === "reminder" ? qsTr("Reminder") : qsTr("Due date")
-        dateIcon = day ? "calendar-days" : kind === "scheduled" ? "hourglass" : kind === "done" ? "calendar-check"
-                 : kind === "reminder" ? "calendar-clock" : "calendar"
-        dateSelected = ok ? BlockViews.textAt(parts.map, "date") : DatesHelper.today
-        dateTime = ok && !day ? BlockViews.textAt(parts.map, "time") : ""
-        dateWithTime = !day
-        dateTimeRequired = kind === "reminder"
-        dateRemovable = !day
-        dateRemoveText = qsTr("Remove")
-        datePopup().open()
+        showDate(dateKindTitle(kind), dateKindIcon(kind), at, DatesHelper.today, !day, kind === "reminder", !day,
+                 qsTr("Remove"))
     }
     function pickJournalDate(r: int, c: int): void {
         remember(r)
         cursor = c
         mode = "journal"
-        dateTitle = qsTr("Link to a day")
-        dateIcon = "calendar-days"
-        dateSelected = DatesHelper.today
-        dateTime = ""
-        dateWithTime = false
-        // (The journal link keeps whatever "time required" was: it has no time.)
-        dateRemovable = false
+        // (The journal link keeps whatever "time required" and the remove text were: it has no time
+        // and nothing to remove.)
+        showDate(dateKindTitle("day"), dateKindIcon("day"), "", DatesHelper.today, false, dateTimeRequired, false,
+                 dateRemoveText)
+    }
+    function tomorrow(): string {
+        return DatesHelper.addDays(DatesHelper.today, 1)
+    }
+    function dateKindTitle(kind: string): string {
+        switch (kind) {
+        case "day": return qsTr("Link to a day")
+        case "scheduled": return qsTr("Scheduled")
+        case "start": return qsTr("Start date")
+        case "created": return qsTr("Created")
+        case "done": return qsTr("Done date")
+        case "cancelled": return qsTr("Cancelled date")
+        case "reminder": return qsTr("Reminder")
+        }
+        return qsTr("Due date")
+    }
+    function dateKindIcon(kind: string): string {
+        switch (kind) {
+        case "day": return "calendar-days"
+        case "scheduled": return "hourglass"
+        case "done": return "calendar-check"
+        case "reminder": return "calendar-clock"
+        }
+        return "calendar"
+    }
+    /// Open the date dialog on the date (and time) in `at`, else on `fallback`.
+    function showDate(title: string, icon: string, at: string, fallback: string, withTime: bool,
+                      timeRequired: bool, removable: bool, removeText: string): void {
+        parts.map = DatesHelper.splitSpec(at)
+        const ok = parts.map.ok === true
+        dateTitle = title
+        dateIcon = icon
+        dateSelected = ok ? BlockViews.textAt(parts.map, "date") : fallback
+        dateTime = ok && withTime ? BlockViews.textAt(parts.map, "time") : ""
+        dateWithTime = withTime
+        dateTimeRequired = timeRequired
+        dateRemovable = removable
+        dateRemoveText = removeText
         datePopup().open()
     }
     function pickRecurrence(r: int): void {
@@ -388,10 +393,7 @@ Item {
             backdropDialog.openFor(path, "insert", 1)
             return
         }
-        backdropJob = DrawingBackdrops.prepare(path, root.noPages(), true)
-    }
-    function noPages(): list<int> {
-        return []
+        backdropJob = DrawingBackdrops.prepare(path, root.noPages, true)
     }
     /// No drawing was made of the picked file: the copy stored for it goes (never a file of the
     /// notebook or one reused).
@@ -479,13 +481,15 @@ Item {
         }
     }
 
+    component EditorPicker: FilePicker {
+        dark: Theme.dark
+        colors: Theme.colors
+    }
     Component {
         id: backdropPickerComponent
-        FilePicker {
+        EditorPicker {
             title: qsTr("Drawing on a picture or PDF")
             fileMode: FilePicker.OpenFile
-            dark: Theme.dark
-            colors: Theme.colors
             nameFilters: DrawingBackdrops.nameFilters
             onAccepted: root.useBackdropSource(root.controller ? root.controller.importBackdropSource(selectedFile) : "")
             onRejected: root.refocus()
@@ -515,16 +519,15 @@ Item {
 
     Component {
         id: imageComponent
-        FilePicker {
+        EditorPicker {
             title: qsTr("Insert a picture")
             fileMode: FilePicker.OpenFiles
-            dark: Theme.dark
-            colors: Theme.colors
             nameFilters: root.controller ? root.controller.imageNameFilters : []
             onAccepted: {
                 const r = root.blockRow()
                 const c = r >= 0 ? root.cursor : -1
-                answer.map = r >= 0 ? root.controller.blocks.get(r) : ({})
+                if (r >= 0)
+                    answer.map = root.controller.blocks.get(r)
                 if (r >= 0 && answer.map.view === "text")
                     root.controller.insertFiles(r, c, c, selectedFiles)
                 else
@@ -550,14 +553,13 @@ Item {
 
     Component {
         id: fileLinkComponent
-        FilePicker {
+        EditorPicker {
             title: qsTr("Link to a file")
             fileMode: FilePicker.OpenFiles
-            dark: Theme.dark
-            colors: Theme.colors
             onAccepted: {
                 const r = root.blockRow()
-                root.controller.insertFileLinks(r, r >= 0 ? root.cursor : -1, r >= 0 ? root.cursor : -1, selectedFiles)
+                const c = r >= 0 ? root.cursor : -1
+                root.controller.insertFileLinks(r, c, c, selectedFiles)
                 root.refocus()
             }
             onRejected: root.refocus()
@@ -579,11 +581,9 @@ Item {
 
     Component {
         id: csvComponent
-        FilePicker {
+        EditorPicker {
             title: qsTr("Table from a CSV file")
             fileMode: FilePicker.OpenFile
-            dark: Theme.dark
-            colors: Theme.colors
             nameFilters: [qsTr("CSV files (*.csv *.tsv *.txt)"), qsTr("All files (*)")]
             onAccepted: {
                 answer.map = root.controller.insertCsvFile(root.blockRow(), selectedFile)
@@ -613,12 +613,10 @@ Item {
 
     Component {
         id: csvSaveComponent
-        FilePicker {
+        EditorPicker {
             objectName: "tableCsvSaveDialog"
             title: qsTr("Save the table as CSV")
             fileMode: FilePicker.SaveFile
-            dark: Theme.dark
-            colors: Theme.colors
             nameFilters: [qsTr("CSV files (*.csv)")]
             defaultSuffix: "csv"
             onAccepted: {

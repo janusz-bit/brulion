@@ -110,12 +110,9 @@ Check::Check(Target target, QString password, sync::HttpTransport *transport, st
     });
 }
 
-Check::~Check()
-{
-    // The engine first (it abandons a running run), then the client, then the notebook (its vault).
-    m_engine.reset();
-    m_client.reset();
-}
+// Members go in reverse order of declaration: the engine first (it abandons a running run), then
+// the client, then the notebook (its vault).
+Check::~Check() = default;
 
 QDateTime Check::now() const
 {

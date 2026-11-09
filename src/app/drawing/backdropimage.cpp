@@ -65,11 +65,18 @@ QString nameOf(const QString &vaultPath)
     return name.isEmpty() ? QFileInfo(vaultPath).fileName() : name;
 }
 
-PreparedBackdrop failed(const QString &vaultPath, int page, QStringView error)
+/// A backdrop of `vaultPath` (page `page`) with nothing prepared yet.
+PreparedBackdrop prepared(const QString &vaultPath, int page)
 {
     PreparedBackdrop out;
     out.source = drawing::BackdropSource{vaultPath, page};
     out.name = nameOf(vaultPath);
+    return out;
+}
+
+PreparedBackdrop failed(const QString &vaultPath, int page, QStringView error)
+{
+    PreparedBackdrop out = prepared(vaultPath, page);
     out.error = error.toString();
     return out;
 }
@@ -89,16 +96,16 @@ drawing::BackdropImage encodeBackdrop(const QImage &source)
     if (source.isNull())
         return {};
     QImage image = source;
-    if (image.width() > drawing::BackdropMaxPixels || image.height() > drawing::BackdropMaxPixels)
+    const auto longSide = [&image] { return std::max(image.width(), image.height()); };
+    if (longSide() > drawing::BackdropMaxPixels)
         image = image.scaled(within(image.size(), drawing::BackdropMaxPixels), Qt::IgnoreAspectRatio,
                              Qt::SmoothTransformation);
     const bool alpha = seeThrough(image);
     if (!alpha)
         image = image.convertToFormat(QImage::Format_RGB32);
     drawing::BackdropImage out = smaller(image, alpha);
-    while (out.bytes.size() > drawing::MaxBackdropBytes
-           && std::max(image.width(), image.height()) > drawing::BackdropMinPixels) {
-        const int side = std::max(drawing::BackdropMinPixels, int(std::max(image.width(), image.height()) * 0.75));
+    while (out.bytes.size() > drawing::MaxBackdropBytes && longSide() > drawing::BackdropMinPixels) {
+        const int side = std::max(drawing::BackdropMinPixels, int(longSide() * 0.75));
         image = image.scaled(within(image.size(), side), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         out = smaller(image, alpha);
     }
@@ -126,13 +133,11 @@ PreparedBackdrop prepareBackdropPicture(const QString &absoluteFile, const QStri
     if (bytes.isEmpty())
         return failed(vaultPath, 0, backdroperror::Format);
 
-    PreparedBackdrop out;
-    out.source = drawing::BackdropSource{vaultPath, 0};
-    out.name = nameOf(vaultPath);
-
+    PreparedBackdrop out = prepared(vaultPath, 0);
     QBuffer buffer;
     buffer.setData(bytes);
-    buffer.open(QIODevice::ReadOnly);
+    if (!buffer.open(QIODevice::ReadOnly))
+        return failed(vaultPath, 0, backdroperror::Format);
     QImageReader reader(&buffer);
     reader.setAllocationLimit(256);
     reader.setAutoTransform(true);
@@ -155,7 +160,6 @@ PreparedBackdrop prepareBackdropPicture(const QString &absoluteFile, const QStri
         QPainter p(&image);
         renderer.render(&p, QRectF(QPointF(0, 0), QSizeF(size)));
         p.end();
-        out.image = encodeBackdrop(image);
     } else {
         if (format.isEmpty() || !reader.canRead())
             return failed(vaultPath, 0, backdroperror::Format);
@@ -174,8 +178,8 @@ PreparedBackdrop prepareBackdropPicture(const QString &absoluteFile, const QStri
         image = reader.read();
         if (image.isNull())
             return failed(vaultPath, 0, backdroperror::Format);
-        out.image = encodeBackdrop(image);
     }
+    out.image = encodeBackdrop(image);
     if (out.image.bytes.isEmpty())
         return failed(vaultPath, 0, backdroperror::Format);
     return out;
@@ -191,9 +195,7 @@ PreparedBackdrop prepareBackdropPdfPage(const QString &absoluteFile, const QStri
     if (rendered.isNull()) // (why: a password, or anything else)
         return failed(vaultPath, page,
                       platform::pdfInfo(absoluteFile, false).locked ? backdroperror::Locked : backdroperror::Pdf);
-    PreparedBackdrop out;
-    out.source = drawing::BackdropSource{vaultPath, page};
-    out.name = nameOf(vaultPath);
+    PreparedBackdrop out = prepared(vaultPath, page);
     out.image = encodeBackdrop(rendered);
     if (out.image.bytes.isEmpty())
         return failed(vaultPath, page, backdroperror::Pdf);

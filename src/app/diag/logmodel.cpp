@@ -19,8 +19,6 @@ LogModel::LogModel(QObject *parent) : QAbstractListModel(parent)
     setLogger(Logger::instance());
 }
 
-LogModel::~LogModel() = default;
-
 void LogModel::setLogger(Logger *logger)
 {
     QObject::disconnect(m_appended);
@@ -35,12 +33,12 @@ void LogModel::setLogger(Logger *logger)
 
 LogModel::Item LogModel::makeItem(const Entry &entry, bool earlier)
 {
-    Item item;
-    item.entry = entry;
-    item.group = logging::categoryGroup(entry.category);
-    item.folded = text::foldKey(QString(entry.category + u' ' + entry.message));
-    item.earlier = earlier;
-    return item;
+    return Item{
+            .entry = entry,
+            .group = logging::categoryGroup(entry.category),
+            .folded = text::foldKey(QString(entry.category + u' ' + entry.message)),
+            .earlier = earlier,
+    };
 }
 
 bool LogModel::matches(const Item &item) const
@@ -58,15 +56,24 @@ bool LogModel::matches(const Item &item) const
     return true;
 }
 
+void LogModel::refilter()
+{
+    m_rows.clear();
+    for (int i = 0; i < m_all.size(); ++i) {
+        if (matches(m_all.at(i)))
+            m_rows.append(i);
+    }
+}
+
 void LogModel::reload()
 {
     beginResetModel();
     m_all.clear();
-    m_rows.clear();
     m_lastSeq = 0;
     if (m_logger) {
         if (m_includeEarlier) {
-            for (const Entry &e : m_logger->earlierEntries())
+            const QList<Entry> earlier = m_logger->earlierEntries();
+            for (const Entry &e : earlier)
                 m_all.append(makeItem(e, true));
         }
         const QList<Entry> entries = m_logger->entries();
@@ -75,10 +82,7 @@ void LogModel::reload()
         if (!entries.isEmpty())
             m_lastSeq = entries.last().seq;
     }
-    for (int i = 0; i < m_all.size(); ++i) {
-        if (matches(m_all.at(i)))
-            m_rows.append(i);
-    }
+    refilter();
     endResetModel();
     Q_EMIT countChanged();
 }
@@ -86,19 +90,18 @@ void LogModel::reload()
 void LogModel::rebuild()
 {
     beginResetModel();
-    m_rows.clear();
-    for (int i = 0; i < m_all.size(); ++i) {
-        if (matches(m_all.at(i)))
-            m_rows.append(i);
-    }
+    refilter();
     endResetModel();
     Q_EMIT countChanged();
+    Q_EMIT filterChanged();
 }
 
 void LogModel::onAppended()
 {
     if (!m_logger)
         return;
+    // Keep this session's part within the ring's size (plus the earlier entries).
+    const qsizetype limit = qsizetype(m_logger->capacity()) * 2;
     // From the newest known entry on: its repeat count may have grown.
     const QList<Entry> fresh = m_logger->entries(m_lastSeq > 0 ? m_lastSeq - 1 : 0);
     if (fresh.isEmpty())
@@ -109,23 +112,9 @@ void LogModel::onAppended()
         reload();
         return;
     }
-    const int oldCount = int(m_rows.size());
     for (const Entry &e : fresh) {
         if (e.seq <= m_lastSeq) {
-            // The newest known entry again: update its repeat.
-            for (qsizetype i = m_all.size() - 1; i >= 0; --i) {
-                Item &item = m_all[i];
-                if (item.earlier || item.entry.seq != e.seq)
-                    continue;
-                if (item.entry.repeat != e.repeat) {
-                    item.entry.repeat = e.repeat;
-                    item.entry.lastTime = e.lastTime;
-                    const qsizetype row = m_rows.lastIndexOf(int(i));
-                    if (row >= 0)
-                        Q_EMIT dataChanged(index(int(row)), index(int(row)), {RepeatRole});
-                }
-                break;
-            }
+            updateRepeat(e);
             continue;
         }
         m_all.append(makeItem(e, false));
@@ -137,14 +126,27 @@ void LogModel::onAppended()
             endInsertRows();
         }
     }
-    // Keep this session's part within the ring's size (plus the earlier entries).
-    const int limit = (m_logger ? m_logger->capacity() : 5000) * 2;
-    if (m_all.size() > limit) {
+    if (m_all.size() > limit)
         reload();
+    else
+        Q_EMIT countChanged();
+}
+
+/// The newest known entry again: its repeat may have grown.
+void LogModel::updateRepeat(const Entry &e)
+{
+    for (qsizetype i = m_all.size() - 1; i >= 0; --i) {
+        Item &item = m_all[i];
+        if (item.earlier || item.entry.seq != e.seq)
+            continue;
+        if (item.entry.repeat != e.repeat) {
+            item.entry.repeat = e.repeat;
+            item.entry.lastTime = e.lastTime;
+            if (const qsizetype row = m_rows.lastIndexOf(int(i)); row >= 0)
+                Q_EMIT dataChanged(index(int(row)), index(int(row)), {RepeatRole});
+        }
         return;
     }
-    if (m_rows.size() != oldCount || !fresh.isEmpty())
-        Q_EMIT countChanged();
 }
 
 void LogModel::onCleared()
@@ -184,11 +186,12 @@ QVariant LogModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> LogModel::roleNames() const
 {
-    return {
+    static const QHash<int, QByteArray> names{
             {SeqRole, "seq"},         {TimeRole, "time"},     {TimeTextRole, "timeText"}, {DayRole, "day"},
             {LevelRole, "level"},     {LetterRole, "letter"}, {GroupRole, "group"},       {CategoryRole, "category"},
             {MessageRole, "message"}, {RepeatRole, "repeat"}, {EarlierRole, "earlier"},
     };
+    return names;
 }
 
 void LogModel::setGroup(const QString &group)
@@ -197,7 +200,6 @@ void LogModel::setGroup(const QString &group)
         return;
     m_group = group;
     rebuild();
-    Q_EMIT filterChanged();
 }
 
 QString LogModel::minLevel() const
@@ -212,7 +214,6 @@ void LogModel::setMinLevel(const QString &level)
         return;
     m_minLevel = parsed;
     rebuild();
-    Q_EMIT filterChanged();
 }
 
 void LogModel::setSearch(const QString &search)
@@ -222,7 +223,6 @@ void LogModel::setSearch(const QString &search)
     m_search = search;
     m_foldedSearch = text::foldKey(search.trimmed());
     rebuild();
-    Q_EMIT filterChanged();
 }
 
 void LogModel::setFromMs(qint64 ms)
@@ -231,7 +231,6 @@ void LogModel::setFromMs(qint64 ms)
         return;
     m_fromMs = ms;
     rebuild();
-    Q_EMIT filterChanged();
 }
 
 void LogModel::setToMs(qint64 ms)
@@ -240,7 +239,6 @@ void LogModel::setToMs(qint64 ms)
         return;
     m_toMs = ms;
     rebuild();
-    Q_EMIT filterChanged();
 }
 
 void LogModel::setIncludeEarlier(bool on)

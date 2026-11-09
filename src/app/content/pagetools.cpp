@@ -19,6 +19,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <utility>
 
 namespace brulion::content {
 
@@ -29,6 +30,11 @@ namespace {
 QString withoutMd(const QString &title)
 {
     return title.endsWith(u".md"_s, Qt::CaseInsensitive) ? title.left(title.size() - 3) : title;
+}
+
+QString tagKey(const QString &display)
+{
+    return display.normalized(QString::NormalizationForm_C).toLower();
 }
 
 /// The tag that names the page at `path` (docs/SYNTAX.md §3): its key and how it is shown —
@@ -46,27 +52,24 @@ PageTag pageTag(const VaultIndex *idx, const QString &path)
     if (!paths::isMarkdown(path))
         return {};
     const QString title = paths::pageTitle(path);
-    PageTag tag{title.normalized(QString::NormalizationForm_C).toLower(), title};
+    PageTag tag{tagKey(title), title};
     if (!idx)
         return tag;
     if (const auto named = idx->resolveTag(tag.key); named && *named != path) {
         tag.display = paths::stripMarkdownExtension(path);
-        tag.key = tag.display.normalized(QString::NormalizationForm_C).toLower();
+        tag.key = tagKey(tag.display);
     }
     const QStringList naming = idx->tagsNaming(path);
     if (!idx->note(path)) {
-        QString exact;
-        for (const QString &key : naming) {
-            const qsizetype depth = key.count(u'/');
-            const qsizetype best = exact.count(u'/');
-            if (exact.isEmpty() || depth > best || (depth == best && key.size() > exact.size()))
-                exact = key;
-        }
-        if (!exact.isEmpty())
-            tag = {exact, exact};
+        // The deepest key, the longest of those.
+        const auto exactness = [](const QString &key) { return std::pair(key.count(u'/'), key.size()); };
+        if (const auto exact = std::ranges::max_element(naming, {}, exactness);
+            exact != naming.cend() && !exact->isEmpty())
+            tag = {*exact, *exact};
     }
     PageTag other;
-    for (const TagCount &t : idx->tags()) { // most used first
+    const QList<TagCount> tags = idx->tags();
+    for (const TagCount &t : tags) { // most used first
         if (t.tag == tag.key) {
             if (!t.display.isEmpty())
                 tag.display = t.display;
@@ -83,12 +86,100 @@ QString propertyText(const QVariant &value)
     if (value.metaType() == QMetaType::fromType<QStringList>())
         return value.toStringList().join(u", "_s);
     if (value.metaType() == QMetaType::fromType<QVariantList>()) {
+        const QVariantList list = value.toList();
         QStringList parts;
-        for (const QVariant &v : value.toList())
+        parts.reserve(list.size());
+        for (const QVariant &v : list)
             parts.append(v.toString());
         return parts.join(u", "_s);
     }
     return value.toString();
+}
+
+/// Whether the ```query filter `q` of the note `source` names the page `path` — the filters
+/// VaultIndex::planRelocation() rewrites on a rename: its tags `keys` (tag:, #tag) and the page
+/// itself (ref:, [[…]], page:, path:).
+bool queryNamesPage(const VaultIndex *idx, const QueryNameRef &q, const VaultPath &source, const QString &path,
+                    const QStringList &keys)
+{
+    const QString value = q.value.trimmed();
+    switch (q.kind) {
+    case QueryFilterKind::Tag: return keys.contains(tagKey(value));
+    case QueryFilterKind::Ref:
+    case QueryFilterKind::Page: {
+        const auto cut = std::ranges::find_if(value, [](QChar c) { return c == u'#' || c == u'|'; });
+        const QString target = value.first(cut - value.cbegin()).trimmed();
+        return !target.isEmpty() && !target.contains(u'*')
+               && idx->resolveLink(target, source).value_or(QString()) == path;
+    }
+    case QueryFilterKind::Path:
+        return value.compare(paths::stripMarkdownExtension(path), Qt::CaseInsensitive) == 0
+               || value.compare(path, Qt::CaseInsensitive) == 0;
+    default: return false;
+    }
+}
+
+/// Pages linking to `path` or carrying a tag that names it, and the tag references to it.
+struct References {
+    int pages = 0;
+    int tagged = 0;
+};
+
+References pageReferences(const VaultIndex *idx, const QString &path)
+{
+    QSet<QString> linking;
+    const QList<Backlink> backlinks = idx->backlinks(path);
+    for (const Backlink &b : backlinks)
+        linking.insert(b.path);
+    const QList<TagReference> tagged = idx->tagReferences(path);
+    for (const TagReference &r : tagged)
+        linking.insert(r.path);
+    return {int(linking.size()), int(tagged.size())};
+}
+
+/// summary()'s journalDate, aliases, tags, properties and words of the indexed note.
+void noteSummary(QVariantMap &out, const ParsedNote &note, const VaultIndex *idx)
+{
+    if (note.journalDate)
+        out.insert(u"journalDate"_s, isoDate(*note.journalDate));
+    out.insert(u"aliases"_s, note.aliases);
+
+    QHash<QString, QString> display;
+    const QList<TagCount> all = idx->tags();
+    for (const TagCount &t : all)
+        display.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
+    QVariantList tags;
+    const QStringList own = pageTags(note);
+    for (const QString &t : own)
+        tags.append(QVariantMap{{u"tag"_s, t}, {u"display"_s, display.value(t, t)}});
+    out.insert(u"tags"_s, tags);
+
+    static const QSet<QString> shown{u"tags"_s, u"tag"_s,       u"aliases"_s, u"alias"_s,  u"title"_s,
+                                     u"id"_s,   u"collapsed"_s, u"public"_s,  u"filters"_s};
+    QVariantList props;
+    QStringList keys = note.properties.keys() + note.frontmatter.keys();
+    keys.removeDuplicates();
+    std::ranges::sort(keys);
+    for (const QString &k : std::as_const(keys)) {
+        if (shown.contains(k.toLower()))
+            continue;
+        const QVariant v = note.properties.contains(k) ? note.properties.value(k) : note.frontmatter.value(k);
+        const QString text = propertyText(v).trimmed();
+        if (!text.isEmpty())
+            props.append(QVariantMap{{u"key"_s, k}, {u"value"_s, oneLine(text, 80)}});
+    }
+    out.insert(u"properties"_s, props);
+
+    int words = 0;
+    static const QRegularExpression word(u"[\\p{L}\\p{N}]+"_s);
+    for (const Block &b : note.blocks) {
+        auto it = word.globalMatch(b.text);
+        while (it.hasNext()) {
+            it.next();
+            ++words;
+        }
+    }
+    out.insert(u"words"_s, words);
 }
 
 } // namespace
@@ -148,7 +239,8 @@ QVariantList PageTools::folderParts() const
 QVariantList PageTools::aliasChips() const
 {
     QVariantList out;
-    for (const QString &alias : m_summary.value(u"aliases"_s).toStringList())
+    const QStringList aliases = m_summary.value(u"aliases"_s).toStringList();
+    for (const QString &alias : aliases)
         out.append(QVariantMap{{u"name"_s, alias}, {u"key"_s, QString()}, {u"editable"_s, false}});
     return out;
 }
@@ -156,7 +248,8 @@ QVariantList PageTools::aliasChips() const
 QVariantList PageTools::tagChips() const
 {
     QVariantList out;
-    for (const QVariant &tag : m_summary.value(u"tags"_s).toList()) {
+    const QVariantList tags = m_summary.value(u"tags"_s).toList();
+    for (const QVariant &tag : tags) {
         const QVariantMap t = tag.toMap();
         out.append(
                 QVariantMap{{u"name"_s, t.value(u"display"_s)}, {u"key"_s, t.value(u"tag"_s)}, {u"editable"_s, false}});
@@ -184,17 +277,17 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
     const QString path = paths::normalize(rawPath);
     if (idx) {
         m_workspace->finishIndexing(); // every linking file must be known
-        for (const VaultPath &source : idx->linksTo(path)) {
+        const QList<VaultPath> linking = idx->linksTo(path);
+        for (const VaultPath &source : linking) {
             if (source == path)
                 continue;
-            int here = 0;
-            for (const ResolvedLink &l : idx->outgoingLinks(source)) {
-                if (l.target == path && l.link.kind != LinkKind::BlockRef && l.link.kind != LinkKind::BlockEmbed)
-                    ++here;
-            }
+            const QList<ResolvedLink> outgoing = idx->outgoingLinks(source);
+            const auto here = std::ranges::count_if(outgoing, [&path](const ResolvedLink &l) {
+                return l.target == path && l.link.kind != LinkKind::BlockRef && l.link.kind != LinkKind::BlockEmbed;
+            });
             if (here > 0) {
                 notes.insert(source);
-                links += here;
+                links += int(here);
             }
         }
         // The tags that name the page (docs/SYNTAX.md §3) are renamed with it, as
@@ -203,7 +296,8 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
         const QStringList keys = idx->tagsNaming(path);
         const auto naming = [&keys](const QString &key) { return keys.contains(key); };
         const QString placeholder = title + u" (2)"_s; // any other name: what changes is the same
-        for (const VaultPath &source : idx->tagsTo(path)) {
+        const QList<VaultPath> tagging = idx->tagsTo(path);
+        for (const VaultPath &source : tagging) {
             if (source == path)
                 continue;
             const qsizetype here =
@@ -213,39 +307,19 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
                 tags += int(here);
             }
         }
-        // The ```query filters that name the page follow it too (VaultIndex::planRelocation()):
-        // its tags (tag:, #tag) and the page itself (ref:, [[…]], page:, path:).
-        const QString stem = paths::stripMarkdownExtension(path);
-        for (const VaultPath &source : idx->notesWithQueries()) {
+        // The ```query filters that name the page follow it too (VaultIndex::planRelocation()).
+        const QList<VaultPath> querying = idx->notesWithQueries();
+        for (const VaultPath &source : querying) {
             int here = 0;
-            for (const QueryNameRef &q : findQueryNames(idx->content(source))) {
-                const QString value = q.value.trimmed();
-                bool names = false;
-                switch (q.kind) {
-                case QueryFilterKind::Tag:
-                    names = keys.contains(value.normalized(QString::NormalizationForm_C).toLower());
-                    if (names)
-                        ++tags;
-                    break;
-                case QueryFilterKind::Ref:
-                case QueryFilterKind::Page: {
-                    const qsizetype cut = std::min(value.indexOf(u'#') < 0 ? value.size() : value.indexOf(u'#'),
-                                                   value.indexOf(u'|') < 0 ? value.size() : value.indexOf(u'|'));
-                    const QString target = value.left(cut).trimmed();
-                    names = !target.isEmpty() && !target.contains(u'*')
-                            && idx->resolveLink(target, source).value_or(QString()) == path;
-                    break;
-                }
-                case QueryFilterKind::Path:
-                    names = value.compare(stem, Qt::CaseInsensitive) == 0
-                            || value.compare(path, Qt::CaseInsensitive) == 0;
-                    break;
-                default: break;
-                }
-                if (names && q.kind != QueryFilterKind::Tag)
+            const QList<QueryNameRef> refs = findQueryNames(idx->content(source));
+            for (const QueryNameRef &q : refs) {
+                if (!queryNamesPage(idx, q, source, path, keys))
+                    continue;
+                ++here;
+                if (q.kind == QueryFilterKind::Tag)
+                    ++tags;
+                else
                     ++links;
-                if (names)
-                    ++here;
             }
             if (here > 0) {
                 notes.insert(source);
@@ -282,7 +356,8 @@ QString PageTools::validateTitle(const QString &rawPath, const QString &rawTitle
     // storage and in other case-insensitive folders a synced vault may land in; links do not
     // tell them apart either.
     if (const VaultIndex *idx = m_workspace->index()) {
-        for (const VaultPath &other : idx->paths()) {
+        const QList<VaultPath> all = idx->paths();
+        for (const VaultPath &other : all) {
             if (other.compare(path, Qt::CaseInsensitive) != 0 && other.compare(target, Qt::CaseInsensitive) == 0)
                 return tr("A page named “%1” already exists in this folder.").arg(paths::pageTitle(other));
         }
@@ -315,70 +390,15 @@ QVariantMap PageTools::summary(const QString &rawPath) const
     out.insert(u"exists"_s, m_workspace->exists(path));
     const VaultIndex *idx = m_workspace->index();
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
-    if (!note) {
-        // A page not written yet (a link's or a tag's): what already names it.
-        if (idx && !path.isEmpty()) {
-            const QList<TagReference> tagged = idx->tagReferences(path);
-            QSet<QString> linking;
-            for (const Backlink &b : idx->backlinks(path))
-                linking.insert(b.path);
-            for (const TagReference &r : tagged)
-                linking.insert(r.path);
-            out.insert(u"backlinks"_s, int(linking.size()));
-            out.insert(u"tag"_s, tagInfo(idx, path, int(tagged.size())));
-        }
-        return out;
+    if (note)
+        noteSummary(out, *note, idx);
+    // Pages linking here or carrying a tag that names this page — also for a page not written
+    // yet (a link's or a tag's): what already names it.
+    if (idx && (note || !path.isEmpty())) {
+        const References refs = pageReferences(idx, path);
+        out.insert(u"backlinks"_s, refs.pages);
+        out.insert(u"tag"_s, tagInfo(idx, path, refs.tagged));
     }
-    if (note->journalDate)
-        out.insert(u"journalDate"_s, isoDate(*note->journalDate));
-    out.insert(u"aliases"_s, note->aliases);
-
-    QHash<QString, QString> display;
-    for (const TagCount &t : idx->tags())
-        display.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
-    QVariantList tags;
-    for (const QString &t : pageTags(*note))
-        tags.append(QVariantMap{ { u"tag"_s, t }, { u"display"_s, display.value(t, t) } });
-    out.insert(u"tags"_s, tags);
-
-    static const QSet<QString> shown{ u"tags"_s, u"tag"_s, u"aliases"_s, u"alias"_s, u"title"_s, u"id"_s,
-                                      u"collapsed"_s, u"public"_s, u"filters"_s };
-    QVariantList props;
-    QStringList keys = note->properties.keys();
-    for (auto it = note->frontmatter.cbegin(); it != note->frontmatter.cend(); ++it) {
-        if (!keys.contains(it.key()))
-            keys.append(it.key());
-    }
-    std::ranges::sort(keys);
-    for (const QString &k : std::as_const(keys)) {
-        if (shown.contains(k.toLower()))
-            continue;
-        const QVariant v = note->properties.contains(k) ? note->properties.value(k) : note->frontmatter.value(k);
-        const QString text = propertyText(v).trimmed();
-        if (!text.isEmpty())
-            props.append(QVariantMap{ { u"key"_s, k }, { u"value"_s, oneLine(text, 80) } });
-    }
-    out.insert(u"properties"_s, props);
-
-    int words = 0;
-    static const QRegularExpression word(u"[\\p{L}\\p{N}]+"_s);
-    for (const Block &b : note->blocks) {
-        auto it = word.globalMatch(b.text);
-        while (it.hasNext()) {
-            it.next();
-            ++words;
-        }
-    }
-    out.insert(u"words"_s, words);
-    // Pages linking here or carrying a tag that names this page.
-    QSet<QString> linking;
-    for (const Backlink &b : idx->backlinks(path))
-        linking.insert(b.path);
-    const QList<TagReference> tagged = idx->tagReferences(path);
-    for (const TagReference &r : tagged)
-        linking.insert(r.path);
-    out.insert(u"backlinks"_s, int(linking.size()));
-    out.insert(u"tag"_s, tagInfo(idx, path, int(tagged.size())));
     return out;
 }
 
@@ -388,7 +408,8 @@ QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int r
     QVariantList subTags;
     const QString prefix = tag.key + u'/';
     if (idx && !tag.key.isEmpty()) {
-        for (const TagCount &t : idx->tags()) {
+        const QList<TagCount> all = idx->tags();
+        for (const TagCount &t : all) {
             if (t.tag.startsWith(prefix))
                 subTags.append(QVariantMap{{u"tag"_s, t.tag},
                                            {u"display"_s, t.display.isEmpty() ? t.tag : t.display},
@@ -447,8 +468,7 @@ bool PageTools::openLink(const QString &url, const QString &fromPath, bool newPa
         return false;
     QString target = rest;
     QString fragment;
-    const qsizetype hash = rest.indexOf(u'#');
-    if (hash >= 0) {
+    if (const qsizetype hash = rest.indexOf(u'#'); hash >= 0) {
         target = rest.left(hash);
         fragment = QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
     }
@@ -479,10 +499,9 @@ QString PageTools::journalPathFor(const QString &date) const
     if (m_workspace->exists(preferred))
         return preferred;
     if (const VaultIndex *idx = m_workspace->index()) {
-        for (const JournalRef &j : idx->journals()) {
-            if (j.date == d)
-                return j.path;
-        }
+        const QList<JournalRef> journals = idx->journals();
+        if (const auto j = std::ranges::find(journals, d, &JournalRef::date); j != journals.cend())
+            return j->path;
     }
     return preferred;
 }
@@ -501,18 +520,21 @@ QVariantMap PageTools::calendarMarks(const QString &from, const QString &to, con
     QVariantMap out;
     if (!m_workspace)
         return out;
-    for (const QString &day : m_workspace->journalDates(from, to))
+    const QStringList journalDays = m_workspace->journalDates(from, to);
+    for (const QString &day : journalDays)
         out.insert(day, QStringList{u"journal"_s});
-    for (const QVariant &value : m_workspace->calendarItems(from, to)) {
+    const QVariantList items = m_workspace->calendarItems(from, to);
+    for (const QVariant &value : items) {
         const QVariantMap item = value.toMap();
         const QString kind = item.value(u"kind"_s).toString();
         if (kind == u"journal")
             continue;
         const QString date = item.value(u"date"_s).toString();
-        const QString mark = kind == u"due" && date < today && item.value(u"status"_s).toString() != u"done"
-                                     ? u"overdue"_s
-                             : kind == u"reminder" ? (item.value(u"alarm"_s).toBool() ? u"alarm"_s : u"reminder"_s)
-                                                   : kind;
+        QString mark = kind;
+        if (kind == u"due" && date < today && item.value(u"status"_s).toString() != u"done")
+            mark = u"overdue"_s;
+        else if (kind == u"reminder")
+            mark = item.value(u"alarm"_s).toBool() ? u"alarm"_s : u"reminder"_s;
         QStringList list = out.value(date).toStringList();
         if (!list.contains(mark) && list.size() < 3)
             list.append(mark);
@@ -526,7 +548,8 @@ QVariantList PageTools::calendarEntries(const QString &date) const
     QVariantList out;
     if (!m_workspace)
         return out;
-    for (const QVariant &item : m_workspace->calendarItems(date, date)) {
+    const QVariantList items = m_workspace->calendarItems(date, date);
+    for (const QVariant &item : items) {
         if (item.toMap().value(u"kind"_s).toString() != u"journal")
             out.append(item);
     }
@@ -562,7 +585,8 @@ QString PageTools::exportFileName(const QString &path, const QString &format) co
 
 QByteArray PageTools::exportData(const QString &rawPath, const QString &format) const
 {
-    if (!m_workspace || !m_workspace->vault())
+    Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
+    if (!vault)
         return {};
     const QString path = paths::normalize(rawPath);
     bool ok = false;
@@ -579,17 +603,18 @@ QByteArray PageTools::exportData(const QString &rawPath, const QString &format) 
     // Embedded pictures and files go into the document (data: URLs).
     if (const VaultIndex *idx = m_workspace->index()) {
         QSet<QString> added;
-        for (const ResolvedLink &l : idx->outgoingLinks(path)) {
+        const QList<ResolvedLink> outgoing = idx->outgoingLinks(path);
+        for (const ResolvedLink &l : outgoing) {
             if (l.link.kind != LinkKind::Embed || l.target.isEmpty() || paths::isMarkdown(l.target) || added.contains(l.target))
                 continue;
             added.insert(l.target);
             bool read = false;
-            const QByteArray bytes = m_workspace->vault()->readBinary(l.target, &read);
+            const QByteArray bytes = vault->readBinary(l.target, &read);
             if (read)
                 input.files.append(io::FileEntry{ l.target, bytes });
         }
     }
-    input.config = m_workspace->vault()->config();
+    input.config = vault->config();
     input.vaultName = paths::pageTitle(path);
     input.now = m_workspace->now();
     const io::ExportResult result = io::runExport(*exporter, input);
@@ -610,7 +635,7 @@ bool PageTools::copyExport(const QString &path, const QString &format) const
     if (data.isEmpty() && !m_workspace->exists(path))
         return false;
     if (format == u"html") {
-        auto *mime = new QMimeData;
+        auto *mime = new QMimeData; // the clipboard takes it
         mime->setHtml(QString::fromUtf8(data));
         mime->setText(m_workspace->readFile(path));
         clipboard->setMimeData(mime);
@@ -630,9 +655,7 @@ bool PageTools::saveExport(const QString &path, const QString &format, const QUr
     QFile file(target.isLocalFile() ? target.toLocalFile() : target.toString());
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
-    const bool written = file.write(data) == data.size();
-    file.close();
-    return written;
+    return file.write(data) == data.size() && file.flush();
 }
 
 } // namespace brulion::content

@@ -10,12 +10,12 @@
 #include "vault/vault.h"
 
 #include <QJsonArray>
+#include <QPolygonF>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
 
 #include <algorithm>
-#include <limits>
 #include <memory>
 
 using namespace Qt::StringLiterals;
@@ -26,16 +26,16 @@ namespace {
 
 constexpr int StepMs = 250;
 
-void collectTexts(QQuickItem *item, const QString &objectName, bool hidden, QStringList *out)
+/// `visit(item)` for `item` and, while it returns true, for its children (the visual tree, depth
+/// first).
+template<typename Visit>
+void walk(QQuickItem *item, const Visit &visit)
 {
-    if (!item)
+    if (!item || !visit(item))
         return;
-    hidden = hidden || !item->isVisible() || qFuzzyIsNull(item->opacity());
-    if (!hidden && item->objectName() == objectName && item->inherits("QQuickText"))
-        out->append(item->property("text").toString());
     const QList<QQuickItem *> children = item->childItems();
     for (QQuickItem *child : children)
-        collectTexts(child, objectName, hidden, out);
+        walk(child, visit);
 }
 
 /// The visible, interactive drawing canvas with the largest area under `item` (the editor's
@@ -44,27 +44,52 @@ drawingview::DrawingCanvas *largestCanvas(QQuickItem *item)
 {
     drawingview::DrawingCanvas *best = nullptr;
     qreal bestArea = 0;
-    const std::function<void(QQuickItem *)> walk = [&](QQuickItem *it) {
-        if (!it || !it->isVisible())
-            return;
-        if (auto *canvas = qobject_cast<drawingview::DrawingCanvas *>(it); canvas && canvas->interactive()) {
-            const qreal area = canvas->width() * canvas->height();
-            if (area > bestArea) {
-                best = canvas;
-                bestArea = area;
-            }
+    walk(item, [&](QQuickItem *it) {
+        if (!it->isVisible())
+            return false;
+        auto *canvas = qobject_cast<drawingview::DrawingCanvas *>(it);
+        if (canvas && canvas->interactive() && canvas->width() * canvas->height() > bestArea) {
+            best = canvas;
+            bestArea = canvas->width() * canvas->height();
         }
-        const QList<QQuickItem *> children = it->childItems();
-        for (QQuickItem *child : children)
-            walk(child);
-    };
-    walk(item);
+        return true;
+    });
     return best;
+}
+
+/// The first shown rich text under `item` (a Text or TextEdit with linkAt()) whose text holds `needle`.
+QQuickItem *richTextHolding(QQuickItem *item, const QString &needle)
+{
+    QQuickItem *found = nullptr;
+    walk(item, [&](QQuickItem *it) {
+        if (found || !it->isVisible())
+            return false;
+        if (it->metaObject()->indexOfMethod("linkAt(double,double)") >= 0 && it->width() > 0 && it->height() > 0
+            && it->property("text").toString().contains(needle))
+            found = it;
+        return !found;
+    });
+    return found;
+}
+
+bool under(const QQuickItem *item, const QString &objectName)
+{
+    for (const QQuickItem *p = item; p; p = p->parentItem()) {
+        if (p->objectName() == objectName)
+            return true;
+    }
+    return false;
 }
 
 QJsonObject rectJson(const QRectF &r)
 {
     return {{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"width"_s, r.width()}, {u"height"_s, r.height()}};
+}
+
+QJsonObject sceneRect(const QQuickItem *item)
+{
+    const QRectF r = item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+    return {{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"w"_s, r.width()}, {u"h"_s, r.height()}};
 }
 
 } // namespace
@@ -82,14 +107,9 @@ QJsonObject strokeFacts(const drawing::Stroke &stroke)
             facts.insert(key, QJsonValue(QJsonValue::Null));
         return facts;
     }
-    double lo = std::numeric_limits<double>::max();
-    double hi = std::numeric_limits<double>::lowest();
-    for (const drawing::StrokePoint &p : stroke.points) {
-        lo = std::min(lo, p.pressure);
-        hi = std::max(hi, p.pressure);
-    }
-    facts.insert(u"pressureMin"_s, lo);
-    facts.insert(u"pressureMax"_s, hi);
+    const auto [lo, hi] = std::ranges::minmax(stroke.points, {}, &drawing::StrokePoint::pressure);
+    facts.insert(u"pressureMin"_s, lo.pressure);
+    facts.insert(u"pressureMax"_s, hi.pressure);
     facts.insert(u"pressureFirst"_s, stroke.points.first().pressure);
     facts.insert(u"pressureLast"_s, stroke.points.last().pressure);
     return facts;
@@ -98,7 +118,13 @@ QJsonObject strokeFacts(const drawing::Stroke &stroke)
 QStringList shownTexts(QQuickItem *root, const QString &objectName)
 {
     QStringList out;
-    collectTexts(root, objectName, false, &out);
+    walk(root, [&](QQuickItem *item) {
+        if (!item->isVisible() || qFuzzyIsNull(item->opacity()))
+            return false;
+        if (item->objectName() == objectName && item->inherits("QQuickText"))
+            out.append(item->property("text").toString());
+        return true;
+    });
     return out;
 }
 
@@ -122,12 +148,9 @@ WebPicturesSelfTest::WebPicturesSelfTest(shell::Workspace *workspace, Options op
     }
 }
 
-WebPicturesSelfTest::~WebPicturesSelfTest() = default;
-
 void WebPicturesSelfTest::start()
 {
     m_clock.start();
-    m_phase.start();
     // Only where the device shows pictures from the internet without asking (tests/web seeds
     // that): never a fetch the user was to be asked for, nor an export of their notebook.
     if (m_workspace && !m_workspace->webPicturesShown()) {
@@ -140,8 +163,7 @@ void WebPicturesSelfTest::start()
         };
         if (m_publish)
             m_publish("brulionWebPictureSelfTest", m_picturesReport);
-        m_finished = true;
-        Q_EMIT finished();
+        finish();
         return;
     }
     Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
@@ -155,16 +177,25 @@ void WebPicturesSelfTest::start()
             m_urls = io::webPictureTargets(input);
         }
     }
-    disconnect(&m_timer, nullptr, this, nullptr);
-    connect(&m_timer, &QTimer::timeout, this, &WebPicturesSelfTest::graceStep);
-    m_timer.start();
+    runTimer(&WebPicturesSelfTest::graceStep);
     graceStep();
+}
+
+void WebPicturesSelfTest::stopTimer()
+{
+    m_timer.stop();
+    disconnect(&m_timer, nullptr, this, nullptr);
+}
+
+void WebPicturesSelfTest::finish()
+{
+    m_finished = true;
+    Q_EMIT finished();
 }
 
 void WebPicturesSelfTest::graceStep()
 {
-    const bool allTold = std::all_of(m_urls.cbegin(), m_urls.cend(),
-                                     [this](const QString &url) { return m_signalled.contains(url); });
+    const bool allTold = std::ranges::all_of(m_urls, [this](const QString &url) { return m_signalled.contains(url); });
     if (!allTold && m_phase.elapsed() < m_options.uiGraceMs)
         return;
     // Asking from now on: what was told so far, the editor fetched by itself.
@@ -173,9 +204,7 @@ void WebPicturesSelfTest::graceStep()
         if (m_signalled.contains(url))
             m_uiFetched.insert(url);
     }
-    m_phase.start();
-    disconnect(&m_timer, nullptr, this, nullptr);
-    connect(&m_timer, &QTimer::timeout, this, &WebPicturesSelfTest::pollStep);
+    runTimer(&WebPicturesSelfTest::pollStep);
     pollStep();
 }
 
@@ -187,6 +216,7 @@ void WebPicturesSelfTest::pollStep()
     }
     // Looking is what the editor does (Workspace::webPicture fetches what may be fetched without
     // asking); "ask" (a host of the local network) stays: this test never asks for a picture.
+    // Every picture is looked at on every step (that starts its fetch): no early exit.
     bool settled = true;
     for (const QString &url : std::as_const(m_urls)) {
         const QString state = m_workspace->webPicture(url).value(u"state"_s).toString();
@@ -215,8 +245,7 @@ void WebPicturesSelfTest::pollStep()
 
 void WebPicturesSelfTest::publishPictures(bool timedOut)
 {
-    m_timer.stop();
-    disconnect(&m_timer, nullptr, this, nullptr);
+    stopTimer();
     QJsonArray pictures;
     for (const QString &url : std::as_const(m_urls)) {
         const QVariantMap p = m_workspace ? m_workspace->webPicture(url) : QVariantMap();
@@ -231,51 +260,41 @@ void WebPicturesSelfTest::publishPictures(bool timedOut)
         });
     }
     m_picturesReport = QJsonObject{
-            {u"page"_s, m_options.page},
-            {u"pageScheme"_s, m_workspace ? m_workspace->webPageScheme() : QString()},
-            {u"done"_s, true},
-            {u"timedOut"_s, timedOut},
-            {u"elapsedMs"_s, double(m_clock.elapsed())},
+            {u"page"_s, m_options.page}, {u"pageScheme"_s, m_workspace ? m_workspace->webPageScheme() : QString()},
+            {u"done"_s, true},           {u"refused"_s, false},
+            {u"timedOut"_s, timedOut},   {u"elapsedMs"_s, double(m_clock.elapsed())},
             {u"pictures"_s, pictures},
     };
-    m_picturesReport.insert(u"refused"_s, false);
     if (m_window)
         m_picturesReport.insert(u"shownTexts"_s,
                                 QJsonArray::fromStringList(shownTexts(m_window->contentItem(), u"webPictureText"_s)));
     if (m_publish)
         m_publish("brulionWebPictureSelfTest", m_picturesReport);
     if (!m_options.exportCopies || !m_workspace) {
-        m_finished = true;
-        Q_EMIT finished();
+        finish();
         return;
     }
     // The export reads the notebook as indexed: wait for the index.
-    m_phase.start();
-    connect(&m_timer, &QTimer::timeout, this, [this] {
+    runTimer([this] {
         if (m_workspace && m_workspace->ready())
             startExport();
         else if (m_phase.elapsed() >= m_options.exportMs)
             publishExport(u"timeout"_s);
     });
-    m_timer.start();
 }
 
 void WebPicturesSelfTest::startExport()
 {
-    m_timer.stop();
-    disconnect(&m_timer, nullptr, this, nullptr);
     m_export = new ioviews::ExportController(this);
     m_export->setWorkspace(m_workspace);
     m_export->setFormat(m_options.exportFormat);
     m_export->setScope(m_options.exportScope);
     m_export->setWebPictures(u"include"_s);
     connect(m_export, &ioviews::ExportController::stateChanged, this, &WebPicturesSelfTest::exportStateChanged);
-    m_phase.start();
-    connect(&m_timer, &QTimer::timeout, this, [this] {
+    runTimer([this] {
         if (m_phase.elapsed() >= m_options.exportMs)
             publishExport(u"timeout"_s);
     });
-    m_timer.start();
     m_export->prepare();
 }
 
@@ -299,8 +318,7 @@ void WebPicturesSelfTest::publishExport(const QString &state)
     if (m_finished)
         return;
     m_finished = true;
-    m_timer.stop();
-    disconnect(&m_timer, nullptr, this, nullptr);
+    stopTimer();
     const QList<io::ExportedFile> files = m_export ? m_export->result() : QList<io::ExportedFile>();
     const QByteArray data = files.isEmpty() ? QByteArray() : files.first().data;
     m_exportReport = QJsonObject{
@@ -379,21 +397,11 @@ QJsonObject PenSelfTest::report() const
             continue;
         QJsonObject facts = strokeFacts(s);
         if (!s.points.isEmpty()) {
-            QRectF bounds;
-            bool first = true;
-            for (const drawing::StrokePoint &p : s.points) {
-                const QPointF at = canvas->mapToScene(canvas->toItem(QPointF(p.x, p.y)));
-                if (first) {
-                    bounds = QRectF(at, QSizeF(0, 0));
-                    first = false;
-                } else {
-                    bounds.setLeft(std::min(bounds.left(), at.x()));
-                    bounds.setRight(std::max(bounds.right(), at.x()));
-                    bounds.setTop(std::min(bounds.top(), at.y()));
-                    bounds.setBottom(std::max(bounds.bottom(), at.y()));
-                }
-            }
-            facts.insert(u"bounds"_s, rectJson(bounds));
+            QPolygonF onScreen;
+            onScreen.reserve(s.points.size());
+            for (const drawing::StrokePoint &p : s.points)
+                onScreen.append(canvas->mapToScene(canvas->toItem(QPointF(p.x, p.y))));
+            facts.insert(u"bounds"_s, rectJson(onScreen.boundingRect()));
         }
         strokes.append(facts);
     }
@@ -420,25 +428,6 @@ void PenSelfTest::publish()
 
 // ---- LinkPartsSelfTest ------------------------------------------------------------------------
 
-namespace {
-
-/// The first shown rich text under `item` (a Text or TextEdit with linkAt()) whose text holds `needle`.
-QQuickItem *richTextHolding(QQuickItem *item, const QString &needle)
-{
-    if (!item || !item->isVisible())
-        return nullptr;
-    if (item->metaObject()->indexOfMethod("linkAt(double,double)") >= 0
-        && item->property("text").toString().contains(needle) && item->width() > 0 && item->height() > 0)
-        return item;
-    for (QQuickItem *child : item->childItems()) {
-        if (QQuickItem *found = richTextHolding(child, needle))
-            return found;
-    }
-    return nullptr;
-}
-
-} // namespace
-
 LinkPartsSelfTest::LinkPartsSelfTest(QQuickWindow *window, shell::AppController *app, PublishFn publish,
                                      QObject *parent)
     : QObject(parent), m_window(window), m_app(app), m_publish(std::move(publish))
@@ -456,31 +445,32 @@ void LinkPartsSelfTest::start()
 QJsonArray LinkPartsSelfTest::linkBoxes(QQuickItem *text)
 {
     struct Box {
-        qreal x1, y1, x2, y2;
+        QString href;
+        int x1, y1, x2, y2;
     };
-    QList<std::pair<QString, Box>> boxes; // in order of first sight
-    for (qreal y = 1; text && y < text->height(); y += 2) {
-        for (qreal x = 1; x < text->width(); x += 2) {
+    QList<Box> boxes; // in order of first sight
+    for (int y = 1; text && y < text->height(); y += 2) {
+        for (int x = 1; x < text->width(); x += 2) {
             QString link;
-            QMetaObject::invokeMethod(text, "linkAt", qReturnArg(link), x, y);
+            QMetaObject::invokeMethod(text, "linkAt", qReturnArg(link), qreal(x), qreal(y));
             if (link.isEmpty())
                 continue;
-            auto it = std::ranges::find_if(boxes, [&](const auto &b) { return b.first == link; });
+            auto it = std::ranges::find(boxes, link, &Box::href);
             if (it == boxes.end()) {
-                boxes.append({link, Box{x, y, x, y}});
+                boxes.append(Box{link, x, y, x, y});
             } else {
-                it->second.x1 = std::min(it->second.x1, x);
-                it->second.y1 = std::min(it->second.y1, y);
-                it->second.x2 = std::max(it->second.x2, x);
-                it->second.y2 = std::max(it->second.y2, y);
+                it->x1 = std::min(it->x1, x);
+                it->y1 = std::min(it->y1, y);
+                it->x2 = std::max(it->x2, x);
+                it->y2 = std::max(it->y2, y);
             }
         }
     }
     QJsonArray out;
-    for (const auto &[href, b] : boxes) {
+    for (const Box &b : std::as_const(boxes)) {
         const QPointF origin = text->mapToScene(QPointF(b.x1, b.y1));
         QJsonObject box = rectJson(QRectF(origin, QSizeF(b.x2 - b.x1, b.y2 - b.y1)));
-        box.insert(u"href"_s, href);
+        box.insert(u"href"_s, b.href);
         out.append(box);
     }
     return out;
@@ -506,42 +496,10 @@ void LinkPartsSelfTest::look()
         m_publish("brulionLinkPartsSelfTest", now);
 }
 
-// ---- main.cpp --------------------------------------------------------------------------------
-
 // ---- PdfSelfTest -------------------------------------------------------------------------------
 
-namespace {
-
-/// The visible items under `root` (the visual tree, depth first) for which `pred` holds.
-void visibleItems(QQuickItem *root, const std::function<bool(QQuickItem *)> &pred, QList<QQuickItem *> *out)
-{
-    if (!root || !root->isVisible() || root->opacity() <= 0.01)
-        return;
-    if (pred(root))
-        out->append(root);
-    for (QQuickItem *child : root->childItems())
-        visibleItems(child, pred, out);
-}
-
-bool under(const QQuickItem *item, const QString &objectName)
-{
-    for (const QQuickItem *p = item; p; p = p->parentItem()) {
-        if (p->objectName() == objectName)
-            return true;
-    }
-    return false;
-}
-
-QJsonObject sceneRect(const QQuickItem *item)
-{
-    const QRectF r = item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
-    return {{u"x"_s, r.x()}, {u"y"_s, r.y()}, {u"w"_s, r.width()}, {u"h"_s, r.height()}};
-}
-
-} // namespace
-
 PdfSelfTest::PdfSelfTest(QQuickWindow *window, shell::Workspace *workspace, PublishFn publish, QObject *parent)
-    : QObject(parent), m_window(window), m_workspace(workspace), m_publish(std::move(publish)), m_timer(this)
+    : QObject(parent), m_window(window), m_workspace(workspace), m_publish(std::move(publish))
 {
     m_timer.setInterval(250);
     connect(&m_timer, &QTimer::timeout, this, &PdfSelfTest::look);
@@ -560,32 +518,36 @@ QJsonObject PdfSelfTest::report() const
     const QVariantMap route = m_route ? m_route() : QVariantMap();
     out.insert(u"route"_s, QJsonObject{{u"view"_s, route.value(u"view"_s).toString()},
                                        {u"path"_s, route.value(u"path"_s).toString()}});
-    QList<QQuickItem *> chips;
-    QList<QQuickItem *> links;
-    QList<QQuickItem *> messages;
-    QList<QQuickItem *> buttons;
+    // The first one of each on screen (the visual tree, depth first).
+    QQuickItem *chip = nullptr;
+    QQuickItem *link = nullptr;
+    QQuickItem *message = nullptr;
+    QQuickItem *button = nullptr;
+    const auto first = [](QQuickItem *&slot, QQuickItem *item) {
+        if (!slot)
+            slot = item;
+    };
     if (m_window) {
-        visibleItems(
-                m_window->contentItem(),
-                [&](QQuickItem *item) {
-                    const QString name = item->objectName();
-                    if (name == u"pdfEmbedChip")
-                        chips.append(item);
-                    else if (name == u"pdfMessageText")
-                        messages.append(item);
-                    else if (name == u"pdfOpenElsewhere")
-                        buttons.append(item);
-                    else if ((item->inherits("QQuickText") || item->inherits("QQuickTextEdit"))
-                             && !under(item, u"pdfEmbedChip"_s)) {
-                        const QString text = item->property("text").toString();
-                        if (text.contains(u"<a "_s) && text.contains(u".pdf"_s, Qt::CaseInsensitive))
-                            links.append(item);
-                    }
-                    return false;
-                },
-                &chips);
+        walk(m_window->contentItem(), [&](QQuickItem *item) {
+            if (!item->isVisible() || item->opacity() <= 0.01)
+                return false;
+            const QString name = item->objectName();
+            if (name == u"pdfEmbedChip")
+                first(chip, item);
+            else if (name == u"pdfMessageText")
+                first(message, item);
+            else if (name == u"pdfOpenElsewhere")
+                first(button, item);
+            else if (!link && (item->inherits("QQuickText") || item->inherits("QQuickTextEdit"))
+                     && !under(item, u"pdfEmbedChip"_s)) {
+                const QString text = item->property("text").toString();
+                if (text.contains(u"<a "_s) && text.contains(u".pdf"_s, Qt::CaseInsensitive))
+                    link = item;
+            }
+            return true;
+        });
     }
-    if (QQuickItem *chip = chips.value(0)) {
+    if (chip) {
         QJsonObject c = sceneRect(chip);
         c.insert(u"icon"_s, chip->property("iconName").toString());
         c.insert(u"text"_s, chip->property("text").toString());
@@ -593,9 +555,9 @@ QJsonObject PdfSelfTest::report() const
     } else {
         out.insert(u"chip"_s, QJsonValue::Null);
     }
-    out.insert(u"link"_s, links.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(sceneRect(links.first())));
-    out.insert(u"message"_s, messages.isEmpty() ? QString() : messages.first()->property("text").toString());
-    out.insert(u"button"_s, buttons.isEmpty() ? QString() : buttons.first()->property("text").toString());
+    out.insert(u"link"_s, link ? QJsonValue(sceneRect(link)) : QJsonValue(QJsonValue::Null));
+    out.insert(u"message"_s, message ? message->property("text").toString() : QString());
+    out.insert(u"button"_s, button ? button->property("text").toString() : QString());
     return out;
 }
 
@@ -617,6 +579,7 @@ void PdfSelfTest::openNow(const QString &path)
     QStringList errors;
     bool opened = false;
     if (m_workspace) {
+        // openInOtherApp() reports synchronously: the connections live only through the call.
         const QMetaObject::Connection n = connect(m_workspace, &shell::Workspace::noticeOccurred, this,
                                                   [&notices](const QString &text) { notices.append(text); });
         const QMetaObject::Connection e = connect(m_workspace, &shell::Workspace::errorOccurred, this,
@@ -632,6 +595,8 @@ void PdfSelfTest::openNow(const QString &path)
                                              {u"errors"_s, QJsonArray::fromStringList(errors)}});
 }
 
+// ---- main.cpp --------------------------------------------------------------------------------
+
 void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *app, const QStringList &args,
                            PublishFn publish)
 {
@@ -642,7 +607,7 @@ void startBrowserSelfTests(QQmlApplicationEngine *engine, shell::AppController *
     const bool linkParts = args.contains(u"--selftest-linkparts"_s);
     if (!app || (!pictures && !pen && !pdf && !linkParts))
         return;
-    const auto run = [engine, app, pictures, pen, pdf, pdfAuto, linkParts, publish] {
+    const auto run = [engine, app, pictures, pen, pdf, pdfAuto, linkParts, publish = std::move(publish)] {
         QQuickWindow *window = engine ? qobject_cast<QQuickWindow *>(engine->rootObjects().value(0)) : nullptr;
         if (pictures) {
             WebPicturesSelfTest::Options options;

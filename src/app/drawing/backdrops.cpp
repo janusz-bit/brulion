@@ -12,7 +12,6 @@
 #include <QDateTime>
 #include <QFileInfo>
 #include <QPointer>
-#include <QSet>
 
 #ifdef Q_OS_WASM
 #include "pickedfiles.h"
@@ -38,6 +37,15 @@ namespace {
 std::mutex s_resolverLock;
 std::function<QString(const QString &)> s_resolver;
 std::function<QString(const QString &, const QByteArray &)> s_importer;
+
+/// The file picker's patterns of the picture files: "*.png", "*.jpg", …
+QStringList picturePatterns()
+{
+    QStringList out;
+    for (const QString &ext : paths::pictureExtensions())
+        out.append(u'*' + ext);
+    return out;
+}
 
 } // namespace
 
@@ -124,10 +132,7 @@ int DrawingBackdrops::pickInBrowser()
     const int pick = ++m_lastPick;
     const QPointer<DrawingBackdrops> self(this);
     // Pictures only: no PDF renderer in the browser.
-    QStringList pictures;
-    for (const QString &ext : paths::pictureExtensions())
-        pictures.append(u'*' + ext);
-    platform::wasm::openFiles({tr("Pictures (%1)").arg(pictures.join(u' '))}, false, MaxAttachmentBytes,
+    platform::wasm::openFiles({tr("Pictures (%1)").arg(picturePatterns().join(u' '))}, false, MaxAttachmentBytes,
                               MaxAttachmentBytes, [self, pick](const QList<platform::PickedFile> &files) {
                                   if (!self || files.isEmpty())
                                       return; // cancelled
@@ -158,16 +163,14 @@ bool DrawingBackdrops::pdfAvailable() const
 
 QStringList DrawingBackdrops::nameFilters() const
 {
-    QStringList pictures;
-    for (const QString &ext : paths::pictureExtensions())
-        pictures.append(u'*' + ext);
+    QStringList pictures = picturePatterns();
     if (!pdfAvailable()) {
         //: %1: the file name patterns of pictures, e.g. "*.png *.jpg *.jpeg"
         return {tr("Pictures (%1)").arg(pictures.join(u' ')), tr("All files (*)")};
     }
+    pictures.append(u"*.pdf"_s);
     //: %1: the file name patterns of pictures and PDF, e.g. "*.png *.jpg *.pdf"
-    return {tr("Pictures and PDF (%1)").arg((pictures + QStringList{u"*.pdf"_s}).join(u' ')), tr("PDF (*.pdf)"),
-            tr("All files (*)")};
+    return {tr("Pictures and PDF (%1)").arg(pictures.join(u' ')), tr("PDF (*.pdf)"), tr("All files (*)")};
 }
 
 bool DrawingBackdrops::isPdf(const QString &vaultPath) const
@@ -234,12 +237,9 @@ int DrawingBackdrops::prepare(const QString &vaultPath, const QList<int> &pages,
     job->file = resolve(vaultPath);
     job->drawings = drawings;
     job->now = QDateTime::currentMSecsSinceEpoch();
-    QSet<int> seen;
     for (const int page : pages) {
-        if (page >= 1 && !seen.contains(page) && job->pages.size() < drawing::MaxPagesPerInsert) {
-            seen.insert(page);
+        if (page >= 1 && !job->pages.contains(page) && job->pages.size() < drawing::MaxPagesPerInsert)
             job->pages.append(page);
-        }
     }
     if (job->pages.isEmpty())
         job->pages = {0};

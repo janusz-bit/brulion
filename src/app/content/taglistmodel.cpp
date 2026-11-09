@@ -43,32 +43,25 @@ void TagListModel::refresh()
     const VaultIndex *idx = vaultIndex();
     if (idx && workspace() && workspace()->isOpen()) {
         const QStringList terms = searchTerms(m_filter);
-        for (const TagCount &t : idx->tags()) {
-            ++total;
+        const QList<TagCount> all = idx->tags();
+        total = int(all.size());
+        for (const TagCount &t : all) {
             const QString display = t.display.isEmpty() ? t.tag : t.display;
             if (!containsAll(display, terms))
                 continue;
-            Tag tag;
-            tag.tag = t.tag;
-            tag.display = display;
-            tag.count = t.count;
-            tag.pageCount = int(t.paths.size());
-            for (const int p : matchPositions(display, terms, false))
-                tag.matches.append(p);
-            tag.page = idx->resolveTag(t.tag).value_or(QString());
-            next.append(tag);
+            const QList<int> positions = matchPositions(display, terms, false);
+            next.append(Tag{.tag = t.tag,
+                            .display = display,
+                            .count = t.count,
+                            .pageCount = int(t.paths.size()),
+                            .matches = QVariantList(positions.cbegin(), positions.cend()),
+                            .page = idx->resolveTag(t.tag).value_or(QString())});
         }
         if (m_sortKey == u"name") {
             // Segment by segment, so "praca/projekt" sorts right after "praca" (not after "praca-dom").
-            std::ranges::stable_sort(next, [](const Tag &a, const Tag &b) {
-                const QStringList sa = a.display.split(u'/');
-                const QStringList sb = b.display.split(u'/');
-                for (qsizetype i = 0; i < std::min(sa.size(), sb.size()); ++i) {
-                    const int c = compareNames(sa.at(i), sb.at(i));
-                    if (c != 0)
-                        return c < 0;
-                }
-                return sa.size() < sb.size();
+            const auto before = [](const QString &a, const QString &b) { return compareNames(a, b) < 0; };
+            std::ranges::stable_sort(next, [before](const Tag &a, const Tag &b) {
+                return std::ranges::lexicographical_compare(a.display.split(u'/'), b.display.split(u'/'), before);
             });
         }
     }
@@ -109,20 +102,16 @@ QVariant TagListModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> TagListModel::roleNames() const
 {
-    return {{TagRole, "tag"},     {DisplayRole, "display"},    {CountRole, "count"},   {PageCountRole, "pageCount"},
+    static const QHash<int, QByteArray> names{
+            {TagRole, "tag"},     {DisplayRole, "display"},    {CountRole, "count"},   {PageCountRole, "pageCount"},
             {DepthRole, "depth"}, {LeafRole, "leaf"},          {ParentRole, "parent"}, {MatchesRole, "matches"},
             {PageRole, "page"},   {PageTitleRole, "pageTitle"}};
+    return names;
 }
 
 QVariantMap TagListModel::get(int row) const
 {
-    QVariantMap out;
-    if (row < 0 || row >= m_rows.size())
-        return out;
-    const QHash<int, QByteArray> names = roleNames();
-    for (auto it = names.cbegin(); it != names.cend(); ++it)
-        out.insert(QString::fromLatin1(it.value()), data(index(row), it.key()));
-    return out;
+    return rowMap(row);
 }
 
 } // namespace brulion::content

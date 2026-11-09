@@ -14,7 +14,9 @@ import Brulion
 //   "streamUndo"     StreamFind.undo(token): a replace over days of the journal stream
 //   "leaveReadOnly"  the editor's readOnlyLeaveRequested(): its host leaves reading mode
 // Made by the editor (BlockEditor.toastAction()) as its child: a toast outliving the editor finds
-// it gone, and nothing happens (the closure's try/catch made sure of that).
+// it gone, and nothing happens (the closure's try/catch made sure of that). It goes by itself long
+// after its toast has (a toast lasts seconds; hovering it holds it), so the editor does not keep
+// one for every toast it ever showed.
 QtObject {
     id: action
 
@@ -34,6 +36,12 @@ QtObject {
     property string url
     property list<string> urls
     property StreamFind stream: null
+
+    readonly property Timer expiry: Timer {
+        interval: 10 * 60 * 1000
+        running: true
+        onTriggered: action.destroy()
+    }
 
     function run(): void {
         const ctl = action.controller

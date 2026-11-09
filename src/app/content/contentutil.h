@@ -19,7 +19,10 @@
 
 namespace brulion {
 class VaultIndex;
+namespace shell {
+class Workspace;
 }
+} // namespace brulion
 
 namespace brulion::content {
 
@@ -27,8 +30,18 @@ namespace brulion::content {
 QDate parseIsoDate(const QString &text);
 /// QDate -> "YYYY-MM-DD" ("" when invalid).
 QString isoDate(QDate date);
+/// The models' `today` property: `isoToday` ("YYYY-MM-DD") when valid, else the workspace clock's
+/// date (the system date without a workspace).
+QDate effectiveToday(const QString &isoToday, const shell::Workspace *workspace);
 /// "en" -> English, anything else Polish (the default UI language).
 dates::UiLocale uiLocale(const QString &locale);
+
+/// Row of the iterator `it` in `rows` (the models' rowOf()): -1 at the end.
+template<typename List, typename Iterator>
+int rowIndex(const List &rows, Iterator it)
+{
+    return it == rows.cend() ? -1 : int(it - rows.cbegin());
+}
 
 /// Renderer palette from a QML map of colours (keys as BlockEditor.rendererPalette: link,
 /// unresolved, muted, codeBackground, highlightBackground, <chip>Fg / <chip>Bg); missing keys keep

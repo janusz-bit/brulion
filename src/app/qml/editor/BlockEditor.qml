@@ -1312,19 +1312,24 @@ FocusScope {
     // visible — once the keyboard has settled. (Growing, it covers nothing: the view stays where
     // the user scrolled it.)
     property real _lastHeight: 0
+    readonly property bool editingAnything: activeEditor !== null || editingTable !== null || editingProperty !== null
     onHeightChanged: {
         const shrank = height < _lastHeight - 0.5
         _lastHeight = height
-        if (shrank && !autoHeight && (activeEditor !== null || editingTable !== null || editingProperty !== null))
+        if (shrank && !autoHeight && editingAnything)
             editVisibleLater.restart()
     }
     readonly property bool keyboardSliding: KeyboardInsets.animating
     onKeyboardSlidingChanged: {
-        if (!keyboardSliding && KeyboardInsets.shown
-                && (activeEditor !== null || editingTable !== null || editingProperty !== null))
+        if (!keyboardSliding && KeyboardInsets.shown && editingAnything)
             editVisibleLater.restart()
     }
 
+    /// The table block shown in `row` (null: another kind of block, or no delegate for it now).
+    function tableAt(row: int): TableBlockView {
+        const item = list.itemAtIndex(row) as BlockDelegate
+        return item ? item.contentItem as TableBlockView : null
+    }
     /// Edit cell (r, c) of the table in `row` (the cell's toolbar after an undo or redo, which
     /// closed the cell first: the table keeps its delegate, the cell opens again with the text the
     /// step left in it).
@@ -1332,8 +1337,7 @@ FocusScope {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
         list.forceLayout()
-        const item = list.itemAtIndex(row) as BlockDelegate
-        const table = item ? item.contentItem as TableBlockView : null
+        const table = tableAt(row)
         if (table)
             table.startCell(r, c)
     }
@@ -1367,8 +1371,7 @@ FocusScope {
             if (!editor.alive)
                 return
             list.forceLayout()
-            const item = list.itemAtIndex(tableFilterLater.row) as BlockDelegate
-            const table = item ? item.contentItem as TableBlockView : null
+            const table = editor.tableAt(tableFilterLater.row)
             if (table)
                 table.openFilter(tableFilterLater.column)
         }
@@ -1382,10 +1385,7 @@ FocusScope {
     }
     /// The table in `row` shows its filter row.
     function tableFiltering(row: int): bool {
-        if (!controller || row < 0 || row >= controller.blocks.count)
-            return false
-        const item = list.itemAtIndex(row) as BlockDelegate
-        const table = item ? item.contentItem as TableBlockView : null
+        const table = tableAt(row)
         return table !== null && table.filtering
     }
 
@@ -1808,9 +1808,6 @@ FocusScope {
         return false
     }
 
-    /// Shift+↑ on the first line (`step` -1) / Shift+↓ on the last one (1) of the edited block: the
-    /// text selection first goes to the block's start / end; once it is there, editing stops and
-    /// the block and the previous / next one are selected (the block alone at the page's edge).
     /// The caret's x of `edit` in the editor's coordinates.
     function caretX(edit: InlineEditor): real {
         mapPoint(edit, editor, edit.caretRect.x, 0)
@@ -1827,6 +1824,9 @@ FocusScope {
     /// The list's content item (its rows).
     readonly property Item listContent: list.contentItem
 
+    /// Shift+↑ on the first line (`step` -1) / Shift+↓ on the last one (1) of the edited block: the
+    /// text selection first goes to the block's start / end; once it is there, editing stops and
+    /// the block and the previous / next one are selected (the block alone at the page's edge).
     function extendFromEdit(edit: InlineEditor, step: int): bool {
         if (step < 0 && edit.cursorPosition > 0) {
             edit.moveCursorSelection(0, TextEdit.SelectCharacters)
@@ -1909,7 +1909,11 @@ FocusScope {
             switch (key) {
             case Qt.Key_Z: undoStep(shift); return true
             case Qt.Key_Y: undoStep(true); return true
-            case Qt.Key_E: toggleSourceMode(); return true
+            case Qt.Key_E:
+                if (editor.sourceModeShortcut !== "Ctrl+E")
+                    return false
+                toggleSourceMode()
+                return true
             case Qt.Key_Period: if (row >= 0) controller.toggleFold(row); return true
             case Qt.Key_Return:
             case Qt.Key_Enter:
@@ -2155,8 +2159,6 @@ FocusScope {
         onTriggered: if (editor.alive) editor.propertyDraft = false
     }
 
-    // ---- The blocks --------------------------------------------------------------------------
-
     // ---- Conflict with changes made elsewhere ------------------------------------------------
     Loader {
         id: conflictBanner
@@ -2242,16 +2244,15 @@ FocusScope {
         }
     }
 
+    // ---- The blocks --------------------------------------------------------------------------
+
     ListView {
         id: list
         // Touch flicks at the finger's speed, and no jump when a drag catches a fling (Qt 6.11 on
         // Android: TouchFlick, docs/UI.md "Scrolling performance").
         TouchFlick.enabled: true
-        anchors.top: conflictBanner.bottom
-        anchors.topMargin: conflictBanner.active ? Theme.space2 : 0
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
+        anchors.topMargin: conflictBanner.y + conflictBanner.height + (conflictBanner.active ? Theme.space2 : 0)
         visible: !editor.controller || !editor.controller.sourceMode
         focus: true
         model: editor.controller ? editor.controller.blocks : null
