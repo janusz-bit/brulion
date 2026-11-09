@@ -4123,6 +4123,8 @@ starts warned.
 
 A whole run took 0.3–7 ms on the desktop with the sample notebook (logging category
 `qt.qml.gc.allocatorStats`). `QV4_GC_TIMELIMIT=5` brings back Qt's default, for a comparison.
+Whole runs also start more often in the middle of a long function. That is why the self-tests'
+runner holds deferred deletions while a pass runs ("The playground's self-tests" below).
 
 ## Dev tools, screenshots and UI tests
 
@@ -4237,6 +4239,13 @@ finger held down until its gesture took effect. A step that throws is a failure 
 runs (`DevTest.callCatching()`). Real input goes through `DevEvents` (QtTest's TestEvent, made when
 first used: `mouseClick()`, `touchPress()`, …); `DevBlock` gives a block's fields, `DevRecord` and
 `DevTest.valueAt()` any map's, `DevTest` finds items by name (`src/app/ui/devtesting.h`).
+
+While a pass runs, `callCatching()` holds the deferred deletions (`deleteLater()`) that come due
+and deletes those objects once the pass returned. QtTest's events process events inside the pass,
+and compiled QML keeps the objects a function used as plain pointers that the garbage collector
+reads. An editor's field that Escape closed was deleted by a touch's events, and a collection later
+in the same pass (a menu being made) read the freed object and crashed the app
+(`tst_editor_qml_properties_touch`, 5 % of runs under load once collections did whole runs).
 
 ### UI benchmark (Brulion vs Obsidian)
 
