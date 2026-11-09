@@ -9,7 +9,8 @@ import Brulion
 // to the tab it showed (AppController.setTabViewState) and gives the next tab's view its own
 // (ShellRouteView.restoreViewState); when the tabs are saved (tabViewStatesRequested) it hands the
 // state over too. Only the tabs shown have views: the others are a route and a view state, no
-// editor (docs/PERFORMANCE.md "Tabs"). The keyboard focus going into the pane (a click into an
+// editor (docs/PERFORMANCE.md "Tabs"); the pane keeps the bottom navigation's views it showed,
+// hidden (ShellRouteView.keepViews), for every tab it shows. The keyboard focus going into the pane (a click into an
 // editor, a list, a field), or a press on its background, makes it the focused one (`activated()`)
 // — nothing lies over the view: an item on top with a pointer handler, even a passive one, changed
 // how the editor's drag selection ended.
@@ -73,5 +74,7 @@ FocusScope {
         focus: true
         covered: pane.covered
         paneActive: pane.paneActive
+        // The bottom navigation's views stay once shown: switching back to one is instant.
+        keepViews: true
     }
 }

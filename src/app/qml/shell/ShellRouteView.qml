@@ -6,8 +6,13 @@ import Brulion
 // window's panes, a page's own window —, AppController.sidePanelRoute in the side panel). The view
 // instance is kept while only the route's parameters change (another page, another day; another tab
 // showing the same view) and replaced when the view changes, with a short fade. The Loader detaches
-// the old view and deletes it on the event loop's next turn (deleteLater), its editor with it;
-// nothing else keeps a view (the shell self-test's "5n").
+// the old view and deletes it on the event loop's next turn (deleteLater), its editor with it.
+// With `keepViews` (the tab panes) the views of the phone's bottom navigation — Journal, All pages,
+// Search, Tasks, Calendar — are kept instead, hidden, once shown: going back to one shows it again
+// at once (where it was scrolled, its filters) instead of building it anew, which took 0.5–1 s on
+// a phone (docs/PERFORMANCE.md "Switching views"). A kept view is hidden with its editing ended
+// (`endEditing()`), and keeps the route it was shown with; the kept views go when the pane shows
+// no route (a split pane closed). Nothing else keeps a view (the shell self-test's "5n").
 //
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
@@ -40,6 +45,9 @@ Item {
     property bool covered: false
     /// The pane navigation goes to (false: the other pane of a split view).
     property bool paneActive: true
+    /// Keep the bottom navigation's views (Journal, All pages, Search, Tasks, Calendar) while
+    /// other views are shown (the tab panes; not the side panel).
+    property bool keepViews: false
 
     /// The view's state (where it is scrolled), {} for a view that keeps none.
     function viewState(): var {
@@ -50,13 +58,29 @@ Item {
         traits.restoreViewState(state)
     }
 
-    readonly property Item view: loader.item as Item
     readonly property string viewName: AppController.routeText(root.route, "view")
+    /// The view shown: a kept view's key ("journals" for both journal routes, "allPages",
+    /// "search", "tasks", "calendar") or another view's name (`loader`); set by showRoute() once
+    /// the view's own route is.
+    property string shownKey
+    // Each view's route: the route it was last shown with (a kept view, hidden, keeps it).
+    property var journalsRoute: ({})
+    property var allPagesRoute: ({})
+    property var searchRoute: ({})
+    property var tasksRoute: ({})
+    property var calendarRoute: ({})
+    property var otherRoute: ({})
+    readonly property Loader shownLoader: shownKey === "journals" ? journalsLoader
+                                        : shownKey === "allPages" ? allPagesLoader
+                                        : shownKey === "search" ? searchLoader
+                                        : shownKey === "tasks" ? tasksLoader
+                                        : shownKey === "calendar" ? calendarLoader : loader
+    readonly property Item view: shownLoader.item as Item
     // The optional view properties are looked up through the view's meta-object (views share no
     // base type): ViewTraits.
     ViewTraits {
         id: traits
-        view: loader.item
+        view: root.view
     }
     /// The view's own title, "" when it has none.
     readonly property string viewTitle: traits.title
@@ -95,17 +119,23 @@ Item {
         traits.stepBack()
     }
 
-    function componentFor(view: string): Component {
+    /// The key of a view kept by `keepViews` ("" for another view).
+    function keptKey(view: string): string {
         switch (view) {
         case "journals":
-        case "journal": return journalsView
+        case "journal": return "journals"
+        case "allPages":
+        case "search":
+        case "tasks":
+        case "calendar": return view
+        default: return ""
+        }
+    }
+    function componentFor(view: string): Component {
+        switch (view) {
         case "page": return pageView
-        case "calendar": return calendarView
-        case "tasks": return tasksView
         case "habits": return habitsView
         case "graph": return graphView
-        case "search": return searchView
-        case "allPages": return allPagesView
         case "tags":
         case "tag": return tagsView
         case "sync": return syncView
@@ -120,24 +150,49 @@ Item {
         default: return null
         }
     }
-
-    Loader {
-        id: loader
-        anchors.fill: parent
-        focus: true
-        sourceComponent: root.componentFor(root.viewName)
-        onLoaded: {
-            const item = loader.item as Item
-            if (item)
-                item.opacity = 0
-            fadeIn.restart()
-            // (traits.view follows loader.item already: itemChanged comes before loaded.)
-            traits.applyPendingState()
+    /// Show the view of `route`: its route first (a view made now starts with it), then the view.
+    function showRoute(): void {
+        // (Not viewName: its binding follows the route only after this handler.)
+        const name = AppController.routeText(root.route, "view")
+        const kept = root.keptKey(name)
+        const key = kept !== "" ? kept : name
+        // A kept view being hidden ends its editing (the touch keyboard goes with it).
+        if (key !== root.shownKey && root.keepViews && root.keptKey(root.shownKey) !== "")
+            traits.endEditing()
+        switch (key) {
+        case "journals": root.journalsRoute = root.route; break
+        case "allPages": root.allPagesRoute = root.route; break
+        case "search": root.searchRoute = root.route; break
+        case "tasks": root.tasksRoute = root.route; break
+        case "calendar": root.calendarRoute = root.route; break
+        default: root.otherRoute = root.route
         }
+        if (!root.keepViews || name === "") {
+            journalsLoader.kept = false
+            allPagesLoader.kept = false
+            searchLoader.kept = false
+            tasksLoader.kept = false
+            calendarLoader.kept = false
+        }
+        root.shownKey = key
+    }
+    onRouteChanged: showRoute()
+    onKeepViewsChanged: showRoute()
+    Component.onCompleted: showRoute()
+
+    // A view shown (made now or kept): it fades in, and gets the state restoreViewState() kept.
+    onViewChanged: {
+        fadeIn.stop() // (the view before, if it was fading in, is left whole)
+        const item = root.view
+        fadeIn.target = item
+        if (item) {
+            item.opacity = 0
+            fadeIn.start()
+        }
+        traits.applyPendingState()
     }
     NumberAnimation {
         id: fadeIn
-        target: loader.item
         property: "opacity"
         from: 0
         to: 1
@@ -145,28 +200,92 @@ Item {
         easing.type: Theme.easing
         // Without motion (or before the animation runs) the view must still be visible.
         onStopped: {
-            const item = loader.item as Item
+            const item = fadeIn.target as Item
             if (item)
                 item.opacity = 1
         }
     }
 
-    Component { id: journalsView; JournalsView { route: root.route; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }
-    Component { id: pageView; PageView { route: root.route; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }
-    Component { id: calendarView; CalendarView { route: root.route; covered: root.covered } }
-    Component { id: tasksView; TasksView { route: root.route } }
-    Component { id: habitsView; HabitsView { route: root.route } }
-    Component { id: graphView; GraphView { route: root.route } }
-    Component { id: searchView; SearchView { route: root.route } }
-    Component { id: allPagesView; AllPagesView { route: root.route } }
-    Component { id: tagsView; TagsView { route: root.route } }
-    Component { id: syncView; SyncView { route: root.route } }
-    Component { id: importExportView; ImportExportView { route: root.route } }
-    Component { id: historyView; HistoryView { route: root.route } }
-    Component { id: trashView; TrashView { route: root.route } }
-    Component { id: cleanupView; CleanupView { route: root.route } }
-    Component { id: replaceView; ReplaceView { route: root.route } }
-    Component { id: settingsView; SettingsView { route: root.route } }
-    Component { id: logsView; LogsView { route: root.route } }
-    Component { id: drawingView; DrawingView { route: root.route; inSidePanel: root.inSidePanel } }
+    // Views not kept: one at a time.
+    Loader {
+        id: loader
+        anchors.fill: parent
+        focus: root.shownLoader === loader
+        sourceComponent: root.componentFor(root.shownKey)
+    }
+    // The kept views: made when first shown, then (`kept`, with keepViews) only hidden.
+    Loader {
+        id: journalsLoader
+        property bool kept
+        readonly property bool shown: root.shownKey === "journals"
+        onShownChanged: if (shown && root.keepViews) kept = true
+        anchors.fill: parent
+        active: shown || kept
+        visible: shown
+        focus: shown
+        sourceComponent: journalsView
+    }
+    Loader {
+        id: allPagesLoader
+        property bool kept
+        readonly property bool shown: root.shownKey === "allPages"
+        onShownChanged: if (shown && root.keepViews) kept = true
+        anchors.fill: parent
+        active: shown || kept
+        visible: shown
+        focus: shown
+        sourceComponent: allPagesView
+    }
+    Loader {
+        id: searchLoader
+        property bool kept
+        readonly property bool shown: root.shownKey === "search"
+        onShownChanged: if (shown && root.keepViews) kept = true
+        anchors.fill: parent
+        active: shown || kept
+        visible: shown
+        focus: shown
+        sourceComponent: searchView
+    }
+    Loader {
+        id: tasksLoader
+        property bool kept
+        readonly property bool shown: root.shownKey === "tasks"
+        onShownChanged: if (shown && root.keepViews) kept = true
+        anchors.fill: parent
+        active: shown || kept
+        visible: shown
+        focus: shown
+        sourceComponent: tasksView
+    }
+    Loader {
+        id: calendarLoader
+        property bool kept
+        readonly property bool shown: root.shownKey === "calendar"
+        onShownChanged: if (shown && root.keepViews) kept = true
+        anchors.fill: parent
+        active: shown || kept
+        visible: shown
+        focus: shown
+        sourceComponent: calendarView
+    }
+
+    Component { id: journalsView; JournalsView { route: root.journalsRoute; inSidePanel: root.inSidePanel; paneActive: root.paneActive && journalsLoader.shown } }
+    Component { id: pageView; PageView { route: root.otherRoute; inSidePanel: root.inSidePanel; paneActive: root.paneActive } }
+    Component { id: calendarView; CalendarView { route: root.calendarRoute; covered: root.covered && calendarLoader.shown } }
+    Component { id: tasksView; TasksView { route: root.tasksRoute } }
+    Component { id: habitsView; HabitsView { route: root.otherRoute } }
+    Component { id: graphView; GraphView { route: root.otherRoute } }
+    Component { id: searchView; SearchView { route: root.searchRoute } }
+    Component { id: allPagesView; AllPagesView { route: root.allPagesRoute } }
+    Component { id: tagsView; TagsView { route: root.otherRoute } }
+    Component { id: syncView; SyncView { route: root.otherRoute } }
+    Component { id: importExportView; ImportExportView { route: root.otherRoute } }
+    Component { id: historyView; HistoryView { route: root.otherRoute } }
+    Component { id: trashView; TrashView { route: root.otherRoute } }
+    Component { id: cleanupView; CleanupView { route: root.otherRoute } }
+    Component { id: replaceView; ReplaceView { route: root.otherRoute } }
+    Component { id: settingsView; SettingsView { route: root.otherRoute } }
+    Component { id: logsView; LogsView { route: root.otherRoute } }
+    Component { id: drawingView; DrawingView { route: root.otherRoute; inSidePanel: root.inSidePanel } }
 }

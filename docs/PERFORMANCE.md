@@ -13,6 +13,9 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 ### What got better
 
+* **Switching views without waiting** (2026-11-09). Journal, Pages, Search, Tasks and Calendar
+  stay in memory once opened: going back to one of them (e.g. from Tasks to the Journal on a
+  phone) shows it at once, where it was scrolled, instead of building it again for 0.5–1 s.
 * **Smooth graph** (2026-10-30). The **Graph** view is laid out on a separate thread and drawn by
   the graphics card: from the very first moment you can pan it, zoom it and drag pages, and the
   interface does not wait for the layout computation. With a notebook of 10,000 notes (a graph of
@@ -1003,7 +1006,8 @@ Tabs (docs/UI.md "Tabs, split view and windows") are kept cheap by design, not b
   tens of kilobytes; no editor, PDF reader, picture or query model stays alive for them.
 * **Switching tabs is a route change in the pane.** The same view (a page after a page) keeps its
   instance and loads the other note, as a link does (the old page is saved first); another view
-  (the journals after a page) is created again, as on navigation. Coming back the pane restores
+  (Graph after a page) is created again, as on navigation — except the bottom navigation's views,
+  which the pane keeps ("Switching views" below). Coming back the pane restores
   where the tab was scrolled (`PageView.viewState()`: the first row in view and the offset into
   it, applied once the page has loaded; the journal stream: the day at the top) — the price of not
   keeping editors is one page load per switch, the same as following a link.
@@ -1014,6 +1018,22 @@ Tabs (docs/UI.md "Tabs, split view and windows") are kept cheap by design, not b
   focused tab changed.
 * **Saving** writes one JSON string per notebook (`tabs/<vault id>`, histories trimmed to 20 routes
   a side) half a second after the last change, so a burst of navigation writes the settings once.
+
+### Switching views: the bottom navigation's views are kept (2026-11-09)
+
+On a phone, going from Tasks to the Journal and back felt slow: `ShellRouteView` deleted the view
+it left and built the next one from nothing, its models, lists and the journal's day editors
+included — Tasks alone took ~0.1 s on a computer and 0.7 s on a phone (above), the Journal
+about as long. Now a pane (`ShellTabPane`, `ShellRouteView.keepViews`) keeps the views of the
+bottom navigation — Journal, All pages, Search, Tasks, Calendar — once it has shown them: hidden
+(`visible: false`, nothing drawn or laid out), each with its own route, and shown again in the
+next frame, where it was scrolled. Their cost while hidden: memory (at most five views a pane;
+the journal's days are a lazy list, only the days that were on screen exist) and keeping their
+models up to date with edits, which follow the index's change log (`QueryCache`,
+`CalendarCache`: a fraction of a millisecond per edit). Other views — a page, Graph, Habits,
+Settings… — are still made per route and deleted when left, so the shell self-test's "5n"
+(rounds of views and pages leave no more editors than the first round) holds. The kept views
+go when the pane shows no route (the split pane closed).
 
 ### Scrolling pages: cheaper rows, pages created whole (2026-11-06, 2026-11-07)
 

@@ -856,7 +856,13 @@ for a custom one) and **Restore all** with a confirmation. Vim mode is not there
 `AppController` keeps the route history of every tab (`navigation.h`: `RouteHistory`, routes are
 `QVariantMap`s `{view, path?, line?, blockId?, date?, tag?, query?, section?, …}`; the tabs:
 `tabs.h`, "Tabs, split view and windows" below); `ShellRouteView` shows the view for a route — a
-tab's in its pane (`ShellTabPane`), and the side panel's route.
+tab's in its pane (`ShellTabPane`), and the side panel's route. A pane keeps the views of the
+phone's bottom navigation — Journal, All pages, Search, Tasks, Calendar — once it has shown them
+(`ShellRouteView.keepViews`): hidden while another view is shown, each with the route it was last
+shown with, and shown again at once, where it was scrolled, instead of being built anew (on a phone
+building one took 0.5–1 s); a view hidden this way ends its editing first (`endEditing()`, the
+touch keyboard goes). Other views (a page, Graph, Settings, …) are made for their route and deleted
+when another view is shown; the side panel keeps none.
 
 | Route `view` | View | Parameters |
 |---|---|---|

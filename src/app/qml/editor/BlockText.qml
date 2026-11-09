@@ -40,14 +40,16 @@ Item {
     /// block is shown by another view or hidden: no text, no inline editor).
     property bool live: true
 
+    /// (null for a moment while a released block goes with an editor being deleted: a day of a
+    /// journal stream kept hidden by the shell, its note deleted.)
     final property BlockEditor editor: block.editor
     /// The editor's controller and find bar (typed here: looked into below).
-    readonly property PageController controller: editor.controller
-    readonly property NoteFind find: editor.find
+    readonly property PageController controller: editor ? editor.controller : null
+    readonly property NoteFind find: editor ? editor.find : null
     readonly property int level: block.shownHeadingLevel
-    readonly property int fontSize: editor.headingSize(level)
-    readonly property int lineHeightPx: editor.headingLineHeight(level)
-    readonly property real firstLineCenter: editor.firstLineCenter(level)
+    readonly property int fontSize: editor ? editor.headingSize(level) : 0
+    readonly property int lineHeightPx: editor ? editor.headingLineHeight(level) : 0
+    readonly property real firstLineCenter: editor ? editor.firstLineCenter(level) : 0
     readonly property bool mono: block.view === "html"
     readonly property bool editing: live && block.editing
     readonly property int align: root.centered ? Text.AlignHCenter : Text.AlignLeft
@@ -194,6 +196,8 @@ Item {
             enabled: !Theme.touchUi
             // (A click on a date, 🔁 or priority chip edits the text: its menu is the right button's.)
             cursorShape: {
+                if (!root.editor)
+                    return Qt.ArrowCursor
                 const link = root.linkAt(point.position.x, point.position.y)
                 return link !== "" && !root.editor.editsOnClick(link) ? Qt.PointingHandCursor
                                                                       : root.editor.readOnly ? Qt.ArrowCursor : Qt.IBeamCursor

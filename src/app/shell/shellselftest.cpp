@@ -2601,6 +2601,9 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         return folderRow != nullptr;
     });
     check(folderRow != nullptr, "All pages lists the notebook's folders as rows");
+    // (All pages is kept from its last visit, scrolled where it was: the folders may be above.)
+    if (folderRow)
+        uidriver::scrollIntoView(window, folderRow, [] { settle(50); });
     tap(folderRow);
     check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == u"Projekty"; }),
           "a folder row opens the folder in All pages");
