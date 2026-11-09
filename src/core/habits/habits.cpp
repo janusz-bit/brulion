@@ -26,7 +26,7 @@ QString propertyText(const QVariant &value)
         return value.toStringList().join(u", "_s);
     if (value.typeId() == QMetaType::QVariantList) {
         QStringList parts;
-        for (const QVariant &v : value.toList())
+        for (const QVariantList list = value.toList(); const QVariant &v : list) // const: no detaching copy
             parts.append(propertyText(v));
         return parts.join(u", "_s);
     }
@@ -87,11 +87,6 @@ Mark markOf(TaskStatus status)
     case TaskStatus::Cancelled: return Mark::Skipped;
     default: return Mark::Open;
     }
-}
-
-bool isDaysKind(const Schedule &s)
-{
-    return s.kind != Kind::Times;
 }
 
 /// The Times block (`interval` periods) holding `day`, for a habit anchored at `start`: [first, last].
@@ -159,7 +154,7 @@ struct BlockResult {
     bool excused = false;
 };
 
-BlockResult evaluate(const Schedule &s, const DayMarks &days, const Span &b, QDate from, QDate today)
+BlockResult evaluate(const Schedule &s, const DayMarks &days, Span b, QDate from, QDate today)
 {
     const Counts c = countIn(days, std::max(b.first, from), std::min(b.last, today));
     BlockResult r;
@@ -193,12 +188,12 @@ QString habitName(QStringView text)
     const qsizetype eol = text.indexOf(u'\n');
     const QStringView line = eol < 0 ? text : text.first(eol);
     struct Cut {
-        qsizetype from;
-        qsizetype to;
+        qsizetype from = 0;
+        qsizetype to = 0;
         QString with;
     };
     QList<Cut> cuts;
-    for (const markdown::TagSpan &tag : markdown::findTags(line))
+    for (const auto tags = markdown::findTags(line); const markdown::TagSpan &tag : tags)
         cuts.append({tag.from, tag.to, QString()});
     const markdown::InlineScan scan = markdown::extractInline(line);
     for (const Link &link : scan.links) {
@@ -218,7 +213,7 @@ QString habitName(QStringView text)
         }
         cuts.append({link.from, link.to, label});
     }
-    std::ranges::sort(cuts, [](const Cut &a, const Cut &b) { return a.from < b.from; });
+    std::ranges::sort(cuts, {}, &Cut::from);
     QString out;
     qsizetype at = 0;
     for (const Cut &cut : std::as_const(cuts)) {
@@ -279,9 +274,7 @@ QList<Check> checksOf(const ParsedNote &note)
         return out;
     for (qsizetype i = 0; i < note.blocks.size(); ++i) {
         const Block &b = note.blocks[i];
-        if (!b.task || b.tags.isEmpty() || definesHabit(b.properties))
-            continue;
-        if (std::none_of(b.tags.cbegin(), b.tags.cend(), [](const QString &t) { return isCheckTag(t); }))
+        if (!b.task || std::ranges::none_of(b.tags, isCheckTag) || definesHabit(b.properties))
             continue;
         Check c;
         c.name = habitName(b.task->text);
@@ -321,25 +314,24 @@ Stats statsOf(const Habit &habit, const DayMarks &days, QDate today, Qt::DayOfWe
     const Schedule &s = *habit.schedule;
     st.unit = unitOf(s);
     st.start = effectiveStart(habit, days, today);
-    const auto todayIt = days.constFind(today);
-    st.todayRecorded = todayIt != days.constEnd();
-    st.todayMark = st.todayRecorded ? *todayIt : Mark::Open;
+    st.todayRecorded = days.contains(today);
+    st.todayMark = days.value(today, Mark::Open);
     for (auto it = days.constBegin(); it != days.constEnd() && it.key() <= today; ++it) {
         if (*it == Mark::Done)
             st.lastDone = it.key();
     }
-    if (st.start > today)
+    // No start (a key of `days` that is no date): the periods below would never reach today.
+    if (!st.start.isValid() || st.start > today)
         return st;
     const QDate from = std::max(st.start, today.addDays(-MaxCountedDays));
     st.done = countIn(days, from, today).done;
 
     int run = 0;
-    if (isDaysKind(s)) {
+    if (s.kind != Kind::Times) { // Days, Weekdays, MonthDay: due days
         for (QDate d = from; d <= today; d = d.addDays(1)) {
             if (!isScheduled(s, st.start, d, weekStart))
                 continue;
-            const auto it = days.constFind(d);
-            const Mark mark = it == days.constEnd() ? Mark::Open : *it;
+            const Mark mark = days.value(d, Mark::Open);
             if (mark == Mark::Done) {
                 ++run;
                 ++st.met;
@@ -403,8 +395,7 @@ QList<DayState> daysOf(const Habit &habit, const DayMarks &days, QDate from, QDa
     }
     out.reserve(from.daysTo(to) + 1);
     for (QDate d = from; d <= to; d = d.addDays(1)) {
-        const auto it = days.constFind(d);
-        const Mark mark = it == days.constEnd() ? Mark::Open : *it;
+        const Mark mark = days.value(d, Mark::Open);
         if (d > today)
             out.append(DayState::Future);
         else if (mark == Mark::Done)
@@ -453,9 +444,7 @@ std::optional<Mark> markFromName(QStringView name)
             {u"no"_s, Mark::Open},           {u"otwarte"_s, Mark::Open},
     };
     const auto it = names.constFind(n);
-    if (it == names.constEnd())
-        return std::nullopt;
-    return *it;
+    return it == names.constEnd() ? std::nullopt : std::optional(*it);
 }
 
 QString dayStateName(DayState state)

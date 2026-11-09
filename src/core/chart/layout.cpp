@@ -2,6 +2,7 @@
 // Every size is bounded: the width is clamped, labels are cut to the room they have (elided with
 // "…"), labels that do not fit are thinned out, values are finite (data.cpp made the rest gaps).
 #include "chart/chart.h"
+#include "chart/messages_p.h"
 
 #include "calc/numbers.h"
 
@@ -16,7 +17,6 @@ namespace brulion::chart {
 
 namespace {
 
-using diagram::Dash;
 using diagram::Item;
 using diagram::Paint;
 using diagram::PathOp;
@@ -60,9 +60,8 @@ struct Measure {
             else
                 hi = mid - 1;
         }
-        if (lo > 0 && lo < text.size() && text.at(lo - 1).isHighSurrogate())
-            --lo;
-        return lo == 0 ? QString() : text.left(lo).trimmed() + u'…';
+        const QStringView kept = detail::cutAt(text, lo);
+        return kept.isEmpty() ? QString() : kept.trimmed().toString() + u'…';
     }
 };
 
@@ -81,15 +80,14 @@ Item textItem(const QRectF &box, const QString &text, qreal px, bool bold, Paint
     return it;
 }
 
-Item pathItem(QList<PathOp> path, Paint fill, Paint stroke, qreal width = 1, Dash dash = Dash::Solid)
+Item pathItem(QList<PathOp> path, Paint fill, Paint stroke, qreal width = 1)
 {
     Item it;
     it.type = Item::Type::Path;
     it.path = std::move(path);
-    it.fill = fill;
-    it.stroke = stroke;
+    it.fill = std::move(fill);
+    it.stroke = std::move(stroke);
     it.strokeWidth = width;
-    it.dash = dash;
     return it;
 }
 
@@ -102,13 +100,13 @@ QList<PathOp> rectPath(const QRectF &r)
             {PathOp::Type::Close, {}, {}, {}}};
 }
 
-QList<PathOp> linePath(const QPointF &a, const QPointF &b)
+QList<PathOp> linePath(QPointF a, QPointF b)
 {
     return {{PathOp::Type::Move, a, {}, {}}, {PathOp::Type::Line, b, {}, {}}};
 }
 
 /// An arc from angle `a0` to `a1` (radians, y down) as cubics (no Move).
-void appendArc(QList<PathOp> &path, const QPointF &c, qreal r, qreal a0, qreal a1)
+void appendArc(QList<PathOp> &path, QPointF c, qreal r, qreal a0, qreal a1)
 {
     const qreal span = a1 - a0;
     const int n = std::max(1, int(std::ceil(std::abs(span) / (std::numbers::pi / 2) - 1e-9)));
@@ -124,7 +122,7 @@ void appendArc(QList<PathOp> &path, const QPointF &c, qreal r, qreal a0, qreal a
     }
 }
 
-QList<PathOp> circlePath(const QPointF &c, qreal r)
+QList<PathOp> circlePath(QPointF c, qreal r)
 {
     QList<PathOp> p{{PathOp::Type::Move, QPointF(c.x() + r, c.y()), {}, {}}};
     appendArc(p, c, r, 0, 2 * std::numbers::pi);
@@ -132,12 +130,25 @@ QList<PathOp> circlePath(const QPointF &c, qreal r)
     return p;
 }
 
-/// "Nice" axis ticks over [lo, hi]: steps of 1, 2 or 5 × 10^k, about five of them.
+/// "Nice" axis ticks over the finite values of `data` (and zero when `fromZero`): steps of 1, 2 or
+/// 5 × 10^k, about five of them.
 struct Ticks {
     double lo = 0, hi = 1, step = 1;
 };
-Ticks niceTicks(double lo, double hi)
+Ticks niceTicks(const Data &data, bool fromZero)
 {
+    double lo = fromZero ? 0 : std::numeric_limits<double>::infinity();
+    double hi = fromZero ? 0 : -std::numeric_limits<double>::infinity();
+    for (const Series &s : data.series) {
+        for (const double v : s.values) {
+            if (std::isfinite(v)) {
+                lo = std::min(lo, v);
+                hi = std::max(hi, v);
+            }
+        }
+    }
+    if (!std::isfinite(lo) || !std::isfinite(hi))
+        lo = hi = 0;
     if (!(hi > lo)) {
         const double pad = lo == 0 ? 1 : std::abs(lo) * 0.1;
         lo -= pad;
@@ -156,15 +167,16 @@ Ticks niceTicks(double lo, double hi)
     return t;
 }
 
-/// A legend row of series names with their colour, flowing in `width`. Returns its height.
-qreal addLegend(QList<Item> &items, const Measure &m, const QStringList &names, qreal top, qreal width, bool bars)
+/// A legend row of the series' names with their colour, flowing in `width`. Returns its height.
+qreal addLegend(QList<Item> &items, const Measure &m, const QList<Series> &series, qreal top, qreal width, bool bars)
 {
     const qreal px = m.fs() * 0.9;
     const qreal lh = m.lineHeight(px);
     const qreal swatch = std::round(px * 0.8);
     qreal x = Margin, y = top;
-    for (qsizetype i = 0; i < names.size(); ++i) {
-        const QString name = m.elide(names.at(i).isEmpty() ? u"—"_s : names.at(i), px, false, width / 3);
+    for (qsizetype i = 0; i < series.size(); ++i) {
+        const QString &label = series.at(i).name;
+        const QString name = m.elide(label.isEmpty() ? u"—"_s : label, px, false, width / 3);
         const qreal w = swatch + 6 + m.width(name, px) + 16;
         if (x > Margin && x + w > width - Margin) {
             x = Margin;
@@ -191,26 +203,9 @@ void layoutAxes(diagram::Scene &scene, const Spec &spec, const Data &data, const
     const qsizetype seriesCount = data.series.size();
     const bool bars = spec.type == Type::Bar;
     QList<Item> &items = scene.items;
-    if (seriesCount > 1) {
-        QStringList names;
-        for (const Series &s : data.series)
-            names.append(s.name);
-        top += addLegend(items, m, names, top, width, bars) + 6;
-    }
-    // The values' range (bars from zero).
-    double lo = bars ? 0 : std::numeric_limits<double>::infinity();
-    double hi = bars ? 0 : -std::numeric_limits<double>::infinity();
-    for (const Series &s : data.series) {
-        for (const double v : s.values) {
-            if (std::isfinite(v)) {
-                lo = std::min(lo, v);
-                hi = std::max(hi, v);
-            }
-        }
-    }
-    if (!std::isfinite(lo) || !std::isfinite(hi))
-        lo = hi = 0;
-    const Ticks ticks = niceTicks(lo, hi);
+    if (seriesCount > 1)
+        top += addLegend(items, m, data.series, top, width, bars) + 6;
+    const Ticks ticks = niceTicks(data, bars); // bars from zero
     const int tickCount = std::clamp(int(std::llround((ticks.hi - ticks.lo) / ticks.step)), 1, 20);
     const qreal small = m.fs() * 0.85;
     const qreal lh = m.lineHeight(small);
@@ -272,30 +267,29 @@ void layoutAxes(diagram::Scene &scene, const Spec &spec, const Data &data, const
         }
     } else {
         const bool markers = n <= 60;
+        QList<QPointF> points;
         for (qsizetype s = 0; s < seriesCount; ++s) {
             const QList<double> &values = data.series.at(s).values;
+            const auto finite = [&values](qsizetype i) {
+                return i >= 0 && i < values.size() && std::isfinite(values.at(i));
+            };
             QList<PathOp> path;
-            QList<QPointF> points;
-            bool open = false;
+            points.clear();
             for (qsizetype i = 0; i < n && i < values.size(); ++i) {
-                const double v = values.at(i);
-                if (!std::isfinite(v)) {
-                    open = false;
+                if (!finite(i))
                     continue;
-                }
-                const QPointF p(plotLeft + slot * (i + 0.5), yOf(v));
-                const bool alone = (i == 0 || !std::isfinite(values.at(i - 1)))
-                                   && (i + 1 >= values.size() || !std::isfinite(values.at(i + 1)));
-                path.append({open ? PathOp::Type::Line : PathOp::Type::Move, p, {}, {}});
-                open = true;
-                if (markers || alone)
+                // A point after a gap starts a new line; one alone has a marker even among many.
+                const QPointF p(plotLeft + slot * (i + 0.5), yOf(values.at(i)));
+                const bool joined = finite(i - 1);
+                path.append({joined ? PathOp::Type::Line : PathOp::Type::Move, p, {}, {}});
+                if (markers || (!joined && !finite(i + 1)))
                     points.append(p);
             }
+            const Paint color = role(diagram::seriesRole(int(s)));
             if (!path.isEmpty())
-                items.append(pathItem(path, Paint{}, role(diagram::seriesRole(int(s))), 2.25));
+                items.append(pathItem(std::move(path), Paint{}, color, 2.25));
             for (const QPointF &p : std::as_const(points))
-                items.append(
-                        pathItem(circlePath(p, 3.25), role(diagram::seriesRole(int(s))), role(Role::Background), 1.25));
+                items.append(pathItem(circlePath(p, 3.25), color, role(Role::Background), 1.25));
         }
     }
     // The zero line (or the bottom) over the bars.
@@ -337,14 +331,12 @@ void layoutPie(diagram::Scene &scene, const Data &data, const Measure &m, qreal 
             appendArc(p, c, R, a, a + span);
             p.append({PathOp::Type::Close, {}, {}, {}});
         }
-        scene.items.append(pathItem(p, role(diagram::sliceRole(int(k))), role(Role::SliceStroke), 1.5));
+        scene.items.append(pathItem(std::move(p), role(diagram::sliceRole(int(k))), role(Role::SliceStroke), 1.5));
         if (span >= 14 * pi / 180) {
             const qreal mid = a + span / 2;
             const QPointF at = shown.size() == 1 ? c : c + QPointF(R * 0.66 * std::cos(mid), R * 0.66 * std::sin(mid));
-            const QString text =
-                    calc::formatNumber(std::round(share * (share >= 0.0995 ? 100 : 1000)) / (share >= 0.0995 ? 1 : 10),
-                                       locale)
-                    + u'%';
+            const double scale = share >= 0.0995 ? 100 : 1000; // whole percents, tenths below 10 %
+            const QString text = calc::formatNumber(std::round(share * scale) / (scale / 100), locale) + u'%';
             const qreal w = m.width(text, px, true) + 4;
             labels.append(
                     textItem(QRectF(at.x() - w / 2, at.y() - lh / 2, w, lh), text, px, true, role(Role::SliceText)));
@@ -385,7 +377,6 @@ diagram::Scene layoutChart(const Spec &spec, const Data &data, const LayoutOptio
     const qreal width =
             std::clamp(std::isfinite(options.width) ? options.width : 640, limits::MinWidth, limits::MaxWidth);
     scene.title = spec.title.isEmpty() ? typeName(spec.type) : spec.title;
-    scene.size = QSizeF(width, Margin * 2);
     qreal top = Margin;
     if (!spec.title.isEmpty()) {
         const qreal px = m.fs() * 1.1;
@@ -394,6 +385,7 @@ diagram::Scene layoutChart(const Spec &spec, const Data &data, const LayoutOptio
                                     m.elide(spec.title, px, true, width - 2 * Margin), px, true, role(Role::Title)));
         top += lh + 6;
     }
+    scene.size = QSizeF(width, top + Margin); // the title's height, kept when there is nothing to draw
     if (data.series.isEmpty() || data.labels.isEmpty())
         return scene;
     if (spec.type == Type::Pie)

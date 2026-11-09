@@ -12,7 +12,7 @@
 #include <QElapsedTimer>
 
 #include <algorithm>
-#include <cstring>
+#include <bit>
 #include <iterator>
 #include <limits>
 #include <optional>
@@ -72,16 +72,8 @@ public:
     explicit Out(QByteArray &buffer) : m_b(buffer) { }
     void raw(const char *data, qsizetype n) { m_b.append(data, n); }
     void u8(quint8 v) { m_b.append(char(v)); }
-    void u32(quint32 v)
-    {
-        for (int i = 0; i < 4; ++i)
-            u8(quint8(v >> (8 * i)));
-    }
-    void u64(quint64 v)
-    {
-        for (int i = 0; i < 8; ++i)
-            u8(quint8(v >> (8 * i)));
-    }
+    void u32(quint32 v) { fixed(v); }
+    void u64(quint64 v) { fixed(v); }
     void varint(quint64 v)
     {
         while (v >= 0x80) {
@@ -101,17 +93,14 @@ public:
         if (needsUtf16(s)) {
             const qsizetype bytes = s.size() * 2;
             varint((quint64(bytes) << 1 | 1) + 1);
-            for (const QChar c : s) {
-                u8(quint8(c.unicode() & 0xff));
-                u8(quint8(c.unicode() >> 8));
-            }
+            for (const QChar c : s)
+                fixed(c.unicode());
             return;
         }
         const QByteArray utf8 = s.toUtf8();
         varint((quint64(utf8.size()) << 1) + 1);
         raw(utf8.constData(), utf8.size());
     }
-    qsizetype size() const { return m_b.size(); }
 
     /// Does `s` hold a lone surrogate (UTF-8 cannot carry it)?
     static bool needsUtf16(QStringView s)
@@ -130,6 +119,14 @@ public:
     }
 
 private:
+    /// `v` in little-endian byte order.
+    template<typename T>
+    void fixed(T v)
+    {
+        for (std::size_t i = 0; i < sizeof(T); ++i)
+            u8(quint8(v >> (8 * i)));
+    }
+
     QByteArray &m_b;
 };
 
@@ -142,33 +139,28 @@ public:
     bool failed() const { return m_failed; }
     bool atEnd() const { return m_p == m_end; }
     qint64 remaining() const { return m_failed ? 0 : qint64(m_end - m_p); }
-    bool fail()
+    /// Mark the input unusable (sticky: every later read gets nothing).
+    void fail()
     {
         m_failed = true;
         m_p = m_end;
-        return false;
+    }
+    /// fail(), returning T() as the value of the read that failed.
+    template<typename T>
+    T fail()
+    {
+        fail();
+        return T();
     }
 
     quint8 u8()
     {
         if (m_failed || m_p >= m_end)
-            return fail(), 0;
+            return fail<quint8>();
         return quint8(*m_p++);
     }
-    quint32 u32()
-    {
-        quint32 v = 0;
-        for (int i = 0; i < 4; ++i)
-            v |= quint32(u8()) << (8 * i);
-        return v;
-    }
-    quint64 u64()
-    {
-        quint64 v = 0;
-        for (int i = 0; i < 8; ++i)
-            v |= quint64(u8()) << (8 * i);
-        return v;
-    }
+    quint32 u32() { return fixed<quint32>(); }
+    quint64 u64() { return fixed<quint64>(); }
     quint64 varint()
     {
         quint64 v = 0;
@@ -180,8 +172,7 @@ public:
             if (!(b & 0x80))
                 return v;
         }
-        fail(); // longer than 10 bytes
-        return 0;
+        return fail<quint64>(); // longer than 10 bytes
     }
     qint64 zigzag()
     {
@@ -193,21 +184,21 @@ public:
     {
         const quint64 n = varint();
         if (m_failed || n > quint64(remaining() / std::max<qint64>(1, minBytes)))
-            return fail(), 0;
+            return fail<qsizetype>();
         return qsizetype(n);
     }
     int small(int maxValue)
     {
         const quint64 v = varint();
         if (v > quint64(maxValue))
-            return fail(), 0;
+            return fail<int>();
         return int(v);
     }
     int intValue()
     {
         const qint64 v = zigzag();
         if (v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max())
-            return fail(), 0;
+            return fail<int>();
         return int(v);
     }
     bool boolean()
@@ -225,7 +216,7 @@ public:
         const quint64 bytes = (tag - 1) >> 1;
         const bool utf16 = ((tag - 1) & 1) != 0;
         if (bytes > quint64(remaining()) || (utf16 && bytes % 2 != 0))
-            return fail(), QString();
+            return fail<QString>();
         const char *p = m_p;
         m_p += bytes;
         if (!utf16)
@@ -239,13 +230,23 @@ public:
     QByteArrayView take(qint64 n)
     {
         if (n < 0 || n > remaining())
-            return fail(), QByteArrayView();
+            return fail<QByteArrayView>();
         const QByteArrayView v(m_p, n);
         m_p += n;
         return v;
     }
 
 private:
+    /// A little-endian T.
+    template<typename T>
+    T fixed()
+    {
+        T v = 0;
+        for (std::size_t i = 0; i < sizeof(T); ++i)
+            v |= T(u8()) << (8 * i);
+        return v;
+    }
+
     const char *m_p;
     const char *m_end;
     bool m_failed = false;
@@ -254,132 +255,6 @@ private:
 // ---- values ---------------------------------------------------------------------------------------
 
 enum VariantTag : quint8 { VInvalid, VBool, VLongLong, VDouble, VString, VStringList, VList, VMap };
-
-/// false when `v` (or something in it) has a type the format cannot hold.
-bool writeVariant(Out &o, const QVariant &v, int depth = 0)
-{
-    if (depth > MaxVariantDepth)
-        return false;
-    switch (v.typeId()) {
-    case QMetaType::UnknownType: o.u8(VInvalid); return true;
-    case QMetaType::Bool:
-        o.u8(VBool);
-        o.boolean(v.toBool());
-        return true;
-    case QMetaType::LongLong:
-        o.u8(VLongLong);
-        o.zigzag(v.toLongLong());
-        return true;
-    case QMetaType::Double: {
-        o.u8(VDouble);
-        const double d = v.toDouble();
-        quint64 bits = 0;
-        std::memcpy(&bits, &d, sizeof bits);
-        o.u64(bits);
-        return true;
-    }
-    case QMetaType::QString:
-        o.u8(VString);
-        o.str(v.toString());
-        return true;
-    case QMetaType::QStringList: {
-        o.u8(VStringList);
-        const QStringList l = v.toStringList();
-        o.varint(quint64(l.size()));
-        for (const QString &s : l)
-            o.str(s);
-        return true;
-    }
-    case QMetaType::QVariantList: {
-        o.u8(VList);
-        const QVariantList l = v.toList();
-        o.varint(quint64(l.size()));
-        for (const QVariant &e : l) {
-            if (!writeVariant(o, e, depth + 1))
-                return false;
-        }
-        return true;
-    }
-    case QMetaType::QVariantMap: {
-        o.u8(VMap);
-        const QVariantMap m = v.toMap();
-        o.varint(quint64(m.size()));
-        for (auto it = m.cbegin(); it != m.cend(); ++it) {
-            o.str(it.key());
-            if (!writeVariant(o, it.value(), depth + 1))
-                return false;
-        }
-        return true;
-    }
-    default: return false;
-    }
-}
-
-QVariant readVariant(In &in, int depth = 0)
-{
-    if (depth > MaxVariantDepth)
-        return in.fail(), QVariant();
-    switch (in.u8()) {
-    case VInvalid: return QVariant();
-    case VBool: return QVariant(in.boolean());
-    case VLongLong: return QVariant(qlonglong(in.zigzag()));
-    case VDouble: {
-        const quint64 bits = in.u64();
-        double d = 0;
-        std::memcpy(&d, &bits, sizeof d);
-        return QVariant(d);
-    }
-    case VString: return QVariant(in.str());
-    case VStringList: {
-        const qsizetype n = in.count();
-        QStringList l;
-        l.reserve(n);
-        for (qsizetype i = 0; i < n && !in.failed(); ++i)
-            l.append(in.str());
-        return QVariant(l);
-    }
-    case VList: {
-        const qsizetype n = in.count();
-        QVariantList l;
-        l.reserve(n);
-        for (qsizetype i = 0; i < n && !in.failed(); ++i)
-            l.append(readVariant(in, depth + 1));
-        return QVariant(l);
-    }
-    case VMap: {
-        const qsizetype n = in.count(2);
-        QVariantMap m;
-        for (qsizetype i = 0; i < n && !in.failed(); ++i) {
-            const QString key = in.str();
-            m.insert(key, readVariant(in, depth + 1));
-        }
-        return QVariant(m);
-    }
-    default: return in.fail(), QVariant();
-    }
-}
-
-bool writeMap(Out &o, const QVariantMap &m)
-{
-    o.varint(quint64(m.size()));
-    for (auto it = m.cbegin(); it != m.cend(); ++it) {
-        o.str(it.key());
-        if (!writeVariant(o, it.value(), 1))
-            return false;
-    }
-    return true;
-}
-
-QVariantMap readMap(In &in)
-{
-    const qsizetype n = in.count(2);
-    QVariantMap m;
-    for (qsizetype i = 0; i < n && !in.failed(); ++i) {
-        const QString key = in.str();
-        m.insert(key, readVariant(in, 1));
-    }
-    return m;
-}
 
 void writeStrings(Out &o, const QStringList &l)
 {
@@ -398,32 +273,112 @@ QStringList readStrings(In &in)
     return l;
 }
 
-void writeDate(Out &o, const QDate &d)
+bool writeVariant(Out &o, const QVariant &v, int depth);
+QVariant readVariant(In &in, int depth);
+
+/// false when a value (or something in it) has a type the format cannot hold.
+bool writeMap(Out &o, const QVariantMap &m, int depth = 0)
 {
-    if (!d.isValid()) {
-        o.u8(0);
-        return;
+    o.varint(quint64(m.size()));
+    for (auto [key, value] : m.asKeyValueRange()) {
+        o.str(key);
+        if (!writeVariant(o, value, depth + 1))
+            return false;
     }
-    o.u8(1);
-    o.zigzag(d.toJulianDay());
+    return true;
+}
+
+QVariantMap readMap(In &in, int depth = 0)
+{
+    const qsizetype n = in.count(2);
+    QVariantMap m;
+    for (qsizetype i = 0; i < n && !in.failed(); ++i) {
+        const QString key = in.str();
+        m.insert(key, readVariant(in, depth + 1));
+    }
+    return m;
+}
+
+/// false when `v` (or something in it) has a type the format cannot hold.
+bool writeVariant(Out &o, const QVariant &v, int depth)
+{
+    if (depth > MaxVariantDepth)
+        return false;
+    switch (v.typeId()) {
+    case QMetaType::UnknownType: o.u8(VInvalid); return true;
+    case QMetaType::Bool:
+        o.u8(VBool);
+        o.boolean(v.toBool());
+        return true;
+    case QMetaType::LongLong:
+        o.u8(VLongLong);
+        o.zigzag(v.toLongLong());
+        return true;
+    case QMetaType::Double:
+        o.u8(VDouble);
+        o.u64(std::bit_cast<quint64>(v.toDouble()));
+        return true;
+    case QMetaType::QString:
+        o.u8(VString);
+        o.str(v.toString());
+        return true;
+    case QMetaType::QStringList:
+        o.u8(VStringList);
+        writeStrings(o, v.toStringList());
+        return true;
+    case QMetaType::QVariantList: {
+        o.u8(VList);
+        const QVariantList l = v.toList();
+        o.varint(quint64(l.size()));
+        return std::ranges::all_of(l, [&o, depth](const QVariant &e) { return writeVariant(o, e, depth + 1); });
+    }
+    case QMetaType::QVariantMap: o.u8(VMap); return writeMap(o, v.toMap(), depth);
+    default: return false;
+    }
+}
+
+QVariant readVariant(In &in, int depth)
+{
+    if (depth > MaxVariantDepth)
+        return in.fail<QVariant>();
+    switch (in.u8()) {
+    case VInvalid: return QVariant();
+    case VBool: return QVariant(in.boolean());
+    case VLongLong: return QVariant(qlonglong(in.zigzag()));
+    case VDouble: return QVariant(std::bit_cast<double>(in.u64()));
+    case VString: return QVariant(in.str());
+    case VStringList: return QVariant(readStrings(in));
+    case VList: {
+        const qsizetype n = in.count();
+        QVariantList l;
+        l.reserve(n);
+        for (qsizetype i = 0; i < n && !in.failed(); ++i)
+            l.append(readVariant(in, depth + 1));
+        return QVariant(l);
+    }
+    case VMap: return QVariant(readMap(in, depth));
+    default: return in.fail<QVariant>();
+    }
+}
+
+void writeDate(Out &o, QDate d)
+{
+    o.boolean(d.isValid());
+    if (d.isValid())
+        o.zigzag(d.toJulianDay());
 }
 
 QDate readDate(In &in)
 {
-    switch (in.u8()) {
-    case 0: return QDate();
-    case 1: {
-        const qint64 jd = in.zigzag();
-        const QDate d = QDate::fromJulianDay(jd);
-        if (!d.isValid())
-            in.fail();
-        return d;
-    }
-    default: return in.fail(), QDate();
-    }
+    if (!in.boolean())
+        return QDate();
+    const QDate d = QDate::fromJulianDay(in.zigzag());
+    if (!d.isValid())
+        in.fail();
+    return d;
 }
 
-void writeTime(Out &o, const std::optional<QTime> &t)
+void writeTime(Out &o, std::optional<QTime> t)
 {
     if (!t) {
         o.u8(0);
@@ -442,15 +397,15 @@ std::optional<QTime> readTime(In &in)
     case 1: {
         const quint64 ms = in.varint();
         if (ms >= 24ULL * 3600 * 1000)
-            return in.fail(), std::nullopt;
+            return in.fail<std::optional<QTime>>();
         return QTime::fromMSecsSinceStartOfDay(int(ms));
     }
     case 2: return QTime();
-    default: return in.fail(), std::nullopt;
+    default: return in.fail<std::optional<QTime>>();
     }
 }
 
-void writeSpec(Out &o, const DateSpec &s)
+void writeSpec(Out &o, DateSpec s)
 {
     writeDate(o, s.date);
     writeTime(o, s.time);
@@ -458,38 +413,24 @@ void writeSpec(Out &o, const DateSpec &s)
 
 DateSpec readSpec(In &in)
 {
-    DateSpec s;
-    s.date = readDate(in);
-    s.time = readTime(in);
-    return s;
+    return {.date = readDate(in), .time = readTime(in)};
 }
 
-void writeOptSpec(Out &o, const std::optional<DateSpec> &s)
+/// A presence flag, then the value.
+template<typename T>
+void writeOptional(Out &o, std::optional<T> v, void (*write)(Out &, T))
 {
-    o.boolean(s.has_value());
-    if (s)
-        writeSpec(o, *s);
+    o.boolean(v.has_value());
+    if (v)
+        write(o, *v);
 }
 
-std::optional<DateSpec> readOptSpec(In &in)
-{
-    if (!in.boolean())
-        return std::nullopt;
-    return readSpec(in);
-}
-
-void writeOptDate(Out &o, const std::optional<QDate> &d)
-{
-    o.boolean(d.has_value());
-    if (d)
-        writeDate(o, *d);
-}
-
-std::optional<QDate> readOptDate(In &in)
+template<typename T>
+std::optional<T> readOptional(In &in, T (*read)(In &))
 {
     if (!in.boolean())
         return std::nullopt;
-    return readDate(in);
+    return read(in);
 }
 
 void writeTask(Out &o, const Task &t)
@@ -498,12 +439,12 @@ void writeTask(Out &o, const Task &t)
     o.str(t.marker);
     o.str(t.text);
     o.zigzag(t.line);
-    writeOptSpec(o, t.due);
-    writeOptSpec(o, t.scheduled);
-    writeOptSpec(o, t.start);
-    writeOptDate(o, t.created);
-    writeOptDate(o, t.doneDate);
-    writeOptDate(o, t.cancelledDate);
+    writeOptional(o, t.due, writeSpec);
+    writeOptional(o, t.scheduled, writeSpec);
+    writeOptional(o, t.start, writeSpec);
+    writeOptional(o, t.created, writeDate);
+    writeOptional(o, t.doneDate, writeDate);
+    writeOptional(o, t.cancelledDate, writeDate);
     o.str(t.recurrence);
     o.varint(quint64(t.priority));
     o.str(t.id);
@@ -524,12 +465,12 @@ Task readTask(In &in)
     t.marker = in.str();
     t.text = in.str();
     t.line = in.intValue();
-    t.due = readOptSpec(in);
-    t.scheduled = readOptSpec(in);
-    t.start = readOptSpec(in);
-    t.created = readOptDate(in);
-    t.doneDate = readOptDate(in);
-    t.cancelledDate = readOptDate(in);
+    t.due = readOptional(in, readSpec);
+    t.scheduled = readOptional(in, readSpec);
+    t.start = readOptional(in, readSpec);
+    t.created = readOptional(in, readDate);
+    t.doneDate = readOptional(in, readDate);
+    t.cancelledDate = readOptional(in, readDate);
     t.recurrence = in.str();
     t.priority = Priority(in.small(int(Priority::Highest)));
     t.id = in.str();
@@ -843,14 +784,12 @@ std::optional<ParsedNote> decodeNote(QByteArrayView body, const VaultPath &path,
     if (in.failed() || !in.atEnd())
         return std::nullopt;
     note.journalDate = markdown::journalDateFromPath(path, config);
-    // As parseNote() leaves it: no growth slack.
+    // As parseNote() leaves it: no growth slack (squeeze() keeps a list without slack as it is).
     note.headings.squeeze();
     note.tasks.squeeze();
     note.reminders.squeeze();
-    for (Block &b : note.blocks) {
-        if (b.children.capacity() > b.children.size())
-            b.children.squeeze();
-    }
+    for (Block &b : note.blocks)
+        b.children.squeeze();
     return note;
 }
 
@@ -1005,12 +944,12 @@ namespace detail {
 
 std::optional<SearchIndex> decodeSearch(QByteArrayView body)
 {
-    auto p = std::make_unique<Reader::SearchDecoder::Private>();
-    p->in = In(body);
-    while (!p->step(std::numeric_limits<int>::max())) { }
-    if (p->failed)
+    Reader::SearchDecoder::Private p;
+    p.in = In(body);
+    while (!p.step(std::numeric_limits<int>::max())) { }
+    if (p.failed)
         return std::nullopt;
-    return std::move(p->out);
+    return std::move(p.out);
 }
 
 } // namespace detail
@@ -1019,15 +958,13 @@ std::optional<SearchIndex> decodeSearch(QByteArrayView body)
 
 Identity Identity::current(const VaultConfig &config, const QString &vaultId)
 {
-    Identity id;
-    id.format = FormatVersion;
-    id.parser = quint32(markdown::ParserVersion);
-    id.search = SearchIndex::FormatVersion;
-    id.qt = QString::fromLatin1(qVersion());
-    id.app = QCoreApplication::applicationVersion();
-    id.parse = VaultIndex::parseFingerprint(config);
-    id.vaultId = vaultId;
-    return id;
+    return {.format = FormatVersion,
+            .parser = quint32(markdown::ParserVersion),
+            .search = SearchIndex::FormatVersion,
+            .qt = QString::fromLatin1(qVersion()),
+            .app = QCoreApplication::applicationVersion(),
+            .parse = VaultIndex::parseFingerprint(config),
+            .vaultId = vaultId};
 }
 
 namespace {
@@ -1047,6 +984,16 @@ QByteArray encodeHeader(const Identity &id)
     o.str(id.vaultId);
     o.u64(text::fnv1a64(h));
     return h;
+}
+
+/// The `length` bytes at `offset` of `file` (in bounds: Reader::open() checked them) when the
+/// fnv1a64() checksum after them matches.
+std::optional<QByteArrayView> checkedSection(QByteArrayView file, qsizetype offset, qsizetype length)
+{
+    const QByteArrayView body = file.sliced(offset, length);
+    if (In(file.sliced(offset + length, 8)).u64() != text::fnv1a64(body))
+        return std::nullopt;
+    return body;
 }
 
 } // namespace
@@ -1107,9 +1054,8 @@ std::shared_ptr<const Reader> Reader::open(QByteArray file, const Identity &expe
     if (dirOffset < quint64(recordsStart) || dirLength > dataEnd || dirOffset > dataEnd - dirLength
         || dataEnd - dirOffset - dirLength != 8)
         return reject(u"directory bounds"_s);
-    const QByteArrayView dirBytes = QByteArrayView(file).sliced(qsizetype(dirOffset), qsizetype(dirLength));
-    In sum(QByteArrayView(file).sliced(qsizetype(dirOffset + dirLength), 8));
-    if (sum.u64() != text::fnv1a64(dirBytes))
+    const std::optional<QByteArrayView> dirBytes = checkedSection(file, qsizetype(dirOffset), qsizetype(dirLength));
+    if (!dirBytes)
         return reject(u"directory checksum"_s);
     const quint64 recordsEnd = searchLength > 0 ? searchOffset : dirOffset;
     if (searchLength > 0
@@ -1118,7 +1064,7 @@ std::shared_ptr<const Reader> Reader::open(QByteArray file, const Identity &expe
         return reject(u"search bounds"_s);
 
     std::shared_ptr<Reader> reader(new Reader);
-    In dir(dirBytes);
+    In dir(*dirBytes);
     const qsizetype count = dir.count(12);
     if (dir.failed() || quint64(count) != noteCount)
         return reject(u"directory"_s);
@@ -1177,11 +1123,10 @@ std::optional<ParsedNote> Reader::decodeNote(const Record &record, const VaultPa
 {
     if (record.length <= 0 || record.path != path)
         return std::nullopt;
-    const QByteArrayView body = QByteArrayView(m_file).sliced(record.offset, record.length);
-    In sum(QByteArrayView(m_file).sliced(record.offset + record.length, 8));
-    if (sum.u64() != text::fnv1a64(body))
+    const std::optional<QByteArrayView> body = checkedSection(m_file, record.offset, record.length);
+    if (!body)
         return std::nullopt;
-    return detail::decodeNote(body, path, content, config);
+    return detail::decodeNote(*body, path, content, config);
 }
 
 bool Reader::hasSearch() const
@@ -1193,17 +1138,12 @@ Reader::SearchDecoder Reader::searchDecoder() const
 {
     auto p = std::make_unique<SearchDecoder::Private>();
     p->file = m_file;
-    if (m_searchLength <= 0) {
+    const std::optional<QByteArrayView> body =
+            m_searchLength > 0 ? checkedSection(p->file, m_searchOffset, m_searchLength) : std::nullopt;
+    if (body)
+        p->in = In(*body);
+    else
         p->fail();
-        return SearchDecoder(std::move(p));
-    }
-    const QByteArrayView body = QByteArrayView(p->file).sliced(m_searchOffset, m_searchLength);
-    In sum(QByteArrayView(p->file).sliced(m_searchOffset + m_searchLength, 8));
-    if (sum.u64() != text::fnv1a64(body)) {
-        p->fail();
-        return SearchDecoder(std::move(p));
-    }
-    p->in = In(body);
     return SearchDecoder(std::move(p));
 }
 
@@ -1249,6 +1189,8 @@ Writer::State Writer::step(int budgetMs, QByteArray *out)
 {
     QElapsedTimer timer;
     timer.start();
+    Out o(*out);
+    Out dir(d->directory);
     if (!d->started) {
         d->started = true;
         d->version = d->index.version();
@@ -1256,23 +1198,22 @@ Writer::State Writer::step(int budgetMs, QByteArray *out)
         d->paths = d->index.paths();
         out->clear();
         out->append(encodeHeader(d->identity));
-        Out dir(d->directory);
         dir.varint(quint64(d->paths.size()));
     }
     if (d->index.version() != d->version)
         return State::Aborted;
-    Out o(*out);
-    Out dir(d->directory);
     while (d->next < d->paths.size()) {
-        const VaultPath &path = d->paths[d->next++];
+        // at(): the list shares the index's, operator[] would copy it.
+        const VaultPath &path = d->paths.at(d->next++);
         const index_detail::Entry *e = index_detail::IndexAccess::entry(d->index, path);
         const std::optional<FileStat> st = d->stat ? d->stat(path) : std::nullopt;
-        const std::optional<QByteArray> body = e ? detail::encodeNote(e->note, e->content) : std::nullopt;
+        // Without the file's size the record could never be used: the note is parsed on load.
+        const std::optional<QByteArray> body = e && st ? detail::encodeNote(e->note, e->content) : std::nullopt;
         dir.str(path);
         dir.varint(quint64(st ? std::max<qint64>(0, st->size) : 0));
         dir.zigzag(st ? st->mtime : 0);
         dir.u64(e ? e->contentKey : 0);
-        if (body && st) {
+        if (body) {
             dir.varint(quint64(out->size()));
             dir.varint(quint64(body->size()));
             o.raw(body->constData(), body->size());

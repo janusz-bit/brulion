@@ -129,7 +129,6 @@ BDialog {
         variant: "label"
     }
     GridLayout {
-        id: grid
         objectName: "pageExportFormats"
         Layout.fillWidth: true
         columns: Theme.compact ? 2 : 3
@@ -143,8 +142,8 @@ BDialog {
                 required property string name
                 required property string iconName
                 required property string description
-                readonly property bool chosen: dialog.format === value
-                objectName: "pageExportFormat_" + value
+                readonly property bool chosen: dialog.format === tile.value
+                objectName: "pageExportFormat_" + tile.value
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -156,7 +155,7 @@ BDialog {
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: tile.name
                 Accessible.description: tile.description
-                Accessible.checked: chosen
+                Accessible.checked: tile.chosen
                 onClicked: dialog.format = tile.value
 
                 background: Rectangle {
@@ -210,7 +209,7 @@ BDialog {
             model: dialog.webPictureChoices
             currentValue: exporter.webPictures
             onActivated: (value) => {
-                exporter.webPictures = value
+                // (The exporter follows the setting: webPictures is bound to it.)
                 AppSettings.exportWebPictures = value
             }
         }

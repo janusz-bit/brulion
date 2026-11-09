@@ -388,6 +388,51 @@ qsizetype quoteEnd(QStringView s, qsizetype i)
     return -1;
 }
 
+/// Offset of the first quote that no closer follows (`s.size()` when every quote closes), found
+/// per kind of quote (those closersFor() knows): quoteEnd() from every quote is quadratic.
+qsizetype firstUnclosedQuote(QStringView s)
+{
+    qsizetype first = s.size();
+    for (const QChar quote : {u'"', u'„', u'“', u'«'}) {
+        qsizetype lastCloser = -1;
+        for (const QChar c : closersFor(quote))
+            lastCloser = std::max(lastCloser, s.lastIndexOf(c));
+        if (const qsizetype at = s.indexOf(quote, std::max<qsizetype>(lastCloser, 0)); at >= 0)
+            first = std::min(first, at);
+    }
+    return first;
+}
+
+/// End (exclusive) of the quoted run or `[[…]]` starting at `i` in a value (the value's end when
+/// unclosed); -1 when none starts there.
+qsizetype groupEnd(QStringView value, qsizetype i)
+{
+    if (opensQuote(value[i])) {
+        const qsizetype end = quoteEnd(value, i);
+        return end < 0 ? value.size() : end;
+    }
+    if (value.sliced(i).startsWith(u"[[")) {
+        const qsizetype close = value.indexOf(u"]]", i + 2);
+        return close < 0 ? value.size() : close + 2;
+    }
+    return -1;
+}
+
+/// Call `f(part, offset)` for each part of a comma list (not split inside quotes and `[[…]]`).
+template<typename F>
+void forEachPart(QStringView value, F &&f)
+{
+    qsizetype start = 0;
+    for (qsizetype i = 0; i <= value.size(); ++i) {
+        if (i == value.size() || value[i] == u',') {
+            f(value.sliced(start, i - start), start);
+            start = i + 1;
+        } else if (const qsizetype end = groupEnd(value, i); end >= 0) {
+            i = end - 1;
+        }
+    }
+}
+
 struct Token {
     QString raw;
     qsizetype from = 0; ///< offset in the source
@@ -412,6 +457,7 @@ bool tokenize(QStringView src, QList<Token> &out)
     qsizetype i = 0;
     const qsizetype n = src.size();
     bool lineStart = true;
+    bool bracketsClose = true; // false once a `[[` has no `]]` after it (nor has a later one then)
     while (i < n) {
         if (src[i].isSpace()) {
             lineStart = lineStart || isLineBreak(src[i]);
@@ -432,7 +478,8 @@ bool tokenize(QStringView src, QList<Token> &out)
                     return false;
                 i = end;
             } else if (src.sliced(i).startsWith(u"[[")) {
-                const qsizetype close = src.indexOf(u"]]", i + 2);
+                const qsizetype close = bracketsClose ? src.indexOf(u"]]", i + 2) : -1;
+                bracketsClose = close >= 0;
                 i = close < 0 ? i + 2 : close + 2;
             } else {
                 ++i;
@@ -444,12 +491,12 @@ bool tokenize(QStringView src, QList<Token> &out)
 }
 
 /// Remove one level of surrounding quotes.
-QString unquote(const QString &s)
+QString unquote(QStringView s)
 {
-    const QString t = s.trimmed();
+    const QStringView t = s.trimmed();
     if (t.size() >= 2 && opensQuote(t.front()) && closersFor(t.front()).contains(t.back()))
-        return t.sliced(1, t.size() - 2);
-    return t;
+        return t.sliced(1, t.size() - 2).toString();
+    return t.toString();
 }
 
 /// Remove surrounding `[[ ]]`.
@@ -464,34 +511,11 @@ QString unbracket(const QString &s)
 /// Split a value on commas outside quotes and `[[…]]`; unquote; drop empty parts.
 QStringList splitValues(QStringView value)
 {
-    QStringList parts;
-    QString cur;
-    for (qsizetype i = 0; i < value.size(); ++i) {
-        const QChar ch = value[i];
-        if (opensQuote(ch)) {
-            const qsizetype end = quoteEnd(value, i);
-            const qsizetype stop = end < 0 ? value.size() : end;
-            cur += value.sliced(i, stop - i);
-            i = stop - 1;
-        } else if (value.sliced(i).startsWith(u"[[")) {
-            const qsizetype close = value.indexOf(u"]]", i + 2);
-            const qsizetype stop = close < 0 ? value.size() : close + 2;
-            cur += value.sliced(i, stop - i);
-            i = stop - 1;
-        } else if (ch == u',') {
-            parts.append(cur);
-            cur.clear();
-        } else {
-            cur += ch;
-        }
-    }
-    parts.append(cur);
     QStringList out;
-    for (const QString &p : std::as_const(parts)) {
-        const QString v = unquote(p).trimmed();
-        if (!v.isEmpty())
-            out.append(v);
-    }
+    forEachPart(value, [&out](QStringView part, qsizetype) {
+        if (QString v = unquote(part).trimmed(); !v.isEmpty())
+            out.append(std::move(v));
+    });
     return out;
 }
 
@@ -507,9 +531,10 @@ QString tagValue(const QString &v)
 /// Lookup key of a written value: folded, whitespace/underscore runs as '-'.
 QString valueKey(const QString &v)
 {
+    const QString folded = text::foldKey(QStringView(v).trimmed());
     QString out;
     bool dash = false;
-    for (const QChar c : text::foldKey(v.trimmed())) {
+    for (const QChar c : folded) {
         if (c.isSpace() || c == u'_') {
             dash = true;
             continue;
@@ -536,9 +561,37 @@ qsizetype keyLength(QStringView raw)
 // ---- parser -------------------------------------------------------------------------------------
 
 struct Used {
-    Key key;
+    Key key = Key::Type;
     QString value;
 };
+
+/// The filter kind of a key that names pages, folders or tags (tag:, page:, path:, ref:).
+std::optional<QueryFilterKind> nameKind(Key k)
+{
+    switch (k) {
+    case Key::Tag: return QueryFilterKind::Tag;
+    case Key::Page: return QueryFilterKind::Page;
+    case Key::Path: return QueryFilterKind::Path;
+    case Key::Ref: return QueryFilterKind::Ref;
+    default: return std::nullopt;
+    }
+}
+
+/// Append `value` unless `list` holds it.
+template<typename T>
+void appendNew(QList<T> &list, const T &value)
+{
+    if (!list.contains(value))
+        list.append(value);
+}
+
+/// Append the `values` that `list` does not hold.
+template<typename T>
+void appendNew(QList<T> &list, const QList<T> &values)
+{
+    for (const T &v : values)
+        appendNew(list, v);
+}
 
 class Parser {
 public:
@@ -548,9 +601,16 @@ private:
     bool applyToken(const QString &token);
     bool applyKey(Key key, const QString &written, const QString &rawValue, bool negate);
     bool applyDate(Key key, const QString &written, const QStringList &values, bool negate);
+    /// The canonical value of a written one (`table`: by valueKey()); null after fail().
     template<typename T>
-    bool mapValues(const QString &written, const QStringList &values, const QHash<QString, T> &table,
+    const T *lookup(const QString &written, const QString &value, const QHash<QString, T> &table,
+                    const QString &allowed);
+    /// The canonical values of `values` appended to `out`, each once; false after fail().
+    template<typename T, typename V>
+    bool mapValues(const QString &written, const QStringList &values, const QHash<QString, V> &table,
                    const QString &allowed, QList<T> &out);
+    /// A filter of one value: a word, a phrase, `#tag`, `[[Page]]`.
+    void addFilter(QueryFilterKind kind, const QString &value, bool negate);
     bool fail(QString message)
     {
         m_error = std::move(message);
@@ -566,22 +626,46 @@ private:
 };
 
 template<typename T>
-bool Parser::mapValues(const QString &written, const QStringList &values, const QHash<QString, T> &table,
+const T *Parser::lookup(const QString &written, const QString &value, const QHash<QString, T> &table,
+                        const QString &allowed)
+{
+    const auto it = table.constFind(valueKey(value));
+    if (it != table.constEnd())
+        return &*it;
+    fail(messages::badValue(written, value, allowed));
+    return nullptr;
+}
+
+template<typename T, typename V>
+bool Parser::mapValues(const QString &written, const QStringList &values, const QHash<QString, V> &table,
                        const QString &allowed, QList<T> &out)
 {
     for (const QString &v : values) {
-        const auto it = table.constFind(valueKey(v));
-        if (it == table.constEnd())
-            return fail(messages::badValue(written, v, allowed));
-        out.append(*it);
+        const V *value = lookup(written, v, table, allowed);
+        if (!value)
+            return false;
+        appendNew(out, *value);
     }
     return true;
+}
+
+void Parser::addFilter(QueryFilterKind kind, const QString &value, bool negate)
+{
+    QueryFilter f;
+    f.kind = kind;
+    f.negate = negate;
+    f.values = {value};
+    m_query.filters.append(std::move(f));
 }
 
 bool Parser::applyDate(Key key, const QString &written, const QStringList &values, bool negate)
 {
     // A fixed reference day: only validates the expressions (runQuery resolves them).
     static const QDate reference(2026, 1, 15);
+    static constexpr std::pair<QStringView, QueryDateOp> operators[] = {
+            {u"<=", QueryDateOp::OnOrBefore}, {u">=", QueryDateOp::OnOrAfter}, {u"<", QueryDateOp::Before},
+            {u">", QueryDateOp::After},       {u"=", QueryDateOp::Within},
+    };
     QueryFilter f;
     f.kind = QueryFilterKind::Date;
     f.field = dateField(key);
@@ -589,30 +673,23 @@ bool Parser::applyDate(Key key, const QString &written, const QStringList &value
     for (const QString &v : values) {
         QueryDateCondition cond;
         QStringView rest(v);
-        QString op;
-        for (const QStringView candidate : {u"<=", u">=", u"<", u">", u"="}) {
-            if (rest.startsWith(candidate)) {
-                op = candidate.toString();
-                rest = rest.sliced(candidate.size());
+        QStringView op;
+        for (const auto &[spelling, dateOp] : operators) {
+            if (rest.startsWith(spelling)) {
+                op = spelling;
+                cond.op = dateOp;
+                rest = rest.sliced(spelling.size());
                 break;
             }
         }
-        if (op == u"<")
-            cond.op = QueryDateOp::Before;
-        else if (op == u"<=")
-            cond.op = QueryDateOp::OnOrBefore;
-        else if (op == u">")
-            cond.op = QueryDateOp::After;
-        else if (op == u">=")
-            cond.op = QueryDateOp::OnOrAfter;
         cond.expr = rest.trimmed().toString();
         if (cond.expr.isEmpty())
             return fail(messages::emptyValue(written, exampleFor(key)));
         const auto resolved = dates::resolveDateExpr(cond.expr, reference, Qt::Monday);
         if (!resolved)
             return fail(messages::badDate(written, cond.expr));
-        if (std::holds_alternative<dates::SpecialDate>(*resolved) && cond.op != QueryDateOp::Within)
-            return fail(messages::operatorWithKeyword(written, op, cond.expr));
+        if (std::get_if<dates::SpecialDate>(&*resolved) && cond.op != QueryDateOp::Within)
+            return fail(messages::operatorWithKeyword(written, op.toString(), cond.expr));
         f.dates.append(cond);
     }
     m_query.filters.append(f);
@@ -637,96 +714,71 @@ bool Parser::applyKey(Key key, const QString &written, const QString &rawValue, 
         const QString allowed = u"tasks, blocks, pages, reminders"_s;
         if (values.size() > 1)
             return fail(messages::badValue(written, values.join(u','), allowed));
-        QList<QueryType> types;
-        if (!mapValues(written, values, typeAliases(), allowed, types))
+        const QueryType *type = lookup(written, values.first(), typeAliases(), allowed);
+        if (!type)
             return false;
-        m_type = types.first();
+        m_type = *type;
         return true;
     }
-    case Key::Status: {
-        QList<QList<TaskStatus>> lists;
-        if (!mapValues(written, values, statusAliases(), u"todo, doing, done, cancelled, deferred, open, closed"_s,
-                       lists))
-            return false;
+    case Key::Status:
         f.kind = QueryFilterKind::Status;
-        for (const QList<TaskStatus> &l : std::as_const(lists)) {
-            for (const TaskStatus s : l) {
-                if (!f.statuses.contains(s))
-                    f.statuses.append(s);
-            }
-        }
-        break;
-    }
-    case Key::Is: {
-        QStringList list;
-        if (!mapValues(written, values, isAliases(), u"blocked, blocking, running, tracked"_s, list))
+        if (!mapValues(written, values, statusAliases(), u"todo, doing, done, cancelled, deferred, open, closed"_s,
+                       f.statuses))
             return false;
+        break;
+    case Key::Is:
         f.kind = QueryFilterKind::Is;
-        for (const QString &v : std::as_const(list)) {
-            if (!f.values.contains(v))
-                f.values.append(v);
-        }
-        break;
-    }
-    case Key::Priority: {
-        QList<Priority> list;
-        if (!mapValues(written, values, priorityAliases(), u"highest, high, medium, low, lowest, none"_s, list))
+        if (!mapValues(written, values, isAliases(), u"blocked, blocking, running, tracked"_s, f.values))
             return false;
-        f.kind = QueryFilterKind::Priority;
-        for (const Priority p : std::as_const(list)) {
-            if (!f.priorities.contains(p))
-                f.priorities.append(p);
-        }
         break;
-    }
+    case Key::Priority:
+        f.kind = QueryFilterKind::Priority;
+        if (!mapValues(written, values, priorityAliases(), u"highest, high, medium, low, lowest, none"_s, f.priorities))
+            return false;
+        break;
     case Key::Tag:
     case Key::Page:
     case Key::Path:
-    case Key::Ref: {
+    case Key::Ref:
+        f.kind = nameKind(key).value();
         for (const QString &v : values) {
-            const QString clean = key == Key::Tag ? tagValue(v) : unbracket(v);
-            if (!clean.isEmpty())
+            if (const QString clean = key == Key::Tag ? tagValue(v) : unbracket(v); !clean.isEmpty())
                 f.values.append(clean);
         }
         if (f.values.isEmpty())
             return fail(messages::emptyValue(written, exampleFor(key)));
-        f.kind = key == Key::Tag    ? QueryFilterKind::Tag
-                 : key == Key::Page ? QueryFilterKind::Page
-                 : key == Key::Path ? QueryFilterKind::Path
-                                    : QueryFilterKind::Ref;
         break;
-    }
     case Key::Text:
         f.kind = QueryFilterKind::Text;
         f.values = values;
         break;
-    case Key::Sort:
+    case Key::Sort: {
+        const QString allowed = u"due, scheduled, start, done, created, remind, date, priority, status, page, path"_s;
         for (const QString &v : values) {
             const bool desc = v.startsWith(u'-');
             const QString name = desc || v.startsWith(u'+') ? v.sliced(1) : v;
-            QList<QuerySortKey> keys;
-            if (!mapValues(written, {name}, sortAliases(),
-                           u"due, scheduled, start, done, created, remind, date, priority, status, page, path"_s, keys))
+            const QuerySortKey *sortKey = lookup(written, name, sortAliases(), allowed);
+            if (!sortKey)
                 return false;
-            m_query.sort.append(QuerySort{keys.first(), desc});
+            m_query.sort.append(QuerySort{*sortKey, desc});
         }
         return true;
+    }
     case Key::Group: {
         if (m_query.group != QueryGroupKey::None)
             return fail(messages::duplicate(written));
         const QString allowed = u"page, due, scheduled, date, tag, status, priority"_s;
         if (values.size() > 1)
             return fail(messages::badValue(written, values.join(u','), allowed));
-        QList<QueryGroupKey> groups;
-        if (!mapValues(written, values, groupAliases(), allowed, groups))
+        const QueryGroupKey *group = lookup(written, values.first(), groupAliases(), allowed);
+        if (!group)
             return false;
-        m_query.group = groups.first();
+        m_query.group = *group;
         return true;
     }
     case Key::Limit: {
         const QString &v = values.first();
-        bool ok = values.size() == 1 && !v.isEmpty()
-                  && std::all_of(v.cbegin(), v.cend(), [](QChar c) { return c >= u'0' && c <= u'9'; });
+        bool ok = values.size() == 1 && std::ranges::all_of(v, [](QChar c) { return c >= u'0' && c <= u'9'; });
         const qlonglong n = ok ? v.toLongLong(&ok) : 0;
         if (!ok || n < 1 || n > MaxQueryLimit)
             return fail(messages::badLimit(values.join(u','), MaxQueryLimit));
@@ -741,41 +793,23 @@ bool Parser::applyKey(Key key, const QString &written, const QString &rawValue, 
 
 bool Parser::applyToken(const QString &token)
 {
-    QString raw = token;
-    bool negate = false;
-    if (raw == u"-")
+    if (token == u"-")
         return true;
-    if (raw.startsWith(u'-')) {
-        negate = true;
-        raw.remove(0, 1);
-    }
-    QueryFilter f;
-    f.negate = negate;
+    const bool negate = token.startsWith(u'-');
+    const QString raw = negate ? token.sliced(1) : token;
     if (opensQuote(raw.front())) {
-        const QString phrase = unquote(raw);
-        if (phrase.trimmed().isEmpty())
-            return true;
-        f.kind = QueryFilterKind::Text;
-        f.values = {phrase};
-        m_query.filters.append(f);
+        if (const QString phrase = unquote(raw); !phrase.trimmed().isEmpty())
+            addFilter(QueryFilterKind::Text, phrase, negate);
         return true;
     }
     if (raw.size() > 1 && raw.startsWith(u'#') && !raw[1].isSpace()) {
-        const QString tag = tagValue(raw.sliced(1));
-        if (!tag.isEmpty()) {
-            f.kind = QueryFilterKind::Tag;
-            f.values = {tag};
-            m_query.filters.append(f);
-        }
+        if (const QString tag = tagValue(raw.sliced(1)); !tag.isEmpty())
+            addFilter(QueryFilterKind::Tag, tag, negate);
         return true;
     }
     if (raw.startsWith(u"[[") && raw.endsWith(u"]]")) {
-        const QString name = unbracket(raw);
-        if (!name.isEmpty()) {
-            f.kind = QueryFilterKind::Ref;
-            f.values = {name};
-            m_query.filters.append(f);
-        }
+        if (const QString name = unbracket(raw); !name.isEmpty())
+            addFilter(QueryFilterKind::Ref, name, negate);
         return true;
     }
     const qsizetype k = keyLength(raw);
@@ -787,23 +821,19 @@ bool Parser::applyToken(const QString &token)
             return fail(messages::unknownKey(written, publicKeys()));
         return applyKey(*it, written, raw.sliced(k + 1), negate);
     }
-    f.kind = QueryFilterKind::Text;
-    f.values = {raw};
-    m_query.filters.append(f);
+    addFilter(QueryFilterKind::Text, raw, negate);
     return true;
 }
 
 QueryType Parser::inferType() const
 {
-    const bool taskish = std::any_of(m_used.cbegin(), m_used.cend(), [](const Used &u) { return isTaskKey(u.key); })
-                         || std::any_of(m_query.sort.cbegin(), m_query.sort.cend(),
-                                        [](const QuerySort &s) { return isTaskSort(s.key); })
+    const bool taskish = std::ranges::any_of(m_used, isTaskKey, &Used::key)
+                         || std::ranges::any_of(m_query.sort, isTaskSort, &QuerySort::key)
                          || isTaskGroup(m_query.group);
     if (taskish)
         return QueryType::Tasks;
-    const bool remind = std::any_of(m_used.cbegin(), m_used.cend(), [](const Used &u) { return u.key == Key::Remind; })
-                        || std::any_of(m_query.sort.cbegin(), m_query.sort.cend(),
-                                       [](const QuerySort &s) { return s.key == QuerySortKey::Remind; });
+    const bool remind = std::ranges::any_of(m_used, [](const Used &u) { return u.key == Key::Remind; })
+                        || std::ranges::any_of(m_query.sort, [](QuerySort s) { return s.key == QuerySortKey::Remind; });
     return remind ? QueryType::Reminders : QueryType::Blocks;
 }
 
@@ -861,7 +891,7 @@ bool isFenceOnly(QStringView line)
     const QStringView rest = line.sliced(i).trimmed();
     if (rest.size() < 3 || (rest.front() != u'`' && rest.front() != u'~'))
         return false;
-    return std::all_of(rest.cbegin(), rest.cend(), [&](QChar c) { return c == rest.front(); });
+    return std::ranges::all_of(rest, [&](QChar c) { return c == rest.front(); });
 }
 
 /// The language of the fence `text` opens (up to three spaces before three or more backticks or
@@ -1018,42 +1048,20 @@ void tokenNames(QStringView token, qsizetype at, QList<QueryNameRef> &out)
     const auto it = keyAliases().constFind(text::foldKey(raw.first(k)));
     if (it == keyAliases().constEnd())
         return;
-    QueryFilterKind kind = QueryFilterKind::Ref;
-    switch (*it) {
-    case Key::Tag: kind = QueryFilterKind::Tag; break;
-    case Key::Page: kind = QueryFilterKind::Page; break;
-    case Key::Path: kind = QueryFilterKind::Path; break;
-    case Key::Ref: kind = QueryFilterKind::Ref; break;
-    default: return;
-    }
-    // The comma list, split as splitValues() does (not inside quotes or `[[…]]`).
-    const QStringView value = raw.sliced(k + 1);
+    const std::optional<QueryFilterKind> kind = nameKind(*it);
+    if (!kind)
+        return;
+    // The comma list, split as splitValues() does.
     const qsizetype base = at + k + 1;
-    qsizetype start = 0;
-    for (qsizetype i = 0; i <= value.size(); ++i) {
-        if (i == value.size() || value[i] == u',') {
-            addName(kind, value.sliced(start, i - start), base + start, out);
-            start = i + 1;
-        } else if (opensQuote(value[i])) {
-            const qsizetype end = quoteEnd(value, i);
-            i = (end < 0 ? value.size() : end) - 1;
-        } else if (value.sliced(i).startsWith(u"[[")) {
-            const qsizetype close = value.indexOf(u"]]", i + 2);
-            i = (close < 0 ? value.size() : close + 2) - 1;
-        }
-    }
+    forEachPart(raw.sliced(k + 1),
+                [&](QStringView part, qsizetype offset) { addName(*kind, part, base + offset, out); });
 }
 
 /// Can `value` stand bare as a filter value (one token, one value of a comma list)?
 bool bareValue(QStringView value)
 {
-    if (value.startsWith(u"//"))
-        return false;
-    for (QChar c : value) {
-        if (c.isSpace() || c == u',' || opensQuote(c))
-            return false;
-    }
-    return !value.contains(u"[[") && !value.contains(u"]]");
+    return !value.startsWith(u"//") && !value.contains(u"[[") && !value.contains(u"]]")
+           && std::ranges::none_of(value, [](QChar c) { return c.isSpace() || c == u',' || opensQuote(c); });
 }
 
 } // namespace
@@ -1066,20 +1074,14 @@ bool index_detail::hasQueryBlocks(const QString &content, const ParsedNote &note
 QList<QueryNameRef> findQueryNames(const QString &content, const ParsedNote *parsed)
 {
     QList<QueryNameRef> out;
-    for (const auto &[from, to] : queryBodies(content, parsed)) {
+    const QList<std::pair<qsizetype, qsizetype>> bodies = queryBodies(content, parsed);
+    for (const auto &[from, to] : bodies) {
         const QStringView body = QStringView(content).sliced(from, to - from);
         QList<Token> tokens;
         if (!tokenize(body, tokens)) {
             // An unclosed quote: the query does not run; the tokens before it are still names.
             tokens.clear();
-            qsizetype end = body.size();
-            for (qsizetype i = 0; i < body.size(); ++i) {
-                if (opensQuote(body[i]) && quoteEnd(body, i) < 0) {
-                    end = i;
-                    break;
-                }
-            }
-            tokenize(body.first(end), tokens);
+            tokenize(body.first(firstUnclosedQuote(body)), tokens);
         }
         for (const Token &t : std::as_const(tokens))
             tokenNames(t.raw, from + t.from, out);
@@ -1095,11 +1097,8 @@ QString formatQueryName(const QueryNameRef &name, const QString &value)
     if (name.bracketed)
         return brackets ? QString() : value;
     if (!name.quote.isNull()) {
-        for (QChar c : closersFor(name.quote)) {
-            if (value.contains(c))
-                return {};
-        }
-        return value;
+        const bool closes = std::ranges::any_of(closersFor(name.quote), [&](QChar c) { return value.contains(c); });
+        return closes ? QString() : value;
     }
     if (bareValue(value))
         return value;
@@ -1114,22 +1113,22 @@ QString retargetQueryNames(const QString &content, const QList<QueryNameEdit> &e
         return content;
     const QList<QueryNameRef> names = findQueryNames(content);
     struct Replacement {
-        qsizetype from;
-        qsizetype to;
+        qsizetype from = 0;
+        qsizetype to = 0;
         QString text;
     };
     QList<Replacement> replacements;
     for (const QueryNameEdit &e : edits) {
-        const auto it = std::find_if(names.cbegin(), names.cend(),
-                                     [&](const QueryNameRef &n) { return n.from == e.from && n.to == e.to; });
+        const auto it =
+                std::ranges::find_if(names, [&](const QueryNameRef &n) { return n.from == e.from && n.to == e.to; });
         if (it == names.cend())
             continue;
         const QString written = formatQueryName(*it, e.value);
-        if (written.isEmpty() || written == content.sliced(e.from, e.to - e.from))
+        if (written.isEmpty() || written == QStringView(content).sliced(e.from, e.to - e.from))
             continue;
         replacements.append({e.from, e.to, written});
     }
-    std::ranges::sort(replacements, [](const Replacement &a, const Replacement &b) { return a.from < b.from; });
+    std::ranges::sort(replacements, {}, &Replacement::from);
     QString out;
     qsizetype pos = 0;
     int count = 0;

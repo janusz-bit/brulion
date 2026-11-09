@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <optional>
+#include <utility>
 
 namespace brulion::github {
 
@@ -206,13 +207,12 @@ public:
     static GitHubError errorOf(const sync::HttpResponse &response);
 
 private:
+    using Headers = QList<std::pair<QByteArray, QByteArray>>;
     using Json = std::function<void(const GitHubError &, const QJsonDocument &, const sync::HttpResponse &)>;
-    void send(const QByteArray &method, const QUrl &url, const QByteArray &body,
-              const QList<QPair<QByteArray, QByteArray>> &headers,
+    void send(const QByteArray &method, const QUrl &url, const QByteArray &body, const Headers &headers,
               std::function<void(const sync::HttpResponse &)> done);
     void api(const QByteArray &method, const QString &path, const QJsonDocument &body, Json done,
-             const QList<QPair<QByteArray, QByteArray>> &headers = {});
-    QUrl apiUrl(const QString &encodedPath) const;
+             const Headers &headers = {});
     void noteRateLimit(const sync::HttpResponse &response);
 
     sync::HttpTransport *m_transport;

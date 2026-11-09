@@ -54,7 +54,6 @@ Item {
             color: Theme.bgSunken
             border.width: 1
             border.color: Theme.borderSubtle
-            clip: true
 
             GraphItem {
                 id: graph

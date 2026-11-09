@@ -8,13 +8,14 @@
 #include <QLoggingCategory>
 #include <QPointer>
 
+#include <algorithm>
+#include <limits>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::github {
 
 namespace {
-
-using Headers = QList<QPair<QByteArray, QByteArray>>;
 
 /// What a cancelled call answers (no transport sends a negative status).
 constexpr int kCancelledStatus = -1;
@@ -29,6 +30,20 @@ QString queryValue(const QString &value)
     return QString::fromLatin1(QUrl::toPercentEncoding(value));
 }
 
+QUrl apiUrl(const QString &encodedPath)
+{
+    return QUrl::fromEncoded(QString(u"https://"_s + ApiHost + u'/' + encodedPath).toLatin1(), QUrl::StrictMode);
+}
+
+/// X-RateLimit-Reset (seconds since the epoch) in ms since the epoch; 0 when missing or out of
+/// range (no overflow on a bogus header).
+qint64 rateLimitResetMs(const sync::HttpResponse &response)
+{
+    bool ok = false;
+    const qint64 seconds = response.header("x-ratelimit-reset").trimmed().toLongLong(&ok);
+    return ok && seconds > 0 && seconds <= std::numeric_limits<qint64>::max() / 1000 ? seconds * 1000 : 0;
+}
+
 /// GitHub's explanation of a failed request: "message" and the "errors" it lists.
 QString messageOf(const QByteArray &body)
 {
@@ -37,10 +52,11 @@ QString messageOf(const QByteArray &body)
         return QString::fromUtf8(body.left(200)).simplified();
     const QJsonObject object = doc.object();
     QString message = object.value(u"message"_s).toString();
-    for (const QJsonValue &error : object.value(u"errors"_s).toArray()) {
-        const QString text = error.isObject() ? error.toObject().value(u"message"_s).toString() : error.toString();
-        const QString code = error.isObject() ? error.toObject().value(u"code"_s).toString() : QString();
-        const QString part = !text.isEmpty() ? text : code;
+    const QJsonArray errors = object.value(u"errors"_s).toArray();
+    for (const QJsonValue error : errors) {
+        const QJsonObject details = error.toObject();
+        const QString text = error.isObject() ? details.value(u"message"_s).toString() : error.toString();
+        const QString part = text.isEmpty() ? details.value(u"code"_s).toString() : text;
         if (!part.isEmpty())
             message += (message.isEmpty() ? QString() : u": "_s) + part;
     }
@@ -84,8 +100,84 @@ TreeEntry treeEntryOf(const QJsonObject &object)
     entry.mode = object.value(u"mode"_s).toString();
     entry.type = object.value(u"type"_s).toString();
     entry.sha = object.value(u"sha"_s).toString();
-    entry.size = object.contains(u"size"_s) ? object.value(u"size"_s).toInteger(-1) : -1;
+    entry.size = object.value(u"size"_s).toInteger(-1);
     return entry;
+}
+
+Tree treeOf(const QJsonObject &object)
+{
+    Tree tree;
+    tree.sha = object.value(u"sha"_s).toString();
+    tree.truncated = object.value(u"truncated"_s).toBool();
+    const QJsonArray entries = object.value(u"tree"_s).toArray();
+    tree.entries.reserve(entries.size());
+    for (const QJsonValue entry : entries)
+        tree.entries.append(treeEntryOf(entry.toObject()));
+    return tree;
+}
+
+/// The id of what a call of the Git database API made.
+QString shaOf(const QJsonObject &object)
+{
+    return object.value(u"sha"_s).toString();
+}
+
+/// The id of the commit a write of the contents API made.
+QString commitShaOf(const QJsonObject &object)
+{
+    return shaOf(object.value(u"commit"_s).toObject());
+}
+
+/// Whether an answer holds what was asked for (else it is a Parse error).
+bool holdsAnswer(const Repository &repository)
+{
+    return repository.id.isValid();
+}
+
+bool holdsAnswer(const PullRequest &pr)
+{
+    return pr.number > 0;
+}
+
+bool holdsAnswer(const Tree &tree)
+{
+    return !tree.sha.isEmpty();
+}
+
+bool holdsAnswer(const QString &sha)
+{
+    return !sha.isEmpty();
+}
+
+/// The handler of an API call answering `done` with what `read` takes from GitHub's JSON object:
+/// the request's error, or Parse with `missing` when the answer holds nothing (holdsAnswer()).
+template<typename T>
+auto answer(GitHubClient::Done<T> done, T (*read)(const QJsonObject &), const QString &missing)
+{
+    return [done = std::move(done), read, missing](const GitHubError &error, const QJsonDocument &doc,
+                                                   const sync::HttpResponse &response) {
+        if (error.isError()) {
+            done(error, {});
+            return;
+        }
+        const T value = read(doc.object());
+        if (holdsAnswer(value))
+            done({}, value);
+        else
+            done(GitHubError::make(GitHubError::Code::Parse, missing, response.status), value);
+    };
+}
+
+/// The handler of a download answering `done` with the bytes, or the request's error.
+auto bytesAnswer(GitHubClient::Done<QByteArray> done)
+{
+    return [done = std::move(done)](const sync::HttpResponse &response) {
+        if (response.status < 200 || response.status >= 300) {
+            done(GitHubClient::errorOf(response), {});
+            return;
+        }
+        done({}, response.body);
+    };
 }
 
 } // namespace
@@ -173,10 +265,9 @@ GitHubError GitHubClient::errorOf(const sync::HttpResponse &response)
         if (status == 429 || remaining == "0" || !retryAfter.isEmpty()
             || message.contains(u"rate limit"_s, Qt::CaseInsensitive)) {
             GitHubError error = GitHubError::make(C::RateLimited, message, status);
+            if (remaining == "0")
+                error.resetAt = rateLimitResetMs(response);
             bool ok = false;
-            const qint64 reset = response.header("x-ratelimit-reset").trimmed().toLongLong(&ok);
-            if (ok && reset > 0 && remaining == "0")
-                error.resetAt = reset * 1000;
             const int seconds = retryAfter.toInt(&ok);
             if (ok && seconds >= 0)
                 error.retryAfterSeconds = seconds;
@@ -210,12 +301,7 @@ void GitHubClient::noteRateLimit(const sync::HttpResponse &response)
         return;
     m_rateLimit.limit = limit;
     m_rateLimit.remaining = response.header("x-ratelimit-remaining").trimmed().toInt();
-    m_rateLimit.resetAt = response.header("x-ratelimit-reset").trimmed().toLongLong() * 1000;
-}
-
-QUrl GitHubClient::apiUrl(const QString &encodedPath) const
-{
-    return QUrl::fromEncoded(QString(u"https://"_s + ApiHost + u'/' + encodedPath).toLatin1(), QUrl::StrictMode);
+    m_rateLimit.resetAt = rateLimitResetMs(response);
 }
 
 void GitHubClient::send(const QByteArray &method, const QUrl &url, const QByteArray &body, const Headers &headers,
@@ -227,8 +313,7 @@ void GitHubClient::send(const QByteArray &method, const QUrl &url, const QByteAr
     request.body = body;
     request.timeoutMs = m_timeoutMs;
     request.headers = headers;
-    const bool api = url.host() == ApiHost;
-    if (api && !m_token.isEmpty())
+    if (url.host() == ApiHost && !m_token.isEmpty())
         request.headers.emplaceBack("Authorization", "Bearer " + m_token.toUtf8());
     if (!m_browser)
         request.headers.emplaceBack("User-Agent", "Brulion");
@@ -241,18 +326,15 @@ void GitHubClient::send(const QByteArray &method, const QUrl &url, const QByteAr
     m_transport->send(request, [self, call, method, url](const sync::HttpResponse &response) {
         if (!self)
             return;
-        const auto it = self->m_open.find(call);
-        if (it == self->m_open.end())
+        const auto handler = self->m_open.take(call);
+        if (!handler)
             return; // cancelled: answered already
-        const std::function<void(const sync::HttpResponse &)> handler = std::move(it.value());
-        self->m_open.erase(it);
         self->noteRateLimit(response);
         if (response.status >= 400 || response.status == 0) {
-            qCDebug(logging::lcNet).noquote()
-                    << u"GitHub %1 %2 -> %3 %4"_s
-                               .arg(QString::fromLatin1(method), url.toString(QUrl::RemoveUserInfo | QUrl::RemoveQuery))
-                               .arg(response.status)
-                               .arg(logging::redact(response.networkError));
+            // One arg() call: a "%3F" of the URL is no placeholder.
+            qCDebug(logging::lcNet).noquote() << u"GitHub %1 %2 -> %3 %4"_s.arg(
+                    QString::fromLatin1(method), url.toString(QUrl::RemoveUserInfo | QUrl::RemoveQuery),
+                    QString::number(response.status), logging::redact(response.networkError));
         }
         handler(response);
     });
@@ -262,9 +344,8 @@ void GitHubClient::api(const QByteArray &method, const QString &path, const QJso
                        const Headers &headers)
 {
     Headers all = headers;
-    bool accept = false;
-    for (const auto &header : headers)
-        accept = accept || header.first.compare("Accept", Qt::CaseInsensitive) == 0;
+    const bool accept = std::ranges::any_of(
+            headers, [](const auto &header) { return header.first.compare("Accept", Qt::CaseInsensitive) == 0; });
     if (!accept)
         all.emplaceBack("Accept", "application/vnd.github+json");
     all.emplaceBack("X-GitHub-Api-Version", "2022-11-28");
@@ -298,45 +379,35 @@ void GitHubClient::api(const QByteArray &method, const QString &path, const QJso
 
 void GitHubClient::user(Done<User> done)
 {
-    api("GET", u"user"_s, {}, [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-        User user;
-        if (error.isError()) {
-            done(error, user);
-            return;
-        }
-        user.login = doc.object().value(u"login"_s).toString();
-        user.name = doc.object().value(u"name"_s).toString();
-        if (r.headers.contains("x-oauth-scopes")) {
-            user.scopesKnown = true;
-            for (const QByteArray &scope : r.header("x-oauth-scopes").split(',')) {
-                if (!scope.trimmed().isEmpty())
-                    user.scopes.append(QString::fromLatin1(scope.trimmed()));
+    api("GET", u"user"_s, {},
+        [done = std::move(done)](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
+            User user;
+            if (error.isError()) {
+                done(error, user);
+                return;
             }
-        }
-        if (user.login.isEmpty()) {
-            done(GitHubError::make(GitHubError::Code::Parse, u"No login in the answer"_s, r.status), user);
-            return;
-        }
-        done({}, user);
-    });
+            const QJsonObject object = doc.object();
+            user.login = object.value(u"login"_s).toString();
+            user.name = object.value(u"name"_s).toString();
+            if (r.headers.contains("x-oauth-scopes")) {
+                user.scopesKnown = true;
+                const QList<QByteArray> scopes = r.header("x-oauth-scopes").split(',');
+                for (const QByteArray &scope : scopes) {
+                    if (const QByteArray name = scope.trimmed(); !name.isEmpty())
+                        user.scopes.append(QString::fromLatin1(name));
+                }
+            }
+            if (user.login.isEmpty()) {
+                done(GitHubError::make(GitHubError::Code::Parse, u"No login in the answer"_s, r.status), user);
+                return;
+            }
+            done({}, user);
+        });
 }
 
 void GitHubClient::repository(const RepoId &repo, Done<Repository> done)
 {
-    api("GET", repoPath(repo), {},
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            if (error.isError()) {
-                done(error, {});
-                return;
-            }
-            const Repository repository = repositoryOf(doc.object());
-            if (!repository.id.isValid()) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No repository in the answer"_s, r.status),
-                     repository);
-                return;
-            }
-            done({}, repository);
-        });
+    api("GET", repoPath(repo), {}, answer(std::move(done), &repositoryOf, u"No repository in the answer"_s));
 }
 
 void GitHubClient::branch(const RepoId &repo, const QString &name, const QString &etag,
@@ -347,7 +418,8 @@ void GitHubClient::branch(const RepoId &repo, const QString &name, const QString
         headers.emplaceBack("If-None-Match", etag.toUtf8());
     api(
             "GET", repoPath(repo) + u"/branches/"_s + encodePath(name), {},
-            [done, name](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
+            [done = std::move(done), name](const GitHubError &error, const QJsonDocument &doc,
+                                           const sync::HttpResponse &r) {
                 BranchHead head;
                 if (error.isError()) {
                     done(error, head, false);
@@ -377,20 +449,22 @@ void GitHubClient::branchNames(const RepoId &repo, const QString &prefix, Done<Q
 {
     const QString filter = prefix.isEmpty() ? QString() : QString(u'/' + encodePath(prefix));
     api("GET", repoPath(repo) + u"/git/matching-refs/heads"_s + filter + u"?per_page=100"_s, {},
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &) {
-            QStringList names;
+        [done = std::move(done)](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &) {
             if (error.code == GitHubError::Code::EmptyRepository) {
-                done({}, names); // no commit: no branch either
+                done({}, {}); // no commit: no branch either
                 return;
             }
             if (error.isError()) {
-                done(error, names);
+                done(error, {});
                 return;
             }
-            for (const QJsonValue &ref : doc.array()) {
+            static constexpr QStringView heads = u"refs/heads/";
+            QStringList names;
+            const QJsonArray refs = doc.array();
+            for (const QJsonValue ref : refs) {
                 const QString full = ref.toObject().value(u"ref"_s).toString();
-                if (full.startsWith(u"refs/heads/"_s))
-                    names.append(full.mid(11));
+                if (full.startsWith(heads))
+                    names.append(full.sliced(heads.size()));
             }
             done({}, names);
         });
@@ -399,42 +473,25 @@ void GitHubClient::branchNames(const RepoId &repo, const QString &prefix, Done<Q
 void GitHubClient::tree(const RepoId &repo, const QString &sha, bool recursive, Done<Tree> done)
 {
     api("GET", repoPath(repo) + u"/git/trees/"_s + encodePath(sha) + (recursive ? u"?recursive=1"_s : QString()), {},
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            Tree tree;
-            if (error.isError()) {
-                done(error, tree);
-                return;
-            }
-            const QJsonObject object = doc.object();
-            tree.sha = object.value(u"sha"_s).toString();
-            tree.truncated = object.value(u"truncated"_s).toBool();
-            const QJsonArray entries = object.value(u"tree"_s).toArray();
-            tree.entries.reserve(entries.size());
-            for (const QJsonValue &entry : entries)
-                tree.entries.append(treeEntryOf(entry.toObject()));
-            if (tree.sha.isEmpty()) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No tree in the answer"_s, r.status), tree);
-                return;
-            }
-            done({}, tree);
-        });
+        answer(std::move(done), &treeOf, u"No tree in the answer"_s));
 }
 
 void GitHubClient::folder(const RepoId &repo, const QString &path, const QString &ref, Done<QList<TreeEntry>> done)
 {
     const QString where = path.isEmpty() ? QString() : QString(u'/' + encodePath(path));
     api("GET", repoPath(repo) + u"/contents"_s + where + u"?ref="_s + queryValue(ref), {},
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            QList<TreeEntry> entries;
+        [done = std::move(done)](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
             if (error.isError()) {
-                done(error, entries);
+                done(error, {});
                 return;
             }
             if (!doc.isArray()) { // a file
-                done(GitHubError::make(GitHubError::Code::NotFound, u"Not a folder"_s, r.status), entries);
+                done(GitHubError::make(GitHubError::Code::NotFound, u"Not a folder"_s, r.status), {});
                 return;
             }
-            for (const QJsonValue &value : doc.array()) {
+            QList<TreeEntry> entries;
+            const QJsonArray listing = doc.array();
+            for (const QJsonValue value : listing) {
                 const QJsonObject object = value.toObject();
                 TreeEntry entry;
                 entry.path = object.value(u"name"_s).toString();
@@ -451,42 +508,21 @@ void GitHubClient::folder(const RepoId &repo, const QString &path, const QString
 void GitHubClient::blob(const RepoId &repo, const QString &sha, Done<QByteArray> done)
 {
     const Headers headers = {{"Accept", "application/vnd.github.raw+json"}, {"X-GitHub-Api-Version", "2022-11-28"}};
-    send("GET", apiUrl(repoPath(repo) + u"/git/blobs/"_s + encodePath(sha)), {}, headers,
-         [done](const sync::HttpResponse &response) {
-             if (response.status < 200 || response.status >= 300) {
-                 done(errorOf(response), {});
-                 return;
-             }
-             done({}, response.body);
-         });
+    send("GET", apiUrl(repoPath(repo) + u"/git/blobs/"_s + encodePath(sha)), {}, headers, bytesAnswer(std::move(done)));
 }
 
 void GitHubClient::rawFile(const RepoId &repo, const QString &commit, const QString &path, Done<QByteArray> done)
 {
     const QString text = u"https://"_s + RawHost + u'/' + encodePath(repo.owner) + u'/' + encodePath(repo.name) + u'/'
                          + encodePath(commit) + u'/' + encodePath(path);
-    const QUrl url = QUrl::fromEncoded(text.toLatin1(), QUrl::StrictMode);
-    send("GET", url, {}, {}, [done](const sync::HttpResponse &response) {
-        if (response.status < 200 || response.status >= 300) {
-            done(errorOf(response), {});
-            return;
-        }
-        done({}, response.body);
-    });
+    send("GET", QUrl::fromEncoded(text.toLatin1(), QUrl::StrictMode), {}, {}, bytesAnswer(std::move(done)));
 }
 
 void GitHubClient::createBlob(const RepoId &repo, const QByteArray &content, Done<QString> done)
 {
     const QJsonObject body{{u"content"_s, QString::fromLatin1(content.toBase64())}, {u"encoding"_s, u"base64"_s}};
     api("POST", repoPath(repo) + u"/git/blobs"_s, QJsonDocument(body),
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            const QString sha = doc.object().value(u"sha"_s).toString();
-            if (!error.isError() && sha.isEmpty()) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No blob in the answer"_s, r.status), sha);
-                return;
-            }
-            done(error, sha);
-        });
+        answer(std::move(done), &shaOf, u"No blob in the answer"_s));
 }
 
 void GitHubClient::createTree(const RepoId &repo, const QString &baseTree, const QList<NewTreeEntry> &entries,
@@ -507,14 +543,7 @@ void GitHubClient::createTree(const RepoId &repo, const QString &baseTree, const
     if (!baseTree.isEmpty())
         body.insert(u"base_tree"_s, baseTree);
     api("POST", repoPath(repo) + u"/git/trees"_s, QJsonDocument(body),
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            const QString sha = doc.object().value(u"sha"_s).toString();
-            if (!error.isError() && sha.isEmpty()) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No tree in the answer"_s, r.status), sha);
-                return;
-            }
-            done(error, sha);
-        });
+        answer(std::move(done), &shaOf, u"No tree in the answer"_s));
 }
 
 void GitHubClient::createCommit(const RepoId &repo, const QString &message, const QString &tree,
@@ -523,46 +552,32 @@ void GitHubClient::createCommit(const RepoId &repo, const QString &message, cons
     const QJsonObject body{
             {u"message"_s, message}, {u"tree"_s, tree}, {u"parents"_s, QJsonArray::fromStringList(parents)}};
     api("POST", repoPath(repo) + u"/git/commits"_s, QJsonDocument(body),
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            const QString sha = doc.object().value(u"sha"_s).toString();
-            if (!error.isError() && sha.isEmpty()) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No commit in the answer"_s, r.status), sha);
-                return;
-            }
-            done(error, sha);
-        });
+        answer(std::move(done), &shaOf, u"No commit in the answer"_s));
 }
 
 void GitHubClient::updateBranch(const RepoId &repo, const QString &branch, const QString &sha, Finished done)
 {
     const QJsonObject body{{u"sha"_s, sha}, {u"force"_s, false}};
     api("PATCH", repoPath(repo) + u"/git/refs/heads/"_s + encodePath(branch), QJsonDocument(body),
-        [done](const GitHubError &error, const QJsonDocument &, const sync::HttpResponse &) { done(error); });
+        [done = std::move(done)](const GitHubError &error, const QJsonDocument &, const sync::HttpResponse &) {
+            done(error);
+        });
 }
 
 void GitHubClient::createBranch(const RepoId &repo, const QString &branch, const QString &sha, Finished done)
 {
     const QJsonObject body{{u"ref"_s, QString(u"refs/heads/"_s + branch)}, {u"sha"_s, sha}};
     api("POST", repoPath(repo) + u"/git/refs"_s, QJsonDocument(body),
-        [done](const GitHubError &error, const QJsonDocument &, const sync::HttpResponse &) { done(error); });
+        [done = std::move(done)](const GitHubError &error, const QJsonDocument &, const sync::HttpResponse &) {
+            done(error);
+        });
 }
 
 void GitHubClient::createFork(const RepoId &repo, Done<Repository> done)
 {
     const QJsonObject body{{u"default_branch_only"_s, true}};
     api("POST", repoPath(repo) + u"/forks"_s, QJsonDocument(body),
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            if (error.isError()) {
-                done(error, {});
-                return;
-            }
-            const Repository fork = repositoryOf(doc.object());
-            if (!fork.id.isValid()) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No fork in the answer"_s, r.status), fork);
-                return;
-            }
-            done({}, fork);
-        });
+        answer(std::move(done), &repositoryOf, u"No fork in the answer"_s));
 }
 
 void GitHubClient::createPullRequest(const RepoId &repo, const QString &title, const QString &body, const QString &head,
@@ -574,35 +589,13 @@ void GitHubClient::createPullRequest(const RepoId &repo, const QString &title, c
                               {u"base"_s, base},
                               {u"maintainer_can_modify"_s, true}};
     api("POST", repoPath(repo) + u"/pulls"_s, QJsonDocument(request),
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            if (error.isError()) {
-                done(error, {});
-                return;
-            }
-            const PullRequest pr = pullRequestOf(doc.object());
-            if (pr.number <= 0) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No pull request in the answer"_s, r.status), pr);
-                return;
-            }
-            done({}, pr);
-        });
+        answer(std::move(done), &pullRequestOf, u"No pull request in the answer"_s));
 }
 
 void GitHubClient::pullRequest(const RepoId &repo, int number, Done<PullRequest> done)
 {
     api("GET", repoPath(repo) + u"/pulls/"_s + QString::number(number), {},
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            if (error.isError()) {
-                done(error, {});
-                return;
-            }
-            const PullRequest pr = pullRequestOf(doc.object());
-            if (pr.number <= 0) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No pull request in the answer"_s, r.status), pr);
-                return;
-            }
-            done({}, pr);
-        });
+        answer(std::move(done), &pullRequestOf, u"No pull request in the answer"_s));
 }
 
 void GitHubClient::putFile(const RepoId &repo, const QString &path, const QString &branch, const QString &message,
@@ -612,14 +605,7 @@ void GitHubClient::putFile(const RepoId &repo, const QString &path, const QStrin
     if (!branch.isEmpty())
         body.insert(u"branch"_s, branch);
     api("PUT", repoPath(repo) + u"/contents/"_s + encodePath(path), QJsonDocument(body),
-        [done](const GitHubError &error, const QJsonDocument &doc, const sync::HttpResponse &r) {
-            const QString sha = doc.object().value(u"commit"_s).toObject().value(u"sha"_s).toString();
-            if (!error.isError() && sha.isEmpty()) {
-                done(GitHubError::make(GitHubError::Code::Parse, u"No commit in the answer"_s, r.status), sha);
-                return;
-            }
-            done(error, sha);
-        });
+        answer(std::move(done), &commitShaOf, u"No commit in the answer"_s));
 }
 
 } // namespace brulion::github

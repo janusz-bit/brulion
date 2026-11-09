@@ -25,7 +25,7 @@ QString capLabel(const QString &text)
 {
     QString t = text.simplified();
     if (t.size() > limits::MaxLabelLength)
-        t = t.left(limits::MaxLabelLength - 1) + u'…';
+        t = detail::cutAt(t, limits::MaxLabelLength - 1).toString() + u'…';
     return t;
 }
 
@@ -119,10 +119,7 @@ DataResult fail(Error::Code code, int line, QString detail = {})
 DataResult fromTable(const Spec &spec, const PageSources &page)
 {
     const PageSources::Table *table = pick(page.tables, spec.sourceIndex, page.chartLine);
-    if (!table)
-        return fail(Error::Code::NoTable, spec.sourceLine,
-                    spec.sourceIndex > 0 ? QString::number(spec.sourceIndex) : QString());
-    const std::optional<calc::TableModel> model = calc::parseTable(table->text);
+    const std::optional<calc::TableModel> model = table ? calc::parseTable(table->text) : std::nullopt;
     if (!model || model->header.isEmpty())
         return fail(Error::Code::NoTable, spec.sourceLine,
                     spec.sourceIndex > 0 ? QString::number(spec.sourceIndex) : QString());
@@ -131,11 +128,11 @@ DataResult fromTable(const Spec &spec, const PageSources &page)
     const int last = int(model->rows.size()) - summary.trailing; // exclusive
     if (last - first > limits::MaxPoints)
         return fail(Error::Code::TooLarge, 0, u"points"_s);
-    const bool formulas = std::any_of(model->rows.cbegin(), model->rows.cend(), [](const QStringList &row) {
-        return std::any_of(row.cbegin(), row.cend(), [](const QString &c) { return c.trimmed().startsWith(u'='); });
+    const bool formulas = std::ranges::any_of(model->rows, [](const QStringList &row) {
+        return std::ranges::any_of(row, [](const QString &c) { return c.trimmed().startsWith(u'='); });
     });
-    const calc::TableEval eval = formulas ? calc::evaluateTable(*model, page.locale, scopeAbove(page, table->line))
-                                          : calc::evaluateTable(*model, page.locale);
+    const calc::TableEval eval =
+            calc::evaluateTable(*model, page.locale, formulas ? scopeAbove(page, table->line) : calc::Scope());
     const int columns = int(model->header.size());
 
     // The labels' column: `x`, else the first one (none when the table has only one column).
@@ -259,7 +256,7 @@ DataResult fromQuery(const Spec &spec, const PageSources &page)
         out.data.labels.append(capLabel(label));
         s.values.append(clean(value));
     }
-    if (std::all_of(s.values.cbegin(), s.values.cend(), [](double v) { return std::isnan(v); }))
+    if (std::ranges::all_of(s.values, [](double v) { return std::isnan(v); }))
         return fail(Error::Code::NoValues, 0);
     out.data.series.append(std::move(s));
     return out;
@@ -272,9 +269,9 @@ PageSources pageSources(QStringView content, int chartLine, calc::CalcLocale loc
     PageSources page;
     page.chartLine = chartLine;
     page.locale = locale;
-    for (const calc::TableSpan &span : calc::findTables(content))
+    for (const auto spans = calc::findTables(content); const calc::TableSpan &span : spans)
         page.tables.append({span.startLine, content.mid(span.from, span.to - span.from).toString()});
-    for (const calc::CalcBlock &block : calc::findCalcBlocks(content))
+    for (const auto blocks = calc::findCalcBlocks(content); const calc::CalcBlock &block : blocks)
         page.calcs.append({block.startLine, block.source});
     page.scopeAt = [text = content.toString(), locale](int line) { return calc::pageScope(text, line, locale); };
     return page;
@@ -291,8 +288,8 @@ DataResult resolveData(const Spec &spec, const PageSources &page)
     if (out.error || spec.type != Type::Pie)
         return out;
     // A pie draws the first series' values above zero.
-    const QList<double> &values = out.data.series.front().values;
-    const auto positive = std::count_if(values.cbegin(), values.cend(), [](double v) { return v > 0; });
+    const QList<double> &values = out.data.series.constFirst().values;
+    const auto positive = std::ranges::count_if(values, [](double v) { return v > 0; });
     if (positive == 0)
         return fail(Error::Code::NoPositiveValues, 0);
     if (positive > limits::MaxSlices)
@@ -315,6 +312,7 @@ QString describeChart(const Spec &spec, const Data &data, calc::CalcLocale local
             total += v > 0 ? v : 0;
     }
     QStringList points;
+    QStringList values; // of one point, with several series
     qsizetype length = out.size();
     for (qsizetype i = 0; i < data.labels.size() && length < maxLength; ++i) {
         QString point;
@@ -329,7 +327,7 @@ QString describeChart(const Spec &spec, const Data &data, calc::CalcLocale local
             point = ChartMessages::tr("%1: %2").arg(data.labels.at(i),
                                                     number(data.series.front().values.value(i, Nan)));
         } else {
-            QStringList values;
+            values.clear();
             for (const Series &s : data.series)
                 values.append(ChartMessages::tr("%1 %2").arg(s.name, number(s.values.value(i, Nan))));
             point = ChartMessages::tr("%1: %2").arg(data.labels.at(i), values.join(u", "_s));
@@ -348,14 +346,13 @@ Result render(QStringView source, const PageSources &page, const LayoutOptions &
 {
     Result out;
     SpecResult spec = parseSpec(source);
-    out.spec = spec.spec;
-    if (spec.error) {
-        out.error = spec.error;
+    out.spec = std::move(spec.spec);
+    out.error = std::move(spec.error);
+    if (out.error)
         return out;
-    }
     DataResult data = resolveData(out.spec, page);
     if (data.error) {
-        out.error = data.error;
+        out.error = std::move(data.error);
         return out;
     }
     out.data = std::move(data.data);

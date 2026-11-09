@@ -48,9 +48,7 @@ std::optional<Period> periodOf(QStringView word)
             {u"year"_s, Period::Year},      {u"years"_s, Period::Year},     {u"yr"_s, Period::Year},
     };
     const auto it = words.constFind(word.toString());
-    if (it == words.constEnd())
-        return std::nullopt;
-    return *it;
+    return it == words.constEnd() ? std::nullopt : std::optional(*it);
 }
 
 int daysPerPeriod(Period period)
@@ -187,13 +185,8 @@ std::optional<Schedule> parseSchedule(QStringView text)
         return Schedule{};
     if (auto times = parseTimes(folded))
         return times;
-    const QList<int> weekdays = dates::parseWeekdayList(folded);
-    if (!weekdays.isEmpty()) {
-        Schedule s;
-        s.kind = Kind::Weekdays;
-        s.weekdays = weekdays;
-        return s;
-    }
+    if (QList<int> weekdays = dates::parseWeekdayList(folded); !weekdays.isEmpty())
+        return Schedule{.kind = Kind::Weekdays, .weekdays = std::move(weekdays)};
     if (const auto rule = dates::parseRecurrence(text))
         return fromRule(*rule);
     return std::nullopt;
@@ -201,14 +194,13 @@ std::optional<Schedule> parseSchedule(QStringView text)
 
 QString formatSchedule(const Schedule &s, dates::UiLocale locale)
 {
-    const bool polish = locale == dates::UiLocale::Polish;
     dates::RecurrenceRule rule;
     rule.interval = s.interval;
     switch (s.kind) {
     case Kind::Days: rule.freq = Freq::Day; break;
     case Kind::Weekdays:
         if (s.weekdays == QList<int>{1, 2, 3, 4, 5} && s.interval == 1)
-            return polish ? u"w dni robocze"_s : u"every weekday"_s;
+            return locale == dates::UiLocale::Polish ? u"w dni robocze"_s : u"every weekday"_s;
         if (s.interval == 1) {
             QStringList names;
             for (const int d : s.weekdays)

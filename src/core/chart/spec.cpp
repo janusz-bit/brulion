@@ -16,7 +16,7 @@ namespace {
 QString excerpt(QStringView text)
 {
     const QStringView t = text.trimmed();
-    return t.size() > 40 ? t.left(39).toString() + u'…' : t.toString();
+    return t.size() > 40 ? detail::cutAt(t, 39).toString() + u'…' : t.toString();
 }
 
 /// The line without a trailing `// comment` (one after a blank: `http://` stays).
@@ -95,7 +95,7 @@ QStringList columnList(QStringView value)
     qsizetype start = 0;
     for (qsizetype i = 0; i <= value.size(); ++i) {
         const QChar c = i < value.size() ? value.at(i) : QChar();
-        if (!close.isNull()) {
+        if (!close.isNull() && i < value.size()) { // an unclosed quote ends with the value
             if (c == close || (close == u'”' && c == u'"'))
                 close = QChar();
             continue;
@@ -141,16 +141,11 @@ SpecResult parseSpec(QStringView source)
         const QStringView word = line.left(colon).trimmed();
         const QStringView value = line.mid(colon + 1).trimmed();
         const Key key = keyOf(word);
-        const auto takeSource = [&](SourceKind kind) -> bool {
-            if (sourceGiven) {
-                out.error = Error{Error::Code::SeveralSources, lineNo, {}};
-                return false;
-            }
-            sourceGiven = true;
-            out.spec.source = kind;
+        if (key == Key::Table || key == Key::Calc || key == Key::Query) { // the one data source
+            if (std::exchange(sourceGiven, true))
+                return fail(Error::Code::SeveralSources, lineNo);
             out.spec.sourceLine = lineNo;
-            return true;
-        };
+        }
         switch (key) {
         case Key::None: return fail(Error::Code::UnknownKey, lineNo, excerpt(word));
         case Key::Type: {
@@ -162,8 +157,7 @@ SpecResult parseSpec(QStringView source)
         }
         case Key::Table:
         case Key::Calc: {
-            if (!takeSource(key == Key::Table ? SourceKind::Table : SourceKind::Calc))
-                return out;
+            out.spec.source = key == Key::Table ? SourceKind::Table : SourceKind::Calc;
             const std::optional<int> index = sourceIndexOf(value);
             if (!index)
                 return fail(Error::Code::InvalidSource, lineNo, excerpt(value));
@@ -171,8 +165,7 @@ SpecResult parseSpec(QStringView source)
             break;
         }
         case Key::Query:
-            if (!takeSource(SourceKind::Query))
-                return out;
+            out.spec.source = SourceKind::Query;
             if (value.isEmpty())
                 return fail(Error::Code::EmptyQuery, lineNo);
             out.spec.query = value.toString();
@@ -185,7 +178,7 @@ SpecResult parseSpec(QStringView source)
             out.spec.y = columnList(value);
             out.spec.yLine = lineNo;
             break;
-        case Key::Title: out.spec.title = value.left(limits::MaxLabelLength).toString(); break;
+        case Key::Title: out.spec.title = detail::cutAt(value, limits::MaxLabelLength).toString(); break;
         }
     }
     return out;
@@ -204,7 +197,6 @@ QString typeName(Type type)
 QString Error::message() const
 {
     using detail::ChartMessages;
-    const QString n = QString::number(line);
     QString text;
     switch (code) {
     case Code::Syntax: text = ChartMessages::tr("cannot read “%1”: write “key: value”.").arg(detail); break;
@@ -245,7 +237,7 @@ QString Error::message() const
     case Code::EmptyQuery: text = ChartMessages::tr("write the query after “query:”."); break;
     }
     if (line > 0)
-        return ChartMessages::tr("Line %1: %2").arg(n, text);
+        return ChartMessages::tr("Line %1: %2").arg(QString::number(line), text);
     if (!text.isEmpty())
         text[0] = text[0].toUpper();
     return text;

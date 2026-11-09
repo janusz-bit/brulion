@@ -24,11 +24,6 @@ using namespace index_detail;
 
 namespace {
 
-bool isThisPage(const QString &folded)
-{
-    return isThisPageValue(folded); // (already folded: folding again changes nothing)
-}
-
 int priorityRank(Priority p)
 {
     switch (p) {
@@ -127,12 +122,6 @@ struct GroupInfo {
     QString order;
 };
 
-/// Per-note data computed once per run.
-struct NoteMeta {
-    QStringList pageTags;
-    QList<std::optional<QStringList>> effective; ///< per block
-};
-
 } // namespace
 
 namespace index_detail {
@@ -200,17 +189,18 @@ private:
     bool refMatches(const QString &value, const View &view);
     bool textMatches(const QString &value, const View &view);
     bool dateMatches(QueryDateField field, const QueryDateCondition &cond, const View &view);
-    bool isOverdue(QueryDateField field, const DateSpec &value, const View &view) const;
+    bool isOverdue(QueryDateField field, DateSpec value, const View &view) const;
     /// The item's dates of a field (at most a few: no allocation for the usual one).
     using DateValues = QVarLengthArray<DateSpec, 4>;
     DateValues dateValues(QueryDateField field, const View &view) const;
+    /// An item's tags: a block's own, its ancestors' and the page's; a page's: ParsedNote::tags.
     QStringList effectiveTags(const View &view);
-    NoteMeta &meta(const Entry *entry);
     QSet<int> refLines(const VaultPath &path, const QString &value);
     /// The tag keys that name the page `ref:value` means.
     const QSet<QString> &refTags(const QString &value);
     std::optional<VaultPath> resolveCached(const QString &target);
     QString folded(const QString &value);
+    /// Drop the candidates (of one note) inside the block of another one (type:blocks).
     void collapseNested(QList<Candidate> &cands) const;
     SortValue sortValue(QuerySortKey key, const View &view) const;
     int defaultCompare(const QueryMatch &a, const QueryMatch &b) const;
@@ -222,7 +212,8 @@ private:
     QDate m_today;
     Qt::DayOfWeek m_weekStart;
     const QueryOptions &m_options;
-    QHash<const Entry *, NoteMeta> m_meta;
+    /// effectiveTags() by note and block (each computed once per run).
+    QHash<const Entry *, QList<std::optional<QStringList>>> m_effectiveTags;
     /// Resolved date expressions by condition (each filter's conditions resolved once per run).
     QHash<const QueryDateCondition *, std::optional<dates::DateExpr>> m_exprs;
     QHash<QString, std::optional<VaultPath>> m_resolved;
@@ -300,11 +291,7 @@ void Runner::matchesOf(const Entry &e, QList<QueryMatch> &out)
 
 bool Runner::matchesAll(const View &view)
 {
-    for (const QueryFilter &f : m_query.filters) {
-        if (test(f, view) == f.negate)
-            return false;
-    }
-    return true;
+    return std::ranges::all_of(m_query.filters, [&](const QueryFilter &f) { return test(f, view) != f.negate; });
 }
 
 bool Runner::test(const QueryFilter &f, const View &view)
@@ -314,25 +301,24 @@ bool Runner::test(const QueryFilter &f, const View &view)
     case QueryFilterKind::Priority: return view.task && f.priorities.contains(view.task->priority);
     case QueryFilterKind::Tag: {
         const QStringList tags = effectiveTags(view);
-        return std::any_of(f.values.cbegin(), f.values.cend(), [&](const QString &v) {
-            return std::any_of(tags.cbegin(), tags.cend(), [&](const QString &t) {
+        return std::ranges::any_of(f.values, [&](const QString &v) {
+            return std::ranges::any_of(tags, [&](const QString &t) {
                 return t == v || (t.size() > v.size() && t.startsWith(v) && t[v.size()] == u'/');
             });
         });
     }
     case QueryFilterKind::Page:
-        return std::any_of(f.values.cbegin(), f.values.cend(), [&](const QString &v) { return pageMatches(v, view); });
+        return std::ranges::any_of(f.values, [&](const QString &v) { return pageMatches(v, view); });
     case QueryFilterKind::Path:
-        return std::any_of(f.values.cbegin(), f.values.cend(), [&](const QString &v) { return pathMatches(v, view); });
+        return std::ranges::any_of(f.values, [&](const QString &v) { return pathMatches(v, view); });
     case QueryFilterKind::Ref:
-        return std::any_of(f.values.cbegin(), f.values.cend(), [&](const QString &v) { return refMatches(v, view); });
+        return std::ranges::any_of(f.values, [&](const QString &v) { return refMatches(v, view); });
     case QueryFilterKind::Text:
-        return std::any_of(f.values.cbegin(), f.values.cend(), [&](const QString &v) { return textMatches(v, view); });
+        return std::ranges::any_of(f.values, [&](const QString &v) { return textMatches(v, view); });
     case QueryFilterKind::Date:
-        return std::any_of(f.dates.cbegin(), f.dates.cend(),
-                           [&](const QueryDateCondition &c) { return dateMatches(f.field, c, view); });
+        return std::ranges::any_of(f.dates, [&](const QueryDateCondition &c) { return dateMatches(f.field, c, view); });
     case QueryFilterKind::Is:
-        return view.task && std::any_of(f.values.cbegin(), f.values.cend(), [&](const QString &v) {
+        return view.task && std::ranges::any_of(f.values, [&](const QString &v) {
                    if (v == u"blocked")
                        return m_index.isTaskBlocked(view.path(), view.block);
                    if (v == u"blocking")
@@ -351,30 +337,27 @@ bool Runner::pageMatches(const QString &value, const View &view)
 {
     const QString v = value.trimmed();
     const QString fv = folded(v);
-    if (isThisPage(fv))
+    if (isThisPageValue(fv))
         return !m_options.currentPath.isEmpty() && m_options.currentPath == view.path();
     const Entry &e = *view.entry;
     if (v.contains(u'*')) {
-        if (globMatch(e.foldedPath, fv))
-            return true;
-        return std::any_of(e.names.cbegin(), e.names.cend(),
-                           [&](const NameCandidate &n) { return globMatch(n.folded, fv); });
+        return globMatch(e.foldedPath, fv)
+               || std::ranges::any_of(e.names, [&](const NameCandidate &n) { return globMatch(n.folded, fv); });
     }
-    if (e.foldedPath == fv
-        || std::any_of(e.names.cbegin(), e.names.cend(), [&](const NameCandidate &n) { return n.folded == fv; }))
-        return true;
-    return resolveCached(v) == view.path();
+    return e.foldedPath == fv || std::ranges::find(e.names, fv, &NameCandidate::folded) != e.names.cend()
+           || resolveCached(v) == view.path();
 }
 
 bool Runner::pathMatches(const QString &value, const View &view)
 {
-    QString p = folded(value.trimmed());
-    while (p.startsWith(u"./"))
-        p.remove(0, 2);
-    while (p.startsWith(u'/'))
-        p.remove(0, 1);
+    const QString p = folded(value.trimmed());
+    QStringView prefix(p);
+    while (prefix.startsWith(u"./"))
+        prefix = prefix.sliced(2);
+    while (prefix.startsWith(u'/'))
+        prefix = prefix.sliced(1);
     const QString fp = text::foldKey(view.path());
-    return p.contains(u'*') ? globMatch(fp, p, true) : fp.startsWith(p);
+    return prefix.contains(u'*') ? globMatch(fp, prefix, true) : fp.startsWith(prefix);
 }
 
 bool Runner::refMatches(const QString &value, const View &view)
@@ -409,23 +392,18 @@ bool Runner::refMatches(const QString &value, const View &view)
 
 const QSet<QString> &Runner::refTags(const QString &value)
 {
-    auto it = m_refTags.find(value);
-    if (it != m_refTags.end())
+    if (const auto it = m_refTags.constFind(value); it != m_refTags.cend())
         return *it;
-    QSet<QString> keys;
-    const auto add = [&keys](const QStringList &list) {
-        for (const QString &k : list)
-            keys.insert(k);
-    };
-    if (isThisPage(folded(value.trimmed()))) {
+    QStringList keys;
+    if (isThisPageValue(folded(value.trimmed()))) {
         if (!m_options.currentPath.isEmpty())
-            add(m_index.tagsNaming(m_options.currentPath));
+            keys = m_index.tagsNaming(m_options.currentPath);
     } else if (const std::optional<VaultPath> target = resolveCached(value)) {
-        add(m_index.tagsNaming(*target));
+        keys = m_index.tagsNaming(*target);
     } else if (const QString name = tagName(cleanTarget(value)); !name.isEmpty()) {
-        keys.insert(name.toLower()); // no page (yet): the tag of that name
+        keys.append(name.toLower()); // no page (yet): the tag of that name
     }
-    return *m_refTags.insert(value, keys);
+    return *m_refTags.insert(value, QSet<QString>(keys.cbegin(), keys.cend()));
 }
 
 bool Runner::textMatches(const QString &value, const View &view)
@@ -440,35 +418,20 @@ Runner::DateValues Runner::dateValues(QueryDateField field, const View &view) co
 {
     DateValues out;
     const Task *t = view.task;
-    auto addSpec = [&](const std::optional<DateSpec> &spec) {
+    const auto addSpec = [&out](const std::optional<DateSpec> &spec) {
         if (spec && spec->isValid())
             out.append(*spec);
     };
-    auto addDate = [&](const std::optional<QDate> &date) {
+    const auto addDate = [&out](std::optional<QDate> date) {
         if (date && date->isValid())
             out.append(DateSpec{*date, std::nullopt});
     };
     switch (field) {
-    case QueryDateField::Due:
-        if (t)
-            addSpec(t->due);
-        break;
-    case QueryDateField::Scheduled:
-        if (t)
-            addSpec(t->scheduled);
-        break;
-    case QueryDateField::Start:
-        if (t)
-            addSpec(t->start);
-        break;
-    case QueryDateField::Done:
-        if (t)
-            addDate(t->doneDate);
-        break;
-    case QueryDateField::Created:
-        if (t)
-            addDate(t->created);
-        break;
+    case QueryDateField::Due: addSpec(t ? t->due : std::nullopt); break;
+    case QueryDateField::Scheduled: addSpec(t ? t->scheduled : std::nullopt); break;
+    case QueryDateField::Start: addSpec(t ? t->start : std::nullopt); break;
+    case QueryDateField::Done: addDate(t ? t->doneDate : std::nullopt); break;
+    case QueryDateField::Created: addDate(t ? t->created : std::nullopt); break;
     case QueryDateField::Date: addDate(view.note().journalDate); break;
     case QueryDateField::Remind:
         if (view.reminder) {
@@ -484,7 +447,7 @@ Runner::DateValues Runner::dateValues(QueryDateField field, const View &view) co
     return out;
 }
 
-bool Runner::isOverdue(QueryDateField field, const DateSpec &value, const View &view) const
+bool Runner::isOverdue(QueryDateField field, DateSpec value, const View &view) const
 {
     const bool open = !view.task || !isClosed(view.task->status);
     switch (field) {
@@ -506,9 +469,9 @@ bool Runner::isOverdue(QueryDateField field, const DateSpec &value, const View &
 
 bool Runner::dateMatches(QueryDateField field, const QueryDateCondition &cond, const View &view)
 {
-    auto cached = m_exprs.find(&cond); // the query outlives the run: conditions stay put
-    if (cached == m_exprs.end())
-        cached = m_exprs.insert(&cond, dates::resolveDateExpr(cond.expr, m_today, m_weekStart));
+    const auto [cached, added] = m_exprs.tryEmplace(&cond); // the query outlives the run: conditions stay put
+    if (added)
+        *cached = dates::resolveDateExpr(cond.expr, m_today, m_weekStart);
     if (!cached->has_value())
         return false;
     const dates::DateExpr &expr = **cached;
@@ -518,13 +481,12 @@ bool Runner::dateMatches(QueryDateField field, const QueryDateCondition &cond, c
         case dates::SpecialDate::None: return values.isEmpty();
         case dates::SpecialDate::Any: return !values.isEmpty();
         case dates::SpecialDate::Overdue:
-            return std::any_of(values.cbegin(), values.cend(),
-                               [&](const DateSpec &v) { return isOverdue(field, v, view); });
+            return std::ranges::any_of(values, [&](DateSpec v) { return isOverdue(field, v, view); });
         }
         return false;
     }
     const auto &range = std::get<dates::DateRange>(expr);
-    return std::any_of(values.cbegin(), values.cend(), [&](const DateSpec &v) {
+    return std::ranges::any_of(values, [&](DateSpec v) {
         const QDate d = v.date;
         switch (cond.op) {
         case QueryDateOp::Before: return d < range.from;
@@ -537,27 +499,17 @@ bool Runner::dateMatches(QueryDateField field, const QueryDateCondition &cond, c
     });
 }
 
-NoteMeta &Runner::meta(const Entry *entry)
-{
-    auto it = m_meta.find(entry);
-    if (it != m_meta.end())
-        return *it;
-    const ParsedNote &note = entry->note;
-    NoteMeta m;
-    m.pageTags = entry->pageTags();
-    m.effective.resize(note.blocks.size());
-    return *m_meta.insert(entry, std::move(m));
-}
-
 QStringList Runner::effectiveTags(const View &view)
 {
     if (view.block < 0)
         return view.note().tags;
-    NoteMeta &m = meta(view.entry);
-    std::optional<QStringList> &cached = m.effective[view.block];
+    const QList<Block> &blocks = view.note().blocks;
+    QList<std::optional<QStringList>> &perBlock = m_effectiveTags[view.entry];
+    if (perBlock.isEmpty())
+        perBlock.resize(blocks.size());
+    std::optional<QStringList> &cached = perBlock[view.block];
     if (!cached) {
-        QStringList tags = m.pageTags;
-        const QList<Block> &blocks = view.note().blocks;
+        QStringList tags = view.entry->pageTags();
         for (int b = view.block; b >= 0; b = blocks[b].parent) {
             for (const QString &t : blocks[b].tags) {
                 if (!tags.contains(t))
@@ -571,28 +523,28 @@ QStringList Runner::effectiveTags(const View &view)
 
 std::optional<VaultPath> Runner::resolveCached(const QString &target)
 {
-    auto it = m_resolved.find(target);
-    if (it == m_resolved.end())
-        it = m_resolved.insert(target, m_index.resolveLink(target, m_options.currentPath));
-    return *it;
+    if (const auto it = m_resolved.constFind(target); it != m_resolved.cend())
+        return *it;
+    return *m_resolved.insert(target, m_index.resolveLink(target, m_options.currentPath));
 }
 
 QSet<int> Runner::refLines(const VaultPath &path, const QString &value)
 {
     const QString cacheKey = path + QChar(0) + value;
-    auto it = m_refLines.find(cacheKey);
-    if (it != m_refLines.end())
+    if (const auto it = m_refLines.constFind(cacheKey); it != m_refLines.cend())
         return *it;
-    QSet<int> lines;
     std::optional<VaultPath> target;
-    if (isThisPage(folded(value.trimmed()))) {
-        if (!m_options.currentPath.isEmpty())
-            target = m_options.currentPath;
+    if (isThisPageValue(folded(value.trimmed()))) {
+        if (m_options.currentPath.isEmpty())
+            return *m_refLines.insert(cacheKey, {}); // no current page: no link is to `this`
+        target = m_options.currentPath;
     } else {
         target = resolveCached(value);
     }
+    QSet<int> lines;
     const QString key = linkKey(value);
-    for (const ResolvedLink &l : m_index.outgoingLinks(path)) {
+    const QList<ResolvedLink> links = m_index.outgoingLinks(path);
+    for (const ResolvedLink &l : links) {
         const bool byId = l.link.kind == LinkKind::BlockRef || l.link.kind == LinkKind::BlockEmbed;
         const bool hit = target ? l.target == *target
                                 : (!byId && l.target.isEmpty() && linkKey(l.link.target, TargetForm::Parsed) == key);
@@ -604,54 +556,43 @@ QSet<int> Runner::refLines(const VaultPath &path, const QString &value)
 
 QString Runner::folded(const QString &value)
 {
-    auto it = m_folded.find(value);
-    if (it == m_folded.end())
-        it = m_folded.insert(value, text::foldKey(value));
-    return *it;
+    if (const auto it = m_folded.constFind(value); it != m_folded.cend())
+        return *it;
+    return *m_folded.insert(value, text::foldKey(value));
 }
 
 // ---- sorting and grouping -----------------------------------------------------------------------
 
 SortValue Runner::sortValue(QuerySortKey key, const View &view) const
 {
-    SortValue v;
     switch (key) {
     case QuerySortKey::Priority:
-        if (view.task)
-            v = SortValue{true, priorityRank(view.task->priority), {}, {}, {}};
-        return v;
+        return view.task ? SortValue{true, priorityRank(view.task->priority), {}, {}, {}} : SortValue{};
     case QuerySortKey::Status:
-        if (view.task)
-            v = SortValue{true, statusRank(view.task->status), {}, {}, {}};
-        return v;
+        return view.task ? SortValue{true, statusRank(view.task->status), {}, {}, {}} : SortValue{};
     case QuerySortKey::Page: return SortValue{true, 0, view.note().title, {}, {}};
     case QuerySortKey::Path: return SortValue{true, 0, view.path(), {}, {}};
     default: break;
     }
+    // The earliest date of the field.
     const DateValues values = dateValues(dateFieldOf(key), view);
-    for (const DateSpec &d : values) {
-        if (!v.present || dates::compareDateSpecs(d, v.date) < 0) {
-            v.present = true;
-            v.date = d;
-        }
-    }
-    return v;
+    const auto earliest =
+            std::ranges::min_element(values, [](DateSpec a, DateSpec b) { return dates::compareDateSpecs(a, b) < 0; });
+    return earliest == values.end() ? SortValue{} : SortValue{true, 0, {}, *earliest, {}};
 }
 
 int Runner::defaultCompare(const QueryMatch &a, const QueryMatch &b) const
 {
     if (m_query.type == QueryType::Pages) {
-        if (const int c = compareNameKeys(a.titleKey, a.title, b.titleKey, b.title); c != 0)
-            return c;
-        return a.path < b.path ? -1 : (b.path < a.path ? 1 : 0);
+        const int c = compareNameKeys(a.titleKey, a.title, b.titleKey, b.title);
+        return c != 0 ? c : QString::compare(a.path, b.path);
     }
     if (m_query.type == QueryType::Reminders && a.reminder >= 0 && b.reminder >= 0) {
         if (const int c = dates::compareDateSpecs(a.at, b.at); c != 0)
             return c;
     }
-    if (a.path != b.path)
-        return a.path < b.path ? -1 : 1;
-    return a.line - b.line;
+    const int c = QString::compare(a.path, b.path);
+    return c != 0 ? c : a.line - b.line;
 }
 
 bool Runner::less(const QueryMatch &a, const QueryMatch &b) const
@@ -661,7 +602,7 @@ bool Runner::less(const QueryMatch &a, const QueryMatch &b) const
         case QuerySortKey::Priority:
         case QuerySortKey::Status: return x.number - y.number;
         case QuerySortKey::Page: return x.text == y.text ? 0 : compareNameKeys(x.nameKey, x.text, y.nameKey, y.text);
-        case QuerySortKey::Path: return x.text < y.text ? -1 : (y.text < x.text ? 1 : 0);
+        case QuerySortKey::Path: return QString::compare(x.text, y.text);
         default: return dates::compareDateSpecs(x.date, y.date);
         }
     };
@@ -680,10 +621,8 @@ bool Runner::less(const QueryMatch &a, const QueryMatch &b) const
     }
     if (const int c = defaultCompare(a, b); c != 0)
         return c < 0;
-    // Ties keep the vault's order (notes by path, document order): what a stable sort of the
-    // candidates in that order gives.
-    if (a.path != b.path)
-        return a.path < b.path;
+    // Ties (in one note: defaultCompare() orders by path) keep the document order: what a stable
+    // sort of the candidates in the vault's order gives.
     if (a.block != b.block)
         return a.block < b.block;
     return a.reminder < b.reminder;
@@ -694,7 +633,7 @@ void Runner::sort(QList<QueryMatch> &matches) const
     // Through a permutation: a match is too big to move around n log n times.
     QList<qsizetype> order(matches.size());
     std::iota(order.begin(), order.end(), 0);
-    std::ranges::sort(order, [&](qsizetype x, qsizetype y) { return less(matches[x], matches[y]); });
+    std::ranges::sort(order, [&](qsizetype x, qsizetype y) { return less(matches.at(x), matches.at(y)); });
     QList<QueryMatch> sorted;
     sorted.reserve(matches.size());
     for (const qsizetype i : std::as_const(order))
@@ -706,12 +645,11 @@ View Runner::viewOf(const QueryMatch &match) const
 {
     View view;
     view.entry = m_trustEntries && match.entry ? match.entry : IndexAccess::entry(m_index, match.path);
-    if (!view.entry)
-        return view;
+    if (!view.entry || match.block >= view.entry->note.blocks.size())
+        return {}; // the note left the index or changed since the match was found: nothing to read
     view.block = match.block;
-    const QList<Block> &blocks = view.entry->note.blocks;
-    if (match.block >= 0 && match.block < blocks.size()) {
-        const Block &b = blocks[match.block];
+    if (match.block >= 0) {
+        const Block &b = view.entry->note.blocks[match.block];
         view.task = b.task ? &*b.task : nullptr;
         if (match.reminder >= 0 && match.reminder < b.reminders.size())
             view.reminder = &b.reminders[match.reminder];
@@ -732,6 +670,8 @@ QueryItem Runner::itemOf(const QueryMatch &match) const
 
 QList<GroupInfo> Runner::groupsOf(const View &view)
 {
+    if (!view.entry)
+        return {}; // a note gone from the index (viewOf()): in no group
     switch (m_query.group) {
     case QueryGroupKey::None: return {};
     case QueryGroupKey::Page: return {GroupInfo{view.path(), view.note().title, 0, view.note().title}};
@@ -776,31 +716,31 @@ QList<QueryGroup> Runner::buildGroups(const QList<QueryItem> &items, const QList
     QList<GroupInfo> infos;
     QHash<QString, qsizetype> byKey;
     for (qsizetype i = 0; i < items.size(); ++i) {
-        for (const GroupInfo &g : groupsOf(views[i])) {
-            auto it = byKey.constFind(g.key);
-            if (it == byKey.constEnd()) {
-                it = byKey.insert(g.key, groups.size());
+        const QList<GroupInfo> itemGroups = groupsOf(views[i]);
+        for (const GroupInfo &g : itemGroups) {
+            const auto [at, added] = byKey.tryEmplace(g.key, groups.size());
+            if (added) {
                 groups.append(QueryGroup{g.key, g.label, {}});
                 infos.append(g);
             }
-            groups[*it].items.append(items[i]);
+            groups[*at].items.append(items[i]);
         }
     }
     QList<qsizetype> order(groups.size());
     std::iota(order.begin(), order.end(), 0);
     const bool byName = m_query.group == QueryGroupKey::Page;
-    QList<QString> nameKeys;
+    QStringList nameKeys;
     if (byName) {
         nameKeys.reserve(infos.size());
         for (const GroupInfo &g : std::as_const(infos))
             nameKeys.append(nameSortKey(g.order));
     }
     std::ranges::stable_sort(order, [&](qsizetype a, qsizetype b) {
-        const GroupInfo &x = infos[a];
-        const GroupInfo &y = infos[b];
+        const GroupInfo &x = infos.at(a);
+        const GroupInfo &y = infos.at(b);
         if (x.rank != y.rank)
             return x.rank < y.rank;
-        const int c = byName ? compareNameKeys(nameKeys[a], x.order, nameKeys[b], y.order)
+        const int c = byName ? compareNameKeys(nameKeys.at(a), x.order, nameKeys.at(b), y.order)
                              : QString::compare(x.order, y.order);
         if (c != 0)
             return c < 0;
@@ -815,14 +755,13 @@ QList<QueryGroup> Runner::buildGroups(const QList<QueryItem> &items, const QList
 
 void Runner::collapseNested(QList<Candidate> &cands) const
 {
-    QHash<const Entry *, QSet<int>> matched;
+    QSet<int> matched;
     for (const Candidate &c : std::as_const(cands))
-        matched[c.view.entry].insert(c.view.block);
-    cands.removeIf([&](const Candidate &c) {
-        const QSet<int> inNote = matched.value(c.view.entry);
+        matched.insert(c.view.block);
+    cands.removeIf([&matched](const Candidate &c) {
         const QList<Block> &blocks = c.view.note().blocks;
         for (int p = blocks[c.view.block].parent; p >= 0; p = blocks[p].parent) {
-            if (inNote.contains(p))
+            if (matched.contains(p))
                 return true;
         }
         return false;
@@ -836,16 +775,17 @@ QueryResult Runner::finish(const QList<QueryMatch> &sorted)
     result.total = int(sorted.size());
     const int limit = std::max(0, m_query.limit.value_or(m_options.defaultLimit));
     const qsizetype count = std::min<qsizetype>(limit, sorted.size());
+    const bool grouped = m_query.group != QueryGroupKey::None;
     result.items.reserve(count);
     QList<View> views;
-    if (m_query.group != QueryGroupKey::None)
+    if (grouped)
         views.reserve(count);
     for (qsizetype i = 0; i < count; ++i) {
         result.items.append(itemOf(sorted[i]));
-        if (m_query.group != QueryGroupKey::None)
+        if (grouped)
             views.append(viewOf(sorted[i]));
     }
-    if (m_query.group != QueryGroupKey::None)
+    if (grouped)
         result.groups = buildGroups(result.items, views);
     return result;
 }
@@ -859,7 +799,7 @@ bool sameQuery(const Query &a, const Query &b)
 
 bool hasRemindFilter(const Query &query)
 {
-    return std::any_of(query.filters.cbegin(), query.filters.cend(), [](const QueryFilter &f) {
+    return std::ranges::any_of(query.filters, [](const QueryFilter &f) {
         return f.kind == QueryFilterKind::Date && f.field == QueryDateField::Remind;
     });
 }
@@ -868,7 +808,7 @@ bool hasRemindFilter(const Query &query)
 
 bool queryResolvesNames(const Query &query)
 {
-    return std::any_of(query.filters.cbegin(), query.filters.cend(), [](const QueryFilter &f) {
+    return std::ranges::any_of(query.filters, [](const QueryFilter &f) {
         return f.kind == QueryFilterKind::Page || f.kind == QueryFilterKind::Ref;
     });
 }
@@ -878,7 +818,8 @@ QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Q
 {
     Runner runner(query, index, today, weekStart, options);
     QList<QueryMatch> matches;
-    for (const Entry *e : IndexAccess::sortedEntries(index))
+    const QList<const Entry *> entries = IndexAccess::sortedEntries(index);
+    for (const Entry *e : entries)
         runner.matchesOf(*e, matches);
     runner.sort(matches);
     return runner.finish(matches);
@@ -925,7 +866,8 @@ const NoteCacheSync &QueryCache::update(const Query &query, const VaultIndex &in
     Runner runner(d->query, index, today, weekStart, d->options);
     if (sync.full) {
         d->sorted.clear();
-        for (const Entry *e : IndexAccess::sortedEntries(index))
+        const QList<const Entry *> entries = IndexAccess::sortedEntries(index);
+        for (const Entry *e : entries)
             runner.matchesOf(*e, d->sorted);
         runner.sort(d->sorted);
     } else if (!sync.changed.isEmpty()) {

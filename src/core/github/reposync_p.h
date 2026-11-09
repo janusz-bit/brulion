@@ -40,6 +40,8 @@ struct RepoSync::Job {
 
 /// One running operation. Kept alive by the callbacks waiting for GitHub.
 struct RepoSync::Run {
+    /// The RepoSync running it: a callback that outlived it ends at alive() without touching it.
+    QPointer<RepoSync> owner;
     Operation operation = Operation::Pull;
     int generation = 0;
     QElapsedTimer timer;
@@ -76,7 +78,13 @@ struct RepoSync::Run {
     int attempts = 0;                ///< commits tried again after the branch moved
     RepoId target;                   ///< where blobs, trees and commits are made
     QList<NewTreeEntry> entries;
-    QList<QPair<qsizetype, QByteArray>> blobs; ///< entries waiting for their blob: index, content
+    /// An entry waiting for its blob.
+    struct Blob {
+        qsizetype entry = 0; ///< index in `entries`
+        QByteArray bytes;
+        QString sha; ///< Git's id of `bytes`
+    };
+    QList<Blob> blobs;
     qsizetype nextBlob = 0;
     int activeBlobs = 0;
     QHash<VaultPath, QString> newShas; ///< committed: path → blob id ("" removed)

@@ -21,6 +21,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
+#include <ranges>
 
 namespace brulion {
 
@@ -59,6 +61,7 @@ QStringList suffixes(const VaultPath &path)
 {
     const QStringList segments = stemOf(path).split(u'/');
     QStringList out;
+    out.reserve(segments.size());
     for (qsizetype n = 1; n <= segments.size(); ++n)
         out.append(segments.mid(segments.size() - n).join(u'/'));
     return out;
@@ -66,7 +69,8 @@ QStringList suffixes(const VaultPath &path)
 
 std::optional<QString> shortestLinkTarget(const NameTable &table, const VaultPath &path, const VaultPath &from)
 {
-    for (const QString &candidate : suffixes(path)) {
+    const QStringList candidates = suffixes(path);
+    for (const QString &candidate : candidates) {
         if (wikiSafe(candidate) && table.resolve(candidate, from, TargetForm::Parsed) == path)
             return candidate;
     }
@@ -79,7 +83,8 @@ std::optional<QString> shortestTagTarget(const NameTable &table, const VaultPath
 {
     if (!isNotePath(path))
         return std::nullopt; // a tag names a note, never an attachment
-    for (const QString &candidate : suffixes(path)) {
+    const QStringList candidates = suffixes(path);
+    for (const QString &candidate : candidates) {
         if (!markdown::tagSyntax(candidate).isEmpty() && table.resolveNote(candidate, TargetForm::Parsed) == path)
             return candidate;
     }
@@ -100,9 +105,7 @@ QString relativePath(const QString &fromDir, const VaultPath &file)
     qsizetype common = 0;
     while (common < from.size() && common + 1 < to.size() && from.at(common) == to.at(common))
         ++common;
-    QStringList parts;
-    for (qsizetype i = common; i < from.size(); ++i)
-        parts.append(u".."_s);
+    QStringList parts(from.size() - common, u".."_s);
     parts += to.mid(common);
     return parts.join(u'/');
 }
@@ -112,15 +115,37 @@ bool sameFolder(const VaultPath &a, const VaultPath &b)
     return pathKey(paths::dirname(a)) == pathKey(paths::dirname(b));
 }
 
+/// A target written as renameLinks() writes one to a moved file (`written` named `named`, which
+/// is at `wanted` with the name `name` after the move): the name alone, behind the written folder
+/// for a rename in place ("../b/New"), else the new path; `ext` appended.
+QString movedTarget(const QString &written, const VaultPath &named, const VaultPath &wanted, const QString &name,
+                    const QString &ext)
+{
+    const qsizetype cut = afterLastSlash(written);
+    if (cut == 0)
+        return name + ext;
+    if (sameFolder(named, wanted))
+        return written.left(cut) + name + ext;
+    return stemOf(wanted) + ext;
+}
+
+/// The Markdown extension a written target ends with, as written (".md", ".MD", ".markdown"); ""
+/// when none.
+QString writtenExtension(const QString &target)
+{
+    for (const QString &e : {u".md"_s, u".markdown"_s}) {
+        if (target.endsWith(e, Qt::CaseInsensitive))
+            return target.right(e.size());
+    }
+    return {};
+}
+
 /// Where the page's name ends in a `ref:` / `page:` value: before a `#Heading` or `|alias`.
 qsizetype nameEnd(const QString &value)
 {
-    qsizetype end = value.size();
-    for (const QChar c : {u'#', u'|'}) {
-        const qsizetype at = value.indexOf(c);
-        if (at >= 0)
-            end = std::min(end, at);
-    }
+    qsizetype end = 0;
+    while (end < value.size() && value[end] != u'#' && value[end] != u'|')
+        ++end;
     return end;
 }
 
@@ -131,6 +156,10 @@ qsizetype nameEnd(const QString &value)
 // ---------------------------------------------------------------------------------------------
 
 struct RelocationPlan::Private {
+    /// (text::foldKey() of a path, a path) pairs.
+    using KeyedPath = std::pair<QString, VaultPath>;
+    using KeyedPaths = QList<KeyedPath>;
+
     Private() = default;
     Private(const Private &) = delete; // `after` reads its own `before`
     Private &operator=(const Private &) = delete;
@@ -152,10 +181,10 @@ struct RelocationPlan::Private {
     QSet<VaultPath> taggedNotes;
     /// allPaths by text::foldKey(), sorted: the files a `path:` prefix matches are one range
     /// (built on the first `path:` filter).
-    mutable std::optional<QList<std::pair<QString, VaultPath>>> foldedPaths;
+    mutable std::optional<KeyedPaths> foldedPaths;
     /// The new paths of the moved files by text::foldKey() (-> their old paths), sorted (built on
     /// the first `path:` filter that changes).
-    mutable std::optional<QList<std::pair<QString, VaultPath>>> foldedTargets;
+    mutable std::optional<KeyedPaths> foldedTargets;
 
     /// A note's names as `page:` matches them (runQuery's pageMatches), folded.
     struct PageNames {
@@ -176,10 +205,10 @@ struct RelocationPlan::Private {
     /// Built on the first `page:` filter.
     mutable std::optional<MovedNames> movedNames;
 
-    const QList<std::pair<QString, VaultPath>> &pathsByFoldedKey() const
+    const KeyedPaths &pathsByFoldedKey() const
     {
         if (!foldedPaths) {
-            QList<std::pair<QString, VaultPath>> list;
+            KeyedPaths list;
             list.reserve(allPaths.size());
             for (const VaultPath &file : allPaths)
                 list.append({text::foldKey(file), file});
@@ -189,13 +218,13 @@ struct RelocationPlan::Private {
         return *foldedPaths;
     }
 
-    const QList<std::pair<QString, VaultPath>> &targetsByFoldedKey() const
+    const KeyedPaths &targetsByFoldedKey() const
     {
         if (!foldedTargets) {
-            QList<std::pair<QString, VaultPath>> list;
+            KeyedPaths list;
             list.reserve(moved.size());
-            for (auto it = moved.cbegin(); it != moved.cend(); ++it)
-                list.append({text::foldKey(it.value()), it.key()});
+            for (const auto &[from, to] : moved.asKeyValueRange())
+                list.append({text::foldKey(to), from});
             std::ranges::sort(list);
             foldedTargets = std::move(list);
         }
@@ -298,22 +327,10 @@ struct RelocationPlan::Private {
         if (pagesMatching(value, newPath, true) == exactly)
             return {};
         QStringList candidates;
-        if (named != wanted) {
-            // The value's own page moved: as renameLinks() writes a link to it, the extension as
-            // written.
-            QString ext;
-            for (const QString &e : {u".md"_s, u".markdown"_s}) {
-                if (target.endsWith(e, Qt::CaseInsensitive))
-                    ext = target.right(e.size());
-            }
-            const qsizetype slash = afterLastSlash(target);
-            if (slash == 0)
-                candidates.append(paths::pageTitle(wanted) + ext);
-            else if (sameFolder(named, wanted))
-                candidates.append(target.left(slash) + paths::pageTitle(wanted) + ext); // a rename in place
-            else
-                candidates.append(stemOf(wanted) + ext);
-        }
+        // The value's own page moved: first as renameLinks() writes a link to it, the extension as
+        // written.
+        if (named != wanted)
+            candidates.append(movedTarget(target, named, wanted, paths::pageTitle(wanted), writtenExtension(target)));
         candidates += suffixes(wanted);
         candidates.append(wanted); // `Mieszkanie.md`: a page at the root whose title another page has
         const QString rest = value.mid(cut);
@@ -329,13 +346,9 @@ struct RelocationPlan::Private {
 
     /// The entries of `byKey` (sorted by folded key) whose key starts with `folded`: what a
     /// `path:` prefix matches (runQuery's pathMatches).
-    static std::pair<QList<std::pair<QString, VaultPath>>::const_iterator,
-                     QList<std::pair<QString, VaultPath>>::const_iterator>
-    prefixRange(const QList<std::pair<QString, VaultPath>> &byKey, const QString &folded)
+    static std::ranges::subrange<KeyedPaths::const_iterator> prefixRange(const KeyedPaths &byKey, const QString &folded)
     {
-        const auto begin = std::lower_bound(
-                byKey.cbegin(), byKey.cend(), folded,
-                [](const std::pair<QString, VaultPath> &e, const QString &key) { return e.first < key; });
+        const auto begin = std::ranges::lower_bound(byKey, folded, {}, &KeyedPath::first);
         auto end = begin;
         while (end != byKey.cend() && end->first.startsWith(folded))
             ++end;
@@ -388,7 +401,7 @@ struct RelocationPlan::Private {
         }
         case QueryFilterKind::Page: return newPageValue(q, path, newPath, movedSource);
         case QueryFilterKind::Ref: {
-            const QString value = q.value;
+            const QString &value = q.value;
             if (isThisPageValue(value))
                 return {};
             // Resolved like a link written in the note (runQuery: resolveLink from the query's
@@ -403,10 +416,7 @@ struct RelocationPlan::Private {
             const VaultPath wanted = moved.value(named, named);
             if (after.resolve(target, newPath, TargetForm::Raw) == wanted)
                 return {};
-            Link link;
-            link.kind = LinkKind::Wiki;
-            link.target = target;
-            const QString written = newTarget(link, named, wanted, newPath);
+            const QString written = newTarget(target, LinkKind::Wiki, named, wanted, newPath);
             return written.isEmpty() ? QString() : written + value.mid(cut);
         }
         case QueryFilterKind::Path: return newPathValue(q.value);
@@ -421,26 +431,25 @@ struct RelocationPlan::Private {
     /// `path:Skrzynka/` must not become `path:Archiwum/`).
     QString newPathValue(const QString &value) const
     {
+        const QStringView written(value);
         qsizetype skip = 0; // "./" and "/" as written stay
-        while (value.sliced(skip).startsWith(u"./"))
+        while (written.sliced(skip).startsWith(u"./"))
             skip += 2;
-        while (value.sliced(skip).startsWith(u'/'))
+        while (written.sliced(skip).startsWith(u'/'))
             ++skip;
         // Compared with the vault's (NFC) paths: a note written elsewhere may hold NFD.
-        const QString prefix = nfc(value.sliced(skip));
+        const QString prefix = nfc(written.sliced(skip));
         if (prefix.isEmpty() || prefix.contains(u'*'))
             return {};
-        const QString folded = text::foldKey(prefix);
         QString newPrefix;
         QSet<VaultPath> matched;
         // The files matched (runQuery's pathMatches: the folded path starts with the folded prefix).
-        const auto [first, last] = prefixRange(pathsByFoldedKey(), folded);
-        for (auto it = first; it != last; ++it) {
-            const VaultPath &file = it->second;
+        for (const KeyedPath &e : prefixRange(pathsByFoldedKey(), text::foldKey(prefix))) {
+            const VaultPath &file = e.second;
             const auto to = moved.constFind(file);
             if (to == moved.cend() || !file.startsWith(prefix, Qt::CaseInsensitive))
                 return {}; // a file that stays (or matched only without its diacritics)
-            const QString rest = file.mid(prefix.size());
+            const QStringView rest = QStringView(file).sliced(prefix.size());
             if (!to->endsWith(rest))
                 return {};
             const QString candidate = to->left(to->size() - rest.size());
@@ -454,21 +463,16 @@ struct RelocationPlan::Private {
         // After the move the new prefix matches exactly those files: none that stays where it
         // matches, none moved there from elsewhere.
         const QString newFolded = text::foldKey(newPrefix);
-        const auto [staysFirst, staysLast] = prefixRange(pathsByFoldedKey(), newFolded);
-        for (auto it = staysFirst; it != staysLast; ++it) {
-            if (!moved.contains(it->second))
-                return {};
-        }
-        const auto [movedFirst, movedLast] = prefixRange(targetsByFoldedKey(), newFolded);
-        for (auto it = movedFirst; it != movedLast; ++it) {
-            if (!matched.contains(it->second))
-                return {};
-        }
+        const auto stays = [this](const KeyedPath &e) { return !moved.contains(e.second); };
+        const auto fromElsewhere = [&matched](const KeyedPath &e) { return !matched.contains(e.second); };
+        if (std::ranges::any_of(prefixRange(pathsByFoldedKey(), newFolded), stays)
+            || std::ranges::any_of(prefixRange(targetsByFoldedKey(), newFolded), fromElsewhere))
+            return {};
         return value.left(skip) + newPrefix;
     }
 
-    /// A Markdown link or picture whose written path names its file exactly — relative to its
-    /// note's folder or from the vault root, as written (`named`, written in the note at `path`):
+    /// A Markdown link or picture whose written path (`linkTarget`) names its file exactly — relative
+    /// to its note's folder or from the vault root, as written (`named`, in the note at `path`):
     /// the path naming `wanted` exactly the same way from the note's new path `newFrom` — so other
     /// Markdown readers (Obsidian, GitHub) find it too, where Brulion would still reach it through
     /// a path suffix or a base name. A relative path stays relative (also when the note itself
@@ -476,10 +480,10 @@ struct RelocationPlan::Private {
     /// extension as written stay. "" when the written path still names it so; std::nullopt when
     /// the link named its file otherwise (a path suffix, a base name, an alias) or no such path
     /// reaches `wanted` in Brulion too (newTarget() then decides).
-    std::optional<QString> exactMarkdownTarget(const Link &link, const VaultPath &path, const VaultPath &named,
+    std::optional<QString> exactMarkdownTarget(const QString &linkTarget, const VaultPath &path, const VaultPath &named,
                                                const VaultPath &wanted, const VaultPath &newFrom) const
     {
-        QString written = link.target.trimmed();
+        QString written = linkTarget.trimmed();
         written.replace(u'\\', u'/');
         if (written.isEmpty())
             return std::nullopt;
@@ -512,64 +516,46 @@ struct RelocationPlan::Private {
         }
         // The extension as written ("Dom", "Dom.md", "Dom.MD").
         QString file = wanted;
-        if (note && isNotePath(wanted)) {
-            QString ext;
-            for (const QString &e : {u".md"_s, u".markdown"_s}) {
-                if (written.endsWith(e, Qt::CaseInsensitive))
-                    ext = written.right(e.size());
-            }
-            file = paths::stripMarkdownExtension(wanted) + ext;
-        }
+        if (note && isNotePath(wanted))
+            file = paths::stripMarkdownExtension(wanted) + writtenExtension(written);
         QStringList candidates;
         if (relative) {
             const QString rel = relativePath(paths::dirname(newFrom), file);
-            if (dotSlash && !rel.startsWith(u"../"_s))
-                candidates.append(u"./"_s + rel);
-            else
+            // "./" as written, and also when not: Brulion reads a path without "./" from the vault
+            // root first (another file may be there).
+            const bool up = rel.startsWith(u"../"_s);
+            if (!dotSlash || up)
                 candidates.append(rel);
-            // Brulion reads a path without "./" from the vault root first: "./" when another file
-            // is there.
-            if (!rel.startsWith(u"../"_s) && !dotSlash)
+            if (!up)
                 candidates.append(u"./"_s + rel);
         } else {
             candidates.append((rooted ? u"/"_s : QString()) + file);
         }
         for (const QString &candidate : std::as_const(candidates)) {
-            if (after.resolve(candidate, newFrom, TargetForm::Parsed) != wanted)
-                continue;
-            return pathKey(candidate) == pathKey(written) ? QString() : candidate;
+            if (after.resolve(candidate, newFrom, TargetForm::Parsed) == wanted)
+                return pathKey(candidate) == pathKey(written) ? QString() : candidate;
         }
         return std::nullopt;
     }
 
-    /// The new target of `link` (written in the note now at `from`) that reaches `wanted`; it
-    /// named `named` before the move. Empty when no written form reaches it.
-    QString newTarget(const Link &link, const VaultPath &named, const VaultPath &wanted, const VaultPath &from) const
+    /// The new target of a link (`linkTarget` as written, of `kind`, in the note now at `from`)
+    /// that reaches `wanted`; it named `named` before the move. Empty when no written form reaches
+    /// it.
+    QString newTarget(const QString &linkTarget, LinkKind kind, const VaultPath &named, const VaultPath &wanted,
+                      const VaultPath &from) const
     {
-        const QString written = link.target.trimmed();
-        const bool wiki = link.kind != LinkKind::Markdown;
+        const QString written = linkTarget.trimmed();
+        const bool wiki = kind != LinkKind::Markdown;
         const bool note = isNotePath(wanted);
         const auto reaches = [&](const QString &target) {
             return !target.isEmpty() && after.resolve(target, from, TargetForm::Parsed) == wanted;
         };
         // The extension as written ("[[Dom.md]]", "[x](Dom.md)") stays.
-        QString ext;
-        if (note) {
-            for (const QString &e : {u".md"_s, u".markdown"_s}) {
-                if (written.endsWith(e, Qt::CaseInsensitive))
-                    ext = written.right(e.size());
-            }
-        }
+        const QString ext = note ? writtenExtension(written) : QString();
         QString target;
         if (named != wanted) {
             // The link's own file moved: as renameLinks() writes it.
-            const qsizetype cut = afterLastSlash(written);
-            if (cut == 0)
-                target = nameOf(wanted) + ext;
-            else if (sameFolder(named, wanted))
-                target = written.left(cut) + nameOf(wanted) + ext; // a rename in place: "../b/New"
-            else
-                target = stemOf(wanted) + ext;
+            target = movedTarget(written, named, wanted, nameOf(wanted), ext);
             if (!reaches(target))
                 target.clear();
         }
@@ -609,7 +595,7 @@ struct RelocationPlan::Private {
             const VaultPath wanted = moved.value(named, named);
             if (link.kind == LinkKind::Markdown) {
                 // A path that names the file exactly keeps naming it so (SYNTAX §2).
-                if (const std::optional<QString> exact = exactMarkdownTarget(link, path, named, wanted, file.newPath)) {
+                if (const auto exact = exactMarkdownTarget(link.target, path, named, wanted, file.newPath)) {
                     if (!exact->isEmpty())
                         edits.append({link.from, link.to, *exact});
                     return;
@@ -617,27 +603,23 @@ struct RelocationPlan::Private {
             }
             if (after.resolve(link.target, file.newPath, TargetForm::Parsed) == wanted)
                 return;
-            const QString target = newTarget(link, named, wanted, file.newPath);
-            if (!target.isEmpty())
+            if (const QString target = newTarget(link.target, link.kind, named, wanted, file.newPath);
+                !target.isEmpty())
                 edits.append({link.from, link.to, target});
         };
+        // (A link without a target, [[#Heading]], is to this note wherever it is.)
         if (entry) {
             for (const PathLink &l : entry->links) {
-                if (l.key.isEmpty())
-                    continue; // [[#Heading]]: this note, wherever it is
-                if (movedSource || keys.contains(l.key))
+                if (!l.key.isEmpty() && (movedSource || keys.contains(l.key)))
                     planLink(entry->note.links.at(l.link), l.target);
             }
         } else {
             const ParsedNote note = markdown::parseNote(QString(), content);
             for (const Link &link : note.links) {
-                if (link.kind != LinkKind::Wiki && link.kind != LinkKind::Embed && link.kind != LinkKind::Markdown)
-                    continue;
-                if (link.kind == LinkKind::Markdown && isExternalTarget(link.target))
-                    continue;
-                if (link.target.trimmed().isEmpty())
-                    continue; // [[#Heading]]: this note, wherever it is
-                if (movedSource || keys.contains(linkKey(link.target, TargetForm::Parsed)))
+                const bool pathLink = link.kind == LinkKind::Wiki || link.kind == LinkKind::Embed
+                                      || (link.kind == LinkKind::Markdown && !isExternalTarget(link.target));
+                if (pathLink && !link.target.trimmed().isEmpty()
+                    && (movedSource || keys.contains(linkKey(link.target, TargetForm::Parsed))))
                     planLink(link, before.resolve(link.target, path, TargetForm::Parsed));
             }
         }
@@ -645,26 +627,23 @@ struct RelocationPlan::Private {
         if (text != content)
             file.links = int(edits.size());
         if (!tagNames.isEmpty() && (!entry || taggedNotes.contains(path))) {
-            const QString tagged = markdown::retargetTags(text, tagNames);
-            if (tagged != text) {
-                for (const markdown::NoteTag &t : markdown::findNoteTags(text)) {
-                    if (tagNames.contains(t.name.toLower()))
-                        ++file.tags;
-                }
-                file.tags = std::max(file.tags, 1);
-                text = tagged;
+            if (QString tagged = markdown::retargetTags(text, tagNames); tagged != text) {
+                const QList<markdown::NoteTag> tags = markdown::findNoteTags(text);
+                const auto renamed = [this](const markdown::NoteTag &t) { return tagNames.contains(t.name.toLower()); };
+                file.tags = std::max(1, int(std::ranges::count_if(tags, renamed)));
+                text = std::move(tagged);
             }
         }
         // The ```query filters naming a moved file or a renamed tag (code: no link or tag above
         // touched them).
-        QList<QueryNameEdit> queryEdits;
-        int queryTags = 0;
         QList<QueryNameRef> queryNames;
         if (!entry)
             queryNames = findQueryNames(text);
         else if (queryNotes.contains(path))
             queryNames = findQueryNames(text, text == content ? &entry->note : nullptr);
-        for (const QueryNameRef &q : queryNames) {
+        QList<QueryNameEdit> queryEdits;
+        int queryTags = 0;
+        for (const QueryNameRef &q : std::as_const(queryNames)) {
             const QString value = newQueryValue(q, path, file.newPath, movedSource);
             if (value.isEmpty() || value == q.value || formatQueryName(q, value).isEmpty())
                 continue;
@@ -700,26 +679,19 @@ const QList<RelocationPlan::File> &RelocationPlan::files() const
 
 int RelocationPlan::links() const
 {
-    int n = 0;
-    for (const File &f : m_files)
-        n += f.links + f.queries - f.queryTags;
-    return n;
+    return std::accumulate(m_files.cbegin(), m_files.cend(), 0,
+                           [](int n, const File &f) { return n + f.links + f.queries - f.queryTags; });
 }
 
 int RelocationPlan::tags() const
 {
-    int n = 0;
-    for (const File &f : m_files)
-        n += f.tags + f.queryTags;
-    return n;
+    return std::accumulate(m_files.cbegin(), m_files.cend(), 0,
+                           [](int n, const File &f) { return n + f.tags + f.queryTags; });
 }
 
 int RelocationPlan::queries() const
 {
-    int n = 0;
-    for (const File &f : m_files)
-        n += f.queries;
-    return n;
+    return std::accumulate(m_files.cbegin(), m_files.cend(), 0, [](int n, const File &f) { return n + f.queries; });
 }
 
 QString RelocationPlan::rewrite(const VaultPath &path, const QString &content) const
@@ -806,16 +778,20 @@ RelocationPlanner::RelocationPlanner(const VaultIndex &index, const QList<FileMo
     p->before = d->names;
     p->after.overlay(&p->before); // the names that change, over those of before
     // Every name a moved file answers to, before and after: the links filed under these keys are
-    // the ones whose resolution can change.
+    // the ones whose resolution can change. The notes to look at: the moved notes (their relative
+    // links), those with such links (at the end), with a tag to rewrite or with ```query blocks.
+    QSet<VaultPath> sources;
     for (const Known &k : std::as_const(known)) {
         if (k.note) {
             p->after.removeNote(k.move.from, k.aliases);
             p->keys.insert(noteNameKey(k.move.from));
             p->keys.insert(noteNameKey(k.move.to));
             for (const QString &a : k.aliases) {
-                for (const QString &key : aliasLinkKeys(a))
+                const QStringList aliasKeys = aliasLinkKeys(a);
+                for (const QString &key : aliasKeys)
                     p->keys.insert(key);
             }
+            sources.insert(k.move.from);
         } else {
             p->after.removeAttachment(k.move.from);
             p->keys.insert(fileNameKey(k.move.from));
@@ -829,16 +805,10 @@ RelocationPlanner::RelocationPlanner(const VaultIndex &index, const QList<FileMo
             p->after.addAttachment(k.move.to);
     }
 
-    // Tags resolve the same wherever they are written: one new name per tag.
-    QSet<VaultPath> sources;
+    // Tags resolve the same wherever they are written: one new name per tag (of a note: the name
+    // table holds the index's notes).
     for (auto it = d->tagIndex.cbegin(); it != d->tagIndex.cend(); ++it) {
-        const QString name = tagName(it.key());
-        if (name.isEmpty() || !p->keys.contains(linkKey(name, TargetForm::Parsed)))
-            continue;
-        const VaultPath named = p->before.resolveNote(name, TargetForm::Parsed);
-        if (named.isEmpty() || !d->entry(named))
-            continue;
-        const QString target = p->newTagName(name);
+        const QString target = p->newTagName(tagName(it.key()));
         if (target.isEmpty())
             continue;
         p->tagNames.insert(it.key(), target);
@@ -872,28 +842,19 @@ RelocationPlanner::RelocationPlanner(const VaultIndex &index, const QList<FileMo
             if (const VaultIndex::Private::Entry *e = k.note ? d->entry(k.move.from) : nullptr)
                 p->movedPageNames.append({k.move.from, e->foldedPath, e->names});
         }
-        for (const VaultPath &q : queryNotes) {
-            sources.insert(q);
-            p->queryNotes.insert(q);
-        }
+        p->queryNotes = QSet<VaultPath>(queryNotes.cbegin(), queryNotes.cend());
+        sources.unite(p->queryNotes);
     }
-
-    // The notes to look at: those with links filed under the keys, and the moved notes (their
-    // relative links).
+    // The notes with links filed under the keys.
     for (const QString &key : std::as_const(p->keys)) {
-        const auto it = d->sourcesByKey.constFind(key);
-        if (it != d->sourcesByKey.cend()) {
+        if (const auto it = d->sourcesByKey.constFind(key); it != d->sourcesByKey.cend()) {
             for (const VaultPath &source : *it)
                 sources.insert(source);
         }
     }
-    for (const Known &k : std::as_const(known)) {
-        if (k.note)
-            sources.insert(k.move.from);
-    }
     s->sources = QList<VaultPath>(sources.cbegin(), sources.cend());
-    std::sort(s->sources.begin(), s->sources.end());
-    s->plan.d = p;
+    std::ranges::sort(s->sources);
+    s->plan.d = std::move(p);
 }
 
 RelocationPlanner::~RelocationPlanner() = default;

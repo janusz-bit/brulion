@@ -80,6 +80,7 @@ Item {
                     Text {
                         Layout.preferredWidth: timeMetrics.advanceWidth
                         text: row.time !== "" ? row.time : "–"
+                        textFormat: Text.PlainText
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.textXs
                         color: row.time !== "" ? Theme.fgMuted : Theme.fgFaint

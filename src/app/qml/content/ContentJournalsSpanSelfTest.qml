@@ -73,11 +73,7 @@ Item {
     }
     /// Steps that do nothing (a finger held down meanwhile).
     function idle(n: int): void {
-        for (let i = 0; i < n; ++i) {
-            if (test.at()) {
-                // (nothing)
-            }
-        }
+        test.stepCursor += n
     }
     function dayAt(row: int): ContentJournalDay {
         test._item = row >= 0 ? test.list.itemAtIndex(row) : null

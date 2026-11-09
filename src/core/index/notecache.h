@@ -52,12 +52,7 @@ public:
         return sync;
     }
     /// Forget the index: the next follow() is a full sync.
-    void reset()
-    {
-        m_serial = 0;
-        m_version = -1;
-        m_key.clear();
-    }
+    void reset() { *this = IndexFollower(); }
 
 private:
     quint64 m_serial = 0;
@@ -78,42 +73,34 @@ public:
     /// reminder list: contiguous, kept up to date by the index).
     using Fill = std::function<void(std::map<VaultPath, Value> &)>;
 
+    /// Full syncs call `fill` (when given) instead of compute() for every note.
     NoteCacheSync sync(const VaultIndex &index, const QString &key, bool dependsOnNames, const Compute &compute,
-                       const Keep &keep)
-    {
-        return sync(index, key, dependsOnNames, compute, keep, Fill());
-    }
-
-    /// sync() whose full syncs call `fill` (when given) instead of compute() for every note.
-    NoteCacheSync sync(const VaultIndex &index, const QString &key, bool dependsOnNames, const Compute &compute,
-                       const Keep &keep, const Fill &fill)
+                       const Keep &keep, const Fill &fill = Fill())
     {
         NoteCacheSync s = m_follower.follow(index, key, dependsOnNames);
-        const auto put = [&](const VaultPath &path, const ParsedNote &note) {
-            Value value = compute(path, note);
-            if (keep(value))
-                m_values.insert_or_assign(path, std::move(value));
-            else
-                m_values.erase(path);
-        };
-        if (s.full && fill) {
+        if (s.full) {
             m_values.clear();
-            fill(m_values);
-        } else if (s.full) {
-            // Paths come in order: each value goes at the end, nothing to erase.
-            m_values.clear();
-            index.forEachNote([&](const VaultPath &path, const ParsedNote &note) {
-                Value value = compute(path, note);
-                if (keep(value))
-                    m_values.emplace_hint(m_values.end(), path, std::move(value));
-            });
-        } else {
-            for (const VaultPath &path : std::as_const(s.changed)) {
-                if (const ParsedNote *note = index.note(path))
-                    put(path, *note);
-                else
-                    m_values.erase(path);
+            if (fill) {
+                fill(m_values);
+            } else {
+                // Paths come in order: each value goes at the end, nothing to erase.
+                index.forEachNote([&](const VaultPath &path, const ParsedNote &note) {
+                    Value value = compute(path, note);
+                    if (keep(value))
+                        m_values.emplace_hint(m_values.end(), path, std::move(value));
+                });
             }
+            return s;
+        }
+        for (const VaultPath &path : std::as_const(s.changed)) {
+            if (const ParsedNote *note = index.note(path)) {
+                Value value = compute(path, *note);
+                if (keep(value)) {
+                    m_values.insert_or_assign(path, std::move(value));
+                    continue;
+                }
+            }
+            m_values.erase(path); // removed, or not worth keeping
         }
         return s;
     }
@@ -122,11 +109,7 @@ public:
     const std::map<VaultPath, Value> &values() const { return m_values; }
 
     /// Forget everything (the next sync() is full).
-    void clear()
-    {
-        m_follower.reset();
-        m_values.clear();
-    }
+    void clear() { *this = NoteCache(); }
 
 private:
     IndexFollower m_follower;

@@ -149,11 +149,7 @@ Item {
     }
     /// Steps that do nothing (a finger held down meanwhile).
     function idle(n: int): void {
-        for (let i = 0; i < n; ++i) {
-            if (test.at()) {
-                // (nothing)
-            }
-        }
+        test.stepCursor += n
     }
     // ---- The touch toolbar, docked on the journal stream's frame (the list's parent) -----------
     /// How many of the frame's toolbar slots are shown, and the first of them (_slot).

@@ -17,6 +17,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -46,7 +47,8 @@ struct RepoLink {
 /// The files of a repository folder that belong to the notebook: what the vault tracks and syncs
 /// (sync::isSyncablePath: no .git, .github, .obsidian, .trash, temp files), without hidden files
 /// and folders (".gitignore", ".editorconfig": the repository's, not notes) — except the
-/// notebook's ".brulion/config.json".
+/// notebook's ".brulion/config.json" — and without names holding a backslash (a separator in the
+/// vault: such a name stands for another file there).
 bool isNotebookPath(const VaultPath &path);
 
 /// A notebook file that differs from the version last pulled or committed.
@@ -204,7 +206,7 @@ public:
     QDateTime now() const;
     void setMaxFileSize(qint64 bytes) { m_maxFileSize = bytes; }
     /// Downloads and uploads in flight (default 4).
-    void setConcurrency(int count) { m_concurrency = qMax(1, count); }
+    void setConcurrency(int count) { m_concurrency = std::max(1, count); }
     /// Wait between checks of a fork that is not ready yet (default 2000 ms; tests) and how many.
     void setForkWait(int ms, int attempts);
 
@@ -258,24 +260,33 @@ private:
     QHash<VaultPath, QString> localShas(QSet<VaultPath> *unknown = nullptr);
     std::optional<QString> localSha(const VaultPath &path);
     void onVaultChanged(const QList<brulion::VaultChange> &changes);
-    bool start(Operation operation);
+    /// `operation` started: its run, now the current one — or none while another operation runs.
+    std::shared_ptr<Run> beginRun(Operation operation);
     void finishOperation();
-    bool alive(int generation) const;
+    /// The run is still the current operation of a RepoSync that has all it needs. Static: a
+    /// callback that outlived its RepoSync (Run::owner) must not touch it.
+    static bool alive(const Run &run);
     void startPull(std::shared_ptr<Run> run);
     void pullBranch(std::shared_ptr<Run> run);
+    void pullFolder(std::shared_ptr<Run> run);
     void pullTree(std::shared_ptr<Run> run, const QString &folderSha);
     void planPull(std::shared_ptr<Run> run, const QList<TreeEntry> &entries);
     void runJobs(std::shared_ptr<Run> run);
     void runJob(std::shared_ptr<Run> run, int index);
     void fetchContent(std::shared_ptr<Run> run, const VaultPath &path, const QString &sha, const QString &commit,
                       std::function<void(const GitHubError &, const QByteArray &)> done);
-    void applyDownload(Run &run, Job &job, const QByteArray &remote, const QByteArray *base);
+    void applyDownload(Run &run, const Job &job, const QByteArray &remote, const QByteArray *base);
     void endPull(std::shared_ptr<Run> run);
     void pruneEmptyFolders(const QSet<QString> &folders);
-    std::optional<VaultPath> existingConflictCopy(const VaultPath &path, const QByteArray &content);
+    /// GitHub's `content` of `path` is saved beside it already.
+    bool hasConflictCopy(const VaultPath &path, const QByteArray &content);
+    /// `current` with the state and title of its pull request; stored when they changed.
+    Proposal updateProposal(const Proposal &current, const PullRequest &pr);
     void reportPull(std::shared_ptr<Run> run);
 
     // reposync_commit.cpp: commits and proposals.
+    void queueCommit(Operation operation, const QString &message, const QString &title, const QString &body,
+                     const QStringList &paths, std::function<void(const CommitReport &)> done);
     void startCommit(std::shared_ptr<Run> run);
     void afterPullForCommit(std::shared_ptr<Run> run);
     void checkProposal(std::shared_ptr<Run> run);
@@ -283,13 +294,14 @@ private:
     void storeRepository(const Repository &repository);
     void newProposalHead(std::shared_ptr<Run> run);
     void commitFirstFile(std::shared_ptr<Run> run);
-    void prepareEntries(std::shared_ptr<Run> run, std::function<void()> then);
-    void uploadBlobs(std::shared_ptr<Run> run, std::function<void()> then);
+    void prepareEntries(std::shared_ptr<Run> run, const std::function<void()> &then);
+    void uploadBlobs(std::shared_ptr<Run> run, const std::function<void()> &then);
     void writeCommit(std::shared_ptr<Run> run);
     void moveBranch(std::shared_ptr<Run> run, const QString &commit, const QString &tree);
     void afterCommitted(std::shared_ptr<Run> run, const QString &commit, const QString &tree);
     void waitForFork(std::shared_ptr<Run> run, int attempt);
     void writeProposal(std::shared_ptr<Run> run);
+    void moveProposalBranch(std::shared_ptr<Run> run, const QString &commit);
     void createProposalBranch(std::shared_ptr<Run> run, const QString &commit, int attempt);
     void openPullRequest(std::shared_ptr<Run> run, const QString &commit, int attempt);
     void finishProposal(std::shared_ptr<Run> run, const QString &commit);

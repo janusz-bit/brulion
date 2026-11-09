@@ -17,6 +17,7 @@ BCard {
     property int maxShown: 3
     readonly property WorkspaceReminders reminders: Workspace.reminders
     readonly property list<var> missed: reminders ? reminders.missed : []
+    readonly property string snoozeLabel: qsTr("Snooze %n min", "", reminders ? reminders.snoozeMinutes : 0)
 
     visible: reminders !== null && reminders.missedCount > 0
 
@@ -109,7 +110,7 @@ BCard {
                         visible: !Theme.compact
                         size: "small"
                         iconName: "clock"
-                        label: qsTr("Snooze %n min", "", banner.reminders.snoozeMinutes)
+                        label: banner.snoozeLabel
                         onClicked: banner.snooze(item.reminderId)
                     }
                     BIconButton {
@@ -141,7 +142,7 @@ BCard {
                         size: "small"
                         variant: "ghost"
                         iconName: "clock"
-                        text: qsTr("Snooze %n min", "", banner.reminders.snoozeMinutes)
+                        text: banner.snoozeLabel
                         onClicked: banner.snooze(item.reminderId)
                     }
                     BButton {

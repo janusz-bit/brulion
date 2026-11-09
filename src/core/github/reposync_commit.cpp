@@ -36,51 +36,37 @@ bool inlineable(const QByteArray &bytes)
 
 void RepoSync::commit(const QString &message, const QStringList &paths, std::function<void(const CommitReport &)> done)
 {
-    if (!start(Operation::Commit)) {
-        CommitReport report;
-        report.refused = u"busy"_s;
-        QTimer::singleShot(0, this, [done, report] {
-            if (done)
-                done(report);
-        });
-        return;
-    }
-    auto run = std::make_shared<Run>();
-    run->operation = Operation::Commit;
-    run->generation = ++m_generation;
-    run->commitDone = std::move(done);
-    run->message = message.trimmed().isEmpty() ? u"Update from Brulion"_s : message.trimmed();
-    run->paths = paths;
-    run->timer.start();
-    m_run = run;
-    QTimer::singleShot(0, this, [this, run] {
-        if (run->generation == m_generation)
-            startCommit(run);
-    });
+    const QString text = message.trimmed();
+    queueCommit(Operation::Commit, text.isEmpty() ? u"Update from Brulion"_s : text, {}, {}, paths, std::move(done));
 }
 
 void RepoSync::propose(const QString &title, const QString &body, const QStringList &paths,
                        std::function<void(const CommitReport &)> done)
 {
-    if (!start(Operation::Propose)) {
+    const QString heading = title.trimmed().isEmpty() ? u"Changes from Brulion"_s : title.trimmed();
+    const QString text = body.trimmed();
+    queueCommit(Operation::Propose, text.isEmpty() ? heading : heading + u"\n\n"_s + text, heading, text, paths,
+                std::move(done));
+}
+
+void RepoSync::queueCommit(Operation operation, const QString &message, const QString &title, const QString &body,
+                           const QStringList &paths, std::function<void(const CommitReport &)> done)
+{
+    const auto run = beginRun(operation);
+    if (!run) {
         CommitReport report;
         report.refused = u"busy"_s;
-        QTimer::singleShot(0, this, [done, report] {
+        QTimer::singleShot(0, this, [done = std::move(done), report] {
             if (done)
                 done(report);
         });
         return;
     }
-    auto run = std::make_shared<Run>();
-    run->operation = Operation::Propose;
-    run->generation = ++m_generation;
     run->commitDone = std::move(done);
-    run->title = title.trimmed().isEmpty() ? u"Changes from Brulion"_s : title.trimmed();
-    run->body = body.trimmed();
-    run->message = run->body.isEmpty() ? run->title : run->title + u"\n\n"_s + run->body;
+    run->message = message;
+    run->title = title;
+    run->body = body;
     run->paths = paths;
-    run->timer.start();
-    m_run = run;
     QTimer::singleShot(0, this, [this, run] {
         if (run->generation == m_generation)
             startCommit(run);
@@ -136,7 +122,7 @@ void RepoSync::afterPullForCommit(std::shared_ptr<Run> run)
         return;
     Q_EMIT progress(u"commit"_s, 0, 0);
     m_client->repository(m_link.repo, [this, run](const GitHubError &error, const Repository &repository) {
-        if (!alive(run->generation))
+        if (!alive(*run))
             return;
         if (error.isError()) {
             failCommit(run, error);
@@ -173,7 +159,8 @@ bool RepoSync::selectTargets(std::shared_ptr<Run> run)
     // Files whose GitHub version waits in a conflict copy: merged first, or the commit would
     // replace GitHub's change with this device's version.
     QSet<VaultPath> waiting;
-    for (const FileStat &file : m_vault->files()) {
+    const QList<FileStat> files = m_vault->files();
+    for (const FileStat &file : files) {
         const std::optional<sync::BrulionConflict> copy = sync::parseBrulionConflict(file.path);
         if (copy && copy->device == ConflictDevice)
             waiting.insert(copy->original);
@@ -214,61 +201,60 @@ void RepoSync::commitFirstFile(std::shared_ptr<Run> run)
 {
     // An empty repository: the Git database API writes nothing into it, the contents API makes
     // its first commit. The first new file goes that way, the others in a commit after it.
-    VaultPath first;
-    for (const VaultPath &path : std::as_const(run->targets)) {
-        if (run->local.contains(path)) {
-            first = path;
-            break;
-        }
+    const auto found = std::ranges::find_if(std::as_const(run->targets),
+                                            [&run](const VaultPath &path) { return run->local.contains(path); });
+    if (found == run->targets.cend()) {
+        run->commit.nothingToCommit = true;
+        reportCommit(run);
+        return;
     }
+    const VaultPath first = *found;
     bool ok = false;
-    const QByteArray bytes = first.isEmpty() ? QByteArray() : m_vault->readBinary(first, &ok);
-    if (first.isEmpty() || !ok) {
-        run->commit.nothingToCommit = first.isEmpty();
-        if (!first.isEmpty())
-            run->commit.error = GitHubError::make(GitHubError::Code::Validation, m_vault->errorString());
+    const QByteArray bytes = m_vault->readBinary(first, &ok);
+    if (!ok) {
+        run->commit.error = GitHubError::make(GitHubError::Code::Validation, m_vault->errorString());
         reportCommit(run);
         return;
     }
     const QString branch =
             run->defaultBranch.isEmpty() || run->defaultBranch == m_link.branch ? QString() : m_link.branch;
-    m_client->putFile(
-            m_link.repo, m_link.repoPath(first), branch, run->message, bytes,
-            [this, run, first, bytes](const GitHubError &error, const QString &) {
-                if (!alive(run->generation))
-                    return;
-                if (error.isError()) {
-                    failCommit(run, error);
-                    return;
-                }
-                m_client->branch(m_link.repo, m_link.branch, {},
-                                 [this, run, first, bytes](const GitHubError &headError, const BranchHead &head, bool) {
-                                     if (!alive(run->generation))
-                                         return;
-                                     if (headError.isError()) {
-                                         failCommit(run, headError);
-                                         return;
-                                     }
-                                     State &state = run->state;
-                                     state.commit = head.commit;
-                                     state.tree = head.tree;
-                                     state.files.insert(first, blobSha(bytes));
-                                     state.emptyRepository = false;
-                                     state.folderMissing = false;
-                                     state.complete = true;
-                                     saveState(state);
-                                     run->firstCommitted.append(first);
-                                     run->targets.removeAll(first);
-                                     if (run->targets.isEmpty()) {
-                                         afterCommitted(run, head.commit, head.tree);
-                                         return;
-                                     }
-                                     prepareEntries(run, [this, run] { writeCommit(run); });
-                                 });
-            });
+    m_client->putFile(m_link.repo, m_link.repoPath(first), branch, run->message, bytes,
+                      [this, run, first, sha = blobSha(bytes)](const GitHubError &error, const QString &) {
+                          if (!alive(*run))
+                              return;
+                          if (error.isError()) {
+                              failCommit(run, error);
+                              return;
+                          }
+                          m_client->branch(
+                                  m_link.repo, m_link.branch, {},
+                                  [this, run, first, sha](const GitHubError &headError, const BranchHead &head, bool) {
+                                      if (!alive(*run))
+                                          return;
+                                      if (headError.isError()) {
+                                          failCommit(run, headError);
+                                          return;
+                                      }
+                                      State &state = run->state;
+                                      state.commit = head.commit;
+                                      state.tree = head.tree;
+                                      state.files.insert(first, sha);
+                                      state.emptyRepository = false;
+                                      state.folderMissing = false;
+                                      state.complete = true;
+                                      saveState(state);
+                                      run->firstCommitted.append(first);
+                                      run->targets.removeAll(first);
+                                      if (run->targets.isEmpty()) {
+                                          afterCommitted(run, head.commit, head.tree);
+                                          return;
+                                      }
+                                      prepareEntries(run, [this, run] { writeCommit(run); });
+                                  });
+                      });
 }
 
-void RepoSync::prepareEntries(std::shared_ptr<Run> run, std::function<void()> then)
+void RepoSync::prepareEntries(std::shared_ptr<Run> run, const std::function<void()> &then)
 {
     run->entries.clear();
     run->blobs.clear();
@@ -297,12 +283,13 @@ void RepoSync::prepareEntries(std::shared_ptr<Run> run, std::function<void()> th
         const QByteArray bytes = m_vault->readBinary(path, &ok);
         if (!ok)
             continue;
+        const QString sha = blobSha(bytes);
         if (inlineable(bytes))
             entry.content = bytes;
         else
-            run->blobs.append({run->entries.size(), bytes});
+            run->blobs.append({run->entries.size(), bytes, sha});
         run->entries.append(entry);
-        run->newShas.insert(path, blobSha(bytes));
+        run->newShas.insert(path, sha);
         run->commit.committed.append(path);
     }
     if (run->entries.isEmpty()) {
@@ -314,22 +301,22 @@ void RepoSync::prepareEntries(std::shared_ptr<Run> run, std::function<void()> th
         reportCommit(run);
         return;
     }
-    uploadBlobs(run, std::move(then));
+    uploadBlobs(run, then);
 }
 
-void RepoSync::uploadBlobs(std::shared_ptr<Run> run, std::function<void()> then)
+void RepoSync::uploadBlobs(std::shared_ptr<Run> run, const std::function<void()> &then)
 {
     const qsizetype total = run->blobs.size();
     while (!run->commit.error.isError() && run->activeBlobs < m_concurrency && run->nextBlob < total) {
         const qsizetype index = run->nextBlob++;
         ++run->activeBlobs;
         Q_EMIT progress(u"upload"_s, int(index), int(total));
-        const qsizetype entry = run->blobs.at(index).first;
-        const QByteArray &bytes = run->blobs.at(index).second;
-        const QString expected = blobSha(bytes);
+        const qsizetype entry = run->blobs.at(index).entry;
+        const QByteArray &bytes = run->blobs.at(index).bytes;
+        const QString expected = run->blobs.at(index).sha;
         m_client->createBlob(
                 run->target, bytes, [this, run, entry, expected, then](const GitHubError &error, const QString &sha) {
-                    if (!alive(run->generation))
+                    if (!alive(*run))
                         return;
                     --run->activeBlobs;
                     if (error.isError()) {
@@ -361,7 +348,7 @@ void RepoSync::writeCommit(std::shared_ptr<Run> run)
     Q_EMIT progress(u"commit"_s, 0, 0);
     m_client->createTree(
             run->target, run->state.tree, run->entries, [this, run](const GitHubError &error, const QString &tree) {
-                if (!alive(run->generation))
+                if (!alive(*run))
                     return;
                 if (error.isError()) {
                     failCommit(run, error);
@@ -369,7 +356,7 @@ void RepoSync::writeCommit(std::shared_ptr<Run> run)
                 }
                 m_client->createCommit(run->target, run->message, tree, {run->state.commit},
                                        [this, run, tree](const GitHubError &commitError, const QString &commit) {
-                                           if (!alive(run->generation))
+                                           if (!alive(*run))
                                                return;
                                            if (commitError.isError()) {
                                                failCommit(run, commitError);
@@ -383,7 +370,7 @@ void RepoSync::writeCommit(std::shared_ptr<Run> run)
 void RepoSync::moveBranch(std::shared_ptr<Run> run, const QString &commit, const QString &tree)
 {
     m_client->updateBranch(m_link.repo, m_link.branch, commit, [this, run, commit, tree](const GitHubError &error) {
-        if (!alive(run->generation))
+        if (!alive(*run))
             return;
         if (error.code == GitHubError::Code::NotFastForward && run->attempts < 1) {
             // Someone pushed meanwhile: their version pulled (and merged), the commit made again.
@@ -411,19 +398,18 @@ void RepoSync::afterCommitted(std::shared_ptr<Run> run, const QString &commit, c
     state.etag.clear();
     state.folderMissing = false;
     state.emptyRepository = false;
-    for (auto it = run->newShas.cbegin(); it != run->newShas.cend(); ++it) {
-        if (it.value().isEmpty())
-            state.files.remove(it.key());
+    for (auto [path, sha] : std::as_const(run->newShas).asKeyValueRange()) {
+        if (sha.isEmpty())
+            state.files.remove(path);
         else
-            state.files.insert(it.key(), it.value());
+            state.files.insert(path, sha);
     }
     saveState(state);
     run->commit.commit = commit;
     if (run->commit.committed.isEmpty())
         run->commit.committed = run->firstCommitted;
-    qCInfo(lcSync).noquote() << u"GitHub commit %1 on %2@%3: %4 file(s)"_s
-                                        .arg(shortSha(commit), m_link.repo.fullName(), m_link.branch)
-                                        .arg(run->commit.committed.size());
+    qCInfo(lcSync).noquote() << u"GitHub commit %1 on %2@%3: %4 file(s)"_s.arg(
+            shortSha(commit), m_link.repo.fullName(), m_link.branch, QString::number(run->commit.committed.size()));
     reportCommit(run);
 }
 
@@ -440,10 +426,9 @@ void RepoSync::checkProposal(std::shared_ptr<Run> run)
     }
     // Still open on GitHub? A merged or closed one is not updated: a new one starts.
     Q_EMIT progress(u"proposal"_s, 0, 0);
-    const Proposal current = *open;
-    m_client->pullRequest(m_link.repo, current.number,
-                          [this, run, current](const GitHubError &error, const PullRequest &pr) {
-                              if (!alive(run->generation))
+    m_client->pullRequest(m_link.repo, open->number,
+                          [this, run, current = *open](const GitHubError &error, const PullRequest &pr) {
+                              if (!alive(*run))
                                   return;
                               if (error.isError() && error.code != GitHubError::Code::NotFound) {
                                   failCommit(run, error);
@@ -470,7 +455,7 @@ void RepoSync::newProposalHead(std::shared_ptr<Run> run)
 {
     Q_EMIT progress(u"fork"_s, 0, 0);
     m_client->repository(m_link.repo, [this, run](const GitHubError &error, const Repository &repository) {
-        if (!alive(run->generation))
+        if (!alive(*run))
             return;
         if (error.isError()) {
             failCommit(run, error);
@@ -485,7 +470,7 @@ void RepoSync::newProposalHead(std::shared_ptr<Run> run)
         }
         // No push: a branch of the user's fork (GitHub answers with the existing one, if any).
         m_client->createFork(m_link.repo, [this, run](const GitHubError &forkError, const Repository &fork) {
-            if (!alive(run->generation))
+            if (!alive(*run))
                 return;
             if (forkError.isError()) {
                 failCommit(run, forkError);
@@ -503,7 +488,7 @@ void RepoSync::waitForFork(std::shared_ptr<Run> run, int attempt)
 {
     // A new fork takes a moment: ready once it has its branches.
     m_client->branchNames(run->target, {}, [this, run, attempt](const GitHubError &error, const QStringList &names) {
-        if (!alive(run->generation))
+        if (!alive(*run))
             return;
         if (!error.isError() && !names.isEmpty()) {
             prepareEntries(run, [this, run] { writeProposal(run); });
@@ -519,7 +504,7 @@ void RepoSync::waitForFork(std::shared_ptr<Run> run, int attempt)
             return;
         }
         QTimer::singleShot(m_forkWaitMs, this, [this, run, attempt] {
-            if (alive(run->generation))
+            if (alive(*run))
                 waitForFork(run, attempt + 1);
         });
     });
@@ -528,59 +513,59 @@ void RepoSync::waitForFork(std::shared_ptr<Run> run, int attempt)
 void RepoSync::writeProposal(std::shared_ptr<Run> run)
 {
     Q_EMIT progress(u"commit"_s, 0, 0);
+    // One more commit on the open proposal's branch — a merge commit when the notebook's branch
+    // moved meanwhile (the tree is that branch's newest plus this device's files) — or the first
+    // commit of a new proposal's branch.
     QStringList parents;
-    if (run->proposal) {
-        // One more commit on the proposal's branch; a merge commit when the notebook's branch moved
-        // meanwhile (the tree is that branch's newest plus this device's files).
+    if (run->proposal)
         parents.append(run->proposal->commit);
-        if (run->proposal->base != run->state.commit)
-            parents.append(run->state.commit);
-    } else {
+    if (!run->proposal || run->proposal->base != run->state.commit)
         parents.append(run->state.commit);
-    }
     m_client->createTree(run->target, run->state.tree, run->entries,
                          [this, run, parents](const GitHubError &error, const QString &tree) {
-                             if (!alive(run->generation))
+                             if (!alive(*run))
                                  return;
                              if (error.isError()) {
                                  failCommit(run, error);
                                  return;
                              }
-                             m_client->createCommit(
-                                     run->target, run->message, tree, parents,
-                                     [this, run](const GitHubError &commitError, const QString &commit) {
-                                         if (!alive(run->generation))
-                                             return;
-                                         if (commitError.isError()) {
-                                             failCommit(run, commitError);
-                                             return;
-                                         }
-                                         if (run->proposal) {
-                                             m_client->updateBranch(run->target, run->proposal->branch, commit,
-                                                                    [this, run, commit](const GitHubError &moveError) {
-                                                                        if (!alive(run->generation))
-                                                                            return;
-                                                                        if (moveError.code
-                                                                            == GitHubError::Code::NotFastForward) {
-                                                                            // Someone else added commits to the
-                                                                            // proposal on GitHub: nothing overwritten.
-                                                                            run->commit.refused = u"proposal-moved"_s;
-                                                                            run->commit.proposal = run->proposal;
-                                                                            reportCommit(run);
-                                                                            return;
-                                                                        }
-                                                                        if (moveError.isError()) {
-                                                                            failCommit(run, moveError);
-                                                                            return;
-                                                                        }
-                                                                        finishProposal(run, commit);
-                                                                    });
-                                             return;
-                                         }
-                                         run->branchName = u"brulion/"_s + now().toString(u"yyyyMMdd-HHmmss"_s);
-                                         createProposalBranch(run, commit, 0);
-                                     });
+                             m_client->createCommit(run->target, run->message, tree, parents,
+                                                    [this, run](const GitHubError &commitError, const QString &commit) {
+                                                        if (!alive(*run))
+                                                            return;
+                                                        if (commitError.isError()) {
+                                                            failCommit(run, commitError);
+                                                            return;
+                                                        }
+                                                        if (run->proposal) {
+                                                            moveProposalBranch(run, commit);
+                                                            return;
+                                                        }
+                                                        run->branchName =
+                                                                u"brulion/"_s + now().toString(u"yyyyMMdd-HHmmss"_s);
+                                                        createProposalBranch(run, commit, 0);
+                                                    });
                          });
+}
+
+void RepoSync::moveProposalBranch(std::shared_ptr<Run> run, const QString &commit)
+{
+    m_client->updateBranch(run->target, run->proposal->branch, commit, [this, run, commit](const GitHubError &error) {
+        if (!alive(*run))
+            return;
+        if (error.code == GitHubError::Code::NotFastForward) {
+            // Someone else added commits to the proposal on GitHub: nothing overwritten.
+            run->commit.refused = u"proposal-moved"_s;
+            run->commit.proposal = run->proposal;
+            reportCommit(run);
+            return;
+        }
+        if (error.isError()) {
+            failCommit(run, error);
+            return;
+        }
+        finishProposal(run, commit);
+    });
 }
 
 void RepoSync::createProposalBranch(std::shared_ptr<Run> run, const QString &commit, int attempt)
@@ -588,7 +573,7 @@ void RepoSync::createProposalBranch(std::shared_ptr<Run> run, const QString &com
     const QString name =
             attempt == 0 ? run->branchName : QString(run->branchName + u'-' + QString::number(attempt + 1));
     m_client->createBranch(run->target, name, commit, [this, run, commit, attempt, name](const GitHubError &error) {
-        if (!alive(run->generation))
+        if (!alive(*run))
             return;
         if (error.code == GitHubError::Code::Validation && attempt < 5) {
             createProposalBranch(run, commit, attempt + 1); // the name is taken
@@ -610,13 +595,13 @@ void RepoSync::openPullRequest(std::shared_ptr<Run> run, const QString &commit, 
             run->target == m_link.repo ? run->branchName : QString(run->target.owner + u':' + run->branchName);
     m_client->createPullRequest(m_link.repo, run->title, run->body, head, m_link.branch,
                                 [this, run, commit, attempt](const GitHubError &error, const PullRequest &pr) {
-                                    if (!alive(run->generation))
+                                    if (!alive(*run))
                                         return;
                                     if (error.code == GitHubError::Code::Validation && run->commit.forked
                                         && attempt < 3) {
                                         // A branch of a fork made a moment ago is not always seen at once.
                                         QTimer::singleShot(m_forkWaitMs, this, [this, run, commit, attempt] {
-                                            if (alive(run->generation))
+                                            if (alive(*run))
                                                 openPullRequest(run, commit, attempt + 1);
                                         });
                                         return;
@@ -643,16 +628,15 @@ void RepoSync::finishProposal(std::shared_ptr<Run> run, const QString &commit)
     proposal.commit = commit;
     proposal.base = run->state.commit;
     proposal.files.clear();
-    for (auto it = run->newShas.cbegin(); it != run->newShas.cend(); ++it)
-        proposal.files.insert(it.key(), it.value());
+    for (auto [path, sha] : std::as_const(run->newShas).asKeyValueRange())
+        proposal.files.insert(path, sha);
     m_store->set(proposalKey(), proposal.toJson());
     Q_EMIT stateChanged();
     run->commit.proposal = proposal;
     run->commit.commit = commit;
-    qCInfo(lcSync).noquote() << u"GitHub proposal #%1 on %2 (%3): %4 file(s)"_s.arg(proposal.number)
-                                        .arg(m_link.repo.fullName(),
-                                             QString(proposal.head.fullName() + u':' + proposal.branch))
-                                        .arg(run->commit.committed.size());
+    qCInfo(lcSync).noquote() << u"GitHub proposal #%1 on %2 (%3): %4 file(s)"_s.arg(
+            QString::number(proposal.number), m_link.repo.fullName(),
+            QString(proposal.head.fullName() + u':' + proposal.branch), QString::number(run->commit.committed.size()));
     reportCommit(run);
 }
 
@@ -668,12 +652,10 @@ void RepoSync::failCommit(std::shared_ptr<Run> run, const GitHubError &error)
 void RepoSync::reportCommit(std::shared_ptr<Run> run)
 {
     run->commit.pull = run->pull;
-    const CommitReport report = run->commit;
-    const auto done = run->commitDone;
     finishOperation();
     Q_EMIT progress(u"done"_s, 0, 0);
-    if (done)
-        done(report);
+    if (run->commitDone)
+        run->commitDone(run->commit);
 }
 
 } // namespace brulion::github

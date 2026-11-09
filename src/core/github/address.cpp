@@ -25,21 +25,30 @@ const QSet<QString> &reservedOwners()
     return names;
 }
 
-QString decodeSegment(const QString &segment)
-{
-    return QUrl::fromPercentEncoding(segment.toUtf8());
-}
-
 bool isAsciiControl(QChar c)
 {
     return c.unicode() < 0x20 || c.unicode() == 0x7f;
+}
+
+/// An ASCII letter or digit, "-" or "_": what account and repository names are made of.
+bool isNameChar(QChar c)
+{
+    return (c.unicode() < 0x80 && c.isLetterOrNumber()) || c == u'-' || c == u'_';
+}
+
+QUrl githubUrl(const QString &encodedPath, const QString &encodedQuery = {})
+{
+    QString text = u"https://"_s + WebHost + u'/' + encodedPath;
+    if (!encodedQuery.isEmpty())
+        text += u'?' + encodedQuery;
+    return QUrl::fromEncoded(text.toLatin1(), QUrl::StrictMode);
 }
 
 } // namespace
 
 std::optional<RepoAddress> parseRepoAddress(const QString &input)
 {
-    QString text = input.trimmed();
+    const QString text = input.trimmed();
     if (text.isEmpty())
         return std::nullopt;
 
@@ -69,8 +78,8 @@ std::optional<RepoAddress> parseRepoAddress(const QString &input)
             path = text;
         }
         // Typed, not a URL: the query and fragment of a pasted address go.
-        const qsizetype cut = path.indexOf(QRegularExpression(u"[?#]"_s));
-        if (cut >= 0)
+        static const QRegularExpression queryOrFragment(u"[?#]"_s);
+        if (const qsizetype cut = path.indexOf(queryOrFragment); cut >= 0)
             path.truncate(cut);
     }
     if (host == u"www.github.com"_s)
@@ -80,10 +89,10 @@ std::optional<RepoAddress> parseRepoAddress(const QString &input)
         return std::nullopt;
 
     QStringList segments = path.split(u'/', Qt::SkipEmptyParts);
-    for (QString &segment : segments)
-        segment = decodeSegment(segment);
     if (segments.size() < 2)
         return std::nullopt;
+    for (QString &segment : segments)
+        segment = QUrl::fromPercentEncoding(segment.toUtf8());
     RepoAddress address;
     address.owner = segments.at(0);
     address.name = segments.at(1);
@@ -107,17 +116,14 @@ bool isValidOwner(QStringView owner)
 {
     if (owner.isEmpty() || owner.size() > 39 || owner.startsWith(u'-'))
         return false;
-    return std::ranges::all_of(
-            owner, [](QChar c) { return (c.unicode() < 0x80 && c.isLetterOrNumber()) || c == u'-' || c == u'_'; });
+    return std::ranges::all_of(owner, isNameChar);
 }
 
 bool isValidRepoName(QStringView name)
 {
     if (name.isEmpty() || name.size() > 100 || name == u"." || name == u"..")
         return false;
-    return std::ranges::all_of(name, [](QChar c) {
-        return (c.unicode() < 0x80 && c.isLetterOrNumber()) || c == u'-' || c == u'_' || c == u'.';
-    });
+    return std::ranges::all_of(name, [](QChar c) { return isNameChar(c) || c == u'.'; });
 }
 
 bool isValidBranchName(QStringView branch)
@@ -127,31 +133,22 @@ bool isValidBranchName(QStringView branch)
         || branch.contains(u"//")) {
         return false;
     }
-    for (const QChar c : branch) {
-        if (isAsciiControl(c) || c == u' ' || c == u'~' || c == u'^' || c == u':' || c == u'?' || c == u'*' || c == u'['
-            || c == u'\\') {
-            return false;
-        }
-    }
-    for (const QStringView segment : branch.tokenize(u'/')) {
-        if (segment.startsWith(u'.') || segment.endsWith(u".lock"))
-            return false;
-    }
-    return true;
+    const auto forbidden = [](QChar c) { return isAsciiControl(c) || QStringView(u" ~^:?*[\\").contains(c); };
+    const auto hidden = [](QStringView segment) { return segment.startsWith(u'.') || segment.endsWith(u".lock"); };
+    return std::ranges::none_of(branch, forbidden) && std::ranges::none_of(branch.tokenize(u'/'), hidden);
 }
 
 std::optional<QString> normalizeFolder(const QString &folder)
 {
-    QStringList kept;
-    const QString text = folder.trimmed().normalized(QString::NormalizationForm_C);
-    for (const QString &segment : text.split(u'/', Qt::SkipEmptyParts)) {
-        if (segment == u"."_s || segment == u".."_s || segment.contains(u'\\')
-            || std::ranges::any_of(segment, isAsciiControl)) {
-            return std::nullopt;
-        }
-        kept.append(segment);
-    }
-    return kept.join(u'/');
+    const QStringList segments =
+            folder.trimmed().normalized(QString::NormalizationForm_C).split(u'/', Qt::SkipEmptyParts);
+    const bool invalid = std::ranges::any_of(segments, [](const QString &segment) {
+        return segment == u"."_s || segment == u".."_s || segment.contains(u'\\')
+               || std::ranges::any_of(segment, isAsciiControl);
+    });
+    if (invalid)
+        return std::nullopt;
+    return segments.join(u'/');
 }
 
 std::pair<QString, QString> splitRefPath(const QStringList &refPath, const QStringList &branches, bool file)
@@ -186,18 +183,6 @@ QString encodePath(const QString &path)
         segment = QString::fromLatin1(QUrl::toPercentEncoding(segment));
     return segments.join(u'/');
 }
-
-namespace {
-
-QUrl githubUrl(const QString &encodedPath, const QString &encodedQuery = {})
-{
-    QString text = u"https://"_s + WebHost + u'/' + encodedPath;
-    if (!encodedQuery.isEmpty())
-        text += u'?' + encodedQuery;
-    return QUrl::fromEncoded(text.toLatin1(), QUrl::StrictMode);
-}
-
-} // namespace
 
 QUrl webUrl(const QString &owner, const QString &name, const QString &branch, const QString &folder)
 {

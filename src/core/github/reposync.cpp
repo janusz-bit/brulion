@@ -42,8 +42,8 @@ using logging::lcSync;
 QJsonObject toJson(const QHash<VaultPath, QString> &map)
 {
     QJsonObject out;
-    for (auto it = map.cbegin(); it != map.cend(); ++it)
-        out.insert(it.key(), it.value());
+    for (auto [path, value] : map.asKeyValueRange())
+        out.insert(path, value);
     return out;
 }
 
@@ -56,6 +56,17 @@ QHash<VaultPath, QString> mapFromJson(const QJsonValue &value)
             out.insert(it.key(), it.value().toString());
     }
     return out;
+}
+
+/// The paths of both maps, sorted.
+QStringList sortedPaths(const QHash<VaultPath, QString> &a, const QHash<VaultPath, QString> &b)
+{
+    QSet<VaultPath> all(a.keyBegin(), a.keyEnd());
+    for (auto it = b.keyBegin(); it != b.keyEnd(); ++it)
+        all.insert(*it);
+    QStringList sorted(all.cbegin(), all.cend());
+    std::ranges::sort(sorted);
+    return sorted;
 }
 
 /// A drawing changed on both sides is merged element by element, never line by line (as
@@ -132,13 +143,11 @@ bool isNotebookPath(const VaultPath &path)
 {
     if (path == vaultConfigPath())
         return true;
-    if (path.isEmpty() || !sync::isSyncablePath(path))
+    // The vault takes a backslash for a separator (paths::normalize): "a\..\.x" would write ".x".
+    if (path.isEmpty() || path.contains(u'\\') || !sync::isSyncablePath(path))
         return false;
-    for (const QStringView segment : QStringView(path).tokenize(u'/')) {
-        if (segment.isEmpty() || segment.startsWith(u'.'))
-            return false;
-    }
-    return true;
+    return std::ranges::none_of(QStringView(path).tokenize(u'/'),
+                                [](QStringView segment) { return segment.isEmpty() || segment.startsWith(u'.'); });
 }
 
 QString changeKindName(LocalChange::Kind kind)
@@ -154,8 +163,8 @@ QString changeKindName(LocalChange::Kind kind)
 QJsonObject Proposal::toJson() const
 {
     QJsonObject fileVersions;
-    for (auto it = files.cbegin(); it != files.cend(); ++it)
-        fileVersions.insert(it.key(), it.value());
+    for (auto [path, version] : files.asKeyValueRange())
+        fileVersions.insert(path, version);
     return {{u"number"_s, number},     {u"url"_s, url.toString()},   {u"title"_s, title},
             {u"state"_s, state},       {u"headOwner"_s, head.owner}, {u"headName"_s, head.name},
             {u"branch"_s, branch},     {u"commit"_s, commit},        {u"base"_s, base},
@@ -216,10 +225,8 @@ RepoSync::RepoSync(Vault *vault, GitHubClient *client, LocalStore *store, QObjec
         connect(vault, &Vault::changed, this, &RepoSync::onVaultChanged);
 }
 
-RepoSync::~RepoSync()
-{
-    ++m_generation; // callbacks still waiting for GitHub end without a report
-}
+// Callbacks still waiting for GitHub end without a report: their run's owner is gone (alive()).
+RepoSync::~RepoSync() = default;
 
 void RepoSync::setLink(const RepoLink &link)
 {
@@ -250,8 +257,8 @@ QDateTime RepoSync::now() const
 
 void RepoSync::setForkWait(int ms, int attempts)
 {
-    m_forkWaitMs = qMax(0, ms);
-    m_forkAttempts = qMax(1, attempts);
+    m_forkWaitMs = std::max(0, ms);
+    m_forkAttempts = std::max(1, attempts);
 }
 
 RepoSync::State RepoSync::loadState() const
@@ -270,7 +277,8 @@ RepoSync::State RepoSync::loadState() const
     state.emptyRepository = meta.value(u"emptyRepository"_s).toBool();
     state.pulledAt = meta.value(u"pulledAt"_s).toInteger();
     state.files = mapFromJson(m_store->get(kFilesKey));
-    for (const QJsonValue &path : m_store->get(kExecutableKey).toArray())
+    const QJsonArray executable = m_store->get(kExecutableKey).toArray();
+    for (const QJsonValue path : executable)
         state.executable.insert(path.toString());
     state.names = mapFromJson(m_store->get(kNamesKey));
     state.lfs = mapFromJson(m_store->get(kLfsKey));
@@ -311,7 +319,7 @@ void RepoSync::resetState()
 
 bool RepoSync::hasPulled() const
 {
-    return m_store && !m_store->get(kStateKey).toObject().value(u"commit"_s).toString().isEmpty();
+    return !headCommit().isEmpty();
 }
 
 QString RepoSync::headCommit() const
@@ -374,12 +382,9 @@ std::optional<QString> RepoSync::localSha(const VaultPath &path)
     const QByteArray bytes = m_vault->readBinary(path, &ok);
     if (!ok)
         return std::nullopt;
-    CachedSha cached;
-    cached.size = stat->size;
-    cached.mtime = stat->mtime;
-    cached.sha = blobSha(bytes);
-    m_shas.insert(path, cached);
-    return cached.sha;
+    const QString sha = blobSha(bytes);
+    m_shas.insert(path, {.size = stat->size, .mtime = stat->mtime, .sha = sha});
+    return sha;
 }
 
 QHash<VaultPath, QString> RepoSync::localShas(QSet<VaultPath> *unknown)
@@ -390,7 +395,7 @@ QHash<VaultPath, QString> RepoSync::localShas(QSet<VaultPath> *unknown)
     QList<FileStat> files = m_vault->files();
     if (const std::optional<FileStat> config = m_vault->stat(vaultConfigPath()); config && !config->isDir)
         files.append(*config);
-    for (const FileStat &file : files) {
+    for (const FileStat &file : std::as_const(files)) {
         if (file.isDir || !isNotebookPath(file.path))
             continue;
         const std::optional<QString> sha = localSha(file.path);
@@ -419,11 +424,9 @@ QList<LocalChange> RepoSync::localChanges()
     const State state = loadState();
     const QHash<VaultPath, QString> local = localShas();
     const std::optional<Proposal> open = proposal();
-    QSet<VaultPath> all(state.files.keyBegin(), state.files.keyEnd());
-    for (auto it = local.cbegin(); it != local.cend(); ++it)
-        all.insert(it.key());
-    QStringList sorted(all.cbegin(), all.cend());
-    std::ranges::sort(sorted);
+    // The files the open proposal changes, with their versions there ("" = removed).
+    const QMap<VaultPath, QString> proposed = open && open->isOpen() ? open->files : QMap<VaultPath, QString>();
+    const QStringList sorted = sortedPaths(state.files, local);
     for (const VaultPath &path : sorted) {
         const QString base = state.files.value(path);
         const auto here = local.constFind(path);
@@ -431,30 +434,33 @@ QList<LocalChange> RepoSync::localChanges()
             // Gone here — unless it could not be read (then it is not known to be gone).
             if (base.isEmpty() || m_vault->exists(path))
                 continue;
-            LocalChange change{path, LocalChange::Kind::Deleted, false};
-            change.proposed = open && open->isOpen() && open->files.contains(path) && open->files.value(path).isEmpty();
-            out.append(change);
+            out.append({path, LocalChange::Kind::Deleted, proposed.contains(path) && proposed.value(path).isEmpty()});
             continue;
         }
         if (*here == base)
             continue;
         if (base.isEmpty() && paths::isConflictCopy(path))
             continue; // a conflict copy stays on this device
-        LocalChange change{path, base.isEmpty() ? LocalChange::Kind::Added : LocalChange::Kind::Modified, false};
-        change.proposed = open && open->isOpen() && open->files.value(path) == *here;
-        out.append(change);
+        out.append({path, base.isEmpty() ? LocalChange::Kind::Added : LocalChange::Kind::Modified,
+                    proposed.value(path) == *here});
     }
     return out;
 }
 
 // ---- Operations -----------------------------------------------------------------------------------
 
-bool RepoSync::start(Operation operation)
+std::shared_ptr<RepoSync::Run> RepoSync::beginRun(Operation operation)
 {
-    if (m_operation != Operation::None)
-        return false;
+    if (busy())
+        return nullptr;
     m_operation = operation;
-    return true;
+    auto run = std::make_shared<Run>();
+    run->owner = this;
+    run->operation = operation;
+    run->generation = ++m_generation;
+    run->timer.start();
+    m_run = run;
+    return run;
 }
 
 void RepoSync::finishOperation()
@@ -463,9 +469,11 @@ void RepoSync::finishOperation()
     m_run.reset();
 }
 
-bool RepoSync::alive(int generation) const
+bool RepoSync::alive(const Run &run)
 {
-    return generation == m_generation && m_run && m_vault && m_client && m_store;
+    const RepoSync *self = run.owner.data();
+    return self && run.generation == self->m_generation && self->m_run && self->m_vault && self->m_client
+           && self->m_store;
 }
 
 void RepoSync::cancel()
@@ -476,22 +484,18 @@ void RepoSync::cancel()
 
 void RepoSync::pull(std::function<void(const PullReport &)> done)
 {
-    if (!start(Operation::Pull)) {
+    const auto run = beginRun(Operation::Pull);
+    if (!run) {
         PullReport report;
         report.refused = u"busy"_s;
         report.error = busyError();
-        QTimer::singleShot(0, this, [done, report] {
+        QTimer::singleShot(0, this, [done = std::move(done), report] {
             if (done)
                 done(report);
         });
         return;
     }
-    auto run = std::make_shared<Run>();
-    run->operation = Operation::Pull;
-    run->generation = ++m_generation;
     run->pullDone = std::move(done);
-    run->timer.start();
-    m_run = run;
     QTimer::singleShot(0, this, [this, run] {
         if (run->generation == m_generation)
             startPull(run);
@@ -536,7 +540,7 @@ void RepoSync::pullBranch(std::shared_ptr<Run> run)
     m_client->branch(
             m_link.repo, m_link.branch, etag,
             [this, run](const GitHubError &error, const BranchHead &head, bool notModified) {
-                if (!alive(run->generation))
+                if (!alive(*run))
                     return;
                 const auto emptyRepository = [this, run] {
                     run->pull.emptyRepository = true;
@@ -552,7 +556,7 @@ void RepoSync::pullBranch(std::shared_ptr<Run> run)
                     m_client->branchNames(m_link.repo, {},
                                           [this, run, error, emptyRepository](const GitHubError &listError,
                                                                               const QStringList &names) {
-                                              if (!alive(run->generation))
+                                              if (!alive(*run))
                                                   return;
                                               if (!listError.isError() && names.isEmpty()) {
                                                   emptyRepository();
@@ -581,39 +585,36 @@ void RepoSync::pullBranch(std::shared_ptr<Run> run)
                 run->head = head;
                 run->pull.commit = head.commit;
                 Q_EMIT progress(u"tree"_s, 0, 0);
-                if (m_link.folder.isEmpty()) {
+                if (m_link.folder.isEmpty())
                     pullTree(run, head.tree);
-                    return;
-                }
-                const QString parent = paths::dirname(m_link.folder);
-                const QString name = paths::basename(m_link.folder);
-                m_client->folder(m_link.repo, parent, head.commit,
-                                 [this, run, name](const GitHubError &folderError, const QList<TreeEntry> &entries) {
-                                     if (!alive(run->generation))
-                                         return;
-                                     if (folderError.code == GitHubError::Code::NotFound) {
-                                         run->pull.folderMissing = true;
-                                         planPull(run, {});
-                                         return;
-                                     }
-                                     if (folderError.isError()) {
-                                         run->pull.error = folderError;
-                                         endPull(run);
-                                         return;
-                                     }
-                                     QString sha;
-                                     for (const TreeEntry &entry : entries) {
-                                         if (entry.path == name && entry.type == u"tree"_s)
-                                             sha = entry.sha;
-                                     }
-                                     if (sha.isEmpty()) {
-                                         run->pull.folderMissing = true;
-                                         planPull(run, {});
-                                         return;
-                                     }
-                                     pullTree(run, sha);
-                                 });
+                else
+                    pullFolder(run);
             });
+}
+
+void RepoSync::pullFolder(std::shared_ptr<Run> run)
+{
+    // The folder's tree: its entry in the listing of the folder holding it.
+    const QString name = paths::basename(m_link.folder);
+    m_client->folder(m_link.repo, paths::dirname(m_link.folder), run->head.commit,
+                     [this, run, name](const GitHubError &error, const QList<TreeEntry> &entries) {
+                         if (!alive(*run))
+                             return;
+                         if (error.isError() && error.code != GitHubError::Code::NotFound) {
+                             run->pull.error = error;
+                             endPull(run);
+                             return;
+                         }
+                         const auto folder = std::ranges::find_if(entries, [&name](const TreeEntry &entry) {
+                             return entry.path == name && entry.type == u"tree"_s;
+                         });
+                         if (folder == entries.cend() || folder->sha.isEmpty()) { // NotFound: no entries
+                             run->pull.folderMissing = true;
+                             planPull(run, {});
+                             return;
+                         }
+                         pullTree(run, folder->sha);
+                     });
 }
 
 void RepoSync::pullTree(std::shared_ptr<Run> run, const QString &folderSha)
@@ -623,27 +624,18 @@ void RepoSync::pullTree(std::shared_ptr<Run> run, const QString &folderSha)
     if (state.complete && !state.folderTree.isEmpty() && folderSha == state.folderTree) {
         // The folder is as it was at the last complete pull: its files are the bookkeeping's.
         QList<TreeEntry> entries;
-        for (auto it = state.files.cbegin(); it != state.files.cend(); ++it) {
-            TreeEntry entry;
-            entry.path = state.names.value(it.key(), it.key());
-            entry.type = u"blob"_s;
-            entry.mode = state.executable.contains(it.key()) ? ExecutableMode.toString() : FileMode.toString();
-            entry.sha = it.value();
-            entries.append(entry);
-        }
-        for (auto it = state.lfs.cbegin(); it != state.lfs.cend(); ++it) {
-            TreeEntry entry;
-            entry.path = state.names.value(it.key(), it.key());
-            entry.type = u"blob"_s;
-            entry.mode = FileMode.toString();
-            entry.sha = it.value();
-            entries.append(entry);
-        }
+        const auto add = [&entries, &state](const VaultPath &path, const QString &sha, QStringView mode) {
+            entries.append({state.names.value(path, path), mode.toString(), u"blob"_s, sha});
+        };
+        for (auto [path, sha] : state.files.asKeyValueRange())
+            add(path, sha, state.executable.contains(path) ? ExecutableMode : FileMode);
+        for (auto [path, sha] : state.lfs.asKeyValueRange())
+            add(path, sha, FileMode);
         planPull(run, entries);
         return;
     }
     m_client->tree(m_link.repo, folderSha, true, [this, run](const GitHubError &error, const Tree &tree) {
-        if (!alive(run->generation))
+        if (!alive(*run))
             return;
         if (error.isError()) {
             run->pull.error = error;
@@ -711,18 +703,14 @@ void RepoSync::planPull(std::shared_ptr<Run> run, const QList<TreeEntry> &entrie
         // Every file pulled before is gone from GitHub (a deleted branch, a moved folder): nothing
         // is removed here — the user decides (link the notebook again, or commit to fill it).
         qCWarning(lcSync).noquote() << u"GitHub pull %1@%2: no files in the folder any more, %3 were there: nothing "
-                                       "removed here"_s.arg(m_link.repo.fullName(), m_link.branch)
-                                               .arg(state.files.size());
+                                       "removed here"_s.arg(m_link.repo.fullName(), m_link.branch,
+                                                            QString::number(state.files.size()));
         report.refused = u"remote-empty"_s;
         endPull(run);
         return;
     }
     run->local = localShas(&run->unknown);
-    QSet<VaultPath> all(run->remote.keyBegin(), run->remote.keyEnd());
-    for (auto it = state.files.cbegin(); it != state.files.cend(); ++it)
-        all.insert(it.key());
-    QStringList sorted(all.cbegin(), all.cend());
-    std::ranges::sort(sorted);
+    const QStringList sorted = sortedPaths(run->remote, state.files);
     for (const VaultPath &path : sorted) {
         if (run->unknown.contains(path))
             continue; // cannot be read here: left as it is
@@ -788,10 +776,7 @@ void RepoSync::planPull(std::shared_ptr<Run> run, const QList<TreeEntry> &entrie
     for (const qsizetype i : std::as_const(dropped))
         run->jobs.removeAt(i);
     // The names and executable bits of the files as GitHub has them now.
-    state.names.clear();
-    state.executable.clear();
-    for (auto it = run->remoteNames.cbegin(); it != run->remoteNames.cend(); ++it)
-        state.names.insert(it.key(), it.value());
+    state.names = run->remoteNames;
     state.executable = run->remoteExecutable;
     runJobs(run);
 }
@@ -815,16 +800,12 @@ void RepoSync::fetchContent(std::shared_ptr<Run> run, const VaultPath &path, con
                             std::function<void(const GitHubError &, const QByteArray &)> done)
 {
     const auto verified = [sha, done](const GitHubError &error, const QByteArray &bytes) {
-        if (error.isError()) {
-            done(error, bytes);
-            return;
-        }
-        if (blobSha(bytes) != sha) {
+        if (!error.isError() && blobSha(bytes) != sha) {
             done(GitHubError::make(GitHubError::Code::Integrity, u"The downloaded bytes are not blob %1"_s.arg(sha)),
                  {});
             return;
         }
-        done({}, bytes);
+        done(error, bytes);
     };
     if (m_client->hasToken() || commit.isEmpty()) {
         m_client->blob(m_link.repo, sha, verified);
@@ -834,21 +815,21 @@ void RepoSync::fetchContent(std::shared_ptr<Run> run, const VaultPath &path, con
     // raw.githubusercontent.com, by the commit (a branch name is cached there for minutes). A file
     // that is not that blob there (a merge base kept from an older commit) comes through the API.
     const QString repoPath = m_link.repoPath(run->state.names.value(path, run->remoteNames.value(path, path)));
-    const int generation = run->generation;
-    m_client->rawFile(m_link.repo, commit, repoPath,
-                      [this, generation, sha, verified](const GitHubError &error, const QByteArray &bytes) {
-                          if (generation != m_generation || !m_client)
-                              return;
-                          if (error.isFatal() && error.code != GitHubError::Code::RateLimited) {
-                              verified(error, bytes);
-                              return;
-                          }
-                          if (!error.isError() && blobSha(bytes) == sha) {
-                              verified({}, bytes);
-                              return;
-                          }
-                          m_client->blob(m_link.repo, sha, verified);
-                      });
+    m_client->rawFile(
+            m_link.repo, commit, repoPath,
+            [this, run, sha, verified, done = std::move(done)](const GitHubError &error, const QByteArray &bytes) {
+                if (!alive(*run))
+                    return;
+                if (error.isFatal() && error.code != GitHubError::Code::RateLimited) {
+                    done(error, bytes);
+                    return;
+                }
+                if (!error.isError() && blobSha(bytes) == sha) {
+                    done({}, bytes); // verified: hashed once
+                    return;
+                }
+                m_client->blob(m_link.repo, sha, verified);
+            });
 }
 
 void RepoSync::runJob(std::shared_ptr<Run> run, int index)
@@ -858,56 +839,49 @@ void RepoSync::runJob(std::shared_ptr<Run> run, int index)
         ++run->doneJobs;
         runJobs(run);
     };
-    Job &job = run->jobs[index];
-    if (job.kind == Job::Kind::Rename) {
-        // The old file still the version GitHub moved, the new name still free here?
-        const std::optional<QString> current = localSha(job.from);
-        const bool free = !m_vault->exists(job.path);
-        if (current && *current == job.local && free && m_vault->rename(job.from, job.path, ChangeSource::Sync)) {
-            run->state.files.remove(job.from);
-            run->state.files.insert(job.path, job.remote);
-            ++run->pull.renamed;
-            run->pull.written.append(job.from);
-            run->pull.written.append(job.path);
-            run->emptiedFolders.insert(paths::dirname(job.from));
+    const Job &job = run->jobs.at(index);
+    if (job.kind == Job::Kind::Rename || job.kind == Job::Kind::Delete) {
+        if (job.kind == Job::Kind::Rename) {
+            // The old file still the version GitHub moved, the new name still free here?
+            const std::optional<QString> current = localSha(job.from);
+            const bool free = !m_vault->exists(job.path);
+            if (current && *current == job.local && free && m_vault->rename(job.from, job.path, ChangeSource::Sync)) {
+                run->state.files.remove(job.from);
+                run->state.files.insert(job.path, job.remote);
+                ++run->pull.renamed;
+                run->pull.written.append(job.from);
+                run->pull.written.append(job.path);
+                run->emptiedFolders.insert(paths::dirname(job.from));
+            } else {
+                // Changed or taken meanwhile: compared again by the next pull (nothing lost).
+                run->pull.errors.append({job.path, u"changed-meanwhile"_s, u"Not moved from %1"_s.arg(job.from)});
+            }
         } else {
-            // Changed or taken meanwhile: compared again by the next pull (nothing lost).
-            run->pull.errors.append({job.path, u"changed-meanwhile"_s, u"Not moved from %1"_s.arg(job.from)});
+            // Still the version GitHub removed? (Edited a moment ago: kept, a commit adds it again.)
+            const std::optional<QString> current = localSha(job.path);
+            if (!current || *current != job.local) {
+                run->state.files.remove(job.path);
+                ++run->pull.kept;
+            } else if (m_vault->remove(job.path, ChangeSource::Sync)) {
+                run->state.files.remove(job.path);
+                ++run->pull.deletedLocal;
+                run->pull.written.append(job.path);
+                run->emptiedFolders.insert(paths::dirname(job.path));
+            } else {
+                run->pull.errors.append({job.path, u"write-failed"_s, m_vault->errorString()});
+            }
         }
         QTimer::singleShot(0, this, [this, run, finished] {
-            if (alive(run->generation))
+            if (alive(*run))
                 finished();
         });
         return;
     }
-    if (job.kind == Job::Kind::Delete) {
-        // Still the version GitHub removed? (Edited a moment ago: kept, a commit adds it again.)
-        const std::optional<QString> current = localSha(job.path);
-        if (!current || *current != job.local) {
-            run->state.files.remove(job.path);
-            ++run->pull.kept;
-        } else if (m_vault->remove(job.path, ChangeSource::Sync)) {
-            run->state.files.remove(job.path);
-            ++run->pull.deletedLocal;
-            run->pull.written.append(job.path);
-            run->emptiedFolders.insert(paths::dirname(job.path));
-        } else {
-            run->pull.errors.append({job.path, u"write-failed"_s, m_vault->errorString()});
-        }
-        QTimer::singleShot(0, this, [this, run, finished] {
-            if (alive(run->generation))
-                finished();
-        });
-        return;
-    }
-    const VaultPath path = job.path;
-    const QString remoteSha = job.remote;
-    const QString headCommit = run->head.commit;
-    fetchContent(run, path, remoteSha, headCommit,
+    fetchContent(run, job.path, job.remote, run->head.commit,
                  [this, run, index, finished](const GitHubError &error, const QByteArray &remote) {
-                     if (!alive(run->generation))
+                     if (!alive(*run))
                          return;
-                     Job &fetched = run->jobs[index];
+                     const Job &fetched = run->jobs.at(index);
                      if (error.isError()) {
                          if (error.isFatal()) {
                              if (!run->pull.error.isError())
@@ -938,23 +912,23 @@ void RepoSync::runJob(std::shared_ptr<Run> run, int index)
                      fetchContent(run, fetched.path, fetched.base, run->before.commit,
                                   [this, run, index, remote, finished](const GitHubError &baseError,
                                                                        const QByteArray &base) {
-                                      if (!alive(run->generation))
+                                      if (!alive(*run))
                                           return;
-                                      Job &merging = run->jobs[index];
                                       if (baseError.isFatal()) {
                                           if (!run->pull.error.isError())
                                               run->pull.error = baseError;
                                           run->nextJob = run->jobs.size();
                                       } else {
                                           // No base to be had (removed meanwhile): both versions kept.
-                                          applyDownload(*run, merging, remote, baseError.isError() ? nullptr : &base);
+                                          applyDownload(*run, run->jobs.at(index), remote,
+                                                        baseError.isError() ? nullptr : &base);
                                       }
                                       finished();
                                   });
                  });
 }
 
-void RepoSync::applyDownload(Run &run, Job &job, const QByteArray &remote, const QByteArray *base)
+void RepoSync::applyDownload(Run &run, const Job &job, const QByteArray &remote, const QByteArray *base)
 {
     PullReport &report = run.pull;
     // The file must still be what the plan saw: an edit made meanwhile is merged next time.
@@ -1016,7 +990,7 @@ void RepoSync::applyDownload(Run &run, Job &job, const QByteArray &remote, const
         }
     }
     // Not merged: this device's version stays, GitHub's is saved beside it (once).
-    if (!existingConflictCopy(job.path, remote)) {
+    if (!hasConflictCopy(job.path, remote)) {
         const VaultPath copy = m_vault->createBinary(sync::conflictCopyPath(job.path, ConflictDevice.toString(), now()),
                                                      remote, ChangeSource::Sync);
         if (copy.isEmpty()) {
@@ -1029,35 +1003,36 @@ void RepoSync::applyDownload(Run &run, Job &job, const QByteArray &remote, const
     report.conflicts.append(job.path);
 }
 
-std::optional<VaultPath> RepoSync::existingConflictCopy(const VaultPath &path, const QByteArray &content)
+bool RepoSync::hasConflictCopy(const VaultPath &path, const QByteArray &content)
 {
-    const QString sha = blobSha(content);
-    for (const FileStat &file : m_vault->files()) {
+    std::optional<QString> sha; // hashed for the first copy of the same size only
+    const QList<FileStat> files = m_vault->files();
+    for (const FileStat &file : files) {
         if (file.isDir || file.size != content.size())
             continue;
         const std::optional<sync::BrulionConflict> parsed = sync::parseBrulionConflict(file.path);
         if (!parsed || parsed->original != path)
             continue;
-        const std::optional<QString> copySha = localSha(file.path);
-        if (copySha && *copySha == sha)
-            return file.path;
+        if (!sha)
+            sha = blobSha(content);
+        if (localSha(file.path) == sha)
+            return true;
     }
-    return std::nullopt;
+    return false;
 }
 
 void RepoSync::pruneEmptyFolders(const QSet<QString> &folders)
 {
     // Git keeps no empty folders: the ones whose last file GitHub removed go too — only when
     // nothing at all is left in them on disk.
-    QStringList sorted(folders.cbegin(), folders.cend());
     QSet<QString> candidates;
-    for (QString folder : sorted) {
+    for (QString folder : folders) {
         while (!folder.isEmpty()) {
             candidates.insert(folder);
             folder = paths::dirname(folder);
         }
     }
-    sorted = QStringList(candidates.cbegin(), candidates.cend());
+    QStringList sorted(candidates.cbegin(), candidates.cend());
     std::ranges::sort(sorted, [](const QString &a, const QString &b) {
         return a.count(u'/') > b.count(u'/') || (a.count(u'/') == b.count(u'/') && a < b);
     });
@@ -1120,21 +1095,12 @@ void RepoSync::endPull(std::shared_ptr<Run> run)
     // An open proposal's state changes when the branch moves (merged) — or on GitHub alone (closed).
     const std::optional<Proposal> open = proposal();
     if (run->operation == Operation::Pull && !report.failed() && !report.upToDate && open && open->isOpen()) {
-        const Proposal current = *open;
-        m_client->pullRequest(m_link.repo, current.number,
-                              [this, run, current](const GitHubError &error, const PullRequest &pr) {
-                                  if (!alive(run->generation))
+        m_client->pullRequest(m_link.repo, open->number,
+                              [this, run, current = *open](const GitHubError &error, const PullRequest &pr) {
+                                  if (!alive(*run))
                                       return;
-                                  if (!error.isError()) {
-                                      Proposal updated = current;
-                                      updated.state = pr.merged ? u"merged"_s : pr.state;
-                                      updated.title = pr.title.isEmpty() ? current.title : pr.title;
-                                      if (updated != current) {
-                                          m_store->set(kProposalKey, updated.toJson());
-                                          Q_EMIT stateChanged();
-                                      }
-                                      run->pull.proposal = updated;
-                                  }
+                                  if (!error.isError())
+                                      run->pull.proposal = updateProposal(current, pr);
                                   reportPull(run);
                               });
         return;
@@ -1146,49 +1112,47 @@ void RepoSync::endPull(std::shared_ptr<Run> run)
     afterPullForCommit(run);
 }
 
+Proposal RepoSync::updateProposal(const Proposal &current, const PullRequest &pr)
+{
+    Proposal updated = current;
+    updated.state = pr.merged ? u"merged"_s : pr.state;
+    updated.title = pr.title.isEmpty() ? current.title : pr.title;
+    if (updated != current) {
+        m_store->set(kProposalKey, updated.toJson());
+        Q_EMIT stateChanged();
+    }
+    return updated;
+}
+
 void RepoSync::reportPull(std::shared_ptr<Run> run)
 {
-    const PullReport report = run->pull;
-    const auto done = run->pullDone;
     finishOperation();
     Q_EMIT progress(u"done"_s, 0, 0);
-    if (done)
-        done(report);
+    if (run->pullDone)
+        run->pullDone(run->pull);
 }
 
 void RepoSync::refreshProposal(std::function<void(const GitHubError &, const std::optional<Proposal> &)> done)
 {
     const std::optional<Proposal> current = proposal();
     if (!current || !m_client || busy()) {
-        QTimer::singleShot(0, this, [done, current, wasBusy = busy()] {
+        QTimer::singleShot(0, this, [done = std::move(done), current, wasBusy = busy()] {
             if (done)
                 done(wasBusy ? busyError() : GitHubError{}, current);
         });
         return;
     }
-    start(Operation::Refresh);
-    auto run = std::make_shared<Run>();
-    run->operation = Operation::Refresh;
-    run->generation = ++m_generation;
-    m_run = run;
-    const Proposal before = *current;
-    m_client->pullRequest(m_link.repo, before.number,
-                          [this, run, before, done](const GitHubError &error, const PullRequest &pr) {
-                              if (!alive(run->generation))
-                                  return;
-                              Proposal updated = before;
-                              if (!error.isError()) {
-                                  updated.state = pr.merged ? u"merged"_s : pr.state;
-                                  updated.title = pr.title.isEmpty() ? before.title : pr.title;
-                                  if (updated != before) {
-                                      m_store->set(kProposalKey, updated.toJson());
-                                      Q_EMIT stateChanged();
-                                  }
-                              }
-                              finishOperation();
-                              if (done)
-                                  done(error, updated);
-                          });
+    const auto run = beginRun(Operation::Refresh);
+    m_client->pullRequest(
+            m_link.repo, current->number,
+            [this, run, before = *current, done = std::move(done)](const GitHubError &error, const PullRequest &pr) {
+                if (!alive(*run))
+                    return;
+                const Proposal updated = error.isError() ? before : updateProposal(before, pr);
+                finishOperation();
+                if (done)
+                    done(error, updated);
+            });
 }
 
 } // namespace brulion::github

@@ -13,8 +13,7 @@ bool HabitCache::sync(const VaultIndex &index)
         return NoteHabits{definitionsOf(path, note), checksOf(note)};
     };
     const auto keep = [](const NoteHabits &v) { return !v.definitions.isEmpty() || !v.checks.isEmpty(); };
-    const bool first = !m_synced;
-    m_synced = true;
+    const bool first = !std::exchange(m_synced, true);
     m_lastSync = m_notes.sync(index, QString(), false, compute, keep);
     if (!m_lastSync.any() && !first)
         return false;
@@ -39,12 +38,8 @@ void HabitCache::rebuild()
             m_habits.append(std::move(h));
         }
         for (const Check &c : value.checks) {
-            DayMarks &marks = days[c.key];
-            const auto it = marks.find(c.date);
-            if (it == marks.end())
-                marks.insert(c.date, c.mark);
-            else
-                *it = strongerMark(*it, c.mark);
+            Mark &mark = days[c.key][c.date]; // a new day: Open, the weakest mark
+            mark = strongerMark(mark, c.mark);
         }
     }
     // Revisions: a key's definition or days differ from the last rebuild's.
@@ -55,7 +50,7 @@ void HabitCache::rebuild()
         keys.insert(it.key());
     QHash<QString, Habit> firsts;
     for (auto it = m_byKey.cbegin(); it != m_byKey.cend(); ++it) {
-        firsts.insert(it.key(), m_habits[it.value()]);
+        firsts.insert(it.key(), m_habits.at(it.value()));
         keys.insert(it.key());
     }
     for (auto it = m_previous.cbegin(); it != m_previous.cend(); ++it)
@@ -72,7 +67,7 @@ void HabitCache::rebuild()
 const Habit *HabitCache::find(QStringView name) const
 {
     const auto it = m_byKey.constFind(habitKey(name));
-    return it == m_byKey.constEnd() ? nullptr : &m_habits[*it];
+    return it == m_byKey.constEnd() ? nullptr : &m_habits.at(*it);
 }
 
 QList<Check> HabitCache::checksOn(QDate date) const
@@ -89,25 +84,15 @@ QList<Check> HabitCache::checksOn(QDate date) const
 
 QStringList HabitCache::undefinedKeys() const
 {
-    QStringList out;
-    for (auto it = m_days.cbegin(); it != m_days.cend(); ++it) {
-        if (!m_byKey.contains(it.key()))
-            out.append(it.key());
-    }
+    QStringList out = m_days.keys();
+    out.removeIf([this](const QString &key) { return m_byKey.contains(key); });
     std::ranges::sort(out);
     return out;
 }
 
 void HabitCache::clear()
 {
-    m_notes.clear();
-    m_synced = false;
-    m_lastSync = {};
-    m_habits.clear();
-    m_byKey.clear();
-    m_days.clear();
-    m_revisions.clear();
-    m_previous.clear();
+    *this = HabitCache();
 }
 
 } // namespace brulion::habits

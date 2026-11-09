@@ -72,13 +72,13 @@ Item {
                 required property bool overdue
                 required property string status
                 required text
-                // Rows of the sections shown, up to the limit (headers and the rest: no height).
+                // Rows of the sections shown, up to the limit (headers and the rest: hidden, so the
+                // layout gives them no height).
                 readonly property bool shown: row.rowType === "task" && root.shownSections.indexOf(row.section) >= 0
                                               && row.index <= root.limit + root.shownSections.length
                 objectName: "dayTaskRow"
                 visible: row.shown
                 Layout.fillWidth: true
-                Layout.preferredHeight: row.shown ? implicitHeight : 0
                 dense: true
                 leftPadding: Theme.space2
                 Accessible.name: row.text + (row.dueLabel !== "" ? ", " + row.dueLabel : "")
@@ -107,6 +107,7 @@ Item {
                         readonly property string label: row.dueLabel !== "" ? row.dueLabel : row.scheduledLabel
                         visible: label !== ""
                         text: label
+                        textFormat: Text.PlainText
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.textXs
                         color: row.overdue ? Theme.dangerText : Theme.fgMuted

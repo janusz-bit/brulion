@@ -198,37 +198,30 @@ FocusScope {
         }
 
         // ---- Unlinked mentions --------------------------------------------------------------------
-        Item {
+        RowLayout {
             visible: root.showUnlinked && (!root.sectioned || (root.unlinkedOpen && unlinked.refCount > 1))
             Layout.fillWidth: true
             Layout.topMargin: root.sectioned ? 0 : Theme.space5
             Layout.bottomMargin: root.sectioned ? Theme.space1 : 0
-            implicitHeight: unlinkedHeader.implicitHeight
-
-            RowLayout {
-                id: unlinkedHeader
-                width: parent.width
-                spacing: Theme.space2
-                BButton {
-                    id: unlinkedToggle
-                    visible: !root.sectioned
-                    variant: "ghost"
-                    iconName: root.unlinkedOpen ? "chevron-down" : "chevron-right"
-                    text: root.unlinkedOpen && unlinked.refCount > 0
-                          ? qsTr("%n unlinked mention(s)", "", unlinked.refCount) : qsTr("Unlinked mentions")
-                    Accessible.description: qsTr("Plain-text mentions of this page in other notes")
-                    onClicked: root.unlinkedOpen = !root.unlinkedOpen
-                }
-                Item { Layout.fillWidth: true }
-                BButton {
-                    visible: root.unlinkedOpen && unlinked.refCount > 1
-                    size: "small"
-                    iconName: "link"
-                    text: qsTr("Link all")
-                    onClicked: {
-                        const n = unlinked.linkAll()
-                        AppController.toast(qsTr("Linked %n mention(s)", "", n), n > 0 ? "success" : "info")
-                    }
+            spacing: Theme.space2
+            BButton {
+                visible: !root.sectioned
+                variant: "ghost"
+                iconName: root.unlinkedOpen ? "chevron-down" : "chevron-right"
+                text: root.unlinkedOpen && unlinked.refCount > 0
+                      ? qsTr("%n unlinked mention(s)", "", unlinked.refCount) : qsTr("Unlinked mentions")
+                Accessible.description: qsTr("Plain-text mentions of this page in other notes")
+                onClicked: root.unlinkedOpen = !root.unlinkedOpen
+            }
+            Item { Layout.fillWidth: true }
+            BButton {
+                visible: root.unlinkedOpen && unlinked.refCount > 1
+                size: "small"
+                iconName: "link"
+                text: qsTr("Link all")
+                onClicked: {
+                    const n = unlinked.linkAll()
+                    AppController.toast(qsTr("Linked %n mention(s)", "", n), n > 0 ? "success" : "info")
                 }
             }
         }

@@ -58,10 +58,8 @@ Item {
     }
     readonly property list<var> dayItems: !root.visible || root.placeholder !== "" || Workspace.revision < 0
                                           ? [] : tools.calendarEntries(root.selectedDate)
-    readonly property bool hasJournal: {
-        return root.visible && root.placeholder === "" && Workspace.revision >= 0
-               && root.journalDates(root.selectedDate).length > 0
-    }
+    readonly property bool hasJournal: root.visible && root.placeholder === "" && Workspace.revision >= 0
+                                       && root.journalDates(root.selectedDate).length > 0
 
     Flickable {
         id: flick
@@ -88,16 +86,12 @@ Item {
                 onPicked: (value) => root.selectedDate = Js.slice(value, 0, 10)
             }
 
-            RowLayout {
+            BText {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.space2
-                spacing: Theme.space2
-                BText {
-                    Layout.fillWidth: true
-                    text: DatesHelper.formatLong(root.selectedDate)
-                    variant: "label"
-                    wrapMode: Text.Wrap
-                }
+                text: DatesHelper.formatLong(root.selectedDate)
+                variant: "label"
+                wrapMode: Text.Wrap
             }
             BText {
                 visible: root.placeholder !== ""

@@ -17,6 +17,7 @@ namespace brulion {
 
 using namespace index_detail;
 using namespace Qt::StringLiterals;
+using markdown::PropertyType;
 
 namespace {
 
@@ -34,18 +35,18 @@ QList<NoteProperty> pagePropertiesOf(const ParsedNote &note)
 {
     QList<NoteProperty> out;
     QSet<QString> yamlKeys;
-    for (auto it = note.frontmatter.constBegin(); it != note.frontmatter.constEnd(); ++it) {
-        if (it.key() == markdown::NoteModeKey || it.key().trimmed().isEmpty())
+    for (auto [key, value] : note.frontmatter.asKeyValueRange()) {
+        if (key == markdown::NoteModeKey || key.trimmed().isEmpty())
             continue;
-        out.append({it.key(), it.value(), markdown::PropertySource::Yaml});
-        yamlKeys.insert(it.key().toLower());
+        out.append({key, value, markdown::PropertySource::Yaml});
+        yamlKeys.insert(key.toLower());
     }
-    for (auto it = note.properties.constBegin(); it != note.properties.constEnd(); ++it) {
-        if (yamlKeys.contains(it.key()) || it.key().isEmpty())
+    for (auto [key, value] : note.properties.asKeyValueRange()) {
+        if (yamlKeys.contains(key) || key.isEmpty())
             continue;
-        if (it.key() == markdown::NoteModeKey && note.frontmatter.contains(it.key()))
+        if (key == markdown::NoteModeKey && note.frontmatter.contains(key))
             continue;
-        out.append({it.key(), it.value(), markdown::PropertySource::Logseq});
+        out.append({key, value, markdown::PropertySource::Logseq});
     }
     return out;
 }
@@ -56,29 +57,71 @@ QString foldedKey(const QString &s)
     return nfc(s).toLower();
 }
 
-/// The spelling used most (ties: the first seen).
-QString mostUsed(const QList<std::pair<QString, int>> &spellings)
-{
-    QString best;
-    int bestCount = -1;
-    for (const auto &[spelling, count] : spellings) {
-        if (count > bestCount) {
-            best = spelling;
-            bestCount = count;
-        }
+/// How often each of a few values was counted, in the order first counted (a linear search).
+template<typename T>
+class Counts {
+public:
+    void add(const T &value)
+    {
+        ++m_total;
+        const auto it = std::ranges::find(m_counts, value, &std::pair<T, int>::first);
+        if (it == m_counts.end())
+            m_counts.append({value, 1});
+        else
+            ++it->second;
     }
-    return best;
-}
+    /// How many were counted in all.
+    int total() const { return m_total; }
+    /// The value counted most often (ties: the first counted); `none` when nothing was.
+    T mostCounted(T none = T()) const
+    {
+        const auto it = std::ranges::max_element(m_counts, {}, &std::pair<T, int>::second);
+        return it == m_counts.end() ? none : it->first;
+    }
 
-void countSpelling(QList<std::pair<QString, int>> &spellings, const QString &spelling)
+private:
+    QList<std::pair<T, int>> m_counts;
+    int m_total = 0;
+};
+
+/// The values of the page property with the folded key `key` in `entries`, most used first (a
+/// value counts once per note, under the spelling most notes use).
+QList<PropertyValueCount> valueCounts(const QList<const index_detail::Entry *> &entries, const QString &key)
 {
-    for (auto &[s, n] : spellings) {
-        if (s == spelling) {
-            ++n;
-            return;
+    QHash<QString, Counts<QString>> spellings; // folded value -> its spellings
+    QStringList order;                         // folded values as first seen
+    for (const index_detail::Entry *e : entries) {
+        QSet<QString> seen; // a value counts once per note
+        for (const QList<NoteProperty> props = pagePropertiesOf(e->note); const NoteProperty &p : props) {
+            if (foldedKey(p.key) != key)
+                continue;
+            for (const QStringList values = markdown::propertyValueTexts(p.key, p.value, p.source);
+                 const QString &v : values) {
+                const QString vk = foldedKey(v);
+                if (v.isEmpty() || seen.contains(vk))
+                    continue;
+                seen.insert(vk);
+                auto it = spellings.find(vk);
+                if (it == spellings.end()) {
+                    it = spellings.insert(vk, {});
+                    order.append(vk);
+                }
+                it->add(v);
+            }
         }
     }
-    spellings.append({spelling, 1});
+    QList<PropertyValueCount> out;
+    out.reserve(order.size());
+    for (const QString &vk : std::as_const(order)) {
+        const Counts<QString> &s = *spellings.constFind(vk);
+        out.append({s.mostCounted(), s.total()});
+    }
+    std::ranges::stable_sort(out, [](const PropertyValueCount &a, const PropertyValueCount &b) {
+        if (a.count != b.count)
+            return a.count > b.count;
+        return compareNames(a.value, b.value) < 0;
+    });
+    return out;
 }
 
 } // namespace
@@ -90,16 +133,14 @@ QList<PropertyKeyInfo> VaultIndex::propertyKeys() const
         return *d->cache.propertyKeys;
     ++d->builds.propertyKeys;
     struct Acc {
-        QList<std::pair<QString, int>> spellings;
-        int count = 0;
-        QHash<int, int> types; ///< PropertyType -> notes with a non-empty value of it
-        QList<int> typeOrder;  ///< types in the order first seen (ties)
+        Counts<QString> spellings;  ///< one per note with the key
+        Counts<PropertyType> types; ///< one per note with a non-empty value of a supported type
     };
     QHash<QString, Acc> acc;
     QStringList order; // folded keys as first seen
     for (const Private::Entry *e : d->sortedEntries()) {
         QSet<QString> seen; // a key written twice in one note (YAML and Logseq) counts once
-        for (const NoteProperty &p : pagePropertiesOf(e->note)) {
+        for (const QList<NoteProperty> props = pagePropertiesOf(e->note); const NoteProperty &p : props) {
             const QString k = foldedKey(p.key);
             if (seen.contains(k))
                 continue;
@@ -109,36 +150,20 @@ QList<PropertyKeyInfo> VaultIndex::propertyKeys() const
                 it = acc.insert(k, Acc());
                 order.append(k);
             }
-            countSpelling(it->spellings, p.key);
-            ++it->count;
-            const bool empty = markdown::propertyValueTexts(p.key, p.value, p.source).isEmpty();
-            const markdown::PropertyType type =
-                    markdown::inferPropertyType(p.key, p.value, p.source, markdown::PropertyType::Unsupported);
-            if (!empty && type != markdown::PropertyType::Unsupported) {
-                if (!it->types.contains(int(type)))
-                    it->typeOrder.append(int(type));
-                ++it->types[int(type)];
-            }
+            it->spellings.add(p.key);
+            const PropertyType type = markdown::inferPropertyType(p.key, p.value, p.source, PropertyType::Unsupported);
+            if (type != PropertyType::Unsupported && !markdown::propertyValueTexts(p.key, p.value, p.source).isEmpty())
+                it->types.add(type);
         }
     }
     QList<PropertyKeyInfo> out;
     out.reserve(order.size());
     for (const QString &k : std::as_const(order)) {
-        const Acc &a = acc[k];
-        PropertyKeyInfo info;
-        info.key = mostUsed(a.spellings);
-        info.count = a.count;
-        int best = -1;
-        int bestCount = 0;
-        for (int t : a.typeOrder) {
-            if (a.types.value(t) > bestCount) {
-                best = t;
-                bestCount = a.types.value(t);
-            }
-        }
-        if (best >= 0)
-            info.type = markdown::propertyTypeName(markdown::PropertyType(best));
-        out.append(info);
+        const Acc &a = *acc.constFind(k);
+        const PropertyType type = a.types.mostCounted(PropertyType::Unsupported);
+        out.append({.key = a.spellings.mostCounted(),
+                    .count = a.spellings.total(),
+                    .type = type == PropertyType::Unsupported ? QString() : markdown::propertyTypeName(type)});
     }
     std::ranges::stable_sort(out, [](const PropertyKeyInfo &a, const PropertyKeyInfo &b) {
         if (a.count != b.count)
@@ -151,55 +176,20 @@ QList<PropertyKeyInfo> VaultIndex::propertyKeys() const
 
 QList<PropertyValueCount> VaultIndex::propertyValues(const QString &key, const QString &prefix, int limit) const
 {
-    QList<PropertyValueCount> out;
     const QString k = foldedKey(key.trimmed());
     if (limit <= 0 || k.isEmpty())
-        return out;
+        return {};
     d->cache.read();
-    auto cached = d->cache.propertyValues.constFind(k);
-    if (cached == d->cache.propertyValues.constEnd()) {
-        struct Acc {
-            QList<std::pair<QString, int>> spellings;
-            int count = 0;
-        };
-        QHash<QString, Acc> acc;
-        QStringList order;
-        for (const Private::Entry *e : d->sortedEntries()) {
-            QSet<QString> seen; // a value counts once per note
-            for (const NoteProperty &p : pagePropertiesOf(e->note)) {
-                if (foldedKey(p.key) != k)
-                    continue;
-                for (const QString &v : markdown::propertyValueTexts(p.key, p.value, p.source)) {
-                    const QString vk = foldedKey(v);
-                    if (v.isEmpty() || seen.contains(vk))
-                        continue;
-                    seen.insert(vk);
-                    auto it = acc.find(vk);
-                    if (it == acc.end()) {
-                        it = acc.insert(vk, Acc());
-                        order.append(vk);
-                    }
-                    countSpelling(it->spellings, v);
-                    ++it->count;
-                }
-            }
-        }
-        QList<PropertyValueCount> all;
-        all.reserve(order.size());
-        for (const QString &vk : std::as_const(order))
-            all.append({mostUsed(acc[vk].spellings), acc[vk].count});
-        std::ranges::stable_sort(all, [](const PropertyValueCount &a, const PropertyValueCount &b) {
-            if (a.count != b.count)
-                return a.count > b.count;
-            return compareNames(a.value, b.value) < 0;
-        });
-        cached = d->cache.propertyValues.insert(k, all);
-    }
+    QHash<QString, QList<PropertyValueCount>> &cache = d->cache.propertyValues;
+    if (!cache.contains(k))
+        cache.insert(k, valueCounts(d->sortedEntries(), k));
+    const QList<PropertyValueCount> &all = *cache.constFind(k);
     const QString typed = text::foldKey(prefix.trimmed());
     if (typed.isEmpty())
-        return cached->mid(0, limit);
+        return all.mid(0, limit);
+    QList<PropertyValueCount> out;
     QList<PropertyValueCount> contains;
-    for (const PropertyValueCount &v : *cached) {
+    for (const PropertyValueCount &v : all) {
         const QString folded = text::foldKey(v.value);
         if (folded.startsWith(typed)) {
             out.append(v);
@@ -209,11 +199,7 @@ QList<PropertyValueCount> VaultIndex::propertyValues(const QString &key, const Q
             contains.append(v);
         }
     }
-    for (const PropertyValueCount &v : std::as_const(contains)) {
-        if (out.size() >= limit)
-            break;
-        out.append(v);
-    }
+    out.append(contains.mid(0, limit - out.size()));
     return out;
 }
 
