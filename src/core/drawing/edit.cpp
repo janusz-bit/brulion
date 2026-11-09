@@ -12,6 +12,7 @@
 #include <climits>
 #include <cmath>
 #include <numbers>
+#include <numeric>
 
 using namespace Qt::StringLiterals;
 
@@ -40,9 +41,51 @@ void stamp(Stroke &e, const EditStamp &s)
     e.updated = s.now;
 }
 
+/// A new element (version 1) as made now.
+Stroke newElement(ElementType type, const QString &color, double width, const EditStamp &s)
+{
+    Stroke e;
+    e.type = type;
+    e.id = newIdOf(s);
+    e.seed = randomOf(s);
+    e.versionNonce = randomOf(s);
+    e.updated = s.now;
+    e.color = color;
+    e.width = width;
+    return e;
+}
+
 double round2(double v)
 {
     return std::round(v * 100) / 100;
+}
+
+QPointF round2(QPointF p)
+{
+    return {round2(p.x()), round2(p.y())};
+}
+
+QPointF pointOf(const StrokePoint &p)
+{
+    return {p.x, p.y};
+}
+
+/// A font size Brulion keeps.
+double fontSizeWithin(double size)
+{
+    return std::clamp(size, 1.0, 1000.0);
+}
+
+/// A box of `size` with its middle at `centre` (its corner rounded as positions are).
+QRectF centredBox(QPointF centre, QSizeF size)
+{
+    return {round2(centre - QPointF(size.width() / 2, size.height() / 2)), size};
+}
+
+/// The element's outermost group ("" none).
+QString outermostGroup(const Stroke &e)
+{
+    return e.groupIds.isEmpty() ? QString() : e.groupIds.last();
 }
 
 void translate(Stroke &e, QPointF delta)
@@ -52,7 +95,7 @@ void translate(Stroke &e, QPointF delta)
         p.y = round2(p.y + delta.y());
     }
     e.box.translate(delta);
-    e.box = QRectF(round2(e.box.x()), round2(e.box.y()), e.box.width(), e.box.height());
+    e.box.moveTopLeft(round2(e.box.topLeft()));
 }
 
 double lineWidth(QStringView line, int family, double size, const TextMetrics &m)
@@ -62,20 +105,21 @@ double lineWidth(QStringView line, int family, double size, const TextMetrics &m
     return 0.55 * size * double(line.size());
 }
 
-/// The end point `k` of a line or an arrow moved by `delta`; an elbow arrow also moves the
-/// neighbouring corner `j` along the segment's axis, keeping right angles.
-void moveEnd(Stroke &e, qsizetype k, qsizetype j, QPointF delta)
+/// The start or the end point of a line or an arrow moved by `delta`; an elbow arrow also moves the
+/// neighbouring corner along the segment's axis, keeping right angles.
+void moveEnd(Stroke &e, bool start, QPointF delta)
 {
-    if (e.elbowed && e.points.size() >= 3) {
-        StrokePoint &tip = e.points[k];
-        StrokePoint &corner = e.points[j];
+    const qsizetype n = e.points.size();
+    StrokePoint &tip = e.points[start ? 0 : n - 1];
+    if (e.elbowed && n >= 3) {
+        StrokePoint &corner = e.points[start ? 1 : n - 2];
         if (std::abs(tip.y - corner.y) < 1e-6)
             corner.y = round2(corner.y + delta.y());
         else if (std::abs(tip.x - corner.x) < 1e-6)
             corner.x = round2(corner.x + delta.x());
     }
-    e.points[k].x = round2(e.points[k].x + delta.x());
-    e.points[k].y = round2(e.points[k].y + delta.y());
+    tip.x = round2(tip.x + delta.x());
+    tip.y = round2(tip.y + delta.y());
     e.box = pointsRect(e.points);
 }
 
@@ -89,13 +133,13 @@ QPointF polylineMiddle(const QList<StrokePoint> &points)
         total += std::hypot(points.at(i + 1).x - points.at(i).x, points.at(i + 1).y - points.at(i).y);
     double rest = total / 2;
     for (qsizetype i = 0; i + 1 < points.size(); ++i) {
-        const QPointF a(points.at(i).x, points.at(i).y), b(points.at(i + 1).x, points.at(i + 1).y);
+        const QPointF a = pointOf(points.at(i)), b = pointOf(points.at(i + 1));
         const double len = std::hypot(b.x() - a.x(), b.y() - a.y());
         if (len >= rest && len > 0)
             return a + (b - a) * (rest / len);
         rest -= len;
     }
-    return QPointF(points.first().x, points.first().y);
+    return pointOf(points.first());
 }
 
 QHash<QString, qsizetype> indexById(const Drawing &d)
@@ -114,12 +158,52 @@ bool lockedIn(const Drawing &d, const QHash<QString, qsizetype> &index, const St
 {
     if (e.locked)
         return true;
-    if (!e.containerId.isEmpty()) {
-        const qsizetype c = index.value(e.containerId, -1);
-        if (c >= 0 && d.strokes.at(c).locked)
-            return true;
+    const qsizetype c = e.containerId.isEmpty() ? -1 : index.value(e.containerId, -1);
+    return c >= 0 && d.strokes.at(c).locked;
+}
+
+/// The elements `ids` that are not locked (lockedIn()) and the labels of those that are not locked
+/// themselves: what an edit of `ids` moves.
+QSet<QString> withLabels(const Drawing &d, const QHash<QString, qsizetype> &index, const QSet<QString> &ids)
+{
+    QSet<QString> out;
+    for (const Stroke &e : d.strokes) {
+        if (ids.contains(e.id) && !lockedIn(d, index, e))
+            out.insert(e.id);
     }
-    return false;
+    for (const Stroke &e : d.strokes) {
+        if (e.type == ElementType::Text && !e.locked && out.contains(e.containerId))
+            out.insert(e.id);
+    }
+    return out;
+}
+
+/// `edit` made on each element of `ids` that `wants` and that is not locked (lockedIn()), which is
+/// then stamped.
+template<typename Wants, typename Edit>
+void editElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s, Wants wants, Edit edit)
+{
+    const QHash<QString, qsizetype> index = indexById(d);
+    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
+        if (const Stroke &e = d.strokes.at(i); !ids.contains(e.id) || !wants(e) || lockedIn(d, index, e))
+            continue;
+        edit(d.strokes[i]);
+        stamp(d.strokes[i], s);
+    }
+}
+
+/// The labels of the arrows in `shift` (not in `moved` themselves) moved as their arrows' middles
+/// moved.
+void shiftArrowLabels(Drawing &d, const QSet<QString> &moved, const QHash<QString, QPointF> &shift, const EditStamp &s)
+{
+    if (shift.isEmpty())
+        return;
+    for (Stroke &e : d.strokes) {
+        if (e.type == ElementType::Text && !moved.contains(e.id) && shift.contains(e.containerId)) {
+            translate(e, shift.value(e.containerId));
+            stamp(e, s);
+        }
+    }
 }
 
 } // namespace
@@ -137,30 +221,23 @@ QString newElementId()
 
 EditStamp randomEditStamp(qint64 now)
 {
-    EditStamp s;
-    s.now = now;
-    s.random = [] { return QRandomGenerator::global()->bounded(1u, 2147483647u); };
-    s.newId = [] { return newElementId(); };
-    return s;
+    return {.now = now,
+            .random = [] { return QRandomGenerator::global()->bounded(1u, 2147483647u); },
+            .newId = newElementId};
 }
 
 qsizetype indexOfElement(const Drawing &d, QStringView id)
 {
     if (id.isEmpty())
         return -1;
-    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
-        if (d.strokes.at(i).id == id)
-            return i;
-    }
-    return -1;
+    const auto it = std::ranges::find_if(d.strokes, [id](const Stroke &e) { return e.id == id; });
+    return it == d.strokes.cend() ? -1 : it - d.strokes.cbegin();
 }
 
 bool isLocked(const Drawing &d, const Stroke &e)
 {
     if (e.locked)
         return true;
-    if (e.containerId.isEmpty())
-        return false;
     const qsizetype c = indexOfElement(d, e.containerId);
     return c >= 0 && d.strokes.at(c).locked;
 }
@@ -177,36 +254,29 @@ QStringList selectionClosure(const Drawing &d, const QStringList &ids)
             labels[e.containerId].append(e.id);
     }
     QSet<QString> taken;
+    QSet<QString> queuedGroups;
     QStringList queue = ids;
     while (!queue.isEmpty()) {
         const QString id = queue.takeLast();
         const qsizetype i = index.value(id, -1);
-        if (i < 0 || taken.contains(id))
+        if (i < 0 || taken.contains(id) || lockedIn(d, index, d.strokes.at(i)))
             continue;
         const Stroke &e = d.strokes.at(i);
-        if (lockedIn(d, index, e))
-            continue;
         taken.insert(id);
-        if (!e.groupIds.isEmpty() && !taken.contains(e.groupIds.last() + QChar(0x1f))) {
-            taken.insert(e.groupIds.last() + QChar(0x1f)); // (each group's members queued once)
+        // Its outermost group's members (each group queued once), its labels (every text that names
+        // it as its container), its shape or arrow when it is a label.
+        if (!e.groupIds.isEmpty() && !queuedGroups.contains(e.groupIds.last())) {
+            queuedGroups.insert(e.groupIds.last());
             queue.append(groups.value(e.groupIds.last()));
         }
-        for (const QString &b : e.boundIds) {
-            const qsizetype k = index.value(b, -1);
-            if (k >= 0 && d.strokes.at(k).type == ElementType::Text && d.strokes.at(k).containerId == e.id)
-                queue.append(b);
-        }
-        if (!e.id.isEmpty())
-            queue.append(labels.value(e.id));
-        if (!e.containerId.isEmpty() && index.contains(e.containerId))
+        queue.append(labels.value(e.id));
+        if (!e.containerId.isEmpty())
             queue.append(e.containerId);
     }
     QStringList out;
     for (const Stroke &e : d.strokes) {
-        if (taken.contains(e.id)) {
+        if (taken.remove(e.id)) // (a duplicate id once)
             out.append(e.id);
-            taken.remove(e.id); // (a duplicate id once)
-        }
     }
     return out;
 }
@@ -215,29 +285,20 @@ void moveElements(Drawing &d, const QSet<QString> &ids, QPointF delta, const Edi
 {
     if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || (delta.x() == 0 && delta.y() == 0))
         return;
-    const QHash<QString, qsizetype> index = indexById(d);
-    QSet<QString> moved;
-    QRectF extent;
-    const auto extend = [&extent](const QRectF &r) { extent = extent.isNull() ? r : extent.united(r); };
-    for (const Stroke &e : std::as_const(d.strokes)) {
-        if (!ids.contains(e.id) || lockedIn(d, index, e))
-            continue;
-        moved.insert(e.id);
-        extend(hasPoints(e.type) ? pointsRect(e.points).adjusted(0, 0, 1e-9, 1e-9) : e.box);
-    }
-    // Labels of moved shapes and arrows go with them.
-    for (Stroke &e : d.strokes) {
-        if (e.type == ElementType::Text && !e.locked && moved.contains(e.containerId) && !moved.contains(e.id)) {
-            moved.insert(e.id);
-            extend(e.box);
-        }
-    }
+    // The elements and the labels of moved shapes and arrows.
+    const QSet<QString> moved = withLabels(d, indexById(d), ids);
     if (moved.isEmpty())
         return;
-    // Nothing leaves CoordinateLimit.
+    // Nothing leaves CoordinateLimit (along an axis on which they already pass it, nothing moves).
+    QRectF extent;
+    for (const Stroke &e : std::as_const(d.strokes)) {
+        if (moved.contains(e.id))
+            extent |= hasPoints(e.type) ? pointsRect(e.points).adjusted(0, 0, 1e-9, 1e-9) : e.box;
+    }
     const double L = CoordinateLimit;
-    delta.setX(std::clamp(delta.x(), -L - extent.left(), L - extent.right()));
-    delta.setY(std::clamp(delta.y(), -L - extent.top(), L - extent.bottom()));
+    const auto within = [](double v, double lo, double hi) { return lo <= hi ? std::clamp(v, lo, hi) : 0.0; };
+    delta = QPointF(within(delta.x(), -L - extent.left(), L - extent.right()),
+                    within(delta.y(), -L - extent.top(), L - extent.bottom()));
     if (delta.x() == 0 && delta.y() == 0)
         return;
     QHash<QString, QPointF> arrowLabelShift;
@@ -254,30 +315,20 @@ void moveElements(Drawing &d, const QSet<QString> &ids, QPointF delta, const Edi
         if (!start && !end)
             continue;
         const QPointF before = polylineMiddle(e.points);
-        if (start && end) {
+        if (start && end)
             translate(e, delta);
-        } else {
-            const qsizetype n = e.points.size();
-            const qsizetype k = start ? 0 : n - 1;
-            moveEnd(e, k, start ? 1 : n - 2, delta);
-        }
+        else
+            moveEnd(e, start, delta);
         stamp(e, s);
         arrowLabelShift.insert(e.id, polylineMiddle(e.points) - before);
     }
-    if (arrowLabelShift.isEmpty())
-        return;
-    for (Stroke &e : d.strokes) {
-        if (e.type == ElementType::Text && !moved.contains(e.id) && arrowLabelShift.contains(e.containerId)) {
-            translate(e, arrowLabelShift.value(e.containerId));
-            stamp(e, s);
-        }
-    }
+    shiftArrowLabels(d, moved, arrowLabelShift, s);
 }
 
 QStringList duplicateElements(Drawing &d, const QStringList &ids, QPointF offset, const EditStamp &s)
 {
     QSet<QString> want(ids.cbegin(), ids.cend());
-    for (const Stroke &e : d.strokes) {
+    for (const Stroke &e : std::as_const(d.strokes)) {
         if (e.type == ElementType::Text && want.contains(e.containerId))
             want.insert(e.id);
     }
@@ -293,8 +344,9 @@ QStringList duplicateElements(Drawing &d, const QStringList &ids, QPointF offset
     }
     if (originals.isEmpty())
         return {};
+    // The copies right above the topmost original.
+    qsizetype at = originals.last() + 1;
     QHash<QString, QString> groupMap;
-    QList<Stroke> copies;
     QStringList out;
     for (const qsizetype i : std::as_const(originals)) {
         Stroke c = d.strokes.at(i);
@@ -308,12 +360,9 @@ QStringList duplicateElements(Drawing &d, const QStringList &ids, QPointF offset
                 groupMap.insert(g, newIdOf(s));
             g = groupMap.value(g);
         }
-        QStringList bound;
-        for (const QString &b : std::as_const(c.boundIds)) {
-            if (idMap.contains(b))
-                bound.append(idMap.value(b));
-        }
-        c.boundIds = bound;
+        c.boundIds.removeIf([&idMap](const QString &b) { return !idMap.contains(b); });
+        for (QString &b : c.boundIds)
+            b = idMap.value(b);
         c.containerId = idMap.value(c.containerId);
         c.startBound = idMap.value(c.startBound);
         c.endBound = idMap.value(c.endBound);
@@ -321,11 +370,8 @@ QStringList duplicateElements(Drawing &d, const QStringList &ids, QPointF offset
         // (Its fractional index belongs to the original: Excalidraw gives the copy one.)
         c.element.remove(u"index"_s);
         out.append(c.id);
-        copies.append(std::move(c));
+        d.strokes.insert(at++, std::move(c));
     }
-    const qsizetype at = originals.last() + 1;
-    for (qsizetype k = 0; k < copies.size(); ++k)
-        d.strokes.insert(at + k, copies.at(k));
     return out;
 }
 
@@ -333,53 +379,35 @@ void deleteElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s)
 {
     const QHash<QString, qsizetype> index = indexById(d);
     QSet<QString> gone;
-    for (const Stroke &e : d.strokes) {
+    for (const Stroke &e : std::as_const(d.strokes)) {
         if (ids.contains(e.id) && !lockedIn(d, index, e))
             gone.insert(e.id);
     }
-    for (const Stroke &e : d.strokes) {
+    for (const Stroke &e : std::as_const(d.strokes)) {
         if (e.type == ElementType::Text && gone.contains(e.containerId))
             gone.insert(e.id);
     }
     if (gone.isEmpty())
         return;
-    QList<Stroke> kept;
-    kept.reserve(d.strokes.size());
+    d.strokes.removeIf([&gone](const Stroke &e) { return gone.contains(e.id); });
     for (Stroke &e : d.strokes) {
-        if (gone.contains(e.id))
-            continue;
-        bool touched = false;
-        const qsizetype bound = e.boundIds.size();
-        e.boundIds.removeIf([&gone](const QString &b) { return gone.contains(b); });
-        touched = e.boundIds.size() != bound;
-        if (!e.startBound.isEmpty() && gone.contains(e.startBound)) {
-            e.startBound.clear();
-            touched = true;
-        }
-        if (!e.endBound.isEmpty() && gone.contains(e.endBound)) {
-            e.endBound.clear();
-            touched = true;
+        bool touched = e.boundIds.removeIf([&gone](const QString &b) { return gone.contains(b); }) > 0;
+        for (QString *bound : {&e.startBound, &e.endBound}) {
+            if (!bound->isEmpty() && gone.contains(*bound)) {
+                bound->clear();
+                touched = true;
+            }
         }
         if (touched)
             stamp(e, s);
-        kept.append(std::move(e));
     }
-    d.strokes = std::move(kept);
 }
 
 void recolorElements(Drawing &d, const QSet<QString> &ids, const QString &color, const EditStamp &s)
 {
-    const QHash<QString, qsizetype> index = indexById(d);
-    QList<qsizetype> chosen;
-    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
-        const Stroke &e = d.strokes.at(i);
-        if (ids.contains(e.id) && e.color != color && !lockedIn(d, index, e))
-            chosen.append(i);
-    }
-    for (const qsizetype i : std::as_const(chosen)) {
-        d.strokes[i].color = color;
-        stamp(d.strokes[i], s);
-    }
+    editElements(
+            d, ids, s, [&color](const Stroke &e) { return e.color != color; },
+            [&color](Stroke &e) { e.color = color; });
 }
 
 void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const EditStamp &s)
@@ -398,14 +426,10 @@ void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const Ed
         unitOf.insert(e.id, units.size());
         units.append(QList<qsizetype>{i});
     }
-    const auto outerGroup = [&d](const QList<qsizetype> &unit) {
-        const Stroke &e = d.strokes.at(unit.first());
-        return e.groupIds.isEmpty() ? QString() : e.groupIds.last();
-    };
     QList<QList<qsizetype>> blocks;
     QString lastGroup;
     for (const QList<qsizetype> &unit : std::as_const(units)) {
-        const QString g = outerGroup(unit);
+        const QString g = outermostGroup(d.strokes.at(unit.first()));
         if (!g.isEmpty() && g == lastGroup && !blocks.isEmpty())
             blocks.last().append(unit);
         else
@@ -414,33 +438,23 @@ void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const Ed
     }
     // The backdrop: the leading locked blocks (with their shapes' labels) stay at the bottom.
     const QHash<QString, qsizetype> index = indexById(d);
+    const auto locked = [&](qsizetype i) { return lockedIn(d, index, d.strokes.at(i)); };
+    const auto picked = [&](qsizetype i) { return ids.contains(d.strokes.at(i).id) && !locked(i); };
     qsizetype fixed = 0;
-    while (fixed < blocks.size()
-           && std::all_of(
-                   blocks.at(fixed).cbegin(), blocks.at(fixed).cend(),
-                   [&](qsizetype i) { return lockedIn(d, index, d.strokes.at(i)); }))
+    while (fixed < blocks.size() && std::ranges::all_of(blocks.at(fixed), locked))
         ++fixed;
-    const auto picked = [&](qsizetype i) {
-        return ids.contains(d.strokes.at(i).id) && !lockedIn(d, index, d.strokes.at(i));
-    };
     QList<bool> selected;
-    for (qsizetype b = 0; b < blocks.size(); ++b) {
-        const QList<qsizetype> &block = blocks.at(b);
-        selected.append(b >= fixed && std::any_of(block.cbegin(), block.cend(), picked));
-    }
-    QList<qsizetype> order(blocks.size());
     for (qsizetype b = 0; b < blocks.size(); ++b)
-        order[b] = b;
+        selected.append(b >= fixed && std::ranges::any_of(blocks.at(b), picked));
+    QList<qsizetype> order(blocks.size());
+    std::iota(order.begin(), order.end(), qsizetype(0));
     switch (how) {
     case Reorder::ToFront:
-    case Reorder::ToBack: {
-        QList<qsizetype> rest, chosen;
-        for (qsizetype b = fixed; b < blocks.size(); ++b)
-            (selected.at(b) ? chosen : rest).append(b);
-        order = order.mid(0, fixed);
-        order += how == Reorder::ToFront ? rest + chosen : chosen + rest;
+    case Reorder::ToBack:
+        // The chosen blocks above (below) the others, both in their order.
+        std::stable_partition(order.begin() + fixed, order.end(),
+                              [&](qsizetype b) { return selected.at(b) == (how == Reorder::ToBack); });
         break;
-    }
     case Reorder::Forward:
         for (qsizetype k = blocks.size() - 2; k >= fixed; --k) {
             if (selected.at(order.at(k)) && !selected.at(order.at(k + 1)))
@@ -458,80 +472,58 @@ void reorderElements(Drawing &d, const QSet<QString> &ids, Reorder how, const Ed
     flat.reserve(d.strokes.size());
     for (const qsizetype b : std::as_const(order))
         flat += blocks.at(b);
-    bool same = true;
-    for (qsizetype i = 0; i < flat.size() && same; ++i)
-        same = flat.at(i) == i;
-    if (same)
-        return;
+    if (std::ranges::is_sorted(std::as_const(flat)))
+        return; // (every index once: the order as it is)
     QList<Stroke> out;
     out.reserve(d.strokes.size());
-    for (qsizetype k = 0; k < flat.size(); ++k) {
-        Stroke e = d.strokes.at(flat.at(k));
-        if (picked(flat.at(k)))
-            stamp(e, s);
-        out.append(std::move(e));
+    for (const qsizetype i : std::as_const(flat)) {
+        out.append(d.strokes.at(i));
+        if (picked(i))
+            stamp(out.last(), s);
     }
     d.strokes = std::move(out);
 }
 
 Stroke newShape(ElementType type, QPointF from, QPointF to, bool constrain, const ShapeStyle &st, const EditStamp &s)
 {
-    Stroke e;
-    e.type = type;
-    e.id = newIdOf(s);
-    e.seed = randomOf(s);
-    e.versionNonce = randomOf(s);
-    e.version = 1;
-    e.updated = s.now;
-    e.color = st.color;
-    e.width = st.width;
-    e.roughness = 0;
-    from = QPointF(round2(from.x()), round2(from.y()));
+    Stroke e = newElement(type, st.color, st.width, s);
+    from = round2(from);
+    const QPointF v = to - from;
     QPointF end = to;
-    if (isLinear(type)) {
-        if (constrain) {
-            const QPointF v = to - from;
-            const double length = std::hypot(v.x(), v.y());
-            const double step = std::numbers::pi / 12;
-            const double angle = std::round(std::atan2(v.y(), v.x()) / step) * step;
-            end = from + QPointF(std::cos(angle), std::sin(angle)) * length;
-        }
-        end = QPointF(round2(end.x()), round2(end.y()));
-        e.points = {{from.x(), from.y(), 0.5}, {end.x(), end.y(), 0.5}};
-        e.box = pointsRect(e.points);
-        e.roundness = 2;
-        if (type == ElementType::Arrow)
-            e.endArrowhead = Arrowhead::Arrow;
-        return e;
-    }
-    if (constrain) {
-        const QPointF v = to - from;
+    if (constrain && isLinear(type)) {
+        // At 15° steps.
+        const double step = std::numbers::pi / 12;
+        const double angle = std::round(std::atan2(v.y(), v.x()) / step) * step;
+        end = from + QPointF(std::cos(angle), std::sin(angle)) * std::hypot(v.x(), v.y());
+    } else if (constrain) {
+        // A square or a circle.
         const double side = std::max(std::abs(v.x()), std::abs(v.y()));
         end = from + QPointF(v.x() < 0 ? -side : side, v.y() < 0 ? -side : side);
     }
-    end = QPointF(round2(end.x()), round2(end.y()));
-    e.box = QRectF(from, end).normalized();
-    e.roundness = type == ElementType::Rectangle && st.rounded ? 3 : 0;
+    end = round2(end);
+    if (!isLinear(type)) {
+        e.box = QRectF(from, end).normalized();
+        e.roundness = type == ElementType::Rectangle && st.rounded ? 3 : 0;
+        return e;
+    }
+    e.points = {{from.x(), from.y(), 0.5}, {end.x(), end.y(), 0.5}};
+    e.box = pointsRect(e.points);
+    e.roundness = 2;
+    if (type == ElementType::Arrow)
+        e.endArrowhead = Arrowhead::Arrow;
     return e;
 }
 
 namespace {
 
 /// The corners stretched to span the unit square.
-QList<QPointF> spanUnitSquare(const QList<QPointF> &corners)
+QList<QPointF> spanUnitSquare(QList<QPointF> corners)
 {
-    double minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-    for (const QPointF &p : corners) {
-        minX = std::min(minX, p.x());
-        maxX = std::max(maxX, p.x());
-        minY = std::min(minY, p.y());
-        maxY = std::max(maxY, p.y());
-    }
-    QList<QPointF> out;
-    out.reserve(corners.size());
-    for (const QPointF &p : corners)
-        out.append(QPointF((p.x() - minX) / (maxX - minX), (p.y() - minY) / (maxY - minY)));
-    return out;
+    const auto [left, right] = std::ranges::minmax(std::as_const(corners), {}, &QPointF::x);
+    const auto [top, bottom] = std::ranges::minmax(std::as_const(corners), {}, &QPointF::y);
+    for (QPointF &p : corners)
+        p = QPointF((p.x() - left.x()) / (right.x() - left.x()), (p.y() - top.y()) / (bottom.y() - top.y()));
+    return corners;
 }
 
 /// `count` corners on a circle, clockwise from the top; every second one at `inner` of the radius
@@ -544,7 +536,7 @@ QList<QPointF> ringCorners(int count, double inner = 1)
         const double a = -std::numbers::pi / 2 + 2 * std::numbers::pi * i / count;
         out.append(QPointF(r * std::cos(a), r * std::sin(a)));
     }
-    return spanUnitSquare(out);
+    return spanUnitSquare(std::move(out));
 }
 
 QList<QPointF> heartCorners()
@@ -558,7 +550,7 @@ QList<QPointF> heartCorners()
         out.append(QPointF(16 * s * s * s,
                            -(13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) - std::cos(4 * t))));
     }
-    return spanUnitSquare(out);
+    return spanUnitSquare(std::move(out));
 }
 
 QList<QPointF> cloudCorners()
@@ -592,35 +584,29 @@ QList<QPointF> cloudCorners()
         reach = std::max(reach, std::min(tx, ty));
         out.append(centre + dir * reach);
     }
-    return spanUnitSquare(out);
+    return spanUnitSquare(std::move(out));
 }
 
 } // namespace
 
 std::optional<PolygonKind> polygonKindFromName(QStringView name)
 {
-    if (name == u"triangle")
-        return PolygonKind::Triangle;
-    if (name == u"rightTriangle")
-        return PolygonKind::RightTriangle;
-    if (name == u"parallelogram")
-        return PolygonKind::Parallelogram;
-    if (name == u"trapezoid")
-        return PolygonKind::Trapezoid;
-    if (name == u"pentagon")
-        return PolygonKind::Pentagon;
-    if (name == u"hexagon")
-        return PolygonKind::Hexagon;
-    if (name == u"star")
-        return PolygonKind::Star;
-    if (name == u"blockArrow")
-        return PolygonKind::BlockArrow;
-    if (name == u"callout")
-        return PolygonKind::Callout;
-    if (name == u"heart")
-        return PolygonKind::Heart;
-    if (name == u"cloud")
-        return PolygonKind::Cloud;
+    using enum PolygonKind;
+    static constexpr std::pair<QStringView, PolygonKind> kinds[] = {{u"triangle", Triangle},
+                                                                    {u"rightTriangle", RightTriangle},
+                                                                    {u"parallelogram", Parallelogram},
+                                                                    {u"trapezoid", Trapezoid},
+                                                                    {u"pentagon", Pentagon},
+                                                                    {u"hexagon", Hexagon},
+                                                                    {u"star", Star},
+                                                                    {u"blockArrow", BlockArrow},
+                                                                    {u"callout", Callout},
+                                                                    {u"heart", Heart},
+                                                                    {u"cloud", Cloud}};
+    for (const auto &[key, kind] : kinds) {
+        if (name == key)
+            return kind;
+    }
     return std::nullopt;
 }
 
@@ -645,16 +631,14 @@ QList<QPointF> polygonTemplate(PolygonKind kind)
 Stroke newPolygon(PolygonKind kind, QPointF from, QPointF to, bool constrain, const ShapeStyle &st, const EditStamp &s)
 {
     // The box as newShape() drags it; the line's fields as a new line has them.
-    Stroke box = newShape(ElementType::Rectangle, from, to, constrain, st, s);
-    Stroke e = box;
+    Stroke e = newShape(ElementType::Rectangle, from, to, constrain, st, s);
+    const QRectF box = e.box;
     e.type = ElementType::Line;
     e.roundness = 0;
     e.polygon = true;
-    for (const QPointF &c : polygonTemplate(kind)) {
-        e.points.append(
-                {round2(box.box.x() + c.x() * box.box.width()), round2(box.box.y() + c.y() * box.box.height()), 0.5});
-    }
-    e.points.append(e.points.first());
+    for (const QList<QPointF> corners = polygonTemplate(kind); const QPointF &c : corners)
+        e.points.append({round2(box.x() + c.x() * box.width()), round2(box.y() + c.y() * box.height()), 0.5});
+    e.points.append(e.points.constFirst());
     e.box = pointsRect(e.points);
     return e;
 }
@@ -711,26 +695,14 @@ QString wrapText(const QString &text, double maxWidth, int fontFamily, double fo
 
 Stroke newText(QPointF topLeft, const QString &text, const TextStyle &st, const TextMetrics &m, const EditStamp &s)
 {
-    Stroke e;
-    e.type = ElementType::Text;
-    e.id = newIdOf(s);
-    e.seed = randomOf(s);
-    e.versionNonce = randomOf(s);
-    e.version = 1;
-    e.updated = s.now;
-    e.color = st.color;
-    e.width = 2;
-    e.roughness = 0;
-    e.fontSize = std::clamp(st.fontSize, 1.0, 1000.0);
+    // (Aligned left and top, its box following it: a new element's defaults.)
+    Stroke e = newElement(ElementType::Text, st.color, 2, s);
+    e.fontSize = fontSizeWithin(st.fontSize);
     e.fontFamily = st.fontFamily;
     e.lineHeight = NewTextLineHeight;
     e.text = QString(text).remove(u'\r');
     e.originalText = e.text;
-    e.textAlign = TextAlign::Left;
-    e.verticalAlign = VerticalAlign::Top;
-    e.autoResize = true;
-    e.box = QRectF(QPointF(round2(topLeft.x()), round2(topLeft.y())),
-                   measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m));
+    e.box = QRectF(round2(topLeft), measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m));
     return e;
 }
 
@@ -841,6 +813,39 @@ LabelRoom polygonRoom(const Stroke &e)
     return room;
 }
 
+/// The shape grown to hold a label of `size` as Excalidraw grows it (its top left stays); false:
+/// it holds it as it is.
+bool growShape(Stroke &shape, QSizeF size)
+{
+    const bool higher = size.height() > labelMax(shape.type, shape.box.height());
+    const bool wider = size.width() > labelMax(shape.type, shape.box.width());
+    if (higher)
+        shape.box.setHeight(containerDimension(shape.type, size.height()));
+    if (wider)
+        shape.box.setWidth(containerDimension(shape.type, size.width()));
+    return higher || wider;
+}
+
+/// The polygon stretched from its top left, as Excalidraw grows a shape, along the axes on which a
+/// label of `size` needs more than its `room`; false: it holds it as it is.
+bool growPolygon(Stroke &polygon, const LabelRoom &room, QSizeF size)
+{
+    const auto stretch = [](double need, double has) {
+        return need > has - 2 * LabelPadding && has > 0 ? (std::ceil(need) + 2 * LabelPadding) / has : 1.0;
+    };
+    const double sx = stretch(size.width(), room.width);
+    const double sy = stretch(size.height(), room.height);
+    if (sx <= 1 && sy <= 1)
+        return false;
+    const QRectF r = pointsRect(polygon.points);
+    for (StrokePoint &p : polygon.points) {
+        p.x = round2(r.left() + (p.x - r.left()) * sx);
+        p.y = round2(r.top() + (p.y - r.top()) * sy);
+    }
+    polygon.box = pointsRect(polygon.points);
+    return true;
+}
+
 /// The Text element at `i` given the text `typed`: measured, wrapped, placed — its label's shape
 /// grown to hold it — and stamped.
 void layoutText(Drawing &d, qsizetype i, const QString &typed, const TextMetrics &m, const EditStamp &s)
@@ -848,59 +853,24 @@ void layoutText(Drawing &d, qsizetype i, const QString &typed, const TextMetrics
     Stroke e = d.strokes.at(i);
     e.originalText = typed;
     const qsizetype c = indexOfElement(d, e.containerId);
-    if (c >= 0 && isLinear(d.strokes.at(c).type) && holdsLabel(d.strokes.at(c))) {
+    if (c >= 0 && holdsLabel(d.strokes.at(c))) {
+        // In a shape or a polygon: wrapped to the room it has there, in its middle, turned with it.
         Stroke &container = d.strokes[c];
-        const LabelRoom room = polygonRoom(container);
-        const double maxWidth = room.width - 2 * LabelPadding;
+        const bool polygon = isLinear(container.type);
+        const LabelRoom room = polygon ? polygonRoom(container) : LabelRoom{};
+        const double maxWidth = polygon ? room.width - 2 * LabelPadding : labelMaxWidth(container);
         e.text = wrapText(typed, maxWidth, e.fontFamily, e.fontSize, m);
         const QSizeF size = measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m);
-        // (Grown from its top left, as Excalidraw grows a shape: stretched along the axis it needs.)
-        const QRectF r = pointsRect(container.points);
-        double sx = 1, sy = 1;
-        if (size.height() > room.height - 2 * LabelPadding && room.height > 0)
-            sy = (std::ceil(size.height()) + 2 * LabelPadding) / room.height;
-        if (size.width() > maxWidth && room.width > 0)
-            sx = (std::ceil(size.width()) + 2 * LabelPadding) / room.width;
-        if (sx > 1 || sy > 1) {
-            for (StrokePoint &p : container.points) {
-                p.x = round2(r.left() + (p.x - r.left()) * sx);
-                p.y = round2(r.top() + (p.y - r.top()) * sy);
-            }
-            container.box = pointsRect(container.points);
+        if (polygon ? growPolygon(container, room, size) : growShape(container, size))
             stamp(container, s);
-        }
-        const QPointF centre = labelCenter(container);
-        e.box = QRectF(QPointF(round2(centre.x() - size.width() / 2), round2(centre.y() - size.height() / 2)), size);
-        e.angle = container.angle;
-        e.textAlign = TextAlign::Center;
-        e.verticalAlign = VerticalAlign::Middle;
-    } else if (c >= 0 && isShape(d.strokes.at(c).type)) {
-        Stroke &container = d.strokes[c];
-        const double maxWidth = labelMaxWidth(container);
-        e.text = wrapText(typed, maxWidth, e.fontFamily, e.fontSize, m);
-        const QSizeF size = measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m);
-        // (Grown as Excalidraw grows it: its top left stays.)
-        bool grown = false;
-        if (size.height() > labelMax(container.type, container.box.height())) {
-            container.box.setHeight(containerDimension(container.type, size.height()));
-            grown = true;
-        }
-        if (size.width() > maxWidth) {
-            container.box.setWidth(containerDimension(container.type, size.width()));
-            grown = true;
-        }
-        if (grown)
-            stamp(container, s);
-        const QPointF centre = container.box.center();
-        e.box = QRectF(QPointF(round2(centre.x() - size.width() / 2), round2(centre.y() - size.height() / 2)), size);
+        e.box = centredBox(labelCenter(container), size);
         e.angle = container.angle;
         e.textAlign = TextAlign::Center;
         e.verticalAlign = VerticalAlign::Middle;
     } else if (c >= 0 && isLinear(d.strokes.at(c).type)) {
         e.text = typed;
-        const QSizeF size = measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m);
-        const QPointF middle = polylineMiddle(d.strokes.at(c).points);
-        e.box = QRectF(QPointF(round2(middle.x() - size.width() / 2), round2(middle.y() - size.height() / 2)), size);
+        e.box = centredBox(polylineMiddle(d.strokes.at(c).points),
+                           measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m));
     } else if (e.autoResize) {
         e.text = typed;
         e.box.setSize(measureText(e.text, e.fontFamily, e.fontSize, e.lineHeight, m));
@@ -941,7 +911,7 @@ void setText(Drawing &d, const QString &id, const QString &text, const TextMetri
     if (i < 0 || d.strokes.at(i).type != ElementType::Text || isLocked(d, d.strokes.at(i)))
         return;
     const QString typed = QString(text).remove(u'\r');
-    if (typed == QString(editableText(d.strokes.at(i))).remove(u'\r'))
+    if (typed == editableText(d.strokes.at(i)).remove(u'\r'))
         return; // (unchanged: kept as it is, wrapped as its program wrapped it)
     if (typed.trimmed().isEmpty()) {
         deleteElements(d, {id}, s);
@@ -1021,19 +991,16 @@ void place(Stroke &e, const Placement &p)
         }
         e.box = pointsRect(e.points);
     } else {
-        const double w = round2(e.box.width() * std::abs(sx));
-        const double h = round2(e.box.height() * std::abs(sy));
-        e.box = QRectF(round2(to.x() - w / 2), round2(to.y() - h / 2), w, h);
+        e.box = centredBox(to, QSizeF(round2(e.box.width() * std::abs(sx)), round2(e.box.height() * std::abs(sy))));
     }
     if (text)
-        e.fontSize = std::clamp(round2(e.fontSize * p.fontScale), 1.0, 1000.0);
+        e.fontSize = fontSizeWithin(round2(e.fontSize * p.fontScale));
     if (e.type == ElementType::Image) {
         e.flipX = e.flipX != p.mirrorX;
         e.flipY = e.flipY != p.mirrorY;
     }
-    if (e.elbowed)
-        return;
-    e.angle = normalizedAngle(p.mirrorX != p.mirrorY ? -e.angle : e.angle + p.turn);
+    if (!e.elbowed)
+        e.angle = normalizedAngle(p.mirrorX != p.mirrorY ? -e.angle : e.angle + p.turn);
 }
 
 bool withinLimit(const Stroke &e)
@@ -1050,15 +1017,7 @@ void transformElements(Drawing &d, const QSet<QString> &ids, const Placement &p,
                        const EditStamp &s)
 {
     const QHash<QString, qsizetype> index = indexById(d);
-    QSet<QString> moved;
-    for (const Stroke &e : std::as_const(d.strokes)) {
-        if (ids.contains(e.id) && !lockedIn(d, index, e))
-            moved.insert(e.id);
-    }
-    for (const Stroke &e : std::as_const(d.strokes)) {
-        if (e.type == ElementType::Text && !e.locked && moved.contains(e.containerId))
-            moved.insert(e.id);
-    }
+    const QSet<QString> moved = withLabels(d, index, ids);
     if (moved.isEmpty())
         return;
     const QList<Stroke> before = d.strokes;
@@ -1078,25 +1037,20 @@ void transformElements(Drawing &d, const QSet<QString> &ids, const Placement &p,
         const qsizetype c = index.value(d.strokes.at(i).containerId, -1);
         if (c < 0)
             continue;
+        Stroke &label = d.strokes[i];
         const Stroke &container = d.strokes.at(c);
         if (isLinear(container.type) && !holdsLabel(container)) {
-            // Level, at the arrow's middle as the arrow now lies.
-            Stroke &label = d.strokes[i];
-            const QPointF middle =
-                    rotatePoint(polylineMiddle(container.points), elementCenter(container), container.angle);
-            const double w = round2(label.box.width() * p.fontScale);
-            const double h = round2(label.box.height() * p.fontScale);
-            label.fontSize = std::clamp(round2(label.fontSize * p.fontScale), 1.0, 1000.0);
-            label.box = QRectF(round2(middle.x() - w / 2), round2(middle.y() - h / 2), w, h);
+            // Level, at the arrow's middle as the arrow now lies (labelCenter()).
+            const QSizeF size(round2(label.box.width() * p.fontScale), round2(label.box.height() * p.fontScale));
+            label.fontSize = fontSizeWithin(round2(label.fontSize * p.fontScale));
+            label.box = centredBox(labelCenter(container), size);
             stamp(label, s);
         } else if (p.layoutLabels) {
-            Stroke &label = d.strokes[i];
-            label.fontSize = std::clamp(round2(label.fontSize * p.fontScale), 1.0, 1000.0);
-            const QString typed = editableText(label);
-            layoutText(d, i, typed, m, s);
+            label.fontSize = fontSizeWithin(round2(label.fontSize * p.fontScale));
+            layoutText(d, i, editableText(label), m, s);
         } else {
-            place(d.strokes[i], p);
-            stamp(d.strokes[i], s);
+            place(label, p);
+            stamp(label, s);
         }
     }
     // Arrows that stay, bound to what moved: their bound ends follow.
@@ -1111,34 +1065,23 @@ void transformElements(Drawing &d, const QSet<QString> &ids, const Placement &p,
         const QPointF middle = polylineMiddle(e.points);
         if (start && end && !e.elbowed) {
             for (StrokePoint &point : e.points) {
-                const QPointF to = p.map(QPointF(point.x, point.y));
-                point.x = round2(to.x());
-                point.y = round2(to.y());
+                const QPointF to = round2(p.map(pointOf(point)));
+                point.x = to.x();
+                point.y = to.y();
             }
             e.box = pointsRect(e.points);
         } else if (start && end) {
             translate(e, p.map(elementCenter(e)) - elementCenter(e));
         } else {
-            const qsizetype n = e.points.size();
-            const qsizetype k = start ? 0 : n - 1;
-            const QPointF tip(e.points.at(k).x, e.points.at(k).y);
-            moveEnd(e, k, start ? 1 : n - 2, p.map(tip) - tip);
+            const QPointF tip = pointOf(start ? e.points.constFirst() : e.points.constLast());
+            moveEnd(e, start, p.map(tip) - tip);
         }
         stamp(e, s);
         labelShift.insert(e.id, polylineMiddle(e.points) - middle);
     }
-    for (Stroke &e : d.strokes) {
-        if (e.type == ElementType::Text && !moved.contains(e.id) && labelShift.contains(e.containerId)) {
-            translate(e, labelShift.value(e.containerId));
-            stamp(e, s);
-        }
-    }
-    for (const Stroke &e : std::as_const(d.strokes)) {
-        if (!withinLimit(e)) {
-            d.strokes = before; // (nothing leaves the limit: the edit is not made)
-            return;
-        }
-    }
+    shiftArrowLabels(d, moved, labelShift, s);
+    if (!std::ranges::all_of(std::as_const(d.strokes), withinLimit))
+        d.strokes = before; // (nothing leaves the limit: the edit is not made)
 }
 
 } // namespace
@@ -1208,10 +1151,8 @@ void rotateElements(Drawing &d, const QSet<QString> &ids, QPointF pivot, double 
 {
     if (!std::isfinite(angle) || !std::isfinite(pivot.x()) || !std::isfinite(pivot.y()) || normalizedAngle(angle) == 0)
         return;
-    Placement p;
-    p.map = [=](QPointF point) { return rotatePoint(point, pivot, angle); };
-    p.turn = angle;
-    transformElements(d, ids, p, TextMetrics{}, s);
+    transformElements(d, ids, {.map = [=](QPointF point) { return rotatePoint(point, pivot, angle); }, .turn = angle},
+                      TextMetrics{}, s);
 }
 
 void flipElements(Drawing &d, const QSet<QString> &ids, Flip flip, QPointF pivot, const EditStamp &s)
@@ -1219,14 +1160,11 @@ void flipElements(Drawing &d, const QSet<QString> &ids, Flip flip, QPointF pivot
     if (!std::isfinite(pivot.x()) || !std::isfinite(pivot.y()))
         return;
     const bool horizontal = flip == Flip::Horizontal;
-    Placement p;
-    p.map = [=](QPointF point) {
+    const auto mirror = [=](QPointF point) {
         return horizontal ? QPointF(2 * pivot.x() - point.x(), point.y())
                           : QPointF(point.x(), 2 * pivot.y() - point.y());
     };
-    p.mirrorX = horizontal;
-    p.mirrorY = !horizontal;
-    transformElements(d, ids, p, TextMetrics{}, s);
+    transformElements(d, ids, {.map = mirror, .mirrorX = horizontal, .mirrorY = !horizontal}, TextMetrics{}, s);
 }
 
 bool hasFill(const Stroke &e)
@@ -1314,7 +1252,7 @@ void styleElements(Drawing &d, const QSet<QString> &ids, const ElementStyle &sty
         const bool newSize =
                 e.type == ElementType::Text && style.fontSize && std::abs(e.fontSize - *style.fontSize) > 1e-6;
         if (newSize) {
-            e.fontSize = std::clamp(*style.fontSize, 1.0, 1000.0);
+            e.fontSize = fontSizeWithin(*style.fontSize);
             changed = true;
         }
         if (!changed)
@@ -1333,52 +1271,37 @@ bool canGroup(const Drawing &d, const QSet<QString> &ids)
     int units = 0;
     bool oneGroup = true;
     QString group;
-    bool first = true;
     for (const Stroke &e : d.strokes) {
         if (!ids.contains(e.id) || (e.type == ElementType::Text && ids.contains(e.containerId)))
             continue;
-        ++units;
-        const QString outer = e.groupIds.isEmpty() ? QString() : e.groupIds.last();
-        if (first)
-            group = outer;
-        else if (outer != group)
+        if (++units == 1)
+            group = outermostGroup(e);
+        else if (outermostGroup(e) != group)
             oneGroup = false;
-        first = false;
     }
     return units >= 2 && (!oneGroup || group.isEmpty());
 }
 
 bool canUngroup(const Drawing &d, const QSet<QString> &ids)
 {
-    return std::any_of(d.strokes.cbegin(), d.strokes.cend(),
-                       [&ids](const Stroke &e) { return ids.contains(e.id) && !e.groupIds.isEmpty(); });
+    return std::ranges::any_of(d.strokes,
+                               [&ids](const Stroke &e) { return ids.contains(e.id) && !e.groupIds.isEmpty(); });
 }
 
 QString groupElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s)
 {
     if (!canGroup(d, ids))
         return {};
-    const QHash<QString, qsizetype> index = indexById(d);
     const QString group = newIdOf(s);
-    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
-        if (!ids.contains(d.strokes.at(i).id) || lockedIn(d, index, d.strokes.at(i)))
-            continue;
-        d.strokes[i].groupIds.append(group);
-        stamp(d.strokes[i], s);
-    }
+    editElements(d, ids, s, [](const Stroke &) { return true; }, [&group](Stroke &e) { e.groupIds.append(group); });
     return group;
 }
 
 void ungroupElements(Drawing &d, const QSet<QString> &ids, const EditStamp &s)
 {
-    const QHash<QString, qsizetype> index = indexById(d);
-    for (qsizetype i = 0; i < d.strokes.size(); ++i) {
-        const Stroke &e = d.strokes.at(i);
-        if (!ids.contains(e.id) || e.groupIds.isEmpty() || lockedIn(d, index, e))
-            continue;
-        d.strokes[i].groupIds.removeLast();
-        stamp(d.strokes[i], s);
-    }
+    editElements(
+            d, ids, s, [](const Stroke &e) { return !e.groupIds.isEmpty(); },
+            [](Stroke &e) { e.groupIds.removeLast(); });
 }
 
 namespace {
@@ -1398,13 +1321,9 @@ QList<ArrangeUnit> arrangeUnitsOf(const Drawing &d, const QSet<QString> &ids)
         if (e.id.isEmpty() || !ids.contains(e.id) || lockedIn(d, index, e))
             continue;
         // (A label goes with its shape or arrow, a member with its outermost group.)
-        const Stroke *owner = &e;
-        if (e.type == ElementType::Text && !e.containerId.isEmpty()) {
-            const qsizetype c = index.value(e.containerId, -1);
-            if (c >= 0)
-                owner = &d.strokes.at(c);
-        }
-        const QString key = owner->groupIds.isEmpty() ? u"e:"_s + owner->id : u"g:"_s + owner->groupIds.last();
+        const qsizetype c = e.type == ElementType::Text ? index.value(e.containerId, -1) : -1;
+        const Stroke &owner = c >= 0 ? d.strokes.at(c) : e;
+        const QString key = owner.groupIds.isEmpty() ? u"e:"_s + owner.id : u"g:"_s + owner.groupIds.last();
         qsizetype u = unitOf.value(key, -1);
         if (u < 0) {
             u = units.size();
@@ -1412,9 +1331,7 @@ QList<ArrangeUnit> arrangeUnitsOf(const Drawing &d, const QSet<QString> &ids)
             units.append(ArrangeUnit{});
         }
         units[u].ids.insert(e.id);
-        const QRectF b = elementBounds(e);
-        if (!b.isNull())
-            units[u].box = units.at(u).box.isNull() ? b : units.at(u).box.united(b);
+        units[u].box |= elementBounds(e); // (a part that covers nothing is left out below)
     }
     units.removeIf([](const ArrangeUnit &u) { return u.box.isNull(); });
     return units;
@@ -1424,11 +1341,8 @@ QList<ArrangeUnit> arrangeUnitsOf(const Drawing &d, const QSet<QString> &ids)
 /// already in place is not stamped).
 void moveUnits(Drawing &d, const QList<ArrangeUnit> &units, const QList<QPointF> &deltas, const EditStamp &s)
 {
-    for (qsizetype k = 0; k < units.size(); ++k) {
-        const QPointF delta(round2(deltas.at(k).x()), round2(deltas.at(k).y()));
-        if (delta.x() != 0 || delta.y() != 0)
-            moveElements(d, units.at(k).ids, delta, s);
-    }
+    for (qsizetype k = 0; k < units.size(); ++k)
+        moveElements(d, units.at(k).ids, round2(deltas.at(k)), s); // (no move: not stamped)
 }
 
 } // namespace
@@ -1445,7 +1359,7 @@ void alignElements(Drawing &d, const QSet<QString> &ids, Align how, const EditSt
         return;
     QRectF all;
     for (const ArrangeUnit &u : units)
-        all = all.isNull() ? u.box : all.united(u.box);
+        all |= u.box;
     QList<QPointF> deltas;
     for (const ArrangeUnit &u : units) {
         const QRectF &b = u.box;
@@ -1471,12 +1385,11 @@ void distributeElements(Drawing &d, const QSet<QString> &ids, Distribute axis, c
     const auto end = [x](const QRectF &r) { return x ? r.right() : r.bottom(); };
     const auto mid = [x](const QRectF &r) { return x ? r.center().x() : r.center().y(); };
     const auto extent = [x](const QRectF &r) { return x ? r.width() : r.height(); };
-    std::ranges::stable_sort(units,
-                             [&mid](const ArrangeUnit &a, const ArrangeUnit &b) { return mid(a.box) < mid(b.box); });
+    std::ranges::stable_sort(units, {}, [&mid](const ArrangeUnit &u) { return mid(u.box); });
     QRectF all;
     double span = 0;
-    for (const ArrangeUnit &u : units) {
-        all = all.isNull() ? u.box : all.united(u.box);
+    for (const ArrangeUnit &u : std::as_const(units)) {
+        all |= u.box;
         span += extent(u.box);
     }
     const qsizetype n = units.size();
@@ -1492,19 +1405,13 @@ void distributeElements(Drawing &d, const QSet<QString> &ids, Distribute axis, c
         }
     } else {
         // Overlapping: equal steps between the middles of the parts at either end, which stay.
-        qsizetype first = 0, last = n - 1;
-        for (qsizetype k = 0; k < n; ++k) {
-            if (start(units.at(k).box) == start(all)) {
-                first = k;
-                break;
-            }
-        }
-        for (qsizetype k = 0; k < n; ++k) {
-            if (end(units.at(k).box) == end(all)) {
-                last = k;
-                break;
-            }
-        }
+        const auto partAt = [&units](const auto &edge, double value, qsizetype fallback) {
+            const auto it = std::ranges::find(std::as_const(units), value,
+                                              [&edge](const ArrangeUnit &u) { return edge(u.box); });
+            return it == units.cend() ? fallback : qsizetype(it - units.cbegin());
+        };
+        const qsizetype first = partAt(start, start(all), 0);
+        const qsizetype last = partAt(end, end(all), n - 1);
         const double step = (mid(units.at(last).box) - mid(units.at(first).box)) / double(n - 1);
         double pos = mid(units.at(first).box);
         for (qsizetype k = 0; k < n; ++k) {
@@ -1519,22 +1426,25 @@ void distributeElements(Drawing &d, const QSet<QString> &ids, Distribute axis, c
 
 namespace {
 
-/// The keys of the elements (mergeKey); false when one is there twice (a broken file).
-bool keysOf(const QList<Stroke> &elements, QStringList &keys, QHash<QString, qsizetype> &index)
+/// The keys of the elements (mergeKey) in their order, and where each is (of a key there twice — a
+/// broken file — the last).
+struct Keys {
+    QStringList list;
+    QHash<QString, qsizetype> index;
+
+    bool unique() const { return index.size() == list.size(); }
+};
+
+Keys keysOf(const QList<Stroke> &elements)
 {
-    keys.clear();
-    index.clear();
-    keys.reserve(elements.size());
-    index.reserve(elements.size());
-    bool unique = true;
+    Keys keys;
+    keys.list.reserve(elements.size());
+    keys.index.reserve(elements.size());
     for (qsizetype i = 0; i < elements.size(); ++i) {
-        const QString k = mergeKey(elements.at(i));
-        if (index.contains(k))
-            unique = false;
-        index.insert(k, i);
-        keys.append(k);
+        keys.list.append(mergeKey(elements.at(i)));
+        keys.index.insert(keys.list.constLast(), i);
     }
-    return unique;
+    return keys;
 }
 
 } // namespace
@@ -1542,12 +1452,9 @@ bool keysOf(const QList<Stroke> &elements, QStringList &keys, QHash<QString, qsi
 ElementDiff diffElements(const QList<Stroke> &before, const QList<Stroke> &after)
 {
     ElementDiff diff;
-    QStringList kb, ka;
-    QHash<QString, qsizetype> hb, ha;
-    const bool uniqueBefore = keysOf(before, kb, hb);
-    const bool uniqueAfter = keysOf(after, ka, ha);
-    const bool unique = uniqueBefore && uniqueAfter;
-    if (!unique) {
+    const Keys kb = keysOf(before);
+    const Keys ka = keysOf(after);
+    if (!kb.unique() || !ka.unique()) {
         // Elements without unique keys cannot be matched: everything replaced.
         for (qsizetype i = 0; i < before.size(); ++i)
             diff.removed.append({i, before.at(i)});
@@ -1557,26 +1464,26 @@ ElementDiff diffElements(const QList<Stroke> &before, const QList<Stroke> &after
     }
     QStringList commonBefore, commonAfter;
     for (qsizetype i = 0; i < before.size(); ++i) {
-        const qsizetype j = ha.value(kb.at(i), -1);
+        const qsizetype j = ka.index.value(kb.list.at(i), -1);
         if (j < 0) {
             diff.removed.append({i, before.at(i)});
             continue;
         }
-        commonBefore.append(kb.at(i));
+        commonBefore.append(kb.list.at(i));
         const Stroke &a = before.at(i);
         const Stroke &b = after.at(j);
         if (a.version != b.version || a.versionNonce != b.versionNonce || a.updated != b.updated)
             diff.changed.append({a, b});
     }
     for (qsizetype j = 0; j < after.size(); ++j) {
-        if (!hb.contains(ka.at(j)))
+        if (!kb.index.contains(ka.list.at(j)))
             diff.added.append({j, after.at(j)});
         else
-            commonAfter.append(ka.at(j));
+            commonAfter.append(ka.list.at(j));
     }
     if (commonBefore != commonAfter) {
-        diff.orderBefore = commonBefore;
-        diff.orderAfter = commonAfter;
+        diff.orderBefore = std::move(commonBefore);
+        diff.orderAfter = std::move(commonAfter);
     }
     return diff;
 }
@@ -1593,20 +1500,16 @@ void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward, c
         e.versionNonce = randomOf(*restamp);
         e.updated = restamp->now;
     };
-    const auto &drop = forward ? diff.removed : diff.added;
-    const auto &insert = forward ? diff.added : diff.removed;
     QList<qsizetype> dropIndices;
-    for (const auto &[i, e] : drop)
+    for (const auto &[i, e] : forward ? diff.removed : diff.added)
         dropIndices.append(i);
-    std::ranges::sort(dropIndices);
-    for (auto it = dropIndices.crbegin(); it != dropIndices.crend(); ++it) {
-        if (*it >= 0 && *it < elements.size())
-            elements.removeAt(*it);
+    std::ranges::sort(dropIndices, std::ranges::greater{});
+    for (const qsizetype i : std::as_const(dropIndices)) {
+        if (i >= 0 && i < elements.size())
+            elements.removeAt(i);
     }
     if (!diff.changed.isEmpty()) {
-        QHash<QString, qsizetype> index;
-        for (qsizetype i = 0; i < elements.size(); ++i)
-            index.insert(mergeKey(elements.at(i)), i);
+        const QHash<QString, qsizetype> index = keysOf(elements).index;
         for (const auto &[a, b] : diff.changed) {
             const qsizetype i = index.value(mergeKey(forward ? a : b), -1);
             if (i < 0)
@@ -1618,9 +1521,7 @@ void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward, c
     }
     const QStringList &order = forward ? diff.orderAfter : diff.orderBefore;
     if (!order.isEmpty()) {
-        QHash<QString, qsizetype> index;
-        for (qsizetype i = 0; i < elements.size(); ++i)
-            index.insert(mergeKey(elements.at(i)), i);
+        const QHash<QString, qsizetype> index = keysOf(elements).index;
         QList<Stroke> sorted;
         sorted.reserve(elements.size());
         QList<bool> used(elements.size(), false);
@@ -1637,11 +1538,11 @@ void applyDiff(QList<Stroke> &elements, const ElementDiff &diff, bool forward, c
         }
         elements = std::move(sorted);
     }
-    QList<std::pair<qsizetype, Stroke>> adds = insert;
-    std::ranges::stable_sort(adds, [](const auto &x, const auto &y) { return x.first < y.first; });
+    QList<std::pair<qsizetype, Stroke>> adds = forward ? diff.added : diff.removed;
+    std::ranges::stable_sort(adds, {}, &std::pair<qsizetype, Stroke>::first);
     for (auto &[i, e] : adds) {
         stampBack(e, 0);
-        elements.insert(std::clamp<qsizetype>(i, 0, elements.size()), e);
+        elements.insert(std::clamp<qsizetype>(i, 0, elements.size()), std::move(e));
     }
 }
 

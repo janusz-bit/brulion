@@ -1,7 +1,7 @@
 #include "diagram/layered_p.h"
 
 #include <algorithm>
-#include <numeric>
+#include <limits>
 
 namespace brulion::diagram::detail {
 
@@ -39,7 +39,7 @@ QList<qreal> isotonic(const QList<qreal> &desired, const QList<qreal> &weights, 
     }
     QList<qreal> out(n);
     qsizetype i = 0;
-    for (const Block &b : blocks) {
+    for (const Block &b : std::as_const(blocks)) {
         const qreal m = b.mean();
         for (qsizetype k = 0; k < b.count; ++k, ++i)
             out[i] = m + offset[i];
@@ -54,7 +54,7 @@ qint64 crossings(QList<std::pair<int, int>> &pairs, int lowerSize)
     QList<int> tree(lowerSize + 1, 0); // Fenwick tree over the lower layer's positions
     qint64 count = 0;
     qint64 seen = 0;
-    for (const auto &[a, b] : pairs) {
+    for (const auto &[a, b] : std::as_const(pairs)) {
         Q_UNUSED(a);
         // Segments already seen ending right of b cross this one.
         qint64 atMost = 0;
@@ -128,11 +128,11 @@ std::optional<LayerResult> layered(const QList<LayerNode> &nodes, const QList<La
     order.reserve(n);
     {
         QList<int> indeg(n);
-        for (int v = 0; v < n; ++v)
+        for (int v = 0; v < n; ++v) {
             indeg[v] = int(ins[v].size());
-        for (int v = 0; v < n; ++v)
             if (indeg[v] == 0)
                 order.append(v);
+        }
         for (qsizetype k = 0; k < order.size(); ++k) {
             const int v = order[k];
             for (const int e : std::as_const(outs[v])) {
@@ -152,10 +152,10 @@ std::optional<LayerResult> layered(const QList<LayerNode> &nodes, const QList<La
             r = std::min(r, rank[head(e)] - span(e));
         rank[v] = r;
     }
-    const int minRank = *std::min_element(rank.cbegin(), rank.cend());
+    const int minRank = std::ranges::min(std::as_const(rank));
     for (int &r : rank)
         r -= minRank;
-    const int ranks = *std::max_element(rank.cbegin(), rank.cend()) + 1;
+    const int ranks = std::ranges::max(std::as_const(rank)) + 1;
 
     // 3. Bends: a node in every rank a link passes; the label is the middle one.
     struct LNode {
@@ -236,34 +236,32 @@ std::optional<LayerResult> layered(const QList<LayerNode> &nodes, const QList<La
         QList<std::pair<int, int>> pairs;
         for (int r = 0; r + 1 < ranks; ++r) {
             pairs.clear();
-            for (const int v : std::as_const(layers[r]))
-                for (const auto &[w, weight] : std::as_const(succs[v])) {
-                    Q_UNUSED(weight);
-                    pairs.append({pos[v], pos[w]});
-                }
-            c += crossings(pairs, int(layers[r + 1].size()));
+            for (const int v : layers.at(r))
+                for (const auto &succ : succs.at(v))
+                    pairs.append({pos[v], pos[succ.first]});
+            c += crossings(pairs, int(layers.at(r + 1).size()));
         }
         return c;
     };
     qint64 best = countCrossings();
     QList<QList<int>> bestLayers = layers;
     int sinceBetter = 0;
+    QList<std::pair<qreal, int>> movable; // a layer's nodes with neighbours: their barycentres
+    QList<qsizetype> slots;               // and their places in the layer
     for (int sweep = 0; sweep < options.maxSweeps && best > 0 && sinceBetter < 4; ++sweep) {
         const bool down = sweep % 2 == 0;
         for (int step = 0; step < ranks - 1; ++step) {
             const int r = down ? step + 1 : ranks - 2 - step;
             QList<int> &layer = layers[r];
-            QList<std::pair<qreal, int>> movable;
-            QList<qsizetype> slots;
+            movable.clear();
+            slots.clear();
             for (qsizetype i = 0; i < layer.size(); ++i) {
-                const auto &nb = down ? preds[layer[i]] : succs[layer[i]];
+                const auto &nb = down ? preds.at(layer[i]) : succs.at(layer[i]);
                 if (nb.isEmpty())
                     continue;
                 qreal sum = 0;
-                for (const auto &[w, weight] : nb) {
-                    Q_UNUSED(weight);
-                    sum += pos[w];
-                }
+                for (const auto &neighbour : nb)
+                    sum += pos[neighbour.first];
                 movable.append({sum / nb.size(), layer[i]});
                 slots.append(i);
             }
@@ -282,7 +280,7 @@ std::optional<LayerResult> layered(const QList<LayerNode> &nodes, const QList<La
             ++sinceBetter;
         }
     }
-    layers = bestLayers;
+    layers = std::move(bestLayers);
     index();
 
     // 5. Coordinates across the ranks.
@@ -303,23 +301,23 @@ std::optional<LayerResult> layered(const QList<LayerNode> &nodes, const QList<La
             x[v] -= at / 2;
     }
     const auto place = [&](int r, bool usePreds, bool useSuccs) {
-        const QList<int> &layer = layers[r];
+        const QList<int> &layer = layers.at(r);
         if (layer.isEmpty())
             return;
-        QList<qreal> desired(layer.size()), weights(layer.size()), sep(std::max<qsizetype>(0, layer.size() - 1));
+        QList<qreal> desired(layer.size()), weights(layer.size()), sep(layer.size() - 1);
         for (qsizetype i = 0; i < layer.size(); ++i) {
             const int v = layer[i];
             qreal sum = 0, wsum = 0;
+            const auto add = [&](const QList<std::pair<int, qreal>> &neighbours) {
+                for (const auto &[u, w] : neighbours) {
+                    sum += w * x[u];
+                    wsum += w;
+                }
+            };
             if (usePreds)
-                for (const auto &[u, w] : std::as_const(preds[v])) {
-                    sum += w * x[u];
-                    wsum += w;
-                }
+                add(preds.at(v));
             if (useSuccs)
-                for (const auto &[u, w] : std::as_const(succs[v])) {
-                    sum += w * x[u];
-                    wsum += w;
-                }
+                add(succs.at(v));
             desired[i] = wsum > 0 ? sum / wsum : x[v];
             weights[i] = wsum > 0 ? wsum : 0.05;
             if (i > 0)

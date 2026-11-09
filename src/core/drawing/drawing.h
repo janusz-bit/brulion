@@ -99,7 +99,7 @@ enum class Arrowhead {
     CircleOutline,
     Diamond,
     DiamondOutline,
-    Other
+    Other,
 };
 /// Text's `textAlign` ("left", "center", "right") and `verticalAlign` ("top", "middle", "bottom").
 enum class TextAlign { Left, Center, Right };

@@ -14,6 +14,7 @@ Text {
     id: label
 
     property string variant: "body"
+    readonly property bool _heading: variant === "title" || variant === "heading" || variant === "display"
 
     color: variant === "muted" || variant === "caption" ? Theme.fgMuted
          : variant === "faint" ? Theme.fgFaint
@@ -29,12 +30,11 @@ Text {
         default: return Theme.textBase
         }
     }
-    font.weight: variant === "title" || variant === "heading" || variant === "display" ? Theme.weightSemiBold
+    font.weight: _heading ? Theme.weightSemiBold
                : variant === "label" ? Theme.weightMedium
                : Theme.weightNormal
     lineHeightMode: Text.FixedHeight
-    lineHeight: Theme.lineHeightPx(font.pixelSize, variant === "title" || variant === "heading" || variant === "display"
-                                                   ? Theme.lineHeightTight : Theme.lineHeight)
+    lineHeight: Theme.lineHeightPx(font.pixelSize, _heading ? Theme.lineHeightTight : Theme.lineHeight)
     textFormat: Text.PlainText
     linkColor: Theme.link
 }

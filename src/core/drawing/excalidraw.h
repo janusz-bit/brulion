@@ -97,7 +97,8 @@ std::optional<QByteArray> decodePayload(QByteArrayView base64, int version);
 /// nullopt when there is none or it cannot be read (`corrupt` tells which).
 std::optional<QByteArray> svgPayload(QByteArrayView svg, bool *corrupt = nullptr);
 /// The start of a file (`head`, e.g. its first 4 KB) is an SVG with an embedded Excalidraw scene:
-/// the payload type or Excalidraw's `svg-source` comment is there. A cheap check for lists.
+/// the payload type is there (Excalidraw's `svg-source` comment alone is not: an export without the
+/// scene). A cheap check for lists.
 bool looksLikeExcalidrawSvg(QByteArrayView head);
 /// How much of a file looksLikeExcalidrawSvg() needs to see.
 inline constexpr qsizetype HeadBytes = 4096;

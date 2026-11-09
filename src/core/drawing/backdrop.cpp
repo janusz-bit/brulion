@@ -25,13 +25,10 @@ const QStringList &backdropMimeTypes()
     return types;
 }
 
-/// The marker of an element (an empty object when it has none or it is no object).
-QJsonObject markerOf(const Stroke &e, bool *present = nullptr)
+/// The marker of an element (undefined when it has none).
+QJsonValue markerOf(const Stroke &e)
 {
-    const QJsonValue v = e.element.value(u"customData"_s).toObject().value(BackdropKey);
-    if (present)
-        *present = v.isObject();
-    return v.toObject();
+    return e.element.value(u"customData"_s).toObject().value(BackdropKey);
 }
 
 /// The path as a relative vault path, or "".
@@ -41,16 +38,10 @@ QString safePath(const QString &path)
         return {};
     if (path.size() >= 2 && path.at(1) == u':')
         return {}; // "C:\…", "c:/…"
-    for (const QChar c : path) {
-        if (c.unicode() < 0x20 || c.unicode() == 0x7f)
-            return {};
-    }
+    if (std::ranges::any_of(path, [](QChar c) { return c.unicode() < 0x20 || c.unicode() == 0x7f; }))
+        return {};
     const QString slashes = QString(path).replace(u'\\', u'/');
-    for (const QStringView segment : QStringView(slashes).split(u'/')) {
-        if (segment == u"..")
-            return {};
-    }
-    return path;
+    return QStringView(slashes).split(u'/').contains(QStringView(u"..")) ? QString() : path;
 }
 
 int safePage(const QJsonValue &v)
@@ -87,18 +78,14 @@ qsizetype backdropIndex(const Drawing &d)
     if (d.strokes.isEmpty())
         return -1;
     const Stroke &e = d.strokes.first();
-    if (e.type != ElementType::Image || !e.locked)
-        return -1;
-    bool present = false;
-    markerOf(e, &present);
-    return present ? 0 : -1;
+    return e.type == ElementType::Image && e.locked && markerOf(e).isObject() ? 0 : -1;
 }
 
 std::optional<BackdropSource> backdropSource(const Drawing &d)
 {
     if (backdropIndex(d) < 0)
         return std::nullopt;
-    const QJsonObject marker = markerOf(d.strokes.first());
+    const QJsonObject marker = markerOf(d.strokes.first()).toObject();
     return BackdropSource{safePath(marker.value(u"path"_s).toString()), safePage(marker.value(u"page"_s))};
 }
 
@@ -143,6 +130,9 @@ bool setBackdrop(Drawing &d, const BackdropImage &image, const BackdropSource &s
         e.box = QRectF(e.box.topLeft(), size);
         e.angle = 0;
         e.opacity = 100;
+        // (Written from the model now, its `scale` from the flips: the new picture unmirrored.)
+        e.flipX = false;
+        e.flipY = false;
         e.fileId = fileId;
         e.version = e.version < INT_MAX ? e.version + 1 : 2;
         e.versionNonce = randomOf(stamp);
@@ -200,7 +190,7 @@ QList<int> parsePageRanges(QStringView text, int count, int limit)
 {
     if (count <= 0 || limit <= 0)
         return {};
-    const QString lower = text.trimmed().toString().toLower();
+    QString lower = text.trimmed().toString().toLower();
     // The lowest `limit` pages named (a huge range stops as soon as it cannot add any).
     std::set<int> pages;
     const auto add = [&pages, limit](int p) {
@@ -216,57 +206,39 @@ QList<int> parsePageRanges(QStringView text, int count, int limit)
             std::swap(a, b);
         a = std::max(a, 1);
         b = std::min(b, count);
-        for (int p = a; p <= b && add(p); ++p) { }
+        for (qint64 p = a; p <= b && add(int(p)); ++p) { }
     };
     if (lower == u"wszystkie" || lower == u"all" || lower == u"*") {
         addRange(1, count);
-    } else {
-        const QString unified = QString(lower).replace(u';', u',');
-        for (const QStringView rawPart : QStringView(unified).split(u',')) {
-            const QStringView part = rawPart.trimmed();
-            if (part.isEmpty())
-                continue;
-            // "a-b" with a hyphen, an en dash or an em dash; a sign is no number.
-            qsizetype dash = -1;
-            for (qsizetype i = 0; i < part.size(); ++i) {
-                const char16_t c = part.at(i).unicode();
-                if (c == u'-' || c == u'\u2013' || c == u'\u2014') {
-                    dash = i;
-                    break;
-                }
-            }
-            const auto number = [](QStringView s, int *out) {
-                s = s.trimmed();
-                if (s.isEmpty())
-                    return false;
-                for (const QChar c : s) {
-                    if (c < u'0' || c > u'9')
-                        return false;
-                }
-                bool ok = false;
-                const int v = s.toInt(&ok);
-                *out = v;
-                return ok;
-            };
-            int a = 0, b = 0;
-            if (dash < 0) {
-                if (number(part, &a) && a >= 1 && a <= count)
-                    add(a);
-            } else if (number(part.first(dash), &a) && number(part.sliced(dash + 1), &b)) {
-                addRange(a, b);
-            }
-        }
+        return QList<int>(pages.cbegin(), pages.cend());
+    }
+    // A number: digits only (a sign is none).
+    const auto number = [](QStringView s) -> std::optional<int> {
+        s = s.trimmed();
+        if (s.isEmpty() || !std::ranges::all_of(s, [](QChar c) { return c >= u'0' && c <= u'9'; }))
+            return std::nullopt;
+        bool ok = false;
+        const int v = s.toInt(&ok);
+        return ok ? std::optional(v) : std::nullopt;
+    };
+    const auto isDash = [](QChar c) { return c == u'-' || c == u'\u2013' || c == u'\u2014'; };
+    // Parts "a-b" (a hyphen, an en dash or an em dash) and "a" (as "a-a"); any other is ignored.
+    lower.replace(u';', u',');
+    for (const QStringView rawPart : QStringView(lower).split(u',')) {
+        const QStringView part = rawPart.trimmed();
+        const qsizetype dash = std::ranges::find_if(part, isDash) - part.begin();
+        const std::optional<int> a = number(part.first(dash));
+        const std::optional<int> b = dash == part.size() ? a : number(part.sliced(dash + 1));
+        if (a && b)
+            addRange(*a, *b);
     }
     return QList<int>(pages.cbegin(), pages.cend());
 }
 
 QString formatPageRanges(const QList<int> &pages)
 {
-    QList<int> sorted;
-    for (const int p : pages) {
-        if (p >= 1)
-            sorted.append(p);
-    }
+    QList<int> sorted = pages;
+    sorted.removeIf([](int p) { return p < 1; });
     std::ranges::sort(sorted);
     sorted.erase(std::ranges::unique(sorted).begin(), sorted.end());
     QStringList parts;

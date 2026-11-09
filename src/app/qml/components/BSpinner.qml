@@ -29,14 +29,15 @@ Item {
         preferredRendererType: Shape.CurveRenderer
 
         readonly property real r: (spinner.size - spinner.strokeWidth) / 2
+        readonly property real c: spinner.size / 2
 
         ShapePath {
             strokeColor: spinner.color.alpha(0.22)
             strokeWidth: spinner.strokeWidth
             fillColor: "transparent"
             PathAngleArc {
-                centerX: spinner.size / 2
-                centerY: spinner.size / 2
+                centerX: shape.c
+                centerY: shape.c
                 radiusX: shape.r
                 radiusY: shape.r
                 startAngle: 0
@@ -49,8 +50,8 @@ Item {
             fillColor: "transparent"
             capStyle: ShapePath.RoundCap
             PathAngleArc {
-                centerX: spinner.size / 2
-                centerY: spinner.size / 2
+                centerX: shape.c
+                centerY: shape.c
                 radiusX: shape.r
                 radiusY: shape.r
                 startAngle: -90

@@ -49,11 +49,9 @@ T.TabBar {
         highlight: Item {
             z: 2
             Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
+                x: 8
+                y: parent.height - height
+                width: parent.width - 16
                 height: 2
                 radius: 1
                 color: Theme.accent
@@ -63,42 +61,40 @@ T.TabBar {
         // Edge fades while tabs are scrolled out of view (`parent: tabList` keeps them on the
         // viewport instead of the scrolling content).
         readonly property bool overflowing: contentWidth > width + 1
-        Rectangle {
-            parent: tabList
-            z: 3
-            width: 28
-            height: tabList.height - 1
-            opacity: tabList.overflowing && !tabList.atXBeginning ? 1 : 0
-            visible: opacity > 0
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: control.fadeColor }
-                GradientStop { position: 1; color: control.fadeColor.alpha(0) }
-            }
-            Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
+        EdgeFade {
+            leading: true
+            shown: tabList.overflowing && !tabList.atXBeginning
         }
-        Rectangle {
-            parent: tabList
-            z: 3
+        EdgeFade {
             x: tabList.width - width
-            width: 28
-            height: tabList.height - 1
-            opacity: tabList.overflowing && !tabList.atXEnd ? 1 : 0
-            visible: opacity > 0
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: control.fadeColor.alpha(0) }
-                GradientStop { position: 1; color: control.fadeColor }
-            }
-            Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
+            leading: false
+            shown: tabList.overflowing && !tabList.atXEnd
         }
+    }
+
+    /// A fade of the bar's edge into `fadeColor`, on the viewport (not on the scrolling content).
+    component EdgeFade: Rectangle {
+        id: edge
+        required property bool leading
+        required property bool shown
+        parent: tabList
+        z: 3
+        width: 28
+        height: tabList.height - 1
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0; color: edge.leading ? control.fadeColor : control.fadeColor.alpha(0) }
+            GradientStop { position: 1; color: edge.leading ? control.fadeColor.alpha(0) : control.fadeColor }
+        }
+        Behavior on opacity { NumberAnimation { duration: Theme.durationFast } }
     }
 
     background: Item {
         Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            y: parent.height - height
+            width: parent.width
             height: 1
             color: Theme.border
         }

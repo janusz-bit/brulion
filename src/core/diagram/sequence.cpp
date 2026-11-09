@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using namespace Qt::StringLiterals;
 
@@ -36,31 +37,27 @@ public:
             if (auto e = statement(st[i]))
                 return *e;
         if (!m_open.isEmpty())
-            return makeError(Code::UnclosedBlock, m_open.last().second);
+            return makeError(Code::UnclosedBlock, m_open.constLast().second);
         if (m_accDescrLine > 0)
             return makeError(Code::UnclosedBlock, m_accDescrLine);
         return std::move(m_d);
     }
 
 private:
-    /// The participant `id` (named now when new). -1: too many.
-    int participant(const QString &idIn, std::optional<Error> &error)
+    /// The participant `name` (made now when new). -1: too many.
+    int participant(QStringView name, std::optional<Error> &error)
     {
-        const QString id = idIn.trimmed();
+        const QString id = name.trimmed().toString();
         if (const auto it = m_ids.constFind(id); it != m_ids.cend())
             return *it;
         if (m_d.participants.size() >= limits::MaxParticipants) {
             error = makeError(Code::TooLarge, m_line, u"participants"_s);
             return -1;
         }
-        SeqParticipant p;
-        p.id = id;
-        p.label = capLength(id);
-        p.line = m_line;
-        p.box = m_box;
-        m_d.participants.append(p);
-        m_ids.insert(id, int(m_d.participants.size() - 1));
-        return int(m_d.participants.size() - 1);
+        const int index = int(m_d.participants.size());
+        m_d.participants.append({.id = id, .label = capLength(id), .box = m_box, .line = m_line});
+        m_ids.insert(id, index);
+        return index;
     }
 
     std::optional<Error> event(SeqEvent e)
@@ -101,10 +98,12 @@ private:
             // Mermaid 11's `participant A@{ "type": "database" }`: the metadata is not drawn.
             if (const qsizetype at = rest.indexOf(u"@{"); at >= 0)
                 rest = rest.first(at).trimmed();
-            static const QRegularExpression as(u"^(.+?)\\s+as\\s+(.+)$"_s);
-            QString id = rest.toString(), label;
+            // (The id ends in a non-space: not tried again from each space of a long run of them.)
+            static const QRegularExpression as(u"^(.*?\\S)\\s+as\\s+(.+)$"_s);
+            QStringView id = rest;
+            QString label;
             if (const auto m = as.matchView(rest); m.hasMatch()) {
-                id = m.captured(1);
+                id = m.capturedView(1);
                 label = cleanLabel(m.capturedView(2));
             }
             if (id.isEmpty())
@@ -112,9 +111,10 @@ private:
             const int p = participant(id, error);
             if (p < 0)
                 return error;
+            SeqParticipant &sp = m_d.participants[p];
             if (!label.isEmpty())
-                m_d.participants[p].label = label;
-            m_d.participants[p].actor = isActor;
+                sp.label = label;
+            sp.actor = isActor;
             return std::nullopt;
         }
         if (startsWithWord(s, u"destroy") || startsWithWord(s, u"links") || startsWithWord(s, u"link")
@@ -122,8 +122,9 @@ private:
             || startsWithWord(s, u"click"))
             return std::nullopt;
         if (startsWithWord(s, u"accTitle")) {
-            if (m_d.title.isEmpty())
-                m_d.title = cleanLabel(s.sliced(s.indexOf(u':') + 1));
+            // `accTitle: …` (without the colon there is no title, not the keyword in it).
+            if (const qsizetype colon = s.indexOf(u':'); colon > 0 && m_d.title.isEmpty())
+                m_d.title = cleanLabel(s.sliced(colon + 1));
             return std::nullopt;
         }
         if (startsWithWord(s, u"title")) {
@@ -135,19 +136,18 @@ private:
         }
         if (startsWithWord(s, u"autonumber")) {
             const QList<QStringView> args = s.sliced(10).trimmed().split(u' ', Qt::SkipEmptyParts);
-            if (!args.isEmpty() && args.front() == u"off") {
+            if (args.value(0) == u"off") {
                 m_number = 0;
                 return std::nullopt;
             }
+            // `autonumber [start [step]]`: 1 for each one missing or no positive number.
             m_number = std::clamp(args.value(0).toInt(), 1, 1000000);
-            if (args.isEmpty() || args.front().toInt() <= 0)
-                m_number = 1;
-            m_step = args.size() > 1 ? std::clamp(args[1].toInt(), 1, 1000) : 1;
+            m_step = std::clamp(args.value(1).toInt(), 1, 1000);
             return std::nullopt;
         }
         if (startsWithWord(s, u"activate") || startsWithWord(s, u"deactivate")) {
             const bool on = s.startsWith(u"activate");
-            const int p = participant(s.sliced(on ? 8 : 10).toString(), error);
+            const int p = participant(s.sliced(on ? 8 : 10), error);
             if (p < 0)
                 return error;
             SeqEvent e;
@@ -200,7 +200,7 @@ private:
         for (const QString &kw : sections) {
             if (!startsWithWord(s, kw))
                 continue;
-            if (m_open.isEmpty() || m_open.last().first == u"box")
+            if (m_open.isEmpty() || m_open.constLast().first == u"box")
                 return makeError(Code::Syntax, m_line, excerpt(s));
             SeqEvent e;
             e.type = Type::BlockSection;
@@ -245,10 +245,10 @@ private:
         const QList<QStringView> who = m.capturedView(2).split(u',');
         if (who.size() > 2 || (who.size() == 2 && e.place != SeqEvent::NotePlace::Over))
             return makeError(Code::Syntax, m_line, excerpt(rest));
-        e.from = participant(who.front().toString(), error);
+        e.from = participant(who.front(), error);
         if (e.from < 0)
             return error;
-        e.to = who.size() == 2 ? participant(who.back().toString(), error) : e.from;
+        e.to = who.size() == 2 ? participant(who.back(), error) : e.from;
         if (e.to < 0)
             return error;
         e.text = cleanLabel(rest.sliced(colon + 1));
@@ -270,13 +270,13 @@ private:
         std::optional<Error> error;
         SeqEvent e;
         e.type = Type::Message;
-        e.from = participant(m.captured(1), error);
+        e.from = participant(m.capturedView(1), error);
         if (e.from < 0)
             return error;
-        e.to = participant(m.captured(4), error);
+        e.to = participant(m.capturedView(4), error);
         if (e.to < 0)
             return error;
-        const QString arrow = m.captured(2);
+        const QStringView arrow = m.capturedView(2);
         e.dotted = arrow.contains(u"--");
         if (arrow.startsWith(u"<<")) {
             e.startHead = Head::Arrow;
@@ -288,8 +288,8 @@ private:
         } else if (arrow.endsWith(u')')) {
             e.endHead = Head::Open;
         }
-        e.activateTarget = m.captured(3) == u"+";
-        e.deactivateSource = m.captured(3) == u"-";
+        e.activateTarget = m.capturedView(3) == u"+";
+        e.deactivateSource = m.capturedView(3) == u"-";
         e.text = colon < 0 ? QString() : cleanLabel(s.sliced(colon + 1));
         if (m_number > 0) {
             e.number = m_number;
@@ -309,7 +309,7 @@ private:
     int m_step = 1;
 };
 
-void translate(QList<Item> &items, const QPointF &d)
+void translate(QList<Item> &items, QPointF d)
 {
     for (Item &it : items) {
         it.box.translate(d);
@@ -341,14 +341,12 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
     QList<qreal> boxW;
     qreal boxH = 0;
     for (const SeqParticipant &p : d.participants) {
-        names.append(layoutText(m, p.label, fs, false, fs * 11));
-        boxW.append(std::max(names.last().size.width() + 2 * fs, fs * 6.5));
-        boxH = std::max(boxH, names.last().size.height() + fs * 1.3);
+        const TextBlock &name = names.emplaceBack(layoutText(m, p.label, fs, false, fs * 11));
+        boxW.append(std::max(name.size.width() + 2 * fs, fs * 6.5));
+        boxH = std::max(boxH, name.size.height() + fs * 1.3);
     }
     const qreal figureH = fs * 2.6; // an actor's stick figure above its name
-    bool anyActor = false;
-    for (const SeqParticipant &p : d.participants)
-        anyActor = anyActor || p.actor;
+    const bool anyActor = std::ranges::any_of(d.participants, &SeqParticipant::actor);
     const qreal headH = anyActor ? std::max(boxH, figureH + boxH - fs * 0.6) : boxH;
     QList<qreal> gap(std::max(0, P - 1));
     for (int i = 0; i + 1 < P; ++i)
@@ -385,7 +383,7 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
             texts[k] = layoutText(m, e.text.isEmpty() ? QString() : u'[' + e.text + u']', fs * 0.9, false, textMax);
         }
     }
-    std::ranges::stable_sort(needs, [](const Need &x, const Need &y) { return x.b - x.a < y.b - y.a; });
+    std::ranges::stable_sort(needs, {}, [](Need n) { return n.b - n.a; });
     for (const Need &n : std::as_const(needs)) {
         if (n.a < 0 || n.b >= P || n.a >= n.b)
             continue;
@@ -408,13 +406,12 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
         title = layoutText(m, d.title, fs * 1.15, true, fs * 40);
         y += title.size.height() + 10;
     }
-    const qreal titleY = 0;
     QList<TextBlock> boxTitles;
     qreal boxTitleH = 0;
     for (const SeqBox &b : d.boxes) {
-        boxTitles.append(layoutText(m, b.title, fs * 0.95, true, fs * 20));
+        const TextBlock &t = boxTitles.emplaceBack(layoutText(m, b.title, fs * 0.95, true, fs * 20));
         if (!b.title.isEmpty())
-            boxTitleH = std::max(boxTitleH, boxTitles.last().size.height() + 6);
+            boxTitleH = std::max(boxTitleH, t.size.height() + 6);
     }
     const qreal boxTop = y;
     if (!d.boxes.isEmpty())
@@ -453,6 +450,14 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
         middle.append(pathItem(rectPath(QRectF(center - actW / 2, top, actW, std::max<qreal>(at - top, 8))),
                                Paint{Role::ActivationFill, {}}, Paint{Role::ActivationStroke, {}}, 1));
     };
+    // A message's number (autonumber) in a circle around `at`.
+    const auto addNumber = [&](int number, QPointF at) {
+        const TextBlock n = layoutText(m, QString::number(number), fs * 0.72, true, 0);
+        const qreal r = std::max(n.size.width() / 2 + 3, fs * 0.62);
+        middle.append(pathItem(ellipsePath(at, r, r), Paint{Role::NumberFill, {}}, Paint{}, 0));
+        middle.append(textItem(n, QRectF(at.x() - r, at.y() - n.size.height() / 2, 2 * r, n.size.height()),
+                               Paint{Role::NumberText, {}}));
+    };
     QList<Item> rectFills; // `rect` blocks, under everything
     for (qsizetype k = 0; k < d.events.size(); ++k) {
         const SeqEvent &e = d.events[k];
@@ -478,15 +483,10 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
                 p.append({PathOp::Type::Line, QPointF(x0 + loopW, y), {}, {}});
                 p.append({PathOp::Type::Line, QPointF(x0 + loopW, y + loopH), {}, {}});
                 p.append({PathOp::Type::Line, tip + QPointF(headInset(e.endHead, width), 0), {}, {}});
-                middle.append(pathItem(p, Paint{}, color, width, dash));
+                middle.append(pathItem(std::move(p), Paint{}, color, width, dash));
                 addHead(middle, e.endHead, tip, QPointF(-1, 0), color, width);
-                if (e.number > 0) {
-                    const TextBlock n = layoutText(m, QString::number(e.number), fs * 0.72, true, 0);
-                    const qreal r = std::max(n.size.width() / 2 + 3, fs * 0.62);
-                    middle.append(pathItem(ellipsePath(QPointF(x0, y), r, r), Paint{Role::NumberFill, {}}, Paint{}, 0));
-                    middle.append(textItem(n, QRectF(x0 - r, y - n.size.height() / 2, 2 * r, n.size.height()),
-                                           Paint{Role::NumberText, {}}));
-                }
+                if (e.number > 0)
+                    addNumber(e.number, QPointF(x0, y));
                 y += loopH + fs * 0.9;
             } else {
                 const bool right = e.to > e.from;
@@ -507,13 +507,8 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
                                        color, width, dash));
                 addHead(middle, e.endHead, b, QPointF(dir, 0), color, width);
                 addHead(middle, e.startHead, a, QPointF(-dir, 0), color, width);
-                if (e.number > 0) {
-                    const TextBlock n = layoutText(m, QString::number(e.number), fs * 0.72, true, 0);
-                    const qreal r = std::max(n.size.width() / 2 + 3, fs * 0.62);
-                    middle.append(pathItem(ellipsePath(a, r, r), Paint{Role::NumberFill, {}}, Paint{}, 0));
-                    middle.append(textItem(n, QRectF(a.x() - r, a.y() - n.size.height() / 2, 2 * r, n.size.height()),
-                                           Paint{Role::NumberText, {}}));
-                }
+                if (e.number > 0)
+                    addNumber(e.number, a);
                 y += fs * 1.1;
             }
             if (e.deactivateSource)
@@ -651,6 +646,7 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
     // Boxes around their participants, under everything.
     QList<Item> boxes;
     for (qsizetype b = 0; b < d.boxes.size(); ++b) {
+        const SeqBox &box = d.boxes[b];
         qreal left = std::numeric_limits<qreal>::max(), right = std::numeric_limits<qreal>::lowest();
         for (int i = 0; i < P; ++i) {
             if (d.participants[i].box != b)
@@ -661,14 +657,13 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
         if (left > right)
             continue;
         const QRectF r(left, boxTop, right - left, bottom + 8 - boxTop);
-        const Paint fill =
-                d.boxes[b].color.isEmpty() ? Paint{Role::ClusterFill, {}} : Paint{Role::None, d.boxes[b].color};
+        const Paint fill = box.color.isEmpty() ? Paint{Role::ClusterFill, {}} : Paint{Role::None, box.color};
         boxes.append(pathItem(rectPath(r), fill, Paint{Role::ClusterStroke, {}}, 1));
-        if (!d.boxes[b].title.isEmpty())
+        if (!box.title.isEmpty())
             boxes.append(textItem(boxTitles[b], QRectF(r.left(), boxTop + 4, r.width(), boxTitles[b].size.height()),
-                                  d.boxes[b].color.isEmpty()
+                                  box.color.isEmpty()
                                           ? Paint{Role::ClusterText, {}}
-                                          : Paint{Role::None, textOn(d.boxes[b].color, u"#1f2430"_s, u"#f3f1ec"_s)}));
+                                          : Paint{Role::None, textOn(box.color, u"#1f2430"_s, u"#f3f1ec"_s)}));
     }
 
     QList<Item> &items = scene.items;
@@ -698,7 +693,7 @@ Scene drawSequence(const SequenceDiagram &d, const Metrics &m)
         width = std::max(width, title.size.width() + 2 * margin);
     translate(items, QPointF(margin - minX + (width - 2 * margin - (maxX - minX)) / 2, margin));
     if (!d.title.isEmpty())
-        items.prepend(textItem(title, QRectF(0, margin + titleY, width, title.size.height()), Paint{Role::Title, {}}));
+        items.prepend(textItem(title, QRectF(0, margin, width, title.size.height()), Paint{Role::Title, {}}));
     scene.size = QSizeF(width, maxY + 2 * margin);
     return scene;
 }

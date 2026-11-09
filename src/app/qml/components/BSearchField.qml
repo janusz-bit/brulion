@@ -30,18 +30,18 @@ BTextField {
     }
 
     onTextEdited: {
-        if (debounce > 0)
+        if (control.debounce > 0)
             debounceTimer.restart()
         else
-            search(text)
+            control.search(control.text)
     }
     onCleared: {
         debounceTimer.stop()
-        search("")
+        control.search("")
     }
     onAccepted: {
         debounceTimer.stop()
-        search(text)
+        control.search(control.text)
     }
 
     Timer {

@@ -72,18 +72,23 @@ QString pathData(const QList<PathOp> &path)
     return d;
 }
 
+/// ` class="…"` for `classes` (nothing when there are none).
+QString classAttribute(const QStringList &classes)
+{
+    if (classes.isEmpty())
+        return {};
+    return u" class=\""_s + classes.join(u' ') + u'"';
+}
+
 class Writer {
 public:
     Writer(const Palette &light, const Palette *dark) : m_light(light), m_dark(dark) { }
 
-    /// ` fill="#…"` (+ opacity) for `paint`; the role's class noted in `classes`.
-    QString paint(const char *property, const Paint &p, QStringList &classes)
+    /// ` fill="#…"` (+ opacity) for `paint` (`none` for no paint); the role's class noted in `classes`.
+    QString paint(QStringView prop, const Paint &p, QStringList &classes)
     {
-        const QString prop = QString::fromLatin1(property);
-        if (p.isNone())
-            return u' ' + prop + u"=\"none\""_s;
-        const QString color = colorOf(p, m_light);
-        const auto rgba = detail::parseHex(color);
+        // (No colour for no paint either: Role::None without one.)
+        const auto rgba = detail::parseHex(colorOf(p, m_light));
         if (!rgba)
             return u' ' + prop + u"=\"none\""_s;
         QString out = u' ' + prop + u"=\""_s + detail::toHex(*rgba) + u'"';
@@ -100,13 +105,12 @@ public:
     QString item(const Item &it)
     {
         QStringList classes;
-        QString out;
         if (it.type == Item::Type::Path) {
             if (it.path.isEmpty())
                 return {};
-            out = u"<path d=\""_s + pathData(it.path) + u'"';
-            out += paint("fill", it.fill, classes);
-            out += paint("stroke", it.stroke, classes);
+            QString out = u"<path d=\""_s + pathData(it.path) + u'"';
+            out += paint(u"fill", it.fill, classes);
+            out += paint(u"stroke", it.stroke, classes);
             if (!it.stroke.isNone()) {
                 out += u" stroke-width=\""_s + num(it.strokeWidth) + u'"';
                 if (it.dash == Dash::Dotted)
@@ -115,22 +119,20 @@ public:
                     out += u" stroke-dasharray=\"6 4\""_s;
                 out += u" stroke-linejoin=\"round\" stroke-linecap=\"round\""_s;
             }
-            if (!classes.isEmpty())
-                out += u" class=\""_s + classes.join(u' ') + u'"';
-            return out + u"/>\n"_s;
+            return out + classAttribute(classes) + u"/>\n"_s;
         }
+        QString out;
         if (!it.background.isNone()) {
             QStringList bg;
             out += u"<rect x=\""_s + num(it.box.x()) + u"\" y=\""_s + num(it.box.y()) + u"\" width=\""_s
                    + num(it.box.width()) + u"\" height=\""_s + num(it.box.height()) + u"\" rx=\"3\""_s
-                   + paint("fill", it.background, bg);
-            if (!bg.isEmpty())
-                out += u" class=\""_s + bg.join(u' ') + u'"';
-            out += u"/>\n"_s;
+                   + paint(u"fill", it.background, bg);
+            out += classAttribute(bg) + u"/>\n"_s;
         }
-        const QString fill = paint("fill", it.color, classes);
-        const qreal total = it.lineHeight * it.lines.size();
-        const qreal top = it.box.center().y() - total / 2;
+        // The colour and its class, the same on every line.
+        QString fill = paint(u"fill", it.color, classes);
+        fill += classAttribute(classes);
+        const qreal top = it.box.center().y() - it.lineHeight * it.lines.size() / 2;
         QString anchor = u"middle"_s;
         qreal x = it.box.center().x();
         if (it.align & Qt::AlignLeft) {
@@ -147,10 +149,7 @@ public:
                    + num(it.fontSize) + u"\" text-anchor=\""_s + anchor + u"\" dominant-baseline=\"central\""_s;
             if (it.bold)
                 out += u" font-weight=\"bold\""_s;
-            out += fill;
-            if (!classes.isEmpty())
-                out += u" class=\""_s + classes.join(u' ') + u'"';
-            out += u" xml:space=\"preserve\">"_s + xmlText(it.lines[i]) + u"</text>\n"_s;
+            out += fill + u" xml:space=\"preserve\">"_s + xmlText(it.lines[i]) + u"</text>\n"_s;
         }
         return out;
     }
@@ -189,14 +188,14 @@ QString toSvg(const Scene &scene, const Palette &light, const Palette *dark, con
     QString body;
     for (const Item &it : scene.items)
         body += w.item(it);
-    const int width = int(std::ceil(std::max<qreal>(1, scene.size.width())));
-    const int height = int(std::ceil(std::max<qreal>(1, scene.size.height())));
+    const QString width = QString::number(int(std::ceil(std::max<qreal>(1, scene.size.width()))));
+    const QString height = QString::number(int(std::ceil(std::max<qreal>(1, scene.size.height()))));
     const QString title = scene.title.isEmpty() ? options.fallbackTitle : scene.title;
-    return u"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 "_s + QString::number(width) + u' '
-           + QString::number(height) + u"\" width=\""_s + QString::number(width) + u"\" height=\""_s
-           + QString::number(height) + u"\" role=\"img\" font-family=\""_s + xmlText(options.fontFamily)
-           + u"\" class=\"brulion-diagram\">\n<title>"_s + xmlText(title) + u"</title>\n"_s + w.style() + body
-           + u"</svg>\n"_s;
+    // (One arg() for all: what it puts in is not read again for placeholders.)
+    return u"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 %1 %2\" width=\"%1\" height=\"%2\" "
+           u"role=\"img\" font-family=\"%3\" class=\"brulion-diagram\">\n<title>%4</title>\n"_s.arg(
+                   width, height, xmlText(options.fontFamily), xmlText(title))
+           + w.style() + body + u"</svg>\n"_s;
 }
 
 } // namespace brulion::diagram

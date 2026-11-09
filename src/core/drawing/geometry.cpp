@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -16,6 +17,16 @@ namespace {
 
 constexpr double Kappa = 0.5522847498; // a quarter circle as a cubic Bézier
 constexpr double HatchAngle = -41 * std::numbers::pi / 180;
+
+QPointF toPoint(QPointF p)
+{
+    return p;
+}
+
+QPointF toPoint(const StrokePoint &p)
+{
+    return {p.x, p.y};
+}
 
 QRectF pointsRectOf(const QList<QPointF> &points)
 {
@@ -31,9 +42,9 @@ QRectF pointsRectOf(const QList<QPointF> &points)
     return QRectF(QPointF(minX, minY), QPointF(maxX, maxY));
 }
 
-bool transparent(const QString &color)
+bool transparent(QStringView color)
 {
-    const QString c = color.trimmed();
+    const QStringView c = color.trimmed();
     return c.isEmpty() || c == u"transparent" || c == u"none";
 }
 
@@ -71,26 +82,33 @@ Path polygonPath(const QList<QPointF> &points, bool close)
     return p;
 }
 
-/// A closed polygon with every corner rounded by a quadratic curve through it, `radius(i)` along
-/// both edges (at most half of each).
-Path roundedPolygon(const QList<QPointF> &corners, const QList<double> &radii)
+QList<QPointF> boxCorners(const QRectF &r)
+{
+    return {r.topLeft(), r.topRight(), r.bottomRight(), r.bottomLeft()};
+}
+
+/// A line drawn as a closed polygon (three points or more).
+bool closedPolygon(const Stroke &e)
+{
+    return e.polygon && e.type == ElementType::Line && e.points.size() >= 3;
+}
+
+/// A closed polygon with every corner rounded by a quadratic curve through it, `radius` along both
+/// edges (at most half of each).
+Path roundedPolygon(const QList<QPointF> &corners, double radius)
 {
     const qsizetype n = corners.size();
-    Path p;
     if (n < 3)
         return polygonPath(corners, true);
-    const auto towards = [](QPointF from, QPointF to, double r) {
+    const auto towards = [radius](QPointF from, QPointF to) {
         const double len = distance(from, to);
-        return len > 0 ? from + (to - from) * (std::min(r, len / 2) / len) : from;
+        return len > 0 ? from + (to - from) * (std::min(radius, len / 2) / len) : from;
     };
+    Path p;
     for (qsizetype i = 0; i < n; ++i) {
-        const QPointF prev = corners.at((i + n - 1) % n);
         const QPointF c = corners.at(i);
-        const QPointF next = corners.at((i + 1) % n);
-        const QPointF in = towards(c, prev, radii.at(i));
-        const QPointF out = towards(c, next, radii.at(i));
-        p.append({i == 0 ? PathOp::Move : PathOp::Line, in, {}, {}});
-        p.append({PathOp::Quad, c, out, {}});
+        p.append({i == 0 ? PathOp::Move : PathOp::Line, towards(c, corners.at((i + n - 1) % n)), {}, {}});
+        p.append({PathOp::Quad, c, towards(c, corners.at((i + 1) % n)), {}});
     }
     p.append({PathOp::Close, {}, {}, {}});
     return p;
@@ -98,9 +116,8 @@ Path roundedPolygon(const QList<QPointF> &corners, const QList<double> &radii)
 
 Path rectanglePath(const QRectF &r, double radius)
 {
-    if (radius <= 0) {
-        return polygonPath({r.topLeft(), r.topRight(), r.bottomRight(), r.bottomLeft()}, true);
-    }
+    if (radius <= 0)
+        return polygonPath(boxCorners(r), true);
     // Excalidraw's: M r 0 L w−r 0 Q w 0, w r … (the corners as quadratic curves).
     const double x = r.left(), y = r.top(), w = r.width(), h = r.height();
     const double k = std::min({radius, w / 2, h / 2});
@@ -147,8 +164,7 @@ Path diamondPath(const Stroke &e)
     // (Excalidraw: proportional to the half diagonals.)
     const double v = radiusFor(e.box.width() / 2, e.roundness == 3 ? 2 : e.roundness);
     const double h = radiusFor(e.box.height() / 2, e.roundness == 3 ? 2 : e.roundness);
-    const double r = std::min(v, h);
-    return roundedPolygon(corners, {r, r, r, r});
+    return roundedPolygon(corners, std::min(v, h));
 }
 
 QList<QPointF> pointsOf(const Stroke &e)
@@ -156,7 +172,7 @@ QList<QPointF> pointsOf(const Stroke &e)
     QList<QPointF> out;
     out.reserve(e.points.size());
     for (const StrokePoint &p : e.points)
-        out.append(QPointF(p.x, p.y));
+        out.append(toPoint(p));
     return out;
 }
 
@@ -165,7 +181,7 @@ QList<QPointF> pointsOf(const Stroke &e)
 Path linearPath(const Stroke &e)
 {
     QList<QPointF> pts = pointsOf(e);
-    const bool closed = e.polygon && e.type == ElementType::Line && pts.size() >= 3;
+    const bool closed = closedPolygon(e);
     if (pts.size() < 3 || e.roundness == 0 || e.elbowed)
         return polygonPath(pts, closed);
     // (Excalidraw's polygon ends on its first point: as a curve that corner counts once.)
@@ -343,20 +359,22 @@ ElementShape localShape(const Stroke &e, qsizetype maxHatch)
     ElementShape s;
     const bool filled = !transparent(e.fill);
     const bool solid = e.fillStyle == FillStyle::Solid || maxHatch == 0;
+    const bool hatched = filled && !solid && maxHatch > 0;
     const double gap = std::max(4.0, 4 * e.width);
     const bool cross = e.fillStyle == FillStyle::CrossHatch;
     const qsizetype perDirection = cross ? std::max<qsizetype>(1, maxHatch / 2) : maxHatch;
     s.hatchWidth = e.width / 2;
-    const auto hatchPolygon = [&](const QList<QPointF> &corners) {
-        if (!filled || solid || maxHatch < 0)
-            return;
-        QList<QPointF> closed = corners;
-        closed.append(corners.first());
-        const auto clip = [&closed](QPointF o, QPointF d) { return clipLine(o, d, {closed}); };
-        const QRectF box = pointsRectOf(corners);
+    // The hatch lines of a region: `box` its bounding box, `clip` the parts of a line inside it.
+    const auto hatch = [&](const QRectF &box, const auto &clip) {
         addHatchLines(s.hatch, box, HatchAngle, gap, perDirection, clip);
         if (cross)
             addHatchLines(s.hatch, box, HatchAngle + std::numbers::pi / 2, gap, perDirection, clip);
+    };
+    const auto hatchPolygon = [&](const QList<QPointF> &corners) {
+        QList<QPointF> closed = corners;
+        closed.append(corners.first());
+        const QList<QList<QPointF>> polygons{closed};
+        hatch(pointsRectOf(corners), [&polygons](QPointF o, QPointF d) { return clipLine(o, d, polygons); });
     };
     switch (e.type) {
     case ElementType::Freedraw: {
@@ -369,48 +387,43 @@ ElementShape localShape(const Stroke &e, qsizetype maxHatch)
         s.outline = rectanglePath(e.box, cornerRadius(e));
         if (filled && solid)
             s.area = s.outline;
-        hatchPolygon({e.box.topLeft(), e.box.topRight(), e.box.bottomRight(), e.box.bottomLeft()});
+        if (hatched)
+            hatchPolygon(boxCorners(e.box));
         break;
     case ElementType::Ellipse:
         s.outline = ellipsePath(e.box);
         if (filled && solid)
             s.area = s.outline;
-        if (filled && !solid && maxHatch > 0) {
-            const QRectF box = e.box;
-            const auto clip = [&box](QPointF o, QPointF d) { return clipLineEllipse(o, d, box); };
-            addHatchLines(s.hatch, box, HatchAngle, gap, perDirection, clip);
-            if (cross)
-                addHatchLines(s.hatch, box, HatchAngle + std::numbers::pi / 2, gap, perDirection, clip);
-        }
+        if (hatched)
+            hatch(e.box, [&e](QPointF o, QPointF d) { return clipLineEllipse(o, d, e.box); });
         break;
     case ElementType::Diamond:
         s.outline = diamondPath(e);
         if (filled && solid)
             s.area = s.outline;
-        hatchPolygon(diamondCorners(e.box));
+        if (hatched)
+            hatchPolygon(diamondCorners(e.box));
         break;
     case ElementType::Line:
     case ElementType::Arrow: {
         s.outline = linearPath(e);
-        const bool closed = e.polygon && e.type == ElementType::Line && e.points.size() >= 3;
+        const bool closed = closedPolygon(e);
         if (closed && filled && solid)
             s.area = s.outline;
-        if (closed)
+        if (closed && hatched)
             hatchPolygon(pointsOf(e));
         if (e.points.size() >= 2) {
-            const QList<QPointF> pts = pointsOf(e);
             const auto head = [&](Arrowhead kind, QPointF tip, QPointF from) {
-                if (kind == Arrowhead::None)
-                    return;
                 bool full = false;
-                Path h = arrowhead(kind, tip, from, e.width, &full);
+                Path h = arrowhead(kind, tip, from, e.width, &full); // (empty for None)
                 if (h.isEmpty())
                     return;
                 s.heads.append(std::move(h));
                 s.headFilled.append(full);
             };
-            head(e.startArrowhead, pts.first(), pts.at(1));
-            head(e.endArrowhead, pts.last(), pts.at(pts.size() - 2));
+            const qsizetype n = e.points.size();
+            head(e.startArrowhead, toPoint(e.points.at(0)), toPoint(e.points.at(1)));
+            head(e.endArrowhead, toPoint(e.points.at(n - 1)), toPoint(e.points.at(n - 2)));
         }
         break;
     }
@@ -420,22 +433,14 @@ ElementShape localShape(const Stroke &e, qsizetype maxHatch)
     return s;
 }
 
-QRectF pointsRectOfStroke(const Stroke &e)
-{
-    return pointsRect(e.points);
-}
-
 } // namespace
 
 QRectF pointsRect(const QList<StrokePoint> &points)
 {
-    QList<QPointF> pts;
-    pts.reserve(points.size());
-    for (const StrokePoint &p : points) {
-        if (std::isfinite(p.x) && std::isfinite(p.y))
-            pts.append(QPointF(p.x, p.y));
-    }
-    return pointsRectOf(pts);
+    Extent extent; // (non-finite points left out)
+    for (const StrokePoint &p : points)
+        extent.add(toPoint(p), 0);
+    return extent.rect();
 }
 
 QPointF rotatePoint(QPointF p, QPointF center, double angle)
@@ -449,9 +454,7 @@ QPointF rotatePoint(QPointF p, QPointF center, double angle)
 
 QPointF elementCenter(const Stroke &e)
 {
-    if (hasPoints(e.type))
-        return pointsRectOfStroke(e).center();
-    return e.box.center();
+    return hasPoints(e.type) ? pointsRect(e.points).center() : e.box.center();
 }
 
 QList<double> dashPattern(const Stroke &e)
@@ -513,11 +516,24 @@ Path arrowhead(Arrowhead head, QPointF tip, QPointF from, double width, bool *fi
 
 namespace {
 
+/// The bounding box of a text's or a picture's box rotated by `angle` about its centre.
+QRectF boxBounds(const QRectF &box, double angle)
+{
+    const QPointF c = box.center();
+    Extent extent;
+    for (const QPointF &p : {box.topLeft(), box.topRight(), box.bottomRight(), box.bottomLeft()})
+        extent.add(rotatePoint(p, c, angle), 0);
+    QRectF r = extent.rect();
+    if (r.width() <= 0 || r.height() <= 0) // (a zero-sized box still is somewhere)
+        r = QRectF(r.topLeft(), QSizeF(std::max(r.width(), 0.01), std::max(r.height(), 0.01)));
+    return r;
+}
+
 ElementShape shapeOf(const Stroke &e, bool rotated, qsizetype maxHatch)
 {
     ElementShape s = localShape(e, maxHatch);
-    const QPointF center = elementCenter(e);
     if (rotated && e.angle != 0 && std::isfinite(e.angle)) {
+        const QPointF center = elementCenter(e);
         transformPath(s.area, center, e.angle);
         transformPath(s.ink, center, e.angle);
         transformPath(s.outline, center, e.angle);
@@ -534,15 +550,12 @@ ElementShape shapeOf(const Stroke &e, bool rotated, qsizetype maxHatch)
         return s;
     }
     if (e.type == ElementType::Text || e.type == ElementType::Image) {
-        Stroke unrotated = e;
-        if (!rotated)
-            unrotated.angle = 0;
-        s.bounds = elementBounds(unrotated);
+        s.bounds = boxBounds(e.box, rotated ? e.angle : 0);
         return s;
     }
     const double pad = std::max(0.0, e.width) / 2;
     addPathBounds(extent, s.outline, pad);
-    for (const Path &h : s.heads)
+    for (const Path &h : std::as_const(s.heads))
         addPathBounds(extent, h, pad);
     s.bounds = extent.rect();
     return s;
@@ -557,16 +570,8 @@ ElementShape elementShape(const Stroke &e, bool rotated, qsizetype hatchLines)
 
 QRectF elementBounds(const Stroke &e)
 {
-    if (e.type == ElementType::Text || e.type == ElementType::Image) {
-        const QPointF c = e.box.center();
-        Extent extent;
-        for (const QPointF &p : {e.box.topLeft(), e.box.topRight(), e.box.bottomRight(), e.box.bottomLeft()})
-            extent.add(rotatePoint(p, c, e.angle), 0);
-        QRectF r = extent.rect();
-        if (r.width() <= 0 || r.height() <= 0) // (a zero-sized box still is somewhere)
-            r = QRectF(r.topLeft(), QSizeF(std::max(r.width(), 0.01), std::max(r.height(), 0.01)));
-        return r;
-    }
+    if (e.type == ElementType::Text || e.type == ElementType::Image)
+        return boxBounds(e.box, e.angle);
     return shapeOf(e, true, -1).bounds; // (hatch lines lie inside the outline)
 }
 
@@ -576,6 +581,7 @@ QList<TextLine> textLines(const Stroke &e)
     QString text = e.text;
     text.remove(u'\r');
     const QStringList lines = text.split(u'\n');
+    out.reserve(lines.size());
     const double step = e.fontSize * e.lineHeight;
     const double x = e.textAlign == TextAlign::Center  ? e.box.center().x()
                      : e.textAlign == TextAlign::Right ? e.box.right()
@@ -613,9 +619,8 @@ QList<QList<QPointF>> flatten(const Path &path, double tolerance)
         return std::clamp(int(std::ceil(std::sqrt(std::max(0.0, length) / std::max(0.01, tolerance)))), 1, 64);
     };
     const auto flush = [&] {
-        if (current.size() >= 1)
-            out.append(current);
-        current.clear();
+        if (!current.isEmpty())
+            out.append(std::exchange(current, {}));
     };
     for (const PathOp &op : path) {
         switch (op.kind) {
@@ -701,20 +706,24 @@ HitShape hitShape(const Stroke &e)
     HitShape h;
     const ElementShape s = localShape(e, -1);
     h.lines = flatten(s.outline, 1);
+    if (!transparent(e.fill) && (isShape(e.type) || closedPolygon(e)))
+        h.areas = h.lines; // (the outline alone, before the heads join it)
     for (const Path &head : s.heads)
         h.lines.append(flatten(head, 1));
-    const bool filled = !transparent(e.fill);
-    if (filled) {
-        const bool closedLine = e.polygon && e.type == ElementType::Line && e.points.size() >= 3;
-        if (isShape(e.type) || closedLine)
-            h.areas = flatten(s.outline, 1);
-    }
     return h;
 }
 
-QList<QPointF> boxCorners(const QRectF &r)
+/// `within(a, b)` holds for a segment ab of the polyline: each point to the next one, the last one
+/// alone.
+template<typename Points, typename Within>
+bool anySegment(const Points &points, const Within &within)
 {
-    return {r.topLeft(), r.topRight(), r.bottomRight(), r.bottomLeft()};
+    const qsizetype n = points.size();
+    for (qsizetype k = 0; k < n; ++k) {
+        if (within(toPoint(points.at(k)), toPoint(points.at(std::min(k + 1, n - 1)))))
+            return true;
+    }
+    return false;
 }
 
 } // namespace
@@ -727,14 +736,8 @@ bool hitTest(const Stroke &e, QPointF scene, double tolerance)
     switch (e.type) {
     case ElementType::Freedraw: {
         const double reach = tolerance + e.width * 4.25 / 2;
-        const qsizetype n = e.points.size();
-        for (qsizetype k = 0; k < n; ++k) {
-            const QPointF a(e.points.at(k).x, e.points.at(k).y);
-            const QPointF b = k + 1 < n ? QPointF(e.points.at(k + 1).x, e.points.at(k + 1).y) : a;
-            if (pointSegment(p, a, b) <= reach)
-                return true;
-        }
-        return !transparent(e.fill) && pointInPolygon(p, pointsOf(e));
+        return anySegment(e.points, [&](QPointF a, QPointF b) { return pointSegment(p, a, b) <= reach; })
+               || (!transparent(e.fill) && pointInPolygon(p, pointsOf(e)));
     }
     case ElementType::Text:
     case ElementType::Image: return e.box.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(p);
@@ -742,18 +745,10 @@ bool hitTest(const Stroke &e, QPointF scene, double tolerance)
     }
     const HitShape h = hitShape(e);
     const double reach = tolerance + e.width / 2;
-    for (const QList<QPointF> &line : h.lines) {
-        for (qsizetype k = 0; k < line.size(); ++k) {
-            const QPointF b = k + 1 < line.size() ? line.at(k + 1) : line.at(k);
-            if (pointSegment(p, line.at(k), b) <= reach)
-                return true;
-        }
-    }
-    for (const QList<QPointF> &area : h.areas) {
-        if (pointInPolygon(p, area))
-            return true;
-    }
-    return false;
+    const auto within = [&](QPointF a, QPointF b) { return pointSegment(p, a, b) <= reach; };
+    if (std::ranges::any_of(h.lines, [&](const QList<QPointF> &line) { return anySegment(line, within); }))
+        return true;
+    return std::ranges::any_of(h.areas, [&](const QList<QPointF> &area) { return pointInPolygon(p, area); });
 }
 
 bool touchesSegment(const Stroke &e, QPointF a, QPointF b, double reach)
@@ -763,18 +758,12 @@ bool touchesSegment(const Stroke &e, QPointF a, QPointF b, double reach)
     const QPointF center = elementCenter(e);
     const QPointF la = rotatePoint(a, center, -e.angle);
     const QPointF lb = rotatePoint(b, center, -e.angle);
+    // A polyline of the element passes within `r` of the move.
+    const auto touches = [&la, &lb](const auto &line, double r) {
+        return anySegment(line, [&](QPointF p, QPointF q) { return segmentDistance(la, lb, p, q) <= r; });
+    };
     switch (e.type) {
-    case ElementType::Freedraw: {
-        const double r = reach + e.width * 4.25 * 0.5;
-        const qsizetype n = e.points.size();
-        for (qsizetype k = 0; k < n; ++k) {
-            const QPointF p(e.points.at(k).x, e.points.at(k).y);
-            const QPointF q = k + 1 < n ? QPointF(e.points.at(k + 1).x, e.points.at(k + 1).y) : p;
-            if (segmentDistance(la, lb, p, q) <= r)
-                return true;
-        }
-        return false;
-    }
+    case ElementType::Freedraw: return touches(e.points, reach + e.width * 4.25 * 0.5);
     case ElementType::Text:
     case ElementType::Image: {
         const QList<QPointF> box = boxCorners(e.box);
@@ -790,25 +779,16 @@ bool touchesSegment(const Stroke &e, QPointF a, QPointF b, double reach)
     }
     const HitShape h = hitShape(e);
     const double r = reach + e.width / 2;
-    for (const QList<QPointF> &line : h.lines) {
-        for (qsizetype k = 0; k < line.size(); ++k) {
-            const QPointF q = k + 1 < line.size() ? line.at(k + 1) : line.at(k);
-            if (segmentDistance(la, lb, line.at(k), q) <= r)
-                return true;
-        }
-    }
-    for (const QList<QPointF> &area : h.areas) {
-        if (pointInPolygon(la, area) || pointInPolygon(lb, area))
-            return true;
-    }
-    return false;
+    if (std::ranges::any_of(h.lines, [&](const QList<QPointF> &line) { return touches(line, r); }))
+        return true;
+    return std::ranges::any_of(
+            h.areas, [&](const QList<QPointF> &area) { return pointInPolygon(la, area) || pointInPolygon(lb, area); });
 }
 
 QList<QPointF> lassoSamples(const Stroke &e)
 {
     constexpr qsizetype MaxSamples = 64;
     QList<QPointF> samples;
-    const QPointF center = elementCenter(e);
     const auto evenly = [](const QList<QPointF> &all) {
         if (all.size() <= MaxSamples)
             return all;
@@ -851,6 +831,7 @@ QList<QPointF> lassoSamples(const Stroke &e)
     }
     }
     if (e.angle != 0) {
+        const QPointF center = elementCenter(e);
         for (QPointF &p : samples)
             p = rotatePoint(p, center, e.angle);
     }
@@ -864,11 +845,7 @@ bool lassoSelects(const Stroke &e, const QList<QPointF> &lasso)
     const QList<QPointF> samples = lassoSamples(e);
     if (samples.isEmpty())
         return false;
-    qsizetype inside = 0;
-    for (const QPointF &p : samples) {
-        if (pointInPolygon(p, lasso))
-            ++inside;
-    }
+    const qsizetype inside = std::ranges::count_if(samples, [&lasso](QPointF p) { return pointInPolygon(p, lasso); });
     return inside * 2 >= samples.size();
 }
 

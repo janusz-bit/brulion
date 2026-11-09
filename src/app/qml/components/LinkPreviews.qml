@@ -44,6 +44,10 @@ QtObject {
     property bool overPopup: false
     /// The popup (BLinkPreview), created in the first window a preview opens in.
     property BLinkPreview popup: null
+    /// close() is running (the popup's onClosed and onAnchorItemChanged must not close again).
+    property bool closing: false
+    /// Where the preview opens (openNow(); a method's point is read through a typed property).
+    property point _at
     readonly property bool shown: popup !== null && popup.visible
 
     /// The link's scheme is one previews are shown for.
@@ -65,7 +69,7 @@ QtObject {
             hub.closeTimer.stop()
             if (hub.pendingItem === item) {
                 hub.openTimer.stop()
-                hub.pendingItem = null
+                hub.forgetPending()
             }
             return
         }
@@ -96,7 +100,6 @@ QtObject {
             hub.closeLater()
         }
     }
-    /// The pointer entered or left the preview.
     /// No preview is pending.
     function forgetPending(): void {
         hub.pendingItem = null
@@ -104,6 +107,7 @@ QtObject {
         hub.pendingFromPath = ""
         hub.pendingHost = null
     }
+    /// The pointer entered or left the preview.
     function setOverPopup(over: bool): void {
         hub.overPopup = over
         if (over)
@@ -115,7 +119,6 @@ QtObject {
         if (hub.shown && !hub.overLink && !hub.overPopup)
             hub.closeTimer.restart()
     }
-    property bool closing: false
     function close(): void {
         if (hub.closing)
             return
@@ -172,9 +175,6 @@ QtObject {
         hub._at = item.mapToItem(root, x, y)
         hub.popup.show(hub._at.x, hub._at.y)
     }
-
-    /// Where the preview opens (openNow(); a method's point is read through a typed property).
-    property point _at
 
     // The text under the open preview went away (a row scrolled out, the page closed): so does it.
     onAnchorItemChanged: if (!hub.anchorItem && !hub.closing && hub.popup && hub.popup.visible) hub.close()

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 using namespace Qt::StringLiterals;
 
@@ -26,6 +27,20 @@ constexpr QByteArrayView PayloadEnd = "<!-- payload-end -->";
 bool finite(const QJsonValue &v)
 {
     return v.isDouble() && std::isfinite(v.toDouble());
+}
+
+/// The arrays and objects of a JSON text, counted before it is parsed (brackets inside strings too:
+/// an upper bound) — what the parse would allocate grows with them, not with the bytes.
+qsizetype containers(QByteArrayView json)
+{
+    return std::ranges::count_if(json, [](char c) { return c == '[' || c == '{'; });
+}
+
+/// The root of an Excalidraw scene: `type` "excalidraw", `elements` an array when present.
+bool isScene(const QJsonObject &root)
+{
+    return root.value(u"type"_s).toString() == u"excalidraw"
+           && (!root.contains(u"elements"_s) || root.value(u"elements"_s).isArray());
 }
 
 /// JSON.stringify's escaping of a string whose characters are bytes (a "byte string").
@@ -60,6 +75,9 @@ void appendByteStringJson(QByteArray &out, QByteArrayView bytes)
 /// The scene JSON of a payload's JSON (the wrapper, or a scene of old exports).
 std::optional<QByteArray> unwrapPayload(const QByteArray &json)
 {
+    // (The wrapper is one object more than the scene it may hold.)
+    if (containers(json) > MaxSceneContainers + 1)
+        return std::nullopt;
     QJsonParseError error{};
     const QJsonDocument doc = QJsonDocument::fromJson(json, &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject())
@@ -83,10 +101,6 @@ std::optional<QByteArray> unwrapPayload(const QByteArray &json)
         return inflate(bytes);
     return bytes;
 }
-
-} // namespace
-
-namespace {
 
 double round2(double v)
 {
@@ -178,7 +192,7 @@ VerticalAlign verticalAlignFrom(QStringView name)
 QStringList stringList(const QJsonValue &v)
 {
     QStringList out;
-    for (const QJsonValue &item : v.toArray()) {
+    for (const QJsonArray items = v.toArray(); const auto &item : items) {
         if (item.isString())
             out.append(item.toString());
     }
@@ -187,10 +201,9 @@ QStringList stringList(const QJsonValue &v)
 
 /// The points of a freedraw, line or arrow element in scene coordinates (nullopt: broken or far
 /// away).
-std::optional<QList<StrokePoint>> pointsFrom(const QJsonObject &e, double x, double y, const QJsonArray &pressures,
+std::optional<QList<StrokePoint>> pointsFrom(const QJsonArray &points, double x, double y, const QJsonArray &pressures,
                                              bool realPressure)
 {
-    const QJsonArray points = e.value(u"points"_s).toArray();
     QList<StrokePoint> out;
     out.reserve(points.size());
     for (qsizetype i = 0; i < points.size(); ++i) {
@@ -207,6 +220,42 @@ std::optional<QList<StrokePoint>> pointsFrom(const QJsonObject &e, double x, dou
         if (!inReach(point.x) || !inReach(point.y))
             return std::nullopt; // far away (CoordinateLimit): kept as foreign
         out.append(point);
+    }
+    return out;
+}
+
+/// Writes a freedraw's, line's or arrow's points: `x`, `y` (the first point), `points` relative to
+/// it and the `width`, `height` they span. Gives the relative points.
+QJsonArray writePoints(QJsonObject &e, const QList<StrokePoint> &points)
+{
+    const double x0 = points.isEmpty() ? 0 : points.first().x;
+    const double y0 = points.isEmpty() ? 0 : points.first().y;
+    QJsonArray out;
+    double minX = 0, minY = 0, maxX = 0, maxY = 0;
+    for (const StrokePoint &p : points) {
+        const double dx = round2(p.x - x0);
+        const double dy = round2(p.y - y0);
+        minX = std::min(minX, dx);
+        maxX = std::max(maxX, dx);
+        minY = std::min(minY, dy);
+        maxY = std::max(maxY, dy);
+        out.append(QJsonArray{dx, dy});
+    }
+    e.insert(u"x"_s, round2(x0));
+    e.insert(u"y"_s, round2(y0));
+    e.insert(u"width"_s, round2(maxX - minX));
+    e.insert(u"height"_s, round2(maxY - minY));
+    e.insert(u"points"_s, out);
+    return out;
+}
+
+/// A freedraw's `pressures` (none when simulated).
+QJsonArray pressuresJson(const Stroke &s)
+{
+    QJsonArray out;
+    if (!s.simulatePressure) {
+        for (const StrokePoint &p : s.points)
+            out.append(std::round(std::clamp(p.pressure, 0.0, 1.0) * 1000) / 1000);
     }
     return out;
 }
@@ -246,30 +295,32 @@ std::optional<Stroke> elementFromJson(const QJsonObject &e)
     s.color = stringOr(e, u"strokeColor", u"#1e1e1e"_s);
     s.fill = stringOr(e, u"backgroundColor", u"transparent"_s);
     s.fillStyle = fillStyleFrom(e.value(u"fillStyle"_s).toString());
-    s.width = finite(e.value(u"strokeWidth"_s)) ? std::clamp(e.value(u"strokeWidth"_s).toDouble(), 0.05, 200.0) : 1;
+    s.width = std::clamp(number(e, u"strokeWidth", 1), 0.05, 200.0);
     s.strokeStyle = strokeStyleFrom(e.value(u"strokeStyle"_s).toString());
     s.roughness = int(std::clamp(number(e, u"roughness", 1), 0.0, 10.0));
-    s.opacity = finite(e.value(u"opacity"_s)) ? std::clamp(e.value(u"opacity"_s).toInt(), 0, 100) : 100;
+    // (Not toInt(): it gives 0 for a fraction or a number beyond int.)
+    s.opacity = int(std::clamp(number(e, u"opacity", 100), 0.0, 100.0));
     if (const QJsonValue r = e.value(u"roundness"_s); r.isObject())
         s.roundness = std::clamp(r.toObject().value(u"type"_s).toInt(3), 1, 3);
     s.locked = e.value(u"locked"_s).toBool();
     s.groupIds = stringList(e.value(u"groupIds"_s));
-    for (const QJsonValue &b : e.value(u"boundElements"_s).toArray()) {
+    for (const QJsonArray bound = e.value(u"boundElements"_s).toArray(); const auto &b : bound) {
         const QString id = b.toObject().value(u"id"_s).toString();
         if (!id.isEmpty())
             s.boundIds.append(id);
     }
     switch (s.type) {
     case ElementType::Freedraw: {
-        if (e.value(u"points"_s).toArray().isEmpty())
+        const QJsonArray points = e.value(u"points"_s).toArray();
+        if (points.isEmpty())
             return std::nullopt;
         s.simulatePressure = e.value(u"simulatePressure"_s).toBool(true);
         const QJsonArray pressures = e.value(u"pressures"_s).toArray();
-        const bool realPressure = !s.simulatePressure && pressures.size() == e.value(u"points"_s).toArray().size();
-        std::optional<QList<StrokePoint>> points = pointsFrom(e, x, y, pressures, realPressure);
-        if (!points)
+        const bool realPressure = !s.simulatePressure && pressures.size() == points.size();
+        std::optional<QList<StrokePoint>> read = pointsFrom(points, x, y, pressures, realPressure);
+        if (!read)
             return std::nullopt;
-        s.points = std::move(*points);
+        s.points = std::move(*read);
         if (!realPressure)
             s.simulatePressure = true;
         s.tool = e.value(u"customData"_s).toObject().value(u"brulionTool"_s).toString() == u"highlighter"
@@ -279,7 +330,7 @@ std::optional<Stroke> elementFromJson(const QJsonObject &e)
     }
     case ElementType::Line:
     case ElementType::Arrow: {
-        std::optional<QList<StrokePoint>> points = pointsFrom(e, x, y, {}, false);
+        std::optional<QList<StrokePoint>> points = pointsFrom(e.value(u"points"_s).toArray(), x, y, {}, false);
         if (!points || points->size() < 2)
             return std::nullopt;
         s.points = std::move(*points);
@@ -320,7 +371,8 @@ std::optional<Stroke> elementFromJson(const QJsonObject &e)
     s.seed = e.value(u"seed"_s).toInt(1);
     s.version = e.value(u"version"_s).toInt(1);
     s.versionNonce = e.value(u"versionNonce"_s).toInt();
-    s.updated = qint64(number(e, u"updated", 0));
+    // (Clamped: a double beyond qint64 has no defined conversion.)
+    s.updated = qint64(std::clamp(number(e, u"updated", 0), -1e18, 1e18));
     s.element = e;
     return s;
 }
@@ -386,30 +438,9 @@ QString verticalAlignName(VerticalAlign align)
 
 QJsonObject strokeElement(const Stroke &stroke)
 {
-    const double x0 = stroke.points.isEmpty() ? 0 : stroke.points.first().x;
-    const double y0 = stroke.points.isEmpty() ? 0 : stroke.points.first().y;
-    const auto round2 = [](double v) { return std::round(v * 100) / 100; };
-    QJsonArray points;
-    QJsonArray pressures;
-    double minX = 0, minY = 0, maxX = 0, maxY = 0;
-    for (const StrokePoint &p : stroke.points) {
-        const double dx = round2(p.x - x0);
-        const double dy = round2(p.y - y0);
-        minX = std::min(minX, dx);
-        maxX = std::max(maxX, dx);
-        minY = std::min(minY, dy);
-        maxY = std::max(maxY, dy);
-        points.append(QJsonArray{dx, dy});
-        if (!stroke.simulatePressure)
-            pressures.append(std::round(std::clamp(p.pressure, 0.0, 1.0) * 1000) / 1000);
-    }
     QJsonObject e{
             {u"id"_s, stroke.id},
             {u"type"_s, u"freedraw"_s},
-            {u"x"_s, round2(x0)},
-            {u"y"_s, round2(y0)},
-            {u"width"_s, round2(maxX - minX)},
-            {u"height"_s, round2(maxY - minY)},
             {u"angle"_s, 0},
             {u"strokeColor"_s, stroke.color},
             {u"backgroundColor"_s, u"transparent"_s},
@@ -429,11 +460,11 @@ QJsonObject strokeElement(const Stroke &stroke)
             {u"updated"_s, double(stroke.updated)},
             {u"link"_s, QJsonValue::Null},
             {u"locked"_s, false},
-            {u"points"_s, points},
-            {u"pressures"_s, pressures},
+            {u"pressures"_s, pressuresJson(stroke)},
             {u"simulatePressure"_s, stroke.simulatePressure},
-            {u"lastCommittedPoint"_s, points.isEmpty() ? QJsonValue(QJsonValue::Null) : points.last()},
     };
+    const QJsonArray points = writePoints(e, stroke.points);
+    e.insert(u"lastCommittedPoint"_s, points.isEmpty() ? QJsonValue(QJsonValue::Null) : points.last());
     if (stroke.tool == Tool::Highlighter)
         e.insert(u"customData"_s, QJsonObject{{u"brulionTool"_s, u"highlighter"_s}});
     return e;
@@ -441,31 +472,11 @@ QJsonObject strokeElement(const Stroke &stroke)
 
 namespace {
 
-/// The relative points of a freedraw, line or arrow element (from the first point), and the
-/// extent they span.
-QJsonArray relativePoints(const QList<StrokePoint> &points, QSizeF *extent)
+/// `v` (a string, an array), or null when it is empty.
+template<typename T>
+QJsonValue nullOr(const T &v)
 {
-    const double x0 = points.isEmpty() ? 0 : points.first().x;
-    const double y0 = points.isEmpty() ? 0 : points.first().y;
-    QJsonArray out;
-    double minX = 0, minY = 0, maxX = 0, maxY = 0;
-    for (const StrokePoint &p : points) {
-        const double dx = round2(p.x - x0);
-        const double dy = round2(p.y - y0);
-        minX = std::min(minX, dx);
-        maxX = std::max(maxX, dx);
-        minY = std::min(minY, dy);
-        maxY = std::max(maxY, dy);
-        out.append(QJsonArray{dx, dy});
-    }
-    if (extent)
-        *extent = QSizeF(round2(maxX - minX), round2(maxY - minY));
-    return out;
-}
-
-QJsonValue nullOr(const QString &s)
-{
-    return s.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(s);
+    return v.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(v);
 }
 
 /// A binding as written: the one read with its elementId replaced (a copy's), or a new one.
@@ -478,6 +489,47 @@ QJsonValue bindingJson(const QJsonValue &read, const QString &id)
     return b;
 }
 
+/// boundElements: [{id, type}] — an entry `read` kept as it was; with `types` (the drawing's), bound
+/// elements not in the drawing (any more) left out.
+QJsonValue boundElementsJson(const QStringList &ids, const QJsonArray &read, const QHash<QString, ElementType> *types)
+{
+    QJsonArray bound;
+    for (const QString &id : ids) {
+        QJsonObject entry;
+        for (const auto &v : read) {
+            if (v.toObject().value(u"id"_s).toString() == id)
+                entry = v.toObject();
+        }
+        if (types) {
+            const auto it = types->constFind(id);
+            if (it == types->constEnd())
+                continue;
+            entry.insert(u"type"_s, *it == ElementType::Text ? u"text"_s : u"arrow"_s);
+        } else if (!entry.contains(u"type"_s)) {
+            entry.insert(u"type"_s, u"arrow"_s);
+        }
+        entry.insert(u"id"_s, id);
+        bound.append(entry);
+    }
+    return nullOr(bound);
+}
+
+/// What an element made in Brulion starts from: Excalidraw's template of its kind.
+QJsonObject newElement(const Stroke &s)
+{
+    if (s.type == ElementType::Freedraw)
+        return strokeElement(s);
+    QJsonObject e{{u"frameId"_s, QJsonValue::Null}, {u"link"_s, QJsonValue::Null}};
+    if (isLinear(s.type)) {
+        e.insert(u"lastCommittedPoint"_s, QJsonValue::Null);
+        e.insert(s.type == ElementType::Arrow ? u"elbowed"_s : u"polygon"_s, false);
+    } else if (s.type == ElementType::Image) {
+        e.insert(u"status"_s, u"saved"_s);
+        e.insert(u"scale"_s, QJsonArray{1, 1});
+    }
+    return e;
+}
+
 } // namespace
 
 QJsonObject elementJson(const Stroke &s, const QHash<QString, ElementType> *types)
@@ -485,29 +537,7 @@ QJsonObject elementJson(const Stroke &s, const QHash<QString, ElementType> *type
     if (!s.element.isEmpty() && s.version == s.element.value(u"version"_s).toInt(1)
         && s.id == s.element.value(u"id"_s).toString())
         return s.element; // unchanged since it was read: as it was
-    QJsonObject e;
-    if (!s.element.isEmpty()) {
-        e = s.element;
-    } else if (s.type == ElementType::Freedraw) {
-        e = strokeElement(s);
-    } else {
-        e = QJsonObject{{u"frameId"_s, QJsonValue::Null}, {u"link"_s, QJsonValue::Null}};
-        switch (s.type) {
-        case ElementType::Line:
-        case ElementType::Arrow:
-            e.insert(u"lastCommittedPoint"_s, QJsonValue::Null);
-            if (s.type == ElementType::Arrow)
-                e.insert(u"elbowed"_s, false);
-            else
-                e.insert(u"polygon"_s, false);
-            break;
-        case ElementType::Image:
-            e.insert(u"status"_s, u"saved"_s);
-            e.insert(u"scale"_s, QJsonArray{1, 1});
-            break;
-        default: break;
-        }
-    }
+    QJsonObject e = s.element.isEmpty() ? newElement(s) : s.element;
     e.insert(u"id"_s, s.id);
     e.insert(u"type"_s, elementTypeName(s.type));
     e.insert(u"angle"_s, s.angle);
@@ -525,54 +555,19 @@ QJsonObject elementJson(const Stroke &s, const QHash<QString, ElementType> *type
     }
     e.insert(u"locked"_s, s.locked);
     e.insert(u"groupIds"_s, QJsonArray::fromStringList(s.groupIds));
-    {
-        // boundElements: [{id, type}] — an entry read kept as it was; bound elements not in the
-        // drawing (any more) left out.
-        QJsonArray bound;
-        const QJsonArray read = e.value(u"boundElements"_s).toArray();
-        for (const QString &id : s.boundIds) {
-            QJsonObject entry;
-            for (const QJsonValue &v : read) {
-                if (v.toObject().value(u"id"_s).toString() == id)
-                    entry = v.toObject();
-            }
-            if (types) {
-                const auto it = types->constFind(id);
-                if (it == types->constEnd())
-                    continue;
-                entry.insert(u"type"_s, *it == ElementType::Text ? u"text"_s : u"arrow"_s);
-            } else if (!entry.contains(u"type"_s)) {
-                entry.insert(u"type"_s, u"arrow"_s);
-            }
-            entry.insert(u"id"_s, id);
-            bound.append(entry);
-        }
-        e.insert(u"boundElements"_s, bound.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(bound));
-    }
+    e.insert(u"boundElements"_s, boundElementsJson(s.boundIds, e.value(u"boundElements"_s).toArray(), types));
     e.insert(u"seed"_s, s.seed);
     e.insert(u"version"_s, s.version);
     e.insert(u"versionNonce"_s, s.versionNonce);
     e.insert(u"isDeleted"_s, false);
     e.insert(u"updated"_s, double(s.updated));
     if (hasPoints(s.type)) {
-        QSizeF extent;
-        const QJsonArray points = relativePoints(s.points, &extent);
-        e.insert(u"x"_s, s.points.isEmpty() ? 0 : round2(s.points.first().x));
-        e.insert(u"y"_s, s.points.isEmpty() ? 0 : round2(s.points.first().y));
-        e.insert(u"width"_s, extent.width());
-        e.insert(u"height"_s, extent.height());
-        e.insert(u"points"_s, points);
+        const QJsonArray points = writePoints(e, s.points);
         if (s.type == ElementType::Freedraw) {
-            QJsonArray pressures;
-            if (!s.simulatePressure) {
-                for (const StrokePoint &p : s.points)
-                    pressures.append(std::round(std::clamp(p.pressure, 0.0, 1.0) * 1000) / 1000);
-            }
-            e.insert(u"pressures"_s, pressures);
+            e.insert(u"pressures"_s, pressuresJson(s));
             e.insert(u"simulatePressure"_s, s.simulatePressure);
             if (e.contains(u"lastCommittedPoint"_s))
-                e.insert(u"lastCommittedPoint"_s,
-                         points.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(points.last()));
+                e.insert(u"lastCommittedPoint"_s, points.isEmpty() ? QJsonValue(QJsonValue::Null) : points.last());
             QJsonObject custom = e.value(u"customData"_s).toObject();
             if (s.tool == Tool::Highlighter)
                 custom.insert(u"brulionTool"_s, u"highlighter"_s);
@@ -654,8 +649,8 @@ void attachPolygonLabels(Drawing &d)
     if (members.isEmpty())
         return;
     QSet<QString> foreignGroups;
-    for (const QJsonValue &v : std::as_const(d.foreign)) {
-        for (const QJsonValue &g : v.toObject().value(u"groupIds"_s).toArray())
+    for (const auto &v : std::as_const(d.foreign)) {
+        for (const QJsonArray groups = v.toObject().value(u"groupIds"_s).toArray(); const auto &g : groups)
             foreignGroups.insert(g.toString());
     }
     QSet<QString> labelled;
@@ -732,7 +727,7 @@ void detachPolygonLabels(const QList<Stroke> &strokes, QList<QJsonObject> &writt
                     bound.removeAt(k);
             }
             if (bound.size() != before)
-                e.insert(u"boundElements"_s, bound.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(bound));
+                e.insert(u"boundElements"_s, nullOr(bound));
         } else if (s.type == ElementType::Text && hasLabelMarker(e)
                    && (s.element.isEmpty() || s.element.value(u"version"_s).toInt(1) != s.version)) {
             // No label any more (written anew): unmarked, so grouping it with a polygon later
@@ -756,36 +751,22 @@ QString polygonLabelGroup(QStringView polygonId)
 
 std::optional<QJsonObject> sceneRoot(QByteArrayView json)
 {
-    if (json.size() > MaxSceneBytes)
+    if (json.size() > MaxSceneBytes || containers(json) > MaxSceneContainers)
         return std::nullopt;
-    // Counted before parsing (brackets inside strings too: an upper bound): what the parse would
-    // allocate grows with the arrays and objects, not with the bytes.
-    qsizetype containers = 0;
-    for (const char c : json) {
-        if ((c == '[' || c == '{') && ++containers > MaxSceneContainers)
-            return std::nullopt;
-    }
     QJsonParseError error{};
     const QJsonDocument doc = QJsonDocument::fromJson(json.toByteArray(), &error);
-    if (error.error != QJsonParseError::NoError || !doc.isObject())
+    if (error.error != QJsonParseError::NoError || !doc.isObject() || !isScene(doc.object()))
         return std::nullopt;
-    QJsonObject root = doc.object();
-    if (root.value(u"type"_s).toString() != u"excalidraw")
-        return std::nullopt;
-    if (root.contains(u"elements"_s) && !root.value(u"elements"_s).isArray())
-        return std::nullopt;
-    return root;
+    return doc.object();
 }
 
 std::optional<Drawing> sceneFromObject(const QJsonObject &root)
 {
-    if (root.value(u"type"_s).toString() != u"excalidraw")
-        return std::nullopt;
-    if (root.contains(u"elements"_s) && !root.value(u"elements"_s).isArray())
+    if (!isScene(root))
         return std::nullopt;
     Drawing d;
     const QJsonArray elements = root.value(u"elements"_s).toArray();
-    for (const QJsonValue &v : elements) {
+    for (const auto &v : elements) {
         const QJsonObject e = v.toObject();
         if (e.value(u"isDeleted"_s).toBool())
             continue;
@@ -802,11 +783,10 @@ std::optional<Drawing> sceneFromObject(const QJsonObject &root)
     d.background = backgroundFromName(d.appState.value(u"brulionBackground"_s).toString());
     // (A number or null reads as "": Auto.)
     d.theme = paperThemeFromName(d.appState.value(u"brulionTheme"_s).toString());
-    for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
-        if (it.key() != u"type" && it.key() != u"version" && it.key() != u"elements" && it.key() != u"appState"
-            && it.key() != u"files")
-            d.scene.insert(it.key(), it.value());
-    }
+    // The other keys, as read.
+    d.scene = root;
+    for (const QLatin1StringView key : {"type"_L1, "version"_L1, "elements"_L1, "appState"_L1, "files"_L1})
+        d.scene.remove(key);
     return d;
 }
 
@@ -832,24 +812,16 @@ QJsonObject sceneObject(const Drawing &drawing)
     for (const Stroke &s : drawing.strokes)
         written.append(elementJson(s, &types));
     detachPolygonLabels(drawing.strokes, written);
-    for (const QJsonValue &v : drawing.foreign)
+    for (const auto &v : drawing.foreign)
         written.append(v.toObject());
     // Fractional indices that no longer rise (an element moved up or down, a copy): left out of
     // every element — Excalidraw makes new ones (syncInvalidIndices).
-    bool rising = true;
-    QString last;
-    bool any = false;
+    QStringList indices;
     for (const QJsonObject &e : std::as_const(written)) {
-        const QJsonValue index = e.value(u"index"_s);
-        if (!index.isString())
-            continue;
-        if (any && !(last < index.toString())) {
-            rising = false;
-            break;
-        }
-        last = index.toString();
-        any = true;
+        if (const QJsonValue index = e.value(u"index"_s); index.isString())
+            indices.append(index.toString());
     }
+    const bool rising = std::adjacent_find(indices.cbegin(), indices.cend(), std::greater_equal<>()) == indices.cend();
     QJsonArray elements;
     QSet<QString> fileIds;
     for (qsizetype i = 0; i < written.size(); ++i) {

@@ -23,9 +23,25 @@ bool takeWord(QStringView &s, QStringView word)
     return true;
 }
 
-QString formatValue(double v)
+/// The values divided by the largest (their sum stays finite whatever they are) and their sum.
+struct Scaled {
+    QList<double> values;
+    double total = 0;
+};
+
+Scaled scaledValues(const PieChart &chart)
 {
-    return QString::number(v, 'g', 12);
+    double largest = 0;
+    for (const PieSlice &s : chart.slices)
+        largest = std::max(largest, s.value);
+    Scaled out;
+    out.values.reserve(chart.slices.size());
+    for (const PieSlice &s : chart.slices) {
+        const double v = largest > 0 ? s.value / largest : 0;
+        out.values.append(v);
+        out.total += v;
+    }
+    return out;
 }
 
 } // namespace
@@ -39,8 +55,7 @@ Outcome<PieChart> parsePie(QStringView source)
     QStringView head = st.front().text;
     if (!takeWord(head, u"pie"))
         return makeError(Code::UnknownType, st.front().line);
-    if (takeWord(head, u"showData"))
-        chart.showData = true;
+    chart.showData = takeWord(head, u"showData");
     if (takeWord(head, u"title"))
         chart.title = cleanLabel(head);
     else if (!head.isEmpty())
@@ -80,42 +95,23 @@ Outcome<PieChart> parsePie(QStringView source)
     return chart;
 }
 
-namespace {
-
-/// The values divided by the largest (their sum stays finite whatever they are).
-QList<double> scaledValues(const PieChart &chart, double *total)
-{
-    double largest = 0;
-    for (const PieSlice &s : chart.slices)
-        largest = std::max(largest, s.value);
-    QList<double> out;
-    *total = 0;
-    for (const PieSlice &s : chart.slices) {
-        out.append(largest > 0 ? s.value / largest : 0);
-        *total += out.last();
-    }
-    return out;
-}
-
-} // namespace
-
 QList<qreal> pieAngles(const PieChart &chart)
 {
-    double total = 0;
-    const QList<double> values = scaledValues(chart, &total);
+    const Scaled scaled = scaledValues(chart);
     QList<qreal> out;
-    for (const double v : values)
-        out.append(total > 0 ? v / total * 360.0 : 0);
+    out.reserve(scaled.values.size());
+    for (const double v : scaled.values)
+        out.append(scaled.total > 0 ? v / scaled.total * 360.0 : 0);
     return out;
 }
 
 Scene drawPie(const PieChart &chart, const Metrics &m)
 {
     constexpr qreal pi = std::numbers::pi;
+    constexpr qreal margin = 8;
     Scene scene;
     scene.title = chart.title;
     const qreal fs = m.fontSize;
-    const qreal margin = 8;
     const qreal R = fs * 9;
     qreal top = margin;
     TextBlock title;
@@ -125,8 +121,8 @@ Scene drawPie(const PieChart &chart, const Metrics &m)
     }
     const QPointF c(margin + R, top + R);
     const QList<qreal> angles = pieAngles(chart);
-    double total = 0;
-    const QList<double> scaled = scaledValues(chart, &total);
+    const Scaled scaled = scaledValues(chart);
+    const auto share = [&](qsizetype i) { return scaled.values[i] / scaled.total * 100; };
     // Slices clockwise from the top.
     qreal a = -pi / 2;
     QList<Item> labels;
@@ -141,13 +137,13 @@ Scene drawPie(const PieChart &chart, const Metrics &m)
             appendArc(p, c, R, R, a, a + span);
             p.append({PathOp::Type::Close, {}, {}, {}});
         }
-        scene.items.append(pathItem(p, Paint{sliceRole(int(i)), {}}, Paint{Role::SliceStroke, {}}, 1.5));
+        scene.items.append(pathItem(std::move(p), Paint{sliceRole(int(i)), {}}, Paint{Role::SliceStroke, {}}, 1.5));
         // The share on the slice when it has room for it.
         if (angles[i] >= 14) {
             const qreal mid = a + span / 2;
-            const qreal share = scaled[i] / total * 100;
+            const qreal pct = share(i);
             const QString text =
-                    share >= 9.95 ? QString::number(std::lround(share)) + u'%' : QString::number(share, 'f', 1) + u'%';
+                    pct >= 9.95 ? QString::number(std::lround(pct)) + u'%' : QString::number(pct, 'f', 1) + u'%';
             const TextBlock t = layoutText(m, text, fs * 0.9, true, 0);
             const QPointF at =
                     chart.slices.size() == 1 ? c : c + QPointF(R * 0.68 * std::cos(mid), R * 0.68 * std::sin(mid));
@@ -161,23 +157,21 @@ Scene drawPie(const PieChart &chart, const Metrics &m)
     const qreal lx = margin + 2 * R + fs * 2;
     const qreal swatch = fs * 0.95;
     QList<TextBlock> rows;
-    qreal rowH = 0, legendW = 0;
+    qreal legendW = 0, legendH = 0;
     for (qsizetype i = 0; i < chart.slices.size(); ++i) {
         const PieSlice &s = chart.slices[i];
-        const double share = scaled[i] / total * 100;
+        const double pct = share(i);
         QString text = s.label;
-        text += chart.showData ? u" ["_s + formatValue(s.value) + u"]"_s : QString();
-        text += u" ("_s + QString::number(share, 'f', share >= 9.95 ? 0 : 1) + u"%)"_s;
-        rows.append(layoutText(m, text, fs, false, fs * 22));
-        rowH = std::max(rowH, rows.last().lineHeight);
-        legendW = std::max(legendW, rows.last().size.width());
+        if (chart.showData)
+            text += u" ["_s + QString::number(s.value, 'g', 12) + u']';
+        text += u" ("_s + QString::number(pct, 'f', pct >= 9.95 ? 0 : 1) + u"%)"_s;
+        const TextBlock &row = rows.emplaceBack(layoutText(m, text, fs, false, fs * 22));
+        legendW = std::max(legendW, row.size.width());
+        legendH += row.size.height() + fs * 0.45;
     }
-    qreal legendH = 0;
-    for (const TextBlock &t : rows)
-        legendH += t.size.height() + fs * 0.45;
     qreal y = c.y() - legendH / 2;
     for (qsizetype i = 0; i < rows.size(); ++i) {
-        const TextBlock &t = rows[i];
+        const TextBlock &t = rows.at(i);
         const qreal sy = y + (t.lineHeight - swatch) / 2;
         scene.items.append(
                 pathItem(roundedRectPath(QRectF(lx, sy, swatch, swatch), 2), Paint{sliceRole(int(i)), {}}, Paint{}, 0));

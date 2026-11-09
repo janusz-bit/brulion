@@ -114,7 +114,7 @@ enum class PolygonKind {
     BlockArrow,
     Callout,
     Heart,
-    Cloud
+    Cloud,
 };
 /// The kind a drawing tool's name stands for ("triangle", "rightTriangle", "parallelogram",
 /// "trapezoid", "pentagon", "hexagon", "star", "blockArrow", "callout", "heart", "cloud").

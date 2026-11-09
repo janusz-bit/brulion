@@ -16,15 +16,19 @@ QString valid(const QString &c, const QString &fallback)
     return rgba ? detail::toHex(*rgba) : fallback;
 }
 
+/// Brulion's dark look (the HTML export's dark colours), also what a dark theme falls back to.
+ThemeColors darkTheme()
+{
+    return {u"#1b1d22"_s, u"#e6e3dc"_s, u"#a8a395"_s, u"#3a3d45"_s, u"#8ab8e6"_s, true};
+}
+
 } // namespace
 
 Palette themedPalette(const ThemeColors &theme)
 {
     using detail::mix;
     const bool dark = theme.dark;
-    const ThemeColors defaults =
-            dark ? ThemeColors{u"#1b1d22"_s, u"#e6e3dc"_s, u"#a8a395"_s, u"#3a3d45"_s, u"#8ab8e6"_s, true}
-                 : ThemeColors{};
+    const ThemeColors defaults = dark ? darkTheme() : ThemeColors{};
     const QString bg = valid(theme.background, defaults.background);
     const QString fg = valid(theme.text, defaults.text);
     const QString muted = valid(theme.mutedText, defaults.mutedText);
@@ -90,7 +94,7 @@ Palette lightPalette()
 
 Palette darkPalette()
 {
-    return themedPalette({u"#1b1d22"_s, u"#e6e3dc"_s, u"#a8a395"_s, u"#3a3d45"_s, u"#8ab8e6"_s, true});
+    return themedPalette(darkTheme());
 }
 
 QString colorOf(const Paint &paint, const Palette &palette)

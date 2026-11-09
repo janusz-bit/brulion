@@ -160,6 +160,7 @@ QString darkCss(const QString &css)
     static const QRegularExpression declaration(
             uR"((?<![\w-])(fill|stroke|stop-color|flood-color|lighting-color|color)(\s*:\s*)(#[0-9A-Fa-f]{3,8})(?![0-9A-Za-z_-]))"_s);
     QString out;
+    out.reserve(css.size());
     qsizetype done = 0;
     for (const QRegularExpressionMatch &m : declaration.globalMatch(css)) {
         out += QStringView(css).sliced(done, m.capturedStart(3) - done);
@@ -196,7 +197,7 @@ std::optional<QByteArray> darkSvg(const QByteArray &svg)
         case QXmlStreamReader::StartElement: {
             const QStringView name = in.qualifiedName();
             out.writeStartElement(name.toString());
-            for (const QXmlStreamAttribute &a : in.attributes()) {
+            for (const QXmlStreamAttributes attributes = in.attributes(); const QXmlStreamAttribute &a : attributes) {
                 const QString attribute = a.qualifiedName().toString();
                 const QString value = a.value().toString();
                 out.writeAttribute(attribute, isColorAttribute(attribute) ? darkValue(value)

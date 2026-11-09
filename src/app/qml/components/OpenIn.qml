@@ -1,4 +1,5 @@
 pragma Singleton
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // OpenIn — where a link or a page's row opens besides "here": a new tab, or a window of its

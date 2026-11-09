@@ -24,6 +24,8 @@ Item {
     readonly property real specSpread: Theme.elevationSpread(level)
     readonly property real specOpacity: Theme.elevationOpacity(level)
     readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
+    /// Rings of the software fallback.
+    readonly property int rings: Math.min(6, Math.ceil(specBlur / 4))
 
     x: target ? target.x : 0
     y: target ? target.y : 0
@@ -48,16 +50,16 @@ Item {
 
     // Software fallback: stacked rings fading outwards.
     Repeater {
-        model: shadow.software ? Math.min(6, Math.ceil(shadow.specBlur / 4)) : 0
+        model: shadow.software ? shadow.rings : 0
         delegate: Rectangle {
             required property int index
-            readonly property real grow: (index + 1) * shadow.specBlur / (2 * Math.min(6, Math.ceil(shadow.specBlur / 4)))
+            readonly property real grow: (index + 1) * shadow.specBlur / (2 * shadow.rings)
             x: -grow
             y: -grow + shadow.specOffsetY * (0.5 + index * 0.1)
             width: shadow.width + 2 * grow
             height: shadow.height + 2 * grow
             radius: shadow.radius + grow
-            color: Theme.shadow.alpha(Math.min(1, shadow.specOpacity * 0.85 / Math.min(6, Math.ceil(shadow.specBlur / 4))))
+            color: Theme.shadow.alpha(Math.min(1, shadow.specOpacity * 0.85 / shadow.rings))
             antialiasing: true
         }
     }

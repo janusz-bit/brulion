@@ -312,7 +312,7 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
     const std::optional<QJsonObject> root = sceneRoot(json);
     if (!root)
         return fail(ReadError::Corrupt);
-    for (const QJsonValue &v : root->value(u"elements"_s).toArray()) {
+    for (const QJsonArray elements = root->value(u"elements"_s).toArray(); const auto &v : elements) {
         if (v.toObject().value(u"isDeleted"_s).toBool())
             layout.tombstones.append(v);
         else
@@ -334,9 +334,8 @@ std::optional<ExcalidrawMarkdownRead> readExcalidrawMarkdown(QByteArrayView byte
         qsizetype to = heading;
         for (const QByteArrayView end : {QByteArrayView("## Element Links"), QByteArrayView("## Embedded Files"),
                                          QByteArrayView("# Element Links"), QByteArrayView("# Embedded Files")}) {
-            const qsizetype at = findLine(b, end, from, to);
-            if (at >= 0)
-                to = std::min(to, at);
+            if (const qsizetype at = findLine(b, end, from, to); at >= 0)
+                to = at; // (findLine() finds lines before `to` only)
         }
         // "%%" right before the drawing's heading.
         for (qsizetype at = findLine(b, "%%", from, to); at >= 0; at = findLine(b, "%%", at + 1, to)) {
@@ -366,23 +365,26 @@ QList<EmbeddedFile> embeddedFiles(QByteArrayView bytes)
     const QRegularExpressionMatch found = heading.match(text);
     if (!found.hasMatch())
         return out;
+    // (Line by line from the heading's line break: the rest of the file is not split up front.)
+    const qsizetype headingEnd = text.indexOf(u'\n', found.capturedEnd());
+    if (headingEnd < 0)
+        return out;
     QSet<QString> seen;
-    const QStringList lines = text.mid(found.capturedEnd()).split(u'\n');
-    for (qsizetype i = 1; i < lines.size(); ++i) {
-        const QString line = QString(lines.at(i)).remove(u'\r');
+    for (const QStringView part : QStringView(text).sliced(headingEnd + 1).tokenize(u'\n')) {
+        const QString line = part.toString().remove(u'\r');
         if (line.startsWith(u'#') || line.startsWith(u"%%"))
             break;
         const QRegularExpressionMatch m = entry.match(line);
         if (!m.hasMatch() || seen.contains(m.captured(1)))
             continue;
-        // The target alone: no alias ("|…"), no heading or block ("#…").
-        QString link = m.captured(2);
-        link = link.left(link.indexOf(u'|') < 0 ? link.size() : link.indexOf(u'|'));
-        link = link.left(link.indexOf(u'#') < 0 ? link.size() : link.indexOf(u'#')).trimmed();
+        // The target alone: no alias ("|…"), no heading or block ("#…"); left(-1) is all of it.
+        QStringView link = m.capturedView(2);
+        link = link.left(link.indexOf(u'|'));
+        link = link.left(link.indexOf(u'#')).trimmed();
         if (link.isEmpty())
             continue;
         seen.insert(m.captured(1));
-        out.append({m.captured(1), link});
+        out.append({m.captured(1), link.toString()});
     }
     return out;
 }
@@ -404,10 +406,10 @@ std::optional<QJsonObject> embeddedFileEntry(const QString &fileId, QByteArrayVi
         mime = u"image/svg+xml"_s;
     else
         return std::nullopt;
+    const QByteArray base64 = QByteArray::fromRawData(bytes.data(), bytes.size()).toBase64(); // (no copy first)
     return QJsonObject{{u"id"_s, fileId},
                        {u"mimeType"_s, mime},
-                       {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s
-                                              + QString::fromLatin1(bytes.toByteArray().toBase64()))},
+                       {u"dataURL"_s, QString(u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(base64))},
                        {EmbeddedFileKey.toString(), true}};
 }
 
@@ -418,7 +420,7 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
     QJsonArray elements = scene.value(u"elements"_s).toArray();
     // The pictures of "## Embedded Files" the app put in to show them stay in their files.
     if (QJsonObject files = scene.value(u"files"_s).toObject(); !files.isEmpty()) {
-        for (const QString &id : files.keys()) {
+        for (const QStringList ids = files.keys(); const QString &id : ids) {
             if (files.value(id).toObject().value(EmbeddedFileKey).toBool())
                 files.remove(id);
         }
@@ -427,7 +429,7 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
 
     QHash<QString, QJsonObject> read;
     read.reserve(layout.elements.size());
-    for (const QJsonValue &v : layout.elements) {
+    for (const auto &v : layout.elements) {
         const QJsonObject e = v.toObject();
         const QString id = e.value(u"id"_s).toString();
         if (!id.isEmpty())
@@ -471,14 +473,14 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
     }
     // Tombstones: the file's (unless the element is back), then the elements read and gone.
     QSet<QString> buried;
-    for (const QJsonValue &v : layout.tombstones) {
+    for (const auto &v : layout.tombstones) {
         const QString id = v.toObject().value(u"id"_s).toString();
         if (!id.isEmpty() && present.contains(id))
             continue;
         elements.append(v);
         buried.insert(id);
     }
-    for (const QJsonValue &v : layout.elements) {
+    for (const auto &v : layout.elements) {
         QJsonObject e = v.toObject();
         const QString id = e.value(u"id"_s).toString();
         if (id.isEmpty() || present.contains(id) || buried.contains(id))
@@ -523,13 +525,13 @@ QByteArray writeExcalidrawMarkdown(const ExcalidrawMarkdown &layout, const Drawi
             QByteArray raw = it->toUtf8();
             if (layout.eol != "\n")
                 raw.replace("\r\n", "\n").replace("\n", layout.eol);
-            edits.append({entry.from, entry.to, raw});
+            edits.append({entry.from, entry.to, std::move(raw)});
         } else if (read.contains(entry.id) && !present.contains(entry.id)) {
             edits.append({entry.from, entry.end, {}});
         }
     }
     edits.append({layout.sceneFrom, layout.sceneTo, block});
-    std::ranges::stable_sort(edits, [](const Edit &a, const Edit &b) { return a.from < b.from; });
+    std::ranges::stable_sort(edits, {}, &Edit::from);
     QByteArray out;
     out.reserve(layout.bytes.size() - (layout.sceneTo - layout.sceneFrom) + block.size() + 64);
     qsizetype at = 0;

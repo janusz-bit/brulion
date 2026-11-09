@@ -47,11 +47,13 @@ T.TextField {
     readonly property int errorHeight: errorText !== "" ? errorLabel.implicitHeight + 4 : 0
     readonly property bool showClear: clearable && length > 0 && !readOnly && enabled
     readonly property int sidePadding: size === "small" ? 8 : 10
+    /// The field area: the control minus its insets (callers may make the field taller).
+    readonly property real fieldAreaHeight: height - topInset - bottomInset
 
     implicitWidth: Math.max(220, placeholder.implicitWidth + leftPadding + rightPadding)
     implicitHeight: hitHeight + errorHeight
     topInset: (hitHeight - fieldHeight) / 2
-    bottomInset: (hitHeight - fieldHeight) / 2 + errorHeight
+    bottomInset: topInset + errorHeight
     topPadding: topInset
     bottomPadding: bottomInset
     leftPadding: sidePadding + (leadingIcon !== "" ? iconLeft.size + 8 : 0)
@@ -107,7 +109,7 @@ T.TextField {
 
     Item {
         id: trailingSlot
-        y: control.fieldTop
+        y: control.topInset
         height: control.fieldAreaHeight
         width: control.trailingItem && control.trailingItem.visible ? control.trailingItem.implicitWidth : 0
         x: control.width - width - (control.showClear ? clearButton.width + 2 : control.sidePadding)
@@ -128,14 +130,10 @@ T.TextField {
         renderType: control.renderType
     }
 
-    // The field area: the control minus its insets (callers may make the field taller).
-    readonly property real fieldTop: topInset
-    readonly property real fieldAreaHeight: height - topInset - bottomInset
-
     BIcon {
         id: iconLeft
         x: control.sidePadding
-        y: control.fieldTop + (control.fieldAreaHeight - height) / 2
+        y: control.topInset + (control.fieldAreaHeight - height) / 2
         name: control.leadingIcon
         size: Theme.iconSize
         color: control.activeFocus ? Theme.fgMuted : Theme.fgFaint
@@ -147,7 +145,7 @@ T.TextField {
         width: Theme.touchUi ? Theme.touchTarget : 24
         height: Math.max(control.fieldAreaHeight, control.hitHeight)
         x: control.width - width - (Theme.touchUi ? 0 : control.sidePadding - 4)
-        y: control.fieldTop + (control.fieldAreaHeight - height) / 2
+        y: control.topInset + (control.fieldAreaHeight - height) / 2
         focusPolicy: Qt.NoFocus
         hoverEnabled: !Theme.touchUi
         Accessible.role: Accessible.Button
@@ -163,7 +161,8 @@ T.TextField {
                 width: 18
                 height: 18
                 radius: 9
-                color: clearButton.hovered ? Theme.bgPressed : "transparent"
+                visible: clearButton.hovered
+                color: Theme.bgPressed
             }
             BIcon {
                 anchors.centerIn: parent

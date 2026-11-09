@@ -31,7 +31,6 @@ T.AbstractButton {
     rightPadding: 4
     focusPolicy: collapsible ? Qt.StrongFocus : Qt.NoFocus
     hoverEnabled: collapsible && !Theme.touchUi
-    enabled: true
 
     Accessible.role: collapsible ? Accessible.Button : Accessible.Heading
     Accessible.name: text
@@ -42,7 +41,7 @@ T.AbstractButton {
         if (!collapsible)
             return
         const next = !expanded
-        expandedToggled(next)
+        control.expandedToggled(next)
         if (expanded !== next)
             expanded = next
     }

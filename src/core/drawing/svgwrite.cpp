@@ -19,17 +19,8 @@ namespace brulion::drawing {
 
 QString safeColor(const QString &color, const QString &fallback)
 {
-    const QString c = color.trimmed();
-    if (c.size() != 4 && c.size() != 7 && c.size() != 9)
-        return fallback;
-    if (!c.startsWith(u'#'))
-        return fallback;
-    for (qsizetype i = 1; i < c.size(); ++i) {
-        const char16_t u = c.at(i).unicode();
-        if (!((u >= u'0' && u <= u'9') || (u >= u'a' && u <= u'f') || (u >= u'A' && u <= u'F')))
-            return fallback;
-    }
-    return c.toLower();
+    // (parseColor() reads exactly these: "#" and 3, 6 or 8 hex digits, spaces around.)
+    return parseColor(color) ? color.trimmed().toLower() : fallback;
 }
 
 QRectF pictureRect(const Drawing &drawing)
@@ -130,28 +121,52 @@ qsizetype payloadLength(QByteArrayView bytes, qsizetype from)
     return skip("<!-- payload-end -->") ? i - from : 0;
 }
 
-/// Does `text` hold an element's start tag (the first one, after the prolog)? Its name in `name`,
-/// its attributes in `attributes`, the character offset after it (the reader's) in `end`. Entity
-/// expansion is bounded by QXmlStreamReader's own limit.
-bool firstStartTag(QStringView text, QString *name = nullptr, QXmlStreamAttributes *attributes = nullptr,
-                   qint64 *end = nullptr)
+/// An element's start tag: its name, its attributes and the character offset after it (the
+/// reader's).
+struct StartTag {
+    QString name;
+    QXmlStreamAttributes attributes;
+    qint64 end = 0;
+};
+
+/// The first start tag `text` holds (after the prolog); nullopt for none or a text that is not
+/// well-formed before it (the reader ends at an error). Entity expansion is bounded by
+/// QXmlStreamReader's own limit.
+std::optional<StartTag> firstStartTag(QStringView text)
 {
     QXmlStreamReader xml(text);
     while (!xml.atEnd()) {
-        const QXmlStreamReader::TokenType token = xml.readNext();
-        if (token == QXmlStreamReader::StartElement) {
-            if (name)
-                *name = xml.name().toString();
-            if (attributes)
-                *attributes = xml.attributes();
-            if (end)
-                *end = xml.characterOffset();
-            return true;
-        }
-        if (token == QXmlStreamReader::Invalid)
-            return false;
+        if (xml.readNext() == QXmlStreamReader::StartElement)
+            return StartTag{xml.name().toString(), xml.attributes(), xml.characterOffset()};
     }
-    return false;
+    return std::nullopt;
+}
+
+/// The path of the paper's lines (a grid's columns too) in `picture` (`w` × `h`), at the scene's
+/// multiples of the spacing (where the editor draws them); "" for plain paper or no line in it.
+QString rulesPath(Background background, const QRectF &picture, const QString &w, const QString &h)
+{
+    if (background == Background::Plain)
+        return {};
+    const double spacing = background == Background::Lines ? LineSpacing : GridSpacing;
+    const double dx = -picture.left();
+    const double dy = -picture.top();
+    // Counted by index (a step added to a huge coordinate would change nothing), at most
+    // MaxRules lines per direction.
+    static constexpr double MaxRules = 100000;
+    const auto rules = [spacing](double from, double to, const auto &line) {
+        const double first = std::ceil(from / spacing);
+        const double count = std::ceil(to / spacing) - first;
+        if (!std::isfinite(first) || !(count > 0) || count > MaxRules)
+            return;
+        for (int i = 0; i < int(count); ++i)
+            line((first + i) * spacing);
+    };
+    QString d;
+    rules(picture.top(), picture.bottom(), [&](double y) { d += u"M0,"_s + formatNumber(y + dy) + u'H' + w; });
+    if (background == Background::Grid)
+        rules(picture.left(), picture.right(), [&](double x) { d += u'M' + formatNumber(x + dx) + u",0V"_s + h; });
+    return d;
 }
 
 } // namespace
@@ -165,18 +180,19 @@ QString safeDataUrl(const QJsonObject &files, const QString &fileId)
 
 QString safeImageDataUrl(const QString &url)
 {
-    static const QStringList types = {u"png"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"svg+xml"_s};
-    for (const QString &type : types) {
-        const QString prefix = u"data:image/"_s + type + u";base64,"_s;
+    static const QStringList prefixes = {u"data:image/png;base64,"_s, u"data:image/jpeg;base64,"_s,
+                                         u"data:image/gif;base64,"_s, u"data:image/webp;base64,"_s,
+                                         u"data:image/svg+xml;base64,"_s};
+    for (const QString &prefix : prefixes) {
         if (!url.startsWith(prefix))
             continue;
-        for (qsizetype i = prefix.size(); i < url.size(); ++i) {
-            const char16_t u = url.at(i).unicode();
-            if (!((u >= u'A' && u <= u'Z') || (u >= u'a' && u <= u'z') || (u >= u'0' && u <= u'9') || u == u'+'
-                  || u == u'/' || u == u'='))
-                return {};
-        }
-        return url.size() > prefix.size() ? url : QString();
+        const QStringView data = QStringView(url).sliced(prefix.size());
+        const bool base64 = std::ranges::all_of(data, [](QChar c) {
+            const char16_t u = c.unicode();
+            return (u >= u'A' && u <= u'Z') || (u >= u'a' && u <= u'z') || (u >= u'0' && u <= u'9') || u == u'+'
+                   || u == u'/' || u == u'=';
+        });
+        return base64 && !data.isEmpty() ? url : QString();
     }
     return {};
 }
@@ -205,16 +221,10 @@ bool isMonospaceFamily(int family)
 QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
 {
     const QRectF picture = pictureRect(drawing);
-    const double left = picture.left();
-    const double top = picture.top();
-    const double right = picture.right();
-    const double bottom = picture.bottom();
-    const int width = int(picture.width());
-    const int height = int(picture.height());
-    const double dx = -left;
-    const double dy = -top;
-    const QString w = QString::number(width);
-    const QString h = QString::number(height);
+    const double dx = -picture.left();
+    const double dy = -picture.top();
+    const QString w = QString::number(int(picture.width()));
+    const QString h = QString::number(int(picture.height()));
     // A backdrop (backdrop.h) and the dark raster of it the app passed, if any.
     const qsizetype backdrop = backdropIndex(drawing);
     const QString darkBackdrop = backdrop >= 0 && drawing.theme == PaperTheme::Dark
@@ -226,8 +236,8 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
     const bool dark = drawing.theme == PaperTheme::Dark && (backdrop < 0 || !darkBackdrop.isEmpty());
     const bool autoTheme = drawing.theme == PaperTheme::Auto && backdrop < 0;
 
-    const bool images = std::any_of(drawing.strokes.cbegin(), drawing.strokes.cend(),
-                                    [](const Stroke &s) { return s.type == ElementType::Image; });
+    const bool images =
+            std::ranges::any_of(drawing.strokes, [](const Stroke &s) { return s.type == ElementType::Image; });
     QString svg;
     svg += u"<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\""_s
            + (images ? u" xmlns:xlink=\"http://www.w3.org/1999/xlink\""_s : QString()) + u" viewBox=\"0 0 "_s + w + u' '
@@ -239,42 +249,25 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
     // metadata once the elements are written: it names only the classes used).
     QString css;
     QString body;
-    const auto withClass = [autoTheme](const QString &cls) {
-        return autoTheme ? u" class=\""_s + cls + u'"' : QString();
+    // ` class="…"` for the classes of an Auto picture's element ("" for none and the other themes).
+    const auto classAttr = [autoTheme](const QString &classes) -> QString {
+        const QString c = classes.trimmed();
+        return !autoTheme || c.isEmpty() ? QString() : u" class=\""_s + c + u'"';
     };
 
     const QString paper = dark ? displayPaper(drawing.paper, true) : safeColor(drawing.paper, QString());
     if (!paper.isEmpty()) {
         body += u"<rect x=\"0\" y=\"0\" width=\""_s + w + u"\" height=\""_s + h + u"\" fill=\""_s + paper + u'"'
-                + withClass(u"p"_s) + u"/>\n"_s;
+                + classAttr(u"p"_s) + u"/>\n"_s;
         if (autoTheme)
             css += u".p{fill:"_s + displayPaper(paper, true) + u'}';
     }
 
-    if (drawing.background != Background::Plain) {
-        // The lines at the scene's multiples of the spacing (where the editor draws them).
-        const double spacing = drawing.background == Background::Lines ? LineSpacing : GridSpacing;
-        // Counted by index (a step added to a huge coordinate would change nothing), at most
-        // MaxRules lines per direction.
-        constexpr double MaxRules = 100000;
-        const auto rules = [&](double from, double to, const auto &line) {
-            const double first = std::ceil(from / spacing);
-            const double count = std::ceil(to / spacing) - first;
-            if (!std::isfinite(first) || !(count > 0) || count > MaxRules)
-                return;
-            for (int i = 0; i < int(count); ++i)
-                line((first + i) * spacing);
-        };
-        QString d;
-        rules(top, bottom, [&](double y) { d += u"M0,"_s + formatNumber(y + dy) + u'H' + w; });
-        if (drawing.background == Background::Grid)
-            rules(left, right, [&](double x) { d += u'M' + formatNumber(x + dx) + u",0V"_s + h; });
-        if (!d.isEmpty()) {
-            body += u"<path d=\""_s + d + u"\" fill=\"none\" stroke=\""_s + displayRule(dark, drawing.paper)
-                    + u"\" stroke-width=\"1\""_s + withClass(u"r"_s) + u"/>\n"_s;
-            if (autoTheme)
-                css += u".r{stroke:"_s + displayRule(true, drawing.paper) + u'}';
-        }
+    if (const QString d = rulesPath(drawing.background, picture, w, h); !d.isEmpty()) {
+        body += u"<path d=\""_s + d + u"\" fill=\"none\" stroke=\""_s + displayRule(dark, drawing.paper)
+                + u"\" stroke-width=\"1\""_s + classAttr(u"r"_s) + u"/>\n"_s;
+        if (autoTheme)
+            css += u".r{stroke:"_s + displayRule(true, drawing.paper) + u'}';
     }
 
     // Auto: one class per colour (first use first) for what is filled with ink (`k`), stroked
@@ -296,10 +289,6 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
         return prefix + QString::number(n);
     };
     const auto shown = [dark](const QString &color) { return dark ? darkColor(color, color) : color; };
-    const auto classAttr = [](const QString &classes) -> QString {
-        const QString c = classes.trimmed();
-        return c.isEmpty() ? QString() : u" class=\""_s + c + u'"';
-    };
     // (The drawing's hatch lines counted: geometry.h DrawingHatchLines.)
     qsizetype hatchBudget = DrawingHatchLines;
     for (qsizetype index = 0; index < drawing.strokes.size(); ++index) {
@@ -330,26 +319,19 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
             const int shownOpacity = dark ? ink.opacity : opacity;
             if (shownOpacity < 100)
                 part += u" fill-opacity=\""_s + formatNumber(shownOpacity / 100.0) + u'"';
-            if (autoTheme) {
-                if (s.tool == Tool::Highlighter) {
-                    // The colour as drawn; a little stronger.
-                    qsizetype n = highlighterClasses.indexOf(ink.opacity);
-                    if (n < 0) {
-                        n = highlighterClasses.size();
-                        highlighterClasses.append(ink.opacity);
-                        css += u".h"_s + QString::number(n) + u"{fill-opacity:"_s + formatNumber(ink.opacity / 100.0)
-                               + u'}';
-                    }
-                    part += withClass(u"h"_s + QString::number(n));
-                } else {
-                    qsizetype n = inkClasses.indexOf(color);
-                    if (n < 0) {
-                        n = inkClasses.size();
-                        inkClasses.append(color);
-                        css += u".k"_s + QString::number(n) + u"{fill:"_s + ink.color + u'}';
-                    }
-                    part += withClass(u"k"_s + QString::number(n));
+            if (autoTheme && s.tool == Tool::Highlighter) {
+                // The colour as drawn; a little stronger.
+                qsizetype n = highlighterClasses.indexOf(ink.opacity);
+                if (n < 0) {
+                    n = highlighterClasses.size();
+                    highlighterClasses.append(ink.opacity);
+                    css += u".h"_s + QString::number(n) + u"{fill-opacity:"_s + formatNumber(ink.opacity / 100.0)
+                           + u'}';
                 }
+                part += classAttr(u"h"_s + QString::number(n));
+            } else {
+                // (A pen's dark ink is darkColor() of its colour.)
+                part += classAttr(classOf(inkClasses, u"k"_s, color, u"fill"_s));
             }
             part += u"/>\n"_s;
             body += rotated ? u"<g transform=\""_s + rotation + u"\">\n"_s + part + u"</g>\n"_s : part;
@@ -358,14 +340,11 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
         const ElementShape shape = elementShape(s, false, std::min(MaxHatchLines, hatchBudget));
         hatchBudget -= shape.hatch.size();
         const QString strokeWidth = formatNumber(std::max(0.05, s.width));
-        const QList<double> dashes = dashPattern(s);
         QString dashAttr;
-        if (!dashes.isEmpty()) {
-            QStringList values;
-            for (const double v : dashes)
-                values.append(formatNumber(v));
-            dashAttr = u" stroke-dasharray=\""_s + values.join(u' ') + u'"';
-        }
+        for (const QList<double> dashes = dashPattern(s); const double v : dashes)
+            dashAttr += (dashAttr.isEmpty() ? u" stroke-dasharray=\""_s : u" "_s) + formatNumber(v);
+        if (!dashAttr.isEmpty())
+            dashAttr += u'"';
         if (!shape.area.isEmpty() && !fillColor.isEmpty()) {
             part += u"<path d=\""_s + pathToSvg(shape.area, dx, dy) + u"\" fill=\""_s + shown(fillColor) + u'"'
                     + classAttr(classOf(fillClasses, u"f"_s, fillColor, u"fill"_s)) + u"/>\n"_s;
@@ -399,7 +378,7 @@ QByteArray toSvg(const Drawing &drawing, const SvgOptions &options)
                                    : s.textAlign == TextAlign::Right ? u" text-anchor=\"end\""_s
                                                                      : QString();
             const QString cls = classAttr(classOf(inkClasses, u"k"_s, color, u"fill"_s));
-            for (const TextLine &line : textLines(s)) {
+            for (const QList<TextLine> lines = textLines(s); const TextLine &line : lines) {
                 if (line.text.isEmpty())
                     continue;
                 part += u"<text x=\""_s + formatNumber(line.baseline.x() + dx) + u"\" y=\""_s
@@ -467,13 +446,12 @@ std::optional<QByteArray> svgWithScene(QByteArrayView picture, QByteArrayView sc
     constexpr qsizetype TagLimit = HeadBytes - 512;
     const QByteArrayView head = picture.sliced(bom, std::min(picture.size(), TagLimit) - bom);
     const QString text = QString::fromUtf8(head);
-    QString name;
-    QXmlStreamAttributes attributes;
-    qint64 end = 0;
-    if (!firstStartTag(text, &name, &attributes, &end) || name != u"svg")
+    const std::optional<StartTag> root = firstStartTag(text);
+    if (!root || root->name != u"svg")
         return std::nullopt;
     // The tag ends at `end` exactly: the text up to it holds the tag, one character less does
     // not (whatever the reader counts in an expanded entity or a line break).
+    const qint64 end = root->end;
     if (end < 2 || end > text.size() || text.at(end - 1) != u'>' || text.at(end - 2) == u'/'
         || !firstStartTag(QStringView(text).first(end)) || firstStartTag(QStringView(text).first(end - 1)))
         return std::nullopt;
@@ -482,7 +460,7 @@ std::optional<QByteArray> svgWithScene(QByteArrayView picture, QByteArrayView sc
     if (!head.startsWith(before) || before.contains("payload-"))
         return std::nullopt;
     for (const QStringView size : {u"width", u"height"}) {
-        QStringView value = attributes.value(size).trimmed();
+        QStringView value = root->attributes.value(size).trimmed();
         if (value.endsWith(u"px"))
             value.chop(2);
         bool number = false;

@@ -190,91 +190,28 @@ T.Control {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 0
 
-                T.AbstractButton {
-                    id: hourTab
-                    readonly property bool active: control.mode === "hour"
-                    implicitWidth: hourLabel.implicitWidth + 2 * Theme.space3
-                    implicitHeight: Math.max(Theme.controlHeightLg, hourLabel.implicitHeight + Theme.space2)
-                    padding: 0
-                    focusPolicy: Qt.StrongFocus
-                    hoverEnabled: !Theme.touchUi
-                    Accessible.role: Accessible.Button
+                FieldTab {
+                    fieldMode: "hour"
+                    text: control.displayHour
                     Accessible.name: qsTr("Hours: %1").arg(control.displayHour)
                     Accessible.description: qsTr("Choose the hour")
-                    onClicked: control.mode = "hour"
-
-                    contentItem: Text {
-                        id: hourLabel
-                        text: control.displayHour
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.text3xl
-                        font.weight: Theme.weightSemiBold
-                        font.features: { "tnum": 1 }
-                        color: hourTab.active ? Theme.fg : Theme.fgFaint
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    background: Rectangle {
-                        radius: Theme.radius
-                        color: hourTab.active ? Theme.bgSelected
-                             : hourTab.hovered ? Theme.bgHover : "transparent"
-                        BFocusRing {
-                            visible: hourTab.visualFocus
-                            targetRadius: Theme.radius
-                        }
-                    }
                 }
-
-                Text {
+                FieldText {
                     Layout.alignment: Qt.AlignVCenter
                     text: ":"
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.text3xl
-                    font.weight: Theme.weightSemiBold
-                    font.features: { "tnum": 1 }
                     color: Theme.fgFaint
                 }
-
-                T.AbstractButton {
-                    id: minuteTab
-                    readonly property bool active: control.mode === "minute"
-                    implicitWidth: minuteLabel.implicitWidth + 2 * Theme.space3
-                    implicitHeight: Math.max(Theme.controlHeightLg, minuteLabel.implicitHeight + Theme.space2)
-                    padding: 0
-                    focusPolicy: Qt.StrongFocus
-                    hoverEnabled: !Theme.touchUi
-                    Accessible.role: Accessible.Button
+                FieldTab {
+                    fieldMode: "minute"
+                    text: control.displayMinute
                     Accessible.name: qsTr("Minutes: %1").arg(control.displayMinute)
                     Accessible.description: qsTr("Choose the minutes")
-                    onClicked: control.mode = "minute"
-
-                    contentItem: Text {
-                        id: minuteLabel
-                        text: control.displayMinute
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.text3xl
-                        font.weight: Theme.weightSemiBold
-                        font.features: { "tnum": 1 }
-                        color: minuteTab.active ? Theme.fg : Theme.fgFaint
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    background: Rectangle {
-                        radius: Theme.radius
-                        color: minuteTab.active ? Theme.bgSelected
-                              : minuteTab.hovered ? Theme.bgHover : "transparent"
-                        BFocusRing {
-                            visible: minuteTab.visualFocus
-                            targetRadius: Theme.radius
-                        }
-                    }
                 }
             }
 
-            Text {
+            DialText {
                 Layout.alignment: Qt.AlignHCenter
                 text: control.mode === "hour" ? qsTr("Hour") : qsTr("Minutes")
-                font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
                 font.weight: Theme.weightMedium
                 color: Theme.fgMuted
@@ -484,15 +421,14 @@ T.Control {
                     Rectangle {
                         anchors.fill: parent
                         radius: width / 2
-                        color: faceInput.hoverValue === hourNumber.index ? Theme.bgHover : "transparent"
+                        color: Theme.bgHover
+                        visible: faceInput.hoverValue === hourNumber.index
                     }
-                    Text {
+                    DialText {
                         anchors.centerIn: parent
                         text: control.pad(hourNumber.index)
-                        font.family: Theme.fontUi
                         font.pixelSize: hourNumber.index < 12 ? control.labelFontSize : control.innerLabelFontSize
                         font.weight: hourNumber.selected ? Theme.weightSemiBold : Theme.weightNormal
-                        font.features: { "tnum": 1 }
                         color: Theme.fg
                     }
                 }
@@ -519,15 +455,14 @@ T.Control {
                     Rectangle {
                         anchors.fill: parent
                         radius: width / 2
-                        color: faceInput.hoverValue === minuteNumber.value ? Theme.bgHover : "transparent"
+                        color: Theme.bgHover
+                        visible: faceInput.hoverValue === minuteNumber.value
                     }
-                    Text {
+                    DialText {
                         anchors.centerIn: parent
                         text: control.pad(minuteNumber.value)
-                        font.family: Theme.fontUi
                         font.pixelSize: control.labelFontSize
                         font.weight: Theme.weightNormal
-                        font.features: { "tnum": 1 }
                         color: Theme.fg
                     }
                 }
@@ -541,13 +476,11 @@ T.Control {
                 color: Theme.primary
                 x: control.selectionX - width / 2
                 y: control.selectionY - height / 2
-                Text {
+                DialText {
                     anchors.centerIn: parent
                     text: control.mode === "hour" ? control.displayHour : control.displayMinute
-                    font.family: Theme.fontUi
                     font.pixelSize: Math.min(Math.round(control.labelSize * 0.45), Math.floor(control.selectionSize * 0.6))
                     font.weight: Theme.weightSemiBold
-                    font.features: { "tnum": 1 }
                     color: Theme.primaryFg
                 }
             }
@@ -557,6 +490,49 @@ T.Control {
                 visible: faceFocus.focusRingShown
                 target: faceFocus
                 targetRadius: faceFocus.width / 2
+            }
+        }
+    }
+
+    /// Text of the dial: the UI font with tabular digits (the caller sets size and weight).
+    component DialText: Text {
+        font.family: Theme.fontUi
+        font.features: { "tnum": 1 }
+    }
+    /// The big hours / minutes digits at the top.
+    component FieldText: DialText {
+        font.pixelSize: Theme.text3xl
+        font.weight: Theme.weightSemiBold
+    }
+    /// The hours / minutes field: a button that switches the dial to `fieldMode`.
+    component FieldTab: T.AbstractButton {
+        id: tab
+
+        required property string fieldMode
+        readonly property bool active: control.mode === fieldMode
+
+        implicitWidth: label.implicitWidth + 2 * Theme.space3
+        implicitHeight: Math.max(Theme.controlHeightLg, label.implicitHeight + Theme.space2)
+        padding: 0
+        focusPolicy: Qt.StrongFocus
+        hoverEnabled: !Theme.touchUi
+        Accessible.role: Accessible.Button
+        onClicked: control.mode = fieldMode
+
+        contentItem: FieldText {
+            id: label
+            text: tab.text
+            color: tab.active ? Theme.fg : Theme.fgFaint
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            radius: Theme.radius
+            color: tab.active ? Theme.bgSelected
+                 : tab.hovered ? Theme.bgHover : "transparent"
+            BFocusRing {
+                visible: tab.visualFocus
+                targetRadius: Theme.radius
             }
         }
     }

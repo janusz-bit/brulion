@@ -102,6 +102,7 @@ T.Control {
     readonly property bool iconsShown: iconOnly || !fill || _withIconsSum <= availableWidth
     readonly property int visualHeight: size === "small" ? Theme.controlHeightSm : Theme.controlHeight
     readonly property int hitHeight: Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0)
+    readonly property int iconSize: size === "small" ? Theme.iconSizeSm : Theme.iconSize
 
     /// Segment `index`'s value is currentValue (===).
     function isCurrentValue(index: int): bool {
@@ -223,15 +224,13 @@ T.Control {
                : control._fillWidth >= 0 ? Math.max(implicitWidth, control._fillWidth)
                : Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
         // At least a touch target wide on touch UIs (icon-only and short labels).
-        implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
-                                (segmentIcon.width > 0 ? iconRoom : 0)
-                                + (control.iconOnly ? 0 : segmentLabel.implicitWidth) + (control.iconOnly ? 16 : 24))
+        implicitWidth: Math.max(minWidth, (segmentIcon.width > 0 ? iconRoom : 0) + labelRoom)
         /// The icon and the space after it (0 without an icon), shown or not.
-        readonly property real iconRoom: iconName === "" ? 0
-            : (control.size === "small" ? Theme.iconSizeSm : Theme.iconSize) + (control.iconOnly ? 0 : segmentRow.spacing)
-        readonly property real withIconWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,
-                                                       iconRoom + (control.iconOnly ? 0 : segmentLabel.implicitWidth)
-                                                       + (control.iconOnly ? 16 : 24))
+        readonly property real iconRoom: iconName === "" ? 0 : control.iconSize + (control.iconOnly ? 0 : segmentRow.spacing)
+        /// The label and the padding around the segment's content.
+        readonly property real labelRoom: (control.iconOnly ? 0 : segmentLabel.implicitWidth) + (control.iconOnly ? 16 : 24)
+        readonly property real minWidth: Theme.touchUi ? Theme.touchTarget : 0
+        readonly property real withIconWidth: Math.max(minWidth, iconRoom + labelRoom)
         focusPolicy: Qt.NoFocus
         hoverEnabled: !Theme.touchUi
         Accessible.role: Accessible.PageTab
@@ -252,7 +251,7 @@ T.Control {
                     id: segmentIcon
                     anchors.verticalCenter: parent.verticalCenter
                     name: control.iconsShown ? segment.iconName : ""
-                    size: control.size === "small" ? Theme.iconSizeSm : Theme.iconSize
+                    size: control.iconSize
                     color: segment.isCurrent ? Theme.fg : Theme.fgMuted
                 }
                 Text {
@@ -260,7 +259,7 @@ T.Control {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: !control.iconOnly
                     text: segment.text
-                    color: segment.isCurrent ? Theme.fg : segment.hovered ? Theme.fg : Theme.fgMuted
+                    color: segment.isCurrent || segment.hovered ? Theme.fg : Theme.fgMuted
                     font.family: Theme.fontUi
                     font.pixelSize: control.size === "small" ? Theme.textSm : Theme.textControl
                     font.weight: segment.isCurrent ? Theme.weightSemiBold : Theme.weightMedium

@@ -42,7 +42,6 @@ T.ToolTip {
     contentItem: Row {
         spacing: 8
         Text {
-            id: tipText
             anchors.verticalCenter: parent.verticalCenter
             width: Math.min(implicitWidth, 300 - (kbd.visible ? kbd.width + 8 : 0))
             text: control.text

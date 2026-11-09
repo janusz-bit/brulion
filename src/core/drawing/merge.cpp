@@ -33,11 +33,8 @@ QHash<QString, const Stroke *> byKey(const Drawing &d)
 {
     QHash<QString, const Stroke *> out;
     out.reserve(d.strokes.size());
-    for (const Stroke &s : d.strokes) {
-        const QString k = mergeKey(s);
-        if (!out.contains(k))
-            out.insert(k, &s);
-    }
+    for (const Stroke &s : d.strokes)
+        out.tryEmplace(mergeKey(s), &s);
     return out;
 }
 
@@ -60,26 +57,14 @@ bool samePaper(QStringView a, QStringView b)
 bool changedWithoutVersion(const Drawing &base, const Drawing &side)
 {
     const QHash<QString, const Stroke *> was = byKey(base);
-    for (const Stroke &s : side.strokes) {
-        const auto it = was.constFind(mergeKey(s));
-        if (it != was.constEnd() && (*it)->version == s.version && contentOf(**it) != contentOf(s))
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(side.strokes, [&was](const Stroke &s) {
+        const Stroke *before = was.value(mergeKey(s));
+        return before && before->version == s.version && contentOf(*before) != contentOf(s);
+    });
 }
 
-/// An Excalidraw plugin file without its scene: the frontmatter, the back of the card, the text
-/// entries, the links, the `%%` (empty for other formats).
-QByteArray aroundScene(const DrawingFile &file)
-{
-    if (!file.markdown)
-        return {};
-    const QByteArray &b = file.markdown->bytes;
-    return b.first(file.markdown->sceneFrom) + b.sliced(file.markdown->sceneTo);
-}
-
-/// aroundScene() without the "## Text Elements" entries (each from its text to its line breaks):
-/// what follows no element of the scene.
+/// markdownAroundScene() without the "## Text Elements" entries (each from its text to its line
+/// breaks): what follows no element of the scene.
 QByteArray notesOf(const ExcalidrawMarkdown &m)
 {
     struct Cut {
@@ -89,7 +74,7 @@ QByteArray notesOf(const ExcalidrawMarkdown &m)
     QList<Cut> cuts{{m.sceneFrom, m.sceneTo}};
     for (const ExcalidrawMarkdown::TextEntry &e : m.textEntries)
         cuts.append({e.from, e.end});
-    std::ranges::sort(cuts, [](const Cut &a, const Cut &b) { return a.from < b.from; });
+    std::ranges::sort(cuts, {}, &Cut::from);
     QByteArray out;
     qsizetype at = 0;
     for (const Cut &c : std::as_const(cuts)) {
@@ -102,16 +87,48 @@ QByteArray notesOf(const ExcalidrawMarkdown &m)
     return out;
 }
 
+/// The text of a "## Text Elements" entry in its file's `bytes` (nullopt for a range outside them:
+/// never for an entry read from them).
+std::optional<QByteArrayView> entryText(const QByteArray &bytes, const ExcalidrawMarkdown::TextEntry &e)
+{
+    if (e.from < 0 || e.from > e.to || e.to > bytes.size())
+        return std::nullopt;
+    return QByteArrayView(bytes).sliced(e.from, e.to - e.from);
+}
+
 /// The elements with an id, by id (the first of an id seen twice).
 QHash<QString, const Stroke *> byId(const Drawing &d)
 {
     QHash<QString, const Stroke *> out;
     out.reserve(d.strokes.size());
     for (const Stroke &s : d.strokes) {
-        if (!s.id.isEmpty() && !out.contains(s.id))
-            out.insert(s.id, &s);
+        if (!s.id.isEmpty())
+            out.tryEmplace(s.id, &s);
     }
     return out;
+}
+
+/// Two backdrops in `strokes` (each side set its own: keys `ours` and `theirs`): the one set last
+/// stays at the bottom (a tie keeps theirs), the other goes — it would lie on it, hidden from the
+/// backdrop's menu.
+void keepOneBackdrop(QList<Stroke> &strokes, const QString &ours, const QString &theirs)
+{
+    qsizetype mine = -1;
+    qsizetype other = -1;
+    for (qsizetype i = 0; i < strokes.size() && (mine < 0 || other < 0); ++i) {
+        const QString k = mergeKey(strokes.at(i));
+        if (k == ours && mine < 0)
+            mine = i;
+        else if (k == theirs && other < 0)
+            other = i;
+    }
+    if (mine < 0 || other < 0)
+        return;
+    const bool oursWins = strokes.at(mine).updated > strokes.at(other).updated;
+    Stroke kept = strokes.at(oursWins ? mine : other);
+    strokes.removeAt(std::max(mine, other));
+    strokes.removeAt(std::min(mine, other));
+    strokes.prepend(std::move(kept));
 }
 
 } // namespace
@@ -132,52 +149,48 @@ QString mergeKey(const Stroke &s)
 
 MergeBase mergeBase(const Drawing &base)
 {
-    MergeBase b;
-    b.known = true;
+    MergeBase b{.known = true, .versions = {}, .background = base.background, .theme = base.theme, .paper = base.paper};
     b.versions.reserve(base.strokes.size());
     for (const Stroke &s : base.strokes)
         b.versions.insert(mergeKey(s), s.version);
-    b.background = base.background;
-    b.theme = base.theme;
-    b.paper = base.paper;
     return b;
 }
 
 Drawing merge(const MergeBase &base, const Drawing &ours, Drawing theirs)
 {
     // Each side's backdrop (backdrop.h), by key: when both set one of their own, one stays.
-    const QString ourBackdrop = backdropIndex(ours) == 0 ? mergeKey(ours.strokes.first()) : QString();
-    const QString theirBackdrop = backdropIndex(theirs) == 0 ? mergeKey(theirs.strokes.first()) : QString();
+    const auto backdropKey = [](const Drawing &d) {
+        return backdropIndex(d) == 0 ? mergeKey(d.strokes.first()) : QString();
+    };
+    const QString ourBackdrop = backdropKey(ours);
+    const QString theirBackdrop = backdropKey(theirs);
     QHash<QString, qsizetype> oursIndex;
+    oursIndex.reserve(ours.strokes.size());
     QStringList oursKeys;
     oursKeys.reserve(ours.strokes.size());
     for (qsizetype i = 0; i < ours.strokes.size(); ++i) {
-        const QString k = mergeKey(ours.strokes.at(i));
-        oursKeys.append(k);
-        if (!oursIndex.contains(k))
-            oursIndex.insert(k, i);
+        oursKeys.append(mergeKey(ours.strokes.at(i)));
+        oursIndex.tryEmplace(oursKeys.constLast(), i);
     }
     QSet<QString> theirKeys;
+    theirKeys.reserve(theirs.strokes.size());
     QList<Stroke> merged;
     merged.reserve(theirs.strokes.size() + ours.strokes.size());
     for (Stroke &t : theirs.strokes) {
         const QString k = mergeKey(t);
         theirKeys.insert(k);
         const qsizetype o = oursIndex.value(k, -1);
-        if (base.known) {
-            const bool inBase = base.versions.contains(k);
-            if (inBase && o < 0)
-                continue; // deleted here
-            if (o >= 0) {
-                const Stroke &mine = ours.strokes.at(o);
-                if (inBase ? mine.version != base.versions.value(k) : mine.version > t.version) {
-                    merged.append(mine); // changed here (or new on both sides, ours newer)
-                    continue;
-                }
+        // (An unknown base has nothing: nothing was deleted, the higher version wins.)
+        const auto was = base.known ? base.versions.constFind(k) : base.versions.constEnd();
+        const bool inBase = was != base.versions.constEnd();
+        if (inBase && o < 0)
+            continue; // deleted here
+        if (o >= 0) {
+            const Stroke &mine = ours.strokes.at(o);
+            if (inBase ? mine.version != *was : mine.version > t.version) {
+                merged.append(mine); // changed here (or new on both sides, ours newer)
+                continue;
             }
-        } else if (o >= 0 && ours.strokes.at(o).version > t.version) {
-            merged.append(ours.strokes.at(o));
-            continue;
         }
         merged.append(std::move(t));
     }
@@ -199,25 +212,8 @@ Drawing merge(const MergeBase &base, const Drawing &ours, Drawing theirs)
     }
     if (!bottom.isEmpty())
         merged = bottom + merged;
-    if (!ourBackdrop.isEmpty() && !theirBackdrop.isEmpty() && ourBackdrop != theirBackdrop) {
-        // Two backdrops (each side set its own): the one set last stays at the bottom (a tie keeps
-        // theirs), the other goes — it would lie on it, hidden from the backdrop's menu.
-        qsizetype mine = -1, other = -1;
-        for (qsizetype i = 0; i < merged.size() && (mine < 0 || other < 0); ++i) {
-            const QString k = mergeKey(merged.at(i));
-            if (k == ourBackdrop && mine < 0)
-                mine = i;
-            else if (k == theirBackdrop && other < 0)
-                other = i;
-        }
-        if (mine >= 0 && other >= 0) {
-            const bool oursWins = merged.at(mine).updated > merged.at(other).updated;
-            Stroke kept = merged.at(oursWins ? mine : other);
-            merged.removeAt(std::max(mine, other));
-            merged.removeAt(std::min(mine, other));
-            merged.prepend(std::move(kept));
-        }
-    }
+    if (!ourBackdrop.isEmpty() && !theirBackdrop.isEmpty() && ourBackdrop != theirBackdrop)
+        keepOneBackdrop(merged, ourBackdrop, theirBackdrop);
     theirs.strokes = std::move(merged);
     if (base.known && ours.background != base.background)
         theirs.background = ours.background;
@@ -236,57 +232,46 @@ MergeCounts mergeCounts(const Drawing &ours, const Drawing &theirs, const Drawin
 {
     const QSet<QString> mine = keysOf(ours);
     const QSet<QString> other = keysOf(theirs);
-    MergeCounts c;
-    c.ours = int(ours.strokes.size());
-    c.theirs = int(theirs.strokes.size());
-    c.merged = int(merged.strokes.size());
-    for (const QString &k : mine) {
-        if (other.contains(k))
-            ++c.common;
-        else
-            ++c.onlyOurs;
-    }
-    c.onlyTheirs = int(other.size()) - c.common;
-    return c;
+    const int common = int(std::ranges::count_if(mine, [&other](const QString &k) { return other.contains(k); }));
+    return {.ours = int(ours.strokes.size()),
+            .theirs = int(theirs.strokes.size()),
+            .common = common,
+            .onlyOurs = int(mine.size()) - common,
+            .onlyTheirs = int(other.size()) - common,
+            .merged = int(merged.strokes.size())};
 }
 
 bool sameDrawing(const Drawing &a, const Drawing &b)
 {
-    if (a.strokes.size() != b.strokes.size() || a.background != b.background || a.theme != b.theme
-        || !samePaper(a.paper, b.paper) || a.foreign != b.foreign)
-        return false;
-    for (qsizetype i = 0; i < a.strokes.size(); ++i) {
-        const Stroke &x = a.strokes.at(i);
-        const Stroke &y = b.strokes.at(i);
-        if (mergeKey(x) != mergeKey(y) || x.version != y.version || contentOf(x) != contentOf(y))
-            return false;
-    }
-    return true;
+    return a.strokes.size() == b.strokes.size() && a.background == b.background && a.theme == b.theme
+           && samePaper(a.paper, b.paper) && a.foreign == b.foreign
+           && std::ranges::equal(a.strokes, b.strokes, [](const Stroke &x, const Stroke &y) {
+                  return x.version == y.version && mergeKey(x) == mergeKey(y) && contentOf(x) == contentOf(y);
+              });
 }
 
 bool containsDrawing(const Drawing &outer, const Drawing &inner)
 {
+    const auto inOuter = [&outer](const QJsonValue &v) { return outer.foreign.contains(v); };
     if ((inner.background != outer.background && inner.background != Background::Plain)
         || (inner.theme != outer.theme && inner.theme != PaperTheme::Auto)
-        || (!samePaper(inner.paper, outer.paper) && !samePaper(inner.paper, DefaultPaper)))
+        || (!samePaper(inner.paper, outer.paper) && !samePaper(inner.paper, DefaultPaper))
+        || !std::all_of(inner.foreign.begin(), inner.foreign.end(), inOuter))
         return false;
-    for (const QJsonValue &v : inner.foreign) {
-        if (!outer.foreign.contains(v))
-            return false;
-    }
     const QHash<QString, const Stroke *> at = byKey(outer);
-    for (const Stroke &s : inner.strokes) {
-        const auto it = at.constFind(mergeKey(s));
-        if (it == at.constEnd() || (*it)->version < s.version
-            || ((*it)->version == s.version && contentOf(**it) != contentOf(s)))
-            return false;
-    }
-    return true;
+    return std::ranges::none_of(inner.strokes, [&at](const Stroke &s) {
+        const Stroke *there = at.value(mergeKey(s));
+        return !there || there->version < s.version
+               || (there->version == s.version && contentOf(*there) != contentOf(s));
+    });
 }
 
 QByteArray markdownAroundScene(const DrawingFile &file)
 {
-    return aroundScene(file);
+    if (!file.markdown)
+        return {};
+    const QByteArray &b = file.markdown->bytes;
+    return b.first(file.markdown->sceneFrom) + b.sliced(file.markdown->sceneTo);
 }
 
 bool keepsMarkdownOf(const DrawingFile &into, const DrawingFile &other)
@@ -296,19 +281,18 @@ bool keepsMarkdownOf(const DrawingFile &into, const DrawingFile &other)
     if (!into.markdown || notesOf(*into.markdown) != notesOf(*other.markdown))
         return false;
     QHash<QString, QByteArrayView> entries;
-    const QByteArray &mine = into.markdown->bytes;
     for (const ExcalidrawMarkdown::TextEntry &e : into.markdown->textEntries) {
-        if (!entries.contains(e.id) && e.from <= e.to && e.to <= mine.size())
-            entries.insert(e.id, QByteArrayView(mine).sliced(e.from, e.to - e.from));
+        if (const std::optional<QByteArrayView> text = entryText(into.markdown->bytes, e))
+            entries.tryEmplace(e.id, *text);
     }
     const QHash<QString, const Stroke *> here = byId(into.drawing);
     const QHash<QString, const Stroke *> there = byId(other.drawing);
-    const QByteArray &theirs = other.markdown->bytes;
     for (const ExcalidrawMarkdown::TextEntry &e : other.markdown->textEntries) {
-        if (e.from > e.to || e.to > theirs.size())
+        const std::optional<QByteArrayView> text = entryText(other.markdown->bytes, e);
+        if (!text)
             continue;
         const auto entry = entries.constFind(e.id);
-        if (entry != entries.constEnd() && *entry == QByteArrayView(theirs).sliced(e.from, e.to - e.from))
+        if (entry != entries.constEnd() && *entry == *text)
             continue;
         const Stroke *m = here.value(e.id);
         const Stroke *t = there.value(e.id);
@@ -337,9 +321,9 @@ std::optional<QByteArray> mergeDrawingFiles(QByteArrayView base, QByteArrayView 
     // changed it (its back of the card, its text entries) — both changed: no merge of notes here.
     const DrawingFile *into = &*there;
     if (there->format == FileFormat::ExcalidrawMarkdown) {
-        const QByteArray before = aroundScene(*was);
-        const QByteArray mine = aroundScene(*here);
-        const QByteArray theirs = aroundScene(*there);
+        const QByteArray before = markdownAroundScene(*was);
+        const QByteArray mine = markdownAroundScene(*here);
+        const QByteArray theirs = markdownAroundScene(*there);
         if (mine != before && theirs != before && mine != theirs)
             return std::nullopt;
         if (theirs == before && mine != before)

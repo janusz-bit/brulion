@@ -27,10 +27,10 @@
 //   SOFTWARE.
 #include "drawing/stroke.h"
 
-#include <QtMath>
-
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <numbers>
 
 using namespace Qt::StringLiterals;
 
@@ -38,25 +38,10 @@ namespace brulion::drawing {
 
 namespace {
 
-// perfect-freehand's vector helpers (vec.ts) on QPointF.
+// perfect-freehand's vector helpers (vec.ts) on QPointF (its add, sub, mul and neg are QPointF's
+// operators).
 using Vec = QPointF;
 
-Vec add(Vec a, Vec b)
-{
-    return a + b;
-}
-Vec sub(Vec a, Vec b)
-{
-    return a - b;
-}
-Vec mul(Vec a, double n)
-{
-    return a * n;
-}
-Vec neg(Vec a)
-{
-    return -a;
-}
 /// Perpendicular rotation.
 Vec per(Vec a)
 {
@@ -107,21 +92,34 @@ bool isEqual(Vec a, Vec b)
 }
 
 constexpr double RateOfPressureChange = 0.275;
-constexpr double FixedPi = M_PI + 0.0001;
+constexpr double FixedPi = std::numbers::pi + 0.0001;
+/// The steps of t around a round corner or cap (summed as JavaScript sums them: the sums decide
+/// the last point) — the end cap's are finer.
+constexpr double CapStep = 1.0 / 13;
+constexpr double EndCapStep = 1.0 / 29;
 
+/// Excalidraw's freedraw easing.
 double easing(double t)
 {
-    return std::sin(t * M_PI / 2);
-} // Excalidraw's freedraw easing
+    return std::sin(t * std::numbers::pi / 2);
+}
 
 double strokeRadius(double size, double thinning, double pressure)
 {
     return size * easing(0.5 - thinning * (0.5 - pressure));
 }
 
+/// The pressure simulated from the speed: `distance` moved since the point before.
+double simulatedPressure(double prevPressure, double distance, double size)
+{
+    const double sp = std::min(1.0, distance / size);
+    const double rp = std::min(1.0, 1 - sp);
+    return std::min(1.0, prevPressure + (rp - prevPressure) * (sp * RateOfPressureChange));
+}
+
 struct Input {
     Vec point;
-    double pressure; ///< < 0: none given
+    double pressure = -1; ///< < 0: none given
 };
 
 struct StrokePt {
@@ -145,9 +143,10 @@ QList<StrokePt> strokePoints(QList<Input> pts, const OutlineOptions &o)
             pts.append({lrp(pts.at(0).point, last.point, i / 4.0), last.pressure});
     }
     if (pts.size() == 1)
-        pts.append({add(pts.at(0).point, Vec(1, 1)), pts.at(0).pressure});
+        pts.append({pts.at(0).point + Vec(1, 1), pts.at(0).pressure});
 
     QList<StrokePt> out;
+    out.reserve(pts.size());
     out.append({pts.at(0).point, pts.at(0).pressure >= 0 ? pts.at(0).pressure : 0.25, Vec(1, 1), 0, 0});
     bool reachedMinimumLength = false;
     double runningLength = 0;
@@ -164,7 +163,7 @@ QList<StrokePt> strokePoints(QList<Input> pts, const OutlineOptions &o)
                 continue;
             reachedMinimumLength = true;
         }
-        prev = {point, pts.at(i).pressure >= 0 ? pts.at(i).pressure : 0.5, uni(sub(prev.point, point)), distance,
+        prev = {point, pts.at(i).pressure >= 0 ? pts.at(i).pressure : 0.5, uni(prev.point - point), distance,
                 runningLength};
         out.append(prev);
     }
@@ -184,13 +183,9 @@ QList<QPointF> outlinePoints(const QList<StrokePt> &points, const OutlineOptions
     QList<QPointF> right;
 
     double prevPressure = points.at(0).pressure;
-    for (int i = 0; i < std::min<qsizetype>(10, points.size()); ++i) {
-        double pressure = points.at(i).pressure;
-        if (o.simulatePressure) {
-            const double sp = std::min(1.0, points.at(i).distance / size);
-            const double rp = std::min(1.0, 1 - sp);
-            pressure = std::min(1.0, prevPressure + (rp - prevPressure) * (sp * RateOfPressureChange));
-        }
+    for (qsizetype i = 0; i < std::min<qsizetype>(10, points.size()); ++i) {
+        const StrokePt &p = points.at(i);
+        const double pressure = o.simulatePressure ? simulatedPressure(prevPressure, p.distance, size) : p.pressure;
         prevPressure = (prevPressure + pressure) / 2;
     }
 
@@ -203,21 +198,16 @@ QList<QPointF> outlinePoints(const QList<StrokePt> &points, const OutlineOptions
     Vec tr = pr;
     bool prevPointSharpCorner = false;
 
-    for (int i = 0; i < points.size(); ++i) {
-        double pressure = points.at(i).pressure;
-        const Vec point = points.at(i).point;
-        const Vec vector = points.at(i).vector;
-        const double distance = points.at(i).distance;
-        const double runningLength = points.at(i).runningLength;
+    const qsizetype last = points.size() - 1;
+    for (qsizetype i = 0; i <= last; ++i) {
+        const auto &[point, pointPressure, vector, distance, runningLength] = points.at(i);
         // Removes noise from the end of the line.
-        if (i < points.size() - 1 && totalLength - runningLength < 3)
+        if (i < last && totalLength - runningLength < 3)
             continue;
+        double pressure = pointPressure;
         if (o.thinning != 0) {
-            if (o.simulatePressure) {
-                const double sp = std::min(1.0, distance / size);
-                const double rp = std::min(1.0, 1 - sp);
-                pressure = std::min(1.0, prevPressure + (rp - prevPressure) * (sp * RateOfPressureChange));
-            }
+            if (o.simulatePressure)
+                pressure = simulatedPressure(prevPressure, distance, size);
             radius = strokeRadius(size, o.thinning, pressure);
         } else {
             radius = size / 2;
@@ -226,19 +216,18 @@ QList<QPointF> outlinePoints(const QList<StrokePt> &points, const OutlineOptions
             firstRadius = radius;
         radius = std::max(0.01, radius);
 
-        const Vec nextVector = (i < points.size() - 1 ? points.at(i + 1) : points.at(i)).vector;
-        const double nextDpr = i < points.size() - 1 ? dpr(vector, nextVector) : 1.0;
+        const Vec nextVector = points.at(i < last ? i + 1 : i).vector;
+        const double nextDpr = i < last ? dpr(vector, nextVector) : 1.0;
         const double prevDpr = dpr(vector, prevVector);
         const bool pointSharpCorner = prevDpr < 0 && !prevPointSharpCorner;
         const bool nextPointSharpCorner = nextDpr < 0;
 
         if (pointSharpCorner || nextPointSharpCorner) {
-            const Vec offset = mul(per(prevVector), radius);
-            constexpr double step = 1.0 / 13;
-            for (double t = 0; t <= 1; t += step) {
-                tl = rotAround(sub(point, offset), point, FixedPi * t);
+            const Vec offset = per(prevVector) * radius;
+            for (double t = 0; t <= 1; t += CapStep) {
+                tl = rotAround(point - offset, point, FixedPi * t);
                 left.append(tl);
-                tr = rotAround(add(point, offset), point, FixedPi * -t);
+                tr = rotAround(point + offset, point, FixedPi * -t);
                 right.append(tr);
             }
             pl = tl;
@@ -249,20 +238,20 @@ QList<QPointF> outlinePoints(const QList<StrokePt> &points, const OutlineOptions
         }
         prevPointSharpCorner = false;
 
-        if (i == points.size() - 1) {
-            const Vec offset = mul(per(vector), radius);
-            left.append(sub(point, offset));
-            right.append(add(point, offset));
+        if (i == last) {
+            const Vec offset = per(vector) * radius;
+            left.append(point - offset);
+            right.append(point + offset);
             continue;
         }
 
-        const Vec offset = mul(per(lrp(nextVector, vector, nextDpr)), radius);
-        tl = sub(point, offset);
+        const Vec offset = per(lrp(nextVector, vector, nextDpr)) * radius;
+        tl = point - offset;
         if (i <= 1 || dist2(pl, tl) > minDistance) {
             left.append(tl);
             pl = tl;
         }
-        tr = add(point, offset);
+        tr = point + offset;
         if (i <= 1 || dist2(pr, tr) > minDistance) {
             right.append(tr);
             pr = tr;
@@ -272,40 +261,27 @@ QList<QPointF> outlinePoints(const QList<StrokePt> &points, const OutlineOptions
     }
 
     const Vec firstPoint = points.at(0).point;
-    const Vec lastPoint = points.size() > 1 ? points.last().point : add(points.at(0).point, Vec(1, 1));
+    const Vec lastPoint = points.size() > 1 ? points.last().point : firstPoint + Vec(1, 1);
     if (points.size() == 1) {
         // A dot.
-        const Vec start =
-                prj(firstPoint, uni(per(sub(firstPoint, lastPoint))), -(firstRadius >= 0 ? firstRadius : radius));
+        const Vec start = prj(firstPoint, uni(per(firstPoint - lastPoint)), -(firstRadius >= 0 ? firstRadius : radius));
         QList<QPointF> dot;
-        constexpr double step = 1.0 / 13;
-        for (double t = step; t <= 1; t += step)
+        for (double t = CapStep; t <= 1; t += CapStep)
             dot.append(rotAround(start, firstPoint, FixedPi * 2 * t));
         return dot;
     }
     if (left.isEmpty() || right.isEmpty())
         return {};
-    QList<QPointF> startCap;
-    {
-        constexpr double step = 1.0 / 13;
-        for (double t = step; t <= 1; t += step)
-            startCap.append(rotAround(right.at(0), firstPoint, FixedPi * t));
-    }
-    QList<QPointF> endCap;
-    {
-        const Vec direction = per(neg(points.last().vector));
-        const Vec start = prj(lastPoint, direction, radius);
-        constexpr double step = 1.0 / 29;
-        for (double t = step; t < 1; t += step)
-            endCap.append(rotAround(start, lastPoint, FixedPi * 3 * t));
-    }
+    // The left side, the end cap, the right side backwards, the start cap.
     QList<QPointF> out;
-    out.reserve(left.size() + endCap.size() + right.size() + startCap.size());
+    out.reserve(left.size() + right.size() + 42);
     out.append(left);
-    out.append(endCap);
-    for (qsizetype i = right.size() - 1; i >= 0; --i)
-        out.append(right.at(i));
-    out.append(startCap);
+    const Vec endCapStart = prj(lastPoint, per(-points.last().vector), radius);
+    for (double t = EndCapStep; t < 1; t += EndCapStep)
+        out.append(rotAround(endCapStart, lastPoint, FixedPi * 3 * t));
+    std::ranges::reverse_copy(std::as_const(right), std::back_inserter(out));
+    for (double t = CapStep; t <= 1; t += CapStep)
+        out.append(rotAround(right.at(0), firstPoint, FixedPi * t));
     return out;
 }
 
@@ -313,15 +289,13 @@ QList<QPointF> outlinePoints(const QList<StrokePt> &points, const OutlineOptions
 
 OutlineOptions outlineOptions(const Stroke &stroke, bool finished)
 {
-    OutlineOptions o;
-    o.size = stroke.width * 4.25;
-    o.simulatePressure = stroke.simulatePressure;
-    o.last = finished;
-    return o;
+    return {.size = stroke.width * 4.25, .simulatePressure = stroke.simulatePressure, .last = finished};
 }
 
 QList<QPointF> strokeOutline(const QList<StrokePoint> &points, const OutlineOptions &options)
 {
+    if (!std::isfinite(options.size))
+        return {};
     QList<Input> input;
     input.reserve(points.size());
     for (const StrokePoint &p : points) {
@@ -332,9 +306,7 @@ QList<QPointF> strokeOutline(const QList<StrokePoint> &points, const OutlineOpti
                 options.simulatePressure || !std::isfinite(p.pressure) ? -1 : std::clamp(p.pressure, 0.0, 1.0);
         input.append({Vec(p.x, p.y), pressure});
     }
-    if (input.isEmpty() || !std::isfinite(options.size))
-        return {};
-    return outlinePoints(strokePoints(input, options), options);
+    return outlinePoints(strokePoints(std::move(input), options), options);
 }
 
 QString formatNumber(double value, int decimals)

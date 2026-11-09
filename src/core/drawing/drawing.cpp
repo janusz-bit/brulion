@@ -20,10 +20,8 @@ QRectF bounds(const Drawing &drawing)
 {
     QRectF out;
     for (const Stroke &s : drawing.strokes) {
-        const QRectF b = elementBounds(s);
-        if (b.isNull())
-            continue;
-        out = out.isNull() ? b : out.united(b);
+        if (const QRectF b = elementBounds(s); !b.isNull())
+            out |= b;
     }
     return out;
 }
@@ -60,10 +58,8 @@ QString elementTypeName(ElementType type)
 
 std::optional<ElementType> elementTypeFromName(QStringView name)
 {
-    static const ElementType all[] = {ElementType::Freedraw, ElementType::Rectangle, ElementType::Ellipse,
-                                      ElementType::Diamond,  ElementType::Line,      ElementType::Arrow,
-                                      ElementType::Text,     ElementType::Image};
-    for (const ElementType t : all) {
+    using enum ElementType;
+    for (const ElementType t : {Freedraw, Rectangle, Ellipse, Diamond, Line, Arrow, Text, Image}) {
         if (name == elementTypeName(t))
             return t;
     }

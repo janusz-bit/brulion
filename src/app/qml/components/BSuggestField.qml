@@ -88,13 +88,17 @@ BTextField {
         const value = UiModels.stringField(suggestions[i], "value")
         return value !== "" ? value : UiModels.stringField(suggestions[i], "title")
     }
+    function closePopup(): void {
+        const popup = popupLoader.item as T.Popup
+        if (popup)
+            popup.close()
+    }
     function pick(i: int): void {
         if (i < 0 || i >= suggestions.length)
             return
         const value = valueOf(i)
         currentIndex = -1
-        if (popupLoader.item)
-            (popupLoader.item as T.Popup).close()
+        closePopup()
         picked(value)
     }
 
@@ -104,8 +108,7 @@ BTextField {
             refresh()
         } else {
             currentIndex = -1
-            if (popupLoader.item)
-                (popupLoader.item as T.Popup).close()
+            closePopup()
         }
     }
     onSuggestingChanged: if (activeFocus) refresh()
@@ -133,8 +136,7 @@ BTextField {
                 field.committed(field.text)
             event.accepted = true
         } else if (event.key === Qt.Key_Escape) {
-            if (popupLoader.item)
-                (popupLoader.item as T.Popup).close()
+            closePopup()
             field.cancelled()
             event.accepted = true
         }
@@ -223,9 +225,10 @@ BTextField {
                         Accessible.name: suggestion.title
                         onClicked: field.pick(suggestion.index)
                         background: Rectangle {
+                            readonly property bool highlighted: suggestion.index === field.currentIndex
+                            visible: highlighted || option.hovered || option.down
                             radius: Theme.radiusSm
-                            color: suggestion.index === field.currentIndex ? Theme.selection
-                                 : option.hovered || option.down ? Theme.bgHover : "transparent"
+                            color: highlighted ? Theme.selection : Theme.bgHover
                         }
                         contentItem: Item {
                             BIcon {
