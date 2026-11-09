@@ -1,0 +1,10 @@
+Nowości w 0.16.1:
+• Notatniki na GitHubie
+• Zapytania Dataview z Obsidiana
+• Android: nowy ekran alarmu
+• Otwórz w przeglądarce
+• Import z Logseqa zachowuje czas zadań
+• Natychmiastowe przełączanie widoków
+• Poprawki
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.16.1
