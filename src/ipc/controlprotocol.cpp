@@ -5,7 +5,9 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocalSocket>
 
+#include <algorithm>
 #include <cmath>
 
 #ifdef Q_OS_UNIX
@@ -160,6 +162,23 @@ QString listenerProblem(qint64 uid, const QString &key)
                    : u"Another user (uid %1) listens at %2: not this user's Brulion"_s.arg(uid).arg(key);
 }
 
+std::unique_ptr<QLocalSocket> connectToTrusted(const QString &key, int timeoutMs, QString *error)
+{
+    error->clear();
+    auto socket = std::make_unique<QLocalSocket>();
+    socket->connectToServer(key);
+    if (!socket->waitForConnected(timeoutMs))
+        return nullptr;
+    // A socket another user created at that name (the shared temp folder when there is no runtime
+    // folder) gets nothing.
+    *error = listenerProblem(peerUid(socket->socketDescriptor()), key);
+    if (!error->isEmpty()) {
+        socket->abort();
+        return nullptr;
+    }
+    return socket;
+}
+
 std::optional<ControlRequest> parseRequest(const QByteArray &rawLine, ControlFailure *failure)
 {
     const auto fail = [failure](const QJsonValue &id, const char *code, const QString &message) {
@@ -302,6 +321,37 @@ ControlFailure badParams(const ControlRequest &request, const QString &message, 
     return f;
 }
 
+/// Why `v` is no valid value of the parameter `p` of `request`; nullopt when it is one.
+std::optional<ControlFailure> checkParam(const ControlRequest &request, const ParamSpec &p, const QJsonValue &v)
+{
+    bool ok = true;
+    switch (p.type) {
+    case ParamType::String: ok = v.isString(); break;
+    case ParamType::Integer: ok = v.isDouble() && std::floor(v.toDouble()) == v.toDouble(); break;
+    case ParamType::Number: ok = v.isDouble() && std::isfinite(v.toDouble()); break;
+    case ParamType::Bool: ok = v.isBool(); break;
+    case ParamType::StringOrObject: ok = v.isString() || v.isObject(); break;
+    case ParamType::Modifiers: ok = parseModifiers(v).has_value(); break;
+    case ParamType::Target: ok = v.isObject(); break;
+    }
+    if (!ok)
+        return badParams(request, u"%1 is %2"_s.arg(p.name, typeName(p.type)), p.name);
+    if ((p.type == ParamType::Integer || p.type == ParamType::Number) && (v.toDouble() < p.min || v.toDouble() > p.max))
+        return badParams(request, u"%1 is between %2 and %3"_s.arg(p.name).arg(p.min).arg(p.max), p.name);
+    if (!p.values.isEmpty() && !p.values.contains(v.toString().toLower()))
+        return badParams(request, u"%1 is one of: %2"_s.arg(p.name, p.values.join(u", "_s)), p.name);
+    if (p.type == ParamType::Target) {
+        const QJsonObject target = v.toObject();
+        if (const QString why = checkTarget(target, true); !why.isEmpty())
+            return badParams(request, p.name + u": "_s + why, p.name);
+        for (auto f = target.constBegin(); f != target.constEnd(); ++f) {
+            if (!targetFields().contains(f.key()))
+                return badParams(request, u"%1 has no field %2"_s.arg(p.name, f.key()), p.name);
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 const QList<MethodSpec> &controlMethods()
@@ -374,11 +424,9 @@ const QList<MethodSpec> &controlMethods()
 
 const MethodSpec *findControlMethod(const QString &name)
 {
-    for (const MethodSpec &m : controlMethods()) {
-        if (m.name == name)
-            return &m;
-    }
-    return nullptr;
+    const QList<MethodSpec> &methods = controlMethods();
+    const auto it = std::ranges::find(methods, name, &MethodSpec::name);
+    return it == methods.cend() ? nullptr : &*it;
 }
 
 TargetKind targetKind(const QJsonObject &object)
@@ -403,11 +451,9 @@ QString checkTarget(const QJsonObject &object, bool required)
         return u"A point needs both x and y (numbers, window coordinates)"_s;
     if (handle && (!object.value(u"handle"_s).isString() || object.value(u"handle"_s).toString().isEmpty()))
         return u"handle is a string from find"_s;
-    if (selector) {
-        for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s}) {
-            if (object.contains(key) && (!object.value(key).isString() || object.value(key).toString().isEmpty()))
-                return u"%1 is a non-empty string"_s.arg(key);
-        }
+    for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s}) {
+        if (object.contains(key) && (!object.value(key).isString() || object.value(key).toString().isEmpty()))
+            return u"%1 is a non-empty string"_s.arg(key);
     }
     if (object.contains(u"exact"_s) && !selector)
         return u"exact goes with text / objectName / type"_s;
@@ -430,41 +476,11 @@ std::optional<ControlFailure> checkRequest(const ControlRequest &request)
     }
     const QJsonObject &params = request.params;
     for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
-        const ParamSpec *p = nullptr;
-        for (const ParamSpec &candidate : spec->params) {
-            if (candidate.name == it.key())
-                p = &candidate;
-        }
-        if (!p)
+        const auto p = std::ranges::find(spec->params, it.key(), &ParamSpec::name);
+        if (p == spec->params.cend())
             return badParams(request, u"%1 takes no parameter %2"_s.arg(spec->name, it.key()), it.key());
-        const QJsonValue v = it.value();
-        bool ok = true;
-        switch (p->type) {
-        case ParamType::String: ok = v.isString(); break;
-        case ParamType::Integer: ok = v.isDouble() && std::floor(v.toDouble()) == v.toDouble(); break;
-        case ParamType::Number: ok = v.isDouble() && std::isfinite(v.toDouble()); break;
-        case ParamType::Bool: ok = v.isBool(); break;
-        case ParamType::StringOrObject: ok = v.isString() || v.isObject(); break;
-        case ParamType::Modifiers: ok = parseModifiers(v).has_value(); break;
-        case ParamType::Target: ok = v.isObject(); break;
-        }
-        if (!ok)
-            return badParams(request, u"%1 is %2"_s.arg(it.key(), typeName(p->type)), it.key());
-        if ((p->type == ParamType::Integer || p->type == ParamType::Number)
-            && (v.toDouble() < p->min || v.toDouble() > p->max))
-            return badParams(request, u"%1 is between %2 and %3"_s.arg(it.key()).arg(p->min).arg(p->max), it.key());
-        if (!p->values.isEmpty() && !p->values.contains(v.toString().toLower()))
-            return badParams(request, u"%1 is one of: %2"_s.arg(it.key(), p->values.join(u", "_s)), it.key());
-        if (p->type == ParamType::Target) {
-            const QJsonObject target = v.toObject();
-            const QString why = checkTarget(target, true);
-            if (!why.isEmpty())
-                return badParams(request, it.key() + u": "_s + why, it.key());
-            for (auto f = target.constBegin(); f != target.constEnd(); ++f) {
-                if (!targetFields().contains(f.key()))
-                    return badParams(request, u"%1 has no field %2"_s.arg(it.key(), f.key()), it.key());
-            }
-        }
+        if (auto problem = checkParam(request, *p, it.value()))
+            return problem;
     }
     for (const ParamSpec &p : spec->params) {
         if (p.required && !params.contains(p.name))
@@ -481,25 +497,19 @@ std::optional<ControlFailure> checkRequest(const ControlRequest &request)
             return badParams(request, why.isEmpty() ? u"find needs text, objectName or type"_s : why);
     }
     if (spec->name == u"waitFor") {
-        QJsonObject item = params;
-        item.remove(u"route"_s);
-        item.remove(u"idle"_s);
-        item.remove(u"gone"_s);
-        item.remove(u"ms"_s);
-        const QString why = checkTarget(item, false);
-        if (!why.isEmpty())
+        QJsonObject item = params; // the item's fields: all but route, idle, gone and ms
+        for (const QString &key : {u"route"_s, u"idle"_s, u"gone"_s, u"ms"_s})
+            item.remove(key);
+        if (const QString why = checkTarget(item, false); !why.isEmpty())
             return badParams(request, why);
-        const bool anything =
-                params.contains(u"route"_s) || params.value(u"idle"_s).toBool() || targetKind(item) != TargetKind::None;
-        if (!anything)
+        const bool hasItem = targetKind(item) != TargetKind::None;
+        if (!params.contains(u"route"_s) && !params.value(u"idle"_s).toBool() && !hasItem)
             return badParams(request, u"waitFor needs a condition: route, text, objectName, type, handle or idle"_s);
-        if (params.contains(u"gone"_s) && targetKind(item) == TargetKind::None)
+        if (params.contains(u"gone"_s) && !hasItem)
             return badParams(request, u"gone goes with an item: text, objectName, type or handle"_s, u"gone"_s);
     }
-    if (spec->name == u"key") {
-        if (params.value(u"sequence"_s).toString().trimmed().isEmpty())
-            return badParams(request, u"sequence names keys, e.g. \"Ctrl+K\" or \"Escape\""_s, u"sequence"_s);
-    }
+    if (spec->name == u"key" && params.value(u"sequence"_s).toString().trimmed().isEmpty())
+        return badParams(request, u"sequence names keys, e.g. \"Ctrl+K\" or \"Escape\""_s, u"sequence"_s);
     if (spec->name == u"scroll" && params.value(u"dx"_s).toDouble() == 0 && params.value(u"dy"_s).toDouble() == 0)
         return badParams(request, u"scroll needs dx or dy: pixels, not 0 (positive: down, right)"_s, u"dy"_s);
     if (spec->name == u"type" && params.value(u"text"_s).toString().size() > 20000)
@@ -515,7 +525,8 @@ std::optional<Qt::KeyboardModifiers> parseModifiers(const QJsonValue &value)
     if (value.isString()) {
         names = value.toString().split(u'+', Qt::SkipEmptyParts);
     } else if (value.isArray()) {
-        for (const QJsonValue &v : value.toArray()) {
+        const QJsonArray array = value.toArray();
+        for (const auto &v : array) {
             if (!v.isString())
                 return std::nullopt;
             names.append(v.toString());
@@ -562,13 +573,11 @@ bool routeMatches(const QJsonObject &route, const QJsonValue &wanted)
         return false;
     const QJsonObject w = wanted.toObject();
     for (auto it = w.constBegin(); it != w.constEnd(); ++it) {
+        const QJsonValue want = it.value();
         const QJsonValue have = route.value(it.key());
-        if (it.value().isDouble() && have.isDouble()) {
-            if (it.value().toDouble() != have.toDouble())
-                return false;
-        } else if (have != it.value()) {
+        const bool same = (want.isDouble() && have.isDouble()) ? want.toDouble() == have.toDouble() : want == have;
+        if (!same)
             return false;
-        }
     }
     return true;
 }

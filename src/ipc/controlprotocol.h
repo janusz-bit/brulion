@@ -27,7 +27,10 @@
 #include <QString>
 #include <QStringList>
 
+#include <memory>
 #include <optional>
+
+class QLocalSocket;
 
 namespace brulion::ipc {
 
@@ -64,6 +67,10 @@ bool trustedPeer(qint64 uid, qint64 own);
 /// Why a client must not talk to the process listening at `key` (`uid`: peerUid() of the
 /// connection), "" when it may (trustedPeer()).
 QString listenerProblem(qint64 uid, const QString &key);
+/// Connect to the local server at `key` within `timeoutMs`, but only to this user's process:
+/// nullptr when nothing listens there, or — with `*error` (listenerProblem()) — when another user's
+/// process does, which is told nothing (it could answer in the app's place). `*error` is "" otherwise.
+std::unique_ptr<QLocalSocket> connectToTrusted(const QString &key, int timeoutMs, QString *error);
 
 struct ControlRequest {
     QJsonValue id; ///< a number or a string (null when the line had none)

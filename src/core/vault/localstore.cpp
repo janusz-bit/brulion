@@ -10,6 +10,8 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion {
@@ -20,13 +22,13 @@ LocalStore::LocalStore(const QString &filePath, QObject *parent)
     , m_timer(this)
 {
     m_timer.setSingleShot(true);
-    connect(&m_timer, &QTimer::timeout, this, [this] { flush(); });
+    connect(&m_timer, &QTimer::timeout, this, &LocalStore::flush);
     reload();
 }
 
 LocalStore::~LocalStore()
 {
-    if (hasPendingChanges() && !flush())
+    if (!flush())
         qCWarning(lcVault).noquote() << "LocalStore: unsaved changes lost:" << m_error;
 }
 
@@ -117,7 +119,7 @@ bool LocalStore::hasPendingChanges() const
 
 void LocalStore::setFlushDelay(int msec)
 {
-    m_flushDelay = qMax(0, msec);
+    m_flushDelay = std::max(0, msec);
 }
 
 int LocalStore::flushDelay() const
@@ -192,11 +194,13 @@ bool LocalStore::readFile(Map &out, QByteArray &raw, const QByteArray *known)
     if (m_path.isEmpty() || !QFileInfo::exists(m_path))
         return true;
     QFile file(m_path);
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (file.open(QIODevice::ReadOnly))
+        raw = file.readAll();
+    // A failed open() or read is no corrupt file (that would be moved aside): tried again later.
+    if (file.error() != QFileDevice::NoError) {
         m_error = tr("Cannot read %1: %2").arg(m_path, file.errorString());
         return false;
     }
-    raw = file.readAll();
     // `known` bytes were parsed (or written by us) before: valid, and the caller has their keys.
     if (known && !raw.isEmpty() && raw == *known)
         return true;

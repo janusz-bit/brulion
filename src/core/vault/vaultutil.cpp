@@ -75,8 +75,7 @@ QString trashStamp(const QDateTime &time)
 QString stripTrashStamp(const QString &segment)
 {
     static const QRegularExpression stamp(u" \\(\\d{8}-\\d{6}\\)(?: \\d+)?(?=\\.[^.]*\\z|\\z)"_s);
-    QString out = segment;
-    return out.remove(stamp);
+    return QString(segment).remove(stamp);
 }
 
 bool isTextPath(const VaultPath &path)
@@ -103,21 +102,17 @@ QByteArray utf8Bom()
 bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *error)
 {
     constexpr int kAttempts = 4;
-    for (int attempt = 0;; ++attempt) {
+    for (int attempt = 1;; ++attempt) {
         QSaveFile file(absolutePath);
-        if (!file.open(QIODevice::WriteOnly) || file.write(bytes.data(), bytes.size()) != bytes.size()) {
-            if (error)
-                *error = file.errorString();
-            return false;
-        }
-        if (file.commit())
+        const bool written = file.open(QIODevice::WriteOnly) && file.write(bytes.data(), bytes.size()) == bytes.size();
+        if (written && file.commit())
             return true;
-        if (file.error() != QFileDevice::RenameError || attempt + 1 == kAttempts) {
+        if (!written || file.error() != QFileDevice::RenameError || attempt == kAttempts) {
             if (error)
                 *error = file.errorString();
             return false;
         }
-        QThread::msleep(15 * (attempt + 1)); // 15 + 30 + 45 ms
+        QThread::msleep(15 * attempt); // 15 + 30 + 45 ms
     }
 }
 

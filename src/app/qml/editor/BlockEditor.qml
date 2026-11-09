@@ -143,7 +143,7 @@ FocusScope {
     // ---- The touch toolbar, docked on the keyboard (docs/UI.md "On-screen keyboard") ------------
     /// The table whose cell is being edited (TableBlockView sets and clears it), else null.
     final property TableBlockView editingTable: null
-    /// The table whose cell is being edited (TableBlockView: itself, or null).
+    /// editingTable = `table` (a TableBlockView, or null).
     function setEditingTable(table: Item): void {
         editingTable = table as TableBlockView
     }
@@ -226,7 +226,6 @@ FocusScope {
         action.token = token
         return action
     }
-    /// A toast's action (EditorToastAction: `kind` and its values), the editor's child.
     /// The "Undo" of a replace over days of the journal stream (FindBar): StreamFind.undo(token).
     function streamUndoAction(stream: StreamFind, token: int): EditorToastAction {
         const action = toastAction("streamUndo", qsTr("Undo"))
@@ -234,6 +233,7 @@ FocusScope {
         action.undo = token
         return action
     }
+    /// A toast's action (EditorToastAction: `kind` and its values), the editor's child.
     function toastAction(kind: string, text: string): EditorToastAction {
         return toastActionComponent.createObject(editor, { kind: kind, text: text }) as EditorToastAction
     }
@@ -303,15 +303,22 @@ FocusScope {
     function spanFocusHere(row: int, reveal: bool): void {
         if (!controller)
             return
+        listTakesKeys(true)
+        if (reveal)
+            ensureRowVisible(row)
+    }
+    /// What a block selection or reading mode takes over from editing: the suggestions close, a
+    /// touch UI loses its keyboard (and enters the selection mode when `selecting`), the list has
+    /// the keys.
+    function listTakesKeys(selecting: bool): void {
         closeSuggestions()
         if (touch) {
             DeviceInfo.hideInputMethod()
-            selectionMode = true
+            if (selecting)
+                selectionMode = true
         }
         if (!list.activeFocus)
             list.forceActiveFocus()
-        if (reveal)
-            ensureRowVisible(row)
     }
 
     // ---- Reading mode (docs/UI.md "Reading mode") ---------------------------------------------------
@@ -350,11 +357,7 @@ FocusScope {
             if (!editor.controller || !editor.controller.readOnly)
                 return
             // What only editing shows goes with it: suggestions, the keyboard.
-            editor.closeSuggestions()
-            if (editor.touch)
-                DeviceInfo.hideInputMethod()
-            if (!list.activeFocus)
-                list.forceActiveFocus()
+            editor.listTakesKeys(false)
         }
     }
 
@@ -963,12 +966,11 @@ FocusScope {
             return true
         if (!controller || row < 0)
             return false
-        const mods = modifiers
-        if (!touch && (mods & Qt.ShiftModifier)) {
+        if (!touch && (modifiers & Qt.ShiftModifier)) {
             extendSelectionTo(row)
             return true
         }
-        if (!touch && (mods & Qt.ControlModifier)) {
+        if (!touch && (modifiers & Qt.ControlModifier)) {
             toggleBlock(row)
             return true
         }
@@ -1225,13 +1227,7 @@ FocusScope {
             controller.undo()
         if (controller.editingRow >= 0 || controller.selectionCount === 0)
             return
-        closeSuggestions()
-        if (touch) {
-            DeviceInfo.hideInputMethod()
-            selectionMode = true
-        }
-        if (!list.activeFocus)
-            list.forceActiveFocus()
+        listTakesKeys(true)
     }
 
     function toggleSourceMode(): void {
@@ -1251,7 +1247,7 @@ FocusScope {
     /// list scrolling the editor (`scroller`).
     function ensureVisible(item: Item, rect: rect): void {
         const height = rect.height
-        if (!item || !list || !editor.alive)
+        if (!item || !editor.alive)
             return
         if (editor.scroller) {
             editor.scroller.ensureVisible(item, rect)
@@ -1284,7 +1280,7 @@ FocusScope {
     /// the list — or of the list scrolling the editor — as far as the content goes.
     function centerInView(item: Item, rect: rect): void {
         const height = rect.height
-        if (!item || !list || !editor.alive)
+        if (!item || !editor.alive)
             return
         if (editor.scroller) {
             // (Every scroller has centerInView now: EditorScroller.)

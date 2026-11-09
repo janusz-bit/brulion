@@ -27,45 +27,26 @@ constexpr std::array<char16_t, 128> Cp1250High = {
         0x010D, 0x00E9, 0x0119, 0x00EB, 0x011B, 0x00ED, 0x00EE, 0x010F, 0x0111, 0x0144, 0x0148, 0x00F3, 0x00F4,
         0x0151, 0x00F6, 0x00F7, 0x0159, 0x016F, 0x00FA, 0x0171, 0x00FC, 0x00FD, 0x0163, 0x02D9};
 
-/// Does legacy 8-bit text look like windows-1250 rather than windows-1252? Bytes of Polish
-/// letters that are rare symbols in windows-1252 (ą ł ś ź Ś Ź Ą Ż = ¹ ³ œ Ÿ Œ – ¥ ¯) are weighed
-/// against Western letters that windows-1250 lacks (à è ì ò ù å ã õ ø …).
+/// Votes of the bytes for windows-1250 against windows-1252: +1 for Polish letters that are rare
+/// symbols in windows-1252 (ą ł ś ź Ś Ź Ą Ż = ¹ ³ œ Ÿ Œ – ¥ ¯), -1 for Western letters that
+/// windows-1250 lacks (à è ì ò ù å ã õ ø …).
+constexpr std::array<signed char, 256> Cp1250Votes = [] {
+    std::array<signed char, 256> votes{};
+    for (const int b : {0xB9, 0xB3, 0x9C, 0x9F, 0x8C, 0x8F, 0xA5, 0xAF})
+        votes[b] = 1;
+    for (const int b :
+         {0xC0, 0xC3, 0xC5, 0xC8, 0xCC, 0xD2, 0xD5, 0xD8, 0xD9, 0xE0, 0xE3, 0xE5, 0xE8, 0xEC, 0xF2, 0xF5, 0xF8, 0xF9})
+        votes[b] = -1;
+    return votes;
+}();
+
+/// Does legacy 8-bit text look like windows-1250 rather than windows-1252 (more votes for it)?
 bool looksLikeCp1250(const QByteArray &data)
 {
-    int polish = 0;
-    int western = 0;
-    for (const char ch : data) {
-        switch (static_cast<unsigned char>(ch)) {
-        case 0xB9:
-        case 0xB3:
-        case 0x9C:
-        case 0x9F:
-        case 0x8C:
-        case 0x8F:
-        case 0xA5:
-        case 0xAF: ++polish; break;
-        case 0xC0:
-        case 0xC3:
-        case 0xC5:
-        case 0xC8:
-        case 0xCC:
-        case 0xD2:
-        case 0xD5:
-        case 0xD8:
-        case 0xD9:
-        case 0xE0:
-        case 0xE3:
-        case 0xE5:
-        case 0xE8:
-        case 0xEC:
-        case 0xF2:
-        case 0xF5:
-        case 0xF8:
-        case 0xF9: ++western; break;
-        default: break;
-        }
-    }
-    return polish > western;
+    qsizetype score = 0;
+    for (const char ch : data)
+        score += Cp1250Votes[static_cast<unsigned char>(ch)];
+    return score > 0;
 }
 
 /// 8-bit text that is not UTF-8: windows-1250 when it looks Polish (see looksLikeCp1250()),

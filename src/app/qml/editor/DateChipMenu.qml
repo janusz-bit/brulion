@@ -55,6 +55,12 @@ BMenu {
     readonly property bool dateKind: !reminder && !recurrence && !priorityKind && !day
     /// Moves to a day: dates and day links (not a series' occurrence).
     readonly property bool movable: (dateKind || day) && !occurrence
+    // What is offered unless the menu is `readOnly`.
+    readonly property bool canMove: movable && !readOnly
+    readonly property bool canRepeat: recurrence && !readOnly
+    readonly property bool canPrioritise: priorityKind && !readOnly
+    readonly property bool canSnooze: reminder && snoozable && !readOnly
+    readonly property bool canEditReminder: reminder && !readOnly
     readonly property bool whenDone: Js.endsWith(rule, " when done")
     readonly property string baseRule: whenDone ? Js.slice(rule, 0, rule.length - " when done".length) : rule
     /// Bumped after a checkable item toggled itself: its `checked` binding (which reads this)
@@ -158,35 +164,35 @@ BMenu {
     ShownSeparator { shown: !menu.priorityKind && !menu.readOnly }
     ShownItem {
         objectName: "dateChipToday"
-        shown: menu.movable && !menu.readOnly
+        shown: menu.canMove
         text: qsTr("Today")
         iconName: "sun"
         onTriggered: menu.chosen("move", 0, 0)
     }
     ShownItem {
         objectName: "dateChipTomorrow"
-        shown: menu.movable && !menu.readOnly
+        shown: menu.canMove
         text: qsTr("Tomorrow")
         iconName: "calendar-days"
         onTriggered: menu.chosen("move", 1, 0)
     }
     ShownItem {
         objectName: "dateChipDayLater"
-        shown: menu.movable && !menu.readOnly
+        shown: menu.canMove
         text: qsTr("A day later")
         iconName: "arrow-right"
         onTriggered: menu.chosen("shift", 1, 0)
     }
     ShownItem {
         objectName: "dateChipHourLater"
-        shown: (menu.reminder && menu.snoozable) && !menu.readOnly
+        shown: menu.canSnooze
         text: qsTr("An hour later")
         iconName: "clock"
         onTriggered: menu.chosen("shift", 0, 60)
     }
     ShownItem {
         objectName: "dateChipTomorrowSameTime"
-        shown: (menu.reminder && menu.snoozable) && !menu.readOnly
+        shown: menu.canSnooze
         text: qsTr("Tomorrow at this time")
         iconName: "calendar-days"
         onTriggered: menu.chosen("move", 1, 0)
@@ -200,16 +206,16 @@ BMenu {
     }
 
     // ---- 🔁: the quick rules --------------------------------------------------------------------------
-    RuleItem { objectName: "dateChipRuleDaily"; shown: menu.recurrence && !menu.readOnly; ruleText: "every day"; text: qsTr("Daily") }
-    RuleItem { objectName: "dateChipRuleWeekdays"; shown: menu.recurrence && !menu.readOnly; ruleText: "every weekday"; text: qsTr("Weekdays") }
-    RuleItem { objectName: "dateChipRuleWeekly"; shown: menu.recurrence && !menu.readOnly; ruleText: "every week"; text: qsTr("Weekly") }
-    RuleItem { objectName: "dateChipRuleTwoWeeks"; shown: menu.recurrence && !menu.readOnly; ruleText: "every 2 weeks"; text: qsTr("Every 2 weeks") }
-    RuleItem { objectName: "dateChipRuleMonthly"; shown: menu.recurrence && !menu.readOnly; ruleText: "every month"; text: qsTr("Monthly") }
-    RuleItem { objectName: "dateChipRuleYearly"; shown: menu.recurrence && !menu.readOnly; ruleText: "every year"; text: qsTr("Yearly") }
-    ShownSeparator { shown: menu.recurrence && !menu.readOnly }
+    RuleItem { objectName: "dateChipRuleDaily"; shown: menu.canRepeat; ruleText: "every day"; text: qsTr("Daily") }
+    RuleItem { objectName: "dateChipRuleWeekdays"; shown: menu.canRepeat; ruleText: "every weekday"; text: qsTr("Weekdays") }
+    RuleItem { objectName: "dateChipRuleWeekly"; shown: menu.canRepeat; ruleText: "every week"; text: qsTr("Weekly") }
+    RuleItem { objectName: "dateChipRuleTwoWeeks"; shown: menu.canRepeat; ruleText: "every 2 weeks"; text: qsTr("Every 2 weeks") }
+    RuleItem { objectName: "dateChipRuleMonthly"; shown: menu.canRepeat; ruleText: "every month"; text: qsTr("Monthly") }
+    RuleItem { objectName: "dateChipRuleYearly"; shown: menu.canRepeat; ruleText: "every year"; text: qsTr("Yearly") }
+    ShownSeparator { shown: menu.canRepeat }
     ShownItem {
         objectName: "dateChipWhenDone"
-        shown: menu.recurrence && !menu.readOnly
+        shown: menu.canRepeat
         text: qsTr("From the completion date")
         iconName: "check"
         checkable: true
@@ -221,17 +227,17 @@ BMenu {
     }
 
     // ---- Priorities ---------------------------------------------------------------------------------
-    PriorityItem { objectName: "dateChipPriorityHighest"; shown: (menu.priorityKind && !menu.logseq) && !menu.readOnly; level: "highest"; text: qsTr("Highest"); iconName: "arrow-up" }
-    PriorityItem { objectName: "dateChipPriorityHigh"; shown: menu.priorityKind && !menu.readOnly; level: "high"; text: qsTr("High"); iconName: "chevron-up" }
-    PriorityItem { objectName: "dateChipPriorityMedium"; shown: menu.priorityKind && !menu.readOnly; level: "medium"; text: qsTr("Medium"); iconName: "minus" }
-    PriorityItem { objectName: "dateChipPriorityLow"; shown: menu.priorityKind && !menu.readOnly; level: "low"; text: qsTr("Low"); iconName: "chevron-down" }
-    PriorityItem { objectName: "dateChipPriorityLowest"; shown: (menu.priorityKind && !menu.logseq) && !menu.readOnly; level: "lowest"; text: qsTr("Lowest"); iconName: "arrow-down" }
+    PriorityItem { objectName: "dateChipPriorityHighest"; shown: menu.canPrioritise && !menu.logseq; level: "highest"; text: qsTr("Highest"); iconName: "arrow-up" }
+    PriorityItem { objectName: "dateChipPriorityHigh"; shown: menu.canPrioritise; level: "high"; text: qsTr("High"); iconName: "chevron-up" }
+    PriorityItem { objectName: "dateChipPriorityMedium"; shown: menu.canPrioritise; level: "medium"; text: qsTr("Medium"); iconName: "minus" }
+    PriorityItem { objectName: "dateChipPriorityLow"; shown: menu.canPrioritise; level: "low"; text: qsTr("Low"); iconName: "chevron-down" }
+    PriorityItem { objectName: "dateChipPriorityLowest"; shown: menu.canPrioritise && !menu.logseq; level: "lowest"; text: qsTr("Lowest"); iconName: "arrow-down" }
 
     // ---- A reminder: the alarm, the block's rule and priority ---------------------------------------
-    ShownSeparator { shown: menu.reminder && !menu.readOnly }
+    ShownSeparator { shown: menu.canEditReminder }
     ShownItem {
         objectName: "dateChipAlarm"
-        shown: menu.reminder && !menu.readOnly
+        shown: menu.canEditReminder
         text: qsTr("Alarm")
         iconName: "bell-ring"
         checkable: true

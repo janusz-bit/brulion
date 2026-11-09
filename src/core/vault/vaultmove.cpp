@@ -23,20 +23,20 @@ namespace brulion {
 
 bool VaultPrivate::renameTargetFree(const VaultPath &from, const VaultPath &to)
 {
+    const bool caseOnly = from.toLower() == to.toLower();
     if (files.contains(to) || dirs.contains(to))
         return fail(Vault::tr("%1 already exists").arg(to));
     // Another entry spelled differently only in letter case ("dom.md" next to "Dom.md"): one
     // entry on case-insensitive storage, and links do not tell them apart.
-    if (from.toLower() != to.toLower() && isTakenCaseInsensitive(to))
+    if (!caseOnly && isTakenCaseInsensitive(to))
         return fail(Vault::tr("%1 already exists").arg(existingCase(to, false)));
     if (!existsOnDisk(to))
         return true;
     // On case-insensitive storage the source itself answers to the new spelling: allowed.
-    if (from.toLower() == to.toLower()) {
+    if (caseOnly) {
         const std::optional<FileStat> source = diskStat(from);
         const std::optional<FileStat> target = diskStat(to);
-        if (source && target && source->isDir == target->isDir && source->size == target->size
-            && source->mtime == target->mtime)
+        if (source && target && sameStat(*source, *target) && source->mtime == target->mtime)
             return true;
     }
     return fail(Vault::tr("%1 already exists").arg(to));
@@ -70,7 +70,9 @@ bool VaultPrivate::moveOnDisk(const VaultPath &from, const VaultPath &to)
         return moved(false);
     if (move(temp, target))
         return moved(true);
-    move(temp, source);
+    // The temporary name is ignored (a temp file): without this trace the entry would seem gone.
+    if (!move(temp, source))
+        qCWarning(lcVault).noquote() << "Cannot move" << temp << "back to" << source;
     return moved(false);
 }
 
@@ -79,12 +81,8 @@ QStringList VaultPrivate::releaseWatches(const QString &absoluteDir)
     if (!watcher)
         return {};
     const QString inside = absoluteDir + u'/';
-    QStringList held;
-    const QStringList watched = watcher->directories() + watcher->files();
-    for (const QString &path : watched) {
-        if (path == absoluteDir || path.startsWith(inside))
-            held.append(path);
-    }
+    QStringList held = watcher->directories() + watcher->files();
+    held.removeIf([&](const QString &path) { return path != absoluteDir && !path.startsWith(inside); });
     if (!held.isEmpty())
         watcher->removePaths(held);
     return held;
@@ -180,17 +178,13 @@ VaultPath VaultPrivate::trashTarget(const VaultPath &path, bool isDir) const
     const QString stamp = u" ("_s + vaultutil::trashStamp(now()) + u')';
     // ".trash/Zakupy" may be a trashed *file* while "Zakupy/x.md" is deleted: use "Zakupy (stamp)/".
     const VaultPath base = avoidFileAncestors(paths::join(vaultTrashFolder(), path), 1, [&stamp](int n) -> QString {
-        if (n == 1)
-            return stamp;
-        return stamp + u' ' + QString::number(n);
+        return n == 1 ? stamp : stamp + u' ' + QString::number(n);
     });
     if (!existsOnDisk(base))
         return base;
-    const VaultPath stamped = vaultutil::insertBeforeExtension(base, stamp, isDir);
-    VaultPath candidate = stamped;
-    for (int i = 2; existsOnDisk(candidate); ++i)
-        candidate = vaultutil::insertBeforeExtension(stamped, u' ' + QString::number(i), isDir);
-    return candidate;
+    return vaultutil::uniqueName(
+            vaultutil::insertBeforeExtension(base, stamp, isDir),
+            [this](const VaultPath &candidate) { return existsOnDisk(candidate); }, isDir);
 }
 
 VaultPath VaultPrivate::avoidFileAncestors(const VaultPath &path, qsizetype keep,
@@ -199,7 +193,7 @@ VaultPath VaultPrivate::avoidFileAncestors(const VaultPath &path, qsizetype keep
     QStringList segments = path.split(u'/');
     for (qsizetype i = keep; i + 1 < segments.size(); ++i) {
         const QString name = segments.at(i);
-        const auto prefix = [&segments, i] { return segments.mid(0, i + 1).join(u'/'); };
+        const auto prefix = [&segments, i] { return segments.first(i + 1).join(u'/'); };
         QFileInfo info(absPath(prefix()));
         // Moving below an existing *file* would fail: pick another folder name.
         for (int n = 1; (info.exists() || info.isSymLink()) && !info.isDir(); ++n) {
@@ -225,12 +219,9 @@ bool VaultPrivate::throughTrashLink(const VaultPath &path) const
     // Trash operations never move or delete files through a symlinked folder inside the trash
     // (".trash" itself included): a planted link would carry deleted notes out of the vault and
     // offer files from elsewhere for restoring.
-    const QStringList chain = vaultutil::ancestors(path);
-    for (const VaultPath &dir : chain) {
-        if (vaultutil::isWithin(dir, vaultTrashFolder()) && QFileInfo(absPath(dir)).isSymLink())
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(vaultutil::ancestors(path), [this](const VaultPath &dir) {
+        return vaultutil::isWithin(dir, vaultTrashFolder()) && QFileInfo(absPath(dir)).isSymLink();
+    });
 }
 
 QString VaultPrivate::trashKey(const VaultPath &trashPath)
@@ -272,8 +263,7 @@ bool Vault::rename(const VaultPath &from, const VaultPath &to, ChangeSource sour
     if (vaultutil::isStrictlyWithin(b, a))
         return d->fail(tr("Cannot move %1 into itself").arg(a));
     d->resolveSpelling(a);
-    const QFileInfo info(d->absPath(a));
-    if (!info.exists() && !info.isSymLink()) {
+    if (!d->existsOnDisk(a)) {
         if (d->knownStat(a))
             d->scheduleCheck(a); // the cache is stale: report the deletion soon
         return d->fail(tr("%1 does not exist").arg(a));
@@ -303,8 +293,7 @@ bool Vault::remove(const VaultPath &path, ChangeSource source)
     if (vaultutil::isWithin(p, vaultTrashFolder()))
         return removePermanently(p, source);
     d->resolveSpelling(p);
-    const QFileInfo info(d->absPath(p));
-    if (!info.exists() && !info.isSymLink()) {
+    if (!d->existsOnDisk(p)) {
         // Already gone on disk (stale cache): just forget it.
         d->finish(d->forgetTree(p, source));
         return true;
@@ -348,16 +337,16 @@ bool Vault::removePermanently(const VaultPath &path, ChangeSource source)
             d->pruneEmptyTrashFolders(paths::dirname(p));
     }
     // After a partial failure, report exactly what is gone.
-    d->finish(ok ? d->forgetTree(p, source) : d->reconcile(ScanScope{{p}, {}, {}}, source));
+    d->finish(ok ? d->forgetTree(p, source) : d->reconcile(ScanScope{.trees = {p}}, source));
     return ok || d->fail(tr("Cannot delete %1").arg(p));
 }
 
 QList<FileStat> Vault::trash() const
 {
     QList<FileStat> out;
-    if (!d->isOpen || QFileInfo(d->absPath(vaultTrashFolder())).isSymLink())
-        return out; // a ".trash" link is never used (see remove())
     const QString base = d->absPath(vaultTrashFolder());
+    if (!d->isOpen || QFileInfo(base).isSymLink())
+        return out; // a ".trash" link is never used (see remove())
     QDirIterator it(base, QDir::Files | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QFileInfo info = it.nextFileInfo();
@@ -374,21 +363,17 @@ TrashInfo Vault::trashInfo(const VaultPath &trashPath) const
     const QString trashFolder = vaultTrashFolder();
     if (!vaultutil::isStrictlyWithin(t, trashFolder))
         return info;
-    // Metadata of the item itself, else of a trashed folder that contains it.
-    QStringList chain{t};
-    const QStringList up = vaultutil::ancestors(t);
-    for (auto it = up.crbegin(); it != up.crend(); ++it) {
-        if (vaultutil::isStrictlyWithin(*it, trashFolder))
-            chain.append(*it);
-    }
-    for (const VaultPath &item : std::as_const(chain)) {
-        const QJsonObject meta = d->store->get(VaultPrivate::trashKey(item)).toObject();
+    // Metadata of the item itself, else of the innermost trashed folder that contains it.
+    QStringList chain = vaultutil::ancestors(t);
+    chain.append(t);
+    for (auto it = chain.crbegin(); it != chain.crend() && vaultutil::isStrictlyWithin(*it, trashFolder); ++it) {
+        const QJsonObject meta = d->store->get(VaultPrivate::trashKey(*it)).toObject();
         const VaultPath original = paths::normalize(meta.value("original"_L1).toString());
         if (original.isEmpty() || vaultutil::isWithin(original, trashFolder))
             continue; // unusable metadata
-        info.original = vaultutil::rebase(t, item, original);
-        if (meta.value("deletedAt"_L1).isDouble())
-            info.deletedAt = QDateTime::fromMSecsSinceEpoch(meta.value("deletedAt"_L1).toInteger());
+        info.original = vaultutil::rebase(t, *it, original);
+        if (const QJsonValue deletedAt = meta.value("deletedAt"_L1); deletedAt.isDouble())
+            info.deletedAt = QDateTime::fromMSecsSinceEpoch(deletedAt.toInteger());
         return info;
     }
     // Deleted on another device (or metadata lost): the trash path minus the stamps.
@@ -403,26 +388,21 @@ VaultPath Vault::restore(const VaultPath &trashPath, ChangeSource source)
 {
     if (!d->requireOpen())
         return {};
+    const auto failed = [this](const QString &message) {
+        d->fail(message);
+        return VaultPath();
+    };
     const VaultPath t = paths::normalize(trashPath);
-    if (!vaultutil::isStrictlyWithin(t, vaultTrashFolder())) {
-        d->fail(tr("%1 is not in the trash").arg(t));
-        return {};
-    }
-    if (d->throughTrashLink(t)) {
-        d->fail(tr("Cannot restore %1: it lies behind a link in the trash").arg(t));
-        return {};
-    }
+    if (!vaultutil::isStrictlyWithin(t, vaultTrashFolder()))
+        return failed(tr("%1 is not in the trash").arg(t));
+    if (d->throughTrashLink(t))
+        return failed(tr("Cannot restore %1: it lies behind a link in the trash").arg(t));
     d->resolveSpelling(t); // items deleted on other devices may have NFD names
-    const QFileInfo info(d->absPath(t));
-    if (!info.exists() && !info.isSymLink()) {
-        d->fail(tr("%1 does not exist").arg(t));
-        return {};
-    }
+    if (!d->existsOnDisk(t))
+        return failed(tr("%1 does not exist").arg(t));
     const VaultPath original = trashInfo(t).original;
-    if (original.isEmpty()) {
-        d->fail(tr("Cannot tell where %1 came from").arg(t));
-        return {};
-    }
+    if (original.isEmpty())
+        return failed(tr("Cannot tell where %1 came from").arg(t));
     const bool isDir = d->isDirOnDisk(t);
     // A folder of the original path may meanwhile be a file: restore into "Folder 2/" then.
     const VaultPath target = d->freePath(

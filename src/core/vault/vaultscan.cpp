@@ -32,12 +32,6 @@ bool entryByPath(const DiskEntry &a, const DiskEntry &b)
     return a.stat.path < b.stat.path;
 }
 
-QList<DiskEntry> sortedEntries(QList<DiskEntry> entries)
-{
-    std::ranges::sort(entries, entryByPath);
-    return entries;
-}
-
 /// How well `to` fits as the new name of `from` (both with the same content): two points per
 /// trailing path segment they share — a moved folder keeps "Projekt/index.md", so identical
 /// notes moved together pair with their own old paths — plus one for a rename in place.
@@ -45,10 +39,21 @@ int renameScore(const VaultPath &from, const VaultPath &to)
 {
     const QStringList a = from.split(u'/');
     const QStringList b = to.split(u'/');
-    qsizetype common = 0;
-    while (common < a.size() && common < b.size() && a.at(a.size() - 1 - common) == b.at(b.size() - 1 - common))
-        ++common;
+    const auto common = std::mismatch(a.crbegin(), a.crend(), b.crbegin(), b.crend()).first - a.crbegin();
     return static_cast<int>(2 * common) + (paths::dirname(from) == paths::dirname(to) ? 1 : 0);
+}
+
+/// True when `path` or a folder above it (the vault folder "" included) is one of `folders`.
+bool atOrBelow(const QSet<VaultPath> &folders, const VaultPath &path)
+{
+    if (folders.isEmpty())
+        return false;
+    for (VaultPath cur = path;; cur = paths::dirname(cur)) {
+        if (folders.contains(cur))
+            return true;
+        if (cur.isEmpty())
+            return false;
+    }
 }
 
 } // namespace
@@ -59,26 +64,12 @@ int renameScore(const VaultPath &from, const VaultPath &to)
 
 bool DiskListing::inListedTree(const VaultPath &path) const
 {
-    if (trees.isEmpty())
-        return false;
-    for (VaultPath cur = path;; cur = paths::dirname(cur)) {
-        if (trees.contains(cur))
-            return true;
-        if (cur.isEmpty())
-            return false;
-    }
+    return atOrBelow(trees, path);
 }
 
 bool DiskListing::withinUnreadable(const VaultPath &path) const
 {
-    if (unreadable.isEmpty())
-        return false;
-    for (VaultPath cur = path;; cur = paths::dirname(cur)) {
-        if (unreadable.contains(cur))
-            return true;
-        if (cur.isEmpty())
-            return false;
-    }
+    return atOrBelow(unreadable, path);
 }
 
 bool DiskListing::coversChildrenOf(const VaultPath &dir) const
@@ -117,51 +108,57 @@ bool DiskListing::coversDir(const VaultPath &dir) const
 
 void VaultPrivate::listChildren(const VaultPath &dir, const QString &dirRel, bool recursive, DiskListing &out) const
 {
-    if (out.listedDirs.contains(dir) || out.unreadable.contains(dir))
-        return;
-    const QString absDir = absOfDiskRel(dirRel);
-    // Without read permission the listing comes back empty, without search permission the
-    // entries cannot be stat-ed: neither means that everything inside was deleted.
-    if (const QFileInfo self(absDir); !self.isReadable() || !self.isExecutable()) {
-        out.unreadable.insert(dir);
-        return;
-    }
-    out.listedDirs.insert(dir);
-    QList<std::pair<VaultPath, QString>> descend; // vault path, on-disk path
-    QDirIterator it(absDir, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
-    while (it.hasNext()) {
-        const QFileInfo info = it.nextFileInfo();
-        const QString name = info.fileName();
-        if (name.contains(u'\\'))
-            continue; // would be read as a separator by paths::normalize
-        const VaultPath path = paths::join(dir, name);
-        if (path.isEmpty())
+    // A stack of the folders still to list instead of recursion: how deep folders nest is up to
+    // what was synced or imported, while the call stack is small on some platforms (1 MB) and
+    // each level of recursion kept a directory open.
+    struct Folder {
+        VaultPath path;
+        QString rel;            ///< relative to the root as spelled on disk
+        bool recursive = false; ///< also list the subfolders the vault knows already
+    };
+    QList<Folder> todo{Folder{dir, dirRel, recursive}};
+    while (!todo.isEmpty()) {
+        const Folder folder = todo.takeLast();
+        if (out.listedDirs.contains(folder.path) || out.unreadable.contains(folder.path))
             continue;
-        QString rel = name;
-        if (!dirRel.isEmpty())
-            rel = dirRel + u'/' + name;
-        if (info.isDir()) {
-            if (info.isSymLink() && !followsLink(info, dirRel))
-                continue; // a link into the vault (duplicates) or a loop
-            if (path == vaultutil::configFolder()) {
-                descend.append({path, rel}); // ignored, but its config.json is tracked
-                continue;
-            }
-            if (!vaultutil::isTracked(path) || out.dirs.contains(path))
-                continue;
-            out.dirs.insert(path, DiskEntry{rel, statOf(info, path)});
-            // A folder the vault does not know yet: everything inside it is new.
-            if (recursive || !dirs.contains(path))
-                descend.append({path, rel});
-        } else if (info.isFile() && vaultutil::isTracked(path) && !out.files.contains(path)) {
-            out.files.insert(path, DiskEntry{rel, statOf(info, path)});
+        const QString absDir = absOfDiskRel(folder.rel);
+        // Without read permission the listing comes back empty, without search permission the
+        // entries cannot be stat-ed: neither means that everything inside was deleted.
+        if (const QFileInfo self(absDir); !self.isReadable() || !self.isExecutable()) {
+            out.unreadable.insert(folder.path);
+            continue;
         }
-    }
-    for (const auto &[sub, subRel] : std::as_const(descend)) {
-        const bool configFolder = sub == vaultutil::configFolder();
-        if (!recursive && !configFolder)
-            out.trees.insert(sub); // a new folder found by a shallow listing
-        listChildren(sub, subRel, !configFolder, out);
+        out.listedDirs.insert(folder.path);
+        QDirIterator it(absDir, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+        while (it.hasNext()) {
+            const QFileInfo info = it.nextFileInfo();
+            const QString name = info.fileName();
+            if (name.contains(u'\\'))
+                continue; // would be read as a separator by paths::normalize
+            const VaultPath path = paths::join(folder.path, name);
+            if (path.isEmpty())
+                continue;
+            const QString rel = folder.rel.isEmpty() ? name : folder.rel + u'/' + name;
+            if (info.isDir()) {
+                if (info.isSymLink() && !followsLink(info, folder.rel))
+                    continue; // a link into the vault (duplicates) or a loop
+                if (path == vaultutil::configFolder()) {
+                    todo.append(Folder{path, rel, false}); // ignored, but its config.json is tracked
+                    continue;
+                }
+                if (!vaultutil::isTracked(path) || out.dirs.contains(path))
+                    continue;
+                out.dirs.insert(path, DiskEntry{rel, statOf(info, path)});
+                // A folder the vault does not know yet: everything inside it is new.
+                if (folder.recursive || !dirs.contains(path)) {
+                    if (!folder.recursive)
+                        out.trees.insert(path); // a new folder found by a shallow listing
+                    todo.append(Folder{path, rel, true});
+                }
+            } else if (info.isFile() && vaultutil::isTracked(path) && !out.files.contains(path)) {
+                out.files.insert(path, DiskEntry{rel, statOf(info, path)});
+            }
+        }
     }
 }
 
@@ -205,12 +202,13 @@ DiskListing VaultPrivate::collect(const ScanScope &scope) const
 
 void VaultPrivate::adoptListing(const DiskListing &listing)
 {
-    const QList<DiskEntry> folders = sortedEntries(listing.dirs.values());
-    for (const DiskEntry &entry : folders) {
+    QList<DiskEntry> folders = listing.dirs.values();
+    std::ranges::sort(folders, entryByPath); // parents before children
+    for (const DiskEntry &entry : std::as_const(folders)) {
         rememberDiskName(entry.stat.path, entry.diskRel);
         trackDir(entry.stat);
     }
-    for (const DiskEntry &entry : std::as_const(listing.files)) {
+    for (const DiskEntry &entry : listing.files) {
         rememberDiskName(entry.stat.path, entry.diskRel);
         trackFile(entry.stat);
     }
@@ -223,59 +221,53 @@ void VaultPrivate::adoptListing(const DiskListing &listing)
 ScanDiff VaultPrivate::diff(const DiskListing &listing) const
 {
     ScanDiff out;
-    for (auto it = files.cbegin(); it != files.cend(); ++it) {
-        if (!listing.coversFile(it.key()))
+    for (const auto &[path, known] : files.asKeyValueRange()) {
+        if (!listing.coversFile(path))
             continue;
-        const auto disk = listing.files.constFind(it.key());
-        if (disk == listing.files.cend())
-            out.vanishedFiles.append(it.value());
-        else if (!sameStat(disk->stat, it.value()) || staleContent.contains(it.key()))
+        if (const auto disk = listing.files.constFind(path); disk == listing.files.cend())
+            out.vanishedFiles.append(known);
+        else if (!sameStat(disk->stat, known) || staleContent.contains(path))
             out.modifiedFiles.append(*disk);
     }
     for (auto it = dirs.cbegin(); it != dirs.cend(); ++it) {
         if (listing.coversDir(it.key()) && !listing.dirs.contains(it.key()))
             out.vanishedDirs.append(it.key());
     }
-    for (auto it = listing.files.cbegin(); it != listing.files.cend(); ++it) {
-        if (!files.contains(it.key()))
-            out.appearedFiles.append(it.value());
+    for (const auto &[path, entry] : listing.files.asKeyValueRange()) {
+        if (!files.contains(path))
+            out.appearedFiles.append(entry);
     }
-    for (auto it = listing.dirs.cbegin(); it != listing.dirs.cend(); ++it) {
-        if (!dirs.contains(it.key()))
-            out.appearedDirs.append(it.value());
+    for (const auto &[path, entry] : listing.dirs.asKeyValueRange()) {
+        if (!dirs.contains(path))
+            out.appearedDirs.append(entry);
     }
     std::ranges::sort(out.vanishedFiles, byPath);
     std::ranges::sort(out.vanishedDirs);
-    out.modifiedFiles = sortedEntries(out.modifiedFiles);
-    out.appearedFiles = sortedEntries(out.appearedFiles);
-    out.appearedDirs = sortedEntries(out.appearedDirs);
+    std::ranges::sort(out.modifiedFiles, entryByPath);
+    std::ranges::sort(out.appearedFiles, entryByPath);
+    std::ranges::sort(out.appearedDirs, entryByPath);
     return out;
 }
 
-QByteArray VaultPrivate::readEntry(const DiskEntry &entry, bool *ok) const
+std::optional<QByteArray> VaultPrivate::readEntry(const DiskEntry &entry) const
 {
     QFile file(absOfDiskRel(entry.diskRel));
-    if (!file.open(QIODevice::ReadOnly)) {
-        *ok = false;
-        return {};
-    }
+    if (!file.open(QIODevice::ReadOnly))
+        return std::nullopt;
     QByteArray bytes = file.readAll();
-    *ok = file.error() == QFileDevice::NoError;
+    if (file.error() != QFileDevice::NoError)
+        return std::nullopt;
     return bytes;
 }
 
-QString VaultPrivate::entryHash(const DiskEntry &entry, QHash<VaultPath, QString> &hashCache, bool *ok) const
+std::optional<QString> VaultPrivate::entryHash(const DiskEntry &entry, QHash<VaultPath, QString> &hashCache) const
 {
-    if (const auto it = hashCache.constFind(entry.stat.path); it != hashCache.cend()) {
-        *ok = true;
+    if (const auto it = hashCache.constFind(entry.stat.path); it != hashCache.cend())
         return *it;
-    }
-    const QByteArray bytes = readEntry(entry, ok);
-    if (!*ok)
-        return {};
-    const QString hash = text::fnv1a64Hex(bytes);
-    hashCache.insert(entry.stat.path, hash);
-    return hash;
+    const std::optional<QByteArray> bytes = readEntry(entry);
+    if (!bytes)
+        return std::nullopt;
+    return *hashCache.insert(entry.stat.path, text::fnv1a64Hex(*bytes));
 }
 
 bool VaultPrivate::sameContent(const FileStat &vanished, const DiskEntry &appeared,
@@ -285,9 +277,7 @@ bool VaultPrivate::sameContent(const FileStat &vanished, const DiskEntry &appear
     // Content never seen, or too big to read while scanning: a rename keeps the modification time.
     if (known.isEmpty() || appeared.stat.size > ContentCache::kMaxItemBytes)
         return vanished.mtime == appeared.stat.mtime;
-    bool ok = false;
-    const QString hash = entryHash(appeared, hashCache, &ok);
-    return ok && hash == known;
+    return entryHash(appeared, hashCache) == known;
 }
 
 QList<RenamePair> VaultPrivate::pairRenames(const ScanDiff &found, QHash<VaultPath, QString> &hashCache) const
@@ -340,19 +330,19 @@ std::optional<VaultChange> VaultPrivate::applyModified(const DiskEntry &entry, C
         watchFile(path);
         return VaultChange{ChangeType::Modified, path, {}, source};
     }
-    bool ok = false;
-    const QByteArray bytes = readEntry(entry, &ok);
-    if (!ok) { // vanished between listing and reading
+    const std::optional<QByteArray> bytes = readEntry(entry);
+    if (!bytes) { // vanished between listing and reading
         snapshotCached(path, source);
         unwatch(path);
         untrackFile(path);
         return VaultChange{ChangeType::Deleted, path, {}, source};
     }
-    const bool same = hashes.value(path) == text::fnv1a64Hex(bytes);
+    const QString hash = text::fnv1a64Hex(*bytes);
+    const bool same = hashes.value(path) == hash;
     if (!same)
         snapshotCached(path, source);
     trackFile(entry.stat);
-    rememberContent(path, bytes);
+    rememberContent(path, *bytes, /*asText=*/false, hash);
     watchFile(path);
     if (same)
         return std::nullopt; // touched, or the echo of our own write
@@ -363,17 +353,13 @@ bool VaultPrivate::adoptFile(const DiskEntry &entry, const QHash<VaultPath, QStr
 {
     const VaultPath &path = entry.stat.path;
     const bool isText = vaultutil::isTextPath(path) && entry.stat.size <= ContentCache::kMaxItemBytes;
-    QByteArray bytes;
-    if (isText) {
-        bool ok = false;
-        bytes = readEntry(entry, &ok);
-        if (!ok)
-            return false; // gone again
-    }
+    const std::optional<QByteArray> bytes = isText ? readEntry(entry) : std::nullopt;
+    if (isText && !bytes)
+        return false; // gone again
     rememberDiskName(path, entry.diskRel);
     trackFile(entry.stat);
-    if (isText)
-        rememberContent(path, bytes);
+    if (bytes)
+        rememberContent(path, *bytes);
     else if (const auto it = hashCache.constFind(path); it != hashCache.cend())
         hashes.insert(path, *it); // read while looking for renames
     watchFile(path);
@@ -480,9 +466,8 @@ QString VaultPrivate::probeStorage() const
 
 std::optional<VaultScanStatus> VaultPrivate::rootProblem(bool checkStorage) const
 {
-    if (!isDirOnDisk(QString())) {
+    if (!isDirOnDisk(QString()))
         return VaultScanStatus{VaultScanStatus::State::RootMissing, {}, u"The vault folder is missing: %1"_s.arg(root)};
-    }
     if (!checkStorage || storageId.isEmpty())
         return std::nullopt;
     const QString current = probeStorage();
@@ -561,11 +546,10 @@ void VaultPrivate::noteListing(const DiskListing &listing, bool full)
     VaultScanStatus status;
     if (!folders.isEmpty()) {
         status.state = VaultScanStatus::State::Unreadable;
-        status.unreadableFolders = QList<VaultPath>(folders.cbegin(), folders.cend());
+        status.unreadableFolders = folders.values();
         std::ranges::sort(status.unreadableFolders);
-        QStringList shown;
-        for (const VaultPath &folder : std::as_const(status.unreadableFolders))
-            shown.append(folder.isEmpty() ? u"(vault folder)"_s : folder);
+        QStringList shown = status.unreadableFolders;
+        std::ranges::replace(shown, QString(), u"(vault folder)"_s);
         status.message = u"%1 folder(s) could not be read; their content is kept as it was: %2"_s.arg(
                 QString::number(shown.size()), shown.join(u", "_s));
         if (status != scanStatus)
@@ -602,17 +586,17 @@ void VaultPrivate::startWatching()
     // watch each (Android allows a few thousand per app) and Qt's addPaths() is quadratic in
     // the number of watched paths. In-place rewrites of the files no editor has open are found
     // by rescan() (the app rescans when it comes back to the foreground).
-    QStringList paths{root};
-    paths.reserve(dirs.size() + fileWatches.size() + 2);
+    QStringList toWatch{root};
+    toWatch.reserve(dirs.size() + fileWatches.size() + 2);
     for (auto it = dirs.cbegin(); it != dirs.cend(); ++it)
-        paths.append(absPath(it.key()));
+        toWatch.append(absPath(it.key()));
     if (files.contains(vaultConfigPath()))
-        paths.append(absPath(vaultConfigPath()));
+        toWatch.append(absPath(vaultConfigPath()));
     for (const VaultPath &file : std::as_const(fileWatches)) {
         if (files.contains(file))
-            paths.append(absPath(file));
+            toWatch.append(absPath(file));
     }
-    const QStringList failed = watcher->addPaths(paths);
+    const QStringList failed = watcher->addPaths(toWatch);
     if (!failed.isEmpty()) {
         qCWarning(lcVault).noquote() << failed.size()
                                      << "paths cannot be watched (inotify limit?); rescan() finds changes there";
@@ -722,18 +706,16 @@ void VaultPrivate::scheduleCheck(const VaultPath &path)
 void VaultPrivate::processPendingEvents()
 {
     batchTimer.stop();
-    ScanScope scope;
-    scope.dirs = std::exchange(pendingDirs, {});
-    scope.files = std::exchange(pendingFiles, {});
+    const ScanScope scope{.dirs = std::exchange(pendingDirs, {}), .files = std::exchange(pendingFiles, {})};
     if (scope.isEmpty() || !isOpen)
         return;
     const QList<VaultChange> changes = reconcile(scope, ChangeSource::External);
     // Re-arm watches: other programs replace files and folders by renaming new ones over them.
-    for (const VaultPath &file : std::as_const(scope.files)) {
+    for (const VaultPath &file : scope.files) {
         if (files.contains(file))
             watchFile(file);
     }
-    for (const VaultPath &dir : std::as_const(scope.dirs)) {
+    for (const VaultPath &dir : scope.dirs) {
         if ((dir.isEmpty() || dirs.contains(dir)) && isDirOnDisk(dir))
             watchDir(dir);
     }
@@ -787,7 +769,7 @@ QStringList Vault::watchedPaths() const
 
 void Vault::setWatchDelay(int msec)
 {
-    d->batchTimer.setInterval(qMax(0, msec));
+    d->batchTimer.setInterval(std::max(0, msec));
 }
 
 void Vault::setRescanInterval(int msec)
@@ -807,9 +789,7 @@ QList<VaultChange> Vault::rescan()
     d->pendingFiles.clear();
     d->batchTimer.stop();
     logging::SlowScope slow(lcVault(), "Rescan", 1000);
-    ScanScope scope;
-    scope.trees.insert(QString());
-    const QList<VaultChange> changes = d->reconcile(scope, ChangeSource::External);
+    const QList<VaultChange> changes = d->reconcile(ScanScope{.trees = {QString()}}, ChangeSource::External);
     d->finish(changes);
     // Without config.json the settings come from .obsidian/ (ignored, so unwatched) and depend
     // on the tracked files (the guards of adoptObsidianSettings): taken in again.

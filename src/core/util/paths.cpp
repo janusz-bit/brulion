@@ -3,6 +3,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
+
 namespace brulion::paths {
 
 VaultPath normalize(const QString &path)
@@ -22,15 +24,13 @@ VaultPath normalize(const QString &path)
     if (clean)
         return unified;
     QStringList parts;
-    for (const QString &seg : unified.split(QLatin1Char('/'))) {
-        if (seg.isEmpty() || seg == QLatin1String("."))
-            continue;
+    for (const QStringView seg : unified.tokenize(u'/', Qt::SkipEmptyParts)) {
         if (seg == QLatin1String("..")) {
             if (!parts.isEmpty())
                 parts.removeLast();
-            continue;
+        } else if (seg != QLatin1String(".")) {
+            parts.append(seg.toString());
         }
-        parts.append(seg);
     }
     return parts.join(QLatin1Char('/'));
 }
@@ -145,12 +145,9 @@ bool isTempFile(const QString &name)
 
 bool isIgnored(const VaultPath &path)
 {
-    const QStringList segs = path.split(QLatin1Char('/'));
-    for (const QString &s : segs) {
-        if (ignoredDirs().contains(s))
-            return true;
-    }
-    return segs.isEmpty() ? false : isTempFile(segs.last());
+    const QStringList segs = path.split(QLatin1Char('/')); // never empty: "" gives {""}
+    return std::ranges::any_of(segs, [](const QString &s) { return ignoredDirs().contains(s); })
+           || isTempFile(segs.last());
 }
 
 std::optional<SyncthingConflict> parseSyncthingConflict(const VaultPath &path)
@@ -160,11 +157,11 @@ std::optional<SyncthingConflict> parseSyncthingConflict(const VaultPath &path)
     const auto m = re.match(basename(path));
     if (!m.hasMatch())
         return std::nullopt;
-    const QString d = m.captured(2), t = m.captured(3);
+    const QStringView d = m.capturedView(2), t = m.capturedView(3); // "20261014", "101112"
     SyncthingConflict c;
     c.original = join(dirname(path), m.captured(1) + m.captured(5));
-    c.time = d.left(4) + QLatin1Char('-') + d.mid(4, 2) + QLatin1Char('-') + d.mid(6, 2) + QLatin1Char('T')
-        + t.left(2) + QLatin1Char(':') + t.mid(2, 2) + QLatin1Char(':') + t.mid(4, 2);
+    c.time = QStringLiteral("%1-%2-%3T%4:%5:%6") .arg(d.first(4), d.sliced(4, 2), d.sliced(6, 2), t.first(2),
+                                                      t.sliced(2, 2), t.sliced(4, 2));
     c.device = m.captured(4);
     return c;
 }
@@ -179,13 +176,19 @@ QString sanitizeFileName(const QString &name)
 {
     static const QRegularExpression reserved(QStringLiteral("[\\\\/:*?\"<>|#^\\[\\]\\x{0000}-\\x{001f}]"));
     static const QRegularExpression spaces(QStringLiteral("\\s+"));
-    static const QRegularExpression leadingDots(QStringLiteral("^\\.+"));
+    constexpr qsizetype MaxLength = 180;
     QString out = name.normalized(QString::NormalizationForm_C);
     out.replace(reserved, QStringLiteral(" "));
     out.replace(spaces, QStringLiteral(" "));
-    out = out.trimmed();
-    out.remove(leadingDots);
-    out = out.left(180).trimmed();
+    // No leading dot (a hidden file), not even behind a space: ". .x" -> "x", not ". x".
+    qsizetype lead = 0;
+    while (lead < out.size() && (out.at(lead) == u'.' || out.at(lead).isSpace()))
+        ++lead;
+    out.remove(0, lead);
+    // At most MaxLength units, but never half of a surrogate pair (an emoji).
+    if (out.size() > MaxLength)
+        out.truncate(out.at(MaxLength - 1).isHighSurrogate() ? MaxLength - 1 : MaxLength);
+    out = std::move(out).trimmed();
     return out.isEmpty() ? QStringLiteral("Untitled") : out;
 }
 

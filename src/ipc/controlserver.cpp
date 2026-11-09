@@ -4,32 +4,34 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 
+#include <utility>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::ipc {
+
+namespace {
+
+void writeLine(QLocalSocket *socket, const QByteArray &line)
+{
+    socket->write(line + '\n');
+    socket->flush();
+}
+
+} // namespace
 
 ControlReply::ControlReply(QLocalSocket *socket, const QJsonValue &id) : m_socket(socket), m_id(id) { }
 
 void ControlReply::ok(const QJsonValue &result) const
 {
-    if (*m_sent)
-        return;
-    *m_sent = true;
-    if (m_socket && m_socket->state() == QLocalSocket::ConnectedState) {
-        m_socket->write(encodeResult(m_id, result) + '\n');
-        m_socket->flush();
-    }
+    if (!std::exchange(*m_sent, true) && connected())
+        writeLine(m_socket, encodeResult(m_id, result));
 }
 
 void ControlReply::fail(const QString &code, const QString &message, const QJsonObject &details) const
 {
-    if (*m_sent)
-        return;
-    *m_sent = true;
-    if (m_socket && m_socket->state() == QLocalSocket::ConnectedState) {
-        m_socket->write(encodeError(m_id, code, message, details) + '\n');
-        m_socket->flush();
-    }
+    if (!std::exchange(*m_sent, true) && connected())
+        writeLine(m_socket, encodeError(m_id, code, message, details));
 }
 
 bool ControlReply::connected() const
@@ -47,12 +49,10 @@ ControlServer::~ControlServer()
 bool ControlServer::listen(const QString &key)
 {
     close();
-    m_error.clear();
     // Only in the user's own folder (controlFolderProblem()): never the shared temp folder.
-    if (const QString problem = controlFolderProblem(key); !problem.isEmpty()) {
-        m_error = problem;
+    m_error = controlFolderProblem(key);
+    if (!m_error.isEmpty())
         return false;
-    }
     // A live server there (another Brulion run with --no-single-instance) keeps its socket; a
     // file left by a crashed run is replaced.
     {
@@ -65,21 +65,20 @@ bool ControlServer::listen(const QString &key)
         }
     }
     QLocalServer::removeServer(key);
-    m_server = new QLocalServer(this);
-    m_server->setSocketOptions(QLocalServer::UserAccessOption);
-    if (!m_server->listen(key)) {
-        m_error = m_server->errorString();
-        delete m_server;
-        m_server = nullptr;
+    auto server = std::make_unique<QLocalServer>();
+    server->setSocketOptions(QLocalServer::UserAccessOption);
+    if (!server->listen(key)) {
+        m_error = server->errorString();
         return false;
     }
 #ifdef Q_OS_UNIX
     // Owner only: read and write for the user, nothing for anybody else (UserAccessOption gives
     // 0700; a socket needs no execute bit). On Windows the named pipe has no file: there
     // UserAccessOption gives it an access list of this user alone.
-    QFile::setPermissions(m_server->fullServerName(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    QFile::setPermissions(server->fullServerName(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 #endif
-    connect(m_server, &QLocalServer::newConnection, this, [this] {
+    m_server = std::move(server);
+    connect(m_server.get(), &QLocalServer::newConnection, this, [this] {
         while (QLocalSocket *socket = m_server->nextPendingConnection())
             accept(socket);
     });
@@ -93,9 +92,7 @@ void ControlServer::close()
     const QList<QLocalSocket *> sockets = m_server->findChildren<QLocalSocket *>();
     for (QLocalSocket *socket : sockets)
         socket->abort();
-    m_server->close(); // removes the socket file
-    delete m_server;
-    m_server = nullptr;
+    m_server.reset(); // closes it (the socket file is removed) and deletes its connections
 }
 
 bool ControlServer::isListening() const
@@ -125,14 +122,14 @@ void ControlServer::accept(QLocalSocket *socket)
 
 void ControlServer::readLines(QLocalSocket *socket)
 {
-    while (socket->state() == QLocalSocket::ConnectedState) {
+    // The handler may close the server (the remote control turned off), which deletes the socket.
+    const QPointer<QLocalSocket> alive(socket);
+    while (alive && socket->state() == QLocalSocket::ConnectedState) {
         if (!socket->canReadLine()) {
             // A line that never ends: refuse it rather than buffer without limit.
             if (socket->bytesAvailable() > MaxLineBytes) {
-                socket->write(encodeError(QJsonValue(), QString::fromLatin1(ControlError::InvalidRequest),
-                                          u"The request is longer than %1 bytes"_s.arg(MaxLineBytes))
-                              + '\n');
-                socket->flush();
+                writeLine(socket, encodeError(QJsonValue(), QString::fromLatin1(ControlError::InvalidRequest),
+                                              u"The request is longer than %1 bytes"_s.arg(MaxLineBytes)));
                 socket->disconnectFromServer();
             }
             return;
@@ -143,13 +140,11 @@ void ControlServer::readLines(QLocalSocket *socket)
         ControlFailure failure;
         const std::optional<ControlRequest> request = parseRequest(line, &failure);
         if (!request) {
-            socket->write(encodeError(failure) + '\n');
-            socket->flush();
+            writeLine(socket, encodeError(failure));
             continue;
         }
         if (const auto problem = checkRequest(*request)) {
-            socket->write(encodeError(*problem) + '\n');
-            socket->flush();
+            writeLine(socket, encodeError(*problem));
             continue;
         }
         const ControlReply reply(socket, request->id);

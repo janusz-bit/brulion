@@ -15,7 +15,13 @@ namespace brulion::ipc {
 
 SingleInstance::SingleInstance(const QString &key, QObject *parent) : QObject(parent), m_key(key) { }
 
-SingleInstance::~SingleInstance() = default;
+SingleInstance::~SingleInstance()
+{
+    // The socket goes before the lock (m_lock, released after this): a launch that took the lock in
+    // between would lose its own new socket file to this server's removal of it.
+    if (m_server)
+        m_server->close();
+}
 
 QString SingleInstance::keyFor(const QString &appDataDir)
 {
@@ -39,19 +45,9 @@ QString SingleInstance::keyFor(const QString &appDataDir)
 
 std::unique_ptr<QLocalSocket> SingleInstance::connectToPrimary(int timeoutMs) const
 {
-    m_error.clear();
-    auto socket = std::make_unique<QLocalSocket>();
-    socket->connectToServer(m_key);
-    if (!socket->waitForConnected(timeoutMs))
-        return nullptr;
-    // Only this user's Brulion: a socket another user created at that name (the shared temp folder
-    // when there is no runtime folder) is told nothing, not even that this one starts.
-    m_error = listenerProblem(peerUid(socket->socketDescriptor()), m_key);
-    if (!m_error.isEmpty()) {
-        socket->abort();
-        return nullptr;
-    }
-    return socket;
+    // Only this user's Brulion: another user's socket at that name is told nothing, not even that
+    // this one starts.
+    return connectToTrusted(m_key, timeoutMs, &m_error);
 }
 
 bool SingleInstance::sendToPrimary(const QByteArray &message, int timeoutMs)
@@ -82,14 +78,12 @@ bool SingleInstance::listen()
 {
     if (m_server)
         return m_server->isListening();
-    m_error.clear();
     // Only in a folder of this user that nobody else can change: in the shared temp folder (a bare
     // key) another user could take the socket's or the lock's name first — Brulion would not start
     // — or listen there and receive what a second launch and brulion-cli send.
-    if (const QString problem = socketFolderProblem(m_key, u"the single-instance socket"_s); !problem.isEmpty()) {
-        m_error = problem;
+    m_error = socketFolderProblem(m_key, u"the single-instance socket"_s);
+    if (!m_error.isEmpty())
         return false;
-    }
     // The lock decides who is primary. The socket alone cannot: QLocalServer with
     // UserAccessOption renames its socket into place, replacing a live one, so two launches at
     // the same moment would both "win". A lock left by a crashed instance is stale (its process
@@ -103,15 +97,14 @@ bool SingleInstance::listen()
         return false; // another instance is the primary (or becoming it): send it the message
     }
     QLocalServer::removeServer(m_key); // a socket file left behind by a crashed instance
-    auto *server = new QLocalServer(this);
+    auto server = std::make_unique<QLocalServer>(this);
     server->setSocketOptions(QLocalServer::UserAccessOption);
     if (!server->listen(m_key)) {
         m_error = u"Cannot listen at %1: %2"_s.arg(m_key, server->errorString());
-        delete server;
         m_lock.reset();
         return false;
     }
-    m_server = server;
+    m_server = server.release(); // a child of this from now on
     connect(m_server, &QLocalServer::newConnection, this, [this] {
         while (QLocalSocket *socket = m_server->nextPendingConnection()) {
             // Linux and Windows tell who connected: another user, or one it cannot tell, is dropped

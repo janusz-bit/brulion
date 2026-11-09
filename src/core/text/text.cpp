@@ -1,7 +1,5 @@
 #include "text/text.h"
 
-#include <QSet>
-
 #include <algorithm>
 #include <atomic>
 
@@ -38,33 +36,15 @@ bool isAscii(QStringView s)
     return std::ranges::all_of(s, [](QChar c) { return c.unicode() < 0x80; });
 }
 
-void appendCodePoint(QString &out, char32_t cp)
-{
-    if (QChar::requiresSurrogates(cp)) {
-        out += QChar(QChar::highSurrogate(cp));
-        out += QChar(QChar::lowSurrogate(cp));
-    } else {
-        out += QChar(char16_t(cp));
-    }
-}
-
 /// Append `s` without combining marks, replacing lone surrogates by U+FFFD.
 void appendWithoutMarks(QStringView s, QString &out)
 {
     for (qsizetype i = 0; i < s.size();) {
         const auto [cp, len] = codePointAt(s, i);
         i += len;
-        if (QChar::isMark(cp))
-            continue;
-        appendCodePoint(out, QChar::isSurrogate(cp) ? ReplacementChar : cp);
+        if (!QChar::isMark(cp))
+            out.append(QChar::fromUcs4(QChar::isSurrogate(cp) ? ReplacementChar : cp));
     }
-}
-
-/// ł/Ł have no canonical decomposition, so NFD alone would keep them.
-void replaceStrokeL(QString &s)
-{
-    s.replace(u'ł', u'l');
-    s.replace(u'Ł', u'L');
 }
 
 /// Fold a single code point the slow way and append the result (possibly nothing): Qt's full
@@ -76,11 +56,11 @@ void appendFoldedSlow(char32_t cp, bool lower, QString &out)
         out += QChar(char16_t(ReplacementChar));
         return;
     }
-    QString folded;
-    appendCodePoint(folded, cp); // not QString::fromUcs4(): it drops U+FEFF as a byte order mark
+    // (Not QString::fromUcs4(): it drops U+FEFF as a byte order mark.)
+    QString folded = QStringView(QChar::fromUcs4(cp)).toString();
     if (lower)
         folded = std::move(folded).toLower();
-    replaceStrokeL(folded);
+    folded.replace(u'ł', u'l').replace(u'Ł', u'L'); // no canonical decomposition: NFD alone keeps them
     appendWithoutMarks(folded.normalized(QString::NormalizationForm_D), out);
 }
 
@@ -122,7 +102,7 @@ char16_t foldedUnit(char16_t c, bool lower)
 }
 
 /// foldKey() (`Lower`) or foldDiacritics() of `s`, one code point at a time. `WithMap`: the
-/// offset in `s` of the code point that produced each folded unit is appended to `map`.
+/// empty `map` gets the offset in `s` of the code point that produced each folded unit.
 template<bool Lower, bool WithMap>
 QString foldPerCodePoint(QStringView s, QList<qsizetype> *map)
 {
@@ -130,14 +110,13 @@ QString foldPerCodePoint(QStringView s, QList<qsizetype> *map)
     // code point folds to more units than it has (Hangul syllables), trimmed at the end.
     QString out(s.size(), Qt::Uninitialized);
     QChar *d = out.data();
-    [[maybe_unused]] const qsizetype mapBase = WithMap ? map->size() : 0;
     [[maybe_unused]] qsizetype *m = nullptr;
     if constexpr (WithMap) {
-        map->resizeForOverwrite(mapBase + s.size());
-        m = map->data() + mapBase;
+        map->resizeForOverwrite(s.size());
+        m = map->data();
     }
     qsizetype n = 0;
-    QString slow;
+    QString slow; // emptied with resize(0), which keeps its buffer (clear() frees it)
     for (qsizetype i = 0; i < s.size();) {
         const char16_t c = s[i].unicode();
         char16_t unit = c;
@@ -147,7 +126,7 @@ QString foldPerCodePoint(QStringView s, QList<qsizetype> *map)
             unit = char16_t(c + 32);
         if (unit == NeedsSlowPath) {
             const auto [cp, len] = codePointAt(s, i);
-            slow.clear();
+            slow.resize(0);
             appendFoldedSlow(cp, Lower, slow);
             // Room for this result and one unit per input unit still to come.
             const qsizetype need = n + slow.size() + (s.size() - i - len);
@@ -156,8 +135,8 @@ QString foldPerCodePoint(QStringView s, QList<qsizetype> *map)
                 out.resize(size);
                 d = out.data();
                 if constexpr (WithMap) {
-                    map->resizeForOverwrite(mapBase + size);
-                    m = map->data() + mapBase;
+                    map->resizeForOverwrite(size);
+                    m = map->data();
                 }
             }
             for (const QChar u : std::as_const(slow)) {
@@ -177,7 +156,7 @@ QString foldPerCodePoint(QStringView s, QList<qsizetype> *map)
     }
     out.resize(n);
     if constexpr (WithMap)
-        map->resize(mapBase + n);
+        map->resize(n);
     return out;
 }
 
@@ -283,22 +262,15 @@ QString wholeWordPattern(QStringView literal)
 
 QString regexAlternation(const QStringList &words)
 {
-    QStringList unique;
-    QSet<QString> seen;
-    for (const QString &w : words) {
-        if (!w.isEmpty() && !seen.contains(w)) {
-            seen.insert(w);
-            unique.append(w);
-        }
-    }
-    std::ranges::sort(unique, [](const QString &a, const QString &b) {
+    QStringList alternatives = words;
+    alternatives.removeIf([](const QString &w) { return w.isEmpty(); });
+    alternatives.removeDuplicates();
+    std::ranges::sort(alternatives, [](const QString &a, const QString &b) {
         return a.size() != b.size() ? a.size() > b.size() : a < b;
     });
-    QStringList escaped;
-    escaped.reserve(unique.size());
-    for (const QString &w : std::as_const(unique))
-        escaped.append(QRegularExpression::escape(w));
-    return escaped.join(u'|');
+    for (QString &w : alternatives)
+        w = QRegularExpression::escape(w);
+    return alternatives.join(u'|');
 }
 
 QRegularExpression unicodeRegex(const QString &pattern, QRegularExpression::PatternOptions options)
@@ -323,12 +295,11 @@ QList<Line> splitLines(QStringView content)
         const char16_t c = content.at(i).unicode();
         if (c != u'\n' && c != u'\r')
             continue;
-        Line line{content.sliced(start, i - start).toString(), {}, start};
+        // Literal terminators: no allocation per line.
+        Line line{content.sliced(start, i - start).toString(), c == u'\n' ? u"\n"_s : u"\r"_s, start};
         if (c == u'\r' && i + 1 < n && content.at(i + 1) == u'\n') {
             line.eol = u"\r\n"_s;
             ++i;
-        } else {
-            line.eol = QString(QChar(c));
         }
         lines.append(std::move(line));
         start = i + 1;
@@ -355,9 +326,7 @@ QString detectEol(QStringView content)
 {
     const qsizetype i =
             std::ranges::find_if(content, [](QChar c) { return c == u'\n' || c == u'\r'; }) - content.begin();
-    if (i >= content.size())
-        return u"\n"_s;
-    if (content.at(i) == u'\n')
+    if (i >= content.size() || content.at(i) == u'\n')
         return u"\n"_s;
     return i + 1 < content.size() && content.at(i + 1) == u'\n' ? u"\r\n"_s : u"\r"_s;
 }
@@ -382,6 +351,18 @@ namespace {
 bool isAsciiDigit(QChar c)
 {
     return c >= u'0' && c <= u'9';
+}
+
+/// The run of ASCII digits at `i` without its leading zeros ("007" -> "7", "000" -> "0"); `i`
+/// moves past the run.
+QStringView digitRun(QStringView s, qsizetype &i)
+{
+    qsizetype first = i;
+    while (i < s.size() && isAsciiDigit(s[i]))
+        ++i;
+    while (first + 1 < i && s[first] == u'0')
+        ++first;
+    return s.sliced(first, i - first);
 }
 
 /// Primary weight of a lower-case code point in Polish alphabetical order: a < ą < b < c < ć …
@@ -426,25 +407,12 @@ int compareNameKeys(const QString &la, const QString &a, const QString &lb, cons
     while (i < la.size() && j < lb.size()) {
         if (isAsciiDigit(la[i]) && isAsciiDigit(lb[j])) {
             // Digit runs compare by value ("2" < "10"), leading zeros ignored.
-            qsizetype ie = i;
-            while (ie < la.size() && isAsciiDigit(la[ie]))
-                ++ie;
-            qsizetype je = j;
-            while (je < lb.size() && isAsciiDigit(lb[je]))
-                ++je;
-            qsizetype is = i;
-            while (is + 1 < ie && la[is] == u'0')
-                ++is;
-            qsizetype js = j;
-            while (js + 1 < je && lb[js] == u'0')
-                ++js;
-            if (ie - is != je - js)
-                return ie - is < je - js ? -1 : 1;
-            const int c = QStringView(la).sliced(is, ie - is).compare(QStringView(lb).sliced(js, je - js));
-            if (c != 0)
+            const QStringView da = digitRun(la, i);
+            const QStringView db = digitRun(lb, j);
+            if (da.size() != db.size())
+                return da.size() < db.size() ? -1 : 1;
+            if (const int c = da.compare(db); c != 0)
                 return c < 0 ? -1 : 1;
-            i = ie;
-            j = je;
             continue;
         }
         const auto [ca, na] = codePointAt(la, i);
@@ -460,8 +428,7 @@ int compareNameKeys(const QString &la, const QString &a, const QString &lb, cons
         return 1;
     if (j < lb.size())
         return -1;
-    const int c = QString::compare(a, b, Qt::CaseSensitive);
-    return c < 0 ? -1 : (c > 0 ? 1 : 0);
+    return std::clamp(QString::compare(a, b, Qt::CaseSensitive), -1, 1);
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -6,6 +6,8 @@
 #include <QNetworkRequest>
 #include <QSet>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::webpicture {
@@ -26,7 +28,8 @@ void PictureFetcher::fetch(const QUrl &url)
     const QString scheme = url.scheme().toLower();
     if (!url.isValid() || url.host().isEmpty() || (scheme != u"http" && scheme != u"https")) {
         QMetaObject::invokeMethod(
-                this, [this, url] { fail(url, FetchError::Network, u"not an http(s) URL"_s); }, Qt::QueuedConnection);
+                this, [this, url] { Q_EMIT failed(url, FetchError::Network, u"not an http(s) URL"_s); },
+                Qt::QueuedConnection);
         return;
     }
     m_queue.append(url);
@@ -35,12 +38,7 @@ void PictureFetcher::fetch(const QUrl &url)
 
 bool PictureFetcher::isFetching(const QUrl &url) const
 {
-    if (m_queue.contains(url))
-        return true;
-    for (auto it = m_running.cbegin(); it != m_running.cend(); ++it)
-        if (it.value() == url)
-            return true;
-    return false;
+    return m_queue.contains(url) || std::ranges::find(m_running, url) != m_running.cend();
 }
 
 void PictureFetcher::cancel(const QUrl &url)
@@ -55,9 +53,10 @@ void PictureFetcher::cancel(const QList<QUrl> &urls)
     const QSet<QUrl> gone(urls.cbegin(), urls.cend());
     m_queue.removeIf([&gone](const QUrl &url) { return gone.contains(url); });
     QList<QNetworkReply *> replies;
-    for (auto it = m_running.cbegin(); it != m_running.cend(); ++it)
-        if (gone.contains(it.value()))
-            replies.append(it.key());
+    for (auto [reply, url] : std::as_const(m_running).asKeyValueRange()) {
+        if (gone.contains(url))
+            replies.append(reply);
+    }
     for (QNetworkReply *reply : std::as_const(replies)) {
         m_running.remove(reply);
         m_aborted.remove(reply);
@@ -72,14 +71,7 @@ void PictureFetcher::cancel(const QList<QUrl> &urls)
 void PictureFetcher::cancelAll()
 {
     m_queue.clear();
-    const auto replies = m_running.keys();
-    m_running.clear();
-    m_aborted.clear();
-    for (QNetworkReply *reply : replies) {
-        reply->disconnect(this);
-        reply->abort();
-        reply->deleteLater();
-    }
+    cancel(m_running.values()); // m_aborted holds running replies only
 }
 
 void PictureFetcher::startNext()
@@ -129,6 +121,11 @@ void PictureFetcher::start(const QUrl &url)
             tooLarge();
     });
     connect(reply, &QNetworkReply::finished, this, [this, reply] { finish(reply); });
+    // A caller's access manager may be deleted, with its replies, before this one.
+    connect(reply, &QObject::destroyed, this, [this, reply] {
+        m_running.remove(reply);
+        m_aborted.remove(reply);
+    });
 }
 
 void PictureFetcher::finish(QNetworkReply *reply)
@@ -137,39 +134,31 @@ void PictureFetcher::finish(QNetworkReply *reply)
     if (!m_running.contains(reply))
         return; // cancelled
     const QUrl url = m_running.take(reply);
-    const auto aborted = m_aborted.constFind(reply);
+    const QNetworkReply::NetworkError error = reply->error();
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    if (aborted != m_aborted.constEnd()) {
-        const Abort why = *aborted;
-        m_aborted.erase(aborted);
-        fail(url, why.error, why.detail);
-    } else if (reply->error() == QNetworkReply::TimeoutError
-               || reply->error() == QNetworkReply::OperationCanceledError) {
-        fail(url, FetchError::Timeout, reply->errorString());
-    } else if (reply->error() == QNetworkReply::InsecureRedirectError
-               || reply->error() == QNetworkReply::TooManyRedirectsError) {
+    if (m_aborted.contains(reply)) {
+        // Taken before the signal: a slot may cancel everything.
+        const Abort why = m_aborted.take(reply);
+        Q_EMIT failed(url, why.error, why.detail);
+    } else if (error == QNetworkReply::TimeoutError || error == QNetworkReply::OperationCanceledError) {
+        Q_EMIT failed(url, FetchError::Timeout, reply->errorString());
+    } else if (error == QNetworkReply::InsecureRedirectError || error == QNetworkReply::TooManyRedirectsError) {
         // The status is the last redirect's (301): no error of the server's.
-        fail(url, FetchError::Redirect, reply->errorString());
-    } else if (status >= 400 || (status > 0 && (status < 200 || status >= 300))) {
-        fail(url, FetchError::Http, QString::number(status));
-    } else if (reply->error() != QNetworkReply::NoError) {
-        fail(url, FetchError::Network, reply->errorString());
+        Q_EMIT failed(url, FetchError::Redirect, reply->errorString());
+    } else if (status > 0 && (status < 200 || status >= 300)) {
+        Q_EMIT failed(url, FetchError::Http, QString::number(status));
+    } else if (error != QNetworkReply::NoError) {
+        Q_EMIT failed(url, FetchError::Network, reply->errorString());
     } else {
         const QByteArray data = reply->readAll();
-        const QString format = sniffFormat(data);
         if (data.size() > m_maxBytes)
-            fail(url, FetchError::TooLarge, QString::number(m_maxBytes));
-        else if (format.isEmpty())
-            fail(url, FetchError::NotPicture, reply->header(QNetworkRequest::ContentTypeHeader).toString());
+            Q_EMIT failed(url, FetchError::TooLarge, QString::number(m_maxBytes));
+        else if (const QString format = sniffFormat(data); format.isEmpty())
+            Q_EMIT failed(url, FetchError::NotPicture, reply->header(QNetworkRequest::ContentTypeHeader).toString());
         else
             Q_EMIT fetched(url, data, format);
     }
     startNext();
-}
-
-void PictureFetcher::fail(const QUrl &url, FetchError error, const QString &detail)
-{
-    Q_EMIT failed(url, error, detail);
 }
 
 QString errorName(FetchError error)

@@ -71,7 +71,7 @@ public:
     /// Clock used for snapshot times and age-based pruning (default: QDateTime::currentDateTime;
     /// an empty function restores it).
     void setClock(std::function<QDateTime()> clock);
-    void setPolicy(const HistoryPolicy &policy);
+    void setPolicy(HistoryPolicy policy);
     HistoryPolicy policy() const;
 
     /// Record `content` as a version of `path`. `reason` is the ChangeSource name of the change

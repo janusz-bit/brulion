@@ -53,6 +53,11 @@ Item {
     readonly property bool mono: block.view === "html"
     readonly property bool editing: live && block.editing
     readonly property int align: root.centered ? Text.AlignHCenter : Text.AlignLeft
+    // Shared by the rendered text, the tinted text and (the font) the editor.
+    readonly property string fontFamily: root.mono ? Theme.fontMono : Theme.fontEditor
+    readonly property int fontPx: root.mono ? Theme.textSm : root.fontSize
+    readonly property int fontWeight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
+    readonly property color textColor: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
     readonly property string html: root.live ? root.block.rowData.html : ""
     /// The rendered text with the find bar's matches tinted (docs/UI.md "Find and replace").
     readonly property string findHtml: {
@@ -122,14 +127,14 @@ Item {
         text: root.tinted ? "" : root.shownHtml
         wrapMode: Text.Wrap
         horizontalAlignment: root.align
-        font.family: root.mono ? Theme.fontMono : Theme.fontEditor
-        font.pixelSize: root.mono ? Theme.textSm : root.fontSize
-        font.weight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
+        font.family: root.fontFamily
+        font.pixelSize: root.fontPx
+        font.weight: root.fontWeight
         font.italic: root.quoted
         font.strikeout: root.block.taskStatus === "cancelled"
         lineHeightMode: Text.FixedHeight
         lineHeight: root.lineHeightPx
-        color: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
+        color: root.textColor
         linkColor: Theme.link
         Accessible.role: Accessible.StaticText
         Accessible.name: root.live ? root.block.plainText : ""
@@ -163,12 +168,12 @@ Item {
             text: root.shownHtml
             wrapMode: TextEdit.Wrap
             horizontalAlignment: root.align
-            font.family: root.mono ? Theme.fontMono : Theme.fontEditor
-            font.pixelSize: root.mono ? Theme.textSm : root.fontSize
-            font.weight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
+            font.family: root.fontFamily
+            font.pixelSize: root.fontPx
+            font.weight: root.fontWeight
             font.italic: root.quoted
             font.strikeout: root.block.taskStatus === "cancelled"
-            color: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
+            color: root.textColor
             Accessible.role: Accessible.StaticText
             Accessible.name: root.live ? root.block.plainText : ""
             onWidthChanged: tints.refresh()
@@ -228,7 +233,7 @@ Item {
                 else if (!textHover.hovered)
                     root.hoveredLink = ""
             }
-            onTapped: (eventPoint, button) => {
+            onTapped: (eventPoint) => {
                 const x = eventPoint.position.x
                 const y = eventPoint.position.y
                 // Shift+click, the touch selection mode (BlockEditor.blockTapped).
@@ -308,9 +313,9 @@ Item {
         sourceComponent: InlineEditor {
             width: editorLoader.width
             block: root.block
-            font.family: root.mono ? Theme.fontMono : Theme.fontEditor
-            font.pixelSize: root.mono ? Theme.textSm : root.fontSize
-            font.weight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
+            font.family: root.fontFamily
+            font.pixelSize: root.fontPx
+            font.weight: root.fontWeight
             lineHeightPx: root.lineHeightPx
             multiline: root.block.view === "html" || root.block.view === "quote" || root.block.view === "callout"
                        || root.block.view === "math"

@@ -29,9 +29,9 @@ struct DiskEntry {
 
 /// Part of the vault to compare with the disk (see VaultPrivate::reconcile).
 struct ScanScope {
-    QSet<VaultPath> trees; ///< folders listed recursively ("" = the whole vault)
-    QSet<VaultPath> dirs;  ///< folders whose direct children are listed
-    QSet<VaultPath> files; ///< single files to stat
+    QSet<VaultPath> trees = {}; ///< folders listed recursively ("" = the whole vault)
+    QSet<VaultPath> dirs = {};  ///< folders whose direct children are listed
+    QSet<VaultPath> files = {}; ///< single files to stat
     bool isEmpty() const { return trees.isEmpty() && dirs.isEmpty() && files.isEmpty(); }
 };
 
@@ -197,8 +197,9 @@ public:
     ScanDiff diff(const DiskListing &listing) const;
     // Content read while scanning is never kept beyond the file at hand: `hashCache` holds only
     // the content hashes of appeared files computed while looking for renames.
-    QByteArray readEntry(const DiskEntry &entry, bool *ok) const;
-    QString entryHash(const DiskEntry &entry, QHash<VaultPath, QString> &hashCache, bool *ok) const;
+    /// The content of a listed file; nullopt when it cannot be read.
+    std::optional<QByteArray> readEntry(const DiskEntry &entry) const;
+    std::optional<QString> entryHash(const DiskEntry &entry, QHash<VaultPath, QString> &hashCache) const;
     bool sameContent(const FileStat &vanished, const DiskEntry &appeared, QHash<VaultPath, QString> &hashCache) const;
     QList<RenamePair> pairRenames(const ScanDiff &diff, QHash<VaultPath, QString> &hashCache) const;
     std::optional<VaultChange> applyModified(const DiskEntry &entry, ChangeSource source);
@@ -290,7 +291,6 @@ public:
     // Watching
     std::unique_ptr<QFileSystemWatcher> watcher;
     bool watchRequested = false; ///< startWatching() called (also before open())
-    bool configFolderWatched = false;
     /// Files watched themselves (besides their folders), the most recently named last; kept
     /// across stopWatching() / open().
     QList<VaultPath> fileWatches;

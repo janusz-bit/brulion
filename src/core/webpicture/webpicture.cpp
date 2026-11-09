@@ -4,6 +4,8 @@
 
 #include <QHostAddress>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::webpicture {
@@ -56,6 +58,15 @@ QStringList extensionsOf(const QString &format)
     return {u'.' + format};
 }
 
+/// The last segment of the URL's path, percent-decoded and trimmed ("" when the path names no file).
+QString lastSegment(const QUrl &url)
+{
+    QString path = url.path(QUrl::FullyDecoded);
+    while (path.endsWith(u'/'))
+        path.chop(1);
+    return path.mid(path.lastIndexOf(u'/') + 1).trimmed();
+}
+
 } // namespace
 
 bool isWebUrl(QStringView target)
@@ -65,9 +76,11 @@ bool isWebUrl(QStringView target)
 
 QUrl webUrl(QStringView target)
 {
-    const QString text = target.trimmed().toString();
-    if (!text.startsWith(u"http://", Qt::CaseInsensitive) && !text.startsWith(u"https://", Qt::CaseInsensitive))
+    // The prefix first, on the view: most targets are no web URL and cost no copy.
+    const QStringView trimmed = target.trimmed();
+    if (!trimmed.startsWith(u"http://", Qt::CaseInsensitive) && !trimmed.startsWith(u"https://", Qt::CaseInsensitive))
         return {};
+    const QString text = trimmed.toString();
     QUrl url(text, QUrl::StrictMode);
     if (!url.isValid())
         url = QUrl(text, QUrl::TolerantMode);
@@ -98,10 +111,7 @@ bool isPrivateHost(const QString &host)
                 u".intranet"_s,  u".corp"_s,  u".private"_s, u".localdomain"_s, u".fritz.box"_s,
         };
         const QString dotted = u'.' + name;
-        for (const QString &suffix : suffixes)
-            if (dotted.endsWith(suffix))
-                return true;
-        return false;
+        return std::ranges::any_of(suffixes, [&dotted](const QString &suffix) { return dotted.endsWith(suffix); });
     }
     bool ip4 = false;
     const quint32 v4 = address.toIPv4Address(&ip4); // also of ::ffff:a.b.c.d
@@ -154,10 +164,7 @@ QString sniffFormat(const QByteArray &data)
 QString attachmentName(const QUrl &url, const QString &format)
 {
     const QStringList extensions = extensionsOf(format);
-    QString path = url.path(QUrl::FullyDecoded);
-    while (path.endsWith(u'/'))
-        path.chop(1);
-    QString name = path.mid(path.lastIndexOf(u'/') + 1).trimmed();
+    QString name = lastSegment(url);
     if (!name.isEmpty()) {
         name = paths::sanitizeFileName(name);
         if (name == u"Untitled")
@@ -179,10 +186,7 @@ QString attachmentName(const QUrl &url, const QString &format)
 
 QString displayName(const QUrl &url)
 {
-    QString path = url.path(QUrl::FullyDecoded);
-    while (path.endsWith(u'/'))
-        path.chop(1);
-    const QString file = path.mid(path.lastIndexOf(u'/') + 1).trimmed();
+    const QString file = lastSegment(url);
     return file.isEmpty() ? url.host() : url.host() + u" › "_s + file;
 }
 

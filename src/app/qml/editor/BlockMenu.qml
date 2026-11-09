@@ -82,11 +82,12 @@ BMenu {
         if (handle >= 0)
             controller.untrack(handle)
         handle = controller.trackBlock(row)
+        const inCell = cellRow > -2
         menu.cellRow = cellRow
-        menu.cellColumn = cellRow > -2 ? cellColumn : -1
-        menu.tableRows = cellRow > -2 ? cellRows : 0
-        menu.tableColumns = cellRow > -2 ? cellColumns : 0
-        menu.cellAlign = cellRow > -2 ? cellAlign : ""
+        menu.cellColumn = inCell ? cellColumn : -1
+        menu.tableRows = inCell ? cellRows : 0
+        menu.tableColumns = inCell ? cellColumns : 0
+        menu.cellAlign = inCell ? cellAlign : ""
         info.map = controller.blocks.get(row)
         table = info.map.view === "table"
         listItem = info.map.kind === "listItem"
@@ -186,6 +187,25 @@ BMenu {
         property bool shown: true
         visible: shown
         height: shown ? implicitHeight : 0
+    }
+    /// "Copy link" ▸ entry: `how` is BlockEditor.copyLink()'s kind.
+    component CopyLinkItem: OptionalItem {
+        required property string how
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0)
+                menu.editor.copyLink(r, how)
+        }
+    }
+    /// Sort the table's rows by the cell's column.
+    component SortItem: BMenuItem {
+        required property bool descending
+        enabled: menu.tableRows > 1
+        onTriggered: {
+            const r = menu.row()
+            if (r >= 0 && !menu.controller.sortTable(r, menu.cellColumn, descending))
+                menu.editor.notice(qsTr("The rows are in that order already."), "info", null)
+        }
     }
     /// One of the column's alignments, ticked when it is the column's.
     component AlignItem: BMenuItem {
@@ -368,28 +388,8 @@ BMenu {
             onTriggered: menu.insertAndEdit("column", menu.cellColumn + 1, -1, menu.cellColumn + 1)
         }
         BMenuSeparator {}
-        BMenuItem {
-            objectName: "tableSortAscending"
-            text: qsTr("Sort ascending")
-            iconName: "arrow-up-narrow-wide"
-            enabled: menu.tableRows > 1
-            onTriggered: {
-                const r = menu.row()
-                if (r >= 0 && !menu.controller.sortTable(r, menu.cellColumn, false))
-                    menu.editor.notice(qsTr("The rows are in that order already."), "info", null)
-            }
-        }
-        BMenuItem {
-            objectName: "tableSortDescending"
-            text: qsTr("Sort descending")
-            iconName: "arrow-down-wide-narrow"
-            enabled: menu.tableRows > 1
-            onTriggered: {
-                const r = menu.row()
-                if (r >= 0 && !menu.controller.sortTable(r, menu.cellColumn, true))
-                    menu.editor.notice(qsTr("The rows are in that order already."), "info", null)
-            }
-        }
+        SortItem { objectName: "tableSortAscending"; descending: false; text: qsTr("Sort ascending"); iconName: "arrow-up-narrow-wide" }
+        SortItem { objectName: "tableSortDescending"; descending: true; text: qsTr("Sort descending"); iconName: "arrow-down-wide-narrow" }
         BMenuItem {
             objectName: "tableFilterColumn"
             text: qsTr("Filter by this column…")
@@ -472,48 +472,22 @@ BMenu {
         title: qsTr("Copy link")
         iconName: "link"
 
-        BMenuItem {
+        CopyLinkItem {
             objectName: "copyBlockRef"
+            how: "blockRef"
             text: qsTr("Block reference ((…))")
             iconName: "link"
             shortcut: menu.editor ? menu.editor.copyRefShortcut : ""
-            onTriggered: {
-                const r = menu.row()
-                if (r >= 0)
-                    menu.editor.copyLink(r, "blockRef")
-            }
         }
-        BMenuItem {
-            objectName: "copyBlockLink"
-            text: qsTr("Link to block [[…#^…]]")
-            iconName: "bookmark"
-            onTriggered: {
-                const r = menu.row()
-                if (r >= 0)
-                    menu.editor.copyLink(r, "blockLink")
-            }
-        }
-        OptionalItem {
+        CopyLinkItem { objectName: "copyBlockLink"; how: "blockLink"; text: qsTr("Link to block [[…#^…]]"); iconName: "bookmark" }
+        CopyLinkItem {
             objectName: "copyHeadingLink"
             shown: menu.heading
+            how: "heading"
             text: qsTr("Link to heading [[…#…]]")
             iconName: "heading"
-            onTriggered: {
-                const r = menu.row()
-                if (r >= 0)
-                    menu.editor.copyLink(r, "heading")
-            }
         }
-        BMenuItem {
-            objectName: "copyEmbed"
-            text: qsTr("Embed")
-            iconName: "rows-2"
-            onTriggered: {
-                const r = menu.row()
-                if (r >= 0)
-                    menu.editor.copyLink(r, "embed")
-            }
-        }
+        CopyLinkItem { objectName: "copyEmbed"; how: "embed"; text: qsTr("Embed"); iconName: "rows-2" }
     }
     OptionalItem {
         shown: !menu.readOnly

@@ -80,7 +80,6 @@ private:
     void startNext();
     void start(const QUrl &url);
     void finish(QNetworkReply *reply);
-    void fail(const QUrl &url, FetchError error, const QString &detail);
 
     QPointer<QNetworkAccessManager> m_manager;
     QList<QUrl> m_queue;
@@ -88,7 +87,7 @@ private:
     /// Replies aborted by us — for their size, or a redirect refused — with what finish() reports
     /// (not the abort's OperationCanceledError).
     struct Abort {
-        FetchError error;
+        FetchError error = FetchError::Network;
         QString detail;
     };
     QHash<QNetworkReply *, Abort> m_aborted;

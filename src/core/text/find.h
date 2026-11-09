@@ -39,13 +39,12 @@ struct TextRange {
 /// U+202F) equals a space: Polish notes and our renderer keep one-letter words with the next one.
 /// An empty query, one with a line break or one that folds to nothing (only combining marks) finds
 /// nothing.
-QList<TextRange> findMatches(QStringView text, QStringView query, const FindOptions &options = {},
-                             qsizetype maxHits = -1);
+QList<TextRange> findMatches(QStringView text, QStringView query, FindOptions options = {}, qsizetype maxHits = -1);
 
 /// `range` of `text` lies inside a link on its line: anywhere in `[[…]]` (the target or its display
 /// text, which a replace cannot tell apart cheaply) or in the target of `[text](…)`. Looks at most
 /// 4096 units either way. What the find bar and the notebook-wide preview warn about.
-bool isInsideLink(QStringView text, const TextRange &range);
+bool isInsideLink(QStringView text, TextRange range);
 
 /// `text` with `replacement` instead of each of `ranges` (ascending, not overlapping: others are
 /// skipped, as are ranges outside the text); everything else byte for byte, CRLF and BOM too.

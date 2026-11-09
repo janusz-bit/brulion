@@ -20,6 +20,7 @@
 #include <algorithm>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion {
 namespace {
@@ -31,9 +32,7 @@ QString cleanAbsolute(const QString &path)
 
 QString withTrailingSlash(const QString &path)
 {
-    if (path.endsWith(u'/'))
-        return path;
-    return path + u'/';
+    return path.endsWith(u'/') ? path : path + u'/';
 }
 
 QDateTime systemNow()
@@ -104,12 +103,9 @@ QString vaultTrashFolder()
 
 FileStat statOf(const QFileInfo &info, const VaultPath &path)
 {
-    FileStat st;
-    st.path = path;
-    st.isDir = info.isDir();
-    st.size = st.isDir ? 0 : info.size();
-    st.mtime = info.fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch();
-    return st;
+    const bool isDir = info.isDir();
+    return FileStat{path, isDir, isDir ? 0 : info.size(),
+                    info.fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch()};
 }
 
 bool sameStat(const FileStat &a, const FileStat &b)
@@ -141,8 +137,8 @@ void ContentCache::put(const VaultPath &path, const QByteArray &bytes)
 
 std::optional<QByteArray> ContentCache::take(const VaultPath &path)
 {
-    const auto it = m_items.find(path);
-    if (it == m_items.end())
+    const auto it = m_items.constFind(path);
+    if (it == m_items.cend())
         return std::nullopt;
     QByteArray bytes = it->bytes;
     m_bytes -= bytes.size();
@@ -195,7 +191,7 @@ VaultPrivate::VaultPrivate(Vault *owner, const QString &rootPath, const QString 
     }
     store = new LocalStore(statePath.isEmpty() ? QString() : statePath + u"/store.json"_s, owner);
     batchTimer.setSingleShot(true);
-    batchTimer.setInterval(50);
+    batchTimer.setInterval(50ms);
     QObject::connect(&batchTimer, &QTimer::timeout, owner, [this] { processPendingEvents(); });
     QObject::connect(&rescanTimer, &QTimer::timeout, owner, [this] { q->rescan(); });
 }
@@ -264,12 +260,7 @@ void VaultPrivate::rememberDiskName(const VaultPath &path, const QString &rel)
 
 void VaultPrivate::forgetDiskNames(const VaultPath &path)
 {
-    for (auto it = diskNames.begin(); it != diskNames.end();) {
-        if (vaultutil::isWithin(it.key(), path))
-            it = diskNames.erase(it);
-        else
-            ++it;
-    }
+    diskNames.removeIf([&](auto it) { return vaultutil::isWithin(it.key(), path); });
 }
 
 void VaultPrivate::rebaseDiskNames(const VaultPath &from, const VaultPath &to)
@@ -281,21 +272,19 @@ void VaultPrivate::rebaseDiskNames(const VaultPath &from, const VaultPath &to)
     // recorded under another spelling of `from`.
     const qsizetype depth = from.count(u'/') + 1;
     QList<std::pair<VaultPath, QString>> moved;
-    for (auto it = diskNames.begin(); it != diskNames.end();) {
-        if (!vaultutil::isWithin(it.key(), from)) {
-            ++it;
-            continue;
-        }
+    diskNames.removeIf([&](auto it) {
+        if (!vaultutil::isWithin(it.key(), from))
+            return false;
         // `from` itself gets the new (normalised) name given to the rename.
         if (it.key() != from) {
             if (const QString suffix = diskSuffix(it.value(), depth); !suffix.isEmpty())
                 moved.append({vaultutil::rebase(it.key(), from, to), suffix});
         }
-        it = diskNames.erase(it);
-    }
+        return true;
+    });
     std::ranges::sort(moved); // parents before children
-    for (const auto &entry : std::as_const(moved))
-        rememberDiskName(entry.first, diskRel(to) + entry.second);
+    for (const auto &[path, suffix] : std::as_const(moved))
+        rememberDiskName(path, diskRel(to) + suffix);
 }
 
 void VaultPrivate::respell(const VaultPath &path, const QString &rel)
@@ -303,19 +292,17 @@ void VaultPrivate::respell(const VaultPath &path, const QString &rel)
     // Entries below keep their own spelling, now below the new spelling of `path`.
     const qsizetype depth = path.count(u'/') + 1;
     QList<std::pair<VaultPath, QString>> below;
-    for (auto it = diskNames.begin(); it != diskNames.end();) {
-        if (!vaultutil::isStrictlyWithin(it.key(), path)) {
-            ++it;
-            continue;
-        }
+    diskNames.removeIf([&](auto it) {
+        if (!vaultutil::isStrictlyWithin(it.key(), path))
+            return false;
         if (const QString suffix = diskSuffix(it.value(), depth); !suffix.isEmpty())
             below.append({it.key(), suffix});
-        it = diskNames.erase(it);
-    }
+        return true;
+    });
     rememberDiskName(path, rel);
     std::ranges::sort(below); // parents before children
-    for (const auto &entry : std::as_const(below))
-        rememberDiskName(entry.first, rel + entry.second);
+    for (const auto &[child, suffix] : std::as_const(below))
+        rememberDiskName(child, rel + suffix);
 }
 
 void VaultPrivate::adoptSpellings(const DiskListing &listing)
@@ -397,7 +384,7 @@ bool VaultPrivate::followsLink(const QFileInfo &link, const QString &parentRel) 
             return false;
         if (rel.isEmpty())
             return true;
-        rel.truncate(qMax<qsizetype>(rel.lastIndexOf(u'/'), 0));
+        rel.truncate(std::max<qsizetype>(rel.lastIndexOf(u'/'), 0));
     }
 }
 
@@ -645,12 +632,8 @@ void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &byte
 QByteArray VaultPrivate::readDisk(const VaultPath &path, bool *ok) const
 {
     QFile file(absPath(path));
-    if (!file.open(QIODevice::ReadOnly)) {
-        *ok = false;
-        return {};
-    }
-    const QByteArray bytes = file.readAll();
-    *ok = file.error() == QFileDevice::NoError;
+    const QByteArray bytes = file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    *ok = file.error() == QFileDevice::NoError; // also set by a failed open()
     return bytes;
 }
 
@@ -740,10 +723,7 @@ bool VaultPrivate::ensureDirs(const VaultPath &dir, QList<VaultChange> &changes)
     VaultPath cur;
     const QStringList segments = dir.split(u'/');
     for (const QString &segment : segments) {
-        if (cur.isEmpty())
-            cur = segment;
-        else
-            cur = cur + u'/' + segment;
+        cur = cur.isEmpty() ? segment : cur + u'/' + segment;
         if (isDirOnDisk(cur)) {
             // A folder created behind our back: take in what it holds first.
             if (vaultutil::isTracked(cur) && !dirs.contains(cur))
@@ -797,7 +777,7 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     if (path.isEmpty())
         return fail(Vault::tr("Cannot write: empty path"));
     resolveSpelling(path);
-    std::optional<FileStat> disk = diskStat(path);
+    const std::optional<FileStat> disk = diskStat(path);
     if (dirs.contains(path) || (disk && disk->isDir))
         return fail(Vault::tr("Cannot write %1: it is a folder").arg(path));
     // QSaveFile writes through symlinks: one that leads nowhere would create its target,
@@ -930,9 +910,9 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
         }
         parsed.warnings += obsidianFiles->warnings;
         ObsidianAdoption adoption = adoptObsidianSettings(obsidianFiles->files, files.keys());
-        parsed.config = adoption.config;
+        parsed.config = std::move(adoption.config);
         parsed.warnings += adoption.warnings;
-        adopted = adoption.adoptedKeys;
+        adopted = std::move(adoption.adoptedKeys);
     }
     if (!quiet || parsed.warnings != configWarnings) {
         for (const QString &warning : std::as_const(parsed.warnings))
@@ -942,10 +922,10 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
         qCInfo(lcVault).noquote() << u"Settings taken from .obsidian/: %1"_s.arg(adopted.join(u", "_s));
     const bool differs = !sameVaultConfig(config, parsed.config) || adopted != configFromObsidian
             || parsed.warnings != configWarnings;
-    config = parsed.config;
-    rawConfig = parsed.raw;
-    configWarnings = parsed.warnings;
-    configFromObsidian = adopted;
+    config = std::move(parsed.config);
+    rawConfig = std::move(parsed.raw);
+    configWarnings = std::move(parsed.warnings);
+    configFromObsidian = std::move(adopted);
     return differs;
 }
 
@@ -954,14 +934,14 @@ void VaultPrivate::finish(const QList<VaultChange> &changes)
     if (changes.isEmpty())
         return;
     const QString configPath = vaultConfigPath();
-    const bool configTouched = std::any_of(changes.cbegin(), changes.cend(), [&](const VaultChange &c) {
-        return c.path == configPath || c.oldPath == configPath;
-    });
+    const bool configTouched = std::ranges::any_of(
+            changes, [&](const VaultChange &c) { return c.path == configPath || c.oldPath == configPath; });
     // Without config.json the settings taken from .obsidian/ depend on the tracked files (the
     // guards of adoptObsidianSettings, the day at the top): checked again when files come or go
     // — say, Brulion's journals/ arriving on a new device after .obsidian/.
-    const bool guardedFilesCameOrWent = obsidianFiles && scanStatus.isOk()
-            && std::any_of(changes.cbegin(), changes.cend(), [](const VaultChange &c) {
+    const bool guardedFilesCameOrWent =
+            obsidianFiles && scanStatus.isOk()
+            && std::ranges::any_of(changes, [](const VaultChange &c) {
                    return c.type != ChangeType::Modified
                            && (obsidianAdoptionDependsOn(c.path)
                                || (!c.oldPath.isEmpty() && obsidianAdoptionDependsOn(c.oldPath)));
@@ -1011,11 +991,8 @@ QString Vault::idForPath(const QString &rootPath)
     }
     if (canonical.isEmpty())
         return text::fnv1a64Hex(clean.toUtf8());
-    for (const QString &segment : std::as_const(missing)) {
-        if (!canonical.endsWith(u'/'))
-            canonical += u'/';
-        canonical += segment;
-    }
+    if (!missing.isEmpty())
+        canonical = withTrailingSlash(canonical) + missing.join(u'/');
     return text::fnv1a64Hex(canonical.toUtf8());
 }
 
@@ -1118,7 +1095,7 @@ QList<FileStat> Vault::files() const
             if (!paths::isIgnored(st.path))
                 d->sortedFiles.append(st);
         }
-        std::sort(d->sortedFiles.begin(), d->sortedFiles.end(), byPath);
+        std::ranges::sort(d->sortedFiles, byPath);
         d->sortedFilesValid = true;
     }
     return d->sortedFiles;
@@ -1171,12 +1148,9 @@ DetachedRead Vault::readDetached(const VaultPath &path, const QString &absoluteP
     if (info.isFile())
         out.statBefore = statOf(info, path);
     QFile file(absolutePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        out.error = file.errorString();
-        return out;
-    }
-    out.bytes = file.readAll();
-    if (file.error() != QFileDevice::NoError) {
+    if (file.open(QIODevice::ReadOnly))
+        out.bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError) { // also set by a failed open()
         out.error = file.errorString();
         out.bytes.clear();
         return out;

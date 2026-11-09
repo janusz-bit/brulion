@@ -74,7 +74,7 @@ private:
     void accept(QLocalSocket *socket);
     void readLines(QLocalSocket *socket);
 
-    QLocalServer *m_server = nullptr;
+    std::unique_ptr<QLocalServer> m_server;
     Handler m_handler;
     QString m_error;
 };

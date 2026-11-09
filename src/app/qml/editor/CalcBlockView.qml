@@ -22,8 +22,8 @@ Rectangle {
     readonly property int lineHeightPx: Theme.lineHeightPx(fontSize, Theme.lineHeight)
     /// The family the note's text is drawn in ("serif" resolved, e.g. "Noto Serif"): the inputs'
     /// TextEdit gets that name, so its text stays in the note's font while it is edited.
-    readonly property string family: BlockViews.resolvedFamily(familyProbe.font) !== ""
-                                     ? BlockViews.resolvedFamily(familyProbe.font) : Theme.fontEditor
+    readonly property string resolvedFamily: BlockViews.resolvedFamily(familyProbe.font)
+    readonly property string family: resolvedFamily !== "" ? resolvedFamily : Theme.fontEditor
     readonly property real firstLineCenter: input.y + lineHeightPx / 2
     /// Width reserved for the results column (widest result, at most 45 %).
     readonly property real resultsWidth: {
@@ -43,10 +43,6 @@ Rectangle {
     }
     function rectTop(r: rect): real {
         return r.y
-    }
-    /// The offset of line `line` of the input text (0 past its last line).
-    function lineStart(line: int): int {
-        return BlockViews.lineStart(input.text, line)
     }
 
     implicitHeight: input.y + input.implicitHeight + Theme.space3
@@ -120,7 +116,6 @@ Rectangle {
         delegate: Text {
             id: result
             objectName: "calcResult" // (the editor's self-tests)
-            required property int index
             required property int line
             required property string value
             required property string error
@@ -128,7 +123,7 @@ Rectangle {
             readonly property bool isError: error !== ""
             readonly property bool isTotal: Js.test(line >= 0 && line < root.inputLines.length ? root.inputLines[line] : "",
                                                     "^\\s*(sum|suma|total|razem|avg|średnia|srednia)\\s*$", "i")
-            readonly property int offset: root.lineStart(line)
+            readonly property int offset: BlockViews.lineStart(input.text, line)
             visible: text !== ""
             x: root.width - root.resultsWidth
             width: root.resultsWidth - Theme.space4

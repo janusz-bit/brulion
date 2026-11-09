@@ -44,17 +44,19 @@ std::optional<QString> pathValue(const QJsonValue &v)
 
 std::optional<QString> formatValue(const QJsonValue &v)
 {
-    if (!v.isString() || !isUsableJournalFormat(v.toString().trimmed()))
+    const QString format = v.toString().trimmed();
+    if (!v.isString() || !isUsableJournalFormat(format))
         return std::nullopt;
-    return v.toString().trimmed();
+    return format;
 }
 
 template<periodic::Period P>
 std::optional<QString> periodFormatValue(const QJsonValue &v)
 {
-    if (!v.isString() || !periodic::isUsableFormat(P, v.toString().trimmed()))
+    const QString format = v.toString().trimmed();
+    if (!v.isString() || !periodic::isUsableFormat(P, format))
         return std::nullopt;
-    return v.toString().trimmed();
+    return format;
 }
 
 std::optional<QTime> timeValue(const QJsonValue &v)
@@ -108,18 +110,24 @@ QString compactJson(const QJsonValue &v)
     return QString::fromUtf8(json.mid(1, json.size() - 2));
 }
 
-/// Applies one key of `raw` to `config` through `parse`, or records a warning.
-template<typename T, typename Parse, typename Apply>
-void mergeKey(const QJsonObject &raw, QLatin1StringView key, Parse parse, Apply apply, QStringList &warnings)
+/// 1, the only version so far.
+std::optional<int> versionValue(const QJsonValue &v)
 {
-    const auto it = raw.constFind(key);
-    if (it == raw.constEnd())
+    return v.isDouble() && v.toDouble() == 1 ? std::optional<int>(1) : std::nullopt;
+}
+
+/// Sets `field` of `out.config` from `key` of `out.raw` through `parse` (a null `field`: the value
+/// is only checked), or records a warning.
+template<typename T, typename Parse>
+void mergeKey(ParsedVaultConfig &out, QLatin1StringView key, Parse parse, T VaultConfig::*field)
+{
+    const auto it = out.raw.constFind(key);
+    if (it == out.raw.constEnd())
         return;
-    const std::optional<T> value = parse(*it);
-    if (value)
-        apply(*value);
-    else
-        warnings.append(u"Invalid value for \"%1\": %2"_s.arg(key, compactJson(*it)));
+    if (const std::optional<T> value = parse(*it); !value)
+        out.warnings.append(u"Invalid value for \"%1\": %2"_s.arg(key, compactJson(*it)));
+    else if (field)
+        out.config.*field = *value;
 }
 
 } // namespace
@@ -156,38 +164,26 @@ ParsedVaultConfig parseVaultConfig(QByteArrayView json)
         return out;
     }
     out.raw = doc.object();
-    VaultConfig &c = out.config;
-    QStringList &w = out.warnings;
-    const QJsonObject &raw = out.raw;
-    mergeKey<int>(
-            raw, kVersion,
-            [](const QJsonValue &v) {
-                return v.isDouble() && v.toDouble() == 1 ? std::optional<int>(1) : std::nullopt;
-            },
-            [](int) {}, w);
-    mergeKey<QString>(raw, kJournalsFolder, pathValue, [&](const QString &v) { c.journalsFolder = v; }, w);
-    mergeKey<QString>(raw, kJournalFileFormat, formatValue, [&](const QString &v) { c.journalFileFormat = v; }, w);
-    mergeKey<QString>(raw, kNewPagesFolder, pathValue, [&](const QString &v) { c.newPagesFolder = v; }, w);
-    mergeKey<QString>(raw, kAttachmentsFolder, pathValue, [&](const QString &v) { c.attachmentsFolder = v; }, w);
-    mergeKey<QString>(raw, kTemplatesFolder, pathValue, [&](const QString &v) { c.templatesFolder = v; }, w);
-    mergeKey<QString>(raw, kJournalTemplate, pathValue, [&](const QString &v) { c.journalTemplate = v; }, w);
-    mergeKey<QTime>(raw, kDefaultReminderTime, timeValue, [&](QTime v) { c.defaultReminderTime = v; }, w);
-    mergeKey<Qt::DayOfWeek>(raw, kWeekStartsOn, weekStartValue, [&](Qt::DayOfWeek v) { c.weekStartsOn = v; }, w);
-    mergeKey<NoteMode>(raw, kJournalMode, noteModeValue, [&](NoteMode v) { c.journalMode = v; }, w);
-    mergeKey<NoteMode>(raw, kPageMode, noteModeValue, [&](NoteMode v) { c.pageMode = v; }, w);
+    mergeKey<int>(out, kVersion, versionValue, nullptr);
+    mergeKey(out, kJournalsFolder, pathValue, &VaultConfig::journalsFolder);
+    mergeKey(out, kJournalFileFormat, formatValue, &VaultConfig::journalFileFormat);
+    mergeKey(out, kNewPagesFolder, pathValue, &VaultConfig::newPagesFolder);
+    mergeKey(out, kAttachmentsFolder, pathValue, &VaultConfig::attachmentsFolder);
+    mergeKey(out, kTemplatesFolder, pathValue, &VaultConfig::templatesFolder);
+    mergeKey(out, kJournalTemplate, pathValue, &VaultConfig::journalTemplate);
+    mergeKey(out, kDefaultReminderTime, timeValue, &VaultConfig::defaultReminderTime);
+    mergeKey(out, kWeekStartsOn, weekStartValue, &VaultConfig::weekStartsOn);
+    mergeKey(out, kJournalMode, noteModeValue, &VaultConfig::journalMode);
+    mergeKey(out, kPageMode, noteModeValue, &VaultConfig::pageMode);
     // Weekly and monthly notes: next to the daily ones unless their folder is set.
-    c.weeklyFolder = c.journalsFolder;
-    c.monthlyFolder = c.journalsFolder;
-    mergeKey<QString>(raw, kWeeklyFolder, pathValue, [&](const QString &v) { c.weeklyFolder = v; }, w);
-    mergeKey<QString>(
-            raw, kWeeklyFileFormat, periodFormatValue<periodic::Period::Week>,
-            [&](const QString &v) { c.weeklyFileFormat = v; }, w);
-    mergeKey<QString>(raw, kWeeklyTemplate, pathValue, [&](const QString &v) { c.weeklyTemplate = v; }, w);
-    mergeKey<QString>(raw, kMonthlyFolder, pathValue, [&](const QString &v) { c.monthlyFolder = v; }, w);
-    mergeKey<QString>(
-            raw, kMonthlyFileFormat, periodFormatValue<periodic::Period::Month>,
-            [&](const QString &v) { c.monthlyFileFormat = v; }, w);
-    mergeKey<QString>(raw, kMonthlyTemplate, pathValue, [&](const QString &v) { c.monthlyTemplate = v; }, w);
+    out.config.weeklyFolder = out.config.journalsFolder;
+    out.config.monthlyFolder = out.config.journalsFolder;
+    mergeKey(out, kWeeklyFolder, pathValue, &VaultConfig::weeklyFolder);
+    mergeKey(out, kWeeklyFileFormat, periodFormatValue<periodic::Period::Week>, &VaultConfig::weeklyFileFormat);
+    mergeKey(out, kWeeklyTemplate, pathValue, &VaultConfig::weeklyTemplate);
+    mergeKey(out, kMonthlyFolder, pathValue, &VaultConfig::monthlyFolder);
+    mergeKey(out, kMonthlyFileFormat, periodFormatValue<periodic::Period::Month>, &VaultConfig::monthlyFileFormat);
+    mergeKey(out, kMonthlyTemplate, pathValue, &VaultConfig::monthlyTemplate);
     return out;
 }
 

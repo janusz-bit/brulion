@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -33,6 +34,11 @@ constexpr quint32 kIdSpace = 36U * 36 * 36 * 36;
 QString tr(const char *text)
 {
     return QCoreApplication::translate("brulion::History", text);
+}
+
+QDateTime systemNow()
+{
+    return QDateTime::currentDateTime();
 }
 
 bool isAlwaysKept(const QString &reason)
@@ -56,9 +62,7 @@ std::optional<qint64> idTime(const QString &id)
 
 } // namespace
 
-History::History(const QString &dir)
-    : m_dir(QDir::cleanPath(QFileInfo(dir).absoluteFilePath())), m_clock([] { return QDateTime::currentDateTime(); })
-{ }
+History::History(const QString &dir) : m_dir(QDir::cleanPath(QFileInfo(dir).absoluteFilePath())), m_clock(systemNow) { }
 
 QString History::dir() const
 {
@@ -67,13 +71,10 @@ QString History::dir() const
 
 void History::setClock(std::function<QDateTime()> clock)
 {
-    if (clock)
-        m_clock = std::move(clock);
-    else
-        m_clock = [] { return QDateTime::currentDateTime(); };
+    m_clock = clock ? std::move(clock) : std::function<QDateTime()>(systemNow);
 }
 
-void History::setPolicy(const HistoryPolicy &policy)
+void History::setPolicy(HistoryPolicy policy)
 {
     m_policy = policy;
 }
@@ -106,7 +107,7 @@ bool History::snapshotBytes(const VaultPath &path, QByteArrayView bytes, const Q
         if (newest.hash == hash || isThrottled(newest, reason, time))
             return true;
     }
-    Stored entry{newId(time), time, bytes.size(), reason, hash};
+    const Stored entry{newId(time), time, bytes.size(), reason, hash};
     // Content first: an interrupted snapshot leaves only an orphan, never a dangling entry.
     if (!writeFile(objectFile(entry.id), bytes))
         return false;
@@ -125,8 +126,8 @@ QList<HistoryEntry> History::list(const VaultPath &path) const
     const QList<Stored> entries = load(paths::normalize(path));
     QList<HistoryEntry> out;
     out.reserve(entries.size());
-    for (auto it = entries.crbegin(); it != entries.crend(); ++it)
-        out.append(HistoryEntry{it->id, QDateTime::fromMSecsSinceEpoch(it->time), it->size, it->reason});
+    for (const Stored &e : entries | std::views::reverse)
+        out.append(HistoryEntry{e.id, QDateTime::fromMSecsSinceEpoch(e.time), e.size, e.reason});
     return out;
 }
 
@@ -146,10 +147,8 @@ QByteArray History::readBytes(const QString &id, bool *ok) const
     if (!idPattern().match(id).hasMatch())
         return {};
     QFile file(objectFile(id));
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    QByteArray bytes = file.readAll();
-    if (file.error() != QFileDevice::NoError)
+    QByteArray bytes = file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    if (file.error() != QFileDevice::NoError) // also set by a failed open()
         return {};
     if (ok)
         *ok = true;
@@ -206,14 +205,16 @@ int History::prune(int maxPerPath, int maxAgeDays, int keepAtLeast)
             QFile::remove(file);
             continue;
         }
-        const QList<Stored> kept = retain(index->entries, time, maxPerPath, maxAgeDays, keepAtLeast);
+        QList<Stored> kept = retain(index->entries, time, maxPerPath, maxAgeDays, keepAtLeast);
         if (kept.size() != index->entries.size()) {
-            if (!save(index->path, kept))
-                continue;
-            removeObjects(index->entries, kept);
-            removed += static_cast<int>(index->entries.size() - kept.size());
+            if (save(index->path, kept)) {
+                removeObjects(index->entries, kept);
+                removed += static_cast<int>(index->entries.size() - kept.size());
+            } else {
+                kept = index->entries; // the index on disk still lists them all: no orphans
+            }
         }
-        for (const Stored &e : kept)
+        for (const Stored &e : std::as_const(kept))
             live.insert(e.id);
     }
     QDirIterator objects(m_dir + u"/objects"_s, {u"*.txt"_s}, QDir::Files);
@@ -255,7 +256,7 @@ std::optional<History::Index> History::loadFile(const QString &file) const
     if (index.path.isEmpty())
         return std::nullopt;
     const QJsonArray entries = object.value("entries"_L1).toArray();
-    for (const QJsonValue &v : entries) {
+    for (const auto &v : entries) {
         const QJsonObject e = v.toObject();
         const QString id = e.value("id"_L1).toString();
         if (!idPattern().match(id).hasMatch() || !e.value("time"_L1).isDouble() || !e.value("size"_L1).isDouble()
@@ -348,7 +349,7 @@ QString History::newId(qint64 time) const
     for (;;) {
         const quint32 seq = counter.fetch_add(1, std::memory_order_relaxed) % kIdSpace;
         const quint32 random = QRandomGenerator::global()->bounded(kIdSpace);
-        const QString id = QString::number(qMax<qint64>(time, 0), 36) + u'-' + u"%1"_s.arg(seq, 4, 36, QChar(u'0'))
+        const QString id = QString::number(std::max<qint64>(time, 0), 36) + u'-' + u"%1"_s.arg(seq, 4, 36, QChar(u'0'))
                            + u"%1"_s.arg(random, 4, 36, QChar(u'0'));
         if (!QFileInfo::exists(objectFile(id)))
             return id;

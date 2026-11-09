@@ -3,12 +3,12 @@
 // docs/SYNTAX.md (the Markdown dialect — single source of truth for parsing/rendering).
 #pragma once
 
-#include <QAtomicInt>
 #include <QDate>
 #include <QDateTime>
 #include <QHash>
 #include <QList>
 #include <QMap>
+#include <QSharedDataPointer>
 #include <QString>
 #include <QStringList>
 #include <QTime>
@@ -35,11 +35,10 @@ struct DateSpec {
     /// "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (the canonical on-disk form).
     QString toString() const
     {
-        return time ? date.toString(QStringLiteral("yyyy-MM-dd")) + QLatin1Char(' ')
-                          + time->toString(QStringLiteral("HH:mm"))
-                    : date.toString(QStringLiteral("yyyy-MM-dd"));
+        const QString day = date.toString(QStringLiteral("yyyy-MM-dd"));
+        return time ? day + QLatin1Char(' ') + time->toString(QStringLiteral("HH:mm")) : day;
     }
-    friend bool operator==(const DateSpec &a, const DateSpec &b) { return a.date == b.date && a.time == b.time; }
+    friend bool operator==(const DateSpec &, const DateSpec &) = default;
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -139,28 +138,7 @@ public:
     Boxed(const T &value) : m(new Holder(value)) { }
     Boxed(T &&value) : m(new Holder(std::move(value))) { }
     Boxed(const std::optional<T> &value) : m(value ? new Holder(*value) : nullptr) { }
-    Boxed(const Boxed &other) noexcept : m(other.m)
-    {
-        if (m)
-            m->ref.ref();
-    }
-    Boxed(Boxed &&other) noexcept : m(std::exchange(other.m, nullptr)) { }
-    ~Boxed() { reset(); }
 
-    Boxed &operator=(const Boxed &other) noexcept
-    {
-        Boxed copy(other);
-        std::swap(m, copy.m);
-        return *this;
-    }
-    Boxed &operator=(Boxed &&other) noexcept
-    {
-        if (this != &other) {
-            reset();
-            m = std::exchange(other.m, nullptr);
-        }
-        return *this;
-    }
     Boxed &operator=(std::nullopt_t) noexcept
     {
         reset();
@@ -170,54 +148,39 @@ public:
     Boxed &operator=(T &&value) { return *this = Boxed(std::move(value)); }
     Boxed &operator=(const std::optional<T> &value) { return *this = Boxed(value); }
 
-    bool has_value() const noexcept { return m != nullptr; }
-    explicit operator bool() const noexcept { return m != nullptr; }
+    bool has_value() const noexcept { return m.constData() != nullptr; }
+    explicit operator bool() const noexcept { return has_value(); }
 
     const T &operator*() const { return m->value; }
     const T *operator->() const { return &m->value; }
     const T &value() const { return m->value; }
-    T &operator*() { return detached(); }
-    T *operator->() { return &detached(); }
-    T &value() { return detached(); }
+    T &operator*() { return m->value; }
+    T *operator->() { return &m->value; }
+    T &value() { return m->value; }
 
     template<typename... A>
     T &emplace(A &&...args)
     {
-        reset();
-        m = new Holder(T(std::forward<A>(args)...));
+        m.reset(new Holder(T(std::forward<A>(args)...)));
         return m->value;
     }
-    void reset() noexcept
-    {
-        if (m && !m->ref.deref())
-            delete m;
-        m = nullptr;
-    }
+    void reset() noexcept { m.reset(); }
 
     /// A copy as std::optional (TaskRef, ReminderRef, QueryItem keep std::optional<Task>).
-    operator std::optional<T>() const { return m ? std::optional<T>(m->value) : std::nullopt; }
+    operator std::optional<T>() const { return has_value() ? std::optional<T>(m->value) : std::nullopt; }
 
     /// Do both hold the same object (no copy was made)? For tests.
-    bool isSharedWith(const Boxed &other) const noexcept { return m && m == other.m; }
+    bool isSharedWith(const Boxed &other) const noexcept { return has_value() && m.constData() == other.m.constData(); }
 
 private:
-    struct Holder {
+    struct Holder : QSharedData {
         explicit Holder(const T &v) : value(v) { }
         explicit Holder(T &&v) : value(std::move(v)) { }
-        QAtomicInt ref{1};
         T value;
     };
-    T &detached()
-    {
-        if (m->ref.loadRelaxed() != 1) {
-            Holder *copy = new Holder(m->value);
-            reset();
-            m = copy;
-        }
-        return m->value;
-    }
-
-    Holder *m = nullptr;
+    /// Copies share the Holder; QSharedDataPointer's non-const operator->() copies it first when
+    /// it is shared (so test it only through constData(): its non-const conversions detach).
+    QSharedDataPointer<Holder> m;
 };
 
 /// A block's own source lines joined with '\n' (Block::raw). Shares the note's text where those

@@ -13,6 +13,13 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::webpicture {
 
+namespace {
+
+/// The length of a key (keyOf()): a SHA-1 in hex.
+constexpr qsizetype KeyLength = 40;
+
+} // namespace
+
 PictureCache::PictureCache(QString dir) : m_dir(std::move(dir)) { }
 
 void PictureCache::setDir(const QString &dir)
@@ -38,9 +45,8 @@ void PictureCache::scan() const
         return;
     const QStringList names = QDir(m_dir).entryList(QDir::Files);
     for (const QString &name : names) {
-        const qsizetype dot = name.indexOf(u'.');
-        if (dot == 40) // a SHA-1 in hex, then the format
-            m_files.insert(name.left(dot), name);
+        if (name.indexOf(u'.') == KeyLength) // the key, then the format
+            m_files.insert(name.left(KeyLength), name);
     }
 }
 
@@ -119,10 +125,11 @@ void PictureCache::prune(qint64 maxBytes)
     if (m_dir.isEmpty())
         return;
     scan();
+    const QDir dir(m_dir);
     QFileInfoList files;
     qint64 total = 0;
     for (const QString &name : std::as_const(m_files)) {
-        const QFileInfo info(QDir(m_dir).filePath(name));
+        const QFileInfo info(dir.filePath(name));
         if (info.exists()) {
             files.append(info);
             total += info.size();
@@ -135,13 +142,13 @@ void PictureCache::prune(qint64 maxBytes)
         const QDateTime read = f.lastRead();
         return read.isValid() ? std::max(read, f.lastModified()) : f.lastModified();
     };
-    std::ranges::sort(files, [&](const QFileInfo &a, const QFileInfo &b) { return used(a) < used(b); });
+    std::ranges::sort(files, {}, used);
     for (const QFileInfo &f : std::as_const(files)) {
         if (total <= maxBytes)
             break;
         if (QFile::remove(f.absoluteFilePath())) {
             total -= f.size();
-            m_files.remove(f.fileName().left(40));
+            m_files.remove(f.fileName().left(KeyLength));
         }
     }
 }
