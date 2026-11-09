@@ -66,16 +66,25 @@ QString guardLineStarts(const QString &text)
     return lines.join(u'\n');
 }
 
+QString fencedDiv(const QString &attributes, const QString &body)
+{
+    return u"::: {"_s + attributes + u"}\n"_s + body + u"\n:::"_s;
+}
+
+/// `![alt](destination)`.
+QString pictureLink(const QString &alt, const QString &destination)
+{
+    return u"!["_s + alt + u"]("_s + destination + u')';
+}
+
 /// `code` as a code span (a backtick fence longer than any run inside).
 QString codeSpan(const QString &code)
 {
     qsizetype longest = 0;
-    for (qsizetype i = 0; i < code.size();) {
-        qsizetype n = 0;
-        while (i + n < code.size() && code[i + n] == u'`')
-            ++n;
-        longest = std::max(longest, n);
-        i += n > 0 ? n : 1;
+    qsizetype run = 0;
+    for (const QChar c : code) {
+        run = c == u'`' ? run + 1 : 0;
+        longest = std::max(longest, run);
     }
     const QString fence(longest + 1, u'`');
     const bool pad = code.startsWith(u'`') || code.endsWith(u'`') || code.isEmpty();
@@ -87,27 +96,21 @@ QString codeSpan(const QString &code)
 QString codeBlock(const QString &lang, const QString &code, const QString &id)
 {
     if (isMathFence(lang)) {
-        QStringList lines;
-        for (const QString &line : code.split(u'\n')) {
-            if (!line.trimmed().isEmpty())
-                lines.append(line);
-        }
+        QStringList lines = code.split(u'\n');
+        lines.removeIf([](const QString &line) { return QStringView(line).trimmed().isEmpty(); });
         const QString math = u"$$\n"_s + lines.join(u'\n') + u"\n$$"_s;
-        return id.isEmpty() ? math : u"::: {#"_s + id + u"}\n"_s + math + u"\n:::"_s;
+        return id.isEmpty() ? math : fencedDiv(u'#' + id, math);
     }
     qsizetype longest = 0;
-    for (const QString &line : code.split(u'\n')) {
-        const QString t = line.trimmed();
+    for (const QStringView line : code.tokenize(u'\n')) {
+        const QStringView t = line.trimmed();
         qsizetype n = 0;
         while (n < t.size() && t[n] == u'`')
             ++n;
         longest = std::max(longest, n);
     }
-    QString cls;
-    for (const QChar c : lang) {
-        if (c.isLetterOrNumber() || c == u'-' || c == u'_' || c == u'+' || c == u'#' || c == u'.')
-            cls += c;
-    }
+    QString cls = lang;
+    cls.removeIf([](QChar c) { return !c.isLetterOrNumber() && !QStringView(u"-_+#.").contains(c); });
     const QString fence(std::max<qsizetype>(3, longest + 1), u'`');
     QString info = cls;
     if (!id.isEmpty())
@@ -221,11 +224,6 @@ QString quoted(const QString &body)
     return lines.join(u'\n');
 }
 
-QString fencedDiv(const QString &attributes, const QString &body)
-{
-    return u"::: {"_s + attributes + u"}\n"_s + body + u"\n:::"_s;
-}
-
 } // namespace
 
 PandocRenderer::PandocRenderer(PandocLinks links) : m_links(std::move(links)) { }
@@ -284,6 +282,9 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
     ++depth;
     const auto restore = qScopeGuard([] { --depth; });
 
+    const auto pageUrl = [this](const Link &l) {
+        return m_links.page ? m_links.page(l.target, l.heading, l.blockId) : std::nullopt;
+    };
     const QString masked = markdown::maskInlineCode(text);
     QList<InlineAtom> atoms;
     codeAndCommentAtoms(text, masked, atoms, codeSpan);
@@ -328,7 +329,7 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
                                                             : QString();
                 label = l.target.isEmpty() ? frag : frag.isEmpty() ? l.target : QString(l.target + u" > "_s + frag);
             }
-            out = link(escape(label), m_links.page ? m_links.page(l.target, l.heading, l.blockId) : std::nullopt);
+            out = link(escape(label), pageUrl(l));
             break;
         }
         case LinkKind::Embed: {
@@ -336,19 +337,16 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
                     m_links.drawing && !isWebPictureTarget(l.target) ? m_links.drawing(l.target) : std::nullopt;
             if (drawing) {
                 // An Obsidian Excalidraw plugin drawing: its picture.
-                out = u"!["_s + escape(l.display.isEmpty() ? paths::basename(l.target) : l.display) + u"]("_s + *drawing
-                      + u')';
+                out = pictureLink(escape(l.display.isEmpty() ? paths::basename(l.target) : l.display), *drawing);
             } else if (isWebPictureTarget(l.target)) {
                 // `![[https://…/kot.jpg]]`: a picture from the internet, like `![](https://…)`.
-                out = u"!["_s + escape(l.display) + u"]("_s + webPictureDestination(l.target) + u')';
+                out = pictureLink(escape(l.display), webPictureDestination(l.target));
             } else if (isAttachmentTarget(l.target)) {
                 const auto url = m_links.attachment ? m_links.attachment(l.target) : std::nullopt;
                 const QString label = escape(l.display.isEmpty() ? paths::basename(l.target) : l.display);
-                out = url && mediaKind(l.target) == MediaKind::Image ? u"!["_s + label + u"]("_s + *url + u')'
-                                                                     : link(label, url);
+                out = url && mediaKind(l.target) == MediaKind::Image ? pictureLink(label, *url) : link(label, url);
             } else {
-                out = link(escape(l.display.isEmpty() ? l.target : l.display),
-                           m_links.page ? m_links.page(l.target, l.heading, l.blockId) : std::nullopt);
+                out = link(escape(l.display.isEmpty() ? l.target : l.display), pageUrl(l));
             }
             break;
         }
@@ -358,9 +356,8 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
                 if (!safeExternal(l.target)) {
                     out = plainText(source);
                 } else if (image) {
-                    out = u"!["_s + escape(l.display) + u"]("_s
-                          + (isWebPictureTarget(l.target) ? webPictureDestination(l.target) : urlDestination(l.target))
-                          + u')';
+                    out = pictureLink(escape(l.display), isWebPictureTarget(l.target) ? webPictureDestination(l.target)
+                                                                                      : urlDestination(l.target));
                 } else {
                     QString shown = renderInline(l.display, true);
                     if (shown.isEmpty())
@@ -369,29 +366,22 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
                 }
                 break;
             }
-            std::optional<QString> url;
-            if (!image && m_links.page && !isAttachmentTarget(l.target))
-                url = m_links.page(l.target, l.heading, l.blockId);
+            std::optional<QString> url = image || isAttachmentTarget(l.target) ? std::nullopt : pageUrl(l);
             if (!url && m_links.attachment)
                 url = m_links.attachment(l.target);
-            if (!url && !image && m_links.page)
-                url = m_links.page(l.target, l.heading, l.blockId);
+            if (!url && !image)
+                url = pageUrl(l);
             QString shown = image ? escape(l.display) : renderInline(l.display, true);
             if (shown.isEmpty() && (!image || !url))
                 shown = escape(l.display.isEmpty() ? paths::basename(l.target) : l.display);
-            if (url && image && mediaKind(l.target) == MediaKind::Image)
-                out = u"!["_s + shown + u"]("_s + *url + u')';
-            else
-                out = link(shown, url);
+            out = url && image && mediaKind(l.target) == MediaKind::Image ? pictureLink(shown, *url) : link(shown, url);
             break;
         }
         case LinkKind::BlockRef:
         case LinkKind::BlockEmbed: {
             const auto ref = m_links.block ? m_links.block(l.target) : std::nullopt;
-            if (!ref)
-                out = u'[' + escape(QString(u"(("_s + l.target + u"))"_s)) + u"]{.missing}"_s;
-            else
-                out = link(renderInline(ref->second, true), ref->first);
+            out = ref ? link(renderInline(ref->second, true), ref->first)
+                      : link(escape(QString(u"(("_s + l.target + u"))"_s)), std::nullopt);
             break;
         }
         case LinkKind::Url: {
@@ -444,11 +434,15 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
     return guardLineStarts(out);
 }
 
+QString PandocRenderer::anchorId(const Block &block) const
+{
+    return m_links.ids && !block.id.isEmpty() ? m_links.idPrefix + blockAnchor(block.id) : QString();
+}
+
 QString PandocRenderer::idSpan(const Block &block) const
 {
-    if (!m_links.ids || block.id.isEmpty())
-        return {};
-    return u"[]{#"_s + m_links.idPrefix + blockAnchor(block.id) + u'}';
+    const QString id = anchorId(block);
+    return id.isEmpty() ? QString() : u"[]{#"_s + id + u'}';
 }
 
 QString PandocRenderer::metaSpans(const Block &block) const
@@ -457,8 +451,7 @@ QString PandocRenderer::metaSpans(const Block &block) const
     bool recurrence = false;
     // The tokens as written in the block's own lines (tasks and other blocks alike; reminders
     // come from the parsed block, with the default time filled in).
-    const QString raw = block.raw.toString();
-    for (const markdown::Token &t : markdown::findTokens(markdown::maskInlineCode(raw))) {
+    for (const markdown::Token &t : markdown::findTokens(markdown::maskInlineCode(block.raw.view()))) {
         if (t.kind == markdown::TokenKind::Reminder || t.kind == markdown::TokenKind::ReminderCompat)
             continue;
         recurrence = recurrence || t.kind == markdown::TokenKind::Recurrence;
@@ -473,13 +466,12 @@ QString PandocRenderer::metaSpans(const Block &block) const
                              : classSpan(u"reminder"_s, IoMessages::tr("reminder: %1").arg(r.at.toString())));
     }
     QStringList props;
-    for (auto it = block.properties.constBegin(); it != block.properties.constEnd(); ++it) {
-        const QString &key = it.key();
+    for (const auto &[key, value] : block.properties.asKeyValueRange()) {
         if (key == u"id" || key == u"collapsed" || key == u"callouttype" || key == u"calloutfold")
             continue;
-        const QString value = it.value().typeId() == QMetaType::QStringList ? it.value().toStringList().join(u", "_s)
-                                                                            : it.value().toString();
-        props.append(classSpan(u"property"_s, key + u": "_s + value));
+        const QString shown =
+                value.typeId() == QMetaType::QStringList ? value.toStringList().join(u", "_s) : value.toString();
+        props.append(classSpan(u"property"_s, key + u": "_s + shown));
     }
     props.sort();
     spans.append(props);
@@ -532,11 +524,11 @@ QString PandocRenderer::renderListItem(const ParsedNote &note, int index) const
     const Block &b = note.blocks[index];
     QString marker = u"-"_s;
     if (isOrderedItem(b)) {
-        const QString first = b.raw.view().trimmed().toString();
+        const QStringView first = b.raw.view().trimmed();
         qsizetype d = 0;
         while (d < first.size() && first[d].isDigit())
             ++d;
-        marker = first.first(d + 1);
+        marker = first.first(d + 1).toString();
     }
     QString content;
     // A list item that is one fenced block (`/Math formula` in an outline or a journal writes
@@ -544,8 +536,7 @@ QString PandocRenderer::renderListItem(const ParsedNote &note, int index) const
     const auto fence = b.task ? std::nullopt : itemFence(b.text);
     const QString embedded = b.task || fence ? QString() : embeddedContent(b.text);
     if (fence) {
-        content = codeBlock(fence->first, fence->second,
-                            m_links.ids && !b.id.isEmpty() ? m_links.idPrefix + blockAnchor(b.id) : QString());
+        content = codeBlock(fence->first, fence->second, anchorId(b));
     } else if (!embedded.isEmpty()) {
         content = embedded;
     } else {
@@ -574,9 +565,8 @@ QString PandocRenderer::renderListItem(const ParsedNote &note, int index) const
         content = box + idSpan(b) + text + status + metaSpans(b);
     }
     if (!b.children.isEmpty()) {
-        bool lists = true;
-        for (const int c : b.children)
-            lists = lists && note.blocks[c].kind == BlockKind::ListItem;
+        const bool lists =
+                std::ranges::all_of(b.children, [&](int c) { return note.blocks[c].kind == BlockKind::ListItem; });
         const QString children = renderBlocks(note, b.children);
         if (!children.isEmpty())
             content += (content.isEmpty() ? QString() : lists ? u"\n"_s : u"\n\n"_s) + children;
@@ -605,16 +595,16 @@ QString PandocRenderer::renderTable(const QString &source) const
     if (rows.isEmpty())
         return {};
     const QStringList header = tableCells(rows.first());
-    const bool hasDelimiter =
-            rows.size() > 1 && tableCells(rows[1]).join(QString()).remove(u'-').remove(u':').trimmed().isEmpty();
+    const QStringList second = rows.size() > 1 ? tableCells(rows[1]) : QStringList(); // parsed once, not per column
+    const bool hasDelimiter = !second.isEmpty() && second.join(QString()).remove(u'-').remove(u':').trimmed().isEmpty();
     QStringList delimiter;
     for (qsizetype c = 0; c < header.size(); ++c) {
-        const QString cell = hasDelimiter && c < tableCells(rows[1]).size() ? tableCells(rows[1]).at(c) : QString();
+        const QString cell = hasDelimiter ? second.value(c) : QString();
         const bool left = cell.startsWith(u':');
         const bool right = cell.endsWith(u':');
         delimiter.append(left && right ? u":-:"_s : right ? u"--:"_s : left ? u":--"_s : u"---"_s);
     }
-    const auto row = [&](const QStringList &cells) {
+    const auto row = [&](const QStringList &cells) -> QString {
         QStringList out;
         for (const QString &cell : cells) {
             QString content = cell.startsWith(u'=') ? codeSpan(cell) : renderInline(cell);
@@ -632,7 +622,7 @@ QString PandocRenderer::renderTable(const QString &source) const
 QString PandocRenderer::renderBlock(const ParsedNote &note, int index) const
 {
     const Block &b = note.blocks[index];
-    const QString id = m_links.ids && !b.id.isEmpty() ? m_links.idPrefix + blockAnchor(b.id) : QString();
+    const QString id = anchorId(b);
     const auto withId = [&](const QString &body) { return id.isEmpty() ? body : fencedDiv(u'#' + id, body); };
     switch (b.kind) {
     case BlockKind::Frontmatter: return {};

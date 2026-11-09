@@ -96,6 +96,7 @@ private:
     ImportResult m_result;
     QHash<QString, qsizetype> m_journalIndex;                              ///< path key -> index in files
     QHash<QString, QList<std::pair<QByteArray, VaultPath>>> m_attachments; ///< requested -> stored
+    QSet<QString> m_warned;                                                ///< warnings given (each once)
 };
 
 /// Maps the files of a tree-shaped source (a vault, an export folder) to their vault paths and

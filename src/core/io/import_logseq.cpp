@@ -80,14 +80,11 @@ QString ednString(const QString &edn, const QString &key)
     return m.hasMatch() ? m.captured(1) : QString();
 }
 
-/// Date of a journal file name in Logseq's file-name format ("yyyy_MM_dd" by default).
-std::optional<QDate> journalFileDate(const QString &stem, const QString &format)
+/// Date of a journal file name in the first of `formats` that reads it.
+std::optional<QDate> journalFileDate(const QString &stem, const QList<JournalTitleFormat> &formats)
 {
-    for (const QString &f : {format, u"yyyy_MM_dd"_s, u"yyyy-MM-dd"_s, u"yyyyMMdd"_s}) {
-        if (f.isEmpty())
-            continue;
-        const QDate d = JournalTitleFormat(f).parse(stem).value_or(QDate());
-        if (d.isValid())
+    for (const JournalTitleFormat &f : formats) {
+        if (const QDate d = f.parse(stem).value_or(QDate()); d.isValid())
             return d;
     }
     return std::nullopt;
@@ -114,10 +111,11 @@ public:
                     [](const QString &p) { return p == u"logseq/config.edn" || p.endsWith(u"/logseq/config.edn"); }))
             return 95;
         static const QRegularExpression journal(u"(^|/)journals/\\d{4}_\\d{2}_\\d{2}\\.md$"_s);
-        const bool journals = anyPath(files, [](const QString &p) { return journal.match(p).hasMatch(); });
+        if (!anyPath(files, [](const QString &p) { return journal.match(p).hasMatch(); }))
+            return 0;
         const bool pages =
                 anyPath(files, [](const QString &p) { return p.startsWith(u"pages/") || p.contains(u"/pages/"); });
-        return journals && pages ? 75 : journals ? 50 : 0;
+        return pages ? 75 : 50;
     }
 
     ImportResult run(const QList<InputFile> &files, const ImportOptions &options) const override
@@ -127,11 +125,18 @@ public:
         const QString prefix = root.isEmpty() ? QString() : root + u'/';
 
         QString edn;
+        const QString configPath = prefix + u"logseq/config.edn"_s;
         for (const InputFile &f : files) {
-            if (f.path == prefix + u"logseq/config.edn")
+            if (f.path == configPath)
                 edn = stripEdnComments(decodeText(f.data));
         }
+        // Journal file names: in the graph's format ("yyyy_MM_dd" by default) or a common one.
         const QString fileFormat = ednString(edn, u":journal/file-name-format"_s);
+        QList<JournalTitleFormat> fileFormats;
+        for (const QString &f : {fileFormat, u"yyyy_MM_dd"_s, u"yyyy-MM-dd"_s, u"yyyyMMdd"_s}) {
+            if (!f.isEmpty())
+                fileFormats.append(JournalTitleFormat(f));
+        }
         QList<JournalTitleFormat> titleFormats;
         QString titleFormat = ednString(edn, u":journal/page-title-format"_s);
         if (titleFormat.isEmpty())
@@ -157,13 +162,11 @@ public:
                 orgWarned = true;
             }
             if (ext != u".md" && ext != u".markdown") {
-                attachments.append(s);
+                attachments.append(std::move(s));
                 continue;
             }
-            const QString folder = paths::dirname(s.relative);
-            const QString stem = paths::pageTitle(s.relative);
-            if (folder == u"journals")
-                s.journal = journalFileDate(stem, fileFormat);
+            if (paths::dirname(s.relative) == u"journals")
+                s.journal = journalFileDate(paths::pageTitle(s.relative), fileFormats);
             s.props = takeLogseqPageProperties(decodeText(f.data));
             pages.append(std::move(s));
         }
@@ -188,10 +191,7 @@ public:
             tree.add(s.relative, s.path);
         }
         for (Source &a : attachments) {
-            QString rel = a.relative;
-            if (rel.startsWith(u"assets/"))
-                rel = rel.sliced(7);
-            a.path = ctx.claimAttachment(rel);
+            a.path = ctx.claimAttachment(a.relative.startsWith(u"assets/") ? a.relative.sliced(7) : a.relative);
             tree.add(a.relative, a.path);
         }
 
@@ -232,9 +232,9 @@ private:
         QVariantMap fm;
         QStringList aliases;
         for (const QString &key : s.props.keys) {
-            const QString raw = s.props.values.value(key).toString();
             if (key == u"title")
                 continue;
+            const QString raw = s.props.values.value(key).toString();
             if (key == u"alias" || key == u"aliases") {
                 aliases.append(markdown::parsePropertyValue(u"alias"_s, raw).toStringList());
             } else if (key == u"tags" || key == u"tag") {

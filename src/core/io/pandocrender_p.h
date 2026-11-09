@@ -77,6 +77,8 @@ private:
     QString renderListItem(const ParsedNote &note, int index) const;
     QString renderTable(const QString &source) const;
     QString metaSpans(const Block &block) const;
+    /// The block's identifier with prefix (empty without ids or a block id).
+    QString anchorId(const Block &block) const;
     QString idSpan(const Block &block) const;
     QString embeddedContent(const QString &text) const;
     QString link(const QString &label, const std::optional<QString> &destination) const;

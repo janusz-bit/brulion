@@ -11,6 +11,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
+
 namespace brulion::io::detail {
 
 using namespace Qt::StringLiterals;
@@ -27,10 +29,11 @@ struct Item {
     QHash<QString, QString> meta;
 };
 
-const QRegularExpression &rawName()
+/// An item file of a RAW export: "<32 hex digits>.md".
+bool isRawItem(const QString &path)
 {
     static const QRegularExpression re(u"(^|/)[0-9a-fA-F]{32}\\.md$"_s);
-    return re;
+    return re.match(path).hasMatch();
 }
 
 /// Parse a RAW item: title line, blank line, body, blank line, `key: value` metadata.
@@ -85,6 +88,20 @@ QDateTime msTime(const QString &value)
     return ms > 0 ? QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC) : QDateTime();
 }
 
+/// `text` with each match of `re` replaced by `replacement(match)`.
+template<typename Replacement>
+QString replaceEach(const QString &text, const QRegularExpression &re, const Replacement &replacement)
+{
+    QString out;
+    qsizetype last = 0;
+    for (auto it = re.globalMatch(text); it.hasNext();) {
+        const auto m = it.next();
+        out += QStringView(text).sliced(last, m.capturedStart() - last) + replacement(m);
+        last = m.capturedEnd();
+    }
+    return out + QStringView(text).sliced(last);
+}
+
 QString taskLine(const QString &title, bool done, const QDateTime &due, const QDateTime &completed,
                  const QTimeZone &zone)
 {
@@ -105,10 +122,9 @@ public:
 
     int detect(const QList<InputFile> &files) const override
     {
-        for (const InputFile &f : files) {
-            if (rawName().match(f.path).hasMatch() && f.data.contains("\ntype_: "))
-                return 95;
-        }
+        if (std::ranges::any_of(files,
+                                [](const InputFile &f) { return isRawItem(f.path) && f.data.contains("\ntype_: "); }))
+            return 95;
         const bool resources = anyPath(
                 files, [](const QString &p) { return p.startsWith(u"_resources/") || p.contains(u"/_resources/"); });
         return resources && anyPath(files, [](const QString &p) { return paths::isMarkdown(p); }) ? 60 : 0;
@@ -119,7 +135,7 @@ public:
         ImportContext ctx(options, name());
         QList<Item> items;
         for (const InputFile &f : files) {
-            if (!rawName().match(f.path).hasMatch())
+            if (!isRawItem(f.path))
                 continue;
             if (auto item = parseItem(decodeText(f.data)))
                 items.append(std::move(*item));
@@ -150,19 +166,24 @@ private:
             if (isDeleted(it))
                 deletedFolders.insert(it.id);
         }
+        // The notebook `folderId` names and the notebooks above it, innermost first (a cycle of
+        // parents ends the chain).
+        const auto folderChain = [&](const QString &folderId) {
+            QList<const Item *> chain;
+            QSet<QString> seen;
+            QString id = folderId.trimmed().toLower();
+            while (!id.isEmpty() && folders.contains(id) && !seen.contains(id)) {
+                seen.insert(id);
+                chain.append(folders.value(id));
+                id = chain.constLast()->meta.value(u"parent_id"_s).trimmed().toLower();
+            }
+            return chain;
+        };
         // A note in the trash, or in a notebook (or sub-notebook) in the trash.
         const auto inTrash = [&](const Item &it) {
-            if (isDeleted(it))
-                return true;
-            QSet<QString> seen;
-            for (QString id = it.meta.value(u"parent_id"_s).trimmed().toLower(); !id.isEmpty() && !seen.contains(id);
-                 id = folders.contains(id) ? folders.value(id)->meta.value(u"parent_id"_s).trimmed().toLower()
-                                           : QString()) {
-                if (deletedFolders.contains(id))
-                    return true;
-                seen.insert(id);
-            }
-            return false;
+            return isDeleted(it)
+                   || std::ranges::any_of(folderChain(it.meta.value(u"parent_id"_s)),
+                                          [&](const Item *folder) { return deletedFolders.contains(folder->id); });
         };
         for (const Item &it : items) {
             switch (it.type) {
@@ -173,31 +194,24 @@ private:
             case FolderType: break; // collected above
             case ResourceType: resources.insert(it.id, &it); break;
             case TagType: tagNames.insert(it.id, it.title); break;
-            default: break;
-            }
-        }
-        for (const Item &it : items) {
-            if (it.type == NoteTagType)
+            case NoteTagType:
                 noteTags[it.meta.value(u"note_id"_s).trimmed().toLower()].append(
                         it.meta.value(u"tag_id"_s).trimmed().toLower());
+                break;
+            default: break;
+            }
         }
         // Resource data files: "resources/<id>.<ext>" (or without extension).
         QHash<QString, const InputFile *> resourceFiles;
         for (const InputFile &f : files) {
-            const QString base = paths::basename(f.path);
-            const QString stem = base.section(u'.', 0, 0).toLower();
-            if (resources.contains(stem) && !rawName().match(f.path).hasMatch())
+            const QString stem = paths::basename(f.path).section(u'.', 0, 0).toLower();
+            if (resources.contains(stem) && !isRawItem(f.path))
                 resourceFiles.insert(stem, &f);
         }
         const auto folderPath = [&](const QString &folderId) {
             QStringList segments;
-            QSet<QString> seen;
-            QString id = folderId.trimmed().toLower();
-            while (!id.isEmpty() && folders.contains(id) && !seen.contains(id)) {
-                seen.insert(id);
-                segments.prepend(pageSegment(folders.value(id)->title));
-                id = folders.value(id)->meta.value(u"parent_id"_s).trimmed().toLower();
-            }
+            for (const auto chain = folderChain(folderId); const Item *folder : chain)
+                segments.prepend(pageSegment(folder->title));
             return segments.join(u'/');
         };
 
@@ -241,13 +255,7 @@ private:
                                                 QRegularExpression::CaseInsensitiveOption);
         bool missing = false;
         for (const Item *n : std::as_const(notes)) {
-            QString body = n->body;
-            QString out;
-            qsizetype last = 0;
-            for (auto it = mdLink.globalMatch(body); it.hasNext();) {
-                const auto m = it.next();
-                out += QStringView(body).sliced(last, m.capturedStart() - last);
-                last = m.capturedEnd();
+            QString body = replaceEach(n->body, mdLink, [&](const QRegularExpressionMatch &m) -> QString {
                 const QString id = m.captured(3).toLower();
                 const QString label = m.captured(2);
                 if (const auto note = notePaths.constFind(id); note != notePaths.constEnd()) {
@@ -255,32 +263,23 @@ private:
                     const bool sameLabel = label.isEmpty()
                                            || label.compare(paths::basename(target), Qt::CaseInsensitive) == 0
                                            || label.contains(u'|');
-                    out += wikiLink(target, {}, {}, sameLabel ? QString() : label);
-                } else if (const auto res = resourcePath(id)) {
+                    return wikiLink(target, {}, {}, sameLabel ? QString() : label);
+                }
+                if (const auto res = resourcePath(id)) {
                     const bool sameLabel = label.isEmpty() || label.contains(u'|')
                                            || label.compare(paths::basename(*res), Qt::CaseInsensitive) == 0;
-                    out += m.captured(1).isEmpty() ? wikiLink(*res, {}, {}, sameLabel ? QString() : label)
+                    return m.captured(1).isEmpty() ? wikiLink(*res, {}, {}, sameLabel ? QString() : label)
                                                    : attachmentLink(*res);
-                } else {
-                    missing = true;
-                    out += label;
                 }
-            }
-            out += QStringView(body).sliced(last);
-            body = out;
-            out.clear();
-            last = 0;
-            for (auto it = htmlImg.globalMatch(body); it.hasNext();) {
-                const auto m = it.next();
-                out += QStringView(body).sliced(last, m.capturedStart() - last);
-                last = m.capturedEnd();
+                missing = true;
+                return label;
+            });
+            body = normalizeNewlines(replaceEach(body, htmlImg, [&](const QRegularExpressionMatch &m) -> QString {
                 if (const auto res = resourcePath(m.captured(1).toLower()))
-                    out += attachmentLink(*res);
-                else
-                    missing = true;
-            }
-            out += QStringView(body).sliced(last);
-            body = normalizeNewlines(out);
+                    return attachmentLink(*res);
+                missing = true;
+                return {};
+            }));
 
             if (n->meta.value(u"is_todo"_s).trimmed() == u"1") {
                 const QDateTime completed = msTime(n->meta.value(u"todo_completed"_s));
@@ -297,9 +296,8 @@ private:
                 !u.isEmpty())
                 fm.insert(u"updated"_s, u);
             QStringList tags;
-            for (const QString &tagId : noteTags.value(n->id)) {
-                const QString name = tagName(tagNames.value(tagId));
-                if (!name.isEmpty())
+            for (const QStringList tagIds = noteTags.value(n->id); const QString &tagId : tagIds) {
+                if (const QString name = tagName(tagNames.value(tagId)); !name.isEmpty())
                     tags.append(name);
             }
             if (!tags.isEmpty())
@@ -325,8 +323,9 @@ private:
         const QTimeZone zone = ctx.options().timeZone;
         TreeImport tree;
         tree.attachmentRelative = [](const QString &p) {
-            const qsizetype k = p.indexOf(u"_resources/"_s);
-            return k >= 0 ? p.sliced(k + 11) : p;
+            constexpr QStringView Resources = u"_resources/";
+            const qsizetype k = p.indexOf(Resources);
+            return k >= 0 ? p.sliced(k + Resources.size()) : p;
         };
         tree.convert = [&](const QString &content, const QString &) {
             const markdown::FrontmatterResult fm = markdown::parseFrontmatter(content);
@@ -334,12 +333,10 @@ private:
                 return content;
             QVariantMap out;
             QStringList order;
-            QString task;
-            const QString completed = fm.data.value(u"completed?"_s).toString().trimmed().toLower();
             for (const QString &key : fm.keys) {
-                const QVariant value = fm.data.value(key);
                 if (key == u"title" || key == u"completed?" || key == u"due")
                     continue;
+                const QVariant value = fm.data.value(key);
                 if (key == u"created" || key == u"updated") {
                     const QString wc = wallClock(isoTime(value.toString()), zone);
                     out.insert(key, wc.isEmpty() ? value : QVariant(wc));
@@ -350,14 +347,15 @@ private:
                 }
                 order.append(key);
             }
+            QString body = normalizeNewlines(content.sliced(fm.bodyStart));
+            // A to-do: its task line above the text.
+            const QString completed = fm.data.value(u"completed?"_s).toString().trimmed().toLower();
             if (!completed.isEmpty()) {
                 const bool done = completed == u"yes" || completed == u"true";
-                task = taskLine(fm.data.value(u"title"_s).toString(), done, isoTime(fm.data.value(u"due"_s).toString()),
-                                QDateTime(), zone);
+                body = taskLine(fm.data.value(u"title"_s).toString(), done, isoTime(fm.data.value(u"due"_s).toString()),
+                                QDateTime(), zone)
+                       + u"\n\n"_s + body;
             }
-            QString body = normalizeNewlines(content.sliced(fm.bodyStart));
-            if (!task.isEmpty())
-                body = task + u"\n\n"_s + body;
             return noteWithFrontmatter(out, order, body);
         };
         importTree(stripCommonRoot(files), ctx, tree);

@@ -31,9 +31,8 @@ bool isRoamPage(const QJsonValue &v)
 
 bool isRoamExport(const QJsonDocument &doc)
 {
-    if (!doc.isArray() || doc.array().isEmpty())
-        return false;
-    return isRoamPage(doc.array().first());
+    const QJsonArray pages = doc.array(); // empty unless the document is an array
+    return !pages.isEmpty() && isRoamPage(pages.first());
 }
 
 /// Roam uids may contain '_' (not allowed in block ids): mapped to '-'.
@@ -115,7 +114,7 @@ void collectRefs(const QJsonArray &blocks, QSet<QString> &refs, int depth)
     static const QRegularExpression ref(u"\\(\\(([A-Za-z0-9_-]{4,})\\)\\)"_s);
     if (depth > MaxDepth)
         return;
-    for (const QJsonValue &v : blocks) {
+    for (const auto &v : blocks) {
         const QJsonObject b = v.toObject();
         for (auto it = ref.globalMatch(b.value(u"string"_s).toString()); it.hasNext();)
             refs.insert(it.next().captured(1));
@@ -128,7 +127,7 @@ void writeBlocks(const QJsonArray &blocks, int depth, const QSet<QString> &refs,
     if (depth > MaxDepth)
         return;
     const QString indent(depth, u'\t');
-    for (const QJsonValue &v : blocks) {
+    for (const auto &v : blocks) {
         const QJsonObject b = v.toObject();
         QString text = convertRoamText(b.value(u"string"_s).toString());
         text.replace(u"\r\n"_s, u"\n"_s);
@@ -184,9 +183,9 @@ public:
             }
             if (!isRoamExport(doc))
                 continue;
-            for (const QJsonValue &v : doc.array()) {
-                if (v.toObject().contains(u"title"_s))
-                    pages.append(v.toObject());
+            for (const QJsonArray all = doc.array(); const auto &v : all) {
+                if (const QJsonObject page = v.toObject(); page.contains(u"title"_s))
+                    pages.append(page);
             }
         }
         QSet<QString> refs;
@@ -207,7 +206,7 @@ public:
                 date = daily.first().parse(title);
             QStringList lines;
             writeBlocks(p.value(u"children"_s).toArray(), 0, refs, lines);
-            QString body = convertJournalLinks(lines.join(u'\n'), daily, ctx);
+            const QString body = convertJournalLinks(lines.join(u'\n'), daily, ctx);
             if (date) {
                 if (!lines.isEmpty())
                     ctx.addJournal(*date, body + u'\n');

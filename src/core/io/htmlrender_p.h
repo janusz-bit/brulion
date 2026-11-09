@@ -73,9 +73,14 @@ private:
     QString renderBlock(const ParsedNote &note, int index) const;
     QString renderListItem(const ParsedNote &note, int index) const;
     QString renderTable(const QString &source) const;
-    /// A ```chart block (`code`, at `line` of `note`) as SVG with its data and source folded under
-    /// it; "" when it cannot be drawn (it stays code).
-    QString chartHtml(const ParsedNote &note, int line, const QString &code, const QString &id) const;
+    /// A fenced block (`lang`, `code`, at `line` of `note`; `id`: attribute text or empty) as
+    /// HTML: a ```chart as SVG with its data and source folded under it, else — also when it
+    /// cannot be drawn — as code, a formula or a Mermaid diagram.
+    QString fenceHtml(const ParsedNote &note, int line, const QString &lang, const QString &code,
+                      const QString &id) const;
+    /// A link of inline text (`source`: as written) as HTML.
+    QString linkHtml(const Link &l, QStringView source) const;
+    QString markdownLinkHtml(const Link &l, QStringView source) const;
     QString metaChips(const Block &block) const;
     /// HTML of the page embedded by `text` when it is a single page embed (`![[Page]]`), else "".
     QString embeddedContent(const QString &text) const;

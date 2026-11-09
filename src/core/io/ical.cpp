@@ -4,6 +4,7 @@
 #include "io/messages_p.h"
 
 #include <QRegularExpression>
+#include <QStringTokenizer>
 
 #include <algorithm>
 #include <array>
@@ -18,11 +19,10 @@ namespace {
 constexpr int MaxLineOctets = 75;
 constexpr int MaxNesting = 16;
 
-const std::array<QStringView, 7> &weekdayCodes()
-{
-    static const std::array<QStringView, 7> codes = {u"MO", u"TU", u"WE", u"TH", u"FR", u"SA", u"SU"};
-    return codes;
-}
+/// BYDAY codes of Monday … Sunday.
+constexpr std::array<QStringView, 7> WeekdayCodes = {u"MO", u"TU", u"WE", u"TH", u"FR", u"SA", u"SU"};
+/// Monday … Friday: "every weekday" (FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR).
+constexpr std::array<int, 5> Workdays = {1, 2, 3, 4, 5};
 
 /// Unfold on bytes: a line break followed by a space or tab continues the previous line.
 QByteArray unfold(QByteArrayView data)
@@ -89,9 +89,8 @@ std::optional<Property> parseLine(QStringView line)
 
 std::optional<int> weekdayFromCode(QStringView code)
 {
-    const auto &codes = weekdayCodes();
     for (int d = 0; d < 7; ++d) {
-        if (code.compare(codes[d], Qt::CaseInsensitive) == 0)
+        if (code.compare(WeekdayCodes[d], Qt::CaseInsensitive) == 0)
             return d + 1;
     }
     return std::nullopt;
@@ -157,60 +156,49 @@ QList<Component> parse(QByteArrayView data, QStringList *warnings)
 {
     QList<Component> roots;
     QList<Component> stack;
+    // Close the open components above `depth` (unterminated inner ones with them).
+    const auto closeTo = [&](qsizetype depth) {
+        while (stack.size() > depth) {
+            Component done = stack.takeLast();
+            if (stack.isEmpty())
+                roots.append(std::move(done));
+            else
+                stack.last().children.append(std::move(done));
+        }
+    };
     bool malformed = false;
     // UTF-8 as RFC 5545 requires; old exports in a Windows code page are read like other text.
     const QString text = detail::decodeText(unfold(data));
-    for (const QStringView rawLine : QStringView(text).split(u'\n')) {
-        const QStringView line = rawLine.trimmed().isEmpty() ? QStringView() : rawLine;
-        if (line.isEmpty())
+    for (const QStringView line : qTokenize(text, u'\n')) {
+        if (line.trimmed().isEmpty())
             continue;
-        const auto prop = parseLine(line);
+        auto prop = parseLine(line);
         if (!prop) {
             malformed = true;
-            continue;
-        }
-        if (prop->name == u"BEGIN") {
-            if (stack.size() >= MaxNesting) {
+        } else if (prop->name == u"BEGIN") {
+            if (stack.size() >= MaxNesting)
                 malformed = true;
-                continue;
-            }
-            stack.append(Component{prop->value.trimmed().toUpper(), {}, {}});
+            else
+                stack.append(Component{prop->value.trimmed().toUpper(), {}, {}});
         } else if (prop->name == u"END") {
+            // Close up to the matching component.
             const QString name = prop->value.trimmed().toUpper();
-            // Close up to the matching component (unterminated inner ones are closed too).
-            qsizetype match = -1;
-            for (qsizetype k = stack.size() - 1; k >= 0; --k) {
-                if (stack[k].name == name) {
-                    match = k;
-                    break;
-                }
-            }
-            if (match < 0) {
+            qsizetype match = stack.size() - 1;
+            while (match >= 0 && stack.at(match).name != name)
+                --match;
+            if (match < 0)
                 malformed = true;
-                continue;
-            }
-            while (stack.size() > match) {
-                Component done = stack.takeLast();
-                if (stack.isEmpty())
-                    roots.append(std::move(done));
-                else
-                    stack.last().children.append(std::move(done));
-            }
+            else
+                closeTo(match);
         } else if (!stack.isEmpty()) {
-            stack.last().properties.append(*prop);
+            stack.last().properties.append(std::move(*prop));
         } else {
             malformed = true;
         }
     }
     if (!stack.isEmpty())
         malformed = true;
-    while (!stack.isEmpty()) {
-        Component done = stack.takeLast();
-        if (stack.isEmpty())
-            roots.append(std::move(done));
-        else
-            stack.last().children.append(std::move(done));
-    }
+    closeTo(0);
     if (malformed && warnings)
         warnings->append(IoMessages::tr("The calendar contains malformed lines; they were ignored."));
     return roots;
@@ -289,9 +277,7 @@ QByteArray foldLine(const QString &line)
 
 std::optional<DateTimeValue> parseDateTime(const Property &property)
 {
-    QString v = property.value.trimmed();
-    v.remove(u'-');
-    v.remove(u':');
+    const QString v = property.value.trimmed().remove(u'-').remove(u':');
     static const QRegularExpression re(u"^(\\d{8})(?:T(\\d{2})(\\d{2})(\\d{2})?(?:\\.\\d+)?(Z)?)?$"_s,
                                        QRegularExpression::CaseInsensitiveOption);
     const auto m = re.match(v);
@@ -379,7 +365,7 @@ std::optional<qint64> parseDuration(QStringView value)
 std::optional<dates::RecurrenceRule> parseRRule(QStringView value, QStringList *dropped)
 {
     QHash<QString, QString> parts;
-    for (const QStringView part : value.trimmed().split(u';', Qt::SkipEmptyParts)) {
+    for (const QStringView part : qTokenize(value.trimmed(), u';', Qt::SkipEmptyParts)) {
         const qsizetype eq = part.indexOf(u'=');
         if (eq <= 0)
             return std::nullopt;
@@ -406,8 +392,9 @@ std::optional<dates::RecurrenceRule> parseRRule(QStringView value, QStringList *
         rule.interval = interval;
     }
     if (parts.contains(u"BYDAY"_s)) {
+        const QStringList codes = parts.take(u"BYDAY"_s).split(u',', Qt::SkipEmptyParts);
         QList<int> days;
-        for (const QString &code : parts.take(u"BYDAY"_s).split(u',', Qt::SkipEmptyParts)) {
+        for (const QString &code : codes) {
             const auto day = weekdayFromCode(code.trimmed());
             if (!day)
                 return std::nullopt; // "2TU", "-1FR": nth weekday of the month
@@ -415,14 +402,12 @@ std::optional<dates::RecurrenceRule> parseRRule(QStringView value, QStringList *
         }
         std::ranges::sort(days);
         days.erase(std::ranges::unique(days).begin(), days.end());
-        const QList<int> workdays = {1, 2, 3, 4, 5};
-        if (rule.freq == dates::RecurrenceRule::Freq::Week) {
+        if (rule.freq == dates::RecurrenceRule::Freq::Week)
             rule.weekdays = days;
-        } else if (rule.freq == dates::RecurrenceRule::Freq::Day && days == workdays) {
+        else if (rule.freq == dates::RecurrenceRule::Freq::Day && std::ranges::equal(days, Workdays))
             rule.weekdaysOnly = true;
-        } else {
+        else
             return std::nullopt;
-        }
     }
     if (parts.contains(u"BYMONTHDAY"_s)) {
         const QString day = parts.take(u"BYMONTHDAY"_s);
@@ -448,15 +433,14 @@ QString formatRRule(const dates::RecurrenceRule &input)
 {
     const dates::RecurrenceRule rule = dates::normalizeRule(input);
     QStringList parts;
-    const auto byDay = [](const QList<int> &days) -> QString {
+    const auto byDay = [](const auto &days) -> QString {
         QStringList codes;
         for (int d : days) {
             if (d >= 1 && d <= 7)
-                codes.append(weekdayCodes()[d - 1].toString());
+                codes.append(WeekdayCodes[d - 1].toString());
         }
         return u"BYDAY="_s + codes.join(u',');
     };
-    const QList<int> workdays = {1, 2, 3, 4, 5};
     switch (rule.freq) {
     case dates::RecurrenceRule::Freq::Day: parts.append(u"FREQ=DAILY"_s); break;
     case dates::RecurrenceRule::Freq::Week: parts.append(u"FREQ=WEEKLY"_s); break;
@@ -468,7 +452,7 @@ QString formatRRule(const dates::RecurrenceRule &input)
     if (rule.freq == dates::RecurrenceRule::Freq::Week && !rule.weekdays.isEmpty())
         parts.append(byDay(rule.weekdays));
     else if (rule.weekdaysOnly)
-        parts.append(byDay(workdays));
+        parts.append(byDay(Workdays));
     if (rule.freq == dates::RecurrenceRule::Freq::Month) {
         if (rule.lastDayOfMonth)
             parts.append(u"BYMONTHDAY=-1"_s);
@@ -507,18 +491,12 @@ void Writer::property(QStringView name, QStringView value, const QList<std::pair
 {
     QString line = name.toString();
     for (const auto &[key, rawValue] : params) {
-        QString v = rawValue;
-        v.remove(u'"');
-        v.remove(u'\r');
-        v.remove(u'\n');
+        const QString v = QString(rawValue).remove(u'"').remove(u'\r').remove(u'\n');
         const bool quote = v.contains(u':') || v.contains(u';') || v.contains(u',');
         line += u';' + key + u'=' + (quote ? u'"' + v + u'"' : v);
     }
-    line += u':';
     // A raw value must not break the line structure.
-    QString clean = value.toString();
-    clean.replace(u'\r', u' ').replace(u'\n', u' ');
-    line += clean;
+    line += u':' + value.toString().replace(u'\r', u' ').replace(u'\n', u' ');
     m_data += foldLine(line);
     m_data += "\r\n";
 }

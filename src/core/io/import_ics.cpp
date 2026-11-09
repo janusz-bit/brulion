@@ -11,6 +11,7 @@
 #include "util/paths.h"
 
 #include <QMap>
+#include <QStringTokenizer>
 
 #include <algorithm>
 
@@ -33,7 +34,7 @@ bool isCalendarFile(const InputFile &f)
 
 /// `base` moved by `d` in the wall-clock `zone`: days are nominal (the same wall-clock time on
 /// another day), seconds exact — RFC 5545 3.3.6. Never computed in the system zone.
-DateSpec shifted(const DateSpec &base, const ical::Duration &d, const QTimeZone &zone)
+DateSpec shifted(DateSpec base, ical::Duration d, const QTimeZone &zone)
 {
     const QDate day = base.date.addDays(d.days);
     if (!base.time && d.seconds == 0)
@@ -59,7 +60,7 @@ public:
     {
         // Only calendars: certain. A calendar among notes (an attachment of a vault or an
         // export) loses against the importers of the notes.
-        if (files.isEmpty() || !std::ranges::any_of(files, isCalendarFile))
+        if (!std::ranges::any_of(files, isCalendarFile))
             return 0;
         return std::ranges::all_of(files, isCalendarFile) ? 100 : 15;
     }
@@ -115,13 +116,12 @@ private:
                 tasks.append(taskText(c, st));
             }
         }
-        for (auto it = days.begin(); it != days.end(); ++it) {
-            auto &events = it.value();
-            std::ranges::stable_sort(events, [](const auto &a, const auto &b) { return a.first < b.first; });
-            QStringList texts;
+        for (auto [date, events] : days.asKeyValueRange()) {
+            std::ranges::stable_sort(events, {}, &std::pair<QString, QString>::first);
+            QString journal;
             for (const auto &e : std::as_const(events))
-                texts.append(e.second);
-            ctx.addJournal(it.key(), texts.join(u'\n') + u'\n');
+                journal += e.second + u'\n';
+            ctx.addJournal(date, journal);
         }
         if (!tasks.isEmpty())
             ctx.addPage(ctx.claimPage(pageSegment(calendarName)), tasks.join(u'\n') + u'\n');
@@ -167,6 +167,7 @@ private:
         return t;
     }
 
+    /// The 🔁 token of the RRULE after a space; "" without a (supported) one.
     static QString recurrence(const ical::Component &c, State &st)
     {
         const ical::Property *p = c.property(u"RRULE");
@@ -180,25 +181,24 @@ private:
         }
         if (!dropped.isEmpty())
             st.droppedRecurrence = true;
-        return markdown::tokens::Recurrence.toString() + u' '
+        return u' ' + markdown::tokens::Recurrence.toString() + u' '
                + dates::formatRecurrence(*rule, dates::UiLocale::English);
     }
 
-    /// ⏰ tokens of the VALARMs (relative triggers count from the start, or the end).
-    static QStringList alarms(const ical::Component &c, const Times &t, State &st)
+    /// The ⏰ tokens of the VALARMs, each after a space (relative triggers count from the start,
+    /// or the end).
+    static QString alarms(const ical::Component &c, const Times &t, const State &st)
     {
         QStringList out;
-        for (const ical::Component *a : c.childrenNamed(u"VALARM")) {
+        for (const auto valarms = c.childrenNamed(u"VALARM"); const ical::Component *a : valarms) {
             const ical::Property *trigger = a->property(u"TRIGGER");
             if (!trigger)
                 continue;
             std::optional<DateSpec> at;
             if (trigger->param(u"VALUE"_s).compare(u"DATE-TIME"_s, Qt::CaseInsensitive) == 0
                 || !trigger->value.trimmed().contains(u'P')) {
-                if (const auto v = ical::parseDateTime(*trigger)) {
-                    bool unknown = false;
-                    at = ical::toWallClock(*v, st.ctx.options().timeZone, &unknown);
-                }
+                if (const auto v = ical::parseDateTime(*trigger))
+                    at = ical::toWallClock(*v, st.ctx.options().timeZone);
             } else if (const auto duration = ical::parseDurationParts(trigger->value)) {
                 const bool fromEnd = trigger->param(u"RELATED"_s).compare(u"END"_s, Qt::CaseInsensitive) == 0;
                 const std::optional<DateSpec> &base = fromEnd && t.end ? t.end : t.start;
@@ -217,14 +217,14 @@ private:
             if (!out.contains(token))
                 out.append(token);
         }
-        return out;
+        return out.isEmpty() ? QString() : u' ' + out.join(u' ');
     }
 
     /// `lineStart`: the text begins the bullet's content, where block syntax ("- ", "# ", "1. ")
     /// would be read as a nested list / heading.
     static QString singleLine(const QString &text, bool lineStart = false)
     {
-        return escapeMarkdownText(QString(text).replace(u'\n', u' ').simplified(), lineStart);
+        return escapeMarkdownText(text.simplified(), lineStart);
     }
 
     /// Continuation lines: location / url properties and the description.
@@ -235,20 +235,21 @@ private:
             out.append(u"location:: "_s + location);
         if (const QString url = c.text(u"URL").trimmed(); !url.isEmpty())
             out.append(u"url:: "_s + url);
-        const QString description = normalizeNewlines(c.text(u"DESCRIPTION"));
-        if (!description.isEmpty()) {
-            for (const QString &line : description.split(u'\n'))
-                out.append(line.trimmed().isEmpty() ? QString() : escapeMarkdownText(line.trimmed(), true));
+        if (const QString description = normalizeNewlines(c.text(u"DESCRIPTION")); !description.isEmpty()) {
+            for (const QStringView line : qTokenize(description, u'\n'))
+                out.append(escapeMarkdownText(line.trimmed(), true));
         }
         return out;
     }
 
     /// The item: its first line and the detail lines below it. Dollars of the texts that would
-    /// pair into a formula across lines ("Bilet $10" / "parking 5$") are escaped.
+    /// pair into a formula across lines ("Bilet $10" / "parking 5$") are escaped. The importer
+    /// writes no formula: formula marks (htmlutil_p.h) in the calendar's texts are removed.
     static QString withDetails(QString first, const QStringList &detailLines)
     {
         for (const QString &line : detailLines)
             first += line.isEmpty() ? u"\n"_s : u"\n  "_s + line;
+        first.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
         return escapeTextFormulas(first);
     }
 
@@ -271,10 +272,8 @@ private:
             if (last > t.start->date)
                 line += u" (→ "_s + last.toString(u"yyyy-MM-dd"_s) + u')';
         }
-        if (const QString rule = recurrence(c, st); !rule.isEmpty())
-            line += u' ' + rule;
-        for (const QString &a : alarms(c, t, st))
-            line += u' ' + a;
+        line += recurrence(c, st);
+        line += alarms(c, t, st);
         return withDetails(line, details(c));
     }
 
@@ -289,9 +288,9 @@ private:
         if (summary.isEmpty())
             summary = IoMessages::tr("(no title)");
         QString line = u"- ["_s + box + u"] "_s + summary;
-        for (const QString &category : c.text(u"CATEGORIES").split(u',', Qt::SkipEmptyParts)) {
-            const QString tag = tagName(category);
-            if (!tag.isEmpty())
+        const QStringList categories = c.text(u"CATEGORIES").split(u',', Qt::SkipEmptyParts);
+        for (const QString &category : categories) {
+            if (const QString tag = tagName(category); !tag.isEmpty())
                 line += u" #"_s + tag;
         }
         const int priority = c.text(u"PRIORITY").trimmed().toInt();
@@ -301,22 +300,15 @@ private:
             line += u' ' + markdown::tokens::PriorityMedium.toString();
         else if (priority >= 6 && priority <= 9)
             line += u' ' + markdown::tokens::PriorityLow.toString();
-        Times t;
-        t.start = wallClock(c, u"DTSTART", st);
-        t.end = wallClock(c, u"DUE", st);
+        const Times t{.start = wallClock(c, u"DTSTART", st), .end = wallClock(c, u"DUE", st)};
         if (t.start)
             line += u' ' + markdown::tokens::Scheduled.toString() + u' ' + t.start->toString();
         if (t.end)
             line += u' ' + markdown::tokens::Due.toString() + u' ' + t.end->toString();
-        if (const QString rule = recurrence(c, st); !rule.isEmpty())
-            line += u' ' + rule;
-        if (box != u'x' && box != u'-') {
-            Times alarmBase = t;
-            if (!alarmBase.start)
-                alarmBase.start = t.end;
-            for (const QString &a : alarms(c, alarmBase, st))
-                line += u' ' + a;
-        }
+        line += recurrence(c, st);
+        // Alarms of open tasks; relative ones count from the start, else from the due date.
+        if (box != u'x' && box != u'-')
+            line += alarms(c, Times{.start = t.start ? t.start : t.end, .end = t.end}, st);
         if (box == u'x') {
             if (const auto completed = wallClock(c, u"COMPLETED", st))
                 line += u' ' + markdown::tokens::Done.toString() + u' ' + completed->date.toString(u"yyyy-MM-dd"_s);

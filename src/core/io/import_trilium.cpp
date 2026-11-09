@@ -65,7 +65,6 @@
 #include <QUrl>
 
 #include <algorithm>
-#include <functional>
 #include <limits>
 
 namespace brulion::io::detail {
@@ -385,7 +384,7 @@ QString urlDestination(const QString &url)
 /// "/" and "\" of a title are no folders, ".." goes nowhere.
 QString fileNameOf(const QString &name, const QString &mime, const QString &fallback)
 {
-    QString f = cleanTitle(QString(name).replace(u'/', u' ').replace(u'\\', u' ')).simplified();
+    QString f = cleanTitle(QString(name).replace(u'/', u' ').replace(u'\\', u' '));
     if (f.isEmpty())
         f = fallback;
     if (paths::extension(f).isEmpty())
@@ -405,6 +404,15 @@ QString compose(const QVariantMap &frontmatter, const QStringList &order, const 
     if (!kept.isEmpty())
         out += kept.join(u"\n\n"_s) + u'\n';
     return out;
+}
+
+/// `code` as a fenced code block of `language`; nothing when it is blank.
+QString fencedCode(const QString &code, const QString &language)
+{
+    if (code.trimmed().isEmpty())
+        return {};
+    const QString fence = codeFenceFor(code);
+    return fence + language + u'\n' + code + u'\n' + fence;
 }
 
 struct Attribute {
@@ -491,11 +499,10 @@ struct Ref {
 class TriliumImport {
 public:
     TriliumImport(const QList<InputFile> &files, const InputFile &meta, ImportContext &ctx)
-        : m_ctx(ctx), m_root(paths::dirname(meta.path))
+        : m_ctx(ctx), m_root(paths::dirname(meta.path)), m_metaData(meta.data)
     {
         for (const InputFile &f : files)
             m_files.insert(pathKey(f.path), &f);
-        m_metaData = meta.data;
         m_known.insert(pathKey(meta.path));
     }
 
@@ -508,7 +515,7 @@ public:
         markReferences();
         place();
         for (int i = 0; i < m_notes.size(); ++i) {
-            const Kind kind = m_notes[i].kind;
+            const Kind kind = m_notes.at(i).kind;
             if (kind == Kind::Page || kind == Kind::Journal)
                 render(i);
         }
@@ -545,7 +552,7 @@ private:
         const QJsonArray top = meta.value(u"files"_s).toArray();
         // "HTML for web publishing" (share theme): a static site, not notes to import.
         bool share = m_files.contains(pathKey(paths::join(m_root, u"search-index.json"_s)));
-        for (const QJsonValue &v : top) {
+        for (const auto &v : top) {
             const QJsonObject o = v.toObject();
             if (!o.value(u"noImport"_s).toBool())
                 continue;
@@ -571,12 +578,16 @@ private:
             int parent = -1;
             QString dir;
         };
+        // Depth-first in the meta's order: the notes of a list are pushed last to first.
         QList<Pending> stack;
-        for (qsizetype k = top.size() - 1; k >= 0; --k) {
-            const QJsonObject o = top[k].toObject();
-            if (!o.isEmpty() && !o.value(u"noImport"_s).toBool())
-                stack.append(Pending{o, -1, m_root});
-        }
+        const auto push = [&stack](const QJsonArray &notes, int parent, const QString &dir) {
+            for (qsizetype k = notes.size() - 1; k >= 0; --k) {
+                const QJsonObject o = notes[k].toObject();
+                if (!o.isEmpty() && !o.value(u"noImport"_s).toBool())
+                    stack.append(Pending{o, parent, dir});
+            }
+        };
+        push(top, -1, m_root);
         while (!stack.isEmpty()) {
             if (m_notes.size() >= MaxNotes) {
                 m_ctx.warn(IoMessages::tr("The Trilium export is too large; only a part of it was imported."));
@@ -601,7 +612,10 @@ private:
             n.dirSource = n.hasDir ? archivePath(p.dir, dir) : p.dir;
             n.protectedNote = n.dataSource.isEmpty() && n.title == u"[protected]";
             n.parent = p.parent;
-            for (const QJsonValue &v : o.value(u"attributes"_s).toArray()) {
+            // (Named const arrays: iterating a temporary one would copy it, it shares its data
+            // with `o`.)
+            const QJsonArray attributes = o.value(u"attributes"_s).toArray();
+            for (const auto &v : attributes) {
                 const QJsonObject a = v.toObject();
                 QString type = a.value(u"type"_s).toString();
                 QString name = a.value(u"name"_s).toString().trimmed();
@@ -616,7 +630,8 @@ private:
                 n.attributes.append(Attribute{type == u"relation", name,
                                               value.isString() ? value.toString() : value.toVariant().toString()});
             }
-            for (const QJsonValue &v : o.value(u"attachments"_s).toArray()) {
+            const QJsonArray attachments = o.value(u"attachments"_s).toArray();
+            for (const auto &v : attachments) {
                 const QJsonObject a = v.toObject();
                 Attachment att;
                 att.id = a.value(u"attachmentId"_s).toString().trimmed();
@@ -629,17 +644,12 @@ private:
             const int index = int(m_notes.size());
             if (p.parent >= 0)
                 m_notes[p.parent].children.append(index);
-            const QJsonArray children = o.value(u"children"_s).toArray();
-            for (qsizetype k = children.size() - 1; k >= 0; --k) {
-                const QJsonObject c = children[k].toObject();
-                if (!c.isEmpty() && !c.value(u"noImport"_s).toBool())
-                    stack.append(Pending{c, index, n.dirSource});
-            }
+            push(o.value(u"children"_s).toArray(), index, n.dirSource);
             m_notes.append(std::move(n));
         }
         // Lookups for references.
         for (int i = 0; i < m_notes.size(); ++i) {
-            const Note &n = m_notes[i];
+            const Note &n = m_notes.at(i);
             m_known.insert(pathKey(n.dataSource));
             for (const Attachment &a : n.attachments)
                 m_known.insert(pathKey(a.source));
@@ -652,9 +662,9 @@ private:
             for (int k = 0; k < n.attachments.size(); ++k) {
                 const Attachment &a = n.attachments[k];
                 if (!a.source.isEmpty())
-                    m_byAttachmentPath.insert(pathKey(a.source), {i, k});
+                    m_byAttachmentPath.insert(pathKey(a.source), Ref{.note = i, .attachment = k});
                 if (!a.id.isEmpty())
-                    m_byAttachmentId.insert(a.id, {i, k});
+                    m_byAttachmentId.insert(a.id, Ref{.note = i, .attachment = k});
             }
         }
         return true;
@@ -780,14 +790,10 @@ private:
     Ref byNoteId(const QString &id) const
     {
         const int i = m_byId.value(id, -1);
-        return i < 0 ? Ref{-1, -1, true} : Ref{i, -1, false};
+        return i < 0 ? Ref{.missing = true} : Ref{.note = i};
     }
 
-    Ref byAttachmentId(const QString &id) const
-    {
-        const auto it = m_byAttachmentId.constFind(id);
-        return it == m_byAttachmentId.constEnd() ? Ref{-1, -1, true} : Ref{it->first, it->second, false};
-    }
+    Ref byAttachmentId(const QString &id) const { return m_byAttachmentId.value(id, Ref{.missing = true}); }
 
     /// Trilium's note path "root/…/<noteId>?viewMode=attachments&attachmentId=…".
     Ref byNotePath(const QString &path) const
@@ -802,7 +808,7 @@ private:
         if (const qsizetype hash = notePath.indexOf(u'#'); hash >= 0)
             notePath.truncate(hash);
         const QStringList ids = notePath.split(u'/', Qt::SkipEmptyParts);
-        return ids.isEmpty() ? Ref{-1, -1, true} : byNoteId(ids.last());
+        return ids.isEmpty() ? Ref{.missing = true} : byNoteId(ids.last());
     }
 
     /// What `href` (an `href`/`src` as written in a note whose file is in `sourceDir`) refers
@@ -828,20 +834,20 @@ private:
             // A link to a note without a file and folder (a protected note): "Folder/" or, in
             // old exports, "Folder/undefined".
             if (c.endsWith(u'/') || c == u"undefined" || c.endsWith(u"/undefined"_s))
-                return Ref{-1, -1, true};
+                return Ref{.missing = true};
             const QString key = pathKey(archivePath(sourceDir, c));
             if (const auto it = m_byData.constFind(key); it != m_byData.constEnd())
-                return Ref{*it, -1, false};
+                return Ref{.note = *it};
             if (const auto it = m_byAttachmentPath.constFind(key); it != m_byAttachmentPath.constEnd())
-                return Ref{it->first, it->second, false};
+                return *it;
             if (const auto it = m_byDir.constFind(key); it != m_byDir.constEnd())
-                return Ref{*it, -1, false};
+                return Ref{.note = *it};
         }
         // References the export did not rewrite (the server's API paths).
         static const QRegularExpression api(u"(?:^|/)api/(images|attachments|notes)/([A-Za-z0-9_]+)"_s);
         if (const auto m = api.match(decoded); m.hasMatch())
             return m.captured(1) == u"attachments" ? byAttachmentId(m.captured(2)) : byNoteId(m.captured(2));
-        return Ref{-1, -1, true};
+        return Ref{.missing = true};
     }
 
     /// Mark what the notes refer to before names are given: notes without content that are
@@ -852,17 +858,16 @@ private:
                                                 QRegularExpression::CaseInsensitiveOption);
         // `](dest)`; old exports wrote attachment names with spaces raw, so up to the ")".
         static const QRegularExpression markdownRef(u"\\]\\(\\s*(?:<([^>\\n]*)>|([^)\\n]+?))\\s*\\)"_s);
-        const auto mark = [&](const Ref &ref) {
+        const auto mark = [this](Ref ref) {
             if (ref.missing || ref.note < 0)
                 return;
-            if (ref.attachment >= 0) {
+            if (ref.attachment >= 0)
                 m_notes[ref.note].attachments[ref.attachment].referenced = true;
-                return;
-            }
-            needPage(effective(ref.note));
+            else
+                needPage(effective(ref.note));
         };
         for (int i = 0; i < m_notes.size(); ++i) {
-            const Note &n = m_notes[i];
+            const Note &n = m_notes.at(i);
             if (n.clone)
                 continue;
             for (const Attribute &a : n.attributes) {
@@ -933,21 +938,15 @@ private:
         return n.prefix.isEmpty() ? title : n.prefix + u" - "_s + title;
     }
 
-    /// The first number to try for the next sibling named `baseKey` in the folder `folderKey`
-    /// ("Untitled 2", "Untitled 3" …): thousands of same-titled siblings stay linear.
-    int &nextSuffix(const QString &folderKey, const QString &baseKey)
-    {
-        return m_nextSuffix[folderKey + u'\n' + baseKey];
-    }
-
     /// `base`, or "base 2", "base 3" … — unique in `folder`, case-insensitively, and no name the
-    /// vault ignores ("logseq", "node_modules": everything in them would be skipped).
+    /// vault ignores ("logseq", "node_modules": everything in them would be skipped). The search
+    /// resumes after the suffix claimed last time: thousands of same-titled siblings stay linear.
     QString claimName(const QString &folder, const QString &base)
     {
         const QString folderKey = pathKey(folder);
         const QString baseKey = pathKey(base);
         QSet<QString> &used = m_usedNames[folderKey];
-        int &next = nextSuffix(folderKey, baseKey);
+        int &next = m_nextSuffix[folderKey + u'\n' + baseKey];
         for (int k = std::max(next, 1);; ++k) {
             const QString name = k == 1 ? base : base + u' ' + QString::number(k);
             const QString key = k == 1 ? baseKey : baseKey + u' ' + QString::number(k);
@@ -959,25 +958,13 @@ private:
         }
     }
 
-    /// A page `base` (or "base 2" …) in `folder`: free among its siblings (pages and folders,
-    /// case-insensitively) and in the vault, never a name the vault ignores (its folder would be).
+    /// A page `base` (or "base 2" …) in `folder`: claimName() (its folder is named like it), and
+    /// free in the vault too; the title it gets there is taken among its siblings as well.
     VaultPath claimPageName(const QString &folder, const QString &base)
     {
-        const QString folderKey = pathKey(folder);
-        const QString baseKey = pathKey(base);
-        QSet<QString> &used = m_usedNames[folderKey];
-        int &next = nextSuffix(folderKey, baseKey);
-        for (int k = std::max(next, 1);; ++k) {
-            const QString candidate = k == 1 ? base : base + u' ' + QString::number(k);
-            const QString key = k == 1 ? baseKey : baseKey + u' ' + QString::number(k);
-            if (used.contains(key) || paths::isIgnored(candidate))
-                continue;
-            next = k + 1;
-            const VaultPath page = m_ctx.claimPage(paths::join(folder, candidate));
-            used.insert(key);
-            used.insert(pathKey(paths::pageTitle(page)));
-            return page;
-        }
+        const VaultPath page = m_ctx.claimPage(paths::join(folder, claimName(folder, base)));
+        m_usedNames[pathKey(folder)].insert(pathKey(paths::pageTitle(page)));
+        return page;
     }
 
     /// The folder for the children of a note named `name` in `parentFolder`, or `parentFolder`
@@ -1001,7 +988,7 @@ private:
         }
         for (int i = 0; i < m_notes.size(); ++i) {
             Note &n = m_notes[i];
-            const QString parentFolder = n.parent < 0 ? QString() : m_notes[n.parent].childFolder;
+            const QString parentFolder = n.parent < 0 ? QString() : m_notes.at(n.parent).childFolder;
             n.folder = parentFolder;
             n.childFolder = parentFolder;
             if (n.transparent || n.clone)
@@ -1018,9 +1005,8 @@ private:
                 n.name = pageSegment(displayName(n)); // only names the folder of its attachments
             }
             if (n.kind == Kind::Asset) {
-                const QString fileName =
-                        fileNameOf(n.label(u"originalFileName").isEmpty() ? n.title : n.label(u"originalFileName"),
-                                   n.mime, u"file"_s);
+                const QString original = n.label(u"originalFileName");
+                const QString fileName = fileNameOf(original.isEmpty() ? n.title : original, n.mime, u"file"_s);
                 if (const InputFile *f = file(n.dataSource))
                     n.asset = m_ctx.addAttachment(paths::join(parentFolder, fileName), f->data);
                 else
@@ -1076,7 +1062,7 @@ private:
     /// however often an export names one large file. nullopt: no JSON object with an `elements`
     /// array (a damaged or protected note), more than a scene may hold (drawing::MaxSceneBytes,
     /// MaxSceneContainers) or no Excalidraw scene.
-    std::optional<CanvasScene> canvasScene(int i, bool foldPictures)
+    std::optional<CanvasScene> canvasScene(int i, bool foldPictures) const
     {
         const Note &n = m_notes[i];
         const InputFile *f = file(n.dataSource);
@@ -1112,7 +1098,8 @@ private:
             for (auto it = object.constBegin(); it != object.constEnd(); ++it)
                 files.insert(files.cend(), it.key(), it.value());
         } else {
-            for (const QJsonValue &v : given.toArray()) {
+            const QJsonArray list = given.toArray();
+            for (const auto &v : list) {
                 const QJsonObject entry = v.toObject();
                 const QString id = entry.value(u"id"_s).toString();
                 if (!id.isEmpty() && !files.contains(id))
@@ -1121,7 +1108,8 @@ private:
         }
         if (foldPictures) {
             QSet<QString> used;
-            for (const QJsonValue &v : scene.value(u"elements"_s).toArray()) {
+            const QJsonArray elements = scene.value(u"elements"_s).toArray();
+            for (const auto &v : elements) {
                 const QJsonObject e = v.toObject();
                 if (e.value(u"type"_s).toString() == u"image" && !e.value(u"isDeleted"_s).toBool())
                     used.insert(e.value(u"fileId"_s).toString());
@@ -1228,15 +1216,11 @@ private:
         // pictures pasted into the canvas) keeps its pictures as files next to it.
         std::optional<Made> made = make(true);
         if (made && !drawing::readDrawing(made->file)) {
-            const bool foldedAny = !made->folded.isEmpty();
-            made.reset();
-            if (foldedAny) {
-                made = make(false);
-                if (made && !drawing::readDrawing(made->file))
-                    made.reset();
-                if (made)
-                    made->picturesTooLarge = true;
-            }
+            made = made->folded.isEmpty() ? std::nullopt : make(false);
+            if (made && !drawing::readDrawing(made->file))
+                made.reset();
+            if (made)
+                made->picturesTooLarge = true;
         }
         if (!made)
             return;
@@ -1249,18 +1233,16 @@ private:
         n.drawingRenderable = made->renderable;
         for (int k = 0; k < n.attachments.size(); ++k) {
             Attachment &a = n.attachments[k];
-            if (isExportImage(n.type, a.title)) {
-                // References to Trilium's picture (an image of the note, an include box) show
-                // the drawing.
-                a.inDrawing = true;
-                a.path = n.drawing;
-                a.renderable = n.drawingRenderable;
-            } else if (made->folded.contains(k) && !a.referenced) {
-                a.inDrawing = true;
-                a.path = n.drawing;
-                a.renderable = n.drawingRenderable;
+            // References to Trilium's picture (an image of the note, an include box) and to the
+            // pictures folded into the scene show the drawing.
+            const bool exportImage = isExportImage(n.type, a.title);
+            if (!exportImage && (a.referenced || !made->folded.contains(k)))
+                continue;
+            a.inDrawing = true;
+            a.path = n.drawing;
+            a.renderable = n.drawingRenderable;
+            if (!exportImage)
                 a.referenced = true; // not listed under the drawing
-            }
         }
     }
 
@@ -1335,27 +1317,19 @@ private:
         }
     }
 
-    std::optional<QString> linkMarkdown(const Ref &ref, const QString &labelMarkdown, bool reference)
+    QString linkMarkdown(Ref ref, const QString &labelMarkdown, bool reference)
     {
-        if (ref.missing || ref.note < 0) {
-            m_missingLinks = true;
-            return labelMarkdown;
+        if (!ref.missing && ref.note >= 0 && ref.attachment >= 0) {
+            const Attachment &a = m_notes.at(ref.note).attachments.at(ref.attachment);
+            return a.path.isEmpty() ? labelMarkdown : fileLink(a.path, plainLabel(labelMarkdown));
         }
-        const QString plain = plainLabel(labelMarkdown);
-        if (ref.attachment >= 0) {
-            const Attachment &a = m_notes[ref.note].attachments[ref.attachment];
-            if (a.path.isEmpty())
-                return labelMarkdown;
-            return fileLink(a.path, plain);
-        }
-        const int t = effective(ref.note);
+        const int t = ref.missing ? -1 : effective(ref.note);
         if (t < 0) {
             m_missingLinks = true;
             return labelMarkdown;
         }
-        const Note &n = m_notes[t];
         // A reference link shows the target's title (its text is only a snapshot).
-        const QString link = linkToNote(t, reference ? n.title : plain);
+        const QString link = linkToNote(t, reference ? m_notes.at(t).title : plainLabel(labelMarkdown));
         return link.isEmpty() ? labelMarkdown : link;
     }
 
@@ -1396,7 +1370,7 @@ private:
             if (!decoded)
                 return altText;
             const QString ext = extensionForMime(decoded->first);
-            const Note &n = m_notes[owner];
+            const Note &n = m_notes.at(owner);
             const QString name =
                     u"image-"_s + QString::number(++m_dataImages[owner]) + (ext.isEmpty() ? u".bin"_s : ext);
             return attachmentLink(
@@ -1414,7 +1388,7 @@ private:
             return altText;
         }
         if (ref->attachment >= 0) {
-            const Attachment &a = m_notes[ref->note].attachments[ref->attachment];
+            const Attachment &a = m_notes.at(ref->note).attachments.at(ref->attachment);
             if (a.path.isEmpty())
                 return altText;
             if (!a.renderable) // a diagram Brulion cannot draw: its page (with the source)
@@ -1432,10 +1406,9 @@ private:
         trilium::Resolver r;
         r.link = [this, sourceDir](const QString &href, const QString &label,
                                    bool reference) -> std::optional<QString> {
-            const auto ref = resolve(href, sourceDir);
-            if (!ref)
-                return std::nullopt;
-            return linkMarkdown(*ref, label, reference);
+            if (const std::optional<Ref> ref = resolve(href, sourceDir))
+                return linkMarkdown(*ref, label, reference);
+            return std::nullopt;
         };
         r.image = [this, owner, sourceDir](const QString &src, const QString &alt) {
             return imageMarkdown(owner, sourceDir, src, alt);
@@ -1455,7 +1428,7 @@ private:
     /// The file of note `i`, or nullptr (reported as missing when the meta names one).
     const InputFile *dataFile(int i)
     {
-        const Note &n = m_notes[i];
+        const Note &n = m_notes.at(i);
         const InputFile *f = file(n.dataSource);
         if (!f && !n.dataSource.isEmpty())
             m_missingFiles = true;
@@ -1465,7 +1438,7 @@ private:
     /// A note too large to convert, kept as a file of its own and linked.
     QString keptAsFile(int i, const InputFile &f, const QString &extension)
     {
-        const Note &n = m_notes[i];
+        const Note &n = m_notes.at(i);
         m_ctx.warn(IoMessages::tr("“%1” is too large to convert; it was saved as an attachment.").arg(displayName(n)));
         const VaultPath path = m_ctx.addAttachment(paths::join(n.folder, n.name + extension), f.data);
         return attachmentLink(path, paths::basename(path));
@@ -1473,7 +1446,7 @@ private:
 
     QString textContent(int i)
     {
-        const Note &n = m_notes[i];
+        const Note &n = m_notes.at(i);
         const InputFile *f = dataFile(i);
         if (!f)
             return {};
@@ -1489,7 +1462,7 @@ private:
 
     QString codeContent(int i)
     {
-        const Note &n = m_notes[i];
+        const Note &n = m_notes.at(i);
         const InputFile *f = dataFile(i);
         if (!f)
             return {};
@@ -1498,16 +1471,12 @@ private:
             const QString ext = paths::extension(n.dataSource);
             return keptAsFile(i, *f, ext.isEmpty() || ext == u".dat" ? u".txt"_s : ext);
         }
-        QString code = utf8Text(f->data);
-        code.replace(u"\r\n"_s, u"\n"_s);
+        QString code = utf8Text(f->data).replace(u"\r\n"_s, u"\n"_s);
         if (code.endsWith(u'\n'))
             code.chop(1);
         if (language == u"markdown")
             return trilium::markdownNoteToMarkdown(code, {}, resolver(i, paths::dirname(n.dataSource)));
-        if (code.trimmed().isEmpty())
-            return {};
-        const QString fence = codeFenceFor(code);
-        return fence + language + u'\n' + code + u'\n' + fence;
+        return fencedCode(code, language);
     }
 
     /// The rendered image of a diagram note (mermaid, canvas …), as an embed.
@@ -1531,7 +1500,7 @@ private:
     /// The source of a drawing kept as an attachment ("Szkic.excalidraw"), as a link.
     QString sourceFile(int i, const QString &extension)
     {
-        const Note &n = m_notes[i];
+        const Note &n = m_notes.at(i);
         const InputFile *f = dataFile(i);
         if (!f || f->data.trimmed().isEmpty())
             return {};
@@ -1539,34 +1508,42 @@ private:
         return attachmentLink(path, paths::basename(path));
     }
 
-    QString mindMapList(int i)
+    /// The content of note `i` as a JSON object (empty when it is none).
+    QJsonObject jsonContent(int i)
     {
         const InputFile *f = dataFile(i);
         if (!f)
             return {};
-        const QJsonObject root = QJsonDocument::fromJson(f->data).object().value(u"nodeData"_s).toObject();
+        const QJsonDocument doc = QJsonDocument::fromJson(f->data);
+        return doc.isObject() ? doc.object() : QJsonObject();
+    }
+
+    /// A mind map's topics as a nested list; a node without a topic adds no level.
+    QString mindMapList(int i)
+    {
         QStringList lines;
-        std::function<void(const QJsonObject &, int)> walk = [&](const QJsonObject &node, int depth) {
+        // Depth-first without recursion: the children are pushed last to first.
+        QList<std::pair<QJsonObject, int>> stack = {{jsonContent(i).value(u"nodeData"_s).toObject(), 0}};
+        while (!stack.isEmpty()) {
+            const auto [node, depth] = stack.takeLast();
             if (depth > MaxMindMapDepth)
-                return;
+                continue;
             const QString topic = cleanTitle(node.value(u"topic"_s).toString());
             if (!topic.isEmpty())
                 lines.append(QString(depth, u'\t') + u"- "_s + escapeMarkdownText(topic, false));
-            for (const QJsonValue &c : node.value(u"children"_s).toArray())
-                walk(c.toObject(), topic.isEmpty() ? depth : depth + 1);
-        };
-        walk(root, 0);
+            const QJsonArray children = node.value(u"children"_s).toArray();
+            for (qsizetype k = children.size() - 1; k >= 0; --k)
+                stack.emplaceBack(children[k].toObject(), topic.isEmpty() ? depth : depth + 1);
+        }
         return lines.join(u'\n');
     }
 
     QString relationMapList(int i)
     {
-        const InputFile *f = dataFile(i);
-        if (!f)
-            return {};
         QStringList lines;
         QSet<int> seen;
-        for (const QJsonValue &v : QJsonDocument::fromJson(f->data).object().value(u"notes"_s).toArray()) {
+        const QJsonArray notes = jsonContent(i).value(u"notes"_s).toArray();
+        for (const auto &v : notes) {
             const Ref ref = byNoteId(v.toObject().value(u"noteId"_s).toString());
             const int t = effective(ref.note);
             if (ref.missing || t < 0 || seen.contains(t))
@@ -1618,16 +1595,17 @@ private:
     /// Does day note `n` make a daily note (render() skips an empty one)?
     bool writesJournal(const Note &n) const
     {
-        return hasContent(n) || !n.children.isEmpty() || !n.dayTitle.isEmpty() || hasUserAttributes(n)
-               || std::any_of(n.attachments.cbegin(), n.attachments.cend(),
-                              [](const Attachment &a) { return !a.path.isEmpty(); });
+        // (The content last: reading it is the expensive check.)
+        return !n.children.isEmpty() || !n.dayTitle.isEmpty() || hasUserAttributes(n)
+               || std::ranges::any_of(n.attachments, [](const Attachment &a) { return !a.path.isEmpty(); })
+               || hasContent(n);
     }
 
     std::pair<QVariantMap, QStringList> frontmatter(int i) const
     {
         const Note &n = m_notes[i];
         // Values are collected per key and the map built once: thousands of labels stay linear.
-        QStringList order;
+        QStringList order = {u"aliases"_s, u"tags"_s};
         QHash<QString, QStringList> values;
         QStringList aliases;
         QStringList tags;
@@ -1636,8 +1614,8 @@ private:
             aliases.append(n.title);
         const auto addTag = [&](const QString &text) {
             const QString tag = tagName(text);
-            if (!tag.isEmpty() && !tagKeys.contains(tag.toCaseFolded())) {
-                tagKeys.insert(tag.toCaseFolded());
+            if (const QString key = tag.toCaseFolded(); !tag.isEmpty() && !tagKeys.contains(key)) {
+                tagKeys.insert(key);
                 tags.append(tag);
             }
         };
@@ -1665,8 +1643,7 @@ private:
             if (a.relation) {
                 if (isSystemRelation(a.name))
                     continue;
-                const QString link = relationLink(byNoteId(a.value.trimmed()));
-                if (!link.isEmpty())
+                if (const QString link = relationLink(byNoteId(a.value.trimmed())); !link.isEmpty())
                     add(a.name, link);
                 continue;
             }
@@ -1687,8 +1664,8 @@ private:
                 add(a.name, a.value);
         }
         QVariantMap fm;
-        for (auto it = values.cbegin(); it != values.cend(); ++it)
-            fm.insert(it.key(), it->size() == 1 ? QVariant(it->first()) : QVariant(*it));
+        for (const auto &[key, list] : std::as_const(values).asKeyValueRange())
+            fm.insert(key, list.size() == 1 ? QVariant(list.first()) : QVariant(list));
         // A template's attribute definitions: the properties a note made from it gets (empty).
         for (const QString &key : std::as_const(definitions)) {
             if (!key.isEmpty() && !key.contains(u':') && !fm.contains(key)) {
@@ -1700,29 +1677,19 @@ private:
             fm.insert(u"aliases"_s, aliases);
         if (!tags.isEmpty())
             fm.insert(u"tags"_s, tags);
-        order.prepend(u"tags"_s);
-        order.prepend(u"aliases"_s);
         return {fm, order};
     }
 
     /// A relation's value: a link to the target note, empty when it was not imported.
-    QString relationLink(const Ref &ref) const
+    QString relationLink(Ref ref) const
     {
         const int t = ref.missing ? -1 : effective(ref.note);
-        if (t < 0)
-            return {};
-        const Note &n = m_notes[t];
-        switch (n.kind) {
-        case Kind::Page: return pageLink(n, n.title);
-        case Kind::Journal: return journalLink(n.date);
-        case Kind::Asset: return n.asset.isEmpty() ? QString() : fileLink(n.asset, n.title);
-        default: return {};
-        }
+        return t < 0 ? QString() : linkToNote(t, m_notes[t].title);
     }
 
     void render(int i)
     {
-        const Note &n = m_notes[i];
+        const Note &n = m_notes.at(i);
         const QString &type = n.type;
         QStringList parts;
         if (n.kind == Kind::Journal && !n.dayTitle.isEmpty())
@@ -1735,30 +1702,19 @@ private:
                 QString code = utf8Text(f->data).replace(u"\r\n"_s, u"\n"_s);
                 while (code.endsWith(u'\n'))
                     code.chop(1);
-                if (!code.trimmed().isEmpty()) {
-                    const QString fence = codeFenceFor(code);
-                    parts.append(fence + u"mermaid\n"_s + code + u'\n' + fence);
-                }
+                parts.append(fencedCode(code, u"mermaid"_s));
             }
             parts.append(exportImageLink(n));
-        } else if (type == u"canvas") {
-            if (!n.drawing.isEmpty()) {
-                parts.append(n.drawingRenderable ? attachmentLink(n.drawing)
-                                                 : fileLink(n.drawing, paths::basename(n.drawing)));
-            } else {
-                parts.append(exportImage(n));
-                parts.append(exportImageLink(n));
-                parts.append(sourceFile(i, u".excalidraw"_s));
-            }
-        } else if (type == u"mindMap") {
+        } else if (type == u"canvas" && !n.drawing.isEmpty()) {
+            parts.append(n.drawingRenderable ? attachmentLink(n.drawing)
+                                             : fileLink(n.drawing, paths::basename(n.drawing)));
+        } else if (type == u"canvas" || type == u"mindMap" || type == u"spreadsheet") {
+            // The rendered image and the source as an attachment (a mind map also as a list).
             parts.append(exportImage(n));
-            parts.append(mindMapList(i));
+            if (type == u"mindMap")
+                parts.append(mindMapList(i));
             parts.append(exportImageLink(n));
-            parts.append(sourceFile(i, u".json"_s));
-        } else if (type == u"spreadsheet") {
-            parts.append(exportImage(n));
-            parts.append(exportImageLink(n));
-            parts.append(sourceFile(i, u".json"_s));
+            parts.append(sourceFile(i, type == u"canvas" ? u".excalidraw"_s : u".json"_s));
         } else if (type == u"relationMap" || type == u"relation-map") {
             parts.append(relationMapList(i));
         } else if (type == u"webView" || type == u"web-view") {
@@ -1777,18 +1733,16 @@ private:
         // with them).
         const bool all = n.listChildren || n.kind == Kind::Journal || !n.hasLabel(u"hideChildrenOverview");
         if (const QString children = childList(i, all); !children.isEmpty()) {
-            if (std::any_of(parts.cbegin(), parts.cend(), [](const QString &p) { return !p.trimmed().isEmpty(); }))
+            if (std::ranges::any_of(std::as_const(parts), [](const QString &p) { return !p.trimmed().isEmpty(); }))
                 parts.append(u"---"_s);
             parts.append(children);
         }
         const auto [fm, order] = frontmatter(i);
         const QString content = compose(fm, order, parts);
-        if (n.kind == Kind::Journal) {
-            if (!content.trimmed().isEmpty())
-                m_ctx.addJournal(n.date, content);
-            return;
-        }
-        m_ctx.addPage(n.page, content);
+        if (n.kind != Kind::Journal)
+            m_ctx.addPage(n.page, content);
+        else if (!content.trimmed().isEmpty())
+            m_ctx.addJournal(n.date, content);
     }
 
     // --- report -----------------------------------------------------------------------------------
@@ -1808,11 +1762,8 @@ private:
     {
         // Files the meta does not know: another export picked together with this one (they
         // all unpack next to each other), or files added by hand.
-        int unknown = 0;
-        for (auto it = m_files.cbegin(); it != m_files.cend(); ++it) {
-            if (!m_known.contains(it.key()))
-                ++unknown;
-        }
+        const int unknown = int(std::count_if(m_files.keyBegin(), m_files.keyEnd(),
+                                              [this](const QString &key) { return !m_known.contains(key); }));
         if (unknown > 0)
             m_ctx.warn(IoMessages::tr("%n file(s) of the selection are not part of the Trilium export and were not "
                                       "imported. Import each Trilium export on its own.",
@@ -1848,8 +1799,8 @@ private:
     QHash<QString, int> m_byId;
     QHash<QString, int> m_byData;
     QHash<QString, int> m_byDir;
-    QHash<QString, std::pair<int, int>> m_byAttachmentPath;
-    QHash<QString, std::pair<int, int>> m_byAttachmentId;
+    QHash<QString, Ref> m_byAttachmentPath;
+    QHash<QString, Ref> m_byAttachmentId;
     QHash<QString, QSet<QString>> m_usedNames;
     QHash<QString, int> m_nextSuffix; ///< folder key + "\n" + name key -> next suffix to try
     QSet<QString> m_pageTitles;       ///< title keys of the imported pages

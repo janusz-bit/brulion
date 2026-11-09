@@ -25,7 +25,6 @@ Item {
         return Workspace.journalDates(date, date)
     }
     readonly property bool found: root.journalPath !== ""
-    readonly property list<var> shownEntries: root.found ? root.entries : []
     readonly property list<var> entries: !root.found || !Js.hasKey(preview.preview, "blocks") ? []
         : UiModels.withDefaults(UiModels.field(preview.preview, "blocks"), { kind: "", depth: 0, html: "", task: "" })
 
@@ -85,7 +84,7 @@ Item {
             wrapMode: Text.Wrap
         }
         Repeater {
-            model: root.shownEntries
+            model: root.entries
             delegate: BRichText {
                 id: entry
                 required property int index
@@ -93,7 +92,6 @@ Item {
                 visible: entry.index < root.limit && AppController.routeText(entry.modelData, "kind") !== "header"
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.space2 + AppController.routeInt(entry.modelData, "depth", 0) * Theme.space3
-                Layout.preferredHeight: visible ? implicitHeight : 0
                 html: AppController.routeText(entry.modelData, "html")
                 font.family: Theme.fontEditor
                 font.pixelSize: Theme.textSm

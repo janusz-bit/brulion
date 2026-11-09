@@ -10,6 +10,8 @@
 
 #include <QRegularExpression>
 
+#include <algorithm>
+
 namespace brulion::io::detail {
 
 using namespace Qt::StringLiterals;
@@ -22,40 +24,34 @@ const QRegularExpression &idSuffix()
     return re;
 }
 
-/// A path segment without Notion's id: "Plan 0123…cdef.md" -> "Plan.md", "DB 0123…_all.csv" ->
-/// "DB.csv". `id` receives the id (lower case).
-QString stripSegment(const QString &segment, QString *id = nullptr)
+/// A path segment without Notion's id, and the id (lower case; empty when there is none):
+/// "Plan 0123…cdef.md" -> "Plan.md", "DB 0123…_all.csv" -> "DB.csv".
+struct Segment {
+    QString name;
+    QString id;
+};
+
+Segment splitSegment(const QString &segment)
 {
-    QString stem = segment;
-    QString ext;
     const qsizetype dot = segment.lastIndexOf(u'.');
-    if (dot > 0 && segment.size() - dot <= 10) {
-        stem = segment.first(dot);
-        ext = segment.sliced(dot);
-    }
-    const auto m = idSuffix().match(stem);
+    const bool hasExtension = dot > 0 && segment.size() - dot <= 10;
+    const auto m = idSuffix().match(hasExtension ? segment.first(dot) : segment);
     if (!m.hasMatch() || m.capturedLength(1) == 0)
-        return segment;
-    if (id)
-        *id = m.captured(2).toLower();
-    return m.captured(1) + ext;
+        return {segment, {}};
+    return {m.captured(1) + (hasExtension ? segment.sliced(dot) : QString()), m.captured(2).toLower()};
 }
 
 QString stripPath(const QString &path)
 {
     QStringList segments = path.split(u'/');
     for (QString &s : segments)
-        s = stripSegment(s);
+        s = splitSegment(s).name;
     return segments.join(u'/');
 }
 
 bool hasNotionId(const QString &path)
 {
-    for (const QString &segment : path.split(u'/')) {
-        if (stripSegment(segment) != segment)
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(path.split(u'/'), [](const QString &s) { return !splitSegment(s).id.isEmpty(); });
 }
 
 /// Leading "# Title" line removed when it repeats the page title.
@@ -79,12 +75,10 @@ QString withoutTitleHeading(const QString &content, const QString &title)
 QVariantMap takeRowProperties(QString &body)
 {
     static const QRegularExpression prop(u"^([^:#>!\\[|*\\-\\s][^:\\n]{0,79}?):\\s+(.*)$"_s);
-    QStringList lines = normalizeNewlines(body).split(u'\n');
-    qsizetype i = 0;
-    while (i < lines.size() && lines[i].trimmed().isEmpty())
-        ++i;
-    QVariantMap fm;
-    qsizetype k = i;
+    const QStringList lines = normalizeNewlines(body).split(u'\n');
+    qsizetype k = 0;
+    while (k < lines.size() && lines[k].trimmed().isEmpty())
+        ++k;
     QList<std::pair<QString, QString>> found;
     for (; k < lines.size() && !lines[k].trimmed().isEmpty(); ++k) {
         const auto m = prop.match(lines[k]);
@@ -94,6 +88,7 @@ QVariantMap takeRowProperties(QString &body)
     }
     if (found.isEmpty())
         return {};
+    QVariantMap fm;
     for (const auto &[key, value] : std::as_const(found)) {
         const QString lower = key.toLower();
         if (lower == u"tags" || lower == u"tagi" || lower == u"labels" || lower == u"etykiety") {
@@ -109,15 +104,13 @@ QVariantMap takeRowProperties(QString &body)
             fm.insert(key, value);
         }
     }
-    lines = lines.mid(k);
-    body = lines.join(u'\n');
+    body = lines.mid(k).join(u'\n');
     return fm;
 }
 
 QString tableCell(QString text)
 {
-    text.replace(u"\r\n"_s, u" "_s).replace(u'\n', u' ').replace(u'\r', u' ');
-    text.replace(u'|', u"\\|"_s);
+    text.replace(u"\r\n"_s, u" "_s).replace(u'\n', u' ').replace(u'\r', u' ').replace(u'|', u"\\|"_s);
     return text.trimmed();
 }
 
@@ -136,13 +129,11 @@ public:
 
     int detect(const QList<InputFile> &files) const override
     {
-        return anyPath(files,
-                       [](const QString &p) {
-                           const QString ext = paths::extension(p);
-                           return (ext == u".md" || ext == u".csv") && hasNotionId(p);
-                       })
-                       ? 90
-                       : 0;
+        const auto notionFile = [](const QString &p) {
+            const QString ext = paths::extension(p);
+            return (ext == u".md" || ext == u".csv") && hasNotionId(p);
+        };
+        return anyPath(files, notionFile) ? 90 : 0;
     }
 
     ImportResult run(const QList<InputFile> &rawFiles, const ImportOptions &options) const override
@@ -162,28 +153,25 @@ public:
             e.file = &f;
             e.source = f.path;
             e.stripped = stripPath(f.path);
-            QString id;
-            stripSegment(paths::basename(f.path), &id);
+            const QString id = splitSegment(paths::basename(f.path)).id;
             const QString ext = paths::extension(f.path);
             if (ext == u".md") {
                 if (!id.isEmpty())
                     sourceById.insert(id, f.path);
-                pages.append(e);
-            } else if (ext == u".csv" && hasNotionId(paths::basename(f.path))) {
+                pages.append(std::move(e));
+            } else if (ext == u".csv" && !id.isEmpty()) {
                 const QString key = pathKey(e.stripped);
                 const bool all = paths::basename(f.path).chopped(4).endsWith(u"_all"_s);
-                const auto it = databaseByStripped.constFind(key);
-                if (it != databaseByStripped.constEnd()) {
+                if (const auto it = databaseByStripped.constFind(key); it != databaseByStripped.constEnd()) {
                     if (all)
-                        databases[*it] = e; // prefer the "_all" variant (every view's rows)
+                        databases[*it] = std::move(e); // prefer the "_all" variant (every view's rows)
                     continue;
                 }
                 databaseByStripped.insert(key, databases.size());
-                databases.append(e);
-                if (!id.isEmpty())
-                    sourceById.insert(id, f.path);
+                databases.append(std::move(e));
+                sourceById.insert(id, f.path);
             } else {
-                attachments.append(e);
+                attachments.append(std::move(e));
             }
         }
 
@@ -195,7 +183,7 @@ public:
             ++titleCount[pathKey(paths::pageTitle(p.path))];
         }
         for (Entry &d : databases) {
-            d.path = ctx.claimPage(d.stripped.first(d.stripped.size() - 4));
+            d.path = ctx.claimPage(d.stripped.chopped(4));
             tree.add(d.source, d.path);
             ++titleCount[pathKey(paths::pageTitle(d.path))];
         }
@@ -265,7 +253,7 @@ private:
         const QList<QStringList> rows = parseCsv(decodeText(db.file->data));
         if (rows.isEmpty())
             return QString();
-        const QString rowFolder = pathKey(db.stripped.first(db.stripped.size() - 4));
+        const QString rowFolder = pathKey(db.stripped.chopped(4));
         QHash<QString, VaultPath> rowPages; // title key -> row page
         for (const Entry &p : pages) {
             if (pathKey(paths::dirname(p.stripped)) == rowFolder)
@@ -275,18 +263,21 @@ private:
         for (const QStringList &r : rows)
             columns = std::max(columns, r.size());
         QStringList lines;
+        QStringList cells;
         for (qsizetype r = 0; r < rows.size(); ++r) {
-            QStringList cells;
+            cells.clear();
             for (qsizetype c = 0; c < columns; ++c) {
-                QString cell = c < rows[r].size() ? rows[r][c] : QString();
-                if (r > 0 && c == 0) {
-                    const auto it = rowPages.constFind(pathKey(pageSegment(cell)));
-                    if (it != rowPages.constEnd() && !cell.trimmed().isEmpty()) {
+                QString cell = rows[r].value(c);
+                if (r > 0 && c == 0 && !cell.trimmed().isEmpty()) {
+                    if (const auto it = rowPages.constFind(pathKey(pageSegment(cell))); it != rowPages.constEnd()) {
                         cells.append(wikiLink(linkTarget(*it)));
                         continue;
                     }
                 }
-                cells.append(r == 0 ? tableCell(cell) : tableCell(escapeMarkdownText(cell, false)));
+                // Without the private-use formula marks (htmlutil_p.h): only an importer's own formulas
+                // may use them, and in the cell they would shield its dollars.
+                cell.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
+                cells.append(tableCell(r == 0 ? cell : escapeMarkdownText(cell, false)));
             }
             lines.append(u"| "_s + cells.join(u" | "_s) + u" |"_s);
             if (r == 0)

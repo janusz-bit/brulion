@@ -78,54 +78,57 @@ bool isUtcName(const QString &zone)
 /// Graph's "no date" (year 1) counts as missing.
 GraphTime parseGraphTime(const QString &text, const QString &zone)
 {
-    GraphTime out;
     const QString t = text.trimmed();
     if (t.isEmpty())
-        return out;
+        return {};
     static const QRegularExpression re(
             uR"(^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:[.,]\d+)?)?)?\s*(Z|[+-]\d{2}:?\d{2})?$)"_s);
+    const GraphTime malformed{std::nullopt, true};
     const QRegularExpressionMatch m = re.match(t);
-    if (!m.hasMatch()) {
-        out.malformed = true;
-        return out;
-    }
+    if (!m.hasMatch())
+        return malformed;
     const QDate date(m.captured(1).toInt(), m.captured(2).toInt(), m.captured(3).toInt());
-    if (!date.isValid()) {
-        out.malformed = true;
-        return out;
-    }
+    if (!date.isValid())
+        return malformed;
     if (date.year() < 1900)
-        return out;
+        return {};
     ical::DateTimeValue v;
     v.date = date;
     if (m.capturedLength(4) > 0) {
         const QTime time(m.captured(4).toInt(), m.captured(5).toInt());
-        if (!time.isValid()) {
-            out.malformed = true;
-            return out;
-        }
+        if (!time.isValid())
+            return malformed;
         v.time = time;
     }
     const QString offset = m.captured(7);
-    if (offset == u"Z") {
-        v.utc = true;
-    } else if (!offset.isEmpty()) {
-        // An explicit offset: the instant in UTC.
-        const QString digits = QString(offset).remove(u':');
-        const int seconds = (digits.mid(1, 2).toInt() * 60 + digits.mid(3, 2).toInt()) * 60;
+    if (!offset.isEmpty() && offset != u"Z") {
+        // An explicit offset ("+02:00", "-0530"): the instant in UTC. One beyond ±16 hours has no
+        // zone (an invalid date-time): malformed.
+        const QStringView hhmm = QStringView(offset).sliced(1);
+        const int seconds = (hhmm.first(2).toInt() * 60 + hhmm.last(2).toInt()) * 60;
         const QDateTime at(v.date, v.time.value_or(QTime(0, 0)),
                            QTimeZone::fromSecondsAheadOfUtc(offset.startsWith(u'-') ? -seconds : seconds));
+        if (!at.isValid())
+            return malformed;
         const QDateTime utc = at.toUTC();
         v.date = utc.date();
         v.time = QTime(utc.time().hour(), utc.time().minute());
         v.utc = true;
-    } else if (isUtcName(zone)) {
+    } else if (offset == u"Z" || isUtcName(zone)) {
         v.utc = true;
     } else {
         v.tzid = zone.trimmed();
     }
-    out.value = v;
-    return out;
+    return {std::move(v), false};
+}
+
+/// A text of the export without the private-use formula marks of escapeTextFormulas()
+/// (htmlutil_p.h): only an importer's own formulas may use them, and in the text they would shield
+/// its dollars.
+QString withoutFormulaMarks(QString text)
+{
+    text.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
+    return text;
 }
 
 /// A web address as a Markdown link destination: what would end it (spaces, parentheses, angle
@@ -170,7 +173,7 @@ RuleResult recurrenceRule(const QJsonObject &recurrence)
         rule.freq = dates::RecurrenceRule::Freq::Day;
     } else if (type == u"weekly") {
         rule.freq = dates::RecurrenceRule::Freq::Week;
-        for (const QJsonValue &d : pattern.value(u"daysOfWeek"_s).toArray()) {
+        for (const QJsonArray days = pattern.value(u"daysOfWeek"_s).toArray(); const auto &d : days) {
             if (const auto n = weekdayNumber(d.toString()); n && !rule.weekdays.contains(*n))
                 rule.weekdays.append(*n);
         }
@@ -207,10 +210,9 @@ enum class Shape {
     Tasks,    ///< one list's tasks
 };
 
-/// One input file's lists: {name, list object (tasks inside)}.
+/// A list of an input file: its name and tasks.
 struct SourceList {
     QString name;
-    QJsonObject list;
     QJsonArray tasks;
     Shape shape = Shape::Explorer;
     bool incomplete = false;
@@ -322,24 +324,24 @@ private:
     static QList<SourceList> listsOf(const QJsonObject &o, const QString &path)
     {
         QList<SourceList> out;
-        const bool pagedTop = o.contains(u"@odata.nextLink"_s);
-        const auto addList = [&](const QJsonObject &list) {
-            SourceList s;
-            s.name = list.value(u"displayName"_s).toString().simplified();
-            s.list = list;
-            s.tasks = list.value(u"tasks"_s).toArray();
-            s.incomplete = list.contains(u"tasks@odata.nextLink"_s);
-            out.append(s);
-        };
-        if (o.value(u"lists"_s).isArray()) {
-            for (const QJsonValue &v : o.value(u"lists"_s).toArray()) {
-                if (v.isObject())
-                    addList(v.toObject());
+        const auto addLists = [&out](const QJsonArray &array, Shape shape) {
+            for (const auto &v : array) {
+                if (!v.isObject())
+                    continue;
+                const QJsonObject list = v.toObject();
+                SourceList s;
+                s.name = list.value(u"displayName"_s).toString().simplified();
+                s.tasks = list.value(u"tasks"_s).toArray();
+                s.shape = shape;
+                s.incomplete = list.contains(u"tasks@odata.nextLink"_s);
+                out.append(std::move(s));
             }
-            for (SourceList &s : out)
-                s.shape = Shape::Bundle;
+        };
+        if (const QJsonValue lists = o.value(u"lists"_s); lists.isArray()) {
+            addLists(lists.toArray(), Shape::Bundle);
             return out;
         }
+        const bool pagedTop = o.contains(u"@odata.nextLink"_s);
         const QJsonArray value = o.value(u"value"_s).toArray();
         const bool tasks = o.value(u"@odata.context"_s).toString().contains(u"/tasks"_s, Qt::CaseInsensitive)
                            || (!value.isEmpty() && isTaskObject(value.first().toObject()));
@@ -350,13 +352,10 @@ private:
             s.tasks = value;
             s.shape = Shape::Tasks;
             s.incomplete = pagedTop;
-            out.append(s);
+            out.append(std::move(s));
             return out;
         }
-        for (const QJsonValue &v : value) {
-            if (v.isObject())
-                addList(v.toObject());
-        }
+        addLists(value, Shape::Explorer);
         if (pagedTop && !out.isEmpty())
             out.last().incomplete = true;
         return out;
@@ -371,7 +370,7 @@ private:
             QDateTime completed;
         };
         QList<Item> items;
-        for (const QJsonValue &v : list.tasks) {
+        for (const auto &v : list.tasks) {
             if (!v.isObject())
                 continue;
             const QJsonObject task = v.toObject();
@@ -386,7 +385,7 @@ private:
                 }
             }
             item.text = taskText(task, st);
-            items.append(item);
+            items.append(std::move(item));
         }
         if (items.isEmpty())
             return false;
@@ -439,13 +438,11 @@ private:
         return spec;
     }
 
-    /// `lineStart`: the text begins the item's content, where block syntax would be read.
-    static QString singleLine(const QString &text, bool lineStart = false)
+    /// A text on one line of the item (line breaks and runs of spaces as one space), escaped.
+    static QString singleLine(const QString &text)
     {
-        return escapeMarkdownText(QString(text).replace(u'\n', u' ').simplified(), lineStart);
+        return escapeMarkdownText(withoutFormulaMarks(text).simplified(), false);
     }
-
-    static QString isoDate(const DateSpec &spec) { return spec.date.toString(u"yyyy-MM-dd"_s); }
 
     static QString taskText(const QJsonObject &task, State &st)
     {
@@ -462,7 +459,7 @@ private:
         if (title.isEmpty())
             title = IoMessages::tr("(no title)");
         QString line = u"- ["_s + box + u"] "_s + title;
-        for (const QJsonValue &c : task.value(u"categories"_s).toArray()) {
+        for (const QJsonArray categories = task.value(u"categories"_s).toArray(); const auto &c : categories) {
             const QString tag = tagName(c.toString());
             if (!tag.isEmpty())
                 line += u" #"_s + tag;
@@ -473,12 +470,13 @@ private:
         else if (importance == u"low")
             line += u' ' + markdown::tokens::PriorityLow.toString();
 
-        const auto field = [&](QStringView key) { return task.value(key.toString()); };
-        if (const auto created = wallClock(field(u"createdDateTime"), st))
-            line += u' ' + markdown::tokens::Created.toString() + u' ' + isoDate(*created);
-        if (const auto start = wallClock(field(u"startDateTime"), st, true))
-            line += u' ' + markdown::tokens::Start.toString() + u' ' + isoDate(*start);
-        std::optional<DateSpec> due = wallClock(field(u"dueDateTime"), st, true);
+        const auto addDate = [&line](QStringView token, const std::optional<DateSpec> &day) {
+            if (day)
+                line += u' ' + token + u' ' + day->date.toString(u"yyyy-MM-dd"_s);
+        };
+        addDate(markdown::tokens::Created, wallClock(task.value(u"createdDateTime"_s), st));
+        addDate(markdown::tokens::Start, wallClock(task.value(u"startDateTime"_s), st, true));
+        std::optional<DateSpec> due = wallClock(task.value(u"dueDateTime"_s), st, true);
         const QJsonObject recurrence = task.value(u"recurrence"_s).toObject();
         if (!due && !recurrence.isEmpty()) {
             // A series without a due date: its first day.
@@ -487,8 +485,7 @@ private:
             if (first.isValid() && first.year() >= 1900)
                 due = DateSpec{first, std::nullopt};
         }
-        if (due)
-            line += u' ' + markdown::tokens::Due.toString() + u' ' + isoDate(*due);
+        addDate(markdown::tokens::Due, due);
         if (!recurrence.isEmpty()) {
             const RuleResult r = recurrenceRule(recurrence);
             st.unsupportedRecurrence = st.unsupportedRecurrence || r.unsupported;
@@ -498,15 +495,13 @@ private:
                         + dates::formatRecurrence(*r.rule, dates::UiLocale::English);
         }
         if (!done && task.value(u"isReminderOn"_s).toBool()) {
-            if (const auto at = wallClock(field(u"reminderDateTime"), st); at && at->time)
+            if (const auto at = wallClock(task.value(u"reminderDateTime"_s), st); at && at->time)
                 line += u' ' + markdown::formatReminderToken(*at);
         }
-        if (done) {
-            // To Do keeps the day of the completion, mostly as midnight UTC (that day, as for due
-            // dates); an exact instant is converted to its day in the vault's zone.
-            if (const auto completed = wallClock(field(u"completedDateTime"), st, true))
-                line += u' ' + markdown::tokens::Done.toString() + u' ' + isoDate(*completed);
-        }
+        // To Do keeps the day of the completion, mostly as midnight UTC (that day, as for due
+        // dates); an exact instant is converted to its day in the vault's zone.
+        if (done)
+            addDate(markdown::tokens::Done, wallClock(task.value(u"completedDateTime"_s), st, true));
         return withDetails(line, details(task, done, st));
     }
 
@@ -516,7 +511,7 @@ private:
     {
         QStringList out;
         const QJsonObject body = task.value(u"body"_s).toObject();
-        const QString content = body.value(u"content"_s).toString();
+        const QString content = withoutFormulaMarks(body.value(u"content"_s).toString());
         if (!content.trimmed().isEmpty()) {
             if (body.value(u"contentType"_s).toString().compare(u"html"_s, Qt::CaseInsensitive) == 0) {
                 for (const QString &l : normalizeNewlines(htmlToMarkdown(content).markdown).split(u'\n'))
@@ -528,7 +523,7 @@ private:
             while (!out.isEmpty() && out.first().isEmpty())
                 out.removeFirst();
         }
-        for (const QJsonValue &v : task.value(u"checklistItems"_s).toArray()) {
+        for (const QJsonArray steps = task.value(u"checklistItems"_s).toArray(); const auto &v : steps) {
             const QJsonObject step = v.toObject();
             const QString text = singleLine(step.value(u"displayName"_s).toString());
             if (text.isEmpty())
@@ -536,10 +531,10 @@ private:
             const QString box = step.value(u"isChecked"_s).toBool() ? u"- [x] "_s : done ? u"- [-] "_s : u"- [ ] "_s;
             out.append(box + text);
         }
-        for (const QJsonValue &v : task.value(u"linkedResources"_s).toArray()) {
+        for (const QJsonArray links = task.value(u"linkedResources"_s).toArray(); const auto &v : links) {
             const QJsonObject link = v.toObject();
-            const QString url = link.value(u"webUrl"_s).toString().trimmed();
-            const QString label = link.value(u"displayName"_s).toString().simplified();
+            const QString url = withoutFormulaMarks(link.value(u"webUrl"_s).toString()).trimmed();
+            const QString label = withoutFormulaMarks(link.value(u"displayName"_s).toString()).simplified();
             const QString scheme = QUrl(url).scheme().toLower();
             if (url.isEmpty() || (scheme != u"http" && scheme != u"https" && scheme != u"mailto")) {
                 // Without a usable address only its name is kept (never a link to another scheme).
@@ -552,32 +547,42 @@ private:
             else
                 out.append(u"- ["_s + escapeMarkdownText(label, false, true) + u"]("_s + linkDestination(url) + u')');
         }
+        out += attachmentItems(task, st);
+        return out;
+    }
+
+    /// The task's attachments as sub-items (only Brulion's download holds their content).
+    static QStringList attachmentItems(const QJsonObject &task, State &st)
+    {
+        QStringList out;
         const QJsonValue attachments = task.value(u"attachments"_s);
-        if (attachments.isArray()) {
-            for (const QJsonValue &v : attachments.toArray()) {
-                const QJsonObject a = v.toObject();
-                if (!a.contains(u"contentBytes"_s)) {
-                    st.attachmentsMissing = st.attachmentsMissing || st.shape != Shape::Bundle;
-                    continue;
-                }
-                const QByteArray base64 = a.value(u"contentBytes"_s).toString().toLatin1();
-                if (base64.size() > MaxAttachmentBytes / 3 * 4 + 4 || a.value(u"size"_s).toDouble() > MaxAttachmentBytes) {
-                    st.attachmentsTooLarge = true;
-                    continue;
-                }
-                const auto decoded = QByteArray::fromBase64Encoding(base64, QByteArray::AbortOnBase64DecodingErrors);
-                if (!decoded || base64.isEmpty()) {
-                    st.attachmentsUnreadable = true;
-                    continue;
-                }
-                QString fileName = paths::basename(a.value(u"name"_s).toString().trimmed());
-                if (fileName.isEmpty())
-                    fileName = u"attachment"_s + extensionForMime(a.value(u"contentType"_s).toString());
-                out.append(u"- "_s + attachmentLink(st.ctx.addAttachment(fileName, *decoded)));
-            }
-        } else if (task.value(u"hasAttachments"_s).toBool() && st.shape != Shape::Bundle) {
+        if (!attachments.isArray()) {
             // (The download says itself which attachments it could not get.)
-            st.attachmentsMissing = true;
+            if (task.value(u"hasAttachments"_s).toBool() && st.shape != Shape::Bundle)
+                st.attachmentsMissing = true;
+            return out;
+        }
+        for (const QJsonArray list = attachments.toArray(); const auto &v : list) {
+            const QJsonObject a = v.toObject();
+            if (!a.contains(u"contentBytes"_s)) {
+                st.attachmentsMissing = st.attachmentsMissing || st.shape != Shape::Bundle;
+                continue;
+            }
+            const QString base64 = a.value(u"contentBytes"_s).toString();
+            if (base64.size() > MaxAttachmentBytes / 3 * 4 + 4 || a.value(u"size"_s).toDouble() > MaxAttachmentBytes) {
+                st.attachmentsTooLarge = true;
+                continue;
+            }
+            const auto decoded =
+                    QByteArray::fromBase64Encoding(base64.toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
+            if (!decoded || base64.isEmpty()) {
+                st.attachmentsUnreadable = true;
+                continue;
+            }
+            QString fileName = paths::basename(a.value(u"name"_s).toString().trimmed());
+            if (fileName.isEmpty())
+                fileName = u"attachment"_s + extensionForMime(a.value(u"contentType"_s).toString());
+            out.append(u"- "_s + attachmentLink(st.ctx.addAttachment(fileName, *decoded)));
         }
         return out;
     }

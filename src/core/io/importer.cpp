@@ -10,7 +10,7 @@
 #include "text/text.h"
 #include "util/paths.h"
 
-#include <QSet>
+#include <QHash>
 
 #include <algorithm>
 
@@ -53,7 +53,7 @@ bool isJunk(const QString &path)
     const QStringList segments = path.split(u'/');
     if (segments.contains(u"__MACOSX"_s))
         return true;
-    const QString name = segments.last();
+    const QString &name = segments.last();
     return name == u".DS_Store" || name == u"Thumbs.db" || name == u"desktop.ini" || name.startsWith(u"._");
 }
 
@@ -113,7 +113,7 @@ QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *
         if (it == seen.constEnd()) {
             seen.insert(key, out.size());
             out.append(std::move(file));
-        } else if (out[*it].data != file.data && warnings) {
+        } else if (warnings && out.at(*it).data != file.data) {
             warnings->append(
                     IoMessages::tr("“%1” appears twice in the input; the first copy was used.").arg(file.path));
         }
@@ -220,15 +220,13 @@ ImportResult runImport(const Importer &importer, const QList<InputFile> &files, 
             out.files.append(ImportedFile{path, std::move(file.data), true});
             continue;
         }
-        VaultPath target = path;
         const bool duplicate = index.contains(key);
-        if (duplicate || claims.isTaken(path)) {
-            target = claims.claim(path);
+        const bool renamed = duplicate || claims.isTaken(path);
+        const VaultPath target = claims.claim(path); // `path` itself when it is free
+        if (renamed) {
             warnings.append(IoMessages::tr("“%1” already exists; it was saved as “%2”.").arg(path, target));
             if (!duplicate && paths::isMarkdown(path))
                 renamedPages.append(Rename{path, target});
-        } else {
-            claims.claim(path);
         }
         index.insert(pathKey(target), out.files.size());
         out.files.append(ImportedFile{target, std::move(file.data), false});
@@ -246,13 +244,8 @@ ImportResult runImport(const Importer &importer, const QList<InputFile> &files, 
                 file.data = content.toUtf8();
         }
     }
-    QSet<QString> unique;
-    for (const QString &w : std::as_const(warnings)) {
-        if (!unique.contains(w)) {
-            unique.insert(w);
-            out.warnings.append(w);
-        }
-    }
+    warnings.removeDuplicates(); // the first occurrence of each stays, in order
+    out.warnings = std::move(warnings);
     return out;
 }
 

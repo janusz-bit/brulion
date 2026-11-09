@@ -68,6 +68,6 @@ QString logseqFileNameForPage(const QString &pageName);
 QString uuidFromSeed(const QString &seed);
 
 /// "<2026-10-15 Thu 10:00 .+1w>" — a Logseq timestamp for a date(-time) and repeater.
-QString logseqTimestamp(const DateSpec &spec, const QString &repeater = {});
+QString logseqTimestamp(DateSpec spec, const QString &repeater = {});
 
 } // namespace brulion::io::detail

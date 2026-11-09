@@ -60,7 +60,9 @@ struct ImportOptions {
 /// One supported source app or format. Implementations are stateless and thread-safe.
 class Importer {
 public:
+    Importer() = default;
     virtual ~Importer() = default;
+    Q_DISABLE_COPY_MOVE(Importer)
 
     /// Stable identifier: "obsidian", "logseq", "notion", "evernote", "keep", "mstodo",
     /// "joplin", "simplenote", "roam", "trilium", "bear", "markdown", "html", "ics".

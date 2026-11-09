@@ -99,14 +99,8 @@ std::optional<Bullet> matchBullet(QStringView line)
         return std::nullopt;
     if (isThematicBreak(line.sliced(i).trimmed()))
         return std::nullopt;
-    Bullet b;
-    b.indentEnd = i;
-    b.column = visualColumn(line, i);
-    qsizetype j = i + 1;
-    while (j < line.size() && (line[j] == u' ' || line[j] == u'\t'))
-        ++j;
-    b.contentStart = j;
-    return b;
+    const qsizetype contentStart = i + 1 + indentEnd(line.sliced(i + 1)); // after the whitespace following it
+    return Bullet{.indentEnd = i, .contentStart = contentStart, .column = visualColumn(line, i)};
 }
 
 /// A fence opening at the start of `content` ("```js", "~~~"): the fence run, else empty.
@@ -124,13 +118,7 @@ QString fenceOpen(QStringView content)
 bool isFenceClose(QStringView line, const QString &fence)
 {
     const QStringView t = line.trimmed();
-    if (!t.startsWith(fence))
-        return false;
-    for (const QChar c : t) {
-        if (c != fence[0])
-            return false;
-    }
-    return true;
+    return t.startsWith(fence) && std::ranges::all_of(t, [&](QChar c) { return c == fence[0]; });
 }
 
 /// Replace Logseq embed macros outside inline code.
@@ -145,26 +133,26 @@ QString convertMacros(const QString &line)
     static const QRegularExpression aliasLink(u"\\[([^\\]\\[]+)\\]\\(\\[\\[([^\\]]+)\\]\\]\\)"_s);
     const QString masked = markdown::maskInlineCode(line);
     struct Hit {
-        qsizetype from;
-        qsizetype to;
+        qsizetype from = 0;
+        qsizetype to = 0;
         QString text;
     };
     QList<Hit> hits;
+    // Capture `n` of a match in `masked` as written in `line` (same length).
+    const auto cap = [&](const QRegularExpressionMatch &m, int n) {
+        return QStringView(line).sliced(m.capturedStart(n), m.capturedLength(n));
+    };
     for (auto it = pageEmbed.globalMatch(masked); it.hasNext();) {
         const auto m = it.next();
-        hits.append(Hit{m.capturedStart(), m.capturedEnd(),
-                        u"![["_s + line.sliced(m.capturedStart(1), m.capturedLength(1)) + u"]]"_s});
+        hits.append(Hit{m.capturedStart(), m.capturedEnd(), u"![["_s + cap(m, 1) + u"]]"_s});
     }
     for (auto it = blockEmbed.globalMatch(masked); it.hasNext();) {
         const auto m = it.next();
-        hits.append(Hit{m.capturedStart(), m.capturedEnd(),
-                        u"!(("_s + line.sliced(m.capturedStart(1), m.capturedLength(1)) + u"))"_s});
+        hits.append(Hit{m.capturedStart(), m.capturedEnd(), u"!(("_s + cap(m, 1) + u"))"_s});
     }
     for (auto it = aliasLink.globalMatch(masked); it.hasNext();) {
         const auto m = it.next();
-        hits.append(Hit{m.capturedStart(), m.capturedEnd(),
-                        u"[["_s + line.sliced(m.capturedStart(2), m.capturedLength(2)) + u'|'
-                                + line.sliced(m.capturedStart(1), m.capturedLength(1)) + u"]]"_s});
+        hits.append(Hit{m.capturedStart(), m.capturedEnd(), u"[["_s + cap(m, 2) + u'|' + cap(m, 1) + u"]]"_s});
     }
     if (hits.isEmpty())
         return line;
@@ -353,12 +341,11 @@ void convertBlock(QList<text::Line> &lines, QList<bool> &removed, const BlockSpa
             suffix.append(markdown::tokens::Recurrence.toString() + u' '
                           + dates::formatRecurrence(*rule, dates::UiLocale::English));
     }
-    QString line = prefix + checkbox + content;
+    first = prefix + checkbox + content;
     if (!suffix.isEmpty())
-        line += (content.isEmpty() && checkbox.isEmpty() ? QString() : u" "_s) + suffix.join(u' ');
+        first += (content.isEmpty() && checkbox.isEmpty() ? QString() : u" "_s) + suffix.join(u' ');
     if (!id.isEmpty())
-        line += u" ^"_s + id;
-    first = line;
+        first += u" ^"_s + id;
 }
 
 } // namespace
@@ -375,7 +362,7 @@ JournalTitleFormat::JournalTitleFormat(const QString &dateFnsFormat)
             {u"E"_s, Token::Weekday},
     };
     QString pattern = u"^"_s;
-    const QString f = dateFnsFormat;
+    const QString &f = dateFnsFormat;
     for (qsizetype i = 0; i < f.size();) {
         if (f[i] == u'\'') {
             const qsizetype close = f.indexOf(u'\'', i + 1);
@@ -428,15 +415,15 @@ std::optional<QDate> JournalTitleFormat::parse(const QString &title) const
     int group = 1;
     for (const auto &[token, text] : m_tokens) {
         switch (token) {
-        case Token::Year4: year = m.captured(group++).toInt(); break;
-        case Token::Year2: year = 2000 + m.captured(group++).toInt(); break;
+        case Token::Year4: year = m.capturedView(group++).toInt(); break;
+        case Token::Year2: year = 2000 + m.capturedView(group++).toInt(); break;
         case Token::MonthLong:
         case Token::MonthShort: month = monthFromName(m.captured(group++)); break;
         case Token::Month2:
-        case Token::Month1: month = m.captured(group++).toInt(); break;
+        case Token::Month1: month = m.capturedView(group++).toInt(); break;
         case Token::DayOrdinal:
         case Token::Day2:
-        case Token::Day1: day = m.captured(group++).toInt(); break;
+        case Token::Day1: day = m.capturedView(group++).toInt(); break;
         case Token::Weekday:
         case Token::Literal: break;
         }
@@ -449,6 +436,8 @@ std::optional<QDate> JournalTitleFormat::parse(const QString &title) const
 
 QString JournalTitleFormat::format(QDate date) const
 {
+    if (!date.isValid())
+        return {}; // month() is 0: no month name
     QString out;
     for (const auto &[token, text] : m_tokens) {
         switch (token) {
@@ -477,8 +466,7 @@ std::optional<QDate> parseJournalTitle(const QString &title, const QList<Journal
         if (const auto d = f.parse(title))
             return d;
     }
-    const QDate iso = QDate::fromString(title.trimmed(), u"yyyy-MM-dd"_s);
-    if (iso.isValid())
+    if (const QDate iso = QDate::fromString(title.trimmed(), u"yyyy-MM-dd"_s); iso.isValid())
         return iso;
     return std::nullopt;
 }
@@ -500,8 +488,8 @@ LogseqPageProperties takeLogseqPageProperties(const QString &content)
         return true;
     };
     qsizetype i = 0;
-    while (i < lines.size() && markdown::matchPropertyLine(lines[i].text))
-        add(lines[i++].text);
+    while (i < lines.size() && add(lines[i].text))
+        ++i;
     if (i == 0) {
         // A first bullet made only of properties.
         const auto bullet = lines.isEmpty() ? std::nullopt : matchBullet(lines[0].text);
@@ -621,9 +609,7 @@ QString logseqFileNameForPage(const QString &pageName)
     const QString name = QString(pageName).replace(u'/', u"___"_s);
     for (qsizetype i = 0; i < name.size(); ++i) {
         const QChar c = name[i];
-        const bool reserved = c.unicode() < 0x20 || c == u'<' || c == u'>' || c == u':' || c == u'"' || c == u'|'
-                              || c == u'?' || c == u'*' || c == u'\\' || c == u'%' || c == u'#'
-                              || (i == 0 && c == u'.');
+        const bool reserved = c.unicode() < 0x20 || QStringView(u"<>:\"|?*\\%#").contains(c) || (i == 0 && c == u'.');
         if (reserved)
             out += u'%' + QString::number(c.unicode(), 16).toUpper().rightJustified(2, u'0');
         else
@@ -640,7 +626,7 @@ QString uuidFromSeed(const QString &seed)
     return QUuid::fromRfc4122(hash).toString(QUuid::WithoutBraces);
 }
 
-QString logseqTimestamp(const DateSpec &spec, const QString &repeater)
+QString logseqTimestamp(DateSpec spec, const QString &repeater)
 {
     QString out = u'<' + spec.date.toString(u"yyyy-MM-dd"_s) + u' '
                   + QLocale::c().dayName(spec.date.dayOfWeek(), QLocale::ShortFormat);

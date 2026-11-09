@@ -77,13 +77,10 @@ Item {
                 flick.contentY = Math.max(0, Math.min(s.y, flick.contentHeight - flick.height))
         }
     }
-    function requestedSection(): string {
-        return panel.initialTab !== "" ? panel.initialTab : "" + AppSettings.value("ui/sidePanel/tab", "")
-    }
 
     Component.onCompleted: {
         // A one-off request (the page menu, route.open): used once, then forgotten.
-        const requested = panel.requestedSection()
+        const requested = panel.initialTab !== "" ? panel.initialTab : "" + AppSettings.value("ui/sidePanel/tab", "")
         AppSettings.setValue("ui/sidePanel/tab", "")
         if (requested !== "")
             panel.reveal(requested)

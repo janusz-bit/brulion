@@ -68,7 +68,7 @@ public:
                 continue;
             }
             found = true;
-            for (const QJsonValue &v : root.value(u"activeNotes"_s).toArray())
+            for (const QJsonArray notes = root.value(u"activeNotes"_s).toArray(); const auto &v : notes)
                 importNote(v.toObject(), ctx);
         }
         if (!found)
@@ -79,24 +79,24 @@ public:
 private:
     static void importNote(const QJsonObject &n, ImportContext &ctx)
     {
+        const QTimeZone &zone = ctx.options().timeZone;
         const QString content = n.value(u"content"_s).toString();
         const QDateTime created = QDateTime::fromString(n.value(u"creationDate"_s).toString(), Qt::ISODateWithMs);
         const QDateTime modified = QDateTime::fromString(n.value(u"lastModified"_s).toString(), Qt::ISODateWithMs);
         QString title = titleFromText(content);
-        QString body = bodyWithoutTitle(content, title);
+        const QString body = title.isEmpty() ? content : bodyWithoutTitle(content, title);
         if (title.isEmpty()) {
             title = u"Simplenote "_s
-                    + (created.isValid() ? created.toTimeZone(ctx.options().timeZone).toString(u"yyyy-MM-dd HH-mm"_s)
+                    + (created.isValid() ? created.toTimeZone(zone).toString(u"yyyy-MM-dd HH-mm"_s)
                                          : n.value(u"id"_s).toString().left(8));
-            body = content;
         }
         QVariantMap fm;
-        if (const QString c = wallClock(created, ctx.options().timeZone); !c.isEmpty())
+        if (const QString c = wallClock(created, zone); !c.isEmpty())
             fm.insert(u"created"_s, c);
-        if (const QString m = wallClock(modified, ctx.options().timeZone); !m.isEmpty())
+        if (const QString m = wallClock(modified, zone); !m.isEmpty())
             fm.insert(u"updated"_s, m);
         QStringList tags;
-        for (const QJsonValue &t : n.value(u"tags"_s).toArray()) {
+        for (const QJsonArray labels = n.value(u"tags"_s).toArray(); const auto &t : labels) {
             const QString name = tagName(t.toString());
             if (!name.isEmpty())
                 tags.append(name);

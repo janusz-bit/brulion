@@ -477,10 +477,10 @@ ApplicationWindow {
     function at(): bool {
         return window.stepCursor++ === window.stepTarget
     }
-    /// Run the steps of `name` (a suite of runSuite()), then exit with the failures.
     /// Theme.touchUi when the steps began: what decides which steps there are (a test that
     /// switches to touch sizes halfway keeps its steps).
     property bool touchRun: false
+    /// Run the steps of `name` (a suite of runSuite()), then exit with the failures.
     function runSteps(name: string): void {
         touchRun = Theme.touchUi
         suite = name
@@ -567,32 +567,31 @@ ApplicationWindow {
     readonly property int waitLimit: 25 * DevTools.testSlowdown
     /// Repeats of a step waiting for something asynchronous (a picture loading).
     property int waits: 0
-    /// In a step that waits until `ready` (at most waitLimit times): true while it is not — the
-    /// step then ends at once and comes again on the next tick. A finger held down until a menu
-    /// shows is a step of `if (window.at()) window.waiting(…)` (the step after it lifts the finger).
     /// What waiting() was last given (the check after a wait reads it instead of the condition).
     property bool lastReady: false
-    function waiting(ready: bool): bool {
+    /// In a step that waits until `ready` (at most `limit` times): true while it is not — the
+    /// step then ends at once and comes again on the next tick.
+    function waitingUpTo(ready: bool, limit: int): bool {
         window.lastReady = ready
-        if (!ready && window.waits++ < window.waitLimit) {
+        if (!ready && window.waits++ < limit) {
             window.stepIndex -= 1
             return true
         }
         window.waits = 0
         return false
     }
-    /// A step that waits until `ready` (waiting()), then checks it. `what` is read on every try: a
-    /// text that cannot be made before `ready` holds is a step of its own
-    /// `if (window.at() && !window.waiting(ready)) window.check(ready, what)`.
-    /// `value` itself — a condition kept in a local through a call (a local holding an `&&` / `?:`
-    /// result and passed to a call after another one does not compile: docs/UI.md "Compiled QML").
-    function truth(value: bool): bool {
-        return value
+    /// waitingUpTo() for waitLimit tries. A finger held down until a menu shows is a step of
+    /// `if (window.at()) window.waiting(…)` (the step after it lifts the finger).
+    function waiting(ready: bool): bool {
+        return window.waitingUpTo(ready, window.waitLimit)
     }
     /// The check after a wait (waiting() false): what it waited for holds.
     function checkWait(what: string): void {
         window.check(window.lastReady, what)
     }
+    /// A step that waits until `ready` (waiting()), then checks it. `what` is read on every try: a
+    /// text that cannot be made before `ready` holds is a step of its own
+    /// `if (window.at() && !window.waiting(ready)) window.check(ready, what)`.
     function waitStep(ready: bool, what: string): void {
         if (!window.waiting(ready))
             window.checkWait(what)
@@ -664,19 +663,20 @@ ApplicationWindow {
     /// the site named on its own line, the alt text (or the failure) at most 2 (3) lines, the
     /// buttons side by side when both fit.
     function checkWebPlaceholder(item: BlockDelegate, failed: bool): void {
-        const frame = item ? window.findItem(window.embedViewOf(item), "embedPicture") : null
-        const holder = item ? window.findItem(window.embedViewOf(item), "webPicturePlaceholder") : null
-        const text = item ? window.findItem(window.embedViewOf(item), "webPictureText") as Text : null
-        const site = item ? window.findItem(window.embedViewOf(item), "webPictureHost") as Text : null
-        const show = item ? window.findItem(window.embedViewOf(item), "webPictureShow") as BButton : null
-        const save = item ? window.findItem(window.embedViewOf(item), "webPictureSave") : null
-        const host = item ? window.embedHost(item, 0) : ""
+        const view = window.embedViewOf(item)
+        const frame = window.findItem(view, "embedPicture")
+        const holder = window.findItem(view, "webPicturePlaceholder")
+        const text = window.findItem(view, "webPictureText") as Text
+        const site = window.findItem(view, "webPictureHost") as Text
+        const show = window.findItem(view, "webPictureShow") as BButton
+        const save = window.findItem(view, "webPictureSave")
+        const siteName = window.embedHost(item, 0)
         const what = failed ? "a failed picture from the internet: " : "a picture from the internet waiting: "
         check(frame !== null && holder !== null && holder.visible && holder.y >= 0
               && holder.y + holder.height <= frame.height,
               what + "the placeholder fits its frame: " + (holder ? holder.y + "+" + holder.height : "-")
               + " in " + (frame ? frame.width + "×" + frame.height : "-"))
-        check(site !== null && site.visible && host !== "" && Js.indexOf(site.text, host) >= 0 && site.lineCount === 1,
+        check(site !== null && site.visible && siteName !== "" && Js.indexOf(site.text, siteName) >= 0 && site.lineCount === 1,
               what + "its site is named: " + (site ? site.text : "-"))
         check(window.webTextFits(text, failed),
               what + "the text above it has its lines: " + (text ? text.lineCount : "-"))
@@ -685,7 +685,6 @@ ApplicationWindow {
               && (show.width + save.width + Theme.space2 > holder.width || show.y === save.y),
               what + "its buttons are side by side: " + (show && save ? show.y + " / " + save.y : "-"))
     }
-    /// The host of the `index`-th embed of a delegate ("" without one).
     /// The text above a picture from the internet's buttons: at most 2 lines (3 when it failed),
     /// cut when waiting.
     function webTextFits(text: Text, failed: bool): bool {
@@ -695,9 +694,10 @@ ApplicationWindow {
             return text.lineCount <= 3
         return text.lineCount <= 2 && text.truncated
     }
+    /// The host of the `index`-th embed of a delegate ("" without one).
     function embedHost(item: BlockDelegate, index: int): string {
-        const host = item ? DevTest.valueAt(item.embeds, index + ".host") : undefined
-        return host === undefined ? "" : "" + host
+        const name = item ? DevTest.valueAt(item.embeds, index + ".host") : undefined
+        return name === undefined ? "" : "" + name
     }
     // Typed reads of the editor's parts: a property of another component's property is read
     // through a function of this file (docs/UI.md "Compiled QML").
@@ -822,7 +822,7 @@ ApplicationWindow {
         if (window.at()) check(info(r).taskStatus === "doing", "Ctrl+Enter cycles the task: " + info(r).taskStatus)
         if (window.at()) { editor.activeEditor.cursorPosition = 0; key(Qt.Key_Up, Qt.NoModifier) }
         if (window.at()) check(page.editingRow === page.previousVisibleRow(r), "Up on the first line goes to the previous block")
-        if (window.at()) { key(Qt.Key_Down, Qt.NoModifier) ; }
+        if (window.at()) { key(Qt.Key_Down, Qt.NoModifier) }
         if (window.at()) check(page.editingRow === r, "Down on the last line comes back")
         if (window.at()) { key(Qt.Key_Up, Qt.AltModifier) }
         if (window.at()) check(page.editingRow === r - 1 && Js.indexOf(info(r - 1).plainText, "Wywieźć") === 0, "Alt+Up moves the block")
@@ -955,7 +955,6 @@ ApplicationWindow {
         }
     }
     function selfTestKeys(): void {
-        const r = window.baseRow
         // ---- Real key events (window -> Keys -> TextEdit), Polish text --------------------
         if (window.at()) { window.realRow = page.insertBlockAfter(rowOf("Ekipa może"), "") }
         if (window.at()) typeKeys("Żółw ąę")
@@ -1131,7 +1130,6 @@ ApplicationWindow {
         }
     }
     function selfTestDialogs(): void {
-        const r = window.baseRow
         // ---- Table cells: typed text is in the document before the cell is left -------------
         // With a mouse, a table takes no room below its grid until it is selected or edited
         // (the "+ Row / + Column" buttons): its height never changes under a resting pointer.
@@ -1192,10 +1190,8 @@ ApplicationWindow {
         if (window.at()) {
             const d = window.reminderBox()
             // Opening takes its transition (it then focuses the dialog): wait for it.
-            if (!d.opened && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (window.waitingUpTo(d.opened, 2 * window.waitLimit))
                 return
-            }
             window.dateField = findItem(d.contentItem, "datePickerNatural") as BTextField
             window.timeField = findItem(d.contentItem, "datePickerTime") as BTextField
             check(d.opened && window.dateField !== null && window.timeField !== null && d.at === "2026-10-16 09:00",
@@ -1231,10 +1227,8 @@ ApplicationWindow {
         }
         if (window.at()) { window.dialogs().createReminder(window.realRow, false); window.waits = 0 }
         if (window.at()) {
-            if (!window.reminderBox().opened && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (window.waitingUpTo(window.reminderBox().opened, 2 * window.waitLimit))
                 return
-            }
             window.timeField.forceActiveFocus()
             window.timeField.selectAll()
             typeKeys("25:99")
@@ -1255,10 +1249,8 @@ ApplicationWindow {
         // The due-date dialog: a typed date counts on Save.
         if (window.at()) { window.dialogs().pickDate(window.realRow, "due"); window.waits = 0 }
         if (window.at()) {
-            if (!window.dateBox().opened && window.waits++ < 2 * window.waitLimit) {
-                window.stepIndex -= 1
+            if (window.waitingUpTo(window.dateBox().opened, 2 * window.waitLimit))
                 return
-            }
             window.dateField = findItem(window.dateBox().contentItem, "datePickerNatural") as BTextField
             if (window.dateField)
                 window.dateField.forceActiveFocus()
@@ -1280,7 +1272,6 @@ ApplicationWindow {
         }
     }
     function selfTestQueries(): void {
-        const r = window.baseRow
         // ---- Live query results: tasks from the vault, checkable in their own files ----------
         if (window.at()) {
             const row = viewRow("query")

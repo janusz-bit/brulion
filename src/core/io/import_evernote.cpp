@@ -20,7 +20,7 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
-const QString MediaScheme = u"evernote-media:"_s;
+constexpr QStringView MediaScheme = u"evernote-media:";
 
 struct Resource {
     QByteArray data;
@@ -75,9 +75,8 @@ Resource readResource(QXmlStreamReader &r)
     Resource res;
     while (r.readNextStartElement()) {
         if (r.name() == u"data") {
-            QByteArray base64 = childText(r).toLatin1();
-            base64.replace('\n', QByteArray()).replace('\r', QByteArray()).replace(' ', QByteArray());
-            res.data = QByteArray::fromBase64(base64);
+            // Line breaks and spaces are skipped like every character outside the alphabet.
+            res.data = QByteArray::fromBase64(childText(r).toLatin1());
         } else if (r.name() == u"mime") {
             res.mime = childText(r).trimmed();
         } else if (r.name() == u"resource-attributes") {
@@ -161,10 +160,9 @@ QList<Note> parseEnex(const QByteArray &xml, const QString &fileName, ImportCont
             notes.append(readNote(r));
     }
     if (r.hasError() && r.error() != QXmlStreamReader::PrematureEndOfDocumentError) {
+        // One arg() call: a "%2" in the file name must stay as it is.
         ctx.warn(IoMessages::tr("“%1” is damaged (line %2: %3); %n note(s) were read.", nullptr, int(notes.size()))
-                         .arg(fileName)
-                         .arg(r.lineNumber())
-                         .arg(r.errorString()));
+                         .arg(fileName, QString::number(r.lineNumber()), r.errorString()));
     } else if (r.hasError()) {
         ctx.warn(IoMessages::tr("“%1” is incomplete; %n note(s) were read.", nullptr, int(notes.size())).arg(fileName));
     }
@@ -189,7 +187,8 @@ qsizetype divEnd(const QString &html, qsizetype from)
 }
 
 /// ENML -> HTML understood by htmlToMarkdown(): en-todo -> checkbox, en-media -> <img> with a
-/// media URL, code blocks -> <pre>, encrypted parts removed.
+/// media URL, code blocks -> <pre>, encrypted parts and the formula marks (htmlutil_p.h: only
+/// importers write them) removed.
 QString enmlToHtml(QString enml, bool *encrypted)
 {
     static const QRegularExpression prolog(u"<\\?xml[^>]*\\?>|<!DOCTYPE[^>]*>"_s,
@@ -205,6 +204,7 @@ QString enmlToHtml(QString enml, bool *encrypted)
     static const QRegularExpression codeBlock(u"<div\\b[^>]*-en-codeblock\\s*:\\s*true[^>]*>"_s,
                                               QRegularExpression::CaseInsensitiveOption);
 
+    enml.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
     enml.remove(prolog);
     enml.replace(note, u"<\\1div>"_s);
     enml = removeElements(enml, {u"en-crypt"_s}, encrypted);
@@ -269,6 +269,11 @@ QString resourceFileName(const Resource &res)
     return name;
 }
 
+bool isEnex(const QString &path)
+{
+    return paths::extension(path) == u".enex";
+}
+
 class EvernoteImporter final : public Importer {
 public:
     QString id() const override { return u"evernote"_s; }
@@ -279,10 +284,9 @@ public:
     {
         // Only .enex files: certain. An .enex among notes (a backup inside a vault) loses against
         // the importers of the notes.
-        const auto isEnex = [](const QString &p) { return paths::extension(p) == u".enex"; };
         if (!anyPath(files, isEnex))
             return 0;
-        return std::ranges::all_of(files, [&](const InputFile &f) { return isEnex(f.path); }) ? 100 : 15;
+        return std::ranges::all_of(files, isEnex, &InputFile::path) ? 100 : 15;
     }
 
     ImportResult run(const QList<InputFile> &files, const ImportOptions &options) const override
@@ -290,7 +294,7 @@ public:
         ImportContext ctx(options, name());
         QList<const InputFile *> enex;
         for (const InputFile &f : files) {
-            if (paths::extension(f.path) == u".enex")
+            if (isEnex(f.path))
                 enex.append(&f);
         }
         struct Parsed {
@@ -308,27 +312,21 @@ public:
                 titles.insert(n.title.toCaseFolded());
             parsed.append(std::move(p));
         }
-        bool encryptedWarned = false;
         for (const Parsed &p : std::as_const(parsed)) {
             for (const Note &n : p.notes) {
                 const QString title = n.title.isEmpty() ? IoMessages::tr("Untitled") : n.title;
                 const VaultPath path = ctx.claimPage(p.notebook.isEmpty() ? pageSegment(title)
                                                                           : p.notebook + u'/' + pageSegment(title));
-                bool encrypted = false;
-                ctx.addPage(path, noteContent(n, title, titles, ctx, &encrypted));
-                if (encrypted && !encryptedWarned) {
-                    ctx.warn(IoMessages::tr("Encrypted parts of notes cannot be imported and were left out."));
-                    encryptedWarned = true;
-                }
+                ctx.addPage(path, noteContent(n, title, titles, ctx));
             }
         }
         return ctx.take();
     }
 
 private:
-    static QString noteContent(const Note &n, const QString &title, const QSet<QString> &titles, ImportContext &ctx,
-                               bool *encrypted)
+    static QString noteContent(const Note &n, const QString &title, const QSet<QString> &titles, ImportContext &ctx)
     {
+        const QTimeZone &zone = ctx.options().timeZone;
         QHash<QString, const Resource *> byHash;
         for (const Resource &r : n.resources)
             byHash.insert(r.hash, &r);
@@ -363,7 +361,10 @@ private:
             return wikiLink(pageSegment(plain));
         };
 
-        QString body = htmlToMarkdown(enmlToHtml(n.content, encrypted), o).markdown;
+        bool encrypted = false;
+        QString body = htmlToMarkdown(enmlToHtml(n.content, &encrypted), o).markdown;
+        if (encrypted) // warned once (ImportContext::warn())
+            ctx.warn(IoMessages::tr("Encrypted parts of notes cannot be imported and were left out."));
         QStringList extra;
         for (const Resource &r : n.resources) {
             if (!used.contains(r.hash) && !r.data.isEmpty())
@@ -372,35 +373,33 @@ private:
         if (!extra.isEmpty())
             body = normalizeNewlines(body) + u"\n\n"_s + extra.join(u"\n"_s);
 
-        QStringList head;
+        // The reminder as a task above the text, the note's tasks below it.
+        QString text;
         if (n.reminder.isValid()) {
-            const QString when = wallClock(n.reminder, ctx.options().timeZone);
-            QString line = (n.reminderDone.isValid() ? u"- [x] "_s : u"- [ ] "_s) + escapeMarkdownText(title, false)
-                           + u' ' + markdown::tokens::Reminder.toString() + u' ' + when;
-            if (n.reminderDone.isValid())
-                line += u' ' + markdown::tokens::Done.toString() + u' '
-                        + n.reminderDone.toTimeZone(ctx.options().timeZone).date().toString(u"yyyy-MM-dd"_s);
-            head.append(line);
+            const bool done = n.reminderDone.isValid();
+            text = (done ? u"- [x] "_s : u"- [ ] "_s) + escapeMarkdownText(title, false) + u' '
+                   + markdown::tokens::Reminder.toString() + u' ' + wallClock(n.reminder, zone);
+            if (done)
+                text += u' ' + markdown::tokens::Done.toString() + u' '
+                        + n.reminderDone.toTimeZone(zone).date().toString(u"yyyy-MM-dd"_s);
+            text += u"\n\n"_s;
         }
+        text += normalizeNewlines(body);
         QStringList tasks;
         for (const EnexTask &t : n.tasks) {
             QString line = (t.done ? u"- [x] "_s : u"- [ ] "_s) + escapeMarkdownText(t.title, false);
             if (t.due.isValid())
-                line += u' ' + markdown::tokens::Due.toString() + u' ' + wallClock(t.due, ctx.options().timeZone);
+                line += u' ' + markdown::tokens::Due.toString() + u' ' + wallClock(t.due, zone);
             tasks.append(line);
         }
-        QString text;
-        if (!head.isEmpty())
-            text += head.join(u'\n') + u"\n\n"_s;
-        text += normalizeNewlines(body);
         if (!tasks.isEmpty())
             text += u"\n\n"_s + tasks.join(u'\n');
 
         QVariantMap fm;
         if (n.created.isValid())
-            fm.insert(u"created"_s, wallClock(n.created, ctx.options().timeZone));
+            fm.insert(u"created"_s, wallClock(n.created, zone));
         if (n.updated.isValid())
-            fm.insert(u"updated"_s, wallClock(n.updated, ctx.options().timeZone));
+            fm.insert(u"updated"_s, wallClock(n.updated, zone));
         QStringList tags;
         for (const QString &t : n.tags) {
             const QString name = tagName(t);

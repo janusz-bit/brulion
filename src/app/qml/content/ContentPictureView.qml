@@ -172,9 +172,8 @@ Item {
 
         Rectangle {
             // A hairline under the bar.
-            anchors.left: parent.left
-            anchors.right: parent.right
             anchors.bottom: parent.bottom
+            width: parent.width
             height: 1
             color: Theme.borderSubtle
         }
@@ -185,8 +184,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Theme.space4
-            anchors.rightMargin: Theme.space4
+            anchors.margins: Theme.space4
             spacing: Theme.space3
 
             BIcon {
@@ -274,10 +272,8 @@ Item {
     Flickable {
         id: flick
 
-        anchors.top: bar.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
+        anchors.topMargin: bar.height
         visible: !root.asText
         clip: true
         // Fitted: the picture fits into the view, its references follow under it.
@@ -304,7 +300,6 @@ Item {
             retainWhileLoading: root.drawing
             fillMode: root.scalable ? Image.PreserveAspectFit : Image.Stretch
             asynchronous: true
-            smooth: true
             mipmap: true
             Accessible.role: Accessible.Graphic
             Accessible.name: root.fileName
@@ -365,21 +360,18 @@ Item {
 
     // The file read as text: read-only (nothing typed can reach a picture's bytes).
     Loader {
-        anchors.top: bar.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
+        anchors.topMargin: bar.height
         active: root.asText
         sourceComponent: Flickable {
             id: textFlick
 
-            /// Grows when the file changes on disk: it is read again.
-            property int revision: 0
             /// The file's start: { text, truncated, bytes / bytesText (read), size / sizeText }.
             readonly property var file: {
                 // `revision` used for real: qmlcachegen compiles a bare `void revision` away, and
-                // the binding's dependency on it with it.
-                const revision = textFlick.revision
+                // the binding's dependency on it with it. (It grows when the file changes on disk:
+                // Syncthing, Nextcloud, another program; the file is read again.)
+                const revision = root.fileRevision
                 return revision >= 0 ? Workspace.readTextStart(root.path, root.textLimit) : ({})
             }
             readonly property bool truncated: AppController.routeFlag(file, "truncated")
@@ -391,15 +383,6 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             TouchFlick.enabled: true
             T.ScrollBar.vertical: BScrollBar {}
-
-            // The file changed on disk while shown (Syncthing, Nextcloud, another program).
-            Connections {
-                target: Workspace
-                function onFileChanged(path: string) {
-                    if (path === root.path)
-                        textFlick.revision++
-                }
-            }
 
             Column {
                 id: textColumn

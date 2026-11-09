@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <utility>
 
 namespace brulion::io::detail {
 
@@ -160,8 +161,7 @@ QString attachmentFileName(const QString &name)
 QString safeRelativePath(const QString &relative, bool attachment)
 {
     QStringList parts = QString(relative).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts);
-    parts.removeAll(u"."_s);
-    parts.removeAll(u".."_s);
+    parts.removeIf([](const QString &part) { return part == u"." || part == u".."; });
     for (qsizetype k = 0; k < parts.size(); ++k) {
         const bool last = k + 1 == parts.size();
         parts[k] = last && attachment ? attachmentFileName(parts[k]) : pageSegment(parts[k]);
@@ -175,18 +175,12 @@ ImportContext::ImportContext(const ImportOptions &options, const QString &import
     : m_options(options), m_claims(options.exists)
 {
     m_options.targetFolder = paths::normalize(options.targetFolder);
-    QString subfolder;
-    if (!options.attachmentSubfolder.trimmed().isEmpty()) {
-        subfolder = safeRelativePath(options.attachmentSubfolder, false);
-    } else if (!m_options.targetFolder.isEmpty()) {
-        subfolder = pageSegment(paths::basename(m_options.targetFolder));
-    } else {
-        subfolder = pageSegment(importerName);
-    }
-    QString base = paths::normalize(options.config.attachmentsFolder);
-    if (base.isEmpty())
-        base = u"assets"_s;
-    m_attachmentFolder = paths::join(base, subfolder);
+    const QString fallback = m_options.targetFolder.isEmpty() ? importerName : paths::basename(m_options.targetFolder);
+    const QString subfolder = options.attachmentSubfolder.trimmed().isEmpty()
+                                      ? pageSegment(fallback)
+                                      : safeRelativePath(options.attachmentSubfolder, false);
+    const QString base = paths::normalize(options.config.attachmentsFolder);
+    m_attachmentFolder = paths::join(base.isEmpty() ? u"assets"_s : base, subfolder);
 }
 
 VaultPath ImportContext::pagePath(const QString &relative) const
@@ -232,8 +226,7 @@ VaultPath ImportContext::addJournal(QDate date, const QString &content)
 {
     const VaultPath path = journalPath(date);
     const QString key = pathKey(path);
-    const auto it = m_journalIndex.constFind(key);
-    if (it != m_journalIndex.constEnd()) {
+    if (const auto it = m_journalIndex.constFind(key); it != m_journalIndex.constEnd()) {
         ImportedFile &file = m_result.files[*it];
         file.data = appendImported(file.data, content.toUtf8());
         return path;
@@ -264,17 +257,18 @@ void ImportContext::addFile(const VaultPath &path, const QByteArray &data)
 
 void ImportContext::warn(const QString &message)
 {
-    if (!m_result.warnings.contains(message))
+    if (!m_warned.contains(message)) {
+        m_warned.insert(message);
         m_result.warnings.append(message);
+    }
 }
 
 ImportResult ImportContext::take()
 {
-    ImportResult out = std::move(m_result);
-    m_result = ImportResult();
     m_journalIndex.clear();
     m_attachments.clear();
-    return out;
+    m_warned.clear();
+    return std::exchange(m_result, {});
 }
 
 // --- SourceTree ----------------------------------------------------------------------------------
@@ -360,12 +354,12 @@ std::optional<QString> SourceTree::resolve(const QString &target, const QString 
     }
     // A path suffix ("Folder/Page" for "Vault/Folder/Page.md"): candidates share the base name.
     const QString suffix = u'/' + pathKey(normalized);
-    QStringList candidates;
-    for (const QString &source : m_byBaseName.value(pathKey(paths::basename(normalized)))) {
+    const QString suffixMd = suffix + u".md"_s;
+    QStringList candidates = m_byBaseName.value(pathKey(paths::basename(normalized))); // each source once (add())
+    candidates.removeIf([&](const QString &source) {
         const QString key = pathKey(source);
-        if ((key.endsWith(suffix) || key.endsWith(suffix + u".md"_s)) && !candidates.contains(source))
-            candidates.append(source);
-    }
+        return !key.endsWith(suffix) && !key.endsWith(suffixMd);
+    });
     return best(candidates);
 }
 
@@ -440,19 +434,16 @@ QString wallClock(const QDateTime &dateTime, const QTimeZone &zone)
 QString noteWithFrontmatter(const QVariantMap &data, const QStringList &order, const QString &body)
 {
     QString out = data.isEmpty() ? QString() : markdown::stringifyFrontmatter(data, order);
-    const QString trimmedBody = normalizeNewlines(body);
-    if (!trimmedBody.isEmpty())
+    if (const QString trimmedBody = normalizeNewlines(body); !trimmedBody.isEmpty())
         out += trimmedBody + u'\n';
-    if (out.isEmpty())
-        return out;
-    return out.endsWith(u'\n') ? out : out + u'\n';
+    if (!out.isEmpty() && !out.endsWith(u'\n'))
+        out += u'\n';
+    return out;
 }
 
 QString normalizeNewlines(const QString &text)
 {
-    QString out = text;
-    out.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
-    QStringList lines = out.split(u'\n');
+    QStringList lines = QString(text).replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n').split(u'\n');
     for (QString &l : lines) {
         while (!l.isEmpty() && (l.back() == u' ' || l.back() == u'\t') && !l.endsWith(u"  "_s))
             l.chop(1);
@@ -556,8 +547,7 @@ QString tagName(const QString &text)
         out.remove(0, 1);
     while (out.endsWith(u'/'))
         out.chop(1);
-    const bool digitsOnly = std::all_of(out.cbegin(), out.cend(), [](QChar c) { return c.isDigit(); });
-    return digitsOnly ? QString() : out;
+    return std::ranges::all_of(std::as_const(out), [](QChar c) { return c.isDigit(); }) ? QString() : out;
 }
 
 QString titleFromText(const QString &text, int maxLength)
@@ -663,16 +653,15 @@ SourceTree importTree(const QList<InputFile> &files, ImportContext &ctx, const T
 {
     SourceTree tree;
     struct Page {
-        const InputFile *file;
+        const InputFile *file = nullptr;
         VaultPath path;
     };
     QList<Page> pages;
     QList<Page> attachments;
-    const auto defaultIsPage = [](const QString &p) { return paths::isMarkdown(p); };
     for (const InputFile &f : files) {
         if (paths::isIgnored(f.path) || (options.skip && options.skip(f.path)))
             continue;
-        const bool page = options.isPage ? options.isPage(f.path) : defaultIsPage(f.path);
+        const bool page = options.isPage ? options.isPage(f.path) : paths::isMarkdown(f.path);
         if (page) {
             QString rel = options.pageRelative ? options.pageRelative(f.path) : f.path;
             const qsizetype dot = rel.lastIndexOf(u'.');

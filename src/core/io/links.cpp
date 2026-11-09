@@ -5,6 +5,8 @@
 #include <QRegularExpression>
 #include <QStringDecoder>
 
+#include <algorithm>
+
 namespace brulion::io::detail {
 
 using namespace Qt::StringLiterals;
@@ -176,22 +178,21 @@ QString percentDecode(QStringView text)
 {
     if (!text.contains(u'%'))
         return text.toString();
-    const auto hex = [](QChar c) -> int {
-        const char16_t u = c.unicode();
-        if (u >= u'0' && u <= u'9')
-            return u - u'0';
-        if (u >= u'a' && u <= u'f')
-            return u - u'a' + 10;
-        if (u >= u'A' && u <= u'F')
-            return u - u'A' + 10;
+    const auto hex = [](char c) -> int {
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F')
+            return c - 'A' + 10;
         return -1;
     };
     QByteArray bytes;
     const QByteArray utf8 = text.toUtf8();
     for (qsizetype i = 0; i < utf8.size(); ++i) {
         if (utf8[i] == '%' && i + 2 < utf8.size()) {
-            const int hi = hex(QChar(char16_t(static_cast<unsigned char>(utf8[i + 1]))));
-            const int lo = hex(QChar(char16_t(static_cast<unsigned char>(utf8[i + 2]))));
+            const int hi = hex(utf8[i + 1]);
+            const int lo = hex(utf8[i + 2]);
             if (hi >= 0 && lo >= 0 && (hi || lo)) { // %00 stays literal
                 bytes += char(hi * 16 + lo);
                 i += 2;
@@ -212,11 +213,8 @@ QString relativePath(const QString &fromDir, const QString &to)
     qsizetype common = 0;
     while (common < from.size() && common + 1 < target.size() && from[common] == target[common])
         ++common;
-    QStringList parts;
-    for (qsizetype k = common; k < from.size(); ++k)
-        parts.append(u".."_s);
-    for (qsizetype k = common; k < target.size(); ++k)
-        parts.append(target[k]);
+    QStringList parts(from.size() - common, u".."_s);
+    parts.append(target.sliced(common));
     return parts.join(u'/');
 }
 

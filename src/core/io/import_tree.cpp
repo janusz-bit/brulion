@@ -87,10 +87,12 @@ public:
 
 // --- Bear ----------------------------------------------------------------------------------------
 
-/// "Folder/Note.textbundle" for a path inside a TextBundle, else empty.
+constexpr auto TextBundleExtension = ".textbundle"_L1;
+
+/// "Folder/Note.textbundle" for a path inside a TextBundle (not for the bundle itself), else empty.
 QString bundleOf(const QString &path)
 {
-    static const QRegularExpression re(u"^(.*?\\.textbundle)(?:/|$)"_s, QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression re(u"^(.*?\\.textbundle)/"_s, QRegularExpression::CaseInsensitiveOption);
     const auto m = re.match(path);
     return m.hasMatch() ? m.captured(1) : QString();
 }
@@ -113,8 +115,8 @@ QString convertBear(const QString &content)
     static const QRegularExpression highlight(u"::(?=\\S)([^:\\n]+?)(?<=\\S)::"_s);
     return mapLinesOutsideCode(content, [](const QString &line, const QString &masked) -> QString {
         struct Hit {
-            qsizetype from;
-            qsizetype to;
+            qsizetype from = 0;
+            qsizetype to = 0;
             QString text;
         };
         QList<Hit> hits;
@@ -130,7 +132,7 @@ QString convertBear(const QString &content)
         }
         if (hits.isEmpty())
             return line;
-        std::ranges::sort(hits, [](const Hit &a, const Hit &b) { return a.from < b.from; });
+        std::ranges::sort(hits, {}, &Hit::from);
         QString out;
         qsizetype last = 0;
         for (const Hit &h : std::as_const(hits)) {
@@ -163,8 +165,7 @@ QVariantMap bundleInfo(const QHash<QString, const InputFile *> &infoFiles, const
     const InputFile *f = infoFiles.value(bundle.toCaseFolded());
     if (!f)
         return out;
-    const QJsonObject root = QJsonDocument::fromJson(f->data).object();
-    const QJsonObject bear = root.value(u"net.shinyfrog.bear"_s).toObject();
+    const QJsonObject bear = QJsonDocument::fromJson(f->data).object().value(u"net.shinyfrog.bear"_s).toObject();
     const auto stamp = [&](const QString &key) {
         return wallClock(QDateTime::fromString(bear.value(key).toString(), Qt::ISODateWithMs), zone);
     };
@@ -190,7 +191,7 @@ public:
     {
         ImportContext ctx(options, name());
         const QList<InputFile> input = stripCommonRoot(
-                files, [](const QString &folder) { return folder.endsWith(u".textbundle"_s, Qt::CaseInsensitive); });
+                files, [](const QString &folder) { return folder.endsWith(TextBundleExtension, Qt::CaseInsensitive); });
         TreeImport tree;
         tree.isPage = [](const QString &p) { return bundleOf(p).isEmpty() ? isTextPage(p) : isBundleText(p); };
         tree.skip = [](const QString &p) {
@@ -205,7 +206,7 @@ public:
                     stem.chop(4);
                 return stem;
             }
-            return bundle.first(bundle.size() - QStringLiteral(".textbundle").size());
+            return bundle.chopped(TextBundleExtension.size());
         };
         tree.attachmentRelative = [](const QString &p) -> QString {
             const QString bundle = bundleOf(p);
@@ -215,17 +216,13 @@ public:
             QString rest = p.sliced(bundle.size() + 1);
             if (rest.startsWith(u"assets/"_s, Qt::CaseInsensitive))
                 rest = rest.sliced(7);
-            return paths::basename(bundle.first(bundle.size() - 11)) + u'/' + rest;
+            return paths::basename(bundle.chopped(TextBundleExtension.size())) + u'/' + rest;
         };
-        const QTimeZone zone = options.timeZone;
         const QHash<QString, const InputFile *> infoFiles = bundleInfoFiles(input);
         tree.convert = [&](const QString &content, const QString &source) -> QString {
             const QString body = convertBear(content);
-            const QString bundle = bundleOf(source);
-            const QVariantMap info = bundle.isEmpty() ? QVariantMap() : bundleInfo(infoFiles, bundle, zone);
-            if (info.isEmpty())
-                return body;
-            return noteWithFrontmatter(info, {u"created"_s, u"updated"_s}, body);
+            const QVariantMap info = bundleInfo(infoFiles, bundleOf(source), options.timeZone);
+            return info.isEmpty() ? body : noteWithFrontmatter(info, {u"created"_s, u"updated"_s}, body);
         };
         importTree(input, ctx, tree);
         return ctx.take();

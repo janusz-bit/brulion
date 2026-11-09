@@ -51,6 +51,10 @@ FocusScope {
     // Quoted note text at the UI's base size everywhere, so the page's own editor text (textEditor)
     // stays the only larger size and the scale has no step between the UI and the editor.
     readonly property int fontSize: Theme.textBase
+    /// The link of the text under the mouse or the pressing finger, underlined (as in the editor).
+    property string hoveredLink: ""
+    /// The last point trackLink() looked at, in textItem's coordinates.
+    property point linkPoint
 
     implicitHeight: layout.implicitHeight + 2 * Theme.space2
     activeFocusOnTab: true
@@ -77,8 +81,7 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: Theme.space2
-        anchors.rightMargin: Theme.space2
+        anchors.margins: Theme.space2
         spacing: Theme.space2
 
         // A bullet like the editor's, or for tasks the editor's checkbox (same column).
@@ -136,8 +139,6 @@ FocusScope {
                 // Screen readers: the text's links as link items of their own (the row stays the
                 // link to the reference; the task checkbox is TaskBox).
                 BLinkTargets {
-                    x: 0
-                    y: 0
                     textItem: textItem.textItem
                     html: row.html
                     lineHeight: textItem.lineHeight
@@ -162,10 +163,6 @@ FocusScope {
         }
     }
 
-    /// The link of the text under the mouse or the pressing finger, underlined (as in the editor).
-    property string hoveredLink: ""
-    /// The last point trackLink() looked at, in textItem's coordinates.
-    property point linkPoint
     function trackLink(pos: point): void {
         row.linkPoint = textItem.mapFromItem(row, pos.x, pos.y)
         const link = textItem.linkAt(row.linkPoint.x, row.linkPoint.y)

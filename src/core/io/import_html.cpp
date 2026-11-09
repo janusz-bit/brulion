@@ -2,6 +2,7 @@
 // Markdown; images (data: URIs and local files) and links to other imported files become
 // attachments and wiki links.
 #include "io/htmlmarkdown.h"
+#include "io/htmlutil_p.h"
 #include "io/importers_p.h"
 #include "io/importutil_p.h"
 #include "io/messages_p.h"
@@ -47,13 +48,26 @@ QString decodeHtml(const QByteArray &data)
 /// A relative reference ("img/a b.png?x#y" -> "img/a b.png"); empty for URLs with a scheme.
 QString relativeReference(const QString &ref)
 {
+    static const QRegularExpression queryOrFragment(u"[?#]"_s);
     QString r = ref.trimmed();
     if (r.isEmpty() || r.startsWith(u'#') || r.startsWith(u"//"_s) || !QUrl(r).scheme().isEmpty())
         return {};
-    const qsizetype cut = r.indexOf(QRegularExpression(u"[?#]"_s));
-    if (cut >= 0)
+    if (const qsizetype cut = r.indexOf(queryOrFragment); cut >= 0)
         r.truncate(cut);
     return percentDecode(r);
+}
+
+/// A wiki link to the imported file `local` (a link, unlike an image, never embeds the file)
+/// with the link's `label` (Markdown), unless it only repeats the page title or file name or
+/// cannot be a wiki link's label.
+QString fileLink(const VaultPath &local, const QString &label)
+{
+    const bool page = paths::isMarkdown(local);
+    QString plain = QString(label).remove(u'\\').trimmed();
+    if (plain.contains(u'|') || plain.contains(u'[')
+        || plain.compare(page ? paths::pageTitle(local) : paths::basename(local), Qt::CaseInsensitive) == 0)
+        plain.clear();
+    return wikiLink(page ? paths::stripMarkdownExtension(local) : local, {}, {}, plain);
 }
 
 class HtmlImporter final : public Importer {
@@ -90,17 +104,16 @@ public:
                 const QString rel = relativeReference(ref);
                 if (rel.isEmpty())
                     return std::nullopt;
-                const QString source = rel.startsWith(u'/') ? paths::normalize(rel) : paths::join(dir, rel);
-                const InputFile *target = bySource.value(pathKey(source));
+                const QString key = pathKey(rel.startsWith(u'/') ? paths::normalize(rel) : paths::join(dir, rel));
+                const InputFile *target = bySource.value(key);
                 if (!target)
                     return std::nullopt;
                 if (isHtml(target->path))
                     return pages.destination(target->path);
-                const auto it = attachments.constFind(pathKey(source));
-                if (it != attachments.constEnd())
+                if (const auto it = attachments.constFind(key); it != attachments.constEnd())
                     return *it;
                 const VaultPath stored = ctx.addAttachment(paths::basename(target->path), target->data);
-                attachments.insert(pathKey(source), stored);
+                attachments.insert(key, stored);
                 return stored;
             };
             HtmlToMarkdownOptions o;
@@ -124,27 +137,13 @@ public:
                 return img.alt.isEmpty() ? QString() : escapeMarkdownText(img.alt, false);
             };
             o.link = [&](const QString &href, const QString &label) -> std::optional<QString> {
-                const auto local = localFile(href);
-                if (!local)
-                    return std::nullopt;
-                if (paths::isMarkdown(*local)) {
-                    const QString target = paths::stripMarkdownExtension(*local);
-                    const QString plain = QString(label).remove(u'\\').trimmed();
-                    const bool same = plain.isEmpty()
-                                      || plain.compare(paths::pageTitle(*local), Qt::CaseInsensitive) == 0
-                                      || plain.contains(u'|') || plain.contains(u'[');
-                    return wikiLink(target, {}, {}, same ? QString() : plain);
-                }
-                // A link (unlike an image) never embeds the file.
-                QString plain = QString(label).remove(u'\\').trimmed();
-                if (plain.contains(u'|') || plain.contains(u'[')
-                    || plain.compare(paths::basename(*local), Qt::CaseInsensitive) == 0)
-                    plain.clear();
-                return wikiLink(*local, {}, {}, plain);
+                if (const auto local = localFile(href))
+                    return fileLink(*local, label);
+                return std::nullopt;
             };
-            const HtmlMarkdown md = htmlToMarkdown(decodeHtml(file->data), o);
-            QString body = md.markdown;
-            QString title = md.title;
+            QString html = decodeHtml(file->data);
+            html.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose)); // only importers write them
+            auto [body, title] = htmlToMarkdown(html, o);
             if (body.startsWith(u"# "_s)) {
                 const qsizetype eol = body.indexOf(u'\n');
                 const QString h1 = body.sliced(2, (eol < 0 ? body.size() : eol) - 2).trimmed();

@@ -28,7 +28,10 @@ bool isKeepNote(const QJsonObject &o)
 
 QDateTime fromUsec(const QJsonValue &v)
 {
-    const qint64 usec = v.isString() ? v.toString().toLongLong() : qint64(v.toDouble());
+    qint64 usec = v.toString().toLongLong();
+    // (A number beyond qint64, from a damaged file, would make the conversion undefined.)
+    if (const double number = v.toDouble(); number > 0 && number < 9e18)
+        usec = qint64(number);
     if (usec <= 0)
         return {};
     return QDateTime::fromMSecsSinceEpoch(usec / 1000, QTimeZone::UTC);
@@ -43,10 +46,10 @@ public:
         for (const InputFile &f : files) {
             const QString base = paths::basename(f.path);
             m_byPath.insert(pathKey(f.path), &f);
-            addFirst(m_byName, base.toCaseFolded(), &f);
+            m_byName.tryEmplace(base.toCaseFolded(), &f);
             const QString stem = base.section(u'.', 0, -2);
             if (!stem.isEmpty() && paths::extension(f.path) != u".json")
-                addFirst(m_byStem, stem.toCaseFolded(), &f);
+                m_byStem.tryEmplace(stem.toCaseFolded(), &f);
         }
     }
 
@@ -64,16 +67,18 @@ public:
     }
 
 private:
-    static void addFirst(QHash<QString, const InputFile *> &map, const QString &key, const InputFile *file)
-    {
-        if (!map.contains(key))
-            map.insert(key, file);
-    }
-
     QHash<QString, const InputFile *> m_byPath;
     QHash<QString, const InputFile *> m_byName; ///< first file with that name
     QHash<QString, const InputFile *> m_byStem; ///< first non-JSON file with that stem
 };
+
+/// Keep's text without the private-use formula marks of escapeTextFormulas() (htmlutil_p.h): only
+/// an importer's own formulas may use them, and in the text they would shield its dollars.
+QString withoutFormulaMarks(QString text)
+{
+    text.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
+    return text;
+}
 
 QString listItem(const QString &text, bool checked)
 {
@@ -130,12 +135,12 @@ private:
                            ImportContext &ctx)
     {
         const QTimeZone &zone = ctx.options().timeZone;
-        const QString text = o.value(u"textContent"_s).toString();
+        const QString text = withoutFormulaMarks(o.value(u"textContent"_s).toString());
         QStringList items;
         QString firstItem;
-        for (const QJsonValue &v : o.value(u"listContent"_s).toArray()) {
+        for (const QJsonArray list = o.value(u"listContent"_s).toArray(); const auto &v : list) {
             const QJsonObject item = v.toObject();
-            const QString itemText = item.value(u"text"_s).toString();
+            const QString itemText = withoutFormulaMarks(item.value(u"text"_s).toString());
             if (firstItem.isEmpty())
                 firstItem = itemText;
             items.append(listItem(itemText, item.value(u"isChecked"_s).toBool()));
@@ -154,7 +159,7 @@ private:
         if (!items.isEmpty())
             parts.append(items.join(u'\n'));
         QStringList media;
-        for (const QJsonValue &v : o.value(u"attachments"_s).toArray()) {
+        for (const QJsonArray attachments = o.value(u"attachments"_s).toArray(); const auto &v : attachments) {
             const QString filePath = v.toObject().value(u"filePath"_s).toString();
             if (filePath.isEmpty())
                 continue;
@@ -168,7 +173,7 @@ private:
         if (!media.isEmpty())
             parts.append(media.join(u'\n'));
         QStringList links;
-        for (const QJsonValue &v : o.value(u"annotations"_s).toArray()) {
+        for (const QJsonArray annotations = o.value(u"annotations"_s).toArray(); const auto &v : annotations) {
             const QJsonObject a = v.toObject();
             const QString url = a.value(u"url"_s).toString().trimmed();
             if (url.isEmpty())
@@ -188,7 +193,7 @@ private:
         if (const QString u = wallClock(fromUsec(o.value(u"userEditedTimestampUsec"_s)), zone); !u.isEmpty())
             fm.insert(u"updated"_s, u);
         QStringList tags;
-        for (const QJsonValue &v : o.value(u"labels"_s).toArray()) {
+        for (const QJsonArray labels = o.value(u"labels"_s).toArray(); const auto &v : labels) {
             const QString name = tagName(v.toObject().value(u"name"_s).toString());
             if (!name.isEmpty())
                 tags.append(name);
