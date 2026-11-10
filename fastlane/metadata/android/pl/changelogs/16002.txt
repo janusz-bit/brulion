@@ -1,0 +1,7 @@
+Nowości w 0.16.2:
+• Bezpieczniej z notatkami z dowolnego źródła
+• Złośliwe notatki nie szkodzą
+• Szybszy Dataview
+• Poprawki
+
+Pełny opis: https://github.com/janusz-bit/brulion/releases/tag/v0.16.2
