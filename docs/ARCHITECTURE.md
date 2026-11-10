@@ -414,6 +414,13 @@ app; these guards keep data from being lost:
   fail while the folder is missing or on another storage, so nothing lands on an empty mount
   point. Files changed on disk behind the app are taken in (and kept in History) before an
   overwrite; every overwrite is atomic (`QSaveFile`) and snapshotted into History first.
+* **Links and sizes in the vault** (`src/core/vault/vault.h`, "Semantics"): a symlink to a file is
+  never followed, wherever it points — not listed, read or written, so a link planted by a sync peer
+  or a checkout (`x.md → ~/.ssh/id_rsa`) is neither indexed nor uploaded nor written through;
+  folder links are followed only when they point outside the vault, and no trash operation or
+  `rename()` goes through one inside `.trash/`. Every read is bounded whatever size the file reports
+  (`/proc` files report none): scans read text files up to 16 MB, `readText()` / `readBinary()`
+  up to 1 GiB.
 * **Sync guards** (`SyncEngine`): a **mass-deletion guard** holds back every deletion of a run
   that would delete more than 25 % and at least 10 files of one side (or all of them) until the
   user confirms the list in the sync center (`needsConfirmation`, `pendingDeletions`); a side

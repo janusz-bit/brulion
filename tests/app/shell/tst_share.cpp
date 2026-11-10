@@ -424,10 +424,10 @@ private Q_SLOTS:
 #ifndef Q_OS_UNIX
         QSKIP("symbolic links");
 #else
-        // The notebook follows a folder linked from outside and a page that is a link: their files'
-        // real paths are outside the notebook, yet they are its pages. A folder starting with "."
-        // holds pages too; a link to another folder of the notebook is not followed (its page is
-        // the real one).
+        // The notebook follows a folder linked from outside: its files' real paths are outside the
+        // notebook, yet they are its pages. A folder starting with "." holds pages too; a link to
+        // another folder of the notebook is not followed (its page is the real one), nor is a link
+        // to a file (no page: the vault never follows those).
         const QString root = m_tmp.filePath(u"dowiązania"_s);
         const QString outside = outsideFolder(
                 u"Dokumenty"_s, {{u"Praca/Plan.md"_s, "# Plan\n- zażółć\n"}, {u"Notatka.md"_s, "# Notatka\n"}});
@@ -440,14 +440,13 @@ private Q_SLOTS:
         QCOMPARE(app->workspace()->rootPath(), QDir::cleanPath(root));
         // What the notebook itself has (the premise).
         QTRY_VERIFY(app->workspace()->exists(u"Praca/Plan.md"_s));
-        QVERIFY(app->workspace()->exists(u"Skrót.md"_s));
+        QVERIFY(!app->workspace()->exists(u"Skrót.md"_s));
         QVERIFY(app->workspace()->exists(u".szkice/Pomysł.md"_s));
         QVERIFY(!app->workspace()->exists(u"Alias/Cel.md"_s));
 
         QSignalSpy ui(app.get(), &AppController::uiActionRequested);
         const QList<std::pair<QString, QString>> opened{
                 {root + u"/Praca/Plan.md"_s, u"Praca/Plan.md"_s},
-                {root + u"/Skrót.md"_s, u"Skrót.md"_s},
                 {root + u"/.szkice/Pomysł.md"_s, u".szkice/Pomysł.md"_s},
                 {root + u"/Alias/Cel.md"_s, u"Projekty/Cel.md"_s},
         };
@@ -467,10 +466,13 @@ private Q_SLOTS:
         QVERIFY(!QFileInfo::exists(root + u"/Pomysł.md"_s));
         QCOMPARE(readRaw(outside + u"/Praca/Plan.md"_s), QByteArray("# Plan\n- zażółć\n"));
         QVERIFY(QFileInfo(root + u"/Skrót.md"_s).isSymLink());
-        // The ignored folders stay no pages: offered as a copy.
+        // A link to a file and the ignored folders are no pages: offered as a copy.
+        app->receiveShare(openedShare({root + u"/Skrót.md"_s}));
+        QCOMPARE(shareRequests(ui), 1);
+        app->dismissShare();
         QVERIFY(writeFile(root + u"/.trash/Stary.md"_s, "# Stary\n"));
         app->receiveShare(openedShare({root + u"/.trash/Stary.md"_s}));
-        QCOMPARE(shareRequests(ui), 1);
+        QCOMPARE(shareRequests(ui), 2);
         app->dismissShare();
 #endif
     }

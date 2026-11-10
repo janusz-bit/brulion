@@ -147,8 +147,11 @@ public:
     bool comparesContent(const FileStat &stat) const;
     /// `hash`: text::fnv1a64Hex(bytes) when the caller has it already.
     void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false, const QString &hash = {});
-    QByteArray readDisk(const VaultPath &path, bool *ok) const;
+    /// At most `limit` bytes (vaultutil::readContent()); `ok` is false for anything else.
+    QByteArray readDisk(const VaultPath &path, qint64 limit, bool *ok) const;
     QByteArray readFile(const VaultPath &path, bool asText, bool *ok);
+    /// Why a read of readText(), readBinary() or readDetached() failed: the "%2" of "Cannot read %1: %2".
+    static QString readFailure(const vaultutil::ContentRead &read);
     /// The bookkeeping after reading a tracked file (readFile(), Vault::adoptRead()).
     void takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes, bool asText,
                   const QString &hash);
@@ -196,9 +199,12 @@ public:
     DiskListing collect(const ScanScope &scope) const;
     ScanDiff diff(const DiskListing &listing) const;
     // Content read while scanning is never kept beyond the file at hand: `hashCache` holds only
-    // the content hashes of appeared files computed while looking for renames.
-    /// The content of a listed file; nullopt when it cannot be read.
-    std::optional<QByteArray> readEntry(const DiskEntry &entry) const;
+    // the content hashes of appeared files computed while looking for renames ("" for a file
+    // that turned out too big to read).
+    /// The content of a listed file; nullopt when it cannot be read — `tooBig` when it holds more
+    /// than ContentCache::kMaxItemBytes after all (files in /proc report no size): such a file is
+    /// compared by its stat, like one whose size says so.
+    std::optional<QByteArray> readEntry(const DiskEntry &entry, bool *tooBig = nullptr) const;
     std::optional<QString> entryHash(const DiskEntry &entry, QHash<VaultPath, QString> &hashCache) const;
     bool sameContent(const FileStat &vanished, const DiskEntry &appeared, QHash<VaultPath, QString> &hashCache) const;
     QList<RenamePair> pairRenames(const ScanDiff &diff, QHash<VaultPath, QString> &hashCache) const;

@@ -1,10 +1,13 @@
-// Path helpers of the vault (vaultutil_p.h) and .brulion/config.json parsing (vaultconfig.h).
+// Path helpers of the vault (vaultutil_p.h), its bounded reads, and .brulion/config.json parsing
+// (vaultconfig.h).
+#include "filesystemtraits.h"
 #include "vault/vaultconfig.h"
 #include "vault/vaultutil_p.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace brulion;
@@ -177,6 +180,64 @@ private Q_SLOTS:
         QCOMPARE(vaultutil::decodeUtf8(QByteArray("\xEF\xBB\xBFzaż\xC3\xB3\xC5\x82\xC4\x87\r\n")), u"zażółć\r\n"_s);
         QCOMPARE(vaultutil::decodeUtf8("a\r\nb\rc\n"_ba), u"a\r\nb\rc\n"_s);
         QCOMPARE(vaultutil::decodeUtf8(QByteArray()), QString());
+    }
+
+    void readContent_data()
+    {
+        // "file", "link" (to such a file), "folder", "missing", or an absolute path of the system.
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QByteArray>("content"); // of the file; for the system's, how it starts
+        QTest::addColumn<qint64>("limit");
+        QTest::addColumn<int>("status");
+        using S = vaultutil::ContentRead::Status;
+        const QByteArray note("# Zakupy\r\n- mleko, jaja\nzażółć gęślą jaźń\n");
+        const QByteArray big = QByteArray("ąę").repeated(1024);
+        QTest::newRow("a note") << u"file"_s << note << qint64(1024) << int(S::Ok);
+        QTest::newRow("exactly the limit") << u"file"_s << big << qint64(big.size()) << int(S::Ok);
+        QTest::newRow("one byte over") << u"file"_s << big << qint64(big.size() - 1) << int(S::TooBig);
+        QTest::newRow("empty") << u"file"_s << QByteArray() << qint64(0) << int(S::Ok);
+        QTest::newRow("missing") << u"missing"_s << QByteArray() << qint64(1024) << int(S::Failed);
+        QTest::newRow("a folder") << u"folder"_s << QByteArray() << qint64(1024) << int(S::Failed);
+        QTest::newRow("a link to a file") << u"link"_s << note << qint64(1024) << int(S::Link);
+        // Files that report no size are read to their end, which some never reach.
+        QTest::newRow("a file of /proc") << u"/proc/self/status"_s << "Name:"_ba << qint64(1 << 20) << int(S::Ok);
+        QTest::newRow("a file of /proc over the limit")
+                << u"/proc/self/status"_s << QByteArray() << qint64(16) << int(S::TooBig);
+        QTest::newRow("a device without end") << u"/dev/zero"_s << QByteArray() << qint64(100'000) << int(S::TooBig);
+    }
+    void readContent()
+    {
+        QFETCH(QString, kind);
+        QFETCH(QByteArray, content);
+        QFETCH(qint64, limit);
+        QFETCH(int, status);
+        QTemporaryDir tmp;
+        QString path = tmp.filePath(u"Notatka.md"_s);
+        if (kind == u"file" || kind == u"link") {
+            QFile file(kind == u"file" ? path : tmp.filePath(u"cel.md"_s));
+            QVERIFY(file.open(QIODevice::WriteOnly) && file.write(content) == content.size());
+            file.close();
+            if (kind == u"link") {
+                BRULION_SKIP_WITHOUT_SYMLINKS();
+                QVERIFY(QFile::link(file.fileName(), path));
+            }
+        } else if (kind == u"folder") {
+            QVERIFY(QDir().mkpath(path));
+        } else if (kind != u"missing") {
+            path = kind;
+            if (!QFileInfo::exists(path))
+                QSKIP("not on this system");
+        }
+        const vaultutil::ContentRead read = vaultutil::readContent(path, limit);
+        QCOMPARE(int(read.status), status);
+        QCOMPARE(read.ok(), status == int(vaultutil::ContentRead::Status::Ok));
+        QCOMPARE(read.error.isEmpty(), status != int(vaultutil::ContentRead::Status::Failed));
+        if (!read.ok())
+            QVERIFY(read.bytes.isEmpty());
+        else if (kind == u"file")
+            QCOMPARE(read.bytes, content);
+        else
+            QVERIFY(read.bytes.startsWith(content) && read.bytes.size() < limit);
     }
 
     // ---- config parsing -----------------------------------------------------------------

@@ -42,7 +42,11 @@
 //    (which exists()/stat() know but files() does not list). Ignored paths can be read and
 //    written but produce no changes. Symlinked folders are followed when they point outside
 //    the vault (an "assets" link to a photo folder); links into the vault (duplicates) and
-//    loops are not. Deleting a symlink removes the link, never what it points to.
+//    loops are not. Symlinked files are never followed, wherever they point (outside the vault
+//    or into it): they are not listed (trash() included), exists()/stat() do not know them,
+//    reads fail and writes are refused — a sync peer (Syncthing syncs symlinks) or a checkout
+//    could plant "x.md -> ~/.ssh/id_rsa", which would be indexed, uploaded by sync and written
+//    through. Moving or deleting a symlink moves or removes the link, never what it points to.
 //  * Paths are normalised with paths::normalize (NFC); files stored with other Unicode
 //    normalisation (NFD names copied from macOS) are found and written under their real name,
 //    also after another program re-spells a known entry and in the (untracked) trash.
@@ -53,8 +57,8 @@
 //    same-size change hidden by coarse timestamps) — that change is taken in first (reported
 //    as External and kept in History), so nothing is overwritten without a trace. Text written
 //    with writeText to a file that has a UTF-8 BOM keeps it. Line endings and every other byte
-//    are written exactly as given. A path that is a symlink leading nowhere is refused
-//    (QSaveFile would create the link's target, wherever it points).
+//    are written exactly as given. A path that is a symlink to a file (or one leading nowhere) is
+//    refused: QSaveFile would write through it — or create its target —, wherever it points.
 //  * writeTextIfUnchanged() writes only when the file still holds the text the caller last saw
 //    (read from the disk, not the cache; a missing file always qualifies): an editor's debounced
 //    save or an agent's edit never overwrites what another program wrote a moment ago. A file
@@ -64,8 +68,9 @@
 //    inserted before the extension. The original location is remembered in the LocalStore,
 //    otherwise derived from the trash path. restore() picks a free path ("Name 2.md") when the
 //    original is taken. Paths inside ".trash/" are deleted permanently. Trash operations never
-//    go through a symlinked folder inside the trash (".trash" itself included): such a link
-//    would carry notes out of the vault or offer foreign files for restoring.
+//    go through a symlinked folder inside the trash (".trash" itself included), nor does
+//    rename() into or out of the trash: such a link would carry notes out of the vault or offer
+//    foreign files for restoring.
 //  * rename()/remove() of an entry that changed kind behind the vault's back (a folder
 //    replaced by a file) first report that change (External), then their own.
 //  * External changes (Syncthing, Nextcloud, other editors) are found by the file system
@@ -88,7 +93,11 @@
 //  * Memory stays bounded: scans read one file at a time and never read files over 16 MB —
 //    those are compared by size and mtime like binary files (a touch counts as a
 //    modification) and are not kept in History; the content cache holds at most 64 MB, and a
-//    .brulion/config.json over 1 MB is ignored (defaults + warning).
+//    .brulion/config.json over 1 MB is ignored (defaults + warning). readText(), readBinary()
+//    and readDetached() fail for files over 1 GiB (they hold the whole file in memory). Every
+//    read stops one byte past its limit, whatever size the file reports — files of /proc
+//    report none and some never end (a followed folder link can reach them) —, and content
+//    found over the limit counts as a file whose size is over it.
 //  * Without .brulion/config.json, a vault with an `.obsidian/` folder takes its journal folder,
 //    file name format and template, templates folder and attachments folder from Obsidian's
 //    settings (obsidiansettings.h; files over 1 MB are skipped with a warning) — in memory, never
@@ -170,7 +179,7 @@ struct DetachedRead {
     QByteArray bytes;
     QString hash;  ///< FNV-1a 64 of the bytes (hex), as the vault keeps it
     QString text;  ///< UTF-8 decoded, a BOM dropped (as readText())
-    QString error; ///< English, when !ok
+    QString error; ///< why, when !ok (the "%2" of "Cannot read %1: %2")
 };
 
 /// Where a trashed file or folder came from.
@@ -267,7 +276,7 @@ public:
 
     /// Rename or move a file or folder. Fails when `to` exists, also in another letter case
     /// ("dom.md" next to "Dom.md"; case-only renames such as "notatka.md" -> "Notatka.md" are
-    /// allowed), or when moving a folder into itself.
+    /// allowed), when moving a folder into itself, or through a symlinked folder in the trash.
     /// Emits one Renamed change per file (Deleted when moved into an ignored folder, Created
     /// for files arriving from one).
     bool rename(const VaultPath &from, const VaultPath &to, ChangeSource source = ChangeSource::User);

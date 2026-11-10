@@ -70,6 +70,11 @@ constexpr qint64 kVerifyBytes = 1024 * 1024;
 /// .brulion/config.json larger than this is not read (a settings file is a few hundred bytes).
 constexpr qint64 kMaxConfigBytes = 1024 * 1024;
 
+/// readText(), readBinary() and readDetached() fail for files larger than this: they hold the
+/// whole file in memory, as writes do. Notes are kilobytes, the app stores attachments up to
+/// 200 MB and backups restore files up to 1 GiB (MaxRestoredEntryBytes) — all of them read back.
+constexpr qint64 kMaxReadBytes = qint64(1) << 30;
+
 /// `path` equals `dir` or lies inside it (absolute file system paths).
 bool fsWithin(const QString &path, const QString &dir)
 {
@@ -329,7 +334,8 @@ std::optional<FileStat> VaultPrivate::diskStat(const VaultPath &path) const
     const QFileInfo info(absPath(path));
     if (!info.exists() || (!info.isDir() && !info.isFile()))
         return std::nullopt;
-    if (info.isDir() && info.isSymLink() && !path.isEmpty() && !followsLink(info, diskRel(paths::dirname(path))))
+    // A link to a file is never followed, one to a folder by followsLink()'s rules.
+    if (info.isSymLink() && !path.isEmpty() && (!info.isDir() || !followsLink(info, diskRel(paths::dirname(path)))))
         return std::nullopt;
     return statOf(info, path);
 }
@@ -629,12 +635,26 @@ void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &byte
         contents.put(path, bytes);
 }
 
-QByteArray VaultPrivate::readDisk(const VaultPath &path, bool *ok) const
+QByteArray VaultPrivate::readDisk(const VaultPath &path, qint64 limit, bool *ok) const
 {
-    QFile file(absPath(path));
-    const QByteArray bytes = file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-    *ok = file.error() == QFileDevice::NoError; // also set by a failed open()
-    return bytes;
+    vaultutil::ContentRead read = vaultutil::readContent(absPath(path), limit);
+    *ok = read.ok();
+    return std::move(read.bytes);
+}
+
+QString VaultPrivate::readFailure(const vaultutil::ContentRead &read)
+{
+    switch (read.status) {
+    case vaultutil::ContentRead::Status::Link:
+        //: The reason in "Cannot read %1: %2"
+        return Vault::tr("links to files are not followed");
+    case vaultutil::ContentRead::Status::TooBig:
+        //: The reason in "Cannot read %1: %2"; %1 = 1024
+        return Vault::tr("it is larger than %1 MB").arg(kMaxReadBytes / (1024 * 1024));
+    case vaultutil::ContentRead::Status::Ok:
+    case vaultutil::ContentRead::Status::Failed: break;
+    }
+    return read.error;
 }
 
 QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok)
@@ -651,22 +671,17 @@ QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok)
     // Stat before reading: if the file changes in between, the content read is newer than the
     // stat, which only causes one harmless check later.
     const std::optional<FileStat> before = tracked ? diskStat(path) : std::nullopt;
-    QFile file(absPath(path));
-    if (!file.open(QIODevice::ReadOnly)) {
-        fail(Vault::tr("Cannot read %1: %2").arg(path, file.errorString()));
+    vaultutil::ContentRead read = vaultutil::readContent(absPath(path), kMaxReadBytes);
+    if (!read.ok()) {
+        fail(Vault::tr("Cannot read %1: %2").arg(path, readFailure(read)));
         if (files.contains(path))
-            scheduleCheck(path); // gone behind our back
-        return {};
-    }
-    const QByteArray bytes = file.readAll();
-    if (file.error() != QFileDevice::NoError) {
-        fail(Vault::tr("Cannot read %1: %2").arg(path, file.errorString()));
+            scheduleCheck(path); // gone (or turned into a link) behind our back
         return {};
     }
     *ok = true;
     if (tracked)
-        takeRead(path, before, bytes, asText, text::fnv1a64Hex(bytes));
-    return bytes;
+        takeRead(path, before, read.bytes, asText, text::fnv1a64Hex(read.bytes));
+    return std::move(read.bytes);
 }
 
 void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes,
@@ -758,7 +773,7 @@ void VaultPrivate::refreshKnownContent(const VaultPath &path, bool asText, qint6
     if (!needed || size > ContentCache::kMaxItemBytes)
         return;
     bool ok = false;
-    const QByteArray current = readDisk(path, &ok);
+    const QByteArray current = readDisk(path, ContentCache::kMaxItemBytes, &ok);
     if (!ok)
         return;
     const auto hash = hashes.constFind(path);
@@ -780,8 +795,9 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     const std::optional<FileStat> disk = diskStat(path);
     if (dirs.contains(path) || (disk && disk->isDir))
         return fail(Vault::tr("Cannot write %1: it is a folder").arg(path));
-    // QSaveFile writes through symlinks: one that leads nowhere would create its target,
-    // wherever it points (outside the vault). Such links are not listed either.
+    // QSaveFile writes through symlinks, to wherever they point (outside the vault), and creates
+    // the target of one that leads nowhere: no link to a file is written (diskStat() knows none).
+    // Such links are not listed either.
     if (!disk && QFileInfo(absPath(path)).isSymLink())
         return fail(Vault::tr("Cannot write %1: it is a link that does not lead to a file").arg(path));
     const bool tracked = vaultutil::isTracked(path);
@@ -863,14 +879,14 @@ VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, C
 std::optional<QByteArray> VaultPrivate::readObsidianSetting(const QString &path, QStringList &warnings) const
 {
     const QFileInfo info(absPath(path));
-    if (!info.isFile())
+    if (!info.isFile() || info.isSymLink()) // a link to a file is none to the vault
         return std::nullopt;
     if (info.size() > kMaxConfigBytes) {
         warnings.append(u"%1 is too big (%2 bytes); not used"_s.arg(path).arg(info.size()));
         return std::nullopt;
     }
     bool ok = false;
-    const QByteArray bytes = readDisk(path, &ok);
+    const QByteArray bytes = readDisk(path, kMaxConfigBytes, &ok);
     if (!ok) {
         warnings.append(u"Cannot read %1"_s.arg(path));
         return std::nullopt;
@@ -892,7 +908,7 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
         parsed.warnings.append(u"%1 is too big (%2 bytes); using the defaults"_s.arg(path).arg(known->size));
     } else if (known != files.cend()) {
         bool ok = false;
-        const QByteArray bytes = readDisk(path, &ok);
+        const QByteArray bytes = readDisk(path, kMaxConfigBytes, &ok);
         if (ok)
             parsed = parseVaultConfig(bytes);
         else
@@ -1147,15 +1163,13 @@ DetachedRead Vault::readDetached(const VaultPath &path, const QString &absoluteP
     const QFileInfo info(absolutePath);
     if (info.isFile())
         out.statBefore = statOf(info, path);
-    QFile file(absolutePath);
-    if (file.open(QIODevice::ReadOnly))
-        out.bytes = file.readAll();
-    if (file.error() != QFileDevice::NoError) { // also set by a failed open()
-        out.error = file.errorString();
-        out.bytes.clear();
+    vaultutil::ContentRead read = vaultutil::readContent(absolutePath, kMaxReadBytes);
+    if (!read.ok()) {
+        out.error = VaultPrivate::readFailure(read);
         return out;
     }
     out.ok = true;
+    out.bytes = std::move(read.bytes);
     out.hash = text::fnv1a64Hex(out.bytes);
     out.text = vaultutil::decodeUtf8(out.bytes);
     return out;
@@ -1207,11 +1221,12 @@ WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString
     }
     d->resolveSpelling(path);
     // What the file holds now — on disk, not what the vault remembers: another program may have
-    // written it a moment ago, before its change reached the vault.
+    // written it a moment ago, before its change reached the vault. (A link to a file is none:
+    // write() refuses it.)
     const QFileInfo info(d->absPath(path));
-    if (info.isFile()) {
+    if (info.isFile() && !info.isSymLink()) {
         bool ok = false;
-        const QByteArray bytes = d->readDisk(path, &ok);
+        const QByteArray bytes = d->readDisk(path, kMaxReadBytes, &ok);
         if (!ok) {
             d->fail(tr("Cannot read %1").arg(path));
             return WriteOutcome::Failed;
