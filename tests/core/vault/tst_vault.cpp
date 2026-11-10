@@ -1204,6 +1204,7 @@ private Q_SLOTS:
     {
         BRULION_SKIP_WITHOUT_SYMLINKS();
         Fixture f;
+        f.followOutsideLinks = true; // the device allows it (tst_vault_edge: by default it does not)
         const QString outside = f.tmp.path() + u"/Zdjęcia"_s;
         writeBehind(outside, u"lato.png"_s, "\x01");
         writeBehind(outside, u"Góry/szczyt.png"_s, "\x02");

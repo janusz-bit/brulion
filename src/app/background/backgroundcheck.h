@@ -61,7 +61,7 @@ int normalizedInterval(int minutes);
 /// look. JSON (Kotlin keeps it, BackgroundCheck.kt):
 ///
 ///   { root, stateDir, vault, ringMinutes, language: "pl" | "en", intervalMinutes,
-///     nextcloud: { davUrl, user, device } (absent: no Nextcloud sync) }
+///     followOutsideLinks, nextcloud: { davUrl, user, device } (absent: no Nextcloud sync) }
 ///
 /// The Nextcloud app password is never part of it: the check reads it from the app's own file
 /// (AppSettings::nextcloudPassword()).
@@ -72,6 +72,10 @@ struct Target {
     int ringMinutes = ScheduledNotification::DefaultRingMinutes;
     QString language = QStringLiteral("pl");
     int intervalMinutes = DefaultIntervalMinutes;
+    /// The vault follows folder links to outside as the app does here (AppSettings'
+    /// followsOutsideLinks); a target of a version before that setting (no key) still does — its sync
+    /// must not take their files for deleted before the app's first open settles the setting.
+    bool followOutsideLinks = false;
 
     struct Nextcloud {
         QString davUrl; ///< WebDAV address of the notebook's server folder

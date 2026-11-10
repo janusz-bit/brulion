@@ -11,6 +11,7 @@
 #include "io/links_p.h"
 #include "io/logseq_p.h"
 #include "io/messages_p.h"
+#include "io/rendercommon_p.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/tasks.h"
@@ -375,7 +376,10 @@ private:
             }
             out.append(line.trimmed().isEmpty() ? QString() : cont + line);
         }
-        for (int child : b.children) {
+        // As in the renderers: on the deepest list level the descendants follow, on that level.
+        if (depth + 1 >= MaxListLevels)
+            return;
+        for (const int child : listedItems(parsed, b.children, depth + 1)) {
             if (parsed.blocks[child].kind == BlockKind::ListItem)
                 emitItem(parsed, child, lines, depth + 1, out);
             else

@@ -110,6 +110,26 @@ private Q_SLOTS:
                  (QStringList{u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"calendar"_s}));
         QVERIFY(s.captureButtonShown());
         QVERIFY(!s.taskStatusHistory()); // docs/SYNTAX.md §5: off by default
+        QVERIFY(!s.followsOutsideLinks()); // a planted link to ~/Documents is no notebook folder
+    }
+
+    void followsOutsideLinksPersists()
+    {
+        // Device-local: in this device's settings, never in the synced .brulion/config.json.
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QSignalSpy changed(&s, &AppSettings::followsOutsideLinksChanged);
+            s.setFollowsOutsideLinks(true);
+            s.setFollowsOutsideLinks(true);
+            QCOMPARE(changed.count(), 1);
+        }
+        {
+            AppSettings again(file, m_tmp.path());
+            QVERIFY(again.followsOutsideLinks());
+            again.setFollowsOutsideLinks(false);
+        }
+        QVERIFY(!AppSettings(file, m_tmp.path()).followsOutsideLinks());
     }
 
     void taskStatusHistoryPersists()

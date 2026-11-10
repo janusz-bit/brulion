@@ -70,6 +70,9 @@ public:
         /// the index is loaded, written when the notebook closes after a load that parsed many
         /// notes (and in watch mode after quiet changes). Off without a state folder.
         bool indexCache = true;
+        /// Vault::setFollowsOutsideLinks(): the app's device setting (brulion-cli reads it, never
+        /// sets it), so the command line sees and writes the same files as the app.
+        bool followOutsideLinks = false;
     };
 
     enum class OpenError { None, Missing, NotAFolder, Failed };

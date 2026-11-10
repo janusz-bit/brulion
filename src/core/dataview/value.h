@@ -12,6 +12,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -50,6 +51,33 @@ struct LinkValue {
 class Value;
 using ValueList = QList<Value>;
 
+/// Limits of the values a query builds — lists, objects and lambdas made while it runs (reduce(),
+/// map(), `+` of lists, …): past them the query stops with an error instead of overflowing the
+/// stack (showing, comparing and freeing a value recurse once per level) or the memory. Real values
+/// stay far below them: frontmatter nests at most 17 levels, a GROUP BY adds 3.
+inline constexpr int MaxValueDepth = 64;
+/// Values in one value, itself included; a part held n times counts n times (showing or comparing
+/// the value visits it n times). A list of a million values takes about 90 MB.
+inline constexpr qint64 MaxValueItems = 1'000'000;
+/// Characters of text in one value (strings, links, object keys), also the longest text `+` and
+/// join() make.
+inline constexpr qint64 MaxTextLength = 10'000'000;
+
+/// How much a value holds (Value::extent(), O(1)), for the limits above.
+struct Extent {
+    int depth = 0;    ///< 0 for a single value; a list, object or lambda: one more than its deepest part
+    qint64 items = 1; ///< values, itself included
+    qint64 chars = 0; ///< characters of text
+
+    /// `part` as one of the parts of this list, object or lambda.
+    void add(const Extent &part)
+    {
+        depth = std::max(depth, part.depth + 1);
+        items += part.items;
+        chars += part.chars;
+    }
+};
+
 /// An object's fields, looked up by name. Page, file and task objects compute their fields when
 /// asked (dataview/objects.cpp); a map object holds them.
 class Object {
@@ -62,9 +90,13 @@ public:
     virtual std::optional<Value> field(const QString &key) const = 0;
     /// The field names, in the order they are shown (object values rendered as text, `extract`).
     virtual QStringList keys() const = 0;
+    /// What it holds. Page, file and task objects count as one value: their fields are read from
+    /// the note when asked, each a value of its own.
+    virtual Extent extent() const { return {1, 1, 0}; }
 };
 
 struct Function; // a lambda (eval_p.h)
+struct ListNode; // a list's items (value.cpp)
 
 class Value {
 public:
@@ -78,11 +110,19 @@ public:
     static Value date(QDate d) { return of(DateValue{QDateTime(d, QTime(0, 0)), false}); }
     static Value duration(const Duration &d) { return of(d); }
     static Value link(const LinkValue &l) { return of(l); }
-    static Value list(ValueList items) { return of(std::make_shared<const ValueList>(std::move(items))); }
-    static Value object(std::shared_ptr<const Object> o) { return o ? of(std::move(o)) : Value(); }
-    /// A map object (keys canonical, shown in the order given).
+    /// A list, an object (null for none), a map object (keys canonical, shown in the order given) or a
+    /// lambda: each throws EvalError (dataview/eval_p.h: runQuery() reports it) when the value would
+    /// go past MaxValueDepth, MaxValueItems or MaxTextLength.
+    static Value list(ValueList items);
+    static Value object(std::shared_ptr<const Object> o)
+    {
+        if (!o)
+            return Value();
+        check(o->extent());
+        return of(std::move(o));
+    }
     static Value map(const QList<std::pair<QString, Value>> &fields);
-    static Value function(std::shared_ptr<const Function> f) { return f ? of(std::move(f)) : Value(); }
+    static Value function(std::shared_ptr<const Function> f);
 
     Type type() const { return Type(m.index()); }
     bool isNull() const { return m.index() == 0; }
@@ -107,7 +147,28 @@ public:
     /// "link", "array", "object", "function".
     QString typeName() const;
 
+    /// What the value holds: a list, a map object and a lambda know it from when they were made.
+    Extent extent() const
+    {
+        switch (type()) {
+        case Type::String: return {0, 1, asString().size()};
+        case Type::Link: return {0, 1, asLink().path.size() + asLink().display.size() + asLink().subpath.size()};
+        case Type::Object: return asObject().extent();
+        case Type::List:
+        case Type::Function: return partsExtent();
+        default: return {};
+        }
+    }
+
 private:
+    Extent partsExtent() const; // a list's or a lambda's
+    /// EvalError when a value holding `e` would go past the limits above.
+    static void check(const Extent &e)
+    {
+        if (e.depth > MaxValueDepth || e.items > MaxValueItems || e.chars > MaxTextLength)
+            throwPastLimits(e);
+    }
+    [[noreturn]] static void throwPastLimits(const Extent &e);
     /// A value holding `data` (one of the alternatives of `m`).
     template<typename T>
     static Value of(T &&data)
@@ -117,10 +178,21 @@ private:
         return v;
     }
 
-    std::variant<std::monostate, bool, double, QString, DateValue, Duration, LinkValue,
-                 std::shared_ptr<const ValueList>, std::shared_ptr<const Object>, std::shared_ptr<const Function>>
+    std::variant<std::monostate, bool, double, QString, DateValue, Duration, LinkValue, std::shared_ptr<const ListNode>,
+                 std::shared_ptr<const Object>, std::shared_ptr<const Function>>
             m;
 };
+
+/// What an object holding `fields` holds (their names count as text).
+inline Extent fieldsExtent(const QList<std::pair<QString, Value>> &fields)
+{
+    Extent e{1, 1, 0};
+    for (const auto &[key, value] : fields) {
+        e.add(value.extent());
+        e.chars += key.size();
+    }
+    return e;
+}
 
 /// A map of fields (Value::map(), frontmatter objects, `object()`).
 class MapObject : public Object {
@@ -128,10 +200,12 @@ public:
     explicit MapObject(QList<std::pair<QString, Value>> fields);
     std::optional<Value> field(const QString &key) const override;
     QStringList keys() const override;
+    Extent extent() const override { return m_extent; }
     const QList<std::pair<QString, Value>> &fields() const { return m_fields; }
 
 private:
     QList<std::pair<QString, Value>> m_fields;
+    Extent m_extent;
 };
 
 /// Dataview's ordering: values of different types by type (null first), numbers, durations,

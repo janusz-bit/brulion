@@ -193,6 +193,7 @@ void wireBackgroundCheck(AppController *app, notify::Notifier *notifier)
         target.ringMinutes = settings->alarmRingMinutes();
         target.language = settings->language();
         target.intervalMinutes = interval;
+        target.followOutsideLinks = settings->followsOutsideLinks();
         if (sync->active()) {
             target.nextcloud = background::Target::Nextcloud{sync->currentDavUrl(), settings->nextcloudUser().trimmed(),
                                                              sync->deviceName()};
@@ -203,6 +204,7 @@ void wireBackgroundCheck(AppController *app, notify::Notifier *notifier)
     QObject::connect(settings, &AppSettings::remindersEnabledChanged, notifier, push);
     QObject::connect(settings, &AppSettings::alarmRingMinutesChanged, notifier, push);
     QObject::connect(settings, &AppSettings::languageChanged, notifier, push);
+    QObject::connect(settings, &AppSettings::followsOutsideLinksChanged, notifier, push);
     QObject::connect(settings, &AppSettings::valueChanged, notifier, [push](const QString &key) {
         if (key == QLatin1String(background::IntervalSettingKey))
             push();
@@ -332,6 +334,16 @@ void integrateWorkspace(AppController *app)
     ws->setWebPicturesShown(settings->webPicturesShown());
     QObject::connect(settings, &AppSettings::webPicturesShownChanged, ws,
                      [settings, ws] { ws->setWebPicturesShown(settings->webPicturesShown()); });
+    // Folder links to outside the notebook: followed only when this device says so (every
+    // notebook opened here; the Vault's semantics).
+    ws->setFollowsOutsideLinks(settings->followsOutsideLinks());
+    QObject::connect(settings, &AppSettings::followsOutsideLinksChanged, ws,
+                     [settings, ws] { ws->setFollowsOutsideLinks(settings->followsOutsideLinks()); });
+    // Devices that followed such links before they became this setting keep them (once per
+    // notebook, while the setting was never chosen; AppSettings::checkOutsideLinksOnce).
+    ws->setOutsideLinksCheck([settings](const QString &root, bool knownBefore, bool outsideLinks) {
+        settings->checkOutsideLinksOnce(root, knownBefore, outsideLinks);
+    });
     // Automatic backups: their messages (also of a failed scheduled run) as toasts.
     QObject::connect(ws->backups(), &WorkspaceBackups::messageRequested, app,
                      [app](const QString &text, const QString &kind) { app->toast(text, kind); });

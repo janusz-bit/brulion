@@ -102,6 +102,36 @@ QString tooDeep()
     return QCoreApplication::translate("brulion::Dataview", "The expression is nested too deeply.");
 }
 
+QString tooLong(int max)
+{
+    return QCoreApplication::translate("brulion::Dataview",
+                                       "The expression is too long: at most %1 operators may follow one another.")
+            .arg(max);
+}
+
+QString valueTooDeep(int max)
+{
+    return QCoreApplication::translate("brulion::Dataview",
+                                       "A list, object or lambda is nested more than %1 levels deep.")
+            .arg(max);
+}
+
+QString valueTooLarge(qint64 items, qint64 chars)
+{
+    return QCoreApplication::translate("brulion::Dataview",
+                                       "A value is too large: more than %1 items or %2 characters.")
+            .arg(items)
+            .arg(chars);
+}
+
+QString resultTooLarge(qint64 items, qint64 chars)
+{
+    return QCoreApplication::translate("brulion::Dataview",
+                                       "The results are too large: more than %1 items or %2 characters.")
+            .arg(items)
+            .arg(chars);
+}
+
 QString badDate(const QString &text)
 {
     return QCoreApplication::translate("brulion::Dataview", "Cannot read the date “%1”. Examples: date(today), date(2026-10-15), date(\"2026-10-15 09:30\").")

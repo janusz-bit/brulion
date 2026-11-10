@@ -414,6 +414,24 @@ app; these guards keep data from being lost:
   fail while the folder is missing or on another storage, so nothing lands on an empty mount
   point. Files changed on disk behind the app are taken in (and kept in History) before an
   overwrite; every overwrite is atomic (`QSaveFile`) and snapshotted into History first.
+* **Links and sizes in the vault** (`src/core/vault/vault.h`, "Semantics"): a symlink to a file is
+  never followed, wherever it points — not listed, read or written, so a link planted by a sync peer
+  or a checkout (`x.md → ~/.ssh/id_rsa`) is neither indexed nor uploaded nor written through;
+  folder links only when they point outside the vault and the device allows it
+  (`Vault::setFollowsOutsideLinks`, off by default; Settings → Notebook, `AppSettings.followsOutsideLinks`,
+  device-local — never `.brulion/config.json`, which a sync peer could change; brulion-cli and
+  the background check read it), so a planted `assets → ~/Documents` makes no notes either. Devices
+  that followed such links before keep them, so their sync does not take the files for deleted: while
+  the setting was never chosen, a notebook's first open checks once and switches it on only when this
+  device knew the notebook before (state in its device folder, or a recent notebook) and it has such
+  a link — a new device or a link planted after the check never does (`AppSettings::checkOutsideLinksOnce`,
+  before the index and sync see the vault; a background target of an older version keeps following
+  them). What is not followed is not the vault's: nothing in it is read, written, moved or deleted
+  (`Vault::reaches()`, also for pictures, PDFs and drawings read by their file), and no trash
+  operation or `rename()` goes through a link inside `.trash/`. Every read is
+  bounded whatever size the file reports
+  (`/proc` files report none): scans read text files up to 16 MB, `readText()` / `readBinary()`
+  up to 1 GiB.
 * **Sync guards** (`SyncEngine`): a **mass-deletion guard** holds back every deletion of a run
   that would delete more than 25 % and at least 10 files of one side (or all of them) until the
   user confirms the list in the sync center (`needsConfirmation`, `pendingDeletions`); a side
@@ -526,10 +544,19 @@ app; these guards keep data from being lost:
   mode / blocked storage is reported before the user writes anything.
 * **Rendering**: note text reaches QML only through the escaping `InlineRenderer` (or
   `TextHelper`/`DiffHelper` escaping); the calculator never evaluates note text as script.
-  Behind that, the QML engine's network access manager serves local URLs only (`file:`,
-  `qrc:`, `data:`; `LocalOnlyNetworkFactory` in `src/app/ui/localnetwork.h`; any other URL gets
-  a transparent pixel, never a request): nothing in QML loads from the network, so even a
-  rich-text `<img>` that slipped through cannot make a synced or imported note contact a server.
+  Behind that, the QML engine's network access manager serves local URLs only (`file:` of this
+  machine, `qrc:`, `data:`; `LocalOnlyNetworkFactory` in `src/app/ui/localnetwork.h`; any other
+  URL — also `file://server/share/…`, a UNC path that Windows would connect to — gets a
+  transparent pixel, never a request): nothing in QML loads from the network, so even a rich-text
+  `<img>` with a web address that slipped through cannot make a synced or imported note contact a
+  server. Qt Quick reads `file:` URLs itself (Image, rich text), never through that manager, so
+  the engine also has a URL guard (`RemoteFileUrlGuard`, same header): a URL property — Image's or
+  Loader's source — naming a file of another machine (a host but localhost, `file:////server/…`,
+  `%5C%5C…`, `webdavs:`) becomes an empty URL, unless the file lies in the open notebook: the
+  pictures of a notebook on `\\server\share` show (the Workspace builds their URLs from vault
+  paths). The engine's own QML and scripts are not checked (an app installed on a share). An
+  `<img>` inside rich text is resolved by Qt without the guard: that none comes from note text is
+  the renderers' job.
   Pictures from the internet (`![x](https://…)`) are fetched by the Workspace itself
   (`workspacepictures.cpp`, core `webpicture`) only when the user allows it — "Show" on the
   picture, the device setting `webPicturesShown` (off by default) or "Save to notebook" — and

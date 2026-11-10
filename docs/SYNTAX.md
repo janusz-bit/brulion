@@ -734,7 +734,11 @@ frontmatter's `tags:`.
 ## 4. Blocks and outline
 
 * Every **list item** is a block. Nesting by indentation (tab = one level; for spaces the
-  child must be indented past the parent's marker). Markers: `-`, `*`, `+`, `1.`, `1)`.
+  child must be indented past the parent's marker). Markers: `-`, `*`, `+`, `1.`, `1)`. The
+  outline keeps any depth; the HTML, Pandoc, OPML and Logseq exports and the clipboard's HTML
+  nest lists up to 100 levels, and an item deeper down is listed on the 100th level after its
+  ancestor there, in document order (nothing is left out; a hostile note's thousands of levels
+  cannot exhaust a thread's stack).
 * Outside lists, each paragraph, heading, fenced code, table, blockquote/callout, `---`
   rule is a top-level block (depth 0). A display formula between two lines that are only `$$`
   stays in one block whatever its lines start with (§11).
@@ -745,6 +749,15 @@ frontmatter's `tags:`.
   page, a quote, or a list item up to the next line indented no deeper than its marker. A longer
   outer fence (````` ```` `````) holds ```` ``` ```` lines as code. A code block's id is a standalone
   `^id` line after its closing fence (in a list item also `id::`).
+* **Tables** (GFM): a line with `|` and a delimiter row of as many cells (`|---|:-:|`), then the
+  rows up to a blank line or a line without `|`. Every row is as wide as the header: a short one
+  reads as if its missing cells were empty, a longer one is cut. So that a few short `|` lines
+  cannot stand for millions of empty cells, a table holds at most as many cells (columns × rows,
+  the header not counted) as its lines have characters, or 65 536 when that is more: the row that
+  would take it past both ends the table and is read as text with the lines after it — in the
+  editor, the exports and the calculator alike. A table whose rows have their cells written out
+  never reaches it; one of 20 columns does only with over 3000 rows that leave out nearly all
+  their cells.
 * **Block id**: ` ^abc-123` (caret + `[A-Za-z0-9-]+`) at the end of a block's first or last
   line (Obsidian style; Brulion writes it at the end of the first line for list items and
   at the end of the last line for paragraphs). Generated ids are 6 chars `[a-z0-9]`.
@@ -1096,11 +1109,14 @@ and written exactly as Logseq does:
   read too). The elapsed time is measured between the two local times, so a clock across a
   daylight-saving change counts the hours that really passed; the written `=>` duration is read
   only when the timestamps give none (the end before the start: an hour repeated when the clocks
-  go back). A line that does not read (bad date, end before start without `=>`, a `=>` duration
-  of more than 100 years) is ignored; only the last clock without an end runs.
+  go back). A line that does not read (bad date, end before start without `=>`, a clock of more
+  than 366 days by its timestamps or its `=>` duration) is ignored; only the last clock without an
+  end runs.
 * Totals: overlapping entries of one task count once; a running clock counts up to now in views
   that show live totals (the summaries), and its chip names its start ("⏱ 25 min + from 10:00").
   Summaries split entries at local midnight (a day of 23 or 25 hours on a daylight-saving change).
+  No stretch of work lasts a year: a clock running for more than 366 days counts nothing either —
+  so the per-day split of a hostile note's clocks over centuries stays at a year per line.
 * One clock runs at a time: starting one (the task menu, the palette, `brulion-cli task start`)
   stops the running one first. The clock is in the file, so it survives a restart and syncs.
 * A new drawer goes after the task's first line and the planning / `key:: value` lines right after
@@ -1542,6 +1558,20 @@ regular-expression functions (`regextest`, `regexmatch`, `regexreplace`) and `cs
 not supported: a note synced from anywhere could make a pattern run for minutes. An unknown
 function, a syntax error or a query too costly to evaluate (the index's notes times a heavy
 expression) shows a helpful message (in the UI language) with its line instead of results.
+
+**Limits** — a query from any note can neither freeze nor crash the app; past them it shows its
+error: an expression or a `FROM` source is at most 256 levels deep (each operator of a chain like
+`a OR b OR c` is a level, so is a call, list, lambda, field or `-` / `!`) and nests parentheses,
+calls, lists and lambdas at most 64 levels; lambdas calling lambdas go at most 64 levels of their
+bodies deep; a value a query builds (`reduce()`, `map()`, `+` of lists, …) nests lists, objects
+and lambdas at most 64 levels and holds at most 1 000 000 values and 10 000 000 characters of text
+in all — so do a text made by `+`, `join()` or `string()` and what a step keeps while it works (the
+values `map()` makes, the keys of `sort()`, `SORT` and `GROUP BY`); a query makes at most 100 000
+rows and does a bounded amount of work, copying and building lists and texts included (a step per
+value and per 64 characters: copying a large list again and again stops as too costly); the rows
+shown — only they are evaluated for their columns — hold at most 1 000 000 cells, labels and tasks
+with 10 000 000 characters in all. A value shown whole stops 64 levels down (`…` below): a task
+object's children go as deep as the note's outline.
 
 **Results** show values as the editor renders text: links as links, lists joined with `, `,
 dates as `2026-10-15` (`2026-10-15 09:30` with a time), durations in words, a missing value as

@@ -3,10 +3,14 @@
 #include "util/paths.h"
 #include "vault/vaultconfig.h"
 
+#include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
 #include <QThread>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -121,6 +125,56 @@ QString decodeUtf8(const QByteArray &bytes)
     if (bytes.startsWith(utf8Bom()))
         return QString::fromUtf8(QByteArrayView(bytes).sliced(3));
     return QString::fromUtf8(bytes);
+}
+
+ContentRead readContent(const QString &absolutePath, qint64 limit)
+{
+    ContentRead out;
+    // QFile cannot open without following a link (no O_NOFOLLOW): the check comes first.
+    if (QFileInfo(absolutePath).isSymLink()) {
+        out.status = ContentRead::Status::Link;
+        return out;
+    }
+    QFile file(absolutePath);
+    const auto failed = [&] {
+        out.error = file.errorString();
+        return out;
+    };
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Unbuffered))
+        return failed();
+    const qint64 size = file.size();
+    if (size > limit) {
+        out.status = ContentRead::Status::TooBig;
+        return out;
+    }
+    QByteArray bytes;
+    if (size > 0) {
+        bytes = QByteArray(size, Qt::Uninitialized);
+        const qint64 got = file.read(bytes.data(), size);
+        if (got < 0)
+            return failed();
+        bytes.truncate(got); // shortened meanwhile
+    } else {
+        char piece[16 * 1024];
+        for (;;) {
+            const qint64 got = file.read(piece, std::min<qint64>(sizeof piece, limit + 1 - bytes.size()));
+            if (got < 0)
+                return failed();
+            if (got == 0)
+                break;
+            if (bytes.size() + got > limit) {
+                out.status = ContentRead::Status::TooBig;
+                return out;
+            }
+            // Grown by doubling, but never past the limit (append() would round up beyond it).
+            if (bytes.capacity() - bytes.size() < got)
+                bytes.reserve(std::min<qint64>(limit, std::max<qint64>(2 * bytes.capacity(), bytes.size() + got)));
+            bytes.append(piece, got);
+        }
+    }
+    out.status = ContentRead::Status::Ok;
+    out.bytes = std::move(bytes);
+    return out;
 }
 
 } // namespace brulion::vaultutil

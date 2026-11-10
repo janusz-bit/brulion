@@ -273,6 +273,7 @@ private Q_SLOTS:
     {
         BRULION_SKIP_WITHOUT_SYMLINKS();
         Fixture f;
+        f.followOutsideLinks = true; // the device follows links to outside folders
         const QString card = f.tmp.path() + u"/karta/Zdjęcia"_s;
         writeBehind(card, u"zdjęcie.png"_s, "PNG");
         writeBehind(card, u"opis.md"_s, "opis");

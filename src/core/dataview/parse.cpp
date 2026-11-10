@@ -13,8 +13,6 @@ namespace brulion::dataview {
 
 namespace {
 
-constexpr int MaxDepth = 64;
-
 struct Token {
     enum class Kind { End, Ident, Number, String, Link, Tag, Op, Literal };
     Kind kind = Kind::End;
@@ -397,11 +395,15 @@ private:
 
     // ---- sources --------------------------------------------------------------------------------
 
-    static std::shared_ptr<const Source> combined(Source::Kind kind, std::shared_ptr<const Source> a,
+    /// `a` (and `b`) combined; deeper than MaxExpressionDepth is an error at `line`.
+    static std::shared_ptr<const Source> combined(Source::Kind kind, int line, std::shared_ptr<const Source> a,
                                                   std::shared_ptr<const Source> b = nullptr)
     {
         auto out = std::make_shared<Source>();
         out->kind = kind;
+        out->depth = 1 + std::max(a->depth, b ? b->depth : 0);
+        if (out->depth > MaxExpressionDepth)
+            throw ParseError{messages::tooLong(MaxExpressionDepth), line};
         out->a = std::move(a);
         out->b = std::move(b);
         return out;
@@ -411,8 +413,8 @@ private:
     {
         auto a = sourceAnd();
         while (isKeyword(peek(), u"or") || isOp(u"|") || isOp(u"||")) {
-            next();
-            a = combined(Source::Kind::Or, a, sourceAnd());
+            const int line = next().line;
+            a = combined(Source::Kind::Or, line, a, sourceAnd());
         }
         return a;
     }
@@ -421,19 +423,19 @@ private:
     {
         auto a = sourceNot();
         while (isKeyword(peek(), u"and") || isOp(u"&") || isOp(u"&&")) {
-            next();
-            a = combined(Source::Kind::And, a, sourceNot());
+            const int line = next().line;
+            a = combined(Source::Kind::And, line, a, sourceNot());
         }
         return a;
     }
 
     std::shared_ptr<const Source> sourceNot()
     {
-        Depth d(*this); // negations and parentheses nest
+        Nesting n(*this); // negations and parentheses nest
         if (!isOp(u"-") && !isOp(u"!"))
             return sourceAtom();
-        next();
-        return combined(Source::Kind::Not, sourceNot());
+        const int line = next().line;
+        return combined(Source::Kind::Not, line, sourceNot());
     }
 
     std::shared_ptr<const Source> sourceAtom()
@@ -492,15 +494,28 @@ private:
 
     // ---- expressions ----------------------------------------------------------------------------
 
-    struct Depth {
-        explicit Depth(Parser &p) : parser(p)
+    /// One level of nesting while it lives: past MaxExpressionNesting a ParseError (each level
+    /// recurses through the whole precedence ladder).
+    struct Nesting {
+        explicit Nesting(Parser &p) : parser(p)
         {
-            if (++parser.depth > MaxDepth)
+            if (++parser.nesting > MaxExpressionNesting)
                 throw ParseError{messages::tooDeep(), parser.peek().line};
         }
-        ~Depth() { --parser.depth; }
+        ~Nesting() { --parser.nesting; }
         Parser &parser;
     };
+
+    /// Gives `e` its parts: it is one level deeper than the deepest (an operator chain grows one
+    /// level per operator). Past MaxExpressionDepth a ParseError at `line`.
+    static void setArgs(Expr &e, QList<ExprPtr> args, int line)
+    {
+        for (const ExprPtr &a : std::as_const(args))
+            e.depth = std::max(e.depth, a->depth + 1);
+        if (e.depth > MaxExpressionDepth)
+            throw ParseError{messages::tooLong(MaxExpressionDepth), line};
+        e.args = std::move(args);
+    }
 
     /// The query from `from` to the end of the last token read, blanks simplified.
     QString textFrom(qsizetype from) const
@@ -520,7 +535,7 @@ private:
 
     ExprPtr expression()
     {
-        Depth d(*this);
+        Nesting n(*this); // every nested expression comes through here: (…), [index], items, arguments, bodies
         return orExpr();
     }
 
@@ -540,12 +555,12 @@ private:
                     chain->text = textFrom(from);
                 return left;
             }
-            next();
+            const int line = next().line;
             chain = make(Expr::Kind::Binary);
             chain->name = word.isEmpty() ? op->toString() : word.toString();
             if (chain->name == u"==")
                 chain->name = u"="_s;
-            chain->args = {left, (this->*operand)()};
+            setArgs(*chain, {left, (this->*operand)()}, line);
             left = chain;
         }
     }
@@ -558,21 +573,21 @@ private:
 
     ExprPtr unaryExpr()
     {
-        Depth d(*this);
         const qsizetype from = peek().from;
         if (!isOp(u"-") && !isOp(u"!"))
             return postfixExpr();
-        const QString op = next().text;
+        Nesting n(*this); // `- - x`: an operator nests the rest
+        const Token &op = next();
         ExprPtr operand = unaryExpr();
         // -3 is a number.
-        if (op == u"-" && operand->kind == Expr::Kind::Literal && operand->value.is(Value::Type::Number)) {
+        if (op.text == u"-" && operand->kind == Expr::Kind::Literal && operand->value.is(Value::Type::Number)) {
             auto e = make(Expr::Kind::Literal, from);
             e->value = Value::number(-operand->value.asNumber());
             return e;
         }
         auto e = make(Expr::Kind::Unary, from);
-        e->name = op;
-        e->args = {operand};
+        e->name = op.text;
+        setArgs(*e, {operand}, op.line);
         return e;
     }
 
@@ -583,26 +598,26 @@ private:
         std::shared_ptr<Expr> chain; // only the whole chain gets its text, see binaryLoop()
         while (true) {
             if (isOp(u".")) {
-                next();
+                const int line = next().line;
                 const Token &k = peek();
                 if (k.kind != Token::Kind::Ident)
                     throw ParseError{messages::expectedName(u"."_s), k.line};
                 next();
                 chain = make(Expr::Kind::Field);
                 chain->name = canonicalKey(k.text);
-                chain->args = {e};
+                setArgs(*chain, {e}, line);
             } else if (isOp(u"[")) {
-                next();
+                const int line = next().line;
                 chain = make(Expr::Kind::Index);
-                chain->args = {e, expression()};
+                setArgs(*chain, {e, expression()}, line);
                 expectOp(u"]");
             } else if (isOp(u"(")) {
                 if (e->kind != Expr::Kind::Variable)
                     throw ParseError{messages::unexpected(u"("_s), peek().line};
-                next();
+                const int line = next().line;
                 chain = make(Expr::Kind::Call);
                 chain->name = e->name;
-                chain->args = expressionList(u")");
+                setArgs(*chain, expressionList(u")"), line);
                 checkCall(*chain, peek().line);
             } else {
                 if (chain)
@@ -664,7 +679,6 @@ private:
 
     ExprPtr primary()
     {
-        Depth d(*this);
         const Token &k = peek();
         const qsizetype from = k.from;
         switch (k.kind) {
@@ -734,7 +748,7 @@ private:
                 ExprPtr body = expression();
                 auto e = make(Expr::Kind::Lambda, from);
                 e->params = params;
-                e->args = {body};
+                setArgs(*e, {body}, k.line);
                 return e;
             }
             if (isOp(u"(")) {
@@ -747,7 +761,7 @@ private:
                 next();
                 QList<ExprPtr> items = expressionList(u"]");
                 auto e = make(Expr::Kind::List, from);
-                e->args = std::move(items);
+                setArgs(*e, std::move(items), k.line);
                 return e;
             }
             break;
@@ -761,7 +775,7 @@ private:
     QList<Token> t;
     qsizetype pos = 0;
     qsizetype lastEnd = 0;
-    int depth = 0;
+    int nesting = 0;
 };
 
 } // namespace

@@ -46,9 +46,13 @@ bool Target::isValid() const
 QJsonObject Target::toJson() const
 {
     QJsonObject json{
-            {u"root"_s, root},         {u"stateDir"_s, stateDir},
-            {u"vault"_s, vault},       {u"ringMinutes"_s, ringMinutes},
-            {u"language"_s, language}, {u"intervalMinutes"_s, intervalMinutes},
+            {u"root"_s, root},
+            {u"stateDir"_s, stateDir},
+            {u"vault"_s, vault},
+            {u"ringMinutes"_s, ringMinutes},
+            {u"language"_s, language},
+            {u"intervalMinutes"_s, intervalMinutes},
+            {u"followOutsideLinks"_s, followOutsideLinks},
     };
     if (nextcloud) {
         json.insert(u"nextcloud"_s, QJsonObject{{u"davUrl"_s, nextcloud->davUrl},
@@ -69,6 +73,7 @@ std::optional<Target> Target::fromJson(const QJsonObject &json)
     t.ringMinutes = std::clamp(json.value(u"ringMinutes"_s).toInt(ScheduledNotification::DefaultRingMinutes), 1, 60);
     t.language = json.value(u"language"_s).toString() == u"en" ? u"en"_s : u"pl"_s;
     t.intervalMinutes = normalizedInterval(json.value(u"intervalMinutes"_s).toInt(DefaultIntervalMinutes));
+    t.followOutsideLinks = json.value(u"followOutsideLinks"_s).toBool(true); // absent: an earlier version's
     const QJsonObject nc = json.value(u"nextcloud"_s).toObject();
     const QString davUrl = nc.value(u"davUrl"_s).toString();
     const QString user = nc.value(u"user"_s).toString();
@@ -133,6 +138,7 @@ void Check::start()
     notebook::Notebook::Options options;
     options.stateDir = m_target.stateDir;
     options.historyReason = u"sync"_s;
+    options.followOutsideLinks = m_target.followOutsideLinks;
     m_notebook = std::make_unique<notebook::Notebook>();
     QString error;
     notebook::Notebook::OpenError kind = notebook::Notebook::OpenError::None;

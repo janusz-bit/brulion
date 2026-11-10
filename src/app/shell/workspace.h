@@ -171,6 +171,20 @@ public:
     /// (History + LocalStore; empty = none). Closes the previous vault first.
     bool open(const QString &rootPath, const QString &deviceStatePath, QString *error = nullptr);
     void close();
+    /// Follow symlinked folders that point outside the notebook (AppSettings'
+    /// followsOutsideLinks): given to the vault before it opens, and to an open one at once
+    /// (Vault::setFollowsOutsideLinks — their files come or go as changes).
+    bool followsOutsideLinks() const { return m_followsOutsideLinks; }
+    void setFollowsOutsideLinks(bool follow);
+    /// Called by open() right after the vault's first listing, before the index and sync see the
+    /// vault: the notebook's folder, whether this device kept state of it before (its device state
+    /// folder had content) and whether the listing left out a folder link to outside. It may switch
+    /// setFollowsOutsideLinks() on — the vault then follows them before anything else sees it
+    /// (AppSettings::checkOutsideLinksOnce, wired by workspaceintegration.cpp).
+    void setOutsideLinksCheck(std::function<void(const QString &root, bool knownBefore, bool outsideLinks)> check)
+    {
+        m_outsideLinksCheck = std::move(check);
+    }
 
     bool isOpen() const;
     QString rootPath() const;
@@ -804,6 +818,8 @@ private:
     mutable WebPictures *m_webPictures = nullptr;
     bool m_webPicturesShown = false;
     bool m_taskStatusHistory = false;
+    bool m_followsOutsideLinks = false;
+    std::function<void(const QString &, bool, bool)> m_outsideLinksCheck;
     QString m_webPictureCacheDir;
     qint64 m_webPictureCacheBytes = 0;
     std::function<bool(const QString &)> m_webPictureHostCheck;

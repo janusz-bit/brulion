@@ -45,14 +45,18 @@ QStringList splitTableRow(QStringView line);
 std::optional<QList<TableAlign>> parseDelimiterRow(QStringView line);
 /// Parse a GFM table: header row with '|', delimiter row with as many cells, body rows until a
 /// blank line (leading blank lines are skipped). Short rows are padded with empty cells, long
-/// rows truncated to the header width. nullopt when the text does not start with a table.
+/// rows truncated to the header width. The table ends before a row that would give it more body
+/// cells (columns × rows) than its lines have characters, or 65 536 when that is more — rows
+/// written out in full never do (SYNTAX §4 "Tables"; markdown's block parser ends it there too).
+/// nullopt when the text does not start with a table.
 std::optional<TableModel> parseTable(QStringView markdown);
 /// Pretty GFM: outer pipes, columns padded to equal display width (at least 3), alignment
 /// colons, pipes escaped, line breaks in cells as `<br>`; rows longer than the header add
 /// columns. Lines joined by '\n'; empty string for a table without columns.
 QString serializeTable(const TableModel &model);
 /// Tables outside fenced code and frontmatter (also indented in list items and starting on a
-/// list item line); offsets are UTF-16 offsets into `content`.
+/// list item line), ending at the row parseTable() ends them; offsets are UTF-16 offsets into
+/// `content`.
 QList<TableSpan> findTables(QStringView content);
 /// `content` with the table at `span` (from findTables(content)) replaced by
 /// serializeTable(model): rows after the first are indented with `span.indent` and joined with

@@ -3,6 +3,7 @@
 
 #include <QTest>
 
+#include <algorithm>
 #include <climits>
 
 using namespace brulion::calc;
@@ -128,6 +129,49 @@ private Q_SLOTS:
     void stopsAtBlankLine()
     {
         QCOMPARE(brulion::calc::parseTable(u"| a |\n|---|\n| 1 |\n\n| 2 |")->rows, (QList<QStringList>{{u"1"_s}}));
+    }
+
+    // Rows are padded to the header, so a table holds only as many body cells as its lines have
+    // characters, or 65 536 when that is more: a 23 KB note of `|` lines once made 4 million cells.
+    void sizeLimit_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("rows");
+        const auto table = [](const QString &header, const QString &delimiter, const QString &row, int count,
+                              const QString &indent = {}) -> QString {
+            return header + u'\n' + indent + delimiter + QString(u'\n' + indent + row).repeated(count)
+                   + u"\n\npo tabeli"_s;
+        };
+        const QString wide = u"|"_s.repeated(2001); // 2000 empty header cells
+        const QString wideDelimiter = u"|"_s + u"-|"_s.repeated(2000);
+        // 2000 × 32 = 64 000 cells, a 33rd row would make 66 000.
+        QTest::newRow("2000 columns, empty rows") << table(wide, wideDelimiter, u"|"_s, 40) << 32;
+        QTest::newRow("Logseq list item") << table(u"- "_s + wide, wideDelimiter, u"|"_s, 40, u"  "_s) << 32;
+        const QString twenty = u"|"_s + u" Kolumna |"_s.repeated(20);
+        const QString twentyDelimiter = u"|"_s + u"---|"_s.repeated(20);
+        QTest::newRow("20 columns, one cell a row") << table(twenty, twentyDelimiter, u"| łódź |"_s, 4000) << 3276;
+        QTest::newRow("within the allowance") << table(twenty, twentyDelimiter, u"| łódź |"_s, 3000) << 3000;
+        // 90 000 cells, each of them written: as many as the rows need.
+        QTest::newRow("written out in full")
+                << table(QString(u"|"_s + u" Zażółć |"_s.repeated(300)), QString(u"|"_s + u"---|"_s.repeated(300)),
+                         QString(u"|"_s + u" ż |"_s.repeated(300)), 300)
+                << 300;
+    }
+    void sizeLimit()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, rows);
+        const QList<TableSpan> tables = findTables(content);
+        QCOMPARE(tables.size(), 1);
+        QCOMPARE(tables[0].endLine, 1 + rows);
+        const auto model = brulion::calc::parseTable(slice(content, tables[0]));
+        QVERIFY(model);
+        QCOMPARE(model->rows.size(), rows);
+        QVERIFY(std::ranges::all_of(model->rows,
+                                    [&](const QStringList &r) { return r.size() == model->header.size(); }));
+        // The text from the header on (an editor block's body, a chart's table) ends there too.
+        QCOMPARE(brulion::calc::parseTable(QStringView(content).sliced(content.indexOf(u'|')))->rows, model->rows);
+        QCOMPARE(evaluateTable(*model).values.size(), rows);
     }
 
     void rejects_data()

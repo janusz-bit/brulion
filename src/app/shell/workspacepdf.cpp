@@ -196,7 +196,7 @@ bool leavesNotebook(const QString &path)
 std::pair<QString, QString> insideFile(const Vault *vault, const QString &rawPath)
 {
     const QString path = paths::normalize(rawPath);
-    if (!vault || path.isEmpty() || leavesNotebook(path))
+    if (!vault || path.isEmpty() || leavesNotebook(path) || !vault->reaches(path))
         return {};
     const QString file = vault->absolutePath(path);
     if (!QFileInfo(file).isFile())

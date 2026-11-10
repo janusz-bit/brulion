@@ -55,8 +55,9 @@ public:
 
     /// The note's blocks as HTML (no <html>/<body>; frontmatter is not rendered).
     QString renderNote(const ParsedNote &note) const;
-    /// Blocks `indices` (siblings, in order) of `note` with their children.
-    QString renderBlocks(const ParsedNote &note, const QList<int> &indices) const;
+    /// Blocks `indices` (siblings, in order) of `note` with their children; `level`: their list
+    /// level (0: not inside a list; lists nest up to MaxListLevels, rendercommon_p.h).
+    QString renderBlocks(const ParsedNote &note, const QList<int> &indices, int level = 0) const;
     /// Inline Markdown as HTML (line breaks -> <br>). `insideLink`: the text sits inside a link (a
     /// link label, a block reference): links show their visible text without an anchor and tags
     /// are plain text — the parser sees no tags there and anchors must not nest.
@@ -71,7 +72,7 @@ public:
 
 private:
     QString renderBlock(const ParsedNote &note, int index) const;
-    QString renderListItem(const ParsedNote &note, int index) const;
+    QString renderListItem(const ParsedNote &note, int index, int level) const;
     QString renderTable(const QString &source) const;
     /// A fenced block (`lang`, `code`, at `line` of `note`; `id`: attribute text or empty) as
     /// HTML: a ```chart as SVG with its data and source folded under it, else — also when it

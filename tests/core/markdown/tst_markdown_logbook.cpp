@@ -82,6 +82,27 @@ private Q_SLOTS:
         QTest::newRow("end before start, written duration")
                 << u":LOGBOOK:\nCLOCK: [2026-11-03 Tue 11:00:00]--[2026-11-03 Tue 10:00:00] =>  00:05:00\n:END:"_s << 1
                 << qint64(300) << false << 0 << 0;
+        // A clock lasts at most 366 days (MaxClockSeconds): no stretch of work lasts longer, and
+        // the per-day split of a line spanning centuries would run over millions of days.
+        QTest::newRow("366 days")
+                << u":LOGBOOK:\nCLOCK: [2023-01-01 Sun 00:00:00]--[2024-01-02 Tue 00:00:00] =>  8784:00:00\n:END:"_s
+                << 1 << MaxClockSeconds << false << 0 << 0;
+        QTest::newRow("a second more")
+                << u":LOGBOOK:\nCLOCK: [2023-01-01 Sun 00:00:00]--[2024-01-02 Tue 00:00:01] =>  8784:00:01\n:END:"_s
+                << 0 << qint64(0) << false << 0 << 1;
+        QTest::newRow("centuries")
+                << u":LOGBOOK:\nCLOCK: [0001-01-01 Mon 00:00]--[9999-12-31 Fri 00:00]\n"
+                   "CLOCK: [2026-11-03 Tue 10:00:00]--[2026-11-03 Tue 10:20:00] =>  00:20:00\n:END:"_s
+                << 1 << qint64(20 * 60) << false << 0 << 1;
+        QTest::newRow("written duration of 366 days")
+                << u":LOGBOOK:\nCLOCK: [2026-11-03 Tue 11:00:00]--[2026-11-03 Tue 10:00:00] =>  8784:00:00\n:END:"_s
+                << 1 << MaxClockSeconds << false << 0 << 0;
+        QTest::newRow("written duration of a year and a minute")
+                << u":LOGBOOK:\nCLOCK: [2026-11-03 Tue 11:00:00]--[2026-11-03 Tue 10:00:00] =>  8784:01:00\n:END:"_s
+                << 0 << qint64(0) << false << 0 << 1;
+        QTest::newRow("written duration of a century")
+                << u":LOGBOOK:\nCLOCK: [2026-11-03 Tue 11:00:00]--[2026-11-03 Tue 10:00:00] =>  876600:00:00\n:END:"_s
+                << 0 << qint64(0) << false << 0 << 1;
         QTest::newRow("two running clocks: the last runs")
                 << u":LOGBOOK:\nCLOCK: [2026-11-03 Tue 08:00:00]\nCLOCK: [2026-11-03 Tue 10:00:00]\n:END:"_s << 1
                 << qint64(0) << true << 0 << 1;
@@ -177,6 +198,28 @@ private Q_SLOTS:
         const Logbook longDay =
                 readLogbook(u":LOGBOOK:\nCLOCK: [2026-10-25 Sun 00:00:00]--[2026-10-26 Mon 00:00:00]\n:END:"_s);
         QCOMPARE(clockedSecondsByDay(longDay.clocks).value(QDate(2026, 10, 25)), qint64(25 * 3600));
+    }
+
+    void perDayStaysBounded()
+    {
+        // Clocks spanning centuries do not read and one that has run for more than 366 days counts
+        // nothing: the split covers at most 367 days a line, never millions.
+        QString text = u":LOGBOOK:\n"_s;
+        for (int i = 0; i < 200; ++i)
+            text += u"CLOCK: [0001-01-01 Mon 00:00]--[9999-12-31 Fri 23:59]\n"_s;
+        const Logbook ages = readLogbook(QString(text + u"CLOCK: [0001-01-01 Mon 00:00]\n:END:"_s));
+        QCOMPARE(ages.malformed, 200);
+        QVERIFY(ages.running());
+        QVERIFY(clockedSecondsByDay(ages.clocks, at(2026, 11, 3, 10, 30)).isEmpty());
+        // A clock running for a year (across both daylight-saving changes) still counts.
+        const Logbook year = readLogbook(u":LOGBOOK:\nCLOCK: [2025-11-03 Mon 10:00:00]\n:END:"_s);
+        const QMap<QDate, qint64> days = clockedSecondsByDay(year.clocks, at(2026, 11, 3, 10, 0));
+        QCOMPARE(days.size(), 366);
+        QCOMPARE(days.first(), qint64(14 * 3600));
+        QCOMPARE(days.value(QDate(2026, 3, 29)), qint64(23 * 3600));
+        QCOMPARE(days.last(), qint64(10 * 3600));
+        QCOMPARE(clockedSecondsByDay(year.clocks, at(2026, 11, 4, 10, 0)).size(), 367);
+        QVERIFY(clockedSecondsByDay(year.clocks, at(2026, 11, 4, 10, 0, 1)).isEmpty());
     }
 
     void format()

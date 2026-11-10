@@ -65,6 +65,8 @@ constexpr auto kIntroDone = "app/introDone"_L1;
 constexpr auto kNewNotebookConfig = "app/newNotebookConfig"_L1;
 constexpr auto kCurrentVault = "vaults/current"_L1;
 constexpr auto kRecentVaults = "vaults/recent"_L1;
+constexpr auto kFollowOutsideLinks = "vaults/followOutsideLinks"_L1;
+constexpr auto kOutsideLinksChecked = "vaults/outsideLinksChecked"_L1; ///< + "/<notebook id>"
 constexpr auto kCloseToTray = "app/closeToTray"_L1;
 constexpr auto kTrayClick = "app/trayClick"_L1;
 constexpr auto kRemindersEnabled = "reminders/enabled"_L1;
@@ -856,6 +858,34 @@ void AppSettings::forgetRecentVault(const QString &rawPath)
         return;
     m_settings->setValue(kRecentVaults, list);
     Q_EMIT recentVaultsChanged();
+}
+
+bool AppSettings::followsOutsideLinks() const
+{
+    return m_settings->value(kFollowOutsideLinks, false).toBool();
+}
+
+void AppSettings::setFollowsOutsideLinks(bool on)
+{
+    if (store(kFollowOutsideLinks, on, followsOutsideLinks()))
+        Q_EMIT followsOutsideLinksChanged();
+}
+
+void AppSettings::checkOutsideLinksOnce(const QString &notebook, bool knownBefore, bool outsideLinks)
+{
+    const QString id = notebookId(notebook);
+    if (id.isEmpty() || m_settings->contains(kFollowOutsideLinks))
+        return; // chosen here, by the user or by an earlier check
+    const QString checked = kOutsideLinksChecked + u'/' + id;
+    if (m_settings->value(checked, false).toBool())
+        return;
+    m_settings->setValue(checked, true);
+    const QVariantList recent = recentVaults(); // before this open adds it
+    const bool recentHere = std::ranges::any_of(recent, [&id](const QVariant &entry) {
+        return notebookId(entry.toMap().value(u"path"_s).toString()) == id;
+    });
+    if (outsideLinks && (knownBefore || recentHere))
+        setFollowsOutsideLinks(true);
 }
 
 // ---- Application ----------------------------------------------------------------------------

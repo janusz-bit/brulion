@@ -15,7 +15,6 @@
 #include "util/paths.h"
 
 #include <QDirIterator>
-#include <QFile>
 #include <QFileInfo>
 #include <QMultiHash>
 
@@ -140,8 +139,13 @@ void VaultPrivate::listChildren(const VaultPath &dir, const QString &dirRel, boo
                 continue;
             const QString rel = folder.rel.isEmpty() ? name : folder.rel + u'/' + name;
             if (info.isDir()) {
-                if (info.isSymLink() && !followsLink(info, folder.rel))
-                    continue; // a link into the vault (duplicates) or a loop
+                if (info.isSymLink() && !followsLink(info, folder.rel)) {
+                    // A link into the vault (duplicates), a loop, or one to outside the device does
+                    // not follow (noted for the app's one-time check: Vault::skippedOutsideLinks()).
+                    out.outsideLinkSkipped =
+                            out.outsideLinkSkipped || (!followOutsideLinks && leadsOutside(info, folder.rel));
+                    continue;
+                }
                 if (path == vaultutil::configFolder()) {
                     todo.append(Folder{path, rel, false}); // ignored, but its config.json is tracked
                     continue;
@@ -155,7 +159,8 @@ void VaultPrivate::listChildren(const VaultPath &dir, const QString &dirRel, boo
                         out.trees.insert(path); // a new folder found by a shallow listing
                     todo.append(Folder{path, rel, true});
                 }
-            } else if (info.isFile() && vaultutil::isTracked(path) && !out.files.contains(path)) {
+            } else if (info.isFile() && !info.isSymLink() && vaultutil::isTracked(path) && !out.files.contains(path)) {
+                // Links to files are never followed, wherever they point (vault.h, "Semantics").
                 out.files.insert(path, DiskEntry{rel, statOf(info, path)});
             }
         }
@@ -249,25 +254,25 @@ ScanDiff VaultPrivate::diff(const DiskListing &listing) const
     return out;
 }
 
-std::optional<QByteArray> VaultPrivate::readEntry(const DiskEntry &entry) const
+std::optional<QByteArray> VaultPrivate::readEntry(const DiskEntry &entry, bool *tooBig) const
 {
-    QFile file(absOfDiskRel(entry.diskRel));
-    if (!file.open(QIODevice::ReadOnly))
+    vaultutil::ContentRead read = vaultutil::readContent(absOfDiskRel(entry.diskRel), ContentCache::kMaxItemBytes);
+    if (tooBig)
+        *tooBig = read.status == vaultutil::ContentRead::Status::TooBig;
+    if (!read.ok())
         return std::nullopt;
-    QByteArray bytes = file.readAll();
-    if (file.error() != QFileDevice::NoError)
-        return std::nullopt;
-    return bytes;
+    return std::move(read.bytes);
 }
 
 std::optional<QString> VaultPrivate::entryHash(const DiskEntry &entry, QHash<VaultPath, QString> &hashCache) const
 {
     if (const auto it = hashCache.constFind(entry.stat.path); it != hashCache.cend())
         return *it;
-    const std::optional<QByteArray> bytes = readEntry(entry);
-    if (!bytes)
+    bool tooBig = false;
+    const std::optional<QByteArray> bytes = readEntry(entry, &tooBig);
+    if (!bytes && !tooBig)
         return std::nullopt;
-    return *hashCache.insert(entry.stat.path, text::fnv1a64Hex(*bytes));
+    return *hashCache.insert(entry.stat.path, bytes ? text::fnv1a64Hex(*bytes) : QString());
 }
 
 bool VaultPrivate::sameContent(const FileStat &vanished, const DiskEntry &appeared,
@@ -277,7 +282,10 @@ bool VaultPrivate::sameContent(const FileStat &vanished, const DiskEntry &appear
     // Content never seen, or too big to read while scanning: a rename keeps the modification time.
     if (known.isEmpty() || appeared.stat.size > ContentCache::kMaxItemBytes)
         return vanished.mtime == appeared.stat.mtime;
-    return entryHash(appeared, hashCache) == known;
+    const std::optional<QString> hash = entryHash(appeared, hashCache);
+    if (hash && hash->isEmpty()) // too big after all (more than its stat said)
+        return vanished.mtime == appeared.stat.mtime;
+    return hash == known;
 }
 
 QList<RenamePair> VaultPrivate::pairRenames(const ScanDiff &found, QHash<VaultPath, QString> &hashCache) const
@@ -320,9 +328,12 @@ std::optional<VaultChange> VaultPrivate::applyModified(const DiskEntry &entry, C
 {
     const VaultPath &path = entry.stat.path;
     staleContent.remove(path);
-    if (!comparesContent(entry.stat)) {
-        // Binary files (and text too big to read while scanning) are compared by size and
-        // modification time only; text the vault still holds from before goes to History.
+    bool byStat = !comparesContent(entry.stat);
+    const std::optional<QByteArray> bytes = byStat ? std::nullopt : readEntry(entry, &byStat);
+    if (byStat) {
+        // Binary files (and text too big to read while scanning, by its size or its content) are
+        // compared by size and modification time only; text the vault still holds from before
+        // goes to History.
         snapshotCached(path, source);
         hashes.remove(path);
         contents.remove(path);
@@ -330,7 +341,6 @@ std::optional<VaultChange> VaultPrivate::applyModified(const DiskEntry &entry, C
         watchFile(path);
         return VaultChange{ChangeType::Modified, path, {}, source};
     }
-    const std::optional<QByteArray> bytes = readEntry(entry);
     if (!bytes) { // vanished between listing and reading
         snapshotCached(path, source);
         unwatch(path);
@@ -352,15 +362,15 @@ std::optional<VaultChange> VaultPrivate::applyModified(const DiskEntry &entry, C
 bool VaultPrivate::adoptFile(const DiskEntry &entry, const QHash<VaultPath, QString> &hashCache)
 {
     const VaultPath &path = entry.stat.path;
-    const bool isText = vaultutil::isTextPath(path) && entry.stat.size <= ContentCache::kMaxItemBytes;
-    const std::optional<QByteArray> bytes = isText ? readEntry(entry) : std::nullopt;
-    if (isText && !bytes)
+    bool byStat = !vaultutil::isTextPath(path) || entry.stat.size > ContentCache::kMaxItemBytes;
+    const std::optional<QByteArray> bytes = byStat ? std::nullopt : readEntry(entry, &byStat);
+    if (!byStat && !bytes)
         return false; // gone again
     rememberDiskName(path, entry.diskRel);
     trackFile(entry.stat);
     if (bytes)
         rememberContent(path, *bytes);
-    else if (const auto it = hashCache.constFind(path); it != hashCache.cend())
+    else if (const auto it = hashCache.constFind(path); it != hashCache.cend() && !it->isEmpty())
         hashes.insert(path, *it); // read while looking for renames
     watchFile(path);
     return true;
@@ -519,7 +529,7 @@ void VaultPrivate::verifyListing(DiskListing &listing) const
         if (listing.dirs.contains(dir) || !listing.coversDir(dir))
             continue;
         const QFileInfo info(absPath(dir));
-        if (info.isSymLink() && !info.exists())
+        if (followOutsideLinks && info.isSymLink() && !info.exists())
             listing.unreadable.insert(dir); // a linked folder whose target is unmounted
         else if (isDirOnDisk(dir) && !caseVariantListed(dir))
             listing.unreadable.insert(paths::dirname(dir));
@@ -528,13 +538,17 @@ void VaultPrivate::verifyListing(DiskListing &listing) const
         const VaultPath &path = it.key();
         if (listing.files.contains(path) || !listing.coversFile(path))
             continue;
-        if (QFileInfo(absPath(path)).isFile() && !caseVariantListed(path))
+        // Gone for the vault, not a gap: a file replaced by a link, or one in a linked folder no
+        // longer followed (diskStat() sees neither, nor does the listing).
+        if (const std::optional<FileStat> st = diskStat(path); st && !st->isDir && !caseVariantListed(path))
             listing.unreadable.insert(paths::dirname(path));
     }
 }
 
 void VaultPrivate::noteListing(const DiskListing &listing, bool full)
 {
+    if (full)
+        outsideLinksSkipped = listing.outsideLinkSkipped;
     QSet<VaultPath> folders = listing.unreadable;
     if (!full) {
         // A partial scan vouches only for the folders it listed.

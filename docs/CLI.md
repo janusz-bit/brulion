@@ -56,7 +56,10 @@ standard input with `--stdin`.
    the app itself starts next time); with none, exit 5 `no_vault`.
 
 The folder must exist: `brulion-cli init <folder>` is the only command that creates one (a
-mistyped path never becomes an empty notebook). Device state — the version history and the lock —
+mistyped path never becomes an empty notebook). Folder links that point outside the notebook are
+followed only as the app on this device follows them (`vaults/followOutsideLinks` of `Brulion.ini`,
+read only, off by default: Settings → Notebook), so a command sees and writes the files the app does.
+Device state — the version history and the lock —
 lives where the app keeps it for that folder (`~/.local/share/Brulion/Brulion/vaults/<id>`), so on
 one computer the app's history shows the command line's changes; `--state-dir` chooses another,
 `--no-history` none. The index cache lives there too (`index-cache.bin`, docs/PERFORMANCE.md L2):
@@ -208,7 +211,7 @@ Never compute a hash yourself.
 | `task set <ref> <status>` | todo, doing, done, cancelled, deferred, none (Polish words too); `[--history]` | a recurring task done → its next occurrence; `--history` logs the change in the task's `:LOGBOOK:` (doing starts its clock, leaving doing stops it) as the app's "Log task status changes" setting does | yes |
 | `task start <ref>` | | start the task's clock: `CLOCK: [2026-11-03 Tue 10:00:00]` in its `:LOGBOOK:` (local time); a clock running elsewhere is stopped first (`stopped`) — one at a time | yes |
 | `task stop [<ref>]` | | stop the task's clock (`--[…] =>  00:25:00`); without a ref every running one | yes |
-| `task time` | `[--by day\|page\|tag\|task] [--from D] [--to D] [--query Q]` | time clocked: `{rows [{key, label, seconds, duration, tasks, path?, ref?}], total, tasks}`; entries crossing midnight are split, overlapping ones of a task count once, a running clock counts up to now | |
+| `task time` | `[--by day\|page\|tag\|task] [--from D] [--to D] [--query Q]` | time clocked: `{rows [{key, label, seconds, duration, tasks, path?, ref?}], total, tasks}`; entries crossing midnight are split, overlapping ones of a task count once, a running clock counts up to now (at most 366 days, docs/SYNTAX.md §5) | |
 | `task depend <ref>` | `--on <ref> [--remove]` | the task waits for the other (`⛔ id` after its `🆔`, Obsidian Tasks' order); the other gets a `🆔` (6 characters) when it has none | yes |
 | `task done <ref>` | | `task set <ref> done` | yes |
 | `task doing <ref>` | | in progress | yes |
@@ -327,7 +330,9 @@ client asks for them; one constant in `src/cli/mcp.cpp`).
   `brulion_task_add`, `brulion_task_set`, `brulion_journal_append`, `brulion_query`, …). Their
   input schemas are the commands' arguments; tools that write also take `dryRun`.
 * Results: the same envelope as above, as `structuredContent` and as JSON text; `isError` when it
-  failed. Bad JSON, unknown methods and unknown tools are JSON-RPC errors.
+  failed. Bad JSON, unknown methods and unknown tools are JSON-RPC errors. A request line longer
+  than 16 MiB (far above any tool call a model writes) is refused as Invalid Request with a null
+  `id` and skipped to its end without being kept in memory; the server goes on.
 * English whatever the system's language: descriptions, messages and errors ("Language" above).
 * `--read-only` offers only the tools that read; destructive tools are offered only with
   `--allow-destructive`; the tools that drive the running app (`brulion_app_state`,

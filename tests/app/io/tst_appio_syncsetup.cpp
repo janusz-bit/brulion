@@ -2,7 +2,8 @@
 // "Security" page; explained connection errors (401, 403, TLS, DNS, refused, CORS in the browser,
 // not WebDAV); NextcloudSetup against the core's in-memory Nextcloud (connected, wrong password,
 // missing folder -> create it, missing account), drafts vs. saved settings (default folder
-// "Notatki", the password stays out of the drafts), switching off; several notebooks on one
+// "Notatki", the password stays out of the drafts), switching off, an app password that cannot be
+// stored or forgotten (an error, nothing saved); several notebooks on one
 // account (a folder of their own proposed, a folder another notebook syncs with refused, signing
 // out or another account stopping every notebook); SyncthingSetup and the .stignore helpers
 // (create, keep the user's rules, append what is missing, CRLF).
@@ -389,6 +390,41 @@ private Q_SLOTS:
         s->setCurrentVault(b);
         QVERIFY(!s->nextcloudEnabled());
         QCOMPARE(s->nextcloudFolder(), u"Dom"_s); // turned on again, it continues there
+    }
+
+    void passwordThatCannotBeStored()
+    {
+        // A folder where the app password's file belongs: it can be neither written nor removed.
+        // Save says so and changes nothing (the typed password stays for another try); Sign out
+        // says that the saved one is still there.
+        auto s = settings();
+        NextcloudSetup form;
+        form.setSettings(s.get());
+        QSignalSpy errors(&form, &NextcloudSetup::errorOccurred);
+        QSignalSpy saved(&form, &NextcloudSetup::saved);
+        QVERIFY(QDir().mkpath(s->passwordFile() + u"/zablokowane"_s));
+        fill(form);
+        QVERIFY(!form.save());
+        QCOMPARE(errors.size(), 1);
+        QCOMPARE(errors.first().first().toString(), NextcloudSetup::tr("The app password could not be saved."));
+        QCOMPARE(saved.size(), 0);
+        QVERIFY(!s->nextcloudEnabled());
+        QVERIFY(s->nextcloudUrl().isEmpty());
+        QCOMPARE(form.password(), u"hasło-źdźbło"_s);
+        QVERIFY(form.dirty());
+
+        form.disconnectAccount();
+        QCOMPARE(errors.size(), 2);
+        QCOMPARE(errors.last().first().toString(), NextcloudSetup::tr("The saved app password could not be deleted."));
+
+        // The way cleared: saved as usual, no error.
+        QVERIFY(QDir(s->passwordFile()).removeRecursively());
+        fill(form);
+        QVERIFY(form.save());
+        QCOMPARE(errors.size(), 2);
+        QCOMPARE(saved.size(), 1);
+        QCOMPARE(s->nextcloudPassword(), u"hasło-źdźbło"_s);
+        QVERIFY(s->nextcloudEnabled());
     }
 
     void anotherAccountStopsTheOtherNotebooks()

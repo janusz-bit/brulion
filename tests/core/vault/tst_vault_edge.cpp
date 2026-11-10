@@ -1,7 +1,7 @@
 // Edge cases found in review: ids of folders that do not exist yet, huge text files, changes
-// hidden behind an unchanged stat (coarse timestamps), History of non-UTF-8 files, writes
-// through dangling symlinks, byte order marks of unseen files, trash entries with NFD names
-// written by other devices, watching requested before open().
+// hidden behind an unchanged stat (coarse timestamps), History of non-UTF-8 files, links to
+// files (never followed) and through the trash, byte order marks of unseen files, trash entries
+// with NFD names written by other devices, watching requested before open().
 #include "vaulttest.h"
 
 #include <QRegularExpression>
@@ -83,6 +83,33 @@ private Q_SLOTS:
         touchBehind(f.root(), u"rośnie.csv"_s);
         QCOMPARE(shortChanges(f.vault->rescan()), QStringList{u"modify:rośnie.csv@external"_s});
         QCOMPARE(f.historyContents(u"rośnie.csv"_s), QStringList{u"a;b\n"_s});
+    }
+
+    void filesOverAGigabyteAreNotRead()
+    {
+        // readText(), readBinary() and readDetached() hold the whole file in memory: one over
+        // 1 GiB fails without being read (sparse here: nothing is written); scans compare it by
+        // its stat, like every file over 16 MB.
+        Fixture f;
+        QVERIFY(f.open());
+        {
+            QFile file(f.root() + u"/nagranie z próby.txt"_s);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            if (!file.resize((qint64(1) << 30) + 1))
+                QSKIP("the file system cannot make a 1 GiB file here");
+        }
+        QCOMPARE(shortChanges(f.vault->rescan()), QStringList{u"create:nagranie z próby.txt@external"_s});
+        bool ok = true;
+        QVERIFY(f.vault->readBinary(u"nagranie z próby.txt"_s, &ok).isEmpty());
+        QVERIFY(!ok);
+        QVERIFY(f.vault->errorString().contains(u"1024 MB"_s));
+        QVERIFY(f.vault->readText(u"nagranie z próby.txt"_s, &ok).isEmpty());
+        QVERIFY(!ok);
+        const DetachedRead read =
+                Vault::readDetached(u"nagranie z próby.txt"_s, f.vault->absolutePath(u"nagranie z próby.txt"_s));
+        QVERIFY(!read.ok);
+        QVERIFY(read.bytes.isEmpty());
+        QVERIFY(f.vault->rescan().isEmpty());
     }
 
     // ---- changes hidden behind an unchanged stat ---------------------------------------------
@@ -183,6 +210,135 @@ private Q_SLOTS:
         QCOMPARE(f.changes(), QStringList{u"create:notatka 2.md@user"_s});
     }
 
+    void fileLinksAreNeverFollowed_data()
+    {
+        QTest::addColumn<bool>("intoTheVault");
+        QTest::newRow("outside the vault") << false; // "klucz.md -> ~/.ssh/id_rsa"
+        QTest::newRow("into the vault") << true;     // a duplicate of a note
+    }
+
+    void fileLinksAreNeverFollowed()
+    {
+        // A link to a file (a sync peer's — Syncthing syncs symlinks — or a checkout's) is not
+        // followed, wherever it points: it would be indexed, uploaded by sync and written through.
+        // Not even inside a linked folder that is followed (the device allows it here).
+        BRULION_SKIP_WITHOUT_SYMLINKS();
+        QFETCH(bool, intoTheVault);
+        Fixture f;
+        f.followOutsideLinks = true;
+        f.write(u"Notatka.md"_s, "moja notatka");
+        f.write(u"zastąpiona.md"_s, "stara treść");
+        f.write(u".trash/usunięta.md"_s, "usunięta");
+        const QString outside = f.tmp.path() + u"/poza"_s;
+        writeBehind(outside, u"id_rsa"_s, "tajny klucz zażółć");
+        writeBehind(outside, u"Zdjęcia/lato.png"_s, "\x01");
+        const QFileInfo target(intoTheVault ? QString(f.root() + u"/Notatka.md"_s) : QString(outside + u"/id_rsa"_s));
+        const QByteArray secret = readBehind(target.absolutePath(), target.fileName());
+        const QStringList links{f.root() + u"/klucz.md"_s, f.root() + u"/.trash/klucz.md"_s,
+                                outside + u"/Zdjęcia/klucz.md"_s};
+        for (const QString &link : links)
+            QVERIFY(QFile::link(target.filePath(), link));
+        QVERIFY(QFile::link(outside + u"/Zdjęcia"_s, f.root() + u"/assets"_s));
+        QVERIFY(f.open());
+        QCOMPARE(f.files(), (QStringList{u"Notatka.md"_s, u"assets/lato.png"_s, u"zastąpiona.md"_s}));
+        QCOMPARE(statPaths(f.vault->trash()), QStringList{u".trash/usunięta.md"_s});
+        for (const QString &link : {u"klucz.md"_s, u"assets/klucz.md"_s, u".trash/klucz.md"_s}) {
+            QVERIFY2(!f.vault->exists(link) && !f.vault->stat(link), qPrintable(link));
+            bool ok = true;
+            QVERIFY(f.vault->readText(link, &ok).isEmpty());
+            QVERIFY(!ok);
+            QVERIFY(f.vault->errorString().contains(link));
+            QVERIFY(f.vault->readBinary(link, &ok).isEmpty());
+            QVERIFY(!ok);
+            QVERIFY(!Vault::readDetached(link, f.vault->absolutePath(link)).ok);
+            QVERIFY(!f.vault->writeText(link, u"nadpisane"_s));
+            QVERIFY(!f.vault->writeBinary(link, "nadpisane"_ba));
+            QCOMPARE(f.vault->writeTextIfUnchanged(link, u"nadpisane"_s, QString::fromUtf8(secret)),
+                     WriteOutcome::Failed);
+        }
+        QCOMPARE(readBehind(target.absolutePath(), target.fileName()), secret);
+        QVERIFY(f.vault->rescan().isEmpty());
+        // A note replaced by such a link behind the vault's back is gone (kept in History), and
+        // its folder is no gap in the listing.
+        QCOMPARE(f.text(u"zastąpiona.md"_s), u"stara treść"_s);
+        QVERIFY(removeBehind(f.root(), u"zastąpiona.md"_s));
+        QVERIFY(QFile::link(target.filePath(), f.root() + u"/zastąpiona.md"_s));
+        QCOMPARE(shortChanges(f.vault->rescan()), QStringList{u"delete:zastąpiona.md@external"_s});
+        QVERIFY(f.vault->scanStatus().isOk());
+        QCOMPARE(f.historyContents(u"zastąpiona.md"_s), QStringList{u"stara treść"_s});
+        QVERIFY(f.vault->rescan().isEmpty());
+        QCOMPARE(f.changes(), QStringList{u"delete:zastąpiona.md@external"_s});
+        QCOMPARE(readBehind(target.absolutePath(), target.fileName()), secret);
+    }
+
+    void outsideFolderLinksOnlyWhereTheDeviceAllowsThem()
+    {
+        // A synced "Dokumenty -> ~/Documents" (Syncthing syncs symlinks) must not make another
+        // folder's files notes — listed, indexed, uploaded by sync, written or deleted through the
+        // link: a folder link pointing outside is followed only when the device allows it.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
+        Fixture f;
+        f.write(u"a.md"_s, "notatka");
+        const QString outside = f.tmp.path() + u"/Dokumenty"_s;
+        writeBehind(outside, u"plan.md"_s, "tajny plan zażółć");
+        writeBehind(outside, u"Podatki/zeznanie.pdf"_s, "%PDF");
+        const QStringList theirs{u"Podatki/zeznanie.pdf"_s, u"plan.md"_s};
+        QVERIFY(QFile::link(outside, f.root() + u"/Dokumenty"_s));
+        QVERIFY(f.open());
+        QVERIFY(!f.vault->followsOutsideLinks());
+        QVERIFY(f.vault->skippedOutsideLinks()); // (the app's one-time check of earlier users)
+        QCOMPARE(f.files(), QStringList{u"a.md"_s});
+        QVERIFY(f.folders().isEmpty());
+        QVERIFY(!f.vault->reaches(u"Dokumenty"_s) && !f.vault->reaches(u"Dokumenty/plan.md"_s));
+        QVERIFY(f.vault->reaches(u"a.md"_s) && f.vault->reaches(u"nowa.md"_s));
+        bool ok = true;
+        QVERIFY(f.vault->readText(u"Dokumenty/plan.md"_s, &ok).isEmpty());
+        QVERIFY(!ok);
+        QVERIFY(f.vault->errorString().contains(u"Dokumenty/plan.md"_s));
+        QVERIFY(f.vault->readBinary(u"Dokumenty/Podatki/zeznanie.pdf"_s, &ok).isEmpty());
+        QVERIFY(!ok);
+        QVERIFY(!f.vault->writeText(u"Dokumenty/plan.md"_s, u"nadpisany"_s));
+        QVERIFY(!f.vault->writeText(u"Dokumenty/nowy.md"_s, u"nowy"_s));
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"Dokumenty/plan.md"_s, u"nadpisany"_s, u"tajny plan zażółć"_s),
+                 WriteOutcome::Failed);
+        QVERIFY(!f.vault->rename(u"Dokumenty/plan.md"_s, u"plan.md"_s));
+        QVERIFY(!f.vault->rename(u"a.md"_s, u"Dokumenty/a.md"_s));
+        QVERIFY(!f.vault->removePermanently(u"Dokumenty/plan.md"_s));
+        QVERIFY(f.vault->remove(u"Dokumenty/plan.md"_s)); // not the vault's: nothing to delete
+        f.vault->processPendingEvents();
+        QVERIFY(f.vault->rescan().isEmpty());
+        QVERIFY(f.changes().isEmpty());
+        QCOMPARE(diskFiles(outside), theirs);
+        QCOMPARE(readBehind(outside, u"plan.md"_s), "tajny plan zażółć"_ba);
+        QCOMPARE(f.read(u"a.md"_s), "notatka"_ba);
+        // Allowed: the linked files come as changes, and go again when it is switched off.
+        f.vault->setFollowsOutsideLinks(true);
+        QCOMPARE(sorted(f.changes()), (QStringList{u"create:Dokumenty/Podatki/zeznanie.pdf@external"_s,
+                                                   u"create:Dokumenty/plan.md@external"_s}));
+        QCOMPARE(f.text(u"Dokumenty/plan.md"_s), u"tajny plan zażółć"_s);
+        QVERIFY(f.vault->reaches(u"Dokumenty/plan.md"_s));
+        QVERIFY(!f.vault->skippedOutsideLinks());
+        QCOMPARE(f.folders(), (QStringList{u"Dokumenty"_s, u"Dokumenty/Podatki"_s}));
+        f.spy->clear();
+        f.vault->setFollowsOutsideLinks(false);
+        QCOMPARE(sorted(f.changes()), (QStringList{u"delete:Dokumenty/Podatki/zeznanie.pdf@external"_s,
+                                                   u"delete:Dokumenty/plan.md@external"_s}));
+        QVERIFY(f.vault->scanStatus().isOk());
+        QCOMPARE(f.files(), QStringList{u"a.md"_s});
+        QVERIFY(f.folders().isEmpty());
+        QCOMPARE(diskFiles(outside), theirs);
+        // Allowed before open(): listed at once.
+        f.followOutsideLinks = true;
+        QVERIFY(f.open());
+        QCOMPARE(f.files(), (QStringList{u"Dokumenty/Podatki/zeznanie.pdf"_s, u"Dokumenty/plan.md"_s, u"a.md"_s}));
+        // A link into the vault (a duplicate) is none to outside.
+        Fixture g;
+        g.write(u"Projekty/a.md"_s, "a");
+        QVERIFY(QFile::link(g.root() + u"/Projekty"_s, g.root() + u"/kopia"_s));
+        QVERIFY(g.open());
+        QVERIFY(!g.vault->skippedOutsideLinks());
+    }
+
     void trashOperationsNeverGoThroughLinks()
     {
         // A ".trash" link (planted by a sync peer) would carry deleted notes out of the vault,
@@ -204,6 +360,12 @@ private Q_SLOTS:
         QVERIFY(f.vault->restore(u".trash/prywatne.txt"_s).isEmpty());
         QVERIFY(!f.vault->remove(u".trash/prywatne.txt"_s));
         QVERIFY(!f.vault->removePermanently(u".trash/prywatne.txt"_s));
+        // Nor by hand: rename() into the trash or out of it.
+        QVERIFY(!f.vault->rename(u"a.md"_s, u".trash/a.md"_s));
+        QVERIFY(f.vault->errorString().contains(u".trash/a.md"_s));
+        QVERIFY(!f.vault->rename(u".trash/prywatne.txt"_s, u"prywatne.txt"_s));
+        QVERIFY(!QFileInfo::exists(f.root() + u"/prywatne.txt"_s));
+        QCOMPARE(f.read(u"a.md"_s), "notatka"_ba);
         QCOMPARE(readBehind(outside, u"prywatne.txt"_s), "sekret"_ba);
         QVERIFY(diskFiles(outside) == QStringList{u"prywatne.txt"_s});
         QVERIFY(f.changes().isEmpty());
@@ -215,7 +377,19 @@ private Q_SLOTS:
         QVERIFY(QFile::link(outside, f.root() + u"/.trash/Projekt"_s));
         QVERIFY(!f.vault->remove(u"Projekt/b.md"_s));
         QVERIFY(f.vault->restore(u".trash/Projekt/prywatne.txt"_s).isEmpty());
+        QVERIFY(!f.vault->rename(u"Projekt/b.md"_s, u".trash/Projekt/b.md"_s));
+        QVERIFY(!f.vault->rename(u".trash/Projekt/prywatne.txt"_s, u"Projekt/prywatne.txt"_s));
+        // Also when the link's name is spelled in NFD (from a Mac) and the path given in NFC.
+        QVERIFY(QFile::link(outside, f.root() + u"/.trash/"_s + u"Książki"_s.normalized(QString::NormalizationForm_D)));
+        QVERIFY(f.vault->restore(u".trash/Książki/prywatne.txt"_s).isEmpty());
+        QVERIFY(!f.vault->removePermanently(u".trash/Książki/prywatne.txt"_s));
+        QVERIFY(!f.vault->rename(u".trash/Książki/prywatne.txt"_s, u"Książki.txt"_s));
         QVERIFY(diskFiles(outside) == QStringList{u"prywatne.txt"_s});
+        QCOMPARE(f.files(), (QStringList{u"Projekt/b.md"_s, u"a.md"_s}));
+        QVERIFY(f.changes().isEmpty());
+        // By hand into a real trash folder and out of it again: allowed.
+        QVERIFY(f.vault->rename(u"a.md"_s, u".trash/Ręcznie/a.md"_s));
+        QVERIFY(f.vault->rename(u".trash/Ręcznie/a.md"_s, u"a.md"_s));
         QVERIFY(f.vault->remove(u"a.md"_s)); // an ordinary trash works
         QCOMPARE(f.read(u".trash/a.md"_s), "notatka"_ba);
     }

@@ -160,6 +160,8 @@ struct Fixture {
     std::unique_ptr<QSignalSpy> spy;
     /// Storage identity probe given to the vault before open() (unset: the system's).
     std::function<QString(const QString &)> storageProbe;
+    /// Vault::setFollowsOutsideLinks() before open() (off, as by default).
+    bool followOutsideLinks = false;
 
     QString root() const { return tmp.path() + u"/Notatki"_s; }
     QString state() const { return tmp.path() + u"/state"_s; }
@@ -178,6 +180,7 @@ struct Fixture {
         vault->setClock(clock.fn());
         if (storageProbe)
             vault->setStorageProbe(storageProbe);
+        vault->setFollowsOutsideLinks(followOutsideLinks);
         QString error;
         if (!vault->open(&error)) {
             qWarning().noquote() << "open failed:" << error;

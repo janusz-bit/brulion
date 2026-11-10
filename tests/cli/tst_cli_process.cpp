@@ -9,7 +9,8 @@
 // pages named like dates resolving as [[links]] do, the notebook and language taken as the app
 // takes them, messages in the system's language (Polish or English; the machine's fields and MCP
 // English), `app open` against a stand-in app, and the MCP server (initialize, tools/list,
-// tools/call, errors, the warm index seeing a file written meanwhile).
+// tools/call, errors, a request line over the 16 MiB limit, the warm index seeing a file written
+// meanwhile).
 #include "appmessage.h"
 #include "controlprotocol.h"
 #include "controlserver.h"
@@ -1094,6 +1095,33 @@ private Q_SLOTS:
         QDir(docs).removeRecursively();
     }
 
+    // Folder links to outside the notebook: followed as the app on this device follows them
+    // (AppSettings' followsOutsideLinks, read only), so a command sees and writes the same files.
+    void outsideFolderLinksAsTheApp()
+    {
+#ifndef Q_OS_UNIX
+        QSKIP("symbolic links");
+#else
+        const QString dir = vault({{u"Dom.md"_s, "- dom\n"}});
+        const QString outside = m_tmp.filePath(u"poza notatnikiem"_s);
+        writeFile(outside + u"/Plan.md"_s, "- plan zażółć\n");
+        QVERIFY(QFile::link(outside, dir + u"/Dokumenty"_s));
+        Run r = run(dir, {u"page"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 1); // the default: not followed
+        r = run(dir, {u"page"_s, u"append"_s, u"Dokumenty/Plan.md"_s, u"- dopisane"_s});
+        QVERIFY(r.code != 0);
+        QCOMPARE(readFile(outside + u"/Plan.md"_s), "- plan zażółć\n"_ba);
+        {
+            QSettings settings(settingsFile(), QSettings::IniFormat);
+            settings.setValue(u"vaults/followOutsideLinks"_s, true);
+        }
+        r = run(dir, {u"page"_s, u"list"_s});
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 2);
+        QFile::remove(settingsFile());
+#endif
+    }
+
     // The documentation of either language (an English one, and a Polish one left from before
     // the UI language changed) is never the user's notebook.
     void documentationOfEitherLanguageIsNoNotebook()
@@ -1754,6 +1782,22 @@ private Q_SLOTS:
         QVERIFY(reply.value(u"result"_s).toObject().value(u"isError"_s).toBool());
         reply = request(R"({"jsonrpc":"2.0","id":9,"method":"ping"})");
         QCOMPARE(reply.value(u"id"_s).toInt(), 9);
+        // A request line of up to 16 MiB is read; a longer one is refused (Invalid Request, no id:
+        // it was not read) and skipped to its end, and the server goes on.
+        constexpr qsizetype kMaxLine = 16 * 1024 * 1024; // mcp.cpp, kMaxLineBytes
+        // (No raw strings: moc loses its way in one with an odd number of quotes.)
+        const QByteArray head = "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"ping\",\"params\":{\"zażółć\":\"";
+        const QByteArray tail = "\"}}";
+        QByteArray longest = head + QByteArray(kMaxLine - head.size() - tail.size(), 'x') + tail;
+        QCOMPARE(longest.size(), kMaxLine);
+        reply = request(longest);
+        QCOMPARE(reply.value(u"id"_s).toInt(), 10);
+        reply = request(longest.insert(head.size(), 'x'));
+        QCOMPARE(reply.value(u"error"_s).toObject().value(u"code"_s).toInt(), -32600);
+        QVERIFY(reply.contains(u"id"_s) && reply.value(u"id"_s).isNull());
+        QVERIFY(reply.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"16777216"_s));
+        reply = request(R"({"jsonrpc":"2.0","id":11,"method":"ping"})");
+        QCOMPARE(reply.value(u"id"_s).toInt(), 11);
         p.closeWriteChannel();
         QVERIFY(p.waitForFinished(kTimeoutMs));
         QCOMPARE(p.exitCode(), 0);

@@ -1,4 +1,6 @@
 #include "dataview/value.h"
+#include "dataview/eval_p.h"
+#include "dataview/messages_p.h"
 
 #include "dates/local.h"
 #include "markdown/properties.h"
@@ -14,16 +16,59 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::dataview {
 
+// ---- Limits ----------------------------------------------------------------------------------------
+
+void throwTooLarge()
+{
+    throw EvalError{messages::valueTooLarge(MaxValueItems, MaxTextLength)};
+}
+
+void Value::throwPastLimits(const Extent &e)
+{
+    if (e.depth > MaxValueDepth)
+        throw EvalError{messages::valueTooDeep(MaxValueDepth)};
+    throwTooLarge();
+}
+
 // ---- Value -----------------------------------------------------------------------------------------
+
+struct ListNode {
+    ValueList items;
+    Extent extent;
+};
+
+Value Value::list(ValueList items)
+{
+    Extent e{1, 1, 0};
+    for (const Value &item : std::as_const(items))
+        e.add(item.extent());
+    check(e);
+    return of(std::make_shared<const ListNode>(std::move(items), e));
+}
 
 Value Value::map(const QList<std::pair<QString, Value>> &fields)
 {
     return object(std::make_shared<MapObject>(fields));
 }
 
+Value Value::function(std::shared_ptr<const Function> f)
+{
+    if (!f)
+        return Value();
+    check({f->depth, 1, 0});
+    return of(std::move(f));
+}
+
 const ValueList &Value::asList() const
 {
-    return *std::get<std::shared_ptr<const ValueList>>(m);
+    return std::get<std::shared_ptr<const ListNode>>(m)->items;
+}
+
+Extent Value::partsExtent() const
+{
+    if (is(Type::List))
+        return std::get<std::shared_ptr<const ListNode>>(m)->extent;
+    return {asFunction().depth, 1, 0}; // a lambda: shown as "<function>", compared by identity
 }
 
 bool Value::truthy() const
@@ -62,7 +107,9 @@ QString Value::typeName() const
 
 // ---- MapObject -------------------------------------------------------------------------------------
 
-MapObject::MapObject(QList<std::pair<QString, Value>> fields) : m_fields(std::move(fields)) { }
+MapObject::MapObject(QList<std::pair<QString, Value>> fields)
+    : m_fields(std::move(fields)), m_extent(fieldsExtent(m_fields))
+{ }
 
 std::optional<Value> MapObject::field(const QString &key) const
 {
@@ -145,8 +192,12 @@ int compare(const Value &a, const Value &b)
         const int c = compareStrings(a.asLink().path, b.asLink().path);
         return c != 0 ? c : compareStrings(a.asLink().subpath, b.asLink().subpath);
     }
+    // (A list or an object equals itself at once: comparing a task object field by field would
+    // follow its children as deep as the note's outline goes.)
     case Value::Type::List: {
         const ValueList &x = a.asList(), &y = b.asList();
+        if (&x == &y)
+            return 0;
         for (qsizetype i = 0; i < std::min(x.size(), y.size()); ++i) {
             if (const int c = compare(x.at(i), y.at(i)))
                 return c;
@@ -154,6 +205,8 @@ int compare(const Value &a, const Value &b)
         return cmp(x.size(), y.size());
     }
     case Value::Type::Object: {
+        if (&a.asObject() == &b.asObject())
+            return 0;
         const QStringList kx = a.asObject().keys(), ky = b.asObject().keys();
         for (qsizetype i = 0; i < std::min(kx.size(), ky.size()); ++i) {
             if (const int c = compareStrings(kx.at(i), ky.at(i)))

@@ -8,6 +8,7 @@
 // and their resolution, and the AppController integration (settings -> reminders/sync, capture).
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "filesystemtraits.h"
 #include "workspace.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
@@ -1475,6 +1476,155 @@ private Q_SLOTS:
         app.closeVault();
         QTRY_VERIFY(!ws->isOpen());
         QVERIFY(!ws->reminders()->isRunning());
+    }
+
+    void outsideFolderLinksFollowTheDeviceSetting()
+    {
+        // AppSettings' followsOutsideLinks (this device's, off by default) reaches the vault of the
+        // open notebook at once and of every notebook opened later; the notebook's own settings
+        // (.brulion/config.json, synced) never hold it.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
+        AppController::Options options;
+        options.settingsFile = m_tmp.filePath(u"links/settings.ini"_s);
+        options.dataDir = m_tmp.filePath(u"links/data"_s);
+        AppController app(options);
+        Workspace *ws = app.workspace();
+        ws->sync()->setSyncthingDiscovery(false);
+        const QString root = newRoot();
+        const QString outside = m_tmp.filePath(u"links/Dokumenty"_s);
+        QVERIFY(writeRaw(root + u"/Start.md"_s, "- start\n"));
+        QVERIFY(writeRaw(outside + u"/Plan.md"_s, "- [[Start]] zażółć\n"));
+        QVERIFY(QFile::link(outside, root + u"/Dokumenty"_s));
+        app.openVault(root);
+        QTRY_COMPARE(app.status(), u"ready"_s);
+        QTRY_VERIFY(ws->ready());
+        QVERIFY(!ws->vault()->followsOutsideLinks());
+        QVERIFY(!ws->exists(u"Dokumenty/Plan.md"_s));
+        QVERIFY(!ws->index()->contains(u"Dokumenty/Plan.md"_s));
+
+        app.settings()->setFollowsOutsideLinks(true);
+        QVERIFY(ws->vault()->followsOutsideLinks());
+        QVERIFY(ws->exists(u"Dokumenty/Plan.md"_s));
+        QTRY_VERIFY(ws->index()->contains(u"Dokumenty/Plan.md"_s));
+        QCOMPARE(ws->readFile(u"Dokumenty/Plan.md"_s), u"- [[Start]] zażółć\n"_s);
+        QVERIFY(!QFile::exists(root + u"/.brulion/config.json"_s));
+        // The next notebook opened (this one again) follows them from its first listing.
+        app.closeVault();
+        QTRY_VERIFY(!ws->isOpen());
+        app.openVault(root);
+        QTRY_COMPARE(app.status(), u"ready"_s);
+        QVERIFY(ws->vault()->followsOutsideLinks());
+        QVERIFY(ws->exists(u"Dokumenty/Plan.md"_s));
+
+        app.settings()->setFollowsOutsideLinks(false);
+        QVERIFY(!ws->exists(u"Dokumenty/Plan.md"_s));
+        QTRY_VERIFY(!ws->index()->contains(u"Dokumenty/Plan.md"_s));
+        QVERIFY(QFile::exists(outside + u"/Plan.md"_s));
+        app.closeVault();
+        QTRY_VERIFY(!ws->isOpen());
+    }
+
+    void outsideLinksKeptWhereTheyWereUsed()
+    {
+        // Following folder links to outside became that setting, off by default. A device that used
+        // a notebook before keeps its links — its first open checks once, while the setting was never
+        // chosen —; a new device, a notebook without links or a link planted later never turns it on.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
+        const QString outside = m_tmp.filePath(u"once/Zdjęcia"_s);
+        QVERIFY(writeRaw(outside + u"/Lato.md"_s, "- lato zażółć\n"));
+        const QString linked = newRoot();
+        const QString plain = newRoot();
+        QVERIFY(writeRaw(linked + u"/Start.md"_s, "- start\n"));
+        QVERIFY(writeRaw(plain + u"/Start.md"_s, "- start\n"));
+        QVERIFY(QFile::link(outside, linked + u"/Zdjęcia"_s));
+        const QString key = u"vaults/followOutsideLinks"_s;
+        const QString linkedChecked = u"vaults/outsideLinksChecked/"_s + brulion::Vault::idForPath(linked);
+        int devices = 0;
+        // A device (settings, app data); `knew`: an earlier version kept state of both notebooks here.
+        const auto device = [&](bool knew) {
+            AppController::Options options;
+            const QString home = m_tmp.filePath(u"once/device-%1"_s.arg(++devices));
+            options.settingsFile = home + u"/settings.ini"_s;
+            options.dataDir = home + u"/data"_s;
+            auto app = std::make_unique<AppController>(options);
+            app->workspace()->sync()->setSyncthingDiscovery(false);
+            for (const QString &root : {linked, plain}) {
+                if (knew)
+                    writeRaw(app->deviceStatePath(root) + u"/store.json"_s, "{}");
+            }
+            return app;
+        };
+
+        // A device that used them: a notebook without links is checked and chooses nothing; the
+        // one with a link keeps it — from its first listing, before the index and sync see the
+        // vault (no change reports its page) — and the choice is stored.
+        {
+            auto app = device(true);
+            QSignalSpy files(app->workspace(), &Workspace::filesChanged);
+            app->openVault(plain);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QVERIFY(!app->settings()->value(key).isValid());
+            app->openVault(linked);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QCOMPARE(app->workspace()->rootPath(), QDir::cleanPath(linked));
+            QVERIFY(app->settings()->followsOutsideLinks());
+            QVERIFY(app->settings()->value(key).toBool());
+            QVERIFY(app->workspace()->vault()->followsOutsideLinks());
+            QVERIFY(app->workspace()->exists(u"Zdjęcia/Lato.md"_s));
+            QTRY_VERIFY(app->workspace()->ready());
+            QVERIFY(app->workspace()->index()->contains(u"Zdjęcia/Lato.md"_s));
+            for (const QList<QVariant> &args : std::as_const(files))
+                QVERIFY(!args.at(0).toStringList().contains(u"Zdjęcia/Lato.md"_s));
+            app->closeVault();
+            QTRY_VERIFY(!app->workspace()->isOpen());
+        }
+        // A new device (a fresh install) with the same notebook: off, and checked for good — its
+        // state from this first use never turns it on later.
+        {
+            auto app = device(false);
+            app->openVault(linked);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QVERIFY(!app->settings()->followsOutsideLinks());
+            QVERIFY(!app->settings()->value(key).isValid());
+            QVERIFY(app->settings()->value(linkedChecked).toBool());
+            QVERIFY(!app->workspace()->exists(u"Zdjęcia/Lato.md"_s));
+            app->closeVault();
+            QTRY_VERIFY(!app->workspace()->isOpen());
+            QVERIFY(writeRaw(app->deviceStatePath(linked) + u"/store.json"_s, "{}"));
+            app->openVault(linked);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QVERIFY(!app->workspace()->exists(u"Zdjęcia/Lato.md"_s));
+            QVERIFY(!app->settings()->value(key).isValid());
+            app->closeVault();
+            QTRY_VERIFY(!app->workspace()->isOpen());
+        }
+        // Chosen already (off): no check at all.
+        {
+            auto app = device(true);
+            app->settings()->setFollowsOutsideLinks(true);
+            app->settings()->setFollowsOutsideLinks(false);
+            app->openVault(linked);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QVERIFY(!app->workspace()->exists(u"Zdjęcia/Lato.md"_s));
+            QVERIFY(!app->settings()->value(linkedChecked).isValid());
+            app->closeVault();
+            QTRY_VERIFY(!app->workspace()->isOpen());
+        }
+        // A link planted after the notebook was checked is not followed.
+        {
+            auto app = device(true);
+            app->openVault(plain);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            app->closeVault();
+            QTRY_VERIFY(!app->workspace()->isOpen());
+            QVERIFY(QFile::link(outside, plain + u"/Zasadzone"_s));
+            app->openVault(plain);
+            QTRY_COMPARE(app->status(), u"ready"_s);
+            QVERIFY(!app->settings()->followsOutsideLinks());
+            QVERIFY(!app->workspace()->exists(u"Zasadzone/Lato.md"_s));
+            app->closeVault();
+            QTRY_VERIFY(!app->workspace()->isOpen());
+        }
     }
 
     // brulion-cli `app open` and a second launch (ipc/appmessage.h) as main() hands them over: the

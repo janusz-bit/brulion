@@ -268,6 +268,9 @@ bool Vault::rename(const VaultPath &from, const VaultPath &to, ChangeSource sour
             d->scheduleCheck(a); // the cache is stale: report the deletion soon
         return d->fail(tr("%1 does not exist").arg(a));
     }
+    // Moves into and out of the trash by hand go through no symlinked folder there either.
+    if (d->throughTrashLink(a) || d->throughTrashLink(b))
+        return d->fail(tr("Cannot move %1 to %2").arg(a, b));
     if (!d->renameTargetFree(a, b))
         return false;
     const bool isDir = d->isDirOnDisk(a);
@@ -322,9 +325,11 @@ bool Vault::removePermanently(const VaultPath &path, ChangeSource source)
     const VaultPath p = paths::normalize(path);
     if (p.isEmpty())
         return d->fail(tr("Cannot delete the vault folder itself"));
+    d->resolveSpelling(p); // e.g. NFD names in the trash — before the check, which looks at them
     if (d->throughTrashLink(p))
         return d->fail(tr("Cannot delete %1: it lies behind a link in the trash").arg(p));
-    d->resolveSpelling(p); // e.g. NFD names in the trash
+    if (d->behindUnfollowedLink(p)) // not the vault's (another folder's, linked into it)
+        return d->fail(tr("Cannot delete %1").arg(p));
     const QFileInfo info(d->absPath(p));
     bool ok = true;
     if (info.isDir() && !info.isSymLink())
@@ -347,7 +352,8 @@ QList<FileStat> Vault::trash() const
     const QString base = d->absPath(vaultTrashFolder());
     if (!d->isOpen || QFileInfo(base).isSymLink())
         return out; // a ".trash" link is never used (see remove())
-    QDirIterator it(base, QDir::Files | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
+    // No links: those to files are not followed, folder links are not entered.
+    QDirIterator it(base, QDir::Files | QDir::Hidden | QDir::System | QDir::NoSymLinks, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QFileInfo info = it.nextFileInfo();
         out.append(statOf(info, paths::join(vaultTrashFolder(), info.filePath().sliced(base.size() + 1))));
@@ -395,9 +401,9 @@ VaultPath Vault::restore(const VaultPath &trashPath, ChangeSource source)
     const VaultPath t = paths::normalize(trashPath);
     if (!vaultutil::isStrictlyWithin(t, vaultTrashFolder()))
         return failed(tr("%1 is not in the trash").arg(t));
+    d->resolveSpelling(t); // items deleted on other devices may have NFD names (links too)
     if (d->throughTrashLink(t))
         return failed(tr("Cannot restore %1: it lies behind a link in the trash").arg(t));
-    d->resolveSpelling(t); // items deleted on other devices may have NFD names
     if (!d->existsOnDisk(t))
         return failed(tr("%1 does not exist").arg(t));
     const VaultPath original = trashInfo(t).original;

@@ -19,10 +19,6 @@ namespace {
 
 constexpr QStringView DayNames[] = {u"Mon", u"Tue", u"Wed", u"Thu", u"Fri", u"Sat", u"Sun"};
 
-/// A written `=> HH:MM:SS` of more hours than this (100 years) is no real clock: the line does not
-/// read (and the hours of a hostile note cannot overflow the count).
-constexpr qint64 MaxWrittenHours = 100 * 366 * 24;
-
 bool isLogbookStart(QStringView line)
 {
     return line.trimmed() == u":LOGBOOK:";
@@ -66,15 +62,17 @@ std::optional<ClockEntry> clockEntry(const QRegularExpressionMatch &m, int index
     if (!e.end.isValid())
         return std::nullopt;
     e.seconds = e.start.secsTo(e.end);
-    if (e.seconds >= 0)
-        return e;
-    // The timestamps give no duration (an hour repeated when the clocks went back, a hand edit):
-    // the written one, else the line does not count.
-    bool ok = false;
-    const qint64 hours = m.capturedView(3).toLongLong(&ok);
-    if (!ok || hours > MaxWrittenHours)
+    if (e.seconds < 0) {
+        // The timestamps give no duration (an hour repeated when the clocks went back, a hand
+        // edit): the written one, else the line does not count.
+        bool ok = false;
+        const qint64 hours = m.capturedView(3).toLongLong(&ok);
+        if (!ok || hours > MaxClockSeconds / 3600) // (also: the sum below cannot overflow)
+            return std::nullopt;
+        e.seconds = hours * 3600 + m.capturedView(4).toInt() * 60 + m.capturedView(5).toInt();
+    }
+    if (e.seconds > MaxClockSeconds)
         return std::nullopt;
-    e.seconds = hours * 3600 + m.capturedView(4).toInt() * 60 + m.capturedView(5).toInt();
     return e;
 }
 
@@ -106,14 +104,15 @@ void readLine(QStringView line, int index, Logbook &out)
 }
 
 /// Closed intervals [start, end) of the entries, as instants (seconds since the epoch: only for
-/// measuring — what is written stays local wall-clock time), merged where they overlap.
+/// measuring — what is written stays local wall-clock time), merged where they overlap. A running
+/// clock counts up to `now`, unless it has run longer than a clock can be (MaxClockSeconds).
 QList<std::pair<qint64, qint64>> mergedIntervals(const QList<ClockEntry> &clocks, const QDateTime &now)
 {
     QList<std::pair<qint64, qint64>> spans;
     for (const ClockEntry &c : clocks) {
         const qint64 s = c.start.toSecsSinceEpoch();
         if (c.running()) {
-            if (now.isValid() && now > c.start)
+            if (now.isValid() && now > c.start && c.start.secsTo(now) <= MaxClockSeconds)
                 spans.append({s, now.toSecsSinceEpoch()});
         } else if (c.seconds > 0) {
             spans.append({s, s + c.seconds});

@@ -13,7 +13,9 @@
 //               refused while sync is on), urlWarning (plain http), davUrl (the WebDAV address the
 //               form leads to)
 //   account     the account is shared by the notebooks: signing out, or saving another server or
-//               user, switches sync off in every other notebook
+//               user, switches sync off in every other notebook; an app password that cannot be
+//               stored or forgotten (its owner-only file) is errorOccurred(), and save() then
+//               changes nothing
 //   test        testConnection() with the drafts — its own WebDavClient, nothing saved — gives
 //               testResult { ok, code, title, message, hint, details, canCreateFolder,
 //               securityUrl }: 401 → how to create an app password (Nextcloud: Settings →
@@ -155,14 +157,15 @@ public:
 
     /// Drafts from the saved settings (drops unsaved edits and the test result).
     Q_INVOKABLE void reload();
-    /// Validate (shows the errors) and write the settings; false when something is invalid.
+    /// Validate (shows the errors) and write the settings; false when something is invalid or the
+    /// app password cannot be stored (errorOccurred).
     Q_INVOKABLE bool save();
     /// Check the drafts against the server (async: testResult).
     Q_INVOKABLE void testConnection();
     /// Create the missing server folder (after testResult.canCreateFolder).
     Q_INVOKABLE void createFolder();
     /// Stop syncing with this account: off in every notebook (they share it), the app password
-    /// forgotten (address and user stay).
+    /// forgotten (address and user stay; errorOccurred when its file stays).
     Q_INVOKABLE void disconnectAccount();
     Q_INVOKABLE void clearTestResult();
 
@@ -173,9 +176,13 @@ Q_SIGNALS:
     void testResultChanged();
     /// save() wrote the settings.
     void saved();
+    /// The app password could not be stored or forgotten (translated).
+    void errorOccurred(const QString &message);
 
 private:
     sync::HttpTransport *transport();
+    /// setNextcloudPassword(); errorOccurred when it fails ("" forgets the stored one).
+    bool storePassword(const QString &password);
     QString effectivePassword() const;
     /// The drafts keep the saved account (no other server or user).
     bool sameAccount() const;

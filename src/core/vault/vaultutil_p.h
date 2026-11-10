@@ -68,5 +68,25 @@ bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *
 /// UTF-8 bytes to text with a leading byte order mark removed.
 QString decodeUtf8(const QByteArray &bytes);
 
+/// A file's content as readContent() found it.
+struct ContentRead {
+    enum class Status {
+        Ok,
+        TooBig, ///< more than the limit, by its size or by what reading it gave
+        Link,   ///< a symlink: the vault never follows links to files (vault.h, "Semantics")
+        Failed, ///< cannot be opened or read (`error`)
+    };
+    Status status = Status::Failed;
+    QByteArray bytes; ///< the content, when Ok
+    QString error;    ///< QFile::errorString(), when Failed
+    bool ok() const { return status == Status::Ok; }
+};
+
+/// The content of the file at `absolutePath`, at most `limit` bytes: every read in the vault goes
+/// through here. A file that reports a size is read up to it in one go (as QIODevice::readAll());
+/// one that reports none — empty, or a file of /proc or /sys, some of which never end — in pieces
+/// until it ends or would hold more than `limit` bytes (never more than that in memory).
+ContentRead readContent(const QString &absolutePath, qint64 limit);
+
 } // namespace vaultutil
 } // namespace brulion

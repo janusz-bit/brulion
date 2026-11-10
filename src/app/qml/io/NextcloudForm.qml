@@ -8,7 +8,8 @@ import Brulion
 // (the notebook's own; proposed: "Notatki" (notes) for a new account, else the notebook's name; one that
 // another notebook syncs with is refused), how often to sync, this device's name; "Test
 // connection" explains what went wrong (and offers to create a missing folder), "Save" applies
-// everything at once. Used by SyncView and the settings' sync section.
+// everything at once (an app password it cannot store is an error toast). Used by SyncView and the
+// settings' sync section.
 //
 //   NextcloudForm { Layout.fillWidth: true }
 IoCard {
@@ -27,6 +28,8 @@ IoCard {
     NextcloudSetup {
         id: setupObject
         settings: AppSettings
+        // The app password could not be stored (Save) or forgotten (Sign out).
+        onErrorOccurred: (message) => AppController.toast(message, "error")
     }
 
     /// A labelled form field.

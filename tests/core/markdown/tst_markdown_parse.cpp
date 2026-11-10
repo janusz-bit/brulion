@@ -1028,6 +1028,16 @@ private Q_SLOTS:
         QTest::newRow("table") << u"| a | b |\n|---|:-:|\n| 1 | 2 |\nafter"_s << u"table@0-2:d0, paragraph@3-3:d0"_s;
         QTest::newRow("table no pipes") << u"a | b\n--- | ---\n1 | 2"_s << u"table@0-2:d0"_s;
         QTest::newRow("table after text") << u"text\n| a | b |\n|---|---|"_s << u"paragraph@0-0:d0, table@1-2:d0"_s;
+        // A table holds as many body cells as its lines have characters, or 65 536 when that is
+        // more (calc::parseTable()'s rule; rows are as wide as the header): 2000 columns of empty
+        // rows end after 32 of them, the rest is text. Rows written out in full never end it.
+        QTest::newRow("table ends at its size limit")
+                << QString(u"|"_s.repeated(2001) + u"\n|"_s + u"-|"_s.repeated(2000) + u"\n|"_s.repeated(40))
+                << u"table@0-33:d0, paragraph@34-41:d0"_s;
+        QTest::newRow("table written out in full")
+                << QString(u"|"_s + u" Zażółć |"_s.repeated(300) + u"\n|"_s + u"---|"_s.repeated(300)
+                           + QString(u"\n|"_s + u" ż |"_s.repeated(300)).repeated(300))
+                << u"table@0-301:d0"_s;
         QTest::newRow("quotes") << u"> a\n> b\nlazy\n\n> c"_s << u"quote@0-2:d0, quote@4-4:d0"_s;
         QTest::newRow("html") << u"<div>\n[[x]]\n</div>\n\n<!-- c\n\nstill -->\ntext\n\n<span>inline</span> text"_s
                               << u"html@0-2:d0, html@4-6:d0, paragraph@7-7:d0, paragraph@9-9:d0"_s;

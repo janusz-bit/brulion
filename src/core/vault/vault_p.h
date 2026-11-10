@@ -44,6 +44,7 @@ struct DiskListing {
     QSet<VaultPath> checkedFiles; ///< files stat-ed individually
     /// Folders that could not be listed (completely): nothing at or below them is covered.
     QSet<VaultPath> unreadable;
+    bool outsideLinkSkipped = false; ///< a folder link to outside was left out (followOutsideLinks off)
 
     /// True when the listing shows every child of `dir`: the folder was listed, lies in a
     /// listed tree, or is gone from a folder that was listed — and neither it nor a folder
@@ -121,7 +122,13 @@ public:
     std::optional<FileStat> diskStat(const VaultPath &path) const;
     void resolveSpelling(const VaultPath &path);
     bool isDirOnDisk(const VaultPath &path) const;
+    /// A symlinked folder the vault follows: leadsOutside() and followOutsideLinks.
     bool followsLink(const QFileInfo &link, const QString &parentRel) const;
+    /// The link points to a folder outside the vault, neither into it nor above itself (a loop).
+    bool leadsOutside(const QFileInfo &link, const QString &parentRel) const;
+    /// True when a folder above `path` is a symlinked folder the vault does not follow: what lies
+    /// there is not the vault's (never listed, stat-ed, read, written or deleted through it).
+    bool behindUnfollowedLink(const VaultPath &path) const;
     bool existsOnDisk(const VaultPath &path) const;
 
     // --- known entries (vault.cpp)
@@ -147,8 +154,11 @@ public:
     bool comparesContent(const FileStat &stat) const;
     /// `hash`: text::fnv1a64Hex(bytes) when the caller has it already.
     void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false, const QString &hash = {});
-    QByteArray readDisk(const VaultPath &path, bool *ok) const;
+    /// At most `limit` bytes (vaultutil::readContent()); `ok` is false for anything else.
+    QByteArray readDisk(const VaultPath &path, qint64 limit, bool *ok) const;
     QByteArray readFile(const VaultPath &path, bool asText, bool *ok);
+    /// Why a read of readText(), readBinary() or readDetached() failed: the "%2" of "Cannot read %1: %2".
+    static QString readFailure(const vaultutil::ContentRead &read);
     /// The bookkeeping after reading a tracked file (readFile(), Vault::adoptRead()).
     void takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes, bool asText,
                   const QString &hash);
@@ -196,9 +206,12 @@ public:
     DiskListing collect(const ScanScope &scope) const;
     ScanDiff diff(const DiskListing &listing) const;
     // Content read while scanning is never kept beyond the file at hand: `hashCache` holds only
-    // the content hashes of appeared files computed while looking for renames.
-    /// The content of a listed file; nullopt when it cannot be read.
-    std::optional<QByteArray> readEntry(const DiskEntry &entry) const;
+    // the content hashes of appeared files computed while looking for renames ("" for a file
+    // that turned out too big to read).
+    /// The content of a listed file; nullopt when it cannot be read — `tooBig` when it holds more
+    /// than ContentCache::kMaxItemBytes after all (files in /proc report no size): such a file is
+    /// compared by its stat, like one whose size says so.
+    std::optional<QByteArray> readEntry(const DiskEntry &entry, bool *tooBig = nullptr) const;
     std::optional<QString> entryHash(const DiskEntry &entry, QHash<VaultPath, QString> &hashCache) const;
     bool sameContent(const FileStat &vanished, const DiskEntry &appeared, QHash<VaultPath, QString> &hashCache) const;
     QList<RenamePair> pairRenames(const ScanDiff &diff, QHash<VaultPath, QString> &hashCache) const;
@@ -251,6 +264,8 @@ public:
     QString id;
     QString canonicalRoot; ///< root with symlinks resolved (set by open())
     QString storageId;     ///< storage identity of the root at open() ("" = unknown)
+    bool followOutsideLinks = false;  ///< Vault::setFollowsOutsideLinks()
+    bool outsideLinksSkipped = false; ///< Vault::skippedOutsideLinks()
     VaultScanStatus scanStatus;
     QElapsedTimer storageChecked; ///< last successful requireStorage() check
     bool isOpen = false;

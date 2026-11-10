@@ -31,6 +31,12 @@
 
 namespace brulion::markdown {
 
+/// The longest a clock can be (366 days): no stretch of work on a task lasts a year. A closed entry
+/// longer than that (by its timestamps or its written `=>` duration) does not read, a running one
+/// that has run longer counts nothing — so lines spanning centuries cannot make the per-day split
+/// (clockedSecondsByDay()) run over millions of days: at most 367 per line.
+inline constexpr qint64 MaxClockSeconds = qint64(366) * 24 * 3600;
+
 /// One `CLOCK:` line.
 struct ClockEntry {
     QDateTime start;    ///< local time
@@ -58,7 +64,7 @@ struct Logbook {
     QList<ClockEntry> clocks;
     QList<StatusChange> changes;
     /// `CLOCK:` / `State` lines that do not read: bad timestamps, an end before the start without a
-    /// `=>` duration (or with one of more than 100 years), a running clock before the last one
+    /// `=>` duration, a clock longer than MaxClockSeconds, a running clock before the last one
     /// (only the last of them runs).
     int malformed = 0;
 
@@ -73,7 +79,8 @@ Logbook readLogbook(QStringView text);
 /// Seconds clocked by the closed entries, overlapping ones counted once.
 qint64 clockedSeconds(const QList<ClockEntry> &clocks);
 /// The same per local day (entries split at midnight); a running entry counts up to `now` when
-/// `now` is valid and after its start. Days without time are left out.
+/// `now` is valid, after its start and no more than MaxClockSeconds after it. Days without time
+/// are left out.
 QMap<QDate, qint64> clockedSecondsByDay(const QList<ClockEntry> &clocks, const QDateTime &now = {});
 
 /// `[2026-11-03 Tue 10:00:00]` (with `seconds` false `[2026-11-03 Tue 10:00]`, org mode's form).

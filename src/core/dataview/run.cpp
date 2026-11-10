@@ -133,11 +133,14 @@ void apply(const Command &cmd, QList<RowData> &rows, Context &ctx)
     case Command::Kind::Sort: {
         QList<std::pair<ValueList, qsizetype>> keyed;
         keyed.reserve(rows.size());
+        Kept kept;
         for (qsizetype i = 0; i < rows.size(); ++i) {
             const Value obj = rowObject(rows.at(i));
             ValueList keys;
-            for (const SortKey &k : cmd.sort)
+            for (const SortKey &k : cmd.sort) {
                 keys.append(evaluate(*k.expr, ctx, obj));
+                kept.add(keys.constLast());
+            }
             keyed.append({keys, i});
         }
         ctx.step(rows.size());
@@ -158,14 +161,17 @@ void apply(const Command &cmd, QList<RowData> &rows, Context &ctx)
     }
     case Command::Kind::GroupBy: {
         QList<std::pair<Value, QList<RowData>>> groups;
+        Kept kept; // the groups' keys
         for (const RowData &row : std::as_const(rows)) {
             const Value key = evaluate(*cmd.expr, ctx, rowObject(row));
             auto it = std::ranges::find_if(groups, [&](const auto &g) { return equals(g.first, key); });
             ctx.step(groups.size() / 8 + 1);
-            if (it == groups.end())
+            if (it == groups.end()) {
+                kept.add(key);
                 groups.append({key, {row}});
-            else
+            } else {
                 it->second.append(row);
+            }
         }
         std::ranges::stable_sort(groups, [](const auto &a, const auto &b) { return compare(a.first, b.first) < 0; });
         const QString name = canonicalKey(cmd.name);
@@ -181,7 +187,7 @@ void apply(const Command &cmd, QList<RowData> &rows, Context &ctx)
             objects.reserve(members.size());
             for (const RowData &m : members)
                 objects.append(rowObject(m));
-            QList<std::pair<QString, Value>> fields{{u"key"_s, key}, {u"rows"_s, Value::list(objects)}};
+            QList<std::pair<QString, Value>> fields{{u"key"_s, key}, {u"rows"_s, ctx.list(objects)}};
             if (name != u"key" && name != u"rows")
                 fields.append({name, key});
             g.base = Value::map(fields);
@@ -258,11 +264,35 @@ void taskRowsOf(const RowData &row, Context &ctx, QList<Row> &out)
     }
 }
 
-Result build(const Query &q, const QList<RowData> &rows, Context &ctx)
+/// What a result shows — its cells, group labels and tasks — counted: at most MaxValueItems of
+/// them with MaxTextLength characters in all (value.h), past them an EvalError (`TABLE this, this, …`
+/// over a large vault would make gigabytes of text).
+class Shown {
+public:
+    /// `text` (a cell, label or task), counted.
+    const QString &add(const QString &text)
+    {
+        ++m_items;
+        m_chars += text.size();
+        if (m_items > MaxValueItems || m_chars > MaxTextLength)
+            throw EvalError{messages::resultTooLarge(MaxValueItems, MaxTextLength)};
+        return text;
+    }
+
+private:
+    qint64 m_items = 0;
+    qint64 m_chars = 0;
+};
+
+/// The result: the first `limit` rows (or items over all groups) made, the others only counted in
+/// `total` — their cells are never made.
+Result build(const Query &q, const QList<RowData> &rows, Context &ctx, int limit)
 {
     Result r;
     r.type = q.type;
+    Shown shown;
     const bool grouped = !rows.isEmpty() && rows.first().group;
+    const qsizetype first = std::min<qsizetype>(rows.size(), limit); // rows shown when ungrouped
     QString groupName;
     for (const auto &cmd : q.commands) {
         if (cmd->kind == Command::Kind::GroupBy)
@@ -275,16 +305,17 @@ Result build(const Query &q, const QList<RowData> &rows, Context &ctx)
                                      : messages::fileHeader());
         for (const auto &col : q.columns)
             r.headers.append(col.second);
-        for (const RowData &row : rows) {
+        for (const RowData &row : rows.first(first)) {
             Row out;
             out.path = row.group ? QString() : row.path;
             if (!q.withoutId)
-                out.cells.append(idCell(row, ctx));
+                out.cells.append(shown.add(idCell(row, ctx)));
             const Value obj = rowObject(row);
             for (const auto &col : q.columns)
-                out.cells.append(toMarkdown(evaluate(*col.first, ctx, obj), ctx.index()));
+                out.cells.append(shown.add(toMarkdown(evaluate(*col.first, ctx, obj), ctx.index())));
             r.rows.append(out);
         }
+        r.total = int(rows.size());
         break;
     }
     case QueryType::List: {
@@ -295,31 +326,48 @@ Result build(const Query &q, const QList<RowData> &rows, Context &ctx)
             return q.withoutId ? value : idCell(row, ctx) + u": "_s + value;
         };
         if (grouped && q.columns.isEmpty()) {
+            qsizetype left = limit;
             for (const RowData &row : rows) {
+                r.total += int(row.rows.size());
+                if (left <= 0)
+                    continue;
                 Group g = groupOf(row);
-                for (const RowData &m : row.rows) {
+                shown.add(g.label);
+                for (const RowData &m : row.rows.first(std::min(row.rows.size(), left))) {
                     Row item;
                     item.path = m.path;
-                    item.cells = {idCell(m, ctx)};
+                    item.cells = {shown.add(idCell(m, ctx))};
                     g.rows.append(item);
                 }
+                left -= g.rows.size();
                 r.groups.append(g);
             }
         } else {
-            for (const RowData &row : rows) {
+            for (const RowData &row : rows.first(first)) {
                 Row item;
                 item.path = row.group ? QString() : row.path;
-                item.cells = {text(row)};
+                item.cells = {shown.add(text(row))};
                 r.rows.append(item);
             }
+            r.total = int(rows.size());
         }
         break;
     }
     case QueryType::Task: {
+        qsizetype left = limit;
+        const auto task = [&shown](const Row &row) { shown.add(row.task ? row.task->text : QString()); };
         if (grouped) {
             for (const RowData &row : rows) {
+                QList<Row> members;
+                taskRowsOf(row, ctx, members);
+                r.total += int(members.size());
+                if (left <= 0)
+                    continue;
                 Group g = groupOf(row);
-                taskRowsOf(row, ctx, g.rows);
+                shown.add(g.label);
+                g.rows = members.first(std::min(members.size(), left));
+                std::ranges::for_each(g.rows, task);
+                left -= g.rows.size();
                 r.groups.append(g);
             }
         } else {
@@ -327,43 +375,26 @@ Result build(const Query &q, const QList<RowData> &rows, Context &ctx)
             for (const RowData &row : rows) {
                 if (row.blockIndex < 0)
                     continue;
+                ++r.total;
+                if (left <= 0)
+                    continue;
                 if (r.groups.isEmpty() || r.groups.constLast().key != row.path) {
                     Group g;
                     g.key = row.path;
                     const ParsedNote *note = ctx.index().note(row.path);
                     g.label = note && !note->title.isEmpty() ? note->title : paths::pageTitle(row.path);
+                    shown.add(g.label);
                     r.groups.append(g);
                 }
                 r.groups.last().rows.append(taskRow(row, ctx));
+                task(r.groups.last().rows.constLast());
+                --left;
             }
         }
         break;
     }
     }
     return r;
-}
-
-/// Cut the result to `limit` rows (or items over all groups); total counts them all.
-void cut(Result &r, int limit)
-{
-    if (r.groups.isEmpty()) {
-        r.total = int(r.rows.size());
-        if (r.rows.size() > limit)
-            r.rows.resize(limit);
-        return;
-    }
-    r.total = 0;
-    for (const Group &g : std::as_const(r.groups))
-        r.total += int(g.rows.size());
-    int left = limit;
-    qsizetype kept = 0;
-    for (; kept < r.groups.size() && left > 0; ++kept) {
-        QList<Row> &rows = r.groups[kept].rows;
-        if (rows.size() > left)
-            rows.resize(left);
-        left -= int(rows.size());
-    }
-    r.groups.resize(kept);
 }
 
 QString sanitizedDisplay(QString s)
@@ -373,18 +404,27 @@ QString sanitizedDisplay(QString s)
 }
 
 /// The values of a list, or the `key: value` fields of an object, each value as `text` writes
-/// it, joined with ", ".
+/// it one level deeper, joined with ", "; "…" for one MaxValueDepth levels inside the value shown
+/// (a task object's children go as deep as the note's outline).
 template<typename Text>
-QString joined(const Value &value, const Text &text)
+QString joined(const Value &value, int depth, const Text &text)
 {
+    if (depth >= MaxValueDepth)
+        return u"…"_s;
     QStringList parts;
+    qint64 length = 0;
+    const auto add = [&](const QString &part) {
+        length += part.size() + 2;
+        checkSize(1, length); // (while it grows: a page object holds a whole note, a list can hold it often)
+        parts.append(part);
+    };
     if (value.is(Value::Type::List)) {
         for (const Value &v : value.asList())
-            parts.append(text(v));
+            add(text(v, depth + 1));
     } else {
         const Object &o = value.asObject();
         for (const QStringList keys = o.keys(); const QString &k : keys)
-            parts.append(k + u": "_s + text(o.field(k).value_or(Value())));
+            add(k + u": "_s + text(o.field(k).value_or(Value()), depth + 1));
     }
     return parts.join(u", "_s);
 }
@@ -407,15 +447,16 @@ std::variant<Result, QString> runQuery(const Query &query, const VaultIndex &ind
             apply(*cmd, rows, ctx);
             limited = limited || cmd->kind == Command::Kind::Limit;
         }
-        Result r = build(query, rows, ctx);
-        cut(r, limited ? MaxRows : std::max(1, opts.defaultLimit));
-        return r;
+        return build(query, rows, ctx, limited ? MaxRows : std::max(1, opts.defaultLimit));
     } catch (const EvalError &e) {
         return e.message.isEmpty() ? messages::tooCostly() : e.message;
     }
 }
 
-QString toMarkdown(const Value &value, const VaultIndex &index)
+namespace {
+
+/// toMarkdown() of a value `depth` levels inside the one shown.
+QString markdown(const Value &value, const VaultIndex &index, int depth)
 {
     switch (value.type()) {
     case Value::Type::Null: return u"–"_s;
@@ -437,7 +478,8 @@ QString toMarkdown(const Value &value, const VaultIndex &index)
         return u"[["_s + target + (display.isEmpty() ? QString() : u'|' + sanitizedDisplay(display)) + u"]]"_s;
     }
     case Value::Type::List:
-    case Value::Type::Object: return joined(value, [&index](const Value &v) { return toMarkdown(v, index); });
+    case Value::Type::Object:
+        return joined(value, depth, [&index](const Value &v, int d) { return markdown(v, index, d); });
     default: {
         Options none;
         Context ctx(index, none);
@@ -446,7 +488,8 @@ QString toMarkdown(const Value &value, const VaultIndex &index)
     }
 }
 
-QString toPlainText(const Value &value)
+/// toPlainText() of a value `depth` levels inside the one shown.
+QString plainText(const Value &value, int depth)
 {
     switch (value.type()) {
     case Value::Type::Null: return u"–"_s;
@@ -463,10 +506,22 @@ QString toPlainText(const Value &value)
         return l.subpath.isEmpty() ? title : title + u" > "_s + l.subpath;
     }
     case Value::Type::List:
-    case Value::Type::Object: return joined(value, toPlainText);
+    case Value::Type::Object: return joined(value, depth, plainText);
     case Value::Type::Function: return u"<function>"_s;
     }
     return QString();
+}
+
+} // namespace
+
+QString toMarkdown(const Value &value, const VaultIndex &index)
+{
+    return markdown(value, index, 0);
+}
+
+QString toPlainText(const Value &value)
+{
+    return plainText(value, 0);
 }
 
 } // namespace brulion::dataview

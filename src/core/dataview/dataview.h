@@ -35,6 +35,14 @@
 // list. A task has status, checked, completed, fullyCompleted, text, line, lineCount, path,
 // section, link, tags, outlinks, children, task, parent, blockId, created, due, start,
 // scheduled, completion and its own fields; other names read its page (`file.name`).
+//
+// Limits — a query comes from any note, imports and sync too: expressions and FROM sources at most
+// MaxExpressionDepth deep and MaxExpressionNesting nested (else parseQuery() fails), the values a
+// query builds at most MaxValueDepth deep and MaxValueItems / MaxTextLength large (value.h), at
+// most MaxRows rows and Options::maxSteps steps (copies and texts built count), and the rows shown
+// (the only ones evaluated for their columns) at most MaxValueItems cells and MaxTextLength
+// characters in all (else runQuery() fails). Stack: the deepest query they allow needs about
+// 256 KiB (optimized build); run queries on a thread with at least 512 KiB.
 #pragma once
 
 #include "dataview/value.h"
@@ -57,6 +65,13 @@ namespace brulion::dataview {
 inline constexpr int DefaultRowLimit = 500;
 /// Most rows a query may make (FLATTEN of large lists): beyond it the query stops with an error.
 inline constexpr int MaxRows = 100000;
+/// The deepest expression or FROM source parseQuery() accepts: a chain like `a OR b OR c` is as deep
+/// as it has operators, and a call, list, lambda, field, index or `-` / `!` adds a level to its
+/// parts. Evaluating, selecting and freeing it recurse once per level (about 1 KB of stack each).
+inline constexpr int MaxExpressionDepth = 256;
+/// Parentheses, calls, lists, lambdas, indexes and `-` / `!` nested in one another (parsing recurses
+/// through about ten functions, some 2 KB of stack, per level).
+inline constexpr int MaxExpressionNesting = 64;
 
 enum class QueryType { List, Table, Task };
 
@@ -90,10 +105,11 @@ struct Options {
     /// A file's size and modification time (`file.size`, `file.mtime`, `file.ctime`); without it
     /// (or for a file it does not know) the size of the indexed text and no times.
     std::function<std::optional<FileStat>(const VaultPath &path)> stat;
-    /// Rows returned without LIMIT.
+    /// Rows returned without LIMIT (the only ones whose columns are evaluated).
     int defaultLimit = DefaultRowLimit;
     /// Steps an evaluation may take before the query stops with an error (a guard against
-    /// queries that would freeze the app).
+    /// queries that would freeze the app): one per expression evaluated, value of a list built or
+    /// copied and Context::CharsPerStep characters of text (dataview/eval_p.h).
     qint64 maxSteps = 20000000;
 };
 
@@ -123,7 +139,7 @@ struct Result {
 };
 
 /// Run a parsed query against the index. Returns the Result or a translated message (an
-/// expression too costly, too many rows).
+/// expression too costly, too many rows, a value or the results too large).
 std::variant<Result, QString> runQuery(const Query &query, const VaultIndex &index, const Options &options);
 
 /// A value as Markdown for a result cell: links as [[links]] (the shortest target), dates ISO
