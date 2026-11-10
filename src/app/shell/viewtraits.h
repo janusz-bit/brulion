@@ -58,21 +58,21 @@ public:
     QObject *view() const { return m_view; }
     void setView(QObject *view);
 
-    QString title() const { return m_title; }
-    QQmlComponent *sidePanel() const { return m_sidePanel; }
-    QString noteMode() const { return m_noteMode; }
-    QString statusText() const { return m_statusText; }
-    QString statusPosition() const { return m_statusPosition; }
-    bool editing() const { return m_flags & Editing; }
-    bool toolbarDocked() const { return m_flags & ToolbarDocked; }
-    bool replacesBottomNav() const { return m_flags & ReplacesBottomNav; }
-    bool pictureRoute() const { return m_flags & PictureRoute; }
-    bool pictureAsText() const { return m_flags & PictureAsText; }
-    bool pdfRoute() const { return m_flags & PdfRoute; }
-    bool fileRoute() const { return m_flags & FileRoute; }
-    bool sourceMode() const { return m_flags & SourceMode; }
-    bool edgeSwipe() const { return m_flags & EdgeSwipe; }
-    bool canStepBack() const { return m_flags & CanStepBack; }
+    QString title() const { return m_values.title; }
+    QQmlComponent *sidePanel() const { return m_values.sidePanel; }
+    QString noteMode() const { return m_values.noteMode; }
+    QString statusText() const { return m_values.statusText; }
+    QString statusPosition() const { return m_values.statusPosition; }
+    bool editing() const { return m_values.flags & Editing; }
+    bool toolbarDocked() const { return m_values.flags & ToolbarDocked; }
+    bool replacesBottomNav() const { return m_values.flags & ReplacesBottomNav; }
+    bool pictureRoute() const { return m_values.flags & PictureRoute; }
+    bool pictureAsText() const { return m_values.flags & PictureAsText; }
+    bool pdfRoute() const { return m_values.flags & PdfRoute; }
+    bool fileRoute() const { return m_values.flags & FileRoute; }
+    bool sourceMode() const { return m_values.flags & SourceMode; }
+    bool edgeSwipe() const { return m_values.flags & EdgeSwipe; }
+    bool canStepBack() const { return m_values.flags & CanStepBack; }
 
     /// The view's viewState() ({} when it has none, or it gives no map).
     Q_INVOKABLE QVariantMap viewState() const;
@@ -108,20 +108,24 @@ private:
         EdgeSwipe = 1 << 8,
         CanStepBack = 1 << 9,
     };
+    /// What refresh() last read of the view (traitsChanged() when any of it changes).
+    struct Values {
+        QString title;
+        QPointer<QQmlComponent> sidePanel;
+        QString noteMode;
+        QString statusText;
+        QString statusPosition;
+        int flags = 0; ///< Flag bits
+        bool operator==(const Values &) const = default;
+    };
     /// The view's method `name` with `parameters` parameters (invalid when it has none).
     QMetaMethod method(const char *name, int parameters) const;
     QVariant read(const char *name) const;
 
     QPointer<QObject> m_view;
     QList<QMetaObject::Connection> m_connections;
-    QString m_title;
-    QPointer<QQmlComponent> m_sidePanel;
-    QString m_noteMode;
-    QString m_statusText;
-    QString m_statusPosition;
-    int m_flags = 0;
-    QVariantMap m_pending;
-    bool m_hasPending = false;
+    Values m_values;
+    QVariantMap m_pending; ///< restoreViewState()'s state until a view takes it ({}: none)
 };
 
 } // namespace brulion::shell

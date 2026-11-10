@@ -433,9 +433,7 @@ Item {
                             property point scene
                             function trackLink(x: real, y: real): void {
                                 const link = cell.editingCell ? "" : cellText.linkAt(x - cellText.x, y - cellText.y)
-                                const h = link !== "" && !Js.startsWith(link, "reminder:") && !root.block.editor.editsOnClick(link) ? link : ""
-                                if (h !== cell.hoveredLink)
-                                    cell.hoveredLink = h
+                                cell.hoveredLink = link !== "" && !Js.startsWith(link, "reminder:") && !root.block.editor.editsOnClick(link) ? link : ""
                             }
                             onEditingCellChanged: cell.hoveredLink = ""
                             x: root.columnX(cell.c)
@@ -617,10 +615,9 @@ Item {
                                         root.commit(r, c, input.text)
                                         if (nextRow === root.noCell) {
                                             root.finish()
-                                        } else if (nextRow >= root.rows.length) {
-                                            root.block.controller.addTableRow(root.blockIndex)
-                                            root.startCellLater(nextRow, nextColumn)
                                         } else {
+                                            if (nextRow >= root.rows.length)
+                                                root.block.controller.addTableRow(root.blockIndex)
                                             root.startCellLater(nextRow, nextColumn)
                                         }
                                     }
@@ -653,18 +650,17 @@ Item {
                                             return
                                         EditorInput.commitPreedit(input)
                                         input.done = true
-                                        const view = root
-                                        view.commit(rowItem.r, cell.c, input.text)
-                                        view.finish()
-                                        const controller = view.block.controller
-                                        const block = view.blockIndex
+                                        root.commit(rowItem.r, cell.c, input.text)
+                                        root.finish()
+                                        const controller = root.block.controller
+                                        const block = root.blockIndex
                                         if (edit === "moveRow")
                                             controller.moveTableRow(block, a, b)
                                         else if (edit === "moveColumn")
                                             controller.moveTableColumn(block, a, b)
                                         else if (edit === "insertRow")
                                             controller.insertTableRow(block, a)
-                                        view.startCellLater(r, c)
+                                        root.startCellLater(r, c)
                                     }
                                     function next(): void {
                                         const r = rowItem.r
@@ -767,12 +763,11 @@ Item {
                                 enabled: cell.editingCell
                                 acceptedButtons: Qt.RightButton
                                 onClicked: (mouse) => {
-                                    const view = root
                                     cell.scene = cellArea.mapToItem(null, mouse.x, mouse.y)
-                                    view.closeCell()
-                                    view.stayCurrent()
-                                    view.block.editor.openCellBlockMenuAt(view.blockIndex, cell.scene, rowItem.r, cell.c,
-                                                                          view.rows.length, view.columns, cell.align)
+                                    root.closeCell()
+                                    root.stayCurrent()
+                                    root.block.editor.openCellBlockMenuAt(root.blockIndex, cell.scene, rowItem.r, cell.c,
+                                                                          root.rows.length, root.columns, cell.align)
                                 }
                             }
                         }

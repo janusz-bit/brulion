@@ -4,11 +4,13 @@
 #include <QMetaProperty>
 #include <QQmlComponent>
 
+#include <utility>
+
 namespace brulion::shell {
 
 namespace {
 
-/// The properties followed, with the flag each sets ("" for those read otherwise).
+/// The properties followed, with the flag each sets (0 for those read otherwise).
 struct Trait {
     const char *name;
     int flag;
@@ -55,10 +57,8 @@ void ViewTraits::setView(QObject *view)
         const QMetaObject *meta = view->metaObject();
         const QMetaMethod slot = metaObject()->method(metaObject()->indexOfSlot("refresh()"));
         for (const Trait &trait : kTraits) {
-            const int index = meta->indexOfProperty(trait.name);
-            if (index < 0)
-                continue;
-            const QMetaProperty property = meta->property(index);
+            // (A property the view lacks is an invalid one, without a notify signal.)
+            const QMetaProperty property = meta->property(meta->indexOfProperty(trait.name));
             if (property.hasNotifySignal())
                 m_connections.append(connect(view, property.notifySignal(), this, slot));
         }
@@ -70,40 +70,35 @@ void ViewTraits::setView(QObject *view)
 
 QVariant ViewTraits::read(const char *name) const
 {
-    if (!m_view || m_view->metaObject()->indexOfProperty(name) < 0)
+    if (!m_view)
         return {};
-    return plain(m_view->property(name));
+    const QMetaObject *meta = m_view->metaObject(); // (a property it lacks reads as an invalid QVariant)
+    return plain(meta->property(meta->indexOfProperty(name)).read(m_view));
 }
 
 void ViewTraits::refresh()
 {
-    const QVariant title = read("title");
-    const QString newTitle = title.metaType() == QMetaType::fromType<QString>() ? title.toString() : QString();
     const auto text = [this](const char *name) {
         const QVariant value = read(name);
         return value.metaType() == QMetaType::fromType<QString>() ? value.toString() : QString();
     };
-    const QString newNoteMode = text("noteMode");
-    const QString newStatusText = text("statusText");
-    const QString newStatusPosition = text("statusPosition");
-    QQmlComponent *newSidePanel = qobject_cast<QQmlComponent *>(read("sidePanel").value<QObject *>());
-    int newFlags = 0;
+    int flags = 0;
     for (const Trait &trait : kTraits) {
         if (trait.flag == 0)
             continue;
         const QVariant value = read(trait.name);
         if (value.metaType() == QMetaType::fromType<bool>() && value.toBool())
-            newFlags |= trait.flag;
+            flags |= trait.flag;
     }
-    if (newTitle == m_title && newNoteMode == m_noteMode && newSidePanel == m_sidePanel && newFlags == m_flags
-        && newStatusText == m_statusText && newStatusPosition == m_statusPosition)
+    Values values{.title = text("title"),
+                  .sidePanel = qobject_cast<QQmlComponent *>(read("sidePanel").value<QObject *>()),
+                  .noteMode = text("noteMode"),
+                  .statusText = text("statusText"),
+                  .statusPosition = text("statusPosition"),
+                  .flags = flags};
+    if (values == m_values)
         return;
-    m_title = newTitle;
-    m_noteMode = newNoteMode;
-    m_statusText = newStatusText;
-    m_statusPosition = newStatusPosition;
-    m_sidePanel = newSidePanel;
-    m_flags = newFlags;
+    m_values = std::move(values);
     Q_EMIT traitsChanged();
 }
 
@@ -138,11 +133,8 @@ QVariantMap ViewTraits::viewState() const
         return {};
     }
     QVariant result(m.returnMetaType());
-    QTemplatedMetaMethodReturnArgument<void> returned;
-    returned.metaType = result.metaType().iface();
-    returned.name = m.typeName();
-    returned.data = result.data();
-    m.invoke(m_view, Qt::DirectConnection, returned);
+    m.invoke(m_view, Qt::DirectConnection,
+             QTemplatedMetaMethodReturnArgument<void>{{result.metaType().iface(), m.typeName(), result.data()}});
     if (result.metaType() == QMetaType::fromType<QVariant>()) // (a `var` result: the QVariant in it)
         result = result.value<QVariant>();
     return plain(result).toMap();
@@ -151,42 +143,35 @@ QVariantMap ViewTraits::viewState() const
 void ViewTraits::restoreViewState(const QVariantMap &state)
 {
     m_pending = state;
-    m_hasPending = !state.isEmpty();
     applyPendingState();
 }
 
 void ViewTraits::applyPendingState()
 {
-    if (!m_hasPending || !m_view)
+    if (m_pending.isEmpty() || !m_view)
         return;
+    QVariant argument(std::exchange(m_pending, {})); // (taken first: a state set during the call is kept)
     const QMetaMethod m = method("restoreViewState", 1);
-    if (m.isValid()) {
-        // The parameter as the function declares it: QVariant for `var` (or no type), else the
-        // map converted to its type.
-        const QMetaType type = m.parameterMetaType(0);
-        QVariant argument(m_pending);
-        if (type == QMetaType::fromType<QVariant>()) {
-            m.invoke(m_view, Qt::DirectConnection, QMetaMethodArgument{type.iface(), "QVariant", &argument});
-        } else if (argument.convert(type)) {
-            m.invoke(m_view, Qt::DirectConnection,
-                     QMetaMethodArgument{type.iface(), type.name(), argument.constData()});
-        }
-    }
-    m_pending.clear();
-    m_hasPending = false;
+    if (!m.isValid())
+        return; // a view without restoreViewState() drops it
+    // The parameter as the function declares it: QVariant for `var` (or no type), else the map
+    // converted to its type.
+    const QMetaType type = m.parameterMetaType(0);
+    if (type == QMetaType::fromType<QVariant>())
+        m.invoke(m_view, Qt::DirectConnection, QMetaMethodArgument{type.iface(), "QVariant", &argument});
+    else if (argument.convert(type))
+        m.invoke(m_view, Qt::DirectConnection, QMetaMethodArgument{type.iface(), type.name(), argument.constData()});
 }
 
 void ViewTraits::endEditing() const
 {
-    const QMetaMethod m = method("endEditing", 0);
-    if (m.isValid())
+    if (const QMetaMethod m = method("endEditing", 0); m.isValid())
         m.invoke(m_view, Qt::DirectConnection);
 }
 
 void ViewTraits::stepBack() const
 {
-    const QMetaMethod m = method("stepBack", 0);
-    if (m.isValid())
+    if (const QMetaMethod m = method("stepBack", 0); m.isValid())
         m.invoke(m_view, Qt::DirectConnection);
 }
 

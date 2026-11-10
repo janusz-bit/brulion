@@ -192,12 +192,11 @@ Row {
         // "Copy link" only for one block (its item in the menu, made for the submenu).
         for (let i = 0; i < menu.count; ++i) {
             const entry = menu.itemAt(i) as T.MenuItem
-            if (entry && entry.subMenu && entry.subMenu.objectName === "selectionCopyLinkMenu") {
-                entry.visible = singleBlock
-                entry.height = singleBlock ? entry.implicitHeight : 0
-            } else if (entry && entry.subMenu && entry.subMenu.objectName === "selectionTaskMenu") {
-                entry.visible = !readOnly
-                entry.height = !readOnly ? entry.implicitHeight : 0
+            const name = entry && entry.subMenu ? entry.subMenu.objectName : ""
+            if (name === "selectionCopyLinkMenu" || name === "selectionTaskMenu") {
+                const shown = name === "selectionCopyLinkMenu" ? singleBlock : !readOnly
+                entry.visible = shown
+                entry.height = shown ? entry.implicitHeight : 0
             }
         }
         menu.bottomMargin = editor ? editor.menuBottomMargin() : Theme.space2

@@ -81,12 +81,12 @@ BDialog {
             /// The task: { path, line, text, title, id, status }.
             readonly property MapHolder task: MapHolder { map: candidate.modelData }
             readonly property string taskId: candidate.task.map.id || ""
-            objectName: "taskDependencyItem_" + index
+            objectName: "taskDependencyItem_" + candidate.index
             width: ListView.view.width
             iconName: candidate.task.map.status === "doing" ? "clock" : "square"
             text: candidate.task.map.text
             subtitle: candidate.task.map.title + (candidate.taskId !== "" ? "  🆔 " + candidate.taskId : "")
-            selected: index === dialog.current
+            selected: candidate.index === dialog.current
             onClicked: {
                 dialog.current = candidate.index
                 dialog.tryAccept()

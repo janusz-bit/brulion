@@ -17,6 +17,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QHostAddress>
 #include <QSysInfo>
 #include <QUrl>
 #include <QXmlStreamReader>
@@ -43,6 +44,13 @@ QString defaultFolder(const QString &folder)
     return f.isEmpty() ? u"Brulion"_s : f;
 }
 
+/// `url` (a Syncthing GUI address) names this machine: localhost, 127.0.0.0/8 or ::1.
+bool isLoopbackUrl(const QString &url)
+{
+    const QString host = QUrl(url.trimmed()).host();
+    return host == u"localhost" || QHostAddress(host).isLoopback();
+}
+
 } // namespace
 
 bool sameNextcloudAccount(const QString &url, const QString &user, const QString &otherUrl, const QString &otherUser)
@@ -50,15 +58,14 @@ bool sameNextcloudAccount(const QString &url, const QString &user, const QString
     if (user.trimmed() != otherUser.trimmed())
         return false;
     const auto server = [](const QString &address) {
-        QUrl u(address.trimmed());
-        if (u.scheme().isEmpty() && !address.trimmed().isEmpty())
-            u = QUrl(u"https://"_s + address.trimmed());
+        const QString trimmed = address.trimmed();
+        QUrl u(trimmed);
+        if (u.scheme().isEmpty() && !trimmed.isEmpty())
+            u = QUrl(u"https://"_s + trimmed);
         u = u.adjusted(QUrl::NormalizePathSegments | QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment);
-        QString path = u.path();
-        while (path.endsWith(u'/'))
-            path.chop(1);
         const QString scheme = u.scheme().toLower();
-        return std::tuple(scheme, u.host().toLower(), u.port(scheme == u"http" ? 80 : 443), path);
+        return std::tuple(scheme, u.host().toLower(), u.port(scheme == u"http" ? 80 : 443),
+                          sync::trimTrailingSlashes(u.path()));
     };
     return !url.trimmed().isEmpty() && server(url) == server(otherUrl);
 }
@@ -68,19 +75,15 @@ QString nextcloudRemote(const QString &url, const QString &user, const QString &
     // As WorkspaceSync::rebuild() builds the client (davUrlFor()) and WebDavClient::identity().
     if (url.trimmed().isEmpty() || user.trimmed().isEmpty())
         return {};
-    QString base = sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), defaultFolder(folder));
-    while (base.endsWith(u'/'))
-        base.chop(1);
-    return user.trimmed() + u'@' + base;
+    return user.trimmed() + u'@'
+           + sync::trimTrailingSlashes(sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), defaultFolder(folder)));
 }
 
 QString nextcloudRemoteFolder(const QString &url, const QString &user, const QString &remote)
 {
     if (url.trimmed().isEmpty() || user.trimmed().isEmpty() || remote.isEmpty())
         return {};
-    QString base = sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), QString());
-    while (base.endsWith(u'/'))
-        base.chop(1);
+    const QString base = sync::trimTrailingSlashes(sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), QString()));
     const QString prefix = user.trimmed() + u'@' + base + u'/';
     if (!remote.startsWith(prefix) || remote.size() == prefix.size())
         return {};
@@ -139,11 +142,11 @@ std::optional<SyncthingSettings> discoverSyncthingConfig()
 #if defined(Q_OS_ANDROID) || defined(Q_OS_WASM)
     return std::nullopt;
 #else
-    const QString home = QDir::homePath();
-    const auto env = [](const char *name) { return qEnvironmentVariable(name); };
-    const QString state = env("XDG_STATE_HOME").isEmpty() ? home + u"/.local/state"_s : env("XDG_STATE_HOME");
-    const QString config = env("XDG_CONFIG_HOME").isEmpty() ? home + u"/.config"_s : env("XDG_CONFIG_HOME");
-    const QStringList files{ state + u"/syncthing/config.xml"_s, config + u"/syncthing/config.xml"_s };
+    const auto xdgFile = [](const char *variable, const QString &homeDefault) {
+        const QString dir = qEnvironmentVariable(variable);
+        return (dir.isEmpty() ? QDir::homePath() + homeDefault : dir) + u"/syncthing/config.xml"_s;
+    };
+    const QStringList files{xdgFile("XDG_STATE_HOME", u"/.local/state"_s), xdgFile("XDG_CONFIG_HOME", u"/.config"_s)};
     for (const QString &file : files) {
         QFile f(file);
         if (f.size() > 4 * 1024 * 1024 || !f.open(QIODevice::ReadOnly))
@@ -436,8 +439,9 @@ void WorkspaceSync::onVaultChanged(const QList<VaultChange> &changes)
 {
     if (m_scheduler)
         m_scheduler->notifyChanges(changes);
-    const bool conflictTouched = std::any_of(changes.cbegin(), changes.cend(), [](const VaultChange &c) {
-        return c.path.contains(u"conflict"_s, Qt::CaseInsensitive) || c.oldPath.contains(u"conflict"_s, Qt::CaseInsensitive);
+    const bool conflictTouched = std::ranges::any_of(changes, [](const VaultChange &c) {
+        return c.path.contains(u"conflict", Qt::CaseInsensitive)
+               || c.oldPath.contains(u"conflict", Qt::CaseInsensitive);
     });
     if (conflictTouched)
         refreshConflicts();
@@ -487,7 +491,6 @@ QString WorkspaceSync::human(const QDateTime &time) const
 
 QString WorkspaceSync::errorText(const QString &code, const QString &fallback) const
 {
-    const sync::SyncStatus s = m_scheduler ? m_scheduler->status() : sync::SyncStatus();
     if (code == u"auth")
         return tr("Wrong user name or app password.");
     if (code == u"forbidden")
@@ -514,13 +517,12 @@ QString WorkspaceSync::errorText(const QString &code, const QString &fallback) c
         return tr("The notebook folder is not available (an unmounted card or drive?).");
     if (code == u"other-process")
         return tr("The background check is syncing this notebook right now. Brulion will try again shortly.");
-    if (code == u"needs-confirmation") {
-        const int n = s.lastReport ? int(s.lastReport->pendingDeletions.size()) : 0;
+    if (code == u"needs-confirmation" || code == u"files") {
+        const std::optional<sync::SyncReport> report = m_scheduler ? m_scheduler->status().lastReport : std::nullopt;
+        if (code == u"files")
+            return tr("%n file(s) could not be synced.", "", report ? int(report->errors.size()) : 0);
+        const int n = report ? int(report->pendingDeletions.size()) : 0;
         return tr("%n file(s) would be deleted. Confirm in the sync center.", "", n);
-    }
-    if (code == u"files") {
-        const int n = s.lastReport ? int(s.lastReport->errors.size()) : 0;
-        return tr("%n file(s) could not be synced.", "", n);
     }
     return fallback.isEmpty() ? tr("Sync failed.") : logging::redact(fallback);
 }
@@ -646,9 +648,9 @@ QVariantMap WorkspaceSync::lastReport() const
             {u"filesMoved"_s, r.filesMoved},
             {u"filesMovedHere"_s, r.filesMovedHere},
             {u"conflicts"_s, int(r.conflicts.size())},
-            {u"conflictPaths"_s, QStringList(r.conflicts)},
+            {u"conflictPaths"_s, r.conflicts},
             {u"errors"_s, errors},
-            {u"skipped"_s, QStringList(r.skipped)},
+            {u"skipped"_s, r.skipped},
             {u"changes"_s, r.changeCount()},
             {u"started"_s, isoOf(r.started)},
             {u"finished"_s, isoOf(r.finished)},
@@ -797,8 +799,11 @@ void WorkspaceSync::rebuildSyncthing()
     m_syncthingStatus = { { u"enabled"_s, false }, { u"folder"_s, folderMarker } };
     if (m_vault) {
         SyncthingSettings settings = m_syncthingSettings;
+        // This machine's key goes to this machine's Syncthing only (its config's address, loopback):
+        // an address typed into the settings may be another device's, which must never learn it.
         if (settings.apiKey.isEmpty() && m_discovery) {
-            if (const auto found = discoverSyncthingConfig()) {
+            if (const auto found = discoverSyncthingConfig();
+                found && (settings.url.isEmpty() || settings.url == found->url || isLoopbackUrl(settings.url))) {
                 settings.apiKey = found->apiKey;
                 if (settings.url.isEmpty())
                     settings.url = found->url;

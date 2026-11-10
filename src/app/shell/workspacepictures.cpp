@@ -36,6 +36,26 @@ namespace brulion::shell {
 namespace {
 /// The browser's cache size: the files and their data: URLs live in the tab's memory.
 constexpr qint64 BrowserCacheBytes = 50 * 1024 * 1024;
+
+/// A cached picture as the browser shows it: a data: URL, with the picture's size.
+struct DataUrl {
+    QUrl url;
+    QSize size;
+};
+
+/// The picture `bytes` cached in `file` (named by its format) as a data: URL.
+DataUrl dataUrlOf(const QByteArray &bytes, const QString &file)
+{
+    const QString format = QFileInfo(file).suffix();
+    const QString mime = format == u"svg"   ? u"image/svg+xml"_s
+                         : format == u"jpg" ? u"image/jpeg"_s
+                         : format == u"ico" ? u"image/x-icon"_s
+                                            : u"image/"_s + format;
+    QBuffer buffer;
+    buffer.setData(bytes);
+    const QSize size = buffer.open(QIODevice::ReadOnly) ? editor::pictureSize(&buffer, file) : QSize();
+    return {QUrl(u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(bytes.toBase64())), size};
+}
 } // namespace
 
 class Workspace::WebPictures : public QObject {
@@ -52,9 +72,22 @@ public:
     /// session (not fetched again without asking once the cache dropped them).
     QSet<QUrl> autoQueued;
     QSet<QUrl> autoFetched;
-    /// The browser: cached pictures as data: URLs, with their sizes.
-    QHash<QString, QUrl> dataUrls;
-    QHash<QString, QSize> dataSizes;
+    /// The browser: cached pictures as data: URLs, by the URL as written.
+    QHash<QString, DataUrl> dataUrls;
+
+    /// The fetch of `url` ended: each URL as written waiting for it gets `error` ("" when cached),
+    /// all before any is told (a row asking again meanwhile finds its final state).
+    void finish(Workspace *self, const QUrl &url, const QString &error)
+    {
+        autoQueued.remove(url);
+        const QSet<QString> written = waiting.take(url);
+        if (!error.isEmpty()) {
+            for (const QString &w : written)
+                errors.insert(w, error);
+        }
+        for (const QString &w : written)
+            Q_EMIT self->webPictureChanged(w);
+    }
 };
 
 Workspace::WebPictures *Workspace::webPictures() const
@@ -62,45 +95,35 @@ Workspace::WebPictures *Workspace::webPictures() const
     if (m_webPictures)
         return m_webPictures;
     auto *self = const_cast<Workspace *>(this);
-    m_webPictures = new WebPictures(self);
+    auto *web = new WebPictures(self);
+    m_webPictures = web;
     QString dir = m_webPictureCacheDir;
     if (dir.isEmpty()) {
         const QString base = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
         dir = base.isEmpty() ? QString() : QDir(base).filePath(u"web-pictures"_s);
     }
-    m_webPictures->cache.setDir(dir);
-    m_webPictures->fetcher = new webpicture::PictureFetcher(nullptr, m_webPictures);
+    web->cache.setDir(dir);
+    web->fetcher = new webpicture::PictureFetcher(nullptr, web);
     if (m_webPictureHostCheck)
-        m_webPictures->fetcher->setPrivateHostCheck(m_webPictureHostCheck);
-    m_webPictures->fetcher->setSimpleRequests(!m_webPageScheme.isEmpty());
-    WebPictures *web = m_webPictures;
+        web->fetcher->setPrivateHostCheck(m_webPictureHostCheck);
+    web->fetcher->setSimpleRequests(!m_webPageScheme.isEmpty());
     connect(web->fetcher, &webpicture::PictureFetcher::fetched, self,
             [self, web](const QUrl &url, const QByteArray &data, const QString &format) {
-                const QString path = web->cache.store(url, data, format);
-                if (path.isEmpty()) {
-                    for (const QString &written : web->waiting.value(url))
-                        web->errors.insert(written, tr("The picture could not be saved on this device."));
-                } else {
-                    if (web->autoQueued.contains(url))
-                        web->autoFetched.insert(url);
-                    const qint64 cap = self->m_webPictureCacheBytes > 0 ? self->m_webPictureCacheBytes
-                                       : self->m_dataUrlAssets          ? BrowserCacheBytes
-                                                                        : webpicture::DefaultCacheBytes;
-                    web->cache.prune(cap);
-                    // The data: URLs of the files dropped go with them.
-                    for (auto it = web->dataUrls.begin(); it != web->dataUrls.end();) {
-                        if (!web->cache.contains(webpicture::webUrl(it.key()))) {
-                            web->dataSizes.remove(it.key());
-                            it = web->dataUrls.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
+                if (web->cache.store(url, data, format).isEmpty()) {
+                    web->finish(self, url, tr("The picture could not be saved on this device."));
+                    return;
                 }
-                web->autoQueued.remove(url);
-                const QSet<QString> written = web->waiting.take(url);
-                for (const QString &w : written)
-                    Q_EMIT self->webPictureChanged(w);
+                if (web->autoQueued.contains(url))
+                    web->autoFetched.insert(url);
+                const qint64 cap = self->m_webPictureCacheBytes > 0 ? self->m_webPictureCacheBytes
+                                   : self->m_dataUrlAssets          ? BrowserCacheBytes
+                                                                    : webpicture::DefaultCacheBytes;
+                web->cache.prune(cap);
+                // The data: URLs of the files dropped go with them.
+                web->dataUrls.removeIf([web](QHash<QString, DataUrl>::iterator it) {
+                    return !web->cache.contains(webpicture::webUrl(it.key()));
+                });
+                web->finish(self, url, QString());
             });
     connect(web->fetcher, &webpicture::PictureFetcher::failed, self,
             [self, web](const QUrl &url, webpicture::FetchError error, const QString &detail) {
@@ -134,14 +157,9 @@ Workspace::WebPictures *Workspace::webPictures() const
                 }
                 qInfo().noquote() << u"Picture from %1 not loaded: %2 (%3)"_s.arg(host, webpicture::errorName(error),
                                                                                   detail);
-                web->autoQueued.remove(url);
-                const QSet<QString> written = web->waiting.take(url);
-                for (const QString &w : written) {
-                    web->errors.insert(w, message);
-                    Q_EMIT self->webPictureChanged(w);
-                }
+                web->finish(self, url, message);
             });
-    return m_webPictures;
+    return web;
 }
 
 void Workspace::setWebPictureCacheDir(const QString &dir)
@@ -150,7 +168,6 @@ void Workspace::setWebPictureCacheDir(const QString &dir)
     if (m_webPictures) {
         m_webPictures->cache.setDir(dir);
         m_webPictures->dataUrls.clear();
-        m_webPictures->dataSizes.clear();
     }
 }
 
@@ -182,12 +199,11 @@ void Workspace::setWebPicturesShown(bool shown)
     if (!shown && m_webPictures) {
         // Consent withdrawn: what was fetched only for it stops; "Show" and "Save to notebook"
         // go on. The rows ask again.
-        WebPictures *web = m_webPictures;
         // All at once: aborting one must not start another of them from the queue.
-        web->fetcher->cancel(web->autoQueued.values());
-        for (const QUrl &url : std::as_const(web->autoQueued))
-            web->waiting.remove(url);
-        web->autoQueued.clear();
+        m_webPictures->fetcher->cancel(m_webPictures->autoQueued.values());
+        for (const QUrl &url : std::as_const(m_webPictures->autoQueued))
+            m_webPictures->waiting.remove(url);
+        m_webPictures->autoQueued.clear();
     }
     Q_EMIT webPicturesShownChanged();
     Q_EMIT webPictureChanged(QString());
@@ -209,33 +225,19 @@ QVariantMap Workspace::webPicture(const QString &url) const
             return out;
         }
         // The browser shows attachments as data: URLs (assetUrl()); the cached pictures too.
-        auto cached = pictures->dataUrls.constFind(url);
-        if (cached == pictures->dataUrls.constEnd()) {
-            const QByteArray bytes = pictures->cache.read(web);
-            const QString format = QFileInfo(file).suffix();
-            const QString mime = format == u"svg"   ? u"image/svg+xml"_s
-                                 : format == u"jpg" ? u"image/jpeg"_s
-                                 : format == u"ico" ? u"image/x-icon"_s
-                                                    : u"image/"_s + format;
-            QBuffer buffer;
-            buffer.setData(bytes);
-            buffer.open(QIODevice::ReadOnly);
-            pictures->dataSizes.insert(url, editor::pictureSize(&buffer, file));
-            cached = pictures->dataUrls.insert(
-                    url, QUrl(u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(bytes.toBase64())));
+        DataUrl cached = pictures->dataUrls.value(url);
+        if (cached.url.isEmpty()) {
+            cached = dataUrlOf(pictures->cache.read(web), file);
+            pictures->dataUrls.insert(url, cached);
         }
-        out.insert(u"url"_s, *cached);
-        const QSize size = pictures->dataSizes.value(url);
-        if (size.isValid()) {
-            out.insert(u"width"_s, size.width());
-            out.insert(u"height"_s, size.height());
+        out.insert(u"url"_s, cached.url);
+        if (cached.size.isValid()) {
+            out.insert(u"width"_s, cached.size.width());
+            out.insert(u"height"_s, cached.size.height());
         }
         return out;
     }
-    if (m_dataUrlAssets) { // the file is gone: its data: URL too (a new fetch may differ)
-        pictures->dataUrls.remove(url);
-        pictures->dataSizes.remove(url);
-    }
+    pictures->dataUrls.remove(url); // the file is gone: its data: URL too (a new fetch may differ)
     if (pictures->fetcher->isFetching(web)) {
         // Maybe for another spelling of the same URL ("HTTPS://Example.com/…"): this one is told
         // when it ends too.
@@ -287,8 +289,7 @@ QByteArray Workspace::webPictureData(const QString &url, QString *format) const
     if (!web.isValid())
         return {};
     WebPictures *pictures = webPictures();
-    const QString file = pictures->cache.lookup(web);
-    if (file.isEmpty())
+    if (pictures->cache.lookup(web).isEmpty()) // (marks the file used)
         return {};
     const QByteArray data = pictures->cache.read(web);
     if (format)

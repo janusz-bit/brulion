@@ -750,6 +750,8 @@ private:
     /// movePath: notebook::relocate()); returns `to` or "" (an error was emitted). Settings naming
     /// `from` or a path in it follow it (a notice says so).
     QString relocate(const QString &from, const QString &to);
+    /// renamePage() / renameFolder() of the normalised `path`: a name that would be hidden is refused.
+    QString renameTo(const QString &path, const QString &newName, bool isDir, bool slashMoves);
     /// Folders produce no Vault change of their own (only files do): tell the lists and the tree,
     /// and for the user's own changes (`byUser`) the sync (an empty folder travels too).
     void notifyFolderChange(const QStringList &paths, bool byUser = true);

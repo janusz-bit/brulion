@@ -34,15 +34,15 @@ T.Popup {
     }
     readonly property string mode: triggerInfo.mode()
     readonly property bool slash: mode === "slash"
+    readonly property real headerHeight: headerText.visible ? headerText.height : 0
     readonly property real rowHeight: Theme.touchUi ? 48 : (slash ? 36 : 40) // two lines (title + folder) need 40
 
     parent: editor
     focus: false
-    modal: false
     closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutsideParent
     padding: Theme.space1
     implicitWidth: Math.min(editor.width - 2 * Theme.space2, slash ? 300 : 360)
-    implicitHeight: Math.min(list.contentHeight, rowHeight * (Theme.touchUi ? 5 : 8)) + topPadding + bottomPadding + (headerText.visible ? headerText.height : 0)
+    implicitHeight: Math.min(list.contentHeight, rowHeight * (Theme.touchUi ? 5 : 8)) + topPadding + bottomPadding + headerHeight
 
     function show(): void {
         if (!target)
@@ -133,8 +133,7 @@ T.Popup {
             leftPadding: Theme.space3
             topPadding: Theme.space1
             bottomPadding: Theme.space1
-            text: Js.indexOf(triggerInfo.token(), "⏰") === 0 ? qsTr("Reminder at")
-                : triggerInfo.token() === "@" ? qsTr("Date") : qsTr("Date")
+            text: Js.indexOf(triggerInfo.token(), "⏰") === 0 ? qsTr("Reminder at") : qsTr("Date")
             font.family: Theme.fontUi
             font.pixelSize: Theme.textXs
             font.weight: Theme.weightMedium
@@ -146,7 +145,7 @@ T.Popup {
             id: list
             objectName: "suggestionList"
             width: parent.width
-            height: popup.availableHeight - (headerText.visible ? headerText.height : 0)
+            height: popup.availableHeight - popup.headerHeight
             clip: true
             // No rows built ahead of the viewport: a ListView makes those asynchronously, and a
             // keystroke that resets the model while one is still being made (a slow phone) has

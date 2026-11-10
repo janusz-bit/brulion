@@ -13,19 +13,13 @@
 #include <QLoggingCategory>
 #include <QSaveFile>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
-namespace {
-
-const QString kLoginKey = u"github/login"_s;
-
-using github::GitHubError;
-using github::RepoLink;
-
-/// Owner-only secret file (as the Nextcloud app password); "" removes it.
-bool writeSecret(const QString &file, const QString &value)
+bool writeSecretFile(const QString &file, const QString &value)
 {
     if (value.isEmpty())
         return !QFileInfo::exists(file) || QFile::remove(file);
@@ -45,11 +39,18 @@ bool writeSecret(const QString &file, const QString &value)
     return true;
 }
 
-QString readSecret(const QString &file)
+QString readSecretFile(const QString &file)
 {
     QFile in(file);
     return in.open(QIODevice::ReadOnly) ? QString::fromUtf8(in.readAll()).trimmed() : QString();
 }
+
+namespace {
+
+const QString kLoginKey = u"github/login"_s;
+
+using github::GitHubError;
+using github::RepoLink;
 
 QString titleOf(const VaultPath &path)
 {
@@ -122,7 +123,7 @@ void WorkspaceGitHub::setSettingsAccess(std::function<QVariant(const QString &, 
 void WorkspaceGitHub::setTokenFile(const QString &path)
 {
     m_tokenFile = path;
-    m_token = path.isEmpty() ? QString() : readSecret(path);
+    m_token = path.isEmpty() ? QString() : readSecretFile(path);
     if (m_client)
         m_client->setToken(m_token);
     Q_EMIT accountChanged();
@@ -362,9 +363,9 @@ QString WorkspaceGitHub::progressText() const
     if (m_operation.isEmpty())
         return {};
     if (m_phase == u"download" && m_total > 0)
-        return tr("Downloading %1 of %2…").arg(qMin(m_done + 1, m_total)).arg(m_total);
+        return tr("Downloading %1 of %2…").arg(std::min(m_done + 1, m_total)).arg(m_total);
     if (m_phase == u"upload" && m_total > 0)
-        return tr("Uploading %1 of %2…").arg(qMin(m_done + 1, m_total)).arg(m_total);
+        return tr("Uploading %1 of %2…").arg(std::min(m_done + 1, m_total)).arg(m_total);
     if (m_phase == u"tree")
         return tr("Comparing the files…");
     if (m_phase == u"fork")
@@ -382,7 +383,7 @@ qreal WorkspaceGitHub::progress() const
 {
     if (m_operation.isEmpty() || m_total <= 0 || (m_phase != u"download" && m_phase != u"upload"))
         return -1;
-    return qBound(0.0, qreal(m_done) / qreal(m_total), 1.0);
+    return std::clamp(qreal(m_done) / qreal(m_total), 0.0, 1.0);
 }
 
 QString WorkspaceGitHub::human(const QDateTime &time) const
@@ -500,7 +501,9 @@ void WorkspaceGitHub::refreshChanges()
 {
     QVariantList list;
     if (m_repo) {
-        for (const github::LocalChange &change : m_repo->localChanges()) {
+        const QList<github::LocalChange> changes = m_repo->localChanges();
+        list.reserve(changes.size());
+        for (const github::LocalChange &change : changes) {
             const QString kind = github::changeKindName(change.kind);
             list.append(QVariantMap{{u"path"_s, change.path},
                                     {u"title"_s, titleOf(change.path)},
@@ -518,12 +521,12 @@ void WorkspaceGitHub::refreshChanges()
 
 QString WorkspaceGitHub::defaultCommitMessage(int count) const
 {
-    return tr("Update %n note(s) from Brulion", "", qMax(1, count));
+    return tr("Update %n note(s) from Brulion", "", std::max(1, count));
 }
 
 QString WorkspaceGitHub::defaultProposalTitle(int count) const
 {
-    return tr("Changes to %n note(s)", "", qMax(1, count));
+    return tr("Changes to %n note(s)", "", std::max(1, count));
 }
 
 // ---- texts ------------------------------------------------------------------------------------------
@@ -541,7 +544,8 @@ QString WorkspaceGitHub::errorText(const QString &code, const QString &message, 
                     .arg(human(QDateTime::fromMSecsSinceEpoch(resetAt)));
         }
         if (retryAfter > 0)
-            return tr("GitHub asks to wait a moment: try again in %n minute(s).", "", qMax(1, (retryAfter + 59) / 60));
+            return tr("GitHub asks to wait a moment: try again in %n minute(s).", "",
+                      std::max(1, (retryAfter + 59) / 60));
         return tr("GitHub's limit of requests is used up for now. With a token the limit is much higher.");
     }
     if (code == u"not-found")
@@ -627,18 +631,18 @@ void WorkspaceGitHub::setError(const QString &code, const QString &text)
     m_lastError = text;
 }
 
-QVariantList WorkspaceGitHub::problems(const QList<QString> &paths, const QList<QString> &codes,
-                                       const QList<QString> &messages) const
+QVariantList WorkspaceGitHub::problems(const QList<github::FileProblem> &list) const
 {
-    QVariantList list;
-    for (qsizetype i = 0; i < paths.size(); ++i) {
-        list.append(QVariantMap{{u"path"_s, paths.at(i)},
-                                {u"title"_s, titleOf(paths.at(i))},
-                                {u"code"_s, codes.at(i)},
-                                {u"text"_s, problemText(codes.at(i))},
-                                {u"message"_s, messages.at(i)}});
+    QVariantList out;
+    out.reserve(list.size());
+    for (const github::FileProblem &problem : list) {
+        out.append(QVariantMap{{u"path"_s, problem.path},
+                               {u"title"_s, titleOf(problem.path)},
+                               {u"code"_s, problem.code},
+                               {u"text"_s, problemText(problem.code)},
+                               {u"message"_s, problem.message}});
     }
-    return list;
+    return out;
 }
 
 // ---- operations --------------------------------------------------------------------------------------
@@ -674,22 +678,8 @@ void WorkspaceGitHub::onPulled(const github::PullReport &report, bool automatic)
     else
         setError(code, errorText(code, report.error.message, report.error.resetAt, report.error.retryAfterSeconds));
 
-    QList<QString> files, codes, messages;
-    for (const github::FileProblem &problem : report.skipped) {
-        files.append(problem.path);
-        codes.append(problem.code);
-        messages.append(problem.message);
-    }
-    const QVariantList skipped = problems(files, codes, messages);
-    files.clear();
-    codes.clear();
-    messages.clear();
-    for (const github::FileProblem &problem : report.errors) {
-        files.append(problem.path);
-        codes.append(problem.code);
-        messages.append(problem.message);
-    }
-    const QVariantList errors = problems(files, codes, messages);
+    const QVariantList skipped = problems(report.skipped);
+    const QVariantList errors = problems(report.errors);
     QString text;
     if (code.isEmpty()) {
         QStringList parts;
@@ -742,36 +732,35 @@ void WorkspaceGitHub::onPulled(const github::PullReport &report, bool automatic)
         Q_EMIT operationFinished(u"pull"_s, true, changed > 0 ? tr("From GitHub: %1").arg(text) : text, u"success"_s);
 }
 
-QStringList WorkspaceGitHub::selectedPaths(const QStringList &leaveOut, bool *none) const
+std::optional<QStringList> WorkspaceGitHub::beginSend(const QString &operation, const QStringList &leaveOut)
 {
-    *none = false;
-    if (leaveOut.isEmpty())
-        return {}; // every change
-    QStringList selected;
-    for (const QVariant &row : m_changes) {
-        const QString path = row.toMap().value(u"path"_s).toString();
-        if (!leaveOut.contains(path))
-            selected.append(path);
+    if (!m_repo || busy())
+        return std::nullopt;
+    QStringList selected; // {} = every change
+    if (!leaveOut.isEmpty()) {
+        for (const QVariant &row : std::as_const(m_changes)) {
+            const QString path = row.toMap().value(u"path"_s).toString();
+            if (!leaveOut.contains(path))
+                selected.append(path);
+        }
+        if (selected.isEmpty()) {
+            Q_EMIT operationFinished(operation, false, tr("Choose at least one note."), u"warning"_s);
+            return std::nullopt;
+        }
     }
-    *none = selected.isEmpty();
+    m_operation = operation;
+    m_phase.clear();
+    Q_EMIT statusChanged();
     return selected;
 }
 
 void WorkspaceGitHub::commit(const QString &message, const QStringList &leaveOut)
 {
-    if (!m_repo || busy())
+    const std::optional<QStringList> paths = beginSend(u"commit"_s, leaveOut);
+    if (!paths)
         return;
-    bool none = false;
-    const QStringList paths = selectedPaths(leaveOut, &none);
-    if (none) {
-        Q_EMIT operationFinished(u"commit"_s, false, tr("Choose at least one note."), u"warning"_s);
-        return;
-    }
-    m_operation = u"commit"_s;
-    m_phase.clear();
-    Q_EMIT statusChanged();
     QPointer<WorkspaceGitHub> self(this);
-    m_repo->commit(message, paths, [self](const github::CommitReport &report) {
+    m_repo->commit(message, *paths, [self](const github::CommitReport &report) {
         if (self)
             self->onCommitted(report, false);
     });
@@ -779,19 +768,11 @@ void WorkspaceGitHub::commit(const QString &message, const QStringList &leaveOut
 
 void WorkspaceGitHub::propose(const QString &title, const QString &body, const QStringList &leaveOut)
 {
-    if (!m_repo || busy())
+    const std::optional<QStringList> paths = beginSend(u"propose"_s, leaveOut);
+    if (!paths)
         return;
-    bool none = false;
-    const QStringList paths = selectedPaths(leaveOut, &none);
-    if (none) {
-        Q_EMIT operationFinished(u"propose"_s, false, tr("Choose at least one note."), u"warning"_s);
-        return;
-    }
-    m_operation = u"propose"_s;
-    m_phase.clear();
-    Q_EMIT statusChanged();
     QPointer<WorkspaceGitHub> self(this);
-    m_repo->propose(title, body, paths, [self](const github::CommitReport &report) {
+    m_repo->propose(title, body, *paths, [self](const github::CommitReport &report) {
         if (self)
             self->onCommitted(report, true);
     });
@@ -809,14 +790,14 @@ void WorkspaceGitHub::onCommitted(const github::CommitReport &report, bool propo
         code = !report.pull.refused.isEmpty() ? report.pull.refused : github::errorCodeName(report.pull.error.code);
     const GitHubError &error = report.error.isError() ? report.error : report.pull.error;
     m_offline = error.code == GitHubError::Code::Network || error.code == GitHubError::Code::Timeout;
-    // A refusal is about this attempt, not the notebook's state: the status stays as it was.
-    const bool refusal = !report.refused.isEmpty() && report.refused != u"busy" && !report.pull.failed();
-    if (code.isEmpty() || refusal)
-        setError({}, {});
-    else
-        setError(code, errorText(code, error.message, error.resetAt, error.retryAfterSeconds));
     const QString failure =
             code.isEmpty() ? QString() : errorText(code, error.message, error.resetAt, error.retryAfterSeconds);
+    // A refusal is about this attempt, not the notebook's state: the status stays as it was.
+    const bool refusal = !report.refused.isEmpty() && report.refused != u"busy" && !report.pull.failed();
+    if (refusal)
+        setError({}, {});
+    else
+        setError(code, failure);
     QString text;
     const RepoLink link = m_repo ? m_repo->link() : RepoLink();
     QString commitUrl;
@@ -921,7 +902,8 @@ void WorkspaceGitHub::resolveLink(const QString &address, const QString &branchT
     Q_EMIT checkingChanged();
     const github::RepoId id{parsed->owner, parsed->name};
     QPointer<WorkspaceGitHub> self(this);
-    const auto finish = [self, done](bool ok, const RepoLink &link, const QString &message, bool empty) {
+    const auto finish = [self, done = std::move(done)](bool ok, const RepoLink &link, const QString &message,
+                                                       bool empty) {
         if (!self)
             return;
         self->m_checkingLink = false;
@@ -1110,13 +1092,16 @@ void WorkspaceGitHub::saveToken(const QString &rawToken)
     }
     m_checkingToken = true;
     Q_EMIT checkingChanged();
-    // A client of its own: the saved token stays in use until this one is known to work.
-    auto probe = std::make_shared<github::GitHubClient>(transport());
+    // A client of its own: the saved token stays in use until this one is known to work. Only the
+    // newest check counts: after a later saveToken() or forgetToken() its answer saves nothing.
+    const int check = ++m_tokenCheck;
+    auto *probe = new github::GitHubClient(transport(), this);
     probe->setBrowser(m_browser);
     probe->setToken(token);
     QPointer<WorkspaceGitHub> self(this);
-    probe->user([self, probe, token](const GitHubError &error, const github::User &user) {
-        if (!self)
+    probe->user([self, probe, check, token](const GitHubError &error, const github::User &user) {
+        probe->deleteLater(); // (runs only while the probe, a child of `self`, is alive)
+        if (!self || self->m_tokenCheck != check)
             return;
         self->m_checkingToken = false;
         Q_EMIT self->checkingChanged();
@@ -1126,7 +1111,7 @@ void WorkspaceGitHub::saveToken(const QString &rawToken)
                                                      : self->linkErrorText(error));
             return;
         }
-        if (!self->m_tokenFile.isEmpty() && !writeSecret(self->m_tokenFile, token)) {
+        if (!self->m_tokenFile.isEmpty() && !writeSecretFile(self->m_tokenFile, token)) {
             Q_EMIT self->tokenChecked(false, WorkspaceGitHub::tr("The token could not be saved on this device."));
             return;
         }
@@ -1148,8 +1133,13 @@ void WorkspaceGitHub::saveToken(const QString &rawToken)
 
 void WorkspaceGitHub::forgetToken()
 {
-    if (!m_tokenFile.isEmpty())
-        writeSecret(m_tokenFile, {});
+    ++m_tokenCheck; // a token still being checked is not saved either
+    if (std::exchange(m_checkingToken, false))
+        Q_EMIT checkingChanged();
+    if (!m_tokenFile.isEmpty() && !writeSecretFile(m_tokenFile, {})) {
+        qCWarning(logging::lcSync).noquote()
+                << u"GitHub: the token could not be removed from %1"_s.arg(QDir::toNativeSeparators(m_tokenFile));
+    }
     m_token.clear();
     if (m_client)
         m_client->setToken({});

@@ -26,6 +26,18 @@ namespace {
 const QString kTestId = u"brulion-test"_s;
 constexpr int kTestNativeId = 2'000'000'001;
 
+dates::UiLocale uiLocale(const QString &language)
+{
+    return language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+}
+
+std::optional<ScheduledNotification> withId(const QList<ScheduledNotification> &list, const QString &id)
+{
+    if (const auto it = std::ranges::find(list, id, &ScheduledNotification::id); it != list.end())
+        return *it;
+    return std::nullopt;
+}
+
 } // namespace
 
 /// Forwards to the notifier while it exists: the scheduler keeps one sink for its whole life,
@@ -123,11 +135,10 @@ QVariantMap WorkspaceReminders::backgroundCheckStatus() const
     const qint64 at = status.value(u"at"_s).toInteger();
     if (status.isEmpty() || at <= 0)
         return {};
-    const dates::UiLocale locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
     const QDateTime when = QDateTime::fromMSecsSinceEpoch(at).toLocalTime();
     return {
             {u"at"_s, when.toString(u"yyyy-MM-dd HH:mm"_s)},
-            {u"when"_s, dates::formatHuman(DateSpec{when.date(), when.time()}, locale, now().date())},
+            {u"when"_s, dates::formatHuman(DateSpec{when.date(), when.time()}, uiLocale(m_language), now().date())},
             {u"ok"_s, status.value(u"ok"_s).toBool()},
             {u"applied"_s, status.value(u"applied"_s).toBool()},
             {u"reminders"_s, status.value(u"reminders"_s).toInt()},
@@ -184,7 +195,7 @@ void WorkspaceReminders::startScheduler()
     m_scheduler = std::make_unique<ReminderScheduler>(m_index.data(), m_proxy.get(), m_vault ? m_vault->store() : nullptr,
                                                       [this] { return now(); });
     m_scheduler->setAlarmRingMinutes(m_ringMinutes);
-    m_scheduler->setLocale(m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish);
+    m_scheduler->setLocale(uiLocale(m_language));
     if (m_testHeartbeatMs > 0)
         m_scheduler->setHeartbeatInterval(m_testHeartbeatMs);
     if (m_testDebounceMs > 0)
@@ -298,7 +309,7 @@ void WorkspaceReminders::setLanguage(const QString &language)
         return;
     m_language = l;
     if (m_scheduler)
-        m_scheduler->setLocale(l == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish);
+        m_scheduler->setLocale(uiLocale(l));
     Q_EMIT upcomingChanged();
     Q_EMIT missedChanged();
 }
@@ -319,7 +330,6 @@ void WorkspaceReminders::setTestIntervals(int heartbeatMs, int debounceMs)
 
 QVariantMap WorkspaceReminders::toMap(const ScheduledNotification &n) const
 {
-    const dates::UiLocale locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
     const QDateTime at = n.at.toLocalTime();
     DateSpec spec{ at.date(), at.time() };
     return {
@@ -327,7 +337,7 @@ QVariantMap WorkspaceReminders::toMap(const ScheduledNotification &n) const
             {u"title"_s, n.title},
             {u"body"_s, n.body},
             {u"at"_s, at.toString(u"yyyy-MM-dd HH:mm"_s)},
-            {u"when"_s, at.isValid() ? dates::formatHuman(spec, locale, now().date()) : QString()},
+            {u"when"_s, at.isValid() ? dates::formatHuman(spec, uiLocale(m_language), now().date()) : QString()},
             {u"alarm"_s, n.alarm},
             {u"path"_s, n.path},
             {u"line"_s, n.line},
@@ -340,7 +350,8 @@ QVariantList WorkspaceReminders::missed() const
     QVariantList out;
     if (!m_scheduler || !m_notifyMissed)
         return out;
-    for (const ScheduledNotification &n : m_scheduler->missed())
+    // (Const copies of the scheduler's lists here and below: a non-const loop would copy deeply.)
+    for (const QList<ScheduledNotification> all = m_scheduler->missed(); const ScheduledNotification &n : all)
         out.append(toMap(n));
     return out;
 }
@@ -355,9 +366,9 @@ QVariantList WorkspaceReminders::upcoming() const
     QVariantList out;
     if (!m_scheduler)
         return out;
-    const QDateTime current = now();
-    for (const ScheduledNotification &n : m_scheduler->upcoming()) {
-        if (n.at < current.addSecs(-60))
+    const QDateTime since = now().addSecs(-60);
+    for (const QList<ScheduledNotification> all = m_scheduler->upcoming(); const ScheduledNotification &n : all) {
+        if (n.at < since)
             continue;
         out.append(toMap(n));
         if (out.size() >= MaxUpcoming)
@@ -386,9 +397,7 @@ bool WorkspaceReminders::firesWhenClosed() const
 
 bool WorkspaceReminders::canShow() const
 {
-    if (!sink())
-        return false;
-    return m_canShow ? m_canShow() : true;
+    return sink() && (!m_canShow || m_canShow());
 }
 
 void WorkspaceReminders::dismissMissed(const QString &id)
@@ -416,17 +425,9 @@ std::optional<ScheduledNotification> WorkspaceReminders::find(const QString &id)
 {
     if (!m_scheduler || id.isEmpty())
         return std::nullopt;
-    const QList<ScheduledNotification> missed = m_scheduler->missed();
-    for (const ScheduledNotification &n : missed) {
-        if (n.id == id)
-            return n;
-    }
-    const QList<ScheduledNotification> upcoming = m_scheduler->upcoming();
-    for (const ScheduledNotification &n : upcoming) {
-        if (n.id == id)
-            return n;
-    }
-    return std::nullopt;
+    if (auto n = withId(m_scheduler->missed(), id))
+        return n;
+    return withId(m_scheduler->upcoming(), id);
 }
 
 bool WorkspaceReminders::snooze(const QString &id, int minutes)
@@ -446,13 +447,11 @@ bool WorkspaceReminders::snoozeNotification(const ScheduledNotification &notific
     const int length = minutes > 0 ? std::min(minutes, 24 * 60) : m_snoozeMinutes;
     QDateTime when = now().addSecs(qint64(length) * 60);
     when.setTime(QTime(when.time().hour(), when.time().minute()));
-    ScheduledNotification target;
-    switch (editOccurrence(
-            notification,
-            [&](const QString &content, const ScheduledNotification &n) {
-                return snoozeReminder(content, n.line, when);
-            },
-            &target)) {
+    const auto moveLater = [&when](const QString &content, const ScheduledNotification &n) {
+        return snoozeReminder(content, n.line, when);
+    };
+    const auto [result, target] = editOccurrence(notification, moveLater);
+    switch (result) {
     case EditResult::Written: break;
     case EditResult::Gone:
         // Edited, moved to another time, completed or deleted meanwhile — its old line may now
@@ -499,10 +498,8 @@ std::optional<ScheduledNotification> WorkspaceReminders::current(const Scheduled
     if (!m_index || !notification.at.isValid())
         return std::nullopt;
     const QList<ScheduledNotification> found = notificationsBetween(*m_index, notification.at, notification.at);
-    for (const ScheduledNotification &n : found) {
-        if (n.id == notification.id)
-            return n;
-    }
+    if (auto n = withId(found, notification.id))
+        return n;
     if (!notification.id.startsWith(ProvisionalIdPrefix))
         return std::nullopt;
     // The note's occurrence of that time with the entry's text: the one on the line quick add
@@ -525,10 +522,9 @@ bool WorkspaceReminders::foreign(const ScheduledNotification &notification) cons
     return !notification.vault.isEmpty() && m_vault && notification.vault != m_vault->id();
 }
 
-WorkspaceReminders::EditResult
+std::pair<WorkspaceReminders::EditResult, ScheduledNotification>
 WorkspaceReminders::editOccurrence(const ScheduledNotification &notification,
-                                   const std::function<QString(const QString &, const ScheduledNotification &)> &edit,
-                                   ScheduledNotification *target)
+                                   const std::function<QString(const QString &, const ScheduledNotification &)> &edit)
 {
     // The second round runs after the first write found the file changed behind the index's back
     // (the vault took the change in, the index followed it); a third mismatch in a row is
@@ -538,26 +534,25 @@ WorkspaceReminders::editOccurrence(const ScheduledNotification &notification,
         // was edited, moved, its task completed (here or on another device) or deleted.
         const std::optional<ScheduledNotification> found = current(notification);
         if (!found)
-            return EditResult::Gone;
-        *target = *found;
+            return {EditResult::Gone, {}};
         // The file must exist and be readable: writeTextIfUnchanged() would create a deleted one.
         bool ok = false;
         m_vault->readText(found->path, &ok);
         if (!ok)
-            return EditResult::Failed;
+            return {EditResult::Failed, *found};
         const QString indexed = m_index->content(found->path);
         const QString edited = edit(indexed, *found);
         if (edited == indexed)
-            return EditResult::Unchanged;
+            return {EditResult::Unchanged, *found};
         switch (m_vault->writeTextIfUnchanged(found->path, edited, indexed, ChangeSource::User)) {
-        case WriteOutcome::Written: return EditResult::Written;
-        case WriteOutcome::Failed: return EditResult::Failed;
+        case WriteOutcome::Written: return {EditResult::Written, *found};
+        case WriteOutcome::Failed: return {EditResult::Failed, *found};
         case WriteOutcome::Changed:
             qCInfo(lcReminders) << "Note changed behind the index, looking the reminder up again:" << found->path;
             break;
         }
     }
-    return EditResult::Gone;
+    return {EditResult::Gone, {}};
 }
 
 bool WorkspaceReminders::applyCompletion(const ScheduledNotification &notification, QDate day)
@@ -574,16 +569,12 @@ bool WorkspaceReminders::applyCompletion(const ScheduledNotification &notificati
         return false;
     }
     const QDate doneDay = day.isValid() ? day : now().date();
-    ScheduledNotification target;
-    const EditResult result = editOccurrence(
-            notification,
-            [&](const QString &content, const ScheduledNotification &n) {
-                // Not on a task (any more): nothing to complete. A notification offers "Done" only
-                // for a task's reminder.
-                return n.taskLine < 0 ? content
-                                      : markdown::setTaskStatus(content, n.taskLine, TaskStatus::Done, doneDay);
-            },
-            &target);
+    const auto markDone = [doneDay](const QString &content, const ScheduledNotification &n) {
+        // Not on a task (any more): nothing to complete. A notification offers "Done" only for a
+        // task's reminder.
+        return n.taskLine < 0 ? content : markdown::setTaskStatus(content, n.taskLine, TaskStatus::Done, doneDay);
+    };
+    const auto [result, target] = editOccurrence(notification, markDone);
     switch (result) {
     case EditResult::Written: break;
     case EditResult::Gone:

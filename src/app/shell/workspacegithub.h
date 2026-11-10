@@ -60,6 +60,7 @@ namespace brulion::github {
 class GitHubClient;
 class RepoSync;
 struct CommitReport;
+struct FileProblem;
 struct GitHubError;
 struct PullReport;
 struct RepoLink;
@@ -234,16 +235,16 @@ private:
     void resolveLink(const QString &address, const QString &branch, const QString &folder, Resolved done);
     QString linkErrorText(const github::GitHubError &error) const;
     void startPull(bool automatic);
-    /// The changes to send ({} = every one); `none`: everything was left out.
-    QStringList selectedPaths(const QStringList &leaveOut, bool *none) const;
+    /// Start `operation` ("commit" | "propose") with every change but `leaveOut`: the paths to send
+    /// ({} = every one); std::nullopt when it cannot start (said when everything was left out).
+    std::optional<QStringList> beginSend(const QString &operation, const QStringList &leaveOut);
     void onPulled(const github::PullReport &report, bool automatic);
     void onCommitted(const github::CommitReport &report, bool proposal);
     void setError(const QString &code, const QString &text);
     void scheduleChanges();
     QString human(const QDateTime &time) const;
     QString kindText(const QString &kind) const;
-    QVariantList problems(const QList<QString> &paths, const QList<QString> &codes,
-                          const QList<QString> &messages) const;
+    QVariantList problems(const QList<github::FileProblem> &list) const;
     QDateTime now() const;
 
     QPointer<Vault> m_vault;
@@ -263,6 +264,8 @@ private:
     bool m_automatic = true;
     bool m_appActive = true;
     bool m_checkingToken = false;
+    /// The token check whose answer counts (saveToken()); a later save or forgetToken() makes it stale.
+    int m_tokenCheck = 0;
     bool m_checkingLink = false;
     bool m_offline = false;
     QString m_operation; ///< "pull" | "commit" | "propose" while one runs
@@ -277,5 +280,12 @@ private:
     QTimer m_startTimer;
     QTimer m_changesTimer;
 };
+
+/// An owner-only secret file, as AppSettings keeps the Nextcloud app password (the GitHub token;
+/// workspaceintegration's Syncthing API key): `value` in `file` (0600, its folder 0700); "" removes
+/// it. False on I/O errors.
+bool writeSecretFile(const QString &file, const QString &value);
+/// The secret kept in `file`, trimmed ("" when there is none).
+QString readSecretFile(const QString &file);
 
 } // namespace brulion::shell

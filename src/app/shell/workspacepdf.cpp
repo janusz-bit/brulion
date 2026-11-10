@@ -28,6 +28,8 @@
 #include <QScreen>
 #include <QStandardPaths>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
@@ -53,6 +55,15 @@ QByteArray headOf(const QString &file)
     return f.read(platform::ExternalFileHeadBytes);
 }
 
+/// The stat of the file `path` names in the notebook (std::nullopt: none, or a folder).
+std::optional<FileStat> fileStat(const Vault *vault, const QString &path)
+{
+    if (!vault || path.isEmpty())
+        return std::nullopt;
+    const std::optional<FileStat> st = vault->stat(paths::normalize(path));
+    return st && !st->isDir ? st : std::nullopt;
+}
+
 } // namespace
 
 bool Workspace::pdfViewable() const
@@ -72,22 +83,14 @@ bool Workspace::isPdf(const QString &path) const
 
 QString Workspace::fileVersion(const QString &path) const
 {
-    if (!m_vault || path.isEmpty())
-        return {};
-    const std::optional<FileStat> st = m_vault->stat(paths::normalize(path));
-    if (!st || st->isDir)
-        return {};
-    return QString::number(st->mtime) + u'-' + QString::number(st->size);
+    const std::optional<FileStat> st = fileStat(m_vault.get(), path);
+    return st ? QString::number(st->mtime) + u'-' + QString::number(st->size) : QString();
 }
 
 QString Workspace::fileSizeText(const QString &path) const
 {
-    if (!m_vault || path.isEmpty())
-        return {};
-    const std::optional<FileStat> st = m_vault->stat(paths::normalize(path));
-    if (!st || st->isDir)
-        return {};
-    return QLocale().formattedDataSize(st->size, 1, QLocale::DataSizeTraditionalFormat);
+    const std::optional<FileStat> st = fileStat(m_vault.get(), path);
+    return st ? QLocale().formattedDataSize(st->size, 1, QLocale::DataSizeTraditionalFormat) : QString();
 }
 
 pdfview::PdfThumbnails *Workspace::pdfThumbnails() const
@@ -117,8 +120,8 @@ QVariantMap Workspace::pdfThumbnail(const QString &rawPath, int page) const
     if (!platform::pdfAvailable())
         return {{u"state"_s, u"unsupported"_s}};
     const QString path = paths::normalize(rawPath);
-    const std::optional<FileStat> st = m_vault && !path.isEmpty() ? m_vault->stat(path) : std::nullopt;
-    if (!st || st->isDir)
+    const std::optional<FileStat> st = fileStat(m_vault.get(), path);
+    if (!st)
         return {{u"state"_s, u"failed"_s}, {u"error"_s, tr("This PDF cannot be read.")}, {u"locked"_s, false}};
     const QString file = m_vault->absolutePath(path);
     m_pdfAsked.insert(file, path);
@@ -159,8 +162,9 @@ void Workspace::pdfFileChanged(const QString &path, const QString &oldPath)
             continue;
         // Its open readers closed (Windows: Syncthing can replace the file); a new mtime is a new
         // thumbnail key, so the next ask draws it again.
-        pdfview::PdfReaderPool::instance().forget(m_vault->absolutePath(p));
-        if (m_pdfAsked.contains(m_vault->absolutePath(p)))
+        const QString file = m_vault->absolutePath(p);
+        pdfview::PdfReaderPool::instance().forget(file);
+        if (m_pdfAsked.contains(file))
             QMetaObject::invokeMethod(this, [this, p] { Q_EMIT pdfThumbnailChanged(p); }, Qt::QueuedConnection);
     }
 }
@@ -181,18 +185,36 @@ void Workspace::releasePdfReaders(const QString &path)
 
 namespace {
 
-/// The file of the notebook `rawPath` names (normalize() keeps a leading ".." of a path that leaves
-/// it): its path and its absolute file; empty when it leaves the notebook or is no file.
+/// A normalized path that leaves the notebook (normalize() keeps a leading ".."), or an absolute one.
+bool leavesNotebook(const QString &path)
+{
+    return path.startsWith(u"../"_s) || path == u".."_s || QDir::isAbsolutePath(path);
+}
+
+/// The file of the notebook `rawPath` names: its path and its absolute file; empty when it leaves
+/// the notebook or is no file.
 std::pair<QString, QString> insideFile(const Vault *vault, const QString &rawPath)
 {
     const QString path = paths::normalize(rawPath);
-    const bool inside = !path.isEmpty() && !path.startsWith(u"../"_s) && path != u".."_s && !QDir::isAbsolutePath(path);
-    if (!vault || !inside)
+    if (!vault || path.isEmpty() || leavesNotebook(path))
         return {};
     const QString file = vault->absolutePath(path);
     if (!QFileInfo(file).isFile())
         return {};
     return {path, file};
+}
+
+/// The drawing editor's drawing (`prepared`: svg, name, page) of a page of `pdfPath`, saved as a new
+/// attachment: its path, "" when it could not be (saveAttachment() said why).
+QString saveDrawingOfPage(Workspace &ws, const QString &pdfPath, const QVariantMap &prepared, const QByteArray &svg)
+{
+    QString name = prepared.value(u"name"_s).toString().trimmed();
+    if (name.isEmpty())
+        name = QFileInfo(paths::basename(pdfPath)).completeBaseName().trimmed();
+    if (name.isEmpty())
+        name = Workspace::tr("Drawing");
+    const int page = std::max(0, prepared.value(u"page"_s).toInt());
+    return ws.saveAttachment(EditorHost::drawingFileNameOn(name, page) + u".svg"_s, svg);
 }
 
 } // namespace
@@ -277,13 +299,7 @@ QVariantMap Workspace::addDrawingOnPdfPage(const QString &rawPdfPath, const QVar
         Q_EMIT errorOccurred(tr("The drawing could not be made."));
         return {};
     }
-    QString name = prepared.value(u"name"_s).toString().trimmed();
-    if (name.isEmpty())
-        name = QFileInfo(paths::basename(pdfPath)).completeBaseName().trimmed();
-    if (name.isEmpty())
-        name = tr("Drawing");
-    const int page = std::max(0, prepared.value(u"page"_s).toInt());
-    const QString drawing = saveAttachment(EditorHost::drawingFileNameOn(name, page) + u".svg"_s, svg);
+    const QString drawing = saveDrawingOfPage(*this, pdfPath, prepared, svg);
     if (drawing.isEmpty())
         return {}; // (saveAttachment() said why)
     const QString fromNote = paths::normalize(rawFromNote);
@@ -337,7 +353,7 @@ QString Workspace::noteOfDrawing(const QString &rawDrawingPath, const QString &r
         bool ok = false;
         const QString content = m_vault->readText(from, &ok);
         if (ok && content.contains(u"![")) {
-            for (const Link &link : markdown::extractInline(content).links) {
+            for (const auto scan = markdown::extractInline(content); const Link &link : scan.links) {
                 if (attachmentPathOf(link.target, from) == drawing)
                     return from;
             }
@@ -359,24 +375,15 @@ QVariantMap Workspace::addDrawingBeside(const QString &rawDrawingPath, const QVa
         Q_EMIT errorOccurred(tr("The drawing could not be made."));
         return {};
     }
-    QString name = prepared.value(u"name"_s).toString().trimmed();
-    if (name.isEmpty())
-        name = QFileInfo(paths::basename(pdfPath)).completeBaseName().trimmed();
-    if (name.isEmpty())
-        name = tr("Drawing");
-    const int page = std::max(0, prepared.value(u"page"_s).toInt());
-    const QString drawing = saveAttachment(EditorHost::drawingFileNameOn(name, page) + u".svg"_s, svg);
+    const QString drawing = saveDrawingOfPage(*this, pdfPath, prepared, svg);
     if (drawing.isEmpty())
         return {}; // (saveAttachment() said why)
     const QString note = paths::normalize(rawNote);
     // Near the line that links to the current drawing (the index's), when the note is indexed.
-    int line = -1;
-    for (const QVariant &link : backlinks(current)) {
-        if (link.toMap().value(u"path"_s).toString() == note) {
-            line = link.toMap().value(u"line"_s).toInt();
-            break;
-        }
-    }
+    const QVariantList links = backlinks(current);
+    const auto linking = std::ranges::find_if(
+            links, [&note](const QVariant &link) { return link.toMap().value(u"path"_s).toString() == note; });
+    const int line = linking == links.cend() ? -1 : linking->toMap().value(u"line"_s).toInt();
     const auto embedsIt = [this, &current, &note](QStringView t) {
         return attachmentPathOf(t.toString(), note) == current;
     };
@@ -396,16 +403,20 @@ QVariantList Workspace::drawingsOnPdfPage(const QString &rawPdfPath, int page, c
     const QString content = m_vault->readText(note, &ok);
     if (!ok || !content.contains(u"!["))
         return out;
+    // At most this many drawings are read for one page (a note may embed any number).
+    constexpr qsizetype MaxRead = 50;
     QStringList seen;
-    int read = 0;
-    for (const Link &link : markdown::extractInline(content).links) {
+    for (const auto scan = markdown::extractInline(content); const Link &link : scan.links) {
+        if (seen.size() >= MaxRead)
+            break;
         const bool embed = link.kind == LinkKind::Embed
                            || (link.kind == LinkKind::Markdown && link.from >= 0 && link.from < content.size()
                                && content.at(link.from) == u'!');
         if (!embed || !link.target.endsWith(u".svg"_s, Qt::CaseInsensitive))
             continue;
+        // (The note's link may name a file outside the notebook: never read.)
         const QString path = attachmentPathOf(link.target, note);
-        if (path.isEmpty() || seen.contains(path) || ++read > 50)
+        if (path.isEmpty() || leavesNotebook(path) || seen.contains(path))
             continue;
         seen.append(path);
         const std::optional<drawing::Drawing> d = drawing::readDrawing(readAttachment(path));

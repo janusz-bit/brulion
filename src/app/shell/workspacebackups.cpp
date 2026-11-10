@@ -65,6 +65,13 @@ QDateTime fromIso(const QString &text)
     return QDateTime::fromString(text, u"yyyy-MM-ddTHH:mm:ss"_s);
 }
 
+/// "today 14:30" for `time`, to the minute, as seen on `today` in the UI language `language`.
+QString whenText(const QDateTime &time, const QString &language, QDate today)
+{
+    const auto locale = language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+    return dates::formatHuman(DateSpec{time.date(), QTime(time.time().hour(), time.time().minute())}, locale, today);
+}
+
 } // namespace
 
 WorkspaceBackups::WorkspaceBackups(std::function<QDateTime()> clock, QObject *parent)
@@ -196,28 +203,27 @@ bool WorkspaceBackups::canWrite()
     if (backup::isInsideFolder(folder(), m_vault->rootPath())) {
         qCWarning(logging::lcIo).noquote() << u"Backup folder %1 lies inside the notebook"_s.arg(folder());
         setFailure(Failure::InsideNotebook, {});
-        if (!m_toldFailures.contains(int(Failure::InsideNotebook)) || !m_runAutomatic) {
-            m_toldFailures.insert(int(Failure::InsideNotebook));
-            Q_EMIT messageRequested(failureMessage(Failure::InsideNotebook), u"error"_s);
-        }
+        tellFailure(Failure::InsideNotebook, u"error"_s, !m_runAutomatic);
         return false;
     }
     return true;
 }
 
-bool WorkspaceBackups::isForeign(const QString &name, bool *listed) const
+QVariantMap WorkspaceBackups::listedBackup(const QString &name) const
 {
-    for (const QVariant &backup : m_backups) {
-        const QVariantMap map = backup.toMap();
-        if (map.value(u"name"_s).toString() == name) {
-            if (listed)
-                *listed = true;
-            return map.value(u"foreign"_s).toBool();
-        }
+    for (const QVariant &entry : m_backups) {
+        if (QVariantMap map = entry.toMap(); map.value(u"name"_s).toString() == name)
+            return map;
     }
-    if (listed)
-        *listed = false;
-    return true;
+    return {};
+}
+
+bool WorkspaceBackups::mayUse(const QString &name, bool allowForeign) const
+{
+    if (!available() || running() || !backup::backupFileTime(name, m_attachment.notebookName))
+        return false;
+    const QVariantMap listed = listedBackup(name);
+    return !listed.isEmpty() && (allowForeign || !listed.value(u"foreign"_s).toBool());
 }
 
 bool WorkspaceBackups::interrupted() const
@@ -284,8 +290,7 @@ void WorkspaceBackups::check()
     settings.keep = keep();
     const QJsonObject last = m_vault->store()->get(kLast).toObject();
     const QDateTime lastTime = fromIso(last.value(u"time"_s).toString());
-    const QDateTime now = m_clock();
-    if (!backup::isDue(settings.interval, lastTime, now)) {
+    if (!backup::isDue(settings.interval, lastTime, m_clock())) {
         Q_EMIT idle();
         return;
     }
@@ -305,26 +310,24 @@ void WorkspaceBackups::check()
                          return;
                      }
                      const backup::Sources sources = backup::collectSources(*m_vault);
-                     backup::ScheduleState state;
-                     state.lastBackup = lastTime;
-                     state.lastFingerprint = last.value(u"fingerprint"_s).toString();
-                     state.lastFileExists = *exists;
+                     const backup::ScheduleState state{.lastBackup = lastTime,
+                                                       .lastFingerprint = last.value(u"fingerprint"_s).toString(),
+                                                       .lastFileExists = *exists};
                      const QDateTime checkedAt = m_clock();
                      const QString fingerprint = backup::fingerprint(sources);
-                     switch (backup::decide(settings, state, fingerprint, sources.notebookFileCount(), checkedAt)) {
-                     case backup::Decision::Run:
-                         m_runAutomatic = true;
-                         if (canWrite())
-                             startWrite(Op::Backup);
-                         else
-                             Q_EMIT idle();
-                         break;
-                     case backup::Decision::Unchanged:
+                     const backup::Decision decision =
+                             backup::decide(settings, state, fingerprint, sources.notebookFileCount(), checkedAt);
+                     if (decision == backup::Decision::Unchanged)
                          qCDebug(logging::lcIo) << "Backup: nothing changed since the last one";
+                     if (decision != backup::Decision::Run) {
                          Q_EMIT idle();
-                         break;
-                     default: Q_EMIT idle(); break;
+                         return;
                      }
+                     m_runAutomatic = true;
+                     if (canWrite())
+                         startWrite(Op::Backup, sources);
+                     else
+                         Q_EMIT idle();
                  });
 }
 
@@ -336,58 +339,60 @@ bool WorkspaceBackups::createNow()
         Q_EMIT messageRequested(tr("The notebook's folder is not available, so no backup was made."), u"error"_s);
         return false;
     }
-    if (backup::collectSources(*m_vault).notebookFileCount() == 0) {
+    const backup::Sources sources = backup::collectSources(*m_vault);
+    if (sources.notebookFileCount() == 0) {
         Q_EMIT messageRequested(tr("This notebook is empty: there is nothing to back up."), u"info"_s);
         return false;
     }
     m_runAutomatic = false;
     if (!canWrite())
         return false;
-    startWrite(Op::Backup);
+    startWrite(Op::Backup, sources);
     return true;
 }
 
 void WorkspaceBackups::cancel()
 {
     switch (m_op) {
-    case Op::Backup:
-    case Op::Safety: m_writer->cancel(); break;
-    case Op::Check: m_checker->cancel(); break;
-    case Op::WaitForSync:
-        ++m_holdGeneration;
-        setOp(Op::None);
-        abortRestore(tr("The restore was cancelled. Nothing was changed."));
+    case Op::Backup: m_writer->cancel(); return;
+    case Op::Safety:
+        if (!m_waitingForStored) {
+            m_writer->cancel();
+            return;
+        }
+        // Written, but not in the browser's storage yet: the restore has not begun.
+        m_waitingForStored = false;
+        m_storedTimeout.stop();
         break;
-    case Op::Restore: m_applier->cancel(); break;
-    case Op::None: break;
+    case Op::Check: m_checker->cancel(); return;
+    case Op::WaitForSync: ++m_holdGeneration; break;
+    case Op::Restore: m_applier->cancel(); return;
+    case Op::None: return;
     }
+    setOp(Op::None);
+    abortRestore(tr("The restore was cancelled. Nothing was changed."));
 }
 
-void WorkspaceBackups::startWrite(Op op)
+void WorkspaceBackups::startWrite(Op op, const backup::Sources &sources)
 {
     const QString folderPath = folder();
-    const QDateTime now = m_clock();
     const QString name = m_attachment.notebookName;
-    const backup::Sources sources = backup::collectSources(*m_vault);
-    m_runTime = now;
+    m_runTime = m_clock();
     m_runFingerprint = backup::fingerprint(sources);
-    backup::WriteOptions options;
-    options.targetPath = backup::freeBackupPath(folderPath, name, now);
-    options.notebookId = m_vault->id();
-    if (m_readHook)
-        options.onRead = [hook = m_readHook](const VaultPath &path, qint64 offset) { hook(path, offset); };
-    options.createFolder = usingDefaultFolder();
-    options.workFolder = m_attachment.workFolder;
-    options.maxBytes = m_attachment.maxBytes;
+    const backup::WriteOptions options{.targetPath = backup::freeBackupPath(folderPath, name, m_runTime),
+                                       .notebookId = m_vault->id(),
+                                       .createFolder = usingDefaultFolder(),
+                                       .workFolder = m_attachment.workFolder,
+                                       .maxBytes = m_attachment.maxBytes,
+                                       .onRead = m_readHook};
     setOp(op);
     m_writer->start(sources, options);
-    inBackground([folderPath, name, now] { backup::removeStalePartials(folderPath, name, now); }, {});
+    inBackground([folderPath, name, now = m_runTime] { backup::removeStalePartials(folderPath, name, now); }, {});
 }
 
-void WorkspaceBackups::onWritten(const backup::WriteResult &written)
+void WorkspaceBackups::onWritten(backup::WriteResult result)
 {
     const bool safety = m_op == Op::Safety;
-    backup::WriteResult result = written;
     if (result.ok() && !result.complete() && !notebookStorageOk()) {
         // The drive went under the run: what it wrote is a fragment, not a copy of the notebook.
         QFile::remove(result.path);
@@ -395,40 +400,36 @@ void WorkspaceBackups::onWritten(const backup::WriteResult &written)
         result.detail = u"the notebook's storage went during the run"_s;
         result.path.clear();
     }
-    if (!result.ok()) {
-        const auto failureOf = [&] {
-            switch (result.error) {
-            case backup::WriteError::FolderMissing: return Failure::FolderMissing;
-            case backup::WriteError::FolderUnwritable: return Failure::FolderUnwritable;
-            case backup::WriteError::TooLarge: return Failure::TooLarge;
-            case backup::WriteError::NothingArchived:
-                return notebookStorageOk() ? Failure::NothingArchived : Failure::NotebookUnavailable;
-            default: return Failure::WriteFailed;
-            }
-        };
-        if (result.error == backup::WriteError::Cancelled) {
-            qCInfo(logging::lcIo) << "Backup: cancelled";
-            setOp(Op::None);
-            if (safety)
-                abortRestore(tr("The restore was cancelled. Nothing was changed."));
-            return;
-        }
-        qCWarning(logging::lcIo).noquote() << u"Backup failed in %1: %2"_s.arg(folder(), result.detail);
-        const Failure failure = failureOf();
-        setOp(Op::None);
-        setFailure(failure, result.detail);
-        if (safety) {
-            abortRestore(tr("The safety backup could not be made, so nothing was restored. %1")
-                                 .arg(failureMessage(failure)));
-            return;
-        }
-        if (!m_toldFailures.contains(int(failure)) || !m_runAutomatic) {
-            m_toldFailures.insert(int(failure));
-            Q_EMIT messageRequested(failureMessage(failure), u"warning"_s);
-        }
+    if (result.ok()) {
+        afterWrite(result);
         return;
     }
-    afterWrite(result);
+    if (result.error == backup::WriteError::Cancelled) {
+        qCInfo(logging::lcIo) << "Backup: cancelled";
+        setOp(Op::None);
+        if (safety)
+            abortRestore(tr("The restore was cancelled. Nothing was changed."));
+        return;
+    }
+    qCWarning(logging::lcIo).noquote() << u"Backup failed in %1: %2"_s.arg(folder(), result.detail);
+    const Failure failure = [&] {
+        switch (result.error) {
+        case backup::WriteError::FolderMissing: return Failure::FolderMissing;
+        case backup::WriteError::FolderUnwritable: return Failure::FolderUnwritable;
+        case backup::WriteError::TooLarge: return Failure::TooLarge;
+        case backup::WriteError::NothingArchived:
+            return notebookStorageOk() ? Failure::NothingArchived : Failure::NotebookUnavailable;
+        default: return Failure::WriteFailed;
+        }
+    }();
+    setOp(Op::None);
+    setFailure(failure, result.detail);
+    if (safety) {
+        abortRestore(
+                tr("The safety backup could not be made, so nothing was restored. %1").arg(failureMessage(failure)));
+        return;
+    }
+    tellFailure(failure, u"warning"_s, !m_runAutomatic);
 }
 
 void WorkspaceBackups::afterWrite(const backup::WriteResult &result)
@@ -448,15 +449,11 @@ void WorkspaceBackups::afterWrite(const backup::WriteResult &result)
     clearFailure(leftOut);
     if (safety)
         m_safetyName = name;
-    qCInfo(logging::lcIo).noquote() << u"Backup written: %1, %2 files, %3%4%5"_s.arg(name)
-                                               .arg(result.files)
-                                               .arg(logging::formatBytes(result.bytes),
-                                                    result.skipped.isEmpty()
-                                                            ? QString()
-                                                            : u", left out: %1"_s.arg(result.skipped.join(u", "_s)),
-                                                    result.vanished.isEmpty() ? QString()
-                                                                              : u", gone meanwhile: %1"_s.arg(
-                                                                                        result.vanished.join(u", "_s)));
+    // One arg() call: a "%2" in the name is never read as a placeholder.
+    qCInfo(logging::lcIo).noquote() << u"Backup written: %1, %2 files, %3%4%5"_s.arg(
+            name, QString::number(result.files), logging::formatBytes(result.bytes),
+            result.skipped.isEmpty() ? QString() : u", left out: "_s + result.skipped.join(u", "_s),
+            result.vanished.isEmpty() ? QString() : u", gone meanwhile: "_s + result.vanished.join(u", "_s));
     Q_EMIT backupWritten(name);
     if (leftOut > 0 && !safety) {
         Q_EMIT messageRequested(tr("The backup was made without %n file(s) that could not be read or disappeared while "
@@ -474,9 +471,8 @@ void WorkspaceBackups::afterWrite(const backup::WriteResult &result)
         for (const VaultPath &path : std::as_const(m_plan.toTrash))
             touched.insert(path);
         for (const QString &path : result.skipped) {
-            const bool below = std::any_of(m_plan.removeFirst.cbegin(), m_plan.removeFirst.cend(),
-                                           [&](const VaultPath &b) { return path == b || path.startsWith(b + u'/'); });
-            if (touched.contains(path) || below) {
+            const auto within = [&](const VaultPath &b) { return path == b || path.startsWith(b + u'/'); };
+            if (touched.contains(path) || std::ranges::any_of(std::as_const(m_plan.removeFirst), within)) {
                 qCWarning(logging::lcIo).noquote()
                         << u"Backup: restore aborted: %1 is not in the safety backup"_s.arg(path);
                 setOp(Op::None);
@@ -495,20 +491,17 @@ void WorkspaceBackups::afterWrite(const backup::WriteResult &result)
         if (safety) {
             m_waitingForStored = true;
             m_storedTimeout.start();
-            refresh();
-            return;
+        } else {
+            setOp(Op::None);
         }
-        setOp(Op::None);
         refresh();
         return;
     }
-    if (safety) {
-        pruneThenRefresh(complete);
-        startApply();
-        return;
-    }
-    setOp(Op::None);
+    if (!safety)
+        setOp(Op::None);
     pruneThenRefresh(complete);
+    if (safety)
+        startApply();
 }
 
 void WorkspaceBackups::storageFlushed()
@@ -540,9 +533,8 @@ void WorkspaceBackups::storageRefused(const QString &why)
         setOp(Op::None);
         abortRestore(tr("The safety backup could not be made, so nothing was restored. %1")
                              .arg(failureMessage(Failure::StorageRefused)));
-    } else if (!m_toldFailures.contains(int(Failure::StorageRefused))) {
-        m_toldFailures.insert(int(Failure::StorageRefused));
-        Q_EMIT messageRequested(failureMessage(Failure::StorageRefused), u"warning"_s);
+    } else {
+        tellFailure(Failure::StorageRefused, u"warning"_s);
     }
     refresh();
 }
@@ -596,13 +588,10 @@ void WorkspaceBackups::refresh()
                          return;
                      QVariantList out;
                      const QDate today = m_clock().date();
-                     const auto locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
                      for (const backup::BackupFile &file : std::as_const(*files)) {
-                         const DateSpec spec{file.time.date(),
-                                             QTime(file.time.time().hour(), file.time.time().minute())};
                          out.append(QVariantMap{{u"name"_s, file.fileName},
                                                 {u"time"_s, iso(file.time)},
-                                                {u"when"_s, dates::formatHuman(spec, locale, today)},
+                                                {u"when"_s, whenText(file.time, m_language, today)},
                                                 {u"size"_s, file.size},
                                                 {u"sizeText"_s, sizeText(file.size)},
                                                 {u"foreign"_s, file.notebookId != notebookId},
@@ -616,10 +605,7 @@ void WorkspaceBackups::refresh()
 
 bool WorkspaceBackups::remove(const QString &name, bool allowForeign)
 {
-    if (!available() || running() || !backup::backupFileTime(name, m_attachment.notebookName))
-        return false;
-    bool listed = false;
-    if (const bool foreign = isForeign(name, &listed); !listed || (foreign && !allowForeign))
+    if (!mayUse(name, allowForeign))
         return false;
     const QString path = QDir(folder()).filePath(QFileInfo(name).fileName());
     if (!QFile::remove(path)) {
@@ -633,10 +619,7 @@ bool WorkspaceBackups::remove(const QString &name, bool allowForeign)
 
 bool WorkspaceBackups::prepareRestore(const QString &name, bool allowForeign)
 {
-    if (!available() || running() || !backup::backupFileTime(name, m_attachment.notebookName))
-        return false;
-    bool listed = false;
-    if (const bool foreign = isForeign(name, &listed); !listed || (foreign && !allowForeign))
+    if (!mayUse(name, allowForeign))
         return false;
     if (!m_storageUnavailable.isEmpty()) {
         Q_EMIT messageRequested(statusText(), u"error"_s);
@@ -683,10 +666,8 @@ void WorkspaceBackups::onChecked(const backup::RestoreCheck &check)
     m_plan = check.plan;
     m_planReady = true;
     const QDateTime time = backup::backupFileTime(m_restoreName, m_attachment.notebookName).value_or(QDateTime());
-    const auto locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
-    const DateSpec spec{time.date(), QTime(time.time().hour(), time.time().minute())};
     Q_EMIT restorePlanReady(QVariantMap{{u"name"_s, m_restoreName},
-                                        {u"when"_s, dates::formatHuman(spec, locale, m_clock().date())},
+                                        {u"when"_s, whenText(time, m_language, m_clock().date())},
                                         {u"changed"_s, int(m_plan.toChange.size())},
                                         {u"recreated"_s, int(m_plan.toRecreate.size())},
                                         {u"trashed"_s, int(m_plan.toTrash.size())},
@@ -694,7 +675,7 @@ void WorkspaceBackups::onChecked(const backup::RestoreCheck &check)
                                         {u"tooLarge"_s, int(m_plan.tooLarge.size())},
                                         {u"hasChanges"_s, m_plan.hasChanges()},
                                         {u"incomplete"_s, m_plan.incomplete},
-                                        {u"foreign"_s, isForeign(m_restoreName)}});
+                                        {u"foreign"_s, listedBackup(m_restoreName).value(u"foreign"_s, true)}});
 }
 
 void WorkspaceBackups::dismissRestore()
@@ -738,10 +719,10 @@ void WorkspaceBackups::holdSyncThenSafetyBackup()
         if (!available())
             return;
         m_safetyName.clear();
-        if (backup::collectSources(*m_vault).notebookFileCount() == 0)
+        if (const backup::Sources sources = backup::collectSources(*m_vault); sources.notebookFileCount() == 0)
             startApply(); // an empty notebook has nothing to save first
         else
-            startWrite(Op::Safety);
+            startWrite(Op::Safety, sources);
     };
     if (!m_holdSync) {
         proceed();
@@ -763,11 +744,9 @@ void WorkspaceBackups::startApply()
             kRestoring,
             QJsonObject{{u"backup"_s, m_restoreName}, {u"safety"_s, m_safetyName}, {u"time"_s, iso(m_clock())}});
     m_vault->store()->flush();
-    qCInfo(logging::lcIo).noquote() << u"Backup: restoring %1 (%2 changed, %3 back, %4 to the trash)"_s
-                                               .arg(m_restoreName)
-                                               .arg(m_plan.toChange.size())
-                                               .arg(m_plan.toRecreate.size())
-                                               .arg(m_plan.toTrash.size());
+    qCInfo(logging::lcIo).noquote() << u"Backup: restoring %1 (%2 changed, %3 back, %4 to the trash)"_s.arg(
+            m_restoreName, QString::number(m_plan.toChange.size()), QString::number(m_plan.toRecreate.size()),
+            QString::number(m_plan.toTrash.size()));
     m_applier->start(m_plan, QDir(folder()).filePath(m_restoreName));
 }
 
@@ -781,8 +760,9 @@ void WorkspaceBackups::onApplied(const backup::RestoreResult &result)
                                                .arg(result.failed.size())
                                                .arg(result.detail);
     const bool hadSafety = !m_safetyName.isEmpty();
+    const QString asItWas = hadSafety ? u" "_s + tr("The safety backup holds the notebook as it was.") : QString();
     QString message;
-    QString kind = u"success"_s;
+    QString kind = u"error"_s;
     if (result.cancelled) {
         message = hadSafety ? tr("The restore was stopped: the notebook is only partly restored. The safety backup "
                                  "holds it as it was.")
@@ -795,16 +775,14 @@ void WorkspaceBackups::onApplied(const backup::RestoreResult &result)
                                 "", int(result.failed.size()))
                            : tr("The restore did not finish: %n file(s) could not be written or moved to the trash.",
                                 "", int(result.failed.size())))
-                  + (hadSafety ? u" "_s + tr("The safety backup holds the notebook as it was.") : QString());
-        kind = u"error"_s;
+                  + asItWas;
     } else if (!result.ok()) {
-        message = tr("The restore did not finish: the backup or the notebook's folder became unavailable.")
-                  + (hadSafety ? u" "_s + tr("The safety backup holds the notebook as it was.") : QString());
-        kind = u"error"_s;
+        message = tr("The restore did not finish: the backup or the notebook's folder became unavailable.") + asItWas;
     } else {
         message = tr("Restored. Replaced notes are in the version history, and files the backup does not hold are in "
                      "the trash.")
                   + (hadSafety ? u" "_s + tr("The safety backup holds everything as it was.") : QString());
+        kind = u"success"_s;
     }
     m_vault->store()->remove(kRestoring);
     m_vault->store()->flush();
@@ -859,6 +837,14 @@ void WorkspaceBackups::clearFailure(int skipped)
         m_vault->store()->remove(kStatus);
     m_toldFailures.clear();
     Q_EMIT stateChanged();
+}
+
+void WorkspaceBackups::tellFailure(Failure failure, const QString &kind, bool byHand)
+{
+    if (!byHand && m_toldFailures.contains(int(failure)))
+        return;
+    m_toldFailures.insert(int(failure));
+    Q_EMIT messageRequested(failureMessage(failure), kind);
 }
 
 QString WorkspaceBackups::lastFile() const
@@ -918,14 +904,14 @@ int WorkspaceBackups::keep() const
     const int fallback = m_browser ? backup::BrowserDefaultKeep : backup::DefaultKeep;
     if (!m_vault)
         return fallback;
-    return qBound(backup::MinKeep, m_vault->store()->get(kKeep, fallback).toInt(), backup::MaxKeep);
+    return std::clamp(m_vault->store()->get(kKeep, fallback).toInt(), backup::MinKeep, backup::MaxKeep);
 }
 
 void WorkspaceBackups::setKeep(int value)
 {
     if (!m_vault || value == keep())
         return;
-    m_vault->store()->set(kKeep, qBound(backup::MinKeep, value, backup::MaxKeep));
+    m_vault->store()->set(kKeep, std::clamp(value, backup::MinKeep, backup::MaxKeep));
     Q_EMIT stateChanged();
 }
 
@@ -1070,9 +1056,7 @@ QString WorkspaceBackups::lastBackupText() const
     const QDateTime time = fromIso(last.value(u"time"_s).toString());
     if (!time.isValid())
         return {};
-    const auto locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
-    const DateSpec spec{time.date(), QTime(time.time().hour(), time.time().minute())};
-    return dates::formatHuman(spec, locale, m_clock().date()) + u" · "_s
+    return whenText(time, m_language, m_clock().date()) + u" · "_s
            + sizeText(qint64(last.value(u"bytes"_s).toDouble()));
 }
 
@@ -1174,9 +1158,9 @@ bool WorkspaceBackups::exportBackup(const QString &name)
 
 void WorkspaceBackups::openFolder()
 {
-    if (canOpenFolder() && !folder().isEmpty()) {
-        QDir().mkpath(folder());
-        QDesktopServices::openUrl(QUrl::fromLocalFile(folder()));
+    if (const QString path = folder(); canOpenFolder() && !path.isEmpty()) {
+        QDir().mkpath(path);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     }
 }
 

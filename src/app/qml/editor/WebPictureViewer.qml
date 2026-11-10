@@ -104,17 +104,14 @@ T.Popup {
         Rectangle {
             id: bar
 
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
+            width: parent.width
             implicitHeight: barRow.implicitHeight + Theme.space3 * 2 + viewer.safeTop
             color: Theme.bg
 
             Rectangle {
                 // A hairline under the bar.
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
+                y: parent.height - 1
+                width: parent.width
                 height: 1
                 color: Theme.borderSubtle
             }
@@ -200,10 +197,8 @@ T.Popup {
         Flickable {
             id: flick
 
-            anchors.top: bar.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.fill: parent
+            anchors.topMargin: bar.height
             anchors.bottomMargin: viewer.safeBottom
             clip: true
             contentWidth: viewer.actualSize ? Math.max(width, image.width) : width

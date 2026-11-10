@@ -5,6 +5,7 @@
 #include "index/vaultindex.h"
 #include "io/clipboardhtml.h"
 #include "io/htmlmarkdown.h"
+#include "io/htmlutil_p.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
@@ -33,7 +34,10 @@ QString Workspace::renderHtml(const QString &markdown, const QString &fromPath) 
 
 QString Workspace::htmlToMarkdown(const QString &html) const
 {
-    return io::htmlToMarkdown(html).markdown;
+    // io's formula marks are the importers' own: pasted ones would stay, with their dollars unescaped.
+    QString pasted = html;
+    pasted.remove(QChar(io::detail::FormulaOpen)).remove(QChar(io::detail::FormulaClose));
+    return io::htmlToMarkdown(pasted).markdown;
 }
 
 } // namespace brulion::shell

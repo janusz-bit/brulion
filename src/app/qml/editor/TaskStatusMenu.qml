@@ -52,12 +52,8 @@ BMenu {
         return h
     }
 
-    /// A checkable item toggles its own `checked` when clicked; give it its state back first (its
-    /// binding reads checkRevision).
-    function choose(item: BMenuItem, value: string): void {
-        ++menu.checkRevision
-        menu.statusChosen(value)
-    }
+    /// A checkable item toggles its own `checked` when clicked; the status items' bindings read
+    /// this: a click bumps it to give them their state back (an assignment would end the binding).
     property int checkRevision: 0
     /// Opened from the keyboard: the current status highlighted, Up / Down move from there.
     function highlightStatus(): void {
@@ -72,12 +68,14 @@ BMenu {
 
     /// A status: checked when it is the task's.
     component StatusItem: BMenuItem {
-        id: statusItem
         required property string value
         objectName: "taskStatus_" + (value === "" ? "none" : value)
         checkable: true
         checked: menu.checkRevision >= 0 && menu.status === value
-        onTriggered: menu.choose(statusItem, value)
+        onTriggered: {
+            ++menu.checkRevision
+            menu.statusChosen(value)
+        }
     }
 
     BMenuItem {

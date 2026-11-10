@@ -212,8 +212,8 @@ private:
     };
 
     void setOp(Op op);
-    void startWrite(Op op);
-    void onWritten(const backup::WriteResult &result);
+    void startWrite(Op op, const backup::Sources &sources);
+    void onWritten(backup::WriteResult result);
     void afterWrite(const backup::WriteResult &result);
     void onChecked(const backup::RestoreCheck &check);
     void startApply();
@@ -221,11 +221,16 @@ private:
     void releaseSync();
     /// False (with a message and a status) when nothing may be written now.
     bool canWrite();
-    bool isForeign(const QString &name, bool *listed = nullptr) const;
+    /// The listed backup of that name ({} when the list has none).
+    QVariantMap listedBackup(const QString &name) const;
+    /// Nothing runs, and `name` is a listed backup of this notebook (or, with `allowForeign`, of any).
+    bool mayUse(const QString &name, bool allowForeign) const;
     void onApplied(const backup::RestoreResult &result);
     void abortRestore(const QString &message);
     void setFailure(Failure failure, const QString &detail);
     void clearFailure(int skipped);
+    /// Tell `failure` in a toast: once a session, but every time for a run started by hand (`byHand`).
+    void tellFailure(Failure failure, const QString &kind, bool byHand = false);
     /// Delete the oldest beyond the limit, then read the folder. `pruneComplete` false: the new
     /// backup left files out, so no complete one goes.
     void pruneThenRefresh(bool pruneComplete);

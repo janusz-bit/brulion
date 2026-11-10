@@ -40,9 +40,7 @@
 #include <QLoggingCategory>
 #include <QMimeDatabase>
 #include <QMimeType>
-#include <QRegularExpression>
 #include <QSet>
-#include <QStringDecoder>
 
 #include <algorithm>
 #include <tuple>
@@ -56,18 +54,21 @@ Q_LOGGING_CATEGORY(lcWorkspace, "brulion.workspace")
 
 namespace {
 
-/// The bytes are UTF-8 text (a BOM allowed): a note Brulion may rewrite without losing bytes.
-bool isUtf8Text(const QByteArray &bytes)
+/// `text`, read from `path`, comes from a file that is not UTF-8 (windows-1250 from an old editor,
+/// synced in): written back, each of its other bytes would be U+FFFD, so it is left alone. The
+/// bytes are read again only when the text shows such a character.
+bool isNotUtf8(Vault &vault, const QString &path, const QString &text)
 {
-    const QByteArrayView body = bytes.startsWith("\xEF\xBB\xBF") ? QByteArrayView(bytes).sliced(3) : QByteArrayView(bytes);
-    QStringDecoder utf8(QStringDecoder::Utf8, QStringDecoder::Flag::Stateless);
-    const QString decoded = utf8.decode(body); // decoding sets hasError()
-    Q_UNUSED(decoded);
-    return !utf8.hasError();
+    return text.contains(QChar::ReplacementCharacter) && !vault.readBinary(path).isValidUtf8();
 }
 
-constexpr auto kFavorites = "ui/favorites";
-constexpr auto kRecentPages = "ui/recentPages";
+constexpr auto kFavorites = "ui/favorites"_L1;
+constexpr auto kRecentPages = "ui/recentPages"_L1;
+/// The sidebar's page lists in the LocalStore, each with the signal that tells of its changes.
+constexpr std::pair<QLatin1StringView, void (Workspace::*)()> kPageLists[] = {
+        {kFavorites, &Workspace::favoritesChanged},
+        {kRecentPages, &Workspace::recentPagesChanged},
+};
 
 /// LocalStore key of a page's folded blocks.
 QString foldStateKey(const QString &path)
@@ -75,8 +76,8 @@ QString foldStateKey(const QString &path)
     return u"ui/folds/"_s + path;
 }
 
-/// Files indexed per event-loop turn while building the index in the background.
-constexpr qint64 kIndexBudgetMs = 12;
+/// Milliseconds of indexing per event-loop turn while the index is built in the background.
+constexpr int kIndexBudgetMs = 12;
 
 /// Interval of the repeating timer that runs the index chunks. In the browser it must not be 0:
 /// Qt 6.11's single-threaded WebAssembly event dispatcher re-arms its browser timeout only after
@@ -101,6 +102,40 @@ QString lineOf(const QString &text)
     if (out.size() > 300)
         out = out.left(299) + u'…';
     return out;
+}
+
+/// The entries (pageEntry()) of the pages of `list` the vault still has.
+QVariantList existingPageEntries(const Vault &vault, const QStringList &list)
+{
+    QVariantList out;
+    for (const QString &path : list) {
+        if (vault.exists(path))
+            out.append(pageEntry(path));
+    }
+    return out;
+}
+
+/// Block `index` of `note`; nullptr when there is no such note or block.
+const Block *blockAt(const ParsedNote *note, qsizetype index)
+{
+    return note && index >= 0 && index < note->blocks.size() ? &note->blocks.at(index) : nullptr;
+}
+
+/// A file's version in the URLs that show it (Qt's pixmap cache keys by the URL).
+QString statVersion(const FileStat &st)
+{
+    return QString::number(st.mtime) + u'-' + QString::number(st.size);
+}
+
+QString percentEncoded(const QString &text)
+{
+    return QString::fromLatin1(QUrl::toPercentEncoding(text));
+}
+
+/// The name of a picked or pasted file, without its folders (also Windows' ones).
+QString pickedFileName(const QString &fileName)
+{
+    return paths::basename(QString(fileName).replace(u'\\', u'/')).trimmed();
 }
 
 } // namespace
@@ -160,12 +195,8 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
 {
     close();
     auto vault = std::make_unique<Vault>(rootPath, deviceStatePath);
-    QString err;
-    if (!vault->open(&err)) {
-        if (error)
-            *error = err;
+    if (!vault->open(error))
         return false;
-    }
     m_vault = std::move(vault);
     if (m_clock)
         m_vault->setClock(m_clock);
@@ -193,12 +224,6 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
 #endif
     m_wasInactive = false;
 
-    notebook::WorkerPool pool;
-#ifdef BRULION_INDEX_THREADS
-    if (!m_indexPool && indexWorkerCount() > 0)
-        m_indexPool = new QThreadPool(this);
-    pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
-#endif
     notebook::IndexLoader::Options loaderOptions;
     loaderOptions.firstFolder = m_vault->config().journalsFolder;
     // The index cache next to History and LocalStore. In the browser it goes to a cache mount of
@@ -213,7 +238,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
                                    .filePath(QFileInfo(deviceStatePath).fileName() + u"/index-cache.bin"_s);
 #endif
     loaderOptions.cachePath = m_indexCachePath;
-    m_loader = std::make_unique<notebook::IndexLoader>(*m_vault, *m_index, std::move(pool), loaderOptions);
+    m_loader = std::make_unique<notebook::IndexLoader>(*m_vault, *m_index, workerPool(), std::move(loaderOptions));
     connect(m_loader.get(), &notebook::IndexLoader::resultsReady, this, &Workspace::onIndexResultsReady);
     m_indexClock.start();
     m_loader->start(m_vault->files());
@@ -229,9 +254,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
         backups.notebookName = name();
         if (!deviceStatePath.isEmpty())
             backups.defaultFolder = QDir(deviceStatePath).filePath(u"backups"_s);
-#ifdef BRULION_INDEX_THREADS
-        backups.pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
-#endif
+        backups.pool = workerPool();
 #ifdef Q_OS_WASM
         if (!deviceStatePath.isEmpty())
             backups.defaultFolder =
@@ -284,6 +307,7 @@ void Workspace::close()
     m_trashCount = -1;
     m_dataUrls.clear();
     m_dataUrlSizes.clear();
+    m_drawingPictures.clear(); // (by the paths of that notebook)
     m_vault->stopWatching();
     disconnect(m_vault.get(), nullptr, this, nullptr);
     disconnect(m_index.get(), nullptr, this, nullptr);
@@ -376,7 +400,7 @@ void Workspace::indexChunk()
         m_indexTimer.stop();
         return;
     }
-    const notebook::IndexLoader::Step step = m_loader->step(int(kIndexBudgetMs));
+    const notebook::IndexLoader::Step step = m_loader->step(kIndexBudgetMs);
     Q_EMIT indexProgressChanged();
     switch (step) {
     case notebook::IndexLoader::Step::More: break;
@@ -428,10 +452,6 @@ void Workspace::indexingFinished()
     }
     // The index cache follows the index from now on (written soon when anything was parsed).
     if (!m_indexCachePath.isEmpty() && !m_cacheKeeper && m_loader) {
-        notebook::WorkerPool pool;
-#ifdef BRULION_INDEX_THREADS
-        pool = indexWorkerPool(static_cast<QThreadPool *>(m_indexPool));
-#endif
         notebook::IndexCacheKeeper::Policy policy = m_cachePolicy;
 #ifdef Q_OS_WASM
         // The site's quota is shared with the notes: the cache takes at most half of what is free.
@@ -439,8 +459,8 @@ void Workspace::indexingFinished()
         policy.maxBytes = notebook::indexCacheBudget(storage.usage, storage.quota, QFileInfo(m_indexCachePath).size(),
                                                      policy.maxBytes);
 #endif
-        m_cacheKeeper = std::make_unique<notebook::IndexCacheKeeper>(*m_vault, *m_index, std::move(pool),
-                                                                     m_indexCachePath, policy);
+        m_cacheKeeper = std::make_unique<notebook::IndexCacheKeeper>(*m_vault, *m_index, workerPool(), m_indexCachePath,
+                                                                     policy);
 #ifdef Q_OS_WASM
         connect(m_cacheKeeper.get(), &notebook::IndexCacheKeeper::saved, this,
                 [] { platform::reportIndexCacheSaved(); });
@@ -493,33 +513,23 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
         VaultIndex::Batch batch(*m_index);
         for (const VaultChange &c : changes) {
             pdfFileChanged(c.path, c.oldPath);
-            m_dataUrls.remove(c.path);
-            m_dataUrlSizes.remove(c.path);
-            if (!c.oldPath.isEmpty()) {
-                m_dataUrls.remove(c.oldPath);
-                m_dataUrlSizes.remove(c.oldPath);
+            for (const QString &path : {c.path, c.oldPath}) { // (an old path for renames only)
+                if (path.isEmpty())
+                    continue;
+                m_dataUrls.remove(path);
+                m_dataUrlSizes.remove(path);
+                if (m_loader)
+                    m_loader->forget(path); // a worker's older read of it is dropped
             }
             switch (c.type) {
             case ChangeType::Created:
-            case ChangeType::Modified:
-                if (m_loader)
-                    m_loader->forget(c.path); // a worker's older read of it is dropped
-                indexFile(c.path);
-                break;
+            case ChangeType::Modified: indexFile(c.path); break;
             case ChangeType::Deleted:
-                if (m_loader)
-                    m_loader->forget(c.path);
                 m_index->remove(c.path);
                 m_vault->store()->remove(foldStateKey(c.path));
                 break;
             case ChangeType::Renamed: {
-                QString content;
-                if (paths::isMarkdown(c.path))
-                    content = m_vault->readText(c.path);
-                if (m_loader) {
-                    m_loader->forget(c.oldPath);
-                    m_loader->forget(c.path);
-                }
+                const QString content = paths::isMarkdown(c.path) ? m_vault->readText(c.path) : QString();
                 if (paths::isIgnored(c.path))
                     m_index->remove(c.oldPath);
                 else
@@ -537,9 +547,7 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
     ++m_revision;
     Q_EMIT revisionChanged();
     // Deletions and restores move files through the trash (.trash is not tracked itself).
-    if (std::any_of(changes.cbegin(), changes.cend(), [](const VaultChange &c) {
-            return c.type == ChangeType::Deleted || c.type == ChangeType::Created || c.type == ChangeType::Renamed;
-        })) {
+    if (std::ranges::any_of(changes, [](const VaultChange &c) { return c.type != ChangeType::Modified; })) {
         m_trashCount = -1;
         Q_EMIT trashChanged();
     }
@@ -667,7 +675,7 @@ QVariantMap Workspace::readTextStart(const QString &path, int maxBytes) const
     if (!file.open(QIODevice::ReadOnly))
         return out;
     const qint64 size = file.size();
-    QByteArray bytes = file.read(qMax(0, maxBytes));
+    QByteArray bytes = file.read(std::max(0, maxBytes));
     const bool truncated = bytes.size() < size;
     if (truncated)
         bytes.truncate(utf8CompletePrefix(bytes));
@@ -759,8 +767,7 @@ bool Workspace::writeAttachment(const QString &rawPath, const QByteArray &data)
     // file manager) whose deletion the vault has not seen yet is never written again. The read
     // that fails makes the vault check the path, so pathRemoved follows.
     if (!QFileInfo(m_vault->absolutePath(path)).isFile()) {
-        bool ok = false;
-        m_vault->readBinary(path, &ok);
+        m_vault->readBinary(path);
         return false;
     }
     releasePdfReaders(path);
@@ -777,7 +784,8 @@ QString Workspace::createAttachment(const QString &rawPath, const QByteArray &da
     const QString path = paths::normalize(rawPath);
     const VaultPath created = m_vault->createBinary(path, data, ChangeSource::User);
     if (created.isEmpty())
-        Q_EMIT errorOccurred(tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));
+        Q_EMIT errorOccurred(
+                tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));
     return created;
 }
 
@@ -812,15 +820,15 @@ QVariantList Workspace::suggestBlocks(const QString &text, int limit) const
         return out;
     for (const BlockRef &ref : m_index->suggestBlocks(text, limit)) {
         const ParsedNote *note = m_index->note(ref.path);
-        if (!note || ref.blockIndex < 0 || ref.blockIndex >= note->blocks.size())
+        const Block *block = blockAt(note, ref.blockIndex);
+        if (!block)
             continue;
-        const Block &block = note->blocks.at(ref.blockIndex);
-        QVariantMap m{ { u"path"_s, ref.path },
-                       { u"line"_s, block.line },
-                       { u"text"_s, lineOf(block.text) },
-                       { u"title"_s, note->title } };
-        if (!block.id.isEmpty())
-            m.insert(u"blockId"_s, block.id);
+        QVariantMap m{{u"path"_s, ref.path},
+                      {u"line"_s, block->line},
+                      {u"text"_s, lineOf(block->text)},
+                      {u"title"_s, note->title}};
+        if (!block->id.isEmpty())
+            m.insert(u"blockId"_s, block->id);
         out.append(m);
     }
     return out;
@@ -850,7 +858,8 @@ QVariantList Workspace::propertyKeys() const
     QVariantList out;
     if (!m_index)
         return out;
-    for (const PropertyKeyInfo &k : m_index->propertyKeys())
+    const QList<PropertyKeyInfo> keys = m_index->propertyKeys(); // (shared with the index's cache)
+    for (const PropertyKeyInfo &k : keys)
         out.append(QVariantMap{{u"key"_s, k.key}, {u"count"_s, k.count}, {u"type"_s, k.type}});
     return out;
 }
@@ -884,13 +893,14 @@ QVariantList Workspace::pictureAttachments(const QString &query, int limit) cons
     if (!m_index || limit <= 0)
         return out;
     const QStringList words = text::foldKey(query).split(u' ', Qt::SkipEmptyParts);
-    for (const VaultPath &path : m_index->attachments()) {
+    const QList<VaultPath> attachments = m_index->attachments(); // (shared with the index's cache)
+    for (const VaultPath &path : attachments) {
         if (out.size() >= limit)
             break;
         if (paths::isIgnored(path) || !paths::isPicturePath(path) || !editor::canDecodePictureFormat(path))
             continue;
         const QString key = text::foldKey(path);
-        if (!std::all_of(words.cbegin(), words.cend(), [&](const QString &w) { return key.contains(w); }))
+        if (!std::ranges::all_of(words, [&](const QString &w) { return key.contains(w); }))
             continue;
         const qsizetype slash = path.lastIndexOf(u'/');
         out.append(QVariantMap{{u"path"_s, path},
@@ -913,15 +923,9 @@ QVariantMap Workspace::linkPart(const QString &target, int part, const QString &
 
 QString Workspace::blockText(const QString &blockId) const
 {
-    if (!m_index)
-        return {};
-    const auto ref = m_index->blockById(blockId);
-    if (!ref)
-        return {};
-    const ParsedNote *note = m_index->note(ref->path);
-    if (!note || ref->blockIndex < 0 || ref->blockIndex >= note->blocks.size())
-        return {};
-    return note->blocks.at(ref->blockIndex).text;
+    const auto ref = m_index ? m_index->blockById(blockId) : std::nullopt;
+    const Block *block = ref ? blockAt(m_index->note(ref->path), ref->blockIndex) : nullptr;
+    return block ? block->text : QString();
 }
 
 bool Workspace::blockIdTaken(const QString &blockId) const
@@ -934,8 +938,8 @@ QString Workspace::linkedBlockText(const QString &path, const QString &blockId) 
     const ParsedNote *note = m_index ? m_index->note(path) : nullptr;
     if (!note)
         return {};
-    if (const int i = note->blockIds.value(blockId, -1); i >= 0 && i < note->blocks.size())
-        return note->blocks.at(i).text;
+    if (const Block *block = blockAt(note, note->blockIds.value(blockId, -1)))
+        return block->text;
     return blockText(blockId); // moved to another page (resolveRoute follows it there)
 }
 
@@ -953,8 +957,14 @@ QString Workspace::ensureBlockId(const QString &path, int line)
     if (result.id.isEmpty())
         return {};
     // Written as an ordinary change: an editor showing that page reloads it (fileChanged).
-    if (result.content != content && !m_vault->writeText(path, result.content, ChangeSource::User))
-        return {};
+    if (result.content != content) {
+        if (isNotUtf8(*m_vault, path, content)) {
+            qCWarning(lcWorkspace) << "Not adding a block id to" << path << "- it is not UTF-8 text";
+            return {};
+        }
+        if (!m_vault->writeText(path, result.content, ChangeSource::User))
+            return {};
+    }
     return result.id;
 }
 
@@ -968,7 +978,8 @@ QVariantList Workspace::templates() const
         return out;
     const QString prefix = folder + u'/';
     QStringList found;
-    for (const FileStat &f : m_vault->markdownFiles()) {
+    const QList<FileStat> files = m_vault->markdownFiles();
+    for (const FileStat &f : files) {
         if (f.path.startsWith(prefix, Qt::CaseInsensitive))
             found.append(f.path);
     }
@@ -987,21 +998,19 @@ QUrl Workspace::assetUrl(const QString &path) const
 {
     if (!m_vault || path.isEmpty())
         return {};
+    const QString key = paths::normalize(path);
     if (!m_dataUrlAssets) {
-        const QString key = paths::normalize(path);
         QUrl url = QUrl::fromLocalFile(m_vault->absolutePath(key));
         // A drawing changes under the same name (the drawing editor's saves): its version in the
         // URL, as Qt's pixmap cache keys by the URL — the embeds and the picture view load the
         // new one, the file is still found (a local file's query is not part of its path).
         if (key.endsWith(u".svg"_s, Qt::CaseInsensitive) && isDrawing(key)) {
             if (const std::optional<FileStat> st = m_vault->stat(key))
-                url.setQuery(u"v="_s + QString::number(st->mtime) + u'-' + QString::number(st->size));
+                url.setQuery(u"v="_s + statVersion(*st));
         }
         return url;
     }
-    const QString key = paths::normalize(path);
-    const auto cached = m_dataUrls.constFind(key);
-    if (cached != m_dataUrls.constEnd())
+    if (const auto cached = m_dataUrls.constFind(key); cached != m_dataUrls.constEnd())
         return cached.value();
     bool ok = false;
     const QByteArray bytes = m_vault->readBinary(key, &ok);
@@ -1013,8 +1022,8 @@ QUrl Workspace::assetUrl(const QString &path) const
     if (mime.startsWith(u"image/"_s)) {
         QBuffer buffer;
         buffer.setData(bytes);
-        buffer.open(QIODevice::ReadOnly);
-        m_dataUrlSizes.insert(key, editor::pictureSize(&buffer, key));
+        if (buffer.open(QIODevice::ReadOnly))
+            m_dataUrlSizes.insert(key, editor::pictureSize(&buffer, key));
     }
     return url;
 }
@@ -1027,37 +1036,34 @@ QUrl Workspace::drawingUrl(const QString &path, bool dark) const
     // image provider "drawing" (src/app/drawing/drawingimageprovider.h, the URL's format there);
     // the version keeps Qt's pixmap cache honest, as in assetUrl().
     const QString key = paths::normalize(path);
-    QString version;
-    if (const std::optional<FileStat> st = m_vault->stat(key))
-        version = QString::number(st->mtime) + u'-' + QString::number(st->size);
+    const std::optional<FileStat> st = m_vault->stat(key);
+    const QString version = st ? statVersion(*st) : QString();
     // An Obsidian Excalidraw plugin drawing: the pictures of its "## Embedded Files", their links
     // resolved here (the provider runs in another thread), read once per version of the file.
     QString pictures;
     if (paths::isMarkdown(key)) {
-        auto cached = m_drawingPictures.constFind(key);
-        if (cached == m_drawingPictures.constEnd() || cached->first != version) {
-            QList<drawing::EmbeddedFile> files;
+        QList<drawing::EmbeddedFile> files;
+        if (const auto cached = m_drawingPictures.constFind(key);
+            cached != m_drawingPictures.constEnd() && cached->first == version) {
+            files = cached->second;
+        } else {
             const QByteArray bytes = readAttachment(key);
             if (drawing::looksLikeExcalidrawMarkdown(bytes.left(drawing::HeadBytes)))
                 files = drawing::embeddedFiles(bytes);
-            cached = m_drawingPictures.insert(key, {version, files});
+            m_drawingPictures.insert(key, {version, files});
         }
         // (Resolved on every call: a picture that arrives later shows.)
-        for (const drawing::EmbeddedFile &f : cached->second) {
+        for (const drawing::EmbeddedFile &f : std::as_const(files)) {
             const QString picture = attachmentPathOf(f.link, key);
-            const std::optional<FileStat> st = picture.isEmpty() ? std::nullopt : m_vault->stat(picture);
-            if (!st)
+            const std::optional<FileStat> pictureStat = picture.isEmpty() ? std::nullopt : m_vault->stat(picture);
+            if (!pictureStat)
                 continue;
-            pictures += u"&f="_s
-                        + QString::fromLatin1(QUrl::toPercentEncoding(
-                                f.fileId + u':' + QDir::fromNativeSeparators(m_vault->absolutePath(picture))))
-                        + u"&fv="_s + QString::number(st->mtime) + u'-' + QString::number(st->size);
+            const QString absolute = QDir::fromNativeSeparators(m_vault->absolutePath(picture));
+            pictures += u"&f="_s + percentEncoded(f.fileId + u':' + absolute) + u"&fv="_s + statVersion(*pictureStat);
         }
     }
-    return QUrl(u"image://drawing/"_s
-                        + QString::fromLatin1(
-                                QUrl::toPercentEncoding(QDir::fromNativeSeparators(m_vault->absolutePath(key))))
-                        + u"?v="_s + QString::fromLatin1(QUrl::toPercentEncoding(version)) + u"&dark="_s
+    const QString drawingFile = percentEncoded(QDir::fromNativeSeparators(m_vault->absolutePath(key)));
+    return QUrl(u"image://drawing/"_s + drawingFile + u"?v="_s + percentEncoded(version) + u"&dark="_s
                         + (dark ? u'1' : u'0') + pictures,
                 QUrl::StrictMode);
 }
@@ -1092,7 +1098,7 @@ QString Workspace::saveAttachment(const QString &fileName, const QByteArray &dat
 {
     if (!m_vault)
         return {};
-    QString name = paths::basename(QString(fileName).replace(u'\\', u'/')).trimmed();
+    QString name = pickedFileName(fileName);
     if (name.isEmpty())
         name = u"attachment-"_s + now().toString(u"yyyyMMdd-HHmmss"_s);
     // sanitizeFileName keeps the extension (dots are allowed) and drops separators/reserved chars.
@@ -1106,8 +1112,7 @@ QString Workspace::saveAttachment(const QString &fileName, const QByteArray &dat
             name += u'.' + suffix;
     }
     const QString folder = paths::normalize(m_vault->config().attachmentsFolder);
-    const VaultPath path = m_vault->createBinary(folder.isEmpty() ? name : paths::join(folder, name), data,
-                                                 ChangeSource::User);
+    const VaultPath path = m_vault->createBinary(paths::join(folder, name), data, ChangeSource::User);
     if (path.isEmpty())
         Q_EMIT errorOccurred(tr("Could not save the attachment %1: %2").arg(name, m_vault->errorString()));
     return path;
@@ -1119,23 +1124,21 @@ QString Workspace::importAttachment(const QString &fileName, const QByteArray &d
         return {};
     // The same file picked again (another slide of the lecture's PDF): the one already stored —
     // under its name or one saveAttachment() gave it ("Slajdy 2.pdf").
-    const QString name = paths::sanitizeFileName(paths::basename(QString(fileName).replace(u'\\', u'/')).trimmed());
-    const QString folder = paths::normalize(m_vault->config().attachmentsFolder);
-    if (!name.isEmpty()) {
-        const VaultPath path = folder.isEmpty() ? name : paths::join(folder, name);
-        const QString ext = paths::extension(path);
-        const QString stem = path.left(path.size() - ext.size());
-        for (int i = 1; i <= 50; ++i) {
-            const VaultPath candidate = m_vault->existingCase(i == 1 ? path : stem + u' ' + QString::number(i) + ext);
-            const std::optional<FileStat> stat = m_vault->stat(candidate);
-            if (!stat)
-                break;
-            bool ok = false;
-            if (!stat->isDir && stat->size == data.size() && m_vault->readBinary(candidate, &ok) == data && ok) {
-                // Used again: no longer the abandoned pick's own copy (discardImport() keeps it).
-                m_importedCopies.remove(candidate);
-                return candidate;
-            }
+    // (sanitizeFileName() names a nameless file "Untitled".)
+    const VaultPath path = paths::join(paths::normalize(m_vault->config().attachmentsFolder),
+                                       paths::sanitizeFileName(pickedFileName(fileName)));
+    const QString ext = paths::extension(path);
+    const QString stem = path.left(path.size() - ext.size());
+    for (int i = 1; i <= 50; ++i) {
+        const VaultPath candidate = m_vault->existingCase(i == 1 ? path : stem + u' ' + QString::number(i) + ext);
+        const std::optional<FileStat> stat = m_vault->stat(candidate);
+        if (!stat)
+            break;
+        bool ok = false;
+        if (!stat->isDir && stat->size == data.size() && m_vault->readBinary(candidate, &ok) == data && ok) {
+            // Used again: no longer the abandoned pick's own copy (discardImport() keeps it).
+            m_importedCopies.remove(candidate);
+            return candidate;
         }
     }
     const QString stored = saveAttachment(fileName, data);
@@ -1203,9 +1206,8 @@ bool Workspace::setConfig(const QVariantMap &map)
         return false;
     VaultConfig c = m_vault->config();
     const auto folder = [&](const char *key, QString &field) {
-        const QString k = QString::fromLatin1(key);
-        if (map.contains(k))
-            field = paths::normalize(map.value(k).toString());
+        if (const auto it = map.constFind(QString::fromLatin1(key)); it != map.constEnd())
+            field = paths::normalize(it->toString());
     };
     folder("journalsFolder", c.journalsFolder);
     folder("newPagesFolder", c.newPagesFolder);
@@ -1295,22 +1297,23 @@ QVariantMap Workspace::resolveRoute(const QVariantMap &route)
     // first content when it does not exist yet. {view: "tag", overview: true} (and routes the
     // shell navigates to itself) keep the tag overview. `fromTag`: a page not written yet waits for
     // a tap on touch screens instead of bringing the keyboard over the blocks with the tag.
-    if (route.value(u"view"_s).toString() == u"tag" && !route.value(u"overview"_s).toBool() && m_vault) {
-        const QString path = tagPage(route.value(u"tag"_s).toString());
+    const QString view = route.value(u"view"_s).toString();
+    if (view == u"tag" && !route.value(u"overview"_s).toBool() && m_vault) {
+        const QString tag = route.value(u"tag"_s).toString();
+        const QString path = tagPage(tag);
         if (!path.isEmpty())
-            return {{u"view"_s, u"page"_s}, {u"path"_s, path}, {u"fromTag"_s, route.value(u"tag"_s).toString()}};
+            return {{u"view"_s, u"page"_s}, {u"path"_s, path}, {u"fromTag"_s, tag}};
         return route;
     }
-    if (route.value(u"view"_s).toString() != u"page" || !m_vault)
+    if (view != u"page" || !m_vault)
         return route;
+    const QString blockId = route.value(u"blockId"_s).toString();
     // [[Page#^id]] whose block was moved to another page (cut and pasted, a block moved by hand):
     // the index knows where the id is now. Only when the linked page is known and lacks the id.
     if (const QString path = route.value(u"path"_s).toString(); !path.isEmpty()) {
-        const QString blockId = route.value(u"blockId"_s).toString();
         if (blockId.isEmpty() || !m_index)
             return route;
-        if (indexing())
-            finishIndexing();
+        finishIndexing();
         const ParsedNote *note = m_index->note(path);
         if (!note || note->blockIds.contains(blockId))
             return route;
@@ -1323,11 +1326,9 @@ QVariantMap Workspace::resolveRoute(const QVariantMap &route)
         return route;
     }
     // Page routes the editor could not resolve itself: {view: "page", blockId} for a ((block)) of
-    // another page, {view: "page", target} for a link to a page that does not exist.
-    QVariantMap out = route;
-    // Right after opening the index is still being built: what looks unresolved may exist.
-    if (indexing())
-        finishIndexing();
+    // another page, {view: "page", target} for a link to a page that does not exist. Right after
+    // opening the index is still being built: what looks unresolved may exist.
+    finishIndexing();
     // A path part of a link ([[Firma/Adam]]: "Firma"): the page, the folder's pages or a new page
     // (VaultIndex::resolveLinkPart() — what its colour said).
     if (route.contains(u"linkPart"_s)) {
@@ -1349,7 +1350,7 @@ QVariantMap Workspace::resolveRoute(const QVariantMap &route)
         }
         return {};
     }
-    const QString blockId = route.value(u"blockId"_s).toString();
+    QVariantMap out = route;
     if (!blockId.isEmpty() && m_index) {
         if (const auto ref = m_index->blockById(blockId)) {
             out.insert(u"path"_s, ref->path);
@@ -1381,21 +1382,16 @@ QString Workspace::tagPage(const QString &rawTag)
     if (tag.trimmed().isEmpty())
         return {};
     // Right after opening the index is still being built: what looks unresolved may exist.
-    if (indexing())
-        finishIndexing();
+    finishIndexing();
     if (m_index) {
         if (const auto page = m_index->resolveTag(tag))
             return *page;
         // A new page is named as the tag was first written (#Praca and #praca: "Praca.md"),
         // whichever spelling was clicked.
         const QString key = tag.normalized(QString::NormalizationForm_C).toLower();
-        for (const TagCount &t : m_index->tags()) {
-            if (t.tag == key) {
-                if (!t.display.isEmpty())
-                    tag = t.display;
-                break;
-            }
-        }
+        const QList<TagCount> tags = m_index->tags();
+        if (const auto t = std::ranges::find(tags, key, &TagCount::tag); t != tags.end() && !t->display.isEmpty())
+            tag = t->display;
     }
     return newPagePath(tag);
 }
@@ -1539,9 +1535,10 @@ QStringList Workspace::periodicNoteStarts(const QString &period, const QString &
     const QDate b = QDate::fromString(to, Qt::ISODate);
     if (!m_vault || !p || !a.isValid() || !b.isValid() || a > b)
         return out;
-    const VaultConfig config = m_vault->config();
+    const VaultConfig &config = m_vault->config();
     const QDate first = periodic::periodStart(*p, a);
-    for (const FileStat &f : m_vault->markdownFiles()) {
+    const QList<FileStat> files = m_vault->markdownFiles();
+    for (const FileStat &f : files) {
         const auto start = periodic::dateFromPath(*p, f.path, config);
         if (start && *start >= first && *start <= b)
             out.append(start->toString(Qt::ISODate));
@@ -1615,9 +1612,7 @@ QString Workspace::appendToTodaysJournal(const QString &block)
     const QString text = m_vault->readText(path, &ok);
     if (!ok)
         return {};
-    // A note that is not UTF-8 (windows-1250 from an old editor, synced in) is left alone: written
-    // back, each of its other bytes would be U+FFFD. Read again only when the text shows one.
-    if (text.contains(QChar::ReplacementCharacter) && !isUtf8Text(m_vault->readBinary(path))) {
+    if (isNotUtf8(*m_vault, path, text)) {
         qCWarning(lcWorkspace) << "Not appending to" << path << "- it is not UTF-8 text";
         return {};
     }
@@ -1636,15 +1631,14 @@ QVariantMap Workspace::setHabitCheck(const QString &name, const QString &date, c
     const dates::UiLocale locale = notebook::contentLocale(m_language);
     const QString tag = habits::checkTag(locale);
     VaultPath path = notebook::journalFileFor(*m_vault, d);
-    bool exists = m_vault->exists(path);
+    const bool exists = m_vault->exists(path);
     QString content;
     if (exists) {
         bool ok = false;
         content = m_vault->readText(path, &ok);
         if (!ok)
             return out;
-        // Not UTF-8: written back, each of its other bytes would be U+FFFD (appendToTodaysJournal).
-        if (content.contains(QChar::ReplacementCharacter) && !isUtf8Text(m_vault->readBinary(path))) {
+        if (isNotUtf8(*m_vault, path, content)) {
             qCWarning(lcWorkspace) << "Not changing" << path << "- it is not UTF-8 text";
             Q_EMIT errorOccurred(tr("The journal page is not UTF-8 text; it was left unchanged."));
             return out;
@@ -1693,10 +1687,14 @@ QString Workspace::addHabit(const QString &name, const QString &schedule, const 
     const QString path = page.isEmpty() ? newPagePath(notebook::habitsPageTitle(locale)) : page;
     if (path.isEmpty())
         return {};
-    bool ok = false;
+    bool ok = true; // (a page not written yet starts empty)
     const QString content = m_vault->exists(path) ? m_vault->readText(path, &ok) : QString();
-    if (m_vault->exists(path) && !ok)
+    if (!ok)
         return {};
+    if (isNotUtf8(*m_vault, path, content)) {
+        qCWarning(lcWorkspace) << "Not adding a habit to" << path << "- it is not UTF-8 text";
+        return {};
+    }
     const QString after = notebook::appendBlock(content, notebook::habitDefinitionBlock(clean, schedule, locale));
     return writeFile(path, after) ? path : QString();
 }
@@ -1709,7 +1707,7 @@ QStringList Workspace::storedList(const QString &key) const
     if (!m_vault)
         return out;
     const QJsonArray array = m_vault->store()->get(key).toArray();
-    for (const QJsonValue &v : array) {
+    for (const auto &v : array) {
         if (v.isString())
             out.append(v.toString());
     }
@@ -1725,40 +1723,30 @@ void Workspace::storeList(const QString &key, const QStringList &list)
 
 QVariantList Workspace::favorites() const
 {
-    QVariantList out;
-    for (const QString &path : storedList(QString::fromLatin1(kFavorites))) {
-        if (m_vault && m_vault->exists(path))
-            out.append(pageEntry(path));
-    }
-    return out;
+    return m_vault ? existingPageEntries(*m_vault, storedList(kFavorites)) : QVariantList();
 }
 
 QVariantList Workspace::recentPages() const
 {
-    QVariantList out;
-    for (const QString &path : storedList(QString::fromLatin1(kRecentPages))) {
-        if (m_vault && m_vault->exists(path))
-            out.append(pageEntry(path));
-    }
-    return out;
+    return m_vault ? existingPageEntries(*m_vault, storedList(kRecentPages)) : QVariantList();
 }
 
 bool Workspace::isFavorite(const QString &path) const
 {
-    return storedList(QString::fromLatin1(kFavorites)).contains(paths::normalize(path));
+    return storedList(kFavorites).contains(paths::normalize(path));
 }
 
 void Workspace::setFavorite(const QString &rawPath, bool favorite)
 {
     const QString path = paths::normalize(rawPath);
-    QStringList list = storedList(QString::fromLatin1(kFavorites));
+    QStringList list = storedList(kFavorites);
     if (list.contains(path) == favorite || path.isEmpty())
         return;
     if (favorite)
         list.append(path);
     else
         list.removeAll(path);
-    storeList(QString::fromLatin1(kFavorites), list);
+    storeList(kFavorites, list);
     Q_EMIT favoritesChanged();
 }
 
@@ -1784,14 +1772,14 @@ void Workspace::notePageOpened(const QString &rawPath)
     const QString path = paths::normalize(rawPath);
     if (!m_vault || path.isEmpty() || !m_vault->exists(path))
         return;
-    QStringList list = storedList(QString::fromLatin1(kRecentPages));
-    if (!list.isEmpty() && list.first() == path)
+    QStringList list = storedList(kRecentPages);
+    if (list.startsWith(path))
         return;
     list.removeAll(path);
     list.prepend(path);
     while (list.size() > MaxRecentPages)
         list.removeLast();
-    storeList(QString::fromLatin1(kRecentPages), list);
+    storeList(kRecentPages, list);
     Q_EMIT recentPagesChanged();
 }
 
@@ -1800,7 +1788,8 @@ QVariantList Workspace::foldState(const QString &path) const
     QVariantList out;
     if (!m_vault)
         return out;
-    for (const QJsonValue &v : m_vault->store()->get(foldStateKey(paths::normalize(path))).toArray()) {
+    const QJsonArray lines = m_vault->store()->get(foldStateKey(paths::normalize(path))).toArray();
+    for (const auto &v : lines) {
         if (v.isDouble() && v.toInt() >= 0)
             out.append(v.toInt());
     }
@@ -1815,8 +1804,7 @@ void Workspace::setFoldState(const QString &rawPath, const QVariantList &lines)
     QList<int> sorted;
     for (const QVariant &v : lines) {
         bool ok = false;
-        const int line = v.toInt(&ok);
-        if (ok && line >= 0 && !sorted.contains(line))
+        if (const int line = v.toInt(&ok); ok && line >= 0 && !sorted.contains(line))
             sorted.append(line);
     }
     std::ranges::sort(sorted);
@@ -1837,18 +1825,12 @@ void Workspace::forgetPath(const QString &path)
         m_vault->store()->remove(foldStateKey(path));
         m_vault->store()->removePrefix(foldStateKey(prefix));
     }
-    for (const char *key : { kFavorites, kRecentPages }) {
-        const QString k = QString::fromLatin1(key);
-        QStringList list = storedList(k);
-        const auto before = list.size();
-        list.removeIf([&](const QString &p) { return p == path || p.startsWith(prefix); });
-        if (list.size() != before) {
-            storeList(k, list);
-            if (key == kFavorites)
-                Q_EMIT favoritesChanged();
-            else
-                Q_EMIT recentPagesChanged();
-        }
+    for (const auto &[key, changed] : kPageLists) {
+        QStringList list = storedList(key);
+        if (list.removeIf([&](const QString &p) { return p == path || p.startsWith(prefix); }) == 0)
+            continue;
+        storeList(key, list);
+        Q_EMIT(this->*changed)();
     }
 }
 
@@ -1862,19 +1844,15 @@ void Workspace::renamePathInLists(const QString &oldPath, const QString &newPath
             store->set(foldStateKey(newPath), folds);
         }
     }
-    for (const char *key : { kFavorites, kRecentPages }) {
-        const QString k = QString::fromLatin1(key);
-        QStringList list = storedList(k);
+    for (const auto &[key, changed] : kPageLists) {
+        QStringList list = storedList(key);
         const qsizetype i = list.indexOf(oldPath);
         if (i < 0)
             continue;
         list[i] = newPath;
         list.removeDuplicates();
-        storeList(k, list);
-        if (key == kFavorites)
-            Q_EMIT favoritesChanged();
-        else
-            Q_EMIT recentPagesChanged();
+        storeList(key, list);
+        Q_EMIT(this->*changed)();
     }
 }
 
@@ -1905,7 +1883,7 @@ QVariantList Workspace::switcherPages(const QString &query, int limit) const
     };
     const QString q = query.trimmed();
     if (q.isEmpty()) {
-        for (const QString &path : storedList(QString::fromLatin1(kRecentPages))) {
+        for (const QString &path : storedList(kRecentPages)) {
             if (m_vault->exists(path))
                 add(path, {});
         }

@@ -42,8 +42,12 @@ T.AbstractButton {
     onClicked: toggled()
     onPressAndHold: openMenu()
 
+    property TaskStatusMenu statusMenu: null
+    /// Its own status menu is shown (from popup() until it has closed).
+    readonly property bool menuOpen: statusMenu !== null && statusMenu.visible
+
     /// The status menu (own) or menuRequested().
-    function openMenu() {
+    function openMenu(): void {
         if (!ownMenu) {
             menuRequested()
             return
@@ -53,9 +57,6 @@ T.AbstractButton {
         statusMenu.status = control.status
         statusMenu.popup(control, 0, control.height)
     }
-    property TaskStatusMenu statusMenu: null
-    /// Its own status menu is shown (from popup() until it has closed).
-    readonly property bool menuOpen: statusMenu !== null && statusMenu.visible
 
     // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so without the device
     // filter every tap on a phone would open the menu as well. Touch: the long press above.

@@ -113,12 +113,13 @@ Column {
         interval: 0
     }
 
-    /// The menu of the token or link at (x, y) of an embedded block's text (`data`: its entry;
-    /// the change goes to the block's own file); false when there is none there.
-    /// The link at (x, y) of `text` ("" none).
+    /// The link at (x, y) of `text` ("" none); a typed function, so that `text` stays readable for
+    /// the calls after it (compiled code does not trust a parameter after a call).
     function linkIn(text: BRichText, x: real, y: real): string {
         return text.linkAt(x, y)
     }
+    /// The menu of the token or link at (x, y) of an embedded block's text (the change goes to the
+    /// block's own file); false when there is none there.
     function linkMenu(path: string, line: int, raw: string, text: BRichText, x: real, y: real): bool {
         const link = root.linkIn(text, x, y)
         if (link === "" || !root.editor)
@@ -218,43 +219,40 @@ Column {
                 }
 
                 // ---- Header: the source as a link -----------------------------------------------------
-                Item {
+                RowLayout {
                     id: header
                     width: parent.width
                     height: root.headerHeight
-                    RowLayout {
-                        anchors.fill: parent
-                        spacing: Theme.space1 + 2
-                        BIcon {
-                            name: root.iconFor(frame.rec.map.kind)
-                            size: Theme.iconSizeSm - 2
-                            color: frame.found ? Theme.link : Theme.fgFaint
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: frame.title
-                            textFormat: Text.PlainText
-                            font.family: Theme.fontUi
-                            font.pixelSize: Theme.textSm
-                            font.weight: Theme.weightMedium
-                            font.underline: headerHover.hovered
-                            color: frame.found ? Theme.link : Theme.linkMissing
-                            elide: Text.ElideRight
-                        }
-                        BIcon {
-                            visible: headerHover.hovered || Theme.touchUi
-                            name: "external-link"
-                            size: Theme.iconSizeSm - 2
-                            color: Theme.fgFaint
-                        }
+                    spacing: Theme.space1 + 2
+                    Accessible.role: Accessible.Link
+                    Accessible.name: frame.title
+                    BIcon {
+                        name: root.iconFor(frame.rec.map.kind)
+                        size: Theme.iconSizeSm - 2
+                        color: frame.found ? Theme.link : Theme.fgFaint
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: frame.title
+                        textFormat: Text.PlainText
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.textSm
+                        font.weight: Theme.weightMedium
+                        font.underline: headerHover.hovered
+                        color: frame.found ? Theme.link : Theme.linkMissing
+                        elide: Text.ElideRight
+                    }
+                    BIcon {
+                        visible: headerHover.hovered || Theme.touchUi
+                        name: "external-link"
+                        size: Theme.iconSizeSm - 2
+                        color: Theme.fgFaint
                     }
                     HoverHandler { id: headerHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
                     TapHandler {
                         gesturePolicy: TapHandler.ReleaseWithinBounds
                         onTapped: root.open(frame.href)
                     }
-                    Accessible.role: Accessible.Link
-                    Accessible.name: frame.title
                 }
 
                 // ---- Embedded blocks ------------------------------------------------------------------
@@ -276,8 +274,10 @@ Column {
                         readonly property bool isTask: !nested && task !== ""
                         readonly property bool closed: task === "done" || task === "cancelled"
                         readonly property int level: rec.map.headingLevel || 0
-                        readonly property bool rule: rec.map.view === "rule"
                         readonly property string view: rec.map.view || ""
+                        readonly property bool rule: view === "rule"
+                        /// A block with text (not a nested embed or a rule).
+                        readonly property bool hasText: !nested && !rule
                         readonly property string path: rec.map.path || ""
                         readonly property int line: rec.map.line || 0
                         readonly property string raw: rec.map.raw || ""
@@ -378,11 +378,11 @@ Column {
 
                         BRichText {
                             id: body
-                            visible: !entry.nested && !entry.rule
+                            visible: entry.hasText
                             x: entry.indent + (entry.isTask ? root.editor.taskBoxWidth + 2 : 0)
                             y: 1
                             width: parent.width - x
-                            html: entry.nested || entry.rule ? "" : entry.html
+                            html: entry.hasText ? entry.html : ""
                             hoveredLink: entry.hoveredLink
                             font.family: entry.view === "code" ? Theme.fontMono : Theme.fontEditor
                             font.pixelSize: entry.view === "code" ? Theme.textSm : entry.fontSize
@@ -417,7 +417,7 @@ Column {
                             x: body.x
                             y: body.y
                             textItem: body.textItem
-                            html: entry.nested || entry.rule ? "" : entry.html
+                            html: entry.hasText ? entry.html : ""
                             lineHeight: entry.lineHeightPx
                             shown: body.visible
                             onActivated: (href, x, y) => {

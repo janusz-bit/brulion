@@ -23,6 +23,24 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
+namespace {
+/// The path `from` gets in `folder` ("" = the notebook root); both normalised.
+QString movedPath(const QString &from, const QString &folder)
+{
+    const QString name = paths::basename(from);
+    return folder.isEmpty() ? name : folder + u'/' + name;
+}
+
+/// The key of a relocation impact in Workspace::m_impacts.
+QString impactKey(const QString &from, const QString &to)
+{
+    return paths::normalize(from) + u'\n' + paths::normalize(to);
+}
+
+/// Planning time per event-loop turn: half a frame.
+constexpr int kImpactSliceMs = 8;
+} // namespace
+
 int Workspace::pageCount() const
 {
     return m_vault ? int(m_vault->markdownFiles().size()) : 0;
@@ -32,16 +50,12 @@ int Workspace::pagesWithoutJournals() const
 {
     // The index's notes are the pages without conflict copies; its lists are cached until the
     // next change (this is read on every revision).
-    if (!m_index)
-        return 0;
-    return int(m_index->paths().size() - m_index->journals().size());
+    return m_index ? int(m_index->paths().size() - m_index->journals().size()) : 0;
 }
 
 QString Workspace::linkTarget(const QString &path, const QString &fromPath) const
 {
-    if (!m_index)
-        return {};
-    return m_index->linkTarget(path, fromPath).value_or(QString());
+    return m_index ? m_index->linkTarget(path, fromPath).value_or(QString()) : QString();
 }
 
 // ---- Folders --------------------------------------------------------------------------------
@@ -77,11 +91,9 @@ QStringList Workspace::folderPaths() const
 
 QVariantMap Workspace::folderInfo(const QString &rawPath) const
 {
-    notebook::FolderInfo info;
-    if (m_vault)
-        info = notebook::folderInfo(*m_vault, rawPath);
+    const notebook::FolderInfo info = m_vault ? notebook::folderInfo(*m_vault, rawPath) : notebook::FolderInfo();
     QVariantList specials;
-    for (const notebook::SpecialPath &s : std::as_const(info.specials))
+    for (const notebook::SpecialPath &s : info.specials)
         specials.append(QVariantMap{{u"special"_s, s.special}, {u"path"_s, s.path}});
     return {{u"exists"_s, info.exists},
             {u"pages"_s, info.pages},
@@ -92,9 +104,8 @@ QVariantMap Workspace::folderInfo(const QString &rawPath) const
 
 QVariantList Workspace::subfolders(const QString &rawFolder) const
 {
-    QVariantList out;
     if (!m_vault)
-        return out;
+        return {};
     const QString folder = paths::normalize(rawFolder);
     const QString prefix = folder.isEmpty() ? QString() : folder + u'/';
     QHash<QString, int> pages;     // direct subfolder -> pages at any depth
@@ -106,12 +117,14 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
         return slash < 0 ? QString() : path.left(slash);
     };
     const QString journalsFolder = paths::normalize(m_vault->config().journalsFolder);
+    const QString journalsPrefix = journalsFolder + u'/';
     const auto inJournals = [&](const QString &path) {
         return !journalsFolder.isEmpty()
                && (path.compare(journalsFolder, Qt::CaseInsensitive) == 0
-                   || path.startsWith(journalsFolder + u'/', Qt::CaseInsensitive));
+                   || path.startsWith(journalsPrefix, Qt::CaseInsensitive));
     };
-    for (const FileStat &f : m_vault->files()) {
+    // Iterated as const: files() shares the vault's own list, which a non-const loop would copy.
+    for (const QList<FileStat> files = m_vault->files(); const FileStat &f : files) {
         const QString child = childOf(f.path);
         if (child.isEmpty())
             continue;
@@ -126,14 +139,15 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
             pages[child] += 1;
     }
     QStringList children;
-    for (const FileStat &f : m_vault->folders()) {
-        if (f.path.startsWith(prefix) && !f.path.mid(prefix.size()).contains(u'/') && !paths::isIgnored(f.path)
+    for (const QList<FileStat> folders = m_vault->folders(); const FileStat &f : folders) {
+        if (f.path.startsWith(prefix) && f.path.indexOf(u'/', prefix.size()) < 0 && !paths::isIgnored(f.path)
             && (pages.contains(f.path) || !withAttachments.contains(f.path)))
             children.append(f.path);
     }
     std::ranges::sort(children, [](const QString &a, const QString &b) {
         return text::compareNames(paths::basename(a), paths::basename(b)) < 0;
     });
+    QVariantList out;
     for (const QString &c : std::as_const(children))
         out.append(QVariantMap{{u"path"_s, c}, {u"name"_s, paths::basename(c)}, {u"pages"_s, pages.value(c)}});
     return out;
@@ -193,12 +207,10 @@ QVariantMap Workspace::cachedImpact(const QString &from, const QString &to)
         return {};
     if (m_impacts.version != m_index->version() || m_impacts.revision != m_revision) {
         // The notebook changed: what was planned may be different now.
-        m_impacts.maps.clear();
-        m_impacts.version = m_index->version();
-        m_impacts.revision = m_revision;
+        m_impacts = {.version = m_index->version(), .revision = m_revision, .maps = {}};
         return {};
     }
-    return m_impacts.maps.value(paths::normalize(from) + u'\n' + paths::normalize(to));
+    return m_impacts.maps.value(impactKey(from, to));
 }
 
 void Workspace::storeImpact(const QString &from, const QString &to, const QVariantMap &impact)
@@ -208,7 +220,7 @@ void Workspace::storeImpact(const QString &from, const QString &to, const QVaria
     if (!m_index || !impact.value(u"ok"_s).toBool())
         return;
     cachedImpact(from, to); // drops what an older state of the notebook planned
-    m_impacts.maps.insert(paths::normalize(from) + u'\n' + paths::normalize(to), impact);
+    m_impacts.maps.insert(impactKey(from, to), impact);
 }
 
 QVariantMap Workspace::relocationImpact(const QString &from, const QString &to)
@@ -234,11 +246,6 @@ struct Workspace::PendingImpact {
     std::unique_ptr<RelocationPlanner> planner; ///< once the checks passed
 };
 
-namespace {
-/// Planning time per event-loop turn: half a frame.
-constexpr int kImpactSliceMs = 8;
-} // namespace
-
 void Workspace::requestMoveImpact(const QString &path, const QString &targetFolder)
 {
     cancelMoveImpact();
@@ -246,9 +253,7 @@ void Workspace::requestMoveImpact(const QString &path, const QString &targetFold
     pending->path = path;
     pending->folder = targetFolder;
     pending->from = paths::normalize(path);
-    const QString folder = paths::normalize(targetFolder);
-    const QString name = paths::basename(pending->from);
-    pending->to = folder.isEmpty() ? name : folder + u'/' + name;
+    pending->to = movedPath(pending->from, paths::normalize(targetFolder));
     m_pendingImpact = std::move(pending);
     m_impactTimer.start(); // the first step on the next turn: never from inside the request
 }
@@ -305,9 +310,7 @@ void Workspace::moveImpactStep()
 QVariantMap Workspace::moveImpact(const QString &path, const QString &targetFolder)
 {
     const QString from = paths::normalize(path);
-    const QString folder = paths::normalize(targetFolder);
-    const QString name = paths::basename(from);
-    return relocationImpact(from, folder.isEmpty() ? name : folder + u'/' + name);
+    return relocationImpact(from, movedPath(from, paths::normalize(targetFolder)));
 }
 
 QVariantMap Workspace::renameImpact(const QString &path, const QString &newName, bool isDir, bool slashMoves)
@@ -326,10 +329,11 @@ QString Workspace::relocate(const QString &from, const QString &to)
 {
     if (!m_vault)
         return {};
+    const QString fromPath = paths::normalize(from);
     // Every note that links to a moved file must be indexed before the plan asks (right after
     // opening the index is still being built in the background).
     finishIndexing();
-    releasePdfReaders(paths::normalize(from));
+    releasePdfReaders(fromPath);
     const notebook::Relocation moved = notebook::relocate(*m_vault, m_index.get(), from, to, ChangeSource::User);
     if (moved.path.isEmpty()) {
         if (moved.problem.kind == notebook::PathProblem::Failed) {
@@ -381,46 +385,38 @@ QString Workspace::relocate(const QString &from, const QString &to)
         }
         Q_EMIT noticeOccurred(tr("Notebook settings updated: %1").arg(said.join(u", "_s)));
     }
-    if (moved.folder && moved.path != paths::normalize(from)) {
-        notifyFolderChange({paths::normalize(from), moved.path});
-        Q_EMIT folderRenamed(paths::normalize(from), moved.path);
+    if (moved.folder && moved.path != fromPath) {
+        notifyFolderChange({fromPath, moved.path});
+        Q_EMIT folderRenamed(fromPath, moved.path);
     }
     return moved.path;
 }
 
-QString Workspace::renamePage(const QString &rawPath, const QString &newTitle, bool slashMoves)
+QString Workspace::renameTo(const QString &path, const QString &newName, bool isDir, bool slashMoves)
 {
-    if (!m_vault)
-        return {};
-    const QString path = paths::normalize(rawPath);
-    if (!m_vault->exists(path))
-        return {};
-    if (const QString hidden = notebook::hiddenTypedSegment(newTitle, false, slashMoves); !hidden.isEmpty()) {
+    // A name the vault would hide is refused (as for a new folder), before it is sanitised.
+    if (const QString hidden = notebook::hiddenTypedSegment(newName, isDir, slashMoves); !hidden.isEmpty()) {
         Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.").arg(hidden));
         return {};
     }
-    const QString to = notebook::renamedPath(path, newTitle, false, slashMoves);
-    if (to.isEmpty())
+    const QString to = notebook::renamedPath(path, newName, isDir, slashMoves);
+    return to.isEmpty() ? QString() : relocate(path, to);
+}
+
+QString Workspace::renamePage(const QString &rawPath, const QString &newTitle, bool slashMoves)
+{
+    const QString path = paths::normalize(rawPath);
+    if (!m_vault || !m_vault->exists(path))
         return {};
-    return relocate(path, to);
+    return renameTo(path, newTitle, false, slashMoves);
 }
 
 QString Workspace::renameFolder(const QString &rawPath, const QString &newName, bool slashMoves)
 {
-    if (!m_vault)
-        return {};
     const QString path = paths::normalize(rawPath);
-    if (path.isEmpty() || newName.trimmed().isEmpty())
+    if (!m_vault || path.isEmpty() || newName.trimmed().isEmpty())
         return {};
-    // A name the vault would hide is refused (as for a new folder), before it is sanitised.
-    if (const QString hidden = notebook::hiddenTypedSegment(newName, true, slashMoves); !hidden.isEmpty()) {
-        Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.").arg(hidden));
-        return {};
-    }
-    const QString to = notebook::renamedPath(path, newName, true, slashMoves);
-    if (to.isEmpty())
-        return {};
-    return relocate(path, to);
+    return renameTo(path, newName, true, slashMoves);
 }
 
 QString Workspace::movePath(const QString &rawPath, const QString &targetFolder)
@@ -437,8 +433,7 @@ QString Workspace::movePath(const QString &rawPath, const QString &targetFolder)
             return {};
         }
     }
-    const QString name = paths::basename(path);
-    return relocate(path, folder.isEmpty() ? name : folder + u'/' + name);
+    return relocate(path, movedPath(path, folder));
 }
 
 } // namespace brulion::shell

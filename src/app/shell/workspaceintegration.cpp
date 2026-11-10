@@ -19,12 +19,11 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QLoggingCategory>
 #include <QPointer>
-#include <QSaveFile>
+#include <QTimer>
 
 using namespace Qt::StringLiterals;
 
@@ -38,27 +37,6 @@ const QString kSyncthingKeyRevision = u"sync/syncthingApiKeyRevision"_s;
 QString syncthingKeyFile(const AppSettings *settings)
 {
     return QFileInfo(settings->passwordFile()).absolutePath() + u"/syncthing-api-key"_s;
-}
-
-/// Owner-only secret file (as AppSettings stores the Nextcloud app password); "" removes it.
-bool writeSecretFile(const QString &file, const QString &value)
-{
-    if (value.isEmpty())
-        return !QFileInfo::exists(file) || QFile::remove(file);
-    const QString dir = QFileInfo(file).absolutePath();
-    if (!QDir().mkpath(dir))
-        return false;
-    QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
-    QSaveFile out(file);
-    if (!out.open(QIODevice::WriteOnly))
-        return false;
-    // Restricted before the secret is written; the rename keeps the permissions.
-    out.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    out.write(value.toUtf8());
-    if (!out.commit())
-        return false;
-    QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    return true;
 }
 
 void wireBackgroundCheck(AppController *app, notify::Notifier *notifier);
@@ -268,13 +246,19 @@ void wireSync(AppController *app)
     };
     applyNextcloud();
     applySyncthing();
+    // Changed Syncthing values are applied together, when the event loop runs again: the setup form saves
+    // the key, then the address, and each apply asks Syncthing at once — the new key would reach the old address.
+    auto *syncthingApply = new QTimer(sync);
+    syncthingApply->setSingleShot(true);
+    syncthingApply->setInterval(0);
+    QObject::connect(syncthingApply, &QTimer::timeout, sync, applySyncthing);
     QObject::connect(settings, &AppSettings::nextcloudChanged, sync, applyNextcloud);
     QObject::connect(settings, &AppSettings::nextcloudPasswordChanged, sync, applyNextcloud);
-    QObject::connect(settings, &AppSettings::valueChanged, sync, [applyNextcloud, applySyncthing](const QString &key) {
+    QObject::connect(settings, &AppSettings::valueChanged, sync, [applyNextcloud, syncthingApply](const QString &key) {
         if (key == u"sync/deviceName")
             applyNextcloud();
         else if (key.startsWith(u"sync/syncthing"_s))
-            applySyncthing();
+            syncthingApply->start();
     });
 
     // The AppController's sync seam (status footer, "Sync now"): Nextcloud's, else — a notebook
@@ -361,15 +345,11 @@ QString syncthingApiKey(AppSettings *settings)
     const QString legacy = settings->value(kSyncthingKeyLegacy, QString()).toString().trimmed();
     if (!legacy.isEmpty()) {
         // Stored in plain QSettings by an older version: move it into the owner-only file.
-        if (!writeSecretFile(file, legacy))
-            return legacy;
-        settings->setValue(kSyncthingKeyLegacy, QString());
+        if (writeSecretFile(file, legacy))
+            settings->setValue(kSyncthingKeyLegacy, QString());
         return legacy;
     }
-    QFile in(file);
-    if (!in.open(QIODevice::ReadOnly))
-        return {};
-    return QString::fromUtf8(in.readAll()).trimmed();
+    return readSecretFile(file);
 }
 
 bool setSyncthingApiKey(AppSettings *settings, const QString &key)
@@ -381,6 +361,9 @@ bool setSyncthingApiKey(AppSettings *settings, const QString &key)
         return true;
     if (!writeSecretFile(syncthingKeyFile(settings), clean))
         return false;
+    // A key left in QSettings (its move failed) would still win over the file: replaced — or forgotten — too.
+    if (!settings->value(kSyncthingKeyLegacy, QString()).toString().isEmpty())
+        settings->setValue(kSyncthingKeyLegacy, QString());
     settings->setValue(kSyncthingKeyRevision, settings->value(kSyncthingKeyRevision, 0).toInt() + 1);
     return true;
 }

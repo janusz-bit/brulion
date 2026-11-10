@@ -84,16 +84,16 @@ QString shortText(const QString &text)
     return out;
 }
 
-} // namespace
-
-// ---- Caches of the lists asked for again and again ------------------------------------------------
-
 /// A ```dataview block's last result: valid for its index version and minute (`date(now)`).
 struct DataviewEntry {
     int version = -1;
     QDateTime minute;
     QVariantMap result;
 };
+
+} // namespace
+
+// ---- Caches of the lists asked for again and again ------------------------------------------------
 
 struct Workspace::ListCaches {
     RecentCaches<CalendarCache> ranges{MaxCachedRanges}; ///< the side panel's month, a picked day, …
@@ -144,7 +144,8 @@ QStringList Workspace::journalDates(const QString &from, const QString &to) cons
     const QDate b = QDate::fromString(to, Qt::ISODate);
     if (!m_index || !a.isValid() || !b.isValid() || a > b)
         return out;
-    for (const JournalRef &j : m_index->journals()) {
+    // (A const copy: the index's cached list, which a non-const loop would copy deeply.)
+    for (const QList<JournalRef> all = m_index->journals(); const JournalRef &j : all) {
         if (j.date >= a && j.date <= b)
             out.append(j.date.toString(Qt::ISODate));
     }
@@ -186,17 +187,16 @@ QVariantList Workspace::backlinks(const QString &path) const
         return out;
     for (const Backlink &b : m_index->backlinks(paths::normalize(path))) {
         const ParsedNote *note = m_index->note(b.path);
-        QVariantMap m{ { u"path"_s, b.path },
-                       { u"title"_s, note ? note->title : paths::pageTitle(b.path) },
-                       { u"line"_s, b.link.line },
-                       { u"journal"_s, journalDate(b.path) } };
+        QVariantMap m{{u"path"_s, b.path},
+                      {u"title"_s, note ? note->title : paths::pageTitle(b.path)},
+                      {u"line"_s, b.link.line},
+                      {u"journal"_s, journalDate(b.path)},
+                      {u"text"_s, QString()}};
         if (note && b.blockIndex >= 0 && b.blockIndex < note->blocks.size()) {
             const Block &block = note->blocks.at(b.blockIndex);
             m.insert(u"text"_s, shortText(block.text));
             if (!block.id.isEmpty())
                 m.insert(u"blockId"_s, block.id);
-        } else {
-            m.insert(u"text"_s, QString());
         }
         out.append(m);
     }
@@ -222,7 +222,7 @@ QVariantList Workspace::tagList() const
     QVariantList out;
     if (!m_index)
         return out;
-    for (const TagCount &t : m_index->tags()) {
+    for (const QList<TagCount> all = m_index->tags(); const TagCount &t : all) {
         out.append(QVariantMap{ { u"tag"_s, t.tag },
                                 { u"display"_s, t.display.isEmpty() ? t.tag : t.display },
                                 { u"count"_s, t.count } });
@@ -238,7 +238,7 @@ QVariantList Workspace::calendarItems(const QString &from, const QString &to) co
     if (!m_index || !a.isValid() || !b.isValid() || a > b || a.daysTo(b) > 400)
         return out;
     CalendarCache &cache = listCaches().ranges.get(a.toString(Qt::ISODate) + u'|' + b.toString(Qt::ISODate));
-    for (const CalendarItem &item : cache.items(*m_index, a, b))
+    for (const QList<CalendarItem> all = cache.items(*m_index, a, b); const CalendarItem &item : all)
         out.append(notebook::calendarItemJson(item).toVariantMap());
     return out;
 }
@@ -352,9 +352,7 @@ QVariantMap Workspace::runDataview(const QString &source, const QString &current
     if (const QString *error = std::get_if<QString>(&result)) {
         out.insert(u"error"_s, *error);
     } else {
-        const QVariantMap json = notebook::dataviewResultJson(*m_index, std::get<dataview::Result>(result)).toVariantMap();
-        for (auto it = json.constBegin(); it != json.constEnd(); ++it)
-            out.insert(it.key(), it.value());
+        out.insert(notebook::dataviewResultJson(*m_index, std::get<dataview::Result>(result)).toVariantMap());
         out.insert(u"ok"_s, true);
     }
     cached.version = m_index->version();

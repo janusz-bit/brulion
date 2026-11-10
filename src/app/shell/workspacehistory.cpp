@@ -31,53 +31,53 @@ QString humanOf(const QDateTime &time, const QString &language, QDate today)
                               language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish, today);
 }
 
+/// `write()` with no throttle of the history (if any) for this one write: the version being
+/// replaced is always recorded.
+template<typename Write>
+bool unthrottled(History *history, const Write &write)
+{
+    if (!history)
+        return write();
+    const HistoryPolicy policy = history->policy();
+    HistoryPolicy none = policy;
+    none.throttleSeconds = 0;
+    history->setPolicy(none);
+    const bool written = write();
+    history->setPolicy(policy);
+    return written;
+}
+
 } // namespace
 
 // ---- History ------------------------------------------------------------------------------------
 
 bool writeTextKeepingHistory(Vault &vault, const QString &path, const QString &content, ChangeSource source)
 {
-    History *h = vault.history();
-    if (!h)
-        return vault.writeText(path, content, source);
-    // No throttle for this one write: the text being replaced is always recorded.
-    const HistoryPolicy policy = h->policy();
-    HistoryPolicy unthrottled = policy;
-    unthrottled.throttleSeconds = 0;
-    h->setPolicy(unthrottled);
-    const bool written = vault.writeText(path, content, source);
-    h->setPolicy(policy);
-    return written;
+    return unthrottled(vault.history(), [&] { return vault.writeText(path, content, source); });
 }
 
 bool writeBytesKeepingHistory(Vault &vault, const QString &path, const QByteArray &bytes, ChangeSource source,
                               QString *error)
 {
     History *h = vault.history();
-    bool written = false;
-    if (!h) {
-        written = vault.writeBinary(path, bytes, source);
-    } else {
-        const HistoryPolicy policy = h->policy();
-        HistoryPolicy unthrottled = policy;
-        unthrottled.throttleSeconds = 0;
-        h->setPolicy(unthrottled);
+    bool recorded = true;
+    const bool written = unthrottled(h, [&] {
         // The vault snapshots the content it holds in memory, never a file beyond its cache (a
         // drawing with pasted photos): the version replaced is recorded from the disk here. (The
         // vault's own snapshot of the same bytes is then no new entry.)
-        const bool exists = vault.exists(path);
-        bool read = false;
-        const QByteArray current = exists ? vault.readBinary(path, &read) : QByteArray();
-        const bool recorded =
-                !exists || (read && (current == bytes || h->snapshotBytes(path, current, changeSourceName(source))));
-        if (!recorded && error)
-            *error = read ? h->errorString() : vault.errorString();
-        written = recorded && vault.writeBinary(path, bytes, source);
-        h->setPolicy(policy);
-        if (!recorded)
-            return false;
-    }
-    if (!written && error)
+        if (h && vault.exists(path)) {
+            bool read = false;
+            const QByteArray current = vault.readBinary(path, &read);
+            recorded = read && (current == bytes || h->snapshotBytes(path, current, changeSourceName(source)));
+            if (!recorded) {
+                if (error)
+                    *error = read ? h->errorString() : vault.errorString();
+                return false;
+            }
+        }
+        return vault.writeBinary(path, bytes, source);
+    });
+    if (!written && recorded && error)
         *error = vault.errorString();
     return written;
 }
@@ -89,7 +89,8 @@ QVariantList Workspace::history(const QString &path) const
     if (!h)
         return out;
     const QDate today = now().date();
-    for (const HistoryEntry &e : h->list(paths::normalize(path))) {
+    const QList<HistoryEntry> entries = h->list(paths::normalize(path));
+    for (const HistoryEntry &e : entries) {
         out.append(QVariantMap{ { u"id"_s, e.id },
                                 { u"time"_s, isoOf(e.time) },
                                 { u"when"_s, humanOf(e.time, m_language, today) },
@@ -131,9 +132,8 @@ QStringList Workspace::historyPaths() const
 
 QVariantList Workspace::trashItems() const
 {
-    QVariantList out;
     if (!m_vault)
-        return out;
+        return {};
     struct Item {
         QString trashPath;
         int files = 0;
@@ -144,7 +144,8 @@ QVariantList Workspace::trashItems() const
     // "trash/<path>" metadata in the LocalStore) above each file.
     const QString trash = vaultTrashFolder();
     QMap<QString, Item> items;
-    for (const FileStat &f : m_vault->trash()) {
+    const QList<FileStat> trashed = m_vault->trash();
+    for (const FileStat &f : trashed) {
         QString item = f.path;
         const QStringList segments = f.path.split(u'/');
         QString prefix = trash;
@@ -165,7 +166,7 @@ QVariantList Workspace::trashItems() const
     const QDate today = now().date();
     for (const Item &item : std::as_const(items)) {
         const TrashInfo info = m_vault->trashInfo(item.trashPath);
-        const QString original = info.original;
+        const QString &original = info.original;
         list.append(QVariantMap{ { u"trashPath"_s, item.trashPath },
                                  { u"original"_s, original },
                                  { u"title"_s, item.folder ? paths::basename(original) : paths::pageTitle(original) },
@@ -183,9 +184,7 @@ QVariantList Workspace::trashItems() const
         return a.value(u"trashPath"_s).toString() < b.value(u"trashPath"_s).toString();
     });
     m_trashCount = int(list.size());
-    for (const QVariantMap &m : std::as_const(list))
-        out.append(m);
-    return out;
+    return QVariantList(list.cbegin(), list.cend());
 }
 
 int Workspace::trashCount() const
@@ -231,7 +230,8 @@ QVariantList Workspace::unreferencedFiles() const
         return list;
     const QLocale locale(m_language == u"en" ? QLocale::English : QLocale::Polish);
     const QDate today = now().date();
-    for (const notebook::UnreferencedFile &file : notebook::unreferencedFiles(*m_index, m_vault->config())) {
+    const QList<notebook::UnreferencedFile> files = notebook::unreferencedFiles(*m_index, m_vault->config());
+    for (const notebook::UnreferencedFile &file : files) {
         if (isFavorite(file.path))
             continue;
         const std::optional<FileStat> stat = m_vault->stat(file.path);

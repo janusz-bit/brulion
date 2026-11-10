@@ -47,10 +47,9 @@ Flickable {
         if (!keepKeyboard)
             source.forceActiveFocus()
         root.rect = source.positionToRectangle(from)
-        const rect = root.rect
-        const top = source.y + rect.y
+        const top = source.y + root.rect.y
         const visibleHeight = root.height - root.toolbarRoom
-        if (top < root.contentY + Theme.space4 || top + rect.height > root.contentY + visibleHeight - Theme.space4)
+        if (top < root.contentY + Theme.space4 || top + root.rect.height > root.contentY + visibleHeight - Theme.space4)
             root.contentY = Math.max(0, Math.min(top - visibleHeight / 3, root.contentHeight - visibleHeight))
     }
     /// The find bar's replaces: one step of the text's own undo history.
@@ -158,7 +157,6 @@ Flickable {
         }
 
         Component.onCompleted: {
-            syncing = true
             text = root.controller ? root.controller.sourceText : ""
             lastText = EditorInput.plainText(textDocument)
             syncing = false
@@ -211,10 +209,7 @@ Flickable {
     // the TextEdit (BlockText's way): its TapHandler takes the press first, and a drag past the
     // threshold goes to the Flickable.
     Item {
-        x: source.x
-        y: source.y
-        width: source.width
-        height: source.height
+        anchors.fill: source
         visible: Theme.touchUi
 
         TapHandler {

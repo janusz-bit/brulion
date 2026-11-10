@@ -205,11 +205,11 @@ private:
     /// the index has and is written only when the file still holds it (compare-and-swap): another
     /// program's change the vault has not taken in yet (an in-place save, a sync while Brulion
     /// was in the background) is taken in first and the occurrence looked up again in it — a
-    /// line number from a stale index never lands on another line. `target` receives the
+    /// line number from a stale index never lands on another line. Returns the outcome and the
     /// occurrence edited.
-    EditResult editOccurrence(const ScheduledNotification &notification,
-                              const std::function<QString(const QString &, const ScheduledNotification &)> &edit,
-                              ScheduledNotification *target);
+    std::pair<EditResult, ScheduledNotification>
+    editOccurrence(const ScheduledNotification &notification,
+                   const std::function<QString(const QString &, const ScheduledNotification &)> &edit);
     /// The notification belongs to another notebook than the open one.
     bool foreign(const ScheduledNotification &notification) const;
     bool applyCompletion(const ScheduledNotification &notification, QDate day);
