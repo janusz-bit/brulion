@@ -112,6 +112,15 @@ done in the repository simply disappears from the list.
   * underlines also outside the edited block and in the Markdown source mode.
 * **Vim mode** — optional movement and editing with Vim keys in the block editor and in source
   mode (Obsidian); command shortcuts can already be changed in Settings → Keyboard shortcuts.
+* **Redesign the notebook choice screen** (`OnboardingView`, "Welcome to Brulion") — on a wide
+  desktop window it is a narrow column in the middle with empty space on both sides and has to be
+  scrolled; the three feature tiles wrap into cramped lines of small text; the cards' descriptions
+  are smaller than the rest of the text; "Import notes", "Open from GitHub" and "Try the sample
+  notebook" are three similar stacked cards; the "Open notebook" button barely reads as the main
+  action; "Recent notebooks", the most useful part for someone coming back, is last and cut off
+  below the fold (the header says 7, four are visible). The list also holds temporary notebooks of
+  test runs (`/tmp/…/scratchpad/vault`): such runs should use their own profile, and a recent
+  folder that no longer exists should be marked or dropped.
 
 ## Views and data
 
@@ -136,6 +145,11 @@ done in the repository simply disappears from the list.
 * **CalDAV calendars** — two-way sync of tasks and events (Nextcloud, Google, Thunderbird, DAVx⁵)
   and read-only subscription to ICS calendars in the calendar view. Today there is a one-time
   iCalendar import and export.
+* **Reminders and alarms stay chips while a block is edited** — today a focused block shows its
+  raw Markdown, so `⏰ 2026-11-20 18:00` and the alarm turn into plain text as soon as the note is
+  entered (docs/UI.md: only an unfocused block shows the rendered chips). They should stay amber
+  chips in the editor too, with their menu (change the time, snooze, remove) and the caret moving
+  over them as one unit, while the file keeps the same text.
 
 ## Capture
 
