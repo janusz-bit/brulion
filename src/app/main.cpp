@@ -332,6 +332,11 @@ int main(int argc, char *argv[])
     brulion::ui::GestureInsets gestureInsets;
     // The mouse wheel moves every Flickable like a browser's smooth scrolling (smoothscroll.h).
     brulion::ui::SmoothScroll::instance();
+    // Qt Quick opens file: URLs itself: a URL property naming a file of another machine (on Windows
+    // a connection to it) is emptied, unless it is the open notebook's (localnetwork.h). Installed
+    // in the app's one QML engine (every window and self-test lives in it); before the controller,
+    // whose workspace updates it until the end.
+    brulion::ui::RemoteFileUrlGuard fileUrlGuard;
     std::unique_ptr<AppController> controller;
 #ifdef BRULION_DESKTOP_INTEGRATION
     std::unique_ptr<brulion::shell::DesktopTray> tray;
@@ -345,6 +350,7 @@ int main(int argc, char *argv[])
 #if QT_CONFIG(qml_network)
     engine.setNetworkAccessManagerFactory(&networkFactory);
 #endif
+    engine.addUrlInterceptor(&fileUrlGuard);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     // image://drawing/…: the previews of drawings in the light or the dark theme (Workspace::drawingUrl).
@@ -380,6 +386,11 @@ int main(int argc, char *argv[])
         options.workingDirectory = QDir::currentPath();
         options.checkForUpdates = !args.contains(u"--selftest-shell"_s);
         controller = std::make_unique<AppController>(options);
+        // The open notebook's pictures pass the URL guard also from \\server\share.
+        brulion::shell::Workspace *workspace = controller->workspace();
+        const auto guardNotebook = [&fileUrlGuard, workspace] { fileUrlGuard.setNotebooks({workspace->rootPath()}); };
+        QObject::connect(workspace, &brulion::shell::Workspace::openChanged, workspace, guardNotebook);
+        guardNotebook();
         if (fixedNow.isValid()) {
             controller->setClock([fixedNow] { return fixedNow; });
             logs.setClock([fixedNow] { return fixedNow; });

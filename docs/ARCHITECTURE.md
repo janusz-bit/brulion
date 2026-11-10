@@ -549,9 +549,14 @@ app; these guards keep data from being lost:
   URL — also `file://server/share/…`, a UNC path that Windows would connect to — gets a
   transparent pixel, never a request): nothing in QML loads from the network, so even a rich-text
   `<img>` with a web address that slipped through cannot make a synced or imported note contact a
-  server. Qt Quick reads `file:` URLs itself (Image, rich text), never through that manager: the
-  pictures of a notebook on `\\server\share` show, and that no `file:` URL comes from note text
-  is the renderers' job (the Workspace builds picture URLs from vault paths).
+  server. Qt Quick reads `file:` URLs itself (Image, rich text), never through that manager, so
+  the engine also has a URL guard (`RemoteFileUrlGuard`, same header): a URL property — Image's or
+  Loader's source — naming a file of another machine (a host but localhost, `file:////server/…`,
+  `%5C%5C…`, `webdavs:`) becomes an empty URL, unless the file lies in the open notebook: the
+  pictures of a notebook on `\\server\share` show (the Workspace builds their URLs from vault
+  paths). The engine's own QML and scripts are not checked (an app installed on a share). An
+  `<img>` inside rich text is resolved by Qt without the guard: that none comes from note text is
+  the renderers' job.
   Pictures from the internet (`![x](https://…)`) are fetched by the Workspace itself
   (`workspacepictures.cpp`, core `webpicture`) only when the user allows it — "Show" on the
   picture, the device setting `webPicturesShown` (off by default) or "Save to notebook" — and
