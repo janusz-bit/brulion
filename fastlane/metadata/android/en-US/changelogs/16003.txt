@@ -1,0 +1,5 @@
+What's new in 0.16.3:
+• Views ready from the start
+• Reminders stay chips while you edit
+
+Full release notes: https://github.com/janusz-bit/brulion/releases/tag/v0.16.3
