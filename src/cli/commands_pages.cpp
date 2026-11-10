@@ -110,6 +110,29 @@ std::optional<VaultPath> existingFolder(Call &call, const QString &raw, bool roo
     return spelled;
 }
 
+/// A folder argument saying where something goes: "." or "/" is the notebook root, an empty path
+/// that is not null (a null folder is the notebook's folder for new pages).
+std::optional<VaultPath> destinationFolder(Call &call, const QString &arg)
+{
+    const QString raw = call.str(arg).trimmed();
+    if (raw == u"." || raw == u"/")
+        return u""_s;
+    return call.vaultPath(raw);
+}
+
+/// Move `from` into the folder argument `arg`.
+Result moveInto(Call &call, const VaultPath &from, const QString &arg)
+{
+    const auto folder = destinationFolder(call, arg);
+    if (!folder)
+        return call.failed();
+    const QString name = paths::basename(from);
+    return relocate(
+            call, from,
+            [&] { return notebook::movePath(*call.vault(), call.index(), from, *folder, ChangeSource::User); },
+            folder->isEmpty() ? name : *folder + u'/' + name);
+}
+
 QJsonObject folderJson(const Vault &vault, const VaultPath &path)
 {
     const notebook::FolderInfo info = notebook::folderInfo(vault, path);
@@ -131,16 +154,16 @@ Result pageList(Call &call)
     Vault *v = call.vault();
     if (!v)
         return call.failed();
-    QString folder;
+    QString prefix; // "folder/" of --folder: only the pages below it
     if (call.has(u"folder"_s)) {
         const auto f = existingFolder(call, call.str(u"folder"_s), true);
         if (!f)
             return call.failed();
-        folder = *f;
+        prefix = f->isEmpty() ? QString() : *f + u'/';
     }
     const VaultConfig config = v->config();
     QList<FileStat> files = v->markdownFiles();
-    files.removeIf([&](const FileStat &f) { return !folder.isEmpty() && !f.path.startsWith(folder + u'/'); });
+    files.removeIf([&](const FileStat &f) { return !prefix.isEmpty() && !f.path.startsWith(prefix); });
     const QString sort = call.has(u"sort"_s) ? call.str(u"sort"_s) : u"title"_s;
     std::ranges::stable_sort(files, [&](const FileStat &a, const FileStat &b) {
         if (sort == u"modified")
@@ -234,15 +257,10 @@ Result pageCreate(Call &call)
     const QString title = call.str(u"title"_s);
     QString folder; // null: the notebook's folder for new pages
     if (call.has(u"folder"_s)) {
-        const QString f = call.str(u"folder"_s).trimmed();
-        if (f == u"." || f == u"/") {
-            folder = u""_s;
-        } else {
-            const auto p = call.vaultPath(f);
-            if (!p)
-                return call.failed();
-            folder = *p;
-        }
+        const auto f = destinationFolder(call, u"folder"_s);
+        if (!f)
+            return call.failed();
+        folder = *f;
     }
     std::optional<NoteMode> mode;
     if (call.has(u"mode"_s))
@@ -358,19 +376,7 @@ Result pageMove(Call &call)
     const auto ref = call.page(call.str(u"ref"_s), true);
     if (!ref)
         return call.failed();
-    const QString target = call.str(u"folder"_s).trimmed();
-    VaultPath folder;
-    if (!(target == u"." || target == u"/")) {
-        const auto p = call.vaultPath(target);
-        if (!p)
-            return call.failed();
-        folder = *p;
-    }
-    const QString name = paths::basename(ref->path);
-    return relocate(
-            call, ref->path,
-            [&] { return notebook::movePath(*call.vault(), call.index(), ref->path, folder, ChangeSource::User); },
-            folder.isEmpty() ? name : folder + u'/' + name);
+    return moveInto(call, ref->path, u"folder"_s);
 }
 
 Result deletePath(Call &call, const VaultPath &path)
@@ -380,9 +386,11 @@ Result deletePath(Call &call, const VaultPath &path)
         Vault &v = *call.vault();
         const auto st = v.stat(path);
         const bool folder = st && st->isDir;
+        const QString below = path + u'/';
         QStringList files;
-        for (const FileStat &f : v.files()) {
-            if (f.path == path || (folder && f.path.startsWith(path + u'/')))
+        // A const list: files() shares the vault's cached list, which a non-const loop would copy.
+        for (const QList<FileStat> all = v.files(); const FileStat &f : all) {
+            if (f.path == path || (folder && f.path.startsWith(below)))
                 files.append(f.path);
         }
         QJsonObject o{{u"path"_s, path},
@@ -423,7 +431,7 @@ Result folderList(Call &call)
             return call.failed();
         const QString prefix = parent->isEmpty() ? QString() : *parent + u'/';
         folders.removeIf(
-                [&](const QString &f) { return !f.startsWith(prefix) || f.mid(prefix.size()).contains(u'/'); });
+                [&](const QString &f) { return !f.startsWith(prefix) || f.indexOf(u'/', prefix.size()) >= 0; });
     }
     QJsonArray out;
     for (const QString &f : std::as_const(folders))
@@ -455,19 +463,7 @@ Result folderMove(Call &call)
     const auto from = existingFolder(call, call.str(u"path"_s), false);
     if (!from)
         return call.failed();
-    const QString target = call.str(u"target"_s).trimmed();
-    VaultPath folder;
-    if (!(target == u"." || target == u"/")) {
-        const auto p = call.vaultPath(target);
-        if (!p)
-            return call.failed();
-        folder = *p;
-    }
-    const QString name = paths::basename(*from);
-    return relocate(
-            call, *from,
-            [&] { return notebook::movePath(*call.vault(), call.index(), *from, folder, ChangeSource::User); },
-            folder.isEmpty() ? name : folder + u'/' + name);
+    return moveInto(call, *from, u"target"_s);
 }
 
 Result folderRename(Call &call)

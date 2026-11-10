@@ -10,6 +10,8 @@
 
 #include <QRegularExpression>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
@@ -35,6 +37,20 @@ QJsonObject calcLineJson(const calc::CalcLineResult &r, int lineOffset)
     return o;
 }
 
+/// A calculation's non-empty lines appended to `lines` (JSON) and `text`; true when one has an error.
+bool appendCalcLines(const QList<calc::CalcLineResult> &results, int lineOffset, QJsonArray &lines, QString &text)
+{
+    bool errors = false;
+    for (const calc::CalcLineResult &r : results) {
+        if (r.input.trimmed().isEmpty())
+            continue;
+        lines.append(calcLineJson(r, lineOffset));
+        errors = errors || r.hasError();
+        text += r.input + u"  =  "_s + (r.hasError() ? tr("error: %1").arg(r.error) : r.value) + u'\n';
+    }
+    return errors;
+}
+
 Result dateParse(Call &call)
 {
     const QString phrase = call.str(u"phrase"_s);
@@ -44,18 +60,19 @@ Result dateParse(Call &call)
         return call.fail(ExitParse, u"date_not_understood"_s, tr("No date in: %1").arg(phrase),
                          {{u"found"_s, false}, {u"phrase"_s, phrase}});
     const DateSpec &spec = found->spec;
-    QJsonObject o{{u"found"_s, true},
-                  {u"date"_s, spec.date.toString(Qt::ISODate)},
-                  {u"time"_s, spec.time ? spec.time->toString(u"HH:mm"_s) : QString()},
-                  {u"spec"_s, spec.toString()},
-                  {u"iso"_s, spec.time ? spec.date.toString(Qt::ISODate) + u'T' + spec.time->toString(u"HH:mm"_s)
-                                       : spec.date.toString(Qt::ISODate)},
-                  {u"human"_s, dates::formatHuman(spec, call.ctx.locale(), now.date())},
-                  {u"past"_s, spec.time ? spec.toLocalDateTime() < now : spec.date < now.date()},
-                  {u"matched"_s, QJsonObject{{u"start"_s, int(found->start)},
-                                             {u"length"_s, int(found->length)},
-                                             {u"text"_s, phrase.mid(found->start, found->length)}}},
-                  {u"rest"_s, dates::stripNaturalDate(phrase, *found).trimmed()}};
+    const QString date = spec.date.toString(Qt::ISODate);
+    const QString time = spec.time ? spec.time->toString(u"HH:mm"_s) : QString();
+    const QJsonObject o{{u"found"_s, true},
+                        {u"date"_s, date},
+                        {u"time"_s, time},
+                        {u"spec"_s, spec.toString()},
+                        {u"iso"_s, spec.time ? date + u'T' + time : date},
+                        {u"human"_s, dates::formatHuman(spec, call.ctx.locale(), now.date())},
+                        {u"past"_s, spec.time ? spec.toLocalDateTime() < now : spec.date < now.date()},
+                        {u"matched"_s, QJsonObject{{u"start"_s, int(found->start)},
+                                                   {u"length"_s, int(found->length)},
+                                                   {u"text"_s, phrase.mid(found->start, found->length)}}},
+                        {u"rest"_s, dates::stripNaturalDate(phrase, *found).trimmed()}};
     return call.ok(o, spec.toString());
 }
 
@@ -67,14 +84,7 @@ Result calcEval(Call &call)
     calc::Scope scope;
     QJsonArray lines;
     QString text;
-    bool errors = false;
-    for (const calc::CalcLineResult &r : calc::evaluateCalc(source, scope, calcLocale(call.ctx))) {
-        if (r.input.trimmed().isEmpty())
-            continue;
-        lines.append(calcLineJson(r, 0));
-        errors = errors || r.hasError();
-        text += r.input + u"  =  "_s + (r.hasError() ? tr("error: %1").arg(r.error) : r.value) + u'\n';
-    }
+    const bool errors = appendCalcLines(calc::evaluateCalc(source, scope, calcLocale(call.ctx)), 0, lines, text);
     const QJsonObject o{{u"lines"_s, lines},
                         {u"value"_s, lines.isEmpty() ? QJsonValue() : lines.last().toObject().value(u"value"_s)}};
     if (errors)
@@ -91,15 +101,10 @@ Result calcPage(Call &call)
     const calc::CalcLocale locale = calcLocale(call.ctx);
     QJsonArray blocks;
     QString text;
-    for (const calc::CalcBlock &b : calc::findCalcBlocks(content)) {
+    for (const auto calcBlocks = calc::findCalcBlocks(content); const calc::CalcBlock &b : calcBlocks) {
         calc::Scope scope = calc::pageScope(content, b.startLine, locale); // what is defined above it
         QJsonArray lines;
-        for (const calc::CalcLineResult &r : calc::evaluateCalc(b.source, scope, locale)) {
-            if (r.input.trimmed().isEmpty())
-                continue;
-            lines.append(calcLineJson(r, b.contentStartLine));
-            text += r.input + u"  =  "_s + (r.hasError() ? tr("error: %1").arg(r.error) : r.value) + u'\n';
-        }
+        appendCalcLines(calc::evaluateCalc(b.source, scope, locale), b.contentStartLine, lines, text);
         blocks.append(QJsonObject{{u"startLine"_s, b.startLine}, {u"endLine"_s, b.endLine}, {u"lines"_s, lines}});
     }
     // Inline calculations: `= expression` code spans.
@@ -108,9 +113,9 @@ Result calcPage(Call &call)
     const QStringList pageLines = QString(content).replace(u"\r\n"_s, u"\n"_s).split(u'\n');
     for (int i = 0; i < pageLines.size(); ++i) {
         for (const auto &m : inlineCalc.globalMatch(pageLines.at(i))) {
-            const calc::CalcLineResult r =
-                    calc::evaluateInline(m.captured(1), calc::pageScope(content, i, locale), locale);
-            QJsonObject o{{u"line"_s, i}, {u"expression"_s, m.captured(1).trimmed()}, {u"value"_s, r.value}};
+            const QString expression = m.captured(1);
+            const auto r = calc::evaluateInline(expression, calc::pageScope(content, i, locale), locale);
+            QJsonObject o{{u"line"_s, i}, {u"expression"_s, expression.trimmed()}, {u"value"_s, r.value}};
             if (r.hasError())
                 o.insert(u"error"_s, r.error);
             inlines.append(o);
@@ -134,26 +139,24 @@ Result blockLink(Call &call)
     const QString pageTarget = notebook::pageLinkTarget(ref->path, config, index);
     notebook::ItemRef item = *ref->item;
     item.page = ref->path;
+    const QJsonObject refDetails{{u"ref"_s, notebook::formatRef(item)}};
     std::optional<notebook::BlockLinks> links;
     const auto written = call.edit(ref->path, [&](const QString &content, bool, QString *next) {
         const notebook::ResolvedLine line = notebook::resolve(content, item, config);
         if (line.status == notebook::ResolvedLine::Stale) {
             call.setError(ExitConflict, u"stale_ref"_s,
-                          tr("The line changed since the ref was taken: read the page again"),
-                          {{u"ref"_s, notebook::formatRef(item)}});
+                          tr("The line changed since the ref was taken: read the page again"), refDetails);
             return false;
         }
         if (line.status == notebook::ResolvedLine::NotFound) {
-            call.setError(ExitNotFound, u"line_not_found"_s, tr("No such line or block"),
-                          {{u"ref"_s, notebook::formatRef(item)}});
+            call.setError(ExitNotFound, u"line_not_found"_s, tr("No such line or block"), refDetails);
             return false;
         }
         // Any block of the notebook with that id counts: a new id avoids them all.
         links = notebook::blockLinks(content, line.line, pageTarget,
                                      [&](const QString &id) { return index->blockById(id).has_value(); });
         if (!links) {
-            call.setError(ExitConflict, u"no_block"_s, tr("That line is no block that can carry an id"),
-                          {{u"ref"_s, notebook::formatRef(item)}});
+            call.setError(ExitConflict, u"no_block"_s, tr("That line is no block that can carry an id"), refDetails);
             return false;
         }
         *next = links->content;
@@ -210,7 +213,7 @@ Result historyList(Call &call)
         return call.failed();
     QJsonArray out;
     QString text;
-    for (const HistoryEntry &e : h->list(*target)) {
+    for (const QList<HistoryEntry> versions = h->list(*target); const HistoryEntry &e : versions) {
         const QString time = e.time.toLocalTime().toString(u"yyyy-MM-dd HH:mm:ss"_s);
         out.append(QJsonObject{{u"id"_s, e.id}, {u"time"_s, time}, {u"size"_s, e.size}, {u"reason"_s, e.reason}});
         text += e.id + u"  "_s + time + u"  "_s + e.reason + u'\n';
@@ -250,10 +253,7 @@ Result historyRestore(Call &call)
     if (!ok)
         return call.fail(ExitNotFound, u"version_not_found"_s, tr("No version %1").arg(id), {{u"id"_s, id}});
     // The version must belong to the page (ids are unique, so this is cheap to check).
-    bool belongs = false;
-    for (const HistoryEntry &e : h->list(*target))
-        belongs = belongs || e.id == id;
-    if (!belongs)
+    if (std::ranges::none_of(h->list(*target), [&id](const HistoryEntry &e) { return e.id == id; }))
         return call.fail(ExitConflict, u"version_of_another_page"_s,
                          tr("Version %1 is not one of %2 (history list shows them)").arg(id, *target));
     notebook::Notebook::WriteOptions options;

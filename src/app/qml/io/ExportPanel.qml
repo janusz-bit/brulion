@@ -74,6 +74,14 @@ ColumnLayout {
 
     spacing: Theme.space5
 
+    /// Small muted explanatory text.
+    component Hint: BText {
+        Layout.fillWidth: true
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
+
     ExportController {
         id: exporterObject
         objectName: "exportController"
@@ -102,8 +110,7 @@ ColumnLayout {
         id: formats
         Layout.fillWidth: true
         // Phones: names only in two columns, the chosen format explained below.
-        readonly property bool brief: Theme.compact
-        columns: brief ? 2 : width >= 700 ? 3 : 2
+        columns: !Theme.compact && width >= 700 ? 3 : 2
         columnSpacing: Theme.space2
         rowSpacing: Theme.space2
 
@@ -140,7 +147,6 @@ ColumnLayout {
                     BFocusRing { visible: tile.visualFocus; targetRadius: Theme.radius }
                 }
                 contentItem: RowLayout {
-                    id: tileRow
                     spacing: Theme.space3
                     BIcon {
                         Layout.alignment: Qt.AlignTop
@@ -162,13 +168,9 @@ ColumnLayout {
                             maximumLineCount: 2
                             elide: Text.ElideRight
                         }
-                        BText {
-                            Layout.fillWidth: true
-                            visible: !formats.brief
+                        Hint {
+                            visible: !Theme.compact
                             text: tile.description
-                            variant: "small"
-                            color: Theme.fgMuted
-                            wrapMode: Text.Wrap
                         }
                     }
                 }
@@ -176,13 +178,9 @@ ColumnLayout {
         }
     }
 
-    BText {
-        Layout.fillWidth: true
-        visible: formats.brief
+    Hint {
+        visible: Theme.compact
         text: exporterObject.chosenFormat.description !== undefined ? "" + exporterObject.chosenFormat.description : ""
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
     }
 
     // ---- What ---------------------------------------------------------------------------------------
@@ -269,19 +267,13 @@ ColumnLayout {
             accessibleName: qsTr("Pictures from the internet")
             model: panel.webPictureChoices
             currentValue: exporterObject.webPictures
-            onActivated: (value) => {
-                exporterObject.webPictures = value
-                AppSettings.exportWebPictures = value
-            }
+            // The controller follows the setting (its binding stays).
+            onActivated: (value) => AppSettings.exportWebPictures = value
         }
-        BText {
-            Layout.fillWidth: true
+        Hint {
             text: exporterObject.webPictures === "include"
                   ? qsTr("The export carries the pictures. Brulion fetches the ones this device does not have yet.")
                   : qsTr("The export shows such pictures only with an internet connection.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
     }
 
@@ -355,13 +347,9 @@ ColumnLayout {
         subtitle: AppController.isWasm ? qsTr("Your browser saves it in its downloads.") : exporterObject.savedTo
         Repeater {
             model: exporterObject.warnings.slice(0, 50)
-            delegate: BText {
-                required property var modelData
-                Layout.fillWidth: true
+            delegate: Hint {
+                required property string modelData
                 text: "• " + modelData
-                variant: "small"
-                color: Theme.fgMuted
-                wrapMode: Text.Wrap
             }
         }
         BButton {

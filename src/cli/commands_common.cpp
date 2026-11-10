@@ -17,18 +17,6 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
 
-Arg positional(const QString &name, ArgType type, const char *help, bool required, bool rest)
-{
-    Arg a;
-    a.name = name;
-    a.type = type;
-    a.help = cliText(help);
-    a.required = required;
-    a.positional = true;
-    a.rest = rest;
-    return a;
-}
-
 Arg option(const QString &name, ArgType type, const char *help, bool required)
 {
     Arg a;
@@ -36,6 +24,14 @@ Arg option(const QString &name, ArgType type, const char *help, bool required)
     a.type = type;
     a.help = cliText(help);
     a.required = required;
+    return a;
+}
+
+Arg positional(const QString &name, ArgType type, const char *help, bool required, bool rest)
+{
+    Arg a = option(name, type, help, required);
+    a.positional = true;
+    a.rest = rest;
     return a;
 }
 
@@ -96,8 +92,8 @@ QString itemBody(const QString &block)
     if (!lines.isEmpty())
         lines.first().remove(marker);
     for (qsizetype i = 1; i < lines.size(); ++i) {
-        if (lines.at(i).startsWith(u"  "_s))
-            lines[i] = lines.at(i).mid(2);
+        if (lines.at(i).startsWith(u"  "))
+            lines[i].remove(0, 2);
     }
     return lines.join(u'\n');
 }
@@ -111,23 +107,26 @@ std::optional<QString> insertUnder(Call &call, const QString &content, const QSt
     const QString under = rawUnder.trimmed();
     int target = -1;
     if (under.startsWith(u'^') || under.startsWith(u"((")) {
-        const auto ref = notebook::parseItemRef(under);
-        for (int i = 0; ref && i < doc.count(); ++i) {
-            if (doc.at(i).blockId == ref->blockId)
-                target = i;
+        // A malformed ref ("((id" without its "))" reads as a page name) has no block id: it must
+        // not match the blocks without one.
+        if (const auto ref = notebook::parseItemRef(under); ref && ref->hasBlock()) {
+            for (int i = 0; i < doc.count(); ++i) {
+                if (doc.at(i).blockId == ref->blockId)
+                    target = i;
+            }
         }
     } else {
         QList<Heading> headings;
         QList<int> rows;
         for (int i = 0; i < doc.count(); ++i) {
-            if (doc.at(i).headingLevel > 0) {
-                headings.append(Heading{doc.at(i).headingLevel, doc.at(i).body.section(u'\n', 0, 0), doc.at(i).line});
+            if (const markdown::BlockEntry &e = doc.at(i); e.headingLevel > 0) {
+                headings.append(Heading{e.headingLevel, e.body.section(u'\n', 0, 0), e.line});
                 rows.append(i);
             }
         }
-        QString fragment = under;
+        QStringView fragment = under;
         while (fragment.startsWith(u'#'))
-            fragment.remove(0, 1);
+            fragment = fragment.sliced(1);
         const int h = markdown::findHeading(headings, fragment.trimmed());
         target = h >= 0 ? rows.at(h) : -1;
     }
@@ -207,46 +206,35 @@ QJsonArray backlinksJson(Call &call, const VaultPath &path)
     VaultIndex *index = call.index();
     if (!index)
         return out;
-    const VaultConfig config = index->config();
-    const auto journal = [&](const VaultPath &p) {
-        const auto d = markdown::journalDateFromPath(p, config);
-        return d ? d->toString(Qt::ISODate) : QString();
+    const VaultConfig &config = index->config();
+    // {kind, path, title, journal, text, blockId?} of a mention in the note at `p`, with the block
+    // `blockIndex` of that note it is in (nullptr: none).
+    const auto mention = [&](const QString &kind, const VaultPath &p, int blockIndex) {
+        const ParsedNote *note = index->note(p);
+        const Block *block =
+                note && blockIndex >= 0 && blockIndex < note->blocks.size() ? &note->blocks.at(blockIndex) : nullptr;
+        const auto day = markdown::journalDateFromPath(p, config);
+        QJsonObject o{{u"kind"_s, kind},
+                      {u"path"_s, p},
+                      {u"title"_s, note ? note->title : paths::pageTitle(p)},
+                      {u"journal"_s, day ? day->toString(Qt::ISODate) : QString()},
+                      {u"text"_s, block ? block->text.simplified() : QString()}};
+        if (block && !block->id.isEmpty())
+            o.insert(u"blockId"_s, block->id);
+        return std::pair{o, block};
     };
-    for (const Backlink &b : index->backlinks(path)) {
-        const ParsedNote *note = index->note(b.path);
-        QJsonObject o{{u"kind"_s, u"link"_s},
-                      {u"path"_s, b.path},
-                      {u"title"_s, note ? note->title : paths::pageTitle(b.path)},
-                      {u"line"_s, b.link.line},
-                      {u"journal"_s, journal(b.path)},
-                      {u"text"_s, QString()}};
-        if (note && b.blockIndex >= 0 && b.blockIndex < note->blocks.size()) {
-            const Block &block = note->blocks.at(b.blockIndex);
-            o.insert(u"text"_s, block.text.simplified());
-            if (!block.id.isEmpty())
-                o.insert(u"blockId"_s, block.id);
-        }
+    for (const QList<Backlink> links = index->backlinks(path); const Backlink &b : links) {
+        QJsonObject o = mention(u"link"_s, b.path, b.blockIndex).first;
+        o.insert(u"line"_s, b.link.line);
         o.insert(u"ref"_s, Call::lineRef(b.path, noteText(call, b.path), b.link.line));
         out.append(o);
     }
-    for (const TagReference &t : index->tagReferences(path)) {
-        const ParsedNote *note = index->note(t.path);
-        QJsonObject o{{u"kind"_s, u"tag"_s},
-                      {u"path"_s, t.path},
-                      {u"title"_s, note ? note->title : paths::pageTitle(t.path)},
-                      {u"tag"_s, t.tag},
-                      {u"journal"_s, journal(t.path)}};
-        if (note && t.blockIndex >= 0 && t.blockIndex < note->blocks.size()) {
-            const Block &block = note->blocks.at(t.blockIndex);
-            o.insert(u"line"_s, block.line);
-            o.insert(u"text"_s, block.text.simplified());
-            if (!block.id.isEmpty())
-                o.insert(u"blockId"_s, block.id);
-            o.insert(u"ref"_s, Call::lineRef(t.path, noteText(call, t.path), block.line));
-        } else {
-            o.insert(u"line"_s, -1); // the page as a whole (frontmatter tags:)
-            o.insert(u"text"_s, QString());
-        }
+    for (const QList<TagReference> tags = index->tagReferences(path); const TagReference &t : tags) {
+        auto [o, block] = mention(u"tag"_s, t.path, t.blockIndex);
+        o.insert(u"tag"_s, t.tag);
+        o.insert(u"line"_s, block ? block->line : -1); // -1: the page as a whole (frontmatter tags:)
+        if (block)
+            o.insert(u"ref"_s, Call::lineRef(t.path, noteText(call, t.path), block->line));
         out.append(o);
     }
     return out;
@@ -254,12 +242,12 @@ QJsonArray backlinksJson(Call &call, const VaultPath &path)
 
 void addRefs(Call &call, QJsonObject &result)
 {
-    const auto withRefs = [&](QJsonArray items) {
+    const auto withRefs = [&call](QJsonArray items) {
         for (qsizetype i = 0; i < items.size(); ++i) {
             QJsonObject o = items.at(i).toObject();
             const QString path = o.value(u"path"_s).toString();
             const int line = o.value(u"line"_s).toInt(-1);
-            if (!path.isEmpty() && line >= 0 && o.contains(u"raw"_s) && !o.value(u"raw"_s).toString().isEmpty())
+            if (!path.isEmpty() && line >= 0 && !o.value(u"raw"_s).toString().isEmpty())
                 o.insert(u"ref"_s, Call::lineRef(path, noteText(call, path), line));
             items[i] = o;
         }

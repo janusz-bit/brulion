@@ -77,7 +77,7 @@ Result appendLine(Call &call, const VaultPath &path, const QString &line)
     return call.ok(o, line + u"  →  "_s + path);
 }
 
-void warnIfPast(Call &call, const DateSpec &spec, const QString &arg)
+void warnIfPast(Call &call, DateSpec spec, const QString &arg)
 {
     const QDateTime now = call.ctx.now();
     const bool past = spec.hasTime() ? spec.toLocalDateTime() < now : spec.date < now.date();
@@ -86,19 +86,30 @@ void warnIfPast(Call &call, const DateSpec &spec, const QString &arg)
                   {{u"argument"_s, arg}, {u"date"_s, spec.toString()}});
 }
 
-/// A recurrence phrase in its canonical English form ("co tydzień" -> "every week").
-std::optional<QString> recurrence(Call &call)
+/// A new task or reminder `line` with --every as 🔁 (in its canonical English form: "co tydzień" ->
+/// "every week"), appended where placeFor() puts it.
+Result addItem(Call &call, QString line)
 {
-    if (!call.has(u"every"_s))
-        return QString();
-    const QString rule = dates::canonicalRecurrence(call.str(u"every"_s));
-    if (rule.isEmpty()) {
-        call.setError(ExitParse, u"recurrence_not_understood"_s, tr("Not a recurrence: %1").arg(call.str(u"every"_s)),
-                      {{u"examples"_s, QJsonArray{u"co tydzień"_s, u"codziennie"_s, u"co miesiąc 15."_s,
-                                                  u"every 2 weeks"_s, u"every weekday"_s}}});
-        return std::nullopt;
+    if (call.has(u"every"_s)) {
+        const QString every = call.str(u"every"_s);
+        const QString rule = dates::canonicalRecurrence(every);
+        if (rule.isEmpty())
+            return call.fail(ExitParse, u"recurrence_not_understood"_s, tr("Not a recurrence: %1").arg(every),
+                             {{u"examples"_s, QJsonArray{u"co tydzień"_s, u"codziennie"_s, u"co miesiąc 15."_s,
+                                                         u"every 2 weeks"_s, u"every weekday"_s}}});
+        line += u' ' + markdown::tokens::Recurrence.toString() + u' ' + rule;
     }
-    return rule;
+    const auto path = placeFor(call);
+    return path ? appendLine(call, *path, line) : call.failed();
+}
+
+/// A task query: `type:tasks` first unless it names a type of its own.
+QString taskQuery(QString source)
+{
+    static const QRegularExpression typed(u"(^|\\s)-?(type|typ):"_s, QRegularExpression::CaseInsensitiveOption);
+    if (!typed.match(source).hasMatch())
+        source.prepend(u"type:tasks "_s);
+    return source;
 }
 
 Result taskList(Call &call)
@@ -109,17 +120,15 @@ Result taskList(Call &call)
     QString source;
     QList<QueryFilter> extra;
     if (call.has(u"query"_s)) {
-        source = call.str(u"query"_s);
-        static const QRegularExpression typed(u"(^|\\s)-?(type|typ):"_s, QRegularExpression::CaseInsensitiveOption);
-        if (!typed.match(source).hasMatch())
-            source.prepend(u"type:tasks "_s);
+        source = taskQuery(call.str(u"query"_s));
     } else {
         source = u"type:tasks"_s;
         const QString status = call.has(u"status"_s) ? call.str(u"status"_s).trimmed() : u"open"_s;
         source += u" status:"_s + QString(status).replace(u' ', u'-');
         if (call.has(u"due"_s)) {
+            static const QRegularExpression space(u"\\s"_s);
             const QString due = call.str(u"due"_s).trimmed();
-            if (due.contains(QRegularExpression(u"\\s"_s)))
+            if (due.contains(space))
                 return call.fail(ExitUsage, u"bad_argument"_s,
                                  tr("--due takes one expression (today, +7d, overdue, "
                                     "this-week, 2026-10-01..2026-10-31)"));
@@ -160,7 +169,8 @@ Result taskList(Call &call)
     addRefs(call, result);
     result.insert(u"query"_s, source);
     QString text;
-    for (const QJsonValue &v : result.value(u"items"_s).toArray()) {
+    // A const array: one sharing `result`'s items would be copied by a non-const loop.
+    for (const QJsonArray items = result.value(u"items"_s).toArray(); const auto &v : items) {
         const QJsonObject o = v.toObject();
         QString marks;
         if (o.value(u"blocked"_s).toBool())
@@ -214,15 +224,7 @@ Result taskAdd(Call &call)
         warnIfPast(call, *spec, arg);
         line += u' ' + markdown::formatReminderToken(*spec, arg == u"alarm");
     }
-    const auto rule = recurrence(call);
-    if (!rule)
-        return call.failed();
-    if (!rule->isEmpty())
-        line += u' ' + markdown::tokens::Recurrence.toString() + u' ' + *rule;
-    const auto path = placeFor(call);
-    if (!path)
-        return call.failed();
-    return appendLine(call, *path, line);
+    return addItem(call, line);
 }
 
 /// The status a word names: a TaskStatus, or nullopt for "no status".
@@ -263,8 +265,14 @@ std::optional<int> refLine(Call &call, const QString &content, const notebook::I
     return std::nullopt;
 }
 
-/// A page ref with a line or block part: the page and the item.
-std::optional<std::pair<VaultPath, notebook::ItemRef>> itemOf(Call &call, const QString &raw)
+/// The page of an item ref and the line or block it points at.
+struct ItemTarget {
+    VaultPath path;
+    notebook::ItemRef item;
+};
+
+/// A page ref with a line or block part.
+std::optional<ItemTarget> itemOf(Call &call, const QString &raw)
 {
     const auto ref = call.page(raw, true);
     if (!ref)
@@ -277,7 +285,7 @@ std::optional<std::pair<VaultPath, notebook::ItemRef>> itemOf(Call &call, const 
     notebook::ItemRef item = *ref->item;
     if (item.page.isEmpty())
         item.page = ref->path;
-    return std::pair{ref->path, item};
+    return ItemTarget{ref->path, item};
 }
 
 Result taskSet(Call &call)
@@ -291,8 +299,8 @@ Result taskSet(Call &call)
     const auto target = itemOf(call, call.str(u"ref"_s));
     if (!target)
         return call.failed();
-    const VaultPath path = target->first;
-    const notebook::ItemRef item = target->second;
+    const VaultPath path = target->path;
+    const notebook::ItemRef item = target->item;
     int line = -1;
     int inserted = 0;
     bool wasTask = false;
@@ -353,14 +361,13 @@ std::optional<QJsonArray> stopClocks(Call &call, const VaultPath &keepPath = {},
         return std::nullopt;
     QJsonArray stopped;
     const QDateTime now = call.ctx.now();
-    for (const TaskRef &t : index->runningClocks()) {
+    for (const QList<TaskRef> running = index->runningClocks(); const TaskRef &t : running) {
         const ParsedNote *note = index->note(t.path);
-        if (!note || t.blockIndex >= note->blocks.size())
+        if (!note || t.blockIndex < 0 || t.blockIndex >= note->blocks.size())
             continue;
         const int line = note->blocks[t.blockIndex].line;
         if (t.path == keepPath && line == keepLine)
             continue;
-        const QDateTime start = t.task.clockStart;
         const auto written = call.edit(t.path, [&](const QString &content, bool, QString *next) {
             *next = markdown::stopTaskClock(content, line, now);
             return true;
@@ -369,7 +376,7 @@ std::optional<QJsonArray> stopClocks(Call &call, const VaultPath &keepPath = {},
             return std::nullopt;
         stopped.append(QJsonObject{{u"ref"_s, Call::lineRef(t.path, written->after, line)},
                                    {u"text"_s, t.task.text},
-                                   {u"seconds"_s, std::max<qint64>(0, start.secsTo(now))}});
+                                   {u"seconds"_s, std::max<qint64>(0, t.task.clockStart.secsTo(now))}});
     }
     return stopped;
 }
@@ -379,7 +386,7 @@ Result taskStart(Call &call)
     const auto target = itemOf(call, call.str(u"ref"_s));
     if (!target)
         return call.failed();
-    const VaultPath path = target->first;
+    const VaultPath path = target->path;
     VaultIndex *index = call.index();
     if (!index)
         return call.failed();
@@ -387,7 +394,7 @@ Result taskStart(Call &call)
     int line = -1;
     const QString current = index->content(path);
     if (!current.isNull()) {
-        const notebook::ResolvedLine r = notebook::resolve(current, target->second, call.vault()->config());
+        const notebook::ResolvedLine r = notebook::resolve(current, target->item, call.vault()->config());
         if (r.line >= 0)
             line = markdown::taskBlockLine(current, r.line);
     }
@@ -398,7 +405,7 @@ Result taskStart(Call &call)
     const QDateTime now = call.ctx.now();
     bool running = false;
     const auto written = call.edit(path, [&](const QString &content, bool, QString *next) {
-        const auto at = taskLineOf(call, content, target->second);
+        const auto at = taskLineOf(call, content, target->item);
         if (!at)
             return false;
         line = *at;
@@ -425,7 +432,7 @@ Result taskStop(Call &call)
         if (!stopped)
             return call.failed();
         QString text;
-        for (const QJsonValue &v : *stopped) {
+        for (const auto &v : *stopped) {
             const QJsonObject o = v.toObject();
             text += markdown::formatClockDuration(o.value(u"seconds"_s).toInteger()) + u"  "_s
                     + o.value(u"text"_s).toString() + u"  "_s + o.value(u"ref"_s).toString() + u'\n';
@@ -437,29 +444,31 @@ Result taskStop(Call &call)
     const auto target = itemOf(call, call.str(u"ref"_s));
     if (!target)
         return call.failed();
-    const VaultPath path = target->first;
+    const VaultPath path = target->path;
     const QDateTime now = call.ctx.now();
     int line = -1;
-    qint64 seconds = -1;
+    std::optional<qint64> seconds; // of the clock that ran
     const auto written = call.edit(path, [&](const QString &content, bool, QString *next) {
-        const auto at = taskLineOf(call, content, target->second);
+        const auto at = taskLineOf(call, content, target->item);
         if (!at)
             return false;
         line = *at;
-        if (const markdown::ClockEntry *running = markdown::taskLogbook(content, line).running())
+        // running() points into the logbook: it must outlive the pointer.
+        const markdown::Logbook logbook = markdown::taskLogbook(content, line);
+        if (const markdown::ClockEntry *running = logbook.running())
             seconds = std::max<qint64>(0, running->start.secsTo(now));
         *next = markdown::stopTaskClock(content, line, now);
         return true;
     });
     if (!written)
         return call.failed();
-    if (seconds < 0)
+    if (!seconds)
         call.warn(u"not_running"_s, tr("No clock runs on this task"));
     QJsonObject o = call.writeJson(*written);
     o.insert(u"line"_s, line);
     o.insert(u"ref"_s, Call::lineRef(path, written->after, line));
-    o.insert(u"seconds"_s, std::max<qint64>(0, seconds));
-    return call.ok(o, markdown::formatClockDuration(std::max<qint64>(0, seconds)) + u"  "_s
+    o.insert(u"seconds"_s, seconds.value_or(0));
+    return call.ok(o, markdown::formatClockDuration(seconds.value_or(0)) + u"  "_s
                               + lineText(written->after, line).trimmed());
 }
 
@@ -496,11 +505,8 @@ Result taskTime(Call &call)
     }
     QList<TaskRef> tasks;
     if (call.has(u"query"_s)) {
-        QString source = call.str(u"query"_s);
-        static const QRegularExpression typed(u"(^|\\s)-?(type|typ):"_s, QRegularExpression::CaseInsensitiveOption);
-        if (!typed.match(source).hasMatch())
-            source.prepend(u"type:tasks "_s);
-        source += u" is:tracked limit:"_s + QString::number(MaxQueryLimit);
+        const QString source =
+                taskQuery(call.str(u"query"_s)) + u" is:tracked limit:"_s + QString::number(MaxQueryLimit);
         const std::variant<Query, QString> parsed = parseQuery(source);
         if (const QString *message = std::get_if<QString>(&parsed))
             return call.fail(ExitParse, u"query_error"_s, *message, {{u"query"_s, source}});
@@ -557,11 +563,11 @@ Result taskDepend(Call &call)
     const bool remove = call.flag(u"remove"_s);
     // The id of the task depended on: its 🆔, else a new one written to it.
     QString id;
-    const auto idWritten = call.edit(on->first, [&](const QString &content, bool, QString *next) {
-        const auto line = taskLineOf(call, content, on->second);
+    const auto idWritten = call.edit(on->path, [&](const QString &content, bool, QString *next) {
+        const auto line = taskLineOf(call, content, on->item);
         if (!line)
             return false;
-        const ParsedNote note = markdown::parseNote(on->first, content, call.vault()->config());
+        const ParsedNote note = markdown::parseNote(on->path, content, call.vault()->config());
         const int b = markdown::blockAtLine(note, *line);
         id = b >= 0 && note.blocks[b].task ? note.blocks[b].task->id : QString();
         if (!id.isEmpty() || remove) {
@@ -577,8 +583,8 @@ Result taskDepend(Call &call)
     if (id.isEmpty())
         return call.fail(ExitUsage, u"no_task_id"_s, tr("That task has no id (🆔): it has no dependents"));
     int line = -1;
-    const auto written = call.edit(target->first, [&](const QString &content, bool, QString *next) {
-        const auto at = taskLineOf(call, content, target->second);
+    const auto written = call.edit(target->path, [&](const QString &content, bool, QString *next) {
+        const auto at = taskLineOf(call, content, target->item);
         if (!at)
             return false;
         line = *at;
@@ -591,7 +597,7 @@ Result taskDepend(Call &call)
     QJsonObject o = call.writeJson(*written);
     o.insert(u"id"_s, id);
     o.insert(u"line"_s, line);
-    o.insert(u"ref"_s, Call::lineRef(target->first, written->after, line));
+    o.insert(u"ref"_s, Call::lineRef(target->path, written->after, line));
     if (idWritten->status != notebook::Notebook::WriteResult::Unchanged)
         o.insert(u"idWritten"_s, call.writeJson(*idWritten));
     return call.ok(o, lineText(written->after, line).trimmed());
@@ -612,17 +618,9 @@ Result remindAdd(Call &call)
     if (!at)
         return call.failed();
     warnIfPast(call, *at, u"at"_s);
-    QString line = (call.flag(u"task"_s) ? u"- [ ] "_s : u"- "_s) + text + u' '
-                   + markdown::formatReminderToken(*at, call.flag(u"alarm"_s));
-    const auto rule = recurrence(call);
-    if (!rule)
-        return call.failed();
-    if (!rule->isEmpty())
-        line += u' ' + markdown::tokens::Recurrence.toString() + u' ' + *rule;
-    const auto path = placeFor(call);
-    if (!path)
-        return call.failed();
-    return appendLine(call, *path, line);
+    const QString line = (call.flag(u"task"_s) ? u"- [ ] "_s : u"- "_s) + text + u' '
+                         + markdown::formatReminderToken(*at, call.flag(u"alarm"_s));
+    return addItem(call, line);
 }
 
 Result remindList(Call &call)
@@ -690,8 +688,8 @@ Result remindSnooze(Call &call)
     const auto target = itemOf(call, call.str(u"ref"_s));
     if (!target)
         return call.failed();
-    const VaultPath path = target->first;
-    const notebook::ItemRef item = target->second;
+    const VaultPath path = target->path;
+    const notebook::ItemRef item = target->item;
     int line = -1;
     const auto written = call.edit(path, [&](const QString &content, bool, QString *next) {
         const auto at = refLine(call, content, item);
@@ -715,6 +713,16 @@ Result remindSnooze(Call &call)
     return call.ok(o);
 }
 
+Command make(const QString &id, const char *summary, Handler run, QList<Arg> args)
+{
+    Command c;
+    c.id = id;
+    c.summary = cliText(summary);
+    c.run = std::move(run);
+    c.args = std::move(args);
+    return c;
+}
+
 } // namespace
 
 void addTaskCommands(QList<Command> &out)
@@ -723,44 +731,36 @@ void addTaskCommands(QList<Command> &out)
             u"ref"_s, ArgType::Ref,
             QT_TRANSLATE_NOOP("brulion::cli",
                               "The task's line: the `ref` task list gives (Dom.md#L12@hash), or a block (^id)"));
-    const auto placeArgs = [] {
-        return QList<Arg>{
-                option(u"page"_s, ArgType::Ref,
-                       QT_TRANSLATE_NOOP("brulion::cli", "Into this page (default: today's daily note)")),
-                option(u"date"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Into the daily note of this day"))};
-    };
-    Command c;
-    c.id = u"task.list"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli",
-                                          "List tasks (default: open ones), or run a task query (docs/SYNTAX.md §10)"));
-    c.args = {option(u"status"_s, ArgType::String,
-                     QT_TRANSLATE_NOOP(
-                             "brulion::cli",
-                             "open (default), todo, doing, done, cancelled, deferred, closed, all — or Polish words")),
-              option(u"due"_s, ArgType::String,
-                     QT_TRANSLATE_NOOP("brulion::cli",
-                                       "A due date expression: today, +7d, <=+7d, overdue, this-week, none")),
-              option(u"tag"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "With this tag (also its sub-tags)")),
-              option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "In this page")),
-              option(u"limit"_s, ArgType::Int,
-                     QT_TRANSLATE_NOOP("brulion::cli", "At most this many (the total is still counted)")),
-              flag(u"blocked"_s,
-                   QT_TRANSLATE_NOOP("brulion::cli", "Only blocked tasks: waiting for an open task (⛔ / 🆔)")),
-              option(u"query"_s, ArgType::String,
-                     QT_TRANSLATE_NOOP(
-                             "brulion::cli",
-                             "A whole query instead (\"status:open due:<=+7d sort:due\"; type:tasks unless given)"))};
-    c.run = taskList;
+    const QList<Arg> placeArgs = {
+            option(u"page"_s, ArgType::Ref,
+                   QT_TRANSLATE_NOOP("brulion::cli", "Into this page (default: today's daily note)")),
+            option(u"date"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Into the daily note of this day"))};
+    Command c = make(
+            u"task.list"_s,
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "List tasks (default: open ones), or run a task query (docs/SYNTAX.md §10)"),
+            taskList,
+            {option(u"status"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP(
+                            "brulion::cli",
+                            "open (default), todo, doing, done, cancelled, deferred, closed, all — or Polish words")),
+             option(u"due"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "A due date expression: today, +7d, <=+7d, overdue, this-week, none")),
+             option(u"tag"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "With this tag (also its sub-tags)")),
+             option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "In this page")),
+             option(u"limit"_s, ArgType::Int,
+                    QT_TRANSLATE_NOOP("brulion::cli", "At most this many (the total is still counted)")),
+             flag(u"blocked"_s,
+                  QT_TRANSLATE_NOOP("brulion::cli", "Only blocked tasks: waiting for an open task (⛔ / 🆔)")),
+             option(u"query"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP(
+                            "brulion::cli",
+                            "A whole query instead (\"status:open due:<=+7d sort:due\"; type:tasks unless given)"))});
     out.append(c);
-    c = Command();
-    c.id = u"task.add"_s;
-    c.summary =
-            cliText(QT_TRANSLATE_NOOP("brulion::cli", "Add a task with canonical tokens (📅 ⏳ 🛫 ⏰ 🔁, priority)"));
-    c.help = cliText(QT_TRANSLATE_NOOP(
-            "brulion::cli",
-            "Dates are phrases (jutro 9:00, w piątek, 2026-10-15) written as YYYY-MM-DD [HH:mm]; a date in the past "
-            "gives a warning. The task goes to today's daily note unless --page or --date."));
-    c.args = QList<Arg>{stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The task"),
+    c = make(u"task.add"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "Add a task with canonical tokens (📅 ⏳ 🛫 ⏰ 🔁, priority)"), taskAdd,
+             QList<Arg>{stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The task"),
                                              true, true)),
                         option(u"due"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Due date 📅")),
                         option(u"scheduled"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Scheduled ⏳")),
@@ -773,59 +773,54 @@ void addTaskCommands(QList<Command> &out)
                                QT_TRANSLATE_NOOP("brulion::cli", "Recurrence 🔁 (co tydzień, every weekday, …)")),
                         option(u"priority"_s, ArgType::String,
                                QT_TRANSLATE_NOOP("brulion::cli", "highest, high, medium, low, lowest"))}
-             + placeArgs();
-    c.run = taskAdd;
+                     + placeArgs);
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "Dates are phrases (jutro 9:00, w piątek, 2026-10-15) written as YYYY-MM-DD [HH:mm]; a date in the past "
+            "gives a warning. The task goes to today's daily note unless --page or --date."));
     c.writes = true;
     out.append(c);
-    c = Command();
-    c.id = u"task.set"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP(
-            "brulion::cli", "Set a task's status (completing a recurring task adds its next occurrence)"));
-    c.args = {ref,
+    c = make(u"task.set"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Set a task's status (completing a recurring task adds its next occurrence)"),
+             taskSet,
+             {ref,
               positional(u"status"_s, ArgType::String,
                          QT_TRANSLATE_NOOP("brulion::cli", "todo, doing, done, cancelled, deferred, none — or "
                                                            "zrobione, w toku, anulowane, odłożone, brak")),
               flag(u"history"_s,
                    QT_TRANSLATE_NOOP("brulion::cli", "Log the change in the task's :LOGBOOK: (doing starts its clock, "
-                                                     "leaving doing stops it), as the app's status history setting"))};
-    c.run = taskSet;
+                                                     "leaving doing stops it), as the app's status history setting"))});
     c.writes = true;
     out.append(c);
-    c = Command();
-    c.id = u"task.start"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP(
-            "brulion::cli", "Start a task's clock (a CLOCK line in its :LOGBOOK:); a running one elsewhere stops"));
-    c.args = {ref};
-    c.run = taskStart;
+    c = make(u"task.start"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Start a task's clock (a CLOCK line in its :LOGBOOK:); a running one elsewhere stops"),
+             taskStart, {ref});
     c.writes = true;
     out.append(c);
-    c = Command();
-    c.id = u"task.stop"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Stop a task's clock (without a ref: every running one)"));
-    c.args = {positional(
-            u"ref"_s, ArgType::Ref,
-            QT_TRANSLATE_NOOP("brulion::cli", "The task's line (Dom.md#L12@hash); default: the running clocks"),
-            false)};
-    c.run = taskStop;
+    c = make(u"task.stop"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "Stop a task's clock (without a ref: every running one)"), taskStop,
+             {positional(u"ref"_s, ArgType::Ref,
+                         QT_TRANSLATE_NOOP("brulion::cli",
+                                           "The task's line (Dom.md#L12@hash); default: the running clocks"),
+                         false)});
     c.writes = true;
     out.append(c);
-    c = Command();
-    c.id = u"task.time"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Time clocked on tasks per day, page, tag or task"));
-    c.args = {option(u"by"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "day (default), page, tag, task")),
+    c = make(u"task.time"_s, QT_TRANSLATE_NOOP("brulion::cli", "Time clocked on tasks per day, page, tag or task"),
+             taskTime,
+             {option(u"by"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "day (default), page, tag, task")),
               option(u"from"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "From this day")),
               option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this day")),
               option(u"query"_s, ArgType::String,
-                     QT_TRANSLATE_NOOP("brulion::cli", "Only the tasks of this query (\"tag:praca\")"))};
-    c.run = taskTime;
+                     QT_TRANSLATE_NOOP("brulion::cli", "Only the tasks of this query (\"tag:praca\")"))});
     out.append(c);
-    c = Command();
-    c.id = u"task.depend"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP(
-            "brulion::cli", "Make a task wait for another (⛔ id; the other gets a 🆔 when it has none)"));
-    c.args = {ref, option(u"on"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The task it waits for"), true),
-              flag(u"remove"_s, QT_TRANSLATE_NOOP("brulion::cli", "Remove the dependency instead"))};
-    c.run = taskDepend;
+    c = make(u"task.depend"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Make a task wait for another (⛔ id; the other gets a 🆔 when it has none)"),
+             taskDepend,
+             {ref, option(u"on"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The task it waits for"), true),
+              flag(u"remove"_s, QT_TRANSLATE_NOOP("brulion::cli", "Remove the dependency instead"))});
     c.writes = true;
     out.append(c);
     const struct {
@@ -838,24 +833,18 @@ void addTaskCommands(QList<Command> &out)
                    {"cancel", "cancelled", QT_TRANSLATE_NOOP("brulion::cli", "Cancel a task")},
                    {"defer", "deferred", QT_TRANSLATE_NOOP("brulion::cli", "Defer a task (waiting)")}};
     for (const auto &a : aliases) {
-        c = Command();
-        c.id = u"task."_s + QString::fromLatin1(a.word);
-        c.summary = cliText(a.summary);
-        c.args = {ref};
         const QString status = QString::fromLatin1(a.status);
-        c.run = [status](Call &call) { return taskStatusAlias(call, status); };
+        c = make(u"task."_s + QString::fromLatin1(a.word), a.summary,
+                 [status](Call &call) { return taskStatusAlias(call, status); }, {ref});
         c.writes = true;
         c.mcp = false; // brulion_task_set covers them
         c.aliasOf = u"task.set"_s;
         out.append(c);
     }
 
-    c = Command();
-    c.id = u"remind.add"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Add a reminder ⏰ (or an alarm ⏰!) as a new block"));
-    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Reminders fire where a Brulion app runs: the desktop app (in "
-                                                       "the tray) or the phone once the app has seen the change."));
-    c.args =
+    c = make(
+            u"remind.add"_s, QT_TRANSLATE_NOOP("brulion::cli", "Add a reminder ⏰ (or an alarm ⏰!) as a new block"),
+            remindAdd,
             QList<Arg>{stdinable(positional(u"text"_s, ArgType::Text,
                                             QT_TRANSLATE_NOOP("brulion::cli", "What to be reminded of"), true, true)),
                        option(u"at"_s, ArgType::Date,
@@ -864,29 +853,28 @@ void addTaskCommands(QList<Command> &out)
                        flag(u"alarm"_s, QT_TRANSLATE_NOOP("brulion::cli", "An alarm ⏰!: loud, stays until dismissed")),
                        option(u"every"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Recurrence 🔁")),
                        flag(u"task"_s, QT_TRANSLATE_NOOP("brulion::cli", "Make it a task (- [ ] …)"))}
-            + placeArgs();
-    c.run = remindAdd;
+                    + placeArgs);
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Reminders fire where a Brulion app runs: the desktop app (in "
+                                                       "the tray) or the phone once the app has seen the change."));
     c.writes = true;
     out.append(c);
-    c = Command();
-    c.id = u"remind.list"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP(
-            "brulion::cli", "Reminders due soon (or in a range), recurring ones expanded — read only, no state kept"));
-    c.args = {option(u"upcoming"_s, ArgType::Int,
-                     QT_TRANSLATE_NOOP("brulion::cli", "The next this many days (default 7)")),
-              option(u"from"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "From this day")),
-              option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this day")),
-              option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most this many (default 200)"))};
-    c.run = remindList;
+    c = make(
+            u"remind.list"_s,
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "Reminders due soon (or in a range), recurring ones expanded — read only, no state kept"),
+            remindList,
+            {option(u"upcoming"_s, ArgType::Int,
+                    QT_TRANSLATE_NOOP("brulion::cli", "The next this many days (default 7)")),
+             option(u"from"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "From this day")),
+             option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this day")),
+             option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most this many (default 200)"))});
     out.append(c);
-    c = Command();
-    c.id = u"remind.snooze"_s;
-    c.summary = cliText(
-            QT_TRANSLATE_NOOP("brulion::cli", "Move a reminder (a recurring one gets a one-off child reminder)"));
-    c.args = {ref,
+    c = make(u"remind.snooze"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "Move a reminder (a recurring one gets a one-off child reminder)"),
+             remindSnooze,
+             {ref,
               option(u"minutes"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "By this many minutes from now")),
-              option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this time"))};
-    c.run = remindSnooze;
+              option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this time"))});
     c.writes = true;
     out.append(c);
 }

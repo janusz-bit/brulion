@@ -40,14 +40,24 @@ std::optional<Day> day(Call &call, const QString &phrase)
     return d;
 }
 
-/// Append `block` to the daily note of `date` (created from the journal template), with the
-/// write JSON plus {date, line, ref}; a dry run shows the template too.
-std::optional<QJsonObject> appendToJournal(Call &call, QDate date, const QString &block)
+QJsonObject dayJson(const Day &d)
 {
-    Vault *v = call.vault();
-    if (!v)
-        return std::nullopt;
-    const VaultPath path = notebook::journalFileFor(*v, date);
+    return {{u"date"_s, d.date.toString(Qt::ISODate)}, {u"path"_s, d.path}, {u"exists"_s, d.exists}};
+}
+
+/// `o` plus the {hash, content} of the note at `path` ("" for one not created yet): its text.
+QString insertContent(Call &call, QJsonObject &o, const VaultPath &path, bool exists)
+{
+    const notebook::Notebook::Current current = exists ? call.nb()->read(path) : notebook::Notebook::Current();
+    o.insert(u"hash"_s, current.hash);
+    o.insert(u"content"_s, current.text);
+    return current.text;
+}
+
+/// Append `block` to the note at `path` (a missing daily, weekly or monthly note is created from
+/// its template): the write JSON plus {line, ref}; a dry run shows the template too.
+std::optional<QJsonObject> appendTo(Call &call, const VaultPath &path, const QString &block)
+{
     int line = -1;
     const auto written = call.edit(
             path,
@@ -60,9 +70,20 @@ std::optional<QJsonObject> appendToJournal(Call &call, QDate date, const QString
     if (!written)
         return std::nullopt;
     QJsonObject o = call.writeJson(*written);
-    o.insert(u"date"_s, date.toString(Qt::ISODate));
     o.insert(u"line"_s, line);
     o.insert(u"ref"_s, Call::lineRef(path, written->after, line));
+    return o;
+}
+
+/// appendTo() the daily note of `date`, plus {date}.
+std::optional<QJsonObject> appendToJournal(Call &call, QDate date, const QString &block)
+{
+    Vault *v = call.vault();
+    if (!v)
+        return std::nullopt;
+    auto o = appendTo(call, notebook::journalFileFor(*v, date), block);
+    if (o)
+        o->insert(u"date"_s, date.toString(Qt::ISODate));
     return o;
 }
 
@@ -71,25 +92,19 @@ Result journalRead(Call &call)
     const auto d = day(call, call.str(u"date"_s));
     if (!d)
         return call.failed();
-    QJsonObject o{{u"date"_s, d->date.toString(Qt::ISODate)}, {u"path"_s, d->path}, {u"exists"_s, d->exists}};
-    if (!d->exists) {
-        o.insert(u"content"_s, QString());
-        o.insert(u"hash"_s, QString());
-        return call.ok(o, QString());
-    }
-    const notebook::Notebook::Current current = call.nb()->read(d->path);
-    o.insert(u"hash"_s, current.hash);
-    o.insert(u"content"_s, current.text);
-    if (call.flag(u"blocks"_s)) {
+    QJsonObject o = dayJson(*d);
+    const QString text = insertContent(call, o, d->path, d->exists);
+    if (d->exists && call.flag(u"blocks"_s)) {
         QJsonArray blocks;
-        for (const Block &b : markdown::parseNote(d->path, current.text, call.vault()->config()).blocks) {
+        const ParsedNote note = markdown::parseNote(d->path, text, call.vault()->config());
+        for (const Block &b : note.blocks) {
             QJsonObject bo = notebook::blockJson(b);
-            bo.insert(u"ref"_s, Call::lineRef(d->path, current.text, b.line));
+            bo.insert(u"ref"_s, Call::lineRef(d->path, text, b.line));
             blocks.append(bo);
         }
         o.insert(u"blocks"_s, blocks);
     }
-    return call.ok(o, current.text);
+    return call.ok(o, text);
 }
 
 Result journalPath(Call &call)
@@ -97,9 +112,7 @@ Result journalPath(Call &call)
     const auto d = day(call, call.str(u"date"_s));
     if (!d)
         return call.failed();
-    return call.ok(
-            QJsonObject{{u"date"_s, d->date.toString(Qt::ISODate)}, {u"path"_s, d->path}, {u"exists"_s, d->exists}},
-            d->path);
+    return call.ok(dayJson(*d), d->path);
 }
 
 Result journalAppend(Call &call)
@@ -128,15 +141,16 @@ Result capture(Call &call)
     auto o = appendToJournal(call, now.date(), line.block);
     if (!o)
         return call.failed();
+    const QString written = line.block.section(u'\n', 0, 0);
     o->insert(u"kind"_s, notebook::captureKindName(line.kind));
     o->insert(u"text"_s, line.text);
-    o->insert(u"written"_s, line.block.section(u'\n', 0, 0));
+    o->insert(u"written"_s, written);
     if (line.when.isValid()) {
         o->insert(u"when"_s, QJsonObject{{u"date"_s, line.when.date.toString(Qt::ISODate)},
                                          {u"time"_s, line.when.time ? line.when.time->toString(u"HH:mm"_s) : QString()},
                                          {u"human"_s, dates::formatHuman(line.when, call.ctx.locale(), now.date())}});
     }
-    return call.ok(*o, line.block.section(u'\n', 0, 0) + u"  →  "_s + o->value(u"path"_s).toString());
+    return call.ok(*o, written + u"  →  "_s + o->value(u"path"_s).toString());
 }
 
 // ---- Weekly and monthly notes ------------------------------------------------------------------
@@ -160,9 +174,10 @@ std::optional<PeriodNote> periodNote(Call &call, periodic::Period period, const 
                                                    call.ctx.locale(), &config);
     if (!start) {
         const bool week = period == periodic::Period::Week;
+        const QString given = phrase.trimmed();
         call.setError(ExitParse, week ? u"week_not_understood"_s : u"month_not_understood"_s,
-                      week ? tr("Not a week: %1").arg(phrase.trimmed()) : tr("Not a month: %1").arg(phrase.trimmed()),
-                      {{u"phrase"_s, phrase.trimmed()},
+                      (week ? tr("Not a week: %1") : tr("Not a month: %1")).arg(given),
+                      {{u"phrase"_s, given},
                        {u"examples"_s, week ? QJsonArray{u"ten tydzień"_s, u"next week"_s, u"2026-W45"_s,
                                                          u"tydzień 45"_s, u"2026-11-03"_s}
                                             : QJsonArray{u"ten miesiąc"_s, u"last month"_s, u"2026-11"_s,
@@ -198,15 +213,8 @@ Result periodRead(Call &call, periodic::Period period)
     if (!n)
         return call.failed();
     QJsonObject o = periodJson(*n);
-    if (!n->exists) {
-        o.insert(u"content"_s, QString());
-        o.insert(u"hash"_s, QString());
-        return call.ok(o, QString());
-    }
-    const notebook::Notebook::Current current = call.nb()->read(n->path);
-    o.insert(u"hash"_s, current.hash);
-    o.insert(u"content"_s, current.text);
-    return call.ok(o, current.text);
+    const QString text = insertContent(call, o, n->path, n->exists);
+    return call.ok(o, text);
 }
 
 Result periodPath(Call &call, periodic::Period period)
@@ -225,26 +233,25 @@ Result periodAppend(Call &call, periodic::Period period)
     const auto n = periodNote(call, period, call.str(u"when"_s));
     if (!n)
         return call.failed();
-    int line = -1;
-    const auto written = call.edit(
-            n->path,
-            [&](const QString &current, bool, QString *next) {
-                *next = notebook::appendBlock(current, block);
-                line = appendedLine(*next, block);
-                return true;
-            },
-            creatingJournal(call, n->path));
-    if (!written)
+    auto o = appendTo(call, n->path, block);
+    if (!o)
         return call.failed();
-    QJsonObject o = call.writeJson(*written);
     const QJsonObject info = periodJson(*n);
     for (const QString &key : {u"period"_s, u"start"_s, u"end"_s, u"week"_s, u"weekYear"_s}) {
         if (info.contains(key))
-            o.insert(key, info.value(key));
+            o->insert(key, info.value(key));
     }
-    o.insert(u"line"_s, line);
-    o.insert(u"ref"_s, Call::lineRef(n->path, written->after, line));
-    return call.ok(o);
+    return call.ok(*o);
+}
+
+Command make(const QString &id, const char *summary, Handler run, QList<Arg> args)
+{
+    Command c;
+    c.id = id;
+    c.summary = cliText(summary);
+    c.run = std::move(run);
+    c.args = std::move(args);
+    return c;
 }
 
 } // namespace
@@ -256,44 +263,37 @@ void addJournalCommands(QList<Command> &out)
                        QT_TRANSLATE_NOOP("brulion::cli",
                                          "The day: today (default), wczoraj, jutro, w piątek, 2026-10-15, last monday"),
                        false, true);
-    Command c;
-    c.id = u"journal.read"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Read a daily note (`journal` alone: today's)"));
-    c.args = {date, flag(u"blocks"_s, QT_TRANSLATE_NOOP("brulion::cli", "Also every block with its ref"))};
-    c.run = journalRead;
+    const Arg text = stdinable(
+            positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The block's text"), true, true));
+    Command c = make(u"journal.read"_s,
+                     QT_TRANSLATE_NOOP("brulion::cli", "Read a daily note (`journal` alone: today's)"), journalRead,
+                     {date, flag(u"blocks"_s, QT_TRANSLATE_NOOP("brulion::cli", "Also every block with its ref"))});
     out.append(c);
-    c = Command();
-    c.id = u"journal.path"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP(
-            "brulion::cli",
-            "The path of a daily note (its existing file under any accepted name, else the configured one)"));
-    c.args = {date};
-    c.run = journalPath;
+    c = make(u"journal.path"_s,
+             QT_TRANSLATE_NOOP(
+                     "brulion::cli",
+                     "The path of a daily note (its existing file under any accepted name, else the configured one)"),
+             journalPath, {date});
     out.append(c);
-    c = Command();
-    c.id = u"journal.append"_s;
-    c.summary = cliText(
-            QT_TRANSLATE_NOOP("brulion::cli", "Append a block to a daily note (created from the journal template)"));
+    c = make(u"journal.append"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "Append a block to a daily note (created from the journal template)"),
+             journalAppend,
+             {text, option(u"date"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "The day (default: today)"))});
     c.help = cliText(QT_TRANSLATE_NOOP(
             "brulion::cli", "A template's empty last bullet is filled; the note's line endings and BOM stay."));
-    c.args = {stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The block's text"),
-                                   true, true)),
-              option(u"date"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "The day (default: today)"))};
-    c.run = journalAppend;
     c.writes = true;
     out.append(c);
-    c = Command();
-    c.id = u"capture"_s;
-    c.summary = cliText(QT_TRANSLATE_NOOP(
-            "brulion::cli",
-            "Quick capture into today's journal, as the app's: a date in it makes a task with ⏰ or 📅"));
+    c = make(u"capture"_s,
+             QT_TRANSLATE_NOOP(
+                     "brulion::cli",
+                     "Quick capture into today's journal, as the app's: a date in it makes a task with ⏰ or 📅"),
+             capture,
+             {stdinable(positional(u"text"_s, ArgType::Text,
+                                   QT_TRANSLATE_NOOP("brulion::cli", "What to capture (Polish or English)"), true,
+                                   true))});
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "\"Kupić mleko jutro o 18\" becomes \"- [ ] Kupić mleko ⏰ 2026-10-15 "
                                        "18:00\"; without a time a due date 📅; dates in the past stay text."));
-    c.args = {stdinable(positional(u"text"_s, ArgType::Text,
-                                   QT_TRANSLATE_NOOP("brulion::cli", "What to capture (Polish or English)"), true,
-                                   true))};
-    c.run = capture;
     c.writes = true;
     out.append(c);
 
@@ -336,26 +336,13 @@ void addJournalCommands(QList<Command> &out)
         const QString word = QString::fromLatin1(p.word);
         const periodic::Period period = p.period;
         const Arg when = positional(u"when"_s, ArgType::String, p.when, false, true);
-        c = Command();
-        c.id = word + u".read"_s;
-        c.summary = cliText(p.read);
-        c.args = {when};
-        c.run = [period](Call &call) { return periodRead(call, period); };
+        c = make(word + u".read"_s, p.read, [period](Call &call) { return periodRead(call, period); }, {when});
         out.append(c);
-        c = Command();
-        c.id = word + u".path"_s;
-        c.summary = cliText(p.path);
-        c.args = {when};
-        c.run = [period](Call &call) { return periodPath(call, period); };
+        c = make(word + u".path"_s, p.path, [period](Call &call) { return periodPath(call, period); }, {when});
         out.append(c);
-        c = Command();
-        c.id = word + u".append"_s;
-        c.summary = cliText(p.append);
+        c = make(word + u".append"_s, p.append, [period](Call &call) { return periodAppend(call, period); },
+                 {text, option(u"when"_s, ArgType::String, p.whenOption)});
         c.help = cliText(p.appendHelp);
-        c.args = {stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The block's text"),
-                                       true, true)),
-                  option(u"when"_s, ArgType::String, p.whenOption)};
-        c.run = [period](Call &call) { return periodAppend(call, period); };
         c.writes = true;
         out.append(c);
     }

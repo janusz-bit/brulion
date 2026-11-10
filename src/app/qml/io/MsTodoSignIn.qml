@@ -17,6 +17,16 @@ ColumnLayout {
     required property ImportController importer
     readonly property MsTodoImport signIn: signInObject
     property bool moreOpen: false
+    /// Signing in works outside the browser only (see the hint below).
+    readonly property bool canSignIn: !AppController.isWasm
+    readonly property bool waiting: signIn.state === "waiting"
+
+    component Hint: BText {
+        Layout.fillWidth: true
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
 
     spacing: Theme.space3
 
@@ -27,19 +37,15 @@ ColumnLayout {
         importer: block.importer
     }
 
-    BText {
-        Layout.fillWidth: true
+    Hint {
         visible: AppController.isWasm
         text: qsTr("In the browser version choose a file saved from Graph Explorer – signing in to Microsoft works in the app for Linux, Windows and Android.")
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
     }
 
     // ---- The app registration and the button --------------------------------------------------
     ColumnLayout {
         Layout.fillWidth: true
-        visible: !AppController.isWasm && !block.signIn.busy
+        visible: block.canSignIn && !block.signIn.busy
         spacing: Theme.space2
 
         BText {
@@ -58,13 +64,7 @@ ColumnLayout {
             onTextEdited: block.signIn.clientId = text
             onAccepted: block.signIn.signIn()
         }
-        BText {
-            Layout.fillWidth: true
-            text: qsTr("From your own free app registration in Microsoft Entra (the guide “Import i eksport” explains it step by step). Brulion remembers it on this device; nothing is stored about your account.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
-        }
+        Hint { text: qsTr("From your own free app registration in Microsoft Entra (the guide “Import i eksport” explains it step by step). Brulion remembers it on this device; nothing is stored about your account.") }
 
         BButton {
             text: block.moreOpen ? qsTr("Less") : qsTr("More")
@@ -92,13 +92,7 @@ ColumnLayout {
                 errorText: block.signIn.authorityError
                 onTextEdited: block.signIn.authority = text
             }
-            BText {
-                Layout.fillWidth: true
-                text: qsTr("consumers – personal accounts (outlook.com, hotmail.com); organizations – work or school accounts; common – both (the app must allow both); or your directory's tenant ID or domain.")
-                variant: "small"
-                color: Theme.fgMuted
-                wrapMode: Text.Wrap
-            }
+            Hint { text: qsTr("consumers – personal accounts (outlook.com, hotmail.com); organizations – work or school accounts; common – both (the app must allow both); or your directory's tenant ID or domain.") }
         }
 
         Flow {
@@ -117,7 +111,7 @@ ColumnLayout {
     // ---- Waiting for the code / for the user / downloading ------------------------------------
     Rectangle {
         Layout.fillWidth: true
-        visible: !AppController.isWasm && block.signIn.busy
+        visible: block.canSignIn && block.signIn.busy
         implicitHeight: waitColumn.implicitHeight + 2 * Theme.space3
         radius: Theme.radius
         color: Theme.bgSunken
@@ -130,13 +124,13 @@ ColumnLayout {
 
             BText {
                 Layout.fillWidth: true
-                visible: block.signIn.state === "waiting"
+                visible: block.waiting
                 text: qsTr("Open %1 on this or any other device, enter the code and sign in with the account that has your tasks:").arg(block.signIn.verificationText)
                 wrapMode: Text.Wrap
             }
             RowLayout {
                 Layout.fillWidth: true
-                visible: block.signIn.state === "waiting"
+                visible: block.waiting
                 spacing: Theme.space3
                 BText {
                     objectName: "msTodoUserCode"
@@ -162,7 +156,7 @@ ColumnLayout {
             }
             Flow {
                 Layout.fillWidth: true
-                visible: block.signIn.state === "waiting"
+                visible: block.waiting
                 spacing: Theme.space2
                 BButton {
                     text: qsTr("Open %1").arg(block.signIn.verificationText)
@@ -176,22 +170,14 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.space2
                 BSpinner { size: Theme.iconSizeSm; running: block.signIn.busy }
-                BText {
+                Hint {
                     objectName: "msTodoProgress"
-                    Layout.fillWidth: true
                     text: block.signIn.progressText
-                    variant: "small"
-                    color: Theme.fgMuted
-                    wrapMode: Text.Wrap
                 }
             }
-            BText {
-                Layout.fillWidth: true
-                visible: block.signIn.state === "waiting" && block.signIn.secondsLeft > 0
+            Hint {
+                visible: block.waiting && block.signIn.secondsLeft > 0
                 text: qsTr("The code expires in %n minute(s).", "", Math.ceil(block.signIn.secondsLeft / 60))
-                variant: "small"
-                color: Theme.fgMuted
-                wrapMode: Text.Wrap
             }
             BButton {
                 objectName: "msTodoCancel"
@@ -226,12 +212,8 @@ ColumnLayout {
         }
     }
 
-    BText {
-        Layout.fillWidth: true
-        visible: !AppController.isWasm
+    Hint {
+        visible: block.canSignIn
         text: qsTr("Or choose a JSON file saved from Graph Explorer:")
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
     }
 }

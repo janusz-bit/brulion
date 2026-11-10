@@ -95,6 +95,14 @@ BDialog {
         }
     }
 
+    /// Small muted explanatory text.
+    component Hint: BText {
+        Layout.fillWidth: true
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
+
     BText {
         Layout.fillWidth: true
         text: qsTr("Repository")
@@ -111,8 +119,7 @@ BDialog {
         errorText: !dialog.addressValid ? AppController.routeText(dialog.parsed, "error") : ""
         onTextEdited: dialog.edited()
     }
-    BText {
-        Layout.fillWidth: true
+    Hint {
         visible: dialog.addressValid
         text: {
             const name = AppController.routeText(dialog.parsed, "fullName")
@@ -124,9 +131,6 @@ BDialog {
                 return qsTr("%1: the branch “%2”, the whole repository").arg(name).arg(dialog.parsedBranch)
             return qsTr("%1: the branch “%2”, the folder “%3”").arg(name).arg(dialog.parsedBranch).arg(dialog.parsedFolder)
         }
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
     }
 
     GridLayout {
@@ -182,12 +186,8 @@ BDialog {
                 onClicked: dialog.showToken = !dialog.showToken
             }
         }
-        BText {
-            Layout.fillWidth: true
+        Hint {
             text: qsTr("Public repositories open without one (to read). A private repository, and sending your changes, need a personal access token of your GitHub account.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
         BButton {
             text: qsTr("Make a token on GitHub")
@@ -197,14 +197,10 @@ BDialog {
             onClicked: Qt.openUrlExternally(dialog.github.tokenUrl)
         }
     }
-    BText {
-        Layout.fillWidth: true
+    Hint {
         visible: dialog.github.signedIn
         text: dialog.github.login !== "" ? qsTr("Signed in to GitHub as %1.").arg("@" + dialog.github.login)
                                          : qsTr("A GitHub token is saved on this device.")
-        variant: "small"
-        color: Theme.fgMuted
-        wrapMode: Text.Wrap
     }
 
     // Desktop: where the notes go on this device.

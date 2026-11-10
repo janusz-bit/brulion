@@ -3,6 +3,8 @@
 
 #include <QHash>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
@@ -53,15 +55,31 @@ Error usage(const QString &code, const QString &message, const QJsonObject &deta
     return Error{ExitUsage, code, message, details};
 }
 
-/// The words of every command id: {"page": {"page.read", …}, …}.
+/// An option as written: "--name", or "--name=value" (a long option with its value).
+struct Option {
+    QString name;
+    std::optional<QString> value;
+};
+
+Option splitOption(const QString &a)
+{
+    if (const qsizetype eq = a.indexOf(u'='); eq > 0 && a.startsWith(u"--"))
+        return {a.left(eq), a.mid(eq + 1)};
+    return {a, std::nullopt};
+}
+
+/// A flag's value: on, unless "--flag=…" says something other than true or 1.
+bool flagValue(const Option &option)
+{
+    return !option.value || *option.value == u"true" || *option.value == u"1";
+}
+
+/// Do `words` begin a command's id ("page", "page read")?
 bool isCommandPrefix(const QStringList &words)
 {
     const QString prefix = words.join(u'.');
-    for (const Command &c : commands()) {
-        if (c.id == prefix || c.id.startsWith(prefix + u'.'))
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(
+            commands(), [&prefix](const Command &c) { return c.id == prefix || c.id.startsWith(prefix + u'.'); });
 }
 
 /// Commands whose first word alone means a subcommand ("journal" = "journal read").
@@ -74,6 +92,31 @@ const QHash<QString, QString> &defaultSubcommands()
     return table;
 }
 
+/// The command the longest run of `words` names (else the first word's default subcommand) and
+/// how many of the words its name takes; {nullptr, 0} when none.
+std::pair<const Command *, qsizetype> commandOf(const QStringList &words)
+{
+    for (qsizetype k = words.size(); k >= 1; --k) {
+        if (const Command *c = findCommand(words.first(k).join(u'.')))
+            return {c, k};
+    }
+    if (const auto it = defaultSubcommands().constFind(words.value(0)); it != defaultSubcommands().cend())
+        return {findCommand(*it), 1};
+    return {nullptr, 0};
+}
+
+/// The values of --format, --lang and --now.
+std::optional<Error> checkGlobals(const Globals &g)
+{
+    if (g.format != u"json" && g.format != u"text")
+        return usage(u"bad_format"_s, tr("--format is json or text"), {{u"format"_s, g.format}});
+    if (!g.lang.isEmpty() && g.lang != u"pl" && g.lang != u"en")
+        return usage(u"bad_lang"_s, tr("--lang is pl or en"), {{u"lang"_s, g.lang}});
+    if (!g.now.isEmpty() && !QDateTime::fromString(g.now, u"yyyy-MM-dd HH:mm"_s).isValid())
+        return usage(u"bad_now"_s, tr("--now takes \"YYYY-MM-DD HH:mm\" (local time)"), {{u"now"_s, g.now}});
+    return std::nullopt;
+}
+
 } // namespace
 
 Invocation parseArguments(const QStringList &arguments)
@@ -81,28 +124,26 @@ Invocation parseArguments(const QStringList &arguments)
     Invocation inv;
     Globals &g = inv.globals;
     const qsizetype n = arguments.size();
+    // The value of `option` at position i: after its '=', else the next argument (i advanced to
+    // it); nullopt with inv.error when there is none.
+    const auto valueOf = [&](qsizetype &i, const Option &option) -> std::optional<QString> {
+        if (option.value)
+            return option.value;
+        if (i + 1 < n)
+            return arguments.at(++i);
+        inv.error = usage(u"missing_value"_s, tr("%1 needs a value").arg(option.name), {{u"option"_s, option.name}});
+        return std::nullopt;
+    };
     // A global option at position i: true when handled (i advanced past its value).
     const auto global = [&](qsizetype &i) -> bool {
-        const QString a = arguments.at(i);
-        QString name = a;
-        std::optional<QString> value;
-        if (const qsizetype eq = a.indexOf(u'='); eq > 0 && a.startsWith(u"--")) {
-            name = a.left(eq);
-            value = a.mid(eq + 1);
-        }
-        if (QString *field = globalValue(g, name)) {
-            if (!value) {
-                if (i + 1 >= n) {
-                    inv.error = usage(u"missing_value"_s, tr("%1 needs a value").arg(name), {{u"option"_s, name}});
-                    return true;
-                }
-                value = arguments.at(++i);
-            }
-            *field = *value;
+        const Option option = splitOption(arguments.at(i));
+        if (QString *field = globalValue(g, option.name)) {
+            if (const auto value = valueOf(i, option))
+                *field = *value;
             return true;
         }
-        if (bool *flag = globalFlag(g, name)) {
-            *flag = !value || *value == u"true" || *value == u"1";
+        if (bool *flag = globalFlag(g, option.name)) {
+            *flag = flagValue(option);
             return true;
         }
         return false;
@@ -112,7 +153,7 @@ Invocation parseArguments(const QStringList &arguments)
     QStringList commandWords;
     qsizetype i = 0;
     for (; i < n && !inv.error; ++i) {
-        const QString a = arguments.at(i);
+        const QString &a = arguments.at(i);
         if (a.startsWith(u'-') && a != u"-") {
             if (a == u"--version" && commandWords.isEmpty()) {
                 commandWords.append(u"version"_s);
@@ -128,20 +169,7 @@ Invocation parseArguments(const QStringList &arguments)
     }
     if (inv.error)
         return inv;
-    const Command *command = nullptr;
-    qsizetype used = 0;
-    for (qsizetype k = commandWords.size(); k >= 1 && !command; --k) {
-        if (const Command *c = findCommand(commandWords.mid(0, k).join(u'.'))) {
-            command = c;
-            used = k;
-        }
-    }
-    if (!command && !commandWords.isEmpty() && defaultSubcommands().contains(commandWords.first())) {
-        command = findCommand(defaultSubcommands().value(commandWords.first()));
-        used = 1;
-    }
-    // Words the command did not take are its first positional arguments.
-    QStringList positional = commandWords.mid(used);
+    const auto [command, used] = commandOf(commandWords);
     if (g.help) {
         inv.command = command;
         inv.helpTopic = command ? command->id : QString();
@@ -162,11 +190,13 @@ Invocation parseArguments(const QStringList &arguments)
     }
     inv.command = command;
 
-    // Its arguments: options (anywhere), positional words in order, global options too.
+    // Its arguments: options (anywhere), positional words in order, global options too. Words the
+    // command's name did not take are its first positional arguments.
+    QStringList positional = commandWords.mid(used);
     QJsonObject args;
     bool dashdash = false;
     for (; i < n; ++i) {
-        const QString a = arguments.at(i);
+        const QString &a = arguments.at(i);
         if (dashdash || !a.startsWith(u'-') || a == u"-") {
             positional.append(a);
             continue;
@@ -180,34 +210,23 @@ Invocation parseArguments(const QStringList &arguments)
                 return inv;
             continue;
         }
-        QString name = a;
-        std::optional<QString> value;
-        if (const qsizetype eq = a.indexOf(u'='); eq > 0 && a.startsWith(u"--")) {
-            name = a.left(eq);
-            value = a.mid(eq + 1);
-        }
-        const Arg *arg = nullptr;
-        for (const Arg &candidate : command->args) {
-            if (!candidate.positional && optionName(candidate.name) == name)
-                arg = &candidate;
-        }
-        if (!arg) {
-            inv.error =
-                    usage(u"unknown_option"_s, tr("Unknown option %1 for %2").arg(name, command->words().join(u' ')),
-                          {{u"option"_s, name}});
+        const Option option = splitOption(a);
+        const auto arg = std::ranges::find_if(command->args, [&option](const Arg &candidate) {
+            return !candidate.positional && optionName(candidate.name) == option.name;
+        });
+        if (arg == command->args.end()) {
+            inv.error = usage(u"unknown_option"_s,
+                              tr("Unknown option %1 for %2").arg(option.name, command->words().join(u' ')),
+                              {{u"option"_s, option.name}});
             return inv;
         }
         if (arg->type == ArgType::Bool) {
-            args.insert(arg->name, !value || *value == u"true" || *value == u"1");
+            args.insert(arg->name, flagValue(option));
             continue;
         }
-        if (!value) {
-            if (i + 1 >= n) {
-                inv.error = usage(u"missing_value"_s, tr("%1 needs a value").arg(name), {{u"option"_s, name}});
-                return inv;
-            }
-            value = arguments.at(++i);
-        }
+        const auto value = valueOf(i, option);
+        if (!value)
+            return inv;
         args.insert(arg->name, *value);
     }
     for (const Arg &a : command->args) {
@@ -225,19 +244,9 @@ Invocation parseArguments(const QStringList &arguments)
                           {{u"arguments"_s, QJsonArray::fromStringList(positional)}});
         return inv;
     }
-    if (g.format != u"json" && g.format != u"text") {
-        inv.error = usage(u"bad_format"_s, tr("--format is json or text"), {{u"format"_s, g.format}});
-        return inv;
-    }
-    if (!g.lang.isEmpty() && g.lang != u"pl" && g.lang != u"en") {
-        inv.error = usage(u"bad_lang"_s, tr("--lang is pl or en"), {{u"lang"_s, g.lang}});
-        return inv;
-    }
-    if (!g.now.isEmpty() && !QDateTime::fromString(g.now, u"yyyy-MM-dd HH:mm"_s).isValid()) {
-        inv.error = usage(u"bad_now"_s, tr("--now takes \"YYYY-MM-DD HH:mm\" (local time)"), {{u"now"_s, g.now}});
-        return inv;
-    }
-    inv.args = args;
+    inv.error = checkGlobals(g);
+    if (!inv.error)
+        inv.args = args;
     return inv;
 }
 
@@ -245,12 +254,8 @@ QJsonObject checkArguments(const Command &command, const QJsonObject &args, std:
 {
     QJsonObject out;
     for (auto it = args.constBegin(); it != args.constEnd(); ++it) {
-        const Arg *arg = nullptr;
-        for (const Arg &a : command.args) {
-            if (a.name == it.key())
-                arg = &a;
-        }
-        if (!arg) {
+        const auto arg = std::ranges::find(command.args, it.key(), &Arg::name);
+        if (arg == command.args.end()) {
             *error = usage(u"unknown_argument"_s, tr("Unknown argument %1").arg(it.key()), {{u"argument"_s, it.key()}});
             return {};
         }
@@ -279,9 +284,10 @@ QJsonObject checkArguments(const Command &command, const QJsonObject &args, std:
             break;
         }
         case ArgType::Enum: {
-            if (!v.isString() || !arg->values.contains(v.toString().trimmed().toLower()))
+            const QString value = v.toString().trimmed().toLower();
+            if (!v.isString() || !arg->values.contains(value))
                 return wrongType(tr("%1 must be one of: %2").arg(u"%1"_s, arg->values.join(u", "_s)));
-            out.insert(arg->name, v.toString().trimmed().toLower());
+            out.insert(arg->name, value);
             break;
         }
         default:

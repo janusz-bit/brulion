@@ -15,6 +15,8 @@
 
 #include <QCoreApplication>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
@@ -49,14 +51,13 @@ Result info(Call &call)
     notebook::Notebook *nb = call.nb();
     if (!nb)
         return call.failed();
-    Vault &v = nb->vault();
-    VaultIndex &index = nb->index();
-    int journals = int(index.journals().size());
-    int openTasks = 0;
-    for (const TaskRef &t : index.tasks()) {
-        if (t.task.status == TaskStatus::Todo || t.task.status == TaskStatus::Doing)
-            ++openTasks;
-    }
+    const Vault &v = nb->vault();
+    const VaultIndex &index = nb->index();
+    const int journals = int(index.journals().size());
+    const QList<TaskRef> tasks = index.tasks();
+    const int openTasks = int(std::ranges::count_if(tasks, [](const TaskRef &t) {
+        return t.task.status == TaskStatus::Todo || t.task.status == TaskStatus::Doing;
+    }));
     const VaultScanStatus scan = v.scanStatus();
     QJsonObject scanJson{{u"state"_s, scanStateName(scan.state)}, {u"message"_s, scan.message}};
     if (!scan.unreadableFolders.isEmpty())
@@ -108,7 +109,7 @@ Result query(Call &call)
                                                                     call.vault()->config().weekStartsOn, options));
     addRefs(call, result);
     QString text;
-    for (const QJsonValue &v : result.value(u"items"_s).toArray()) {
+    for (const QJsonArray items = result.value(u"items"_s).toArray(); const auto &v : items) {
         const QJsonObject o = v.toObject();
         QString line = o.value(u"text"_s).toString().simplified();
         if (o.contains(u"task"_s))
@@ -132,7 +133,7 @@ Result search(Call &call)
     const int limit = std::clamp(call.integer(u"limit"_s, 20), 1, 500);
     QJsonArray hits;
     QString out;
-    for (const SearchHit &hit : index->search(text, limit)) {
+    for (const QList<SearchHit> found = index->search(text, limit); const SearchHit &hit : found) {
         QJsonObject o = notebook::searchHitJson(hit, index->config());
         if (hit.line >= 0)
             o.insert(u"ref"_s, Call::lineRef(hit.path, noteText(call, hit.path), hit.line));
@@ -154,7 +155,7 @@ Result tags(Call &call)
     const QString key = text::foldKey(prefix);
     QJsonArray out;
     QString text;
-    for (const TagCount &t : index->tags()) {
+    for (const QList<TagCount> all = index->tags(); const TagCount &t : all) {
         if (!key.isEmpty() && !text::foldKey(t.tag).startsWith(key))
             continue;
         const auto page = index->resolveTag(t.tag);
@@ -183,7 +184,7 @@ Result tag(Call &call)
     QString display = name;
     int count = 0;
     QStringList subTags;
-    for (const TagCount &t : index->tags()) {
+    for (const QList<TagCount> all = index->tags(); const TagCount &t : all) {
         if (t.tag == key) {
             count = t.count;
             if (!t.display.isEmpty())
@@ -216,9 +217,10 @@ Result tag(Call &call)
     if (!page)
         o.insert(u"newPage"_s, notebook::newPagePath(*call.vault(), display)); // where a click on it creates it
     QString text;
-    for (const QJsonValue &v : blocks.value(u"items"_s).toArray())
-        text += v.toObject().value(u"text"_s).toString().simplified() + u"  "_s
-                + v.toObject().value(u"ref"_s).toString() + u'\n';
+    for (const QJsonArray items = blocks.value(u"items"_s).toArray(); const auto &v : items) {
+        const QJsonObject item = v.toObject();
+        text += item.value(u"text"_s).toString().simplified() + u"  "_s + item.value(u"ref"_s).toString() + u'\n';
+    }
     return call.ok(o, text);
 }
 
@@ -229,7 +231,7 @@ Result backlinks(Call &call)
         return call.failed();
     const QJsonArray items = backlinksJson(call, ref->path);
     QString text;
-    for (const QJsonValue &v : items) {
+    for (const auto &v : items) {
         const QJsonObject o = v.toObject();
         text += (o.value(u"kind"_s).toString() == u"tag" ? u"#  "_s : u"[[ "_s) + o.value(u"text"_s).toString()
                 + u"  "_s + o.value(u"path"_s).toString() + u'\n';
@@ -245,7 +247,7 @@ Result links(Call &call)
     VaultIndex *index = call.index();
     QJsonArray out;
     QString text;
-    for (const ResolvedLink &l : index->outgoingLinks(ref->path)) {
+    for (const QList<ResolvedLink> found = index->outgoingLinks(ref->path); const ResolvedLink &l : found) {
         QJsonObject o{{u"kind"_s, notebook::linkKindName(l.link.kind)},
                       {u"target"_s, l.link.target},
                       {u"line"_s, l.link.line},
@@ -270,7 +272,7 @@ Result unlinked(Call &call)
         return call.failed();
     QJsonArray out;
     QString text;
-    for (const UnlinkedRef &u : call.index()->unlinkedReferences(ref->path)) {
+    for (const QList<UnlinkedRef> found = call.index()->unlinkedReferences(ref->path); const UnlinkedRef &u : found) {
         out.append(QJsonObject{{u"path"_s, u.path},
                                {u"title"_s, paths::pageTitle(u.path)},
                                {u"line"_s, u.line},
@@ -296,7 +298,7 @@ Result calendar(Call &call)
         return call.fail(ExitUsage, u"bad_range"_s, tr("--to must follow --from, at most 400 days later"));
     QJsonArray out;
     QString text;
-    for (const CalendarItem &item : calendarItems(*index, *from, *to)) {
+    for (const QList<CalendarItem> items = calendarItems(*index, *from, *to); const CalendarItem &item : items) {
         QJsonObject o = notebook::calendarItemJson(item);
         if (item.kind != CalendarItem::Journal)
             o.insert(u"ref"_s, Call::lineRef(item.path, noteText(call, item.path), item.line));
@@ -330,7 +332,7 @@ void addIndexCommands(QList<Command> &out)
                     QT_TRANSLATE_NOOP("brulion::cli",
                                       "The notebook: folder, settings, counts, scan state, whether the app runs"),
                     info, {}));
-    Command c = make(
+    out.append(make(
             u"query"_s,
             QT_TRANSLATE_NOOP("brulion::cli", "Run a query (docs/SYNTAX.md §10), the same results as a ```query block"),
             query,
@@ -338,8 +340,8 @@ void addIndexCommands(QList<Command> &out)
                         QT_TRANSLATE_NOOP("brulion::cli",
                                           "type:tasks status:open due:<=+7d sort:due — keys also in Polish"),
                         true, true),
-             option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The page page:this / ref:this mean"))});
-    out.append(c);
+             option(u"page"_s, ArgType::Ref,
+                    QT_TRANSLATE_NOOP("brulion::cli", "The page page:this / ref:this mean"))}));
     out.append(make(
             u"search"_s,
             QT_TRANSLATE_NOOP("brulion::cli", "Full-text search, diacritic-insensitive (\"zolw\" finds \"żółw\")"),

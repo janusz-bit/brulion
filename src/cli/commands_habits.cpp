@@ -17,25 +17,22 @@ namespace brulion::cli {
 
 namespace {
 
-/// The index's habits (a cache per call: the command line runs one command).
-struct Habits {
-    VaultIndex *index = nullptr;
-    habits::HabitCache cache;
-};
-
-bool loadHabits(Call &call, Habits &h)
+/// The index's habits (a cache per call: the command line runs one command); nullopt with the
+/// call's error when there is no notebook.
+std::optional<habits::HabitCache> loadHabits(Call &call)
 {
-    h.index = call.index();
-    if (!h.index)
-        return false;
-    h.cache.sync(*h.index);
-    return true;
+    VaultIndex *index = call.index();
+    if (!index)
+        return std::nullopt;
+    habits::HabitCache cache;
+    cache.sync(*index);
+    return cache;
 }
 
-QJsonObject habitJson(Call &call, const Habits &h, const habits::Habit &habit, QDate today, int days)
+QJsonObject habitJson(Call &call, const habits::HabitCache &cache, const habits::Habit &habit, QDate today, int days)
 {
     const Qt::DayOfWeek weekStart = call.ctx.weekStart();
-    const habits::DayMarks marks = h.cache.days(habit.key);
+    const habits::DayMarks marks = cache.days(habit.key);
     QJsonObject o{{u"name"_s, habit.name},
                   {u"key"_s, habit.key},
                   {u"schedule"_s, habit.scheduleText},
@@ -111,8 +108,8 @@ QString habitLine(const QJsonObject &o)
 
 Result habitList(Call &call)
 {
-    Habits h;
-    if (!loadHabits(call, h))
+    const auto cache = loadHabits(call);
+    if (!cache)
         return call.failed();
     const auto date = call.date(call.str(u"date"_s));
     if (!date)
@@ -120,20 +117,18 @@ Result habitList(Call &call)
     const int days = std::clamp(call.integer(u"days"_s, 7), 0, 400);
     QJsonArray list;
     QString text;
-    for (const habits::Habit &habit : h.cache.habits()) {
-        const QJsonObject o = habitJson(call, h, habit, *date, days);
+    for (const habits::Habit &habit : cache->habits()) {
+        const QJsonObject o = habitJson(call, *cache, habit, *date, days);
         list.append(o);
         text += habitLine(o) + u'\n';
     }
-    QJsonArray undefined;
-    for (const QString &key : h.cache.undefinedKeys())
-        undefined.append(key);
     if (list.isEmpty())
         text = tr("No habits: give a block the property habit:: (e.g. \"- Medytacja\" and \"  habit:: codziennie\")")
                + u'\n';
-    return call.ok(
-            QJsonObject{{u"date"_s, date->toString(Qt::ISODate)}, {u"habits"_s, list}, {u"undefined"_s, undefined}},
-            text);
+    return call.ok(QJsonObject{{u"date"_s, date->toString(Qt::ISODate)},
+                               {u"habits"_s, list},
+                               {u"undefined"_s, QJsonArray::fromStringList(cache->undefinedKeys())}},
+                   text);
 }
 
 Result habitSet(Call &call)
@@ -143,14 +138,14 @@ Result habitSet(Call &call)
         return call.fail(ExitUsage, u"bad_argument"_s,
                          tr("The state is done, skipped or open (also: zrobione, pominięte, brak)"),
                          {{u"state"_s, call.str(u"state"_s)}});
-    Habits h;
-    if (!loadHabits(call, h))
+    const auto cache = loadHabits(call);
+    if (!cache)
         return call.failed();
     const QString name = call.text(u"name"_s).trimmed();
-    const habits::Habit *habit = h.cache.find(habits::habitName(name));
+    const habits::Habit *habit = cache->find(habits::habitName(name));
     if (!habit) {
         QJsonArray names;
-        for (const habits::Habit &other : h.cache.habits()) {
+        for (const habits::Habit &other : cache->habits()) {
             if (!other.duplicate)
                 names.append(other.name);
         }
@@ -166,18 +161,18 @@ Result habitSet(Call &call)
     const VaultPath path = notebook::journalFileFor(*v, *date);
     const QString tag = habits::checkTag(call.ctx.locale());
     notebook::HabitCheckEdit result;
+    // `o` with the habit, the day, its mark before and after and the check's line (`result`).
+    const auto answer = [&](QJsonObject o) {
+        o.insert(u"habit"_s, habit->name);
+        o.insert(u"date"_s, date->toString(Qt::ISODate));
+        o.insert(u"mark"_s, habits::markName(*mark));
+        o.insert(u"before"_s, result.hadCheck ? habits::markName(result.before) : QString());
+        o.insert(u"line"_s, result.line);
+        return o;
+    };
     // "Open" on a day without a note: nothing to change, and no note created for it.
-    if (*mark == habits::Mark::Open && !QFileInfo(v->absolutePath(path)).isFile()) {
-        return call.ok(QJsonObject{{u"path"_s, path},
-                                   {u"changed"_s, false},
-                                   {u"created"_s, false},
-                                   {u"habit"_s, habit->name},
-                                   {u"date"_s, date->toString(Qt::ISODate)},
-                                   {u"mark"_s, habits::markName(*mark)},
-                                   {u"before"_s, QString()},
-                                   {u"line"_s, -1}},
-                       QString());
-    }
+    if (*mark == habits::Mark::Open && !QFileInfo(v->absolutePath(path)).isFile())
+        return call.ok(answer({{u"path"_s, path}, {u"changed"_s, false}, {u"created"_s, false}}));
     const auto written = call.edit(
             path,
             [&](const QString &content, bool, QString *next) {
@@ -193,12 +188,7 @@ Result habitSet(Call &call)
             creatingJournal(call, path));
     if (!written)
         return call.failed();
-    QJsonObject o = call.writeJson(*written);
-    o.insert(u"habit"_s, habit->name);
-    o.insert(u"date"_s, date->toString(Qt::ISODate));
-    o.insert(u"mark"_s, habits::markName(*mark));
-    o.insert(u"before"_s, result.hadCheck ? habits::markName(result.before) : QString());
-    o.insert(u"line"_s, result.line);
+    QJsonObject o = answer(call.writeJson(*written));
     if (result.line >= 0)
         o.insert(u"ref"_s, Call::lineRef(path, written->after, result.line));
     return call.ok(o, result.line >= 0 ? lineText(written->after, result.line) : QString());

@@ -41,6 +41,9 @@ ColumnLayout {
     readonly property string docsAddress: "https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide/"
                                           + (AppSettings.language === "pl" ? "pl" : "en")
 
+    /// What the address typed says is wrong with it ("" when nothing).
+    readonly property string addressError: AppController.routeText(panel.github.parseAddress(addressField.typedText), "error")
+
     signal showConflicts()
 
     function reportRows(key: string): list<var> {
@@ -76,6 +79,44 @@ ColumnLayout {
         onAccepted: panel.github.unlink()
     }
 
+    /// Small muted explanatory text.
+    component Hint: BText {
+        Layout.fillWidth: true
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
+    /// A file the last pull left out (muted) or could not do (`isError`): `path — text`.
+    component ProblemRow: RowLayout {
+        id: problem
+        required property string path
+        required property string text
+        property bool isError: false
+        Layout.fillWidth: true
+        spacing: Theme.space2
+        BIcon {
+            Layout.alignment: Qt.AlignTop
+            name: problem.isError ? "circle-alert" : "info"
+            size: Theme.iconSizeSm
+            color: problem.isError ? Theme.dangerText : Theme.fgMuted
+        }
+        BText {
+            Layout.fillWidth: true
+            text: problem.path + " — " + problem.text
+            variant: "small"
+            color: problem.isError ? Theme.fg : Theme.fgMuted
+            wrapMode: Text.Wrap
+        }
+    }
+    /// One reassuring line with a tick.
+    component Check: RowLayout {
+        property alias text: line.text
+        Layout.fillWidth: true
+        spacing: Theme.space2
+        BIcon { name: "check"; size: Theme.iconSizeSm; color: Theme.fgMuted }
+        BText { id: line; Layout.fillWidth: true; variant: "small"; wrapMode: Text.Wrap }
+    }
+
     /// A labelled form field.
     component Field: ColumnLayout {
         id: field
@@ -107,7 +148,6 @@ ColumnLayout {
 
     // ---- Linked: state and actions ---------------------------------------------------------------
     IoCard {
-        id: statusCard
         visible: panel.linked
         iconName: panel.ghState === "offline" ? "cloud-off" : panel.ghState === "error" ? "circle-alert" : "git-branch"
         iconColor: panel.ghState === "error" ? Theme.dangerText
@@ -132,13 +172,9 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: Theme.space2
             BIcon { Layout.alignment: Qt.AlignVCenter; name: "folder"; size: Theme.iconSizeSm; color: Theme.fgMuted }
-            BText {
-                Layout.fillWidth: true
+            Hint {
                 text: panel.github.folder !== "" ? qsTr("Branch “%1”, folder “%2”").arg(panel.github.branch).arg(panel.github.folder)
                                                  : qsTr("Branch “%1”, the whole repository").arg(panel.github.branch)
-                variant: "small"
-                color: Theme.fgMuted
-                wrapMode: Text.Wrap
             }
             BButton {
                 text: qsTr("Open on GitHub")
@@ -160,13 +196,7 @@ ColumnLayout {
             }
             RowLayout {
                 Layout.fillWidth: true
-                BText {
-                    Layout.fillWidth: true
-                    text: panel.github.progressText
-                    variant: "small"
-                    color: Theme.fgMuted
-                    wrapMode: Text.Wrap
-                }
+                Hint { text: panel.github.progressText }
                 BButton {
                     text: qsTr("Stop")
                     iconName: "square"
@@ -215,32 +245,20 @@ ColumnLayout {
                 onClicked: Qt.openUrlExternally(panel.github.headUrl)
             }
         }
-        BText {
-            Layout.fillWidth: true
+        Hint {
             visible: !panel.github.signedIn
             text: qsTr("Without a token Brulion only reads this repository. To send changes, save a token below.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
-        BText {
-            Layout.fillWidth: true
+        Hint {
             visible: panel.github.signedIn && panel.github.pushKnown && !panel.github.canPush
             text: qsTr("Your token may not write to this repository: changes go as a pull request from your copy of it.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
 
         // What the last operation did.
-        BText {
-            Layout.fillWidth: true
+        Hint {
             visible: !panel.busy && AppController.routeText(panel.github.lastReport, "text") !== ""
                      && panel.ghState !== "error"
             text: AppController.routeText(panel.github.lastReport, "text")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
         RowLayout {
             Layout.fillWidth: true
@@ -271,43 +289,12 @@ ColumnLayout {
         Repeater {
             model: panel.showProblems ? panel.failed : panel.noRows
             // lastReport.errors: [{ path, title, code, text, message }]
-            delegate: RowLayout {
-                id: failedRow
-                required property string path
-                required property string title
-                required property string code
-                required property string text
-                Layout.fillWidth: true
-                spacing: Theme.space2
-                BIcon { Layout.alignment: Qt.AlignTop; name: "circle-alert"; size: Theme.iconSizeSm; color: Theme.dangerText }
-                BText {
-                    Layout.fillWidth: true
-                    text: failedRow.path + " — " + failedRow.text
-                    variant: "small"
-                    wrapMode: Text.Wrap
-                }
-            }
+            delegate: ProblemRow { isError: true }
         }
         Repeater {
             model: panel.showProblems ? panel.skipped : panel.noRows
             // lastReport.skipped: [{ path, title, code, text, message }]
-            delegate: RowLayout {
-                id: skippedRow
-                required property string path
-                required property string title
-                required property string code
-                required property string text
-                Layout.fillWidth: true
-                spacing: Theme.space2
-                BIcon { Layout.alignment: Qt.AlignTop; name: "info"; size: Theme.iconSizeSm; color: Theme.fgMuted }
-                BText {
-                    Layout.fillWidth: true
-                    text: skippedRow.path + " — " + skippedRow.text
-                    variant: "small"
-                    color: Theme.fgMuted
-                    wrapMode: Text.Wrap
-                }
-            }
+            delegate: ProblemRow {}
         }
     }
 
@@ -325,16 +312,12 @@ ColumnLayout {
                        : panel.proposalOpen ? "info" : "neutral"
             }
         ]
-        BText {
-            Layout.fillWidth: true
+        Hint {
             text: panel.proposalOpen
                   ? qsTr("Waiting for the repository's people to look at it. Proposing again adds your new changes to it.")
                   : AppController.routeText(panel.github.proposal, "state") === "merged"
                     ? qsTr("Accepted: its notes are on the branch now.")
                     : qsTr("Closed without being accepted. Your changes are still here; a new proposal can send them again.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
         Flow {
             Layout.fillWidth: true
@@ -423,26 +406,14 @@ ColumnLayout {
         ColumnLayout {
             Layout.fillWidth: true
             spacing: Theme.space1
-            RowLayout {
-                spacing: Theme.space2
-                BIcon { name: "check"; size: Theme.iconSizeSm; color: Theme.fgMuted }
-                BText { Layout.fillWidth: true; text: qsTr("Works on every device, in the browser too — no git needed."); variant: "small"; wrapMode: Text.Wrap }
-            }
-            RowLayout {
-                spacing: Theme.space2
-                BIcon { name: "check"; size: Theme.iconSizeSm; color: Theme.fgMuted }
-                BText { Layout.fillWidth: true; text: qsTr("Notes changed here and on GitHub are merged line by line; when they cannot be, both versions are kept."); variant: "small"; wrapMode: Text.Wrap }
-            }
-            RowLayout {
-                spacing: Theme.space2
-                BIcon { name: "check"; size: Theme.iconSizeSm; color: Theme.fgMuted }
-                BText { Layout.fillWidth: true; text: qsTr("Notes in this notebook that are not in the repository stay here until you commit them."); variant: "small"; wrapMode: Text.Wrap }
-            }
+            Check { text: qsTr("Works on every device, in the browser too — no git needed.") }
+            Check { text: qsTr("Notes changed here and on GitHub are merged line by line; when they cannot be, both versions are kept.") }
+            Check { text: qsTr("Notes in this notebook that are not in the repository stay here until you commit them.") }
         }
 
         Field {
             label: qsTr("Repository")
-            help: AppController.routeText(panel.github.parseAddress(addressField.typedText), "error") === ""
+            help: panel.addressError === ""
                   ? qsTr("“owner/name” or the address of a page of the repository on github.com (also of a folder).")
                   : ""
             BTextField {
@@ -453,7 +424,7 @@ ColumnLayout {
                 accessibleName: qsTr("Repository")
                 placeholderText: qsTr("owner/name or https://github.com/…")
                 inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-                errorText: AppController.routeText(panel.github.parseAddress(addressField.typedText), "error")
+                errorText: panel.addressError
                 onTextEdited: panel.linkMessage = ""
             }
         }
@@ -601,6 +572,7 @@ ColumnLayout {
                 text: qsTr("Forget the token")
                 iconName: "trash-2"
                 variant: "ghost"
+                enabled: !panel.github.checkingToken
                 onClicked: {
                     panel.github.forgetToken()
                     panel.tokenMessage = ""
@@ -615,13 +587,7 @@ ColumnLayout {
         visible: panel.linked
         spacing: Theme.space2
         BIcon { Layout.alignment: Qt.AlignTop; name: "info"; size: Theme.iconSize; color: Theme.fgFaint }
-        BText {
-            Layout.fillWidth: true
-            text: qsTr("Brulion checks GitHub when the notebook opens and every 15 minutes while it is in front. Your changes go to GitHub only when you commit or propose them.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
-        }
+        Hint { text: qsTr("Brulion checks GitHub when the notebook opens and every 15 minutes while it is in front. Your changes go to GitHub only when you commit or propose them.") }
         BButton {
             text: qsTr("Unlink…")
             size: "small"

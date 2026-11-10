@@ -101,7 +101,6 @@ BDialog {
             id: box
             required property string path
             required property string title
-            required property string kind
             required property string kindText
             required property bool proposed
             Layout.fillWidth: true

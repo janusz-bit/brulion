@@ -9,13 +9,14 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
-#include <QPointer>
-#include <QTimer>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <thread>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -35,6 +36,8 @@ constexpr int kParseError = -32700;
 constexpr int kInvalidRequest = -32600;
 constexpr int kMethodNotFound = -32601;
 constexpr int kInvalidParams = -32602;
+constexpr qint64 kRescanIntervalMs = 10 * 1000;    // for in-place edits that watchers do not report
+constexpr qint64 kMaxImageBytes = 8 * 1024 * 1024; // the largest screenshot sent as a picture
 
 class McpServer {
     Q_DECLARE_TR_FUNCTIONS(brulion::cli)
@@ -53,22 +56,15 @@ public:
     /// Tools offered: MCP-visible commands the mode allows.
     bool offered(const Command &c) const
     {
-        if (!c.mcp)
-            return false;
-        if (m_readOnly && c.writes)
-            return false;
-        if (c.destructive && !m_allowDestructive)
-            return false;
-        if (c.appControl && !m_appControl)
-            return false;
-        return true;
+        return c.mcp && !(m_readOnly && c.writes) && !(c.destructive && !m_allowDestructive)
+               && !(c.appControl && !m_appControl);
     }
 
     void handle(const QByteArray &line)
     {
         if (line.trimmed().isEmpty())
             return;
-        QJsonParseError parseError;
+        QJsonParseError parseError{};
         const QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
         if (parseError.error != QJsonParseError::NoError) {
             sendError(QJsonValue(), kParseError, tr("Parse error: %1").arg(parseError.errorString()));
@@ -87,6 +83,10 @@ public:
                 sendError(id, kInvalidRequest, tr("Not a JSON-RPC 2.0 request"));
             return;
         }
+        // A notification (no id: initialized, cancelled, …) is never answered (JSON-RPC 2.0), and the
+        // methods here that do something are requests: none runs for a notification.
+        if (notification || method.startsWith(u"notifications/"))
+            return;
         const QJsonObject params = request.value(u"params"_s).toObject();
         if (method == u"initialize") {
             const QString asked = params.value(u"protocolVersion"_s).toString();
@@ -101,8 +101,6 @@ public:
                                 {u"instructions"_s, instructions()}});
             return;
         }
-        if (method.startsWith(u"notifications/"))
-            return; // initialized, cancelled, …: nothing to answer
         if (method == u"ping") {
             sendResult(id, QJsonObject());
             return;
@@ -128,8 +126,7 @@ public:
             callTool(id, params);
             return;
         }
-        if (!notification)
-            sendError(id, kMethodNotFound, tr("Method not found: %1").arg(method));
+        sendError(id, kMethodNotFound, tr("Method not found: %1").arg(method));
     }
 
 private:
@@ -162,15 +159,13 @@ private:
     void callTool(const QJsonValue &id, const QJsonObject &params)
     {
         const QString name = params.value(u"name"_s).toString();
-        const Command *command = nullptr;
-        for (const Command &c : commands()) {
-            if (toolName(c) == name && offered(c))
-                command = &c;
-        }
-        if (!command) {
+        const QList<Command> &all = commands();
+        const auto it = std::ranges::find_if(all, [&](const Command &c) { return offered(c) && toolName(c) == name; });
+        if (it == all.end()) {
             sendError(id, kInvalidParams, tr("Unknown tool: %1").arg(name));
             return;
         }
+        const Command &command = *it;
         const QJsonValue rawArgs = params.value(u"arguments"_s);
         if (!rawArgs.isUndefined() && !rawArgs.isNull() && !rawArgs.isObject()) {
             sendError(id, kInvalidParams, tr("arguments must be an object"));
@@ -183,25 +178,36 @@ private:
         std::optional<Error> unused;
         if (notebook::Notebook *nb = m_ctx.vaultRoot().isEmpty() ? nullptr : m_ctx.notebook(&unused)) {
             nb->vault().processPendingEvents();
-            if (m_sinceRescan.elapsed() > 10 * 1000) {
+            if (m_sinceRescan.elapsed() > kRescanIntervalMs) {
                 nb->vault().rescan();
                 m_sinceRescan.restart();
             }
         }
-        const bool dryRun = args.take(u"dryRun"_s).toBool();
-        m_ctx.globals.dryRun = dryRun && command->writes;
-        const Result result = execute(m_ctx, *command, args);
-        m_ctx.globals.dryRun = false;
-        const QJsonObject envelopeJson = envelope(m_ctx, command, result);
+        // MCP's own `dryRun` (inputSchema), no argument of the command. Another type than a boolean
+        // (also "true") is refused: taken for false, it would write.
+        const QJsonValue dryRun = args.take(u"dryRun"_s);
+        Result result;
+        if (dryRun.isBool() || dryRun.isNull() || dryRun.isUndefined()) {
+            m_ctx.globals.dryRun = dryRun.toBool() && command.writes;
+            result = execute(m_ctx, command, args);
+            m_ctx.globals.dryRun = false;
+        } else {
+            result.error = Error{ExitUsage,
+                                 u"bad_argument"_s,
+                                 tr("%1 must be true or false").arg(u"dryRun"_s),
+                                 {{u"argument"_s, u"dryRun"_s}}};
+        }
+        const QJsonObject envelopeJson = envelope(m_ctx, &command, result);
         const QString text = QString::fromUtf8(QJsonDocument(envelopeJson).toJson(QJsonDocument::Compact));
         QJsonArray content{QJsonObject{{u"type"_s, u"text"_s}, {u"text"_s, text}}};
-        // A screenshot of the app as a picture the agent can look at (up to 8 MB). Only a PNG: the
-        // path is the app's answer, and no other file goes to the agent.
-        if (command->id == u"app.screenshot" && !result.error) {
-            QFile file(result.value.toObject().value(u"path"_s).toString());
-            if (file.size() <= 8 * 1024 * 1024 && file.open(QIODevice::ReadOnly)) {
-                const QByteArray png = file.readAll();
-                if (png.startsWith(QByteArrayView("\x89PNG\r\n\x1a\n", 8)))
+        // A screenshot as a picture the agent can look at: only a PNG in a regular file, read up to the
+        // limit (the path is the app's answer; no other file, nor a pipe or a device, goes to the agent).
+        if (command.id == u"app.screenshot" && !result.error) {
+            const QString path = result.value.toObject().value(u"path"_s).toString();
+            QFile file(path);
+            if (QFileInfo(path).isFile() && file.open(QIODevice::ReadOnly)) {
+                const QByteArray png = file.read(kMaxImageBytes + 1);
+                if (png.size() <= kMaxImageBytes && png.startsWith(QByteArrayView("\x89PNG\r\n\x1a\n", 8)))
                     content.append(QJsonObject{{u"type"_s, u"image"_s},
                                                {u"data"_s, QString::fromLatin1(png.toBase64())},
                                                {u"mimeType"_s, u"image/png"_s}});
@@ -258,21 +264,21 @@ int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appCon
     // the vault's watcher and timers keep running between requests.
     QCoreApplication *app = QCoreApplication::instance();
     std::thread reader([app, &server] {
+        // A line to the main thread, waiting until it is handled.
+        const auto deliver = [app, &server](const std::string &line) {
+            const QByteArray bytes = QByteArray::fromStdString(line);
+            QMetaObject::invokeMethod(app, [&server, bytes] { server.handle(bytes); }, Qt::BlockingQueuedConnection);
+        };
         std::string line;
         int c = 0;
         while ((c = std::fgetc(stdin)) != EOF) {
-            if (c != '\n') {
+            if (c == '\n')
+                deliver(std::exchange(line, {}));
+            else
                 line.push_back(char(c));
-                continue;
-            }
-            const QByteArray bytes = QByteArray::fromStdString(line);
-            line.clear();
-            QMetaObject::invokeMethod(app, [&server, bytes] { server.handle(bytes); }, Qt::BlockingQueuedConnection);
         }
-        if (!line.empty()) {
-            const QByteArray bytes = QByteArray::fromStdString(line);
-            QMetaObject::invokeMethod(app, [&server, bytes] { server.handle(bytes); }, Qt::BlockingQueuedConnection);
-        }
+        if (!line.empty())
+            deliver(line);
         QMetaObject::invokeMethod(app, [] { QCoreApplication::quit(); }, Qt::QueuedConnection);
     });
     const int code = QCoreApplication::exec();

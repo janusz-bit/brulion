@@ -13,6 +13,7 @@
 #include <QTimer>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::shell {
 
@@ -22,55 +23,53 @@ DesktopTray::DesktopTray(AppController *app, QObject *parent) : QObject(parent),
         return;
     // At login the panel's tray host may come up after Brulion (autostart with --hidden): look
     // again for a while instead of running without a tray for the whole session.
-    m_retry = new QTimer(this);
-    m_retry->setInterval(1000);
-    connect(m_retry, &QTimer::timeout, this, [this] {
-        if (create() || ++m_attempts >= MaxAttempts)
-            m_retry->stop();
+    auto *retry = new QTimer(this);
+    retry->setInterval(1s);
+    connect(retry, &QTimer::timeout, this, [this, retry, attempts = 0]() mutable {
+        if (create() || ++attempts >= MaxAttempts)
+            retry->stop();
     });
-    m_retry->start();
+    retry->start();
 }
 
 bool DesktopTray::create()
 {
     if (m_tray || !QSystemTrayIcon::isSystemTrayAvailable())
         return m_tray != nullptr;
-    AppController *app = m_app;
 
-    m_menu = new QMenu;
+    m_menu = std::make_unique<QMenu>();
     m_show = m_menu->addAction(QString());
     m_calendar = m_menu->addAction(QString());
     m_today = m_menu->addAction(QString());
     m_capture = m_menu->addAction(QString());
     m_menu->addSeparator();
     m_quit = m_menu->addAction(QString());
-    connect(m_show, &QAction::triggered, app, &AppController::showWindow);
-    connect(m_calendar, &QAction::triggered, app, [this, app] {
-        app->showTrayCalendar(m_tray->geometry(), QCursor::pos());
+    connect(m_show, &QAction::triggered, m_app, &AppController::showWindow);
+    connect(m_calendar, &QAction::triggered, m_app,
+            [this] { m_app->showTrayCalendar(m_tray->geometry(), QCursor::pos()); });
+    connect(m_today, &QAction::triggered, m_app, [this] {
+        m_app->showWindow();
+        m_app->openToday(); // waits while the notebook is opening; nothing without one
     });
-    connect(m_today, &QAction::triggered, app, [app] {
-        app->showWindow();
-        app->openToday(); // waits while the notebook is opening; nothing without one
-    });
-    connect(m_capture, &QAction::triggered, app, &AppController::quickCapture);
-    connect(m_quit, &QAction::triggered, app, &AppController::quit);
+    connect(m_capture, &QAction::triggered, m_app, &AppController::quickCapture);
+    connect(m_quit, &QAction::triggered, m_app, &AppController::quit);
 
     m_tray = new QSystemTrayIcon(QIcon(u":/images/logo.svg"_s), this);
-    m_tray->setContextMenu(m_menu);
-    connect(m_tray, &QSystemTrayIcon::activated, app, [this, app](QSystemTrayIcon::ActivationReason reason) {
+    m_tray->setContextMenu(m_menu.get());
+    connect(m_tray, &QSystemTrayIcon::activated, m_app, [this](QSystemTrayIcon::ActivationReason reason) {
         // Windows sends Trigger and then DoubleClick for a double click: the calendar opens for
         // a moment, then the window comes up (and hides it), as with the system clock.
         if (reason == QSystemTrayIcon::DoubleClick)
-            app->showWindow();
-        else if (reason == QSystemTrayIcon::Trigger && app->settings()->trayClick() == u"calendar")
-            app->showTrayCalendar(m_tray->geometry(), QCursor::pos(), true);
+            m_app->showWindow();
+        else if (reason == QSystemTrayIcon::Trigger && m_app->settings()->trayClick() == u"calendar")
+            m_app->showTrayCalendar(m_tray->geometry(), QCursor::pos(), true);
         else if (reason == QSystemTrayIcon::Trigger)
-            app->requestUiAction(u"toggleWindow"_s);
+            m_app->requestUiAction(u"toggleWindow"_s);
     });
-    connect(app, &AppController::notificationRequested, this, [this](const QString &title, const QString &body) {
-        m_tray->showMessage(title, body, QIcon(u":/images/logo.svg"_s), 8000);
+    connect(m_app, &AppController::notificationRequested, this, [this](const QString &title, const QString &body) {
+        m_tray->showMessage(title, body, m_tray->icon(), 8000);
     });
-    connect(m_tray, &QSystemTrayIcon::messageClicked, app, &AppController::showWindow);
+    connect(m_tray, &QSystemTrayIcon::messageClicked, m_app, &AppController::showWindow);
 
     retranslate();
     // Follow language switches (installing a translator sends LanguageChange to the app object).
@@ -84,7 +83,6 @@ DesktopTray::~DesktopTray()
 {
     if (m_tray)
         QCoreApplication::instance()->removeEventFilter(this);
-    delete m_menu;
 }
 
 bool DesktopTray::isAvailable() const

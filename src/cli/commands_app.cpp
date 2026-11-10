@@ -19,6 +19,8 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
@@ -29,19 +31,14 @@ namespace {
 int exitFor(const QString &code)
 {
     namespace E = ipc::ControlError;
-    for (const char *usage : {E::ParseError, E::InvalidRequest, E::UnknownMethod, E::BadParams}) {
-        if (code == QLatin1String(usage))
-            return ExitUsage;
-    }
-    if (code == QLatin1String(E::NotFound) || code == QLatin1String(E::Timeout) || code == QLatin1String(E::OffScreen))
-        return ExitNotFound;
-    if (code == QLatin1String(E::StaleHandle) || code == QLatin1String(E::Ambiguous))
-        return ExitConflict;
-    if (code == QLatin1String(E::NotReady))
-        return ExitUnavailable;
-    if (code == QLatin1String(E::Refused))
-        return ExitRefused;
-    return ExitInternal;
+    static const QHash<QString, int> exits{
+            {QLatin1String(E::ParseError), ExitUsage},    {QLatin1String(E::InvalidRequest), ExitUsage},
+            {QLatin1String(E::UnknownMethod), ExitUsage}, {QLatin1String(E::BadParams), ExitUsage},
+            {QLatin1String(E::NotFound), ExitNotFound},   {QLatin1String(E::Timeout), ExitNotFound},
+            {QLatin1String(E::OffScreen), ExitNotFound},  {QLatin1String(E::StaleHandle), ExitConflict},
+            {QLatin1String(E::Ambiguous), ExitConflict},  {QLatin1String(E::NotReady), ExitUnavailable},
+            {QLatin1String(E::Refused), ExitRefused}};
+    return exits.value(code, ExitInternal);
 }
 
 QString singleInstanceKey(const Call &call)
@@ -108,34 +105,40 @@ Result appResult(Call &call, const QString &method, const QJsonObject &params, i
     return call.ok(*result);
 }
 
-/// A target from the command line: `<target>` ("h12" a handle from find, "120,340" a point in
-/// window coordinates, anything else the text of an item) and the options --handle, --x/--y,
-/// --text, --object-name, --type, --exact. `prefix`: "from"/"to" of drag. {} when none is given.
-std::optional<QJsonObject> targetOf(Call &call, const QString &positionalName, bool required)
+/// The string arguments `keys` that are given, copied into `params` under their names.
+void copyGiven(const Call &call, QJsonObject &params, std::initializer_list<QString> keys)
 {
-    QJsonObject target;
-    const QString word = call.str(positionalName).trimmed();
+    for (const QString &key : keys) {
+        if (call.has(key))
+            params.insert(key, call.str(key));
+    }
+}
+
+/// A target word: "h12" a handle from find, "120,340" a point in window coordinates, anything
+/// else the text of an item ({} for "").
+QJsonObject targetFromWord(const QString &word)
+{
     static const QRegularExpression handle(u"^h\\d+$"_s);
     static const QRegularExpression point(u"^\\s*(-?\\d+(?:\\.\\d+)?)\\s*[,x ]\\s*(-?\\d+(?:\\.\\d+)?)\\s*$"_s);
-    if (!word.isEmpty()) {
-        if (handle.match(word).hasMatch()) {
-            target.insert(u"handle"_s, word);
-        } else if (const auto m = point.match(word); m.hasMatch()) {
-            target.insert(u"x"_s, m.captured(1).toDouble());
-            target.insert(u"y"_s, m.captured(2).toDouble());
-        } else {
-            target.insert(u"text"_s, word);
-        }
-    }
-    if (call.has(u"handle"_s))
-        target.insert(u"handle"_s, call.str(u"handle"_s));
+    if (word.isEmpty())
+        return {};
+    if (handle.match(word).hasMatch())
+        return {{u"handle"_s, word}};
+    if (const auto m = point.match(word); m.hasMatch())
+        return {{u"x"_s, m.captured(1).toDouble()}, {u"y"_s, m.captured(2).toDouble()}};
+    return {{u"text"_s, word}};
+}
+
+/// A target from the command line: `<target>` (targetFromWord()) and the options --handle,
+/// --x/--y, --text, --object-name, --type, --exact; {} when none is given. nullopt and the call's
+/// error when ipc::checkTarget() refuses it (`required`: also when none is given).
+std::optional<QJsonObject> targetOf(Call &call, bool required)
+{
+    QJsonObject target = targetFromWord(call.str(u"target"_s).trimmed());
+    copyGiven(call, target, {u"handle"_s, u"text"_s, u"objectName"_s, u"type"_s});
     if (call.has(u"x"_s) || call.has(u"y"_s)) {
         target.insert(u"x"_s, call.integer(u"x"_s, 0));
         target.insert(u"y"_s, call.integer(u"y"_s, 0));
-    }
-    for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s}) {
-        if (call.has(key))
-            target.insert(key, call.str(key));
     }
     if (call.flag(u"exact"_s))
         target.insert(u"exact"_s, true);
@@ -149,14 +152,9 @@ std::optional<QJsonObject> targetOf(Call &call, const QString &positionalName, b
 }
 
 /// The pointer options shared by click, long-press, double-click, drag and scroll.
-void pointerOptions(Call &call, QJsonObject &params)
+void pointerOptions(const Call &call, QJsonObject &params)
 {
-    if (call.has(u"button"_s))
-        params.insert(u"button"_s, call.str(u"button"_s));
-    if (call.has(u"modifiers"_s))
-        params.insert(u"modifiers"_s, call.str(u"modifiers"_s));
-    if (call.has(u"device"_s))
-        params.insert(u"device"_s, call.str(u"device"_s));
+    copyGiven(call, params, {u"button"_s, u"modifiers"_s, u"device"_s});
 }
 
 // ---- Through the single-instance socket -----------------------------------------------------
@@ -189,15 +187,25 @@ Result sendToApp(Call &call, const QByteArray &message, QJsonObject result)
     return call.ok(result);
 }
 
-/// `app open` without the remote control: the route resolved here, sent as an `open` message.
+/// Send the message `verb` ("today", "capture": no payload) to the running app.
+Result sendVerb(Call &call, const char *verb)
+{
+    return sendToApp(call, ipc::encodeMessage(verb), {{u"sent"_s, QString::fromLatin1(verb)}});
+}
+
+/// `app open` without the remote control: today's daily note, or the route resolved here, sent as
+/// an `open` message.
 Result openByMessage(Call &call, const QString &target)
 {
+    if (target.isEmpty() || target == u"today")
+        return sendVerb(call, "today");
     if (auto e = call.ctx.resolveVault())
         return failWith(*e);
     const auto ref = call.page(target, false);
     if (!ref)
         return call.failed();
     QJsonObject route;
+    // --line, --block-id, --heading: that place of the page instead of the ref's line or block.
     const bool place = call.has(u"line"_s) || call.has(u"blockId"_s) || call.has(u"heading"_s);
     if (ref->journal && !ref->item && !(place && ref->exists)) {
         route = {{u"view"_s, u"journal"_s}, {u"date"_s, ref->journal->toString(Qt::ISODate)}, {u"path"_s, ref->path}};
@@ -206,24 +214,19 @@ Result openByMessage(Call &call, const QString &target)
             return call.fail(ExitNotFound, u"page_not_found"_s, tr("No page %1").arg(ref->path),
                              {{u"path"_s, ref->path}});
         route = {{u"view"_s, u"page"_s}, {u"path"_s, ref->path}};
-        if (ref->item && ref->item->hasBlock()) {
+        if (place) {
+            if (call.has(u"line"_s))
+                route.insert(u"line"_s, call.integer(u"line"_s, 0));
+            if (call.has(u"blockId"_s))
+                route.insert(u"blockId"_s, call.str(u"blockId"_s).remove(u'^'));
+            copyGiven(call, route, {u"heading"_s});
+        } else if (ref->item && ref->item->hasBlock()) {
             route.insert(u"blockId"_s, ref->item->blockId);
         } else if (ref->item && ref->item->hasLine()) {
-            notebook::ItemRef item = *ref->item;
             const notebook::ResolvedLine line =
-                    notebook::resolve(call.nb()->read(ref->path).text, item, call.vault()->config());
-            route.insert(u"line"_s, line.line >= 0 ? line.line : item.line);
+                    notebook::resolve(call.nb()->read(ref->path).text, *ref->item, call.vault()->config());
+            route.insert(u"line"_s, line.line >= 0 ? line.line : ref->item->line);
         }
-        if (place) {
-            route.remove(u"line"_s);
-            route.remove(u"blockId"_s);
-        }
-        if (call.has(u"line"_s))
-            route.insert(u"line"_s, call.integer(u"line"_s, 0));
-        if (call.has(u"blockId"_s))
-            route.insert(u"blockId"_s, call.str(u"blockId"_s).remove(u'^'));
-        if (call.has(u"heading"_s))
-            route.insert(u"heading"_s, call.str(u"heading"_s));
     }
     const QString current = call.ctx.settingsValue(u"vaults/current"_s);
     if (!current.isEmpty() && Vault::idForPath(current) != Vault::idForPath(call.ctx.vaultRoot()))
@@ -239,22 +242,16 @@ Result appOpen(Call &call)
 {
     const QString target = call.str(u"target"_s).trimmed();
     if (target == u"capture")
-        return sendToApp(call, ipc::encodeMessage("capture"), {{u"sent"_s, u"capture"_s}});
+        return sendVerb(call, "capture");
     ipc::ControlClient probe(ipc::controlKeyFor(singleInstanceKey(call)));
-    if (!probe.connect(500)) {
-        // No remote control: the single-instance message (the route resolved here).
-        if (target.isEmpty() || target == u"today")
-            return sendToApp(call, ipc::encodeMessage("today"), {{u"sent"_s, u"today"_s}});
+    // No remote control: the single-instance message (the route resolved here).
+    if (!probe.connect(500))
         return openByMessage(call, target);
-    }
     // The app resolves the ref in the notebook it shows (the same refs as here).
     QJsonObject params{{u"ref"_s, target.isEmpty() ? u"today"_s : target}};
     if (call.has(u"line"_s))
         params.insert(u"line"_s, call.integer(u"line"_s, 0));
-    if (call.has(u"blockId"_s))
-        params.insert(u"blockId"_s, call.str(u"blockId"_s));
-    if (call.has(u"heading"_s))
-        params.insert(u"heading"_s, call.str(u"heading"_s));
+    copyGiven(call, params, {u"blockId"_s, u"heading"_s});
     if (call.flag(u"side"_s))
         params.insert(u"side"_s, true);
     // A notebook named on the command line must be the one the app shows.
@@ -277,8 +274,6 @@ Result appOpen(Call &call)
         // A notebook still opening: the message, which the app keeps until the notebook is ready.
         if (call.error && call.error->code == QLatin1String(ipc::ControlError::NotReady)) {
             call.error.reset();
-            if (target.isEmpty() || target == u"today")
-                return sendToApp(call, ipc::encodeMessage("today"), {{u"sent"_s, u"today"_s}});
             return openByMessage(call, target);
         }
         return call.failed();
@@ -291,18 +286,17 @@ Result appOpen(Call &call)
 
 Result appToday(Call &call)
 {
-    return sendToApp(call, ipc::encodeMessage("today"), {{u"sent"_s, u"today"_s}});
+    return sendVerb(call, "today");
 }
 
 Result appCapture(Call &call)
 {
     const QString text = call.text(u"text"_s);
-    if (text.trimmed().isEmpty()) {
-        if (call.dryRun())
-            return call.ok(QJsonObject{{u"dryRun"_s, true}, {u"sent"_s, u"capture"_s}});
-        return sendToApp(call, ipc::encodeMessage("capture"), {{u"sent"_s, u"capture"_s}});
-    }
-    return appResult(call, u"capture"_s, {{u"text"_s, text}});
+    if (!text.trimmed().isEmpty())
+        return appResult(call, u"capture"_s, {{u"text"_s, text}});
+    if (call.dryRun())
+        return call.ok(QJsonObject{{u"dryRun"_s, true}, {u"sent"_s, u"capture"_s}});
+    return sendVerb(call, "capture");
 }
 
 Result appState(Call &call)
@@ -359,10 +353,7 @@ Result appScreenshot(Call &call)
 Result appFind(Call &call)
 {
     QJsonObject params;
-    for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s, u"within"_s}) {
-        if (call.has(key) && !call.str(key).isEmpty())
-            params.insert(key, call.str(key));
-    }
+    copyGiven(call, params, {u"text"_s, u"objectName"_s, u"type"_s, u"within"_s});
     if (call.flag(u"exact"_s))
         params.insert(u"exact"_s, true);
     if (call.flag(u"includeHidden"_s))
@@ -376,7 +367,7 @@ Result appFind(Call &call)
 
 Result pointerCommand(Call &call, const QString &method, bool targetRequired)
 {
-    const auto target = targetOf(call, u"target"_s, targetRequired);
+    const auto target = targetOf(call, targetRequired);
     if (!target)
         return call.failed();
     QJsonObject params = *target;
@@ -417,18 +408,7 @@ Result appDrag(Call &call)
 {
     QJsonObject params;
     for (const QString &end : {u"from"_s, u"to"_s}) {
-        QJsonObject target;
-        const QString word = call.str(end).trimmed();
-        static const QRegularExpression handle(u"^h\\d+$"_s);
-        static const QRegularExpression point(u"^\\s*(-?\\d+(?:\\.\\d+)?)\\s*[,x ]\\s*(-?\\d+(?:\\.\\d+)?)\\s*$"_s);
-        if (handle.match(word).hasMatch()) {
-            target.insert(u"handle"_s, word);
-        } else if (const auto m = point.match(word); m.hasMatch()) {
-            target.insert(u"x"_s, m.captured(1).toDouble());
-            target.insert(u"y"_s, m.captured(2).toDouble());
-        } else if (!word.isEmpty()) {
-            target.insert(u"text"_s, word);
-        }
+        const QJsonObject target = targetFromWord(call.str(end).trimmed());
         if (const QString why = ipc::checkTarget(target, true); !why.isEmpty())
             return call.fail(ExitUsage, u"bad_target"_s, end + u": "_s + why);
         params.insert(end, target);
@@ -445,7 +425,7 @@ Result appType(Call &call)
     if (text.isEmpty())
         return call.fail(ExitUsage, u"missing_argument"_s, tr("Nothing to type"));
     // The app types about one key in 10 ms (and waits for the window to settle).
-    return appResult(call, u"type"_s, {{u"text"_s, text}}, int(qMin<qsizetype>(30000 + text.size() * 30, 900000)));
+    return appResult(call, u"type"_s, {{u"text"_s, text}}, int(std::min<qsizetype>(30000 + text.size() * 30, 900000)));
 }
 
 Result appKey(Call &call)
@@ -470,15 +450,12 @@ Result appWait(Call &call)
             params.insert(u"route"_s, raw);
         }
     }
-    for (const QString &key : {u"text"_s, u"objectName"_s, u"type"_s, u"handle"_s}) {
-        if (call.has(key))
-            params.insert(key, call.str(key));
-    }
+    copyGiven(call, params, {u"text"_s, u"objectName"_s, u"type"_s, u"handle"_s});
     for (const QString &key : {u"exact"_s, u"idle"_s, u"gone"_s}) {
         if (call.flag(key))
             params.insert(key, true);
     }
-    const int ms = qBound(0, call.integer(u"timeout"_s, 5000), 120000);
+    const int ms = std::clamp(call.integer(u"timeout"_s, 5000), 0, 120000);
     params.insert(u"ms"_s, ms);
     return appResult(call, u"waitFor"_s, params, ms + 10000);
 }

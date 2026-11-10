@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <limits>
 
 using namespace Qt::StringLiterals;
 
@@ -114,7 +115,8 @@ std::optional<Error> Context::resolveVault()
         const auto isDocs = [&data](const QString &p) { return !notebook::docsNotebookLanguage(data, p).isEmpty(); };
         if (isDocs(path)) {
             path.clear();
-            for (const QVariant &recent : appSettingsValue(u"vaults/recent"_s).toList()) {
+            const QVariantList recents = appSettingsValue(u"vaults/recent"_s).toList();
+            for (const QVariant &recent : recents) {
                 const QString candidate = recent.toMap().value(u"path"_s).toString();
                 if (!candidate.trimmed().isEmpty() && !isDocs(candidate)) {
                     path = candidate;
@@ -213,9 +215,7 @@ QString Context::readStdin()
     if (m_stdin)
         return *m_stdin;
     QFile in;
-    QByteArray bytes;
-    if (in.open(stdin, QIODevice::ReadOnly))
-        bytes = in.readAll();
+    const QByteArray bytes = in.open(stdin, QIODevice::ReadOnly) ? in.readAll() : QByteArray();
     QString text = QString::fromUtf8(bytes);
     stdinInvalidUtf8 = text.toUtf8() != bytes; // replaced by U+FFFD
     if (text.startsWith(QChar(0xFEFF)))
@@ -240,7 +240,8 @@ QString Call::str(const QString &name) const
 
 bool Call::has(const QString &name) const
 {
-    return args.contains(name) && !(args.value(name).isString() && args.value(name).toString().isEmpty());
+    const QJsonValue v = args.value(name);
+    return !v.isUndefined() && !(v.isString() && v.toString().isEmpty());
 }
 
 bool Call::flag(const QString &name) const
@@ -251,8 +252,11 @@ bool Call::flag(const QString &name) const
 int Call::integer(const QString &name, int fallback) const
 {
     const QJsonValue v = args.value(name);
-    if (v.isDouble())
-        return int(v.toInteger());
+    if (v.isDouble()) {
+        // A whole number (checkArguments) of qint64's range: saturated to an int, never wrapped.
+        using Limits = std::numeric_limits<int>;
+        return int(std::clamp<qint64>(v.toInteger(), Limits::min(), Limits::max()));
+    }
     bool ok = false;
     const int n = v.toString().toInt(&ok);
     return ok ? n : fallback;
@@ -260,18 +264,15 @@ int Call::integer(const QString &name, int fallback) const
 
 QString Call::text(const QString &name)
 {
-    if (ctx.globals.stdinText) {
-        for (const Arg &a : cmd.args) {
-            if (a.name == name && a.fromStdin) {
-                const QString text = ctx.readStdin();
-                if (ctx.stdinInvalidUtf8)
-                    warn(u"stdin_invalid_utf8"_s,
-                         tr("Standard input was not valid UTF-8: invalid bytes were replaced"));
-                return text;
-            }
-        }
-    }
-    return str(name);
+    const bool fromStdin = ctx.globals.stdinText && std::ranges::any_of(cmd.args, [&name](const Arg &a) {
+                               return a.name == name && a.fromStdin;
+                           });
+    if (!fromStdin)
+        return str(name);
+    const QString text = ctx.readStdin();
+    if (ctx.stdinInvalidUtf8)
+        warn(u"stdin_invalid_utf8"_s, tr("Standard input was not valid UTF-8: invalid bytes were replaced"));
+    return text;
 }
 
 bool Call::dryRun() const
@@ -317,8 +318,7 @@ void Call::warn(const QString &code, const QString &message, const QJsonObject &
 
 notebook::Notebook *Call::nb()
 {
-    notebook::Notebook *n = ctx.notebook(&error);
-    return n;
+    return ctx.notebook(&error);
 }
 
 VaultIndex *Call::index()
@@ -380,12 +380,10 @@ std::optional<QDate> Call::date(const QString &phrase)
     if (t.isEmpty())
         return ctx.today();
     if (const auto iso = dates::parseIsoDate(t))
-        return *iso;
+        return iso;
     const auto found = dates::parseNaturalDate(t, ctx.now(), ctx.weekStart(), ctx.locale());
-    if (found && found->start == 0 && found->length >= t.size())
-        return found->spec.date;
-    if (found && t.mid(found->end()).trimmed().isEmpty() && t.left(found->start).trimmed().isEmpty())
-        return found->spec.date;
+    if (found && t.left(found->start).trimmed().isEmpty() && t.mid(found->end()).trimmed().isEmpty())
+        return found->spec.date; // a date with nothing but spaces around it
     setError(ExitParse, u"date_not_understood"_s, tr("Not a date: %1").arg(t),
              {{u"phrase"_s, t},
               {u"examples"_s, QJsonArray{u"dziś"_s, u"wczoraj"_s, u"w piątek"_s, u"2026-10-15"_s, u"next monday"_s}}});
@@ -396,7 +394,7 @@ std::optional<DateSpec> Call::dateSpec(const QString &phrase, const QString &arg
 {
     const QString t = phrase.trimmed();
     if (const auto spec = dates::parseDateSpec(t))
-        return *spec;
+        return spec;
     const auto found = dates::parseNaturalDate(t, ctx.now(), ctx.weekStart(), ctx.locale());
     if (!found) {
         setError(ExitParse, u"date_not_understood"_s, tr("Not a date: %1").arg(t),
@@ -503,12 +501,14 @@ std::optional<Call::PageRef> Call::page(const QString &raw, bool mustExist)
     };
     // 3. A page name as [[links]] read it: a title, or a path suffix ("Projekty/Dom").
     const QString key = foldName(notebook::withoutMdExtension(name).trimmed());
+    const bool bySuffix = key.contains(u'/');
+    const QString suffix = u'/' + key;
     QStringList matches;
-    for (const FileStat &f : v.markdownFiles()) {
+    for (const QList<FileStat> files = v.markdownFiles(); const FileStat &f : files) {
         if (paths::isConflictCopy(f.path))
             continue;
-        const QString stem = foldName(paths::stripMarkdownExtension(f.path));
-        if (key.contains(u'/') ? (stem == key || stem.endsWith(u'/' + key)) : foldName(paths::pageTitle(f.path)) == key)
+        const QString folded = foldName(bySuffix ? paths::stripMarkdownExtension(f.path) : paths::pageTitle(f.path));
+        if (folded == key || (bySuffix && folded.endsWith(suffix)))
             matches.append(f.path);
     }
     if (matches.size() == 1)
@@ -531,7 +531,7 @@ std::optional<Call::PageRef> Call::page(const QString &raw, bool mustExist)
             return finish(future);
     }
     QJsonArray suggestions;
-    for (const PageSuggestion &s : index.suggestPages(name, 5))
+    for (const QList<PageSuggestion> pages = index.suggestPages(name, 5); const PageSuggestion &s : pages)
         suggestions.append(s.path);
     setError(ExitNotFound, u"page_not_found"_s, tr("No page %1").arg(name),
              {{u"ref"_s, t}, {u"suggestions"_s, suggestions}});
@@ -547,11 +547,9 @@ bool Call::lock()
         return false;
     QString message;
     m_lock = n->lock(10000, &message);
-    if (!m_lock) {
+    if (!m_lock)
         setError(ExitUnavailable, u"lock_timeout"_s, tr("The notebook is busy: %1").arg(message));
-        return false;
-    }
-    return true;
+    return m_lock != nullptr;
 }
 
 std::optional<notebook::Notebook::WriteResult> Call::edit(const VaultPath &path, const notebook::Notebook::Edit &edit,
@@ -620,38 +618,27 @@ QString Call::lineRef(const VaultPath &path, const QString &content, int line)
 
 Result execute(Context &context, const Command &command, const QJsonObject &rawArgs)
 {
-    std::optional<Error> error;
-    const QJsonObject args = checkArguments(command, rawArgs, &error);
     Result refused;
-    if (error) {
-        refused.error = error;
-        return refused;
-    }
-    if (command.writes && context.globals.readOnly) {
+    const QJsonObject args = checkArguments(command, rawArgs, &refused.error);
+    if (!refused.error && command.writes && context.globals.readOnly)
         refused.error = Error{ExitRefused, u"read_only"_s,
                               tr("%1 writes notes: refused in read-only mode").arg(command.words().join(u' '))};
-        return refused;
-    }
-    if (command.destructive && !context.globals.allowDestructive) {
+    if (!refused.error && command.destructive && !context.globals.allowDestructive)
         refused.error = Error{ExitRefused, u"destructive_refused"_s,
                               tr("%1 replaces, moves or removes existing notes: run it with --allow-destructive")
                                       .arg(command.words().join(u' '))};
+    if (!refused.error && command.needsVault)
+        refused.error = context.resolveVault();
+    if (refused.error)
         return refused;
-    }
-    if (command.needsVault) {
-        if (auto e = context.resolveVault()) {
-            refused.error = e;
-            return refused;
-        }
-    }
     Call call(context, command, args);
     Result result = command.run(call);
-    QJsonArray warnings = call.warnings;
-    for (const QJsonValue &w : std::as_const(result.warnings)) {
+    QJsonArray warnings = std::move(call.warnings);
+    for (const auto &w : std::as_const(result.warnings)) {
         if (!warnings.contains(w))
             warnings.append(w);
     }
-    result.warnings = warnings;
+    result.warnings = std::move(warnings);
     return result;
 }
 

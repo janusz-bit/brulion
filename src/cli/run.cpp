@@ -73,7 +73,7 @@ QStringList commandLineArguments(int argc, char **argv)
 
 QString messageLanguage()
 {
-    for (const QString &name : QLocale::system().uiLanguages()) {
+    for (const QStringList languages = QLocale::system().uiLanguages(); const QString &name : languages) {
         const QLocale::Language language = QLocale(name).language();
         if (language == QLocale::Polish)
             return u"pl"_s;
@@ -107,8 +107,9 @@ int run(int argc, char **argv)
     const QString program = QFileInfo(programPath).fileName() == u"cli" ? u"brulion cli"_s : u"brulion-cli"_s;
 
     qInstallMessageHandler(messageHandler);
+    static char fallbackName[] = "brulion-cli";
     static int qtArgc = 1;
-    static char *qtArgv[] = {argc > 0 ? argv[0] : const_cast<char *>("brulion-cli"), nullptr};
+    static char *qtArgv[] = {argc > 0 ? argv[0] : fallbackName, nullptr};
     QCoreApplication app(qtArgc, qtArgv);
     // The app's names: the same settings file, app data (History, LocalStore) and socket — also
     // for a separate profile (BRULION_PROFILE, src/ipc/profile.h).

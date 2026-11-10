@@ -20,8 +20,11 @@ ColumnLayout {
     readonly property bool hasCurrent: importer.chosenImporter.id !== undefined
     readonly property string pick: hasCurrent ? "" + importer.chosenImporter.pick : "both"
     readonly property bool collapsed: Theme.compact && hasCurrent
+    readonly property string currentIcon: hasCurrent ? "" + importer.chosenImporter.icon : ""
+    readonly property string currentName: hasCurrent ? "" + importer.chosenImporter.name : ""
+    readonly property string currentPhoneHowTo: hasCurrent ? "" + importer.chosenImporter.phoneHowTo : ""
     /// The chosen importer's file types ("*.enex").
-    function fileTypes(): list<string> {
+    readonly property list<string> fileTypes: {
         if (!picker.hasCurrent)
             return []
         return picker.importer.chosenImporter.fileTypes
@@ -30,6 +33,13 @@ ColumnLayout {
 
     signal pickFiles()
     signal pickFolder()
+
+    component Hint: BText {
+        Layout.fillWidth: true
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
 
     spacing: Theme.space4
 
@@ -46,10 +56,10 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: picker.collapsed
         spacing: Theme.space2
-        BIcon { name: picker.hasCurrent ? "" + picker.importer.chosenImporter.icon : ""; size: Theme.iconSize; color: Theme.link }
+        BIcon { name: picker.currentIcon; size: Theme.iconSize; color: Theme.link }
         BText {
             Layout.fillWidth: true
-            text: picker.hasCurrent ? "" + picker.importer.chosenImporter.name : ""
+            text: picker.currentName
             variant: "label"
             elide: Text.ElideRight
         }
@@ -86,11 +96,11 @@ ColumnLayout {
                 hoverEnabled: !Theme.touchUi
                 focusPolicy: Qt.StrongFocus
                 checkable: true
-                checked: chosen
+                checked: tile.chosen
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: tile.name
-                Accessible.checked: chosen
-                onClicked: picker.importer.importerId = chosen ? "" : tile.importerKey
+                Accessible.checked: tile.chosen
+                onClicked: picker.importer.importerId = tile.chosen ? "" : tile.importerKey
 
                 background: Rectangle {
                     radius: Theme.radius
@@ -100,7 +110,6 @@ ColumnLayout {
                     BFocusRing { visible: tile.visualFocus; targetRadius: Theme.radius }
                 }
                 contentItem: RowLayout {
-                    id: row
                     spacing: Theme.space2
                     BIcon {
                         name: tile.iconName
@@ -119,9 +128,9 @@ ColumnLayout {
     }
 
     IoCard {
-        iconName: picker.hasCurrent ? "" + picker.importer.chosenImporter.icon : "sparkles"
+        iconName: picker.hasCurrent ? picker.currentIcon : "sparkles"
         iconColor: picker.hasCurrent ? Theme.link : Theme.fgMuted
-        title: picker.hasCurrent ? qsTr("From %1").arg(picker.importer.chosenImporter.name) : qsTr("Not sure where to start?")
+        title: picker.hasCurrent ? qsTr("From %1").arg(picker.currentName) : qsTr("Not sure where to start?")
         subtitle: picker.hasCurrent ? "" + picker.importer.chosenImporter.howTo
                   : qsTr("Choose the exported files or the folder – Brulion recognises Obsidian, Logseq, Notion, Evernote and the others by itself. Nothing is written before you see what will be imported.")
 
@@ -129,7 +138,7 @@ ColumnLayout {
         RowLayout {
             objectName: "importPhoneHowTo"
             Layout.fillWidth: true
-            visible: picker.phone && picker.hasCurrent && picker.importer.chosenImporter.phoneHowTo !== ""
+            visible: picker.phone && picker.currentPhoneHowTo !== ""
             spacing: Theme.space2
             BIcon {
                 Layout.alignment: Qt.AlignTop
@@ -140,7 +149,7 @@ ColumnLayout {
             }
             BText {
                 Layout.fillWidth: true
-                text: picker.hasCurrent ? "" + picker.importer.chosenImporter.phoneHowTo : ""
+                text: picker.currentPhoneHowTo
                 wrapMode: Text.Wrap
             }
         }
@@ -159,8 +168,8 @@ ColumnLayout {
             BButton {
                 objectName: "importChooseFiles"
                 visible: picker.pick !== "folder"
-                text: picker.hasCurrent && picker.pick === "files" && picker.fileTypes().length === 1
-                      ? qsTr("Choose the %1 file…").arg(Js.replace(picker.fileTypes()[0], "*", ""))
+                text: picker.hasCurrent && picker.pick === "files" && picker.fileTypes.length === 1
+                      ? qsTr("Choose the %1 file…").arg(Js.replace(picker.fileTypes[0], "*", ""))
                       : qsTr("Choose files…")
                 iconName: "file-input"
                 variant: "primary"
@@ -175,25 +184,17 @@ ColumnLayout {
                 onClicked: picker.pickFolder()
             }
         }
-        BText {
-            Layout.fillWidth: true
+        Hint {
             visible: AppController.isWasm && picker.pick !== "files"
             text: qsTr("In the browser choose a ZIP of the folder.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
         // The system's picker, briefly: where the places are, what Android refuses. (Its menu in
         // words: Android's fonts have no ☰, U+2630.)
-        BText {
-            Layout.fillWidth: true
+        Hint {
             visible: picker.phone
             text: picker.pick === "files"
                   ? qsTr("The system's picker opens: its menu (three lines in its top left corner) switches between Downloads, the phone's storage, Google Drive and other apps; a long press selects several files.")
                   : qsTr("The system's picker opens: its menu (three lines in its top left corner) switches between Downloads, the phone's storage, Google Drive and other apps. Android does not let apps take the whole Downloads folder or the top of the storage – choose a folder inside it, or type its path below.")
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
     }
 }

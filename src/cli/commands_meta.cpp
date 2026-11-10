@@ -123,9 +123,9 @@ Result init(Call &call)
     const QString path = QDir::cleanPath(
             QFileInfo(raw.startsWith(u"~/"_s) ? QDir::homePath() + raw.mid(1) : raw).absoluteFilePath());
     const QFileInfo info(path);
-    if (info.exists() && !info.isDir())
-        return call.fail(ExitUsage, u"not_a_folder"_s, tr("%1 is a file").arg(path), {{u"path"_s, path}});
     const bool existed = info.exists();
+    if (existed && !info.isDir())
+        return call.fail(ExitUsage, u"not_a_folder"_s, tr("%1 is a file").arg(path), {{u"path"_s, path}});
     if (call.dryRun())
         return call.ok(QJsonObject{{u"path"_s, path}, {u"created"_s, false}, {u"dryRun"_s, true}});
     if (!existed && !QDir().mkpath(path))
@@ -134,6 +134,7 @@ Result init(Call &call)
     return call.ok(QJsonObject{{u"path"_s, path}, {u"created"_s, !existed}}, path);
 }
 
+/// A command about the command line itself: it needs no notebook and is no MCP tool.
 Command make(const QString &id, const char *summary, Handler run, QList<Arg> args)
 {
     Command c;
@@ -142,6 +143,7 @@ Command make(const QString &id, const char *summary, Handler run, QList<Arg> arg
     c.run = std::move(run);
     c.args = std::move(args);
     c.needsVault = false;
+    c.mcp = false;
     return c;
 }
 
@@ -153,11 +155,11 @@ void addMetaCommands(QList<Command> &out)
                      QT_TRANSLATE_NOOP("brulion::cli", "Create a notebook folder (the only command that creates one)"),
                      init, {positional(u"path"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The folder"))});
     c.writes = true;
-    c.mcp = false;
     out.append(c);
     c = make(u"version"_s,
              QT_TRANSLATE_NOOP("brulion::cli", "The version of brulion-cli (and of Qt, the MCP protocol)"), version,
              {});
+    c.mcp = true; // the only one of them that is an MCP tool
     out.append(c);
     c = make(u"help"_s,
              QT_TRANSLATE_NOOP("brulion::cli",
@@ -166,18 +168,15 @@ void addMetaCommands(QList<Command> &out)
              {positional(u"topic"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A command, e.g. \"task add\""),
                          false, true),
               flag(u"json"_s, QT_TRANSLATE_NOOP("brulion::cli", "The commands as JSON"))});
-    c.mcp = false;
     out.append(c);
     c = make(u"schema"_s, QT_TRANSLATE_NOOP("brulion::cli", "JSON Schema of the commands' arguments (all, or one)"),
              schema,
              {positional(u"command"_s, ArgType::String,
                          QT_TRANSLATE_NOOP("brulion::cli", "A command, e.g. \"task add\""), false, true)});
-    c.mcp = false;
     out.append(c);
     c = make(u"completion"_s, QT_TRANSLATE_NOOP("brulion::cli", "A shell completion script"), completion,
              {choice(u"shell"_s, {u"bash"_s, u"fish"_s, u"zsh"_s}, QT_TRANSLATE_NOOP("brulion::cli", "The shell"), true,
                      true)});
-    c.mcp = false;
     out.append(c);
     c = make(u"mcp"_s,
              QT_TRANSLATE_NOOP("brulion::cli",
@@ -194,7 +193,6 @@ void addMetaCommands(QList<Command> &out)
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "JSON-RPC 2.0 over stdio, tools only; the notebook stays open and watched, so "
                                        "calls after the first are fast. Give the notebook with --vault."));
-    c.mcp = false;
     out.append(c);
 }
 

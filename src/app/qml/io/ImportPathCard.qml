@@ -20,12 +20,11 @@ IoCard {
                                         && AppController.needsStoragePermission(card.path)
                                         && !AppController.permissions.allFilesAccess
 
-    function onePath(path: string): list<string> {
-        return [path]
-    }
+    readonly property list<string> paths: [card.path]
+
     function submit(): void {
         if (card.path !== "")
-            card.importer.addPaths(card.onePath(card.path))
+            card.importer.addPaths(card.paths)
     }
 
     iconName: "folder-open"

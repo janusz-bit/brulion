@@ -6,6 +6,8 @@
 
 #include <QJsonDocument>
 
+#include <cmath>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
@@ -34,8 +36,10 @@ QString scalar(const QJsonValue &v)
     switch (v.type()) {
     case QJsonValue::Bool: return v.toBool() ? tr("yes") : tr("no");
     case QJsonValue::Double: {
+        // A whole number as one; the range check (qint64 holds [-2^63, 2^63)) keeps the conversion defined.
         const double d = v.toDouble();
-        return d == double(qint64(d)) ? QString::number(qint64(d)) : QString::number(d, 'g', 6);
+        const bool whole = d >= -0x1p63 && d < 0x1p63 && d == std::trunc(d);
+        return whole ? QString::number(qint64(d)) : QString::number(d, 'g', 6);
     }
     case QJsonValue::String: return v.toString();
     case QJsonValue::Null:
@@ -49,18 +53,15 @@ QString itemLine(const QJsonObject &o)
 {
     static const char *const order[] = {"ref", "path",  "date", "time",    "at",    "line",  "kind",  "status",
                                         "tag", "title", "text", "excerpt", "value", "error", "count", "trashPath"};
+    const bool hasRef = o.contains(u"ref"_s);
     QStringList parts;
     for (const char *key : order) {
         const QString k = QString::fromLatin1(key);
-        if (!o.contains(k))
-            continue;
         const QJsonValue v = o.value(k);
-        if ((v.isString() && v.toString().isEmpty()) || v.isNull())
+        if (v.isUndefined() || v.isNull() || (v.isString() && v.toString().isEmpty()))
             continue;
-        if (k == u"path" && o.contains(u"ref"_s))
-            continue; // the ref names it
-        if (k == u"line" && o.contains(u"ref"_s))
-            continue;
+        if (hasRef && (k == u"path" || k == u"line"))
+            continue; // the ref names them
         QString s = scalar(v).simplified();
         if (s.size() > 160)
             s = s.left(159) + u'…';
@@ -88,7 +89,7 @@ void render(QString &out, const QString &key, const QJsonValue &v, int depth)
         const QJsonArray a = v.toArray();
         if (!label.isEmpty())
             out += indent + label + (a.isEmpty() ? u" —\n"_s : u"\n"_s);
-        for (const QJsonValue &item : a)
+        for (const auto &item : a)
             out += indent + (key.isEmpty() ? QString() : u"  "_s) + u"- "_s
                    + (item.isObject() ? itemLine(item.toObject()) : scalar(item)) + u'\n';
         return;
@@ -106,9 +107,8 @@ void render(QString &out, const QString &key, const QJsonValue &v, int depth)
 
 } // namespace
 
-QString renderText(const Command *command, const Result &result)
+QString renderText(const Command * /*command*/, const Result &result)
 {
-    Q_UNUSED(command);
     QString out;
     if (result.error) {
         out += tr("error: %1 (%2)").arg(result.error->message, result.error->code) + u'\n';
@@ -121,23 +121,23 @@ QString renderText(const Command *command, const Result &result)
     } else {
         render(out, QString(), result.value, 0);
     }
-    for (const QJsonValue &w : result.warnings)
+    for (const auto &w : result.warnings)
         out += tr("warning: %1").arg(w.toObject().value(u"message"_s).toString()) + u'\n';
     return out;
 }
 
 QString unifiedDiff(const QString &before, const QString &after, const QString &path, const QString &newPath)
 {
-    const auto lines = [](const QString &text) {
+    const auto lines = [](const QString &content) {
         QStringList out;
-        const QList<text::Line> split = text::splitLines(text);
-        for (qsizetype i = 0; i < split.size(); ++i) {
-            if (i + 1 == split.size() && split.at(i).text.isEmpty() && split.at(i).eol.isEmpty() && i > 0)
-                break; // the "line" after the final line break
-            out.append(split.at(i).text);
-        }
-        if (text.isEmpty())
-            out.clear();
+        if (content.isEmpty())
+            return out;
+        const QList<text::Line> split = text::splitLines(content);
+        out.reserve(split.size());
+        for (const text::Line &line : split)
+            out.append(line.text);
+        if (split.size() > 1 && split.last().text.isEmpty() && split.last().eol.isEmpty())
+            out.removeLast(); // the "line" after the final line break
         return out;
     };
     const QStringList a = lines(before);
@@ -146,6 +146,9 @@ QString unifiedDiff(const QString &before, const QString &after, const QString &
     if (hunks.isEmpty())
         return {};
     constexpr qsizetype context = 3;
+    const auto range = [](qsizetype from, qsizetype count) {
+        return count == 0 ? u"%1,0"_s.arg(from) : u"%1,%2"_s.arg(from + 1).arg(count);
+    };
     const QString to = newPath.isEmpty() ? u"b/"_s + path : newPath == u"/dev/null" ? newPath : u"b/"_s + newPath;
     QString out = u"--- a/"_s + path + u"\n+++ "_s + to + u'\n';
     // Hunks closer than 2 × context lines share one block.
@@ -159,9 +162,6 @@ QString unifiedDiff(const QString &before, const QString &after, const QString &
         const qsizetype bFrom = std::max<qsizetype>(0, hunks.at(i).bStart - context);
         const qsizetype aTo = std::min(a.size(), hunks.at(j).aStart + hunks.at(j).aLength + context);
         const qsizetype bTo = std::min(b.size(), hunks.at(j).bStart + hunks.at(j).bLength + context);
-        const auto range = [](qsizetype from, qsizetype count) {
-            return count == 0 ? u"%1,0"_s.arg(from) : u"%1,%2"_s.arg(from + 1).arg(count);
-        };
         out += u"@@ -"_s + range(aFrom, aTo - aFrom) + u" +"_s + range(bFrom, bTo - bFrom) + u" @@\n"_s;
         qsizetype ai = aFrom;
         for (qsizetype k = i; k <= j; ++k) {

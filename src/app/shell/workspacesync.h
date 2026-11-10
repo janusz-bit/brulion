@@ -105,8 +105,11 @@ struct NextcloudSettings {
 
 /// Syncthing REST access (from AppSettings "sync/syncthingApiKey" / "sync/syncthingUrl").
 struct SyncthingSettings {
-    QString apiKey; ///< empty: discovered from Syncthing's config.xml on the desktop
-    QString url;    ///< empty: http://127.0.0.1:8384
+    /// Empty: discovered from Syncthing's config.xml on the desktop, and then used only with the
+    /// address found there or a loopback one (an address typed into the settings may be another
+    /// device's, which must never learn this machine's key).
+    QString apiKey;
+    QString url; ///< empty: the discovered address, else http://127.0.0.1:8384
     friend bool operator==(const SyncthingSettings &, const SyncthingSettings &) = default;
 };
 
@@ -355,6 +358,7 @@ private:
     void refreshConflicts();
     void onVaultChanged(const QList<brulion::VaultChange> &changes);
     void onSynced(const sync::SyncReport &report);
+    void holdReadyIfIdle();
     QString errorText(const QString &code, const QString &fallback) const;
     QString human(const QDateTime &time) const;
     // workspacesyncruns.cpp: live progress, history, run details.
@@ -385,7 +389,6 @@ private:
     std::unique_ptr<sync::SyncScheduler> m_scheduler;
     bool m_held = false;               ///< holdSync()
     std::function<void()> m_holdReady; ///< waits for the run in flight
-    void holdReadyIfIdle();
     std::unique_ptr<sync::SyncthingClient> m_syncthing;
     QMetaObject::Connection m_vaultConnection;
     NextcloudSettings m_nextcloud;

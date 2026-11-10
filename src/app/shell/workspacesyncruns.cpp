@@ -3,7 +3,6 @@
 // run. Every text is translated here; technical messages are redacted (logging::redact).
 #include "workspacesync.h"
 
-#include "dates/dates.h"
 #include "log/redact.h"
 #include "sync/sync.h"
 #include "sync/synchistory.h"
@@ -14,6 +13,7 @@
 #include <QLocale>
 
 #include <algorithm>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -43,6 +43,14 @@ QString progressPhaseId(sync::SyncProgress::Phase phase)
 QString titleOf(const QString &path)
 {
     return path.isEmpty() ? QString() : paths::pageTitle(path);
+}
+
+/// English for "en", else Polish; built once (a QLocale made from a language allocates).
+const QLocale &localeOf(const QString &language)
+{
+    static const QLocale english(QLocale::English, QLocale::UnitedStates);
+    static const QLocale polish(QLocale::Polish, QLocale::Poland);
+    return language == u"en" ? english : polish;
 }
 
 } // namespace
@@ -199,11 +207,9 @@ QString WorkspaceSync::fileErrorText(const QString &code, int status) const
 
 QString WorkspaceSync::durationText(qint64 ms) const
 {
-    const QLocale locale = m_language == u"en" ? QLocale(QLocale::English, QLocale::UnitedStates)
-                                               : QLocale(QLocale::Polish, QLocale::Poland);
-    const qint64 m = qMax<qint64>(0, ms);
+    const qint64 m = std::max<qint64>(0, ms);
     if (m < 10'000)
-        return tr("%1 s").arg(locale.toString(double(m) / 1000.0, 'f', 1));
+        return tr("%1 s").arg(localeOf(m_language).toString(double(m) / 1000.0, 'f', 1));
     const qint64 s = (m + 500) / 1000;
     if (s < 60)
         return tr("%1 s").arg(s);
@@ -214,9 +220,7 @@ QString WorkspaceSync::durationText(qint64 ms) const
 
 QString WorkspaceSync::bytesText(qint64 bytes) const
 {
-    const QLocale locale = m_language == u"en" ? QLocale(QLocale::English, QLocale::UnitedStates)
-                                               : QLocale(QLocale::Polish, QLocale::Poland);
-    return locale.formattedDataSize(qMax<qint64>(0, bytes), 1, QLocale::DataSizeTraditionalFormat);
+    return localeOf(m_language).formattedDataSize(std::max<qint64>(0, bytes), 1, QLocale::DataSizeTraditionalFormat);
 }
 
 QString WorkspaceSync::shortErrorText(const QString &code) const
@@ -270,7 +274,6 @@ QString WorkspaceSync::outcomeText(const sync::SyncRunRecord &r) const
 
 QVariantMap WorkspaceSync::historyRow(const sync::SyncRunRecord &r) const
 {
-    const QString outcome = sync::syncOutcomeName(r.outcome);
     const bool user = sync::needsUser(r.outcome, r.errorCode);
     QString tone = u"success"_s;
     switch (r.outcome) {
@@ -282,6 +285,7 @@ QVariantMap WorkspaceSync::historyRow(const sync::SyncRunRecord &r) const
     case sync::SyncOutcome::Failed: tone = user ? u"danger"_s : u"warning"_s; break;
     case sync::SyncOutcome::Cancelled: tone = u"info"_s; break;
     }
+    const QString duration = durationText(r.durationMs);
     QStringList parts;
     if (r.uploaded > 0)
         parts.append(u"↑%1"_s.arg(r.uploaded));
@@ -302,21 +306,22 @@ QVariantMap WorkspaceSync::historyRow(const sync::SyncRunRecord &r) const
     if (r.isQuiet() && r.repeats > 1 && r.firstStarted.isValid())
         parts.append(u"%1–%2"_s.arg(r.firstStarted.toLocalTime().toString(u"HH:mm"_s),
                                     r.finished.toLocalTime().toString(u"HH:mm"_s)));
-    parts.append(durationText(r.durationMs));
-    QString errorText;
+    parts.append(duration);
+    QString error;
     switch (r.outcome) {
     case sync::SyncOutcome::Refused:
-    case sync::SyncOutcome::Failed: errorText = this->errorText(r.errorCode, r.errorMessage); break;
+    case sync::SyncOutcome::Failed: error = errorText(r.errorCode, r.errorMessage); break;
     case sync::SyncOutcome::FileErrors:
-        errorText = r.errors.isEmpty() ? QString()
-                                       : titleOf(r.errors.first().path) + u": "_s
-                                                 + fileErrorText(r.errors.first().code, r.errors.first().status);
+        if (!r.errors.isEmpty()) {
+            const sync::SyncFileError &first = r.errors.first();
+            error = titleOf(first.path) + u": "_s + fileErrorText(first.code, first.status);
+        }
         break;
     case sync::SyncOutcome::NeedsConfirmation:
-        errorText = tr("%n file(s) would be deleted. Check the list and confirm in the sync center.", "",
-                       r.pendingDeletions);
+        error = tr("%n file(s) would be deleted. Check the list and confirm in the sync center.", "",
+                   r.pendingDeletions);
         break;
-    case sync::SyncOutcome::Conflicts: errorText = tr("Both versions were kept. Merge them in Conflicts."); break;
+    case sync::SyncOutcome::Conflicts: error = tr("Both versions were kept. Merge them in Conflicts."); break;
     case sync::SyncOutcome::Ok:
     case sync::SyncOutcome::Cancelled: break;
     }
@@ -327,15 +332,15 @@ QVariantMap WorkspaceSync::historyRow(const sync::SyncRunRecord &r) const
             {u"startedText"_s, human(r.started)},
             {u"finished"_s, isoOf(r.finished)},
             {u"durationMs"_s, r.durationMs},
-            {u"durationText"_s, durationText(r.durationMs)},
+            {u"durationText"_s, duration},
             {u"trigger"_s, trigger},
             {u"triggerText"_s, triggerText(trigger)},
-            {u"outcome"_s, outcome},
+            {u"outcome"_s, sync::syncOutcomeName(r.outcome)},
             {u"outcomeText"_s, outcomeText(r)},
             {u"tone"_s, tone},
             {u"summary"_s, parts.join(u" · "_s)},
             {u"errorCode"_s, r.errorCode},
-            {u"errorText"_s, errorText},
+            {u"errorText"_s, error},
             {u"needsUser"_s, user},
             {u"repeats"_s, r.repeats},
             {u"quiet"_s, r.isQuiet()},
@@ -352,23 +357,18 @@ QVariantMap WorkspaceSync::runDetails(int number) const
     QVariantList phases;
     for (const sync::SyncPhaseTime &p : r.phases) {
         const QString id = sync::syncPhaseName(p.phase);
-        QStringList detail;
+        QString detail;
         switch (p.phase) {
-        case sync::SyncPhase::ListRemote:
-            detail.append(tr("%n folder(s)", "", p.items));
-            if (p.bytes > 0)
-                detail.append(bytesText(p.bytes));
-            break;
-        case sync::SyncPhase::ListLocal: detail.append(tr("%n file(s)", "", p.items)); break;
-        case sync::SyncPhase::Compare: detail.append(tr("%n tracked file(s)", "", p.items)); break;
-        case sync::SyncPhase::Transfer:
-            detail.append(tr("%n file(s) checked", "", p.items));
-            if (p.bytes > 0)
-                detail.append(bytesText(p.bytes));
-            break;
+        case sync::SyncPhase::ListRemote: detail = tr("%n folder(s)", "", p.items); break;
+        case sync::SyncPhase::ListLocal: detail = tr("%n file(s)", "", p.items); break;
+        case sync::SyncPhase::Compare: detail = tr("%n tracked file(s)", "", p.items); break;
+        case sync::SyncPhase::Transfer: detail = tr("%n file(s) checked", "", p.items); break;
         case sync::SyncPhase::Connect:
         case sync::SyncPhase::SaveState: break;
         }
+        // Only the listing and the transfer count bytes.
+        if (p.bytes > 0 && (p.phase == sync::SyncPhase::ListRemote || p.phase == sync::SyncPhase::Transfer))
+            detail += u" · "_s + bytesText(p.bytes);
         phases.append(QVariantMap{
                 {u"id"_s, id},
                 {u"text"_s, phaseText(id)},
@@ -377,15 +377,15 @@ QVariantMap WorkspaceSync::runDetails(int number) const
                 {u"share"_s,
                  r.durationMs > 0 ? std::clamp(double(p.durationMs) / double(r.durationMs), 0.0, 1.0) : 0.0},
                 {u"items"_s, p.items},
-                {u"detailText"_s, detail.join(u" · "_s)},
+                {u"detailText"_s, detail},
         });
     }
     out.insert(u"phases"_s, phases);
 
     const sync::SyncStats &st = r.stats;
     QStringList methods;
-    for (auto it = st.requestsByMethod.cbegin(); it != st.requestsByMethod.cend(); ++it)
-        methods.append(u"%1 %2"_s.arg(QString::fromLatin1(it.key())).arg(it.value()));
+    for (const auto &[method, count] : st.requestsByMethod.asKeyValueRange())
+        methods.append(u"%1 %2"_s.arg(QString::fromLatin1(method), QString::number(count)));
     QVariantList slowest;
     for (const sync::SyncRequestTime &t : st.slowest) {
         slowest.append(QVariantMap{
@@ -422,7 +422,7 @@ QVariantMap WorkspaceSync::runDetails(int number) const
         });
     }
     out.insert(u"errors"_s, errors);
-    out.insert(u"moreErrors"_s, qMax(0, r.fileErrors - int(r.errors.size())));
+    out.insert(u"moreErrors"_s, std::max(0, r.fileErrors - int(r.errors.size())));
     QVariantList conflicts;
     for (const VaultPath &path : r.conflictPaths)
         conflicts.append(QVariantMap{{u"path"_s, path}, {u"title"_s, titleOf(path)}});
@@ -493,26 +493,24 @@ QString WorkspaceSync::runDetailsText(int number) const
         lines.append(tr("Details: %1").arg(m));
     lines.append(tr("Duration: %1").arg(d.value(u"durationText"_s).toString()));
     const QVariantMap c = d.value(u"counts"_s).toMap();
+    const auto count = [&c](const QString &key) { return c.value(key).toInt(); };
     lines.append(tr("Sent %1 · downloaded %2 · merged %3 · deleted %4 here, %5 on the server · conflicts %6 · "
                     "errors %7")
-                         .arg(c.value(u"uploaded"_s).toInt())
-                         .arg(c.value(u"downloaded"_s).toInt())
-                         .arg(c.value(u"merged"_s).toInt())
-                         .arg(c.value(u"deletedLocal"_s).toInt())
-                         .arg(c.value(u"deletedRemote"_s).toInt())
-                         .arg(c.value(u"conflicts"_s).toInt())
-                         .arg(c.value(u"fileErrors"_s).toInt()));
-    const int foldersCreated = c.value(u"foldersCreated"_s).toInt();
-    const int foldersDeleted = c.value(u"foldersDeleted"_s).toInt();
-    const int foldersMoved = c.value(u"foldersMoved"_s).toInt();
-    const int foldersMovedHere = c.value(u"foldersMovedHere"_s).toInt();
-    if (foldersCreated + foldersDeleted + foldersMoved + foldersMovedHere > 0)
-        lines.append(folderCountsText(foldersCreated, foldersDeleted, foldersMoved, foldersMovedHere));
-    if (const QString files = fileMovesText(c.value(u"filesMoved"_s).toInt(), c.value(u"filesMovedHere"_s).toInt());
-        !files.isEmpty()) {
-        lines.append(files);
+                         .arg(count(u"uploaded"_s))
+                         .arg(count(u"downloaded"_s))
+                         .arg(count(u"merged"_s))
+                         .arg(count(u"deletedLocal"_s))
+                         .arg(count(u"deletedRemote"_s))
+                         .arg(count(u"conflicts"_s))
+                         .arg(count(u"fileErrors"_s)));
+    if (const QString folders = folderCountsText(count(u"foldersCreated"_s), count(u"foldersDeleted"_s),
+                                                 count(u"foldersMoved"_s), count(u"foldersMovedHere"_s));
+        !folders.isEmpty()) {
+        lines.append(folders);
     }
-    for (const QVariant &v : d.value(u"phases"_s).toList()) {
+    if (const QString files = fileMovesText(count(u"filesMoved"_s), count(u"filesMovedHere"_s)); !files.isEmpty())
+        lines.append(files);
+    for (const QVariantList phases = d.value(u"phases"_s).toList(); const QVariant &v : phases) {
         const QVariantMap p = v.toMap();
         QString line = u"  %1: %2"_s.arg(p.value(u"text"_s).toString(), p.value(u"durationText"_s).toString());
         if (const QString detail = p.value(u"detailText"_s).toString(); !detail.isEmpty())
@@ -524,18 +522,18 @@ QString WorkspaceSync::runDetailsText(int number) const
                          .arg(st.value(u"requestsText"_s).toString(), st.value(u"averageText"_s).toString(),
                               st.value(u"bytesText"_s).toString(), st.value(u"protocol"_s).toString())
                          .trimmed());
-    for (const QVariant &v : st.value(u"slowest"_s).toList()) {
+    for (const QVariantList slowest = st.value(u"slowest"_s).toList(); const QVariant &v : slowest) {
         const QVariantMap s = v.toMap();
         lines.append(u"  %1 %2 → %3 · %4"_s.arg(s.value(u"method"_s).toString(), s.value(u"title"_s).toString(),
                                                 QString::number(s.value(u"status"_s).toInt()),
                                                 s.value(u"msText"_s).toString()));
     }
-    for (const QVariant &v : d.value(u"errors"_s).toList()) {
+    for (const QVariantList errors = d.value(u"errors"_s).toList(); const QVariant &v : errors) {
         const QVariantMap e = v.toMap();
         lines.append(u"  ✕ %1: %2 [%3] %4"_s.arg(e.value(u"path"_s).toString(), e.value(u"text"_s).toString(),
                                                  e.value(u"code"_s).toString(), e.value(u"message"_s).toString()));
     }
-    for (const QVariant &v : d.value(u"conflicts"_s).toList())
+    for (const QVariantList conflicts = d.value(u"conflicts"_s).toList(); const QVariant &v : conflicts)
         lines.append(u"  ⇄ %1"_s.arg(v.toMap().value(u"path"_s).toString()));
     return logging::redact(lines.join(u'\n'));
 }
@@ -545,9 +543,7 @@ QStringList WorkspaceSync::historyLines(int max) const
     QStringList out;
     if (!m_history)
         return out;
-    const QList<sync::SyncRunRecord> runs = m_history->runs();
-    for (qsizetype i = 0; i < runs.size() && i < max; ++i) {
-        const sync::SyncRunRecord &r = runs.at(i);
+    for (const sync::SyncRunRecord &r : m_history->runs() | std::views::take(std::max(max, 0))) {
         QString line = u"#%1 %2 · %3 · %4 · %5"_s.arg(
                 QString::number(r.number), r.started.toLocalTime().toString(u"yyyy-MM-dd HH:mm"_s),
                 triggerText(sync::syncTriggerName(r.trigger)), outcomeText(r), durationText(r.durationMs));
@@ -576,7 +572,7 @@ void WorkspaceSync::updateLive()
         const QString phase = progressPhaseId(p.phase);
         const qint64 wall =
                 s.runStarted.isValid() ? QDateTime::currentMSecsSinceEpoch() - s.runStarted.toMSecsSinceEpoch() : 0;
-        const qint64 elapsed = qMax(p.elapsedMs, wall);
+        const qint64 elapsed = std::max(p.elapsedMs, wall);
         QString detail;
         double progress = -1;
         if (p.phase == sync::SyncProgress::Phase::Listing && p.total > 0) {
@@ -586,11 +582,8 @@ void WorkspaceSync::updateLive()
             progress = std::clamp(double(p.done) / double(p.total), 0.0, 1.0);
         }
         QStringList titles;
-        for (const VaultPath &path : p.active) {
-            if (titles.size() >= 3)
-                break;
+        for (const VaultPath &path : p.active | std::views::take(3))
             titles.append(titleOf(path));
-        }
         const QString trigger = sync::syncTriggerName(s.trigger);
         const int number = m_engine && m_engine->isSyncing() ? m_engine->nextRunNumber() - 1 : 0;
         QString stallText;

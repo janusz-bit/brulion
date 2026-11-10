@@ -15,10 +15,11 @@
 
 #include <QObject>
 
+#include <memory>
+
 class QAction;
 class QMenu;
 class QSystemTrayIcon;
-class QTimer;
 
 namespace brulion::shell {
 
@@ -47,16 +48,14 @@ private:
     bool create();
     void retranslate();
 
-    AppController *m_app;
+    AppController *m_app = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
-    QMenu *m_menu = nullptr;
+    std::unique_ptr<QMenu> m_menu; ///< a widget without a parent: the tray icon does not own it
     QAction *m_show = nullptr;
     QAction *m_calendar = nullptr;
     QAction *m_today = nullptr;
     QAction *m_capture = nullptr;
     QAction *m_quit = nullptr;
-    QTimer *m_retry = nullptr;
-    int m_attempts = 0;
 };
 
 } // namespace brulion::shell

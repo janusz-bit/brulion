@@ -19,27 +19,29 @@ ColumnLayout {
     property bool showFiles: false
     property bool showWarnings: false
     readonly property list<var> none: []
+    readonly property int fileCount: AppController.routeInt(importer.preview, "fileCount", 0)
+    readonly property bool reportHasFolder: (importer.report.folder || "") !== ""
 
     // The preview's and the report's lists (importer.preview / importer.report).
-    function previewWarnings(): list<string> {
-        if (preview.importer.preview.warnings === undefined)
+    readonly property list<string> previewWarnings: {
+        if (importer.preview.warnings === undefined)
             return []
-        return preview.importer.preview.warnings
+        return importer.preview.warnings
     }
-    function previewFiles(): list<var> {
-        if (preview.importer.preview.files === undefined)
+    readonly property list<var> previewFiles: {
+        if (importer.preview.files === undefined)
             return []
-        return preview.importer.preview.files
+        return importer.preview.files
     }
-    function reportWarnings(): list<string> {
-        if (preview.importer.report.warnings === undefined)
+    readonly property list<string> reportWarnings: {
+        if (importer.report.warnings === undefined)
             return []
-        return preview.importer.report.warnings
+        return importer.report.warnings
     }
-    function reportFailed(): list<var> {
-        if (preview.importer.report.failed === undefined)
+    readonly property list<var> reportFailed: {
+        if (importer.report.failed === undefined)
             return []
-        return preview.importer.report.failed
+        return importer.report.failed
     }
     /// The counts of the preview's tiles.
     function tiles(): list<var> {
@@ -81,6 +83,28 @@ ColumnLayout {
     }
 
     signal pickAgain()
+
+    // A small muted explanation / a bullet of a warning list / the "n warnings" toggle.
+    component Hint: BText {
+        Layout.fillWidth: true
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
+    component Bullet: Hint {
+        required property string modelData
+        Layout.leftMargin: Theme.space4
+        text: "• " + modelData
+    }
+    component WarningsToggle: BButton {
+        required property int count
+        property bool open: false
+        visible: count > 0
+        text: qsTr("%n warning(s)", "", count)
+        iconName: open ? "chevron-down" : "chevron-right"
+        size: "small"
+        variant: "ghost"
+    }
 
     spacing: Theme.space4
 
@@ -159,13 +183,7 @@ ColumnLayout {
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                 onTextEdited: preview.importer.targetFolder = text
             }
-            BText {
-                Layout.fillWidth: true
-                text: qsTr("Daily notes always go to your journal; attachments to the attachments folder.")
-                variant: "small"
-                color: Theme.fgMuted
-                wrapMode: Text.Wrap
-            }
+            Hint { text: qsTr("Daily notes always go to your journal; attachments to the attachments folder.") }
         }
     }
 
@@ -243,7 +261,7 @@ ColumnLayout {
 
     // ---- Preview -----------------------------------------------------------------------------------
     IoCard {
-        visible: preview.phase === "ready" && !!preview.importer.preview.fileCount
+        visible: preview.phase === "ready" && preview.fileCount > 0
         iconName: "eye"
         title: qsTr("What will be imported")
         subtitle: qsTr("Nothing has been written yet.")
@@ -314,25 +332,14 @@ ColumnLayout {
         }
 
         // Warnings of the importer (unsupported parts, skipped files).
-        BButton {
-            visible: preview.previewWarnings().length > 0
-            text: qsTr("%n warning(s)", "", preview.previewWarnings().length)
-            iconName: preview.showWarnings ? "chevron-down" : "chevron-right"
-            size: "small"
-            variant: "ghost"
+        WarningsToggle {
+            count: preview.previewWarnings.length
+            open: preview.showWarnings
             onClicked: preview.showWarnings = !preview.showWarnings
         }
         Repeater {
-            model: preview.showWarnings ? preview.previewWarnings().slice(0, 100) : preview.none
-            delegate: BText {
-                required property string modelData
-                Layout.fillWidth: true
-                Layout.leftMargin: Theme.space4
-                text: "• " + modelData
-                variant: "small"
-                color: Theme.fgMuted
-                wrapMode: Text.Wrap
-            }
+            model: preview.showWarnings ? preview.previewWarnings.slice(0, 100) : preview.none
+            delegate: Bullet {}
         }
 
         // The first files.
@@ -356,16 +363,16 @@ ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 1
                 clip: true
-                model: preview.showFiles ? preview.previewFiles() : preview.none
+                model: preview.showFiles ? preview.previewFiles : preview.none
                 boundsBehavior: Flickable.StopAtBounds
                 T.ScrollBar.vertical: BScrollBar {}
                 footer: BText {
                     width: ListView.view ? ListView.view.width : 0
-                    visible: AppController.routeInt(preview.importer.preview, "fileCount", 0) > preview.previewFiles().length
+                    visible: preview.fileCount > preview.previewFiles.length
                     height: visible ? 32 : 0
                     leftPadding: Theme.space3
                     verticalAlignment: Text.AlignVCenter
-                    text: qsTr("… and %n more", "", (preview.importer.preview.fileCount || 0) - preview.previewFiles().length)
+                    text: qsTr("… and %n more", "", preview.fileCount - preview.previewFiles.length)
                     variant: "small"
                     color: Theme.fgMuted
                 }
@@ -403,7 +410,7 @@ ColumnLayout {
             spacing: Theme.space2
             BButton {
                 objectName: "importStartButton"
-                text: qsTr("Import %n file(s)", "", preview.importer.preview.fileCount || 0)
+                text: qsTr("Import %n file(s)", "", preview.fileCount)
                 iconName: "download"
                 variant: "primary"
                 enabled: preview.importer.targetFolderError === ""
@@ -420,23 +427,19 @@ ColumnLayout {
     // ---- Report -----------------------------------------------------------------------------------
     IoCard {
         visible: preview.phase === "done"
-        readonly property bool troubled: preview.reportFailed().length > 0 || !!preview.importer.report.cancelled
+        readonly property bool troubled: preview.reportFailed.length > 0 || !!preview.importer.report.cancelled
         tone: troubled ? "warning" : "success"
         iconName: troubled ? "triangle-alert" : "circle-check"
         iconColor: troubled ? Theme.warningText : Theme.successText
         title: preview.importer.report.cancelled ? qsTr("Import stopped") : qsTr("Imported from %1").arg(preview.importer.report.source || "")
         subtitle: preview.reportSummary()
 
-        BText {
-            Layout.fillWidth: true
+        Hint {
             visible: (preview.importer.report.renamed || 0) > 0
             text: qsTr("%n file(s) got a new name because the name was taken.", "", preview.importer.report.renamed || 0)
-            variant: "small"
-            color: Theme.fgMuted
-            wrapMode: Text.Wrap
         }
         Repeater {
-            model: preview.reportFailed().slice(0, 20)
+            model: preview.reportFailed.slice(0, 20)
             delegate: BText {
                 required property string path
                 required property string message
@@ -447,34 +450,23 @@ ColumnLayout {
                 wrapMode: Text.Wrap
             }
         }
-        BButton {
-            visible: preview.reportWarnings().length > 0
-            text: qsTr("%n warning(s)", "", preview.reportWarnings().length)
-            iconName: preview.showWarnings ? "chevron-down" : "chevron-right"
-            size: "small"
-            variant: "ghost"
+        WarningsToggle {
+            count: preview.reportWarnings.length
+            open: preview.showWarnings
             onClicked: preview.showWarnings = !preview.showWarnings
         }
         Repeater {
-            model: preview.showWarnings && preview.phase === "done" ? preview.reportWarnings().slice(0, 100) : preview.none
-            delegate: BText {
-                required property string modelData
-                Layout.fillWidth: true
-                Layout.leftMargin: Theme.space4
-                text: "• " + modelData
-                variant: "small"
-                color: Theme.fgMuted
-                wrapMode: Text.Wrap
-            }
+            model: preview.showWarnings && preview.phase === "done" ? preview.reportWarnings.slice(0, 100) : preview.none
+            delegate: Bullet {}
         }
         Flow {
             Layout.fillWidth: true
             spacing: Theme.space2
             BButton {
                 objectName: "importOpenFolder"
-                visible: (preview.importer.report.folder || "") !== "" || (preview.importer.report.firstPage || "") !== ""
+                visible: preview.reportHasFolder || (preview.importer.report.firstPage || "") !== ""
                 //: Polish: "Otwórz zaimportowany folder"
-                text: (preview.importer.report.folder || "") !== "" ? qsTr("Open the imported folder") : qsTr("Open the first page")
+                text: preview.reportHasFolder ? qsTr("Open the imported folder") : qsTr("Open the first page")
                 iconName: "folder-open"
                 variant: "primary"
                 onClicked: preview.importer.openTarget()
