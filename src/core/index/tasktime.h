@@ -33,12 +33,14 @@ struct TimeSummary {
 
 /// The time of `tasks` (as the index lists them) clocked on the local days [from, to] (an invalid
 /// date: unbounded) grouped by `group`. Entries crossing midnight are split; overlapping entries
-/// of one task count once; a running clock counts up to `now` (invalid: not at all). Tags are the
-/// task's own, its ancestors' and its page's; a task counts in every tag it has.
+/// of one task count once; a running clock counts up to `now` (invalid: not at all), unless it
+/// has run longer than markdown::MaxClockSeconds — so the work is bounded by the logbooks' lines.
+/// Tags are the task's own, its ancestors' and its page's; a task counts in every tag it has.
 TimeSummary summarizeTime(const VaultIndex &index, const QList<TaskRef> &tasks, TimeGroup group, QDate from = {},
                           QDate to = {}, const QDateTime &now = {});
 
-/// Seconds a task (as the index lists it) has: its closed entries and a running clock up to `now`.
+/// Seconds a task (as the index lists it) has: its closed entries and a running clock up to `now`
+/// (as summarizeTime() counts it).
 qint64 taskSpentSeconds(const Task &task, const QDateTime &now);
 
 } // namespace brulion

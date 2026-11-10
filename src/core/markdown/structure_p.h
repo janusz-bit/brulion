@@ -12,7 +12,9 @@
 // Deliberate differences from CommonMark, chosen for notes written by Obsidian / Logseq:
 // indented code blocks are not recognised (indented lines are list items or text); a list item
 // is a child of the previous item when its marker is indented past that item's marker (tab = 4
-// columns); a GFM table ends at the first line without `|`.
+// columns); a GFM table ends at the first line without `|`, or before a row that would give it
+// more body cells than both 65 536 and its characters (calc::parseTable()'s size rule,
+// docs/SYNTAX.md §4 "Tables").
 #pragma once
 
 #include "markdown/frontmatter.h"

@@ -1,7 +1,8 @@
 // What the renderers of the exporters share (HtmlRenderer — htmlrender_p.h —, PandocRenderer —
 // pandocrender_p.h): inline "atoms" (spans replaced by rendered output) with CommonMark-like
-// emphasis between them, code spans and comments, and block helpers (list markers, table cells,
-// callout titles, list items that are one fenced block). Internal to the io module.
+// emphasis between them, code spans and comments, and block helpers (list markers, the nesting
+// limit, table cells, callout titles, list items that are one fenced block). Internal to the io
+// module.
 #pragma once
 
 #include "markdown/highlight.h"
@@ -70,6 +71,15 @@ QString visibleText(const Link &link, QStringView source);
 
 /// A numbered list item ("1." / "1)").
 bool isOrderedItem(const Block &b);
+/// The list levels the renderers nest, far more than any outline has. On the deepest one each
+/// item is followed by its descendants, in document order, at that level: the renderers recurse
+/// once per level, and a hostile note's outline of thousands of levels must not overflow a
+/// thread's stack (1 MB on Android). Nothing is left out.
+inline constexpr int MaxListLevels = 100;
+/// `indices` (siblings on list level `level`, 0 = a top-level list) as a renderer lists them:
+/// those blocks, or on the deepest level (MaxListLevels - 1) each one followed by its descendants
+/// (the children of list items, any depth; found without recursion).
+QList<int> listedItems(const ParsedNote &note, const QList<int> &indices, int level);
 /// Split a GFM table row into cells (`\|` is not a separator).
 QStringList tableCells(QStringView row);
 /// The callout title: the first text line without `[!type]±`, else the type capitalised.

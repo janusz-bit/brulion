@@ -57,8 +57,9 @@ public:
 
     /// The note's blocks (frontmatter is not rendered), separated by blank lines.
     QString renderNote(const ParsedNote &note) const;
-    /// Blocks `indices` (siblings, in order) of `note` with their children.
-    QString renderBlocks(const ParsedNote &note, const QList<int> &indices) const;
+    /// Blocks `indices` (siblings, in order) of `note` with their children; `level`: their list
+    /// level (0: not inside a list; lists nest up to MaxListLevels, rendercommon_p.h).
+    QString renderBlocks(const ParsedNote &note, const QList<int> &indices, int level = 0) const;
     /// Inline Markdown of the Brulion dialect as Pandoc Markdown; line breaks become hard breaks
     /// (`\` at the line end). `insideLink`: the text sits in a link label (no links or tags).
     QString renderInline(QStringView text, bool insideLink = false) const;
@@ -74,7 +75,7 @@ public:
 
 private:
     QString renderBlock(const ParsedNote &note, int index) const;
-    QString renderListItem(const ParsedNote &note, int index) const;
+    QString renderListItem(const ParsedNote &note, int index, int level) const;
     QString renderTable(const QString &source) const;
     QString metaSpans(const Block &block) const;
     /// The block's identifier with prefix (empty without ids or a block id).

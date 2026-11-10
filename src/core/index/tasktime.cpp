@@ -31,10 +31,9 @@ QStringList effectiveTags(const ParsedNote &note, int block)
 
 qint64 taskSpentSeconds(const Task &task, const QDateTime &now)
 {
-    qint64 total = task.clockedSeconds;
-    if (task.clockStart.isValid() && now.isValid() && now > task.clockStart)
-        total += task.clockStart.secsTo(now);
-    return total;
+    // A running clock as the summaries count it (markdown::clockedSecondsByDay()).
+    const qint64 running = task.clockStart.isValid() && now.isValid() ? task.clockStart.secsTo(now) : 0;
+    return task.clockedSeconds + (running > 0 && running <= markdown::MaxClockSeconds ? running : 0);
 }
 
 TimeSummary summarizeTime(const VaultIndex &index, const QList<TaskRef> &tasks, TimeGroup group, QDate from, QDate to,

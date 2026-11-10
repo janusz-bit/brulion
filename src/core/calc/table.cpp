@@ -52,6 +52,28 @@ std::optional<QList<TableAlign>> tableHead(QStringView header, QStringView delim
     return aligns;
 }
 
+// --- size ----------------------------------------------------------------------------------
+
+/// The body cells (columns × rows) every table may have, however few characters its lines have.
+constexpr qint64 TableCellBudget = 65536;
+
+/// What a table line counts towards its cells: its characters without the blanks around them,
+/// and its line break.
+qsizetype tableLineChars(QStringView line)
+{
+    return line.trimmed().size() + 1;
+}
+
+/// Whether a table of `columns` columns may have `rows` body rows when its lines, the header and
+/// delimiter row included, count `chars` (tableLineChars()). Every row is as wide as the header,
+/// so a few short `|` lines could stand for millions of empty cells: a table holds as many cells
+/// as its text has characters, or TableCellBudget when that is more (SYNTAX §4 "Tables"). Rows
+/// written out in full never reach it. markdown's block parser ends a table at the same row.
+bool tableHolds(qsizetype columns, qsizetype rows, qsizetype chars)
+{
+    return qint64(columns) * rows <= std::max<qint64>(TableCellBudget, chars);
+}
+
 // --- display width -------------------------------------------------------------------------
 
 bool inRanges(char32_t cp, std::initializer_list<std::pair<char32_t, char32_t>> ranges)
@@ -216,8 +238,9 @@ bool isTerminator(QStringView line)
 }
 
 struct TableStart {
-    qsizetype offset = 0; ///< characters before the header row's text
-    int base = 0;         ///< indentation column of the table
+    qsizetype offset = 0;  ///< characters before the header row's text
+    int base = 0;          ///< indentation column of the table
+    qsizetype columns = 0; ///< of the header
 };
 
 /// Header of a table starting at `text` (a plain or list-item line), or nullopt.
@@ -228,16 +251,18 @@ std::optional<TableStart> tableStart(QStringView text, QStringView next)
         // Logseq / Markdown list item whose content starts with the table: `- | a | b |`.
         const int base = columnWidth(text.left(item));
         const int delimiterIndent = indentWidth(next);
-        if (!tableHead(text.mid(item), next) || delimiterIndent < base || delimiterIndent - base >= 4)
+        const auto aligns = tableHead(text.mid(item), next);
+        if (!aligns || delimiterIndent < base || delimiterIndent - base >= 4)
             return std::nullopt;
-        return TableStart{item, base};
+        return TableStart{item, base, aligns->size()};
     }
-    if (isTerminator(text) || !tableHead(text, next))
+    const auto aligns = isTerminator(text) ? std::nullopt : tableHead(text, next);
+    if (!aligns)
         return std::nullopt;
     const int base = indentWidth(text);
     if (std::abs(indentWidth(next) - base) >= 4)
         return std::nullopt;
-    return TableStart{leadingWhitespace(text).size(), base};
+    return TableStart{leadingWhitespace(text).size(), base, aligns->size()};
 }
 
 } // namespace
@@ -297,9 +322,11 @@ std::optional<TableModel> parseTable(QStringView markdown)
     TableModel model;
     model.header = splitTableRow(lines.at(h).text);
     model.aligns = *aligns;
+    qsizetype chars = tableLineChars(lines.at(h).text) + tableLineChars(lines.at(h + 1).text);
     for (qsizetype i = h + 2; i < lines.size(); ++i) {
         const QString &line = lines.at(i).text;
-        if (QStringView(line).trimmed().isEmpty())
+        chars += tableLineChars(line);
+        if (QStringView(line).trimmed().isEmpty() || !tableHolds(aligns->size(), model.rows.size() + 1, chars))
             break;
         QStringList cells = splitTableRow(line);
         cells.resize(aligns->size()); // as wide as the header: short rows padded, long ones cut
@@ -392,10 +419,13 @@ QList<TableSpan> findTables(QStringView content)
         if (!start)
             continue;
         qsizetype end = i + 1;
+        qsizetype chars = tableLineChars(QStringView(text).mid(start->offset)) + tableLineChars(next);
         for (qsizetype j = i + 2; j < lines.size(); ++j) {
             const QString &row = lines.at(j).text;
             const int w = indentWidth(row);
-            if (QStringView(row).trimmed().isEmpty() || isTerminator(row) || w < start->base || w - start->base >= 4)
+            chars += tableLineChars(row);
+            if (QStringView(row).trimmed().isEmpty() || isTerminator(row) || w < start->base || w - start->base >= 4
+                || !tableHolds(start->columns, j - i - 1, chars))
                 break;
             end = j;
         }

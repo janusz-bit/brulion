@@ -471,11 +471,12 @@ QString HtmlRenderer::renderNote(const ParsedNote &note) const
     return renderBlocks(note, roots);
 }
 
-QString HtmlRenderer::renderBlocks(const ParsedNote &note, const QList<int> &indices) const
+QString HtmlRenderer::renderBlocks(const ParsedNote &note, const QList<int> &indices, int level) const
 {
+    const QList<int> blocks = listedItems(note, indices, level);
     QString out;
-    for (qsizetype k = 0; k < indices.size();) {
-        const int idx = indices[k];
+    for (qsizetype k = 0; k < blocks.size();) {
+        const int idx = blocks[k];
         const Block &b = note.blocks[idx];
         if (b.kind != BlockKind::ListItem) {
             out += renderBlock(note, idx);
@@ -484,9 +485,9 @@ QString HtmlRenderer::renderBlocks(const ParsedNote &note, const QList<int> &ind
         }
         const bool ordered = isOrderedItem(b);
         out += ordered ? u"<ol>"_s : u"<ul>"_s;
-        while (k < indices.size() && note.blocks[indices[k]].kind == BlockKind::ListItem
-               && isOrderedItem(note.blocks[indices[k]]) == ordered) {
-            out += renderListItem(note, indices[k]);
+        while (k < blocks.size() && note.blocks[blocks[k]].kind == BlockKind::ListItem
+               && isOrderedItem(note.blocks[blocks[k]]) == ordered) {
+            out += renderListItem(note, blocks[k], level);
             ++k;
         }
         out += ordered ? u"</ol>"_s : u"</ul>"_s;
@@ -494,7 +495,7 @@ QString HtmlRenderer::renderBlocks(const ParsedNote &note, const QList<int> &ind
     return out;
 }
 
-QString HtmlRenderer::renderListItem(const ParsedNote &note, int index) const
+QString HtmlRenderer::renderListItem(const ParsedNote &note, int index, int level) const
 {
     const Block &b = note.blocks[index];
     QString out = u"<li"_s;
@@ -517,8 +518,8 @@ QString HtmlRenderer::renderListItem(const ParsedNote &note, int index) const
         out += u"<div class=\"embed\">"_s + embedded + u"</div>"_s;
     else
         out += renderInline(b.text) + metaChips(b);
-    if (!b.children.isEmpty())
-        out += renderBlocks(note, b.children);
+    if (!b.children.isEmpty() && level + 1 < MaxListLevels) // (else listedItems() lists them after it)
+        out += renderBlocks(note, b.children, level + 1);
     return out + u"</li>"_s;
 }
 
@@ -663,7 +664,7 @@ QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
     }
     case BlockKind::Rule: return u"<hr>"_s;
     case BlockKind::Html: return u"<pre class=\"raw-html\""_s + id + u'>' + esc(b.text) + u"</pre>"_s;
-    case BlockKind::ListItem: return u"<ul>"_s + renderListItem(note, index) + u"</ul>"_s;
+    case BlockKind::ListItem: return u"<ul>"_s + renderListItem(note, index, 0) + u"</ul>"_s;
     }
     return {};
 }

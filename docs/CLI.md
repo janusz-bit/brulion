@@ -208,7 +208,7 @@ Never compute a hash yourself.
 | `task set <ref> <status>` | todo, doing, done, cancelled, deferred, none (Polish words too); `[--history]` | a recurring task done → its next occurrence; `--history` logs the change in the task's `:LOGBOOK:` (doing starts its clock, leaving doing stops it) as the app's "Log task status changes" setting does | yes |
 | `task start <ref>` | | start the task's clock: `CLOCK: [2026-11-03 Tue 10:00:00]` in its `:LOGBOOK:` (local time); a clock running elsewhere is stopped first (`stopped`) — one at a time | yes |
 | `task stop [<ref>]` | | stop the task's clock (`--[…] =>  00:25:00`); without a ref every running one | yes |
-| `task time` | `[--by day\|page\|tag\|task] [--from D] [--to D] [--query Q]` | time clocked: `{rows [{key, label, seconds, duration, tasks, path?, ref?}], total, tasks}`; entries crossing midnight are split, overlapping ones of a task count once, a running clock counts up to now | |
+| `task time` | `[--by day\|page\|tag\|task] [--from D] [--to D] [--query Q]` | time clocked: `{rows [{key, label, seconds, duration, tasks, path?, ref?}], total, tasks}`; entries crossing midnight are split, overlapping ones of a task count once, a running clock counts up to now (at most 366 days, docs/SYNTAX.md §5) | |
 | `task depend <ref>` | `--on <ref> [--remove]` | the task waits for the other (`⛔ id` after its `🆔`, Obsidian Tasks' order); the other gets a `🆔` (6 characters) when it has none | yes |
 | `task done <ref>` | | `task set <ref> done` | yes |
 | `task doing <ref>` | | in progress | yes |

@@ -6,6 +6,7 @@
 #include "io/exportutil_p.h"
 #include "io/ical.h"
 #include "io/messages_p.h"
+#include "io/rendercommon_p.h"
 #include "markdown/inline.h"
 #include "markdown/notemode.h"
 #include "markdown/properties.h"
@@ -444,14 +445,16 @@ private:
                 headingLevels.append(b.headingLevel);
                 continue;
             }
-            writeBlock(x, p, i, lines);
+            writeBlock(x, p, i, lines, 0);
         }
         for (qsizetype k = 0; k < headingLevels.size(); ++k)
             x.writeEndElement();
         x.writeEndElement();
     }
 
-    static void writeBlock(QXmlStreamWriter &x, const ParsedNote &p, int index, const QList<text::Line> &lines)
+    /// A block and its children; `level` is its list level (0 = a top-level block).
+    static void writeBlock(QXmlStreamWriter &x, const ParsedNote &p, int index, const QList<text::Line> &lines,
+                           int level)
     {
         const Block &b = p.blocks[index];
         QString text;
@@ -475,8 +478,11 @@ private:
             x.writeAttribute(u"_note"_s, note);
         if (b.task && (b.task->status == TaskStatus::Done || b.task->status == TaskStatus::Cancelled))
             x.writeAttribute(u"_complete"_s, u"true"_s);
-        for (int c : b.children)
-            writeBlock(x, p, c, lines);
+        // As in the renderers: on the deepest list level the descendants follow, on that level.
+        if (level + 1 < MaxListLevels) {
+            for (const int c : listedItems(p, b.children, level + 1))
+                writeBlock(x, p, c, lines, level + 1);
+        }
         x.writeEndElement();
     }
 };

@@ -166,6 +166,17 @@ int cellCount(QStringView row)
     return n;
 }
 
+/// Whether a table of `columns` columns may have `rows` body rows when its lines, the header and
+/// delimiter row included, have `chars` characters (each without the blanks around it, plus its
+/// line break): as many cells as characters, or 65 536 when that is more — calc::parseTable()'s
+/// rule (calc/table.cpp tableHolds()), so the editor, the exports and the calculator see the same
+/// table. Every row is as wide as the header: a few short `|` lines must not stand for millions
+/// of empty cells.
+bool tableHolds(qint64 columns, qint64 rows, qint64 chars)
+{
+    return columns * rows <= std::max<qint64>(65536, chars);
+}
+
 /// GFM delimiter row: `|? :?-+:? (| :?-+:?)* |?` with optional blanks.
 bool isDelimiterRow(QStringView s)
 {
@@ -622,14 +633,21 @@ private:
     void parseTable()
     {
         const LineView v = m_views[m_i];
+        const LineView delimiter = m_views[m_i + 1];
         const int idx = newNode(BlockKind::Table, v.line);
         node(idx).own.append(OwnLine{v, 0, LineRole::Text});
-        node(idx).own.append(OwnLine{m_views[m_i + 1], 0, LineRole::Meta});
+        node(idx).own.append(OwnLine{delimiter, 0, LineRole::Meta});
         m_i += 2;
-        while (m_i < m_views.size()) {
+        // The masked text has no more characters than calc's (comments blanked): a table ends here
+        // no later than calc::parseTable() would end it.
+        const auto chars = [](QStringView t) { return t.trimmed().size() + 1; };
+        const qint64 columns = cellCount(m_st.maskedText(delimiter));
+        qint64 tableChars = chars(m_st.maskedText(v)) + chars(m_st.maskedText(delimiter));
+        for (qint64 rows = 1; m_i < m_views.size(); ++rows) {
             const LineView w = m_views[m_i];
             const QStringView u = m_st.maskedText(w);
-            if (isBlank(u) || !u.contains(u'|'))
+            tableChars += chars(u);
+            if (isBlank(u) || !u.contains(u'|') || !tableHolds(columns, rows, tableChars))
                 break;
             node(idx).own.append(OwnLine{w, 0, LineRole::Text});
             ++m_i;

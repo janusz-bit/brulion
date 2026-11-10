@@ -15,7 +15,7 @@ namespace brulion::markdown {
 /// for any input (another block split, text, property, task field, link offset…): the index
 /// cache (index/indexcache.h) keeps parsed notes on the device and must not hand out old parses.
 /// tst_markdown_model's golden digest (kParseDigest) fails until you do.
-inline constexpr int ParserVersion = 2;
+inline constexpr int ParserVersion = 3;
 
 /// Parse a note. `path` gives the title (file base name) and, with `config`, the journal date;
 /// `config.defaultReminderTime` completes date-only reminders. Never fails for any input and

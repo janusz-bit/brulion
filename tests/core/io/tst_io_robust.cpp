@@ -2,16 +2,25 @@
 // may crash or hang, and every produced path must obey the path rules.
 #include "iotest.h"
 
+#include "calc/table.h"
 #include "io/exporter.h"
 #include "io/htmlmarkdown.h"
+#include "io/htmlrender_p.h"
 #include "io/importer.h"
+#include "io/pandocrender_p.h"
 #include "io/tar.h"
 #include "io/zip.h"
+#include "markdown/parse.h"
 #include "util/paths.h"
 
 #include <QElapsedTimer>
 #include <QRandomGenerator>
 #include <QTest>
+#include <QThread>
+#include <QXmlStreamReader>
+
+#include <algorithm>
+#include <memory>
 
 using namespace brulion;
 using namespace brulion::io;
@@ -260,6 +269,123 @@ private Q_SLOTS:
         QStringList warnings;
         QVERIFY(readZip(bomb, &warnings, o).isEmpty());
         QCOMPARE(warnings.size(), 1);
+    }
+
+    void deepOutlinesRenderOnASmallStack()
+    {
+        // The parser keeps an outline of 3000 levels; the renderers, which recurse once per level,
+        // nest lists 100 levels deep and list the deeper items on the last one, in order — on a
+        // thread with an Android thread's 1 MB stack.
+        QString src;
+        for (int i = 0; i < 3000; ++i)
+            src += QString(i, u' ') + u"- poziom "_s + QString::number(i) + u'\n';
+        const ParsedNote note = markdown::parseNote(u"Głęboko.md"_s, src);
+        QCOMPARE(note.blocks.last().depth, 2999);
+        QString html;
+        QString pandoc;
+        const std::unique_ptr<QThread> thread(QThread::create([&] {
+            html = detail::HtmlRenderer().renderNote(note);
+            pandoc = detail::PandocRenderer().renderNote(note);
+        }));
+        thread->setStackSize(1024 * 1024);
+        thread->start();
+        QVERIFY(thread->wait(QDeadlineTimer(120000)));
+
+        int depth = 0;
+        int deepest = 0;
+        for (qsizetype i = html.indexOf(u"ul>"); i > 0; i = html.indexOf(u"ul>", i + 3)) {
+            depth += html.at(i - 1) == u'/' ? -1 : 1;
+            deepest = std::max(deepest, depth);
+        }
+        QCOMPARE(deepest, 100);
+        QCOMPARE(depth, 0);
+        QCOMPARE(html.count(u"<li>"_s), 3000);
+        qsizetype at = 0;
+        for (int i = 0; i < 3000 && at >= 0; ++i)
+            at = html.indexOf(u"poziom %1<"_s.arg(i), at);
+        QVERIFY(at > 0);
+
+        const QStringList lines = pandoc.split(u'\n');
+        QCOMPARE(lines.size(), 3000);
+        for (int i = 0; i < 3000; ++i) {
+            QCOMPARE(lines.at(i).trimmed(), u"- poziom %1"_s.arg(i));
+            QCOMPARE(lines.at(i).indexOf(u'-'), 2 * std::min(i, 99));
+        }
+    }
+
+    void deepOutlinesExportOnASmallStack()
+    {
+        // The OPML and Logseq exports nest like the renderers: 100 list levels, the deeper items
+        // on the last one, in order, on a thread with a 1 MB stack.
+        QString src;
+        for (int i = 0; i < 3000; ++i)
+            src += QString(i, u' ') + u"- poziom "_s + QString::number(i) + u'\n';
+        ExportInput in;
+        in.files = {iotest::text(u"Głęboko.md"_s, src)};
+        QByteArray opml;
+        QByteArray logseq;
+        const std::unique_ptr<QThread> thread(QThread::create([&] {
+            opml = runExport(*exporterById(u"opml"), in).files.value(0).data;
+            logseq = runExport(*exporterById(u"logseq-zip"), in).files.value(0).data;
+        }));
+        thread->setStackSize(1024 * 1024);
+        thread->start();
+        QVERIFY(thread->wait(QDeadlineTimer(120000)));
+
+        // OPML: the note's outline holds the items, 100 levels deep at most.
+        QXmlStreamReader x(opml);
+        int depth = 0;
+        int deepest = 0;
+        QStringList texts;
+        while (!x.atEnd()) {
+            x.readNext();
+            if (x.isStartElement() && x.name() == u"outline") {
+                deepest = std::max(deepest, ++depth);
+                texts.append(x.attributes().value(u"text").toString());
+            } else if (x.isEndElement() && x.name() == u"outline") {
+                --depth;
+            }
+        }
+        QVERIFY2(!x.hasError(), qPrintable(x.errorString()));
+        QCOMPARE(deepest, 101);
+        QCOMPARE(texts.size(), 3001);
+        for (int i = 0; i < 3000; ++i)
+            QCOMPARE(texts.at(i + 1), u"poziom %1"_s.arg(i));
+
+        // Logseq: one bullet per item, indented by its level up to the 100th.
+        const QList<FileEntry> entries = readZip(logseq);
+        const auto page =
+                std::ranges::find_if(entries, [](const FileEntry &e) { return e.path.endsWith(u"Głęboko.md"); });
+        QVERIFY(page != entries.cend());
+        const QStringList lines = QString::fromUtf8(page->data).split(u'\n', Qt::SkipEmptyParts);
+        QCOMPARE(lines.size(), 3000);
+        for (int i = 0; i < 3000; ++i)
+            QCOMPARE(lines.at(i), QString(std::min(i, 99), u'\t') + u"- poziom %1"_s.arg(i));
+    }
+
+    void tablesEndAtTheSameRowEverywhere()
+    {
+        // Rows are as wide as the header, so a table holds only as many cells as its lines have
+        // characters, or 65 536 when that is more: 2000 columns end after 32 empty rows. The block
+        // parser (the exports, the editor's blocks) and calc (the editor's cells, the calculator,
+        // charts) end it at the same row; the other 8 lines are a paragraph.
+        const QString src = u"|"_s.repeated(2001) + u"\n|"_s + u"-|"_s.repeated(2000) + u"\n|"_s.repeated(40)
+                            + u"\n\nKoniec żółwia\n"_s;
+        const ParsedNote note = markdown::parseNote(u"Tabela.md"_s, src);
+        QCOMPARE(note.blocks.size(), 3);
+        QCOMPARE(note.blocks[0].kind, BlockKind::Table);
+        QCOMPARE(note.blocks[1].kind, BlockKind::Paragraph);
+        QCOMPARE(note.blocks[1].line, 34);
+        const auto model = calc::parseTable(note.blocks[0].text);
+        QVERIFY(model);
+        QCOMPARE(model->header.size(), 2000);
+        QCOMPARE(model->rows.size(), 32);
+        const QList<calc::TableSpan> spans = calc::findTables(src);
+        QCOMPARE(spans.size(), 1);
+        QCOMPARE(spans[0].endLine, 33);
+        const QString html = detail::HtmlRenderer().renderNote(note);
+        QCOMPARE(html.count(u"<tr>"_s), 1 + 32);
+        QVERIFY(html.contains(u"<p>|<br>|"_s));
     }
 };
 

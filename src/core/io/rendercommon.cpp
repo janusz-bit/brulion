@@ -330,6 +330,21 @@ bool isOrderedItem(const Block &b)
     return i > 0 && i < first.size() && (first[i] == u'.' || first[i] == u')');
 }
 
+QList<int> listedItems(const ParsedNote &note, const QList<int> &indices, int level)
+{
+    if (level + 1 < MaxListLevels)
+        return indices;
+    QList<int> out;
+    QList<int> todo(indices.crbegin(), indices.crend());
+    while (!todo.isEmpty()) {
+        const int i = todo.takeLast();
+        out.append(i);
+        if (note.blocks[i].kind == BlockKind::ListItem)
+            todo.append(QList<int>(note.blocks[i].children.crbegin(), note.blocks[i].children.crend()));
+    }
+    return out;
+}
+
 QStringList tableCells(QStringView row)
 {
     QStringView r = row.trimmed();

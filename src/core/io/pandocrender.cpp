@@ -488,11 +488,12 @@ QString PandocRenderer::renderNote(const ParsedNote &note) const
     return renderBlocks(note, roots);
 }
 
-QString PandocRenderer::renderBlocks(const ParsedNote &note, const QList<int> &indices) const
+QString PandocRenderer::renderBlocks(const ParsedNote &note, const QList<int> &indices, int level) const
 {
+    const QList<int> blocks = listedItems(note, indices, level);
     QStringList parts;
-    for (qsizetype k = 0; k < indices.size();) {
-        const int idx = indices[k];
+    for (qsizetype k = 0; k < blocks.size();) {
+        const int idx = blocks[k];
         const Block &b = note.blocks[idx];
         if (idx == m_links.skipBlock) {
             ++k;
@@ -509,9 +510,9 @@ QString PandocRenderer::renderBlocks(const ParsedNote &note, const QList<int> &i
         // blank lines itself).
         const bool ordered = isOrderedItem(b);
         QStringList items;
-        while (k < indices.size() && note.blocks[indices[k]].kind == BlockKind::ListItem
-               && isOrderedItem(note.blocks[indices[k]]) == ordered) {
-            items.append(renderListItem(note, indices[k]));
+        while (k < blocks.size() && note.blocks[blocks[k]].kind == BlockKind::ListItem
+               && isOrderedItem(note.blocks[blocks[k]]) == ordered) {
+            items.append(renderListItem(note, blocks[k], level));
             ++k;
         }
         parts.append(items.join(u'\n'));
@@ -519,7 +520,7 @@ QString PandocRenderer::renderBlocks(const ParsedNote &note, const QList<int> &i
     return parts.join(u"\n\n"_s);
 }
 
-QString PandocRenderer::renderListItem(const ParsedNote &note, int index) const
+QString PandocRenderer::renderListItem(const ParsedNote &note, int index, int level) const
 {
     const Block &b = note.blocks[index];
     QString marker = u"-"_s;
@@ -564,10 +565,10 @@ QString PandocRenderer::renderListItem(const ParsedNote &note, int index) const
         }
         content = box + idSpan(b) + text + status + metaSpans(b);
     }
-    if (!b.children.isEmpty()) {
+    if (!b.children.isEmpty() && level + 1 < MaxListLevels) { // (else listedItems() lists them after it)
         const bool lists =
                 std::ranges::all_of(b.children, [&](int c) { return note.blocks[c].kind == BlockKind::ListItem; });
-        const QString children = renderBlocks(note, b.children);
+        const QString children = renderBlocks(note, b.children, level + 1);
         if (!children.isEmpty())
             content += (content.isEmpty() ? QString() : lists ? u"\n"_s : u"\n\n"_s) + children;
     }
@@ -705,7 +706,7 @@ QString PandocRenderer::renderBlock(const ParsedNote &note, int index) const
     }
     case BlockKind::Rule: return u"* * *"_s;
     case BlockKind::Html: return codeBlock(QString(), b.text, id);
-    case BlockKind::ListItem: return renderListItem(note, index);
+    case BlockKind::ListItem: return renderListItem(note, index, 0);
     }
     return {};
 }

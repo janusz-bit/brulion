@@ -285,6 +285,29 @@ private Q_SLOTS:
         QCOMPARE(tasks.rows.first().line, 2);
         QCOMPARE(tasks.rows.first().seconds, qint64(90 * 60));
     }
+
+    void clocksOverCenturies()
+    {
+        // Lines spanning centuries do not read and a clock running since year 1 counts nothing
+        // (markdown::MaxClockSeconds): a summary of every day splits the real hour only.
+        QString note = u"- DOING Wieczne zadanie\n  :LOGBOOK:\n"_s;
+        for (int i = 0; i < 100; ++i)
+            note += u"  CLOCK: [0001-01-01 Mon 00:00]--[9999-12-31 Fri 00:00]\n"_s;
+        note += u"  CLOCK: [2026-11-03 Tue 08:00:00]--[2026-11-03 Tue 09:00:00] =>  01:00:00\n"
+                "  CLOCK: [0001-01-01 Mon 00:00]\n  :END:\n"_s;
+        VaultIndex index;
+        index.update(u"Wieczność.md"_s, note);
+        const QDateTime now(Today, QTime(10, 30));
+        const QList<TaskRef> all = index.tasks();
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(taskSpentSeconds(all.first().task, now), qint64(3600));
+        for (const TimeGroup group : {TimeGroup::Day, TimeGroup::Page, TimeGroup::Tag, TimeGroup::Task}) {
+            const TimeSummary summary = summarizeTime(index, all, group, {}, {}, now);
+            QCOMPARE(summary.rows.size(), 1);
+            QCOMPARE(summary.total, qint64(3600));
+        }
+        QCOMPARE(summarizeTime(index, all, TimeGroup::Day, {}, {}, now).rows.first().key, u"2026-11-03"_s);
+    }
 };
 
 QTEST_GUILESS_MAIN(TstIndexTasks)
