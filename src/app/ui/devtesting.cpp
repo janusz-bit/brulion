@@ -1,10 +1,13 @@
 #include "devtesting.h"
 
 #include <QAccessible>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QFont>
 #include <QJSEngine>
 #include <QJSValue>
 #include <QLocale>
+#include <QPointer>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQmlListReference>
@@ -14,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -186,6 +190,23 @@ QStringList wrongHourPresses(const QJSValue &picker, const QList<Circle> &number
     return wrong;
 }
 
+// The deferred deletions that come due while a self-test's pass runs (DevTest::callCatching): an
+// application event filter takes their events, and the outermost call deletes the objects once
+// the pass returned.
+class DeferredDeleteHold : public QObject
+{
+public:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() != QEvent::DeferredDelete)
+            return false;
+        held.append(watched);
+        return true;
+    }
+    QList<QPointer<QObject>> held;
+};
+DeferredDeleteHold *deferredDeleteHold = nullptr;
+int passDepth = 0;
 } // namespace
 
 // --- DevEvents --------------------------------------------------------------------------------
@@ -661,7 +682,23 @@ QString DevTest::callCatching(QObject *object, const QString &function) const
     const QJSValue fn = self.property(function);
     if (!fn.isCallable())
         return u"%1 is not a function"_s.arg(function);
+    // A pass's QML functions keep the objects they used in their compiled locals, which the
+    // garbage collector reads during a collection (Qt 6.11: plain pointers). QtTest's touch, key
+    // and mouse events process events, so an object a step ends (Escape closes an editor's
+    // field: deleteLater) was deleted inside the pass, and a collection later in it (making a
+    // menu) read the freed object and crashed the app. Such objects go once the pass returned.
+    if (passDepth++ == 0) {
+        deferredDeleteHold = new DeferredDeleteHold;
+        QCoreApplication::instance()->installEventFilter(deferredDeleteHold);
+    }
     const QJSValue result = fn.callWithInstance(self);
+    if (--passDepth == 0) {
+        QCoreApplication::instance()->removeEventFilter(deferredDeleteHold);
+        const QList<QPointer<QObject>> held = std::exchange(deferredDeleteHold->held, {});
+        delete std::exchange(deferredDeleteHold, nullptr);
+        for (const QPointer<QObject> &heldObject : held)
+            delete heldObject.data();
+    }
     return result.isError() ? result.toString() : QString();
 }
 

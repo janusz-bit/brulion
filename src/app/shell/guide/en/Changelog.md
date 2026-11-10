@@ -7,6 +7,17 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.16.1 — November 9, 2026
+
+**Note**
+- Version 0.16.0 was not published: its tests failed on the build servers. The app's self-test clicked a link on a page that was still returning to where it had been scrolled, and the drawing editor's test found the fault fixed below. Everything new in 0.16.0, described below, is available from this version on.
+
+**Changes**
+- **Views stay ready** — Journal, Pages, Search, Tasks and Calendar stay in their tab once shown: switching back to one is instant (building it anew took 0.5–1 s on a phone), and it comes back scrolled where it was. A view left this way ends its editing first. Other views are still made anew when opened.
+
+**Fixes**
+- On a busy device the buttons of a view that had just opened could lose their tooltips and stop changing colour: in the drawing toolbar the pen stayed highlighted after another tool was chosen. Qt's cleanup of unused memory, done in small steps since Qt 6.8, could take them for unused while the view was being built; Brulion now has it do its work in one go, as before.
+
 ## 0.16.0 — November 8, 2026
 
 **New**

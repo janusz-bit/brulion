@@ -263,4 +263,6 @@ jobs:
       pages: write
       id-token: write
     uses: ./.github/workflows/fdroid.yml
+    with:
+      release: true
     secrets: inherit
