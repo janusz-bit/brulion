@@ -39,8 +39,8 @@ FocusScope {
         recent = []
         AppSettings.clearRecentSearches()
     }
-    /// Open result `row`: here, in the side panel (`newPane`) or in `target` ("tab": a new tab).
     MapHolder { id: resultInfo }
+    /// Open result `row`: here, in the side panel (`newPane`) or in `target` ("tab": a new tab).
     function openResult(row: int, newPane: bool, target: string): void {
         // { path, line, … }
         resultInfo.map = results.get(row)
@@ -51,6 +51,11 @@ FocusScope {
         OpenIn.begin(target)
         AppController.openPage(path, resultInfo.map.line, newPane && !Theme.narrow)
         OpenIn.end()
+    }
+    /// Open the current result (the side panel with `newPane`).
+    function openCurrent(newPane: bool): void {
+        if (results.count > 0)
+            openResult(Math.max(0, list.currentIndex), newPane, "")
     }
     function move(delta: int): void {
         if (results.count === 0)
@@ -68,7 +73,7 @@ FocusScope {
         if (AppController.routeText(AppController.currentRoute, "view") !== "search")
             return
         // (Empty parameters are left out of the route.)
-        AppController.replaceRoute({ view: "search", query: Js.trim(field.text) !== "" ? field.text : "",
+        AppController.replaceRoute({ view: "search", query: query !== "" ? field.text : "",
                                      folder: results.folder })
     }
     function setFolder(folder: string): void {
@@ -76,24 +81,22 @@ FocusScope {
         syncRoute()
     }
 
-    focus: true
-    Component.onCompleted: {
-        loadRecent()
-        const folder = AppController.routeText(route, "folder")
-        if (folder !== "")
-            results.folder = folder
-        const q = AppController.routeText(route, "query")
-        if (q !== "")
-            applyQuery(q)
-        field.forceActiveFocus()
-    }
-    onRouteChanged: {
+    /// Take the route's query and folder (when they differ from the shown ones).
+    function followRoute(): void {
         if (Js.hasKey(route, "query") && AppController.routeText(route, "query") !== field.text)
             applyQuery(AppController.routeText(route, "query"))
         const folder = AppController.routeText(route, "folder")
         if (folder !== results.folder)
             results.folder = folder
     }
+
+    focus: true
+    Component.onCompleted: {
+        loadRecent()
+        followRoute()
+        field.forceActiveFocus()
+    }
+    onRouteChanged: followRoute()
 
     SearchResultModel {
         id: results
@@ -125,13 +128,12 @@ FocusScope {
                 if (AppController.routeText(AppController.currentRoute, "query") !== q)
                     root.syncRoute()
             }
-            onAccepted: if (results.count > 0) root.openResult(Math.max(0, list.currentIndex), false, "")
+            onAccepted: root.openCurrent(false)
             Keys.onDownPressed: root.move(1)
             Keys.onUpPressed: root.move(-1)
             Keys.onPressed: (event) => {
                 if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)) {
-                    if (results.count > 0)
-                        root.openResult(Math.max(0, list.currentIndex), true, "")
+                    root.openCurrent(true)
                     event.accepted = true
                 } else if (event.key === Qt.Key_PageDown) {
                     root.move(8)
@@ -229,6 +231,10 @@ FocusScope {
                 required property list<var> titleMatches
                 required property string journalDate
                 readonly property bool journal: hit.journalDate !== ""
+                readonly property string heading: hit.journal ? DatesHelper.formatLong(hit.journalDate) : hit.title
+                // On the highlighted row the accent is too light: the text colour (the matches
+                // stay bold).
+                readonly property color matchColor: hit.highlighted ? Theme.fg : Theme.accentText
 
                 // Full width (ListView places delegates at x 0); the row itself is inset.
                 width: list.width
@@ -242,7 +248,7 @@ FocusScope {
                 highlighted: ListView.isCurrentItem
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.ListItem
-                Accessible.name: (journal ? DatesHelper.formatLong(hit.journalDate) : hit.title) + ": " + hit.excerpt
+                Accessible.name: hit.heading + ": " + hit.excerpt
                 // Ctrl+click: a new tab (OpenIn).
                 onClicked: root.openResult(hit.index, false, OpenIn.clickTarget(Qt.LeftButton, EditorInput.keyboardModifiers()))
                 TapHandler {
@@ -254,8 +260,9 @@ FocusScope {
                 }
 
                 background: Rectangle {
+                    visible: hit.down || hit.highlighted || hit.hovered
                     radius: Theme.radius
-                    color: hit.down ? Theme.bgPressed : hit.highlighted ? Theme.bgSelected : hit.hovered ? Theme.bgHover : "transparent"
+                    color: hit.down ? Theme.bgPressed : hit.highlighted ? Theme.bgSelected : Theme.bgHover
                 }
                 contentItem: ColumnLayout {
                     id: hitColumn
@@ -270,11 +277,9 @@ FocusScope {
                         }
                         ContentHighlightText {
                             Layout.fillWidth: true
-                            source: hit.journal ? DatesHelper.formatLong(hit.journalDate) : hit.title
+                            source: hit.heading
                             positions: hit.journal ? root.noMatches : hit.titleMatches
-                            // On the highlighted row the accent is too light: the text colour (the
-                            // matches stay bold).
-                            highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
+                            highlightColor: hit.matchColor
                             // The snippet's size: weight and colour set the title apart.
                             font.weight: Theme.weightSemiBold
                             font.pixelSize: Theme.textBase
@@ -294,7 +299,7 @@ FocusScope {
                         Layout.fillWidth: true
                         source: hit.excerpt
                         positions: hit.excerptMatches
-                        highlightColor: hit.highlighted ? Theme.fg : Theme.accentText
+                        highlightColor: hit.matchColor
                         color: Theme.fgMuted
                         font.pixelSize: Theme.textBase
                         wrapMode: Text.Wrap

@@ -193,6 +193,9 @@ FocusScope {
 
     PageTools { id: tools; workspace: Workspace }
 
+    /// The stream's commands and shortcuts act on the day being written in (this pane, shown).
+    readonly property bool streamKeys: !single && !inSidePanel && paneActive && visible && activeDay !== null
+
     // The palette's "Toggle note mode", "Add page property" and its link commands
     // ("copyLink:<kind>") in the journal stream: the day being written in (today until another day gets the caret). One day
     // as a page: its PageView does it.
@@ -307,12 +310,12 @@ FocusScope {
     }
     Shortcut {
         sequence: ShortcutMap.sequences["page.find"] || ""
-        enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
+        enabled: root.streamKeys
         onActivated: root.openFind(false)
     }
     Shortcut {
         sequence: ShortcutMap.sequences["page.replace"] || ""
-        enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
+        enabled: root.streamKeys
         onActivated: root.openFind(true)
     }
 
@@ -335,10 +338,8 @@ FocusScope {
     // ---- The journal list ------------------------------------------------------------------------
     Loader {
         id: listLoader
-        anchors.top: findBarLoader.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
+        anchors.topMargin: findBarLoader.height
         active: !root.single
         focus: !root.single
         sourceComponent: journalsComponent

@@ -218,7 +218,7 @@ QStringList fingerRightClickHandlers(QQuickWindow *window)
     std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
         if (!item->isVisible())
             return;
-        const QObjectList children = item->children();
+        const QObjectList &children = item->children();
         for (const QObject *child : children) {
             if (!child->inherits("QQuickTapHandler") || !shown(item) || !screen.contains(pointIn(item)))
                 continue;
@@ -236,6 +236,83 @@ QStringList fingerRightClickHandlers(QQuickWindow *window)
     visit(window->contentItem());
     return found;
 }
+
+/// The first item called `name` under `root` that findShown() accepts.
+QQuickItem *findShownNamed(QQuickItem *root, const QString &name)
+{
+    return findShown(root, [&name](QQuickItem *item) { return item->objectName() == name; });
+}
+
+/// findShown(), polled until it finds an item (nullptr when none turns up in time).
+QQuickItem *waitShown(QQuickItem *root, const std::function<bool(QQuickItem *)> &pred)
+{
+    QQuickItem *found = nullptr;
+    waitFor([&] { return (found = findShown(root, pred)) != nullptr; });
+    return found;
+}
+
+/// findShownNamed(), polled until it finds an item.
+QQuickItem *waitNamed(QQuickItem *root, const QString &name)
+{
+    return waitShown(root, [&name](QQuickItem *item) { return item->objectName() == name; });
+}
+
+/// Is `item` the editor called `objectName` ("pageEditor", "journalDayEditor") whose loaded
+/// controller edits `path`?
+bool editsLoaded(const QQuickItem *item, const QString &objectName, const QString &path)
+{
+    if (item->objectName() != objectName)
+        return false;
+    const auto *controller = item->property("controller").value<QObject *>();
+    return controller && controller->property("path").toString() == path && controller->property("loaded").toBool();
+}
+
+/// The shown editor called `objectName` with the loaded controller of `path`, polled for.
+QQuickItem *waitLoadedEditor(QQuickItem *root, const QString &objectName, const QString &path)
+{
+    return waitShown(root, [&](QQuickItem *item) { return editsLoaded(item, objectName, path); });
+}
+
+/// The controller of an editor item (nullptr for none).
+QObject *controllerOf(const QQuickItem *editor)
+{
+    return editor ? editor->property("controller").value<QObject *>() : nullptr;
+}
+
+/// Evaluate the JavaScript `js` in the context of `item`. False (and the error on stderr) when it
+/// failed.
+bool evaluateIn(QQuickItem *item, const QString &js)
+{
+    QQmlExpression expression(qmlContext(item), item, js);
+    expression.evaluate();
+    if (expression.hasError())
+        std::fprintf(stderr, "selftest: %s\n", qPrintable(expression.error().toString()));
+    return !expression.hasError();
+}
+
+/// `text` typed key by key into the focused item.
+void typeChars(QQuickWindow *window, const QString &text)
+{
+    for (const QChar ch : text)
+        sendKey(window, 0, Qt::NoModifier, QString(ch));
+}
+
+/// The text of the app's last toast, while the spy lives.
+class ToastSpy {
+public:
+    explicit ToastSpy(AppController *app)
+        : m_connection(QObject::connect(app, &AppController::toastRequested, app,
+                                        [this](const QString &toast) { text = toast; }))
+    { }
+    ~ToastSpy() { QObject::disconnect(m_connection); }
+    ToastSpy(const ToastSpy &) = delete;
+    ToastSpy &operator=(const ToastSpy &) = delete;
+
+    QString text;
+
+private:
+    QMetaObject::Connection m_connection;
+};
 
 using Check = std::function<void(bool, const char *)>;
 
@@ -256,13 +333,7 @@ void checkCalendarEdgeSwipe(QQuickWindow *window, QQuickItem *calendarView, cons
         check(false, "the shell and its drawer exist");
         return;
     }
-    const auto run = [&](const QString &js) {
-        QQmlExpression expression(qmlContext(shellItem), shellItem, js);
-        expression.evaluate();
-        if (expression.hasError())
-            std::fprintf(stderr, "selftest: %s\n", qPrintable(expression.error().toString()));
-        return !expression.hasError();
-    };
+    const auto run = [shellItem](const QString &js) { return evaluateIn(shellItem, js); };
     const auto opened = [drawer] { return drawer->property("opened").toBool(); };
     const auto closed = [drawer] { return !drawer->property("visible").toBool(); };
     const auto margin = [drawer] { return drawer->property("dragMargin").toReal(); };
@@ -338,20 +409,11 @@ void checkBackZoomsOutAtHome(QQuickWindow *window, AppController *app, const Che
     const QString today = ws->journalPath(app->today(0));
     app->goHome();
     // Today's day of the stream (list delegates are not in the QObject tree: the visual tree).
-    QObject *day = nullptr;
-    waitFor([&] {
-        QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
-            const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>()
-                                                                      : nullptr;
-            return c && c->property("path").toString() == today && c->property("loaded").toBool();
-        });
-        day = editor ? editor->property("controller").value<QObject *>() : nullptr;
-        return day != nullptr;
-    });
+    QObject *day = controllerOf(waitLoadedEditor(window->contentItem(), u"journalDayEditor"_s, today));
     const QStringList lines = ws->readFile(today).split(u'\n');
     int parent = -1;
     int child = -1;
-    for (qsizetype i = 0; i < lines.size(); ++i) {
+    for (qsizetype i = 0; day && i < lines.size(); ++i) {
         if (lines.at(i).startsWith(u"- Pomysł na obiad"_s))
             QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(parent), int(i));
         else if (lines.at(i).startsWith(u"  - albo żurek"_s))
@@ -389,7 +451,8 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     };
     // Every note with a task, as it was (restored at the end).
     QHash<QString, QString> notes;
-    for (const QVariant &v : ws->runQuery(u"type:tasks status:all"_s).value(u"items"_s).toList()) {
+    const QVariantList tasks = ws->runQuery(u"type:tasks status:all"_s).value(u"items"_s).toList();
+    for (const QVariant &v : tasks) {
         const QString path = v.toMap().value(u"path"_s).toString();
         if (!notes.contains(path))
             notes.insert(path, ws->readFile(path));
@@ -404,14 +467,8 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         }
         settle(200);
     };
-    const auto shownWhere = [](QQuickItem *root, const std::function<bool(QQuickItem *)> &pred) {
-        QQuickItem *found = nullptr;
-        waitFor([&] { return (found = findShown(root, pred)) != nullptr; });
-        return found;
-    };
-    const auto named = [&](QQuickItem *root, const QString &name) {
-        return shownWhere(root, [&name](QQuickItem *item) { return item->objectName() == name; });
-    };
+    const auto shownWhere = waitShown;
+    const auto named = waitNamed;
     // A visible item of the visual tree (list delegates are not in the QObject tree), on screen or
     // not (a day of the journal is taller than a phone's screen).
     std::function<QQuickItem *(QQuickItem *, const std::function<bool(QQuickItem *)> &)> visual =
@@ -543,15 +600,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     // ---- The backlinks under a page: today's "Przejrzeć [[Remont mieszkania]]…" task.
     const QString remont = u"Projekty/Remont mieszkania.md"_s;
     app->openPage(remont);
-    QQuickItem *editor = nullptr;
-    waitFor([&] {
-        editor = findShown(window->contentItem(), [&](QQuickItem *item) {
-            const auto *c =
-                    item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>() : nullptr;
-            return c && c->property("path").toString() == remont && c->property("loaded").toBool();
-        });
-        return editor != nullptr;
-    });
+    QQuickItem *editor = waitLoadedEditor(window->contentItem(), u"pageEditor"_s, remont);
     if (auto *list = editor ? editor->property("listView").value<QQuickItem *>() : nullptr) {
         QMetaObject::invokeMethod(list, "positionViewAtEnd");
         settle(300);
@@ -606,12 +655,14 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     const QString chimney = u"Kominiarz.md"_s;
     ws->writeFile(chimney,
                   u"- [ ] Zadzwonić do kominiarza w sprawie przeglądu przewodów 📅 "_s + app->today(0) + u"\n"_s);
-    const auto entryTitle = [](QQuickItem *row) {
+    // The planning entry a row shows (a plain map or a JS object).
+    const auto entryOf = [](QQuickItem *row) {
         QVariant entry = row->property("entry");
         if (entry.canConvert<QJSValue>())
             entry = entry.value<QJSValue>().toVariant();
-        return entry.toMap().value(u"title"_s).toString();
+        return entry.toMap();
     };
+    const auto entryTitle = [&entryOf](QQuickItem *row) { return entryOf(row).value(u"title"_s).toString(); };
     QQuickItem *chimneyRow =
             agenda ? shownWhere(agenda,
                                 [&](QQuickItem *item) {
@@ -638,12 +689,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     const QString pills = u"Leki.md"_s;
     // Late in the day: today's time has not rung yet (no notification during the checks).
     ws->writeFile(pills, u"- Leki na ciśnienie ⏰ "_s + app->today(0) + u" 23:58 🔁 every day\n"_s);
-    const auto isOccurrence = [](QQuickItem *row) {
-        QVariant entry = row->property("entry");
-        if (entry.canConvert<QJSValue>())
-            entry = entry.value<QJSValue>().toVariant();
-        return entry.toMap().value(u"occurrence"_s).toBool();
-    };
+    const auto isOccurrence = [&entryOf](QQuickItem *row) { return entryOf(row).value(u"occurrence"_s).toBool(); };
     QQuickItem *pillsRow = agenda ? shownWhere(agenda,
                                                [&](QQuickItem *item) {
                                                    return isA(item, "PlanningItemRow")
@@ -815,12 +861,9 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     QObject *day = nullptr;
     QQuickItem *dayEditor = nullptr;
     waitFor([&] {
-        dayEditor = visual(window->contentItem(), [&](QQuickItem *item) {
-            const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>()
-                                                                      : nullptr;
-            return c && c->property("path").toString() == today && c->property("loaded").toBool();
-        });
-        day = dayEditor ? dayEditor->property("controller").value<QObject *>() : nullptr;
+        dayEditor = visual(window->contentItem(),
+                           [&](QQuickItem *item) { return editsLoaded(item, u"journalDayEditor"_s, today); });
+        day = controllerOf(dayEditor);
         return day != nullptr;
     });
     if (!day && qEnvironmentVariableIsSet("BRULION_SELFTEST_DEBUG")) {
@@ -875,8 +918,7 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
             return day->property("editingRow").toInt() == row && f
                    && QByteArray(f->metaObject()->className()).contains("InlineEditor");
         });
-        for (const QChar ch : u" /zrobione"_s)
-            sendKey(window, 0, Qt::NoModifier, QString(ch));
+        typeChars(window, u" /zrobione"_s);
         check(editing && waitFor([&] { return dayEditor->property("suggestionsOpen").toBool(); }),
               "“/zrobione” typed into a journal day opens the commands");
         sendKey(window, Qt::Key_Return);
@@ -973,17 +1015,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         }
         // Not written yet: on a desktop it opens ready to type; on a touch screen it waits for a tap
         // (the keyboard would cover the tagged blocks it lists), which starts typing.
-        QQuickItem *tagEditor = nullptr;
-        QObject *tagController = nullptr;
-        waitFor([&] {
-            tagEditor = findShown(window->contentItem(), [&](QQuickItem *item) {
-                auto *c =
-                        item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>() : nullptr;
-                return c && c->property("path").toString() == tagPage && c->property("loaded").toBool();
-            });
-            tagController = tagEditor ? tagEditor->property("controller").value<QObject *>() : nullptr;
-            return tagController != nullptr;
-        });
+        QObject *tagController = controllerOf(waitLoadedEditor(window->contentItem(), u"pageEditor"_s, tagPage));
         check(tagController != nullptr, "the tag's page is in the editor");
         if (tagController) {
             settle(200);
@@ -1026,9 +1058,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
             // A long press: the tag's menu (LinkMenu), "Filter by tag" first; its "Open tag page".
             touchTap(window, taskTag, 1000);
             check(waitFor([&] { return openMenus(window) == 1; }), "a long press on a tag in Tasks opens its menu");
-            const auto menuItem = [window](const QString &name) {
-                return findShown(window->contentItem(), [&](QQuickItem *item) { return item->objectName() == name; });
-            };
+            const auto menuItem = [window](const QString &name) { return findShownNamed(window->contentItem(), name); };
             QQuickItem *filter = menuItem(u"linkMenuFilter"_s);
             check(filter != nullptr, "the tag's menu offers “Filtruj po tagu”");
             QQuickItem *open = menuItem(u"linkMenuOpen"_s);
@@ -1104,17 +1134,12 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         app->workspace()->writeFile(draft, u"- szkic\n"_s);
         app->openPage(draft);
         // The tag's "#" among the page actions.
-        const auto strip = [window] {
-            return findShown(window->contentItem(),
-                             [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; });
-        };
+        const auto strip = [window] { return findShownNamed(window->contentItem(), u"pageTagOverview"_s); };
         const auto headerOf = [&](const QString &path) {
             QQuickItem *found = nullptr;
             waitFor([&] {
                 QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
-                    auto *c = item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>()
-                                                                  : nullptr;
-                    return c && c->property("path").toString() == path && c->property("loaded").toBool();
+                    return editsLoaded(item, u"pageEditor"_s, path);
                 });
                 found = editor ? findShown(editor, [](QQuickItem *item) { return isA(item, "ContentPageHeader"); })
                                : nullptr;
@@ -1197,9 +1222,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         // A "/" moves the page, here renamed too: the toast names the folder and the new name.
         const QString probe = u"Próba przenosin.md"_s;
         app->workspace()->writeFile(probe, u"- żółw\n"_s);
-        QString toast;
-        const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
-                                                                [&toast](const QString &text) { toast = text; });
+        const ToastSpy toasts(app);
         uidriver::callQml(rename, "openFor", {probe, false});
         QQuickItem *field = nullptr;
         waitFor([&] {
@@ -1213,12 +1236,11 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         }
         const QString expected = QCoreApplication::translate("ShellMoveWords", "Moved to “%1” as “%2”")
                                          .arg(u"Projekty"_s, u"Próba po zmianie"_s);
-        const bool moved = field && waitFor([&] { return toast == expected; });
+        const bool moved = field && waitFor([&] { return toasts.text == expected; });
         if (!moved)
-            std::fprintf(stderr, "selftest: the move's toast: %s\n", qPrintable(toast));
+            std::fprintf(stderr, "selftest: the move's toast: %s\n", qPrintable(toasts.text));
         check(moved && app->workspace()->exists(u"Projekty/Próba po zmianie.md"_s),
               "a “/” in the rename dialog moves the page, renamed too: the toast names the folder and the new name");
-        QObject::disconnect(toasts);
         app->workspace()->deletePage(app->workspace()->exists(probe) ? probe : u"Projekty/Próba po zmianie.md"_s);
     }
     app->goHome();
@@ -1241,9 +1263,7 @@ void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Che
     logger->flush();
 
     app->navigate({{u"view"_s, u"logs"_s}});
-    const auto shownNamed = [window](const QString &name) {
-        return findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
-    };
+    const auto shownNamed = [window](const QString &name) { return findShownNamed(window->contentItem(), name); };
     QQuickItem *list = nullptr;
     check(waitFor([&] { return (list = shownNamed(u"logsList"_s)) && list->property("count").toInt() > 0; }, 5000),
           "the event log page lists entries");
@@ -1265,8 +1285,7 @@ void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Che
     if (QQuickItem *search = shownNamed(u"logsSearch"_s)) {
         tapOrClick(window, pointIn(search), touch);
         settle(50);
-        for (const QChar ch : u"ZAZOLC"_s)
-            sendKey(window, 0, Qt::NoModifier, QString(ch));
+        typeChars(window, u"ZAZOLC"_s);
         check(waitFor([&] { return model && model->property("count").toInt() == 1; }),
               "searching \"ZAZOLC\" finds the line with \"Zażółć\"");
         sendKey(window, Qt::Key_Escape);
@@ -1326,8 +1345,9 @@ void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Che
     brulion::sync::SyncRunRecord run;
     run.number = 42;
     run.trigger = brulion::sync::SyncTrigger::LocalChange;
-    run.started = QDateTime::currentDateTime().addSecs(-90);
-    run.finished = QDateTime::currentDateTime().addSecs(-28);
+    const QDateTime now = QDateTime::currentDateTime();
+    run.started = now.addSecs(-90);
+    run.finished = now.addSecs(-28);
     run.durationMs = 62'000;
     run.outcome = brulion::sync::SyncOutcome::Failed;
     run.errorCode = u"timeout"_s;
@@ -1388,9 +1408,7 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
             mouseClick(window, pointIn(item));
     };
     const auto shownItem = [window](const std::function<bool(QQuickItem *)> &pred) {
-        QQuickItem *found = nullptr;
-        waitFor([&] { return (found = findShown(window->contentItem(), pred)) != nullptr; });
-        return found;
+        return waitShown(window->contentItem(), pred);
     };
     const auto named = [](const QString &name) {
         return [name](QQuickItem *item) { return item->objectName() == name; };
@@ -1455,13 +1473,7 @@ void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer,
         return;
     }
     // True when it ran without an error.
-    const auto run = [&](const QString &js) {
-        QQmlExpression expression(qmlContext(shellItem), shellItem, js);
-        expression.evaluate();
-        if (expression.hasError())
-            std::fprintf(stderr, "selftest: %s\n", qPrintable(expression.error().toString()));
-        return !expression.hasError();
-    };
+    const auto run = [shellItem](const QString &js) { return evaluateIn(shellItem, js); };
     const auto opened = [drawer] { return drawer->property("opened").toBool(); };
     const auto closed = [drawer] { return !drawer->property("visible").toBool(); };
     const auto margin = [drawer] { return drawer->property("dragMargin").toReal(); };
@@ -1594,7 +1606,6 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
     const bool narrow = window->width() < 900;
     const auto view = [app] { return app->currentView(); };
     const auto routePath = [app] { return app->currentRoute().value(u"path"_s).toString(); };
-    const auto pause = [](int ms) { settle(ms); };
     // A tap / a left click, and the gesture for the context menu: a long press / a right-click.
     const auto activate = [&](QQuickItem *item, qreal fx = 0.5) {
         if (!item)
@@ -1617,17 +1628,10 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         return waitFor([&] { return openMenus(window) == 0; });
     };
     // (The visual tree: Repeater and list delegates are not in the window's QObject tree.)
-    const auto findNamed = [window](const QString &name) {
-        return findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
-    };
+    const auto findNamed = [window](const QString &name) { return findShownNamed(window->contentItem(), name); };
     const auto findType = [window](const char *type, const std::function<bool(QQuickItem *)> &pred = {}) {
-        QQuickItem *found = nullptr;
-        waitFor([&] {
-            found = findShown(window->contentItem(),
-                              [&](QQuickItem *item) { return isA(item, type) && (!pred || pred(item)); });
-            return found != nullptr;
-        });
-        return found;
+        return waitShown(window->contentItem(),
+                         [&](QQuickItem *item) { return isA(item, type) && (!pred || pred(item)); });
     };
 
     QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
@@ -1648,7 +1652,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
             if (row >= 0)
                 QMetaObject::invokeMethod(list, "positionViewAtIndex", row, 4 /* ListView.Contain */);
         }
-        pause(60);
+        settle(60);
         return findShown(list, [&](QQuickItem *item) {
             return item->property("isDir").isValid() && item->property("path").toString() == path;
         });
@@ -1682,7 +1686,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
     };
     check(!app->workspace()->createFolder(empty).isEmpty(), "an empty folder is created");
     app->goHome();
-    pause(200);
+    settle(200);
 
     // ---- The page tree: the drawer on phones (opened from the top bar's ☰), the sidebar on
     //      desktops.
@@ -1869,26 +1873,13 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
     app->openPage(page);
     // The controller of the editor on screen (earlier page views may still wait for their
     // deferred deletion, see treeMenu).
-    QObject *controller = nullptr;
-    waitFor([&] {
-        QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
-            if (item->objectName() != u"pageEditor")
-                return false;
-            const auto *c = item->property("controller").value<QObject *>();
-            return c && c->property("path").toString() == page && c->property("loaded").toBool();
-        });
-        controller = editor ? editor->property("controller").value<QObject *>() : nullptr;
-        return controller != nullptr;
-    });
+    QObject *controller = controllerOf(waitLoadedEditor(window->contentItem(), u"pageEditor"_s, page));
     const QString zoomName = QCoreApplication::translate("BlockDelegate", "Zoom into block");
     const auto bullet = [&] {
         return findType("QQuickItem", [&zoomName](QQuickItem *item) {
-            const QObjectList children = item->children();
-            for (const QObject *c : children) {
-                if (c->inherits("QQuickAccessibleAttached") && c->property("name").toString() == zoomName)
-                    return true;
-            }
-            return false;
+            return std::ranges::any_of(item->children(), [&zoomName](const QObject *c) {
+                return c->inherits("QQuickAccessibleAttached") && c->property("name").toString() == zoomName;
+            });
         });
     };
     QQuickItem *dot = controller ? bullet() : nullptr;
@@ -1981,14 +1972,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     const QString recipes = u"Przepisy.md"_s;
     const QString remont = u"Projekty/Remont mieszkania.md"_s;
     QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
-    const auto named = [window](const QString &name) {
-        QQuickItem *found = nullptr;
-        waitFor([&] {
-            found = findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
-            return found != nullptr;
-        });
-        return found;
-    };
+    const auto named = [window](const QString &name) { return waitNamed(window->contentItem(), name); };
     const auto openDrawer = [&] {
         if (!narrow || !drawer || drawer->property("opened").toBool())
             return;
@@ -2003,7 +1987,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         waitFor([&] { return !drawer->property("visible").toBool(); });
     };
     const auto treeList = [window]() -> QQuickItem * {
-        return findShown(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"sidebarTree"; });
+        return findShownNamed(window->contentItem(), u"sidebarTree"_s);
     };
     // The sidebar's (or the drawer's) row of `path`, scrolled into view.
     const auto treeRow = [&](const QString &path) -> QQuickItem * {
@@ -2219,8 +2203,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             check(accept && accept->isEnabled(), "a name still being composed enables “Utwórz”");
             tap(accept);
         } else {
-            for (const QChar ch : u"Zażółć"_s)
-                sendKey(window, 0, Qt::NoModifier, QString(ch));
+            typeChars(window, u"Zażółć"_s);
             sendKey(window, Qt::Key_Return);
         }
         check(waitFor([&] { return ws->exists(u"Zażółć"_s); }), "the typed folder is created at the root");
@@ -2549,8 +2532,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
                      && f->property("selectedText").toString() == u"Remont mieszkania";
           }),
           "the page header's title edit starts with the title selected");
-    for (const QChar ch : u"TCP/IP"_s)
-        sendKey(window, 0, Qt::NoModifier, QString(ch));
+    typeChars(window, u"TCP/IP"_s);
     sendKey(window, Qt::Key_Return);
     // (Every page view has its dialog: the one that opened.)
     QObject *confirm = nullptr;
@@ -2692,9 +2674,7 @@ void checkLinkParts(QQuickWindow *window, AppController *app, const Check &check
         else
             mouseClick(window, at, Qt::RightButton);
     }
-    const auto menuItem = [window](const QString &name) {
-        return findShown(window->contentItem(), [&](QQuickItem *item) { return item->objectName() == name; });
-    };
+    const auto menuItem = [window](const QString &name) { return findShownNamed(window->contentItem(), name); };
     check(text && waitFor([&] { return openMenus(window) == 1 && menuItem(u"linkMenuOpen"_s) != nullptr; }),
           touch ? "a long press on “Projekty” opens its menu" : "a right-click on “Projekty” opens its menu");
     QQuickItem *openItem = menuItem(u"linkMenuOpen"_s);
@@ -2735,9 +2715,8 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     ws->write(newPage, u"- Wstęp\n- Przeniesiony blok z łazienką ^przen1\n"_s);
     ws->write(oldPage, u"# Stara strona\n\nZobacz [[Stara strona#^przen1]] i [[Stara strona#Brakujący nagłówek]].\n\n"
                        u"Akapit do skopiowania.\n\nZnaczniki: [[#<b>Pogrubiony</b> nagłówek]].\n"_s);
-    QString lastToast;
-    const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
-                                                            [&lastToast](const QString &text) { lastToast = text; });
+    ToastSpy toasts(app); // (disconnects on the early returns, too)
+    QString &lastToast = toasts.text;
     const auto loaded = [&](const QString &path) -> QObject * {
         QObject *page = nullptr;
         waitFor([&] {
@@ -2871,9 +2850,7 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     const QString today = ws->journalPath(app->today(0));
     QObject *day = nullptr;
     std::function<QQuickItem *(QQuickItem *)> dayEditorIn = [&](QQuickItem *item) -> QQuickItem * {
-        const auto *c =
-                item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>() : nullptr;
-        if (c && c->property("path").toString() == today && c->property("loaded").toBool())
+        if (editsLoaded(item, u"journalDayEditor"_s, today))
             return item;
         const QList<QQuickItem *> children = item->childItems();
         for (QQuickItem *child : children) {
@@ -2884,7 +2861,7 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     };
     waitFor([&] {
         QQuickItem *dayEditor = dayEditorIn(window->contentItem());
-        day = dayEditor ? dayEditor->property("controller").value<QObject *>() : nullptr;
+        day = controllerOf(dayEditor);
         return day != nullptr;
     });
     check(day != nullptr, "today's journal day is shown");
@@ -2904,7 +2881,6 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
         QMetaObject::invokeMethod(day, "save", qReturnArg(saved));
         check(ws->readFile(today) == before, "copying the day's link writes nothing");
     }
-    QObject::disconnect(toasts);
 }
 
 /// 5l. Link previews (docs/UI.md "Link previews") and rounded tags outside the editor's blocks:

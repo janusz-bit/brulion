@@ -57,7 +57,7 @@ bool scrolls(const QQuickItem *flickable, Qt::Orientation orientation)
         return true;
     if (direction == 0)
         return std::floor(std::abs(content - view)) != 0;
-    return direction & (vertical ? 2 : 1);
+    return (direction & (vertical ? 2 : 1)) != 0;
 }
 
 /// Whether the view is at its end towards which `delta` scrolls (atYBeginning / atYEnd…).

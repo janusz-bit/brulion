@@ -11,11 +11,9 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::ui {
 
-void startScrollProbe(QQmlApplicationEngine *engine, const QStringList &arguments)
+void startScrollProbe(QQmlApplicationEngine *, const QStringList &arguments)
 {
-    Q_UNUSED(engine);
-    if (std::any_of(arguments.cbegin(), arguments.cend(),
-                    [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); }))
+    if (std::ranges::any_of(arguments, [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); }))
         qWarning("--scroll-probe: not part of this build (BRULION_SCROLL_PROBE=OFF; build with "
                  "RelWithDebInfo or -DBRULION_SCROLL_PROBE=ON)");
 }

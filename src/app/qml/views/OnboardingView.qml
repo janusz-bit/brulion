@@ -51,6 +51,37 @@ Rectangle {
                                   { view: "importExport", tab: "import" })
     }
 
+    /// The round icon of a card (the sample notebook's is tinted: set `color` and `tint`).
+    component CardDisc: Rectangle {
+        id: disc
+        required property string iconName
+        property color tint: Theme.fgMuted
+        Layout.alignment: Qt.AlignTop
+        implicitWidth: 44
+        implicitHeight: 44
+        radius: 22
+        color: Theme.bgSunken
+        BIcon {
+            anchors.centerIn: parent
+            name: disc.iconName
+            size: Theme.iconSizeLg
+            color: disc.tint
+        }
+    }
+    /// The title and the muted description of a card.
+    component CardTitle: BText {
+        Layout.fillWidth: true
+        variant: "label"
+        font.pixelSize: Theme.textMd
+        wrapMode: Text.Wrap
+    }
+    component CardHint: BText {
+        Layout.fillWidth: true
+        variant: "muted"
+        font.pixelSize: Theme.textSm
+        wrapMode: Text.Wrap
+    }
+
     Flickable {
         id: flick
         anchors.fill: parent
@@ -142,13 +173,7 @@ Rectangle {
                                 variant: "label"
                                 wrapMode: Text.Wrap
                             }
-                            BText {
-                                Layout.fillWidth: true
-                                text: feature.text
-                                variant: "muted"
-                                font.pixelSize: Theme.textSm
-                                wrapMode: Text.Wrap
-                            }
+                            CardHint { text: feature.text }
                         }
                     }
                 }
@@ -269,39 +294,17 @@ Rectangle {
                     anchors.fill: parent
                     spacing: Theme.space4
 
-                    Rectangle {
-                        Layout.alignment: Qt.AlignTop
-                        implicitWidth: 44
-                        implicitHeight: 44
-                        radius: 22
-                        color: Theme.bgSunken
-                        BIcon {
-                            anchors.centerIn: parent
-                            name: "download"
-                            size: Theme.iconSizeLg
-                            color: Theme.fgMuted
-                        }
-                    }
+                    CardDisc { iconName: "download" }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.space2
-                        BText {
-                            Layout.fillWidth: true
-                            text: qsTr("Notes in another app?")
-                            variant: "label"
-                            font.pixelSize: Theme.textMd
-                            wrapMode: Text.Wrap
-                        }
-                        BText {
-                            Layout.fillWidth: true
+                        CardTitle { text: qsTr("Notes in another app?") }
+                        CardHint {
                             // An Obsidian vault (synced with Syncthing or not) needs no import:
                             // its folder opens as the notebook (docs/IMPORT.md).
                             text: AppController.isWasm
                                   ? qsTr("Brulion imports Obsidian vaults, Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others. The notebook above opens on its import screen.")
                                   : qsTr("An Obsidian vault needs no import: choose its folder above and open it — also one synced with Syncthing. Other notes come in through import: Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others; the notebook above opens on its import screen.")
-                            variant: "muted"
-                            font.pixelSize: Theme.textSm
-                            wrapMode: Text.Wrap
                         }
                         BButton {
                             objectName: "onboardingImport"
@@ -323,35 +326,13 @@ Rectangle {
                     anchors.fill: parent
                     spacing: Theme.space4
 
-                    Rectangle {
-                        Layout.alignment: Qt.AlignTop
-                        implicitWidth: 44
-                        implicitHeight: 44
-                        radius: 22
-                        color: Theme.bgSunken
-                        BIcon {
-                            anchors.centerIn: parent
-                            name: "git-branch"
-                            size: Theme.iconSizeLg
-                            color: Theme.fgMuted
-                        }
-                    }
+                    CardDisc { iconName: "git-branch" }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.space2
-                        BText {
-                            Layout.fillWidth: true
-                            text: qsTr("Notes on GitHub?")
-                            variant: "label"
-                            font.pixelSize: Theme.textMd
-                            wrapMode: Text.Wrap
-                        }
-                        BText {
-                            Layout.fillWidth: true
+                        CardTitle { text: qsTr("Notes on GitHub?") }
+                        CardHint {
                             text: qsTr("Open Markdown notes from a GitHub repository — all of it or one folder — as a notebook: Brulion keeps it up to date and sends your changes back as commits or pull requests. No git needed, also in the browser.")
-                            variant: "muted"
-                            font.pixelSize: Theme.textSm
-                            wrapMode: Text.Wrap
                         }
                         BButton {
                             objectName: "onboardingGitHub"
@@ -375,35 +356,17 @@ Rectangle {
                     anchors.fill: parent
                     spacing: Theme.space4
 
-                    Rectangle {
-                        Layout.alignment: Qt.AlignTop
-                        implicitWidth: 44
-                        implicitHeight: 44
-                        radius: 22
+                    CardDisc {
+                        iconName: "sparkles"
                         color: Theme.warningBg
-                        BIcon {
-                            anchors.centerIn: parent
-                            name: "sparkles"
-                            size: Theme.iconSizeLg
-                            color: Theme.warningText
-                        }
+                        tint: Theme.warningText
                     }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 2
-                        BText {
-                            Layout.fillWidth: true
-                            text: qsTr("Try the sample notebook")
-                            variant: "label"
-                            font.pixelSize: Theme.textMd
-                            wrapMode: Text.Wrap
-                        }
-                        BText {
-                            Layout.fillWidth: true
+                        CardTitle { text: qsTr("Try the sample notebook") }
+                        CardHint {
                             text: qsTr("“Sample notebook” — a guided tour with live examples of every feature: links, tasks, reminders, calculations, tables and queries.")
-                            variant: "muted"
-                            font.pixelSize: Theme.textSm
-                            wrapMode: Text.Wrap
                         }
                     }
                     BIcon {

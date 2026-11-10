@@ -89,6 +89,8 @@ Item {
 
     /// Font families can be chosen (not in the browser: Qt there has only its bundled fonts).
     readonly property bool fontChoice: DeviceInfo.platform !== "wasm"
+    /// The surface name of the theme in use (for the accent swatches).
+    readonly property string surface: Theme.dark ? Theme.darkSurface : Theme.lightSurface
     /// Accent presets with their names ({ value, name }).
     readonly property list<var> accents: [
         { value: "coral", name: qsTr("Coral") },
@@ -184,8 +186,8 @@ Item {
         const pl = have.indexOf("pl") >= 0
         const en = have.indexOf("en") >= 0
         const auto = { value: "auto", text: qsTr("Automatic", "spelling languages") }
-        const polish = { value: "pl", text: qsTr("Polish") }
-        const english = { value: "en", text: qsTr("English") }
+        const polish = { value: "pl", text: languageName("pl") }
+        const english = { value: "en", text: languageName("en") }
         const both = { value: "pl,en", text: qsTr("Both", "spelling languages") }
         if (pl && en)
             return [auto, polish, english, both]
@@ -404,21 +406,27 @@ Item {
         // (A Binding: assigning the text below does not end it.)
         Binding on text { value: field.configText }
         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-        function save(): void {
-            if (text === configText)
-                return
-            const value = "" + Js.trim(text)
+        function commit(value: string): void {
             errorText = Workspace.setConfig(Js.withKey({}, key, value)) ? "" : invalidText
+        }
+        function save(): void {
+            if (text !== configText)
+                commit("" + Js.trim(text))
         }
         /// Save a value picked elsewhere (a clock dialog) at once. The binding to the config
         /// shows the value (a value changed later elsewhere shows too).
         function applyValue(value: string): void {
-            errorText = Workspace.setConfig(Js.withKey({}, key, value)) ? "" : invalidText
+            commit(value)
             // Typed text the pick replaces, when the config already had that value.
             if (text !== configText)
                 text = configText
         }
         onEditingFinished: save()
+    }
+
+    /// A switch row of a settings card.
+    component SettingSwitch: BSwitch {
+        Layout.fillWidth: true
     }
 
     /// Granted / not granted, with a button to ask.
@@ -603,8 +611,7 @@ Item {
                                 required property string value
                                 required property string name
                                 objectName: "accentSwatch_" + value
-                                color: "" + ThemePalette.accentSwatch(value, "", Theme.dark,
-                                                                      Theme.dark ? Theme.darkSurface : Theme.lightSurface)
+                                color: "" + ThemePalette.accentSwatch(value, "", Theme.dark, root.surface)
                                 label: name
                                 // Theme: the setting, or a screenshot's --accent.
                                 selected: Theme.accentName === value
@@ -615,8 +622,7 @@ Item {
                             objectName: "accentSwatch_custom"
                             readonly property string custom: Theme.accentName === "custom" ? Theme.customAccent
                                                                                            : AppSettings.customAccent
-                            color: custom !== "" ? "" + ThemePalette.accentSwatch("custom", custom, Theme.dark,
-                                                                                  Theme.dark ? Theme.darkSurface : Theme.lightSurface)
+                            color: custom !== "" ? "" + ThemePalette.accentSwatch("custom", custom, Theme.dark, root.surface)
                                                  // (bgSunken is a black hole in the dark.)
                                                  : Theme.dark ? Theme.bgElevated2 : Theme.bgSunken
                             iconName: custom !== "" ? "" : "plus"
@@ -701,8 +707,7 @@ Item {
                         onActivated: (value) => AppSettings.density = value
                     }
                 }
-                BSwitch {
-                    Layout.fillWidth: true
+                SettingSwitch {
                     text: qsTr("Reduce motion")
                     description: qsTr("Turn off animations.")
                     checked: AppSettings.reducedMotion
@@ -852,9 +857,8 @@ Item {
                         }
                     }
                 }
-                BSwitch {
+                SettingSwitch {
                     objectName: "captureButtonSetting"
-                    Layout.fillWidth: true
                     text: qsTr("Quick note button")
                     description: qsTr("The + button in the top bar of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
                     checked: AppSettings.captureButtonShown
@@ -959,27 +963,24 @@ Item {
                     onActivated: (value) => AppSettings.editorWidth = value
                 }
             }
-            BSwitch {
-                Layout.fillWidth: true
+            SettingSwitch {
                 text: qsTr("Open pages as Markdown source")
                 description: qsTr("Show the whole file as text instead of blocks. Ctrl+E switches for one page.")
                 checked: AppSettings.editorSourceMode
                 onToggled: AppSettings.editorSourceMode = checked
             }
             // Task status history in the task's :LOGBOOK: (docs/SYNTAX.md §5; default off).
-            BSwitch {
+            SettingSwitch {
                 objectName: "settingsTaskStatusHistory"
-                Layout.fillWidth: true
                 text: qsTr("Log task status changes")
                 description: qsTr("Each change is written to the task's LOGBOOK with its time, and “In progress” starts and stops the task's timer, as in Logseq.")
                 checked: AppSettings.taskStatusHistory
                 onToggled: AppSettings.taskStatusHistory = checked
             }
             // Spell checking (docs/UI.md "Spell checking"): only where this device can check.
-            BSwitch {
+            SettingSwitch {
                 objectName: "settingsSpellCheck"
                 visible: SpellCheck.available
-                Layout.fillWidth: true
                 text: qsTr("Check spelling")
                 description: Theme.touchUi
                              ? qsTr("Misspelled words of the block you are editing are underlined; tap one for corrections.")
@@ -1017,43 +1018,38 @@ Item {
                     onClicked: dictionaryDialog.open()
                 }
             }
-            BSwitch {
+            SettingSwitch {
                 objectName: "settingsWordCount"
-                Layout.fillWidth: true
                 text: qsTr("Word count")
                 description: qsTr("Words, characters and reading time in the corner of a page (wide windows); the page's menu always shows them.")
                 checked: AppSettings.wordCountShown
                 onToggled: AppSettings.wordCountShown = checked
             }
-            BSwitch {
+            SettingSwitch {
                 objectName: "settingsFocusMode"
-                Layout.fillWidth: true
                 text: qsTr("Focus mode")
                 description: qsTr("On a page and in the journal only the text, without side bars and toolbars. %1 or Esc leaves it.")
                              .arg(ShortcutMap.sequences["view.focus"] || qsTr("The command palette"))
                 checked: AppSettings.focusMode
                 onToggled: AppSettings.focusMode = checked
             }
-            BSwitch {
+            SettingSwitch {
                 objectName: "settingsReadingMode"
-                Layout.fillWidth: true
                 text: qsTr("Reading mode")
                 description: qsTr("Pages and the journal open for reading: a tap follows links and never starts editing, nothing changes a note. %1 or the book in a page's header switches it.")
                              .arg(ShortcutMap.sequences["view.reading"] || qsTr("The command palette"))
                 checked: AppSettings.readingMode
                 onToggled: AppSettings.readingMode = checked
             }
-            BSwitch {
+            SettingSwitch {
                 objectName: "settingsTypewriter"
-                Layout.fillWidth: true
                 text: qsTr("Typewriter scrolling")
                 description: qsTr("The line you are writing stays in the middle of the screen.")
                 checked: AppSettings.typewriterScrolling
                 onToggled: AppSettings.typewriterScrolling = checked
             }
-            BSwitch {
+            SettingSwitch {
                 objectName: "settingsWebPictures"
-                Layout.fillWidth: true
                 text: qsTr("Show pictures from the internet without asking")
                 description: qsTr("Off: a picture with a web address waits for “Show”, so opening a synced or imported note tells no site that you read it. Pictures saved to the notebook are always shown.")
                 checked: AppSettings.webPicturesShown
@@ -1067,13 +1063,10 @@ Item {
                 color: Theme.bgSunken
                 Column {
                     id: previewColumn
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
+                    anchors.fill: parent
                     anchors.margins: Theme.space4
                     spacing: Theme.space2
                     BText {
-                        id: preview
                         objectName: "editorPreview"
                         width: parent.width
                         text: qsTr("Zażółć gęślą jaźń — a sample of your notes in this font and size, with a second line to show the line spacing.")
@@ -1253,8 +1246,8 @@ Item {
                     iconName: "clock"
                     label: qsTr("Pick a time on a clock")
                     variant: "secondary"
-                    onClicked: defaultReminderTimeDialog.openFor(AppController.routeText(Workspace.config, "defaultReminderTime") !== ""
-                                                                ? AppController.routeText(Workspace.config, "defaultReminderTime") : "09:00")
+                    onClicked: defaultReminderTimeDialog.openFor(defaultReminderTimeField.configText !== ""
+                                                                ? defaultReminderTimeField.configText : "09:00")
 
                     BTimePickerDialog {
                         id: defaultReminderTimeDialog
@@ -1302,8 +1295,7 @@ Item {
                     ? qsTr("Reminders and alarms are scheduled in Android and ring even when Brulion is closed.")
                     : qsTr("Reminders appear as system notifications while Brulion runs (also in the tray).")
 
-            BSwitch {
-                Layout.fillWidth: true
+            SettingSwitch {
                 text: qsTr("Reminders and alarms")
                 description: qsTr("Notify me about ⏰ reminders and ring ⏰! alarms.")
                 iconName: "bell"
@@ -1375,8 +1367,7 @@ Item {
                     onActivated: (value) => AppSettings.alarmRingMinutes = value
                 }
             }
-            BSwitch {
-                Layout.fillWidth: true
+            SettingSwitch {
                 text: qsTr("Show missed reminders")
                 description: qsTr("Reminders that were due while the device was off appear when Brulion starts.")
                 checked: AppSettings.notifyMissed
@@ -1464,8 +1455,7 @@ Item {
             SettingsGroup {
                 heading: qsTr("Application")
 
-                BSwitch {
-                    Layout.fillWidth: true
+                SettingSwitch {
                     visible: AppController.isDesktop
                     enabled: AppController.trayAvailable
                     text: qsTr("Keep running in the system tray")
@@ -1496,9 +1486,8 @@ Item {
                 }
                 // Windows: the Run key (src/platform/autostart.h); with a separate
                 // BRULION_PROFILE shown, but disabled.
-                BSwitch {
+                SettingSwitch {
                     objectName: "settingsStartAtLogin"
-                    Layout.fillWidth: true
                     visible: AppController.autostartAvailability !== "unsupported"
                     enabled: AppController.autostartAvailability === "available"
                     text: qsTr("Start when you sign in")
@@ -1532,19 +1521,17 @@ Item {
                         onClicked: AppController.navigate({ view: "logs" })
                     }
                 }
-                BSwitch {
+                SettingSwitch {
                     objectName: "settingsDetailedLog"
-                    Layout.fillWidth: true
                     text: qsTr("Detailed log")
                     description: qsTr("Also writes every request to the server (never note contents or passwords). Turn it on when syncing gives trouble.")
                     iconName: "scroll-text"
                     checked: Logs.detailed
                     onToggled: Logs.detailed = checked
                 }
-                BSwitch {
+                SettingSwitch {
                     objectName: "settingsCheckUpdates"
                     visible: AppController.updates.supported
-                    Layout.fillWidth: true
                     text: qsTr("Check for new versions")
                     description: qsTr("Once a day Brulion asks GitHub for the latest release and shows a message when there is a newer one. GitHub sees this device's address; nothing about your notes is sent.")
                     iconName: "download"
@@ -1594,9 +1581,8 @@ Item {
                 visible: AppController.remoteControl.available === true
                 heading: qsTr("For developers")
 
-                BSwitch {
+                SettingSwitch {
                     objectName: "settingsRemoteControl"
-                    Layout.fillWidth: true
                     text: qsTr("Allow agents to control the app (local socket)")
                     description: qsTr("AI agents and scripts of your user account can then see what Brulion shows, click, type and take screenshots (brulion-cli app …). Any program you run can then read your notes too — turn it on only while you need it.")
                     iconName: "terminal"

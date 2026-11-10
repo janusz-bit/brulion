@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -45,36 +47,21 @@ QString keyCap(const QString &key)
     return key;
 }
 
-} // namespace
-
-FuzzyMatch fuzzyMatch(QStringView query, QStringView text)
+/// Whether `needle` appears in the first `n` characters of `haystack`, in order.
+bool isSubsequence(const QString &needle, const QString &haystack, qsizetype n)
 {
-    FuzzyMatch result;
-    QString q = text::foldKey(query);
-    q.removeIf([](QChar c) { return c.isSpace(); });
-    if (q.isEmpty()) {
-        result.score = 1;
-        return result;
+    qsizetype i = 0;
+    for (qsizetype j = 0; j < n && i < needle.size(); ++j) {
+        if (haystack.at(j) == needle.at(i))
+            ++i;
     }
-    const text::FoldedText folded = text::foldKeyWithMap(text);
-    const QString &f = folded.text;
-    const qsizetype n = std::min(f.size(), MaxTextLength);
-    const qsizetype m = q.size();
-    if (m > n)
-        return result;
+    return i == needle.size();
+}
 
-    // Quick reject: is q a subsequence of f at all?
-    {
-        qsizetype i = 0;
-        for (qsizetype j = 0; j < n && i < m; ++j) {
-            if (f.at(j) == q.at(i))
-                ++i;
-        }
-        if (i < m)
-            return result;
-    }
-
-    // Per-position bonus, judged on the original text (camelCase needs the case).
+/// Per-position bonus of the first `n` folded characters, judged on the original text (camelCase
+/// needs the case).
+QList<int> positionBonuses(const text::FoldedText &folded, QStringView text, qsizetype n)
+{
     QList<int> bonus(n, 0);
     for (qsizetype j = 0; j < n; ++j) {
         const qsizetype o = folded.toOriginal(j);
@@ -94,6 +81,41 @@ FuzzyMatch fuzzyMatch(QStringView query, QStringView text)
         else if (!prev.isDigit() && cur.isDigit())
             bonus[j] = BonusCamel / 2;
     }
+    return bonus;
+}
+
+QVariantList toVariantList(const QList<int> &values)
+{
+    QVariantList out;
+    out.reserve(values.size());
+    for (const int v : values)
+        out.append(v);
+    return out;
+}
+
+} // namespace
+
+FuzzyMatch fuzzyMatch(QStringView query, QStringView text)
+{
+    FuzzyMatch result;
+    QString q = text::foldKey(query);
+    q.removeIf([](QChar c) { return c.isSpace(); });
+    if (q.isEmpty()) {
+        result.score = 1;
+        return result;
+    }
+    const text::FoldedText folded = text::foldKeyWithMap(text);
+    const QString &f = folded.text;
+    const qsizetype n = std::min(f.size(), MaxTextLength);
+    const qsizetype m = q.size();
+    if (m > n)
+        return result;
+
+    // Quick reject: is q a subsequence of f at all?
+    if (!isSubsequence(q, f, n))
+        return result;
+
+    const QList<int> bonus = positionBonuses(folded, text, n);
 
     // score[i][j]: best score with q[i] matched at f[j]; from[i][j]: position of q[i-1].
     QList<int> score(m * n, NegInf);
@@ -157,7 +179,7 @@ FuzzyMatch fuzzyMatch(QStringView query, QStringView text)
     }
     for (int p : std::as_const(foldedPositions)) {
         const int o = int(folded.toOriginal(p));
-        if (result.positions.isEmpty() || result.positions.last() != o)
+        if (result.positions.isEmpty() || result.positions.constLast() != o)
             result.positions.append(o);
     }
     // Exact (folded) equality and prefix matches are what people mean most of the time.
@@ -184,10 +206,7 @@ int TextHelper::fuzzyScore(const QString &query, const QString &text) const
 QVariantMap TextHelper::fuzzyMatch(const QString &query, const QString &text) const
 {
     const FuzzyMatch match = ui::fuzzyMatch(query, text);
-    QVariantList positions;
-    for (int p : match.positions)
-        positions.append(p);
-    return {{u"score"_s, match.score}, {u"positions"_s, positions}};
+    return {{u"score"_s, match.score}, {u"positions"_s, toVariantList(match.positions)}};
 }
 
 QStringList TextHelper::shortcutKeys(const QString &sequence) const
@@ -230,7 +249,7 @@ QList<FuzzyRanked> fuzzyRankList(const QString &query, const QStringList &texts,
                 match = {other.score / 2, {}};
         }
         if (match.score > 0)
-            ranked.append({i, match.score, texts.at(i).size(), match.positions});
+            ranked.append({i, match.score, texts.at(i).size(), std::move(match.positions)});
     }
     if (!emptyQuery) {
         std::ranges::stable_sort(ranked, [](const Ranked &a, const Ranked &b) {
@@ -243,8 +262,8 @@ QList<FuzzyRanked> fuzzyRankList(const QString &query, const QStringList &texts,
         ranked.resize(limit);
     QList<FuzzyRanked> out;
     out.reserve(ranked.size());
-    for (const Ranked &r : std::as_const(ranked))
-        out.append({r.index, r.score, r.positions});
+    for (Ranked &r : ranked)
+        out.append({r.index, r.score, std::move(r.positions)});
     return out;
 }
 
@@ -254,12 +273,9 @@ QVariantList TextHelper::fuzzyRank(const QString &query, const QStringList &text
     QVariantList out;
     const QList<FuzzyRanked> ranked = fuzzyRankList(query, texts, limit, secondary);
     out.reserve(ranked.size());
-    for (const FuzzyRanked &r : ranked) {
-        QVariantList positions;
-        for (int p : r.positions)
-            positions.append(p);
-        out.append(QVariantMap{{u"index"_s, r.index}, {u"score"_s, r.score}, {u"positions"_s, positions}});
-    }
+    for (const FuzzyRanked &r : ranked)
+        out.append(QVariantMap{
+                {u"index"_s, r.index}, {u"score"_s, r.score}, {u"positions"_s, toVariantList(r.positions)}});
     return out;
 }
 

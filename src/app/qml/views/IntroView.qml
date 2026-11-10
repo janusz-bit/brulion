@@ -165,7 +165,6 @@ Rectangle {
 
     /// Settings rows on a card, divided by hairlines (as on the settings page).
     component Group: BCard {
-        id: group
         default property alias rows: groupColumn.data
         Layout.fillWidth: true
         padding: Theme.compact ? Theme.space4 : Theme.space5
@@ -179,21 +178,25 @@ Rectangle {
         ShellSettingDividers { column: groupColumn }
     }
 
-    /// A choice shown as a card: a check when it is the chosen one.
-    component ChoiceCard: BCard {
-        id: choice
+    /// One of several equal cards to click: the chosen one is accented.
+    component PickCard: BCard {
         property string title
-        property string subtitle
-        property string icon
         property bool chosen: false
         Layout.fillWidth: true
         Layout.preferredWidth: 1
         clickable: true
         tone: chosen ? "accent" : "default"
-        padding: Theme.space4
         accessibleName: title
         Accessible.checkable: true
         Accessible.checked: chosen
+    }
+
+    /// A choice shown as a card: a check when it is the chosen one.
+    component ChoiceCard: PickCard {
+        id: choice
+        property string subtitle
+        property string icon
+        padding: Theme.space4
 
         RowLayout {
             anchors.fill: parent
@@ -230,12 +233,10 @@ Rectangle {
     }
 
     /// A theme as a small picture of the app in its own colours.
-    component ThemeTile: BCard {
+    component ThemeTile: PickCard {
         id: tile
         required property string mode       // "dark" | "light" | "system"
         property string surface: ""         // the dark or light background ("" for "system")
-        property string title
-        property bool chosen: false
         readonly property var darkColors: ThemePalette.colors(true, AppSettings.lightSurface,
                                                              mode === "dark" ? surface : AppSettings.darkSurface,
                                                              Theme.accentName, Theme.customAccent)
@@ -243,14 +244,7 @@ Rectangle {
                                                               Theme.accentName, Theme.customAccent)
         /// One "page" per half (two on "system").
         readonly property list<var> pages: mode === "system" ? [darkColors, lightColors] : [mode === "light" ? lightColors : darkColors]
-        Layout.fillWidth: true
-        Layout.preferredWidth: 1
-        clickable: true
-        tone: chosen ? "accent" : "default"
         padding: Theme.space2
-        accessibleName: title
-        Accessible.checkable: true
-        Accessible.checked: chosen
 
         ColumnLayout {
             anchors.fill: parent
@@ -390,11 +384,13 @@ Rectangle {
 
     Flickable {
         id: flick
-        anchors.top: parent.top
-        anchors.topMargin: root.safeTop
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: footer.top
+        anchors {
+            top: parent.top
+            topMargin: root.safeTop
+            left: parent.left
+            right: parent.right
+            bottom: footer.top
+        }
         contentWidth: width
         contentHeight: column.implicitHeight + 2 * margin
         clip: true
@@ -457,7 +453,6 @@ Rectangle {
             }
 
             StackLayout {
-                id: pages
                 Layout.fillWidth: true
                 currentIndex: root.step
                 // Only the shown step's height (StackLayout takes the tallest by default).
@@ -821,10 +816,12 @@ Rectangle {
     // ---- Footer: Back, Continue ------------------------------------------------------------
     Rectangle {
         id: footer
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Math.max(root.safeBottom, KeyboardInsets.overlap)
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            bottomMargin: Math.max(root.safeBottom, KeyboardInsets.overlap)
+        }
         implicitHeight: footerRow.implicitHeight + 2 * Theme.space3
         color: Theme.bg
 

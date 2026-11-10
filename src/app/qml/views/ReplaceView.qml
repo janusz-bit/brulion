@@ -283,23 +283,17 @@ FocusScope {
                 }
             }
 
+            // Nothing typed yet, or nothing found.
             BEmptyState {
+                readonly property bool untouched: root.session.query === ""
                 parent: list
                 anchors.centerIn: parent
                 width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
-                visible: !root.session.scanning && root.session.query !== "" && root.session.fileCount === 0
+                visible: untouched || (!root.session.scanning && root.session.fileCount === 0)
                 iconName: "search"
-                title: qsTr("No results")
-                description: qsTr("No note has this text. Trash, drawings and other files are not searched.")
-            }
-            BEmptyState {
-                parent: list
-                anchors.centerIn: parent
-                width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
-                visible: root.session.query === ""
-                iconName: "search"
-                title: qsTr("Replace in notebook")
-                description: qsTr("Type the text to find: nothing changes until you have seen the notes that have it and confirmed.")
+                title: untouched ? qsTr("Replace in notebook") : qsTr("No results")
+                description: untouched ? qsTr("Type the text to find: nothing changes until you have seen the notes that have it and confirmed.")
+                                       : qsTr("No note has this text. Trash, drawings and other files are not searched.")
             }
         }
     }

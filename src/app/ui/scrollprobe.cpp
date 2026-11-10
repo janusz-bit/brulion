@@ -24,12 +24,14 @@
 #include <qtestsupport_gui.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
-#include <functional>
 #include <limits>
+#include <utility>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace brulion::ui {
 
@@ -105,7 +107,7 @@ double num(const QObject *object, const char *name)
 double slope(const QList<QPointF> &points)
 {
     if (points.size() < 2)
-        return std::numeric_limits<double>::quiet_NaN();
+        return kNaN;
     double mt = 0, my = 0;
     for (const QPointF &p : points) {
         mt += p.x();
@@ -113,14 +115,15 @@ double slope(const QList<QPointF> &points)
     }
     mt /= double(points.size());
     my /= double(points.size());
-    double num = 0, den = 0;
+    double cov = 0, den = 0;
     for (const QPointF &p : points) {
-        num += (p.x() - mt) * (p.y() - my);
+        cov += (p.x() - mt) * (p.y() - my);
         den += (p.x() - mt) * (p.x() - mt);
     }
-    return den > 1 ? num / den : std::numeric_limits<double>::quiet_NaN();
+    return den > 1 ? cov / den : kNaN;
 }
 
+/// `values` by value: the copy is sorted.
 double percentile(QList<double> values, double p)
 {
     if (values.isEmpty())
@@ -205,6 +208,20 @@ struct Stroke {
 
 enum class Context { Other, Input, Frame };
 
+/// Attributes the scroll changes inside a scope to `context`, then restores the outer one.
+class ContextScope {
+public:
+    ContextScope(Context &slot, Context context) : m_slot(slot), m_outer(std::exchange(slot, context)) { }
+    ~ContextScope() { m_slot = m_outer; }
+    Q_DISABLE_COPY_MOVE(ContextScope)
+
+private:
+    Context &m_slot;
+    Context m_outer;
+};
+
+enum class TouchStage { Press, Move, Release };
+
 class ScrollProbe : public QObject {
     Q_OBJECT
 
@@ -228,10 +245,10 @@ public:
         m_observe = m_script == u"observe";
         m_direct = m_script == u"drag" || m_script == u"touchpad";
         m_input.setTimerType(Qt::PreciseTimer);
-        m_input.setInterval(8); // a touch screen's / touchpad's report rate (~120 Hz)
+        m_input.setInterval(8ms); // a touch screen's / touchpad's report rate (~120 Hz)
         connect(&m_input, &QTimer::timeout, this, &ScrollProbe::tick);
         m_clock.start();
-        QTimer::singleShot(200, this, &ScrollProbe::waitForTarget);
+        QTimer::singleShot(200ms, this, &ScrollProbe::waitForTarget);
     }
 
 protected:
@@ -248,10 +265,7 @@ protected:
             // Real input: deliver it here to attribute the scroll it causes (touch moves only
             // queue: Qt Quick delivers the newest one with the next frame).
             recordInput(event, true);
-            const Context outer = m_context;
-            m_context = Context::Input;
-            static_cast<QObject *>(m_window.data())->event(event);
-            m_context = outer;
+            dispatch(Context::Input, event);
             return true;
         }
         if (event->type() != QEvent::UpdateRequest)
@@ -259,10 +273,7 @@ protected:
         // Handle the frame here to time it as a whole (polish, sync, animations, incubation).
         m_frameBegin = now();
         m_gapMs = m_lastFrameEnd > 0 ? m_frameBegin - m_lastFrameEnd : 0;
-        const Context outer = m_context;
-        m_context = Context::Frame;
-        static_cast<QObject *>(m_window.data())->event(event);
-        m_context = outer;
+        dispatch(Context::Frame, event);
         m_lastFrameEnd = now();
         m_lastGuiMs = m_lastFrameEnd - m_frameBegin;
         return true;
@@ -291,7 +302,7 @@ private Q_SLOTS:
 
 private:
     double now() const { return double(m_clock.nsecsElapsed()) / 1e6; }
-    void log(const QString &text) const
+    void log(const QString &text)
     {
         std::fprintf(stderr, "scroll-probe: %s\n", qPrintable(text));
         m_logLines.append(text);
@@ -300,19 +311,24 @@ private:
             qInfo().noquote() << "scroll-probe:" << text;
     }
 
+    static bool isTouch(QEvent::Type type)
+    {
+        return type == QEvent::TouchBegin || type == QEvent::TouchUpdate || type == QEvent::TouchEnd
+               || type == QEvent::TouchCancel;
+    }
+
     static bool isInput(QEvent::Type type)
     {
-        switch (type) {
-        case QEvent::TouchBegin:
-        case QEvent::TouchUpdate:
-        case QEvent::TouchEnd:
-        case QEvent::TouchCancel:
-        case QEvent::MouseButtonPress:
-        case QEvent::MouseMove:
-        case QEvent::MouseButtonRelease:
-        case QEvent::Wheel: return true;
-        default: return false;
-        }
+        return isTouch(type) || type == QEvent::MouseButtonPress || type == QEvent::MouseMove
+               || type == QEvent::MouseButtonRelease || type == QEvent::Wheel;
+    }
+
+    /// Hands `event` to the window (QQuickWindow::event() is protected: through QObject) with the
+    /// scroll it causes attributed to `context`.
+    void dispatch(Context context, QEvent *event)
+    {
+        const ContextScope scope(m_context, context);
+        static_cast<QObject *>(m_window.data())->event(event);
     }
 
     /// Observe: count real input, follow the finger, and keep the strokes.
@@ -322,8 +338,7 @@ private:
         if (count)
             ++m_inputEvents;
         const QEvent::Type type = event->type();
-        if (type != QEvent::TouchBegin && type != QEvent::TouchUpdate && type != QEvent::TouchEnd
-            && type != QEvent::TouchCancel)
+        if (!isTouch(type))
             return;
         const auto *touch = static_cast<const QTouchEvent *>(event);
         if (touch->points().isEmpty())
@@ -392,7 +407,7 @@ private:
         collect(m_window->contentItem(), all);
         QQuickItem *best = nullptr;
         double bestArea = 0;
-        const QString spec = m_targetSpec;
+        const QString &spec = m_targetSpec;
         for (QQuickItem *item : std::as_const(all)) {
             if (!item->inherits("QQuickFlickable") || !visibleTree(item))
                 continue;
@@ -446,11 +461,11 @@ private:
                 QCoreApplication::exit(2);
                 return;
             }
-            QTimer::singleShot(100, this, &ScrollProbe::waitForTarget);
+            QTimer::singleShot(100ms, this, &ScrollProbe::waitForTarget);
             return;
         }
         m_target = target;
-        QTimer::singleShot(m_waitMs, this, &ScrollProbe::begin);
+        QTimer::singleShot(std::chrono::milliseconds(m_waitMs), this, &ScrollProbe::begin);
     }
 
     void begin()
@@ -482,14 +497,15 @@ private:
                 Qt::DirectConnection);
         const QSGRendererInterface *ri = m_window->rendererInterface();
         const QString api = ri ? QString::number(int(ri->graphicsApi())) : u"?"_s;
+        const QPointF origin = m_target->mapToScene(QPointF(0, 0));
         log(u"target %1 '%2' in %3, %4x%5 at %6,%7; window %8x%9 dpr %10; QPA %11; graphics api %12; render loop %13; "
             u"screen %14 Hz; script %15, %16 pass(es), speed %17 px/s"_s
                     .arg(QString::fromLatin1(m_target->metaObject()->className()), m_target->objectName(),
                          parentChain(m_target))
                     .arg(m_target->width())
                     .arg(m_target->height())
-                    .arg(m_target->mapToScene(QPointF(0, 0)).x())
-                    .arg(m_target->mapToScene(QPointF(0, 0)).y())
+                    .arg(origin.x())
+                    .arg(origin.y())
                     .arg(m_window->width())
                     .arg(m_window->height())
                     .arg(m_window->devicePixelRatio())
@@ -505,7 +521,7 @@ private:
         m_startMs = now();
         if (m_observe) {
             log(u"observing real input for %1 ms"_s.arg(m_maxMs));
-            QTimer::singleShot(m_maxMs, this, &ScrollProbe::finish);
+            QTimer::singleShot(std::chrono::milliseconds(m_maxMs), this, &ScrollProbe::finish);
             m_window->update();
             return;
         }
@@ -556,7 +572,7 @@ private:
     }
 
     /// The scrolling physics in effect: Flickable's, the style hints', the screen's.
-    void logTuning() const
+    void logTuning()
     {
         const QStyleHints *hints = QGuiApplication::styleHints();
         const QScreen *screen = m_window->screen();
@@ -580,7 +596,7 @@ private:
 
     /// What the window holds: items, blocks, icons (an IconImage without a source looks its
     /// empty name up in the icon theme, on the file system), menus — per block.
-    void logInventory() const
+    void logInventory()
     {
         QList<QQuickItem *> all;
         collect(m_window->contentItem(), all);
@@ -682,7 +698,6 @@ private:
     void startPhase()
     {
         m_phaseStart = now();
-        m_stroke = 0;
         m_strokeStart = -1;
         m_restUntil = now() + 300;
         log(u"phase %1 at contentY %2"_s.arg(phaseName()).arg(num(m_target, "contentY")));
@@ -694,27 +709,27 @@ private:
         return !moving && m_target->property(down() ? "atYEnd" : "atYBeginning").toBool();
     }
 
-    void deliver(const std::function<void()> &send, double scroll)
+    template<typename Send>
+    void deliver(const Send &send, double scroll)
     {
-        const Context outer = m_context;
-        m_context = Context::Input;
-        send();
-        m_context = outer;
+        {
+            const ContextScope scope(m_context, Context::Input);
+            send();
+        }
         ++m_inputEvents;
         m_inputScroll += scroll;
     }
 
-    void touch(int type, QPointF p, double scroll)
+    void touch(TouchStage stage, QPointF p, double scroll)
     {
         deliver(
                 [&] {
                     TouchSequence seq(m_window, touchDevice());
-                    if (type == 0)
-                        seq.press(0, p.toPoint(), m_window);
-                    else if (type == 1)
-                        seq.move(0, p.toPoint(), m_window);
-                    else
-                        seq.release(0, p.toPoint(), m_window);
+                    switch (stage) {
+                    case TouchStage::Press: seq.press(0, p.toPoint(), m_window); break;
+                    case TouchStage::Move: seq.move(0, p.toPoint(), m_window); break;
+                    case TouchStage::Release: seq.release(0, p.toPoint(), m_window); break;
+                    }
                     seq.commit(false);
                 },
                 scroll);
@@ -750,7 +765,7 @@ private:
                 ++m_phaseIndex;
                 if (m_phaseIndex >= 2 * m_passes) {
                     m_input.stop();
-                    QTimer::singleShot(600, this, &ScrollProbe::finish);
+                    QTimer::singleShot(600ms, this, &ScrollProbe::finish);
                     return;
                 }
                 startPhase();
@@ -761,74 +776,83 @@ private:
             m_strokeStart = t;
             m_strokeStep = 0;
             m_lastFinger = 0;
-            ++m_stroke;
         }
         const double sign = down() ? 1 : -1; // + scrolls down (content moves up)
         const double elapsed = t - m_strokeStart;
-        const double h = m_target->height();
         if (m_script == u"drag" || m_script == u"flick") {
-            const bool flick = m_script == u"flick";
-            const double distance = h * (flick ? 0.4 : 0.55);
-            const double duration = flick ? 100 : distance / m_speed * 1000;
-            const double fy0 = down() ? 0.78 : 0.22;
-            const QPointF start = strokePoint(fy0);
-            if (m_strokeStep == 0) {
-                touch(0, start, 0);
-                m_strokeStep = 1;
-                return;
-            }
-            const double moved = std::min(1.0, elapsed / duration) * distance;
-            if (m_strokeStep == 1) {
-                if (moved > m_lastFinger + 0.5) {
-                    touch(1, start - QPointF(0, sign * moved), sign * (moved - m_lastFinger));
-                    m_lastFinger = moved;
-                }
-                if (elapsed >= duration)
-                    m_strokeStep = 2;
-                return;
-            }
-            // Drag: hold the finger still before lifting it (no fling); flick: lift at once.
-            if (!flick && elapsed < duration + 120)
-                return;
-            touch(2, start - QPointF(0, sign * distance), 0);
-            endStroke(flick ? 100 : 150);
+            touchStep(m_script == u"flick", sign, elapsed);
+        } else if (m_script == u"wheel") {
+            wheelStep(sign, elapsed);
+        } else if (m_script == u"touchpad") {
+            touchpadStep(sign, elapsed);
+        } else {
+            log(u"unknown script '%1'"_s.arg(m_script));
+            QCoreApplication::exit(2);
+        }
+    }
+
+    /// drag / flick: press, move with the finger, hold still before lifting it (drag: no fling) or
+    /// lift at once (flick).
+    void touchStep(bool flick, double sign, double elapsed)
+    {
+        const double distance = m_target->height() * (flick ? 0.4 : 0.55);
+        const double duration = flick ? 100 : distance / m_speed * 1000;
+        const double fy0 = down() ? 0.78 : 0.22;
+        const QPointF start = strokePoint(fy0);
+        if (m_strokeStep == 0) {
+            touch(TouchStage::Press, start, 0);
+            m_strokeStep = 1;
             return;
         }
-        if (m_script == u"wheel") {
-            // Notches of a mouse wheel, 50 ms apart, 6 per stroke.
-            if (elapsed >= m_strokeStep * 50.0) {
-                const int step = std::lround(QGuiApplication::styleHints()->wheelScrollLines() * 24.0);
-                wheel(strokePoint(0.5), QPoint(), QPoint(0, int(-sign * 120)), Qt::NoScrollPhase,
-                      Qt::MouseEventNotSynthesized, sign * step);
-                if (++m_strokeStep >= 6)
-                    endStroke(150);
+        const double moved = std::min(1.0, elapsed / duration) * distance;
+        if (m_strokeStep == 1) {
+            if (moved > m_lastFinger + 0.5) {
+                touch(TouchStage::Move, start - QPointF(0, sign * moved), sign * (moved - m_lastFinger));
+                m_lastFinger = moved;
             }
+            if (elapsed >= duration)
+                m_strokeStep = 2;
             return;
         }
-        if (m_script == u"touchpad") {
-            // Two-finger scrolling: pixel deltas at the touchpad's rate for 500 ms, with phases.
-            const QPointF p = strokePoint(0.5);
-            if (m_strokeStep == 0) {
-                wheel(p, QPoint(), QPoint(), Qt::ScrollBegin, Qt::MouseEventSynthesizedBySystem, 0);
-                m_strokeStep = 1;
-                m_lastFinger = 0;
-                return;
-            }
-            const double target = std::min(500.0, elapsed) * m_speed / 1000.0;
-            const int dy = int(std::lround(target - m_lastFinger));
-            if (dy != 0) {
-                wheel(p, QPoint(0, int(-sign * dy)), QPoint(0, int(-sign * dy)), Qt::ScrollUpdate,
-                      Qt::MouseEventSynthesizedBySystem, sign * dy);
-                m_lastFinger += dy;
-            }
-            if (elapsed >= 500) {
-                wheel(p, QPoint(), QPoint(), Qt::ScrollEnd, Qt::MouseEventSynthesizedBySystem, 0);
-                endStroke(150);
-            }
+        if (!flick && elapsed < duration + 120)
+            return;
+        touch(TouchStage::Release, start - QPointF(0, sign * distance), 0);
+        endStroke(flick ? 100 : 150);
+    }
+
+    /// wheel: notches of a mouse wheel, 50 ms apart, 6 per stroke.
+    void wheelStep(double sign, double elapsed)
+    {
+        if (elapsed < m_strokeStep * 50.0)
+            return;
+        const int step = std::lround(QGuiApplication::styleHints()->wheelScrollLines() * 24.0);
+        wheel(strokePoint(0.5), QPoint(), QPoint(0, int(-sign * 120)), Qt::NoScrollPhase, Qt::MouseEventNotSynthesized,
+              sign * step);
+        if (++m_strokeStep >= 6)
+            endStroke(150);
+    }
+
+    /// touchpad: two-finger scrolling, pixel deltas at the touchpad's rate for 500 ms, with phases.
+    void touchpadStep(double sign, double elapsed)
+    {
+        const QPointF p = strokePoint(0.5);
+        if (m_strokeStep == 0) {
+            wheel(p, QPoint(), QPoint(), Qt::ScrollBegin, Qt::MouseEventSynthesizedBySystem, 0);
+            m_strokeStep = 1;
+            m_lastFinger = 0;
             return;
         }
-        log(u"unknown script '%1'"_s.arg(m_script));
-        QCoreApplication::exit(2);
+        const double target = std::min(500.0, elapsed) * m_speed / 1000.0;
+        const int dy = int(std::lround(target - m_lastFinger));
+        if (dy != 0) {
+            wheel(p, QPoint(0, int(-sign * dy)), QPoint(0, int(-sign * dy)), Qt::ScrollUpdate,
+                  Qt::MouseEventSynthesizedBySystem, sign * dy);
+            m_lastFinger += dy;
+        }
+        if (elapsed >= 500) {
+            wheel(p, QPoint(), QPoint(), Qt::ScrollEnd, Qt::MouseEventSynthesizedBySystem, 0);
+            endStroke(150);
+        }
     }
 
     void endStroke(double restMs)
@@ -937,6 +961,23 @@ private:
         if (!m_target || !m_contentItem)
             return;
         const double t0 = now();
+        Frame f = sampleView(t0);
+        const Frame *prev = m_frames.isEmpty() ? nullptr : &m_frames.constLast();
+        QStringList events;
+        trackDelegates(f, prev, events);
+        trackBlocks(f);
+        followAnchor(f, prev, events);
+        f.events = events.join(u' ');
+        trackStroke(f, prev, t0);
+        f.probeMs = now() - t0;
+        m_frames.append(std::move(f));
+        if (m_frames.size() > 200000)
+            finish();
+    }
+
+    /// The view's state and the input since the previous frame (which this takes over).
+    Frame sampleView(double t0)
+    {
         Frame f;
         f.n = int(m_frames.size());
         f.t = t0 - m_startMs;
@@ -981,13 +1022,16 @@ private:
         m_inputScroll = 0;
         m_dyInput = m_dyFrame = m_dyAnim = m_dyOther = 0;
         f.phase = m_observe ? u"observe"_s : m_phaseIndex < 2 * m_passes ? phaseName() : u"end"_s;
+        return f;
+    }
 
-        // Delegates of the target: created, destroyed, resized (and where: above / in / below).
+    /// Delegates of the target: created, destroyed, resized (and where: above / in / below), moved,
+    /// and the changes of originY / contentHeight — as `events` of the frame.
+    void trackDelegates(Frame &f, const Frame *prev, QStringList &events)
+    {
         const auto *header = m_target->property("headerItem").value<QQuickItem *>();
         const auto *footer = m_target->property("footerItem").value<QQuickItem *>();
         QHash<const QQuickItem *, DelegateState> current;
-        QStringList events;
-        const Frame *prev = m_frames.isEmpty() ? nullptr : &m_frames.constLast();
         const double viewTop = prev ? prev->contentY : f.contentY;
         const double viewBottom = viewTop + f.height;
         QStringList moves; // delegates whose y changed (in content coordinates)
@@ -1003,37 +1047,37 @@ private:
             // the view's next refill: at y 0, not drawn) is not counted until it is placed.
             if (index.isValid() && !placed(child, index.toInt()))
                 continue;
-            DelegateState s{index.isValid() ? index.toInt() : -1, child->y(), child->height()};
+            const DelegateState s{index.isValid() ? index.toInt() : -1, child->y(), child->height()};
             current.insert(child, s);
             const auto it = m_delegates.constFind(child);
             if (it == m_delegates.constEnd()) {
                 ++f.created;
                 events.append(u"+%1:%2%3"_s.arg(s.index).arg(s.height, 0, 'f', 0).arg(blockKind(child)));
-            } else {
-                if (std::abs(s.y - it->y) > 0.5)
-                    moves.append(u"m%1:%2"_s.arg(s.index).arg(s.y - it->y, 0, 'f', 0));
-                if (it->y < topmostY) {
-                    topmostY = it->y;
-                    topmost = child;
-                }
-                if (std::abs(it->height - s.height) > 0.5) {
-                    const bool above = it->y + it->height <= viewTop + 0.5;
-                    const bool below = it->y >= viewBottom - 0.5;
-                    // Blocks (BlockDelegate.view): which kind of block changed its height.
-                    events.append(u"r%1:%2%3%4"_s.arg(s.index)
-                                          .arg(s.height - it->height, 0, 'f', 0)
-                                          .arg(above   ? u"a"_s
-                                               : below ? u"b"_s
-                                                       : u"v"_s)
-                                          .arg(blockKind(child)));
-                }
+                continue;
+            }
+            if (std::abs(s.y - it->y) > 0.5)
+                moves.append(u"m%1:%2"_s.arg(s.index).arg(s.y - it->y, 0, 'f', 0));
+            if (it->y < topmostY) {
+                topmostY = it->y;
+                topmost = child;
+            }
+            if (std::abs(it->height - s.height) > 0.5) {
+                const bool above = it->y + it->height <= viewTop + 0.5;
+                const bool below = it->y >= viewBottom - 0.5;
+                // Blocks (BlockDelegate.view): which kind of block changed its height.
+                events.append(u"r%1:%2%3%4"_s.arg(s.index)
+                                      .arg(s.height - it->height, 0, 'f', 0)
+                                      .arg(above   ? u"a"_s
+                                           : below ? u"b"_s
+                                                   : u"v"_s,
+                                           blockKind(child)));
             }
         }
         if (topmost) {
             // Mark the topmost delegate's resize: ListView keeps the content in place only for that one.
-            const int idx = current.value(topmost).index;
+            const QString resized = u"r%1:"_s.arg(current.value(topmost).index);
             for (QString &e : events) {
-                if (e.startsWith(u"r%1:"_s.arg(idx)))
+                if (e.startsWith(resized))
                     e.append(u'F');
             }
         }
@@ -1065,8 +1109,11 @@ private:
             if (std::abs(f.contentHeight - prev->contentHeight) > 0.5)
                 events.append(u"H%1"_s.arg(f.contentHeight - prev->contentHeight, 0, 'f', 0));
         }
+    }
 
-        // Nested blocks (the journal's days, or the page's own delegates).
+    /// Nested blocks (the journal's days, or the page's own delegates).
+    void trackBlocks(Frame &f)
+    {
         QSet<const QQuickItem *> blocks;
         countBlocks(m_contentItem, blocks);
         f.blocks = int(blocks.size());
@@ -1075,9 +1122,11 @@ private:
                 ++f.blocksCreated;
         }
         m_blocks = blocks;
+    }
 
-        // The anchor: what the user looks at. Its movement on screen against the scroll asked for.
-        const QPointF centre(m_target->width() * 0.5, m_target->height() * 0.5);
+    /// The anchor: what the user looks at. Its movement on screen against the scroll asked for.
+    void followAnchor(Frame &f, const Frame *prev, QStringList &events)
+    {
         if (m_anchor && !anchorRowGone() && delegateOf(m_anchor.data()) != m_anchorDelegate.data()) {
             // The anchor left its row (the row's content was rebuilt): only a new anchor.
             m_anchor = nullptr;
@@ -1104,63 +1153,13 @@ private:
             const double screenPos = m_anchor->mapToItem(m_target, QPointF(0, 0)).y();
             f.anchorShift = contentPos - m_anchorContentY;
             f.anchorScreen = screenPos - m_anchorScreenY;
-            // Touchpad: frames with scroll events (after the gesture Flickable may still animate).
-            // Observe: touch drags only — a mouse or a stylus (Qt's mouse / tablet path) moves
-            // the content too, but the probe follows fingers only: those frames are not judged.
-            const bool following = prev
-                                   && (m_script == u"touchpad" ? f.inputEvents > 0 && std::abs(f.dyAnim) < 0.5
-                                                               : f.dragging && prev->dragging
-                                                                         && (!m_observe || f.pressed || prev->pressed));
-            // Observe: frames of a drag follow the finger; the rest are animations or rest.
-            const bool direct = m_observe ? following : m_direct;
-            if (direct && following) {
-                // The content follows the finger / touchpad: it moves by -inputScroll on screen. Less
-                // in the same direction is input held back (the drag threshold, StopAtBounds at an
-                // end); more, or the other way, is a jump.
-                const double expected = -f.inputScroll;
-                const double moved = f.anchorScreen;
-                const bool against = expected * moved < 0 && std::abs(moved) > 2;
-                if (std::abs(moved) > std::abs(expected) + 2 || against) {
-                    f.unexplained = moved - expected;
-                    f.jump = true;
-                } else if (std::abs(moved - expected) > 2) {
-                    f.held = expected - moved;
-                } else {
-                    f.unexplained = moved - expected;
-                }
-            } else if ((m_direct || m_observe) && prev && !f.moving && !prev->moving && f.inputEvents == 0
-                       && std::abs(f.dyAnim) < 0.5) {
-                f.unexplained = f.anchorScreen; // at rest: nothing may move
-                f.jump = std::abs(f.unexplained) > 2;
-            } else if (!direct && prev && !std::isnan(prev->anchorScreen) && f.inputEvents == 0
-                       && prev->inputEvents == 0) {
-                if (f.moving && prev->moving && !f.atBound && !prev->atBound && prev->interval > 0) {
-                    // An animation (fling, wheel): the displacement changes smoothly from frame to
-                    // frame — Qt's animation driver advances one vsync interval per frame, or the
-                    // time since the last frame when frames are late (its timer mode).
-                    const double perFrame = f.anchorScreen - prev->anchorScreen;
-                    const double perTime = f.anchorScreen - prev->anchorScreen / prev->interval * f.interval;
-                    f.unexplained = std::abs(perFrame) < std::abs(perTime) ? perFrame : perTime;
-                    // An animation starting after a frame without movement (a fling after the still
-                    // frame at the lift-off, restarted at the finger's speed by TouchFlick) may move
-                    // at once by up to the fastest fling over the time since it started: at most
-                    // since the start of the previous frame.
-                    const double sinceStart = f.interval + prev->interval;
-                    const double limit =
-                            std::abs(prev->anchorScreen) < 1
-                                    ? std::max(6.0, num(m_target, "maximumFlickVelocity") * sinceStart / 1000 + 2)
-                                    : std::max(6.0, 0.5 * std::abs(prev->anchorScreen));
-                    f.jump = std::abs(f.unexplained) > limit;
-                } else if (!f.moving && !prev->moving) {
-                    f.unexplained = f.anchorScreen;
-                    f.jump = std::abs(f.unexplained) > 2;
-                }
-            }
+            judgeAnchorMove(f, prev);
             const bool onScreen = screenPos > -m_anchor->height() && screenPos < m_target->height();
             if (!onScreen)
                 m_anchor = nullptr;
         }
         if (!m_anchor || !m_anchor->window()) {
+            const QPointF centre(m_target->width() * 0.5, m_target->height() * 0.5);
             m_anchor = anchorAt(centre);
             m_anchorDelegate = m_anchor ? delegateOf(m_anchor) : nullptr;
             const QVariant row = m_anchorDelegate ? m_anchorDelegate->property("index") : QVariant();
@@ -1175,31 +1174,88 @@ private:
             m_anchorScreenY = m_anchor->mapToItem(m_target, QPointF(0, 0)).y();
             m_anchorHeight = m_anchor->height();
         }
-        f.events = events.join(u' ');
-        if (!m_strokes.isEmpty()) {
-            Stroke &s = m_strokes.last();
-            if (f.dragging && prev && prev->dragging) {
-                ++s.dragFrames;
-                if (f.touchMoves == 0)
-                    ++s.stillFrames;
-                else if (f.touchMoves > 1)
-                    ++s.multiFrames;
+    }
+
+    /// Whether the anchor's movement on screen (f.anchorScreen) is explained by the input or the
+    /// running animation; sets f.unexplained / f.held / f.jump.
+    void judgeAnchorMove(Frame &f, const Frame *prev) const
+    {
+        // Touchpad: frames with scroll events (after the gesture Flickable may still animate).
+        // Observe: touch drags only — a mouse or a stylus (Qt's mouse / tablet path) moves
+        // the content too, but the probe follows fingers only: those frames are not judged.
+        const bool following = prev
+                               && (m_script == u"touchpad" ? f.inputEvents > 0 && std::abs(f.dyAnim) < 0.5
+                                                           : f.dragging && prev->dragging
+                                                                     && (!m_observe || f.pressed || prev->pressed));
+        // Observe: frames of a drag follow the finger; the rest are animations or rest.
+        const bool direct = m_observe ? following : m_direct;
+        if (direct && following) {
+            // The content follows the finger / touchpad: it moves by -inputScroll on screen. Less
+            // in the same direction is input held back (the drag threshold, StopAtBounds at an
+            // end); more, or the other way, is a jump.
+            const double expected = -f.inputScroll;
+            const double moved = f.anchorScreen;
+            const bool against = expected * moved < 0 && std::abs(moved) > 2;
+            if (std::abs(moved) > std::abs(expected) + 2 || against) {
+                f.unexplained = moved - expected;
+                f.jump = true;
+            } else if (std::abs(moved - expected) > 2) {
+                f.held = expected - moved;
+            } else {
+                f.unexplained = moved - expected;
             }
-            if (!std::isnan(s.tUp) && std::isnan(s.velocity))
-                s.velocity = f.velocity;
-            if (!std::isnan(s.tUp) && std::isnan(s.tStop) && !f.moving)
-                closeFling(t0);
+        } else if ((m_direct || m_observe) && prev && !f.moving && !prev->moving && f.inputEvents == 0
+                   && std::abs(f.dyAnim) < 0.5) {
+            f.unexplained = f.anchorScreen; // at rest: nothing may move
+            f.jump = std::abs(f.unexplained) > 2;
+        } else if (!direct && prev && !std::isnan(prev->anchorScreen) && f.inputEvents == 0 && prev->inputEvents == 0) {
+            if (f.moving && prev->moving && !f.atBound && !prev->atBound && prev->interval > 0) {
+                // An animation (fling, wheel): the displacement changes smoothly from frame to
+                // frame — Qt's animation driver advances one vsync interval per frame, or the
+                // time since the last frame when frames are late (its timer mode).
+                const double perFrame = f.anchorScreen - prev->anchorScreen;
+                const double perTime = f.anchorScreen - prev->anchorScreen / prev->interval * f.interval;
+                f.unexplained = std::abs(perFrame) < std::abs(perTime) ? perFrame : perTime;
+                // An animation starting after a frame without movement (a fling after the still
+                // frame at the lift-off, restarted at the finger's speed by TouchFlick) may move
+                // at once by up to the fastest fling over the time since it started: at most
+                // since the start of the previous frame.
+                const double sinceStart = f.interval + prev->interval;
+                const double limit =
+                        std::abs(prev->anchorScreen) < 1
+                                ? std::max(6.0, num(m_target, "maximumFlickVelocity") * sinceStart / 1000 + 2)
+                                : std::max(6.0, 0.5 * std::abs(prev->anchorScreen));
+                f.jump = std::abs(f.unexplained) > limit;
+            } else if (!f.moving && !prev->moving) {
+                f.unexplained = f.anchorScreen;
+                f.jump = std::abs(f.unexplained) > 2;
+            }
         }
-        f.probeMs = now() - t0;
-        m_frames.append(f);
-        if (m_frames.size() > 200000)
-            finish();
+    }
+
+    /// The newest touch stroke's counters (observe).
+    void trackStroke(const Frame &f, const Frame *prev, double t0)
+    {
+        if (m_strokes.isEmpty())
+            return;
+        Stroke &s = m_strokes.last();
+        if (f.dragging && prev && prev->dragging) {
+            ++s.dragFrames;
+            if (f.touchMoves == 0)
+                ++s.stillFrames;
+            else if (f.touchMoves > 1)
+                ++s.multiFrames;
+        }
+        if (!std::isnan(s.tUp) && std::isnan(s.velocity))
+            s.velocity = f.velocity;
+        if (!std::isnan(s.tUp) && std::isnan(s.tStop) && !f.moving)
+            closeFling(t0);
     }
 
     // ---- Report ---------------------------------------------------------------------------------
     static QString fmt(double v, int prec = 1) { return std::isnan(v) ? QString() : QString::number(v, 'f', prec); }
 
-    void writeCsv() const
+    void writeCsv()
     {
         if (m_outFile.isEmpty())
             return;
@@ -1255,13 +1311,17 @@ private:
                     QString::number(f.pressed),
                     f.layout,
             };
-            file.write(cols.join(u',').toUtf8());
-            file.write("\n");
+            file.write(cols.join(u',').toUtf8() + '\n');
+        }
+        file.close();
+        if (file.error() != QFile::NoError) {
+            log(u"cannot write "_s + m_outFile);
+            return;
         }
         log(u"wrote %1 frames to %2"_s.arg(m_frames.size()).arg(m_outFile));
     }
 
-    void summarize() const
+    void summarize()
     {
         // Frames while scrolling: in a phase, and the view moving or input arriving.
         QList<double> intervals;
@@ -1331,59 +1391,57 @@ private:
             animTotal += std::abs(f.dyAnim);
             prev = &f;
         }
-        const auto line = [this](const QString &s) { log(s); };
         QList<double> swapIntervals;
         {
             const QMutexLocker lock(&m_swapMutex);
             for (qsizetype i = 1; i < m_swaps.size(); ++i)
                 swapIntervals.append(m_swaps.at(i) - m_swaps.at(i - 1));
         }
-        line(u"SUMMARY script=%1 target=%2 frames=%3 scrolling-frames=%4 duration=%5s"_s.arg(m_script, m_targetSpec)
-                     .arg(m_frames.size())
-                     .arg(frames)
-                     .arg(m_frames.isEmpty() ? 0 : m_frames.constLast().t / 1000, 0, 'f', 1));
-        line(u"FRAMES interval ms p50=%1 p90=%2 p99=%3 max=%4; >33ms=%5 >50ms=%6 >100ms=%7; swap p50=%8 p99=%9 max=%10"_s
-                     .arg(percentile(intervals, 0.5), 0, 'f', 1)
-                     .arg(percentile(intervals, 0.9), 0, 'f', 1)
-                     .arg(percentile(intervals, 0.99), 0, 'f', 1)
-                     .arg(percentile(intervals, 1), 0, 'f', 1)
-                     .arg(std::count_if(intervals.cbegin(), intervals.cend(), [](double v) { return v > 33.4; }))
-                     .arg(std::count_if(intervals.cbegin(), intervals.cend(), [](double v) { return v > 50; }))
-                     .arg(std::count_if(intervals.cbegin(), intervals.cend(), [](double v) { return v > 100; }))
-                     .arg(percentile(swapIntervals, 0.5), 0, 'f', 1)
-                     .arg(percentile(swapIntervals, 0.99), 0, 'f', 1)
-                     .arg(percentile(swapIntervals, 1), 0, 'f', 1));
-        line(u"JUMPS %1 frames (%2), total %3 px, max %4 px; layout shifts of the anchor: %5 frames, %6 px; "
-             u"input held back (drag threshold, an end): %7 frames, %8 px"_s.arg(jumps.size())
-                     .arg(m_observe ? u"drags: content moved more than the finger, or against it; flings: "
-                                      u"displacement off the animation's by > max(6 px, 50%)"_s
-                          : m_direct ? u"content moved more than the input, or against it"_s
-                                     : u"displacement off the animation's by > max(6 px, 50%)"_s)
-                     .arg(jumpTotal, 0, 'f', 0)
-                     .arg(jumpMax, 0, 'f', 0)
-                     .arg(shifts)
-                     .arg(shiftTotal, 0, 'f', 0)
-                     .arg(heldFrames)
-                     .arg(heldTotal, 0, 'f', 0));
-        line(u"SCROLL not from input or animation (timers, queued calls, model signals): %1 frames, %2 px; contentY "
-             u"changes inside frames (polish, touch moves Qt delivers with the frame): %3 px; animations: %4 px"_s
-                     .arg(other.size())
-                     .arg(otherTotal, 0, 'f', 0)
-                     .arg(frameDyDirect, 0, 'f', 0)
-                     .arg(animTotal, 0, 'f', 0));
-        line(u"VIEW originY changes %1 (total %2 px), contentHeight changes while moving %3, scroll bar thumb "
-             u"jumps > 3 px %4 (visibleArea, an attached bar's), %5"_s.arg(originChanges)
-                     .arg(originTotal, 0, 'f', 0)
-                     .arg(heightChanges)
-                     .arg(thumbJumps)
-                     .arg(m_rowScroll ? u"row scroll bar thumb jumps %1"_s.arg(rowThumbJumps)
-                                      : u"no row scroll bar"_s));
-        line(u"DELEGATES created %1 (in %2 frames), nested blocks created %3; probe cost per frame p50 %4 ms, max %5 ms"_s
-                     .arg(created)
-                     .arg(createdFrames)
-                     .arg(blocksCreated)
-                     .arg(percentile(probe, 0.5), 0, 'f', 3)
-                     .arg(percentile(probe, 1), 0, 'f', 3));
+        log(u"SUMMARY script=%1 target=%2 frames=%3 scrolling-frames=%4 duration=%5s"_s.arg(m_script, m_targetSpec)
+                    .arg(m_frames.size())
+                    .arg(frames)
+                    .arg(m_frames.isEmpty() ? 0 : m_frames.constLast().t / 1000, 0, 'f', 1));
+        log(u"FRAMES interval ms p50=%1 p90=%2 p99=%3 max=%4; >33ms=%5 >50ms=%6 >100ms=%7; swap p50=%8 p99=%9 max=%10"_s
+                    .arg(percentile(intervals, 0.5), 0, 'f', 1)
+                    .arg(percentile(intervals, 0.9), 0, 'f', 1)
+                    .arg(percentile(intervals, 0.99), 0, 'f', 1)
+                    .arg(percentile(intervals, 1), 0, 'f', 1)
+                    .arg(std::count_if(intervals.cbegin(), intervals.cend(), [](double v) { return v > 33.4; }))
+                    .arg(std::count_if(intervals.cbegin(), intervals.cend(), [](double v) { return v > 50; }))
+                    .arg(std::count_if(intervals.cbegin(), intervals.cend(), [](double v) { return v > 100; }))
+                    .arg(percentile(swapIntervals, 0.5), 0, 'f', 1)
+                    .arg(percentile(swapIntervals, 0.99), 0, 'f', 1)
+                    .arg(percentile(swapIntervals, 1), 0, 'f', 1));
+        log(u"JUMPS %1 frames (%2), total %3 px, max %4 px; layout shifts of the anchor: %5 frames, %6 px; "
+            u"input held back (drag threshold, an end): %7 frames, %8 px"_s.arg(jumps.size())
+                    .arg(m_observe ? u"drags: content moved more than the finger, or against it; flings: "
+                                     u"displacement off the animation's by > max(6 px, 50%)"_s
+                         : m_direct ? u"content moved more than the input, or against it"_s
+                                    : u"displacement off the animation's by > max(6 px, 50%)"_s)
+                    .arg(jumpTotal, 0, 'f', 0)
+                    .arg(jumpMax, 0, 'f', 0)
+                    .arg(shifts)
+                    .arg(shiftTotal, 0, 'f', 0)
+                    .arg(heldFrames)
+                    .arg(heldTotal, 0, 'f', 0));
+        log(u"SCROLL not from input or animation (timers, queued calls, model signals): %1 frames, %2 px; contentY "
+            u"changes inside frames (polish, touch moves Qt delivers with the frame): %3 px; animations: %4 px"_s
+                    .arg(other.size())
+                    .arg(otherTotal, 0, 'f', 0)
+                    .arg(frameDyDirect, 0, 'f', 0)
+                    .arg(animTotal, 0, 'f', 0));
+        log(u"VIEW originY changes %1 (total %2 px), contentHeight changes while moving %3, scroll bar thumb "
+            u"jumps > 3 px %4 (visibleArea, an attached bar's), %5"_s.arg(originChanges)
+                    .arg(originTotal, 0, 'f', 0)
+                    .arg(heightChanges)
+                    .arg(thumbJumps)
+                    .arg(m_rowScroll ? u"row scroll bar thumb jumps %1"_s.arg(rowThumbJumps) : u"no row scroll bar"_s));
+        log(u"DELEGATES created %1 (in %2 frames), nested blocks created %3; probe cost per frame p50 %4 ms, max %5 ms"_s
+                    .arg(created)
+                    .arg(createdFrames)
+                    .arg(blocksCreated)
+                    .arg(percentile(probe, 0.5), 0, 'f', 3)
+                    .arg(percentile(probe, 1), 0, 'f', 3));
         const auto describe = [](const Frame *f) {
             return u"#%1 t=%2 %3 interval=%4 gap=%5 polish=%6 prevgui=%7 dy(in/frame/anim/other)=%8/%9/%10/%11 "
                    u"unexplained=%12 "
@@ -1398,8 +1456,7 @@ private:
                            .arg(f->dyFrame, 0, 'f', 0)
                            .arg(f->dyAnim, 0, 'f', 0)
                            .arg(f->dyOther, 0, 'f', 0)
-                           .arg(fmt(f->unexplained, 0))
-                           .arg(fmt(f->anchorShift, 0))
+                           .arg(fmt(f->unexplained, 0), fmt(f->anchorShift, 0))
                            .arg(f->created)
                            .arg(f->blocksCreated)
                            .arg(f->contentY, 0, 'f', 0)
@@ -1407,18 +1464,19 @@ private:
                            .arg(f->contentHeight, 0, 'f', 0)
                            .arg(f->events);
         };
+        const auto logFirst = [&](const QString &label, const QList<const Frame *> &list, qsizetype count) {
+            for (qsizetype i = 0; i < std::min(count, list.size()); ++i)
+                log(label + describe(list.at(i)));
+        };
         QList<const Frame *> worstJumps = jumps;
         std::ranges::sort(worstJumps, [](const Frame *a, const Frame *b) {
             return std::abs(a->unexplained) > std::abs(b->unexplained);
         });
-        for (qsizetype i = 0; i < std::min<qsizetype>(12, worstJumps.size()); ++i)
-            line(u"  jump "_s + describe(worstJumps.at(i)));
+        logFirst(u"  jump "_s, worstJumps, 12);
         QList<const Frame *> worstStutter = stutter;
         std::ranges::sort(worstStutter, [](const Frame *a, const Frame *b) { return a->interval > b->interval; });
-        for (qsizetype i = 0; i < std::min<qsizetype>(12, worstStutter.size()); ++i)
-            line(u"  stutter "_s + describe(worstStutter.at(i)));
-        for (qsizetype i = 0; i < std::min<qsizetype>(8, other.size()); ++i)
-            line(u"  other-scroll "_s + describe(other.at(i)));
+        logFirst(u"  stutter "_s, worstStutter, 12);
+        logFirst(u"  other-scroll "_s, other, 8);
         if (!m_strokes.isEmpty())
             summarizeTouch();
         if (m_checkTolerance > 0)
@@ -1433,7 +1491,7 @@ private:
     /// the rows it has not created moves that end whenever a row at the edge comes and goes (with
     /// --probe-cache 0 a row at the edge is released and created again as the input pushes past
     /// the end).
-    void check() const
+    void check()
     {
         int jumps = 0, shifts = 0, thumbJumps = 0;
         double worst = 0;
@@ -1478,7 +1536,7 @@ private:
     }
 
     /// Observe: how the real touch input reached the frames, and the flings.
-    void summarizeTouch() const
+    void summarizeTouch()
     {
         // Frames of a drag (dragging in this frame and the previous one).
         int drag = 0, still = 0, one = 0, multi = 0;
@@ -1561,15 +1619,11 @@ private:
                         .arg(s.dragFrames)
                         .arg(s.stillFrames)
                         .arg(s.multiFrames)
-                        .arg(fmt(s.releaseSpeed, 0))
-                        .arg(fmt(s.velocity, 0))
-                        .arg(fmt(flung, 0))
-                        .arg(fmt(s.tStop - s.tUp, 0))
-                        .arg(s.caught    ? u" (caught)"_s
+                        .arg(fmt(s.releaseSpeed, 0), fmt(s.velocity, 0), fmt(flung, 0), fmt(s.tStop - s.tUp, 0),
+                             s.caught    ? u" (caught)"_s
                              : s.atBound ? u" (to an end)"_s
-                                         : QString())
-                        .arg(fmt(start, 0))
-                        .arg(fmt(start / std::abs(s.releaseSpeed), 2)));
+                                         : QString(),
+                             fmt(start, 0), fmt(start / std::abs(s.releaseSpeed), 2)));
             if (duration >= 300 && !std::isnan(start) && std::abs(s.releaseSpeed) > 100)
                 startRatios.append(start / std::abs(s.releaseSpeed));
         }
@@ -1626,15 +1680,14 @@ private:
     int m_cache = -1;              // --probe-cache: the target's cacheBuffer (-1: its own)
     bool m_requireRowBar = false;  // --probe-row-bar: the target must have a BRowScrollBar
     bool m_hasItemAtIndex = false; // the target is an item view (ListView, GridView)
-    mutable bool m_checkFailed = false;
-    mutable QStringList m_logLines;
+    bool m_checkFailed = false;
+    QStringList m_logLines;
 
     QElapsedTimer m_clock;
     QTimer m_input;
     double m_startMs = 0;
     int m_phaseIndex = 0;
     double m_phaseStart = 0;
-    int m_stroke = 0;
     double m_strokeStart = -1;
     double m_strokeEnd = 0;
     double m_restUntil = 0;
@@ -1668,7 +1721,7 @@ private:
     double m_fingerY = 0;
     double m_lastMoveAt = 0;
     bool m_pressed = false;
-    mutable QMutex m_swapMutex;
+    QMutex m_swapMutex;
     QList<double> m_swaps;
 };
 
@@ -1676,8 +1729,8 @@ private:
 
 void startScrollProbe(QQmlApplicationEngine *engine, const QStringList &arguments)
 {
-    const bool wanted = std::any_of(arguments.cbegin(), arguments.cend(),
-                                    [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); });
+    const bool wanted =
+            std::ranges::any_of(arguments, [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); });
     if (!engine || !wanted)
         return;
     new ScrollProbe(engine, arguments); // owned by the engine; quits the app when done

@@ -221,8 +221,7 @@ FocusScope {
     /// pages use the shell's default (file name).
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : AppController.routeText(periodic, "label")
     /// A block (or the source) is being edited, or a picture, a PDF or another file fills the view.
-    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute || root.pdfRoute
-                                    || root.fileRoute
+    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || !root.noteRoute
     /// The editor's touch toolbar is docked at the bottom (on the keyboard, or on the phone's
     /// bottom navigation once the keyboard went).
     readonly property bool toolbarDocked: editor.toolbarVisible
@@ -238,16 +237,16 @@ FocusScope {
         editor.stepBack()
     }
     /// The page is shown as Markdown source (the shell turns the palette's block commands off).
-    readonly property bool sourceMode: page.sourceMode && !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+    readonly property bool sourceMode: page.sourceMode && root.noteRoute
     /// The note's mode, "document" | "outline" (the top bar's menu shows it); "" while loading and
     /// for a picture, a PDF or another file.
-    readonly property string noteMode: !page.loaded || root.pictureRoute || root.pdfRoute || root.fileRoute ? ""
+    readonly property string noteMode: !page.loaded || !root.noteRoute ? ""
                                        : page.documentMode ? "document" : "outline"
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     /// The shell's status bar (wide windows): the word count — the selection's while there is
     /// one — and the edited block; "" while there is none (docs/UI.md "Status bar").
     readonly property string statusText: !root.statsFooterShown ? ""
-                                         : Js.hasKey(root.selectionStats, "words")
+                                         : root.selectionCounted
                                            ? qsTr("Selection: %1").arg(root.statsSummary(selectionStatsInfo, false))
                                            : root.statsSummary(pageStatsInfo, false)
     readonly property string statusPosition: page.loaded && !page.sourceMode && page.editingRow >= 0
@@ -282,6 +281,8 @@ FocusScope {
     /// would have been saved over its bytes.
     readonly property bool fileRoute: root.routePath !== "" && !root.pictureRoute && !root.pdfRoute
                                       && !Js.test(root.routePath, "\\.(md|markdown)$", "i")
+    /// A note (Markdown) in the block editor: not a picture, a PDF or another file.
+    readonly property bool noteRoute: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
     /// The view swipes sideways from the left edge itself: a PDF zoomed past the view's width pans
     /// (the drawer's edge strip yields to it, ShellRouteView.viewEdgeSwipe).
     readonly property bool edgeSwipe: root.pdfRoute && pdfLoader.item !== null && (pdfLoader.item as ContentPdfView).pannedSideways
@@ -353,7 +354,7 @@ FocusScope {
         // A picture's, a PDF's or another file's bytes are not a note: the editor stays unloaded
         // (page.path "" saves the previous page without loading anything); ContentPictureView /
         // ContentPdfView shows it.
-        if (root.pictureRoute || root.pdfRoute || root.fileRoute) {
+        if (!root.noteRoute) {
             if (page.path !== "") {
                 root._revealed = ""
                 root._foldsFor = ""
@@ -404,6 +405,14 @@ FocusScope {
             root.showPictureAsText()
     }
 
+    /// Ctrl+E, "Markdown source": a picture ⇄ its text (read-only); a PDF, another file: nothing.
+    function toggleSource(): void {
+        if (root.pictureRoute)
+            root.togglePictureText()
+        else if (root.noteRoute)
+            editor.toggleSourceMode()
+    }
+
     /// The fold state being restored (Workspace.foldState()).
     property list<var> _folds
     function restoreFolds(): void {
@@ -442,7 +451,7 @@ FocusScope {
     /// route.open: a dialog or section opened right away (screenshots, smoke tests).
     function openRequested(): void {
         const open = AppController.routeText(route, "open")
-        if (open === "" || (!root.pictureRoute && !root.pdfRoute && !root.fileRoute && !page.loaded))
+        if (open === "" || (root.noteRoute && !page.loaded))
             return
         const key = root.routePath + "\n" + open
         if (key === root._opened)
@@ -461,6 +470,13 @@ FocusScope {
         case "rename":
         case "find":
         case "export":
+        // The side panel's context on this tab (wide windows), one turn later: from this
+        // view's Component.onCompleted (a picture opens at once) the shell still offers the
+        // previous view's side panel, whose context went with that view ("Cannot create a
+        // component in an invalid context").
+        case "links":
+        case "outline":
+        case "calendar":
             openLater.action = open
             openLater.restart()
             break
@@ -471,17 +487,6 @@ FocusScope {
             refsSection.unlinkedOpen = true
             scrollToEnd.restart()
             break
-        case "links":
-        case "outline":
-        case "calendar": {
-            // The side panel's context on this tab (wide windows), one turn later: from this
-            // view's Component.onCompleted (a picture opens at once) the shell still offers the
-            // previous view's side panel, whose context went with that view ("Cannot create a
-            // component in an invalid context").
-            openLater.action = open
-            openLater.restart()
-            break
-        }
         }
     }
 
@@ -510,10 +515,10 @@ FocusScope {
     // ---- The find bar -------------------------------------------------------------------------
     property bool findOpen: false
     /// A note is shown in the editor: there is something to find in.
-    readonly property bool findable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute && page.loaded
+    readonly property bool findable: root.noteRoute && page.loaded
     /// "Print…" (the menu, the palette, Ctrl+P): a note — a picture, a PDF or another file has
     /// its own app for that.
-    readonly property bool printable: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+    readonly property bool printable: root.noteRoute
     onFindableChanged: if (!findable && findOpen) root.closeFind()
     function openFind(withReplace: bool): void {
         if (!root.findable)
@@ -574,7 +579,11 @@ FocusScope {
     property var pageStats: ({})
     /// The selection's counts while text or blocks are selected, else {}.
     property var selectionStats: ({})
-    readonly property bool statsAvailable: page.loaded && !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+    readonly property bool statsAvailable: page.loaded && root.noteRoute
+    /// The page's counts are there (the page menu lists them).
+    readonly property bool statsListed: root.statsAvailable && Js.hasKey(root.pageStats, "words")
+    /// Text or blocks are selected and counted.
+    readonly property bool selectionCounted: Js.hasKey(root.selectionStats, "words")
     /// The counts in the view's corner (wide windows, the setting on; the page menu has them always).
     readonly property bool statsFooterShown: AppSettings.wordCountShown && !Theme.narrow && !root.inSidePanel
                                              && root.statsAvailable && root.visible
@@ -734,14 +743,12 @@ FocusScope {
     BlockEditor {
         id: editor
         objectName: "pageEditor"
-        anchors.top: findBarLoader.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
+        anchors.topMargin: findBarLoader.height
         find: root.findOpen ? noteFind : null
         // A picture, a PDF or another file fills the view instead (its bytes are never loaded into
         // the editor).
-        visible: !root.pictureRoute && !root.pdfRoute && !root.fileRoute
+        visible: root.noteRoute
         focus: !root.pdfRoute
         controller: page
         // The reading mode's toast: "Edit" leaves it.
@@ -816,7 +823,7 @@ FocusScope {
         height: statsLabel.implicitHeight + Theme.space1 * 2
         radius: Theme.radiusSm
         color: Theme.bg.alpha(0.85)
-        readonly property bool selection: Js.hasKey(root.selectionStats, "words")
+        readonly property bool selection: root.selectionCounted
         readonly property string text: selection ? qsTr("Selection: %1").arg(root.statsSummary(selectionStatsInfo, false))
                                                  : root.statsSummary(pageStatsInfo, false)
         Accessible.role: Accessible.StaticText
@@ -924,14 +931,14 @@ FocusScope {
         // The page's counts (and the selection's), for reading only.
         BMenuItem {
             objectName: "pageMenuStats"
-            visible: root.statsAvailable && Js.hasKey(root.pageStats, "words")
+            visible: root.statsListed
             height: visible ? implicitHeight : 0
             enabled: false
             text: root.statsSummary(pageStatsInfo, true)
             iconName: "type"
         }
         BMenuSeparator {
-            visible: root.statsAvailable && Js.hasKey(root.pageStats, "words")
+            visible: root.statsListed
             height: visible ? implicitHeight : 0
         }
 
@@ -1124,8 +1131,8 @@ FocusScope {
         ContentSidePanel {
             id: contextPanel
             // A picture's references (the index knows the notes that embed it; nothing loads it).
-            path: root.pictureRoute || root.pdfRoute || root.fileRoute ? root.routePath : page.path
-            attachment: root.pictureRoute || root.pdfRoute || root.fileRoute
+            path: root.noteRoute ? page.path : root.routePath
+            attachment: !root.noteRoute
             controller: page
             editor: editor
             Connections {
@@ -1156,34 +1163,26 @@ FocusScope {
     Connections {
         target: AppController
         function onUiActionRequested(action: string) {
-            if (!root.paneActive)
+            if (!root.commandTarget)
                 return
-            if (action === "toggleSourceMode" && root.visible && !root.inSidePanel) {
-                // A picture: Ctrl+E / "Markdown source" switch between the picture and its text;
-                // a PDF and another file have no Markdown.
-                if (root.pictureRoute)
-                    root.togglePictureText()
-                else if (!root.pdfRoute && !root.fileRoute)
-                    editor.toggleSourceMode()
-            } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel) {
+            if (action === "toggleSourceMode")
+                root.toggleSource()
+            else if (action === "toggleNoteMode")
                 root.toggleNoteMode()
-            } else if ((action === "findInNote" || action === "replaceInNote") && root.visible && !root.inSidePanel) {
+            else if (action === "findInNote" || action === "replaceInNote")
                 root.openFind(action === "replaceInNote")
-            } else if (Js.startsWith(action, "copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute
-                       && !root.pdfRoute && !root.fileRoute) {
+            else if (Js.startsWith(action, "copyLink:") && root.noteRoute)
                 editor.copyCurrentLink(Js.sliceFrom(action, 9))
-            } else if (action === "saveWebPictures" && root.visible && !root.inSidePanel && editor.visible) {
+            else if (action === "saveWebPictures" && editor.visible)
                 editor.downloadWebPictures("")
-            } else if (action === "addProperty" && root.visible && !root.inSidePanel && editor.visible) {
+            else if (action === "addProperty" && editor.visible)
                 editor.addProperty()
-            } else if (action === "taskClock" && root.visible && !root.inSidePanel && editor.visible) {
+            else if (action === "taskClock" && editor.visible)
                 editor.toggleCurrentTaskClock()
-            } else if (action === "taskDependency" && root.visible && !root.inSidePanel && editor.visible) {
+            else if (action === "taskDependency" && editor.visible)
                 editor.openCurrentDependencyPicker()
-            } else if ((action === "exportPage" || action === "printPage") && root.visible && !root.inSidePanel
-                       && page.exists && !root.pictureRoute && !root.pdfRoute && !root.fileRoute) {
+            else if ((action === "exportPage" || action === "printPage") && page.exists && root.noteRoute)
                 exportDialog.openFor(page.path, action === "printPage")
-            }
         }
     }
 
@@ -1197,12 +1196,6 @@ FocusScope {
     Shortcut {
         sequence: ShortcutMap.sequences["page.source"] || ""
         enabled: root.commandTarget // one per window (two would be ambiguous)
-        // A picture: the picture ⇄ its text (read-only); a PDF, another file: nothing.
-        onActivated: {
-            if (root.pictureRoute)
-                root.togglePictureText()
-            else if (!root.pdfRoute && !root.fileRoute)
-                editor.toggleSourceMode()
-        }
+        onActivated: root.toggleSource()
     }
 }

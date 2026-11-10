@@ -62,10 +62,10 @@ public:
     /// and counts at 1/2 when it beats the primary text (e.g. a page's folder path).
     Q_INVOKABLE QVariantList fuzzyRank(const QString &query, const QStringList &texts, int limit = 0,
                                        const QStringList &secondary = {}) const;
-    /// Escaped rich text with the characters at `positions` wrapped in
-    /// <b><font color="…">…</font></b> (colour optional). Safe for Text.StyledText.
     /// fuzzyRank()'s texts themselves, best first (all of them in order for an empty query).
     Q_INVOKABLE QStringList fuzzyRankTexts(const QString &query, const QStringList &texts, int limit = 0) const;
+    /// Escaped rich text with the characters at `positions` wrapped in
+    /// <b><font color="…">…</font></b> (colour optional). Safe for Text.StyledText.
     Q_INVOKABLE QString markMatches(const QString &text, const QVariantList &positions,
                                     const QString &color = {}) const;
     /// HTML-escape (&, <, >, ") for rich-text Text items.
