@@ -16,7 +16,7 @@ Rectangle {
     id: bar
 
     readonly property list<var> tabs: AppController.tabs
-    readonly property real tabWidth: Math.max(minTabWidth, Math.min(maxTabWidth, (list.width) / Math.max(1, tabs.length)))
+    readonly property real tabWidth: Math.max(minTabWidth, Math.min(maxTabWidth, list.width / Math.max(1, tabs.length)))
     readonly property real minTabWidth: 120
     readonly property real maxTabWidth: 220
 
@@ -93,15 +93,16 @@ Rectangle {
                 // A shown tab runs into the view under it (its fill covers the bar's bottom line).
                 Rectangle {
                     anchors.fill: parent
-                    color: tab.shown ? Theme.bg : hover.hovered ? Theme.bgHover : "transparent"
-                    Rectangle {
-                        objectName: "shellTabAccent"
-                        visible: tab.focusedTab && (AppController.tabCount > 1 || AppController.splitTab !== 0)
-                        anchors.top: parent.top
-                        width: parent.width
-                        height: 2
-                        color: Theme.accent
-                    }
+                    visible: tab.shown || hover.hovered
+                    color: tab.shown ? Theme.bg : Theme.bgHover
+                }
+                Rectangle {
+                    objectName: "shellTabAccent"
+                    visible: tab.focusedTab && (AppController.tabCount > 1 || AppController.splitTab !== 0)
+                    anchors.top: parent.top
+                    width: parent.width
+                    height: 2
+                    color: Theme.accent
                 }
                 // Hairlines between the tabs, full height (IDE-like).
                 Rectangle {

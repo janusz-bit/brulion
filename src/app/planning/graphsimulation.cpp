@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include <utility>
 
 namespace brulion::planning {
 
@@ -43,8 +44,7 @@ public:
     void process()
     {
         m_shared->processPending.store(false);
-        const bool changed = applyCommands();
-        schedule(changed);
+        schedule(applyCommands());
     }
 
     /// Before the thread quits (or the owner deletes an inline worker).
@@ -177,12 +177,7 @@ private:
             m_timer.stop();
             return;
         }
-        ForceLayout &layout = m_run.layout;
-        if (!layout.running()) {
-            m_timer.stop();
-            publish(true);
-            return;
-        }
+        ForceLayout &layout = m_run.layout; // not running: no step, the final frame below
         const bool dragging = layout.alphaTarget() > 0;
         long long allowed = LLONG_MAX; // reduced motion: as many as the budget allows
         if (dragging) {
@@ -193,7 +188,7 @@ private:
                     static_cast<long long>(std::ceil(double(m_expected) * elapsedMs / double(m_run.minRunMs)));
             allowed = std::max<long long>(m_segTicks + 1, paced);
         }
-        const double budgetMs = m_threaded ? double(std::max(1, m_run.frameIntervalMs))
+        const double budgetMs = m_threaded ? double(m_run.frameIntervalMs) // kept in [1, 1000]
                                            : std::clamp(0.5 * m_run.frameIntervalMs, 8.0, 25.0);
         QElapsedTimer batch;
         batch.start();
@@ -232,23 +227,21 @@ private:
 
     void publish(bool final)
     {
-        SimFrame frame;
-        frame.generation = m_run.generation;
-        frame.x = m_run.layout.xs();
-        frame.y = m_run.layout.ys();
-        frame.alpha = m_run.layout.alpha();
-        frame.running = !final;
-        frame.fastCooling = m_fast;
-        frame.tickMs = m_segTickMs;
-        frame.ticks = m_runTicks;
-        if (final)
-            frame.state = m_run.layout;
+        const ForceLayout &layout = m_run.layout;
+        SimFrame frame{.generation = m_run.generation,
+                       .x = layout.xs(),
+                       .y = layout.ys(),
+                       .alpha = layout.alpha(),
+                       .running = !final,
+                       .fastCooling = m_fast,
+                       .tickMs = m_segTickMs,
+                       .ticks = m_runTicks,
+                       .state = final ? std::optional(layout) : std::nullopt};
         bool notify = false;
         {
             std::lock_guard lock(m_shared->frameMutex);
             m_shared->latest = std::move(frame);
-            notify = !m_shared->framePending;
-            m_shared->framePending = true;
+            notify = !std::exchange(m_shared->framePending, true);
         }
         if (notify)
             QMetaObject::invokeMethod(m_sim, &GraphSimulation::frameReady, Qt::QueuedConnection);
@@ -290,15 +283,12 @@ GraphSimulation::~GraphSimulation()
     }
 #ifdef BRULION_GRAPH_THREADS
     if (m_thread) {
-        QMetaObject::invokeMethod(m_worker, [w = m_worker] { w->shutdown(); }, Qt::QueuedConnection);
-        m_thread->wait();
-        delete m_worker;
-        delete m_thread;
+        QMetaObject::invokeMethod(m_worker.get(), &GraphSimWorker::shutdown, Qt::QueuedConnection);
+        m_thread->wait(); // the worker goes with the members, then the thread with the children
         return;
     }
 #endif
     m_worker->shutdown();
-    delete m_worker;
 }
 
 void GraphSimulation::setInlineForTests(bool inlineRuns)
@@ -315,10 +305,10 @@ void GraphSimulation::ensureWorker()
 {
     if (m_worker)
         return;
-    m_worker = new GraphSimWorker(this, m_shared, m_threaded);
+    m_worker = std::make_unique<GraphSimWorker>(this, m_shared, m_threaded);
 #ifdef BRULION_GRAPH_THREADS
     if (m_threaded) {
-        m_thread = new QThread;
+        m_thread = new QThread(this);
         m_thread->setObjectName(QStringLiteral("brulion-graph"));
         m_worker->moveToThread(m_thread);
         m_thread->start();
@@ -329,7 +319,7 @@ void GraphSimulation::ensureWorker()
 void GraphSimulation::wake()
 {
     if (!m_shared->processPending.exchange(true))
-        QMetaObject::invokeMethod(m_worker, [w = m_worker] { w->process(); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(m_worker.get(), &GraphSimWorker::process, Qt::QueuedConnection);
 }
 
 void GraphSimulation::start(SimRun run)

@@ -11,7 +11,6 @@
 #include "notebook/replace.h"
 
 #include <QAbstractListModel>
-#include <QPointer>
 #include <QSet>
 #include <QTimer>
 
@@ -132,6 +131,9 @@ private:
         QSet<int> excluded;
     };
 
+    /// `parameter` = `value`; true (and parametersChanged()) when that changed it.
+    template<typename T>
+    bool setParameter(T &parameter, const T &value);
     void forgetResults();
     void scheduleScan();
     void startScan();
@@ -139,13 +141,14 @@ private:
     void scanStep();
     void applyStep();
     void undoStep();
-    void rebuildRows();
-    int fileRow(int file) const;
+    /// The scan's plan so far and its rows (a model reset).
+    void showPlan(notebook::ReplacePlan plan);
     void fileTickChanged(int file);
     int tickedInFile(const notebook::ReplaceFile &file) const;
     /// A file's ticks: its own, else m_defaultTicked.
     Ticks ticksOf(const QString &path) const;
-    /// Take the kept ticks back for the notes of the plan so far.
+    /// Take the kept ticks back for the notes of the plan so far; once the scan is done, all of them
+    /// are and the kept ones are forgotten.
     void adoptKeptTicks();
 
     Workspace *m_workspace = nullptr;

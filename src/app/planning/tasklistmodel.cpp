@@ -22,6 +22,7 @@
 namespace brulion::planning {
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace {
 
@@ -80,10 +81,10 @@ int compareOptionalSpecs(const std::optional<DateSpec> &a, const std::optional<D
     return 0;
 }
 
+/// The done section's date: the cancelled date of a cancelled task, else the done date, else the
+/// cancelled one.
 std::optional<QDate> finishedDate(const Task &t)
 {
-    if (t.status == TaskStatus::Done && t.doneDate)
-        return t.doneDate;
     if (t.status == TaskStatus::Cancelled && t.cancelledDate)
         return t.cancelledDate;
     return t.doneDate ? t.doneDate : t.cancelledDate;
@@ -119,12 +120,48 @@ QString taskKey(const QString &path, int line)
     return path + u':' + QString::number(line);
 }
 
+/// `folder` without leading and trailing slashes.
+QString withoutSlashes(QString folder)
+{
+    while (folder.endsWith(u'/'))
+        folder.chop(1);
+    while (folder.startsWith(u'/'))
+        folder.remove(0, 1);
+    return folder;
+}
+
+using ChoiceCount = std::pair<QString, int>; ///< a filter choice (tag, folder, page) and its tasks
+
+bool mostUsedFirst(const ChoiceCount &a, const ChoiceCount &b)
+{
+    return a.second != b.second ? a.second > b.second : compareNames(a.first, b.first) < 0;
+}
+
+bool byName(const ChoiceCount &a, const ChoiceCount &b)
+{
+    return compareNames(a.first, b.first) < 0;
+}
+
+/// The entries of `counts` in `less` order, at most `limit` of them (0: all).
+QList<ChoiceCount> sortedCounts(const QHash<QString, int> &counts,
+                                bool (*less)(const ChoiceCount &, const ChoiceCount &), int limit)
+{
+    QList<ChoiceCount> list;
+    list.reserve(counts.size());
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+        list.append({it.key(), it.value()});
+    std::ranges::sort(list, less);
+    if (limit > 0 && list.size() > limit)
+        list.resize(limit);
+    return list;
+}
+
 } // namespace
 
 TaskListModel::TaskListModel(QObject *parent) : QAbstractListModel(parent)
 {
     m_refreshTimer.setSingleShot(true);
-    m_refreshTimer.setInterval(150);
+    m_refreshTimer.setInterval(150ms);
     connect(&m_refreshTimer, &QTimer::timeout, this, &TaskListModel::rebuild);
 }
 
@@ -244,12 +281,22 @@ QVariant TaskListModel::sectionRowData(const QString &section, int role) const
     case LineRole:
     case DepthRole:
     case SubtaskCountRole:
-    case PriorityRole: return 0;
+    case PriorityRole:
+    case BlockingCountRole: return 0;
     case OverdueRole:
     case IsJournalRole:
-    case ReminderAlarmRole: return false;
-    case ReminderSpecRole: return QString();
+    case ReminderAlarmRole:
+    case BlockedRole:
+    case ProgressCompleteRole:
+    case ClockRunningRole:
+    case FoldedRole: return false;
     case TagsRole: return QStringList();
+    case ReminderSpecRole:
+    case BlockedByRole:
+    case BlockedByIdRole:
+    case DependencyProblemRole:
+    case ProgressRole:
+    case TimeLabelRole:
     case TextRole:
     case HtmlRole:
     case StatusRole:
@@ -279,16 +326,13 @@ QVariant TaskListModel::taskRowData(const Item &item, int role) const
     const dates::UiLocale loc = uiLocale(m_locale);
     switch (role) {
     case RowTypeRole: return u"task"_s;
-    case SectionRole: return item.section;
-    case SectionLabelRole: return sectionLabel(item.section);
-    case SectionCountRole: return m_sectionCounts.value(item.section);
     case CollapsedRole: return false;
     case KeyRole: return taskKey(item.ref.path, t.line);
     case Qt::DisplayRole:
     case TextRole: return plainText(t.text);
     case HtmlRole:
         if (!item.rendered) {
-            item.html = renderInline(m_index.data(), t.text, item.ref.path, today, loc, paletteFromMap(m_paletteMap));
+            item.html = renderInline(m_index.data(), t.text, item.ref.path, today, loc, m_palette);
             item.rendered = true;
         }
         return item.html;
@@ -353,11 +397,11 @@ QVariantMap TaskListModel::timeSummary(const QString &group, const QString &rang
     if (range == u"today") {
         from = to = today;
     } else if (range == u"week") {
-        from = today.addDays(-((today.dayOfWeek() - int(weekStartDay()) + 7) % 7));
+        from = dates::startOfWeek(today, weekStartDay());
         to = from.addDays(6);
     } else if (range == u"month") {
-        from = QDate(today.year(), today.month(), 1);
-        to = from.addMonths(1).addDays(-1);
+        from = dates::startOfMonth(today);
+        to = dates::endOfMonth(today);
     }
     QList<TaskRef> tasks;
     tasks.reserve(m_items.size());
@@ -414,7 +458,7 @@ QVariantList TaskListModel::paletteChoices(const QString &kind) const
 
 QHash<int, QByteArray> TaskListModel::roleNames() const
 {
-    return {
+    static const QHash<int, QByteArray> names = {
             {RowTypeRole, "rowType"},
             {SectionRole, "section"},
             {SectionLabelRole, "sectionLabel"},
@@ -459,6 +503,7 @@ QHash<int, QByteArray> TaskListModel::roleNames() const
             {DoneDateRole, "doneDate"},
             {CreatedRole, "created"},
     };
+    return names;
 }
 
 QVariantMap TaskListModel::get(int row) const
@@ -468,8 +513,8 @@ QVariantMap TaskListModel::get(int row) const
         return out;
     const QHash<int, QByteArray> names = roleNames();
     const QModelIndex idx = createIndex(row, 0);
-    for (auto it = names.cbegin(); it != names.cend(); ++it)
-        out.insert(QString::fromLatin1(it.value()), data(idx, it.key()));
+    for (auto [role, name] : names.asKeyValueRange())
+        out.insert(QString::fromLatin1(name), data(idx, role));
     return out;
 }
 
@@ -484,8 +529,7 @@ void TaskListModel::setVaultIndex(VaultIndex *index)
 {
     if (m_index == index)
         return;
-    if (m_indexConnection)
-        disconnect(m_indexConnection);
+    disconnect(m_indexConnection);
     m_index = index;
     if (index)
         m_indexConnection = connect(index, &VaultIndex::changed, this, &TaskListModel::scheduleRefresh);
@@ -540,6 +584,7 @@ void TaskListModel::setPalette(const QVariantMap &palette)
     if (m_paletteMap == palette)
         return;
     m_paletteMap = palette;
+    m_palette = paletteFromMap(palette);
     Q_EMIT paletteChanged();
     for (Item &item : m_items)
         item.rendered = false;
@@ -553,6 +598,14 @@ void TaskListModel::filtersEdited()
     requestRebuild();
 }
 
+void TaskListModel::setFilter(QString &filter, const QString &value)
+{
+    if (filter == value)
+        return;
+    filter = value;
+    filtersEdited();
+}
+
 void TaskListModel::setTagFilter(const QString &tag)
 {
     QString t = tag.trimmed();
@@ -560,62 +613,34 @@ void TaskListModel::setTagFilter(const QString &tag)
         t.remove(0, 1);
     if (t.startsWith(u"[[") && t.endsWith(u"]]"))
         t = t.mid(2, t.size() - 4).trimmed();
-    t = t.toLower();
-    if (m_tag == t)
-        return;
-    m_tag = t;
-    filtersEdited();
+    setFilter(m_tag, t.toLower());
 }
 
 void TaskListModel::setPageFilter(const QString &path)
 {
-    const QString p = path.trimmed();
-    if (m_page == p)
-        return;
-    m_page = p;
-    filtersEdited();
+    setFilter(m_page, path.trimmed());
 }
 
 void TaskListModel::setFolderFilter(const QString &folder)
 {
-    QString f = folder.trimmed();
-    while (f.endsWith(u'/'))
-        f.chop(1);
-    while (f.startsWith(u'/'))
-        f.remove(0, 1);
-    if (m_folder == f)
-        return;
-    m_folder = f;
-    filtersEdited();
+    setFilter(m_folder, withoutSlashes(folder.trimmed()));
 }
 
 void TaskListModel::setPriorityFilter(const QString &priority)
 {
     static const QStringList known{u"highest"_s, u"high"_s, u"medium"_s, u"low"_s, u"lowest"_s, u"none"_s};
-    const QString p = known.contains(priority) ? priority : QString();
-    if (m_priority == p)
-        return;
-    m_priority = p;
-    filtersEdited();
+    setFilter(m_priority, known.contains(priority) ? priority : QString());
 }
 
 void TaskListModel::setStatusFilter(const QString &status)
 {
     static const QStringList known{u"all"_s, u"open"_s, u"todo"_s, u"doing"_s, u"deferred"_s, u"done"_s, u"cancelled"_s};
-    const QString s = known.contains(status) ? status : u"all"_s;
-    if (m_status == s)
-        return;
-    m_status = s;
-    filtersEdited();
+    setFilter(m_status, known.contains(status) ? status : u"all"_s);
 }
 
 void TaskListModel::setTextFilter(const QString &text)
 {
-    const QString t = text.simplified();
-    if (m_text == t)
-        return;
-    m_text = t;
-    filtersEdited();
+    setFilter(m_text, text.simplified());
 }
 
 void TaskListModel::setSortKey(const QString &key)
@@ -729,17 +754,11 @@ void TaskListModel::setQueryCache(std::shared_ptr<QueryCache> cache)
 QString TaskListModel::pageQueryValue(const QString &path) const
 {
     // The title reads best; use it when it resolves back to the same page, else the path.
-    QString title = path.section(u'/', -1);
-    if (title.endsWith(u".md", Qt::CaseInsensitive))
-        title.chop(3);
-    if (m_index) {
-        if (const auto resolved = m_index->resolveLink(title); resolved && *resolved == path)
-            return queryValue(title);
-    }
     QString p = path;
     if (p.endsWith(u".md", Qt::CaseInsensitive))
         p.chop(3);
-    return queryValue(p);
+    const QString title = p.section(u'/', -1);
+    return queryValue(m_index && m_index->resolveLink(title) == path ? title : p);
 }
 
 QString TaskListModel::queryText() const
@@ -755,28 +774,22 @@ QString TaskListModel::queryText() const
         parts << u"path:"_s + queryValue(m_folder + u'/');
     if (!m_priority.isEmpty())
         parts << u"priority:"_s + m_priority;
-    for (const QString &w : m_text.split(u' ', Qt::SkipEmptyParts))
+    for (const QStringList words = m_text.split(u' ', Qt::SkipEmptyParts); const QString &w : words)
         parts << textWord(w);
-    if (m_sort == u"due")
-        parts << u"sort:due"_s;
-    else if (m_sort == u"priority")
-        parts << u"sort:priority"_s;
-    else if (m_sort == u"page")
-        parts << u"sort:page"_s;
-    else if (m_sort == u"created")
-        parts << u"sort:-created"_s;
+    // m_sort is one of setSortKey()'s keys; created sorts the newest first.
+    parts << u"sort:"_s + (m_sort == u"created" ? u"-created"_s : m_sort);
     return parts.join(u' ');
 }
 
 bool TaskListModel::applyQuery(const QString &query)
 {
     const auto parsed = parseQuery(query);
-    if (!std::holds_alternative<Query>(parsed))
+    const auto *q = std::get_if<Query>(&parsed);
+    if (!q)
         return false;
-    const Query &q = std::get<Query>(parsed);
-    QString tag, page, folder, priority, status = u"all"_s, text;
+    QString tag, page, folder, priority, status = u"all"_s;
     QStringList words;
-    for (const QueryFilter &f : q.filters) {
+    for (const QueryFilter &f : q->filters) {
         if (f.negate)
             continue;
         switch (f.kind) {
@@ -786,9 +799,8 @@ bool TaskListModel::applyQuery(const QString &query)
             break;
         case QueryFilterKind::Page:
             if (!f.values.isEmpty()) {
-                const QString v = f.values.first();
-                const auto resolved = m_index ? m_index->resolveLink(v) : std::nullopt;
-                page = resolved ? *resolved : v;
+                const QString &v = f.values.first();
+                page = m_index ? m_index->resolveLink(v).value_or(v) : v;
             }
             break;
         case QueryFilterKind::Path:
@@ -814,10 +826,9 @@ bool TaskListModel::applyQuery(const QString &query)
         case QueryFilterKind::Is: break;
         }
     }
-    text = words.join(u' ');
     QString sort = m_sort;
-    if (!q.sort.isEmpty()) {
-        switch (q.sort.first().key) {
+    if (!q->sort.isEmpty()) {
+        switch (q->sort.first().key) {
         case QuerySortKey::Priority: sort = u"priority"_s; break;
         case QuerySortKey::Page:
         case QuerySortKey::Path: sort = u"page"_s; break;
@@ -829,21 +840,20 @@ bool TaskListModel::applyQuery(const QString &query)
     tag = tag.trimmed().toLower();
     if (tag.startsWith(u'#'))
         tag.remove(0, 1);
-    while (folder.endsWith(u'/'))
-        folder.chop(1);
-    while (folder.startsWith(u'/'))
-        folder.remove(0, 1);
+    page = page.trimmed();
+    folder = withoutSlashes(folder).trimmed();
+    const QString text = words.join(u' ').simplified();
     // The same filters again (TasksView applies its route when created and when complete).
-    if (tag == m_tag && page.trimmed() == m_page && folder.trimmed() == m_folder && priority == m_priority
-        && status == m_status && text.simplified() == m_text && sort == m_sort)
+    if (tag == m_tag && page == m_page && folder == m_folder && priority == m_priority && status == m_status
+        && text == m_text && sort == m_sort)
         return true;
     const bool sortChanged = sort != m_sort;
     m_tag = tag;
-    m_page = page.trimmed();
-    m_folder = folder.trimmed();
+    m_page = page;
+    m_folder = folder;
     m_priority = priority;
     m_status = status;
-    m_text = text.simplified();
+    m_text = text;
     m_sort = sort;
     Q_EMIT filtersChanged();
     if (sortChanged)
@@ -858,27 +868,19 @@ QVariantList TaskListModel::tagChoices(int limit) const
     if (!m_index)
         return out;
     QHash<QString, int> counts;
-    QHash<QString, QString> display;
-    for (const TaskRef &ref : m_index->tasks()) {
+    for (const QList<TaskRef> tasks = m_index->tasks(); const TaskRef &ref : tasks) {
         const ParsedNote *note = m_index->note(ref.path);
         if (!note || ref.blockIndex < 0 || ref.blockIndex >= note->blocks.size())
             continue;
         for (const QString &tag : note->blocks.at(ref.blockIndex).tags)
             ++counts[tag];
     }
-    for (const TagCount &t : m_index->tags())
+    QHash<QString, QString> display;
+    for (const QList<TagCount> tags = m_index->tags(); const TagCount &t : tags)
         display.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
-    QList<std::pair<QString, int>> list;
-    for (auto it = counts.cbegin(); it != counts.cend(); ++it)
-        list.append({it.key(), it.value()});
-    std::ranges::sort(list, [](const auto &a, const auto &b) {
-        return a.second != b.second ? a.second > b.second : compareNames(a.first, b.first) < 0;
-    });
-    for (const auto &[tag, count] : list) {
-        if (limit > 0 && out.size() >= limit)
-            break;
-        out.append(QVariantMap{{u"value"_s, tag}, {u"label"_s, QString(u'#' + display.value(tag, tag))}, {u"count"_s, count}});
-    }
+    for (const QList<ChoiceCount> list = sortedCounts(counts, mostUsedFirst, limit); const auto &[tag, count] : list)
+        out.append(QVariantMap{
+                {u"value"_s, tag}, {u"label"_s, QString(u'#' + display.value(tag, tag))}, {u"count"_s, count}});
     return out;
 }
 
@@ -888,23 +890,13 @@ QVariantList TaskListModel::folderChoices(int limit) const
     if (!m_index)
         return out;
     QHash<QString, int> counts;
-    for (const TaskRef &ref : m_index->tasks()) {
+    for (const QList<TaskRef> tasks = m_index->tasks(); const TaskRef &ref : tasks) {
         // Every ancestor folder counts ("Projekty/Dom/x.md" -> "Projekty", "Projekty/Dom").
-        QString folder = folderOf(ref.path);
-        while (!folder.isEmpty()) {
+        for (QString folder = folderOf(ref.path); !folder.isEmpty(); folder = folderOf(folder))
             ++counts[folder];
-            folder = folderOf(folder);
-        }
     }
-    QList<std::pair<QString, int>> list;
-    for (auto it = counts.cbegin(); it != counts.cend(); ++it)
-        list.append({it.key(), it.value()});
-    std::ranges::sort(list, [](const auto &a, const auto &b) { return compareNames(a.first, b.first) < 0; });
-    for (const auto &[folder, count] : list) {
-        if (limit > 0 && out.size() >= limit)
-            break;
+    for (const QList<ChoiceCount> list = sortedCounts(counts, byName, limit); const auto &[folder, count] : list)
         out.append(QVariantMap{{u"value"_s, folder}, {u"label"_s, folder}, {u"count"_s, count}});
-    }
     return out;
 }
 
@@ -914,17 +906,9 @@ QVariantList TaskListModel::pageChoices(int limit) const
     if (!m_index)
         return out;
     QHash<QString, int> counts;
-    for (const TaskRef &ref : m_index->tasks())
+    for (const QList<TaskRef> tasks = m_index->tasks(); const TaskRef &ref : tasks)
         ++counts[ref.path];
-    QList<std::pair<QString, int>> list;
-    for (auto it = counts.cbegin(); it != counts.cend(); ++it)
-        list.append({it.key(), it.value()});
-    std::ranges::sort(list, [](const auto &a, const auto &b) {
-        return a.second != b.second ? a.second > b.second : compareNames(a.first, b.first) < 0;
-    });
-    for (const auto &[path, count] : list) {
-        if (limit > 0 && out.size() >= limit)
-            break;
+    for (const QList<ChoiceCount> list = sortedCounts(counts, mostUsedFirst, limit); const auto &[path, count] : list) {
         const ParsedNote *note = m_index->note(path);
         out.append(QVariantMap{
                 {u"value"_s, path}, {u"label"_s, note ? note->title : path}, {u"count"_s, count}, {u"folder"_s, folderOf(path)}});
@@ -1030,31 +1014,23 @@ void TaskListModel::rankTitles(QList<Item> &items)
 {
     // The distinct titles sorted once by their collation keys (kept per title: many tasks share a
     // page, and a rebuild sees the same pages again); the comparison then reads integers.
-    QList<QString> titles;
-    QSet<QString> seen;
-    for (const Item &item : std::as_const(items)) {
-        if (!seen.contains(item.pageTitle)) {
-            seen.insert(item.pageTitle);
-            titles.append(item.pageTitle);
-        }
-    }
-    std::vector<QCollatorSortKey> keys; // copies share the key's data
-    keys.reserve(size_t(titles.size()));
-    for (const QString &title : std::as_const(titles)) {
-        auto key = m_titleKeys.constFind(title);
-        if (key == m_titleKeys.cend())
-            key = m_titleKeys.insert(title, nameSortKey(title));
-        keys.push_back(*key);
-    }
-    QList<qsizetype> order(titles.size());
-    std::iota(order.begin(), order.end(), 0);
-    std::ranges::sort(order, [&](qsizetype a, qsizetype b) {
-        const int c = keys[size_t(a)].compare(keys[size_t(b)]);
-        return c != 0 ? c < 0 : QString::compare(titles[a], titles[b]) < 0;
-    });
     m_titleRank.clear();
-    for (qsizetype k = 0; k < order.size(); ++k)
-        m_titleRank.insert(titles[order[k]], int(k));
+    for (const Item &item : std::as_const(items))
+        m_titleRank.insert(item.pageTitle, 0);
+    std::vector<std::pair<QString, QCollatorSortKey>> titles; // copies share the key's data
+    titles.reserve(size_t(m_titleRank.size()));
+    for (auto it = m_titleRank.cbegin(); it != m_titleRank.cend(); ++it) {
+        auto key = m_titleKeys.find(it.key());
+        if (key == m_titleKeys.end())
+            key = m_titleKeys.insert(it.key(), nameSortKey(it.key()));
+        titles.emplace_back(it.key(), *key);
+    }
+    std::ranges::sort(titles, [](const auto &a, const auto &b) {
+        const int c = a.second.compare(b.second);
+        return c != 0 ? c < 0 : QString::compare(a.first, b.first) < 0;
+    });
+    for (size_t rank = 0; rank < titles.size(); ++rank)
+        m_titleRank[titles[rank].first] = int(rank);
     for (Item &item : items)
         item.title = m_titleRank.value(item.pageTitle);
 }
@@ -1063,39 +1039,26 @@ bool TaskListModel::itemLess(const Item &a, const Item &b) const
 {
     if (a.sectionRank != b.sectionRank)
         return a.sectionRank < b.sectionRank;
-    // compareNames() order of the page titles (ranks).
-    const auto titles = [&] { return a.title - b.title; };
     const Task &ta = a.ref.task;
     const Task &tb = b.ref.task;
     static const qsizetype doneRank = sectionKeys().indexOf(u"done"_s);
-    if (a.sectionRank == doneRank) {
-        if (a.finished != b.finished) {
-            if (a.finished && b.finished)
-                return *a.finished > *b.finished;
-            return a.finished.has_value();
-        }
-    } else if (m_sortMode == SortByPriority) {
+    const bool done = a.sectionRank == doneRank;
+    // Newest first, the undated last (std::optional orders nullopt first).
+    if (done && a.finished != b.finished)
+        return a.finished > b.finished;
+    if (!done && m_sortMode == SortByPriority && a.priority != b.priority)
+        return a.priority < b.priority;
+    if (!done && m_sortMode == SortByCreated && ta.created != tb.created)
+        return ta.created > tb.created;
+    if (done || m_sortMode != SortByPage) {
+        if (const int c = compareOptionalSpecs(a.date, b.date); c != 0)
+            return c < 0;
         if (a.priority != b.priority)
             return a.priority < b.priority;
-    } else if (m_sortMode == SortByCreated) {
-        if (ta.created != tb.created) {
-            if (ta.created && tb.created)
-                return *ta.created > *tb.created;
-            return ta.created.has_value();
-        }
-    } else if (m_sortMode == SortByPage) {
-        if (const int c = titles(); c != 0)
-            return c < 0;
-        if (a.ref.path != b.ref.path)
-            return a.ref.path < b.ref.path;
-        return ta.line < tb.line;
     }
-    if (const int c = compareOptionalSpecs(a.date, b.date); c != 0)
-        return c < 0;
-    if (a.priority != b.priority)
-        return a.priority < b.priority;
-    if (const int c = titles(); c != 0)
-        return c < 0;
+    // compareNames() order of the page titles (ranks), then the path and the line.
+    if (a.title != b.title)
+        return a.title < b.title;
     if (a.ref.path != b.ref.path)
         return a.ref.path < b.ref.path;
     return ta.line < tb.line;
@@ -1107,19 +1070,15 @@ void TaskListModel::rebuild()
     m_rebuildPending = false;
     const QDate today = currentDay();
     const Qt::DayOfWeek ws = weekStartDay();
-    int vaultTasks = 0;
     m_sortMode = m_sort == u"priority"  ? SortByPriority
                  : m_sort == u"created" ? SortByCreated
                  : m_sort == u"page"    ? SortByPage
                                         : SortByDue;
-    const auto less = [this](const Item &a, const Item &b) { return itemLess(a, b); };
     std::optional<Query> query;
     if (m_index) {
-        vaultTasks = int(m_index->tasks().size());
-        const QString text = queryText();
-        auto parsed = parseQuery(text);
-        if (std::holds_alternative<Query>(parsed))
-            query = std::move(std::get<Query>(parsed));
+        auto parsed = parseQuery(queryText());
+        if (auto *q = std::get_if<Query>(&parsed))
+            query = std::move(*q);
     }
     if (!query) {
         m_items.clear();
@@ -1143,7 +1102,7 @@ void TaskListModel::rebuild()
         QSet<VaultPath> changed;
         if (!full && !sync.changed.isEmpty()) {
             changed = QSet<VaultPath>(sync.changed.cbegin(), sync.changed.cend());
-            for (const QueryItem &qi : m_query->itemsOf(changed, *m_index)) {
+            for (const QList<QueryItem> matches = m_query->itemsOf(changed, *m_index); const QueryItem &qi : matches) {
                 if (!qi.task)
                     continue;
                 fresh.append(makeItem(qi, today, ws));
@@ -1167,7 +1126,7 @@ void TaskListModel::rebuild()
             // Through a permutation: an item is too big to move around n log n times.
             QList<qsizetype> order(items.size());
             std::iota(order.begin(), order.end(), 0);
-            std::ranges::sort(order, [&](qsizetype x, qsizetype y) { return itemLess(items[x], items[y]); });
+            std::ranges::sort(order, [&](qsizetype x, qsizetype y) { return itemLess(items.at(x), items.at(y)); });
             QList<Item> sorted;
             sorted.reserve(items.size());
             for (const qsizetype i : std::as_const(order))
@@ -1176,6 +1135,7 @@ void TaskListModel::rebuild()
         } else if (!changed.isEmpty()) {
             m_items.removeIf([&](const Item &item) { return changed.contains(item.ref.path); });
             if (!fresh.isEmpty()) {
+                const auto less = [this](const Item &a, const Item &b) { return itemLess(a, b); };
                 std::ranges::sort(fresh, less);
                 QList<Item> merged;
                 merged.reserve(m_items.size() + fresh.size());
@@ -1186,15 +1146,12 @@ void TaskListModel::rebuild()
             }
         }
     }
-    // The rich text shows links into other notes: rendered again when shown.
-    for (Item &item : m_items)
-        item.rendered = false;
-
     m_total = int(m_items.size());
     m_open = 0;
     m_overdue = 0;
     m_todayCount = 0;
-    for (const Item &item : std::as_const(m_items)) {
+    for (Item &item : m_items) {
+        item.rendered = false; // the rich text shows links into other notes: rendered again when shown
         if (!isClosed(item.ref.task.status))
             ++m_open;
         if (item.section == u"overdue")
@@ -1202,7 +1159,7 @@ void TaskListModel::rebuild()
         else if (item.section == u"today")
             ++m_todayCount;
     }
-    m_vaultTasks = vaultTasks;
+    m_vaultTasks = m_index ? int(m_index->tasks().size()) : 0;
     layoutTasks();
     rebuildRows();
     Q_EMIT countsChanged();
@@ -1213,47 +1170,39 @@ void TaskListModel::layoutTasks()
     const qsizetype n = m_items.size();
     // The listed task each item follows (the nearest listed ancestor task), -1 for none.
     QList<int> parentOf(n, -1);
-    if (m_nestSubtasks) {
-        QHash<QString, QHash<int, int>> byBlock; // path -> block index -> item
-        bool any = false;
+    const auto hasAncestors = [](const Item &item) { return !item.taskAncestors.isEmpty(); };
+    if (m_nestSubtasks && std::ranges::any_of(std::as_const(m_items), hasAncestors)) {
+        QHash<std::pair<QString, int>, int> itemOfBlock; // (path, block index) -> item
+        itemOfBlock.reserve(n);
+        for (int i = 0; i < n; ++i)
+            itemOfBlock.insert({m_items.at(i).ref.path, m_items.at(i).ref.blockIndex}, i);
         for (int i = 0; i < n; ++i) {
             const Item &item = m_items.at(i);
-            byBlock[item.ref.path].insert(item.ref.blockIndex, i);
-            any = any || !item.taskAncestors.isEmpty();
-        }
-        if (any) {
-            for (int i = 0; i < n; ++i) {
-                const Item &item = m_items.at(i);
-                if (item.taskAncestors.isEmpty())
-                    continue;
-                const QHash<int, int> &blocks = byBlock[item.ref.path];
-                for (const int ancestor : item.taskAncestors) {
-                    const auto it = blocks.constFind(ancestor);
-                    if (it != blocks.cend()) {
-                        parentOf[i] = *it;
-                        break;
-                    }
+            for (const int ancestor : item.taskAncestors) {
+                if (const int p = itemOfBlock.value({item.ref.path, ancestor}, -1); p >= 0) {
+                    parentOf[i] = p;
+                    break;
                 }
             }
-            // The section a task is shown in: its own, or the one of the task it follows unless
-            // it is more urgent than that. Ancestors first (a parent's block index is smaller).
-            QList<int> order(n);
-            std::iota(order.begin(), order.end(), 0);
-            std::ranges::sort(order, [&](int a, int b) {
-                const TaskRef &x = m_items.at(a).ref;
-                const TaskRef &y = m_items.at(b).ref;
-                return x.path != y.path ? x.path < y.path : x.blockIndex < y.blockIndex;
-            });
-            QList<qsizetype> shownRank(n, -1);
-            for (const int i : std::as_const(order)) {
-                const qsizetype own = m_items.at(i).sectionRank;
-                const int p = parentOf[i];
-                if (p >= 0 && shownRank[p] >= 0 && own >= shownRank[p]) {
-                    shownRank[i] = shownRank[p];
-                } else {
-                    parentOf[i] = -1;
-                    shownRank[i] = own;
-                }
+        }
+        // The section a task is shown in: its own, or the one of the task it follows unless
+        // it is more urgent than that. Ancestors first (a parent's block index is smaller).
+        QList<int> order(n);
+        std::iota(order.begin(), order.end(), 0);
+        std::ranges::sort(order, [&](int a, int b) {
+            const TaskRef &x = m_items.at(a).ref;
+            const TaskRef &y = m_items.at(b).ref;
+            return x.path != y.path ? x.path < y.path : x.blockIndex < y.blockIndex;
+        });
+        QList<qsizetype> shownRank(n, -1);
+        for (const int i : std::as_const(order)) {
+            const qsizetype own = m_items.at(i).sectionRank;
+            const int p = parentOf[i];
+            if (p >= 0 && shownRank[p] >= 0 && own >= shownRank[p]) {
+                shownRank[i] = shownRank[p];
+            } else {
+                parentOf[i] = -1;
+                shownRank[i] = own;
             }
         }
     }
@@ -1275,7 +1224,6 @@ void TaskListModel::layoutTasks()
         if (parentOf[i] >= 0)
             continue;
         const QString &section = m_items.at(i).section;
-        const qsizetype first = m_layout.size();
         stack.append({i, 0});
         while (!stack.isEmpty()) {
             const auto [item, depth] = stack.takeLast();
@@ -1287,15 +1235,16 @@ void TaskListModel::layoutTasks()
             for (qsizetype k = kids->size() - 1; k >= 0; --k)
                 stack.append({kids->at(k), depth + 1});
         }
-        // Each row's subtasks: the rows after it that are deeper, up to the next one that is not.
-        QList<qsizetype> open; // rows of this tree whose subtasks are still being counted
-        for (qsizetype r = first; r < m_layout.size(); ++r) {
-            while (!open.isEmpty() && m_layout.at(open.last()).depth >= m_layout.at(r).depth)
-                open.removeLast();
-            for (const qsizetype o : std::as_const(open))
-                ++m_layout[o].subtasks;
-            open.append(r);
-        }
+    }
+    // Each row's subtasks: the rows after it that are deeper, up to the next one that is not (a
+    // tree's first row, at depth 0, closes all rows before it).
+    QList<qsizetype> open; // rows whose subtasks are still being counted
+    for (qsizetype r = 0; r < m_layout.size(); ++r) {
+        while (!open.isEmpty() && m_layout.at(open.last()).depth >= m_layout.at(r).depth)
+            open.removeLast();
+        for (const qsizetype o : std::as_const(open))
+            ++m_layout[o].subtasks;
+        open.append(r);
     }
     followFoldedTasks();
 }
@@ -1307,30 +1256,26 @@ void TaskListModel::followFoldedTasks()
     // A folded task stays folded at its key while that line holds a task with the same text and
     // subtasks; else the nearest task of its note with that text and subtasks takes the fold (an
     // edit moved it); else the fold is gone.
-    QHash<QString, QList<qsizetype>> byPath; // the rows of a note's tasks with subtasks
-    for (qsizetype r = 0; r < m_layout.size(); ++r) {
-        if (m_layout.at(r).subtasks > 0)
-            byPath[m_items.at(m_layout.at(r).item).ref.path].append(r);
+    QHash<QString, QList<const Item *>> byPath; // a note's tasks with subtasks, in row order
+    for (const Row &row : std::as_const(m_layout)) {
+        if (row.subtasks > 0) {
+            const Item &item = m_items.at(row.item);
+            byPath[item.ref.path].append(&item);
+        }
     }
     QHash<QString, QString> folded;
-    for (auto it = m_folded.cbegin(); it != m_folded.cend(); ++it) {
-        const qsizetype colon = it.key().lastIndexOf(u':');
-        const QString path = it.key().left(colon);
-        const int line = it.key().mid(colon + 1).toInt();
-        const QList<qsizetype> rows = byPath.value(path);
-        std::optional<qsizetype> best;
-        for (const qsizetype r : rows) {
-            const Item &item = m_items.at(m_layout.at(r).item);
-            if (plainText(item.ref.task.text) != it.value())
-                continue;
-            const int distance = std::abs(item.ref.task.line - line);
-            if (!best || distance < std::abs(m_items.at(m_layout.at(*best).item).ref.task.line - line))
-                best = r;
+    for (auto [key, text] : std::as_const(m_folded).asKeyValueRange()) {
+        const qsizetype colon = key.lastIndexOf(u':');
+        const QString path = key.left(colon);
+        const int line = QStringView(key).sliced(colon + 1).toInt();
+        std::optional<int> best; // the line of the nearest task with that text
+        for (const QList<const Item *> tasks = byPath.value(path); const Item *item : tasks) {
+            const Task &task = item->ref.task;
+            if ((!best || std::abs(task.line - line) < std::abs(*best - line)) && plainText(task.text) == text)
+                best = task.line;
         }
-        if (best) {
-            const Item &item = m_items.at(m_layout.at(*best).item);
-            folded.insert(taskKey(item.ref.path, item.ref.task.line), it.value());
-        }
+        if (best)
+            folded.insert(taskKey(path, *best), text);
     }
     m_folded = std::move(folded);
 }
@@ -1344,122 +1289,94 @@ QString TaskListModel::rowKey(const Row &row) const
 void TaskListModel::rebuildRows()
 {
     QList<Row> rows;
-    QStringList newKeys;
-    {
-        QString current;
-        int foldedDepth = -1; // the depth of the folded task whose subtasks are skipped
-        for (const Row &task : std::as_const(m_layout)) {
-            if (task.section != current) {
-                current = task.section;
-                rows.append(Row{true, current, -1});
-                newKeys.append(u"header:"_s + current);
-                foldedDepth = -1;
-            }
-            if (m_collapsed.contains(task.section))
-                continue;
-            if (foldedDepth >= 0 && task.depth > foldedDepth)
-                continue;
+    QStringList keys;
+    QString current;
+    int foldedDepth = -1; // the depth of the folded task whose subtasks are skipped
+    for (const Row &task : std::as_const(m_layout)) {
+        if (task.section != current) {
+            current = task.section;
+            rows.append(Row{true, current, -1});
+            keys.append(u"header:"_s + current);
             foldedDepth = -1;
-            const QString key = rowKey(task);
-            if (task.subtasks > 0 && m_folded.contains(key))
-                foldedDepth = task.depth;
-            rows.append(task);
-            newKeys.append(key);
         }
+        if (m_collapsed.contains(task.section) || (foldedDepth >= 0 && task.depth > foldedDepth))
+            continue;
+        const QString key = rowKey(task);
+        foldedDepth = task.subtasks > 0 && m_folded.contains(key) ? task.depth : -1;
+        rows.append(task);
+        keys.append(key);
     }
+    QHash<QString, int> newRow; // key -> its row in `rows`
+    newRow.reserve(keys.size());
+    for (int i = 0; i < keys.size(); ++i)
+        newRow.insert(keys.at(i), i);
 
     // Keep the view steady (scroll position, delegates) with row moves/inserts/removes instead of a
-    // reset: ticking off a task moves one row. Large reshuffles reset.
-    const QStringList &oldKeys = m_rowKeys;
-    QSet<QString> newSet; // only needed to update rows that are shown already
-    bool incremental = false;
-    if (!m_rows.isEmpty()) {
-        newSet = QSet<QString>(newKeys.cbegin(), newKeys.cend());
-        int removals = 0;
-        for (const QString &k : oldKeys)
-            removals += newSet.contains(k) ? 0 : 1;
-        incremental = oldKeys.size() == m_rows.size()
-                      && removals + std::abs(int(newKeys.size()) - int(oldKeys.size())) < kMaxIncrementalOps
-                      && QSet<QString>(oldKeys.cbegin(), oldKeys.cend()).size() == oldKeys.size()
-                      && newSet.size() == newKeys.size();
-    }
-
-    if (!incremental) {
-        beginResetModel();
-        m_rows = rows;
-        endResetModel();
-    } else {
+    // reset: ticking off a task moves one row. Large reshuffles reset. Each step below changes
+    // m_rows and m_rowKeys together, between its begin and end signals.
+    const auto gone = [&newRow](const QString &key) { return !newRow.contains(key); };
+    const qsizetype changes =
+            std::ranges::count_if(std::as_const(m_rowKeys), gone) + std::abs(keys.size() - m_rowKeys.size());
+    const bool incremental = !m_rows.isEmpty() && changes < kMaxIncrementalOps && newRow.size() == keys.size()
+                             && m_rowOfKey.size() == m_rowKeys.size(); // the keys are unique, new and old
+    if (incremental) {
         // 0. Point the surviving rows at the new items (m_items was replaced already).
-        QHash<QString, Row> byKey;
-        for (int i = 0; i < newKeys.size(); ++i)
-            byKey.insert(newKeys.at(i), rows.at(i));
-        QList<Row> cur = m_rows;
-        QStringList curKeys = oldKeys;
-        for (int i = 0; i < cur.size(); ++i) {
-            const auto it = byKey.constFind(curKeys.at(i));
-            if (it != byKey.cend())
-                cur[i] = it.value();
+        for (int i = 0; i < m_rows.size(); ++i) {
+            if (const int row = newRow.value(m_rowKeys.at(i), -1); row >= 0)
+                m_rows[i] = rows.at(row);
             else
-                cur[i].item = -1;
+                m_rows[i].item = -1;
         }
-        m_rows = cur;
         // 1. Remove rows that are gone (bottom-up, contiguous ranges).
-        for (int i = int(curKeys.size()) - 1; i >= 0;) {
-            if (newSet.contains(curKeys.at(i))) {
-                --i;
+        for (int last = int(m_rowKeys.size()) - 1; last >= 0; --last) {
+            if (!gone(m_rowKeys.at(last)))
                 continue;
-            }
-            int first = i;
-            while (first - 1 >= 0 && !newSet.contains(curKeys.at(first - 1)))
+            int first = last;
+            while (first > 0 && gone(m_rowKeys.at(first - 1)))
                 --first;
-            beginRemoveRows({}, first, i);
-            cur.remove(first, i - first + 1);
-            curKeys.remove(first, i - first + 1);
-            m_rows = cur;
+            beginRemoveRows({}, first, last);
+            m_rows.remove(first, last - first + 1);
+            m_rowKeys.remove(first, last - first + 1);
             endRemoveRows();
-            i = first - 1;
+            last = first;
         }
         // 2. Walk the new order: move rows into place or insert new ones.
         int ops = 0;
-        for (int i = 0; i < newKeys.size() && ops < kMaxIncrementalOps; ++i) {
-            if (i < curKeys.size() && curKeys.at(i) == newKeys.at(i))
+        for (int i = 0; i < keys.size() && ops < kMaxIncrementalOps; ++i) {
+            if (i < m_rowKeys.size() && m_rowKeys.at(i) == keys.at(i))
                 continue;
-            const qsizetype j = curKeys.indexOf(newKeys.at(i), i + 1);
-            if (j > i) {
-                beginMoveRows({}, int(j), int(j), {}, i);
-                curKeys.move(j, i);
-                cur.move(j, i);
-                m_rows = cur;
+            if (const int j = int(m_rowKeys.indexOf(keys.at(i), i + 1)); j > i) {
+                beginMoveRows({}, j, j, {}, i);
+                m_rowKeys.move(j, i);
+                m_rows.move(j, i);
                 endMoveRows();
             } else {
                 beginInsertRows({}, i, i);
-                curKeys.insert(i, newKeys.at(i));
-                cur.insert(i, rows.at(i));
-                m_rows = cur;
+                m_rowKeys.insert(i, keys.at(i));
+                m_rows.insert(i, rows.at(i));
                 endInsertRows();
             }
             ++ops;
         }
-        if (curKeys != newKeys) {
-            beginResetModel();
-            m_rows = rows;
-            endResetModel();
-        } else {
-            m_rows = rows;
-            if (!m_rows.isEmpty())
-                Q_EMIT dataChanged(createIndex(0, 0), createIndex(int(m_rows.size()) - 1, 0));
-        }
     }
-    m_rowKeys = newKeys;
-    m_rowOfKey.clear();
-    for (int i = 0; i < newKeys.size(); ++i)
-        m_rowOfKey.insert(newKeys.at(i), i);
+    if (!incremental || m_rowKeys != keys) {
+        beginResetModel();
+        m_rows = std::move(rows);
+        m_rowKeys = std::move(keys);
+        m_rowOfKey = std::move(newRow);
+        endResetModel();
+    } else {
+        // The rows are the new ones now (moved, inserted, pointed at the new items): any data changed.
+        m_rowOfKey = std::move(newRow);
+        if (!m_rows.isEmpty())
+            Q_EMIT dataChanged(createIndex(0, 0), createIndex(int(m_rows.size()) - 1, 0));
+    }
 }
 
 QVariantList TaskListModel::sections() const
 {
     QVariantList out;
-    for (const QString &key : sectionKeys()) {
+    for (const QStringList keys = sectionKeys(); const QString &key : keys) {
         const int count = m_sectionCounts.value(key);
         if (count == 0)
             continue;

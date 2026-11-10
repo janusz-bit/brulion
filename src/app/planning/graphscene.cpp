@@ -10,6 +10,8 @@
 
 #include <cmath>
 #include <cstring>
+#include <iterator>
+#include <utility>
 
 namespace brulion::planning {
 
@@ -33,6 +35,20 @@ std::unique_ptr<QTextLayout> makeLayout(const QString &text, const QFont &font)
     }
     layout->endLayout();
     return layout;
+}
+
+/// A node for one mesh chunk: coloured triangles, streamed (it owns its geometry and material).
+QSGGeometryNode *makeMeshNode()
+{
+    auto *node = new QSGGeometryNode;
+    auto *g = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0, 0, QSGGeometry::UnsignedShortType);
+    g->setDrawingMode(QSGGeometry::DrawTriangles);
+    g->setVertexDataPattern(QSGGeometry::StreamPattern);
+    g->setIndexDataPattern(QSGGeometry::StreamPattern);
+    node->setGeometry(g);
+    node->setMaterial(new QSGVertexColorMaterial);
+    node->setFlags(QSGNode::OwnsGeometry | QSGNode::OwnsMaterial);
+    return node;
 }
 
 } // namespace
@@ -77,33 +93,20 @@ void GraphSceneNode::syncChunks(QSGNode *parent, std::vector<QSGGeometryNode *> 
         parent->removeChildNode(node);
         delete node;
     }
+    while (nodes.size() < meshes.size()) {
+        nodes.push_back(makeMeshNode());
+        parent->appendChildNode(nodes.back());
+    }
+    static_assert(sizeof(geometry::Vertex) == sizeof(QSGGeometry::ColoredPoint2D));
     for (size_t i = 0; i < meshes.size(); ++i) {
         const geometry::Mesh &mesh = meshes[i];
-        QSGGeometryNode *node = nullptr;
-        if (i < nodes.size()) {
-            node = nodes[i];
-        } else {
-            node = new QSGGeometryNode;
-            auto *g = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0, 0,
-                                      QSGGeometry::UnsignedShortType);
-            g->setDrawingMode(QSGGeometry::DrawTriangles);
-            g->setVertexDataPattern(QSGGeometry::StreamPattern);
-            g->setIndexDataPattern(QSGGeometry::StreamPattern);
-            node->setGeometry(g);
-            node->setFlag(QSGNode::OwnsGeometry);
-            node->setMaterial(new QSGVertexColorMaterial);
-            node->setFlag(QSGNode::OwnsMaterial);
-            parent->appendChildNode(node);
-            nodes.push_back(node);
-        }
-        QSGGeometry *g = node->geometry();
+        QSGGeometry *g = nodes[i]->geometry();
         g->allocate(int(mesh.vertices.size()), int(mesh.indices.size()));
-        static_assert(sizeof(geometry::Vertex) == sizeof(QSGGeometry::ColoredPoint2D));
         if (!mesh.vertices.empty())
             std::memcpy(g->vertexData(), mesh.vertices.data(), mesh.vertices.size() * sizeof(geometry::Vertex));
         if (!mesh.indices.empty())
             std::memcpy(g->indexData(), mesh.indices.data(), mesh.indices.size() * sizeof(quint16));
-        node->markDirty(QSGNode::DirtyGeometry);
+        nodes[i]->markDirty(QSGNode::DirtyGeometry);
     }
 }
 
@@ -117,14 +120,18 @@ void GraphSceneNode::setLabelBackgrounds(const geometry::MeshChunks &chunks)
     syncChunks(m_labelBackgroundRoot, m_labelBackgrounds, chunks);
 }
 
+void GraphSceneNode::dropTextNode(LabelNode &label)
+{
+    if (!label.node)
+        return;
+    m_labelTextRoot->removeChildNode(label.node);
+    delete std::exchange(label.node, nullptr);
+}
+
 void GraphSceneNode::clearLabels()
 {
-    for (auto &[node, l] : m_labels) {
-        if (l.node) {
-            m_labelTextRoot->removeChildNode(l.node);
-            delete l.node;
-        }
-    }
+    for (auto &entry : m_labels)
+        dropTextNode(entry.second);
     m_labels.clear();
 }
 
@@ -135,8 +142,6 @@ void GraphSceneNode::setLabels(QQuickWindow *window, const std::vector<Label> &l
         clearLabels();
         m_font = font;
     }
-    for (auto &[node, l] : m_labels)
-        l.used = false;
     const qreal snap = dpr > 0 ? dpr : 1;
     for (const Label &label : labels) {
         LabelNode &l = m_labels[label.node];
@@ -169,18 +174,12 @@ void GraphSceneNode::setLabels(QQuickWindow *window, const std::vector<Label> &l
     for (auto it = m_labels.begin(); it != m_labels.end();) {
         LabelNode &l = it->second;
         if (l.used) {
+            l.used = false; // for the next frame
             ++it;
-            continue;
+        } else {
+            dropTextNode(l);
+            it = trim ? m_labels.erase(it) : std::next(it);
         }
-        if (l.node) {
-            m_labelTextRoot->removeChildNode(l.node);
-            delete l.node;
-            l.node = nullptr;
-        }
-        if (trim)
-            it = m_labels.erase(it);
-        else
-            ++it;
     }
     m_shown = qsizetype(labels.size());
 }

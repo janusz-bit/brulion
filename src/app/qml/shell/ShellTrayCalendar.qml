@@ -68,77 +68,73 @@ ApplicationWindow {
         popup.hide()
     }
 
-    Item {
+    ColumnLayout {
         id: content
         anchors.fill: parent
+        anchors.margins: 1 // inside the frame
         focus: true
+        spacing: 0
         Keys.onEscapePressed: popup.hide()
 
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 1 // inside the frame
-            spacing: 0
-
-            RowLayout {
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.space3
+            Layout.rightMargin: Theme.space1
+            Layout.topMargin: Theme.space2
+            spacing: Theme.space2
+            BText {
+                objectName: "trayCalendarToday"
                 Layout.fillWidth: true
-                Layout.leftMargin: Theme.space3
-                Layout.rightMargin: Theme.space1
-                Layout.topMargin: Theme.space2
-                spacing: Theme.space2
-                BText {
-                    objectName: "trayCalendarToday"
-                    Layout.fillWidth: true
-                    text: DatesHelper.formatLong(DatesHelper.today)
-                    variant: "title"
-                    wrapMode: Text.Wrap
-                }
-                BIconButton {
-                    iconName: "x"
-                    label: qsTr("Close")
-                    size: "small"
-                    onClicked: popup.hide()
-                }
+                text: DatesHelper.formatLong(DatesHelper.today)
+                variant: "title"
+                wrapMode: Text.Wrap
             }
-
-            ContentMiniCalendar {
-                id: calendar
-                objectName: "trayCalendarMonth"
-                // No Workspace queries on every save while the window is hidden (an item's own
-                // visibility does not follow its window's).
-                visible: popup.visible
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                placeholder: AppController.status === "ready" ? ""
-                             : popup.notebookOpening ? qsTr("Opening the notebook…")
-                             : qsTr("Open a notebook to see its tasks and reminders.")
-                // Shows the main window on what was opened; Main.qml hides the calendar then.
-                onActivated: AppController.showWindow()
+            BIconButton {
+                iconName: "x"
+                label: qsTr("Close")
+                size: "small"
+                onClicked: popup.hide()
             }
+        }
 
-            Rectangle {
+        ContentMiniCalendar {
+            id: calendar
+            objectName: "trayCalendarMonth"
+            // No Workspace queries on every save while the window is hidden (an item's own
+            // visibility does not follow its window's).
+            visible: popup.visible
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            placeholder: AppController.status === "ready" ? ""
+                         : popup.notebookOpening ? qsTr("Opening the notebook…")
+                         : qsTr("Open a notebook to see its tasks and reminders.")
+            // Shows the main window on what was opened; Main.qml hides the calendar then.
+            onActivated: AppController.showWindow()
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 1
+            color: Theme.borderSubtle
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.margins: Theme.space2
+            spacing: Theme.space2
+            BButton {
+                objectName: "trayCalendarOpen"
                 Layout.fillWidth: true
-                implicitHeight: 1
-                color: Theme.borderSubtle
+                text: qsTr("Open Brulion")
+                iconName: "maximize"
+                onClicked: AppController.showWindow()
             }
-            RowLayout {
+            BButton {
+                objectName: "trayCalendarCapture"
                 Layout.fillWidth: true
-                Layout.margins: Theme.space2
-                spacing: Theme.space2
-                BButton {
-                    objectName: "trayCalendarOpen"
-                    Layout.fillWidth: true
-                    text: qsTr("Open Brulion")
-                    iconName: "maximize"
-                    onClicked: AppController.showWindow()
-                }
-                BButton {
-                    objectName: "trayCalendarCapture"
-                    Layout.fillWidth: true
-                    visible: AppController.status === "ready" || popup.notebookOpening
-                    text: qsTr("Quick capture…")
-                    iconName: "notebook-pen"
-                    onClicked: AppController.quickCapture()
-                }
+                visible: AppController.status === "ready" || popup.notebookOpening
+                text: qsTr("Quick capture…")
+                iconName: "notebook-pen"
+                onClicked: AppController.quickCapture()
             }
         }
     }

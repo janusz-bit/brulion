@@ -87,7 +87,7 @@ public:
             connect(m_workspace, &shell::Workspace::openChanged, this, &PlanningContext::vaultIndexChanged);
     }
 
-    QObject *vaultIndex() const { return m_workspace ? static_cast<QObject *>(m_workspace->index()) : nullptr; }
+    QObject *vaultIndex() const { return m_workspace ? m_workspace->index() : nullptr; }
     EditorHost *host() const { return m_workspace.data(); }
 
 Q_SIGNALS:

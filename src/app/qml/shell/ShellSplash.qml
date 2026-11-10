@@ -5,8 +5,6 @@ import Brulion
 
 // ShellSplash — shown while the app boots or a vault is being opened.
 Rectangle {
-    id: splash
-
     color: Theme.bg
 
     ColumnLayout {

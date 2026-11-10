@@ -3,10 +3,10 @@
 // (remotecontrol.h). Library brulion_uidriver (desktop builds; tests/app/shell tst_uidriver).
 //
 // Input goes through QtGui as a device's does — mouse events through qt_handleMouseEvent (what
-// QtTest calls), touch points through QTest::QTouchEventSequence, wheel events through
-// qt_handleWheelEvent, key events either to the focused item (KeyDelivery::FocusItem: the
-// self-tests) or as a keyboard's (KeyDelivery::System: shortcuts first, then the focused item) —
-// so pointer handlers see whole clicks and long presses, and shortcuts fire.
+// QtTest calls), touch points through QTest::QTouchEventSequence, wheel events (a touchpad's, with
+// scroll phases) sent to the window, key events either to the focused item (KeyDelivery::FocusItem:
+// the self-tests) or as a keyboard's (KeyDelivery::System: shortcuts first, then the focused item)
+// — so pointer handlers see whole clicks and long presses, and shortcuts fire.
 //
 // A gesture is a list of steps (an event, then a pause). run() plays one at once, letting the
 // event loop run in the pauses (nested event processing: only for the self-tests and journeys,

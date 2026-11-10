@@ -54,7 +54,6 @@ public:
     };
 
     explicit ShortcutMap(AppSettings *settings, QObject *parent = nullptr);
-    ~ShortcutMap() override;
 
     /// The actions in their order (titles in the UI language), then the stored custom shortcuts
     /// are read again.

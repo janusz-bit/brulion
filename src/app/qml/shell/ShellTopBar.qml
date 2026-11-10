@@ -76,6 +76,8 @@ Rectangle {
     readonly property bool onPage: routeView === "page" || journalPagePath !== ""
     /// The view shows a page in the editor (a page or a daily note).
     readonly property bool inEditor: onPage || routeView === "journal" || routeView === "journals"
+    /// ... and it is a note (no picture, PDF or other file): reading mode, properties, note mode.
+    readonly property bool inNote: inEditor && !picture && !pdf && !fileOnly
     readonly property string pagePath: routeView === "page" ? routePath : journalPagePath
     // (Workspace.favorites: followed; it lists the favourites that exist.)
     readonly property bool favorite: onPage && Workspace.favorites.length >= 0 && Workspace.isFavorite(bar.pagePath)
@@ -180,8 +182,9 @@ Rectangle {
             Accessible.name: qsTr("Tabs (%1)").arg(AppController.tabCount)
             onClicked: tabSwitcher.popup(tabSwitcherButton, tabSwitcherButton.width - tabSwitcher.width, tabSwitcherButton.height)
             background: Rectangle {
+                visible: tabSwitcherButton.down
                 radius: Theme.radiusFull
-                color: tabSwitcherButton.down ? Theme.bgPressed : "transparent"
+                color: Theme.bgPressed
             }
             contentItem: Item {
                 Rectangle {
@@ -271,7 +274,7 @@ Rectangle {
         // journal's (the rail, the bottom navigation — on a phone both are on screen).
         BIconButton {
             objectName: "topBarReadingMode"
-            visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
+            visible: bar.inNote
             iconName: "eye"
             label: AppSettings.readingMode ? qsTr("Leave reading mode") : qsTr("Reading mode")
             shortcut: ShortcutMap.sequences["view.reading"] || ""
@@ -519,7 +522,7 @@ Rectangle {
         // ---- The note's mode: document, outline, Markdown source --------------------------
         Column {
             objectName: "menuNoteMode"
-            visible: bar.inEditor && bar.noteMode !== "" && !bar.picture && !bar.pdf && !bar.fileOnly
+            visible: bar.inNote && bar.noteMode !== ""
             height: visible ? implicitHeight : 0
             bottomPadding: Theme.space1
             spacing: 2
@@ -624,7 +627,7 @@ Rectangle {
         BMenuItem {
             // The properties panel's add row of the page shown (the day being written in).
             objectName: "menuAddProperty"
-            visible: bar.inEditor && !bar.picture && !bar.pdf && !bar.fileOnly
+            visible: bar.inNote
             height: visible ? implicitHeight : 0
             text: qsTr("Add property")
             iconName: "plus"
@@ -689,7 +692,6 @@ Rectangle {
         // ---- The notebook's places (on phones this menu is the only way there besides the
         // palette) ------------------------------------------------------------------------------
         BMenu {
-            id: notebookPlaces
             objectName: "menuNotebook"
             title: qsTr("Notebook")
             iconName: "notebook-pen"

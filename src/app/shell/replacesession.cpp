@@ -6,6 +6,8 @@
 
 #include <QElapsedTimer>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
@@ -13,6 +15,20 @@ namespace brulion::shell {
 namespace {
 constexpr int ScanDebounceMs = 350;
 constexpr int SliceMs = 12;
+
+/// A query or replacement is one line: line breaks become spaces.
+QString oneLine(QString text)
+{
+    text.replace(u'\r', u' ').replace(u'\n', u' ');
+    return text;
+}
+
+/// The index of the file `path` in `plan`, else -1.
+int fileIndex(const notebook::ReplacePlan &plan, const QString &path)
+{
+    const auto it = std::ranges::find(plan.files, path, &notebook::ReplaceFile::path);
+    return it == plan.files.cend() ? -1 : int(it - plan.files.cbegin());
+}
 } // namespace
 
 ReplaceSession::ReplaceSession(Workspace *workspace) : QAbstractListModel(workspace), m_workspace(workspace)
@@ -53,11 +69,9 @@ QVariant ReplaceSession::data(const QModelIndex &index, int role) const
         return {};
     const Row &row = m_rows.at(index.row());
     const notebook::ReplaceFile &file = m_plan.files.at(row.file);
-    const Ticks ticks = ticksOf(file.path);
-    const bool isHit = row.hit >= 0;
-    const notebook::ReplaceHit *hit = isHit ? &file.hits.at(row.hit) : nullptr;
+    const notebook::ReplaceHit *hit = row.hit >= 0 ? &file.hits.at(row.hit) : nullptr;
     switch (role) {
-    case KindRole: return row.more ? u"more"_s : isHit ? u"hit"_s : u"file"_s;
+    case KindRole: return row.more ? u"more"_s : hit ? u"hit"_s : u"file"_s;
     case PathRole: return file.path;
     case TitleRole: {
         const QString name = paths::basename(file.path);
@@ -67,8 +81,10 @@ QVariant ReplaceSession::data(const QModelIndex &index, int role) const
     case FolderRole: return paths::dirname(file.path);
     case HitsRole: return row.more ? file.hitCount - int(file.hits.size()) : file.hitCount;
     case TickRole: {
-        if (isHit)
+        if (hit) {
+            const Ticks ticks = ticksOf(file.path);
             return ticks.file && !ticks.excluded.contains(hit->index) ? 2 : 0;
+        }
         const int ticked = tickedInFile(file);
         return ticked == 0 ? 0 : ticked == file.hitCount ? 2 : 1;
     }
@@ -84,58 +100,51 @@ QVariant ReplaceSession::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> ReplaceSession::roleNames() const
 {
-    return { { KindRole, "kind" },        { PathRole, "path" },       { TitleRole, "title" },
-             { FolderRole, "folder" },    { HitsRole, "hits" },       { TickRole, "tick" },
-             { HitRole, "hit" },          { LineRole, "line" },       { BeforeRole, "before" },
-             { MatchedRole, "matched" },  { AfterRole, "after" },     { InLinkRole, "inLink" } };
+    static const QHash<int, QByteArray> names{
+            {KindRole, "kind"},     {PathRole, "path"},       {TitleRole, "title"}, {FolderRole, "folder"},
+            {HitsRole, "hits"},     {TickRole, "tick"},       {HitRole, "hit"},     {LineRole, "line"},
+            {BeforeRole, "before"}, {MatchedRole, "matched"}, {AfterRole, "after"}, {InLinkRole, "inLink"},
+    };
+    return names;
+}
+
+template<typename T>
+bool ReplaceSession::setParameter(T &parameter, const T &value)
+{
+    if (parameter == value)
+        return false;
+    parameter = value;
+    Q_EMIT parametersChanged();
+    return true;
 }
 
 void ReplaceSession::setQuery(const QString &query)
 {
-    QString line = query;
-    line.replace(u'\r', u' ').replace(u'\n', u' ');
-    if (m_query == line)
-        return;
-    m_query = line;
-    Q_EMIT parametersChanged();
-    scheduleScan();
+    if (setParameter(m_query, oneLine(query)))
+        scheduleScan();
 }
 
 void ReplaceSession::setReplacement(const QString &replacement)
 {
-    QString line = replacement;
-    line.replace(u'\r', u' ').replace(u'\n', u' ');
-    if (m_replacement == line)
-        return;
-    m_replacement = line;
-    Q_EMIT parametersChanged();
+    setParameter(m_replacement, oneLine(replacement));
 }
 
 void ReplaceSession::setMatchCase(bool on)
 {
-    if (m_options.matchCase == on)
-        return;
-    m_options.matchCase = on;
-    Q_EMIT parametersChanged();
-    scheduleScan();
+    if (setParameter(m_options.matchCase, on))
+        scheduleScan();
 }
 
 void ReplaceSession::setMatchDiacritics(bool on)
 {
-    if (m_options.matchDiacritics == on)
-        return;
-    m_options.matchDiacritics = on;
-    Q_EMIT parametersChanged();
-    scheduleScan();
+    if (setParameter(m_options.matchDiacritics, on))
+        scheduleScan();
 }
 
 void ReplaceSession::setWholeWord(bool on)
 {
-    if (m_options.wholeWord == on)
-        return;
-    m_options.wholeWord = on;
-    Q_EMIT parametersChanged();
-    scheduleScan();
+    if (setParameter(m_options.wholeWord, on))
+        scheduleScan();
 }
 
 qreal ReplaceSession::scanProgress() const
@@ -151,12 +160,7 @@ qreal ReplaceSession::applyProgress() const
 
 ReplaceSession::Ticks ReplaceSession::ticksOf(const QString &path) const
 {
-    const auto it = m_ticks.constFind(path);
-    if (it != m_ticks.cend())
-        return *it;
-    Ticks ticks;
-    ticks.file = m_defaultTicked;
-    return ticks;
+    return m_ticks.value(path, Ticks{m_defaultTicked, {}});
 }
 
 int ReplaceSession::tickedInFile(const notebook::ReplaceFile &file) const
@@ -167,10 +171,8 @@ int ReplaceSession::tickedInFile(const notebook::ReplaceFile &file) const
 
 int ReplaceSession::tickedFiles() const
 {
-    int out = 0;
-    for (const notebook::ReplaceFile &file : m_plan.files)
-        out += tickedInFile(file) > 0 ? 1 : 0;
-    return out;
+    return int(std::ranges::count_if(m_plan.files,
+                                     [this](const notebook::ReplaceFile &file) { return tickedInFile(file) > 0; }));
 }
 
 int ReplaceSession::tickedHits() const
@@ -223,23 +225,20 @@ void ReplaceSession::adoptKeptTicks()
         if (it != m_kept.files.cend() && it->hash == file.hash && !m_ticks.contains(file.path))
             m_ticks.insert(file.path, it->ticks);
     }
+    if (!m_scan) // the scan is done: every note had its ticks back
+        m_kept = {};
 }
 
 void ReplaceSession::scheduleScan()
 {
-    stopScan();
-    forgetResults();
+    reset();
     if (!m_query.isEmpty())
         m_debounce.start();
-    else
-        m_debounce.stop();
 }
 
 void ReplaceSession::scanNow()
 {
-    m_debounce.stop();
-    stopScan();
-    forgetResults();
+    reset();
     startScan();
 }
 
@@ -282,28 +281,23 @@ void ReplaceSession::scanStep()
     if (!m_scan)
         return;
     const notebook::ReplaceScan::Step step = m_scan->step(SliceMs);
-    if (!m_scan->takeMerged().isEmpty()) {
-        m_plan = m_scan->plan();
-        adoptKeptTicks();
-        rebuildRows();
-        Q_EMIT resultsChanged();
-    } else {
-        // (Notes without hits and skipped ones count too.)
-        m_plan.skipped = m_scan->plan().skipped;
-    }
+    if (!m_scan->takeMerged().isEmpty())
+        showPlan(m_scan->plan());
+    else
+        m_plan.skipped = m_scan->plan().skipped; // (notes without hits and skipped ones count too)
     Q_EMIT progressChanged();
+    if (!m_scan) // a slot stopped it
+        return;
     switch (step) {
-    case notebook::ReplaceScan::Step::Done:
-        m_plan = m_scan->plan();
-        adoptKeptTicks();
-        m_kept = {};
+    case notebook::ReplaceScan::Step::Done: {
+        notebook::ReplacePlan plan = m_scan->plan();
         m_scan.reset();
         if (m_applyMode == ApplyMode::None)
             m_slices.stop();
-        rebuildRows();
-        Q_EMIT resultsChanged();
+        showPlan(std::move(plan));
         Q_EMIT stateChanged();
         break;
+    }
     case notebook::ReplaceScan::Step::More:
         m_slices.start(); // the event loop gets its turn
         break;
@@ -314,11 +308,12 @@ void ReplaceSession::scanStep()
     }
 }
 
-void ReplaceSession::rebuildRows()
+void ReplaceSession::showPlan(notebook::ReplacePlan plan)
 {
     QList<Row> rows;
-    for (int f = 0; f < m_plan.files.size(); ++f) {
-        const notebook::ReplaceFile &file = m_plan.files.at(f);
+    rows.reserve(2 * plan.files.size() + plan.previewHits);
+    for (int f = 0; f < plan.files.size(); ++f) {
+        const notebook::ReplaceFile &file = plan.files.at(f);
         rows.append({ f, -1, false });
         for (int h = 0; h < file.hits.size(); ++h)
             rows.append({ f, h, false });
@@ -327,69 +322,54 @@ void ReplaceSession::rebuildRows()
     }
     // (While a scan merges; afterwards the rows only change when a new scan starts.)
     beginResetModel();
+    m_plan = std::move(plan);
+    adoptKeptTicks();
     m_rows = std::move(rows);
     endResetModel();
-}
-
-int ReplaceSession::fileRow(int file) const
-{
-    for (int r = 0; r < m_rows.size(); ++r) {
-        if (m_rows.at(r).file == file)
-            return r;
-    }
-    return -1;
+    Q_EMIT resultsChanged();
 }
 
 void ReplaceSession::fileTickChanged(int file)
 {
-    const int first = fileRow(file);
-    if (first < 0)
+    // (The rows are in the order of their files.)
+    const auto [first, end] = std::ranges::equal_range(std::as_const(m_rows), file, {}, &Row::file);
+    if (first == end)
         return;
-    int last = first;
-    while (last + 1 < m_rows.size() && m_rows.at(last + 1).file == file)
-        ++last;
-    Q_EMIT dataChanged(index(first), index(last), { TickRole });
+    Q_EMIT dataChanged(index(int(first - m_rows.cbegin())), index(int(end - m_rows.cbegin()) - 1), {TickRole});
     Q_EMIT resultsChanged();
 }
 
 void ReplaceSession::setFileTicked(const QString &path, bool ticked)
 {
-    for (int f = 0; f < m_plan.files.size(); ++f) {
-        if (m_plan.files.at(f).path == path) {
-            Ticks &ticks = m_ticks[path];
-            ticks.file = ticked;
-            ticks.excluded.clear();
-            fileTickChanged(f);
-            return;
-        }
-    }
+    const int f = fileIndex(m_plan, path);
+    if (f < 0)
+        return;
+    m_ticks.insert(path, Ticks{ticked, {}});
+    fileTickChanged(f);
 }
 
 void ReplaceSession::setHitTicked(const QString &path, int hit, bool ticked)
 {
-    for (int f = 0; f < m_plan.files.size(); ++f) {
-        const notebook::ReplaceFile &file = m_plan.files.at(f);
-        if (file.path != path)
-            continue;
-        if (!m_ticks.contains(path))
-            m_ticks.insert(path, ticksOf(path));
-        Ticks &ticks = m_ticks[path];
-        if (ticked && !ticks.file) {
-            // From nothing ticked: only this one (as far as the preview names them).
-            ticks.file = true;
-            ticks.excluded.clear();
-            for (int i = 0; i < file.hitCount; ++i) {
-                if (i != hit)
-                    ticks.excluded.insert(i);
-            }
-        } else if (ticked) {
-            ticks.excluded.remove(hit);
-        } else {
-            ticks.excluded.insert(hit);
-        }
-        fileTickChanged(f);
+    const int f = fileIndex(m_plan, path);
+    const int hitCount = f < 0 ? 0 : m_plan.files.at(f).hitCount;
+    if (hit < 0 || hit >= hitCount)
         return;
+    // Its own ticks from here on (the default ones if it has none yet), changed in place.
+    Ticks &ticks = *m_ticks.insert(path, ticksOf(path));
+    if (ticked && !ticks.file) {
+        // From nothing ticked: only this one (as far as the preview names them).
+        ticks.file = true;
+        ticks.excluded.clear();
+        for (int i = 0; i < hitCount; ++i) {
+            if (i != hit)
+                ticks.excluded.insert(i);
+        }
+    } else if (ticked) {
+        ticks.excluded.remove(hit);
+    } else {
+        ticks.excluded.insert(hit);
     }
+    fileTickChanged(f);
 }
 
 void ReplaceSession::tickAll(bool ticked)
@@ -434,11 +414,11 @@ void ReplaceSession::applyStep()
     clock.start();
     while (vault && m_applyAt < m_choices.size() && clock.elapsed() < SliceMs) {
         const notebook::ReplaceChoice &choice = m_choices.at(m_applyAt++);
-        const auto file = std::find_if(m_applyPlan.files.cbegin(), m_applyPlan.files.cend(),
-                                       [&](const notebook::ReplaceFile &f) { return f.path == choice.path; });
-        if (file == m_applyPlan.files.cend())
+        const int file = fileIndex(m_applyPlan, choice.path);
+        if (file < 0)
             continue;
-        notebook::ReplacedFile done = notebook::applyToFile(*vault, *file, m_applyPlan, m_applyReplacement, choice.excluded);
+        notebook::ReplacedFile done = notebook::applyToFile(*vault, m_applyPlan.files.at(file), m_applyPlan,
+                                                            m_applyReplacement, choice.excluded);
         switch (done.status) {
         case notebook::ReplaceStatus::Written:
             m_appliedHits += done.replaced;

@@ -49,7 +49,7 @@ FocusScope {
 
     Connections {
         target: AppController
-        function onTabRouteChanged(id: int) {
+        function onTabRouteChanged(id: int): void {
             if (id === pane.tabId)
                 pane.sync()
         }

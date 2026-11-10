@@ -65,8 +65,9 @@ Rectangle {
                 anchors.fill: parent
                 anchors.topMargin: 2
                 anchors.bottomMargin: 1
+                visible: syncHover.hovered
                 radius: Theme.radiusXs
-                color: syncHover.hovered ? Theme.bgHover : "transparent"
+                color: Theme.bgHover
             }
             Row {
                 id: syncRow
@@ -129,8 +130,9 @@ Rectangle {
                 anchors.fill: parent
                 anchors.topMargin: 2
                 anchors.bottomMargin: 1
+                visible: paletteHover.hovered
                 radius: Theme.radiusXs
-                color: paletteHover.hovered ? Theme.bgHover : "transparent"
+                color: Theme.bgHover
             }
             Row {
                 id: paletteRow

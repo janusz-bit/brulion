@@ -30,7 +30,6 @@
 #include "forcelayout.h"
 
 #include <QObject>
-#include <QPointer>
 #include <QtGlobal>
 
 #include <atomic>
@@ -132,8 +131,8 @@ private:
     void wake();
 
     std::shared_ptr<Shared> m_shared = std::make_shared<Shared>();
-    GraphSimWorker *m_worker = nullptr;
-    QThread *m_thread = nullptr;
+    std::unique_ptr<GraphSimWorker> m_worker;
+    QThread *m_thread = nullptr; ///< a child of this object: deleted after the worker
     bool m_threaded = false;
 };
 

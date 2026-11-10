@@ -9,7 +9,7 @@
 //   default: templates link to everything they will be used for; tags and missing pages only
 //   templates link to go with them). The local graph's centre is shown even when it is a template.
 // * Local graph: with `focusPath` set (a node id: a page path) only the nodes within `depth`
-//   (1 or 2) links of it are kept.
+//   (1–3) links of it are kept.
 // * `maxNodes` caps the graph (the best connected nodes win, the focus always stays):
 //   `truncated` / `totalNodeCount` tell the view. Phones and the browser use a lower cap.
 // * The simulation runs on a worker thread while `active` (GraphSimulation; inline on the GUI

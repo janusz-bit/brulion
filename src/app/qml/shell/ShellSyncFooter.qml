@@ -43,7 +43,7 @@ T.ItemDelegate {
     readonly property string iconName: {
         switch (control.syncState) {
         case "idle": return control.statusIcon !== "" ? control.statusIcon : "cloud"
-        case "error": return "cloud-off"
+        case "error":
         case "offline": return "cloud-off"
         }
         if (Workspace.syncthingFolder)
@@ -102,9 +102,13 @@ T.ItemDelegate {
         }
     }
 
-    background: Rectangle {
-        radius: control.compact ? Theme.radius : 0
-        color: control.pressed ? Theme.bgPressed : control.hovered ? Theme.bgHover : "transparent"
+    background: Item {
+        Rectangle {
+            anchors.fill: parent
+            visible: control.pressed || control.hovered
+            radius: control.compact ? Theme.radius : 0
+            color: control.pressed ? Theme.bgPressed : Theme.bgHover
+        }
         Rectangle {
             visible: !control.compact
             width: parent.width

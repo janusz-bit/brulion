@@ -62,6 +62,7 @@
 
 #include "index/notecache.h"
 #include "index/vaultindex.h"
+#include "markdown/inlinerenderer.h"
 #include "types.h"
 
 #include <QAbstractListModel>
@@ -350,6 +351,8 @@ private:
     QString rowKey(const Row &row) const;
     void rebuildRows();
     void filtersEdited();
+    /// Set a filter member to `value`: filtersChanged() and a rebuild when it changed.
+    void setFilter(QString &filter, const QString &value);
     QVariant taskRowData(const Item &item, int role) const;
     QVariant sectionRowData(const QString &section, int role) const;
     QString pageQueryValue(const QString &path) const;
@@ -361,6 +364,7 @@ private:
     int m_weekStart = 0;
     QString m_locale = QStringLiteral("pl");
     QVariantMap m_paletteMap;
+    markdown::Palette m_palette; ///< paletteFromMap(m_paletteMap), the rich text's colours
     std::function<QDate()> m_clock;
 
     QString m_tag;

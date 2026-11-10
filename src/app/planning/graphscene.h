@@ -74,10 +74,12 @@ private:
         std::unique_ptr<QTextLayout> layout;
         QString text;
         QColor color;
-        bool used = false;
+        bool used = false; ///< shown by the setLabels() in progress (false between frames)
     };
 
     static void syncChunks(QSGNode *parent, std::vector<QSGGeometryNode *> &nodes, const geometry::MeshChunks &chunks);
+    /// Removes and deletes the label's text node (its layout stays).
+    void dropTextNode(LabelNode &label);
 
     QSGRectangleNode *m_background = nullptr;
     QSGTransformNode *m_camera = nullptr;

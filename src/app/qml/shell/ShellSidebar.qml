@@ -56,8 +56,9 @@ Rectangle {
     readonly property bool recentShown: AppSettings.sidebarHidden.indexOf("recent") < 0
     /// The sections above the tree (the list's header) and below it (its footer), in the order of
     /// the settings: "favorites" | "recent".
-    readonly property list<string> sectionsBefore: AppSettings.sidebarSections.slice(0, Math.max(0, AppSettings.sidebarSections.indexOf("pages")))
-    readonly property list<string> sectionsAfter: AppSettings.sidebarSections.slice(AppSettings.sidebarSections.indexOf("pages") + 1)
+    readonly property int pagesSectionAt: AppSettings.sidebarSections.indexOf("pages")
+    readonly property list<string> sectionsBefore: AppSettings.sidebarSections.slice(0, Math.max(0, pagesSectionAt))
+    readonly property list<string> sectionsAfter: AppSettings.sidebarSections.slice(pagesSectionAt + 1)
     /// "Recent": up to 5 recent pages, without the one shown (the tree highlights it). Set once
     /// per change — a route change updates the recent pages and then the current path — and only
     /// when the list differs, so the header above the tree is not rebuilt (and resized) twice while
@@ -71,8 +72,8 @@ Rectangle {
         sidebar.recentOthers = next
     }
     /// A list's JSON text (typed).
-    function textOf(list: var): string {
-        return Js.stringify(list)
+    function textOf(value: var): string {
+        return Js.stringify(value)
     }
     function recentNext(): list<var> {
         return AppController.recentPagesExcept(sidebar.currentPath, 5)
@@ -156,6 +157,7 @@ Rectangle {
     }
     /// Indentation of a row: 18 px (touch) / 14 px per level, 8 px per level below the fourth
     /// (a narrow drawer keeps room for deep names).
+    readonly property int rowInset: Theme.touchUi ? 14 : 10
     function indent(depth: int): real {
         const step = Theme.touchUi ? 18 : 14
         return depth <= 4 ? depth * step : 4 * step + (depth - 4) * 8
@@ -602,7 +604,7 @@ Rectangle {
 
                 width: list.width - list.leftMargin - list.rightMargin
                 dense: true
-                leftPadding: (Theme.touchUi ? 14 : 10) + sidebar.indent(depth)
+                leftPadding: sidebar.rowInset + sidebar.indent(depth)
                 // Daily notes by their date ("Wed, Oct 14"), not by their file name, in the language
                 // shown: DatesHelper.locale read for real (a method call alone is not tracked).
                 text: journalDate === "" ? title : DatesHelper.locale !== "" ? DatesHelper.formatShort(journalDate) : journalDate
@@ -633,7 +635,7 @@ Rectangle {
                     delegate: Rectangle {
                         required property int index
                         z: -2
-                        x: Math.round((Theme.touchUi ? 14 : 10) + sidebar.indent(index) + Theme.iconSize / 2)
+                        x: Math.round(sidebar.rowInset + sidebar.indent(index) + Theme.iconSize / 2)
                         width: 1
                         height: row.height
                         color: Theme.guideOnSunken
@@ -741,7 +743,6 @@ Rectangle {
     // Sees the pointer of a drag wherever it goes (a passive observer above the list: it takes
     // nothing from the rows), and its release: the drop.
     Item {
-        id: pointerWatch
         anchors.fill: parent
         z: 10
         PointHandler {
@@ -817,6 +818,37 @@ Rectangle {
     // No edge line of its own: on wide windows the SplitView's handle (BSplitHandle) is the one
     // hairline beside the page; the drawer has its own edge.
 
+    /// A menu entry that takes no room while hidden.
+    component HidingItem: BMenuItem {
+        height: visible ? implicitHeight : 0
+    }
+    component HidingSeparator: BMenuSeparator {
+        height: visible ? implicitHeight : 0
+    }
+    /// A page of "Favorites" / "Recent" ({ path, title }): its own icon (docs/UI.md "Page icon and
+    /// cover") in place of `fallbackIcon`; a middle click opens it in a new tab (docs/UI.md "Tabs,
+    /// split view and windows").
+    component PageRow: BListItem {
+        id: pageRow
+        required property string path
+        required property string title
+        property string fallbackIcon
+        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(pageRow.path) : ({})
+        readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
+        readonly property string pageIconName: AppController.routeText(pageIcon, "name")
+        width: parent.width
+        dense: true
+        text: title
+        iconName: pageIconKind === "app" ? pageIconName : fallbackIcon
+        iconEmoji: pageIconKind === "emoji" ? pageIconName : ""
+        TapHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            acceptedButtons: Qt.MiddleButton
+            enabled: OpenIn.tabs
+            onTapped: sidebar.openPage(pageRow.path, "tab")
+        }
+    }
+
     // ---- The page sections around the tree (their order: AppSettings.sidebarSections) ----------
     Component {
         id: favoritesSection
@@ -844,30 +876,13 @@ Rectangle {
 
                 Repeater {
                     model: Workspace.favorites
-                    delegate: BListItem {
+                    // (Workspace.favorites: { path, title }.)
+                    delegate: PageRow {
                         id: favoriteItem
-                        // (Workspace.favorites: { path, title }.)
-                        required property string path
-                        required property string title
-                        /// The page's own icon in place of the star (docs/UI.md "Page icon and cover").
-                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(path) : ({})
-                        readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
-                        readonly property string pageIconName: AppController.routeText(pageIcon, "name")
-                        width: parent.width
-                        dense: true
-                        text: title
-                        iconName: pageIconKind === "app" ? pageIconName : "star"
-                        iconEmoji: pageIconKind === "emoji" ? pageIconName : ""
+                        fallbackIcon: "star"
                         selected: sidebar.routeView === "page" && sidebar.routePath === path
                         onClicked: sidebar.openPageHere(favoriteItem.path)
                         onPressAndHold: sidebar.showContextMenu(favoriteItem, favoriteItem.path, false)
-                        TapHandler {
-                            // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            acceptedButtons: Qt.MiddleButton
-                            enabled: OpenIn.tabs
-                            onTapped: sidebar.openPage(favoriteItem.path, "tab")
-                        }
                         TapHandler {
                             // Right-click only (see the tree rows below): never a finger.
                             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
@@ -904,27 +919,11 @@ Rectangle {
 
                 Repeater {
                     model: sidebar.recentOthers
-                    delegate: BListItem {
+                    // (AppController.recentPagesExcept: { path, title }.)
+                    delegate: PageRow {
                         id: recentItem
-                        // (AppController.recentPagesExcept: { path, title }.)
-                        required property string path
-                        required property string title
-                        readonly property var pageIcon: Workspace.revision >= 0 ? Workspace.pageIconOf(path) : ({})
-                        readonly property string pageIconKind: AppController.routeText(pageIcon, "kind")
-                        readonly property string pageIconName: AppController.routeText(pageIcon, "name")
-                        width: parent.width
-                        dense: true
-                        text: title
-                        iconName: pageIconKind === "app" ? pageIconName : "clock"
-                        iconEmoji: pageIconKind === "emoji" ? pageIconName : ""
+                        fallbackIcon: "clock"
                         onClicked: sidebar.openPageHere(recentItem.path)
-                        TapHandler {
-                            // A middle click: in a new tab (docs/UI.md "Tabs, split view and windows").
-                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                            acceptedButtons: Qt.MiddleButton
-                            enabled: OpenIn.tabs
-                            onTapped: sidebar.openPage(recentItem.path, "tab")
-                        }
                     }
                 }
             }
@@ -942,69 +941,60 @@ Rectangle {
                                          && Workspace.exists(contextMenu.path)
         readonly property bool page: !isDir && Js.endsWith(Js.toLowerCase(contextMenu.path), ".md")
 
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuNewPage"
             visible: contextMenu.isDir
-            height: visible ? implicitHeight : 0
             text: qsTr("New page here")
             iconName: "square-pen"
             onTriggered: sidebar.newPageRequested(contextMenu.path)
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuNewFolder"
             visible: contextMenu.isDir
-            height: visible ? implicitHeight : 0
             text: qsTr("New folder…")
             iconName: "folder-plus"
             onTriggered: sidebar.newFolderRequested(contextMenu.path)
         }
-        BMenuSeparator {
+        HidingSeparator {
             visible: contextMenu.isDir
-            height: visible ? implicitHeight : 0
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuShowPages"
             visible: contextMenu.isDir
-            height: visible ? implicitHeight : 0
             text: qsTr("Show folder pages")
             iconName: "files"
             onTriggered: sidebar.go({ view: "allPages", path: contextMenu.path })
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuSearch"
             visible: contextMenu.isDir
-            height: visible ? implicitHeight : 0
             text: qsTr("Search in folder")
             iconName: "search"
             onTriggered: sidebar.go({ view: "search", folder: contextMenu.path })
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuOpenTab"
             visible: !contextMenu.isDir
-            height: visible ? implicitHeight : 0
             text: qsTr("Open in new tab")
             iconName: "plus"
             onTriggered: sidebar.openPage(contextMenu.path, "tab")
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuOpenSide"
             visible: !contextMenu.isDir && !Theme.narrow
-            height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")
             iconName: "panel-right"
             onTriggered: AppController.openPage(contextMenu.path, -1, true)
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuOpenWindow"
             visible: !contextMenu.isDir && AppController.windowsAllowed && !Theme.narrow
-            height: visible ? implicitHeight : 0
             text: qsTr("Open in new window")
             iconName: "app-window"
             onTriggered: AppController.openWindow({ view: "page", path: contextMenu.path })
         }
-        BMenuItem {
+        HidingItem {
             visible: contextMenu.page
-            height: visible ? implicitHeight : 0
             text: contextMenu.favorite ? qsTr("Remove from favorites") : qsTr("Add to favorites")
             iconName: "star"
             onTriggered: Workspace.toggleFavorite(contextMenu.path)
@@ -1015,18 +1005,16 @@ Rectangle {
             iconName: "folder-input"
             onTriggered: sidebar.moveRequested(contextMenu.path, contextMenu.isDir)
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuCopyLink"
             visible: !contextMenu.isDir
-            height: visible ? implicitHeight : 0
             text: qsTr("Copy link")
             iconName: "link"
             onTriggered: sidebar.copyLink(contextMenu.path)
         }
-        BMenuItem {
+        HidingItem {
             objectName: "treeMenuExport"
             visible: contextMenu.isDir
-            height: visible ? implicitHeight : 0
             text: qsTr("Export folder…")
             iconName: "share"
             onTriggered: sidebar.go({ view: "importExport", tab: "export", scope: "folder", folder: contextMenu.path })
@@ -1037,9 +1025,8 @@ Rectangle {
             iconName: "pencil"
             onTriggered: sidebar.renameRequested(contextMenu.path, contextMenu.isDir)
         }
-        BMenuItem {
+        HidingItem {
             visible: contextMenu.page
-            height: visible ? implicitHeight : 0
             text: qsTr("Page history")
             iconName: "history"
             onTriggered: sidebar.go({ view: "history", path: contextMenu.path })

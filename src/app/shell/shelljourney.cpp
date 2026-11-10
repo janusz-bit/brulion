@@ -14,6 +14,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 
@@ -72,18 +73,18 @@ private:
     bool onScreen(const QQuickItem *item) const { return uidriver::onScreen(m_window, item); }
     /// The topmost visible item matching `pred` (popups first, then the last one painted).
     QQuickItem *find(const std::function<bool(QQuickItem *)> &pred) const { return uidriver::topmost(m_window, pred); }
-    QQuickItem *findText(const QString &text, const char *within = nullptr, int timeoutMs = 3000) const
+    /// find(), waiting up to `timeoutMs` for such an item.
+    QQuickItem *waitForItem(const std::function<bool(QQuickItem *)> &pred, int timeoutMs) const
     {
         QQuickItem *found = nullptr;
-        waitFor(
-            [&] {
-                found = find([&](QQuickItem *item) {
-                    return labelOf(item) == text && (!within || hasAncestor(item, within));
-                });
-                return found != nullptr;
-            },
-            timeoutMs);
+        waitFor([&] { return (found = find(pred)) != nullptr; }, timeoutMs);
         return found;
+    }
+    QQuickItem *findText(const QString &text, const char *within = nullptr, int timeoutMs = 3000) const
+    {
+        return waitForItem(
+                [&](QQuickItem *item) { return labelOf(item) == text && (!within || hasAncestor(item, within)); },
+                timeoutMs);
     }
     QQuickItem *findType(const char *type, const std::function<bool(QQuickItem *)> &pred = {}) const
     {
@@ -105,10 +106,7 @@ private:
             uidriver::run(uidriver::touchTap(m_window, scenePos, 50, 250)); // a quick tap
             return;
         }
-        uidriver::ClickTiming timing;
-        timing.afterMove = 20;
-        timing.afterPress = 40;
-        timing.afterRelease = 250;
+        const uidriver::ClickTiming timing{.afterMove = 20, .afterPress = 40, .afterRelease = 250};
         uidriver::run(uidriver::mouseClick(m_window, scenePos, Qt::LeftButton, Qt::NoModifier, timing));
     }
     bool click(QQuickItem *item, qreal fx = 0.5, qreal fy = 0.5)
@@ -124,32 +122,21 @@ private:
     /// The visible item named `name` (objectName), waiting for it like findText().
     QQuickItem *findName(const QString &name, int timeoutMs = 3000) const
     {
-        QQuickItem *found = nullptr;
-        waitFor(
-            [&] {
-                found = find([&](QQuickItem *item) { return item->objectName() == name; });
-                return found != nullptr;
-            },
-            timeoutMs);
-        return found;
+        return waitForItem([&](QQuickItem *item) { return item->objectName() == name; }, timeoutMs);
     }
     bool clickName(const QString &name)
     {
-        QQuickItem *item = findName(name);
-        if (!item) {
-            log(u"no visible item named \""_s + name + u'"');
-            return false;
-        }
-        return click(item);
+        if (QQuickItem *item = findName(name))
+            return click(item);
+        log(u"no visible item named \""_s + name + u'"');
+        return false;
     }
     bool clickText(const QString &text, const char *within = nullptr)
     {
-        QQuickItem *item = findText(text, within);
-        if (!item) {
-            log(u"no visible item with the text \""_s + text + u'"');
-            return false;
-        }
-        return click(item);
+        if (QQuickItem *item = findText(text, within))
+            return click(item);
+        log(u"no visible item with the text \""_s + text + u'"');
+        return false;
     }
     bool key(int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier, const QString &text = QString())
     {
@@ -208,14 +195,12 @@ private:
         bool clicked = false;
         if (narrow() && bottomText)
             clicked = clickText(ui("ShellBottomNav", bottomText), "ShellBottomNav");
-        if (!clicked && narrow() && sidebarText) {
-            if (openDrawer()) {
-                if (!m_drawerShot) {
-                    m_drawerShot = true;
-                    shot(u"drawer"_s, 500);
-                }
-                clicked = clickText(ui("ShellRail", sidebarText), "ShellRail");
+        if (!clicked && narrow() && sidebarText && openDrawer()) {
+            if (!m_drawerShot) {
+                m_drawerShot = true;
+                shot(u"drawer"_s, 500);
             }
+            clicked = clickText(ui("ShellRail", sidebarText), "ShellRail");
         }
         if (!clicked && !narrow() && sidebarText)
             clicked = clickText(ui("ShellRail", sidebarText), "ShellRail");
@@ -238,15 +223,10 @@ private:
         settle(300);
         if (!shotName.isEmpty())
             shot(shotName, 300);
-        if (submenu) {
-            if (!clickText(ui("ShellTopBar", submenu))) {
-                key(Qt::Key_Escape);
-                settle(200);
-                return false;
-            }
+        const bool inSubmenu = submenu && clickText(ui("ShellTopBar", submenu));
+        if (inSubmenu)
             settle(300);
-        }
-        if (clickText(ui("ShellTopBar", itemText)))
+        if ((!submenu || inSubmenu) && clickText(ui("ShellTopBar", itemText)))
             return true;
         key(Qt::Key_Escape); // close the menu again
         settle(200);
@@ -470,21 +450,14 @@ void Journey::tasks()
                                      : task.toMap().value(u"text"_s).toString();
         return text.contains(u"Kupić bilety do kina"_s);
     });
-    QQuickItem *box = nullptr;
-    if (row) {
-        const QList<QQuickItem *> inside = uidriver::allItems(row);
-        for (QQuickItem *item : inside) {
-            if (isA(item, "TaskBox") && visibleTree(item)) {
-                box = item;
-                break;
-            }
-        }
-    }
-    if (!box) {
+    const QList<QQuickItem *> inside = row ? uidriver::allItems(row) : QList<QQuickItem *>();
+    const auto box = std::ranges::find_if(
+            inside, [](const QQuickItem *item) { return isA(item, "TaskBox") && visibleTree(item); });
+    if (box == inside.cend()) {
         fail(u"the new task is listed with a checkbox"_s);
         return;
     }
-    click(box);
+    click(*box);
     if (!waitFor([&] { return fileHas(todayPath(), u"- [x] Kupić bilety do kina"_s); }, 3000))
         fail(u"ticking the task off writes [x]"_s);
     shot(u"tasks-done"_s, 600);
@@ -532,11 +505,8 @@ void Journey::search()
 {
     go(u"search"_s, "Search", "Search");
     settle(400);
-    const QQuickItem *focus = m_window->activeFocusItem();
-    if (!focus || !focus->inherits("QQuickTextInput")) {
-        if (QQuickItem *field = findType("BSearchField"))
-            click(field);
-        else
+    if (const QQuickItem *focus = m_window->activeFocusItem(); !focus || !focus->inherits("QQuickTextInput")) {
+        if (!click(findType("BSearchField")))
             fail(u"the search field"_s);
     }
     type(u"zolw"_s);
@@ -558,12 +528,9 @@ void Journey::graph()
 void Journey::sync()
 {
     closePopups();
-    bool clicked = false;
     if (narrow())
         openDrawer();
-    if (QQuickItem *footer = findType("ShellSyncFooter"))
-        clicked = click(footer, 0.25, 0.5);
-    if (!clicked || !waitFor([this] { return view() == u"sync"; })) {
+    if (!click(findType("ShellSyncFooter"), 0.25, 0.5) || !waitFor([this] { return view() == u"sync"; })) {
         fallback(u"open the sync center (the sidebar's sync footer)"_s);
         m_app->navigate({ { u"view"_s, u"sync"_s } });
     }
@@ -615,16 +582,10 @@ void Journey::history()
     QQuickItem *day = nullptr;
     waitFor([&] { return (day = today()) != nullptr; });
     // Today's own button (every day has one).
-    const auto insideToday = [day](const QQuickItem *item) {
-        for (const QQuickItem *p = item; p; p = p->parentItem()) {
-            if (p == day)
-                return true;
-        }
-        return false;
-    };
+    const QString openText = ui("ContentJournalDay", "Open as page");
     QQuickItem *open = day ? find([&](QQuickItem *item) {
-        return labelOf(item) == ui("ContentJournalDay", "Open as page") && item->isEnabled()
-               && (isA(item, "BButton") || isA(item, "BIconButton")) && insideToday(item);
+        return labelOf(item) == openText && item->isEnabled() && (isA(item, "BButton") || isA(item, "BIconButton"))
+               && day->isAncestorOf(item);
     })
                            : nullptr;
     if (!open || !click(open) || !waitFor([this] { return view() == u"journal"; })) {
@@ -643,8 +604,10 @@ void Journey::longTitles()
 {
     // Long Polish names: the top bar, the page header, the sidebar and All pages.
     const QString path = u"Projekty/Konstantynopolitańczykowianeczka i niedźwiedź — notatki z wyprawy do Szczebrzeszyna.md"_s;
-    m_app->workspace()->writeFile(path, u"- Chrząszcz brzmi w trzcinie w Szczebrzeszynie [[Remont mieszkania]]\n"_s
-                                        u"- Najdłuższe polskie słowo: dziewięćsetdziewięćdziesięciodziewięcioletni\n"_s);
+    const QString text = u"- Chrząszcz brzmi w trzcinie w Szczebrzeszynie [[Remont mieszkania]]\n"_s
+                         u"- Najdłuższe polskie słowo: dziewięćsetdziewięćdziesięciodziewięcioletni\n"_s;
+    if (!m_app->workspace()->writeFile(path, text))
+        fail(u"the note with the long title is written"_s);
     settle(500);
     m_app->openPage(path);
     waitFor([&] { return m_app->currentRoute().value(u"path"_s).toString() == path; });
@@ -739,10 +702,8 @@ void Journey::emptyNotebook()
     go(u"graph"_s, "Graph");
     shot(u"empty-graph"_s, 1200);
     go(u"search"_s, "Search", "Search");
-    if (const QQuickItem *focus = m_window->activeFocusItem(); !focus || !focus->inherits("QQuickTextInput")) {
-        if (QQuickItem *field = findType("BSearchField"))
-            click(field);
-    }
+    if (const QQuickItem *focus = m_window->activeFocusItem(); !focus || !focus->inherits("QQuickTextInput"))
+        click(findType("BSearchField"));
     type(u"żółw"_s);
     shot(u"empty-search"_s, 900);
     if (!moreMenu("Trash", QString(), "Notebook") || !waitFor([this] { return view() == u"trash"; })) {
@@ -752,9 +713,7 @@ void Journey::emptyNotebook()
     shot(u"empty-trash"_s, 900);
     // The first note: a click on today's prompt and a few words.
     go(u"journals"_s, "Journals", "Journal");
-    if (QQuickItem *prompt = findText(ui("ContentJournalDay", "What's on today? Click to start writing.")))
-        click(prompt);
-    else
+    if (!click(findText(ui("ContentJournalDay", "What's on today? Click to start writing."))))
         fail(u"today's prompt"_s);
     if (!editorHasKeyboard())
         fail(u"a click on today's prompt starts writing"_s);

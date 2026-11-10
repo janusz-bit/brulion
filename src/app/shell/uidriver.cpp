@@ -1,5 +1,6 @@
 #include "uidriver.h"
 
+#include <QByteArrayView>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QGuiApplication>
@@ -21,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <memory>
+#include <ranges>
 
 QT_BEGIN_NAMESPACE
 // QtGui's entry points for synthetic input (what QtTest's functions call): the events go through
@@ -52,12 +54,12 @@ void settle(int ms)
 bool waitFor(const std::function<bool()> &condition, int timeoutMs)
 {
     // Sanitizer test runs are ~25x slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
-    static const int slowdown = qMax(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
-    timeoutMs *= slowdown;
+    static const int slowdown = std::max(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
+    const qint64 timeout = qint64(timeoutMs) * slowdown;
     QElapsedTimer timer;
     timer.start();
     while (!condition()) {
-        if (timer.elapsed() > timeoutMs)
+        if (timer.elapsed() > timeout)
             return false;
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
         QThread::msleep(5);
@@ -70,7 +72,7 @@ bool waitFor(const std::function<bool()> &condition, int timeoutMs)
 bool isA(const QObject *object, const char *prefix)
 {
     for (const QMetaObject *m = object->metaObject(); m; m = m->superClass()) {
-        if (QByteArray(m->className()).startsWith(prefix))
+        if (QByteArrayView(m->className()).startsWith(prefix))
             return true;
     }
     return false;
@@ -85,23 +87,16 @@ bool hasAncestor(const QQuickItem *item, const char *prefix)
     return false;
 }
 
-namespace {
-
-QString cleanClassName(const char *className)
+QString typeName(const QObject *object)
 {
-    QString name = QString::fromLatin1(className);
+    if (!object)
+        return {};
+    QString name = QString::fromLatin1(object->metaObject()->className());
     for (const QString &marker : {u"_QMLTYPE_"_s, u"_QML_"_s}) {
         if (const qsizetype at = name.indexOf(marker); at > 0)
             name.truncate(at);
     }
     return name;
-}
-
-} // namespace
-
-QString typeName(const QObject *object)
-{
-    return object ? cleanClassName(object->metaObject()->className()) : QString();
 }
 
 bool shown(const QQuickItem *item)
@@ -115,7 +110,7 @@ bool shown(const QQuickItem *item)
 
 bool onScreen(const QQuickWindow *window, const QQuickItem *item)
 {
-    const QPointF c = item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
+    const QPointF c = pointIn(item);
     if (!QRectF(0, 0, window->width(), window->height()).contains(c))
         return false;
     for (const QQuickItem *p = item->parentItem(); p; p = p->parentItem()) {
@@ -160,12 +155,10 @@ QList<QQuickItem *> matching(QQuickWindow *window, const std::function<bool(QQui
     struct Ranked {
         QQuickItem *item;
         int score;
-        qsizetype order;
     };
     QList<Ranked> ranked;
     const QList<QQuickItem *> items = allItems(window->contentItem());
-    for (qsizetype i = 0; i < items.size(); ++i) {
-        QQuickItem *item = items.at(i);
+    for (QQuickItem *item : items) {
         if (!pred(item))
             continue;
         const bool visible = shown(item);
@@ -173,16 +166,13 @@ QList<QQuickItem *> matching(QQuickWindow *window, const std::function<bool(QQui
             continue;
         const int score =
                 (visible ? 4 : 0) + (hasAncestor(item, "QQuickOverlay") ? 2 : 0) + (onScreen(window, item) ? 1 : 0);
-        ranked.append({item, score, i});
+        ranked.prepend({item, score});
     }
-    // Popups first, then on screen, then the last one painted.
-    std::ranges::stable_sort(ranked, [](const Ranked &a, const Ranked &b) {
-        return a.score != b.score ? a.score > b.score : a.order > b.order;
-    });
-    QList<QQuickItem *> out;
-    out.reserve(ranked.size());
-    for (const Ranked &r : std::as_const(ranked))
-        out.append(r.item);
+    // Popups first, then on screen, then the last one painted (prepended: the stable sort keeps it
+    // before the earlier ones of its score).
+    std::ranges::stable_sort(ranked, std::ranges::greater{}, &Ranked::score);
+    QList<QQuickItem *> out(ranked.size());
+    std::ranges::transform(std::as_const(ranked), out.begin(), &Ranked::item);
     return out;
 }
 
@@ -243,8 +233,7 @@ QQuickItem *renderedTextContaining(QQuickItem *root, const QString &needle)
         if (!item->isVisible())
             continue;
         if (item->metaObject()->indexOfMethod("linkAt(double,double)") >= 0
-            && item->property("text").toString().contains(needle)
-            && area.contains(item->mapToScene(QPointF(item->width() / 2, item->height() / 2))))
+            && item->property("text").toString().contains(needle) && area.contains(pointIn(item)))
             return item;
         stack.append(item->childItems());
     }
@@ -270,20 +259,15 @@ QString itemsAt(QQuickWindow *window, QPointF scenePos)
     QQuickItem *item = window->contentItem();
     while (item) {
         QList<QQuickItem *> children = item->childItems();
-        std::ranges::stable_sort(children, [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
-        QQuickItem *next = nullptr;
-        for (auto it = children.crbegin(); it != children.crend(); ++it) {
-            QQuickItem *c = *it;
-            if (!c->isVisible() || c->opacity() <= 0.01)
-                continue;
-            if (c->contains(c->mapFromScene(scenePos))) {
-                next = c;
+        std::ranges::stable_sort(children, {}, &QQuickItem::z);
+        item = nullptr;
+        for (QQuickItem *c : std::as_const(children) | std::views::reverse) {
+            if (c->isVisible() && c->opacity() > 0.01 && c->contains(c->mapFromScene(scenePos))) {
+                item = c;
+                chain.append(QString::fromLatin1(c->metaObject()->className()) + u'/' + c->objectName());
                 break;
             }
         }
-        if (next)
-            chain.append(QString::fromLatin1(next->metaObject()->className()) + u'/' + next->objectName());
-        item = next;
     }
     return chain.join(u" > "_s);
 }
@@ -349,8 +333,7 @@ bool scrollIntoView(QQuickWindow *window, QQuickItem *item, const std::function<
         const qreal h = p->height();
         const qreal originY = p->property("originY").toReal();
         const qreal maxY = originY + std::max<qreal>(0, p->property("contentHeight").toReal() - h);
-        const qreal y = std::clamp<qreal>(r.center().y() - h / 2, originY, maxY);
-        p->setProperty("contentY", y);
+        p->setProperty("contentY", std::clamp<qreal>(r.center().y() - h / 2, originY, maxY));
         // Sideways too: a row of tools wider than the screen (the phone's editing toolbar) — not a
         // flickable that only flicks up and down (wider content there is not to be scrolled to).
         constexpr int verticalFlickOnly = 0x2; // Flickable.VerticalFlick
@@ -374,19 +357,16 @@ bool takesPresses(const QQuickItem *item)
     // popup is open in it (items of the app's own shown there — toasts — do not count).
     if (item->inherits("QQuickOverlay")) {
         const QList<QQuickItem *> children = item->childItems();
-        return std::any_of(children.cbegin(), children.cend(),
-                           [](const QQuickItem *c) { return c->isVisible() && c->inherits("QQuickPopupItem"); });
+        return std::ranges::any_of(
+                children, [](const QQuickItem *c) { return c->isVisible() && c->inherits("QQuickPopupItem"); });
     }
     if (item->acceptTouchEvents() || item->acceptedMouseButtons() != Qt::NoButton)
         return true;
-    const QObjectList children = item->children();
-    for (const QObject *child : children) {
-        if (child->inherits("QQuickPointerHandler") && !child->inherits("QQuickHoverHandler")
-            && !child->inherits("QQuickWheelHandler") && !child->inherits("QQuickPointHandler")
-            && child->property("enabled").toBool())
-            return true;
-    }
-    return false;
+    return std::ranges::any_of(item->children(), [](const QObject *child) {
+        return child->inherits("QQuickPointerHandler") && !child->inherits("QQuickHoverHandler")
+               && !child->inherits("QQuickWheelHandler") && !child->inherits("QQuickPointHandler")
+               && child->property("enabled").toBool();
+    });
 }
 
 QQuickItem *pressTargetUnder(QQuickItem *item, QPointF scenePos)
@@ -399,9 +379,9 @@ QQuickItem *pressTargetUnder(QQuickItem *item, QPointF scenePos)
     if (item->clip() && !QRectF(0, 0, item->width(), item->height()).contains(local))
         return nullptr; // nothing of it there, its children clipped too
     QList<QQuickItem *> children = item->childItems();
-    std::ranges::stable_sort(children, [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
-    for (auto it = children.crbegin(); it != children.crend(); ++it) {
-        if (QQuickItem *found = pressTargetUnder(*it, scenePos))
+    std::ranges::stable_sort(children, {}, &QQuickItem::z);
+    for (QQuickItem *child : std::as_const(children) | std::views::reverse) {
+        if (QQuickItem *found = pressTargetUnder(child, scenePos))
             return found;
     }
     if (item->contains(local) && (takesPresses(item) || item->inherits("QQuickFlickable")))
@@ -604,12 +584,8 @@ Gesture mouseDoubleClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton
 
 Gesture mouseLongPress(QQuickWindow *window, QPointF scenePos, int holdMs, Qt::MouseButton button)
 {
-    ClickTiming timing;
-    timing.afterMove = 20;
-    timing.afterPress = holdMs;
-    timing.releaseGap = holdMs;
-    timing.afterRelease = 250;
-    return mouseClick(window, scenePos, button, Qt::NoModifier, timing);
+    return mouseClick(window, scenePos, button, Qt::NoModifier,
+                      {.afterMove = 20, .afterPress = holdMs, .afterRelease = 250, .releaseGap = holdMs});
 }
 
 Gesture mouseDrag(QQuickWindow *window, QPointF from, QPointF to, int holdMs, bool escape, Qt::MouseButton button,
@@ -624,15 +600,8 @@ Gesture mouseDrag(QQuickWindow *window, QPointF from, QPointF to, int holdMs, bo
         g.append(mouseEvent(window, p, button, Qt::NoButton, QEvent::MouseMove, modifiers, mouseTimestamp(16),
                             step == steps ? 16 + holdMs : 16));
     }
-    if (escape) {
-        g.append(Step{[window] {
-                          QKeyEvent press(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
-                          QCoreApplication::sendEvent(window, &press);
-                          QKeyEvent release(QEvent::KeyRelease, Qt::Key_Escape, Qt::NoModifier);
-                          QCoreApplication::sendEvent(window, &release);
-                      },
-                      50, false});
-    }
+    if (escape)
+        g.append(Step{[window] { deliverKey(window, {Qt::Key_Escape, {}, {}}, KeyDelivery::FocusItem); }, 50, false});
     g.append(mouseEvent(window, to, Qt::NoButton, button, QEvent::MouseButtonRelease, modifiers, mouseTimestamp(20),
                         200));
     return g;
@@ -656,7 +625,7 @@ Gesture touchDoubleTap(QQuickWindow *window, QPointF scenePos)
 Gesture touchPinch(QQuickWindow *window, QPointF centre, qreal fromDistance, qreal toDistance, int steps, int stepMs)
 {
     auto sequence = std::make_shared<TouchSequence>(window, touchDevice());
-    steps = qMax(1, steps);
+    steps = std::max(1, steps);
     const auto at = [centre](qreal distance, int finger) {
         return (centre + QPointF(finger == 0 ? -distance / 2 : distance / 2, 0)).toPoint();
     };
@@ -681,7 +650,7 @@ Gesture touchPinch(QQuickWindow *window, QPointF centre, qreal fromDistance, qre
 Gesture touchDrag(QQuickWindow *window, QPointF from, QPointF delta, int steps, int stepMs, int holdMs, int afterMs)
 {
     auto sequence = std::make_shared<TouchSequence>(window, touchDevice());
-    steps = qMax(1, steps);
+    steps = std::max(1, steps);
     Gesture g{Step{[sequence, window, p = from.toPoint()] { sequence->press(0, p, window).commit(false); }, stepMs,
                    true}};
     for (int step = 1; step <= steps; ++step) {
@@ -709,7 +678,7 @@ Gesture touchScroll(QQuickWindow *window, QPointF scenePos, QPointF delta, bool 
         stops = {(threshold + 1) / along, (threshold + 2) / along};
     }
     const qreal start = stops.isEmpty() ? 0 : stops.last();
-    const int steps = qMax(1, int(std::ceil(length / 12.0)));
+    const int steps = std::max(1, int(std::ceil(length / 12.0)));
     for (int step = 1; step <= steps; ++step)
         stops.append(start + length * step / steps);
     auto sequence = std::make_shared<TouchSequence>(window, touchDevice());
@@ -751,7 +720,7 @@ Gesture wheel(QQuickWindow *window, QPointF scenePos, QPointF delta, Qt::Keyboar
     g.append(Step{send(lead, Qt::ScrollUpdate), 8, false});
     // Two-finger scrolling: the content follows the fingers, at most 40 px per report.
     const qreal length = std::hypot(delta.x(), delta.y());
-    const int steps = qMax(1, int(std::ceil(length / 40.0)));
+    const int steps = std::max(1, int(std::ceil(length / 40.0)));
     QPoint sent;
     for (int step = 1; step <= steps; ++step) {
         const QPoint total = (delta * step / double(steps)).toPoint();
@@ -857,7 +826,6 @@ std::optional<QList<KeyStroke>> parseKeySequence(const QString &sequence, QStrin
     QList<KeyStroke> out;
     for (const QString &chord : std::as_const(chords)) {
         // "Ctrl++" ends with the plus key.
-        QStringList parts;
         QString rest = chord;
         QString keyName;
         if (rest.endsWith(u"++")) {
@@ -867,7 +835,7 @@ std::optional<QList<KeyStroke>> parseKeySequence(const QString &sequence, QStrin
             keyName = u"+"_s;
             rest.clear();
         }
-        parts = rest.split(u'+', Qt::SkipEmptyParts);
+        QStringList parts = rest.split(u'+', Qt::SkipEmptyParts);
         if (keyName.isEmpty()) {
             if (parts.isEmpty())
                 return fail(u"No key in \"%1\""_s.arg(chord));
@@ -913,25 +881,21 @@ QList<KeyStroke> strokesFor(const QString &text)
     const QList<uint> codes = text.toUcs4();
     for (qsizetype i = 0; i < codes.size(); ++i) {
         const char32_t c = char32_t(codes.at(i));
-        const QString chars = QString::fromUcs4(&c, 1);
-        if (c == U'\r') {
-            if (i + 1 < codes.size() && codes.at(i + 1) == U'\n')
-                continue; // "\r\n": one Return
-            out.append(KeyStroke{Qt::Key_Return, {}, u"\r"_s});
-        } else if (c == U'\n') {
+        if (c == U'\r' && i + 1 < codes.size() && codes.at(i + 1) == U'\n')
+            continue; // "\r\n": one Return
+        if (c == U'\r' || c == U'\n') {
             out.append(KeyStroke{Qt::Key_Return, {}, u"\r"_s});
         } else if (c == U'\t') {
             out.append(KeyStroke{Qt::Key_Tab, {}, u"\t"_s});
         } else if (c == U' ') {
             out.append(KeyStroke{Qt::Key_Space, {}, u" "_s});
         } else if (c > 0xffff) {
-            out.append(KeyStroke{0, {}, chars}); // an emoji: text without a key of its own
-        } else if (QChar(char16_t(c)).isPrint()) {
-            const QChar ch{char16_t(c)};
+            out.append(KeyStroke{0, {}, QString::fromUcs4(&c, 1)}); // an emoji: text without a key of its own
+        } else if (const QChar ch{char16_t(c)}; ch.isPrint()) {
             // Qt's key code of a character key is the code point of its capital (Key_A … Key_Z
             // for ASCII letters, 0x104 for "ą" and "Ą"); a capital comes with Shift held.
-            out.append(
-                    KeyStroke{int(ch.toUpper().unicode()), ch.isUpper() ? Qt::ShiftModifier : Qt::NoModifier, chars});
+            out.append(KeyStroke{int(ch.toUpper().unicode()), ch.isUpper() ? Qt::ShiftModifier : Qt::NoModifier,
+                                 QString(ch)});
         }
     }
     return out;
@@ -1003,7 +967,7 @@ void tapOrClickNow(QQuickWindow *window, QPointF scenePos, bool touch)
 
 bool callQml(QObject *object, const char *name, const QVariantList &args, QVariant *result)
 {
-    if (!object)
+    if (!object || args.size() > 4)
         return false;
     const QMetaObject *meta = object->metaObject();
     QMetaMethod method;
@@ -1014,22 +978,22 @@ bool callQml(QObject *object, const char *name, const QVariantList &args, QVaria
             break;
         }
     }
-    if (!method.isValid() || args.size() > 4)
+    if (!method.isValid())
         return false;
-    // Each argument as its parameter's type (a QVariant holds a `var` parameter's value).
+    // Each argument as its parameter's type; a QVariant (`var`) parameter gets the QVariant itself
+    // (QVariant::fromValue() does not wrap a QVariant in another one).
     std::array<QVariant, 4> values;
     std::array<QMetaMethodArgument, 4> arguments{};
     for (qsizetype i = 0; i < args.size(); ++i) {
         const QMetaType type = method.parameterMetaType(int(i));
-        if (type == QMetaType::fromType<QVariant>()) {
-            values[i] = QVariant::fromValue(args.at(i));
-            arguments[i] = {type.iface(), "QVariant", values[i].constData()};
-        } else {
+        const void *data = &args.at(i);
+        if (type != QMetaType::fromType<QVariant>()) {
             values[i] = args.at(i);
             if (values[i].metaType() != type && !values[i].convert(type))
                 return false;
-            arguments[i] = {type.iface(), type.name(), values[i].constData()};
+            data = values[i].constData();
         }
+        arguments[i] = {type.iface(), type.name(), data};
     }
     const QMetaType returnType = method.returnMetaType();
     const bool returns = returnType.isValid() && returnType != QMetaType::fromType<void>();

@@ -7,6 +7,7 @@
 #include <QKeyCombination>
 #include <QKeySequence>
 
+#include <algorithm>
 #include <optional>
 
 using namespace Qt::StringLiterals;
@@ -25,11 +26,12 @@ std::optional<QKeyCombination> combinationOf(const QString &normalized)
     return seq[0];
 }
 
-bool isModifierKey(int key)
+/// Not a key of a shortcut: none, one Qt does not know, or a modifier alone.
+bool isNoShortcutKey(int key)
 {
-    return key == Qt::Key_Shift || key == Qt::Key_Control || key == Qt::Key_Alt || key == Qt::Key_Meta
-           || key == Qt::Key_AltGr || key == Qt::Key_Super_L || key == Qt::Key_Super_R || key == Qt::Key_Hyper_L
-           || key == Qt::Key_Hyper_R || key == Qt::Key_CapsLock || key == Qt::Key_NumLock;
+    return key == 0 || key == Qt::Key_unknown || key == Qt::Key_Shift || key == Qt::Key_Control || key == Qt::Key_Alt
+           || key == Qt::Key_Meta || key == Qt::Key_AltGr || key == Qt::Key_Super_L || key == Qt::Key_Super_R
+           || key == Qt::Key_Hyper_L || key == Qt::Key_Hyper_R || key == Qt::Key_CapsLock || key == Qt::Key_NumLock;
 }
 
 /// The keys used where commands are not (normalized -> area), built once.
@@ -72,7 +74,7 @@ const QHash<QString, QString> &reservedKeys()
 }
 
 /// Ctrl+Alt with these letters is AltGr on Windows: ą ć ę ł ń ó ś ź ż on the Polish keyboard.
-bool isAltGrLetter(const QKeyCombination &c)
+bool isAltGrLetter(QKeyCombination c)
 {
     if ((c.keyboardModifiers() & (Qt::ControlModifier | Qt::AltModifier)) != (Qt::ControlModifier | Qt::AltModifier))
         return false;
@@ -109,24 +111,15 @@ QString areaName(const QString &area)
 
 ShortcutMap::ShortcutMap(AppSettings *settings, QObject *parent) : QObject(parent), m_settings(settings) { }
 
-ShortcutMap::~ShortcutMap() = default;
-
 QString ShortcutMap::normalize(const QString &text)
 {
-    const QString trimmed = text.trimmed();
-    if (trimmed.isEmpty())
-        return {};
-    const auto combination = combinationOf(trimmed);
-    if (!combination)
-        return {};
-    const int key = combination->key();
-    if (key == 0 || key == Qt::Key_unknown || isModifierKey(key))
+    const auto combination = combinationOf(text.trimmed());
+    if (!combination || isNoShortcutKey(combination->key()))
         return {};
     const QKeyCombination clean(combination->keyboardModifiers() & ~Qt::KeypadModifier, combination->key());
     const QString out = QKeySequence(clean).toString(QKeySequence::PortableText);
     // Something Qt reads but cannot write back the same way is no shortcut people can type.
-    const auto again = combinationOf(out);
-    return again && *again == clean ? out : QString();
+    return combinationOf(out) == clean ? out : QString();
 }
 
 QString ShortcutMap::reservedUse(const QString &normalized)
@@ -158,11 +151,8 @@ void ShortcutMap::setActions(const QList<Action> &actions)
 
 const ShortcutMap::Action *ShortcutMap::find(const QString &id) const
 {
-    for (const Action &a : m_actions) {
-        if (a.id == id)
-            return &a;
-    }
-    return nullptr;
+    const auto it = std::ranges::find(m_actions, id, &Action::id);
+    return it == m_actions.cend() ? nullptr : &*it;
 }
 
 void ShortcutMap::load()
@@ -228,8 +218,8 @@ void ShortcutMap::store(const QString &id)
 QVariantMap ShortcutMap::sequences() const
 {
     QVariantMap out;
-    for (auto it = m_effective.cbegin(); it != m_effective.cend(); ++it)
-        out.insert(it.key(), it.value());
+    for (const auto [id, shortcut] : m_effective.asKeyValueRange())
+        out.insert(id, shortcut);
     return out;
 }
 
@@ -248,12 +238,10 @@ QVariantList ShortcutMap::shellBindings() const
 {
     static const QStringList viewsOwn{u"page.find"_s, u"page.replace"_s, u"page.source"_s, u"page.addProperty"_s};
     QVariantList out;
-    for (const QVariant &binding : bindings()) {
-        const QVariantMap b = binding.toMap();
-        const QString id = b.value(u"id"_s).toString();
-        if (viewsOwn.contains(id) || (id == u"block.copyRef" && b.value(u"sequence"_s).toString() == u"Ctrl+Shift+C"))
-            continue;
-        out.append(binding);
+    for (const Action &a : m_actions) {
+        const QString s = m_effective.value(a.id);
+        if (!s.isEmpty() && !viewsOwn.contains(a.id) && !(a.id == u"block.copyRef" && s == u"Ctrl+Shift+C"))
+            out.append(QVariantMap{{u"id"_s, a.id}, {u"action"_s, a.id}, {u"sequence"_s, s}});
     }
     return out;
 }
@@ -296,12 +284,11 @@ QVariantMap ShortcutMap::check(const QString &id, const QString &sequence) const
     };
     if (!find(id))
         return result("unknown", tr("There is no such command."));
-    const QString shown = n.isEmpty() ? sequence.trimmed() : n;
     if (n.isEmpty())
         return result(
                 "invalid",
                 tr("“%1” is not a key combination Brulion can use: press one key with Ctrl, Alt or a function key.")
-                        .arg(shown));
+                        .arg(sequence.trimmed()));
     if (typesText(n))
         return result(
                 "typing",
@@ -366,14 +353,12 @@ QString ShortcutMap::reset(const QString &id)
     const Action *a = find(id);
     if (!a || !m_custom.contains(id))
         return {};
-    QString loser;
-    if (!a->defaultSequence.isEmpty()) {
-        loser = m_owner.value(a->defaultSequence);
-        if (loser == id)
-            loser.clear();
-        if (!loser.isEmpty())
-            setNone(loser);
-    }
+    // The action that has its default now ("" for none: no action owns "").
+    QString loser = m_owner.value(a->defaultSequence);
+    if (loser == id)
+        loser.clear();
+    if (!loser.isEmpty())
+        setNone(loser);
     m_custom.remove(id);
     store(id);
     rebuild();
@@ -409,7 +394,7 @@ QVariantList ShortcutMap::entries(const QString &query) const
 
 QString ShortcutMap::sequenceForKey(int key, int modifiers) const
 {
-    if (key == 0 || key == Qt::Key_unknown || isModifierKey(key))
+    if (isNoShortcutKey(key))
         return {};
     Qt::KeyboardModifiers mods = Qt::KeyboardModifiers(modifiers)
                                  & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);

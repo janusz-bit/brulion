@@ -14,6 +14,8 @@
 #include <QColor>
 #include <QRegularExpression>
 
+#include <algorithm>
+
 namespace brulion::planning {
 
 using namespace Qt::StringLiterals;
@@ -46,11 +48,8 @@ QString colorString(const QVariant &v, const QString &fallback)
 {
     if (!v.isValid())
         return fallback;
-    QColor c;
-    if (v.metaType() == QMetaType::fromType<QColor>())
-        c = v.value<QColor>();
-    else
-        c = QColor::fromString(v.toString());
+    const QColor c =
+            v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
     if (!c.isValid())
         return fallback;
     return c.alpha() == 255 ? c.name(QColor::HexRgb) : c.name(QColor::HexArgb);
@@ -141,14 +140,13 @@ QString plainText(const QString &markdown)
     static const QRegularExpression emphasis(u"(\\*\\*|__|~~|==)"_s);
     static const QRegularExpression code(u"`([^`]*)`"_s);
     static const QRegularExpression spaces(u"\\s+"_s);
-    const QString &s = markdown;
     // Wiki links: display text, else the target without its fragment.
     QString out;
     qsizetype last = 0;
-    auto it = wiki.globalMatch(s);
+    auto it = wiki.globalMatch(markdown);
     while (it.hasNext()) {
         const auto m = it.next();
-        out += QStringView(s).sliced(last, m.capturedStart() - last);
+        out += QStringView(markdown).sliced(last, m.capturedStart() - last);
         QString shown = m.captured(2).trimmed();
         if (shown.isEmpty()) {
             shown = m.captured(1);
@@ -159,7 +157,7 @@ QString plainText(const QString &markdown)
         out += shown;
         last = m.capturedEnd();
     }
-    out += QStringView(s).sliced(last);
+    out += QStringView(markdown).sliced(last);
     out.replace(mdLink, u"\\1"_s);
     out.replace(blockRef, u"((\\1))"_s);
     out.replace(code, u"\\1"_s);
@@ -175,16 +173,11 @@ QString statusName(TaskStatus status)
 
 std::optional<TaskStatus> statusFromName(const QString &name)
 {
-    if (name == u"todo")
-        return TaskStatus::Todo;
-    if (name == u"doing")
-        return TaskStatus::Doing;
-    if (name == u"done")
-        return TaskStatus::Done;
-    if (name == u"cancelled")
-        return TaskStatus::Cancelled;
-    if (name == u"deferred")
-        return TaskStatus::Deferred;
+    for (const TaskStatus s :
+         {TaskStatus::Todo, TaskStatus::Doing, TaskStatus::Done, TaskStatus::Cancelled, TaskStatus::Deferred}) {
+        if (statusName(s) == name)
+            return s;
+    }
     return std::nullopt;
 }
 
@@ -196,21 +189,6 @@ bool isClosed(TaskStatus status)
 QString priorityName(Priority priority)
 {
     return notebook::priorityName(priority);
-}
-
-Priority priorityFromName(const QString &name)
-{
-    if (name == u"lowest")
-        return Priority::Lowest;
-    if (name == u"low")
-        return Priority::Low;
-    if (name == u"medium")
-        return Priority::Medium;
-    if (name == u"high")
-        return Priority::High;
-    if (name == u"highest")
-        return Priority::Highest;
-    return Priority::None;
 }
 
 QString humanDate(const DateSpec &spec, dates::UiLocale locale, QDate today)
@@ -273,11 +251,10 @@ QString appendBlock(const QString &content, const QString &block)
         lines.removeLast();
     if (lines.isEmpty())
         return content;
-    const QString first = lines.first().trimmed();
-    const bool listItem = listMarker.match(first).hasMatch();
-    QString item = first;
+    QString item = lines.first().trimmed();
+    const QString indent = listMarker.match(item).hasMatch() ? u"  "_s : QString();
     for (qsizetype i = 1; i < lines.size(); ++i)
-        item += u'\n' + (listItem ? u"  "_s : QString()) + lines.at(i).trimmed();
+        item += u'\n' + indent + lines.at(i).trimmed();
     return notebook::appendBlock(content, item);
 }
 
@@ -300,28 +277,18 @@ QuickAdd parseQuickAdd(const QString &input, const QDateTime &now, Qt::DayOfWeek
     r.ok = !r.text.isEmpty();
     if (!r.ok)
         return r;
-    std::optional<DateSpec> due;
-    std::optional<DateSpec> reminder;
-    if (r.when) {
-        if (r.when->hasTime())
-            reminder = r.when;
-        else
-            due = DateSpec{r.when->date, std::nullopt};
-    }
-    r.line = taskLine(r.text, due, reminder);
+    // With a time the date becomes a ⏰ reminder, else a 📅 due date.
+    const bool timed = r.when && r.when->hasTime();
+    r.line = taskLine(r.text, timed ? std::nullopt : r.when, timed ? r.when : std::nullopt);
     return r;
 }
 
 QString queryValue(const QString &value)
 {
     const QString v = value.trimmed();
-    bool needsQuotes = v.isEmpty();
-    for (const QChar c : v) {
-        if (c.isSpace() || c == u',' || c == u'"' || c == u'„' || c == u'“' || c == u'«') {
-            needsQuotes = true;
-            break;
-        }
-    }
+    const bool needsQuotes = v.isEmpty() || std::ranges::any_of(v, [](QChar c) {
+                                 return c.isSpace() || c == u',' || c == u'"' || c == u'„' || c == u'“' || c == u'«';
+                             });
     if (!needsQuotes)
         return v;
     QString inner = v;

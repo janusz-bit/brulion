@@ -22,6 +22,7 @@
 #include <QUrl>
 
 #include <cstdlib>
+#include <utility>
 
 namespace brulion::planning {
 
@@ -36,7 +37,7 @@ void PlanningActions::setHost(EditorHost *host)
     if (m_host == host)
         return;
     m_host = host;
-    m_undoPath.clear();
+    m_undo = {};
     Q_EMIT hostChanged();
     Q_EMIT undoChanged();
 }
@@ -98,7 +99,7 @@ void PlanningActions::setLocale(const QString &locale)
 
 bool PlanningActions::canUndo() const
 {
-    return m_host && !m_undoPath.isEmpty();
+    return m_host && !m_undo.path.isEmpty();
 }
 
 QDate PlanningActions::currentDay() const
@@ -121,32 +122,28 @@ VaultConfig PlanningActions::config() const
 int PlanningActions::locateTask(const QString &path, const QString &content, int line, const QString &text) const
 {
     const ParsedNote note = markdown::parseNote(path, content, config());
-    int best = -1;
-    int bestDistance = 0;
+    int best = -1; // the nearest task with that text
     for (const Task &t : note.tasks) {
         const bool sameText = text.isEmpty() || plainText(t.text) == text;
-        if (t.line == line && sameText)
+        if (sameText && t.line == line)
             return line;
-        if (!sameText || text.isEmpty())
-            continue;
-        const int d = std::abs(t.line - line);
-        if (best < 0 || d < bestDistance) {
+        if (sameText && !text.isEmpty() && (best < 0 || std::abs(t.line - line) < std::abs(best - line)))
             best = t.line;
-            bestDistance = d;
-        }
     }
     return best;
 }
 
+bool PlanningActions::fail(const QString &message)
+{
+    Q_EMIT failed(message);
+    return false;
+}
+
 bool PlanningActions::writeChange(const QString &path, const QString &before, const QString &after)
 {
-    if (!m_host->write(path, after)) {
-        Q_EMIT failed(tr("The change could not be saved."));
-        return false;
-    }
-    m_undoPath = path;
-    m_undoBefore = before;
-    m_undoAfter = after;
+    if (!m_host->write(path, after))
+        return fail(tr("The change could not be saved."));
+    m_undo = {path, before, after};
     Q_EMIT undoChanged();
     return true;
 }
@@ -157,31 +154,23 @@ bool PlanningActions::toggleTask(const QString &path, int line, const QString &t
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
-    if (!ok) {
-        Q_EMIT failed(tr("The page could not be read."));
-        return false;
-    }
+    if (!ok)
+        return fail(tr("The page could not be read."));
     const int at = locateTask(path, content, line, text);
-    if (at < 0) {
-        Q_EMIT failed(tr("The task was changed in the meantime."));
-        return false;
-    }
+    if (at < 0)
+        return fail(tr("The task was changed in the meantime."));
     const QString after = markdown::toggleTaskLogged(content, at, statusLog());
-    if (after == content)
-        return false;
-    if (!writeChange(path, content, after))
+    if (after == content || !writeChange(path, content, after))
         return false;
     // Report the new status of the toggled task. Completing a recurring task inserts its next
     // instance on `at`, the completed one moves one line down.
     const ParsedNote note = markdown::parseNote(path, after, config());
-    QString status;
+    std::optional<TaskStatus> status;
     for (const Task &t : note.tasks) {
-        if (t.line == at)
-            status = statusName(t.status);
-        else if (t.line == at + 1 && isClosed(t.status) && !status.isEmpty() && !isClosed(*statusFromName(status)))
-            status = statusName(t.status);
+        if (t.line == at || (t.line == at + 1 && status && !isClosed(*status) && isClosed(t.status)))
+            status = t.status;
     }
-    Q_EMIT taskChanged(path, at, status);
+    Q_EMIT taskChanged(path, at, status ? statusName(*status) : QString());
     return true;
 }
 
@@ -193,15 +182,11 @@ bool PlanningActions::setTaskStatus(const QString &path, int line, const QString
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
-    if (!ok) {
-        Q_EMIT failed(tr("The page could not be read."));
-        return false;
-    }
+    if (!ok)
+        return fail(tr("The page could not be read."));
     const int at = locateTask(path, content, line, text);
-    if (at < 0) {
-        Q_EMIT failed(tr("The task was changed in the meantime."));
-        return false;
-    }
+    if (at < 0)
+        return fail(tr("The task was changed in the meantime."));
     const markdown::StatusLogOptions log = statusLog();
     QString after = s ? markdown::setTaskStatusLogged(content, at, *s, log) : markdown::removeTaskMarker(content, at);
     if (after == content)
@@ -234,25 +219,18 @@ bool PlanningActions::toggleClock(const QString &path, int line, const QString &
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
-    if (!ok) {
-        Q_EMIT failed(tr("The page could not be read."));
-        return false;
-    }
+    if (!ok)
+        return fail(tr("The page could not be read."));
     const int found = locateTask(path, content, line, text);
     const int at = found < 0 ? -1 : markdown::taskBlockLine(content, found);
-    if (at < 0) {
-        Q_EMIT failed(tr("The task was changed in the meantime."));
-        return false;
-    }
+    if (at < 0)
+        return fail(tr("The task was changed in the meantime."));
     const QDateTime now = statusLog().now;
-    QString after;
     const bool running = markdown::taskLogbook(content, at).running() != nullptr;
-    if (running) {
-        after = markdown::stopTaskClock(content, at, now);
-    } else {
-        stopTaskClocksElsewhere(*m_host, now, path);
-        after = markdown::startTaskClock(stopTaskClocksIn(content, now, at), at, now);
-    }
+    if (!running)
+        stopTaskClocksElsewhere(*m_host, now, path); // one clock at a time
+    const QString after = running ? markdown::stopTaskClock(content, at, now)
+                                  : markdown::startTaskClock(stopTaskClocksIn(content, now, at), at, now);
     if (after == content || !writeChange(path, content, after))
         return false;
     Q_EMIT clockToggled(path, at, !running);
@@ -271,15 +249,11 @@ bool PlanningActions::addDependency(const QString &path, int line, const QString
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
-    if (!ok) {
-        Q_EMIT failed(tr("The page could not be read."));
-        return false;
-    }
+    if (!ok)
+        return fail(tr("The page could not be read."));
     const int at = locateTask(path, content, line, text);
-    if (at < 0) {
-        Q_EMIT failed(tr("The task was changed in the meantime."));
-        return false;
-    }
+    if (at < 0)
+        return fail(tr("The task was changed in the meantime."));
     // The task waited for: its 🆔, else a new one written to it first.
     const QString other = onPath == path ? content : m_host->read(onPath, &ok);
     if (!ok)
@@ -295,40 +269,27 @@ bool PlanningActions::addDependency(const QString &path, int line, const QString
         id = markdown::generateTaskId(
                 [&](const QString &c) { return (m_index && m_index->hasTaskId(c)) || other.contains(c); });
         const QString withId = markdown::setTaskId(other, onLine, id);
-        if (onPath == path) {
+        if (onPath == path)
             before = withId;
-        } else if (m_host->writeIfUnchanged(onPath, withId, other) != EditorHost::WriteResult::Written) {
-            Q_EMIT failed(tr("The change could not be saved."));
-            return false;
-        }
+        else if (m_host->writeIfUnchanged(onPath, withId, other) != EditorHost::WriteResult::Written)
+            return fail(tr("The change could not be saved."));
     }
     const QString after = markdown::addTaskDependency(before, at, id);
-    if (after == content)
-        return false;
-    return writeChange(path, content, after);
+    return after != content && writeChange(path, content, after);
 }
 
 bool PlanningActions::undo()
 {
     if (!canUndo())
         return false;
+    const UndoSnapshot change = std::exchange(m_undo, {});
     bool ok = false;
-    const QString current = m_host->read(m_undoPath, &ok);
-    const QString path = m_undoPath;
-    const QString before = m_undoBefore;
-    const bool unchanged = ok && current == m_undoAfter;
-    m_undoPath.clear();
-    m_undoBefore.clear();
-    m_undoAfter.clear();
+    const QString current = m_host->read(change.path, &ok);
     Q_EMIT undoChanged();
-    if (!unchanged) {
-        Q_EMIT failed(tr("The page changed in the meantime; nothing was undone."));
-        return false;
-    }
-    if (!m_host->write(path, before)) {
-        Q_EMIT failed(tr("The change could not be saved."));
-        return false;
-    }
+    if (!ok || current != change.after)
+        return fail(tr("The page changed in the meantime; nothing was undone."));
+    if (!m_host->write(change.path, change.before))
+        return fail(tr("The change could not be saved."));
     return true;
 }
 
@@ -338,11 +299,12 @@ bool PlanningActions::appendBlock(const QString &path, const QString &block)
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
+    // A missing page is created; one the index knows is not replaced because it could not be read.
+    if (!ok && m_index && m_index->contains(path))
+        return fail(tr("The page could not be read."));
     const QString before = ok ? content : QString();
     const QString after = planning::appendBlock(before, block);
-    if (after == before)
-        return false;
-    return writeChange(path, before, after);
+    return after != before && writeChange(path, before, after);
 }
 
 bool PlanningActions::editToken(const QString &path, int line, const QString &text, const QString &kind,
@@ -353,24 +315,16 @@ bool PlanningActions::editToken(const QString &path, int line, const QString &te
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
-    if (!ok) {
-        Q_EMIT failed(tr("The page could not be read."));
-        return false;
-    }
-    const VaultConfig cfg = config();
-    markdown::TokenEditContext context;
-    context.today = currentDay();
-    context.defaultReminderTime = cfg.defaultReminderTime;
-    context.config = cfg;
+    if (!ok)
+        return fail(tr("The page could not be read."));
     const int at = tokenBlockLine(path, content, line, text, *ref);
-    if (at < 0) {
-        Q_EMIT failed(tr("The task was changed in the meantime."));
-        return false;
-    }
+    if (at < 0)
+        return fail(tr("The task was changed in the meantime."));
+    const VaultConfig cfg = config();
+    const markdown::TokenEditContext context{
+            .today = currentDay(), .defaultReminderTime = cfg.defaultReminderTime, .config = cfg};
     const QString after = markdown::editBlockToken(content, at, *ref, action, a, b, context);
-    if (after == content)
-        return false;
-    return writeChange(path, content, after);
+    return after != content && writeChange(path, content, after);
 }
 
 int PlanningActions::tokenBlockLine(const QString &path, const QString &content, int line, const QString &text,
@@ -400,13 +354,11 @@ std::optional<markdown::TokenRef> PlanningActions::tokenRefOf(const QString &kin
             {u"reminder"_s, TokenKind::Reminder}, {u"recurrence"_s, TokenKind::Recurrence},
             {u"priority"_s, TokenKind::Priority},
     };
-    if (!kinds.contains(kind) || value.isEmpty())
+    const auto it = kinds.constFind(kind);
+    if (it == kinds.cend() || value.isEmpty())
         return std::nullopt;
-    markdown::TokenRef ref;
-    ref.kind = kinds.value(kind);
-    ref.value = value;
-    ref.defaultTime = config().defaultReminderTime; // the models' reminders have it filled in
-    return ref;
+    // The models' reminders have the default time filled in.
+    return markdown::TokenRef{.kind = *it, .value = value, .defaultTime = config().defaultReminderTime};
 }
 
 QVariantMap PlanningActions::tokenMenu(const QString &path, int line, const QString &text, const QString &kind,
@@ -448,26 +400,20 @@ bool PlanningActions::snoozeReminder(const QString &path, int line, const QStrin
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
-    if (!ok) {
-        Q_EMIT failed(tr("The page could not be read."));
-        return false;
-    }
+    if (!ok)
+        return fail(tr("The page could not be read."));
     // The reminder found again (the line may have moved since the menu opened, or hold another
     // task's reminder by now), then the line of its block that holds it.
     const int block = tokenBlockLine(path, content, line, text, *ref);
     const markdown::BlockDocument doc(content);
     const int i = block < 0 ? -1 : doc.indexAtLine(block);
     const auto range = i < 0 ? std::nullopt : markdown::findTokenRef(doc.at(i).body, *ref);
-    if (!range) {
-        Q_EMIT failed(tr("The reminder was changed in the meantime."));
-        return false;
-    }
-    const int reminderLine = doc.at(i).line + int(doc.at(i).body.left(range->first).count(u'\n'));
+    if (!range)
+        return fail(tr("The reminder was changed in the meantime."));
+    const int reminderLine = doc.at(i).line + int(QStringView(doc.at(i).body).left(range->first).count(u'\n'));
     const QString after = brulion::snoozeReminder(content, reminderLine, when);
-    if (after == content) {
-        Q_EMIT failed(tr("The reminder was changed in the meantime."));
-        return false;
-    }
+    if (after == content)
+        return fail(tr("The reminder was changed in the meantime."));
     return writeChange(path, content, after);
 }
 
@@ -535,10 +481,8 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath, bool
     if (scheme == u"taskdep") {
         // A ⛔ id: the task it waits for (docs/SYNTAX.md §5).
         const auto place = m_index ? notebook::firstTaskWithId(*m_index, rest) : std::nullopt;
-        if (!place) {
-            Q_EMIT failed(tr("No task in the notebook has the id %1").arg(rest));
-            return false;
-        }
+        if (!place)
+            return fail(tr("No task in the notebook has the id %1").arg(rest));
         m_host->navigate({{u"view"_s, u"page"_s}, {u"path"_s, place->path}, {u"line"_s, place->line}}, newPane);
         return true;
     }
@@ -551,14 +495,9 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath, bool
         return true;
     }
     if (scheme == u"page") {
-        QString target = rest;
-        QString fragment;
-        const qsizetype hash = rest.indexOf(u'#');
-        if (hash >= 0) {
-            target = rest.left(hash);
-            fragment = QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
-        }
-        target = QUrl::fromPercentEncoding(target.toUtf8());
+        const qsizetype hash = rest.indexOf(u'#'); // -1: left() keeps the whole text
+        const QString target = QUrl::fromPercentEncoding(rest.left(hash).toUtf8());
+        const QString fragment = hash < 0 ? QString() : QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
         QVariantMap route{{u"view"_s, u"page"_s}};
         const QString resolved = target.isEmpty() ? fromPath : m_host->resolveLink(target, fromPath);
         if (resolved.isEmpty())

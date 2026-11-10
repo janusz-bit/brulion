@@ -28,13 +28,26 @@ QList<QVariantMap> routesFrom(const QJsonValue &value, int count)
 {
     QList<QVariantMap> out;
     const QJsonArray array = value.toArray();
-    for (const QJsonValue &v : array) {
+    for (const auto &v : array) {
         if (v.isObject())
             out.append(v.toObject().toVariantMap());
     }
-    while (out.size() > count)
-        out.removeFirst();
-    return out;
+    return out.size() > count ? out.last(count) : out;
+}
+
+/// The position of tab `id` in `tabs`, -1 for none.
+qsizetype indexIn(const QList<Tab> &tabs, int id)
+{
+    const auto it = std::ranges::find(tabs, id, &Tab::id);
+    return it == tabs.cend() ? -1 : it - tabs.cbegin();
+}
+
+/// Whether the tab's route `changed` — then its view state goes.
+bool routeChanged(Tab &t, bool changed)
+{
+    if (changed)
+        t.viewState.clear();
+    return changed;
 }
 
 } // namespace
@@ -48,43 +61,35 @@ TabSet::TabSet(const QVariantMap &home)
 
 QList<int> TabSet::bar() const
 {
-    QList<int> out;
-    for (const Tab &t : m_bar)
-        out.append(t.id);
+    QList<int> out(m_bar.size());
+    std::ranges::transform(m_bar, out.begin(), &Tab::id);
     return out;
 }
 
 QList<int> TabSet::windows() const
 {
-    QList<int> out;
-    for (const Tab &t : m_windows)
-        out.append(t.id);
+    QList<int> out(m_windows.size());
+    std::ranges::transform(m_windows, out.begin(), &Tab::id);
     return out;
 }
 
 const Tab *TabSet::tab(int id) const
 {
-    for (auto *list : {&m_bar, &m_windows}) {
-        for (const Tab &t : *list) {
-            if (t.id == id)
-                return &t;
-        }
+    for (const QList<Tab> *list : {&m_bar, &m_windows}) {
+        if (const qsizetype at = indexIn(*list, id); at >= 0)
+            return &list->at(at);
     }
     return nullptr;
 }
 
 Tab *TabSet::find(int id)
 {
-    return const_cast<Tab *>(std::as_const(*this).tab(id));
+    return const_cast<Tab *>(std::as_const(*this).tab(id == 0 ? m_active : id));
 }
 
 int TabSet::indexOf(int id) const
 {
-    for (qsizetype i = 0; i < m_bar.size(); ++i) {
-        if (m_bar.at(i).id == id)
-            return int(i);
-    }
-    return -1;
+    return int(indexIn(m_bar, id));
 }
 
 QVariantMap TabSet::route(int id) const
@@ -103,16 +108,13 @@ const RouteHistory *TabSet::history(int id) const
 
 bool TabSet::navigate(int id, const QVariantMap &route)
 {
-    Tab *t = find(id == 0 ? m_active : id);
-    if (!t || !t->history.navigate(route))
-        return false;
-    t->viewState.clear();
-    return true;
+    Tab *t = find(id);
+    return t && routeChanged(*t, t->history.navigate(route));
 }
 
 bool TabSet::replace(int id, const QVariantMap &route)
 {
-    Tab *t = find(id == 0 ? m_active : id);
+    Tab *t = find(id);
     if (!t)
         return false;
     const QVariantMap before = t->history.current();
@@ -122,20 +124,14 @@ bool TabSet::replace(int id, const QVariantMap &route)
 
 bool TabSet::back(int id)
 {
-    Tab *t = find(id == 0 ? m_active : id);
-    if (!t || !t->history.back())
-        return false;
-    t->viewState.clear();
-    return true;
+    Tab *t = find(id);
+    return t && routeChanged(*t, t->history.back());
 }
 
 bool TabSet::forward(int id)
 {
-    Tab *t = find(id == 0 ? m_active : id);
-    if (!t || !t->history.forward())
-        return false;
-    t->viewState.clear();
-    return true;
+    Tab *t = find(id);
+    return t && routeChanged(*t, t->history.forward());
 }
 
 bool TabSet::goHome(int id)
@@ -145,7 +141,7 @@ bool TabSet::goHome(int id)
 
 bool TabSet::setViewState(int id, const QVariantMap &state)
 {
-    Tab *t = find(id == 0 ? m_active : id);
+    Tab *t = find(id);
     if (!t || t->viewState == state)
         return false;
     t->viewState = state;
@@ -243,14 +239,10 @@ void TabSet::barTabLeft(int id, qsizetype index)
 {
     if (m_bar.isEmpty()) {
         m_bar.append(makeTab(m_home, false));
-        m_main = m_bar.first().id;
+        m_main = m_bar.constFirst().id;
         m_split = 0;
         m_splitFocused = false;
-        if (m_active == id || !contains(m_active))
-            m_active = m_main;
-        return;
-    }
-    if (id == m_split) {
+    } else if (id == m_split) {
         m_split = 0;
         m_splitFocused = false;
     } else if (id == m_main) {
@@ -277,10 +269,8 @@ void TabSet::barTabLeft(int id, qsizetype index)
 
 bool TabSet::close(int id)
 {
-    for (qsizetype i = 0; i < m_windows.size(); ++i) {
-        if (m_windows.at(i).id != id)
-            continue;
-        m_windows.removeAt(i);
+    if (const qsizetype window = indexIn(m_windows, id); window >= 0) {
+        m_windows.removeAt(window);
         if (m_active == id)
             m_active = focusedBarTab();
         return true;
@@ -298,12 +288,11 @@ bool TabSet::closeOthers(int id)
     const int index = indexOf(id);
     if (index < 0 || (m_bar.size() == 1 && m_split == 0))
         return false;
-    const Tab keep = m_bar.at(index);
-    m_bar = {keep};
+    m_bar = m_bar.sliced(index, 1);
     m_main = id;
     m_split = 0;
     m_splitFocused = false;
-    if (!contains(m_active) || !tab(m_active)->windowed)
+    if (const Tab *activeTab = tab(m_active); !activeTab || !activeTab->windowed)
         m_active = id;
     return true;
 }
@@ -321,20 +310,15 @@ bool TabSet::split(int id)
     if (id == 0) {
         if (size() >= MaxTabs)
             return false;
-        const int source = focusedBarTab();
-        const Tab t = makeTab(route(source), false);
-        m_bar.insert(indexOf(source) + 1, t);
+        const Tab t = makeTab(route(focusedBarTab()), false);
+        m_bar.insert(insertPosition(), t);
         // (From the focused split pane its copy replaces it there; the main pane stays.)
-        m_split = t.id;
-        m_splitFocused = true;
-        m_active = t.id;
-        return true;
+        id = t.id;
+    } else {
+        const Tab *t = tab(id);
+        if (!t || t->windowed || id == m_main || (id == m_split && m_splitFocused && m_active == id))
+            return false;
     }
-    const Tab *t = tab(id);
-    if (!t || t->windowed || id == m_main)
-        return false;
-    if (id == m_split && m_splitFocused && m_active == id)
-        return false;
     m_split = id;
     m_splitFocused = true;
     m_active = id;
@@ -380,7 +364,7 @@ bool TabSet::detach(int id)
         return false;
     Tab t = m_bar.takeAt(index);
     t.windowed = true;
-    m_windows.append(t);
+    m_windows.append(std::move(t));
     barTabLeft(id, index);
     m_active = id;
     return true;
@@ -388,23 +372,21 @@ bool TabSet::detach(int id)
 
 bool TabSet::attach(int id)
 {
-    for (qsizetype i = 0; i < m_windows.size(); ++i) {
-        if (m_windows.at(i).id != id)
-            continue;
-        Tab t = m_windows.takeAt(i);
-        t.windowed = false;
-        m_bar.insert(insertPosition(), t);
-        select(id);
-        return true;
-    }
-    return false;
+    const qsizetype window = indexIn(m_windows, id);
+    if (window < 0)
+        return false;
+    Tab t = m_windows.takeAt(window);
+    t.windowed = false;
+    m_bar.insert(insertPosition(), std::move(t));
+    select(id);
+    return true;
 }
 
 void TabSet::reset()
 {
     m_bar = {makeTab(m_home, false)};
     m_windows.clear();
-    m_main = m_bar.first().id;
+    m_main = m_bar.constFirst().id;
     m_split = 0;
     m_splitFocused = false;
     m_active = m_main;
@@ -427,7 +409,7 @@ QByteArray TabSet::save() const
     }
     const QJsonObject root{{u"tabs"_s, tabs},
                            {u"main"_s, indexOf(m_main)},
-                           {u"split"_s, m_split != 0 ? indexOf(m_split) : -1},
+                           {u"split"_s, indexOf(m_split)}, // -1 for none: no tab has id 0
                            {u"splitFocused"_s, splitFocused()}};
     return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
@@ -435,15 +417,11 @@ QByteArray TabSet::save() const
 bool TabSet::restore(const QByteArray &json)
 {
     QJsonParseError error;
-    const QJsonDocument doc = QJsonDocument::fromJson(json, &error);
-    const QJsonArray saved = doc.object().value(u"tabs"_s).toArray();
-    if (error.error != QJsonParseError::NoError || !doc.isObject() || saved.isEmpty()) {
-        reset();
-        return false;
-    }
+    const QJsonObject root = QJsonDocument::fromJson(json, &error).object(); // {} unless an object
+    const QJsonArray saved = root.value(u"tabs"_s).toArray();
     QList<Tab> bar;
     QList<int> idOfSaved; // the new id of each saved tab, 0 when it was dropped
-    for (const QJsonValue &value : saved) {
+    for (const auto &value : saved) {
         idOfSaved.append(0);
         const QJsonObject o = value.toObject();
         if (bar.size() >= MaxTabs || !o.value(u"current"_s).isObject())
@@ -455,28 +433,26 @@ bool TabSet::restore(const QByteArray &json)
                                routesFrom(o.value(u"forward"_s), SavedDepth)))
             continue;
         t.id = m_nextId++;
-        if (o.value(u"view"_s).isObject())
-            t.viewState = o.value(u"view"_s).toObject().toVariantMap();
+        t.viewState = o.value(u"view"_s).toObject().toVariantMap(); // {} unless an object
         idOfSaved.last() = t.id;
-        bar.append(t);
+        bar.append(std::move(t));
     }
-    if (bar.isEmpty()) {
+    // Malformed JSON, no saved tab or none left.
+    if (error.error != QJsonParseError::NoError || bar.isEmpty()) {
         reset();
         return false;
     }
-    const auto savedId = [&](const QJsonValue &v) {
-        const int index = v.isDouble() ? v.toInt(-1) : -1;
-        return index >= 0 && index < idOfSaved.size() ? idOfSaved.at(index) : 0;
-    };
-    m_bar = bar;
+    // The new id of a saved tab's index (main, split); 0 for none.
+    const auto savedId = [&idOfSaved](const QJsonValue &v) { return idOfSaved.value(v.toInt(-1)); };
+    m_bar = std::move(bar);
     m_windows.clear();
-    m_main = savedId(doc.object().value(u"main"_s));
+    m_main = savedId(root.value(u"main"_s));
     if (m_main == 0)
-        m_main = m_bar.first().id;
-    m_split = savedId(doc.object().value(u"split"_s));
+        m_main = m_bar.constFirst().id;
+    m_split = savedId(root.value(u"split"_s));
     if (m_split == m_main)
         m_split = 0;
-    m_splitFocused = m_split != 0 && doc.object().value(u"splitFocused"_s).toBool();
+    m_splitFocused = m_split != 0 && root.value(u"splitFocused"_s).toBool();
     m_active = focusedBarTab();
     return true;
 }

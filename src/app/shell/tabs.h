@@ -153,6 +153,7 @@ public:
     }
 
 private:
+    /// tab() to change it; id 0: the active tab.
     Tab *find(int id);
     Tab makeTab(const QVariantMap &route, bool windowed);
     /// The bar position a new tab goes to: after the focused one.

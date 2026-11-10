@@ -56,8 +56,6 @@ bool isClosed(TaskStatus status);
 
 /// "" (none) | "lowest" | "low" | "medium" | "high" | "highest".
 QString priorityName(Priority priority);
-/// Inverse of priorityName(); Priority::None for anything unknown.
-Priority priorityFromName(const QString &name);
 
 /// Human label relative to `today` ("today 09:00", "tomorrow", "Fri, Oct 17"), see dates::formatHuman.
 QString humanDate(const DateSpec &spec, dates::UiLocale locale, QDate today);

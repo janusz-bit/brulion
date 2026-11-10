@@ -6,9 +6,12 @@
 
 #include <QCoreApplication>
 
+#include <algorithm>
+
 namespace brulion::planning {
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 namespace {
 
@@ -41,7 +44,7 @@ QString periodText(const habits::Schedule &s, int done, int target)
 HabitListModel::HabitListModel(QObject *parent) : QAbstractListModel(parent)
 {
     m_refreshTimer.setSingleShot(true);
-    m_refreshTimer.setInterval(150);
+    m_refreshTimer.setInterval(150ms);
     connect(&m_refreshTimer, &QTimer::timeout, this, &HabitListModel::rebuild);
 }
 
@@ -113,7 +116,7 @@ QVariant HabitListModel::rowData(const Row &row, int role) const
 
 QHash<int, QByteArray> HabitListModel::roleNames() const
 {
-    return {
+    static const QHash<int, QByteArray> names{
             {KeyRole, "key"},
             {NameRole, "name"},
             {ScheduleRole, "schedule"},
@@ -140,6 +143,7 @@ QHash<int, QByteArray> HabitListModel::roleNames() const
             {StartRole, "start"},
             {DaysRole, "days"},
     };
+    return names;
 }
 
 // ---- properties ----------------------------------------------------------------------------
@@ -200,8 +204,7 @@ void HabitListModel::setMonth(const QString &month)
     if (m_monthText == month)
         return;
     m_monthText = month;
-    const QDate first = QDate::fromString(month + u"-01"_s, Qt::ISODate);
-    m_month = first.isValid() ? first : QDate();
+    m_month = QDate::fromString(month + u"-01"_s, Qt::ISODate); // invalid: today's month
     Q_EMIT monthChanged();
     requestRebuild(true);
 }
@@ -235,11 +238,8 @@ bool HabitListModel::currentMonth() const
 
 QString HabitListModel::habitsPage() const
 {
-    for (const Row &row : m_rows) {
-        if (row.habit.blockIndex >= 0)
-            return row.habit.path;
-    }
-    return {};
+    const auto it = std::ranges::find_if(m_rows, [](const Row &row) { return row.habit.blockIndex >= 0; });
+    return it == m_rows.cend() ? QString() : it->habit.path;
 }
 
 QStringList HabitListModel::undefinedNames() const
@@ -249,9 +249,10 @@ QStringList HabitListModel::undefinedNames() const
 
 void HabitListModel::setRefreshDelay(int msec)
 {
+    msec = std::max(0, msec);
     if (m_refreshTimer.interval() == msec)
         return;
-    m_refreshTimer.setInterval(std::max(0, msec));
+    m_refreshTimer.setInterval(msec);
     Q_EMIT refreshDelayChanged();
 }
 
@@ -287,18 +288,16 @@ QVariantMap HabitListModel::get(int row) const
     if (row < 0 || row >= m_rows.size())
         return out;
     const QHash<int, QByteArray> names = roleNames();
-    for (auto it = names.cbegin(); it != names.cend(); ++it)
-        out.insert(QString::fromLatin1(it.value()), rowData(m_rows.at(row), it.key()));
+    for (const auto &[role, name] : names.asKeyValueRange())
+        out.insert(QString::fromLatin1(name), rowData(m_rows.at(row), role));
     return out;
 }
 
 int HabitListModel::rowOfKey(const QString &key) const
 {
-    for (qsizetype i = 0; i < m_rows.size(); ++i) {
-        if (m_rows[i].habit.key == key && !m_rows[i].habit.duplicate)
-            return int(i);
-    }
-    return -1;
+    const auto it =
+            std::ranges::find_if(m_rows, [&](const Row &row) { return row.habit.key == key && !row.habit.duplicate; });
+    return it == m_rows.cend() ? -1 : int(it - m_rows.cbegin());
 }
 
 void HabitListModel::refresh()
@@ -401,18 +400,17 @@ void HabitListModel::rebuild()
     if (!changed && !full)
         return;
     const QList<habits::Habit> &habits = m_cache.habits();
-    bool sameRows = habits.size() == m_rows.size();
-    for (qsizetype i = 0; sameRows && i < habits.size(); ++i)
-        sameRows = habits[i].key == m_rows[i].habit.key && habits[i].path == m_rows[i].habit.path;
+    const bool sameRows = std::ranges::equal(habits, std::as_const(m_rows), [](const habits::Habit &h, const Row &r) {
+        return h.key == r.habit.key && h.path == r.habit.path;
+    });
     if (!sameRows) {
         beginResetModel();
         m_rows.clear();
         m_rows.reserve(habits.size());
         for (const habits::Habit &h : habits) {
-            Row row;
+            Row &row = m_rows.emplaceBack();
             row.habit = h;
             compute(row);
-            m_rows.append(std::move(row));
         }
         m_lastRecomputed = int(m_rows.size());
         endResetModel();

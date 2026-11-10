@@ -186,9 +186,18 @@ Q_SIGNALS:
     void failed(const QString &message);
 
 private:
+    /// The last change made here, for undo() (path "" = none).
+    struct UndoSnapshot {
+        QString path;
+        QString before;
+        QString after;
+    };
+
     QDate currentDay() const;
     QDateTime currentTime() const;
     VaultConfig config() const;
+    /// Emits failed(message); false (`return fail(tr(…));`).
+    bool fail(const QString &message);
     bool writeChange(const QString &path, const QString &before, const QString &after);
     /// The status history setting (the host's) and the time of a change now.
     markdown::StatusLogOptions statusLog() const;
@@ -203,10 +212,7 @@ private:
     QString m_now;
     int m_weekStart = 0;
     QString m_locale = QStringLiteral("pl");
-    // Undo snapshot of the last change.
-    QString m_undoPath;
-    QString m_undoBefore;
-    QString m_undoAfter;
+    UndoSnapshot m_undo;
 };
 
 } // namespace brulion::planning
