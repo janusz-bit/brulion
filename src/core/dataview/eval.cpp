@@ -25,7 +25,9 @@ const Value *latest(const Bound &names, const QString &name)
 /// A row seen as an object: FLATTEN / GROUP BY names first (the latest wins), then the base.
 class RowObject final : public Object {
 public:
-    RowObject(Bound extra, Value base) : m_extra(std::move(extra)), m_base(std::move(base)) { }
+    RowObject(Bound extra, Value base)
+        : m_extra(std::move(extra)), m_base(std::move(base)), m_extent(extentOf(m_extra, m_base))
+    { }
     Q_DISABLE_COPY_MOVE(RowObject)
 
     std::optional<Value> field(const QString &key) const override
@@ -45,12 +47,21 @@ public:
         }
         return out;
     }
+    Extent extent() const override { return m_extent; }
     /// A name FLATTEN or GROUP BY set (also dotted ones: `FLATTEN file.tasks`), or nullptr.
     const Value *extra(const QString &name) const { return latest(m_extra, name); }
 
 private:
+    static Extent extentOf(const Bound &extra, const Value &base)
+    {
+        Extent e = fieldsExtent(extra);
+        e.add(base.extent());
+        return e;
+    }
+
     Bound m_extra;
     Value m_base;
+    Extent m_extent;
 };
 
 /// `file.name`, `a.b.c`: a chain of plain names — what FLATTEN names its values after.
@@ -91,16 +102,22 @@ Value arithmetic(const QString &op, const Value &a, const Value &b, Context &ctx
     if (op == u"+") {
         if (a.is(T::Number) && b.is(T::Number))
             return Value::number(a.asNumber() + b.asNumber());
-        if (a.is(T::String) || b.is(T::String))
-            return Value::string(toText(a, ctx) + toText(b, ctx));
+        // (Texts and lists are checked before they are joined: `x + x` doubles them.)
+        if (a.is(T::String) || b.is(T::String)) {
+            const QString left = toText(a, ctx), right = toText(b, ctx);
+            checkSize(1, left.size() + right.size());
+            return Value::string(left + right);
+        }
         if (a.is(T::Date) && b.is(T::Duration))
             return Value::date(shifted(a.asDate(), b.asDuration()));
         if (a.is(T::Duration) && b.is(T::Date))
             return Value::date(shifted(b.asDate(), a.asDuration()));
         if (a.is(T::Duration) && b.is(T::Duration))
             return Value::duration(sum(a.asDuration(), b.asDuration(), 1));
-        if (a.is(T::List) && b.is(T::List))
+        if (a.is(T::List) && b.is(T::List)) {
+            checkSize(a.extent().items + b.extent().items, a.extent().chars + b.extent().chars);
             return Value::list(a.asList() + b.asList());
+        }
         return Value();
     }
     if (op == u"-") {
@@ -232,6 +249,14 @@ void Context::throwTooDeep()
     throw EvalError{messages::tooDeep()};
 }
 
+Function::Function(QStringList paramNames, ExprPtr bodyExpr, Value rowValue, Bound boundNames)
+    : params(std::move(paramNames)), body(std::move(bodyExpr)), row(std::move(rowValue)), bound(std::move(boundNames))
+{
+    Extent e = fieldsExtent(bound);
+    e.add(row.extent());
+    depth = e.depth;
+}
+
 Value rowObject(const RowData &row)
 {
     return Value::object(std::make_shared<RowObject>(row.extra, row.base));
@@ -265,10 +290,14 @@ Value fieldOf(const Value &value, const QString &key, Context &ctx)
         ValueList out;
         for (const Value &item : value.asList()) {
             const Value v = fieldOf(item, key, ctx);
-            if (v.is(Value::Type::List))
+            if (v.is(Value::Type::List)) {
+                // (A page counts as one value, its fields not: a list holding one page many times
+                // would gather its list as often.)
+                checkSize(out.size() + v.asList().size());
                 out.append(v.asList());
-            else
+            } else {
                 out.append(v);
+            }
         }
         return Value::list(out);
     }
@@ -280,7 +309,7 @@ Value fieldOf(const Value &value, const QString &key, Context &ctx)
 
 Value callFunction(const Function &f, const ValueList &args, Context &ctx)
 {
-    const auto call = ctx.enterCall();
+    const auto call = ctx.enterCall(f.body->depth);
     Bound bound = f.bound;
     for (qsizetype i = 0; i < f.params.size(); ++i)
         bound.append({f.params.at(i), args.value(i)});
@@ -370,8 +399,7 @@ Value evaluate(const Expr &e, Context &ctx, const Value &row, const Bound &bound
         throw EvalError{messages::notAFunction(e.name)};
     }
     case Expr::Kind::List: return Value::list(evaluateAll(e.args, ctx, row, bound));
-    case Expr::Kind::Lambda:
-        return Value::function(std::make_shared<Function>(Function{e.params, e.args.at(0), row, bound}));
+    case Expr::Kind::Lambda: return Value::function(std::make_shared<Function>(e.params, e.args.at(0), row, bound));
     }
     return Value();
 }
@@ -422,8 +450,10 @@ QString formatDuration(Duration d)
     return (negative ? u"-"_s : QString()) + parts.join(u", "_s);
 }
 
-QString toText(const Value &value, Context &ctx)
+QString toText(const Value &value, Context &ctx, int depth)
 {
+    if (depth >= MaxValueDepth && (value.is(Value::Type::List) || value.is(Value::Type::Object)))
+        return u"…"_s;
     switch (value.type()) {
     case Value::Type::Null: return u"null"_s;
     case Value::Type::Boolean: return value.asBool() ? u"true"_s : u"false"_s;
@@ -438,18 +468,27 @@ QString toText(const Value &value, Context &ctx)
             target += u'#' + l.subpath;
         return u"[["_s + target + (l.display.isEmpty() ? QString() : u'|' + l.display) + u"]]"_s;
     }
+    // (Each text checked while it grows: a page object holds a whole note, a list can hold it often.)
     case Value::Type::List: {
         QStringList parts;
-        for (const Value &v : value.asList())
-            parts.append(toText(v, ctx));
+        qint64 length = 0;
+        for (const Value &v : value.asList()) {
+            parts.append(toText(v, ctx, depth + 1));
+            length += parts.constLast().size() + 2;
+            checkSize(1, length);
+        }
         return parts.join(u", "_s);
     }
     case Value::Type::Object: {
         QStringList parts;
+        qint64 length = 0;
         const Object &o = value.asObject();
         const QStringList keys = o.keys();
-        for (const QString &k : keys)
-            parts.append(k + u": "_s + toText(o.field(k).value_or(Value()), ctx));
+        for (const QString &k : keys) {
+            parts.append(k + u": "_s + toText(o.field(k).value_or(Value()), ctx, depth + 1));
+            length += parts.constLast().size() + 2;
+            checkSize(1, length);
+        }
         return u"{ "_s + parts.join(u", "_s) + u" }"_s;
     }
     case Value::Type::Function: return u"<function>"_s;

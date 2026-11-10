@@ -1559,6 +1559,16 @@ which are read, never passed on.
 
 Obsidian has no syntax of its own for a coloured highlight; its Highlightr plugin writes HTML that
 Obsidian, GitHub, Pandoc and browsers show without any plugin. Brulion reads and writes that
+**Limits** — a query from any note can neither freeze nor crash the app; past them it shows its
+error: an expression or a `FROM` source is at most 256 levels deep (each operator of a chain like
+`a OR b OR c` is a level, so is a call, list, lambda, field or `-` / `!`) and nests parentheses,
+calls, lists and lambdas at most 64 levels; lambdas calling lambdas go at most 64 levels of their
+bodies deep; a value a query builds (`reduce()`, `map()`, `+` of lists, …) nests lists, objects
+and lambdas at most 64 levels and holds at most 1 000 000 values and 10 000 000 characters of text
+in all — as does a text made by `+`, `join()` or `string()`; a query makes at most 100 000 rows. A
+value shown whole stops 64 levels down (`…` below): a task object's children go as deep as the
+note's outline.
+
 (`markdown/highlight.h`):
 
 ```markdown

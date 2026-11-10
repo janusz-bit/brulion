@@ -640,9 +640,12 @@ Value fJoin(const Args &a, Context &ctx)
         return Value::string(toText(a.at(0), ctx));
     const QString sep = a.size() > 1 ? toText(a.at(1), ctx) : u", "_s;
     QStringList parts;
+    qint64 length = 0;
     for (const Value &v : a.at(0).asList()) {
         ctx.step();
         parts.append(toText(v, ctx));
+        length += parts.constLast().size() + sep.size(); // (a long separator between many values)
+        checkSize(1, length);
     }
     return Value::string(parts.join(sep));
 }
@@ -739,6 +742,7 @@ Value fSplit(const Args &a, Context &ctx)
         return Value();
     const QString &s = a.at(0).asString();
     const QString sep = toText(a.at(1), ctx);
+    checkSize(sep.isEmpty() ? s.size() : s.count(sep) + 1, s.size()); // (before making the parts)
     ValueList out;
     if (sep.isEmpty()) {
         for (const QChar c : s)

@@ -7,6 +7,7 @@
 
 #include <QRegularExpression>
 #include <QSet>
+#include <QVarLengthArray>
 
 #include <algorithm>
 
@@ -458,7 +459,7 @@ public:
         if (key == u"completed")
             return Value::boolean(t && t->status == TaskStatus::Done);
         if (key == u"fullycompleted")
-            return Value::boolean(fullyCompleted(m_index));
+            return Value::boolean(fullyCompleted());
         if (key == u"text" || key == u"visual")
             return Value::string(t ? t->text : b.text);
         if (key == u"line")
@@ -529,15 +530,22 @@ private:
         return *m_own;
     }
 
-    bool fullyCompleted(int index) const
+    /// The item is a done task, and so is every task under it (with a list, not recursion: an
+    /// outline from a synced note can be thousands of levels deep).
+    bool fullyCompleted() const
     {
-        const Block &b = m_note->blocks.at(index);
-        if (b.task && b.task->status != TaskStatus::Done)
-            return false;
-        if (!b.task && index == m_index)
-            return false;
-        const auto done = [this](int c) { return c < 0 || c >= m_note->blocks.size() || fullyCompleted(c); };
-        return std::ranges::all_of(b.children, done);
+        QVarLengthArray<int, 64> pending{m_index};
+        while (!pending.isEmpty()) {
+            const int i = pending.last();
+            pending.removeLast();
+            if (i < 0 || i >= m_note->blocks.size())
+                continue;
+            const Block &b = m_note->blocks.at(i);
+            if (b.task ? b.task->status != TaskStatus::Done : i == m_index)
+                return false;
+            pending.append(b.children.constData(), b.children.size());
+        }
+        return true;
     }
 
     LinkValue section() const

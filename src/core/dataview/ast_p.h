@@ -39,6 +39,9 @@ struct Expr {
     /// chain of plain fields (`file.name`) also what a FLATTEN of it is named. Set on the outermost
     /// node of an operator or field chain only: inner nodes of a chain have none.
     QString text;
+    /// Levels from this node down to its deepest leaf (1 for a leaf), at most MaxExpressionDepth:
+    /// how deeply evaluating it recurses.
+    int depth = 1;
 };
 
 struct Source {
@@ -46,6 +49,7 @@ struct Source {
     Kind kind = Kind::Tag;
     QString value; ///< tag (lower-case, no '#'), folder / file path, link target
     std::shared_ptr<const Source> a, b;
+    int depth = 1; ///< as Expr::depth
 };
 
 struct SortKey {

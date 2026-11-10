@@ -373,18 +373,21 @@ QString sanitizedDisplay(QString s)
 }
 
 /// The values of a list, or the `key: value` fields of an object, each value as `text` writes
-/// it, joined with ", ".
+/// it one level deeper, joined with ", "; "…" for one MaxValueDepth levels inside the value shown
+/// (a task object's children go as deep as the note's outline).
 template<typename Text>
-QString joined(const Value &value, const Text &text)
+QString joined(const Value &value, int depth, const Text &text)
 {
+    if (depth >= MaxValueDepth)
+        return u"…"_s;
     QStringList parts;
     if (value.is(Value::Type::List)) {
         for (const Value &v : value.asList())
-            parts.append(text(v));
+            parts.append(text(v, depth + 1));
     } else {
         const Object &o = value.asObject();
         for (const QStringList keys = o.keys(); const QString &k : keys)
-            parts.append(k + u": "_s + text(o.field(k).value_or(Value())));
+            parts.append(k + u": "_s + text(o.field(k).value_or(Value()), depth + 1));
     }
     return parts.join(u", "_s);
 }
@@ -415,7 +418,10 @@ std::variant<Result, QString> runQuery(const Query &query, const VaultIndex &ind
     }
 }
 
-QString toMarkdown(const Value &value, const VaultIndex &index)
+namespace {
+
+/// toMarkdown() of a value `depth` levels inside the one shown.
+QString markdown(const Value &value, const VaultIndex &index, int depth)
 {
     switch (value.type()) {
     case Value::Type::Null: return u"–"_s;
@@ -437,7 +443,8 @@ QString toMarkdown(const Value &value, const VaultIndex &index)
         return u"[["_s + target + (display.isEmpty() ? QString() : u'|' + sanitizedDisplay(display)) + u"]]"_s;
     }
     case Value::Type::List:
-    case Value::Type::Object: return joined(value, [&index](const Value &v) { return toMarkdown(v, index); });
+    case Value::Type::Object:
+        return joined(value, depth, [&index](const Value &v, int d) { return markdown(v, index, d); });
     default: {
         Options none;
         Context ctx(index, none);
@@ -446,7 +453,8 @@ QString toMarkdown(const Value &value, const VaultIndex &index)
     }
 }
 
-QString toPlainText(const Value &value)
+/// toPlainText() of a value `depth` levels inside the one shown.
+QString plainText(const Value &value, int depth)
 {
     switch (value.type()) {
     case Value::Type::Null: return u"–"_s;
@@ -463,10 +471,22 @@ QString toPlainText(const Value &value)
         return l.subpath.isEmpty() ? title : title + u" > "_s + l.subpath;
     }
     case Value::Type::List:
-    case Value::Type::Object: return joined(value, toPlainText);
+    case Value::Type::Object: return joined(value, depth, plainText);
     case Value::Type::Function: return u"<function>"_s;
     }
     return QString();
+}
+
+} // namespace
+
+QString toMarkdown(const Value &value, const VaultIndex &index)
+{
+    return markdown(value, index, 0);
+}
+
+QString toPlainText(const Value &value)
+{
+    return plainText(value, 0);
 }
 
 } // namespace brulion::dataview

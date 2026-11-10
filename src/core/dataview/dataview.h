@@ -35,6 +35,12 @@
 // list. A task has status, checked, completed, fullyCompleted, text, line, lineCount, path,
 // section, link, tags, outlinks, children, task, parent, blockId, created, due, start,
 // scheduled, completion and its own fields; other names read its page (`file.name`).
+//
+// Limits — a query comes from any note, imports and sync too: expressions and FROM sources at most
+// MaxExpressionDepth deep and MaxExpressionNesting nested (else parseQuery() fails), the values a
+// query builds at most MaxValueDepth deep and MaxValueItems / MaxTextLength large (value.h), at
+// most MaxRows rows and Options::maxSteps steps (else runQuery() fails). Stack: the deepest query
+// they allow needs about 256 KiB (optimized build); run queries on a thread with at least 512 KiB.
 #pragma once
 
 #include "dataview/value.h"
@@ -57,6 +63,13 @@ namespace brulion::dataview {
 inline constexpr int DefaultRowLimit = 500;
 /// Most rows a query may make (FLATTEN of large lists): beyond it the query stops with an error.
 inline constexpr int MaxRows = 100000;
+/// The deepest expression or FROM source parseQuery() accepts: a chain like `a OR b OR c` is as deep
+/// as it has operators, and a call, list, lambda, field, index or `-` / `!` adds a level to its
+/// parts. Evaluating, selecting and freeing it recurse once per level (about 1 KB of stack each).
+inline constexpr int MaxExpressionDepth = 256;
+/// Parentheses, calls, lists, lambdas, indexes and `-` / `!` nested in one another (parsing recurses
+/// through about ten functions, some 2 KB of stack, per level).
+inline constexpr int MaxExpressionNesting = 64;
 
 enum class QueryType { List, Table, Task };
 
