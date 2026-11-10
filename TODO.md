@@ -231,6 +231,12 @@ done in the repository simply disappears from the list.
 ## Performance
 
 Details in docs/PERFORMANCE.md, "Next steps":
+* **Tabs prepared in the background** — the bottom navigation's views (Journal, Tasks, Calendar,
+  also All pages and Search) are kept once shown (`ShellRouteView`, `KeptLoader`), but each is
+  built only on its first visit, which takes 0.5–1 s on a phone (docs/PERFORMANCE.md "Switching
+  views"). After the notebook opens they should be built in the background, one at a time while
+  the app is idle (asynchronous `Loader`, hidden), so that even the first switch shows the view at
+  once; to measure: start-up time and memory on a phone and a Raspberry Pi;
 * faster merging of ready notes into the index on the UI thread, less view refreshing during
   loading (in the browser the first load without a ready index takes 11–16 % longer than before
   wave 5) and measuring indexing on a Raspberry Pi and a phone (L1b);
